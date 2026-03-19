@@ -136,6 +136,7 @@ export const MessageTypes = {
   SHARD_STATE: 'shard_state',
   COMBAT_RESULT: 'combat_result',
   EXTRACTION_STATE: 'extraction_state',
+  STASH_UPDATE: 'stash_update',
 } as const;
 
 export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
@@ -179,6 +180,14 @@ export type {
 } from './narrative-types.js';
 
 export { DEFAULT_NARRATION_CONFIG } from './narrative-types.js';
+
+// ─── Stash Types (GDD §7.3) ─────────────────────────────────────────────────
+
+export type {
+  StashItemType,
+  StashItem,
+  StashItemInstance,
+} from './types/stash.js';
 
 // ─── Extraction Types (GDD §3 step 6) ────────────────────────────────────────
 
