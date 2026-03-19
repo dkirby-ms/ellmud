@@ -1,15 +1,15 @@
+import { useReducer } from 'react';
+import { AppContext, appReducer, initialState } from './store.js';
+import { AuthScreen } from './components/AuthScreen.js';
+import { GameScreen } from './components/GameScreen.js';
+import './styles.css';
+
 export function App(): React.JSX.Element {
+  const [state, dispatch] = useReducer(appReducer, initialState);
+
   return (
-    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-      <h1 style={{ color: '#4a9eff', fontFamily: 'monospace' }}>
-        ⌁ Ellmud
-      </h1>
-      <p style={{ color: '#888', fontFamily: 'monospace' }}>
-        Connecting to the Refuge...
-      </p>
-      <p style={{ color: '#555', fontSize: '0.8rem', fontFamily: 'monospace' }}>
-        Client shell — full terminal UI coming soon.
-      </p>
-    </div>
+    <AppContext.Provider value={{ state, dispatch }}>
+      {state.authenticated ? <GameScreen /> : <AuthScreen />}
+    </AppContext.Provider>
   );
 }
