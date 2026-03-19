@@ -44,7 +44,231 @@
 
 **Why:** User resolved all open architecture questions from Elminster's Colyseus and Azure analyses.
 
+### 2026-03-19T21:50:40Z: User directive - Azure environments (UAT/Prod only)
+**By:** dkirby-ms (via Copilot)
+**What:** Azure environments are UAT and Prod only — no Dev environment. Local development uses local services (no Azure resources needed for dev).
+**Why:** User request — captured for team memory. Affects Bicep IaC, CI/CD pipeline, and deploy scripts.
+
+### 2026-03-19: Centralized Server Config Module
+**By:** Drizzt (Engine Dev)
+**Issue:** #15
+**PR:** #53
+
+**What**
+Introduced `packages/server/src/config.ts` as the single source of truth for all server configuration. All env var reads go through `getConfig()` — no more scattered `process.env` lookups.
+
+**Why**
+- Player limit enforcement needs a config value accessible from `ShardRoom.onJoin()`
+- Redis presence config needs to exist before Phase 2 (wired, disabled)
+- Testability: `resetConfig()` lets tests override values without polluting other suites
+- Server startup log now shows all scaling parameters at a glance
+
+**Impact**
+- Any new server config should go through `config.ts`, not raw `process.env`
+- Tests that need non-default config must call `resetConfig()` in `afterEach`
+- Multi-client shard tests must set `MAX_PLAYERS_PER_SHARD` > 1
+
+### 2026-03-19: Client Package Type Declaration Pattern
+**By:** Drizzt (Engine Dev)
+**Date:** 2026-03-19
+**Context:** Fixed client package build errors — `import.meta.env` and jest-dom matcher types
+
+**What**
+When adding third-party type declarations or augmenting library types in the monorepo:
+1. **Create standalone `.d.ts` files in `src/`** rather than using `tsconfig.json` `types` array
+2. **Use explicit module augmentation** (`declare module 'library'`) for extending interfaces
+3. **Separate type declarations from runtime registration** — types in `.d.ts`, runtime setup in test setup files
+4. **Follow Vite convention**: `vite-env.d.ts` with `/// <reference types="vite/client" />` for `import.meta.env`
+
+**Rationale**
+- **TypeScript `types` array doesn't play well with `moduleResolution: "bundler"`** — paths like `@testing-library/jest-dom/types/vitest` fail resolution even though the file exists
+- **Explicit `.d.ts` files are more transparent** — easier to grep, easier to understand what types are being added
+- **Vitest setup requires both type augmentation AND runtime registration** — `expect.extend(matchers)` adds methods at runtime; `.d.ts` augmentation tells TypeScript they exist
+
+**Implementation**
+- ✅ `packages/client/src/vite-env.d.ts` — Vite client types for import.meta
+- ✅ `packages/client/src/testing.d.ts` — jest-dom matchers for vitest Assertion interface
+- ✅ `packages/client/src/__tests__/setup.ts` — runtime matcher registration (unchanged from original pattern)
+
+**Affected Packages**
+- `packages/client` (direct fix)
+- Future packages using Vite or vitest should follow the same pattern
+
+**Notes**
+This pattern should be documented if we add more packages to the monorepo. The jest-dom v6 `/vitest` import is supposed to handle both types and runtime, but it doesn't work reliably under our tooling setup (vitest 4.1.0 + bundler moduleResolution).
+
+### 2026-03-19: CI/CD pipeline follows playgrid patterns with Ellmud adaptations
+**By:** Drizzt
+**Issue:** #17
+**PR:** #56
+
+**What**
+CI/CD workflow uses OIDC Azure login, `az acr build` (remote build), `az containerapp update` with revision-based rollback. Dockerfile is multi-stage with workspace-aware layer caching. Deploy + docker jobs gated to `push to main` only; PRs run build/test/lint.
+
+**Why**
+Directly follows the playgrid reference per decision 2026-03-19 (deployment model). Adapted for Ellmud's `packages/*` workspace layout. `tsc --noEmit` scoped to server tsconfig to avoid pre-existing client TS errors blocking CI. Rollback step uses Container Apps revision management rather than manual re-deploy.
+
+**Required secrets**
+`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `ACR_NAME`, `CONTAINER_APP_NAME`, `RESOURCE_GROUP` — must be configured before merging to `main`.
+
+### 2026-03-19: Bicep IaC Two-Phase Module Pattern
+**By:** Drizzt (Engine Dev)
+**Date:** 2025-07-25
+**PR:** #57 (squad/18-bicep-iac)
+**Issues:** #18, #1
+
+**What**
+The `container-apps.bicep` module supports two-phase deployment via a `deployApp` boolean parameter. Phase 1 creates only the Container Apps Environment; Phase 2 creates the environment (idempotent) plus the game server Container App.
+
+**Why**
+Redis deploys as a container *inside* the Container Apps Environment, and the game server needs Redis's FQDN as an environment variable. This creates a dependency chain: **Environment → Redis → Game Server App**. A single module can't output the environment ID and also consume the Redis host without a circular dependency.
+
+**Impact**
+- **CI/CD** (#17): The deployment workflow calls `main.bicep` once — ARM resolves the two-phase ordering automatically via implicit dependencies between modules.
+- **Future modules**: Any new sidecar containers (e.g., telemetry collector) follow the same pattern — deploy into the environment after it exists.
+- **Redis is ephemeral**: No persistence, `allkeys-lru` eviction at 256MB. Losing Redis loses Colyseus presence data but not game state (that's in PostgreSQL).
+
+### 2026-03-19: Serve React Client from Express in Production
+**By:** Drizzt (Engine Dev)
+**Requested by:** dkirby-ms
+**Date:** 2026-03-19 (deployed 2026-03-19T22:30)
+**Commit:** 3a45dd0
+
+**Context**
+Azure UAT deployment showed API JSON instead of the client UI. The Dockerfile multi-stage build discarded the client dist, and Express had no static file serving middleware.
+
+**Decision**
+1. **Dockerfile**: Copy `packages/client/dist` into `packages/server/dist/public` in the runtime stage. The client build is a static artifact — no runtime deps needed.
+2. **Express static serving**: Add `express.static()` pointing at the `public/` directory alongside the compiled server code, plus a catch-all `app.get('*')` that serves `index.html` for React Router client-side routing.
+3. **Route order**: All API routes (`/auth`, `/health`, `/admin`, `/colyseus`) are registered BEFORE static file serving. Express matches routes in registration order, so API endpoints always take precedence over the SPA catch-all.
+
+**Implications**
+- The server container now serves both the API and the client UI from a single process — no separate static hosting needed.
+- Any new API routes MUST be registered before the catch-all, or they'll be swallowed by the SPA handler.
+- The `public/` path is relative to the compiled server output (`dist/`), not the source tree.
+
+### 2026-03-19: Redis Cache + Presence Independently Toggleable
+**By:** Drizzt (Engine Dev)
+**Date:** 2026-03-19
+**Issue:** #2 — Redis Container Setup
+
+**What**
+Redis cache (`REDIS_CACHE_ENABLED`) and Redis presence (`REDIS_PRESENCE_ENABLED`) are controlled by separate env vars, not a single `REDIS_ENABLED` flag.
+
+**Why**
+- Local dev may want Redis cache (for faster narration iteration) without presence (single replica).
+- Production may enable presence first (for scaling) before enabling the cache.
+- The cache factory falls back to in-memory if Redis is unreachable, so enabling `REDIS_CACHE_ENABLED` is always safe — worst case it degrades gracefully.
+
+**Impact**
+- Config schema: `redis.enabled` (presence) + `redis.cacheEnabled` (cache) share `redis.connectionString`.
+- Anyone adding new Redis-backed features should follow this pattern: add a new boolean toggle, share the connection string.
+
+### 2026-03-19: Admin dashboard on same Express server
+**By:** Drizzt
+**Date:** 2026-03-19
+**Issue:** #14
+
+**What**
+The admin dashboard runs on the same Express server as the game, not a separate process. Admin routes are at `/admin/api/*`, dashboard UI at `/admin/`. Auth is via `ADMIN_TOKEN` env var (separate from player auth). Real-time updates use SSE (Server-Sent Events), not a WebSocket admin client.
+
+**Why**
+- Single process keeps Phase 1 deployment simple (one container)
+- SSE is simpler than WebSocket for one-way admin data flow
+- Separate admin token prevents privilege confusion with player auth
+- Inline HTML avoids a build step and framework dependency for admin UI
+
+**Trade-offs**
+- SSE polling at 2s interval means slight delay vs true push
+- Admin accessing private Room fields (`players` map) uses `as any` — will need cleanup if Room API changes
+- Single process means admin load affects game server (acceptable at Phase 1 scale)
+
+### 2026-03-19: Stash uses weight-based capacity, not slot-based
+**By:** Drizzt (Issue #11)
+**Date:** 2026-03-19
+**Status:** Implemented
+
+**What**
+The player stash enforces a weight-based capacity (default 200 weight units), not a fixed number of item slots. This means lighter items stack more efficiently, and heavy items consume proportionally more space.
+
+**Why**
+- GDD §7.3 specifies weight-limited stash with expandable capacity via upgrades
+- Weight-based is more interesting gameplay-wise: players must choose between many light materials vs fewer heavy weapons
+- Capacity upgrades (`setCapacity()`) are already implemented and ready for faction/progression unlocks
+- The alternative (fixed slots) would require arbitrary slot limits per item type
+
+**Impact**
+- StashService.storeItem() checks `currentWeight + addedWeight > capacity`
+- Default capacity is 200 weight units (generous for Phase 1, tunable later)
+- When Jarlaxle's item system merges (#16), item weights must be reasonable (0.1–10.0 range typical)
+
+### 2026-03-19: Item types live in @ellmud/shared, not server
+**By:** Jarlaxle
+**Date:** 2026-03-19
+**Issue:** #16
+
+**What**
+All item interfaces (`ItemDefinition`, `ItemInstance`, `Loadout`, rarity configs, durability functions, loadout validation) are defined in `packages/shared/src/items.ts` and re-exported from `@ellmud/shared`.
+
+Server-side code (registry, loot drops) imports these types. Drizzt's stash persistence (#11) should also import from `@ellmud/shared`.
+
+**Why**
+- Drizzt is building stash persistence (#11) in parallel. Both systems need the same `ItemDefinition` and `ItemInstance` types.
+- Putting types in shared avoids divergence and ensures the DB layer and game logic agree on item structure.
+- Pure functions (validateLoadout, computeEffectiveStats, etc.) are usable by both server and future client-side validation.
+
+**Important: Avoid circular imports in shared**
+`items.ts` must NOT import from `./index.js` (which re-exports `items.ts`). The `GearTier` type is duplicated locally to break the cycle. If you add new shared modules that reference types from `index.ts`, check for this pattern.
+
+### 2026-03-19: Login Screen Rebuilt to Match Figma
+**By:** Jarlaxle (Systems Dev)
+**Date:** 2026-03-19 (deployed 2026-03-19T22:30)
+**Status:** Implemented & pushed to dev
+**Commit:** bad772a
+
+**What Changed**
+- `packages/client/src/styles.css` — Full CSS variable and auth-section rewrite to Figma palette
+- `packages/client/src/components/AuthScreen.tsx` — Tab UI, gold design, confirm password, flavor text
+- `packages/client/index.html` — Google Fonts (Cinzel, Crimson Text, Inter, JetBrains Mono)
+- `packages/client/src/__tests__/auth.test.tsx` — Updated selectors, added password-mismatch test
+
+**Why**
+Team directive: "Always defer design and UX decisions to the Figma master design." The previous login screen used a cyan accent, wrong background colors, no serif fonts, and a toggle-button mode switch — none of which matched the spec in `docs/figma-design-prompt.md`.
+
+**Design Tokens Applied**
+- Background: `#0A0B0F` (primary), `#12131A` (panels), `#1C1D27` (elevated)
+- Accent gold: `#C9A84C`
+- Text: `#E8E0D0` (primary), `#8A8B95` (secondary), `#4A4B55` (disabled)
+- Fonts: Cinzel (display), Crimson Text (serif/prose), Inter (UI), JetBrains Mono (mono)
+
+**Impact**
+- Game screen CSS variables updated (`--bg-panel` replaces `--bg-secondary`, `--text-secondary` replaces `--text-dim`, `--text-primary` replaces `--text-bright`)
+- Any new UI work should use the Figma palette variables from `:root`
+- 45/45 client tests pass, TypeScript clean, Vite build clean
+
+### 2026-03-19: Combat should block movement commands
+**By:** Minsc (Tester)
+**Date:** 2026-03-19
+**Context:** Phase 1 QA (Issue #19)
+
+**What**
+Players in active combat can use `go <direction>` to move freely without fleeing first. The `flee` action exists specifically for this purpose, but the command handler doesn't block movement during combat — only extraction channels enforce command locks.
+
+**Evidence**
+Cross-system integration test in `cross-system-integration.test.ts` confirms: a player registered in an active combat encounter can successfully `go north` without the system preventing it.
+
+**Recommendation**
+Add a combat command lock in `handleCommand()` (packages/server/src/commands/index.ts) that blocks `go` while `combatSystem.isInCombat(playerId)` is true, similar to the existing extraction command lock pattern. This aligns with GDD §6.2 flee mechanics.
+
+**Impact**
+Low risk — single conditional check before the `go` handler. Requires adding `playerId` to CommandContext (currently only has `player.sessionId`).
+
+**Status**
+Documented in KNOWN_ISSUES.md #1. Ready for Phase 2 implementation.
+
 ---
+
+## Architecture Analyses (Approved)
 
 ## Architecture Analyses (Approved)
 

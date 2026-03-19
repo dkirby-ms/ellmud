@@ -53,3 +53,27 @@
 - Jarlaxle #7: Creature narration arriving in NARRATION messages (creature movement, attacks, death scenes)
 - Drizzt #10: Extraction mechanic messages (safe zone timers, extraction attempts, success/death states)
 - Coordinate with Drizzt on extraction UI states in your client
+
+---
+
+## Cross-Team Updates (2026-03-19T22:30)
+
+### UAT Deployment Fix — Static Serving Pattern
+**Relevant to:** Client screen development
+- Drizzt committed static file serving fix (commit 3a45dd0): React client now loads in Azure UAT
+- API routes (Auth, WebSocket, Admin) take precedence over SPA catch-all
+- All 552 tests passing (no regression)
+
+### Figma Design Tokens Deployed
+**Relevant to:** All 10 missing screens in Phase 2
+- Jarlaxle completed AuthScreen rebuild (commit bad772a) with Figma palette + typography locked in
+- CSS variables now available in `:root` for all new screens
+- 4 font families: Cinzel (display), Crimson Text (serif), Inter (UI), JetBrains Mono (mono)
+- Color palette: `#0A0B0F` primary bg, `#12131A` panels, `#C9A84C` gold accent, `#E8E0D0` text
+- **All new screens must use these tokens** — no hardcoded colors
+
+### Client Screen Audit Complete
+**Findings:**
+- 10 of 11 screens still missing: Map/Viewport, Character Sheet, Inventory, Equipment, Skills, NPC Dialogue, Combat Log, Settings, Help, Leaderboard
+- Design issues (cyan palette, system fonts) fixed by Jarlaxle's work
+- Phase 2 can now proceed with clear design baseline and working static serving

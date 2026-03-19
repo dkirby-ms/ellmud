@@ -89,3 +89,28 @@
 - Drizzt #10: Extraction mechanic (safe zones, loot, death penalty)
 - Minsc #13: Web Terminal Client (displays creature actions, extraction UI)
 - Coordinate with both on message types for creature narration
+
+### 2025-07-25: Login Screen Figma Rebuild
+- Rebuilt AuthScreen.tsx and styles.css to match `docs/figma-design-prompt.md` — the authoritative Figma design spec.
+- **CSS theme overhaul:** Replaced entire `:root` variable block with Figma palette (`#0A0B0F` bg, `#C9A84C` gold accent, `#E8E0D0` warm-bone text, `#12131A` panel, etc.). Added `--font-display` (Cinzel), `--font-serif` (Crimson Text), `--font-sans` (Inter), updated `--font-mono` to JetBrains Mono. Old cyan accent (`#4a9eff`) eliminated.
+- **AuthScreen:** Tab-based Login/Register (role="tab"), "ELLMUD" gold display title, static italic subtitle, confirm password field with validation, "Enter the Refuge" / "Create Shardwalker" button labels, rotating flavor text below card.
+- **Test updates:** All 8 auth tests updated for new selectors (tab roles, new button names). Added password-mismatch validation test. 45/45 client tests pass.
+- **Google Fonts** added to `index.html` via `<link>` preconnect.
+- **Lesson:** When the Figma spec exists, it's the source of truth for all color, typography, and layout decisions — don't invent. The old "Phase 1: functional first" CSS was completely wrong on colors, fonts, and card dimensions.
+
+---
+
+## Cross-Team Updates (2026-03-19T22:30)
+
+### Figma Design Tokens Now Team Standard
+**Relevant to:** Drizzt (static serving), Minsc (all future screens)
+- CSS variables and typography locked in as baseline for all new UI work
+- 4 font families loaded from Google Fonts: Cinzel, Crimson Text, Inter, JetBrains Mono
+- Color palette: `#0A0B0F` (primary bg), `#12131A` (panels), `#1C1D27` (elevated), `#C9A84C` (gold accent)
+- All new screens must reference `:root` CSS variables; no hardcoded colors
+
+### Static Serving Pattern Deployed
+**Relevant to:** Drizzt committed; Minsc should test
+- React client now served from Express in production (`/public/` directory)
+- API routes (`/auth`, `/colyseus`, etc.) take precedence over SPA catch-all
+- Dockerfile multi-stage build ensures client artifacts are preserved

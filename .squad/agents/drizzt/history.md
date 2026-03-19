@@ -275,3 +275,31 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 3. Import the types you're extending: `import 'vitest'` and `import type { ... } from '...'`
 4. Extend the interface: `interface Assertion<T> extends SomeMatchers<...> {}`
 5. Keep runtime registration separate (e.g., in test setup files)
+
+### Static File Serving Fix
+**Task:** Fix production deployment so React client is served from Express server
+**Status:** ✅ Complete
+
+**Changes:**
+1. **Dockerfile** — Added `COPY --from=build /app/packages/client/dist ./packages/server/dist/public` to runtime stage so client build artifacts survive the multi-stage Docker build.
+2. **packages/server/src/index.ts** — Added `express.static()` middleware and a catch-all `app.get('*')` route for React Router. Placed AFTER all API routes (`/auth`, `/health`, `/admin`, `/colyseus`) so API endpoints take precedence.
+
+**Key insight:** Route registration order in Express matters — API routes registered first win over the catch-all. The `__dirname` derivation uses `import.meta.url` because the project uses ESM (`"module": "Node16"`).
+
+**Verification:** TypeScript compiles clean, all 552 tests pass (23 files), pushed to dev.
+
+---
+
+## Cross-Team Updates (2026-03-19T22:30)
+
+### Static File Serving Pattern Documented
+**Relevant to:** Jarlaxle (Figma design tokens), Minsc (integration testing)
+- Express now serves both API + static client from one container
+- Route registration order is critical: API routes before catch-all
+- Pattern documented in decisions.md for future reference
+
+### Figma Design Tokens Adopted
+**Relevant to:** All UI work going forward
+- Jarlaxle deployed gold-palette CSS variables (`#C9A84C` accent, dark backgrounds)
+- Typography: Cinzel (display), Crimson Text (serif), Inter (UI), JetBrains Mono (mono)
+- Any new API routes must use these design tokens; old cyan palette is deprecated
