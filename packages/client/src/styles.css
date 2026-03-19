@@ -1,25 +1,46 @@
 /*
- * Ellmud terminal theme — dark background, monospace, MUD aesthetic.
- * Phase 1: functional first, pretty later.
+ * Ellmud — Figma-authoritative theme.
+ * Colors, typography, and layout from docs/figma-design-prompt.md.
  */
 
 :root {
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #141414;
-  --bg-input: #1a1a1a;
-  --text-primary: #c8c8c8;
-  --text-dim: #666;
-  --text-bright: #e8e8e8;
-  --accent: #4a9eff;
-  --accent-dim: #2a6ecc;
-  --danger: #ff4a4a;
-  --warning: #ffaa4a;
-  --success: #4aff7a;
-  --combat: #ff6a4a;
+  /* ─── Backgrounds ─── */
+  --bg-primary: #0A0B0F;
+  --bg-panel: #12131A;
+  --bg-elevated: #1C1D27;
+  --bg-input: #1C1D27;
+
+  /* ─── Text ─── */
+  --text-primary: #E8E0D0;
+  --text-secondary: #8A8B95;
+  --text-disabled: #4A4B55;
+
+  /* ─── Accent / Semantic ─── */
+  --accent: #C9A84C;
+  --accent-dim: #a8893e;
+  --danger: #8B2500;
+  --success: #2D6B4F;
+  --interactive: #3A7D7B;
+  --warning: #B8860B;
+
+  /* ─── Loot tiers ─── */
+  --loot-common: #E8E0D0;
+  --loot-sturdy: #6B8E6B;
+  --loot-refined: #4682B4;
+  --loot-masterwork: #7B4FA0;
+  --loot-anomalous: #DAA520;
+
+  /* ─── Legacy semantic aliases (game screen) ─── */
+  --combat: #8B2500;
   --speech: #aaffaa;
   --sound: #aa88ff;
   --trace: #888844;
-  --font-mono: 'Courier New', Courier, monospace;
+
+  /* ─── Typography ─── */
+  --font-display: 'Cinzel', serif;
+  --font-serif: 'Crimson Text', serif;
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', Courier, monospace;
 }
 
 * {
@@ -31,7 +52,7 @@ body {
   padding: 0;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -40,28 +61,75 @@ body {
 
 .auth-screen {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
   padding: 1rem;
+  background:
+    radial-gradient(ellipse at 50% 20%, rgba(201, 168, 76, 0.03) 0%, transparent 60%),
+    linear-gradient(180deg, #0A0B0F 0%, #0E0F15 50%, #0A0B0F 100%);
 }
 
 .auth-container {
   width: 100%;
-  max-width: 360px;
+  max-width: 480px;
   text-align: center;
+  background: var(--bg-panel);
+  border: 1px solid rgba(201, 168, 76, 0.1);
+  border-radius: 6px;
+  padding: 2.5rem 2rem 2rem;
 }
 
 .auth-title {
-  font-size: 2rem;
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  font-weight: 700;
   color: var(--accent);
-  margin-bottom: 0.25rem;
+  letter-spacing: 0.2em;
+  margin: 0 0 0.25rem;
 }
 
 .auth-subtitle {
-  color: var(--text-dim);
-  margin-bottom: 2rem;
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--text-secondary);
+  margin: 0 0 1.5rem;
+  font-size: 1rem;
 }
+
+/* ─── Auth Tabs ─── */
+
+.auth-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 1.5rem;
+}
+
+.auth-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0.6rem 0;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.auth-tab:hover {
+  color: var(--text-primary);
+}
+
+.auth-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ─── Auth Form ─── */
 
 .auth-form {
   display: flex;
@@ -77,19 +145,23 @@ body {
 }
 
 .auth-field label {
-  color: var(--text-dim);
-  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .auth-field input {
-  background: var(--bg-input);
-  border: 1px solid #333;
+  background: var(--bg-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 1rem;
-  padding: 0.6rem 0.8rem;
-  border-radius: 2px;
+  font-size: 0.95rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 4px;
+  transition: border-color 0.2s;
 }
 
 .auth-field input:focus {
@@ -97,28 +169,37 @@ body {
   border-color: var(--accent);
 }
 
+.auth-field input::placeholder {
+  color: var(--text-disabled);
+}
+
 .auth-error {
-  color: var(--danger);
+  color: #c44;
   font-size: 0.85rem;
-  padding: 0.5rem;
-  background: rgba(255, 74, 74, 0.1);
+  padding: 0.5rem 0.75rem;
+  background: rgba(139, 37, 0, 0.15);
   border-left: 3px solid var(--danger);
+  border-radius: 2px;
+  text-align: left;
 }
 
 .auth-button {
-  background: var(--accent-dim);
-  color: var(--text-bright);
+  background: var(--accent);
+  color: var(--bg-primary);
   border: none;
-  font-family: var(--font-mono);
-  font-size: 1rem;
-  padding: 0.7rem;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.75rem;
   cursor: pointer;
-  border-radius: 2px;
+  border-radius: 4px;
   margin-top: 0.5rem;
+  letter-spacing: 0.03em;
+  transition: background 0.2s;
 }
 
 .auth-button:hover:not(:disabled) {
-  background: var(--accent);
+  background: #d4b35a;
 }
 
 .auth-button:disabled {
@@ -126,19 +207,16 @@ body {
   cursor: not-allowed;
 }
 
-.auth-toggle {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  cursor: pointer;
-  margin-top: 1rem;
-  text-decoration: underline;
-}
+/* ─── Flavor Text ─── */
 
-.auth-toggle:hover {
-  color: var(--accent);
+.auth-flavor {
+  margin-top: 1.5rem;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  min-height: 1.2em;
 }
 
 /* ─── Game Screen ─────────────────────────────────────────────────────────── */
@@ -154,7 +232,7 @@ body {
   align-items: center;
   gap: 1rem;
   padding: 0.5rem 1rem;
-  background: var(--bg-secondary);
+  background: var(--bg-panel);
   border-bottom: 1px solid #222;
   flex-shrink: 0;
 }
@@ -165,7 +243,7 @@ body {
 }
 
 .room-info {
-  color: var(--text-dim);
+  color: var(--text-secondary);
   flex: 1;
 }
 
@@ -191,7 +269,7 @@ body {
 .logout-button {
   background: none;
   border: 1px solid #333;
-  color: var(--text-dim);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 0.75rem;
   padding: 0.2rem 0.6rem;
@@ -219,9 +297,9 @@ body {
   padding: 1px 0;
 }
 
-.msg-room { color: var(--text-bright); }
+.msg-room { color: var(--text-primary); }
 .msg-combat { color: var(--combat); }
-.msg-system { color: var(--text-dim); }
+.msg-system { color: var(--text-secondary); }
 .msg-speech { color: var(--speech); }
 .msg-sound { color: var(--sound); font-style: italic; }
 .msg-trace { color: var(--trace); font-style: italic; }
@@ -233,7 +311,7 @@ body {
   display: flex;
   align-items: center;
   padding: 0.5rem 1rem;
-  background: var(--bg-secondary);
+  background: var(--bg-panel);
   border-top: 1px solid #222;
   flex-shrink: 0;
 }

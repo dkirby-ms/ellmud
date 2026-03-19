@@ -51,18 +51,19 @@ describe('AuthScreen', () => {
     renderAuth();
     expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /enter the refuge/i })).toBeInTheDocument();
   });
 
-  it('toggles between login and register', async () => {
+  it('toggles between login and register via tabs', async () => {
     const user = userEvent.setup();
     renderAuth();
 
-    await user.click(screen.getByText(/new player\? register/i));
-    expect(screen.getByRole('button', { name: /register/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /register/i }));
+    expect(screen.getByRole('button', { name: /create shardwalker/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/confirm password/i)).toBeInTheDocument();
 
-    await user.click(screen.getByText(/already have an account\? login/i));
-    expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /login/i }));
+    expect(screen.getByRole('button', { name: /enter the refuge/i })).toBeInTheDocument();
   });
 
   it('calls login API and dispatches LOGIN_SUCCESS on success', async () => {
@@ -73,7 +74,7 @@ describe('AuthScreen', () => {
 
     await user.type(screen.getByLabelText(/username/i), 'testuser');
     await user.type(screen.getByLabelText(/password/i), 'secret123');
-    await user.click(screen.getByRole('button', { name: /login/i }));
+    await user.click(screen.getByRole('button', { name: /enter the refuge/i }));
 
     await waitFor(() => {
       expect(mockedLogin).toHaveBeenCalledWith('testuser', 'secret123');
@@ -91,10 +92,11 @@ describe('AuthScreen', () => {
 
     const { dispatch } = renderAuth();
 
-    await user.click(screen.getByText(/new player\? register/i));
+    await user.click(screen.getByRole('tab', { name: /register/i }));
     await user.type(screen.getByLabelText(/username/i), 'newplayer');
-    await user.type(screen.getByLabelText(/password/i), 'pass1234');
-    await user.click(screen.getByRole('button', { name: /register/i }));
+    await user.type(screen.getByLabelText(/^password$/i), 'pass1234');
+    await user.type(screen.getByLabelText(/confirm password/i), 'pass1234');
+    await user.click(screen.getByRole('button', { name: /create shardwalker/i }));
 
     await waitFor(() => {
       expect(mockedRegister).toHaveBeenCalledWith('newplayer', 'pass1234');
@@ -106,6 +108,20 @@ describe('AuthScreen', () => {
     });
   });
 
+  it('shows error when passwords do not match on register', async () => {
+    const user = userEvent.setup();
+    renderAuth();
+
+    await user.click(screen.getByRole('tab', { name: /register/i }));
+    await user.type(screen.getByLabelText(/username/i), 'newplayer');
+    await user.type(screen.getByLabelText(/^password$/i), 'pass1234');
+    await user.type(screen.getByLabelText(/confirm password/i), 'different');
+    await user.click(screen.getByRole('button', { name: /create shardwalker/i }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Passwords do not match');
+    expect(mockedRegister).not.toHaveBeenCalled();
+  });
+
   it('displays API error message on login failure', async () => {
     const user = userEvent.setup();
     mockedLogin.mockRejectedValue(new api.ApiError(401, 'Invalid credentials'));
@@ -114,7 +130,7 @@ describe('AuthScreen', () => {
 
     await user.type(screen.getByLabelText(/username/i), 'bad');
     await user.type(screen.getByLabelText(/password/i), 'wrong');
-    await user.click(screen.getByRole('button', { name: /login/i }));
+    await user.click(screen.getByRole('button', { name: /enter the refuge/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Invalid credentials');
@@ -129,7 +145,7 @@ describe('AuthScreen', () => {
 
     await user.type(screen.getByLabelText(/username/i), 'test');
     await user.type(screen.getByLabelText(/password/i), 'test12');
-    await user.click(screen.getByRole('button', { name: /login/i }));
+    await user.click(screen.getByRole('button', { name: /enter the refuge/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Connection failed');
@@ -145,7 +161,7 @@ describe('AuthScreen', () => {
 
     await user.type(screen.getByLabelText(/username/i), 'test');
     await user.type(screen.getByLabelText(/password/i), 'test12');
-    await user.click(screen.getByRole('button', { name: /login/i }));
+    await user.click(screen.getByRole('button', { name: /enter the refuge/i }));
 
     expect(screen.getByRole('button', { name: /connecting/i })).toBeDisabled();
   });

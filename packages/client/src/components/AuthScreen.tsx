@@ -1,18 +1,49 @@
-import { useState, useCallback, type FormEvent } from 'react';
+import { useState, useCallback, useEffect, type FormEvent } from 'react';
 import { login, register, ApiError } from '../services/api.js';
 import { useAppContext } from '../store.js';
+
+const FLAVOR_LINES = [
+  'The shard hums beneath your feet.',
+  'Something ancient stirs in the deep.',
+  'A faint light pulses beyond the veil.',
+  'The Refuge gates groan against the wind.',
+  'Iron meets bone in the dark below.',
+  'Whispers curl from cracks in the stone.',
+  'The collapse draws nearer with each breath.',
+];
 
 export function AuthScreen(): React.JSX.Element {
   const { dispatch } = useAppContext();
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [flavorIndex, setFlavorIndex] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setFlavorIndex((i) => (i + 1) % FLAVOR_LINES.length);
+    }, 6000);
+    return () => clearInterval(id);
+  }, []);
+
+  const switchMode = useCallback((registerMode: boolean) => {
+    setIsRegister(registerMode);
+    setError(null);
+    setConfirmPassword('');
+  }, []);
 
   const handleSubmit = useCallback(async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (isRegister && password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -28,15 +59,34 @@ export function AuthScreen(): React.JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [username, password, isRegister, dispatch]);
+  }, [username, password, confirmPassword, isRegister, dispatch]);
 
   return (
     <div className="auth-screen">
       <div className="auth-container">
-        <h1 className="auth-title">⌁ Ellmud</h1>
-        <p className="auth-subtitle">
-          {isRegister ? 'Create your character' : 'Enter the Refuge'}
-        </p>
+        <h1 className="auth-title">ELLMUD</h1>
+        <p className="auth-subtitle">The shards are calling.</p>
+
+        <div className="auth-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            className={`auth-tab${!isRegister ? ' active' : ''}`}
+            aria-selected={!isRegister}
+            onClick={() => switchMode(false)}
+          >
+            Login
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={`auth-tab${isRegister ? ' active' : ''}`}
+            aria-selected={isRegister}
+            onClick={() => switchMode(true)}
+          >
+            Register
+          </button>
+        </div>
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="auth-field">
@@ -66,6 +116,21 @@ export function AuthScreen(): React.JSX.Element {
             />
           </div>
 
+          {isRegister && (
+            <div className="auth-field">
+              <label htmlFor="confirmPassword">Confirm Password</label>
+              <input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter password"
+                disabled={loading}
+                required
+              />
+            </div>
+          )}
+
           {error && (
             <div className="auth-error" role="alert">
               {error}
@@ -73,19 +138,16 @@ export function AuthScreen(): React.JSX.Element {
           )}
 
           <button type="submit" className="auth-button" disabled={loading}>
-            {loading ? 'Connecting...' : isRegister ? 'Register' : 'Login'}
+            {loading
+              ? 'Connecting...'
+              : isRegister
+                ? 'Create Shardwalker'
+                : 'Enter the Refuge'}
           </button>
         </form>
-
-        <button
-          type="button"
-          className="auth-toggle"
-          onClick={() => { setIsRegister(!isRegister); setError(null); }}
-          disabled={loading}
-        >
-          {isRegister ? 'Already have an account? Login' : 'New player? Register'}
-        </button>
       </div>
+
+      <p className="auth-flavor">{FLAVOR_LINES[flavorIndex]}</p>
     </div>
   );
 }
