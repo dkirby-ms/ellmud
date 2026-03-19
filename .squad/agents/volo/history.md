@@ -66,3 +66,16 @@
 - Your NarrationService filters by `type` and selects template/context → LLM input
 - No handler needs to know about narration enrichment — it's delivery-layer concern
 - Keep `NarrationContext` type in sync as new action types arrive (you own the schema)
+
+### 2025-07-25: Phase 1 Documentation (Issue #20)
+- Authored 7 documentation files for onboarding and reference:
+  - `docs/architecture.md` — system overview, component diagram, data flow, security model
+  - `docs/setup.md` — local dev setup, env vars, workspace commands, DB/Redis setup
+  - `docs/api-reference.md` — WebSocket message protocol (all 7 message types), command list (17 verbs + aliases), HTTP auth endpoints
+  - `docs/llm-integration.md` — narration pipeline deep-dive, state snapshot schema, prompt structure, cache key generation, timeout budgets, template fallback, telemetry, cost model
+  - `docs/player-guide.md` — how to play, all commands, combat mechanics, extraction, stash, creatures, shard lifecycle
+  - `docs/admin-guide.md` — Colyseus monitor, debugging tools, common issues, migration tracking
+  - `README.md` — quick start, architecture summary, doc links, Phase 1 status
+- **Key approach:** Read every source file to document what's actually implemented, not what the GDD aspires to. All types, interfaces, and command names match the codebase.
+- **LLM integration doc is my crown jewel** — it covers the full narration pipeline I built in Issue #9, from state hashing through cache to template fallback, with exact type definitions and configuration values. Any developer can understand the pipeline from this doc alone.
+- **Cross-referenced GDD sections** where relevant but clearly marked Phase 1 scope vs future phases.
