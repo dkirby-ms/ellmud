@@ -549,3 +549,79 @@ After:
 
 **Scope note:** PRNG is deterministic (mulberry32, seeded). Enables replay testing. Seed baking into ShardInstance is Issue #10 scope.
 
+
+---
+
+## 2026-03-19T16:01:36Z: Client message-only protocol enforcement via test-time source scanning
+
+**By:** Minsc (Tester)  
+**Issue:** #13 — Web Terminal Client
+
+### Decision
+
+The connection test suite (`connection.test.ts`) reads the `connection.ts` source file at test time and verifies that forbidden Schema patterns (`room.state`, `onStateChange`, `@colyseus/schema` imports) are NOT present in executable code. Comments are stripped before checking to avoid false positives.
+
+### Why
+
+The "message-only protocol" is the single most critical architectural constraint. A Schema subscription would leak server state to the dumb terminal client, violating GDD §14. Static analysis at test time catches this before CI merges it.
+
+### Trade-offs
+
+- Pro: Zero-cost at runtime, catches accidental imports immediately
+- Con: Brittle if connection code is refactored into multiple files (would need to scan all of them)
+- Mitigation: If connection logic spreads, update the test to scan all service files
+
+---
+
+## 2026-03-19T16:01:36Z: Creature AI uses CreatureWorldState interface for decoupling
+
+**By:** Jarlaxle  
+**Issue:** #7 (Drowned Revenant)
+
+### What
+
+Creature behavior (`updateCreature()`) takes a `CreatureWorldState` interface — not direct Colyseus/ShardRoom references. ShardRoom must construct this state each tick:
+
+```ts
+interface CreatureWorldState {
+  playersInRoom: Map<string, string[]>;  // roomId → playerIds
+  roomExits: Map<string, string[]>;       // roomId → adjacent roomIds
+  noisyRooms: Set<string>;               // rooms with recent sound
+}
+```
+
+### Why
+
+Keeps creature AI testable and decoupled from Colyseus. Behavior tree tests run without mocking any server infrastructure.
+
+### Impact on Team
+
+- **Drizzt (ShardRoom integration):** When integrating creatures into ShardRoom's tick, construct `CreatureWorldState` from room state. Call `creatureManager.updateAll(worldState)` each tick, then translate returned `CreatureAction[]` into combat system calls and player narration.
+- **Volo (narration):** Creature actions return `CreatureAction` with type + IDs. Narration layer can enrich these. Creature names are plain strings (e.g., "Drowned Revenant").
+
+---
+
+## 2026-03-19T16:01:36Z: Extraction Channel Architecture
+
+**By:** Drizzt (Engine Dev)  
+**Issue:** #10
+
+### What
+
+Extraction is implemented as a **channel-based system** with a static command lock check integrated into the central command dispatcher (`handleCommand()`). The `ExtractionSystem` class is independent of Colyseus — it owns channel state and can be unit-tested without a server.
+
+### Key Design Choices
+
+1. **Command lock via static method**: `ExtractionSystem.checkCommandLock(verb, playerId, system)` is called in `handleCommand()` before dispatching to any handler. This means *all* commands pass through the lock — no handler needs to know about extraction.
+
+2. **Combat damage interrupts extraction**: In `ShardRoom.update()`, after resolving combat ticks, any strike events targeting an extracting player interrupt their channel. This couples extraction to combat at the ShardRoom level (not inside either system).
+
+3. **Local Room `type` field is optional**: Added `type?: RoomType` to the local/dev Room interface in `shard/RoomGraph.ts`. When Jarlaxle's generator replaces the test graph, this becomes the required `type: RoomType` from the shared package.
+
+4. **Noise events are recorded but not propagated**: Per Phase 1 scope, extraction generates `NoiseEvent` objects (level 8, sustained) but they aren't fed into a trace system yet. The interface is stable for Phase 2 integration.
+
+### Team Impact
+
+- **Jarlaxle**: Extraction rooms must have `type: 'extraction'` in the room graph. The `extractionRoomIds` array on the shared `RoomGraph` type should be populated by the generator.
+- **All handlers**: The `CommandContext` now has an optional `extractionSystem` field. Existing handlers don't need to change — the lock is enforced centrally.
+- **Future channeled actions**: The channel + lock pattern can be reused for crafting, rituals, or any interruptible multi-tick action.
