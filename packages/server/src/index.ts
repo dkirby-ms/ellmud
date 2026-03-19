@@ -11,9 +11,11 @@ import {
   initColyseusAuth,
 } from './auth/index.js';
 import { createHealthRouter } from './health.js';
+import { getConfig } from './config.js';
 
-const PORT = Number(process.env['PORT'] ?? 2567);
-const AUTH_REQUIRED = process.env['AUTH_REQUIRED'] === 'true';
+const config = getConfig();
+const PORT = config.port;
+const AUTH_REQUIRED = config.authRequired;
 
 const app = express();
 app.use(express.json());
@@ -47,3 +49,4 @@ server.define('refuge', RefugeRoom);
 console.log(`[Ellmud] Colyseus server listening on ws://localhost:${PORT}`);
 console.log(`[Ellmud] Admin monitor at http://localhost:${PORT}/colyseus`);
 console.log(`[Ellmud] Auth required: ${AUTH_REQUIRED}`);
+console.log(`[Ellmud] Max players/shard: ${config.maxPlayersPerShard}, Matchmaker: ${config.matchmakerMode}, Redis: ${config.redis.enabled ? 'enabled' : 'disabled'}`);

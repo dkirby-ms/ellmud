@@ -16,6 +16,7 @@ import { handleLook } from '../commands/handlers/look.js';
 import { CombatSystem, createCombatant, type TickResult } from '../combat/index.js';
 import { ExtractionSystem, type ExtractionTickResult } from '../extraction/index.js';
 import { authenticateClient } from '../auth/colyseus-auth.js';
+import { getConfig } from '../config.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -87,6 +88,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
   onJoin(client: Client): void {
+    // Enforce max players per shard (Phase 1: solo play = 1)
+    const maxPlayers = getConfig().maxPlayersPerShard;
+    if (this.state.playerCount >= maxPlayers) {
+      throw new Error(`Shard is full (${maxPlayers}/${maxPlayers} players).`);
+    }
+
     this.state.playerCount++;
 
     // Initialize player state at shard entry room

@@ -14,15 +14,21 @@ import {
   quickCollapseOptions,
 } from './helpers/index.js';
 import { MessageCollector } from './helpers/message-collector.js';
+import { resetConfig } from '../config.js';
 
 let colyseus: ColyseusTestServer;
 
 beforeAll(async () => {
+  // Edge-case tests need multi-player shards
+  process.env['MAX_PLAYERS_PER_SHARD'] = '10';
+  resetConfig();
   colyseus = await bootTestServer();
 });
 
 afterAll(async () => {
   await colyseus.shutdown();
+  delete process.env['MAX_PLAYERS_PER_SHARD'];
+  resetConfig();
 });
 
 describe('Edge Cases — ShardRoom', () => {

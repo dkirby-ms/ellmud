@@ -217,3 +217,11 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 - Jarlaxle #7: Drowned Revenant creature + behavior tree (uses your combatSystem from #6)
 - Minsc #13: Web Terminal Client (uses your auth #12 + Volo narration #9)
 - Coordinate with Minsc on extraction UI mockups
+
+## Learnings
+
+### 2026-03-19: Solo Play Config (#15)
+- **Colyseus `onJoin` throwing** surfaces as a `MatchMakeError` to the client SDK — clean rejection path, no custom error protocol needed.
+- **Config singleton with `resetConfig()`** is essential for test isolation when tests manipulate `process.env`. Without reset, the cached config bleeds between test files since vitest runs in threads.
+- **Existing multi-client tests break** when you enforce player limits. Any test that connects >1 client to a ShardRoom needs `MAX_PLAYERS_PER_SHARD` set higher. Fixed `edge-cases.test.ts`; keep this pattern for future multi-player tests.
+- **Room disposal on last leave**: Colyseus disposes rooms when the last client leaves. A "rejoin after leave" test won't work for the same room handle — the room is gone. Phase 2 multiplayer tests should account for this.
