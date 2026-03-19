@@ -51,6 +51,20 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 
 **Next Phase:** Phase 1 kickoff — assign developer(s) to issues #1–#18. Target: 8–10 weeks to solo MVP (login → loadout → shard entry → combat → extraction → stash persist).
 
+### 2025-07-25: Extraction Mechanic (Issue #10)
+**Task:** Build channeled extraction escape mechanic — GDD §3 step 6 (core gameplay loop finale)
+**Status:** ✅ Complete
+
+**Outcome:**
+- **ExtractionSystem** (`extraction/ExtractionSystem.ts`): Multi-tick channeled escape with configurable duration (default 5 ticks). Tracks per-player extraction channels, noise generation (level 8 sustained per GDD §12.2), command lock enforcement, and interrupt handling.
+- **Extract command** (`commands/handlers/extract.ts`): Validates extraction room type + combat state before starting channel. Follows established CommandHandler pattern.
+- **Command lock**: Movement (go) and combat (attack, strike, dodge, flee) blocked during channel. Passive commands (look, inventory) allowed. Lock check integrated into `handleCommand()` via `ExtractionSystem.checkCommandLock()` static method.
+- **ShardRoom integration**: Extraction system ticked in main update loop. Successful extraction removes player from shard and sends `EXTRACTION_STATE` message. Damage from combat interrupts channels. Shard collapse interrupts all active channels with shard-sickness narration.
+- **Shared types**: `ExtractionMessage` interface + `EXTRACTION_STATE` added to MessageTypes (append-only).
+- **Test graph**: Added 'extraction-chamber' room (type: 'extraction') connected below crypt. Local `Room` interface extended with optional `type?: RoomType`.
+- **30 new tests**: ExtractionSystem unit tests (start, tick, interrupt, interruptAll, noise, configurable duration), extract command handler (valid/invalid room, combat rejection), command lock (5 blocked + 2 passive + 1 non-extracting), full flow (complete, interrupted, multi-player, collapse), room graph assertions.
+- **All 174 non-integration tests pass** (30 new + 144 existing, zero regressions)
+
 ### 2025-07-25: Username/Password Authentication (Issue #12)
 **Task:** Build auth system with bcrypt password hashing, session tokens, HTTP endpoints, and Colyseus onAuth integration
 **Status:** ✅ Complete
@@ -147,6 +161,14 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
     - `packages/server/src/auth/colyseus-auth.ts` — Colyseus onAuth hook (authenticateClient)
     - `packages/server/src/auth/index.ts` — Barrel export
     - `packages/server/src/__tests__/auth.test.ts` — 35 tests (unit + HTTP + Colyseus integration)
+16. **Extraction system architecture:** Extraction is a channel-based system (not instant) — the `ExtractionSystem` class owns all channel state, independent of Colyseus. The static `checkCommandLock()` method lets the command registry enforce locks without coupling to the system instance. This pattern works for any future channeled action (crafting, rituals).
+17. **Two Room interfaces coexist:** The local `packages/server/src/shard/RoomGraph.ts` Room has `items: Item[]` and optional `type?: RoomType`. The shared `packages/shared/src/room-graph.ts` Room has `items: LootContainer[]`, required `type: RoomType`, and `hazards`. The local one is the temp dev fixture; Jarlaxle's generator produces the shared type. When the generator replaces the test graph, the `type` field becomes mandatory.
+18. **Key file paths for extraction system:**
+    - `packages/server/src/extraction/ExtractionSystem.ts` — Core extraction logic (channel state, ticking, interrupts, command locks, noise events)
+    - `packages/server/src/extraction/index.ts` — Barrel export
+    - `packages/server/src/commands/handlers/extract.ts` — Extract command handler
+    - `packages/server/src/__tests__/extraction.test.ts` — 30 tests
+19. **Shared package rebuild required:** After modifying `packages/shared/src/index.ts`, you must rebuild (`npm run build` in shared) before the server can see new types. The server imports from the compiled `dist/` output, not the source. `tsc --build --force` clears stale caches.
 
 ---
 

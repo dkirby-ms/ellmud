@@ -53,6 +53,18 @@
 - **Narration structure:** All handlers return narration entries with `{type: string, text: string}`. Volo (Issue #9) will enrich these with LLM. Handlers never change.
 - **Wave 4 context:** You're starting Issue #6 (combat) now. Drizzt #8 is stable foundation. Volo #9 (LLM narration) will land in parallel. Drizzt #12 (auth) won't block your work.
 
+### 2025-07-25: Drowned Revenant Creature + AI Behavior Tree (Issue #7)
+- Created 7 files: types, behavior tree, CreatureManager, loot system, Drowned Revenant template, barrel export, and 41 unit tests.
+- **Behavior tree is pure state machine:** idle→alert→hostile→fleeing. All transitions deterministic — no Math.random anywhere. Uses `simpleHash(creature.id + idleTicks)` for patrol room selection.
+- **Fleeing is terminal in Phase 1:** Once a creature enters fleeing state, it never recovers. Simplifies reasoning. If cornered (no exits), falls back to dodge.
+- **Berserker archetype:** Drowned Revenant always strikes in hostile state, targets first player in room (deterministic ordering).
+- **Combat integration is clean:** `toCombatant()` converts Creature→Combatant, `syncFromCombat()` syncs HP/room back. No modifications to CombatSystem needed — the Combatant interface already had `isPlayer: boolean`.
+- **Spawn placement uses PRNG shuffle:** Eligible rooms filtered by template rules (forbid entry/extraction, prefer corridors/dead-ends), then shuffled with seeded PRNG. First N rooms from shuffle get creatures.
+- **Loot is fully deterministic Phase 1:** Every loot table entry drops on death. Item IDs namespaced by creature ID for uniqueness.
+- **CreatureWorldState is a minimal view interface:** `playersInRoom`, `roomExits`, `noisyRooms`. ShardRoom constructs this each tick from its own state. Keeps creature AI decoupled from Colyseus.
+- Pre-existing test failure in `commands.test.ts` (expects 5 rooms but test graph now has 6) — not related to creature changes.
+- All 41 creature tests pass. All 208 pre-existing tests unaffected.
+
 ---
 
 ## Wave 4 Cross-Team Context (2026-03-19T16:32:56Z)
