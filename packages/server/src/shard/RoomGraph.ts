@@ -15,10 +15,13 @@ export interface Item {
 
 export type Direction = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
 
+export type RoomType = 'entry' | 'extraction' | 'boss' | 'corridor' | 'junction' | 'dead_end';
+
 export interface Room {
   id: string;
   name: string;
   description: string;
+  type?: RoomType;
   exits: Map<Direction, string>;
   items: Item[];
 }
@@ -93,10 +96,23 @@ export function createTestRoomGraph(): RoomGraph {
       'Stone sarcophagi jut from rubble. The ceiling has partially caved in, and dust motes dance in shafts of dim light. A faint scratching echoes from the walls.',
     exits: new Map<Direction, string>([
       ['east', 'corridor'],
+      ['down', 'extraction-chamber'],
     ]),
     items: [
       { id: 'bandage', name: 'crude bandage', weight: 0.5, description: 'A strip of cloth that could staunch a wound.' },
     ],
+  });
+
+  rooms.set('extraction-chamber', {
+    id: 'extraction-chamber',
+    name: 'Extraction Chamber',
+    description:
+      'A circular chamber thrums with latent energy. Runes carved into the floor pulse with violet light, forming a portal anchor. This is a way out.',
+    type: 'extraction',
+    exits: new Map<Direction, string>([
+      ['up', 'crypt'],
+    ]),
+    items: [],
   });
 
   return { rooms, startRoomId: 'entry' };

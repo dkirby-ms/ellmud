@@ -99,9 +99,9 @@ describe('Command Parser', () => {
 // ─── Room Graph Tests ─────────────────────────────────────────────────────
 
 describe('Room Graph', () => {
-  it('should create a test graph with 5 rooms', () => {
+  it('should create a test graph with 6 rooms', () => {
     const graph = createTestRoomGraph();
-    expect(graph.rooms.size).toBe(5);
+    expect(graph.rooms.size).toBe(6);
     expect(graph.startRoomId).toBe('entry');
   });
 

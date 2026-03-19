@@ -14,6 +14,7 @@ import { PlayerState } from '../state/PlayerState.js';
 import { createTestRoomGraph, type RoomGraph } from '../shard/RoomGraph.js';
 import { handleLook } from '../commands/handlers/look.js';
 import { CombatSystem, createCombatant, type TickResult } from '../combat/index.js';
+import { ExtractionSystem, type ExtractionTickResult } from '../extraction/index.js';
 import { authenticateClient } from '../auth/colyseus-auth.js';
 
 const TICK_INTERVAL_MS = 1000;
@@ -38,6 +39,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private roomGraph!: RoomGraph;
   private players = new Map<string, PlayerState>();
   private combatSystem!: CombatSystem;
+  private extractionSystem!: ExtractionSystem;
 
   onCreate(options: Record<string, unknown>): void {
     // Initialize server-internal state (never sent to clients)
@@ -61,6 +63,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       const room = this.roomGraph.rooms.get(roomId);
       return room ? Array.from(room.exits.values()) : [];
     });
+
+    // Initialize extraction system (default 5-tick channel)
+    this.extractionSystem = new ExtractionSystem();
 
     // Register message handlers
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
@@ -109,6 +114,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   onLeave(client: Client): void {
     this.state.playerCount--;
+    this.extractionSystem.interruptExtraction(client.sessionId, 'you left the shard');
     this.players.delete(client.sessionId);
     this.combatSystem.removeCombatant(client.sessionId);
     this.log(`Player left: ${client.sessionId} (${this.state.playerCount} players)`);
@@ -140,7 +146,27 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     if (this.combatSystem.hasActiveEncounters()) {
       const tickResult = this.combatSystem.resolveTick();
       this.deliverCombatResults(tickResult);
+
+      // Check if any extracting players took damage — interrupt their channels
+      for (const event of tickResult.events) {
+        if (event.type === 'strike' && event.targetId) {
+          if (this.extractionSystem.isExtracting(event.targetId)) {
+            const narration = this.extractionSystem.interruptExtraction(
+              event.targetId, 'you were struck by an enemy',
+            );
+            if (narration) {
+              const client = this.findClient(event.targetId);
+              if (client) {
+                this.sendNarrate(client, { text: narration, type: 'system', timestamp: Date.now() });
+              }
+            }
+          }
+        }
+      }
     }
+
+    // Resolve extraction ticks
+    this.tickExtractions();
   }
 
   // ─── Shard Lifecycle ─────────────────────────────────────────────────────
@@ -181,8 +207,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
   private handleCollapse(): void {
+    // Interrupt all active extractions
+    this.extractionSystem.interruptAll('the shard collapsed');
+
+    // Shard-sickness narration for all remaining players
     this.broadcast(MessageTypes.NARRATE, {
-      text: 'The shard shatters. Reality folds in on itself. Everything goes dark.',
+      text: 'The shard shatters. Reality folds in on itself. Everything goes dark. A deep sickness settles into your bones — shard-sickness consumes you.',
       type: 'system',
       timestamp: Date.now(),
     } satisfies NarrateMessage);
@@ -255,6 +285,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       otherPlayersInRoom,
       stability: this.state.stability,
       combatSystem: this.combatSystem,
+      extractionSystem: this.extractionSystem,
     };
   }
 
@@ -311,6 +342,51 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   private findClient(sessionId: string): Client | undefined {
     return this.clients.find((c) => c.sessionId === sessionId);
+  }
+
+  // ─── Extraction Tick Delivery ─────────────────────────────────────────────
+
+  private tickExtractions(): void {
+    for (const playerId of this.extractionSystem.getActiveExtractions()) {
+      const result = this.extractionSystem.tickExtraction(playerId);
+      if (!result) continue;
+
+      const client = this.findClient(playerId);
+      if (!client) {
+        this.extractionSystem.interruptExtraction(playerId, 'player disconnected');
+        continue;
+      }
+
+      this.sendNarrate(client, {
+        text: result.narration,
+        type: 'system',
+        timestamp: Date.now(),
+      });
+
+      if (result.completed) {
+        this.handleSuccessfulExtraction(client, playerId);
+      }
+    }
+  }
+
+  private handleSuccessfulExtraction(client: Client, playerId: string): void {
+    // Remove player from shard
+    this.players.delete(playerId);
+    this.combatSystem.removeCombatant(playerId);
+    this.state.playerCount--;
+
+    this.log(`Player extracted: ${playerId}`);
+
+    // Send extraction completion message — client should transition to Refuge
+    client.send(MessageTypes.EXTRACTION_STATE, {
+      playerId,
+      state: 'completed',
+      narration: 'You emerge from the portal into the warm glow of the Refuge. You made it out.',
+      timestamp: Date.now(),
+    });
+
+    // Disconnect the client from this shard room (they rejoin Refuge)
+    client.leave();
   }
 
   // ─── Message Senders ─────────────────────────────────────────────────────

@@ -135,6 +135,7 @@ export const MessageTypes = {
   ROOM_HEADER: 'room_header',
   SHARD_STATE: 'shard_state',
   COMBAT_RESULT: 'combat_result',
+  EXTRACTION_STATE: 'extraction_state',
 } as const;
 
 export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
@@ -178,3 +179,15 @@ export type {
 } from './narrative-types.js';
 
 export { DEFAULT_NARRATION_CONFIG } from './narrative-types.js';
+
+// ─── Extraction Types (GDD §3 step 6) ────────────────────────────────────────
+
+/** Server → Client: Extraction channel state update. */
+export interface ExtractionMessage {
+  playerId: string;
+  state: 'started' | 'progress' | 'completed' | 'interrupted';
+  ticksRemaining?: number;
+  totalTicks?: number;
+  narration: string;
+  timestamp: number;
+}

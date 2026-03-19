@@ -9,6 +9,7 @@ import type { NarrationType } from '@ellmud/shared';
 import type { Room } from '../shard/RoomGraph.js';
 import type { PlayerState } from '../state/PlayerState.js';
 import type { CombatSystem } from '../combat/CombatSystem.js';
+import { ExtractionSystem } from '../extraction/ExtractionSystem.js';
 import { handleGo } from './handlers/go.js';
 import { handleLook } from './handlers/look.js';
 import { handleTake } from './handlers/take.js';
@@ -16,6 +17,7 @@ import { handleDrop } from './handlers/drop.js';
 import { handleInventory } from './handlers/inventory.js';
 import { handleAttack } from './handlers/attack.js';
 import { handleStrike, handleDodge, handleFlee } from './handlers/combat-actions.js';
+import { handleExtract } from './handlers/extract.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,8 @@ export interface CommandContext {
   stability: number;
   /** Combat system reference (available in ShardRoom context). */
   combatSystem?: CombatSystem;
+  /** Extraction system reference (available in ShardRoom context). */
+  extractionSystem?: ExtractionSystem;
 }
 
 export type CommandHandler = (ctx: CommandContext) => CommandResult;
@@ -64,12 +68,25 @@ handlers.set('attack', handleAttack);
 handlers.set('strike', handleStrike);
 handlers.set('dodge', handleDodge);
 handlers.set('flee', handleFlee);
+handlers.set('extract', handleExtract);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(
   verb: string,
   ctx: CommandContext,
 ): CommandResult {
+  // Extraction command lock: block movement/combat while channeling
+  if (ctx.extractionSystem) {
+    const lockMessage = ExtractionSystem.checkCommandLock(
+      verb, ctx.player.sessionId, ctx.extractionSystem,
+    );
+    if (lockMessage) {
+      return {
+        narrations: [{ text: lockMessage, type: 'system' }],
+      };
+    }
+  }
+
   const handler = handlers.get(verb);
   if (!handler) {
     return {
