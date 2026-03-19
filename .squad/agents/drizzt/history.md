@@ -252,3 +252,26 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 - **Monorepo Dockerfile layer caching**: copy package.json files first, `npm ci`, then copy source. This means dependency installs are cached unless package.json changes — saves minutes on rebuilds.
 - **Production runtime image** only needs shared + server workspaces. Client build output is not needed server-side (client is served separately or via CDN in production).
 - **Pre-existing build errors** in client package (Vite types, testing-library matchers) don't affect server build or tests. CI workflow's `tsc --noEmit` targets server tsconfig specifically to avoid false failures.
+
+### 2026-03-19: Client Package Build Fix
+- **Task:** Fixed TypeScript errors in `packages/client` preventing build
+- **Status:** ✅ Complete — 0 TypeScript errors, vite build succeeds, all 44 client tests pass
+- **Files changed:**
+  - Created `packages/client/src/vite-env.d.ts` — adds Vite client type declarations for `import.meta.env`
+  - Created `packages/client/src/testing.d.ts` — augments vitest Assertion interface with jest-dom matchers
+  - Updated `packages/client/src/__tests__/setup.ts` — restored runtime matcher registration (kept original `expect.extend(matchers)` pattern)
+
+**Technical Notes:**
+- **`import.meta.env` TypeScript support**: Vite provides `vite/client` types, but they must be referenced in a `.d.ts` file. Created `vite-env.d.ts` with `/// <reference types="vite/client" />` — standard Vite pattern.
+- **@testing-library/jest-dom type augmentation**: The package v6.9.1 exports `/matchers` for runtime registration (which setup.ts already did) but TypeScript needs a separate declaration module. Created `testing.d.ts` that imports vitest and jest-dom types, then augments the vitest `Assertion` interface with `TestingLibraryMatchers`.
+- **Runtime vs compile-time**: TypeScript augmentation (`testing.d.ts`) does NOT replace runtime matcher registration (`expect.extend(matchers)` in setup.ts) — both are required. The d.ts tells TypeScript the methods exist; expect.extend() actually adds them to vitest's expect at runtime.
+- **Why not use `@testing-library/jest-dom/vitest` import?** The package exports a `/vitest` entry that's supposed to auto-register types and matchers, but under vitest 4.1.0 with bundler moduleResolution, it doesn't work correctly. Manual augmentation is more explicit and reliable.
+- **tsconfig.json `types` array pitfall**: Adding `@testing-library/jest-dom/types/vitest` to the types array caused "Cannot find type definition file" errors because TypeScript couldn't resolve that path correctly under moduleResolution: bundler. Explicit `.d.ts` files in `src/` (covered by `include: ["src/**/*"]`) are the correct pattern for module augmentation.
+- **Verification complete**: `tsc --noEmit` passes, `vite build` produces dist output, `vitest run` shows 44/44 tests passing for client, and 552/552 tests still pass for server (no regression).
+
+**Pattern for future type augmentation:**
+1. Create a `.d.ts` file in `src/` (e.g., `testing.d.ts`, `vite-env.d.ts`)
+2. Use `declare module 'libraryName'` to augment third-party interfaces
+3. Import the types you're extending: `import 'vitest'` and `import type { ... } from '...'`
+4. Extend the interface: `interface Assertion<T> extends SomeMatchers<...> {}`
+5. Keep runtime registration separate (e.g., in test setup files)
