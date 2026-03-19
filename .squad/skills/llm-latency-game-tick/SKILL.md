@@ -3,7 +3,7 @@ name: "llm-latency-game-tick"
 description: "Pattern for integrating LLM generation into real-time game loops where LLM latency exceeds tick budgets"
 domain: "game-architecture, llm-integration"
 confidence: "high"
-source: "earned — Azure architecture analysis for Shardbound (2026-03-19)"
+source: "earned — Azure architecture analysis for Ellmud (2026-03-19)"
 ---
 
 ## Context

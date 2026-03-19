@@ -2,7 +2,7 @@
 
 ## Project Context
 
-- **Project:** Shardbound (ellmud) — PvPvE Extraction RPG / Real-Time MUD
+- **Project:** Ellmud — PvPvE Extraction RPG / Real-Time MUD
 - **Stack:** Node.js, Colyseus 0.17.x (WebSocket), Azure Container Apps, PostgreSQL, Redis, LLM integration via Azure AI Foundry
 - **What:** Procedurally generated shard instances, tick-based combat, server-authoritative game state, message-only client protocol, LLM narration layer
 - **User:** dkirby-ms

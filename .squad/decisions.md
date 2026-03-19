@@ -89,7 +89,7 @@ Adopt Colyseus 0.17.x with:
 
 ---
 
-### 2026-03-19: Azure hosting architecture for Shardbound
+### 2026-03-19: Azure hosting architecture for Ellmud
 **By:** Elminster  
 **Status:** Approved by dkirby-ms
 

@@ -1,6 +1,6 @@
 # Squad Team
 
-> Shardbound (ellmud) — PvPvE Extraction RPG / Real-Time MUD
+> Ellmud — PvPvE Extraction RPG / Real-Time MUD
 
 ## Coordinator
 
@@ -22,7 +22,7 @@
 
 ## Project Context
 
-- **Project:** Shardbound (ellmud) — PvPvE Extraction RPG / Real-Time MUD
+- **Project:** Ellmud — PvPvE Extraction RPG / Real-Time MUD
 - **Stack:** Node.js, WebSocket/SSH, LLM integration for narrative
 - **Description:** Procedurally generated shard instances, tick-based combat, server-authoritative game state, LLM narration layer. Text-primary interface with ANSI colour and UTF-8 box-drawing.
 - **GDD:** GDD.md

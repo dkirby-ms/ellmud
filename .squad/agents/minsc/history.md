@@ -2,7 +2,7 @@
 
 ## Project Context
 
-- **Project:** Shardbound (ellmud) — PvPvE Extraction RPG / Real-Time MUD
+- **Project:** Ellmud — PvPvE Extraction RPG / Real-Time MUD
 - **Stack:** Node.js, WebSocket/SSH, LLM integration for narrative
 - **What:** Procedurally generated shard instances, tick-based combat, server-authoritative game state, LLM narration layer
 - **User:** dkirby-ms
