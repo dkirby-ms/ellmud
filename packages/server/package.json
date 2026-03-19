@@ -19,6 +19,7 @@
     "@ellmud/shared": "*",
     "bcryptjs": "^3.0.3",
     "express": "^4.21.0",
+    "ioredis": "^5.10.1",
     "pg": "^8.20.0"
   },
   "devDependencies": {

@@ -1,0 +1,48 @@
+# Local development services for Ellmud.
+# Usage: docker compose up -d
+#
+# Redis 7 — narration cache + Colyseus presence (Phase 2).
+# PostgreSQL 16 — player persistence (future; stubbed for local dev).
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: ellmud-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: ellmud-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ellmud
+      POSTGRES_PASSWORD: ellmud_dev
+      POSTGRES_DB: ellmud
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ellmud"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  postgres-data:

@@ -15,12 +15,14 @@ export interface ServerConfig {
   /** Matchmaker mode. 'in-process' = Colyseus default built-in matchmaker. */
   matchmakerMode: 'in-process';
 
-  /** Redis presence configuration (wired but unused in Phase 1). */
+  /** Redis configuration — shared connection for cache + presence. */
   redis: {
     /** Enable Redis-backed presence for multi-replica scaling. */
     enabled: boolean;
-    /** Redis connection string (used when enabled = true). */
+    /** Redis connection string. */
     connectionString: string;
+    /** Enable Redis-backed narration cache (falls back to in-memory when false). */
+    cacheEnabled: boolean;
   };
 
   /** Server listen port. */
@@ -55,6 +57,7 @@ export function loadConfig(): ServerConfig {
     redis: {
       enabled: envBool('REDIS_PRESENCE_ENABLED', false),
       connectionString: envStr('REDIS_CONNECTION_STRING', 'redis://localhost:6379'),
+      cacheEnabled: envBool('REDIS_CACHE_ENABLED', false),
     },
     port: envInt('PORT', 2567),
     authRequired: envBool('AUTH_REQUIRED', false),
