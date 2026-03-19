@@ -3,9 +3,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     pool: 'threads',
-    fileParallelism: false,
-    testTimeout: 20000,
-    hookTimeout: 10000,
+    testTimeout: 5000,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
