@@ -28,4 +28,42 @@
 
 ---
 
-_Merged from decisions/inbox/ on 2026-03-19T14:14._
+## 2026-03-19T14:30: GDD faction & skill names canonical
+
+**By:** Jarlaxle (Systems Dev)  
+**Scope:** Issue #3 — PostgreSQL schema  
+
+**Decision:** Game Design Document (GDD) is the canonical source for faction names and skill categories. When issue text paraphrases or simplifies GDD content, use GDD §9.4 and §7.1 as the source of truth.
+
+**Example:** Issue #3 listed four skill categories and alternate faction names; GDD defines six skills (combat, defence, survival, subterfuge, awareness, social) and factions (Ironwright Compact, Veil Cartographers, Scarlet Ledger).
+
+**Impact:**
+- Code referencing `FactionSlugs` and `SkillCategory` should use `packages/server/src/db/types.ts` as the canonical enum
+- Future issues should reference GDD sections directly
+- All game data in schema must match GDD, not paraphrasing
+
+---
+
+## 2026-03-19T14:30: Colyseus test server architecture
+
+**By:** Minsc (Tester)  
+**Scope:** Issue #19 — Test infrastructure  
+
+**Decision:** Establish repeatable patterns for Colyseus server testing to avoid port binding and timing flakiness.
+
+**Patterns:**
+- **One Colyseus test server per test file** — Shared across all `describe` blocks via file-level `beforeAll`/`afterAll`
+- **`fileParallelism: false`** in server vitest config — Port 2568 cannot run multiple servers simultaneously
+- **Polling over fixed waits** — Use `waitUntil()` helper for state transitions that depend on simulation clock
+- **@colyseus/sdk as devDependency** — Added to @ellmud/server; required by @colyseus/testing but not declared upstream
+
+**Why:** Parallel test files cause `EADDRINUSE` crashes. Simulation clock is imprecise under load, making fixed delays flaky.
+
+**Impact:**
+- All server test files must import `bootTestServer()` from helpers and use one server per file
+- Never use `wait(N)` for state-dependent checks; use `waitUntil()` polling
+- Server vitest enforces single-file parallelism
+
+---
+
+_Merged from decisions/inbox/ on 2026-03-19T14:30._
