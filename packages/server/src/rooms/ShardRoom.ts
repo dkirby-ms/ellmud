@@ -8,6 +8,11 @@ import {
   MessageTypes,
 } from '@ellmud/shared';
 import { ShardState } from '../state.js';
+import { parseCommand } from '../commands/parser.js';
+import { handleCommand, type CommandContext } from '../commands/index.js';
+import { PlayerState } from '../state/PlayerState.js';
+import { createTestRoomGraph, type RoomGraph } from '../shard/RoomGraph.js';
+import { handleLook } from '../commands/handlers/look.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -28,6 +33,8 @@ interface ShardRoomOptions {
 export class ShardRoom extends Room<ShardRoomOptions> {
   private lifecycle: SharedShardState = 'seeding';
   private collapseTimerSeconds = 1200; // 20 minutes default
+  private roomGraph!: RoomGraph;
+  private players = new Map<string, PlayerState>();
 
   onCreate(options: Record<string, unknown>): void {
     // Initialize server-internal state (never sent to clients)
@@ -43,9 +50,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     this.state.collapseTimer = this.collapseTimerSeconds;
 
+    // Initialize room graph (will be replaced by procedural generator)
+    this.roomGraph = createTestRoomGraph();
+
     // Register message handlers
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
-      this.handleCommand(client, message);
+      this.handleCommandMessage(client, message);
     });
 
     // 1-second tick for all game simulation
@@ -60,20 +70,23 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   onJoin(client: Client): void {
     this.state.playerCount++;
+
+    // Initialize player state at shard entry room
+    const playerState = new PlayerState(client.sessionId, this.roomGraph.startRoomId);
+    this.players.set(client.sessionId, playerState);
+
     this.log(`Player joined: ${client.sessionId} (${this.state.playerCount} players)`);
 
-    // Send initial room state via messages
+    // Send initial system narration
     this.sendNarrate(client, {
       text: 'You step through the rift into a shard of the dying world...',
       type: 'system',
       timestamp: Date.now(),
     });
 
-    this.sendRoomHeader(client, {
-      roomName: 'Shard Entry',
-      exits: ['north', 'east'],
-      stability: this.state.stability,
-    });
+    // Send initial room look
+    const lookResult = handleLook(this.buildCommandContext(playerState, []));
+    this.deliverResult(client, lookResult);
 
     this.sendShardState(client, {
       state: this.lifecycle,
@@ -83,6 +96,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   onLeave(client: Client): void {
     this.state.playerCount--;
+    this.players.delete(client.sessionId);
     this.log(`Player left: ${client.sessionId} (${this.state.playerCount} players)`);
   }
 
@@ -161,26 +175,78 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   // ─── Command Handling ────────────────────────────────────────────────────
 
-  private handleCommand(client: Client, message: CommandMessage): void {
-    this.log(`Command from ${client.sessionId}: ${message.verb} ${message.args.join(' ')}`);
+  private handleCommandMessage(client: Client, message: CommandMessage): void {
+    const player = this.players.get(client.sessionId);
+    if (!player) {
+      this.sendNarrate(client, {
+        text: 'Your presence flickers. You are not fully in this shard.',
+        type: 'system',
+        timestamp: Date.now(),
+      });
+      return;
+    }
 
-    // Placeholder command handling — will be expanded with full parser
-    switch (message.verb) {
-      case 'look':
-        this.sendNarrate(client, {
-          text: 'You survey your surroundings carefully...',
-          type: 'room',
-          timestamp: Date.now(),
-        });
-        break;
+    // If the client sends pre-parsed { verb, args }, use them directly.
+    // If it's raw text, parse it through the command parser.
+    let verb: string;
+    let args: string[];
 
-      default:
-        this.sendNarrate(client, {
-          text: `You try to "${message.verb}" but nothing happens.`,
-          type: 'system',
-          timestamp: Date.now(),
-        });
-        break;
+    if (message.verb && message.args) {
+      // Pre-parsed from client (raw text may also arrive as { verb: raw, args: [] })
+      // Run through parser for alias expansion if args is empty and verb has spaces,
+      // or if verb is a known alias
+      const parseResult = parseCommand(`${message.verb} ${message.args.join(' ')}`.trim());
+      if (!parseResult.ok) {
+        this.sendNarrate(client, { text: parseResult.error, type: 'system', timestamp: Date.now() });
+        return;
+      }
+      verb = parseResult.command.verb;
+      args = parseResult.command.args;
+    } else {
+      this.sendNarrate(client, {
+        text: 'Silence hangs in the air. Type a command.',
+        type: 'system',
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    this.log(`Command from ${client.sessionId}: ${verb} ${args.join(' ')}`);
+
+    const ctx = this.buildCommandContext(player, args);
+    const result = handleCommand(verb, ctx);
+    this.deliverResult(client, result);
+  }
+
+  private buildCommandContext(player: PlayerState, args: string[]): CommandContext {
+    const room = this.roomGraph.rooms.get(player.currentRoomId)!;
+    const otherPlayersInRoom: string[] = [];
+    for (const [sid, ps] of this.players) {
+      if (sid !== player.sessionId && ps.currentRoomId === player.currentRoomId) {
+        otherPlayersInRoom.push(sid);
+      }
+    }
+
+    return {
+      player,
+      room,
+      args,
+      resolveRoom: (roomId: string) => this.roomGraph.rooms.get(roomId),
+      otherPlayersInRoom,
+      stability: this.state.stability,
+    };
+  }
+
+  private deliverResult(client: Client, result: import('../commands/index.js').CommandResult): void {
+    for (const narration of result.narrations) {
+      this.sendNarrate(client, {
+        text: narration.text,
+        type: narration.type,
+        timestamp: Date.now(),
+      });
+    }
+    if (result.roomHeader) {
+      this.sendRoomHeader(client, result.roomHeader);
     }
   }
 

@@ -1,0 +1,74 @@
+/**
+ * Command registry — maps verb strings to handler functions.
+ *
+ * All command handlers receive a CommandContext and return a CommandResult.
+ * The ShardRoom is responsible for building the context and delivering the result.
+ */
+
+import type { NarrationType } from '@ellmud/shared';
+import type { Room } from '../shard/RoomGraph.js';
+import type { PlayerState } from '../state/PlayerState.js';
+import { handleGo } from './handlers/go.js';
+import { handleLook } from './handlers/look.js';
+import { handleTake } from './handlers/take.js';
+import { handleDrop } from './handlers/drop.js';
+import { handleInventory } from './handlers/inventory.js';
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+export interface NarrationEntry {
+  text: string;
+  type: NarrationType;
+}
+
+export interface RoomHeaderEntry {
+  roomName: string;
+  exits: string[];
+  stability: number;
+}
+
+export interface CommandResult {
+  narrations: NarrationEntry[];
+  roomHeader?: RoomHeaderEntry;
+}
+
+export interface CommandContext {
+  player: PlayerState;
+  room: Room;
+  args: string[];
+  /** Resolve a room ID to a Room object. */
+  resolveRoom: (roomId: string) => Room | undefined;
+  /** Other player session IDs in the same room. */
+  otherPlayersInRoom: string[];
+  /** Current shard stability (0–1). */
+  stability: number;
+}
+
+export type CommandHandler = (ctx: CommandContext) => CommandResult;
+
+// ─── Registry ───────────────────────────────────────────────────────────────
+
+const handlers = new Map<string, CommandHandler>();
+
+handlers.set('go', handleGo);
+handlers.set('look', handleLook);
+handlers.set('take', handleTake);
+handlers.set('drop', handleDrop);
+handlers.set('inventory', handleInventory);
+
+/** Execute a command for a player. Returns narration results. */
+export function handleCommand(
+  verb: string,
+  ctx: CommandContext,
+): CommandResult {
+  const handler = handlers.get(verb);
+  if (!handler) {
+    return {
+      narrations: [{
+        text: `You try to "${verb}" but nothing happens.`,
+        type: 'system',
+      }],
+    };
+  }
+  return handler(ctx);
+}
