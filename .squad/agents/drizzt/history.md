@@ -239,6 +239,12 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 - **Existing multi-client tests break** when you enforce player limits. Any test that connects >1 client to a ShardRoom needs `MAX_PLAYERS_PER_SHARD` set higher. Fixed `edge-cases.test.ts`; keep this pattern for future multi-player tests.
 - **Room disposal on last leave**: Colyseus disposes rooms when the last client leaves. A "rejoin after leave" test won't work for the same room handle — the room is gone. Phase 2 multiplayer tests should account for this.
 
+### 2026-03-19: Redis Cache Integration (#2)
+- **ioredis named import required** under `module: "Node16"` — `import { Redis } from 'ioredis'` works; `import Redis from 'ioredis'` hits namespace-as-type errors. Always check tsconfig module resolution when adding new deps.
+- **NarrationCache interface was already well-designed** — implementing Redis as a new backend required zero changes to NarrationService. Interface-first design paid off immediately.
+- **Cache and Presence should be independently toggleable** — added `REDIS_CACHE_ENABLED` separate from `REDIS_PRESENCE_ENABLED`. A local dev might want Redis cache but not presence (or vice versa).
+- **MockRedisCache pattern for tests** — testing the Redis integration without a running Redis instance. Implements `NarrationCache` interface with a Map, tracks calls for assertions. Proves the contract, not the wire protocol.
+- **Docker Compose LRU config** — Redis `maxmemory-policy allkeys-lru` with 128MB cap. No persistence (appendonly no, save "") since this is ephemeral narration cache. Production Redis (Azure) will be configured separately via Bicep (#18).
 ### 2026-03-19: CI/CD Pipeline (#17)
 - **`az acr build`** does remote Docker builds on ACR — no Docker-in-Docker or local Docker daemon needed in GitHub Actions. Much cleaner than `docker build` + `docker push` with credentials.
 - **OIDC federated credentials** (id-token: write) eliminate stored service principal secrets. Playgrid uses this pattern and it's the right call for Ellmud too.
