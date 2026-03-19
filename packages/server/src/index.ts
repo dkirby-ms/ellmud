@@ -2,6 +2,8 @@ import { Server } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { monitor } from '@colyseus/monitor';
 import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { ShardRoom, RefugeRoom } from './rooms/index.js';
 import {
   AuthService,
@@ -43,6 +45,16 @@ initColyseusAuth(authService, AUTH_REQUIRED);
 
 // Colyseus monitor (admin dashboard) — serves Schema state for admin visibility
 app.use('/colyseus', monitor());
+
+// Serve client static files
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const publicPath = path.resolve(__dirname, 'public');
+app.use(express.static(publicPath));
+
+// Catch-all: serve index.html for client-side routing
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(publicPath, 'index.html'));
+});
 
 const server = new Server({
   transport: new WebSocketTransport({ server: app.listen(PORT) }),
