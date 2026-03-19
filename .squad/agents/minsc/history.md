@@ -16,6 +16,10 @@
 - **`@colyseus/sdk` is a peer dependency of `@colyseus/testing`:** Not declared explicitly — must be added to server devDependencies for tests to run.
 - **Test structure:** File-level `beforeAll`/`afterAll` for the Colyseus server, with multiple `describe` blocks sharing one server instance. This avoids port conflicts within a file.
 - **Test counts (Issue #19):** 42 server tests (6 files), 19 shared tests (1 file), 0 client tests (skeleton config). 61 total passing tests.
+- **Client test infrastructure (Issue #13):** jsdom environment required for React component tests. `@testing-library/jest-dom/matchers` must be manually extended via `expect.extend(matchers)` — the `/vitest` entrypoint doesn't auto-register in monorepo setups. Explicit `cleanup()` in `afterEach` is mandatory when using `screen` queries across tests.
+- **Message-only protocol enforcement via source scanning:** Connection tests read `connection.ts` source at test time and grep for forbidden patterns (`room.state`, `onStateChange`, `Schema`). Comments are stripped before checking to avoid false positives. This catches accidental Schema usage at CI time.
+- **Client test count (Issue #13):** 44 client tests (5 files) — connection protocol, terminal rendering, command input + aliases, auth flow, state reducer.
+- **Pre-existing server failures:** Server tests have a pre-existing failure (`commands.test.ts` expects 5 rooms but gets 6) likely from another agent's uncommitted extraction work. Not related to client.
 
 ---
 
