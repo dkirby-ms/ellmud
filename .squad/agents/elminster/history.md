@@ -90,3 +90,19 @@
 - **Decision — File placement:** `packages/client/` in monorepo. `packages/shared/` for message types shared with server.
 - **Phased plan:** A (Foundation, weeks 1-2) → B (Core Screens, weeks 3-5) → C (Gameplay, weeks 6-8) → D (Polish, weeks 9-10).
 - **Key files:** `docs/figma-conversion-strategy.md` (full strategy), `.squad/decisions/inbox/elminster-figma-conversion.md` (architectural decisions).
+
+### 2026-03-19: Figma Export v2 Analysis
+- **Action:** Comprehensive analysis of updated Figma export v2 responding to the gap-fill brief. Analysis document: `docs/figma-v2-analysis.md`.
+- **What the design team delivered:** Three new production-quality overlay components (ChatPanel, ExtractionOverlay, InventoryOverlay) addressing §2D, §2C, §2B from the brief. Combat UI implemented inline in ShardExploration. Sound cues panel added to sidebar.
+- **Coverage scorecard:** 55% of requested items fully or partially addressed (11/20), 45% missing (9/20). High-value items delivered: chat/social panel, extraction flow (all 3 states), inventory/loadout overlay.
+- **Key finding — Zero new dependencies:** v2 has the exact same 55 dependencies as v1. No new bloat. All new components built with existing React/Lucide/Radix primitives.
+- **Key finding — Theme tokens infrastructure added:** v2 theme.css grew from ~2K to 3.1K. Added `@theme inline` block exposing all color/typography tokens for Tailwind utilities (Tailwind v4 pattern). Tokens now cover tier colors, state colors, typography scale, font weights. BUT: No components migrated to use tokens yet — still all hardcoded hex values.
+- **Key finding — Overlay architecture pattern:** All three new components use state-discriminated rendering (null | state string → different UI trees). Clean pattern for modal overlays. Props drive UI (isOpen, state, progress), callbacks for dismissal (onClose). Stateless, reusable, wire-able to Colyseus.
+- **Key finding — Tier color modeling:** InventoryOverlay introduces `Item` interface with `tier` enum (common/sturdy/refined/masterwork/anomalous). `getTierColor()` function maps tier to hex. This is new modeling work (not in v1). Should be extracted to shared utils.
+- **Remaining gaps:** 12 items still missing. High-priority (3): reconnection overlay, enemy status panel, tick timer. Medium-priority (4): mini-action buttons, ambient events feed, auto-complete hint, trade interface. Low-priority (5): button state variants, HP bar states, toasts, empty states, responsive breakpoints.
+- **Impact on conversion strategy:** Phase C (Gameplay) shrinks from 3 weeks → 2.5 weeks due to overlay scaffolds. Total estimate: 10 weeks → 9.5 weeks (5% time savings). Phase A (Foundation) and Phase B (Core Screens) unchanged.
+- **Combat UI implementation:** Combat banner (⚔ COMBAT with blood-red border), action quickbar (7 buttons with keyboard shortcuts 1-7), sound cues panel all inline in ShardExploration. No separate component. Works functionally but needs enemy status panel and tick timer added (Phase C work).
+- **Decision — No further design iterations needed:** The remaining gaps are small enough to build in-house during Phase C/D. Patterns are clear from existing components. Proceed with conversion using v1 + v2 combined as design source.
+- **Decision — Phase A priority:** Migrate all hardcoded hex → theme tokens BEFORE starting Phase B. The Tailwind v4 @theme inline block is ready — just need find-replace gruntwork across all components.
+- **Open for Phase C:** Add enemy status panel (sidebar, during combat), tick timer (below combat banner), reconnection overlay (full-screen). Add trade interface to ChatPanel. All other gaps are Phase D polish or post-MVP.
+- **Key files:** `docs/figma-v2-analysis.md` (full analysis with gap scorecard, component deep dives, theme audit, remaining gaps list).

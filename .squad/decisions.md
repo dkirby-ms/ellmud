@@ -304,3 +304,200 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 - All meaningful changes require team consensus
 - Document architectural decisions here
 - Keep history focused on work, decisions focused on direction
+
+---
+
+### 2026-03-19T14:06: Figma Export v2 Analysis — Architecture Decisions
+**By:** Elminster (Lead/Architect)  
+**Status:** For stakeholder review  
+**Context:** Deep analysis of updated Figma export responding to gap-fill brief. 55% coverage (11/20 items) achieved with production-quality component scaffolds.
+
+#### Decision 1: Accept v2 Export and Proceed with Conversion
+
+**Recommendation:** Accept the v2 Figma export (ChatPanel, ExtractionOverlay, InventoryOverlay) as production-quality scaffolds and integrate them into the conversion plan.
+
+**Why:**
+- Three new overlays are well-structured, stateless components aligned with message-only client architecture
+- Implement high-value features (chat, extraction flow, inventory management) previously missing
+- Component structure (props-driven, callback-based) compatible with Colyseus integration
+- No new dependencies added (still 55 packages)
+- Saves ~0.5 weeks of Phase C implementation time
+
+**Impact:**
+- Phase C timeline: 3 weeks → 2.5 weeks (5% time savings on overlays)
+- Remaining gaps (enemy status panel, tick timer, reconnection overlay) are small enough to build in-house during Phase C/D
+
+**Alternatives considered:**
+- Request another design iteration → Rejected. Remaining gaps are polish/edge-cases faster to handle in-house.
+- Reject v2 and build from scratch → Rejected. v2 scaffolds are production-quality and align with design system.
+
+**Open questions:** None. Ready to proceed.
+
+---
+
+#### Decision 2: Prioritize Theme Token Migration (Phase A)
+
+**Recommendation:** Make theme token migration the **first task** in Phase A (Foundation), before Colyseus integration work.
+
+**Why:**
+- Tailwind v4 `@theme inline` block exists in theme.css and exposes all tokens correctly
+- All components (v1 and v2) still use hardcoded hex values (15-25+ per component)
+- Token migration is pure find-replace work with zero behavioral changes — safe to parallelize across team
+- Starting Phase B with hardcoded colors will cause merge conflicts and rework when tokens are eventually migrated
+
+**Pattern to enforce:**
+
+Before:
+```tsx
+<div className="bg-[#12131A] text-[#C9A84C] border-[#2A2B35]">
+```
+
+After:
+```tsx
+<div className="bg-bg-panel text-accent-gold border-border-muted">
+```
+
+**Impact:**
+- Phase A work estimate unchanged (2 weeks) — token migration was always part of Phase A
+- Eliminates ~800-1000 hardcoded hex literals across 9 components (6 pages + 3 new overlays)
+- Reduces future maintenance burden (single source of truth for colors)
+
+**Alternatives considered:**
+- Migrate incrementally during Phase B/C → Rejected. Creates merge conflicts and inconsistent codebase.
+- Keep hardcoded colors, add tokens for new code only → Rejected. Violates "single source of truth" principle.
+
+**Open questions:** None. Straightforward refactoring.
+
+---
+
+#### Decision 3: Extract Shared Utilities During Phase A
+
+**Recommendation:** Extract reusable utilities from new v2 components into `packages/shared/` during Phase A.
+
+**Utilities to extract:**
+
+1. **`getTierColor(tier: string): string`** (from InventoryOverlay.tsx)
+   - Location: `packages/shared/utils/tiers.ts`
+   - Maps tier enum → hex color
+   - Used by: InventoryOverlay, StashTab, ShardboardTab, ExtractionOverlay
+
+2. **`getCollapseColor(remainingSeconds: number, totalSeconds: number): string`** (from ShardExploration.tsx)
+   - Location: `packages/client/utils/shard.ts`
+   - Maps shard stability percentage → color (>50% white, 25-50% amber, <25% red)
+   - Used by: ShardExploration (sidebar + narrative header)
+
+3. **Tier enum and Item type** (from InventoryOverlay.tsx)
+   - Location: `packages/shared/types/items.ts`
+   - Type definitions for loot tiers and item properties
+   - Used by: InventoryOverlay, StashTab, LoadoutTab, ExtractionOverlay
+
+**Why:**
+- These patterns are copy-pasted across multiple components
+- Extracting enforces consistency (single source of truth)
+- Enables shared types between client and server
+
+**Impact:**
+- Adds ~1 day to Phase A (extraction + migration work)
+- Reduces Phase B/C implementation time by eliminating duplicate logic
+
+**Alternatives considered:**
+- Keep utilities inline, extract later → Rejected. Phase A is the correct time for foundational work.
+
+**Open questions:** None.
+
+---
+
+#### Decision 4: Build Missing High-Priority Components in Phase C
+
+**Recommendation:** Build the 3 missing high-priority components during Phase C (Gameplay) as part of combat and reconnection integration work.
+
+**Components to build:**
+
+1. **Enemy Status Panel** (sidebar, during combat)
+   - Shows: enemy name (serif, gold), HP tier (qualitative text), telegraphed action
+   - Location: Replaces Sound Cues section in ShardExploration sidebar during combat
+   - Effort: ~0.5 days (state already exists, just needs rendering)
+
+2. **Tick Timer** (below combat banner)
+   - Shows: slim countdown bar (3-4px height) filling left-to-right over 1 second, resets each tick
+   - Location: Immediately below "⚔ COMBAT" banner in ShardExploration
+   - Effort: ~0.25 days (simple progress bar with 1s setInterval)
+
+3. **Reconnection Overlay** (full-screen)
+   - Shows: dark scrim, centered pulsing indicator, "Connection lost. Reconnecting..." text
+   - Location: Full-screen overlay, appears when Colyseus room drops
+   - Effort: ~1 day (includes Colyseus reconnection token handling)
+
+**Why:**
+- Critical for core UX (combat feedback, reconnection tolerance)
+- Integrate directly with Phase C work (combat integration, Colyseus room lifecycle)
+- Building earlier would require mocking server behavior
+
+**Impact:**
+- Adds ~1.75 days to Phase C
+- Phase C estimate already included "combat UI polish" — this specifies it
+
+**Alternatives considered:**
+- Defer to Phase D → Rejected. Enemy status and tick timer are part of core combat loop, not polish.
+- Build in Phase A/B → Rejected. Would require mocking server state.
+
+**Open questions:** None.
+
+---
+
+#### Decision 5: Defer Medium/Low-Priority Gaps to Phase D or Post-MVP
+
+**Recommendation:** Do not block conversion on remaining 9 medium/low-priority gaps. Build opportunistically during Phase C/D if time allows, otherwise defer to post-MVP.
+
+**Deferred items:**
+
+**Medium-priority (nice-to-have, Phase D if time allows):**
+- Mini-action buttons (Look/Listen/Inventory quickbar) — ~0.5 days
+- Ambient events feed (Refuge activity scrolling text) — ~1 day
+- Auto-complete hint (ghost text above command input) — ~1 day
+- Trade interface (two-column offer panel in ChatPanel) — ~2 days
+
+**Low-priority (polish, post-MVP):**
+- Button state variants documentation — ~0.5 days
+- HP bar state transitions — ~0.5 days
+- Toast notification component (4 variants) — ~1 day
+- Empty state designs (6 atmospheric prose states) — ~1 day
+- Responsive breakpoints (tablet layouts) — ~3 days or post-MVP
+
+**Why:**
+- Phase C/D timeline already tight (9.5 weeks for full conversion)
+- These items improve UX but don't block core gameplay
+- Can be added incrementally post-MVP based on player feedback
+
+**Impact:**
+- Protects Phase C/D timeline from scope creep
+- Allows focus on core loop (login → loadout → enter shard → combat → extract → stash persists)
+
+**Alternatives considered:**
+- Build everything before launch → Rejected. Violates MVP principles.
+- Build none of them ever → Rejected. Some (ambient events, trade UI) valuable for immersion/economy, just not blocking.
+
+**Open questions:**
+- Should we prioritize ambient events feed or trade interface? → Answer after Phase B — depends on RefugeRoom integration complexity.
+
+---
+
+#### Summary Table
+
+| Decision | Recommendation | Impact | Phase |
+|----------|----------------|--------|-------|
+| **1. Accept v2 export** | ✅ Proceed with conversion using v1+v2 | -0.5 weeks Phase C | Immediate |
+| **2. Prioritize theme tokens** | ✅ Migrate all hex → tokens in Phase A | Clean foundation for Phase B/C | Phase A |
+| **3. Extract shared utils** | ✅ Extract getTierColor, Item types, collapse logic | +1 day Phase A, saves time later | Phase A |
+| **4. Build high-priority gaps** | ✅ Enemy status, tick timer, reconnection overlay | +1.75 days Phase C | Phase C |
+| **5. Defer medium/low gaps** | ✅ Defer 9 items to Phase D or post-MVP | Protects timeline | Phase D / Post-MVP |
+
+**Net impact:** Phase A +1 day (utils extraction), Phase C -0.5 weeks (overlay scaffolds) +1.75 days (high-priority gaps) = **Phase C net: -1 day**. Total estimate: 10 weeks → 9.5 weeks.
+
+**Go/no-go:** ✅ **Proceed with conversion.** The Figma export v2 provides sufficient design fidelity. No further design iterations needed.
+
+---
+
+*Proposed by Elminster — 2026-03-19*  
+*Awaiting stakeholder review (dkirby-ms)*
+
