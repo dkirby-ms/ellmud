@@ -41,6 +41,8 @@ const KNOWN_VERBS = new Set([
   'listen',
   'extract',
   'shardboard',
+  'stash',
+  'store',
 ]);
 
 export interface ParseResult {
