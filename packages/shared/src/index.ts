@@ -180,6 +180,38 @@ export type {
 
 export { DEFAULT_NARRATION_CONFIG } from './narrative-types.js';
 
+// ─── Item System (GDD §7.2, §7.3) ────────────────────────────────────────────
+
+export type {
+  ItemType,
+  WeaponStats,
+  ArmourStats,
+  ConsumableStats,
+  ItemStats,
+  RarityConfig,
+  ItemDefinition,
+  ItemInstance,
+  Loadout,
+  LoadoutValidationResult,
+} from './items.js';
+
+export {
+  RARITY_TIERS,
+  GEAR_TIER_ORDER,
+  getRarityConfig,
+  compareTiers,
+  computeEffectiveStats,
+  computeMaxDurability,
+  createItemInstance,
+  depleteDurability,
+  isBroken,
+  MAX_LOADOUT_WEIGHT,
+  MAX_CONSUMABLE_SLOTS,
+  getItemWeight,
+  calculateLoadoutWeight,
+  validateLoadout,
+} from './items.js';
+
 // ─── Extraction Types (GDD §3 step 6) ────────────────────────────────────────
 
 /** Server → Client: Extraction channel state update. */
