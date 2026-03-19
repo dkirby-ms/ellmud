@@ -1,15 +1,20 @@
 name: CI/CD
 
+# ─── Branch Strategy ─────────────────────────────────────────────────────────
+# dev  — active development, PRs merge here, tests only (no deploy)
+# uat  — staging/QA, push triggers build + deploy to UAT Container App
+# prod — production, push triggers build + deploy to Prod Container App
+
 on:
   pull_request:
-    branches: [main]
+    branches: [dev, uat, prod]
     paths-ignore:
       - docs/**
       - .squad/**
       - "*.md"
       - "**/*.md"
   push:
-    branches: [main]
+    branches: [uat, prod]
     paths-ignore:
       - docs/**
       - .squad/**
@@ -54,10 +59,12 @@ jobs:
         run: npm run test
 
   # ─── Docker Build & Push to ACR ───────────────────────────────────────────────
+  # Runs on push to uat/prod only. Uses GitHub environments for per-env secrets.
   docker-build-push:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push'
     needs: build-and-test
     runs-on: ubuntu-latest
+    environment: ${{ github.ref_name }}
     permissions:
       id-token: write
       contents: read
@@ -77,16 +84,19 @@ jobs:
         run: |
           az acr build \
             --registry ${{ secrets.ACR_NAME }} \
-            --image ellmud:${{ github.sha }} \
-            --image ellmud:latest \
+            --image ellmud-${{ github.ref_name }}:${{ github.sha }} \
+            --image ellmud-${{ github.ref_name }}:latest \
             --file Dockerfile \
             .
 
   # ─── Deploy to Azure Container Apps ───────────────────────────────────────────
+  # Environment-aware: secrets (CONTAINER_APP_NAME, RESOURCE_GROUP) come from
+  # the GitHub environment matching the branch name (uat or prod).
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push'
     needs: docker-build-push
     runs-on: ubuntu-latest
+    environment: ${{ github.ref_name }}
     permissions:
       id-token: write
       contents: read
@@ -125,7 +135,7 @@ jobs:
           az containerapp update \
             --name ${{ secrets.CONTAINER_APP_NAME }} \
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --image ${{ secrets.ACR_NAME }}.azurecr.io/ellmud:${{ github.sha }} \
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/ellmud-${{ github.ref_name }}:${{ github.sha }} \
             --set-env-vars "NODE_ENV=production" "PORT=2567"
 
       - name: Wait for deployment
@@ -192,7 +202,7 @@ jobs:
 
   # ─── Create issue on CI failure ───────────────────────────────────────────────
   create-failure-issue:
-    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: failure() && github.event_name == 'push'
     needs: [build-and-test, docker-build-push, deploy]
     runs-on: ubuntu-latest
     permissions:
@@ -210,7 +220,8 @@ jobs:
           set -euo pipefail
 
           SHORT_SHA="${GITHUB_SHA::7}"
-          TITLE="CI/CD failure (${SHORT_SHA})"
+          BRANCH="${GITHUB_REF_NAME}"
+          TITLE="CI/CD failure on ${BRANCH} (${SHORT_SHA})"
 
           existing_issue="$(gh issue list \
             --repo "$GITHUB_REPOSITORY" \
@@ -226,7 +237,7 @@ jobs:
 
           body_file="$(mktemp)"
           cat <<EOF > "$body_file"
-          CI/CD failure detected on \`main\`.
+          CI/CD failure detected on \`${BRANCH}\`.
 
           - Workflow run: ${RUN_URL}
           - Commit: ${GITHUB_SHA}
