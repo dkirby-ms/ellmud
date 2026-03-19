@@ -225,6 +225,36 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 
 ---
 
+### 2026-03-19T12:52:00Z: Ellmud Client UI Design Language
+**By:** Volo (Narrative Dev)  
+**Status:** Proposed — awaiting team review
+
+**What:** Defined the visual design language and screen architecture for the Ellmud web client, captured in a Figma AI design prompt for prototype generation.
+
+**Key Decisions:**
+1. **Single-screen gameplay paradigm**: The main shard exploration/combat view is a unified screen with a large narrative panel (70%) and a collapsible sidebar (30%), not separate pages. Players stay in one view during a run — consistent with MUD tradition.
+2. **Terminal-modern hybrid aesthetic**: Command input at the bottom (monospace, terminal-inspired), narrative prose in a serif reading font, modern UI chrome in sans-serif. Blends MUD heritage with contemporary game UI.
+3. **Dark fantasy color palette**: Near-black base (#0A0B0F), warm bone-white text (#E8E0D0), muted gold accents (#C9A84C), blood red for danger (#8B2500), spectral teal for interactables (#3A7D7B). No bright/saturated colors — everything muted and atmospheric.
+4. **Text-first, no graphics engine**: All game state communicated through styled prose text, typographic hierarchy, and subtle iconography. No sprites, no canvas, no WebGL. This is a text game with excellent typography.
+5. **Clickable affordances alongside typed commands**: Exits, items, and actions are subtly clickable in the narrative text (underline on hover) for accessibility, but the primary input remains the command bar. Power users type; new users can click.
+
+**Why:**
+- Respects GDD §12/§13: web-only, text-primary, no graphics engine, accessible by design
+- Supports the "information scarcity" pillar: dark, atmospheric UI with limited visual information reinforces tension
+- The single-screen layout keeps narrative flow unbroken during gameplay — critical for immersion in a text-heavy medium
+- Terminal-modern hybrid attracts both MUD veterans (familiar input model) and modern gamers (polished UI)
+
+**Impact:**
+- Client developers should build toward this screen architecture
+- LLM narrative output (my domain) must be formatted to work within the prose panel's constraints (line length, paragraph breaks, inline semantic markup for clickable elements)
+- The Refuge hub view is the only screen that meaningfully differs from the shard view (tabbed panels for stash/crafting/trading vs. narrative exploration)
+
+**Open Questions:**
+- Should the Refuge use the same narrative-panel layout or a more structured dashboard? (Proposed: hybrid — narrative panel for ambient text, but with structured panels for stash/trade)
+- Mobile breakpoint: is portrait phone a target or just tablet+desktop? (Proposed: tablet+ for Phase 1, phone as stretch goal)
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus
