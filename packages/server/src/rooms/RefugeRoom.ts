@@ -51,6 +51,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
       this.initStash();
     }
 
+
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
       this.handleCommand(client, message);
     });
@@ -71,6 +72,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
     // Resolve player ID: from auth context or fallback to sessionId
     const playerId = (options['playerId'] as string) || client.sessionId;
     this.playerIds.set(client.sessionId, playerId);
+
 
     this.log(`Player joined Refuge: ${client.sessionId} (${this.state.playerCount} players)`);
 
@@ -151,6 +153,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
       case 'store':
         this.handleStoreCommand(client, message.args);
         break;
+
 
       default:
         client.send(MessageTypes.NARRATE, {
@@ -233,6 +236,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
       timestamp: Date.now(),
     } satisfies NarrateMessage);
   }
+
 
   // ─── Logging ─────────────────────────────────────────────────────────────
 
