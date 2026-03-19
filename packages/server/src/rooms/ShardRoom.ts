@@ -13,6 +13,7 @@ import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
 import { createTestRoomGraph, type RoomGraph } from '../shard/RoomGraph.js';
 import { handleLook } from '../commands/handlers/look.js';
+import { authenticateClient } from '../auth/colyseus-auth.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -66,6 +67,10 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Begin shard lifecycle
     this.transitionTo('seeding');
     this.seedShard();
+  }
+
+  async onAuth(_client: Client, options: Record<string, unknown>): Promise<unknown> {
+    return authenticateClient(options['token'] as string | undefined);
   }
 
   onJoin(client: Client): void {

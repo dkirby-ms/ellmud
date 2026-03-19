@@ -3,11 +3,30 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { monitor } from '@colyseus/monitor';
 import express from 'express';
 import { ShardRoom, RefugeRoom } from './rooms/index.js';
+import {
+  AuthService,
+  InMemoryTokenStore,
+  InMemoryPlayerRepository,
+  createAuthRouter,
+  initColyseusAuth,
+} from './auth/index.js';
 
 const PORT = Number(process.env['PORT'] ?? 2567);
+const AUTH_REQUIRED = process.env['AUTH_REQUIRED'] === 'true';
 
 const app = express();
 app.use(express.json());
+
+// ─── Auth Setup ──────────────────────────────────────────────────────────────
+const tokenStore = new InMemoryTokenStore();
+const playerRepo = new InMemoryPlayerRepository();
+const authService = new AuthService(tokenStore, playerRepo);
+
+// Mount auth routes on the same Express app Colyseus uses
+app.use(createAuthRouter(authService));
+
+// Initialize Colyseus room auth hooks
+initColyseusAuth(authService, AUTH_REQUIRED);
 
 // Colyseus monitor (admin dashboard) — serves Schema state for admin visibility
 app.use('/colyseus', monitor());
@@ -22,3 +41,4 @@ server.define('refuge', RefugeRoom);
 
 console.log(`[Ellmud] Colyseus server listening on ws://localhost:${PORT}`);
 console.log(`[Ellmud] Admin monitor at http://localhost:${PORT}/colyseus`);
+console.log(`[Ellmud] Auth required: ${AUTH_REQUIRED}`);

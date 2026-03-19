@@ -6,6 +6,7 @@ import {
   MessageTypes,
 } from '@ellmud/shared';
 import { RefugeState } from '../state.js';
+import { authenticateClient } from '../auth/colyseus-auth.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -35,6 +36,10 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
     this.setSimulationInterval((deltaTime: number) => this.update(deltaTime), TICK_INTERVAL_MS);
 
     this.log('RefugeRoom created — The Refuge is open.');
+  }
+
+  async onAuth(_client: Client, options: Record<string, unknown>): Promise<unknown> {
+    return authenticateClient(options['token'] as string | undefined);
   }
 
   onJoin(client: Client): void {
