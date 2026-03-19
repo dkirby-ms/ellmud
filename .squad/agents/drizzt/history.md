@@ -57,3 +57,14 @@
 - Jarlaxle deployed gold-palette CSS variables (`#C9A84C` accent, dark backgrounds)
 - Typography: Cinzel (display), Crimson Text (serif), Inter (UI), JetBrains Mono (mono)
 - Any new UI work must use these design tokens; old cyan palette is deprecated
+
+---
+
+## Learnings
+
+### CI/CD 3-Branch Strategy
+- **File:** `.github/workflows/ci-cd.yml`
+- **Pattern:** `github.ref_name` maps directly to GitHub environment name (`uat`/`prod`), enabling `environment: ${{ github.ref_name }}` for env-aware secrets without any matrix or conditional logic.
+- **Docker tags:** Environment-prefixed images (`ellmud-uat:{sha}`, `ellmud-prod:{sha}`) keep ACR organized and prevent UAT images from being confused with prod.
+- **Key insight:** Since push triggers are scoped to `[uat, prod]` in the `on:` block, deploy job `if` conditions only need `github.event_name == 'push'` — the branch filtering is already enforced at the trigger level.
+- **Infra alignment:** Bicep `environmentName` param already accepts `['dev', 'uat', 'prod']` with `resourcePrefix = 'ellmud-${environmentName}'`, so the CI/CD image naming convention (`ellmud-{env}`) matches infra naming.
