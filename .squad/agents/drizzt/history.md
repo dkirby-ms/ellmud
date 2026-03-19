@@ -220,6 +220,19 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 
 ## Learnings
 
+### 2026-07-21: Admin Dashboard (#14)
+**Task:** Build Phase 1 admin dashboard — routes, auth, SSE, HTML dashboard, tests.
+**Status:** ✅ Complete — PR #55
+
+**Technical Notes:**
+- Colyseus `matchMaker.query({})` throws if the server isn't booted — wrap in try/catch for test resilience
+- `matchMaker.getLocalRoomById(roomId)` returns the live Room instance with state — this is the hook for admin inspection
+- `room.clock.stop()` / `room.clock.start()` control the simulation tick (NOT pause/resume — ClockTimer inherits from Clock)
+- Accessing private fields on Room (e.g. `players` map on ShardRoom) requires `as any` cast — acceptable for admin inspection
+- SSE (EventSource) doesn't support custom HTTP headers — auth via query param `?token=` instead
+- Admin auth uses a separate ADMIN_TOKEN env var, not the player auth system — fail-closed when unset
+- Express router middleware can be applied per-route (not just `router.use`) for selective auth
+- The dashboard HTML is served inline from a TypeScript template literal — zero build step, zero dependencies
 ### 2026-03-19: Solo Play Config (#15)
 - **Colyseus `onJoin` throwing** surfaces as a `MatchMakeError` to the client SDK — clean rejection path, no custom error protocol needed.
 - **Config singleton with `resetConfig()`** is essential for test isolation when tests manipulate `process.env`. Without reset, the cached config bleeds between test files since vitest runs in threads.

@@ -1,0 +1,71 @@
+/**
+ * Admin API response types.
+ */
+
+export interface AdminRoomSummary {
+  roomId: string;
+  name: string;
+  clients: number;
+  maxClients: number;
+  locked: boolean;
+  createdAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AdminShardDetail {
+  roomId: string;
+  name: string;
+  clients: number;
+  biome: string;
+  lifecycle: string;
+  stability: number;
+  collapseTimer: number;
+  tick: number;
+  playerCount: number;
+  paused: boolean;
+  players: AdminPlayerInfo[];
+}
+
+export interface AdminRefugeDetail {
+  roomId: string;
+  name: string;
+  clients: number;
+  tick: number;
+  playerCount: number;
+  paused: boolean;
+}
+
+export interface AdminPlayerInfo {
+  sessionId: string;
+  currentRoomId: string;
+  inventoryCount: number;
+  currentWeight: number;
+  maxCarryWeight: number;
+}
+
+export interface AdminMetrics {
+  uptime: number;
+  timestamp: number;
+  rooms: {
+    total: number;
+    shards: number;
+    refuges: number;
+    totalPlayers: number;
+  };
+  narration: {
+    cache_hits: number;
+    cache_misses: number;
+    cache_hit_ratio: number;
+    cache_size: number;
+    llm_calls: number;
+    llm_timeouts: number;
+    fallback_uses: number;
+    fallback_rate: number;
+    avg_llm_latency_ms: number;
+  };
+}
+
+export interface AdminSSEEvent {
+  type: 'rooms' | 'metrics' | 'shard_update';
+  data: unknown;
+}

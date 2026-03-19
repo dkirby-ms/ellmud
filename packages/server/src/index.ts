@@ -11,6 +11,7 @@ import {
   initColyseusAuth,
 } from './auth/index.js';
 import { createHealthRouter } from './health.js';
+import { createAdminRouter, createDashboardRouter } from './admin/index.js';
 import { getConfig } from './config.js';
 
 const config = getConfig();
@@ -31,6 +32,11 @@ app.use(createAuthRouter(authService));
 // Mount health check endpoint
 app.use(createHealthRouter());
 
+// ─── Admin Dashboard ─────────────────────────────────────────────────────────
+// Admin API at /admin/api/*, dashboard UI at /admin/
+// Protected by ADMIN_TOKEN env var — admin auth is separate from player auth.
+app.use(createAdminRouter());
+app.use('/admin', createDashboardRouter());
 
 // Initialize Colyseus room auth hooks
 initColyseusAuth(authService, AUTH_REQUIRED);
@@ -48,5 +54,6 @@ server.define('refuge', RefugeRoom);
 
 console.log(`[Ellmud] Colyseus server listening on ws://localhost:${PORT}`);
 console.log(`[Ellmud] Admin monitor at http://localhost:${PORT}/colyseus`);
+console.log(`[Ellmud] Admin dashboard at http://localhost:${PORT}/admin`);
 console.log(`[Ellmud] Auth required: ${AUTH_REQUIRED}`);
 console.log(`[Ellmud] Max players/shard: ${config.maxPlayersPerShard}, Matchmaker: ${config.matchmakerMode}, Redis: ${config.redis.enabled ? 'enabled' : 'disabled'}`);
