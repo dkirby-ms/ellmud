@@ -101,6 +101,25 @@ export type ShardModifier =
   | 'echoing'
   | 'bountiful';
 
+// ─── Combat Result Messages (GDD §6) ────────────────────────────────────────
+
+/** Server → Client: Structured combat tick results. */
+export interface CombatResultMessage {
+  tick: number;
+  encounterId: string;
+  results: Array<{
+    actorId: string;
+    actorName: string;
+    action: CombatAction;
+    targetId?: string;
+    targetName?: string;
+    damage?: number;
+    newHp?: number;
+    maxHp?: number;
+  }>;
+  combatEnded: boolean;
+}
+
 // ─── Message Type Keys ──────────────────────────────────────────────────────
 
 /**
@@ -115,6 +134,7 @@ export const MessageTypes = {
   NARRATE: 'narrate',
   ROOM_HEADER: 'room_header',
   SHARD_STATE: 'shard_state',
+  COMBAT_RESULT: 'combat_result',
 } as const;
 
 export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
@@ -138,3 +158,23 @@ export {
   serializeRoomGraph,
   deserializeRoomGraph,
 } from './room-graph.js';
+
+// ─── Narrative Types (GDD §4) ────────────────────────────────────────────────
+
+export type {
+  LLMNarrationType,
+  NarrationItem,
+  NarrationCreature,
+  NarrationTrace,
+  NarrationRoom,
+  NarrationPlayer,
+  NarrationEvent,
+  NarrativeDirectives,
+  NarrationContext,
+  NarrationTimeoutConfig,
+  NarrationModelConfig,
+  NarrationConfig,
+  NarrationTelemetry,
+} from './narrative-types.js';
+
+export { DEFAULT_NARRATION_CONFIG } from './narrative-types.js';

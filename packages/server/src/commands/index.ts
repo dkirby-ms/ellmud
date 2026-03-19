@@ -8,11 +8,14 @@
 import type { NarrationType } from '@ellmud/shared';
 import type { Room } from '../shard/RoomGraph.js';
 import type { PlayerState } from '../state/PlayerState.js';
+import type { CombatSystem } from '../combat/CombatSystem.js';
 import { handleGo } from './handlers/go.js';
 import { handleLook } from './handlers/look.js';
 import { handleTake } from './handlers/take.js';
 import { handleDrop } from './handlers/drop.js';
 import { handleInventory } from './handlers/inventory.js';
+import { handleAttack } from './handlers/attack.js';
+import { handleStrike, handleDodge, handleFlee } from './handlers/combat-actions.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -42,6 +45,8 @@ export interface CommandContext {
   otherPlayersInRoom: string[];
   /** Current shard stability (0–1). */
   stability: number;
+  /** Combat system reference (available in ShardRoom context). */
+  combatSystem?: CombatSystem;
 }
 
 export type CommandHandler = (ctx: CommandContext) => CommandResult;
@@ -55,6 +60,10 @@ handlers.set('look', handleLook);
 handlers.set('take', handleTake);
 handlers.set('drop', handleDrop);
 handlers.set('inventory', handleInventory);
+handlers.set('attack', handleAttack);
+handlers.set('strike', handleStrike);
+handlers.set('dodge', handleDodge);
+handlers.set('flee', handleFlee);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(

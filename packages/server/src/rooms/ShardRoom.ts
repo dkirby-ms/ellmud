@@ -13,6 +13,7 @@ import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
 import { createTestRoomGraph, type RoomGraph } from '../shard/RoomGraph.js';
 import { handleLook } from '../commands/handlers/look.js';
+import { CombatSystem, createCombatant, type TickResult } from '../combat/index.js';
 import { authenticateClient } from '../auth/colyseus-auth.js';
 
 const TICK_INTERVAL_MS = 1000;
@@ -36,6 +37,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private collapseTimerSeconds = 1200; // 20 minutes default
   private roomGraph!: RoomGraph;
   private players = new Map<string, PlayerState>();
+  private combatSystem!: CombatSystem;
 
   onCreate(options: Record<string, unknown>): void {
     // Initialize server-internal state (never sent to clients)
@@ -53,6 +55,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Initialize room graph (will be replaced by procedural generator)
     this.roomGraph = createTestRoomGraph();
+
+    // Initialize combat system with room exit resolver
+    this.combatSystem = new CombatSystem((roomId: string) => {
+      const room = this.roomGraph.rooms.get(roomId);
+      return room ? Array.from(room.exits.values()) : [];
+    });
 
     // Register message handlers
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
@@ -102,6 +110,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   onLeave(client: Client): void {
     this.state.playerCount--;
     this.players.delete(client.sessionId);
+    this.combatSystem.removeCombatant(client.sessionId);
     this.log(`Player left: ${client.sessionId} (${this.state.playerCount} players)`);
   }
 
@@ -125,6 +134,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       } else if (this.state.stability <= 0.25 && this.lifecycle === 'active') {
         this.transitionTo('destabilising');
       }
+    }
+
+    // Resolve combat tick
+    if (this.combatSystem.hasActiveEncounters()) {
+      const tickResult = this.combatSystem.resolveTick();
+      this.deliverCombatResults(tickResult);
     }
   }
 
@@ -239,6 +254,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       resolveRoom: (roomId: string) => this.roomGraph.rooms.get(roomId),
       otherPlayersInRoom,
       stability: this.state.stability,
+      combatSystem: this.combatSystem,
     };
   }
 
@@ -253,6 +269,48 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     if (result.roomHeader) {
       this.sendRoomHeader(client, result.roomHeader);
     }
+  }
+
+  // ─── Combat Result Delivery ──────────────────────────────────────────────
+
+  private deliverCombatResults(tickResult: TickResult): void {
+    // Send combat event narrations to all clients in relevant rooms
+    for (const event of tickResult.events) {
+      // Broadcast combat narrations to all connected clients
+      this.broadcast(MessageTypes.NARRATE, {
+        text: event.narration,
+        type: 'combat',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    }
+
+    // Handle flee movement — update player positions and send room descriptions
+    for (const flee of tickResult.fleeResults) {
+      const player = this.players.get(flee.combatantId);
+      if (player) {
+        player.currentRoomId = flee.toRoomId;
+        const client = this.findClient(flee.combatantId);
+        if (client) {
+          const targetRoom = this.roomGraph.rooms.get(flee.toRoomId);
+          if (targetRoom) {
+            this.sendNarrate(client, {
+              text: `You flee to **${targetRoom.name}**.\n${targetRoom.description}`,
+              type: 'room',
+              timestamp: Date.now(),
+            });
+            this.sendRoomHeader(client, {
+              roomName: targetRoom.name,
+              exits: Array.from(targetRoom.exits.keys()),
+              stability: this.state.stability,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  private findClient(sessionId: string): Client | undefined {
+    return this.clients.find((c) => c.sessionId === sessionId);
   }
 
   // ─── Message Senders ─────────────────────────────────────────────────────
