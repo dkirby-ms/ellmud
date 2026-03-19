@@ -28,3 +28,9 @@
 - **GDD:** GDD.md
 - **User:** dkirby-ms
 - **Created:** 2026-03-19
+
+## Issue Source
+
+- **Repository:** dkirby-ms/ellmud
+- **Connected:** 2026-03-19
+- **Filters:** All open issues (49 backlog items across Phase 1–4)

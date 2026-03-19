@@ -167,6 +167,62 @@ The 200ms combat narration target cannot be met by real-time LLM generation (~1.
 5. **Cold Start (LOW)** → Accept 5-15s cold start during off-hours. Keep min replicas = 1 for expected play hours (~$15/month).
 6. **Foundry Regional Availability (LOW)** → Deploy all services in same region. East US 2 and West US 2 have broadest availability.
 
+### 2026-03-19T11:55:00Z: Backlog Decomposition — GDD §17 Roadmap
+**By:** Elminster (Lead)  
+**Status:** Decision — Implemented
+
+**What:** GDD Roadmap decomposed into 81 granular GitHub issues across 4 phases (Phase 1–4) with dependencies, acceptance criteria, and risk mitigations. Deployed to dkirby-ms/ellmud repository as issues #1–#49 plus 4 milestones and 16 domain/priority labels.
+
+**Phase Breakdown:**
+- **Phase 1 MVP (18 issues, 8–10 weeks):** Solo core loop, 1 creature, 1 biome, simple auth
+- **Phase 2 Multiplayer (12 issues, 6–8 weeks):** Multi-player PvP, sound, traces, ambient Refuge
+- **Phase 3 Depth (16 issues, 8–12 weeks):** Skills, crafting, all 5 biomes, Tier 2–3 progression, factions
+- **Phase 4 World (10 issues, 6–8 weeks):** Marketplace, world events, OAuth, lore, seasonal leaderboards
+
+**Key Architecture Preservation:**
+- ✅ Colyseus 0.17.x message-only protocol (no Schema sync to clients)
+- ✅ Azure Container Apps + AI Foundry + PostgreSQL Flexible
+- ✅ Redis unmanaged container (cost optimization)
+- ✅ Web-only (SSH deferred indefinitely)
+- ✅ RefugeRoom as tick-driven living world
+- ✅ Admin dashboard from Phase 1 (Schema authorised consumer only)
+- ✅ LLM cache-first pipeline with template fallback (never blocks gameplay)
+- ✅ Server-authoritative state verified by integration test #19
+
+**Critical Path Dependencies:**
+```
+Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8) → Extraction (10)
+  → Stash + Auth + Client (11–13) → Phase 1 Test (19)
+  → Multi-Player Infra (21) → Phase 2 Gameplay (22–27) → Phase 2 Test (31)
+  → Skills + Crafting (32–33) → Biomes + Factions (34–38) → Phase 3 Test (47)
+  → OAuth + Seasonal (48–49) → Phase 4 Test (49)
+```
+
+**Parallelization Opportunities:**
+- Phase 1: Infra → {Colyseus, RoomGen, Combat, Item System, Docs} in parallel
+- Phase 2: Multi-Infra → {Sound, Traces, Awareness, Communication, Ambient} in parallel
+- Phase 3: Heavy parallelization (skill tree, crafting, biomes, factions mostly independent)
+- Phase 4: Refinements; safe to parallelize across teams
+
+**Risk Mitigations Embedded in Backlog:**
+1. **Schema Leakage (CRITICAL):** Client integration test (#19) verifies no Schema patches to web terminal; architectural enforcement via code review gate
+2. **LLM Latency:** Combat cached or templated within 200ms; async enrichment (never blocks tick)
+3. **Colyseus Scaling:** Redis presence from Phase 1; multi-replica stickiness tested Phase 2 before prod
+4. **Refuge Room Scaling:** Shard Refuge into multiple rooms; Redis pub/sub for cross-instance trade/chat
+5. **OAuth Retrofit:** Schema normalized Phase 1 for zero-migration Phase 4 bolt-on
+6. **Creature AI Determinism:** Behavior uses same tick resolution; replayable and testable
+7. **Prompt Injection Defence:** Free-text fields (say/emote) placed in untrusted data; never concatenated into LLM prompt
+
+**Estimated Total Timeline:** 28–38 weeks (1 full-time developer)
+
+**Why:** The GDD's 4-bullet-point roadmap per phase lacks sufficient detail for task assignment, sprint planning, and dependency tracking. This decomposition operationalizes the design without changing any core decisions or architecture. All issues include GDD section references (traceability), granular acceptance criteria (testable outcomes), and explicit dependency declarations (scheduling clarity).
+
+**Stakeholder Input Questions (for Phase 1 kickoff):**
+1. Is Phase 1 scope (solo, 1 creature, 1 biome) acceptable, or prioritize Phase 2 multi-player sooner?
+2. Team size: 1 dev, 2 devs, or more? (Timeline scales linearly.)
+3. OAuth required for launch, or post-launch nice-to-have?
+4. Seasonal frequency: every 4 weeks, 6 weeks, or variable?
+
 ---
 
 ## Governance
