@@ -35,9 +35,9 @@ describe('MessageTypes', () => {
     expect(MessageTypes.SHARD_STATE).toBe('shard_state');
   });
 
-  it('should have exactly 4 message types', () => {
+  it('should have exactly 5 message types', () => {
     const keys = Object.keys(MessageTypes);
-    expect(keys).toHaveLength(4);
+    expect(keys).toHaveLength(5);
   });
 
   it('should have unique values for all message types', () => {
