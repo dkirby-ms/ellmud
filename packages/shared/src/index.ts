@@ -118,3 +118,23 @@ export const MessageTypes = {
 } as const;
 
 export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
+
+// ─── Room Graph (GDD §10.1) ─────────────────────────────────────────────────
+
+export type {
+  Direction,
+  RoomType,
+  HazardPlaceholder,
+  LootContainer,
+  Room,
+  RoomGraph,
+  SerializedRoom,
+  SerializedRoomGraph,
+} from './room-graph.js';
+
+export {
+  ALL_DIRECTIONS,
+  OPPOSITE_DIRECTION,
+  serializeRoomGraph,
+  deserializeRoomGraph,
+} from './room-graph.js';
