@@ -76,3 +76,17 @@
   - Phase 4: OAuth schema prepared Phase 1 (zero breaking changes on bolt-on).
 - **Total Backlog:** 81 issues, estimated 28–38 weeks end-to-end (1 full-time dev). Linearly scalable to team size.
 - **Open Questions Captured:** 5 questions for stakeholder review (Phase 1 scope, Phase 2 timing, skill respec economy, anomalous item gating, seasonal leaderboard frequency, OAuth timing).
+
+### 2026-03-19: Figma Export Conversion Strategy
+- **Action:** Audited Figma AI prototype export (`/tmp/figma-export/`) and produced comprehensive conversion strategy at `docs/figma-conversion-strategy.md`. Decision filed at `.squad/decisions/inbox/elminster-figma-conversion.md`.
+- **Figma export quality:** Visual design is production-quality — colors, typography, layout proportions all match the GDD design prompt exactly. Code quality is scaffold-tier: hardcoded hex colors throughout (not using theme tokens), inline `style={{ fontFamily }}` everywhere, all data mock, zero state management or server integration. 6 screens, 3 tab components, 48 shadcn/ui primitives (mostly unused).
+- **Key finding — NarrativeEntry types:** The ShardExploration component defines `room | combat | trace | sound | system | speech` entry types that map directly to the server message categories. This validates the message protocol design.
+- **Key finding — Combat overlay pattern:** The conditional combat action bar rendering in ShardExploration is the correct UX pattern for transitioning between exploration and combat without leaving the narrative view.
+- **Decision — Keep visual design, rewrite implementation:** The layouts and visual patterns are the reusable asset; the code logic is 100% replaced. Every page needs: mock data removed, Colyseus message handlers, state management hooks, loading/error states.
+- **Decision — State management:** React Context + useReducer (no external library). The client is a thin view layer over server-authoritative state. ~10 state slices. Migration to Zustand available if needed.
+- **Decision — Colyseus integration:** Message-only pattern. Client MUST NOT subscribe to `room.state`. All state via `onMessage()` handlers. Schema leakage prevention enforced at architecture level.
+- **Decision — Dependency reduction:** ~55 → ~22 packages. Drop all MUI (conflicts with Tailwind), 12 unused Radix primitives, 15+ scaffold deps. Add only `colyseus.js`.
+- **Decision — Theme token migration:** Phase A prerequisite. All hardcoded hex values → Tailwind theme tokens. Inline fontFamily styles → Tailwind utilities. The theme.css already defines correct tokens — page components just don't use them.
+- **Decision — File placement:** `packages/client/` in monorepo. `packages/shared/` for message types shared with server.
+- **Phased plan:** A (Foundation, weeks 1-2) → B (Core Screens, weeks 3-5) → C (Gameplay, weeks 6-8) → D (Polish, weeks 9-10).
+- **Key files:** `docs/figma-conversion-strategy.md` (full strategy), `.squad/decisions/inbox/elminster-figma-conversion.md` (architectural decisions).
