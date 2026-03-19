@@ -51,6 +51,21 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 
 **Next Phase:** Phase 1 kickoff — assign developer(s) to issues #1–#18. Target: 8–10 weeks to solo MVP (login → loadout → shard entry → combat → extraction → stash persist).
 
+### 2025-07-25: Username/Password Authentication (Issue #12)
+**Task:** Build auth system with bcrypt password hashing, session tokens, HTTP endpoints, and Colyseus onAuth integration
+**Status:** ✅ Complete
+
+**Outcome:**
+- **AuthService** (`auth/AuthService.ts`): register/login/validateToken/logout. Bcrypt 10 rounds. Input validation (username 3-20 alphanumeric, password ≥6 chars).
+- **InMemoryTokenStore** (`auth/TokenStore.ts`): Map-based session tokens with setTimeout TTL cleanup (24h). `unref()` on timers to avoid holding process open.
+- **InMemoryPlayerRepository** (`auth/PlayerRepository.ts`): Player CRUD with case-insensitive duplicate detection. Matches `Player` + `PlayerIdentity` types from `db/types.ts`.
+- **HTTP Routes** (`auth/routes.ts`): POST `/auth/register` (201), `/auth/login` (200), `/auth/logout` (200). Error codes: 400 bad input, 401 wrong credentials, 409 duplicate username.
+- **Colyseus onAuth** (`auth/colyseus-auth.ts`): `authenticateClient()` used in ShardRoom and RefugeRoom `onAuth` hooks. Auth is optional by default (AUTH_REQUIRED env var) — existing tests pass without tokens.
+- **Server integration** (`index.ts`): Auth routes mounted on same Express app Colyseus uses. AuthService initialized with in-memory stores.
+- **35 new tests**: 9 registration, 4 login, 4 token validation, 1 expiry, 8 HTTP route, 5 Colyseus onAuth, 4 room join integration (including register→login→join flow)
+- **All 136 tests pass** (35 new + 101 existing, zero regressions)
+- Used `bcryptjs` (pure JS) over native `bcrypt` for platform compatibility with ESM
+
 ### 2025-07-24: Command Parser + Movement & Inventory (Issue #8)
 **Task:** Build GDD §5.1 verb-noun command parser, movement system, and basic inventory commands
 **Status:** ✅ Complete
@@ -121,3 +136,38 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
     - `packages/server/src/state/PlayerState.ts` — Per-player in-memory state (room ID, inventory, weight)
     - `packages/server/src/shard/RoomGraph.ts` — Room/Item/Direction types + test graph
     - `packages/server/src/__tests__/commands.test.ts` — 44 tests (parser, handlers, integration)
+12. **Auth is optional by design:** The onAuth hook in ShardRoom/RefugeRoom uses `authenticateClient()` which returns anonymous context when no token is provided and AUTH_REQUIRED is false. This is critical — existing tests that join rooms without tokens must not break. The `resetColyseusAuth()` function clears state between test suites.
+13. **bcryptjs over bcrypt:** Pure JS `bcryptjs` avoids native compilation issues in ESM environments. 10 rounds is the minimum acceptable — takes ~80ms per hash which is fine for auth but would be unacceptable in a tick loop.
+14. **Token TTL cleanup:** `setTimeout` with `.unref()` prevents token cleanup timers from keeping the Node process alive. The `dispose()` method on InMemoryTokenStore clears all timers — call it on shutdown.
+15. **Key file paths for auth system:**
+    - `packages/server/src/auth/AuthService.ts` — Core auth logic (register, login, validateToken, logout)
+    - `packages/server/src/auth/TokenStore.ts` — Token storage interface + InMemoryTokenStore
+    - `packages/server/src/auth/PlayerRepository.ts` — Player CRUD interface + InMemoryPlayerRepository
+    - `packages/server/src/auth/routes.ts` — Express routes for /auth/*
+    - `packages/server/src/auth/colyseus-auth.ts` — Colyseus onAuth hook (authenticateClient)
+    - `packages/server/src/auth/index.ts` — Barrel export
+    - `packages/server/src/__tests__/auth.test.ts` — 35 tests (unit + HTTP + Colyseus integration)
+
+---
+
+## Wave 4 Cross-Team Context (2026-03-19T16:32:56Z)
+
+**Completed parallel:**
+- ✅ **Drizzt Issue #12:** Username/password auth with bcrypt, JWT tokens, optional auth by default
+- ✅ **Jarlaxle Issue #6:** Combat system (strike, dodge, flee), pure logic class, 1s tick loop
+- ✅ **Volo Issue #9:** LLM narration pipeline, in-memory cache, Azure AI + fallbacks
+
+**Your Issue #10 — Extraction Mechanic — can now proceed:**
+- Auth foundation (#12) provides `playerId` tracking across sessions → loot persistence
+- Combat (#6) provides tick loop → safe zone timers can hook into tick cycle
+- Narration (#9) provides enrichment pipeline → death scenes and loot narratives ready
+
+**Dependencies resolved:**
+- Extraction does NOT require Jarlaxle Issue #7 (creature AI) — use static spawn points for Phase 1
+- Your Issue #10 handler pattern will follow existing parser→handler→delivery model (Issue #8)
+- CommandContext may include optional `combatSystem` field from Jarlaxle — use for combat-aware extraction checks
+
+**Upcoming Wave 5:**
+- Jarlaxle #7: Drowned Revenant creature + behavior tree (uses your combatSystem from #6)
+- Minsc #13: Web Terminal Client (uses your auth #12 + Volo narration #9)
+- Coordinate with Minsc on extraction UI mockups
