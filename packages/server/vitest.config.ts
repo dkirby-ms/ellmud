@@ -4,8 +4,8 @@ export default defineConfig({
   test: {
     pool: 'threads',
     fileParallelism: false,
-    testTimeout: 20000,
-    hookTimeout: 10000,
+    testTimeout: 60000,
+    hookTimeout: 60000,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

@@ -2,7 +2,7 @@
  * Test client helpers — reduce boilerplate for connecting test clients
  * and waiting for initial messages.
  */
-import { ColyseusTestServer, boot } from '@colyseus/testing';
+import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
 import { ShardRoom } from '../../rooms/ShardRoom.js';
 import { RefugeRoom } from '../../rooms/RefugeRoom.js';
@@ -15,15 +15,20 @@ export interface TestClientHandle {
 
 /**
  * Boot a test server with both room types defined.
+ * Uses server.listen(0) so the OS assigns a random available port,
+ * then patches server.port so ColyseusTestServer connects correctly.
+ * (@colyseus/testing's boot() ignores the port param for Server instances.)
  */
 export async function bootTestServer(): Promise<ColyseusTestServer> {
   const server = new Server();
   server.define('shard', ShardRoom);
   server.define('refuge', RefugeRoom);
-  return await boot(server);
+  await server.listen(0);
+  // After listen(0), the OS-assigned port is on the underlying HTTP server
+  const addr = (server as any).transport.server.address();
+  (server as any).port = addr.port;
+  return new ColyseusTestServer(server);
 }
-
-export { boot };
 
 /**
  * Create a room and connect a client with a MessageCollector already wired up.

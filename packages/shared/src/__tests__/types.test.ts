@@ -8,6 +8,7 @@ import {
   type NarrateMessage,
   type RoomHeaderMessage,
   type ShardStateMessage,
+  type ExtractionMessage,
   type NarrationType,
   type ShardState,
   type CombatAction,
@@ -35,9 +36,13 @@ describe('MessageTypes', () => {
     expect(MessageTypes.SHARD_STATE).toBe('shard_state');
   });
 
-  it('should have exactly 5 message types', () => {
+  it('should export EXTRACTION_STATE type key', () => {
+    expect(MessageTypes.EXTRACTION_STATE).toBe('extraction_state');
+  });
+
+  it('should have exactly 6 message types', () => {
     const keys = Object.keys(MessageTypes);
-    expect(keys).toHaveLength(5);
+    expect(keys).toHaveLength(6);
   });
 
   it('should have unique values for all message types', () => {
@@ -81,6 +86,20 @@ describe('Message Type Shapes', () => {
     const msg: ShardStateMessage = { state: 'seeding' };
     expect(msg.state).toBe('seeding');
     expect(msg.collapseTimer).toBeUndefined();
+  });
+
+  it('ExtractionMessage should accept extraction state fields', () => {
+    const msg: ExtractionMessage = {
+      playerId: 'p1',
+      state: 'started',
+      ticksRemaining: 5,
+      totalTicks: 10,
+      narration: 'You begin channelling extraction.',
+      timestamp: 12345,
+    };
+    expect(msg.playerId).toBe('p1');
+    expect(msg.state).toBe('started');
+    expect(msg.ticksRemaining).toBe(5);
   });
 });
 

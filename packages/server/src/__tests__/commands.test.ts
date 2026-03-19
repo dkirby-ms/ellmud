@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
-import { ColyseusTestServer, boot } from '@colyseus/testing';
+import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
 import { ShardRoom } from '../rooms/ShardRoom.js';
 import { RefugeRoom } from '../rooms/RefugeRoom.js';
@@ -353,7 +353,10 @@ describe('ShardRoom Commands (Integration)', () => {
     const server = new Server();
     server.define('shard', ShardRoom);
     server.define('refuge', RefugeRoom);
-    colyseus = await boot(server);
+    await server.listen(0);
+    const addr = (server as any).transport.server.address();
+    (server as any).port = addr.port;
+    colyseus = new ColyseusTestServer(server);
   });
 
   afterAll(async () => {

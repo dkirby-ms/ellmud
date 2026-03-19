@@ -1,4 +1,4 @@
-export { bootTestServer, connectTestClient, connectToExistingRoom, wait, waitUntil, boot } from './test-client.js';
+export { bootTestServer, connectTestClient, connectToExistingRoom, wait, waitUntil } from './test-client.js';
 export { MessageCollector } from './message-collector.js';
 export type { CollectedMessage } from './message-collector.js';
 export type { TestClientHandle } from './test-client.js';
