@@ -1,0 +1,14 @@
+node_modules
+.git
+.github
+docs
+.squad
+*.md
+!README.md
+**/__tests__
+**/*.test.ts
+**/*.spec.ts
+**/vitest.config.*
+**/.env*
+**/dist
+*.tsbuildinfo
