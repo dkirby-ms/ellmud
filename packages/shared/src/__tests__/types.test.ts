@@ -40,9 +40,13 @@ describe('MessageTypes', () => {
     expect(MessageTypes.EXTRACTION_STATE).toBe('extraction_state');
   });
 
-  it('should have exactly 6 message types', () => {
+  it('should export STASH_UPDATE type key', () => {
+    expect(MessageTypes.STASH_UPDATE).toBe('stash_update');
+  });
+
+  it('should have exactly 7 message types', () => {
     const keys = Object.keys(MessageTypes);
-    expect(keys).toHaveLength(6);
+    expect(keys).toHaveLength(7);
   });
 
   it('should have unique values for all message types', () => {

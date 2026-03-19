@@ -51,6 +51,20 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 
 **Next Phase:** Phase 1 kickoff — assign developer(s) to issues #1–#18. Target: 8–10 weeks to solo MVP (login → loadout → shard entry → combat → extraction → stash persist).
 
+### 2026-03-19: Stash Persistence (Issue #11)
+**Task:** Build persistent stash system — save/load player inventory from PostgreSQL (in-memory for Phase 1)
+**Status:** ✅ Complete
+
+**Outcome:**
+- **StashRepository** (`stash/StashRepository.ts`): Interface + InMemoryStashRepository. Per-player Map storage with O(1) lookups. Configurable capacity (default 200 weight). Admin visibility via listPlayerIds().
+- **StashService** (`stash/StashService.ts`): Weight enforcement, capacity checks, item resolution via StashItem definitions. Partial name matching for take command. Text summary generation for narration.
+- **Shared types** (`shared/types/stash.ts`): StashItem, StashItemInstance, StashItemType — minimal bridge types until Jarlaxle's #16 merges.
+- **RefugeRoom integration**: Stash loaded on join with summary narration. Three commands: `stash` (list), `take <item>` (remove from stash), `store <item>` (placeholder for Phase 1).
+- **STASH_UPDATE** message type added to shared protocol (append-only).
+- **43 new tests**: 14 repository CRUD, 29 service logic (weight limits, capacity upgrades, partial matching, admin, edge cases).
+- **All 509 tests pass** (43 new + 466 existing, zero regressions)
+- **PR #51** opened as draft against dev.
+
 ### 2025-07-25: Extraction Mechanic (Issue #10)
 **Task:** Build channeled extraction escape mechanic — GDD §3 step 6 (core gameplay loop finale)
 **Status:** ✅ Complete
@@ -169,6 +183,16 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
     - `packages/server/src/commands/handlers/extract.ts` — Extract command handler
     - `packages/server/src/__tests__/extraction.test.ts` — 30 tests
 19. **Shared package rebuild required:** After modifying `packages/shared/src/index.ts`, you must rebuild (`npm run build` in shared) before the server can see new types. The server imports from the compiled `dist/` output, not the source. `tsc --build --force` clears stale caches.
+20. **Stash system architecture:** StashRepository (interface) + InMemoryStashRepository (Phase 1) follow the same pattern as PlayerRepository from auth. StashService orchestrates weight checks and item resolution. RefugeRoom holds StashService via dependency injection (`initStash()`), loads stash on join, and handles `stash`/`take`/`store` commands through its existing switch-based command handler (not the shard parser).
+21. **StashItem types are minimal and temporary:** `packages/shared/src/types/stash.ts` defines StashItem, StashItemInstance, StashItemType — a bridge type until Jarlaxle's full ItemDefinition/ItemInstance from #16 merges. The StashRepository uses StashItemInstance (instanceId + itemId + durability). When reconciling, replace StashItem with ItemDefinition and StashItemInstance with ItemInstance.
+22. **Weight is authority, not quantity:** Stash capacity is measured in weight units (default 200), not item count. This means a stash full of light materials (0.1 weight each) holds 2000 items, while heavy weapons (5.0 weight) only fit 40. Capacity upgrades via `repo.setCapacity()` are the designed expansion path.
+23. **Key file paths for stash system:**
+    - `packages/shared/src/types/stash.ts` — StashItem, StashItemInstance types
+    - `packages/server/src/stash/StashRepository.ts` — Interface + InMemoryStashRepository
+    - `packages/server/src/stash/StashService.ts` — Business logic (weight, capacity, search)
+    - `packages/server/src/stash/index.ts` — Barrel export
+    - `packages/server/src/__tests__/stash.test.ts` — 43 tests
+24. **Branch switching with untracked files is hazardous:** When multiple squad branches coexist with untracked files (from parallel work), `git stash pop` on a different branch can lose tracked-file modifications. Always commit before switching branches, or use `git worktree` for parallel development.
 
 ---
 

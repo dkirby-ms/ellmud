@@ -29,6 +29,7 @@ app.use(createAuthRouter(authService));
 // Mount health check endpoint
 app.use(createHealthRouter());
 
+
 // Initialize Colyseus room auth hooks
 initColyseusAuth(authService, AUTH_REQUIRED);
 
