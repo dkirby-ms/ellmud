@@ -238,3 +238,11 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 - **Config singleton with `resetConfig()`** is essential for test isolation when tests manipulate `process.env`. Without reset, the cached config bleeds between test files since vitest runs in threads.
 - **Existing multi-client tests break** when you enforce player limits. Any test that connects >1 client to a ShardRoom needs `MAX_PLAYERS_PER_SHARD` set higher. Fixed `edge-cases.test.ts`; keep this pattern for future multi-player tests.
 - **Room disposal on last leave**: Colyseus disposes rooms when the last client leaves. A "rejoin after leave" test won't work for the same room handle — the room is gone. Phase 2 multiplayer tests should account for this.
+
+### 2026-03-19: CI/CD Pipeline (#17)
+- **`az acr build`** does remote Docker builds on ACR — no Docker-in-Docker or local Docker daemon needed in GitHub Actions. Much cleaner than `docker build` + `docker push` with credentials.
+- **OIDC federated credentials** (id-token: write) eliminate stored service principal secrets. Playgrid uses this pattern and it's the right call for Ellmud too.
+- **Rollback via revision management**: Container Apps maintains revision history. Capture the active revision before deploy, redirect traffic back if health check fails, deactivate the broken revision.
+- **Monorepo Dockerfile layer caching**: copy package.json files first, `npm ci`, then copy source. This means dependency installs are cached unless package.json changes — saves minutes on rebuilds.
+- **Production runtime image** only needs shared + server workspaces. Client build output is not needed server-side (client is served separately or via CDN in production).
+- **Pre-existing build errors** in client package (Vite types, testing-library matchers) don't affect server build or tests. CI workflow's `tsc --noEmit` targets server tsconfig specifically to avoid false failures.

@@ -1,0 +1,241 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - docs/**
+      - .squad/**
+      - "*.md"
+      - "**/*.md"
+  push:
+    branches: [main]
+    paths-ignore:
+      - docs/**
+      - .squad/**
+      - "*.md"
+      - "**/*.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─── Build, Test, Lint ────────────────────────────────────────────────────────
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6 # v4.0.4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build workspaces
+        run: npm run build
+
+      - name: TypeScript check
+        run: npx tsc --noEmit -p packages/server/tsconfig.json
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm run test
+
+  # ─── Docker Build & Push to ACR ───────────────────────────────────────────────
+  docker-build-push:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Azure login via OIDC
+        uses: azure/login@6c251865b4e6290e7b78be643ea2d005bc51f69a # v2.1.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push image to ACR
+        run: |
+          az acr build \
+            --registry ${{ secrets.ACR_NAME }} \
+            --image ellmud:${{ github.sha }} \
+            --image ellmud:latest \
+            --file Dockerfile \
+            .
+
+  # ─── Deploy to Azure Container Apps ───────────────────────────────────────────
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: docker-build-push
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Azure login via OIDC
+        uses: azure/login@6c251865b4e6290e7b78be643ea2d005bc51f69a # v2.1.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Capture current revision (for rollback)
+        id: pre-deploy
+        run: |
+          CURRENT_REVISION=$(az containerapp revision list \
+            --name ${{ secrets.CONTAINER_APP_NAME }} \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --query "[?properties.active].name | [0]" -o tsv)
+          echo "revision=$CURRENT_REVISION" >> "$GITHUB_OUTPUT"
+          echo "Current active revision: $CURRENT_REVISION"
+
+      - name: Configure container app registry
+        run: |
+          az containerapp registry set \
+            --name ${{ secrets.CONTAINER_APP_NAME }} \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --server ${{ secrets.ACR_NAME }}.azurecr.io \
+            --identity system
+
+      - name: Deploy to Container App
+        run: |
+          az containerapp update \
+            --name ${{ secrets.CONTAINER_APP_NAME }} \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/ellmud:${{ github.sha }} \
+            --set-env-vars "NODE_ENV=production" "PORT=2567"
+
+      - name: Wait for deployment
+        run: sleep 15
+
+      - name: Health check
+        id: healthcheck
+        run: |
+          FQDN=$(az containerapp show \
+            --name ${{ secrets.CONTAINER_APP_NAME }} \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --query "properties.configuration.ingress.fqdn" -o tsv)
+          HEALTH_URL="https://${FQDN}/health"
+          echo "Checking health endpoint: $HEALTH_URL"
+
+          MAX_ATTEMPTS=10
+          ATTEMPT=0
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            if curl -f -s "$HEALTH_URL" | grep -q '"status":"ok"'; then
+              echo "✓ Health check passed"
+              exit 0
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS failed, retrying in 5s..."
+            sleep 5
+          done
+
+          echo "✗ Health check failed after $MAX_ATTEMPTS attempts"
+          exit 1
+
+      - name: Rollback on failure
+        if: failure() && steps.pre-deploy.outputs.revision != ''
+        run: |
+          echo "Rolling back to revision: ${{ steps.pre-deploy.outputs.revision }}"
+          FAILED_REVISION=$(az containerapp revision list \
+            --name ${{ secrets.CONTAINER_APP_NAME }} \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --query "[?properties.active].name | [0]" -o tsv)
+
+          az containerapp revision set-mode \
+            --name ${{ secrets.CONTAINER_APP_NAME }} \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --mode multiple
+
+          az containerapp ingress traffic set \
+            --name ${{ secrets.CONTAINER_APP_NAME }} \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --revision-weight "${{ steps.pre-deploy.outputs.revision }}=100"
+
+          if [ -n "$FAILED_REVISION" ] && [ "$FAILED_REVISION" != "${{ steps.pre-deploy.outputs.revision }}" ]; then
+            az containerapp revision deactivate \
+              --name ${{ secrets.CONTAINER_APP_NAME }} \
+              --resource-group ${{ secrets.RESOURCE_GROUP }} \
+              --revision "$FAILED_REVISION"
+          fi
+
+          az containerapp revision set-mode \
+            --name ${{ secrets.CONTAINER_APP_NAME }} \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --mode single
+
+          echo "✓ Rollback complete"
+
+  # ─── Create issue on CI failure ───────────────────────────────────────────────
+  create-failure-issue:
+    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build-and-test, docker-build-push, deploy]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Create failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          COMMIT_AUTHOR: ${{ github.event.head_commit.author.name }}
+        run: |
+          set -euo pipefail
+
+          SHORT_SHA="${GITHUB_SHA::7}"
+          TITLE="CI/CD failure (${SHORT_SHA})"
+
+          existing_issue="$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state open \
+            --search "\"${TITLE}\" in:title" \
+            --json number \
+            --jq '.[0].number // empty')"
+
+          if [ -n "$existing_issue" ]; then
+            echo "Issue #$existing_issue already exists for ${SHORT_SHA}."
+            exit 0
+          fi
+
+          body_file="$(mktemp)"
+          cat <<EOF > "$body_file"
+          CI/CD failure detected on \`main\`.
+
+          - Workflow run: ${RUN_URL}
+          - Commit: ${GITHUB_SHA}
+          - Commit message: ${COMMIT_MESSAGE}
+          - Commit author: ${COMMIT_AUTHOR}
+          EOF
+
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$TITLE" \
+            --label bug \
+            --body-file "$body_file"
