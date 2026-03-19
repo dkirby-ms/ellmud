@@ -233,3 +233,8 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 - Admin auth uses a separate ADMIN_TOKEN env var, not the player auth system — fail-closed when unset
 - Express router middleware can be applied per-route (not just `router.use`) for selective auth
 - The dashboard HTML is served inline from a TypeScript template literal — zero build step, zero dependencies
+### 2026-03-19: Solo Play Config (#15)
+- **Colyseus `onJoin` throwing** surfaces as a `MatchMakeError` to the client SDK — clean rejection path, no custom error protocol needed.
+- **Config singleton with `resetConfig()`** is essential for test isolation when tests manipulate `process.env`. Without reset, the cached config bleeds between test files since vitest runs in threads.
+- **Existing multi-client tests break** when you enforce player limits. Any test that connects >1 client to a ShardRoom needs `MAX_PLAYERS_PER_SHARD` set higher. Fixed `edge-cases.test.ts`; keep this pattern for future multi-player tests.
+- **Room disposal on last leave**: Colyseus disposes rooms when the last client leaves. A "rejoin after leave" test won't work for the same room handle — the room is gone. Phase 2 multiplayer tests should account for this.
