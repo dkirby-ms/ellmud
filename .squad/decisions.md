@@ -225,8 +225,403 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 
 ---
 
+### 2026-03-19T12:52:00Z: Ellmud Client UI Design Language
+**By:** Volo (Narrative Dev)  
+**Status:** Proposed — awaiting team review
+
+**What:** Defined the visual design language and screen architecture for the Ellmud web client, captured in a Figma AI design prompt for prototype generation.
+
+**Key Decisions:**
+1. **Single-screen gameplay paradigm**: The main shard exploration/combat view is a unified screen with a large narrative panel (70%) and a collapsible sidebar (30%), not separate pages. Players stay in one view during a run — consistent with MUD tradition.
+2. **Terminal-modern hybrid aesthetic**: Command input at the bottom (monospace, terminal-inspired), narrative prose in a serif reading font, modern UI chrome in sans-serif. Blends MUD heritage with contemporary game UI.
+3. **Dark fantasy color palette**: Near-black base (#0A0B0F), warm bone-white text (#E8E0D0), muted gold accents (#C9A84C), blood red for danger (#8B2500), spectral teal for interactables (#3A7D7B). No bright/saturated colors — everything muted and atmospheric.
+4. **Text-first, no graphics engine**: All game state communicated through styled prose text, typographic hierarchy, and subtle iconography. No sprites, no canvas, no WebGL. This is a text game with excellent typography.
+5. **Clickable affordances alongside typed commands**: Exits, items, and actions are subtly clickable in the narrative text (underline on hover) for accessibility, but the primary input remains the command bar. Power users type; new users can click.
+
+**Why:**
+- Respects GDD §12/§13: web-only, text-primary, no graphics engine, accessible by design
+- Supports the "information scarcity" pillar: dark, atmospheric UI with limited visual information reinforces tension
+- The single-screen layout keeps narrative flow unbroken during gameplay — critical for immersion in a text-heavy medium
+- Terminal-modern hybrid attracts both MUD veterans (familiar input model) and modern gamers (polished UI)
+
+**Impact:**
+- Client developers should build toward this screen architecture
+- LLM narrative output (my domain) must be formatted to work within the prose panel's constraints (line length, paragraph breaks, inline semantic markup for clickable elements)
+- The Refuge hub view is the only screen that meaningfully differs from the shard view (tabbed panels for stash/crafting/trading vs. narrative exploration)
+
+**Open Questions:**
+- Should the Refuge use the same narrative-panel layout or a more structured dashboard? (Proposed: hybrid — narrative panel for ambient text, but with structured panels for stash/trade)
+- Mobile breakpoint: is portrait phone a target or just tablet+desktop? (Proposed: tablet+ for Phase 1, phone as stretch goal)
+
+### 2026-03-19T13:27: User directive — Figma design gaps
+**By:** dkirby-ms (via Copilot)
+**What:** If elements are missing from the Figma design export, flag them rather than inventing replacements. The user will go back to the design team to update the Figma prototype.
+**Why:** User request — captured for team memory. Design team owns the visual spec; squad adapts, doesn't originate UI designs.
+
+### 2026-03-19T13:28: User directive — Design authority (Figma as source of truth)
+**By:** dkirby-ms (via Copilot)
+**What:** Always defer design and UX decisions to the Figma master design. The Figma prototype is the authoritative source of truth for all visual design, layout, and UX patterns. If a screen, component, or interaction is missing from the Figma export, flag it as a gap — do NOT invent or improvise UI designs. Missing elements go back to the design team for creation in Figma first.
+**Why:** User request — captured for team memory. Separation of concerns: design team owns UX, squad implements faithfully.
+
+### 2026-03-19T13:28: Figma Export Conversion Architecture
+**By:** Elminster (Lead/Architect)
+**Status:** Proposed — awaiting team review
+**Full analysis:** `docs/figma-conversion-strategy.md`
+
+**Context:** A Figma AI prototype was exported as a React app (`/tmp/figma-export/`). It contains 6 screens, 3 tab components, and a full shadcn/ui library (~48 primitives). The export is a presentational prototype with zero server integration, hardcoded mock data, and no state management.
+
+**Decisions:**
+1. **Keep visual design, rewrite implementation** — Preserve the visual patterns as reference; rewrite every file's logic. The code implementation is scaffold-quality (hardcoded hex colors, inline styles, no shared state, mock data).
+2. **Client lives at `packages/client/`** — Monorepo structure: `packages/client/` (React UI), `packages/server/` (Colyseus), `packages/shared/` (message types, game types). The shared package is the contract between client and server — prevents type drift.
+3. **State management: React Context + useReducer** — No Zustand, no Redux. The client is a thin view layer over server-authoritative state. Context + useReducer handles ~10 state slices (auth, character, narrative, room, combat, shard, inventory, loadout, connection, settings). Migration to Zustand is clean if we outgrow this later.
+4. **Colyseus integration: message-only, no Schema subscription** — The client MUST NOT subscribe to `room.state` or `room.onStateChange`. All game state arrives via `room.onMessage()` handlers. This is the schema leakage prevention enforced at the architecture level.
+   - **Message flow:**
+     - Client → Server: `room.send("command", { text })`, `room.send("action", { type })`, `room.send("chat", { text })`
+     - Server → Client: `onMessage("narrate")`, `onMessage("combat:tick")`, `onMessage("shard:tick")`, `onMessage("ambient")`, `onMessage("chat")`
+5. **Dependency reduction: ~55 → ~22 packages** — Drop all MUI packages (conflicts with Tailwind), unused Radix primitives (~12 packages), and Figma scaffold deps (canvas-confetti, cmdk, embla-carousel, recharts, etc.). Add `colyseus.js` as the only new dependency.
+6. **Theme token migration required before feature work** — All page components use hardcoded hex values (`text-[#C9A84C]`) instead of the Tailwind theme tokens already defined in theme.css. This must be fixed in Phase A before any feature work, or we'll have two color systems to maintain.
+7. **Shared message types package** — `packages/shared/` defines TypeScript interfaces for all client-server messages (`NarrateMessage`, `CombatTickMessage`, `ShardTickMessage`, etc.). Both client and server import from this package. This is the type-safe contract.
+
+**Risks & Mitigations:**
+- **Visual fidelity during token migration** — Compare screenshots before/after. The Figma export is the visual reference.
+- **shadcn/ui pruning** — Verify build after each removal. Components are self-contained.
+- **Narrative panel memory** — Cap at 500 entries. Server messages append indefinitely.
+
+**Rejected Alternatives:**
+- **Use Figma export as-is, incrementally wire up:** Rejected. The hardcoded colors and inline styles would accumulate tech debt faster than we can pay it off. A clean Phase A foundation is worth the upfront cost.
+- **Use Redux/Zustand from day one:** Rejected. The client state is simple (server pushes, client renders). Context + useReducer is sufficient and has zero dependencies.
+- **Drop shadcn/ui entirely:** Rejected. The primitives we keep (dialog, tabs, scroll-area, tooltip) are battle-tested accessible components that save us from reimplementing ARIA patterns.
+
+**Impact:**
+- **Client developers:** Follow `docs/figma-conversion-strategy.md` phased plan (A→B→C→D).
+- **Server developers:** Define message types in `packages/shared/` before client integration.
+- **Narrative dev (Volo):** LLM output must match `NarrateMessage` type format (type field, structured exits, semantic markup).
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus
 - Document architectural decisions here
 - Keep history focused on work, decisions focused on direction
+
+---
+
+### 2026-03-19T14:06: Figma Export v2 Analysis — Architecture Decisions
+**By:** Elminster (Lead/Architect)  
+**Status:** For stakeholder review  
+**Context:** Deep analysis of updated Figma export responding to gap-fill brief. 55% coverage (11/20 items) achieved with production-quality component scaffolds.
+
+#### Decision 1: Accept v2 Export and Proceed with Conversion
+
+**Recommendation:** Accept the v2 Figma export (ChatPanel, ExtractionOverlay, InventoryOverlay) as production-quality scaffolds and integrate them into the conversion plan.
+
+**Why:**
+- Three new overlays are well-structured, stateless components aligned with message-only client architecture
+- Implement high-value features (chat, extraction flow, inventory management) previously missing
+- Component structure (props-driven, callback-based) compatible with Colyseus integration
+- No new dependencies added (still 55 packages)
+- Saves ~0.5 weeks of Phase C implementation time
+
+**Impact:**
+- Phase C timeline: 3 weeks → 2.5 weeks (5% time savings on overlays)
+- Remaining gaps (enemy status panel, tick timer, reconnection overlay) are small enough to build in-house during Phase C/D
+
+**Alternatives considered:**
+- Request another design iteration → Rejected. Remaining gaps are polish/edge-cases faster to handle in-house.
+- Reject v2 and build from scratch → Rejected. v2 scaffolds are production-quality and align with design system.
+
+**Open questions:** None. Ready to proceed.
+
+---
+
+#### Decision 2: Prioritize Theme Token Migration (Phase A)
+
+**Recommendation:** Make theme token migration the **first task** in Phase A (Foundation), before Colyseus integration work.
+
+**Why:**
+- Tailwind v4 `@theme inline` block exists in theme.css and exposes all tokens correctly
+- All components (v1 and v2) still use hardcoded hex values (15-25+ per component)
+- Token migration is pure find-replace work with zero behavioral changes — safe to parallelize across team
+- Starting Phase B with hardcoded colors will cause merge conflicts and rework when tokens are eventually migrated
+
+**Pattern to enforce:**
+
+Before:
+```tsx
+<div className="bg-[#12131A] text-[#C9A84C] border-[#2A2B35]">
+```
+
+After:
+```tsx
+<div className="bg-bg-panel text-accent-gold border-border-muted">
+```
+
+**Impact:**
+- Phase A work estimate unchanged (2 weeks) — token migration was always part of Phase A
+- Eliminates ~800-1000 hardcoded hex literals across 9 components (6 pages + 3 new overlays)
+- Reduces future maintenance burden (single source of truth for colors)
+
+**Alternatives considered:**
+- Migrate incrementally during Phase B/C → Rejected. Creates merge conflicts and inconsistent codebase.
+- Keep hardcoded colors, add tokens for new code only → Rejected. Violates "single source of truth" principle.
+
+**Open questions:** None. Straightforward refactoring.
+
+---
+
+#### Decision 3: Extract Shared Utilities During Phase A
+
+**Recommendation:** Extract reusable utilities from new v2 components into `packages/shared/` during Phase A.
+
+**Utilities to extract:**
+
+1. **`getTierColor(tier: string): string`** (from InventoryOverlay.tsx)
+   - Location: `packages/shared/utils/tiers.ts`
+   - Maps tier enum → hex color
+   - Used by: InventoryOverlay, StashTab, ShardboardTab, ExtractionOverlay
+
+2. **`getCollapseColor(remainingSeconds: number, totalSeconds: number): string`** (from ShardExploration.tsx)
+   - Location: `packages/client/utils/shard.ts`
+   - Maps shard stability percentage → color (>50% white, 25-50% amber, <25% red)
+   - Used by: ShardExploration (sidebar + narrative header)
+
+3. **Tier enum and Item type** (from InventoryOverlay.tsx)
+   - Location: `packages/shared/types/items.ts`
+   - Type definitions for loot tiers and item properties
+   - Used by: InventoryOverlay, StashTab, LoadoutTab, ExtractionOverlay
+
+**Why:**
+- These patterns are copy-pasted across multiple components
+- Extracting enforces consistency (single source of truth)
+- Enables shared types between client and server
+
+**Impact:**
+- Adds ~1 day to Phase A (extraction + migration work)
+- Reduces Phase B/C implementation time by eliminating duplicate logic
+
+**Alternatives considered:**
+- Keep utilities inline, extract later → Rejected. Phase A is the correct time for foundational work.
+
+**Open questions:** None.
+
+---
+
+#### Decision 4: Build Missing High-Priority Components in Phase C
+
+**Recommendation:** Build the 3 missing high-priority components during Phase C (Gameplay) as part of combat and reconnection integration work.
+
+**Components to build:**
+
+1. **Enemy Status Panel** (sidebar, during combat)
+   - Shows: enemy name (serif, gold), HP tier (qualitative text), telegraphed action
+   - Location: Replaces Sound Cues section in ShardExploration sidebar during combat
+   - Effort: ~0.5 days (state already exists, just needs rendering)
+
+2. **Tick Timer** (below combat banner)
+   - Shows: slim countdown bar (3-4px height) filling left-to-right over 1 second, resets each tick
+   - Location: Immediately below "⚔ COMBAT" banner in ShardExploration
+   - Effort: ~0.25 days (simple progress bar with 1s setInterval)
+
+3. **Reconnection Overlay** (full-screen)
+   - Shows: dark scrim, centered pulsing indicator, "Connection lost. Reconnecting..." text
+   - Location: Full-screen overlay, appears when Colyseus room drops
+   - Effort: ~1 day (includes Colyseus reconnection token handling)
+
+**Why:**
+- Critical for core UX (combat feedback, reconnection tolerance)
+- Integrate directly with Phase C work (combat integration, Colyseus room lifecycle)
+- Building earlier would require mocking server behavior
+
+**Impact:**
+- Adds ~1.75 days to Phase C
+- Phase C estimate already included "combat UI polish" — this specifies it
+
+**Alternatives considered:**
+- Defer to Phase D → Rejected. Enemy status and tick timer are part of core combat loop, not polish.
+- Build in Phase A/B → Rejected. Would require mocking server state.
+
+**Open questions:** None.
+
+---
+
+#### Decision 5: Defer Medium/Low-Priority Gaps to Phase D or Post-MVP
+
+**Recommendation:** Do not block conversion on remaining 9 medium/low-priority gaps. Build opportunistically during Phase C/D if time allows, otherwise defer to post-MVP.
+
+**Deferred items:**
+
+**Medium-priority (nice-to-have, Phase D if time allows):**
+- Mini-action buttons (Look/Listen/Inventory quickbar) — ~0.5 days
+- Ambient events feed (Refuge activity scrolling text) — ~1 day
+- Auto-complete hint (ghost text above command input) — ~1 day
+- Trade interface (two-column offer panel in ChatPanel) — ~2 days
+
+**Low-priority (polish, post-MVP):**
+- Button state variants documentation — ~0.5 days
+- HP bar state transitions — ~0.5 days
+- Toast notification component (4 variants) — ~1 day
+- Empty state designs (6 atmospheric prose states) — ~1 day
+- Responsive breakpoints (tablet layouts) — ~3 days or post-MVP
+
+**Why:**
+- Phase C/D timeline already tight (9.5 weeks for full conversion)
+- These items improve UX but don't block core gameplay
+- Can be added incrementally post-MVP based on player feedback
+
+**Impact:**
+- Protects Phase C/D timeline from scope creep
+- Allows focus on core loop (login → loadout → enter shard → combat → extract → stash persists)
+
+**Alternatives considered:**
+- Build everything before launch → Rejected. Violates MVP principles.
+- Build none of them ever → Rejected. Some (ambient events, trade UI) valuable for immersion/economy, just not blocking.
+
+**Open questions:**
+- Should we prioritize ambient events feed or trade interface? → Answer after Phase B — depends on RefugeRoom integration complexity.
+
+---
+
+#### Summary Table
+
+| Decision | Recommendation | Impact | Phase |
+|----------|----------------|--------|-------|
+| **1. Accept v2 export** | ✅ Proceed with conversion using v1+v2 | -0.5 weeks Phase C | Immediate |
+| **2. Prioritize theme tokens** | ✅ Migrate all hex → tokens in Phase A | Clean foundation for Phase B/C | Phase A |
+| **3. Extract shared utils** | ✅ Extract getTierColor, Item types, collapse logic | +1 day Phase A, saves time later | Phase A |
+| **4. Build high-priority gaps** | ✅ Enemy status, tick timer, reconnection overlay | +1.75 days Phase C | Phase C |
+| **5. Defer medium/low gaps** | ✅ Defer 9 items to Phase D or post-MVP | Protects timeline | Phase D / Post-MVP |
+
+**Net impact:** Phase A +1 day (utils extraction), Phase C -0.5 weeks (overlay scaffolds) +1.75 days (high-priority gaps) = **Phase C net: -1 day**. Total estimate: 10 weeks → 9.5 weeks.
+
+**Go/no-go:** ✅ **Proceed with conversion.** The Figma export v2 provides sufficient design fidelity. No further design iterations needed.
+
+---
+
+*Proposed by Elminster — 2026-03-19*  
+*Awaiting stakeholder review (dkirby-ms)*
+
+
+---
+
+## Wave 3 Completed Decisions
+
+### 2026-03-19T16:01:36Z: Command System Architecture (Three-Layer Pattern)
+
+**By:** Drizzt (Engine Dev)  
+**Issue:** #8  
+**What:** The command system uses a three-layer architecture:
+1. **Parser** (`commands/parser.ts`) — Stateless text-to-`{verb, args}` transformation with alias expansion. Unknown verbs rejected with static error.
+2. **Handlers** (`commands/handlers/*.ts`) — Pure functions receiving `CommandContext`, returning `CommandResult` with narration entries (type-tagged for LLM enrichment).
+3. **Delivery** — ShardRoom builds context, invokes handler, sends narration to client.
+
+**Why:** 
+- Handlers are unit-testable without Colyseus (17 tests without framework)
+- Extensibility: new command = handler file + one registry line (critical for combat system rollout)
+- LLM-ready: narration entries have type tags; when LLM lands, handlers return templates without code changes
+
+**Team Impact:**
+- **Jarlaxle:** `Room` interface in `RoomGraph` is the navigation contract. Movement handlers validate against your room exits.
+- **Combat (Issues #6-7):** Strike/dodge/flee handlers slot into same architecture. No parser or delivery changes needed.
+- **Volo (Issue #9):** Narration delivery layer will enrich `{type, text}` entries with LLM. Handlers unchanged.
+
+**Tech details:** `CommandContext` = player state + current room + room resolver + occupants list. `CommandResult` = `Narration[]` (each with `type: string`, `text: string`) + optional room header update.
+
+---
+
+### 2026-03-19T16:01:36Z: Backbone Chain Graph Topology for Shard Generation
+
+**By:** Jarlaxle (Systems Dev)  
+**Issue:** #5  
+**What:** Room graph generator uses **backbone chain** topology: fill rooms connected linearly, entries attached near start, extractions near end, boss at ~60% depth. Cyclic edges added only between rooms within 35% of each other on backbone.
+
+**Why:**
+- Guarantees structural minimum distance (GDD requirement: no beeline to extraction)
+- Supports navigation interest (cycles don't create shortcuts)
+- Biome templates are decoupled from generator — new biome = template file only
+
+**How:** Iterative edge repair after initial graph construction. Algorithm cuts edges on shortest entry→extraction paths, then repairs connectivity with BFS distance checks. Naive repair would re-introduce shortcuts; the fix checks each repair edge.
+
+**Team Impact:**
+- **Drizzt (Issue #8):** Movement handlers consume `RoomGraph` from generator. Exit validation against `room.exits` map.
+- **Combat (Issues #6-7):** Room hazards stored in biome templates. Hazard effects checked during tick (future scope).
+- **World Building (Phase 3):** New biomes only need template file + test. Sunken Library, Ironhold, etc. follow same pattern.
+
+**Scope note:** PRNG is deterministic (mulberry32, seeded). Enables replay testing. Seed baking into ShardInstance is Issue #10 scope.
+
+
+---
+
+## 2026-03-19T16:01:36Z: Client message-only protocol enforcement via test-time source scanning
+
+**By:** Minsc (Tester)  
+**Issue:** #13 — Web Terminal Client
+
+### Decision
+
+The connection test suite (`connection.test.ts`) reads the `connection.ts` source file at test time and verifies that forbidden Schema patterns (`room.state`, `onStateChange`, `@colyseus/schema` imports) are NOT present in executable code. Comments are stripped before checking to avoid false positives.
+
+### Why
+
+The "message-only protocol" is the single most critical architectural constraint. A Schema subscription would leak server state to the dumb terminal client, violating GDD §14. Static analysis at test time catches this before CI merges it.
+
+### Trade-offs
+
+- Pro: Zero-cost at runtime, catches accidental imports immediately
+- Con: Brittle if connection code is refactored into multiple files (would need to scan all of them)
+- Mitigation: If connection logic spreads, update the test to scan all service files
+
+---
+
+## 2026-03-19T16:01:36Z: Creature AI uses CreatureWorldState interface for decoupling
+
+**By:** Jarlaxle  
+**Issue:** #7 (Drowned Revenant)
+
+### What
+
+Creature behavior (`updateCreature()`) takes a `CreatureWorldState` interface — not direct Colyseus/ShardRoom references. ShardRoom must construct this state each tick:
+
+```ts
+interface CreatureWorldState {
+  playersInRoom: Map<string, string[]>;  // roomId → playerIds
+  roomExits: Map<string, string[]>;       // roomId → adjacent roomIds
+  noisyRooms: Set<string>;               // rooms with recent sound
+}
+```
+
+### Why
+
+Keeps creature AI testable and decoupled from Colyseus. Behavior tree tests run without mocking any server infrastructure.
+
+### Impact on Team
+
+- **Drizzt (ShardRoom integration):** When integrating creatures into ShardRoom's tick, construct `CreatureWorldState` from room state. Call `creatureManager.updateAll(worldState)` each tick, then translate returned `CreatureAction[]` into combat system calls and player narration.
+- **Volo (narration):** Creature actions return `CreatureAction` with type + IDs. Narration layer can enrich these. Creature names are plain strings (e.g., "Drowned Revenant").
+
+---
+
+## 2026-03-19T16:01:36Z: Extraction Channel Architecture
+
+**By:** Drizzt (Engine Dev)  
+**Issue:** #10
+
+### What
+
+Extraction is implemented as a **channel-based system** with a static command lock check integrated into the central command dispatcher (`handleCommand()`). The `ExtractionSystem` class is independent of Colyseus — it owns channel state and can be unit-tested without a server.
+
+### Key Design Choices
+
+1. **Command lock via static method**: `ExtractionSystem.checkCommandLock(verb, playerId, system)` is called in `handleCommand()` before dispatching to any handler. This means *all* commands pass through the lock — no handler needs to know about extraction.
+
+2. **Combat damage interrupts extraction**: In `ShardRoom.update()`, after resolving combat ticks, any strike events targeting an extracting player interrupt their channel. This couples extraction to combat at the ShardRoom level (not inside either system).
+
+3. **Local Room `type` field is optional**: Added `type?: RoomType` to the local/dev Room interface in `shard/RoomGraph.ts`. When Jarlaxle's generator replaces the test graph, this becomes the required `type: RoomType` from the shared package.
+
+4. **Noise events are recorded but not propagated**: Per Phase 1 scope, extraction generates `NoiseEvent` objects (level 8, sustained) but they aren't fed into a trace system yet. The interface is stable for Phase 2 integration.
+
+### Team Impact
+
+- **Jarlaxle**: Extraction rooms must have `type: 'extraction'` in the room graph. The `extractionRoomIds` array on the shared `RoomGraph` type should be populated by the generator.
+- **All handlers**: The `CommandContext` now has an optional `extractionSystem` field. Existing handlers don't need to change — the lock is enforced centrally.
+- **Future channeled actions**: The channel + lock pattern can be reused for crafting, rituals, or any interruptible multi-tick action.

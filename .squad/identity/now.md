@@ -1,7 +1,7 @@
 # Current Focus
 
-**Phase:** Architecture complete. Ready for project scaffolding.
+**Phase:** Test infrastructure fixed. All 344 tests passing. Ready to continue Phase 1 backlog (10 issues remaining).
 
-**What happened:** Team hired, 3 architecture analyses completed (Colyseus, Azure, deployment model), all 10 open questions resolved, GDD fully updated with concrete technology choices.
+**What happened:** Coordinator identified and fixed critical Colyseus boot() port assignment bug. Tests now run stably in ~110 seconds with no port conflicts.
 
-**What's next:** Project scaffolding — npm workspaces (client/server/shared), Colyseus 0.17.x install, TypeScript config, Dockerfile, Bicep IaC, GitHub Actions workflows. Per GDD §17 Phase 1 roadmap.
+**What's next:** Phase 1 backlog completion — Issues #11-20 (features, game balance, extraction mechanics, creature narration).

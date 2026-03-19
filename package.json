@@ -1,12 +1,22 @@
 {
   "name": "ellmud",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PvPvE Extraction RPG — Real-Time MUD",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev:server": "npm run dev -w @ellmud/server",
+    "dev:client": "npm run dev -w @ellmud/client",
+    "build": "npm run build -w @ellmud/shared && npm run build -w @ellmud/server && npm run build -w @ellmud/client",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "engines": {
+    "node": ">=20.0.0"
+  }
 }
