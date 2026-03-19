@@ -1,0 +1,44 @@
+{
+  "agents": {
+    "elminster": {
+      "persistent_name": "Elminster",
+      "universe": "Forgotten Realms",
+      "role": "Lead",
+      "created_at": "2026-03-19T01:49:55Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "drizzt": {
+      "persistent_name": "Drizzt",
+      "universe": "Forgotten Realms",
+      "role": "Engine Dev",
+      "created_at": "2026-03-19T01:49:55Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "jarlaxle": {
+      "persistent_name": "Jarlaxle",
+      "universe": "Forgotten Realms",
+      "role": "Systems Dev",
+      "created_at": "2026-03-19T01:49:55Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "volo": {
+      "persistent_name": "Volo",
+      "universe": "Forgotten Realms",
+      "role": "Narrative Dev",
+      "created_at": "2026-03-19T01:49:55Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "minsc": {
+      "persistent_name": "Minsc",
+      "universe": "Forgotten Realms",
+      "role": "Tester",
+      "created_at": "2026-03-19T01:49:55Z",
+      "legacy_named": false,
+      "status": "active"
+    }
+  }
+}
