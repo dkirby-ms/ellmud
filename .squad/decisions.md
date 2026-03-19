@@ -253,6 +253,50 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 - Should the Refuge use the same narrative-panel layout or a more structured dashboard? (Proposed: hybrid — narrative panel for ambient text, but with structured panels for stash/trade)
 - Mobile breakpoint: is portrait phone a target or just tablet+desktop? (Proposed: tablet+ for Phase 1, phone as stretch goal)
 
+### 2026-03-19T13:27: User directive — Figma design gaps
+**By:** dkirby-ms (via Copilot)
+**What:** If elements are missing from the Figma design export, flag them rather than inventing replacements. The user will go back to the design team to update the Figma prototype.
+**Why:** User request — captured for team memory. Design team owns the visual spec; squad adapts, doesn't originate UI designs.
+
+### 2026-03-19T13:28: User directive — Design authority (Figma as source of truth)
+**By:** dkirby-ms (via Copilot)
+**What:** Always defer design and UX decisions to the Figma master design. The Figma prototype is the authoritative source of truth for all visual design, layout, and UX patterns. If a screen, component, or interaction is missing from the Figma export, flag it as a gap — do NOT invent or improvise UI designs. Missing elements go back to the design team for creation in Figma first.
+**Why:** User request — captured for team memory. Separation of concerns: design team owns UX, squad implements faithfully.
+
+### 2026-03-19T13:28: Figma Export Conversion Architecture
+**By:** Elminster (Lead/Architect)
+**Status:** Proposed — awaiting team review
+**Full analysis:** `docs/figma-conversion-strategy.md`
+
+**Context:** A Figma AI prototype was exported as a React app (`/tmp/figma-export/`). It contains 6 screens, 3 tab components, and a full shadcn/ui library (~48 primitives). The export is a presentational prototype with zero server integration, hardcoded mock data, and no state management.
+
+**Decisions:**
+1. **Keep visual design, rewrite implementation** — Preserve the visual patterns as reference; rewrite every file's logic. The code implementation is scaffold-quality (hardcoded hex colors, inline styles, no shared state, mock data).
+2. **Client lives at `packages/client/`** — Monorepo structure: `packages/client/` (React UI), `packages/server/` (Colyseus), `packages/shared/` (message types, game types). The shared package is the contract between client and server — prevents type drift.
+3. **State management: React Context + useReducer** — No Zustand, no Redux. The client is a thin view layer over server-authoritative state. Context + useReducer handles ~10 state slices (auth, character, narrative, room, combat, shard, inventory, loadout, connection, settings). Migration to Zustand is clean if we outgrow this later.
+4. **Colyseus integration: message-only, no Schema subscription** — The client MUST NOT subscribe to `room.state` or `room.onStateChange`. All game state arrives via `room.onMessage()` handlers. This is the schema leakage prevention enforced at the architecture level.
+   - **Message flow:**
+     - Client → Server: `room.send("command", { text })`, `room.send("action", { type })`, `room.send("chat", { text })`
+     - Server → Client: `onMessage("narrate")`, `onMessage("combat:tick")`, `onMessage("shard:tick")`, `onMessage("ambient")`, `onMessage("chat")`
+5. **Dependency reduction: ~55 → ~22 packages** — Drop all MUI packages (conflicts with Tailwind), unused Radix primitives (~12 packages), and Figma scaffold deps (canvas-confetti, cmdk, embla-carousel, recharts, etc.). Add `colyseus.js` as the only new dependency.
+6. **Theme token migration required before feature work** — All page components use hardcoded hex values (`text-[#C9A84C]`) instead of the Tailwind theme tokens already defined in theme.css. This must be fixed in Phase A before any feature work, or we'll have two color systems to maintain.
+7. **Shared message types package** — `packages/shared/` defines TypeScript interfaces for all client-server messages (`NarrateMessage`, `CombatTickMessage`, `ShardTickMessage`, etc.). Both client and server import from this package. This is the type-safe contract.
+
+**Risks & Mitigations:**
+- **Visual fidelity during token migration** — Compare screenshots before/after. The Figma export is the visual reference.
+- **shadcn/ui pruning** — Verify build after each removal. Components are self-contained.
+- **Narrative panel memory** — Cap at 500 entries. Server messages append indefinitely.
+
+**Rejected Alternatives:**
+- **Use Figma export as-is, incrementally wire up:** Rejected. The hardcoded colors and inline styles would accumulate tech debt faster than we can pay it off. A clean Phase A foundation is worth the upfront cost.
+- **Use Redux/Zustand from day one:** Rejected. The client state is simple (server pushes, client renders). Context + useReducer is sufficient and has zero dependencies.
+- **Drop shadcn/ui entirely:** Rejected. The primitives we keep (dialog, tabs, scroll-area, tooltip) are battle-tested accessible components that save us from reimplementing ARIA patterns.
+
+**Impact:**
+- **Client developers:** Follow `docs/figma-conversion-strategy.md` phased plan (A→B→C→D).
+- **Server developers:** Define message types in `packages/shared/` before client integration.
+- **Narrative dev (Volo):** LLM output must match `NarrateMessage` type format (type field, structured exits, semantic markup).
+
 ---
 
 ## Governance
