@@ -51,6 +51,27 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
 
 **Next Phase:** Phase 1 kickoff — assign developer(s) to issues #1–#18. Target: 8–10 weeks to solo MVP (login → loadout → shard entry → combat → extraction → stash persist).
 
+### 2025-07-24: Command Parser + Movement & Inventory (Issue #8)
+**Task:** Build GDD §5.1 verb-noun command parser, movement system, and basic inventory commands
+**Status:** ✅ Complete
+
+**Outcome:**
+- **Command parser** (`commands/parser.ts`): Stateless, deterministic verb-noun parser with alias expansion (n/s/e/w → go direction, l → look, i → inventory, k → attack). Rejects unknown verbs with static error (no LLM invocation).
+- **5 command handlers** (`commands/handlers/`): go, look, take, drop, inventory — all server-authoritative
+- **Command registry** (`commands/index.ts`): Maps verbs to handlers via `handleCommand()`. Returns `CommandResult` (narrations + optional room header) for ShardRoom to deliver.
+- **PlayerState** (`state/PlayerState.ts`): In-memory per-player state — current room ID, inventory (Map of stacked items), weight tracking (default 20 units), partial name matching for items
+- **RoomGraph** (`shard/RoomGraph.ts`): Room/Item/Direction interfaces + 5-room development test graph (entry → corridor → shrine, entry → armory, corridor → crypt). Disposable fixture — Jarlaxle's generator replaces it.
+- **ShardRoom wired**: Players get initial room description on join. All commands flow through parser → handler → narration delivery. Player state lifecycle (create on join, cleanup on leave).
+- **44 tests** — 9 parser tests, 4 room graph tests, 8 player state tests, 17 handler unit tests, 6 integration tests (Colyseus client→server round-trip)
+- All 100 existing + new tests pass. Pre-existing `shard-gen.test.ts` failure is Jarlaxle's domain.
+
+### 2026-03-19: Room Graph Generation (Jarlaxle Issue #5) — Cross-Team Context
+- Jarlaxle completed Issue #5: procedural room graph generator with backbone chain topology, Flooded Crypt biome (15 new tests, 139 total passing).
+- **Key for you:** Your movement handlers now validate against real procedural graphs. Movement handler calls `resolver.getRoom(roomId)` and checks `room.exits.has(direction)`. No changes needed — it just works.
+- **API contract:** `RoomGraph` type and `Room` interface are stable. You consume `generator.generateShard()` → returns `RoomGraph` → pass to ShardRoom initialization.
+- **Biome patterns:** Jarlaxle created Flooded Crypt template. Each biome template defines room count, exit topology, flavor text, hazards. Your handlers ignore biome details — they just move players through exits.
+- **Wave 4 context:** Jarlaxle is starting Issue #6 (combat strike/dodge/flee). Combat handlers will follow your three-layer pattern exactly. No parser or delivery changes. Issue #12 (auth) won't block that work.
+
 ### 2026-03-19: Project Scaffold + Colyseus Server (Issue #4)
 **Task:** Build monorepo structure, shared message types, Colyseus server with ShardRoom/RefugeRoom, client skeleton
 **Status:** ✅ Complete
@@ -90,3 +111,13 @@ Infra (1–3) → Colyseus (4) + RoomGen (5) → Combat (6–7) → Movement (8)
    - `packages/server/src/index.ts` — Server entry point (express + Colyseus + monitor)
    - `packages/server/src/__tests__/rooms.test.ts` — Integration tests (5 tests, including no-Schema-patch assertion)
    - `packages/client/src/App.tsx` — Placeholder client shell
+8. **Command system architecture:** Parser is stateless and deterministic (no LLM for parsing, per GDD §5.1). Aliases expand at parse time. Handlers receive a `CommandContext` with player state, room, and room-graph resolver — this decouples handlers from Colyseus internals. The handler returns `CommandResult` (narrations + optional room header), and ShardRoom delivers it via messages. This pattern will scale cleanly to combat actions and LLM narration.
+9. **Weight-based inventory:** `PlayerState` tracks carry weight with a default 20-unit budget. `canCarry()` check happens before `addItem()`. Items are stacked by ID with quantity tracking. Partial name matching supports both `take halberd` and `take corroded halberd`.
+10. **Test room graph is disposable:** The 5-room `createTestRoomGraph()` in `shard/RoomGraph.ts` is a development fixture only. Jarlaxle's procedural generator will replace it. The `Room` interface and `RoomGraph` type are the real contract — keep them stable.
+11. **Key file paths for command system:**
+    - `packages/server/src/commands/parser.ts` — Verb-noun parser with alias expansion
+    - `packages/server/src/commands/index.ts` — Command registry + `handleCommand()` + types (CommandContext, CommandResult)
+    - `packages/server/src/commands/handlers/` — Individual command handlers (go, look, take, drop, inventory)
+    - `packages/server/src/state/PlayerState.ts` — Per-player in-memory state (room ID, inventory, weight)
+    - `packages/server/src/shard/RoomGraph.ts` — Room/Item/Direction types + test graph
+    - `packages/server/src/__tests__/commands.test.ts` — 44 tests (parser, handlers, integration)

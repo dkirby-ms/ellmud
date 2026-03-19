@@ -501,3 +501,51 @@ After:
 *Proposed by Elminster — 2026-03-19*  
 *Awaiting stakeholder review (dkirby-ms)*
 
+
+---
+
+## Wave 3 Completed Decisions
+
+### 2026-03-19T16:01:36Z: Command System Architecture (Three-Layer Pattern)
+
+**By:** Drizzt (Engine Dev)  
+**Issue:** #8  
+**What:** The command system uses a three-layer architecture:
+1. **Parser** (`commands/parser.ts`) — Stateless text-to-`{verb, args}` transformation with alias expansion. Unknown verbs rejected with static error.
+2. **Handlers** (`commands/handlers/*.ts`) — Pure functions receiving `CommandContext`, returning `CommandResult` with narration entries (type-tagged for LLM enrichment).
+3. **Delivery** — ShardRoom builds context, invokes handler, sends narration to client.
+
+**Why:** 
+- Handlers are unit-testable without Colyseus (17 tests without framework)
+- Extensibility: new command = handler file + one registry line (critical for combat system rollout)
+- LLM-ready: narration entries have type tags; when LLM lands, handlers return templates without code changes
+
+**Team Impact:**
+- **Jarlaxle:** `Room` interface in `RoomGraph` is the navigation contract. Movement handlers validate against your room exits.
+- **Combat (Issues #6-7):** Strike/dodge/flee handlers slot into same architecture. No parser or delivery changes needed.
+- **Volo (Issue #9):** Narration delivery layer will enrich `{type, text}` entries with LLM. Handlers unchanged.
+
+**Tech details:** `CommandContext` = player state + current room + room resolver + occupants list. `CommandResult` = `Narration[]` (each with `type: string`, `text: string`) + optional room header update.
+
+---
+
+### 2026-03-19T16:01:36Z: Backbone Chain Graph Topology for Shard Generation
+
+**By:** Jarlaxle (Systems Dev)  
+**Issue:** #5  
+**What:** Room graph generator uses **backbone chain** topology: fill rooms connected linearly, entries attached near start, extractions near end, boss at ~60% depth. Cyclic edges added only between rooms within 35% of each other on backbone.
+
+**Why:**
+- Guarantees structural minimum distance (GDD requirement: no beeline to extraction)
+- Supports navigation interest (cycles don't create shortcuts)
+- Biome templates are decoupled from generator — new biome = template file only
+
+**How:** Iterative edge repair after initial graph construction. Algorithm cuts edges on shortest entry→extraction paths, then repairs connectivity with BFS distance checks. Naive repair would re-introduce shortcuts; the fix checks each repair edge.
+
+**Team Impact:**
+- **Drizzt (Issue #8):** Movement handlers consume `RoomGraph` from generator. Exit validation against `room.exits` map.
+- **Combat (Issues #6-7):** Room hazards stored in biome templates. Hazard effects checked during tick (future scope).
+- **World Building (Phase 3):** New biomes only need template file + test. Sunken Library, Ironhold, etc. follow same pattern.
+
+**Scope note:** PRNG is deterministic (mulberry32, seeded). Enables replay testing. Seed baking into ShardInstance is Issue #10 scope.
+
