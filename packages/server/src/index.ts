@@ -10,6 +10,7 @@ import {
   createAuthRouter,
   initColyseusAuth,
 } from './auth/index.js';
+import { createHealthRouter } from './health.js';
 
 const PORT = Number(process.env['PORT'] ?? 2567);
 const AUTH_REQUIRED = process.env['AUTH_REQUIRED'] === 'true';
@@ -24,6 +25,9 @@ const authService = new AuthService(tokenStore, playerRepo);
 
 // Mount auth routes on the same Express app Colyseus uses
 app.use(createAuthRouter(authService));
+
+// Mount health check endpoint
+app.use(createHealthRouter());
 
 // Initialize Colyseus room auth hooks
 initColyseusAuth(authService, AUTH_REQUIRED);
