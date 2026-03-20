@@ -310,7 +310,7 @@ function getShardDetail(room: import('@colyseus/core').Room): AdminShardDetail {
 
   const players: AdminPlayerInfo[] = [];
   if (playersMap) {
-    for (const [_sid, ps] of playersMap) {
+    for (const [, ps] of playersMap) {
       players.push({
         sessionId: ps.sessionId,
         currentRoomId: ps.currentRoomId,
@@ -361,7 +361,7 @@ function getShardPlayers(room: import('@colyseus/core').Room): AdminPlayerInfo[]
   if (!playersMap) return [];
 
   const players: AdminPlayerInfo[] = [];
-  for (const [_sid, ps] of playersMap) {
+  for (const [, ps] of playersMap) {
     players.push({
       sessionId: ps.sessionId,
       currentRoomId: ps.currentRoomId,

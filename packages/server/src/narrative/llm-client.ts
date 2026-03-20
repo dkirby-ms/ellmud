@@ -71,7 +71,7 @@ const SCHEMA_KEYWORDS = [
  */
 export function validateLLMOutput(
   text: string,
-  context: NarrationContext,
+  _context: NarrationContext,
 ): string | null {
   // Check for mechanical numbers
   for (const pattern of FORBIDDEN_PATTERNS) {

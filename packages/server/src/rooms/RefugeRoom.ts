@@ -176,7 +176,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
         type: 'system',
         timestamp: Date.now(),
       } satisfies NarrateMessage);
-    } catch (err) {
+    } catch {
       client.send(MessageTypes.NARRATE, {
         text: 'Failed to access your stash.',
         type: 'system',

@@ -44,7 +44,7 @@ export function resolveDodge(combatant: Combatant): CombatEvent {
 }
 
 /** Build a flee narration event. */
-export function resolveFlee(combatant: Combatant, success: boolean, toRoomId?: string): CombatEvent {
+export function resolveFlee(combatant: Combatant, success: boolean, _toRoomId?: string): CombatEvent {
   const narration = success
     ? `${combatant.name} flees from combat!`
     : `${combatant.name} tries to flee but there is no escape!`;
