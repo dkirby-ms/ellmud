@@ -3,7 +3,7 @@
  * Wires up listeners for every known MessageType so tests don't need boilerplate.
  */
 import { MessageTypes } from '@ellmud/shared';
-import type { NarrateMessage, RoomHeaderMessage, ShardStateMessage } from '@ellmud/shared';
+import type { NarrateMessage, RoomHeaderMessage, ShardStateMessage, RoomSwitchMessage } from '@ellmud/shared';
 
 export interface CollectedMessage {
   type: string;
@@ -16,6 +16,7 @@ export class MessageCollector {
   readonly narrate: NarrateMessage[] = [];
   readonly roomHeader: RoomHeaderMessage[] = [];
   readonly shardState: ShardStateMessage[] = [];
+  readonly roomSwitch: RoomSwitchMessage[] = [];
 
   constructor(client: { onMessage: (type: string, cb: (data: unknown) => void) => void }) {
     client.onMessage(MessageTypes.NARRATE, (data) => {
@@ -34,6 +35,12 @@ export class MessageCollector {
       const msg = data as ShardStateMessage;
       this.shardState.push(msg);
       this.all.push({ type: MessageTypes.SHARD_STATE, data: msg, receivedAt: Date.now() });
+    });
+
+    client.onMessage(MessageTypes.ROOM_SWITCH, (data) => {
+      const msg = data as RoomSwitchMessage;
+      this.roomSwitch.push(msg);
+      this.all.push({ type: MessageTypes.ROOM_SWITCH, data: msg, receivedAt: Date.now() });
     });
   }
 
@@ -59,5 +66,6 @@ export class MessageCollector {
     this.narrate.length = 0;
     this.roomHeader.length = 0;
     this.shardState.length = 0;
+    this.roomSwitch.length = 0;
   }
 }

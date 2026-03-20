@@ -36,11 +36,12 @@ describe('Connection — message-only protocol enforcement', () => {
     expect(codeOnly).not.toMatch(/\bSchema\b/);
   });
 
-  it('subscribes to narrate, room_header, shard_state, combat_result messages', () => {
+  it('subscribes to narrate, room_header, shard_state, combat_result, room_switch messages', () => {
     expect(connectionSource).toContain('MessageTypes.NARRATE');
     expect(connectionSource).toContain('MessageTypes.ROOM_HEADER');
     expect(connectionSource).toContain('MessageTypes.SHARD_STATE');
     expect(connectionSource).toContain('MessageTypes.COMBAT_RESULT');
+    expect(connectionSource).toContain('MessageTypes.ROOM_SWITCH');
   });
 
   it('sends commands using MessageTypes.COMMAND', () => {
@@ -48,7 +49,8 @@ describe('Connection — message-only protocol enforcement', () => {
   });
 });
 
-// Mock Colyseus Client
+// Mock Colyseus Client — shared mock so switchRoom can get a different return value
+let mockJoinOrCreate = vi.fn();
 const mockRoom = {
   onMessage: vi.fn(),
   onError: vi.fn(),
@@ -56,11 +58,12 @@ const mockRoom = {
   send: vi.fn(),
   leave: vi.fn(),
 };
+mockJoinOrCreate.mockResolvedValue(mockRoom);
 
 vi.mock('@colyseus/sdk', () => {
   return {
     Client: class MockClient {
-      joinOrCreate = vi.fn().mockResolvedValue(mockRoom);
+      joinOrCreate = (...args: unknown[]) => mockJoinOrCreate(...args);
     },
     Room: class MockRoom {},
   };
@@ -72,7 +75,7 @@ describe('Connection — runtime behavior', () => {
     // Reset the module-level client singleton
   });
 
-  it('connect() subscribes to all 4 message types + error + leave', async () => {
+  it('connect() subscribes to all 5 message types + error + leave', async () => {
     // Dynamic import to get the module after mocks are set up
     const { connect, resetClient } = await import('../services/connection.js');
     resetClient();
@@ -82,17 +85,19 @@ describe('Connection — runtime behavior', () => {
       onRoomHeader: vi.fn(),
       onShardState: vi.fn(),
       onCombatResult: vi.fn(),
+      onRoomSwitch: vi.fn(),
       onError: vi.fn(),
       onLeave: vi.fn(),
     };
 
     const room = await connect('test-token', 'refuge', handlers);
 
-    // 4 message subscriptions
+    // 5 message subscriptions
     expect(mockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.NARRATE, handlers.onNarrate);
     expect(mockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.ROOM_HEADER, handlers.onRoomHeader);
     expect(mockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.SHARD_STATE, handlers.onShardState);
     expect(mockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.COMBAT_RESULT, handlers.onCombatResult);
+    expect(mockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.ROOM_SWITCH, handlers.onRoomSwitch);
 
     // Error and leave handlers
     expect(mockRoom.onError).toHaveBeenCalledTimes(1);
@@ -117,5 +122,51 @@ describe('Connection — runtime behavior', () => {
 
     sendRawCommand(mockRoom as any, '   ');
     expect(mockRoom.send).not.toHaveBeenCalled();
+  });
+
+  it('switchRoom() leaves current room and joins target with re-registered handlers', async () => {
+    const { switchRoom, resetClient } = await import('../services/connection.js');
+    resetClient();
+
+    const newMockRoom = {
+      onMessage: vi.fn(),
+      onError: vi.fn(),
+      onLeave: vi.fn(),
+      send: vi.fn(),
+      leave: vi.fn(),
+    };
+
+    // Configure the shared mock to return the new room for the next joinOrCreate
+    mockJoinOrCreate.mockResolvedValueOnce(newMockRoom);
+
+    const currentRoom = {
+      leave: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const handlers = {
+      onNarrate: vi.fn(),
+      onRoomHeader: vi.fn(),
+      onShardState: vi.fn(),
+      onCombatResult: vi.fn(),
+      onRoomSwitch: vi.fn(),
+      onError: vi.fn(),
+      onLeave: vi.fn(),
+    };
+
+    const result = await switchRoom(currentRoom as any, 'shard', 'test-token', handlers);
+
+    // Should have left the current room
+    expect(currentRoom.leave).toHaveBeenCalled();
+
+    // Should have registered all 5 message handlers on the new room
+    expect(newMockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.NARRATE, handlers.onNarrate);
+    expect(newMockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.ROOM_HEADER, handlers.onRoomHeader);
+    expect(newMockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.SHARD_STATE, handlers.onShardState);
+    expect(newMockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.COMBAT_RESULT, handlers.onCombatResult);
+    expect(newMockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.ROOM_SWITCH, handlers.onRoomSwitch);
+    expect(newMockRoom.onError).toHaveBeenCalledTimes(1);
+    expect(newMockRoom.onLeave).toHaveBeenCalledTimes(1);
+
+    expect(result).toBe(newMockRoom);
   });
 });

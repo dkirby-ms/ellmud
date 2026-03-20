@@ -109,6 +109,66 @@ describe('RefugeRoom Multi-Player', () => {
     expect(collector.narrate.length).toBeGreaterThan(initialCount);
     const response = collector.narrate[collector.narrate.length - 1]!;
     expect(response.text).toContain('Shardboard');
+    // Phase 1: should mention 'enter shard' instruction
+    expect(response.text).toContain('enter shard');
+
+    await client.leave();
+  });
+
+  it('should send ROOM_SWITCH message when "enter shard" command is used', async () => {
+    const room = await colyseus.createRoom('refuge', {});
+    const client = await colyseus.connectTo(room);
+    const collector = new MessageCollector(client);
+    await wait(500);
+
+    client.send(MessageTypes.COMMAND, makeCommand('enter', 'shard'));
+    await wait(500);
+
+    // Should receive a ROOM_SWITCH message targeting 'shard'
+    expect(collector.roomSwitch.length).toBe(1);
+    expect(collector.roomSwitch[0]!.target).toBe('shard');
+    expect(collector.roomSwitch[0]!.reason).toBe('enter_shard');
+
+    // Should also receive transition narration
+    const transitionMsg = collector.narrate.find((m) => m.text.includes('rift'));
+    expect(transitionMsg).toBeDefined();
+
+    await client.leave();
+  });
+
+  it('should send ROOM_SWITCH for bare "enter" command (defaults to shard)', async () => {
+    const room = await colyseus.createRoom('refuge', {});
+    const client = await colyseus.connectTo(room);
+    const collector = new MessageCollector(client);
+    await wait(500);
+
+    client.send(MessageTypes.COMMAND, makeCommand('enter'));
+    await wait(500);
+
+    expect(collector.roomSwitch.length).toBe(1);
+    expect(collector.roomSwitch[0]!.target).toBe('shard');
+
+    await client.leave();
+  });
+
+  it('should reject "enter" with unknown target', async () => {
+    const room = await colyseus.createRoom('refuge', {});
+    const client = await colyseus.connectTo(room);
+    const collector = new MessageCollector(client);
+    await wait(500);
+
+    const initialCount = collector.narrate.length;
+    client.send(MessageTypes.COMMAND, makeCommand('enter', 'tavern'));
+    await wait(500);
+
+    // Should NOT send ROOM_SWITCH
+    expect(collector.roomSwitch.length).toBe(0);
+
+    // Should narrate the error
+    expect(collector.narrate.length).toBeGreaterThan(initialCount);
+    const errorMsg = collector.narrate[collector.narrate.length - 1]!;
+    expect(errorMsg.text).toContain('tavern');
+    expect(errorMsg.type).toBe('system');
 
     await client.leave();
   });

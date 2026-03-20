@@ -9,6 +9,7 @@ import {
   type RoomHeaderMessage,
   type ShardStateMessage,
   type ExtractionMessage,
+  type RoomSwitchMessage,
   type NarrationType,
   type ShardState,
   type CombatAction,
@@ -44,9 +45,13 @@ describe('MessageTypes', () => {
     expect(MessageTypes.STASH_UPDATE).toBe('stash_update');
   });
 
-  it('should have exactly 7 message types', () => {
+  it('should export ROOM_SWITCH type key', () => {
+    expect(MessageTypes.ROOM_SWITCH).toBe('room_switch');
+  });
+
+  it('should have exactly 8 message types', () => {
     const keys = Object.keys(MessageTypes);
-    expect(keys).toHaveLength(7);
+    expect(keys).toHaveLength(8);
   });
 
   it('should have unique values for all message types', () => {
@@ -104,6 +109,23 @@ describe('Message Type Shapes', () => {
     expect(msg.playerId).toBe('p1');
     expect(msg.state).toBe('started');
     expect(msg.ticksRemaining).toBe(5);
+  });
+
+  it('RoomSwitchMessage should accept target, reason, and optional options', () => {
+    const msg: RoomSwitchMessage = {
+      target: 'shard',
+      reason: 'enter_shard',
+    };
+    expect(msg.target).toBe('shard');
+    expect(msg.reason).toBe('enter_shard');
+    expect(msg.options).toBeUndefined();
+
+    const msgWithOptions: RoomSwitchMessage = {
+      target: 'refuge',
+      reason: 'extraction_complete',
+      options: { biome: 'flooded_crypt' },
+    };
+    expect(msgWithOptions.options).toEqual({ biome: 'flooded_crypt' });
   });
 });
 
