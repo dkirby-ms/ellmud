@@ -12,6 +12,17 @@ export interface AdminRoomSummary {
   metadata?: Record<string, unknown>;
 }
 
+export interface AdminCreatureInfo {
+  id: string;
+  name: string;
+  type: string;
+  hp: number;
+  maxHp: number;
+  currentRoomId: string;
+  behaviorState: string;
+  isAlive: boolean;
+}
+
 export interface AdminShardDetail {
   roomId: string;
   name: string;
@@ -24,6 +35,7 @@ export interface AdminShardDetail {
   playerCount: number;
   paused: boolean;
   players: AdminPlayerInfo[];
+  creatures: AdminCreatureInfo[];
 }
 
 export interface AdminRefugeDetail {

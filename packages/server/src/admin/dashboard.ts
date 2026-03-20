@@ -108,6 +108,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
       <span>Uptime: <span id="uptime">--</span></span>
       <span>Rooms: <span id="room-count">--</span></span>
       <span>Players: <span id="player-count">--</span></span>
+      <span>Creatures: <span id="creature-count">--</span></span>
     </div>
 
     <div class="grid">
@@ -203,6 +204,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
       document.getElementById('uptime').textContent = formatUptime(data.uptime);
       document.getElementById('room-count').textContent = data.rooms.total;
       document.getElementById('player-count').textContent = data.rooms.totalPlayers;
+      document.getElementById('creature-count').textContent =
+        (data.rooms.livingCreatures || 0) + '/' + (data.rooms.totalCreatures || 0);
 
       // Cache metrics
       const ratio = (data.narration.cache_hit_ratio * 100).toFixed(1) + '%';
@@ -278,6 +281,20 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
               data.players.forEach(p => {
                 html += '<tr><td>' + p.sessionId.substring(0, 10) + '</td><td>' + p.currentRoomId + '</td>' +
                   '<td>' + p.inventoryCount + '</td><td>' + p.currentWeight.toFixed(1) + '/' + p.maxCarryWeight + '</td></tr>';
+              });
+              html += '</tbody></table>';
+            }
+
+            if (data.creatures && data.creatures.length > 0) {
+              html += '<h3 style="margin-top:12px">Creatures (' + data.creatures.length + ')</h3>';
+              html += '<table><thead><tr><th>Name</th><th>Room</th><th>HP</th><th>State</th><th>Alive</th></tr></thead><tbody>';
+              data.creatures.forEach(c => {
+                const hpPct = ((c.hp / c.maxHp) * 100).toFixed(0);
+                const stateClass = c.behaviorState === 'hostile' ? 'danger' : c.behaviorState === 'fleeing' ? 'warn' : c.behaviorState === 'alert' ? 'warn' : '';
+                html += '<tr><td>' + c.name + '</td><td>' + c.currentRoomId + '</td>' +
+                  '<td>' + c.hp + '/' + c.maxHp + ' (' + hpPct + '%)</td>' +
+                  '<td><span class="lifecycle ' + stateClass + '">' + c.behaviorState + '</span></td>' +
+                  '<td>' + (c.isAlive ? '✓' : '✗') + '</td></tr>';
               });
               html += '</tbody></table>';
             }

@@ -16,6 +16,7 @@ import type {
   AdminShardDetail,
   AdminRefugeDetail,
   AdminPlayerInfo,
+  AdminCreatureInfo,
   AdminMetrics,
 } from './types.js';
 
@@ -82,6 +83,46 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
     } catch (err) {
       console.error('[Admin] Failed to get room detail:', err);
       res.status(500).json({ error: 'Failed to get room detail' });
+    }
+  });
+
+  // ─── GET /admin/api/creatures — List all creatures across shards ──────────
+  router.get('/admin/api/creatures', adminAuth, async (_req: Request, res: Response) => {
+    try {
+      const rooms = await safeQueryRooms();
+      const creatures: Array<AdminCreatureInfo & { shardRoomId: string }> = [];
+
+      for (const roomCache of rooms) {
+        if (roomCache.name !== 'shard') continue;
+        const room = safeGetRoom(roomCache.roomId);
+        if (!room) continue;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cm = (room as any)['creatureManager'] as
+          | { getAllCreatures(): Array<{ id: string; name: string; type: string; hp: number; maxHp: number; currentRoomId: string; behaviorState: string; isAlive: boolean }> }
+          | undefined;
+
+        if (cm) {
+          for (const c of cm.getAllCreatures()) {
+            creatures.push({
+              id: c.id,
+              name: c.name,
+              type: c.type,
+              hp: c.hp,
+              maxHp: c.maxHp,
+              currentRoomId: c.currentRoomId,
+              behaviorState: c.behaviorState,
+              isAlive: c.isAlive,
+              shardRoomId: roomCache.roomId,
+            });
+          }
+        }
+      }
+
+      res.json({ creatures, count: creatures.length });
+    } catch (err) {
+      console.error('[Admin] Failed to list creatures:', err);
+      res.status(500).json({ error: 'Failed to list creatures' });
     }
   });
 
@@ -334,6 +375,28 @@ function getShardDetail(room: import('@colyseus/core').Room): AdminShardDetail {
     }
   }
 
+  // Access creature manager for debug visibility
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const creatureManager = (room as any)['creatureManager'] as
+    | { getAllCreatures(): Array<{ id: string; name: string; type: string; hp: number; maxHp: number; currentRoomId: string; behaviorState: string; isAlive: boolean }> }
+    | undefined;
+
+  const creatures: AdminCreatureInfo[] = [];
+  if (creatureManager) {
+    for (const c of creatureManager.getAllCreatures()) {
+      creatures.push({
+        id: c.id,
+        name: c.name,
+        type: c.type,
+        hp: c.hp,
+        maxHp: c.maxHp,
+        currentRoomId: c.currentRoomId,
+        behaviorState: c.behaviorState,
+        isAlive: c.isAlive,
+      });
+    }
+  }
+
   return {
     roomId: room.roomId,
     name: 'shard',
@@ -346,6 +409,7 @@ function getShardDetail(room: import('@colyseus/core').Room): AdminShardDetail {
     playerCount: state.playerCount ?? 0,
     paused: !room.clock.running,
     players,
+    creatures,
   };
 }
 
@@ -405,6 +469,22 @@ async function sendSSESnapshot(res: Response, deps: AdminRouterDeps): Promise<vo
     const telemetry = deps.telemetry?.getTelemetry();
     const cacheSize = getCacheSize(deps.cache);
 
+    // Count creatures across shards
+    let totalCreatures = 0;
+    let livingCreatures = 0;
+    for (const shardCache of shards) {
+      const shardRoom = safeGetRoom(shardCache.roomId);
+      if (!shardRoom) continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cm = (shardRoom as any)['creatureManager'] as
+        | { getAllCreatures(): Array<{ isAlive: boolean }>; getLivingCreatures(): Array<unknown> }
+        | undefined;
+      if (cm) {
+        totalCreatures += cm.getAllCreatures().length;
+        livingCreatures += cm.getLivingCreatures().length;
+      }
+    }
+
     const data = {
       timestamp: Date.now(),
       uptime: process.uptime(),
@@ -413,6 +493,8 @@ async function sendSSESnapshot(res: Response, deps: AdminRouterDeps): Promise<vo
         shards: shards.length,
         refuges: refuges.length,
         totalPlayers,
+        totalCreatures,
+        livingCreatures,
         list: rooms.map((r) => ({
           roomId: r.roomId,
           name: r.name,

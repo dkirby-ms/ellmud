@@ -194,6 +194,18 @@ describe('Admin API', () => {
     });
   });
 
+  describe('GET /admin/api/creatures', () => {
+    it('returns empty creature list when no rooms active', async () => {
+      const app = createTestApp();
+      const res = await request(app, 'get', '/admin/api/creatures', { token: TEST_TOKEN });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('creatures');
+      expect(res.body).toHaveProperty('count');
+      expect(res.body.count).toBe(0);
+    });
+  });
+
   describe('GET /admin/api/players', () => {
     it('returns empty player list when no rooms active', async () => {
       const app = createTestApp();
@@ -317,5 +329,23 @@ describe('Admin Dashboard HTML', () => {
     expect(res.text).toContain('<!DOCTYPE html>');
     expect(res.text).toContain('Ellmud Admin Dashboard');
     expect(res.text).toContain('Admin Token');
+  });
+
+  it('includes creature count in status bar', async () => {
+    const app = express();
+    app.use('/admin', createDashboardRouter());
+    const res = await request(app, 'get', '/admin/');
+
+    expect(res.text).toContain('creature-count');
+    expect(res.text).toContain('Creatures:');
+  });
+
+  it('includes creature table rendering in room detail script', async () => {
+    const app = express();
+    app.use('/admin', createDashboardRouter());
+    const res = await request(app, 'get', '/admin/');
+
+    expect(res.text).toContain('data.creatures');
+    expect(res.text).toContain('behaviorState');
   });
 });
