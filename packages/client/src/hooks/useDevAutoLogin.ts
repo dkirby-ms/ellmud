@@ -21,13 +21,14 @@ export function useDevAutoLogin(): void {
 
     (async () => {
       try {
-        // Try register first (ignore 409 duplicate), then login
-        await register('dev', 'devdev').catch((err) => {
-          // Ignore duplicate username error, we'll just login next
-          if (err.status !== 409) throw err;
-        });
-
-        const result = await login('dev', 'devdev');
+        // Try login first — avoids noisy 409 on register when user exists
+        let result;
+        try {
+          result = await login('dev', 'devdev');
+        } catch {
+          // Login failed — user may not exist yet, try registering
+          result = await register('dev', 'devdev');
+        }
         dispatch({ type: 'LOGIN_SUCCESS', token: result.token, playerId: result.playerId });
       } catch {
         // Server not running or other failure — fall back to AuthScreen
