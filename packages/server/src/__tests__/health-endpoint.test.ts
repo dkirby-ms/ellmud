@@ -1,7 +1,7 @@
 /**
  * Health Endpoint Tests
  *
- * Covers: GET /health returns 200 with status, uptime, and timestamp.
+ * Covers: GET /health returns 200 with status, uptime, timestamp, and Redis status.
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
@@ -16,9 +16,9 @@ describe('Health Endpoint', () => {
     if (server) server.close();
   });
 
-  async function createApp(): Promise<{ port: number; app: express.Express }> {
+  async function createApp(deps?: { isCacheRedis?: boolean; isPresenceRedis?: boolean }): Promise<{ port: number; app: express.Express }> {
     const app = express();
-    app.use(createHealthRouter());
+    app.use(createHealthRouter(deps));
     server = app.listen(0);
     const addr = server.address();
     const port = typeof addr === 'object' && addr ? addr.port : 0;
@@ -58,5 +58,41 @@ describe('Health Endpoint', () => {
     const { port } = await createApp();
     const res = await fetch(`http://127.0.0.1:${port}/health`);
     expect(res.headers.get('content-type')).toContain('application/json');
+  });
+
+  it('reports in-memory cache and local presence by default', async () => {
+    const { port } = await createApp();
+    const res = await fetch(`http://127.0.0.1:${port}/health`);
+    const body = await res.json() as { redis: { cache: string; presence: string } };
+
+    expect(body.redis.cache).toBe('in-memory');
+    expect(body.redis.presence).toBe('local');
+  });
+
+  it('reports Redis cache when isCacheRedis is true', async () => {
+    const { port } = await createApp({ isCacheRedis: true });
+    const res = await fetch(`http://127.0.0.1:${port}/health`);
+    const body = await res.json() as { redis: { cache: string; presence: string } };
+
+    expect(body.redis.cache).toBe('redis');
+    expect(body.redis.presence).toBe('local');
+  });
+
+  it('reports Redis presence when isPresenceRedis is true', async () => {
+    const { port } = await createApp({ isPresenceRedis: true });
+    const res = await fetch(`http://127.0.0.1:${port}/health`);
+    const body = await res.json() as { redis: { cache: string; presence: string } };
+
+    expect(body.redis.cache).toBe('in-memory');
+    expect(body.redis.presence).toBe('redis');
+  });
+
+  it('reports both Redis when both are true', async () => {
+    const { port } = await createApp({ isCacheRedis: true, isPresenceRedis: true });
+    const res = await fetch(`http://127.0.0.1:${port}/health`);
+    const body = await res.json() as { redis: { cache: string; presence: string } };
+
+    expect(body.redis.cache).toBe('redis');
+    expect(body.redis.presence).toBe('redis');
   });
 });
