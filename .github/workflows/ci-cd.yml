@@ -136,7 +136,16 @@ jobs:
             --name ${{ secrets.CONTAINER_APP_NAME }} \
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
             --image ${{ secrets.ACR_NAME }}.azurecr.io/ellmud-${{ github.ref_name }}:${{ github.sha }} \
-            --set-env-vars "NODE_ENV=production" "PORT=2567"
+            --set-env-vars "NODE_ENV=production" "PORT=2567" \
+            --container-name ellmud \
+            --command "" --args ""
+
+      - name: Update ingress target port
+        run: |
+          az containerapp ingress update \
+            --name ${{ secrets.CONTAINER_APP_NAME }} \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --target-port 2567
 
       - name: Wait for deployment
         run: sleep 15

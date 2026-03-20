@@ -43,9 +43,10 @@ param redisHost string = ''
 @description('Deploy the game server container app (false = environment only)')
 param deployApp bool = false
 
-// Bootstrap placeholder — replaced by real image after first CI push
+// Bootstrap placeholder — replaced by real image after first CI push.
+// Uses the same port the game server will use so ingress config stays stable.
 var bootstrapImage = 'node:22-alpine'
-var bootstrapCommand = 'node -e "require(\'http\').createServer((q,s)=>{s.writeHead(200,{\'Content-Type\':\'application/json\'});s.end(JSON.stringify({status:\'ok\',mode:\'placeholder\'}))}).listen(3000,\'0.0.0.0\')"'
+var bootstrapCommand = 'node -e "require(\'http\').createServer((q,s)=>{s.writeHead(200,{\'Content-Type\':\'application/json\'});s.end(JSON.stringify({status:\'ok\',mode:\'placeholder\'}))}).listen(2567,\'0.0.0.0\')"'
 
 resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: '${resourcePrefix}-cae'
@@ -80,7 +81,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
     configuration: {
       ingress: {
         external: true
-        targetPort: 3000
+        targetPort: 2567
         transport: 'http'
         allowInsecure: false
         traffic: [
@@ -103,8 +104,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             memory: '2Gi'
           }
           env: [
-            { name: 'NODE_ENV', value: 'development' }
-            { name: 'PORT', value: '3000' }
+            { name: 'NODE_ENV', value: 'production' }
+            { name: 'PORT', value: '2567' }
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
             { name: 'DATABASE_URL', value: 'postgresql://${postgresAdminUsername}:${postgresAdminPassword}@${postgresServerFqdn}:5432/${postgresDatabaseName}?sslmode=require' }
             { name: 'REDIS_URL', value: 'redis://${redisHost}:6379' }

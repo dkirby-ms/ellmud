@@ -11,4 +11,4 @@ docs
 **/vitest.config.*
 **/.env*
 **/dist
-*.tsbuildinfo
+**/*.tsbuildinfo
