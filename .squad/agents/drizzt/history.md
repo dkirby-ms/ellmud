@@ -208,3 +208,33 @@
 - **Package:** `@colyseus/redis-presence@0.17.6`
 - **Constructor:** Accepts `string | number | RedisOptions | ClusterNode[]` — connection string works directly
 - **Internals:** Creates two ioredis clients (pub + sub) internally for Pub/Sub presence. The `shutdown()` method cleanly disconnects both
+## Wave 3 Complete — Redis Container Integration (2026-03-20T20:21:36Z)
+
+### Redis Container Setup — PR #78
+**Task:** Issue #2 — Redis Container Setup  
+**Status:** ✅ Complete
+
+**What I built:**
+1. **@colyseus/redis-presence integration** — Installed package, wired into server boot
+2. **Factory functions** — `createNarrationCache()` and `createPresence()` use env var toggles
+3. **Bicep env var fix** — Config now reads both `REDIS_CONNECTION_STRING` (preferred) and `REDIS_URL` (fallback), defaults to `redis://localhost:6379`
+4. **Health endpoints** — `/health/redis` added to admin dashboard (status: `connected | disconnected`)
+5. **Two-phase deployment toggles** — `REDIS_CACHE_ENABLED` + `REDIS_PRESENCE_ENABLED` allow Phase 1 → Phase 2 transition without code changes
+
+**Tests:** 9 new tests validating Redis connection, presence sync, cache integration. All passing. Total: 846 tests.
+
+**Key decision:** `REDIS_CONNECTION_STRING` is canonical for future Bicep deployments — Elminster should use this name for any new Redis env vars.
+
+### Volo Completed LLM Pipeline Audit — PR #79
+**Relevant to:** Issue #9 LLM Narration Pipeline acceptance criteria
+- Fixed `getTimeout()` to use per-type config lookup instead of hardcoded branching
+- Added `validateLLMOutput()` forbidden directive enforcement (`reveal_hidden_items`, `reveal_player_names`, `resolve_mechanics`)
+- 50 new integration tests covering timeout budgets, template fallback, background enrichment, output contract
+- All 846 tests passing — zero regressions
+
+### Minsc Built Anticipatory Tests
+**Relevant to:** Wave 3 Redis + Narration contracts
+- 25 Redis contract tests (connection, presence, cache key generation, eviction)
+- 54 narration contract tests (per-type timeout, forbidden directives, background enrichment, validation)
+- 79 total new tests, all passing
+- These tests validate both Drizzt's Redis and Volo's LLM implementations automatically when PRs merge

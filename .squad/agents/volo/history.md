@@ -89,3 +89,22 @@
 - **Key pattern: forbidden directive validation** — The `forbidden` array in narrative_directives is a runtime-configurable guardrail. Validation checks are additive (each directive adds a check), so new forbidden rules can be added without modifying the validator function's core structure.
 - **Background enrichment verified:** When primary LLM call times out, `backgroundEnrich()` fires a new LLM call with its own AbortController bound to hard_limit. Invalid output in background is silently rejected (template stays in cache). Hard limit cancels the background call.
 - **Test count:** 846 total (was 726), all passing. 0 lint errors.
+
+## Wave 3 Complete — LLM Pipeline Acceptance Audit (2026-03-20T20:21:36Z)
+
+### Wave 3 Completion Status
+**Task:** Issue #9 LLM Narration Pipeline acceptance criteria audit  
+**Status:** ✅ Complete — PR #79 open for merge
+
+**Parallel agents this wave:**
+- **Drizzt** — PR #78: Redis container integration, Bicep env var fix, 9 new tests
+- **Minsc** — 79 anticipatory tests (25 Redis + 54 narration contracts)
+
+**Total test count:** 846 passing (was 767). 79 new tests this wave. 0 regressions.
+
+**Infrastructure readiness:**
+- LLM pipeline passes full acceptance criteria
+- Per-type config lookup enables future tuning (e.g., faster movement narration during combat)
+- Forbidden directives are runtime-configurable guardrail
+- Background enrichment ensures template is always on time
+- Redis cache is now available as Phase 2 config switch (`REDIS_CACHE_ENABLED=true`)

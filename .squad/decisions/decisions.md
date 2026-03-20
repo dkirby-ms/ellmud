@@ -160,3 +160,61 @@ await server.listen(PORT);  // This registers matchmaking routes
 - **Client team:** No client changes needed — the Colyseus SDK's `joinOrCreate()` call will now succeed.
 
 _Merged from decisions/inbox/ on 2026-03-20T12:03:00Z._
+
+---
+
+## 2026-03-20T20:21:36Z: Bicep IaC Two-Phase Module Pattern
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2025-07-25  
+**PR:** #57 (squad/18-bicep-iac)  
+**Issues:** #18, #1
+
+**Decision:** The `container-apps.bicep` module supports two-phase deployment via a `deployApp` boolean parameter. Phase 1 creates only the Container Apps Environment; Phase 2 creates the environment (idempotent) plus the game server Container App.
+
+**Rationale:** Redis deploys as a container *inside* the Container Apps Environment, and the game server needs Redis's FQDN as an environment variable. This creates a dependency chain: **Environment → Redis → Game Server App**. A single module can't output the environment ID and also consume the Redis host without a circular dependency.
+
+**Impact:**
+- **CI/CD** (#17): The deployment workflow calls `main.bicep` once — ARM resolves the two-phase ordering automatically via implicit dependencies between modules.
+- **Future modules**: Any new sidecar containers (e.g., telemetry collector) follow the same pattern — deploy into the environment after it exists.
+- **Redis is ephemeral**: No persistence, `allkeys-lru` eviction at 256MB. Losing Redis loses Colyseus presence data but not game state (that's in PostgreSQL).
+
+---
+
+## 2026-03-21T00:00:00Z: Redis Connection String Env Var Compatibility
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-03-21  
+**PR:** #78  
+**Issue:** #2
+
+**Context:** The Bicep IaC originally set `REDIS_URL` as the environment variable for the Redis connection string, but `config.ts` read `REDIS_CONNECTION_STRING`. This mismatch would cause Redis to be unreachable in production.
+
+**Decision:** Config now reads both: `REDIS_CONNECTION_STRING` takes precedence, falls back to `REDIS_URL`, then defaults to `redis://localhost:6379`. The Bicep was updated to use `REDIS_CONNECTION_STRING` as the canonical name.
+
+**Impact:**
+- **Elminster (infra):** If adding new Redis env vars, use `REDIS_CONNECTION_STRING` as the canonical name
+- **All agents:** The two-toggle design (`REDIS_CACHE_ENABLED` + `REDIS_PRESENCE_ENABLED`) allows Phase 1 → Phase 2 transition by flipping env vars only — no code changes needed
+
+---
+
+## 2026-03-20T20:21:36Z: Per-Type Timeout Config Lookup
+
+**By:** Volo (Narrative Dev)  
+**Date:** 2026-03-20  
+**Issue:** #9  
+**PR:** #79
+
+**Decision:** `NarrationService.getTimeout()` uses direct per-type config lookup (`config.timeouts[type]`) instead of hardcoded branching by category (combat vs exploration).
+
+**Context:** The original implementation grouped narration types into two categories:
+- `combat_action | combat_round` → `config.timeouts.combat_action`
+- everything else → `config.timeouts.room_description`
+
+This worked because all types within a category had the same timeout value. But it meant that `movement` and `event` types couldn't have distinct timeouts even if the config specified them — they were silently mapped to `room_description`'s timeout.
+
+**Rationale:** Since `NarrationTimeoutConfig` already has a property for every `LLMNarrationType`, direct lookup is simpler, more correct, and forward-compatible. If we later need different timeouts for `movement` vs `room_description` (e.g., faster movement narration during combat traversal), it just works.
+
+**Impact:**
+- No behavioral change with current `DEFAULT_NARRATION_CONFIG` (combat types = 800ms, others = 2000ms)
+- Future flexibility to tune per-type without code changes

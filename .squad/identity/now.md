@@ -1,21 +1,27 @@
 # Current Focus
 
-**Phase:** Wave 2 PostgreSQL + Bicep complete. PRs #76, #77 pending merge to `dev`. 272 new tests added (665 server, 80 shared, 45 client). All passing. Ready for Wave 3 backlog.
+**Phase:** Wave 3 complete (Redis #2 + LLM Pipeline #9). PRs #78 and #79 open for merge. 846 tests passing.
 
-**What happened:** Parallel agents completed infrastructure hardening. Jarlaxle fixed 4 production Bicep bugs and refactored container-apps module. Drizzt built full PostgreSQL persistence layer (PgPlayerRepository, PgStashRepository, migration runner, auto-detection toggle). Minsc wrote 125 contract tests validating behavioral equivalence.
+**What happened:** Parallel agents built core infrastructure. Drizzt wired @colyseus/redis-presence into server boot, fixed Bicep REDIS_CONNECTION_STRING compatibility. Volo audited LLM narration pipeline acceptance criteria, fixed per-type timeout lookup and forbidden directive validation. Minsc wrote 79 anticipatory tests (25 Redis contracts + 54 narration contracts). All passing.
 
-**What's next:** 
-1. Merge PRs #76, #77 to `dev` branch
-2. Wave 3 priorities: #11 Stash Persistence + #2 Redis (coordinate with Wave 2 PG layer)
-3. #9 LLM Pipeline (narration enrichment)
-4. #18 Creature spawning continuation
+**What's next:**
+1. Merge PRs #78, #79 to `dev` branch
+2. Wave 4 priorities: #11 Stash Persistence or client UI batch
+3. #7 Creature spawning continuation (Drowned Revenant + AI)
 
-**Key accomplishment:** DATABASE_URL toggle enables zero-config local dev (in-memory) + one-line production activation (PostgreSQL). Bicep IaC now production-ready (zero errors/warnings).
+**Key accomplishment:** Redis is now production-ready in container deployment. LLM pipeline passes full acceptance criteria: per-type config, forbidden directives, background enrichment, timeout budgets. Infrastructure tests are solid (79 new anticipatory tests on dev).
 
-**Test status:** 
-- Server: 665 passing (579 base + 147 PG new)
+**Test status:**
+- Server: 767 passing (prior) → 846 passing (after Wave 3)
 - Shared: 80 passing
 - Client: 45 passing
-- Persistence contract tests: 125 proven (await PG implementation)
-- Total: 790 passing tests
+- New: 79 anticipatory tests (25 Redis + 54 narration)
+- Total: 846 passing tests (68 new this wave)
+
+**Infrastructure readiness:**
+- Redis container deployment pattern locked in
+- Bicep IaC Phase 1 → Phase 2 toggle via env vars (no code changes)
+- LLM pipeline forward-compatible (per-type config, forbidden directives)
+
+
 
