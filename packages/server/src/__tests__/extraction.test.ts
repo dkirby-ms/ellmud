@@ -43,6 +43,20 @@ describe('ExtractionSystem', () => {
       expect(system.isExtracting('player1')).toBe(true);
     });
 
+    it('should return totalTicks and ticksRemaining on success', () => {
+      const result = system.startExtraction('player1', 'extraction-chamber', 'extraction');
+      expect(result.success).toBe(true);
+      expect(result.totalTicks).toBe(5);
+      expect(result.ticksRemaining).toBe(5);
+    });
+
+    it('should not include tick info on failure', () => {
+      const result = system.startExtraction('player1', 'corridor', 'corridor');
+      expect(result.success).toBe(false);
+      expect(result.totalTicks).toBeUndefined();
+      expect(result.ticksRemaining).toBeUndefined();
+    });
+
     it('should reject extraction in a non-extraction room', () => {
       const result = system.startExtraction('player1', 'corridor', 'corridor');
       expect(result.success).toBe(false);
@@ -419,6 +433,64 @@ describe('Extraction Full Flow', () => {
       expect(r.narration).toContain('shard collapsed');
     }
     expect(system.getActiveExtractions()).toHaveLength(0);
+  });
+});
+
+// ─── Extraction State Protocol ──────────────────────────────────────────────
+
+describe('Extraction State Protocol', () => {
+  it('should return tick counts on successful start for EXTRACTION_STATE message', () => {
+    const system = new ExtractionSystem(5);
+    const result = system.startExtraction('player1', 'extraction-chamber', 'extraction');
+    expect(result.success).toBe(true);
+    expect(result.totalTicks).toBe(5);
+    expect(result.ticksRemaining).toBe(5);
+  });
+
+  it('should track ticksRemaining via getChannel during progress', () => {
+    const system = new ExtractionSystem(4);
+    system.startExtraction('player1', 'extraction-chamber', 'extraction');
+
+    system.tickExtraction('player1');
+    const channel1 = system.getChannel('player1');
+    expect(channel1?.ticksRemaining).toBe(3);
+    expect(channel1?.totalTicks).toBe(4);
+
+    system.tickExtraction('player1');
+    const channel2 = system.getChannel('player1');
+    expect(channel2?.ticksRemaining).toBe(2);
+  });
+
+  it('should remove channel on completion (no channel data for completed state)', () => {
+    const system = new ExtractionSystem(2);
+    system.startExtraction('player1', 'extraction-chamber', 'extraction');
+
+    system.tickExtraction('player1');
+    expect(system.getChannel('player1')).toBeDefined();
+
+    const final = system.tickExtraction('player1');
+    expect(final!.completed).toBe(true);
+    expect(system.getChannel('player1')).toBeUndefined();
+  });
+
+  it('should remove channel on interruption (for interrupted state)', () => {
+    const system = new ExtractionSystem(5);
+    system.startExtraction('player1', 'extraction-chamber', 'extraction');
+
+    const narration = system.interruptExtraction('player1', 'struck by an enemy');
+    expect(narration).toContain('shatters');
+    expect(system.getChannel('player1')).toBeUndefined();
+  });
+
+  it('interruptAll should return structured data for each interrupted player', () => {
+    const system = new ExtractionSystem(5);
+    system.startExtraction('p1', 'extraction-chamber', 'extraction');
+    system.startExtraction('p2', 'extraction-chamber', 'extraction');
+
+    const results = system.interruptAll('shard collapsed');
+    expect(results).toHaveLength(2);
+    expect(results.every(r => r.playerId && r.narration)).toBe(true);
+    expect(results.every(r => r.narration.includes('shard collapsed'))).toBe(true);
   });
 });
 

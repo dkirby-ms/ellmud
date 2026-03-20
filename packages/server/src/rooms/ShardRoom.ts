@@ -207,6 +207,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
               const client = this.findClient(event.targetId);
               if (client) {
                 this.sendNarrate(client, { text: narration, type: 'system', timestamp: Date.now() });
+                this.sendExtractionState(client, {
+                  playerId: event.targetId,
+                  state: 'interrupted',
+                  narration,
+                  timestamp: Date.now(),
+                });
               }
             }
           }
@@ -257,7 +263,20 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   private handleCollapse(): void {
     // Interrupt all active extractions
-    this.extractionSystem.interruptAll('the shard collapsed');
+    const interrupted = this.extractionSystem.interruptAll('the shard collapsed');
+
+    // Send EXTRACTION_STATE 'interrupted' to each affected player
+    for (const { playerId, narration } of interrupted) {
+      const client = this.findClient(playerId);
+      if (client) {
+        this.sendExtractionState(client, {
+          playerId,
+          state: 'interrupted',
+          narration,
+          timestamp: Date.now(),
+        });
+      }
+    }
 
     // Shard-sickness narration for all remaining players
     this.broadcast(MessageTypes.NARRATE, {
@@ -312,9 +331,23 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     this.log(`Command from ${client.sessionId}: ${verb} ${args.join(' ')}`);
 
+    const wasExtracting = this.extractionSystem.isExtracting(client.sessionId);
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
     this.deliverResult(client, result);
+
+    // Send EXTRACTION_STATE 'started' if this command initiated an extraction
+    if (!wasExtracting && this.extractionSystem.isExtracting(client.sessionId)) {
+      const channel = this.extractionSystem.getChannel(client.sessionId)!;
+      this.sendExtractionState(client, {
+        playerId: client.sessionId,
+        state: 'started',
+        totalTicks: channel.totalTicks,
+        ticksRemaining: channel.ticksRemaining,
+        narration: result.narrations[0]?.text ?? 'The extraction ritual begins...',
+        timestamp: Date.now(),
+      });
+    }
   }
 
   private buildCommandContext(player: PlayerState, args: string[]): CommandContext {
@@ -397,6 +430,10 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     return this.clients.find((c) => c.sessionId === sessionId);
   }
 
+  private sendExtractionState(client: Client, msg: ExtractionMessage): void {
+    client.send(MessageTypes.EXTRACTION_STATE, msg);
+  }
+
   // ─── Extraction Tick Delivery ─────────────────────────────────────────────
 
   private tickExtractions(): void {
@@ -418,6 +455,17 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
       if (result.completed) {
         this.handleSuccessfulExtraction(client, playerId);
+      } else {
+        // Send progress update so the client can track channel state
+        const channel = this.extractionSystem.getChannel(playerId);
+        this.sendExtractionState(client, {
+          playerId,
+          state: 'progress',
+          ticksRemaining: channel?.ticksRemaining,
+          totalTicks: channel?.totalTicks,
+          narration: result.narration,
+          timestamp: Date.now(),
+        });
       }
     }
   }
