@@ -131,3 +131,32 @@ The LLM client uses a `LLMTransport` function type (not an SDK class). To connec
 - **Minsc (Issue #13):** Web Terminal Client receives NARRATION messages with enriched text. Client can display telemetry badge (LLM vs template)
 
 _Merged from decisions/inbox/ on 2026-03-19T16:32:56Z._
+
+---
+
+## 2026-03-20T12:03:00Z: Colyseus Server.listen() Required for Matchmaking
+
+**By:** Drizzt (Engine Dev)  
+**Status:** Implemented
+
+**Context:** POST `/matchmake/joinOrCreate/refuge` was returning 404 in production. The Colyseus matchmaking HTTP routes were never being registered.
+
+**Decision:** Always use `Server.listen(PORT)` instead of pre-listening the HTTP server. The correct pattern is:
+
+```ts
+const httpServer = http.createServer(app);  // Don't listen yet
+const server = new Server({
+  transport: new WebSocketTransport({ server: httpServer }),
+});
+server.define('refuge', RefugeRoom);
+await server.listen(PORT);  // This registers matchmaking routes
+```
+
+**Never** do `app.listen(PORT)` and pass the result to the transport — this bypasses Colyseus's route registration.
+
+**Impact:**
+- **All agents:** If you modify `packages/server/src/index.ts`, preserve the `http.createServer(app)` + `server.listen(PORT)` pattern.
+- **Minsc (QA):** The matchmaking endpoint `POST /matchmake/joinOrCreate/refuge` should now work in integration tests.
+- **Client team:** No client changes needed — the Colyseus SDK's `joinOrCreate()` call will now succeed.
+
+_Merged from decisions/inbox/ on 2026-03-20T12:03:00Z._
