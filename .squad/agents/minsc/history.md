@@ -10,6 +10,10 @@
 
 ## Learnings
 
+- **Contract test pattern for repository swapability:** Wrote repository tests as reusable contract functions (`playerRepositoryContractTests`, `stashRepositoryContractTests`) that accept a factory. Same tests run against InMemoryRepo now and will run against PgRepo later — just swap the factory. This ensures the PG implementation satisfies the exact same behavioral contract.
+- **Migration SQL parse tests catch schema drift:** Schema validation tests parse SQL with regex to verify constraints, foreign keys, indexes, and cross-migration consistency without needing a running database. Caught migration 006 (stash_capacity) that other teammates added — tests adapted to be tolerant of additional migrations while still validating core schema.
+- **player_skills table uses updated_at instead of created_at:** Not all data tables follow the same timestamp pattern. Config/override tables (006_create_stash_capacity) have no timestamps at all. Schema validation tests should check core data tables (001-005) separately from utility tables.
+
 - **Colyseus boot() port assignment bug:** `@colyseus/testing` boot() ignores port parameter for Server instances. Workaround: use `server.listen(0)` for OS auto-assignment, then patch `server.port` from `transport.server.address().port`. Bumped `hookTimeout`/`testTimeout` to 30s. All 344 tests now pass in ~110s.
 - **Colyseus testing port conflicts:** `@colyseus/testing` boots a real server on port 2568. Multiple test files with `bootTestServer()` cause `EADDRINUSE` if files run in parallel. Fixed with `fileParallelism: false` in vitest config.
 - **Colyseus simulation clock is imprecise in tests:** 1-second tick intervals don't fire at exactly 1s under load. For tests that depend on timer expiration (collapse lifecycle), use polling (`waitUntil`) instead of fixed `wait()` calls.
