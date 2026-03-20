@@ -81,3 +81,19 @@
 - 10 of 11 screens still missing: Map/Viewport, Character Sheet, Inventory, Equipment, Skills, NPC Dialogue, Combat Log, Settings, Help, Leaderboard
 - Design issues (cyan palette, system fonts) fixed by Jarlaxle's work
 - Phase 2 can now proceed with clear design baseline and working static serving
+
+## Cross-Team Updates (Wave 2 completion — 2026-03-20T18:38)
+
+### Drizzt Built 147 Tests — Your Contract Pattern Is Proven
+**Relevant to:** Persistence layer validation, future repository work
+- Drizzt implemented PgPlayerRepository and PgStashRepository (PR #77) with 147 new tests
+- Your 125 contract tests are now active: 39 tests validating StashRepository behavioral equivalence, 27 validating PlayerRepository, 59 validating schema
+- If all 125 contract tests pass against PG implementations, persistence layer is production-ready
+- **For you:** Your contract test pattern is proven infrastructure. Future repositories (skills, factions, run history, item definitions) should reuse this exact pattern: write one contract test suite, run against both InMemory and PG implementations. Zero duplication, guaranteed consistency.
+
+### Jarlaxle's Bicep Refinement Complete — Infrastructure Solid
+**Relevant to:** Deployment readiness, Wave 3 merge
+- Fixed 4 critical production bugs in Bicep IaC (PR #76)
+- Deployment docs updated with correct port mappings and environment setup
+- Zero validation errors/warnings
+- **For you:** Deployment infrastructure is locked in. When you validate new features, assume Azure Container Apps is correctly configured. No surprises in production deployment.

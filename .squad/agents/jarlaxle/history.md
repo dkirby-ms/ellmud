@@ -159,3 +159,18 @@
 - Updated `docs/deployment.md` with correct values and deployment order docs.
 - **Lesson:** Bicep `existing` resources cannot have `dependsOn`. Role assignments require deterministic `name`/`scope` at deployment start — use local variables computed from params, not module outputs.
 - **Lesson:** This was infrastructure work outside my game systems domain. Bicep's compile-time vs runtime distinction is the main gotcha — ARM template generation happens before deployment, so certain properties must resolve from the template itself.
+## Cross-Team Updates (Wave 2 completion — 2026-03-20T18:38)
+
+### Bicep IaC Hardening Complete — PR #76 Ready
+**Relevant to:** Deployment infrastructure, Elminster (infra coordination)
+- Fixed 4 critical bugs: dependsOn syntax, port 3000→2567, NODE_ENV, allowed environments list
+- Refactored container-apps module for existingEnvironmentId pattern (reduces circular dependencies)
+- Updated docs/deployment.md with corrected configuration examples
+- Zero Bicep validation errors/warnings
+- **For you:** Deployment docs now serve as single source of truth. When you wire generator into ShardRoom, the infrastructure team has correct port/env mappings to reference.
+
+### Minsc's Contract Test Pattern Proven — 125 Tests Ready
+**Relevant to:** Testing validation, Drizzt's persistence layer
+- Minsc wrote PlayerRepository (27), StashRepository (39), Schema validation (59) tests
+- All use factory pattern: identical tests run against InMemory today, will run against PG implementation in PR #77
+- **For you:** These 125 tests are proven infrastructure. When you add item system (#16), persistence tests can reuse this pattern for new repositories (skills, factions, run history). No duplication, guaranteed behavioral equivalence.

@@ -1048,3 +1048,106 @@ Shared `Room.items` is `LootContainer[]` (containers with item ID arrays), but c
 **Critical Path:** #18 (3–4h) + #3 (4–6h) in parallel → User Azure provision → #2 (6–8h) + #9 (4–5h) in parallel → #11 (4–5h) = ~31–36 agent hours to UAT gate.
 
 **Key Finding:** Infrastructure bottleneck is solvable. All agent-ready work parallelizes; no blocked streams.
+
+### 2026-03-20: Extraction Stash Transfer Pattern
+**Author:** Drizzt (Engine Dev)
+**Issue:** #10
+**Date:** 2026-03-20
+**Status:** Implemented
+**PR:** #77
+
+**What:** When a player successfully extracts from a shard, their carried inventory is automatically transferred to their persistent stash before the `ROOM_SWITCH` to refuge.
+
+**Key design choices:**
+- **Shard Item → Stash Item bridging:** Shard `Item` is registered as `StashItem` with defaults (`type: 'material'`, `rarity: 'common'`, `baseDurability: null`). Jarlaxle's full item system (#16) will replace these defaults when it lands.
+- **StashService weight enforcement:** Transfer uses weight-aware storage; items exceeding 200-unit capacity are lost with player narration.
+- **Pure function extraction:** Transfer logic lives in `extraction/stash-transfer.ts`, testable without Colyseus.
+- **Shared repository pattern:** Both RefugeRoom and ShardRoom share the same `StashRepository` instance.
+
+**Team impact:**
+- Jarlaxle: Update Shard Item → StashItem bridge when item system #16 merges
+- Minsc: Verify end-to-end extraction → refuge stash flow in integration tests
+
+### 2026-03-20: DATABASE_URL Toggle for PG Persistence
+**Author:** Drizzt (Engine Dev)
+**Issue:** #3
+**Date:** 2026-03-20
+**Status:** Implemented
+**PR:** #77
+
+**What:** Setting `DATABASE_URL` in the environment activates PostgreSQL persistence. When unset, the server falls back to in-memory repositories (Phase 1 default).
+
+**Why:**
+- Zero-config local dev: no PG needed, just `npm run dev`
+- Production: set `DATABASE_URL` and migrations run automatically on startup
+- Tests run with mocked pg pool — no live database needed
+
+**Implementation pattern:** Any new repository (skills, factions, run history) should follow: interface → in-memory impl → PG impl → DATABASE_URL toggle in index.ts
+
+**Impact:**
+- `PgStashRepository` uses `player_stash_capacity` table (migration 006) for per-player weight overrides
+- JSONB `metadata` column on `player_stash` stores extensible item properties
+
+### 2026-03-20: Repository Contract Test Pattern
+**Author:** Minsc (Tester)
+**Date:** 2026-03-20
+**Context:** Persistence layer tests for Issue #3
+
+**What:** Repository tests are written as contract test functions that accept a factory:
+```typescript
+function stashRepositoryContractTests(createRepo: () => StashRepository) { ... }
+```
+
+Currently invoked with `() => new InMemoryStashRepository()`. When Drizzt builds the PG implementation, add a second `describe` block with `() => new PgStashRepository(pool)` — same 39+ assertions, different backend.
+
+**Why:**
+- Guarantees behavioral equivalence between in-memory and PostgreSQL implementations
+- Catches subtle differences (e.g., PG's `quantity > 0` CHECK vs in-memory allowing 0)
+- No test duplication — one source of truth for expected behavior
+
+**Files:** `packages/server/src/__tests__/persistence-player-repository.test.ts`, `persistence-stash-repository.test.ts`
+
+**Impact:** When Drizzt implements PgPlayerRepository and PgStashRepository, add describe blocks that run existing contract tests against PG implementations.
+
+### 2026-03-20: Client UI Issue Decomposition
+**Author:** Elminster (Lead/Architect)
+**Date:** 2026-03-20
+**Scope:** GitHub issue creation strategy for Ellmud client UI implementation
+**Status:** Decided ✓
+
+**Decision:** 10 GitHub issues covering Phase 1 critical path:
+- **Critical (4):** #66 Combat Overlay, #67 Clickable Exits, #68 Refuge Tabs, #69 Shardboard
+- **High (2):** #70 Reconnection Overlay, #71 Loading States
+- **Medium (4):** #72 Extraction Screen, #73 Chat Panel, #74 Button System, #75 Toast Notifications
+
+**Why scoped this way:**
+- Intentionally limited to Phase 1 MVP (Phase D/E deferred to Phase 2)
+- Foundation work (#74 Button System, #75 Toasts) unblocks dependent issues
+- Grouped related work (Combat UI is one issue, not 8)
+- ~1 week per issue, completing these reaches ~80% overall client coverage
+
+**Impact:** Each issue references precise Figma specifications and enforces design token consistency (CSS variables, typography, colors). All future screens must use `:root` variables; no hardcoded colors.
+
+### 2026-03-20: Creature Spawning & AI Tick Wiring Integration
+**Author:** Jarlaxle (Game Systems Dev)
+**Date:** 2026-03-20
+**Issue:** #7
+**Status:** Implemented
+
+**What:** CreatureManager, behavior tree, and loot system wired into ShardRoom's live game loop.
+
+**Key design choices:**
+- **Derived PRNG seed:** Creature placement uses `seed + 7919` (large prime offset) to keep spawning deterministic but independent from graph generator
+- **AI tick order:** Creature AI → combat resolve → sync deaths → extraction tick. Ensures creature actions queue before same-tick resolution
+- **Death processing:** `removeCreature()` (loot generation) before `syncFromCombat()` (mark dead). Order is critical for loot system.
+- **Test isolation:** `useTestGraph: true` skips creature spawning. Existing 44+ test graph tests unaffected. Procedural tests use fixed seed for determinism.
+- **CommandContext extension:** Optional `creaturesInRoom: {id, name}[]` field. Lightweight refs keep creature details out of command handlers.
+
+**Tick sequence verified:**
+- Creature AI evaluates and queues actions → Combat system resolves all actions (player + creature) simultaneously → Dead creatures removed (loot drops) → HP synced → Extraction checks run
+
+**Team impact:**
+- Drizzt: `CommandContext` has optional `creaturesInRoom`. Attack handler accepts creature targets. No breaking changes.
+- Volo: Narration receives creature names; enriches flavor text (e.g., "Drowned Revenant strikes player-1")
+- Minsc: Room descriptions now include creatures. Message format unchanged; terminal displays as-is.
+

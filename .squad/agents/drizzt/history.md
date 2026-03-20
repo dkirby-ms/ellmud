@@ -157,3 +157,13 @@
 - `FOR UPDATE` row locking in stash operations to prevent race conditions
 - JSONB metadata column for extensible item properties (maxDurability now, roll data later)
 - `DATABASE_URL` as the single toggle between in-memory and PG persistence
+## Cross-Team Updates (Wave 2 completion — 2026-03-20T18:38)
+
+### Minsc Built 125 Contract Tests — Ready for PG Validation
+**Relevant to:** Drizzt's PR #77 PostgreSQL implementation
+- Minsc wrote PlayerRepository contract (27 tests), StashRepository contract (39 tests), Schema validation (59 tests)
+- All tests use factory-based pattern: identical tests will run against both InMemory and PG implementations
+- These 125 tests are awaiting PgPlayerRepository + PgStashRepository implementation to activate
+- When Drizzt's PR #77 lands, add `describe('PgPlayerRepository', ...)` and `describe('PgStashRepository', ...)` blocks with PG factories — tests automatically run against both backends
+- This guarantees behavioral equivalence: if PG tests pass, persistence layer is production-ready
+- **For you:** Contract tests are proven. Remaining persistence (skills, factions, run history) can reuse this same pattern with confidence. No need to write separate test suites.

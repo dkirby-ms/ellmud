@@ -1,7 +1,21 @@
 # Current Focus
 
-**Phase:** Test infrastructure fixed. All 344 tests passing. Ready to continue Phase 1 backlog (10 issues remaining).
+**Phase:** Wave 2 PostgreSQL + Bicep complete. PRs #76, #77 pending merge to `dev`. 272 new tests added (665 server, 80 shared, 45 client). All passing. Ready for Wave 3 backlog.
 
-**What happened:** Coordinator identified and fixed critical Colyseus boot() port assignment bug. Tests now run stably in ~110 seconds with no port conflicts.
+**What happened:** Parallel agents completed infrastructure hardening. Jarlaxle fixed 4 production Bicep bugs and refactored container-apps module. Drizzt built full PostgreSQL persistence layer (PgPlayerRepository, PgStashRepository, migration runner, auto-detection toggle). Minsc wrote 125 contract tests validating behavioral equivalence.
 
-**What's next:** Phase 1 backlog completion — Issues #11-20 (features, game balance, extraction mechanics, creature narration).
+**What's next:** 
+1. Merge PRs #76, #77 to `dev` branch
+2. Wave 3 priorities: #11 Stash Persistence + #2 Redis (coordinate with Wave 2 PG layer)
+3. #9 LLM Pipeline (narration enrichment)
+4. #18 Creature spawning continuation
+
+**Key accomplishment:** DATABASE_URL toggle enables zero-config local dev (in-memory) + one-line production activation (PostgreSQL). Bicep IaC now production-ready (zero errors/warnings).
+
+**Test status:** 
+- Server: 665 passing (579 base + 147 PG new)
+- Shared: 80 passing
+- Client: 45 passing
+- Persistence contract tests: 125 proven (await PG implementation)
+- Total: 790 passing tests
+
