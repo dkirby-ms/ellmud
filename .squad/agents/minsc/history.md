@@ -151,3 +151,24 @@
 - When Drizzt's PR #78 merges, Redis tests automatically validate Redis container integration
 - When Volo's PR #79 merges, narration tests automatically validate LLM pipeline acceptance criteria
 - No code changes needed for tests to activate — just PRs merge
+
+## Wave 4 Anticipatory Tests (2026-03-20)
+
+### Stash Persistence Wiring (#11) — 21 tests
+- **File:** `packages/server/src/__tests__/wave4-stash-wiring.test.ts`
+- **Extraction→stash transfer pipeline:** Uses `transferInventoryToStash()` from `extraction/stash-transfer.ts`. Tests store success, weight-limited loss, empty inventory, unknown item definition registration, and multi-type transfers.
+- **Weight enforcement edge cases:** Exact capacity boundary, single item exceeding capacity, overflow on second item, quantity×weight multiplication.
+- **Capacity upgrade flow:** Default capacity → setCapacity → retry store succeeds. Capacity is per-player.
+- **Server restart durability:** New StashService instance with same repo preserves items, capacity, and multi-player isolation.
+- **Refuge entry stash-load:** `getStashSummary()` returns "empty" for new players, includes item names after deposit, shows weight/capacity. Full end-to-end: PlayerState→extraction→transfer→stash→summary.
+
+### Room Graph Generation (#5) — 26 tests
+- **File:** `packages/server/src/__tests__/wave4-room-graph.test.ts`
+- **Multi-tier validation:** Tier 2 (25-40 rooms, 3 entries/3 extractions) and Tier 3 (40-60 rooms, 4 entries/3 extractions) verified across 5 seeds each. All tiers tested for full connectivity and min entry→extraction distance ≥5.
+- **Biome naming:** All room names verified against `ROOM_NAMES` from `flooded-crypt.ts`. Names match their type pool (e.g., entry rooms get entry names).
+- **Hazard placement:** Verified hazards appear in some rooms but never in entry/extraction rooms. Severity 0-1 range enforced. Hazard types validated against flooded_crypt template set.
+- **Graph adapter:** `adaptRoomGraph()` tested for room count preservation, startRoomId = first entry, exit connectivity, name/description preservation, and loot container item resolution.
+- **Serialization + determinism:** All 3 tiers round-trip through JSON cleanly. All 3 tiers are deterministic (same seed → same graph).
+
+**Test count:** 902 → 949 (server) after Wave 4 tests. All green, zero lint errors.
+
