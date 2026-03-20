@@ -897,3 +897,154 @@ Auto-detect protocol from `window.location.protocol`:
 - **Client team:** No changes; fix is transparent.
 - **Infra team:** No Bicep changes; ACA already forwards 443 → 2567.
 - **Testing:** All 552 server + 76 shared tests pass. Client connection tests pass (verify message-only protocol, unaffected).
+
+### 2025-07-24: Concurrently for Dev Scripts
+**Author:** Drizzt (Engine Dev)
+**Date:** 2025-07-24
+**Status:** Implemented
+
+**Context**
+The root `package.json` dev script used shell backgrounding (`&`) to run server and client in parallel:
+```
+"dev": "npm run dev:server & npm run dev:client & wait"
+```
+Backgrounded children survive the parent's SIGINT (Ctrl+C), leaving stale node processes bound to port 2567. Repeated "port in use" errors during development.
+
+**Decision**
+Replaced with `concurrently` which properly manages child process groups and forwards kill signals:
+```
+"dev": "concurrently --kill-others \"npm:dev:server\" \"npm:dev:client\""
+```
+- `concurrently` installed as root devDependency
+- `--kill-others` ensures all children die on Ctrl+C
+- `dev:server` and `dev:client` scripts unchanged
+
+**Why:** Proper process lifecycle management removes friction from local development.
+
+**Verification:** Build clean, 635/635 tests pass.
+
+### 2025-07-24: Refuge Room Exits Set to Empty
+**Author:** Drizzt (Engine Dev)
+**Date:** 2025-07-24
+**Status:** Implemented
+
+**Context**
+RefugeRoom sent `exits: ['north', 'south', 'east', 'west']` in ROOM_HEADER, but no `go` command handler existed. Players saw 4 exits they couldn't use.
+
+**Decision**
+Changed `exits: []` in ROOM_HEADER. Refuge is a single room (Central Plaza) with no sub-areas. Proper sub-area navigation deferred to future issue.
+
+**Why:** Prevents confusion. UI no longer advertises unavailable exits.
+
+**Impact:** No test changes needed. All 635 tests pass.
+
+### 2026-03-21: Dev Mode Auth Bypass
+**Author:** Drizzt (Engine Dev)
+**Date:** 2026-03-21
+**Status:** Implemented
+**Commit:** (Wave 1)
+
+**What:** Client-side dev mode auto-login skips auth screen during local development.
+
+**Implementation:** `useDevAutoLogin` hook in `packages/client/src/hooks/` checks `import.meta.env.DEV`:
+- If true and not authenticated, registers+logs in with dev credentials (`dev/devdev`)
+- On success, dispatches `LOGIN_SUCCESS` → GameScreen
+- On failure (server unavailable), gracefully falls back to AuthScreen
+
+**Why client-side?**
+- Zero server changes; reuses existing `/auth/register` and `/auth/login` endpoints
+- Zero production risk; `import.meta.env.DEV` is compile-time false in production
+- Graceful degradation; falls back if server unavailable
+- Simple; 37 lines of code
+
+**Files:** `packages/client/src/hooks/useDevAutoLogin.ts` (new), `packages/client/src/App.tsx` (2 line addition)
+
+**Security:** Dev credentials intentional weak (local dev only), impossible to enable in production via compile-time constant, server auth unchanged.
+
+**Team impact:** Faster local development DX. All 45 client + 552 server tests pass.
+
+### 2026-03-20: Room Switching via ROOM_SWITCH Message
+**Author:** Drizzt (Engine Dev)
+**Issue:** #65
+**Date:** 2026-03-20
+**Status:** Implemented
+**Commit:** a742710
+
+**What:** Server sends `ROOM_SWITCH` message (`{ target, options?, reason }`) to trigger room transitions. Client handles switch by leaving current room and joining target.
+
+**Protocol Addition:**
+```
+MessageTypes.ROOM_SWITCH = 'room_switch'
+RoomSwitchMessage {
+  target: string       // 'shard' | 'refuge'
+  options?: Record<string, unknown>
+  reason: string       // 'enter_shard' | 'extraction_complete'
+}
+```
+
+**Why server-initiated, client-executed?**
+- **Server authoritative:** Only server decides when switches occur (extraction complete, enter command)
+- **Clean disconnects:** Client leaves current room before joining next, avoiding orphaned connections
+- **Extensible:** `options` field carries biome selection, shard tier, etc. in future phases
+
+**Implementation:**
+- RefugeRoom: `enter` command emits `ROOM_SWITCH` → 'shard'
+- ShardRoom: Extraction completion emits `ROOM_SWITCH` → 'refuge'
+- Client: `switchRoom()` method handles disconnect/reconnect
+- GameScreen: `switchingRef` guard prevents disconnect messages during transitions
+
+**Testing:** 9 new tests, 681 total passing. Full flow verified: connect → enter → extract → return.
+
+**Team impact:**
+- Jarlaxle: GameScreen `switchingRef` guard must be checked by any UI state depending on connection status
+- Minsc: Integration tests can test full flow; `MessageCollector` captures `ROOM_SWITCH` messages
+- Elminster: No infra changes; room switching is intra-process
+
+### 2026-03-20: Generator Wiring Uses Adapter Pattern
+**Author:** Jarlaxle (Systems Dev)
+**Issue:** #5
+**Date:** 2026-03-20
+**Status:** Implemented
+**Commit:** fe06f2b
+
+**What:** ShardRoom now calls `generateShardGraph()` by default instead of `createTestRoomGraph()`. Graph-adapter converts shared `RoomGraph` format (LootContainer[]) to local format (Item[]) for command handlers.
+
+**Why Adapter, Not Unified Types?**
+Shared `Room.items` is `LootContainer[]` (containers with item ID arrays), but command handlers expect `Item[]` (objects with name, weight, description). Unifying would require rewriting every handler that touches items. Adapter converts at ShardRoom boundary — zero changes to existing command system.
+
+**Implementation:**
+- New file: `packages/server/src/shard-gen/graph-adapter.ts` (conversion logic)
+- ShardRoom.onCreate(): Calls `generateShardGraph()` by default, `{ useTestGraph: true }` option returns hardcoded 6-room test graph
+- Result: Procedurally generated shards now standard; test mode available for deterministic fixtures
+
+**Testing:** 5 new tests, 640 total passing. Generator wiring, adapter conversion, fallback logic verified.
+
+**Team impact:**
+- Drizzt: Command handlers unchanged; Room/Item interfaces stable
+- Minsc: Room names now procedurally generated (e.g., "Drowned Vestibule") — UI must handle any string
+- Future: Adding Tier 2/3 shards only requires generator config changes; adapter handles rest
+
+### 2026-03-20: Infrastructure Phase 1 Triage
+**Author:** Elminster (Architect)
+**Date:** 2026-03-20
+**Status:** Analysis Complete
+**Deliverable:** .squad/decisions/inbox/elminster-infra-triage.md
+
+**Summary:** Comprehensive triage of seven Phase 1 infrastructure issues. Classified 5 as agent-ready (can be fully coded without Azure access), 1 as partially ready, recommended deferring 1 to Phase 2.
+
+**Agent-Ready (5 issues):**
+- **#3 PostgreSQL Schema:** Pure TypeScript + SQL design. No DB connection required.
+- **#2 Redis Container:** Config + connection logic. Local Docker testing parallel.
+- **#9 LLM Pipeline:** Pipeline architecture + mock transport. Pure wiring work.
+- **#11 Stash Persistence:** Depends on #3. Simple repository swap.
+- **#18 Bicep IaC:** Templates exist. Refinement + PostgreSQL wiring.
+
+**Partially Agent-Ready (1 issue):**
+- **#1 Azure Infrastructure Setup:** User requires Azure CLI. Bicep prep work agent-ready. Local testing proceeds without resources.
+
+**Defer to Phase 2 (1 issue):**
+- **#14 Admin Dashboard:** Full scope 16–20 hours. Phase 1 solo play doesn't need Schema inspection. Phase 2 multiplayer makes immediately valuable. Recommend defer.
+
+**Critical Path:** #18 (3–4h) + #3 (4–6h) in parallel → User Azure provision → #2 (6–8h) + #9 (4–5h) in parallel → #11 (4–5h) = ~31–36 agent hours to UAT gate.
+
+**Key Finding:** Infrastructure bottleneck is solvable. All agent-ready work parallelizes; no blocked streams.

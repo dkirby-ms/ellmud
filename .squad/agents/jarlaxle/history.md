@@ -114,3 +114,21 @@
 - React client now served from Express in production (`/public/` directory)
 - API routes (`/auth`, `/colyseus`, etc.) take precedence over SPA catch-all
 - Dockerfile multi-stage build ensures client artifacts are preserved
+
+## Cross-Team Updates (Wave 1 completion — 2026-03-20T17:00)
+
+### Room Switching Enables Generator Wiring to Thrive
+**Relevant to:** Drizzt (#65), Minsc (integration), Elminster (infra)
+- Drizzt's ROOM_SWITCH message now wires to your generator-powered ShardRoom instances
+- `enter` command in RefugeRoom instantiates ShardRoom with `generateShardGraph()` by default
+- Graph-adapter automatically handles your shared RoomGraph format (LootContainer[]) conversion to local Item[] format
+- Full shard entry/exit flow now testable without mocking generators
+
+### Command System Remains Stable
+**For Drizzt:** Room and Item interfaces from your room-graph.ts are frozen. Movement handlers consume `room.exits: Map<Direction, string>` as designed. No breaking changes to command API.
+
+### Test Mode Fallback Ready for Integration
+**For Minsc:** Hardcoded 6-room test graph available via `{ useTestGraph: true }` room option. Integration tests can use deterministic fixtures without procedural generation variability.
+
+### Adapter Pattern Enables Future Shards
+**For Phase 2:** Adding Tier 2/3 shards only requires generator config changes. Adapter handles conversion for all biomes automatically. No command system or client rewrite needed.

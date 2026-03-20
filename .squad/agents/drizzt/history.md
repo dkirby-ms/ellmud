@@ -99,3 +99,18 @@
   - `switchingRef` guard in GameScreen prevents onLeave handler from showing disconnect messages during a switch.
   - `handlersRef` pattern lets the same handlers object be reused across room switches, avoiding stale closures.
 - **Testing:** 681 total tests passing (555 server + 46 client + 80 shared). 9 new tests covering enter command, shardboard, switchRoom(), and RoomSwitchMessage type.
+
+## Cross-Team Updates (Wave 1 completion — 2026-03-20T17:00)
+
+### Room Switching Enables Full Shard Loop
+**Relevant to:** Jarlaxle (#5), Minsc (integration), Elminster (infra)
+- Refuge → Shard transitions now server-authorized via `ROOM_SWITCH` message
+- `enter` command in RefugeRoom wires to generator-powered ShardRoom instances
+- Extraction completion (`extraction_complete`) triggers Shard → Refuge return
+- Full player lifecycle testable: login → enter → extract → return
+
+### Generator Integration Point Ready
+**For Jarlaxle #5:** ShardRoom now instantiates procedurally generated graphs on entry. Graph-adapter pattern handles conversion from shared RoomGraph format (LootContainer[]) to local Item[] format used by command handlers. No command system changes needed.
+
+### Integration Test Harness Enhanced
+**For Minsc:** MessageCollector helper now captures ROOM_SWITCH messages. Integration tests can verify room transitions without mocking Colyseus internals.
