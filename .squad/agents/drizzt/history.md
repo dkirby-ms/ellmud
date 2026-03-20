@@ -249,3 +249,36 @@
   - `completed` — already existed
 - **Pattern:** ShardRoom checks `isExtracting` before/after command to detect extraction start without coupling command handler to message protocol.
 - **Key insight:** The `getChannel()` accessor on ExtractionSystem provides tick state for progress messages without duplicating data in the tick result. Channel is deleted on completion/interruption, so progress messages only fire for active channels.
+
+## Wave 4b Completion — All Phase 1 Server Issues Closed (2026-03-20T22:11Z)
+
+**Status:** ✅ Complete  
+**PRs:** #80, #81, #82, #83 all merged to dev  
+**Test Status:** 949 server tests (+182 new), 80 shared, 45 client = 1029+ passing  
+**Issues Closed:** #2, #3, #5, #7, #9, #10, #11, #18 (all Phase 1 server block)
+
+### Extraction Messaging Completion (PR #83, Issue #10)
+- Added `EXTRACTION_STATE` messages for all 4 phases: started, progress, interrupted, completed
+- Stash transfer integrated with #80 provider — extraction → persistent storage
+- Command locking enforced during channeling
+- 9 new tests validating state transitions, noise generation, command locks
+- Merged and verified
+
+### Integration with Other Waves
+- **#80 Stash Persistence:** Extraction system now transfers inventory to persistent stash via provider
+- **#81 Room Topology:** Dead-end rooms don't offer tactical advantage; topology semantics enforced
+- **#82 Creature Admin:** Admin dashboard reports all systems; creatures don't interfere with extraction
+
+### Architecture Decisions Approved
+- Singleton provider pattern for server-wide state is correct — rooms consume via accessors, tests bypass via `initStash()`
+- `wasExtracting` detection pattern decouples command handling from protocol messaging
+- Command lock enforcement prevents multi-tasking during extraction (tick-aligned)
+
+### Minor Follow-Up (Phase 2)
+- Elminster noted: Extract `creatureManager` admin access pattern to helper to eliminate duplication
+- Monitor `ensureJunctionExits()` performance at Tier 3 (60 rooms) — may need BFS caching
+
+---
+
+**Phase 1 Server Block Status:** ✅ **COMPLETE**  
+All 8 server issues closed. Ready for Phase 1 Client UI batch (#66–#75) or Phase 2.

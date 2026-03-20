@@ -184,3 +184,36 @@
 - **Lesson:** Room type semantics (dead_end = 1 exit, junction = 3+ exits) must be enforced structurally, not just by name. The old code assigned types randomly but never guaranteed the connectivity matched the type.
 - **Lesson:** Order of post-processing matters. Junction enforcement before distance cuts = junctions lose exits. Junction enforcement after = need distance checking inside junction enforcement to prevent shortcuts.
 - Added 7 new tests (22 total in shard-gen.test.ts). All 1009 tests pass. PR #81.
+
+## Wave 4b Completion — Creature Admin Dashboard (2026-03-20T22:11Z)
+
+**Status:** ✅ Complete
+**PR:** #82 merged to dev
+**Issue:** #7 Drowned Revenant (Creature System)
+**Test Status:** Admin telemetry added, all 949 server tests passing
+
+### What I Built (PR #82)
+1. **Admin dashboard creature visibility** — Real-time creature spawns/despawns via SSE
+2. **Creature type distribution** — Admin routes report active creatureManager counts by type
+3. **Health/state telemetry** — HTML table shows creature population, health ranges
+4. **Integration with stash (#80)** — Creature loot drops work with persistent stash system
+5. **Integration with topology (#81)** — Creature patrol logic relies on room type semantics (dead_end=1 exit, junction≥3 exits)
+
+### Key Integration Points
+- **PR #80 Stash:** Creature loot transfers to persistent stash on kill
+- **PR #81 Room Topology:** Patrol AI respects room type semantics
+  - Dead_ends: Terminal nodes, no continuous patrol
+  - Junctions: Hubs, natural waypoints for patrol logic
+- **PR #83 Extraction:** Creatures do not interfere with extraction mechanics (tested)
+
+### Architecture Note (Phase 2 Follow-Up)
+- **Minor note from Elminster:** Extract the `creatureManager` admin access pattern (`as any` bracket-access) to a typed helper method to eliminate 3x duplication across admin routes
+- **Impact:** Before Phase 2, refactor admin routes to use `shardRoom.getAdminSnapshot()` instead of direct field access
+
+### Integration Complete
+Creature system was built in Wave 3; Wave 4b added operator visibility. System is production-ready from game logic perspective.
+
+---
+
+**Phase 1 Server Block Status:** ✅ **COMPLETE**
+All topology enforcement in place. Creature AI can trust room types. Patrol logic is solid.

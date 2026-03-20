@@ -202,6 +202,70 @@ The player stash enforces a weight-based capacity (default 200 weight units), no
 - Default capacity is 200 weight units (generous for Phase 1, tunable later)
 - When Jarlaxle's item system merges (#16), item weights must be reasonable (0.1–10.0 range typical)
 
+### 2026-03-20: Wave 4 PR Review Gate — All Approved
+**By:** Elminster (Lead / Architect)
+**Date:** 2026-03-20
+**PRs:** #80, #81, #82, #83
+
+**What**
+Reviewed all four Wave 4 PRs for architecture, failure modes, GDD compliance, cross-system compatibility, test coverage, and production readiness. All four approved.
+
+**Decisions**
+1. **PR #80 (stash persistence):** Singleton provider pattern is the correct approach for shared server-wide state (stash repository, item definitions). Rooms consume via accessor functions, tests bypass via `initStash()`.
+2. **PR #81 (room topology):** Room type semantics are now structurally enforced, not cosmetic. This is a foundational decision — all future systems (creature AI, minimap, events) can rely on `dead_end = 1 exit`, `junction = ≥3 exits`.
+3. **PR #82 (creature admin):** The `as any` bracket-access pattern for private fields in admin routes is acceptable for Phase 1. Before Phase 2, consider adding a typed `getAdminSnapshot()` method on ShardRoom to eliminate the duplication and fragility.
+4. **PR #83 (extraction messaging):** The `wasExtracting` detection pattern is the right approach — it decouples command handling from protocol messaging without adding state tracking fields.
+
+**Cross-System**
+All four PRs touch non-overlapping concerns and merge cleanly to dev. The integration points are sound:
+- Stash provider (#80) + extraction stash transfer (#83) share the same repository
+- Room topology (#81) provides structural semantics for creature patrol (#82)
+- Admin dashboard (#82) reports stash backend from #80's provider
+
+**Minor Notes for Follow-Up**
+- PR #82: Extract the `creatureManager` admin access pattern to a helper (3x duplication)
+- PR #81: Monitor `ensureJunctionExits()` performance at Tier 3 room counts (60 rooms) — may need BFS caching
+
+### 2026-03-20: Room Type Topology Enforcement
+**By:** Jarlaxle (Systems Dev)
+**Date:** 2026-03-20
+**Issue:** #5 (reopened)
+**PR:** #81
+
+**What**
+Room types now enforce their topological semantics:
+- `dead_end` rooms always have exactly 1 exit (branch off backbone)
+- `junction` rooms always have ≥ 3 exits (true branching points)
+- At least 1 dead_end guaranteed per graph
+
+**Why**
+Previously, types were assigned randomly but connectivity didn't match. Dead_ends could have 4 exits; junctions could have 1. This made room types purely cosmetic labels with no gameplay meaning. Now movement commands, creature AI patrol logic, and future minimap rendering can rely on type semantics.
+
+**Impact**
+- `room.type === 'dead_end'` → guaranteed exactly 1 exit. Safe to use for "cornered" detection in creature AI.
+- `room.type === 'junction'` → guaranteed ≥ 3 exits. Can be used for "crossroads" gameplay events.
+- Graph is deterministic from seed — same topology guarantees apply across replays.
+- Drizzt: movement handlers can trust exit counts match room types.
+- Minsc: client minimap can use type for rendering hints (dead_end = alcove icon, junction = intersection).
+
+### 2026-03-20: Wave 4 Anticipatory Test Architecture
+**By:** Minsc (Tester)
+**Date:** 2026-03-20
+**Context:** Wave 4 — Stash Persistence (#11) + Room Graph Generation (#5)
+
+**What**
+Wrote 47 anticipatory tests across two files:
+- `wave4-stash-wiring.test.ts` (21 tests): Covers the extraction→stash transfer pipeline, weight enforcement edge cases, capacity upgrades, server restart durability, and refuge entry stash-load flow.
+- `wave4-room-graph.test.ts` (26 tests): Covers multi-tier generation (T2/T3), biome-specific naming verification, hazard placement, graph adapter conversion, and multi-tier serialization/determinism.
+
+**Why**
+Tests written proactively while Drizzt builds stash wiring and Jarlaxle completes room graph. This gives implementers a ready-made acceptance gate — when their code lands, these tests either pass or expose exact contract violations. The stash-transfer tests specifically validate the `transferInventoryToStash()` function that bridges shard gameplay and persistent storage — a critical integration seam.
+
+**Impact**
+- Drizzt: Stash wiring PR should pass all 21 stash tests without modification. If `transferInventoryToStash` signature or `StashService` behavior changes, tests need updating.
+- Jarlaxle: Room graph tests validate multi-tier generation and biome naming. If tier room count ranges change or new biomes are added, tests need updating.
+- All: Total test count is now 949 server + 80 shared = 1029.
+
 ### 2026-03-19: Item types live in @ellmud/shared, not server
 **By:** Jarlaxle
 **Date:** 2026-03-19
