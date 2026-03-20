@@ -12,7 +12,7 @@ targetScope = 'resourceGroup'
 // ─── Parameters ─────────────────────────────────────────────────────────────
 
 @description('Environment name')
-@allowed(['dev', 'staging', 'prod'])
+@allowed(['dev', 'uat', 'prod'])
 param environmentName string
 
 @description('Azure region for all resources')
