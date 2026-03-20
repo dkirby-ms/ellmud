@@ -63,6 +63,10 @@ export interface AdminMetrics {
     fallback_rate: number;
     avg_llm_latency_ms: number;
   };
+  redis: {
+    cache_backend: 'redis' | 'in-memory';
+    presence_backend: 'redis' | 'local';
+  };
 }
 
 export interface AdminSSEEvent {

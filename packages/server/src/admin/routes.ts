@@ -24,6 +24,10 @@ export interface AdminRouterDeps {
   telemetry?: NarrationTelemetryTracker;
   /** Narration cache instance (optional — cache size reported as 0). */
   cache?: NarrationCache;
+  /** Whether the narration cache is Redis-backed. */
+  isCacheRedis?: boolean;
+  /** Whether Colyseus presence is Redis-backed. */
+  isPresenceRedis?: boolean;
 }
 
 export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
@@ -147,6 +151,10 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
           fallback_uses: telemetry?.fallback_uses ?? 0,
           fallback_rate: telemetry?.fallback_rate ?? 0,
           avg_llm_latency_ms: telemetry?.avg_llm_latency_ms ?? 0,
+        },
+        redis: {
+          cache_backend: deps.isCacheRedis ? 'redis' : 'in-memory',
+          presence_backend: deps.isPresenceRedis ? 'redis' : 'local',
         },
       };
 
@@ -415,6 +423,10 @@ async function sendSSESnapshot(res: Response, deps: AdminRouterDeps): Promise<vo
         llm_timeouts: telemetry?.llm_timeouts ?? 0,
         avg_llm_latency_ms: telemetry?.avg_llm_latency_ms ?? 0,
         fallback_rate: telemetry?.fallback_rate ?? 0,
+      },
+      redis: {
+        cache_backend: deps.isCacheRedis ? 'redis' : 'in-memory',
+        presence_backend: deps.isPresenceRedis ? 'redis' : 'local',
       },
     };
 

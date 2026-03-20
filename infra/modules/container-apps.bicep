@@ -114,7 +114,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             { name: 'PORT', value: '2567' }
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
             { name: 'DATABASE_URL', value: 'postgresql://${postgresAdminUsername}:${postgresAdminPassword}@${postgresServerFqdn}:5432/${postgresDatabaseName}?sslmode=require' }
-            { name: 'REDIS_URL', value: 'redis://${redisHost}:6379' }
+            { name: 'REDIS_CONNECTION_STRING', value: 'redis://${redisHost}:6379' }
+            { name: 'REDIS_CACHE_ENABLED', value: 'true' }
+            { name: 'REDIS_PRESENCE_ENABLED', value: 'true' }
           ]
         }
       ]

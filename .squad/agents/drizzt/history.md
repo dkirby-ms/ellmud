@@ -167,3 +167,44 @@
 - When Drizzt's PR #77 lands, add `describe('PgPlayerRepository', ...)` and `describe('PgStashRepository', ...)` blocks with PG factories — tests automatically run against both backends
 - This guarantees behavioral equivalence: if PG tests pass, persistence layer is production-ready
 - **For you:** Contract tests are proven. Remaining persistence (skills, factions, run history) can reuse this same pattern with confidence. No need to write separate test suites.
+
+### Redis Container + Colyseus Presence Wiring (#2) — PR #78
+**Task:** Complete Issue #2 — Redis container setup with cache + Colyseus presence
+**Status:** ✅ Complete — PR #78
+
+**What was already done (prior PRs):**
+- RedisNarrationCache (ioredis), cache factory, SHA-256 hasher, narration telemetry
+- Docker Compose Redis service, Azure Bicep redis.bicep module
+- Config system with independent REDIS_CACHE_ENABLED / REDIS_PRESENCE_ENABLED toggles
+
+**What I built:**
+1. `cache/redis-presence.ts` — Factory that creates RedisPresence or LocalPresence based on config
+2. Server startup wiring — `createNarrationCache()` + `createPresence()` called at boot, cache/presence passed to Colyseus Server and admin deps
+3. Config fix — `REDIS_CONNECTION_STRING` now falls back to `REDIS_URL` (Bicep compatibility)
+4. Health endpoint — `/health` reports Redis cache and presence backend status
+5. Admin metrics — `/admin/api/metrics` + SSE include Redis backend info
+6. Bicep env vars — Added `REDIS_CACHE_ENABLED`, `REDIS_PRESENCE_ENABLED`, `REDIS_CONNECTION_STRING` to container-apps.bicep
+7. 9 new tests — presence factory (3), health endpoint Redis status (4), config REDIS_URL fallback (2)
+
+**Key patterns:**
+- Dynamic import for `@colyseus/redis-presence` — avoids hard dependency when Redis disabled
+- `PresenceResult` type with `isRedis` boolean for monitoring without coupling to Redis internals
+- Env var precedence: `REDIS_CONNECTION_STRING` > `REDIS_URL` > `redis://localhost:6379`
+- Two-toggle design: cache and presence are independently configurable (Phase 1 can enable cache without presence)
+
+## Learnings
+
+### Redis Presence Dynamic Import Pattern
+- **File:** `packages/server/src/cache/redis-presence.ts`
+- **Pattern:** Use `await import('@colyseus/redis-presence')` instead of static import to allow graceful fallback when the package is unavailable or Redis is unreachable
+- **Why:** @colyseus/redis-presence is an optional peer dep. Static imports would crash the server if Redis is disabled. Dynamic import + try/catch enables zero-config local dev (no Redis required)
+
+### Env Var Mismatch Between Bicep and Config
+- **Problem:** Bicep originally set `REDIS_URL` but config.ts read `REDIS_CONNECTION_STRING` — app couldn't find Redis in production
+- **Fix:** Config reads `REDIS_CONNECTION_STRING` first, falls back to `REDIS_URL`, then defaults to `redis://localhost:6379`
+- **Lesson:** Always verify env var names match between IaC (Bicep) and application config. Added both names to config as defense-in-depth
+
+### Colyseus RedisPresence Constructor
+- **Package:** `@colyseus/redis-presence@0.17.6`
+- **Constructor:** Accepts `string | number | RedisOptions | ClusterNode[]` — connection string works directly
+- **Internals:** Creates two ioredis clients (pub + sub) internally for Pub/Sub presence. The `shutdown()` method cleanly disconnects both

@@ -18,6 +18,7 @@ import { createHealthRouter } from './health.js';
 import { createAdminRouter, createDashboardRouter } from './admin/index.js';
 import { getConfig } from './config.js';
 import { runMigrations } from './db/index.js';
+import { createNarrationCache, createPresence } from './cache/index.js';
 
 const config = getConfig();
 const PORT = config.port;
@@ -31,6 +32,10 @@ if (USE_PG) {
   console.log('[Ellmud] Migrations complete.');
 }
 
+// ─── Redis Bootstrap ─────────────────────────────────────────────────────────
+const { cache: narrationCache, isRedis: isCacheRedis } = await createNarrationCache(config);
+const { presence, isRedis: isPresenceRedis } = await createPresence(config);
+
 const app = express();
 app.use(express.json());
 
@@ -42,13 +47,13 @@ const authService = new AuthService(tokenStore, playerRepo);
 // Mount auth routes on the same Express app Colyseus uses
 app.use(createAuthRouter(authService));
 
-// Mount health check endpoint
-app.use(createHealthRouter());
+// Mount health check endpoint — includes Redis status
+app.use(createHealthRouter({ isCacheRedis, isPresenceRedis }));
 
 // ─── Admin Dashboard ─────────────────────────────────────────────────────────
 // Admin API at /admin/api/*, dashboard UI at /admin/
 // Protected by ADMIN_TOKEN env var — admin auth is separate from player auth.
-app.use(createAdminRouter());
+app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis }));
 app.use('/admin', createDashboardRouter());
 
 // Initialize Colyseus room auth hooks
@@ -77,6 +82,7 @@ const httpServer = http.createServer(app);
 
 const server = new Server({
   transport: new WebSocketTransport({ server: httpServer }),
+  presence,
 });
 
 // Register room types
@@ -89,4 +95,5 @@ console.log(`[Ellmud] Colyseus server listening on ws://localhost:${PORT}`);
 console.log(`[Ellmud] Admin monitor at http://localhost:${PORT}/colyseus`);
 console.log(`[Ellmud] Admin dashboard at http://localhost:${PORT}/admin`);
 console.log(`[Ellmud] Auth required: ${AUTH_REQUIRED}`);
-console.log(`[Ellmud] Max players/shard: ${config.maxPlayersPerShard}, Matchmaker: ${config.matchmakerMode}, Redis: ${config.redis.enabled ? 'enabled' : 'disabled'}`);
+console.log(`[Ellmud] Cache: ${isCacheRedis ? 'Redis' : 'in-memory'}, Presence: ${isPresenceRedis ? 'Redis' : 'local'}`);
+console.log(`[Ellmud] Max players/shard: ${config.maxPlayersPerShard}, Matchmaker: ${config.matchmakerMode}`);
