@@ -232,7 +232,7 @@ describe('Template Fallback Contract (Issue #9)', () => {
     for (const type of types) {
       const ctx = makeContext({ narration_type: type });
       const prose = await service.narrate(ctx);
-      expect(prose.length).toBeGreaterThan(5, `Template for ${type} should produce prose`);
+      expect(prose.length, `Template for ${type} should produce prose`).toBeGreaterThan(5);
     }
   });
 });
