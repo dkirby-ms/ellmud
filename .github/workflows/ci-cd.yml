@@ -138,7 +138,7 @@ jobs:
             --image ${{ secrets.ACR_NAME }}.azurecr.io/ellmud-${{ github.ref_name }}:${{ github.sha }} \
             --set-env-vars "NODE_ENV=production" "PORT=2567" \
             --container-name ellmud \
-            --command "" --args ""
+            --command "node" "packages/server/dist/index.js"
 
       - name: Update ingress target port
         run: |
