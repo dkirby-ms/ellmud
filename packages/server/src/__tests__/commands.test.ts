@@ -364,7 +364,7 @@ describe('ShardRoom Commands (Integration)', () => {
   });
 
   it('should send room description on join', async () => {
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('shard', { useTestGraph: true });
     const client = await colyseus.connectTo(room);
 
     const narrations: NarrateMessage[] = [];
@@ -388,7 +388,7 @@ describe('ShardRoom Commands (Integration)', () => {
   });
 
   it('should handle look command via messages', async () => {
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('shard', { useTestGraph: true });
     const client = await colyseus.connectTo(room);
 
     const narrations: NarrateMessage[] = [];
@@ -409,7 +409,7 @@ describe('ShardRoom Commands (Integration)', () => {
   });
 
   it('should handle movement commands', async () => {
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('shard', { useTestGraph: true });
     const client = await colyseus.connectTo(room);
 
     const narrations: NarrateMessage[] = [];
@@ -437,7 +437,7 @@ describe('ShardRoom Commands (Integration)', () => {
   });
 
   it('should handle direction alias via message', async () => {
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('shard', { useTestGraph: true });
     const client = await colyseus.connectTo(room);
 
     const narrations: NarrateMessage[] = [];
@@ -458,7 +458,7 @@ describe('ShardRoom Commands (Integration)', () => {
   });
 
   it('should handle take and inventory commands', async () => {
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('shard', { useTestGraph: true });
     const client = await colyseus.connectTo(room);
 
     const narrations: NarrateMessage[] = [];
@@ -489,7 +489,7 @@ describe('ShardRoom Commands (Integration)', () => {
   });
 
   it('should reject unknown commands with system narration', async () => {
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('shard', { useTestGraph: true });
     const client = await colyseus.connectTo(room);
 
     const narrations: NarrateMessage[] = [];

@@ -3,8 +3,10 @@ import {
   type CommandMessage,
   type NarrateMessage,
   type RoomHeaderMessage,
+  type RoomSwitchMessage,
   type ShardState as SharedShardState,
   type ShardStateMessage,
+  type BiomeType,
   MessageTypes,
 } from '@ellmud/shared';
 import { ShardState } from '../state.js';
@@ -12,6 +14,8 @@ import { parseCommand } from '../commands/parser.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
 import { createTestRoomGraph, type RoomGraph } from '../shard/RoomGraph.js';
+import { generateShardGraph } from '../shard/generator.js';
+import { adaptRoomGraph } from '../shard/graph-adapter.js';
 import { handleLook } from '../commands/handlers/look.js';
 import { CombatSystem, type TickResult } from '../combat/index.js';
 import { ExtractionSystem } from '../extraction/index.js';
@@ -56,8 +60,15 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     this.state.collapseTimer = this.collapseTimerSeconds;
 
-    // Initialize room graph (will be replaced by procedural generator)
-    this.roomGraph = createTestRoomGraph();
+    // Initialize room graph — use procedural generator by default, test graph as fallback
+    if (options['useTestGraph'] === true) {
+      this.roomGraph = createTestRoomGraph();
+    } else {
+      const seed = typeof options['seed'] === 'number' ? options['seed'] : Date.now();
+      const biome = (typeof options['biome'] === 'string' ? options['biome'] : 'flooded_crypt') as BiomeType;
+      const sharedGraph = generateShardGraph({ tier: 1, biome, seed });
+      this.roomGraph = adaptRoomGraph(sharedGraph);
+    }
 
     // Initialize combat system with room exit resolver
     this.combatSystem = new CombatSystem((roomId: string) => {
@@ -384,7 +395,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     this.log(`Player extracted: ${playerId}`);
 
-    // Send extraction completion message — client should transition to Refuge
+    // Send extraction completion message
     client.send(MessageTypes.EXTRACTION_STATE, {
       playerId,
       state: 'completed',
@@ -392,8 +403,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       timestamp: Date.now(),
     });
 
-    // Disconnect the client from this shard room (they rejoin Refuge)
-    client.leave();
+    // Tell client to switch back to refuge
+    client.send(MessageTypes.ROOM_SWITCH, {
+      target: 'refuge',
+      reason: 'extraction_complete',
+    } satisfies RoomSwitchMessage);
   }
 
   // ─── Message Senders ─────────────────────────────────────────────────────
