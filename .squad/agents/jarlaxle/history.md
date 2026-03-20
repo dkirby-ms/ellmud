@@ -143,3 +143,10 @@
 - **CombatSystem.getActiveEncounterRoomIds()** added for creature noise detection (rooms with combat → noise → alert state transitions).
 - **Attack handler updated for creature targeting:** `resolveTarget` now checks creature names (exact then partial match) before falling back to player IDs. Creatures registered with `isPlayer: false`.
 - 18 new tests in `creature-wiring.test.ts`: spawning (5), AI tick (4), loot drops (2), look (3), attack (2), CombatSystem API (2). Total: 579 server tests passing.
+
+### 2025-07-25: PR #76 Rebase — Bicep IaC Branch Conflict Resolution
+- Rebased `squad/18-bicep-iac` onto latest `origin/dev` to resolve merge conflicts blocking PR #76.
+- **Conflicts were in `infra/` files only** (main.bicep, main.bicepparam, container-apps.bicep) — someone had added placeholder infra files on dev that collided with my Bicep templates. Resolved by taking my (branch) versions since those are the fully developed templates.
+- **No `.squad/` conflicts** in this case — the branch divergence was from creature wiring (#7), extraction (#10), and room switching (#65) landing on dev after my branch was cut.
+- **Lesson:** During `git rebase`, terminology is inverted — `--theirs` gives you *your* branch's version (the commits being replayed), `--ours` gives you the base branch. This is backwards from merge. Always verify with `grep` for conflict markers after resolution.
+- **Lesson:** Force push with `--force-with-lease` is the safe way to update after rebase — it fails if someone else pushed to the branch since your last fetch.

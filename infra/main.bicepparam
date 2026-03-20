@@ -2,7 +2,7 @@ using './main.bicep'
 
 param environmentName = 'uat'
 
-param location = 'centralus'
+param location = 'eastus2'
 
 param postgresAdminUsername = 'pgadmin'
 

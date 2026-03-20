@@ -21,6 +21,12 @@ All resources deploy into a single resource group in **East US 2** (default):
 | Registry | Azure Container Registry | Basic |
 | Monitoring | Application Insights + Log Analytics | Free / PerGB2018 |
 
+## Environments
+
+Two environments are supported: **uat** and **prod**. There is no dev environment — local development uses local services.
+
+Set the `environmentName` parameter in `main.bicepparam` to `uat` or `prod`.
+
 ## Quick Start
 
 ```bash
@@ -63,6 +69,7 @@ infra/
   main.bicep              # Orchestrator — wires all modules together
   main.bicepparam         # Parameter file (region, names, env vars)
   deploy.sh               # One-command deployment script
+  setup-gh-environments.sh # GitHub environment + secrets setup
   modules/
     monitoring.bicep       # Application Insights + Log Analytics
     acr.bicep              # Azure Container Registry (Basic)
@@ -72,21 +79,34 @@ infra/
     ai-foundry.bicep       # Azure AI Services + GPT-4o-mini deployment
 ```
 
+## Deployment Order
+
+The orchestrator (`main.bicep`) handles dependencies automatically:
+
+1. **Monitoring** — Log Analytics + App Insights (needed by Container Apps)
+2. **ACR** — Container Registry (independent)
+3. **PostgreSQL** — Database (independent)
+4. **Container Apps Environment** — hosting platform (needs Log Analytics)
+5. **Redis** — cache container (needs Container Apps Environment)
+6. **Game Server App** — reuses the environment, wired to Postgres + Redis
+7. **AI Foundry** — GPT-4o-mini endpoint (independent)
+8. **RBAC** — ACR Pull role for the Container App's managed identity
+
 ## Resource Naming Convention
 
 All resources follow the pattern `ellmud-{env}-{resource-type}`:
 
-| Resource | Name Pattern | Example |
+| Resource | Name Pattern | Example (UAT) |
 |----------|-------------|---------|
 | Resource Group | `ellmud-rg` | `ellmud-rg` |
-| Container App | `ellmud-{env}-app` | `ellmud-dev-app` |
-| Container App Env | `ellmud-{env}-cae` | `ellmud-dev-cae` |
-| PostgreSQL | `ellmud-{env}-pg` | `ellmud-dev-pg` |
-| Redis | `ellmud-{env}-redis` | `ellmud-dev-redis` |
-| ACR | `ellmud{env}acr` | `ellmuddevacr` |
-| App Insights | `ellmud-{env}-ai` | `ellmud-dev-ai` |
-| Log Analytics | `ellmud-{env}-logs` | `ellmud-dev-logs` |
-| AI Services | `ellmud-{env}-ai-services` | `ellmud-dev-ai-services` |
+| Container App | `ellmud-{env}-app` | `ellmud-uat-app` |
+| Container App Env | `ellmud-{env}-cae` | `ellmud-uat-cae` |
+| PostgreSQL | `ellmud-{env}-pg` | `ellmud-uat-pg` |
+| Redis | `ellmud-{env}-redis` | `ellmud-uat-redis` |
+| ACR | `ellmud{env}acr` | `ellmuduatacr` |
+| App Insights | `ellmud-{env}-ai` | `ellmud-uat-ai` |
+| Log Analytics | `ellmud-{env}-logs` | `ellmud-uat-logs` |
+| AI Services | `ellmud-{env}-ai-services` | `ellmud-uat-ai-services` |
 
 ## Environment Variables
 
@@ -94,9 +114,9 @@ The game server container receives these environment variables automatically:
 
 | Variable | Source | Description |
 |----------|--------|-------------|
-| `NODE_ENV` | Static | `development` |
-| `PORT` | Static | `3000` |
-| `DATABASE_URL` | PostgreSQL module | Full connection string |
+| `NODE_ENV` | Static | `production` |
+| `PORT` | Static | `2567` (Colyseus default) |
+| `DATABASE_URL` | PostgreSQL module | Full connection string with SSL |
 | `REDIS_URL` | Redis module | `redis://<redis-fqdn>:6379` |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Monitoring module | App Insights telemetry |
 
@@ -106,7 +126,18 @@ After infrastructure is deployed:
 
 1. **Push a container image** — CI/CD will build and push to ACR, then update the Container App
 2. **Verify health** — The bootstrap placeholder responds on `/` with `{"status":"ok","mode":"placeholder"}`
-3. **Check logs** — `az containerapp logs show --name ellmud-dev-app --resource-group ellmud-rg`
+3. **Check logs** — `az containerapp logs show --name ellmud-uat-app --resource-group ellmud-rg`
+
+## GitHub Environments Setup
+
+For CI/CD, run the interactive setup script to configure GitHub environment secrets:
+
+```bash
+chmod +x infra/setup-gh-environments.sh
+./infra/setup-gh-environments.sh
+```
+
+This creates `uat` and `prod` environments in GitHub with the required Azure secrets.
 
 ## Tearing Down
 
