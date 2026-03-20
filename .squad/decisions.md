@@ -849,3 +849,51 @@ Extraction is implemented as a **channel-based system** with a static command lo
 - **Jarlaxle**: Extraction rooms must have `type: 'extraction'` in the room graph. The `extractionRoomIds` array on the shared `RoomGraph` type should be populated by the generator.
 - **All handlers**: The `CommandContext` now has an optional `extractionSystem` field. Existing handlers don't need to change — the lock is enforced centrally.
 - **Future channeled actions**: The channel + lock pattern can be reused for crafting, rituals, or any interruptible multi-tick action.
+
+### 2026-03-19T22:37:00Z: User directive - Container App Environment Sharing
+**By:** saitcho (via Copilot)
+**What:** UAT and Prod have separate Container Apps but share a single Container App Environment (CAE). No separate CAE per environment.
+**Why:** User request — captured for team memory
+
+### 2026-03-20: CI/CD Pipeline — 3-Branch Environment Strategy
+**By:** Drizzt (Engine Dev)
+**Date:** 2026-03-20
+**Commit:** ec83635
+
+**What:** CI/CD workflow updated from single-branch (`main`) to 3-branch strategy:
+- `dev` — PRs merge here. Tests only, no cloud deploy.
+- `uat` — Push triggers build + deploy to UAT Azure Container App.
+- `prod` — Push triggers build + deploy to Prod Azure Container App.
+
+**Key design choices:**
+1. GitHub environments (`uat`, `prod`) provide per-environment secrets (`CONTAINER_APP_NAME`, `RESOURCE_GROUP`, `ACR_NAME`, Azure OIDC creds). Each environment's secrets configured once in GitHub Settings → Environments.
+2. Docker images tagged `ellmud-{env}:{sha}` (e.g., `ellmud-uat:abc1234`, `ellmud-prod:abc1234`) to keep ACR organized.
+3. `github.ref_name` used as environment selector — no matrix, no conditionals. Push triggers scoped to `[uat, prod]`.
+4. Failure issue job branch-aware (includes branch name in title/body).
+
+**Requires from team:**
+- GitHub environments `uat` and `prod` must be created in repo settings with appropriate secrets.
+- Secrets per environment: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `ACR_NAME`, `CONTAINER_APP_NAME`, `RESOURCE_GROUP`.
+
+**Why:** Team decision to use UAT/Prod only (no dev cloud environment). Local dev stays fully local.
+
+### 2026-03-20: WebSocket Protocol Auto-Detection
+**Author:** Drizzt (Engine Dev)
+**Date:** 2026-03-20
+**Status:** Implemented
+**Commit:** a12f404
+
+**Context**
+The Colyseus client WebSocket endpoint was hardcoded to `ws://` in `packages/client/src/services/connection.ts`. Browsers block mixed-content WebSocket requests (`ws://` from `https://` page) when deployed to Azure Container Apps (HTTPS).
+
+**Decision**
+Auto-detect protocol from `window.location.protocol`:
+- **HTTPS** → `wss://${window.location.host}` (no explicit port; ACA ingress terminates TLS on 443 → container port 2567)
+- **HTTP** → `ws://${window.location.hostname}:2567` (local dev: Vite 5173, Colyseus 2567)
+- **`VITE_WS_URL` env var** remains highest-priority override for custom configurations.
+
+**Impact**
+- **Server team:** No changes; ACA ingress routing unchanged.
+- **Client team:** No changes; fix is transparent.
+- **Infra team:** No Bicep changes; ACA already forwards 443 → 2567.
+- **Testing:** All 552 server + 76 shared tests pass. Client connection tests pass (verify message-only protocol, unaffected).
