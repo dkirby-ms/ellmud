@@ -10,6 +10,7 @@ export type {
   AdminShardDetail,
   AdminRefugeDetail,
   AdminPlayerInfo,
+  AdminCreatureInfo,
   AdminMetrics,
   AdminSSEEvent,
 } from './types.js';
