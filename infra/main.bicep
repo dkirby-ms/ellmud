@@ -12,7 +12,7 @@ targetScope = 'resourceGroup'
 // ─── Parameters ─────────────────────────────────────────────────────────────
 
 @description('Environment name')
-@allowed(['dev', 'staging', 'prod'])
+@allowed(['uat', 'prod'])
 param environmentName string
 
 @description('Azure region for all resources')
@@ -97,15 +97,14 @@ module redis 'modules/redis.bicep' = {
   }
 }
 
-// 6. Container Apps Game Server (phase 2 — app with Redis host)
+// 6. Container Apps Game Server (reuses existing environment, deploys the app)
 module containerAppsApp 'modules/container-apps.bicep' = {
   name: 'container-apps-app'
   params: {
     resourcePrefix: resourcePrefix
     location: location
     tags: tags
-    logAnalyticsCustomerId: monitoring.outputs.logAnalyticsCustomerId
-    logAnalyticsSharedKey: monitoring.outputs.logAnalyticsSharedKey
+    existingEnvironmentId: containerAppsEnv.outputs.environmentId
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     postgresServerFqdn: postgres.outputs.serverFqdn
     postgresDatabaseName: postgres.outputs.databaseName
@@ -128,17 +127,16 @@ module aiFoundry 'modules/ai-foundry.bicep' = {
 
 // ─── RBAC: Container App → ACR Pull ─────────────────────────────────────────
 
-// Use deterministic names so ARM can resolve at deployment start
+// ACR name must be deterministic (not a runtime output) for role assignment scope
 var acrNameForRbac = replace('${resourcePrefix}acr', '-', '')
 
-resource acrResource 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
+resource acrResourceRef 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
   name: acrNameForRbac
-  dependsOn: [acr]
 }
 
 resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(resourceGroup().id, acrNameForRbac, 'AcrPull')
-  scope: acrResource
+  scope: acrResourceRef
   properties: {
     roleDefinitionId: subscriptionResourceId(
       'Microsoft.Authorization/roleDefinitions',
@@ -147,6 +145,7 @@ resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     principalId: containerAppsApp.outputs.containerAppPrincipalId
     principalType: 'ServicePrincipal'
   }
+  dependsOn: [acr]
 }
 
 // ─── Outputs ────────────────────────────────────────────────────────────────
