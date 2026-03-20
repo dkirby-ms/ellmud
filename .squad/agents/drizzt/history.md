@@ -89,3 +89,13 @@
 - **Implementation:** Custom hook (`useDevAutoLogin`) fires once on mount in dev mode, attempts to register dev user (ignores 409 duplicate error), then logs in with credentials `dev/devdev`. On success, dispatches `LOGIN_SUCCESS` action. On failure (server not running), silently falls back to AuthScreen.
 - **Key insight:** No server changes needed — reuses existing `/auth/register` and `/auth/login` endpoints. The `useRef` pattern prevents multiple attempts, and the hook gracefully degrades when server is unavailable. In production builds, `import.meta.env.DEV` is false, so auth screen works normally.
 - **Testing:** All 45 client tests pass, all 552 server tests pass. TypeScript and ESLint clean.
+
+### Refuge ↔ Shard Room Switching (#65)
+- **Files:** `packages/shared/src/index.ts`, `packages/server/src/rooms/RefugeRoom.ts`, `packages/server/src/rooms/ShardRoom.ts`, `packages/client/src/services/connection.ts`, `packages/client/src/components/GameScreen.tsx`
+- **Pattern:** Server sends `ROOM_SWITCH` message (target + reason); client handles switch by leaving current room and joining the target via `switchRoom()`. No client-side routing — the server dictates when and where the player moves.
+- **Key decisions:**
+  - `ROOM_SWITCH` replaces the old `client.leave()` call in `handleSuccessfulExtraction()` — server no longer force-disconnects; client drives the room transition.
+  - `enter` command in RefugeRoom defaults to shard when no argument given (Phase 1: single shard option).
+  - `switchingRef` guard in GameScreen prevents onLeave handler from showing disconnect messages during a switch.
+  - `handlersRef` pattern lets the same handlers object be reused across room switches, avoiding stale closures.
+- **Testing:** 681 total tests passing (555 server + 46 client + 80 shared). 9 new tests covering enter command, shardboard, switchRoom(), and RoomSwitchMessage type.
