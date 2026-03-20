@@ -2,6 +2,7 @@ import { Server } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { monitor } from '@colyseus/monitor';
 import express from 'express';
+import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { ShardRoom, RefugeRoom } from './rooms/index.js';
@@ -51,18 +52,28 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicPath = path.resolve(__dirname, 'public');
 app.use(express.static(publicPath));
 
-// Catch-all: serve index.html for client-side routing
+// Catch-all: serve index.html for client-side routing (GET only — does not
+// interfere with Colyseus POST /matchmake/* routes)
 app.get('*', (_req, res) => {
   res.sendFile(path.join(publicPath, 'index.html'));
 });
 
+// Create HTTP server from Express but don't listen yet — Colyseus's
+// Server.listen() will call httpServer.listen(PORT) AND register matchmaking
+// routes (POST /matchmake/joinOrCreate/:roomName, etc.) via
+// bindRouterToTransport, which prepends a handler that intercepts Colyseus
+// routes before Express sees them.
+const httpServer = http.createServer(app);
+
 const server = new Server({
-  transport: new WebSocketTransport({ server: app.listen(PORT) }),
+  transport: new WebSocketTransport({ server: httpServer }),
 });
 
 // Register room types
 server.define('shard', ShardRoom);
 server.define('refuge', RefugeRoom);
+
+await server.listen(PORT);
 
 console.log(`[Ellmud] Colyseus server listening on ws://localhost:${PORT}`);
 console.log(`[Ellmud] Admin monitor at http://localhost:${PORT}/colyseus`);

@@ -68,3 +68,9 @@
 - **Docker tags:** Environment-prefixed images (`ellmud-uat:{sha}`, `ellmud-prod:{sha}`) keep ACR organized and prevent UAT images from being confused with prod.
 - **Key insight:** Since push triggers are scoped to `[uat, prod]` in the `on:` block, deploy job `if` conditions only need `github.event_name == 'push'` — the branch filtering is already enforced at the trigger level.
 - **Infra alignment:** Bicep `environmentName` param already accepts `['dev', 'uat', 'prod']` with `resourcePrefix = 'ellmud-${environmentName}'`, so the CI/CD image naming convention (`ellmud-{env}`) matches infra naming.
+
+### WebSocket Protocol Auto-Detection
+- **File:** `packages/client/src/services/connection.ts`
+- **Problem:** Hardcoded `ws://` caused mixed-content errors when the page was served over HTTPS on Azure Container Apps.
+- **Fix:** Auto-detect protocol from `window.location.protocol`. HTTPS → `wss://${host}` (no port, ACA ingress handles TLS termination on 443). HTTP → `ws://${hostname}:2567` (local dev where Vite and Colyseus run on different ports).
+- **Key insight:** Use `window.location.host` (includes port if non-default) for HTTPS and `window.location.hostname` (no port) + explicit `:2567` for HTTP dev. The `VITE_WS_URL` env var override is preserved as the highest-priority option.
