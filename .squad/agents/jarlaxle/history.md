@@ -174,3 +174,13 @@
 - Minsc wrote PlayerRepository (27), StashRepository (39), Schema validation (59) tests
 - All use factory pattern: identical tests run against InMemory today, will run against PG implementation in PR #77
 - **For you:** These 125 tests are proven infrastructure. When you add item system (#16), persistence tests can reuse this pattern for new repositories (skills, factions, run history). No duplication, guaranteed behavioral equivalence.
+
+### 2025-07-25: Room Graph Quality Hardening (Issue #5 — reopened)
+- Issue was reopened after initial implementation. Generator existed and was wired into ShardRoom, but room type topology wasn't enforced.
+- **Dead-end fix:** Excluded dead_end rooms from the backbone chain. They now attach as single branches with exactly 1 exit. The old code put them in the backbone (giving them 2 backbone edges) and added cycle edges to them (up to 4 exits total). Fixed by: (a) separate backbone pool excluding dead_ends, (b) skip dead_ends in cycle addition pool, (c) skip connected dead_ends in distance enforcement repairs, (d) exclude dead_ends as reconnection targets.
+- **Junction fix:** Added `ensureJunctionExits()` post-processing that guarantees ≥ 3 exits per junction room. Runs AFTER distance enforcement (not before — learned that the hard way, because edge cuts reduced junction exits). Each added edge is checked against the min-distance constraint and undone if it creates a shortcut.
+- **Dead-end guarantee:** Random roll (15% chance) could produce 0 dead_ends for some seeds. Added fallback: if no dead_end was generated, convert the last fill room to dead_end.
+- **Repair bug:** `repairConnectivitySafe` inner loop doesn't re-run BFS after each reconnection — it only marks the directly connected room. Dead_end rooms attached to a newly reconnected backbone node appeared in the `disconnected` list and got extra edges. Fixed by skipping dead_end rooms with exits ≥ 1 in the repair loop.
+- **Lesson:** Room type semantics (dead_end = 1 exit, junction = 3+ exits) must be enforced structurally, not just by name. The old code assigned types randomly but never guaranteed the connectivity matched the type.
+- **Lesson:** Order of post-processing matters. Junction enforcement before distance cuts = junctions lose exits. Junction enforcement after = need distance checking inside junction enforcement to prevent shortcuts.
+- Added 7 new tests (22 total in shard-gen.test.ts). All 1009 tests pass. PR #81.
