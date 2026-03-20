@@ -97,3 +97,27 @@
 - Deployment docs updated with correct port mappings and environment setup
 - Zero validation errors/warnings
 - **For you:** Deployment infrastructure is locked in. When you validate new features, assume Azure Container Apps is correctly configured. No surprises in production deployment.
+
+## Wave 3 Anticipatory Tests (2026-03-20)
+
+### Redis Contract Tests (Issue #2) — 25 tests
+- **File:** `packages/server/src/__tests__/wave3-redis-contracts.test.ts`
+- **Mock pattern for ioredis:** `vi.mock('ioredis')` with a module-level `MockRedisClient` that the mock constructor returns. Swap `mockRedisInstance` per test in `beforeEach`. This pattern works cleanly because `RedisNarrationCache` creates `new Redis()` internally.
+- **Cache factory fallback:** `createNarrationCache()` returns InMemory when `cacheEnabled=false` or when Redis connect fails. Returns RedisNarrationCache when connect succeeds.
+- **Graceful degradation:** `RedisNarrationCache.get()` returns null, `.set()` and `.del()` are no-ops when Redis throws — never propagates errors to callers.
+- **TTL edge case:** Redis `EX` command needs seconds, not ms. The implementation uses `Math.ceil(ttlMs / 1000)` with minimum 1s. Tests verify ms→seconds conversion, fractional rounding, and the GDD combat (30s) / exploration (5min) TTLs.
+- **Key schema:** Default prefix is `narration:` + SHA-256 hash. Custom prefix supported via config.
+- **Connection lifecycle:** `connect() → connected=true`, `disconnect() → connected=false`, force disconnect on quit failure via `client.disconnect()`.
+- **Interface contract:** `RedisNarrationCache` satisfies `NarrationCache` — get/set parity with `InMemoryNarrationCache`.
+
+### Narration Pipeline Contract Tests (Issue #9) — 54 tests
+- **File:** `packages/server/src/__tests__/wave3-narration-contracts.test.ts`
+- **GDD §4.5 timeout budgets verified:** combat_action=800ms, combat_round=800ms, room_description=2000ms, movement=2000ms, event=2000ms, hard_limit=3000ms. Tests verify `DEFAULT_NARRATION_CONFIG` values match spec.
+- **Template fallback contract:** When LLM exceeds timeout, template prose matches `renderTemplate()` output exactly. All 5 narration types produce non-empty prose.
+- **Background enrichment:** After timeout fallback, LLM result writes to cache asynchronously. Background failure is silent — template stays in cache. Tests use 50ms timeout + 500ms hard_limit + 600ms wait to verify.
+- **Cache hit path:** Pre-populated cache returns immediately, LLM callCount stays 0. Second call to same context hits cache.
+- **Output validation (GDD §4.4):** Tests all 7 SCHEMA_KEYWORDS (hp_pct, shard_stability, awareness_level, light_level, disposition, narration_type, narrative_directives) and all FORBIDDEN_PATTERNS (HP numbers, damage, percentages, XP, gold, level numbers).
+- **Telemetry event tracking:** Verified cache_hit, cache_miss, llm_timeout, fallback_used, llm_calls accumulate correctly. Reset clears all.
+- **End-to-end pipeline:** 4 integration paths tested: (1) miss→LLM→cache→return, (2) miss→timeout→template→background enrichment, (3) cache hit→return, (4) all 5 narration types through pipeline.
+
+### Test count: 726 → 814 (server) after Wave 3 + other team additions. All green, zero lint errors.
