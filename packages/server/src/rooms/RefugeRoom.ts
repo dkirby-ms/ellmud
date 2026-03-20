@@ -84,7 +84,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
 
     client.send(MessageTypes.ROOM_HEADER, {
       roomName: 'The Refuge — Central Plaza',
-      exits: ['north', 'south', 'east', 'west'],
+      exits: [],
       stability: 1.0,
     } satisfies RoomHeaderMessage);
 

@@ -82,3 +82,10 @@
 - **Fix:** (1) Create HTTP server via `http.createServer(app)` without listening, (2) pass it to `WebSocketTransport({ server: httpServer })`, (3) call `await server.listen(PORT)` which triggers the full Colyseus setup: `matchMaker.accept()` → `transport.listen()` → `bindRouterToTransport()`.
 - **How it works:** `bindRouterToTransport` finds the Express app from the HTTP server's "request" listeners, removes it, then prepends a new handler that checks Colyseus routes first (POST `/matchmake/*`) and delegates non-matching requests to Express. This means the SPA catch-all (`app.get('*')`) is safe — it only catches GET requests that don't match Colyseus routes.
 - **Key insight:** Never bypass `Server.listen()` in Colyseus 0.17. Even when providing your own HTTP server, Colyseus must call `listen()` to wire up matchmaking. The transport's `server` option is for sharing an HTTP server, not for pre-starting it.
+
+### Dev Mode Auth Bypass (2026-03-21)
+- **Files:** `packages/client/src/hooks/useDevAutoLogin.ts`, `packages/client/src/App.tsx`
+- **Pattern:** Client-side auto-login hook using `import.meta.env.DEV` (Vite dev mode flag) to bypass auth screen during local development.
+- **Implementation:** Custom hook (`useDevAutoLogin`) fires once on mount in dev mode, attempts to register dev user (ignores 409 duplicate error), then logs in with credentials `dev/devdev`. On success, dispatches `LOGIN_SUCCESS` action. On failure (server not running), silently falls back to AuthScreen.
+- **Key insight:** No server changes needed — reuses existing `/auth/register` and `/auth/login` endpoints. The `useRef` pattern prevents multiple attempts, and the hook gracefully degrades when server is unavailable. In production builds, `import.meta.env.DEV` is false, so auth screen works normally.
+- **Testing:** All 45 client tests pass, all 552 server tests pass. TypeScript and ESLint clean.
