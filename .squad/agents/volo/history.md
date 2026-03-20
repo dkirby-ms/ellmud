@@ -79,3 +79,13 @@
 - **Key approach:** Read every source file to document what's actually implemented, not what the GDD aspires to. All types, interfaces, and command names match the codebase.
 - **LLM integration doc is my crown jewel** — it covers the full narration pipeline I built in Issue #9, from state hashing through cache to template fallback, with exact type definitions and configuration values. Any developer can understand the pipeline from this doc alone.
 - **Cross-referenced GDD sections** where relevant but clearly marked Phase 1 scope vs future phases.
+
+### 2026-03-20: Issue #9 — LLM Narration Pipeline Acceptance Criteria (PR #79)
+- **Audit result:** The pipeline was ~95% complete. Three gaps found and fixed:
+  1. `getTimeout()` used hardcoded branching (`combat_action || combat_round → 800ms, else → 2000ms`) instead of per-type config lookup. Fixed to `config.timeouts[type]` — now movement/event can have distinct timeouts if configured.
+  2. `validateLLMOutput()` ignored `narrative_directives.forbidden` array. Added defense-in-depth checks for `reveal_hidden_items`, `reveal_player_names`, and `resolve_mechanics`.
+  3. No dedicated integration test file for the 10 acceptance criteria. Added `narration-pipeline-integration.test.ts` with 50 tests covering every AC.
+- **Key pattern: per-type timeout config lookup** — `NarrationTimeoutConfig` has a property per `LLMNarrationType` plus `hard_limit`, so `config.timeouts[type]` is a clean direct lookup. No branching needed.
+- **Key pattern: forbidden directive validation** — The `forbidden` array in narrative_directives is a runtime-configurable guardrail. Validation checks are additive (each directive adds a check), so new forbidden rules can be added without modifying the validator function's core structure.
+- **Background enrichment verified:** When primary LLM call times out, `backgroundEnrich()` fires a new LLM call with its own AbortController bound to hard_limit. Invalid output in background is silently rejected (template stays in cache). Hard limit cancels the background call.
+- **Test count:** 846 total (was 726), all passing. 0 lint errors.
