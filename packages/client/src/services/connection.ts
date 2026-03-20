@@ -14,7 +14,10 @@ import {
   type CombatResultMessage,
 } from '@ellmud/shared';
 
-const WS_ENDPOINT = import.meta.env.VITE_WS_URL ?? `ws://${window.location.hostname}:2567`;
+const WS_ENDPOINT = import.meta.env.VITE_WS_URL ??
+  (window.location.protocol === 'https:'
+    ? `wss://${window.location.host}`
+    : `ws://${window.location.hostname}:2567`);
 
 export interface MessageHandlers {
   onNarrate: (msg: NarrateMessage) => void;
