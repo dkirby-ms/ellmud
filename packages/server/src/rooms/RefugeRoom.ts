@@ -9,7 +9,7 @@ import {
 } from '@ellmud/shared';
 import { RefugeState } from '../state.js';
 import { authenticateClient } from '../auth/colyseus-auth.js';
-import { StashService, InMemoryStashRepository } from '../stash/index.js';
+import { StashService, InMemoryStashRepository, getStashRepository, getItemDefs } from '../stash/index.js';
 import type { StashRepository } from '../stash/index.js';
 
 const TICK_INTERVAL_MS = 1000;
@@ -47,9 +47,9 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   onCreate(): void {
     this.setState(new RefugeState());
 
-    // Initialize stash with defaults if not already injected
+    // Initialize stash with shared provider if not already injected
     if (!this.stashService) {
-      this.initStash();
+      this.initStash(getStashRepository(), getItemDefs());
     }
 
 

@@ -9,6 +9,7 @@ import { Router, type Request, type Response } from 'express';
 export interface HealthRouterDeps {
   isCacheRedis?: boolean;
   isPresenceRedis?: boolean;
+  isStashPg?: boolean;
 }
 
 export function createHealthRouter(deps: HealthRouterDeps = {}): Router {
@@ -22,6 +23,9 @@ export function createHealthRouter(deps: HealthRouterDeps = {}): Router {
       redis: {
         cache: deps.isCacheRedis ? 'redis' : 'in-memory',
         presence: deps.isPresenceRedis ? 'redis' : 'local',
+      },
+      persistence: {
+        stash: deps.isStashPg ? 'postgresql' : 'in-memory',
       },
     });
   });

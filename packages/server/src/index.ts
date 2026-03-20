@@ -19,6 +19,7 @@ import { createAdminRouter, createDashboardRouter } from './admin/index.js';
 import { getConfig } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence } from './cache/index.js';
+import { initStashProvider, isStashPg } from './stash/index.js';
 
 const config = getConfig();
 const PORT = config.port;
@@ -31,6 +32,10 @@ if (USE_PG) {
   await runMigrations();
   console.log('[Ellmud] Migrations complete.');
 }
+
+// ─── Stash Persistence ──────────────────────────────────────────────────────
+initStashProvider(USE_PG);
+console.log(`[Ellmud] Stash persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Redis Bootstrap ─────────────────────────────────────────────────────────
 const { cache: narrationCache, isRedis: isCacheRedis } = await createNarrationCache(config);
@@ -47,13 +52,13 @@ const authService = new AuthService(tokenStore, playerRepo);
 // Mount auth routes on the same Express app Colyseus uses
 app.use(createAuthRouter(authService));
 
-// Mount health check endpoint — includes Redis status
-app.use(createHealthRouter({ isCacheRedis, isPresenceRedis }));
+// Mount health check endpoint — includes Redis + persistence status
+app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));
 
 // ─── Admin Dashboard ─────────────────────────────────────────────────────────
 // Admin API at /admin/api/*, dashboard UI at /admin/
 // Protected by ADMIN_TOKEN env var — admin auth is separate from player auth.
-app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis }));
+app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));
 app.use('/admin', createDashboardRouter());
 
 // Initialize Colyseus room auth hooks
@@ -96,4 +101,5 @@ console.log(`[Ellmud] Admin monitor at http://localhost:${PORT}/colyseus`);
 console.log(`[Ellmud] Admin dashboard at http://localhost:${PORT}/admin`);
 console.log(`[Ellmud] Auth required: ${AUTH_REQUIRED}`);
 console.log(`[Ellmud] Cache: ${isCacheRedis ? 'Redis' : 'in-memory'}, Presence: ${isPresenceRedis ? 'Redis' : 'local'}`);
+console.log(`[Ellmud] Stash persistence: ${isStashPg() ? 'PostgreSQL' : 'in-memory'}`);
 console.log(`[Ellmud] Max players/shard: ${config.maxPlayersPerShard}, Matchmaker: ${config.matchmakerMode}`);

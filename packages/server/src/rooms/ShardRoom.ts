@@ -22,7 +22,7 @@ import { CombatSystem, type TickResult, createCombatant } from '../combat/index.
 import { ExtractionSystem } from '../extraction/index.js';
 import { authenticateClient } from '../auth/colyseus-auth.js';
 import { getConfig } from '../config.js';
-import { StashService, InMemoryStashRepository } from '../stash/index.js';
+import { StashService, InMemoryStashRepository, getStashRepository, getItemDefs } from '../stash/index.js';
 import type { StashRepository } from '../stash/index.js';
 import { transferInventoryToStash } from '../extraction/stash-transfer.js';
 import { CreatureManager, DROWNED_REVENANT, type CreatureAction } from '../creatures/index.js';
@@ -105,6 +105,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Initialize extraction system (default 5-tick channel)
     this.extractionSystem = new ExtractionSystem();
+
+    // Initialize stash with shared provider if not already injected
+    if (!this.stashService) {
+      this.initStash(getStashRepository(), getItemDefs());
+    }
 
     // Register message handlers
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {

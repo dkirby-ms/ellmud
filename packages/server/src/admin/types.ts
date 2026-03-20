@@ -67,6 +67,9 @@ export interface AdminMetrics {
     cache_backend: 'redis' | 'in-memory';
     presence_backend: 'redis' | 'local';
   };
+  persistence: {
+    stash_backend: 'postgresql' | 'in-memory';
+  };
 }
 
 export interface AdminSSEEvent {
