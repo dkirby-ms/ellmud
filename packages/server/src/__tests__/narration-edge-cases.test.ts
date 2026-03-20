@@ -6,12 +6,11 @@
  * telemetry accumulation, and background enrichment failure handling.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { NarrationContext, NarrationConfig } from '@ellmud/shared';
-import { DEFAULT_NARRATION_CONFIG } from '@ellmud/shared';
+import { describe, it, expect } from 'vitest';
+import type { NarrationContext } from '@ellmud/shared';
 import { InMemoryNarrationCache } from '../narrative/cache.js';
 import { LLMClient, validateLLMOutput } from '../narrative/llm-client.js';
-import type { LLMTransport, LLMResponse } from '../narrative/llm-client.js';
+import type { LLMTransport } from '../narrative/llm-client.js';
 import { renderTemplate } from '../narrative/templates.js';
 import { NarrationTelemetryTracker } from '../narrative/telemetry.js';
 import { NarrationService } from '../narrative/NarrationService.js';
@@ -57,24 +56,6 @@ function makeContext(overrides: Partial<NarrationContext> = {}): NarrationContex
       forbidden: ['reveal_hidden_items', 'reveal_player_names'],
     },
     ...overrides,
-  };
-}
-
-function makeMockTransport(
-  response: string = 'The flooded crypt breathes with ancient malice.',
-  delay: number = 50,
-): LLMTransport {
-  return async (_request, signal) => {
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, delay);
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        reject(new DOMException('Aborted', 'AbortError'));
-      }, { once: true });
-    });
-    return {
-      choices: [{ message: { content: response } }],
-    } satisfies LLMResponse;
   };
 }
 

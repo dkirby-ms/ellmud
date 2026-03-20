@@ -11,7 +11,7 @@ import type { Combatant, CombatStats } from '../combat/CombatState.js';
 import { ExtractionSystem } from '../extraction/ExtractionSystem.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
-import { createTestRoomGraph, type Room, type RoomGraph } from '../shard/RoomGraph.js';
+import { createTestRoomGraph, type Room } from '../shard/RoomGraph.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -284,7 +284,7 @@ describe('Combat System Edge Cases', () => {
 
     // First tick: strike deals damage (creature defaults to dodge)
     // 10 * 0.5 - 0 = 5 damage, creature: 8 - 5 = 3 HP
-    const tick1 = combat.resolveTick();
+    combat.resolveTick();
     expect(creature.hp).toBe(3);
 
     // Next tick: p1 strikes again

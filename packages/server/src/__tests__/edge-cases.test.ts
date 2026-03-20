@@ -62,7 +62,7 @@ describe('Edge Cases — ShardRoom', () => {
     const room = await colyseus.createRoom('shard', {});
 
     const client1 = await colyseus.connectTo(room);
-    const collector1 = new MessageCollector(client1);
+    new MessageCollector(client1);
 
     const client2 = await colyseus.connectTo(room);
     const collector2 = new MessageCollector(client2);
@@ -132,7 +132,7 @@ describe('Edge Cases — RefugeRoom', () => {
     const room = await colyseus.createRoom('refuge', {});
 
     const client1 = await colyseus.connectTo(room);
-    const collector1 = new MessageCollector(client1);
+    new MessageCollector(client1);
 
     const client2 = await colyseus.connectTo(room);
     const collector2 = new MessageCollector(client2);

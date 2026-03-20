@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { Room, RoomGraph, Direction, ShardTier, BiomeType } from '@ellmud/shared';
+import type { Room, RoomGraph, ShardTier, BiomeType } from '@ellmud/shared';
 import { serializeRoomGraph, deserializeRoomGraph } from '@ellmud/shared';
 import { generateShardGraph } from '../shard/generator.js';
 import { createPRNG } from '../shard/prng.js';
@@ -169,7 +169,7 @@ describe('Shard Graph Generation', () => {
   it('exits are bidirectional', () => {
     const graph = generateShardGraph(T1_CONFIG);
     for (const room of graph.rooms.values()) {
-      for (const [dir, targetId] of room.exits) {
+      for (const [, targetId] of room.exits) {
         const target = graph.rooms.get(targetId)!;
         expect(target).toBeDefined();
         // Target should have an exit back to this room

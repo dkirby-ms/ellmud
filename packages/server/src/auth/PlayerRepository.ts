@@ -8,7 +8,7 @@
  * for username/password auth, with provider_id reserved for future OAuth.
  */
 
-import type { Player, PlayerIdentity } from '../db/types.js';
+import type { Player } from '../db/types.js';
 
 export interface PlayerRepository {
   createPlayer(username: string, passwordHash: string): Promise<Player & { passwordHash: string }>;
@@ -59,7 +59,8 @@ export class InMemoryPlayerRepository implements PlayerRepository {
     const player = this.players.get(id);
     if (!player) return null;
     // Strip passwordHash from the returned Player
-    const { passwordHash: _, ...playerData } = player;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash: _passwordHash, ...playerData } = player;
     return playerData;
   }
 }

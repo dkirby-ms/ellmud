@@ -49,11 +49,6 @@ const BLOCKED_COMMANDS = new Set<string>([
   'go', 'attack', 'strike', 'dodge', 'flee',
 ]);
 
-/** Commands allowed while extracting (passive / informational). */
-const PASSIVE_COMMANDS = new Set<string>([
-  'look', 'inventory', 'take', 'drop',
-]);
-
 // ─── ExtractionSystem ───────────────────────────────────────────────────────
 
 export class ExtractionSystem {

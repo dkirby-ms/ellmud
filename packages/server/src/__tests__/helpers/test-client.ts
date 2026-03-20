@@ -25,8 +25,8 @@ export async function bootTestServer(): Promise<ColyseusTestServer> {
   server.define('refuge', RefugeRoom);
   await server.listen(0);
   // After listen(0), the OS-assigned port is on the underlying HTTP server
-  const addr = (server as any).transport.server.address();
-  (server as any).port = addr.port;
+  const addr = (server as unknown as { transport: { server: { address(): { port: number } } } }).transport.server.address();
+  (server as unknown as { port: number }).port = addr.port;
   return new ColyseusTestServer(server);
 }
 

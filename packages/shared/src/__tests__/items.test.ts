@@ -17,7 +17,6 @@ import {
   validateLoadout,
   calculateLoadoutWeight,
   MAX_LOADOUT_WEIGHT,
-  MAX_CONSUMABLE_SLOTS,
   type ItemDefinition,
   type WeaponStats,
   type ArmourStats,

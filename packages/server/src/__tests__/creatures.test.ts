@@ -9,9 +9,9 @@ import { CreatureManager } from '../creatures/CreatureManager.js';
 import { updateCreature, type CreatureWorldState } from '../creatures/behavior.js';
 import { generateLoot } from '../creatures/loot.js';
 import { DROWNED_REVENANT } from '../creatures/templates/drowned-revenant.js';
-import type { Creature, BehaviorState } from '../creatures/types.js';
+import type { Creature } from '../creatures/types.js';
 import { CombatSystem } from '../combat/CombatSystem.js';
-import { createCombatant, type CombatStats } from '../combat/CombatState.js';
+import { createCombatant } from '../combat/CombatState.js';
 import { createPRNG } from '../shard/prng.js';
 import type { Room, RoomGraph, RoomType, Direction } from '@ellmud/shared';
 
@@ -131,7 +131,7 @@ describe('Creature Behavior Tree', () => {
       const creature = makeCreature();
       const world = makeWorldState({ noisyRooms: new Set(['junction-1']) });
 
-      const action = updateCreature(creature, world, 0.25);
+      updateCreature(creature, world, 0.25);
 
       expect(creature.behaviorState).toBe('alert');
       expect(creature.alertTargetRoomId).toBe('junction-1');
@@ -186,7 +186,7 @@ describe('Creature Behavior Tree', () => {
       });
       const world = makeWorldState();
 
-      const action = updateCreature(creature, world, 0.25);
+      updateCreature(creature, world, 0.25);
 
       expect(creature.behaviorState).toBe('idle');
     });
@@ -209,7 +209,7 @@ describe('Creature Behavior Tree', () => {
       const creature = makeCreature({ behaviorState: 'hostile' });
       const world = makeWorldState(); // No players anywhere
 
-      const action = updateCreature(creature, world, 0.25);
+      updateCreature(creature, world, 0.25);
 
       expect(creature.behaviorState).toBe('idle');
     });
@@ -269,7 +269,7 @@ describe('Creature Behavior Tree', () => {
       const creature = makeCreature({ behaviorState: 'fleeing', hp: 50 }); // Full HP but still fleeing
       const world = makeWorldState();
 
-      const action = updateCreature(creature, world, 0.25);
+      updateCreature(creature, world, 0.25);
 
       expect(creature.behaviorState).toBe('fleeing');
     });
@@ -365,7 +365,7 @@ describe('Creature Combat Integration', () => {
 
     // Player strikes, creature dodges
     combat.submitAction(combatant.id, 'dodge');
-    const result = combat.resolveTick();
+    combat.resolveTick();
 
     // Sync HP back
     const updatedCombatant = combat.getCombatant(combatant.id)!;

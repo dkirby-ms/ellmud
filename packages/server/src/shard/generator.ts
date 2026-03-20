@@ -17,7 +17,6 @@ import type {
   Room,
   RoomGraph,
   RoomType,
-  Direction,
   LootContainer,
   HazardPlaceholder,
 } from '@ellmud/shared';

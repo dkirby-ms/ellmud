@@ -23,7 +23,6 @@ import {
 } from './CombatState.js';
 import { calculateDamage } from './damage.js';
 import {
-  resolveStrike,
   resolveDodge,
   resolveFlee,
   resolveDefeated,

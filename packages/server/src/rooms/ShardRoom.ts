@@ -13,8 +13,8 @@ import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
 import { createTestRoomGraph, type RoomGraph } from '../shard/RoomGraph.js';
 import { handleLook } from '../commands/handlers/look.js';
-import { CombatSystem, createCombatant, type TickResult } from '../combat/index.js';
-import { ExtractionSystem, type ExtractionTickResult } from '../extraction/index.js';
+import { CombatSystem, type TickResult } from '../combat/index.js';
+import { ExtractionSystem } from '../extraction/index.js';
 import { authenticateClient } from '../auth/colyseus-auth.js';
 import { getConfig } from '../config.js';
 

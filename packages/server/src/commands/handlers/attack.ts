@@ -6,7 +6,7 @@
  */
 
 import type { CommandResult, CommandContext } from '../index.js';
-import { createCombatant, DEFAULT_PLAYER_STATS } from '../../combat/CombatState.js';
+import { createCombatant } from '../../combat/CombatState.js';
 
 export function handleAttack(ctx: CommandContext): CommandResult {
   const { player, args, combatSystem, otherPlayersInRoom } = ctx;
