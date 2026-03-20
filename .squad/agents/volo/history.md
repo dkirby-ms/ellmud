@@ -108,3 +108,51 @@
 - Forbidden directives are runtime-configurable guardrail
 - Background enrichment ensures template is always on time
 - Redis cache is now available as Phase 2 config switch (`REDIS_CACHE_ENABLED=true`)
+
+### 2026-03-20: Clickable Exits in Narrative Panel (Issue #67, PR #86)
+- **Built exit detection pipeline** for the narrative panel — 4 new files, 656 lines added
+- **Architecture:** `parseExits()` uses `RoomHeaderMessage.exits` as an "NLP hint from server" — only directions that are actual exits get linked. This is inherently LLM-robust because it doesn't depend on text format.
+- **Word-boundary matching:** Regex uses lookahead/lookbehind (`(?<![a-zA-Z])...(![a-zA-Z])`) to avoid false positives like "northern", "eastward", "downstairs". Direction aliases sorted longest-first to match "northeast" before "north"/"east".
+- **Components:** `ExitLink` (keyboard-accessible inline link), `ClickableExits` (standalone wrapper), plus Terminal/GameScreen integration
+- **Styling:** Teal `var(--interactive)` text with underline → gold `var(--accent)` on hover. `white-space: nowrap` prevents mid-word line breaks. `focus-visible` outline for keyboard users.
+- **Key design decision:** Exit detection only fires on `room` and `header` message types — system, combat, sound, speech, trace messages are left plain. This prevents visual noise and false matching.
+- **Tests:** 28 new tests + satisfied 28 anticipatory tests from Minsc (56 total). 13 exit detection tests cover 8+ room description styles.
+- **Pre-existing failures:** Toast.test.tsx (24 failures, `clearAllToasts is not a function`) — not my code, not touched.
+
+---
+
+## Wave 5 Cross-Team Client UI Batch Context (2026-03-20T23:27:56Z)
+
+### What Other Agents Are Doing
+
+**Drizzt (Engine Dev) — Issue #74, PR #84: Button Design System**
+- `<Button>` component: `type` prop for variant, `size`, `icon`, `disabled` support
+- CSS variable `--border-muted` added; BEM naming `.btn--{variant}` and `.btn--{size}`
+- **For you:** Exit links can use styled buttons or role="link" spans; Button component available for CTAs
+- Tests: 52 passing
+
+**Jarlaxle (Systems Dev) — Issue #75, PR #85: Toast Notifications**
+- Event-driven service: `toast.success()`, `toast.warning()`, `toast.danger()`, `toast.dismiss(id)`
+- Auto-dismiss 4s, max 3 visible, no React dependency
+- **For you:** Use toast for narrative-related feedback (prose quality feedback, LLM timeout notifications, etc.)
+- Tests: 18 passing
+
+**Minsc (Tester) — Anticipatory tests across 3 issues**
+- 100 tests total: Button (40), Toast (35), ClickableExits (25)
+- 25 tests for clickable exits validating your exit detection API and link rendering
+- Exit link pattern: role="link" on span with tabIndex=0 (not `<a>`)
+- **For you:** Tests are active; exit detection must match API contract in test comments
+- Tests: 28 passing
+
+**Elminster (Lead/Architect) — Content Admin Tool design complete**
+- 1,463-line design document at `docs/content-admin-tool.md`
+- **For you:** Narrative templates authored in admin tool feed into LLM fallback system (Phase 2)
+
+### Implications for Your Work
+
+1. **Button and Toast ready** — Use both for narrative panel UI feedback
+2. **Exit detection pattern locked** — Server sends `availableExits`; tests validate no false positives on LLM prose
+3. **Anticipatory tests active** — 25 tests now validating your clickable exits implementation; tests will pass when feature branch merges
+4. **Exit link rendering pattern set** — Use role="link" on span (not `<a>`) for keyboard/accessibility compliance
+
+**Next Issues (7 remaining for Phase 1 client UI):** #66, #68, #69, #70, #71, #72, #73

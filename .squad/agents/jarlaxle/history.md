@@ -217,3 +217,52 @@ Creature system was built in Wave 3; Wave 4b added operator visibility. System i
 
 **Phase 1 Server Block Status:** ✅ **COMPLETE**
 All topology enforcement in place. Creature AI can trust room types. Patrol logic is solid.
+
+### 2025-07-25: Toast Notification System (Issue #75)
+- Created 3 files: `services/toast.ts` (event-driven pub/sub), `components/ToastContainer.tsx` (React component with animation), CSS additions in `styles.css`.
+- **Architecture:** Toast service is a standalone module — no React dependency, no store coupling. Emits `onAdd`/`onDismiss` events. Component subscribes and manages its own animation state (enter/exit).
+- **Max 3 enforcement lives in the component**, not the service. When a 4th toast arrives, oldest is auto-dismissed via `setTimeout(0)` to avoid re-entrancy in the subscriber callback.
+- **Exit animations use a two-phase approach:** mark toast as `exiting` (applies `toast-exit` CSS class with fade-out keyframes), then remove from DOM after 300ms timer.
+- **Icons are inline SVGs matching Lucide paths** — no `lucide-react` dependency added. Keeps bundle minimal.
+- **All colors use CSS variables** — `--text-secondary` (system), `--success`, `--warning`, `--danger` for accent bars and icons. `--bg-elevated` for background, `--border-muted` for border, `--accent` for close button hover.
+- **Testing insight:** `userEvent.click()` with `vi.useFakeTimers()` causes timeouts in jsdom. Use `fireEvent.click()` instead for synchronous click tests under fake timers.
+- **Pre-existing test failures** found: `Toast.test.tsx` (capitalized, references `clearAllToasts` that doesn't exist) and `ClickableExits.test.tsx` (imports missing component) — both from other agents, not related to this work.
+- 18 tests total: 6 service unit + 12 component integration. All pass. PR #85.
+
+---
+
+## Wave 5 Cross-Team Client UI Batch Context (2026-03-20T23:27:56Z)
+
+### What Other Agents Are Doing
+
+**Drizzt (Engine Dev) — Issue #74, PR #84: Button Design System**
+- `<Button>` component: `type` prop (primary/secondary/danger/ghost), `size` (small/medium/large), `icon`, `disabled`
+- CSS variables: `--border-muted` added to `:root` for shared use
+- BEM naming: `.btn--{variant}` and `.btn--{size}` with full words
+- **For you:** Use `<Button>` for inventory/stats UI instead of raw `<button>` elements
+- Tests: 52 passing
+
+**Volo (Narrative Dev) — Issue #67, PR #86: Clickable Exits**
+- Narrative panel uses server hints (`RoomHeaderMessage.exits`) not regex
+- Terminal accepts `availableExits` and `onExitClick` props
+- **For you:** Combined with toast system, can notify when exits clicked
+- Tests: 28 passing
+
+**Minsc (Tester) — Anticipatory tests across 3 issues**
+- 100 tests total: Button (40), Toast (35), ClickableExits (25)
+- Import-failure pattern activates immediately when feature branches merge
+- Toast patterns: timer tests use `vi.useFakeTimers()` + `vi.useRealTimers()` for userEvent
+- **For you:** Toast test conventions established; build on them for notification UI work
+
+**Elminster (Lead/Architect) — Content Admin Tool design complete**
+- 1,463-line design document at `docs/content-admin-tool.md`
+- **For you:** Creature templates, biome data, loot tables currently hardcoded will load from DB (Phase 2)
+
+### Implications for Your Work
+
+1. **Button API locked** — Use `<Button>` for all new UI pages
+2. **Toast service ready** — `import { toast } from '../services/toast.js'`; call `toast.success()` from anywhere
+3. **Test patterns established** — Future component tests follow Button/Toast/ClickableExits conventions
+4. **Anticipatory tests active** — 35 toast tests now validating your API; tests will pass immediately when feature branch merges
+
+**Next Issues (7 remaining for Phase 1 client UI):** #66, #68, #69, #70, #71, #72, #73

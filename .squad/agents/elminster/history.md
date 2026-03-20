@@ -163,3 +163,14 @@ All four PRs merge cleanly to dev:
 ---
 
 **Recommendation:** Server block complete. Next: Phase 1 client UI batch (#66–#75) or Phase 2.
+
+### 2025-07-25: Content Admin Tool Design Document
+- **Action:** Created comprehensive design document at `docs/content-admin-tool.md` (1,463 lines) for a designer-facing content management tool, separate from the existing debug/admin dashboard.
+- **Key architecture decision:** Content admin tool is a separate container (React + Express) in the same Container Apps Environment, sharing the PostgreSQL instance but introducing its own `content_*` tables. Does NOT use Redis — Redis remains game-server-only.
+- **Content domains covered (12):** Creatures, Items, Biomes, Shard Modifiers, Loot Tables, Skills, Factions, Room Templates, Narrative Templates, Balance Constants, Contracts (Phase 4), Crafting Recipes (Phase 3).
+- **Data flow:** Content Admin → PostgreSQL (content tables) → Game Server reads at startup / hot-reload / shard seeding. Atomic content snapshots for deployment and rollback.
+- **Content lifecycle:** Draft → In Review → Published → Deprecated, with version history per entry and atomic deployment snapshots.
+- **Integration pattern:** Game server gets `POST /admin/api/content/reload` endpoint for hot-reload. Backward compatible — falls back to hardcoded TypeScript content when content tables are absent.
+- **Key files:** `docs/content-admin-tool.md` (the design document), `.squad/decisions/inbox/elminster-content-admin-tool.md` (team decision).
+- **Audience:** Document is designed for UI/UX designers creating Figma mockups — includes ASCII wireframes for every major screen, field-level detail for every content type, and component descriptions.
+- **GDD relationship:** This tool is NOT the admin dashboard described in GDD §13.3 (which is a debug/inspection tool using Colyseus Schema sync). This is a content authoring tool that feeds content into the game.

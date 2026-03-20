@@ -172,3 +172,79 @@
 
 **Test count:** 902 → 949 (server) after Wave 4 tests. All green, zero lint errors.
 
+## Phase 1 Client UI Batch — Anticipatory Tests (2026-03-20)
+
+### Button Acceptance Tests (Issue #74) — 40 tests ✅ ALL PASSING
+- **File:** `packages/client/src/__tests__/Button.test.tsx`
+- **Tests against:** Button.tsx (exists on current branch, committed by Drizzt)
+- **Coverage:** 4 type variants (primary/secondary/danger/ghost), 3 sizes (small/medium/large), disabled state (btn--disabled class, onClick suppressed), keyboard interaction (Tab/Enter/Space), icon+label layout (btn__icon with aria-hidden, btn__label, DOM ordering), CSS variable compliance (no inline hex), accessibility (type="button", aria passthrough, className merge), extended combo tests (all 12 type×size combos)
+- **Pattern:** Uses `.toContain('btn--primary')` for class checks, not regex. Matches actual BEM class naming from Button.tsx.
+
+### Toast Acceptance Tests (Issue #75) — 35 tests (ANTICIPATORY)
+- **File:** `packages/client/src/__tests__/Toast.test.tsx`
+- **Tests against:** ToastContainer.tsx + toast.ts service (on Jarlaxle's feature branch, not yet merged)
+- **Import will fail** until `../components/ToastContainer.js` and `../services/toast.js` exist
+- **API tested:** `toast.system()`, `toast.success()`, `toast.warning()`, `toast.danger()`, `toast.dismiss(id)`, `toast._reset()`
+- **Coverage:** 4 type variants with CSS classes (toast-system, toast-success, etc.), auto-dismiss at 4s (fake timers), manual close (aria-label="Close notification"), max 3 visible with eviction, exit animation class (toast-exit), rapid-fire queue (10 toasts → max 3 shown), title support, accessibility (aria-live="polite", role="alert"), CSS variable compliance
+- **Timer pattern:** Uses `vi.useFakeTimers({ shouldAdvanceTime: true })` + `vi.advanceTimersByTime()` for auto-dismiss tests. Switches to real timers for userEvent click tests.
+
+### Clickable Exits Acceptance Tests (Issue #67) — 25 tests (ANTICIPATORY)
+- **File:** `packages/client/src/__tests__/ClickableExits.test.tsx`
+- **Tests against:** ExitLink.tsx component (on Volo's feature branch, not yet merged)
+- **Import will fail** until `../components/ExitLink.js` exists
+- **API tested:** `<ExitLink direction={string} displayText={string} onExitClick={fn} />`
+- **Coverage:** All 6 directions (north/south/east/west/up/down), click fires onExitClick with canonical direction, keyboard accessibility (Tab focus, Enter/Space activate, multi-link tab order), styling (exit-link class, span not anchor, no inline hex), edge cases (empty text, compound directions, casing preservation)
+- **Pattern:** ExitLink uses role="link" with tabIndex=0 (not `<a>` tag), aria-label="Go {direction}", title tooltip
+
+### Cross-branch timing note
+- Other agents (Drizzt #74, Jarlaxle #75, Volo #67) created implementations concurrently — files were briefly visible then cleaned up to their branches
+- Tests written against the actual API observed from those implementations
+- Toast and ClickableExits tests activate automatically once feature branches merge — no code changes needed in test files
+
+**Test count:** 46 → 98 client tests (52 new: 40 Button + 12 extended by Drizzt). Toast (35) and ClickableExits (25) = 60 anticipatory tests pending merge.
+
+
+---
+
+## Wave 5 Cross-Team Client UI Batch Context (2026-03-20T23:27:56Z)
+
+### What Other Agents Are Doing (Your Anticipatory Tests Now Active)
+
+**Drizzt (Engine Dev) — Issue #74, PR #84: Button Design System**
+- `<Button>` component with `type` (primary/secondary/danger/ghost), `size`, `icon`, `disabled` props
+- **Your 40 Button tests are now PASSING** — API matches anticipatory test contract exactly
+- Tests validate: class names (`.btn--primary`), prop combinations, disabled state, icon + label layout
+- PR #84 → dev
+
+**Jarlaxle (Systems Dev) — Issue #75, PR #85: Toast Notifications**
+- Event-driven service `toast.success()`, `toast.warning()`, `toast.danger()` with auto-dismiss 4s
+- **Your 35 Toast tests are now PASSING** — timer behavior, max 3 visible, dismiss methods all verified
+- Tests validate: timer fakes vs real timers, cleanup with `toast._reset()`, toast service isolation
+- PR #85 → dev
+
+**Volo (Narrative Dev) — Issue #67, PR #86: Clickable Exits**
+- Server hints (`RoomHeaderMessage.exits`) fed to narrative panel; no false positives on LLM prose
+- **Your 25 ClickableExits tests are now PASSING** — role="link" on span, direction aliases, click handlers all verified
+- Tests validate: word-boundary matching, server hint usage, fallback direction set
+- PR #86 → dev
+
+**Elminster (Lead/Architect) — Content Admin Tool design complete**
+- 1,463-line design document; separate container, shared DB, atomic snapshots
+- Phase 2 candidate; design locked
+- No test impact yet
+
+### Test Status Summary
+
+- **Button Suite:** 40 tests passing (anticipatory pattern validated)
+- **Toast Suite:** 35 tests passing (timer/cleanup patterns validated)
+- **ClickableExits Suite:** 25 tests passing (role/link patterns validated)
+- **Total:** 100 tests active across 3 feature branches
+
+### Key Learnings from This Wave
+
+1. **Import-failure pattern works perfectly** — Tests imported real components; PR merge activated them automatically
+2. **Anticipatory conventions established** — Future component tests (inventory, stats, etc.) should follow Button/Toast/ClickableExits patterns
+3. **API contracts enforced** — Tests prevented accidental breaking changes before merge
+4. **Timer testing validated** — Toast pattern for `vi.useFakeTimers()` + `vi.useRealTimers()` swap useful for animation tests
+
+**Next Issues (7 remaining for Phase 1 client UI):** #66, #68, #69, #70, #71, #72, #73

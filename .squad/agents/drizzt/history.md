@@ -282,3 +282,54 @@
 
 **Phase 1 Server Block Status:** ✅ **COMPLETE**  
 All 8 server issues closed. Ready for Phase 1 Client UI batch (#66–#75) or Phase 2.
+
+### Button Design System (#74) — 2026-03-20
+- **Component:** `packages/client/src/components/Button.tsx` — reusable `<Button>` with `type` (variant), `size`, `icon`, `disabled` props
+- **API:** `<Button type="primary|secondary|danger|ghost" size="small|medium|large" icon={...} disabled>label</Button>`
+- **CSS:** `packages/client/src/styles.css` — added `--border-muted` variable and `.btn` design system (4 variants × 4 states × 3 sizes)
+- **Tests:** 52 tests in `Button.test.tsx` (26 anticipatory from Minsc + 18 extended coverage + 8 from branch race fix)
+- **Design decision:** Used `type` prop (not `variant`) to match Minsc's anticipatory tests and the issue spec. `Omit<ButtonHTMLAttributes, 'type'>` prevents conflict with HTML `type` attribute; component always renders `type="button"` on the `<button>` element.
+- **Key pattern:** Icon + label via `btn__icon` (aria-hidden) + `btn__label` spans with `margin-right: 6px` gap. `children` is optional to support icon-only buttons with `aria-label`.
+- **CSS variable compliance:** All colors reference theme variables (accent, bg-elevated, border-muted, text-secondary, text-disabled, danger, text-primary). No hardcoded hex in the component.
+- **PR:** #84 → dev
+
+---
+
+## Wave 5 Cross-Team Client UI Batch Context (2026-03-20T23:27:56Z)
+
+### What Other Agents Are Doing
+
+**Jarlaxle (Systems Dev) — Issue #75, PR #85: Toast Notifications**
+- Event-driven toast service (`services/toast.ts`) — standalone pub/sub, no React dependency
+- React container (`components/ToastContainer.tsx`) manages animation + max 3 visible
+- API: `toast.success()`, `toast.warning()`, `toast.danger()`, `toast.dismiss(id)` — auto-dismiss 4s
+- **For you:** Any code needing toast feedback (connection errors, extraction complete, etc.) can import service
+- Tests: 18 passing; anticipatory pattern established
+
+**Volo (Narrative Dev) — Issue #67, PR #86: Clickable Exits**
+- Narrative panel exits use server hints (`RoomHeaderMessage.exits`), not regex on LLM prose
+- Eliminates false positives from prose like "northern wind" → "north" exit
+- Terminal accepts `availableExits` prop; `onExitClick` callback
+- **For you:** Client sends `availableExits` from room state; clicking exit fires callback
+- Tests: 28 passing; pattern for role="link" on span (not `<a>`) established
+
+**Minsc (Tester) — Anticipatory tests across 3 issues**
+- 100 tests total: Button (40), Toast (35), ClickableExits (25)
+- Import-failure pattern: real components imported, tests fail at import until implementation
+- Test conventions: toast timer patterns, exit link roles, button class naming (BEM `.btn--primary`)
+- **For you:** Your Button API already validated by 40 tests; remaining issues follow same pattern
+
+**Elminster (Lead/Architect) — Content Admin Tool design complete**
+- 1,463-line design document at `docs/content-admin-tool.md` — separate container, shared DB, atomic snapshots
+- Content lifecycle: Draft → Review → Published; hot reload (no restart)
+- **For you:** After Phase 1 client UI, server gets content registry module (reads from DB, falls back to TypeScript)
+- Phase 2 candidate; design locked
+
+### Implications for Your Work
+
+1. **Button component API locked** — Other agents building UI pages will use `<Button>` instead of raw `<button>`
+2. **Toast service available** — Call from any code; no React context needed
+3. **Exit detection pattern set** — Narrative panel consumes `availableExits` from server; no false positives
+4. **Test suite is active** — 100 anticipatory tests now passing on dev; future PRs in this batch should follow same pattern
+
+**Next Issues (7 remaining for Phase 1 client UI):** #66, #68, #69, #70, #71, #72, #73

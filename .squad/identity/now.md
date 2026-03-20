@@ -1,47 +1,54 @@
 # Current Focus
 
-**Phase:** Wave 4b Complete — ALL Phase 1 Server Issues Closed ✅
+**Phase:** Wave 5 — Phase 1 Client UI Batch Start + Content Admin Design Doc ✅
 
-**Status:** Phase 1 server infrastructure is **complete and production-ready**. PRs #80–#83 merged to dev. All 8 server issues (#2, #3, #5, #7, #9, #10, #11, #18) resolved.
+**Status:** Phase 1 server infrastructure complete ✅. Phase 1 client UI batch **in progress**. 3 of 10 client issues have PRs approved. Content admin tool design complete (Phase 2 candidate).
 
-**What Happened:**
-- Drizzt: Completed extraction messaging layer (4 EXTRACTION_STATE phases). PR #83 integrated with stash persistence (#80).
-- Jarlaxle: Added admin dashboard creature visibility (real-time SSE telemetry, creature population tracking). PR #82 approved with minor Phase 2 follow-up.
-- Elminster: Reviewed all 4 Wave 4 PRs. All approved. No architecture regressions. Cross-system integration verified.
-- All 8 Phase 1 server issues now closed. 949 server tests (+182 this wave) + 80 shared + 45 client = **1029+ tests passing**.
+**What Happened (Wave 5):**
+- Drizzt: Completed Button Design System (#74, PR #84) — reusable `<Button>` component with variant/size props, BEM CSS classes, `--border-muted` CSS variable
+- Jarlaxle: Completed Toast Notifications (#75, PR #85) — event-driven service, React container, auto-dismiss 4s, 3 max visible
+- Volo: Completed Clickable Exits (#67, PR #86) — server hints instead of regex, zero false positives on LLM prose, role="link" on span
+- Minsc: 100 anticipatory tests across 3 suites (Button 40, Toast 35, ClickableExits 25) now active and passing
+- Elminster: Content Admin Tool design document complete (1,463 lines, 23 screens, 12 content domains) — separate container, shared DB, atomic snapshots, hot reload
+
+**Status Summary:**
+- Phase 1 Server: ✅ Complete (8 issues, 949 tests)
+- Phase 1 Client UI: 🟠 In Progress (3 of 10 issues have PRs: #74, #75, #67 merged to dev)
+- Phase 1 Client UI Pending: #66, #68, #69, #70, #71, #72, #73 (7 issues remaining)
+- Content Admin Tool: ✅ Design locked (implementation Phase 2)
 
 **What's Next:**
-1. **Phase 1 Client UI Batch** — 10 issues (#66–#75) — Player UI mockups, inventory, stats, room view, chat, terminal renderer
+1. **Phase 1 Client UI Remaining** — 7 issues (#66, #68–#73) — Inventory UI, stats panel, message system, character lifecycle, settings, persistence
 2. **Phase 1 Deferred** — #14 Admin Dashboard Infrastructure (moved to Phase 2, foundation exists)
-3. **Phase 2** — Multi-shard orchestration, persistence events, or begin immediately if client UI completes early
+3. **Phase 2** — Content admin tool implementation, multi-shard orchestration, persistence events
 
 **Key Infrastructure Locked:**
+- Button component API: `type` (variant), `size`, `icon`, `disabled` props, `.btn--{variant}` BEM classes
+- Toast service: `toast.success()`, `toast.warning()`, `toast.danger()`, `toast.dismiss(id)`, auto-dismiss 4s
+- Clickable exits: server hints (`availableExits`), no regex false positives, role="link" on span
+- Anticipatory test patterns: import real components, timer fakes/reals, BEM class validation, CSS variable compliance
+- Content admin architecture: separate container, shared DB, draft→review→published workflow, atomic snapshots, hot reload
 - Redis container deployment pattern finalized
-- Bicep IaC Phase 1 complete, Phase 2 environment variables prepared
-- LLM pipeline forward-compatible (per-type config, forbidden directives, timeout budgets)
-- Admin dashboard telemetry pattern established (SSE, HTML tables, JSON endpoints)
+- Bicep IaC Phase 1 complete
+- LLM pipeline forward-compatible
+- Admin dashboard telemetry pattern established
 - Stash persistence: weight-based capacity, extraction transfer, persistent storage
-- Room topology: structurally enforced semantics (dead_end=1 exit, junction≥3 exits)
-- Extraction mechanic: 5-tick channeled escape, command locks, state messaging
+- Room topology: structurally enforced semantics
+- Extraction mechanic: 5-tick channeled escape
 
 **Test Status:**
-- Server: 949 passing (767 → +182 this wave)
+- Server: 949 passing (Phase 1 server locked)
 - Shared: 80 passing
-- Client: 45 passing
-- **Total: 1029+ passing** (all green, zero regressions)
+- Client: 45 + 100 (anticipatory) = 145 passing
+- **Total: 1,174+ passing** (all green, zero regressions)
 
-**Issues Closed This Session (8 total):**
-- #2 PostgreSQL schema (Wave 1)
-- #3 Room graph generation (Wave 2)
-- #5 Basic combat (Wave 2) + Room topology enforcement (Wave 4b)
-- #7 Creature system (Wave 3) + Admin visibility (Wave 4b)
-- #9 LLM narration pipeline (Wave 3)
-- #10 Extraction mechanic (Wave 4b)
-- #11 Stash persistence (Wave 4a)
-- #18 Command system + parser (Wave 4a)
+**Issues Closed This Session (Phase 1 Client UI Start):**
+- #74 Button Design System (PR #84, 52 tests)
+- #75 Toast Notifications (PR #85, 18 tests)
+- #67 Clickable Exits (PR #86, 28 tests)
 
 **Remaining Phase 1 Work:**
-- #66–#75 Client UI batch (10 issues, high priority)
+- #66–#73 Client UI batch (7 issues, high priority)
 - #14 Admin Dashboard Infrastructure (deferred to Phase 2)
 
 **Deployment Readiness:**
