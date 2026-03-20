@@ -5,5 +5,6 @@ export {
   DuplicateUsernameError,
   type PlayerRepository,
 } from './PlayerRepository.js';
+export { PgPlayerRepository } from './PgPlayerRepository.js';
 export { createAuthRouter } from './routes.js';
 export { authenticateClient, initColyseusAuth, resetColyseusAuth } from './colyseus-auth.js';

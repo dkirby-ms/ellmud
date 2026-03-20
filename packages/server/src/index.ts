@@ -10,23 +10,33 @@ import {
   AuthService,
   InMemoryTokenStore,
   InMemoryPlayerRepository,
+  PgPlayerRepository,
   createAuthRouter,
   initColyseusAuth,
 } from './auth/index.js';
 import { createHealthRouter } from './health.js';
 import { createAdminRouter, createDashboardRouter } from './admin/index.js';
 import { getConfig } from './config.js';
+import { runMigrations } from './db/index.js';
 
 const config = getConfig();
 const PORT = config.port;
 const AUTH_REQUIRED = config.authRequired;
+const USE_PG = !!process.env.DATABASE_URL;
+
+// ─── Database Bootstrap ──────────────────────────────────────────────────────
+if (USE_PG) {
+  console.log('[Ellmud] DATABASE_URL detected — running PostgreSQL migrations…');
+  await runMigrations();
+  console.log('[Ellmud] Migrations complete.');
+}
 
 const app = express();
 app.use(express.json());
 
 // ─── Auth Setup ──────────────────────────────────────────────────────────────
 const tokenStore = new InMemoryTokenStore();
-const playerRepo = new InMemoryPlayerRepository();
+const playerRepo = USE_PG ? new PgPlayerRepository() : new InMemoryPlayerRepository();
 const authService = new AuthService(tokenStore, playerRepo);
 
 // Mount auth routes on the same Express app Colyseus uses
