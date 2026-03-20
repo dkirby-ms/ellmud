@@ -28,6 +28,8 @@ export interface AdminRouterDeps {
   isCacheRedis?: boolean;
   /** Whether Colyseus presence is Redis-backed. */
   isPresenceRedis?: boolean;
+  /** Whether stash persistence uses PostgreSQL. */
+  isStashPg?: boolean;
 }
 
 export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
@@ -155,6 +157,9 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         redis: {
           cache_backend: deps.isCacheRedis ? 'redis' : 'in-memory',
           presence_backend: deps.isPresenceRedis ? 'redis' : 'local',
+        },
+        persistence: {
+          stash_backend: deps.isStashPg ? 'postgresql' : 'in-memory',
         },
       };
 
@@ -427,6 +432,9 @@ async function sendSSESnapshot(res: Response, deps: AdminRouterDeps): Promise<vo
       redis: {
         cache_backend: deps.isCacheRedis ? 'redis' : 'in-memory',
         presence_backend: deps.isPresenceRedis ? 'redis' : 'local',
+      },
+      persistence: {
+        stash_backend: deps.isStashPg ? 'postgresql' : 'in-memory',
       },
     };
 
