@@ -138,6 +138,13 @@
 - TypeScript interfaces for all tables (`db/types.ts`)
 - In-memory repository interfaces + implementations
 
+### PR #77 CI Fix (lint errors)
+- **Files:** `persistence-schema-validation.test.ts`, `persistence-stash-repository.test.ts`, `creature-wiring.test.ts`
+- **Problem:** CI failed with 6 ESLint `no-unused-vars` errors — 2 from my persistence tests, 4 pre-existing in creature-wiring.
+- **Fix:** Removed unused `makeKeyItem` helper, used `table` variable in UUID assertion, removed unused imports and destructured variables in creature-wiring.
+- **Key insight:** The ESLint config only ignores `_`-prefixed **args** (`argsIgnorePattern: '^_'`), not variables or imports. Prefixing a loop variable with `_` won't silence the error.
+- **CI root cause:** The lint step runs `eslint src/` which catches errors in ALL files, not just changed ones. Pre-existing errors in other tests block unrelated PRs.
+
 **What I built:**
 1. `PgPlayerRepository` — transactional player+identity creation, case-insensitive username lookup, PG constraint → DuplicateUsernameError mapping
 2. `PgStashRepository` — full CRUD with auto-stacking, JSONB metadata for maxDurability, per-player capacity overrides
