@@ -19,8 +19,11 @@ Phase 1 uses in-memory Maps for persistence. All repositories follow the same pa
 
 ## Examples
 - `packages/server/src/auth/PlayerRepository.ts` — PlayerRepository interface + InMemoryPlayerRepository
+- `packages/server/src/auth/PgPlayerRepository.ts` — PostgreSQL implementation of PlayerRepository
 - `packages/server/src/stash/StashRepository.ts` — StashRepository interface + InMemoryStashRepository
+- `packages/server/src/stash/PgStashRepository.ts` — PostgreSQL implementation of StashRepository
 - `packages/server/src/auth/TokenStore.ts` — TokenStore interface + InMemoryTokenStore
+- `packages/server/src/index.ts` — DATABASE_URL toggle selects PG vs in-memory at startup
 
 ## Anti-Patterns
 - Don't use sync methods — they break when migrating to PG (even if in-memory is sync)

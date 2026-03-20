@@ -126,3 +126,27 @@
 
 ### Integration Test Harness Enhanced
 **For Minsc:** MessageCollector helper now captures ROOM_SWITCH messages. Integration tests can verify room transitions without mocking Colyseus internals.
+
+### PostgreSQL Persistence Layer (#3) — 2026-03-20
+**Task:** Implement PG repository implementations for the existing schema
+**Status:** ✅ Complete — PR #77
+
+**What was already done:**
+- SQL migrations 001-005 covering all 7 tables (players, identities, items, stash, skills, factions, run_history)
+- Migration runner with `_migrations` meta-table tracking
+- Connection pool (`pg.Pool` with `DATABASE_URL`)
+- TypeScript interfaces for all tables (`db/types.ts`)
+- In-memory repository interfaces + implementations
+
+**What I built:**
+1. `PgPlayerRepository` — transactional player+identity creation, case-insensitive username lookup, PG constraint → DuplicateUsernameError mapping
+2. `PgStashRepository` — full CRUD with auto-stacking, JSONB metadata for maxDurability, per-player capacity overrides
+3. Migration 006 — `player_stash_capacity` table
+4. Server startup wiring — `DATABASE_URL` auto-detection, migration execution, PG/in-memory repo selection
+5. 22 unit tests (mocked pg pool) + included 125 pre-existing contract tests
+
+**Key patterns:**
+- PG unique-violation code `23505` with constraint name for domain-specific error mapping
+- `FOR UPDATE` row locking in stash operations to prevent race conditions
+- JSONB metadata column for extensible item properties (maxDurability now, roll data later)
+- `DATABASE_URL` as the single toggle between in-memory and PG persistence

@@ -150,3 +150,12 @@
 - **No `.squad/` conflicts** in this case — the branch divergence was from creature wiring (#7), extraction (#10), and room switching (#65) landing on dev after my branch was cut.
 - **Lesson:** During `git rebase`, terminology is inverted — `--theirs` gives you *your* branch's version (the commits being replayed), `--ours` gives you the base branch. This is backwards from merge. Always verify with `grep` for conflict markers after resolution.
 - **Lesson:** Force push with `--force-with-lease` is the safe way to update after rebase — it fails if someone else pushed to the branch since your last fetch.
+### 2025-07-25: Bicep IaC Refinement (Issue #18)
+- Fixed critical Bicep compilation error: `dependsOn` on `existing` resource is invalid. Role assignment `name` and `scope` must use compile-time deterministic values, not module outputs.
+- Fixed Container Apps port from 3000 → 2567 (Colyseus default). NODE_ENV from development → production.
+- Aligned allowed environments to uat/prod only (no dev in Azure, per team decision).
+- Refactored container-apps module: added `existingEnvironmentId` param so the second invocation reuses the environment instead of redundantly declaring the same resource. Cleaner ARM template.
+- Suppressed intentional `listKeys()` linter warning in monitoring module (Key Vault is Phase 2).
+- Updated `docs/deployment.md` with correct values and deployment order docs.
+- **Lesson:** Bicep `existing` resources cannot have `dependsOn`. Role assignments require deterministic `name`/`scope` at deployment start — use local variables computed from params, not module outputs.
+- **Lesson:** This was infrastructure work outside my game systems domain. Bicep's compile-time vs runtime distinction is the main gotcha — ARM template generation happens before deployment, so certain properties must resolve from the template itself.
