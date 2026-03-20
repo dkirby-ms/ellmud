@@ -238,3 +238,14 @@
 - 54 narration contract tests (per-type timeout, forbidden directives, background enrichment, validation)
 - 79 total new tests, all passing
 - These tests validate both Drizzt's Redis and Volo's LLM implementations automatically when PRs merge
+
+### EXTRACTION_STATE Protocol Completion (#10) — PR #83
+- **Files:** `ExtractionSystem.ts`, `ShardRoom.ts`, `extraction.test.ts`
+- **Problem:** The shared `ExtractionMessage` type defines four states (started/progress/completed/interrupted) but only 'completed' was sent from ShardRoom. The client couldn't track extraction channel lifecycle.
+- **Fix:** Wired EXTRACTION_STATE messages for all four phases:
+  - `started` — sent after extract command succeeds (includes totalTicks/ticksRemaining)
+  - `progress` — sent each tick with updated ticksRemaining
+  - `interrupted` — sent on damage, collapse, or disconnect
+  - `completed` — already existed
+- **Pattern:** ShardRoom checks `isExtracting` before/after command to detect extraction start without coupling command handler to message protocol.
+- **Key insight:** The `getChannel()` accessor on ExtractionSystem provides tick state for progress messages without duplicating data in the tick result. Channel is deleted on completion/interruption, so progress messages only fire for active channels.
