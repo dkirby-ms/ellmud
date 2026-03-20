@@ -140,6 +140,15 @@ export class CombatSystem {
     return this.encounters.size > 0;
   }
 
+  /** Room IDs with active combat — used for creature noise detection. */
+  getActiveEncounterRoomIds(): string[] {
+    const roomIds: string[] = [];
+    for (const enc of this.encounters.values()) {
+      roomIds.push(enc.roomId);
+    }
+    return roomIds;
+  }
+
   // ─── Tick Resolution ──────────────────────────────────────────────────────
 
   /**

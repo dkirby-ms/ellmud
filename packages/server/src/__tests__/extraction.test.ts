@@ -442,3 +442,117 @@ describe('Room Graph — Extraction Room', () => {
     expect(extraction.exits.get('up')).toBe('crypt');
   });
 });
+
+// ─── Extraction Stash Transfer ──────────────────────────────────────────────
+
+import { transferInventoryToStash } from '../extraction/stash-transfer.js';
+import { StashService, InMemoryStashRepository } from '../stash/index.js';
+import type { StashItem } from '@ellmud/shared';
+import type { Item } from '../shard/RoomGraph.js';
+
+function makeItem(id: string, name: string, weight: number): Item {
+  return { id, name, weight, description: `A ${name}.` };
+}
+
+describe('Extraction Stash Transfer', () => {
+  let repo: InMemoryStashRepository;
+  let itemDefs: Map<string, StashItem>;
+  let stashService: StashService;
+
+  beforeEach(() => {
+    repo = new InMemoryStashRepository();
+    itemDefs = new Map();
+    stashService = new StashService(repo, itemDefs);
+  });
+
+  it('should transfer all carried items to the stash', async () => {
+    const player = new PlayerState('p1', 'entry');
+    const sword = makeItem('rusty-sword', 'Rusty Sword', 3);
+    const gem = makeItem('shard-gem', 'Shard Gem', 1);
+    player.addItem(sword);
+    player.addItem(gem);
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    expect(result.stored).toBe(2);
+    expect(result.lost).toBe(0);
+
+    // Verify items are in the stash
+    const stash = await repo.loadStash('p1');
+    expect(stash).toHaveLength(2);
+    expect(stash.some((e) => e.instance.itemId === 'rusty-sword')).toBe(true);
+    expect(stash.some((e) => e.instance.itemId === 'shard-gem')).toBe(true);
+  });
+
+  it('should respect stash weight limit — excess items are lost', async () => {
+    // Set a very small stash capacity
+    await repo.setCapacity('p1', 5);
+
+    const player = new PlayerState('p1', 'entry', 100); // high carry limit
+    const light = makeItem('light-item', 'Light Item', 2);
+    const heavy = makeItem('heavy-item', 'Heavy Item', 4);
+    player.addItem(light);
+    player.addItem(heavy);
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    // light (2) fits, heavy (4) would bring total to 6 > 5 — lost
+    expect(result.stored).toBe(1);
+    expect(result.lost).toBe(1);
+
+    const stash = await repo.loadStash('p1');
+    expect(stash).toHaveLength(1);
+  });
+
+  it('should handle empty inventory gracefully', async () => {
+    const player = new PlayerState('p1', 'entry');
+    expect(player.inventory.size).toBe(0);
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    expect(result.stored).toBe(0);
+    expect(result.lost).toBe(0);
+
+    const stash = await repo.loadStash('p1');
+    expect(stash).toHaveLength(0);
+  });
+
+  it('should handle stacked items (quantity > 1)', async () => {
+    const player = new PlayerState('p1', 'entry');
+    const arrow = makeItem('iron-arrow', 'Iron Arrow', 0.1);
+    player.addItem(arrow);
+    player.addItem(arrow);
+    player.addItem(arrow);
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    expect(result.stored).toBe(3);
+    expect(result.lost).toBe(0);
+  });
+
+  it('should register item definitions in itemDefs map', async () => {
+    const player = new PlayerState('p1', 'entry');
+    const relic = makeItem('ancient-relic', 'Ancient Relic', 5);
+    player.addItem(relic);
+
+    expect(itemDefs.has('ancient-relic')).toBe(false);
+
+    await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    expect(itemDefs.has('ancient-relic')).toBe(true);
+    expect(itemDefs.get('ancient-relic')!.weight).toBe(5);
+    expect(itemDefs.get('ancient-relic')!.type).toBe('material');
+  });
+
+  it('should lose all items when stash is completely full', async () => {
+    await repo.setCapacity('p1', 0);
+
+    const player = new PlayerState('p1', 'entry');
+    player.addItem(makeItem('coin', 'Coin', 0.1));
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    expect(result.stored).toBe(0);
+    expect(result.lost).toBe(1);
+  });
+});

@@ -132,3 +132,14 @@
 
 ### Adapter Pattern Enables Future Shards
 **For Phase 2:** Adding Tier 2/3 shards only requires generator config changes. Adapter handles conversion for all biomes automatically. No command system or client rewrite needed.
+
+### 2025-07-25: Creature Spawning + AI Tick Wiring (Issue #7 completion)
+- Wired CreatureManager into ShardRoom: spawning in `onCreate()`, AI tick in `update()`, loot drops on death, creature display in `look` command.
+- **Spawn uses derived PRNG seed** (`seed + 7919`) to keep creature placement deterministic but independent from the graph generator's PRNG sequence. Both share the same mulberry32 algorithm.
+- **Creature AI tick runs BEFORE combat resolution** — creatures evaluate behavior trees, queue combat actions, then `resolveTick()` processes everyone simultaneously. Order: creature tick → combat resolve → sync deaths → extraction tick.
+- **Death/loot order matters:** `removeCreature()` must be called BEFORE `syncFromCombat()` for dead creatures, because `syncFromCombat` sets `isAlive = false` and `removeCreature` guards on `isAlive`. ShardRoom processes defeated events first, then syncs survivors.
+- **Test graph isolation preserved:** `useTestGraph: true` skips creature spawning entirely. Existing tests (44+ using test graph) remain unaffected. New `creature-wiring.test.ts` uses procedural graphs with seed for deterministic creature testing.
+- **CommandContext extended with `creaturesInRoom`:** Lightweight `{id, name}` refs. Look handler shows "A Drowned Revenant lurks here." Attack handler resolves creature targets by partial name match (same pattern as player targeting).
+- **CombatSystem.getActiveEncounterRoomIds()** added for creature noise detection (rooms with combat → noise → alert state transitions).
+- **Attack handler updated for creature targeting:** `resolveTarget` now checks creature names (exact then partial match) before falling back to player IDs. Creatures registered with `isPlayer: false`.
+- 18 new tests in `creature-wiring.test.ts`: spawning (5), AI tick (4), loot drops (2), look (3), attack (2), CombatSystem API (2). Total: 579 server tests passing.
