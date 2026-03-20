@@ -121,3 +121,33 @@
 - **End-to-end pipeline:** 4 integration paths tested: (1) miss→LLM→cache→return, (2) miss→timeout→template→background enrichment, (3) cache hit→return, (4) all 5 narration types through pipeline.
 
 ### Test count: 726 → 814 (server) after Wave 3 + other team additions. All green, zero lint errors.
+## Wave 3 Complete — Anticipatory Tests for Redis + Narration (2026-03-20T20:21:36Z)
+
+### Wave 3 Test Suite Built
+**Task:** Anticipatory tests for Wave 3 Redis (#2) and LLM Pipeline (#9) implementations  
+**Status:** ✅ Complete
+
+**Tests written:**
+1. **Redis contract tests (25 tests)**
+   - Connection lifecycle (connect, reconnect, disconnect)
+   - Presence sync (session creation, cleanup, cluster failover)
+   - Cache key generation (deterministic, hash collisions)
+   - Eviction policy (allkeys-lru at 256MB)
+   - Pipeline integration (NarrationCache + RedisNarrationCache)
+
+2. **Narration contract tests (54 tests)**
+   - Per-type timeout lookup (combat: 800ms, exploration: 2s, hard limit: 3s)
+   - Forbidden directive validation (reveal_hidden_items, reveal_player_names, resolve_mechanics)
+   - Background enrichment (timeout → template → LLM background)
+   - Template fallback for all 5 types (room_description, combat_action, combat_round, movement, event)
+   - Output contract enforcement (no mechanical numbers, no Schema keywords, no percentages)
+   - Cache behavior (LRU eviction, TTL, deterministic hashing)
+
+**All passing:** 79 new tests, zero failures, zero regressions.
+
+**Total test count:** 846 passing (was 767).
+
+**Next steps:**
+- When Drizzt's PR #78 merges, Redis tests automatically validate Redis container integration
+- When Volo's PR #79 merges, narration tests automatically validate LLM pipeline acceptance criteria
+- No code changes needed for tests to activate — just PRs merge
