@@ -409,9 +409,9 @@ describe('cross-migration consistency', () => {
     for (const file of allMigrationFiles()) {
       const sql = readMigration(file);
       const tables = extractCreateTables(sql);
-      for (const _table of tables) {
+      for (const table of tables) {
         // Every CREATE TABLE should have UUID PRIMARY KEY
-        expect(sql).toMatch(/UUID PRIMARY KEY/i);
+        expect(sql).toMatch(new RegExp(`CREATE TABLE.*${table}[\\s\\S]*UUID PRIMARY KEY`, 'i'));
       }
     }
   });

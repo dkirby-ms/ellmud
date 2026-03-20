@@ -51,15 +51,6 @@ function makeShield(instanceId = 'shield-inst-1'): StashItemInstance {
   };
 }
 
-function makeKeyItem(instanceId = 'key-inst-1'): StashItemInstance {
-  return {
-    instanceId,
-    itemId: 'dungeon-key',
-    durability: null,
-    maxDurability: null,
-  };
-}
-
 // ─── Contract Tests ─────────────────────────────────────────────────────────
 
 function stashRepositoryContractTests(createRepo: () => StashRepository) {
