@@ -74,3 +74,11 @@
 - **Problem:** Hardcoded `ws://` caused mixed-content errors when the page was served over HTTPS on Azure Container Apps.
 - **Fix:** Auto-detect protocol from `window.location.protocol`. HTTPS → `wss://${host}` (no port, ACA ingress handles TLS termination on 443). HTTP → `ws://${hostname}:2567` (local dev where Vite and Colyseus run on different ports).
 - **Key insight:** Use `window.location.host` (includes port if non-default) for HTTPS and `window.location.hostname` (no port) + explicit `:2567` for HTTP dev. The `VITE_WS_URL` env var override is preserved as the highest-priority option.
+
+### Colyseus 0.17 Matchmaking Route Registration
+- **File:** `packages/server/src/index.ts`
+- **Problem:** POST `/matchmake/joinOrCreate/refuge` returned 404. Colyseus matchmaking HTTP routes were never registered because `Server.listen()` was never called — the old code passed a pre-listening server (`app.listen(PORT)`) to `WebSocketTransport` and skipped the Colyseus startup flow.
+- **Root cause:** In `@colyseus/core`, `bindRouterToTransport()` — the function that registers matchmaking routes — is only called inside `Server.listen()`. If you pass an already-listening server to the transport and never call `server.listen()`, no matchmaking routes are registered.
+- **Fix:** (1) Create HTTP server via `http.createServer(app)` without listening, (2) pass it to `WebSocketTransport({ server: httpServer })`, (3) call `await server.listen(PORT)` which triggers the full Colyseus setup: `matchMaker.accept()` → `transport.listen()` → `bindRouterToTransport()`.
+- **How it works:** `bindRouterToTransport` finds the Express app from the HTTP server's "request" listeners, removes it, then prepends a new handler that checks Colyseus routes first (POST `/matchmake/*`) and delegates non-matching requests to Express. This means the SPA catch-all (`app.get('*')`) is safe — it only catches GET requests that don't match Colyseus routes.
+- **Key insight:** Never bypass `Server.listen()` in Colyseus 0.17. Even when providing your own HTTP server, Colyseus must call `listen()` to wire up matchmaking. The transport's `server` option is for sharing an HTTP server, not for pre-starting it.
