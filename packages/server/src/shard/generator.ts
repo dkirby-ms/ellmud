@@ -126,17 +126,25 @@ function createRooms(
 
   // Fill remaining with corridor, junction, dead_end
   const remaining = total - rooms.length;
+  let hasDeadEnd = false;
   for (let i = 0; i < remaining; i++) {
     const roll = rng.next();
     let type: RoomType;
     if (roll < 0.15) {
       type = 'dead_end';
+      hasDeadEnd = true;
     } else if (roll < 0.40) {
       type = 'junction';
     } else {
       type = 'corridor';
     }
     rooms.push(makeRoom(type));
+  }
+
+  // Guarantee at least one dead-end room for interesting topology
+  if (!hasDeadEnd && remaining > 0) {
+    const lastFill = rooms[rooms.length - 1];
+    lastFill.type = 'dead_end';
   }
 
   return rooms;
@@ -148,15 +156,16 @@ function connectRooms(rooms: Room[], rng: PRNG): void {
   const entryRooms = rooms.filter(r => r.type === 'entry');
   const extractionRooms = rooms.filter(r => r.type === 'extraction');
   const bossRoom = rooms.find(r => r.type === 'boss')!;
-  const fillRooms = rooms.filter(
-    r => r.type !== 'entry' && r.type !== 'extraction' && r.type !== 'boss',
+  const deadEndRooms = rooms.filter(r => r.type === 'dead_end');
+  const backbonePool = rooms.filter(
+    r => r.type !== 'entry' && r.type !== 'extraction' && r.type !== 'boss' && r.type !== 'dead_end',
   );
-  rng.shuffle(fillRooms);
+  rng.shuffle(backbonePool);
 
-  // Phase 1: Build a backbone chain through the fill rooms.
-  // Entries attach to the start, boss in the middle, extractions at the end.
-  // This guarantees structural distance between entries and extractions.
-  const backbone = [...fillRooms];
+  // Phase 1: Build a backbone chain through corridor/junction rooms.
+  // Dead-end rooms are excluded — they attach as branches to preserve single-exit topology.
+  // Entries at the start, boss in the middle, extractions at the end.
+  const backbone = [...backbonePool];
 
   // Connect backbone as a chain
   for (let i = 1; i < backbone.length; i++) {
@@ -182,8 +191,14 @@ function connectRooms(rooms: Room[], rng: PRNG): void {
     linkRooms(extractionRooms[i], backbone[attachIdx], rng);
   }
 
+  // Attach dead-end rooms as single branches off the backbone
+  for (const deadEnd of deadEndRooms) {
+    linkRooms(deadEnd, rng.pick(backbone), rng);
+  }
+
   // Phase 2: Add extra edges to create cycles (graph is NOT a tree)
-  // Only add edges between rooms that are close in backbone index to avoid shortcutting
+  // Exclude dead-end rooms to preserve their single-exit branch topology
+  const cyclePool = rooms.filter(r => r.type !== 'dead_end');
   const extraEdges = Math.max(3, Math.floor(rooms.length * 0.25));
   let added = 0;
   let attempts = 0;
@@ -191,8 +206,8 @@ function connectRooms(rooms: Room[], rng: PRNG): void {
 
   while (added < extraEdges && attempts < maxAttempts) {
     attempts++;
-    const a = rng.pick(rooms);
-    const b = rng.pick(rooms);
+    const a = rng.pick(cyclePool);
+    const b = rng.pick(cyclePool);
     if (a.id === b.id) continue;
 
     // Never directly connect entry ↔ extraction
@@ -220,6 +235,10 @@ function connectRooms(rooms: Room[], rng: PRNG): void {
 
   // Phase 3: Verify and enforce minimum distance constraint
   ensureMinDistance(rooms, rng);
+
+  // Phase 4: Ensure junction rooms have ≥ 3 exits (their defining characteristic)
+  // Runs after distance enforcement so edge cuts don't reduce junction exits.
+  ensureJunctionExits(rooms, rng);
 }
 
 function linkRooms(a: Room, b: Room, rng: PRNG): void {
@@ -234,6 +253,31 @@ function linkRooms(a: Room, b: Room, rng: PRNG): void {
 
   a.exits.set(dir, b.id);
   b.exits.set(opposite, a.id);
+}
+
+/** Ensure junction rooms have at least 3 exits (their defining characteristic). */
+function ensureJunctionExits(rooms: Room[], rng: PRNG): void {
+  const junctions = rooms.filter(r => r.type === 'junction');
+  const targets = rooms.filter(r => r.type !== 'dead_end');
+  const roomMap = new Map(rooms.map(r => [r.id, r]));
+  const entryIds = rooms.filter(r => r.type === 'entry').map(r => r.id);
+  const extractionIds = rooms.filter(r => r.type === 'extraction').map(r => r.id);
+
+  for (const junction of junctions) {
+    let attempts = 0;
+    while (junction.exits.size < 3 && attempts < 30) {
+      attempts++;
+      const target = rng.pick(targets);
+      if (target.id === junction.id) continue;
+      if (Array.from(junction.exits.values()).includes(target.id)) continue;
+      if (target.exits.size >= ALL_DIRECTIONS.length) continue;
+      linkRooms(junction, target, rng);
+      // Undo if this edge violates the minimum distance constraint
+      if (!distanceOk(roomMap, entryIds, extractionIds)) {
+        unlinkRooms(junction, target);
+      }
+    }
+  }
 }
 
 // ─── Minimum Distance Enforcement ───────────────────────────────────────────
@@ -351,14 +395,20 @@ function repairConnectivitySafe(
 
     const disconnected = rooms.filter(r => !visited.has(r.id));
     for (const room of disconnected) {
+      // Dead-end rooms with an exit are reachable once their parent is reconnected.
+      // Skip to preserve their single-exit topology.
+      if (room.type === 'dead_end' && room.exits.size >= 1) continue;
+
       const isEntry = entrySet.has(room.id);
       const isExtraction = extractionSet.has(room.id);
 
       // Collect candidates: rooms in the main component with free directions
+      // Exclude dead-end rooms as targets to preserve their single-exit topology
       const candidates = rooms.filter(
         r =>
           visited.has(r.id) &&
           r.exits.size < ALL_DIRECTIONS.length &&
+          r.type !== 'dead_end' &&
           !(isEntry && extractionSet.has(r.id)) &&
           !(isExtraction && entrySet.has(r.id)),
       );

@@ -234,6 +234,80 @@ describe('Shard Graph Generation', () => {
     }
     expect(hasLoot).toBe(true);
   });
+
+  it('dead-end rooms have exactly 1 exit', () => {
+    for (const seed of [1, 7, 42, 100, 256, 9999, 314159]) {
+      const graph = generateShardGraph({ ...T1_CONFIG, seed });
+      for (const room of graph.rooms.values()) {
+        if (room.type === 'dead_end') {
+          expect(room.exits.size).toBe(1);
+        }
+      }
+    }
+  });
+
+  it('at least one dead-end room exists in every graph', () => {
+    for (const seed of [1, 7, 42, 100, 256, 9999, 314159]) {
+      const graph = generateShardGraph({ ...T1_CONFIG, seed });
+      const deadEnds = Array.from(graph.rooms.values()).filter(r => r.type === 'dead_end');
+      expect(deadEnds.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('junction rooms have ≥ 3 exits', () => {
+    // Junctions are topological branching points — they need 3+ connections
+    for (const seed of [1, 7, 42, 100, 256, 314159]) {
+      const graph = generateShardGraph({ ...T1_CONFIG, seed });
+      for (const room of graph.rooms.values()) {
+        if (room.type === 'junction') {
+          expect(room.exits.size).toBeGreaterThanOrEqual(3);
+        }
+      }
+    }
+  });
+
+  it('boss room reachable from all entries', () => {
+    for (const seed of [42, 7, 256]) {
+      const graph = generateShardGraph({ ...T1_CONFIG, seed });
+      for (const entryId of graph.entryRoomIds) {
+        const dist = bfs(entryId, graph.rooms);
+        expect(dist.has(graph.bossRoomId)).toBe(true);
+      }
+    }
+  });
+
+  it('hazards placed only in non-entry/extraction rooms', () => {
+    const graph = generateShardGraph(T1_CONFIG);
+    let hasHazard = false;
+    for (const room of graph.rooms.values()) {
+      if (room.hazards.length > 0) {
+        hasHazard = true;
+        expect(room.type).not.toBe('entry');
+        expect(room.type).not.toBe('extraction');
+        for (const hazard of room.hazards) {
+          expect(hazard.type).toBeTruthy();
+          expect(hazard.severity).toBeGreaterThan(0);
+        }
+      }
+    }
+    expect(hasHazard).toBe(true);
+  });
+
+  it('room type distribution includes corridors, junctions, and dead ends', () => {
+    // With enough rooms, all fill types should appear
+    const graph = generateShardGraph({ ...T1_CONFIG, seed: 100 });
+    const types = new Set(Array.from(graph.rooms.values()).map(r => r.type));
+    expect(types.has('corridor')).toBe(true);
+    expect(types.has('junction')).toBe(true);
+    expect(types.has('dead_end')).toBe(true);
+  });
+
+  it('graph metadata preserved: seed, biome, tier', () => {
+    const graph = generateShardGraph(T1_CONFIG);
+    expect(graph.seed).toBe(T1_CONFIG.seed);
+    expect(graph.biome).toBe(T1_CONFIG.biome);
+    expect(graph.tier).toBe(T1_CONFIG.tier);
+  });
 });
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
