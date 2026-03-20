@@ -100,6 +100,18 @@
   - `handlersRef` pattern lets the same handlers object be reused across room switches, avoiding stale closures.
 - **Testing:** 681 total tests passing (555 server + 46 client + 80 shared). 9 new tests covering enter command, shardboard, switchRoom(), and RoomSwitchMessage type.
 
+### Extraction Return to Refuge + Stash Transfer (#10)
+- **Files:** `packages/server/src/rooms/ShardRoom.ts`, `packages/server/src/extraction/stash-transfer.ts`, `packages/server/src/extraction/index.ts`, `packages/server/src/__tests__/extraction.test.ts`
+- **What:** On successful extraction, player's shard inventory is transferred to their persistent stash before sending `ROOM_SWITCH` to refuge.
+- **Key decisions:**
+  - Extracted `transferInventoryToStash()` into `extraction/stash-transfer.ts` — pure function, testable without Colyseus infrastructure.
+  - Shard `Item` → `StashItem` bridge: items registered as `type: 'material'`, `rarity: 'common'`, `baseDurability: null` by default. Jarlaxle's item system (#16) will reconcile these when both merge.
+  - StashService weight enforcement used — items exceeding the 200-unit stash capacity are silently lost with narrated feedback.
+  - ShardRoom gains `initStash(repo?, itemDefs?)` — same injection pattern as RefugeRoom. Allows shared repository across rooms.
+  - `handleSuccessfulExtraction()` is now async to await stash transfer before cleanup.
+  - Empty inventory extraction is a no-op (no narration, no stash calls).
+- **Testing:** 6 new tests in extraction.test.ts: transfer all items, weight limit enforcement, empty inventory, stacked items, itemDef registration, full-stash rejection. 705 total tests passing (579 server + 46 client + 80 shared).
+
 ## Cross-Team Updates (Wave 1 completion — 2026-03-20T17:00)
 
 ### Room Switching Enables Full Shard Loop
