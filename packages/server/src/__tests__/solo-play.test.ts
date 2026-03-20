@@ -2,9 +2,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import { ColyseusTestServer } from '@colyseus/testing';
 import { bootTestServer, connectTestClient, wait } from './helpers/index.js';
 import { resetConfig } from '../config.js';
-import { MessageTypes } from '@ellmud/shared';
-import type { NarrateMessage } from '@ellmud/shared';
-import { MessageCollector } from './helpers/message-collector.js';
 
 describe('Solo Play — Player Limit Enforcement', () => {
   let colyseus: ColyseusTestServer;

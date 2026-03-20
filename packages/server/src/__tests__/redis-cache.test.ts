@@ -6,9 +6,8 @@
  * and graceful fallback when Redis is unavailable.
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import type { NarrationContext, NarrationConfig } from '@ellmud/shared';
-import { DEFAULT_NARRATION_CONFIG } from '@ellmud/shared';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import type { NarrationContext } from '@ellmud/shared';
 import { InMemoryNarrationCache } from '../narrative/cache.js';
 import type { NarrationCache } from '../narrative/cache.js';
 import { NarrationService } from '../narrative/NarrationService.js';
@@ -305,7 +304,7 @@ describe('Redis config env vars', () => {
 
   afterEach(() => {
     for (const [key, val] of Object.entries(envBackup)) {
-      if (val === undefined) delete process.env[key];
+      if (val === undefined) Reflect.deleteProperty(process.env, key);
       else process.env[key] = val;
     }
     resetConfig();

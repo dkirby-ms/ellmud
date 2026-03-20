@@ -14,8 +14,8 @@ describe('ShardRoom', () => {
     server.define('shard', ShardRoom);
     server.define('refuge', RefugeRoom);
     await server.listen(0);
-    const addr = (server as any).transport.server.address();
-    (server as any).port = addr.port;
+    const addr = (server as unknown as { transport: { server: { address(): { port: number } } } }).transport.server.address();
+    (server as unknown as { port: number }).port = addr.port;
     colyseus = new ColyseusTestServer(server);
   });
 
@@ -131,8 +131,8 @@ describe('RefugeRoom', () => {
     const server = new Server();
     server.define('refuge', RefugeRoom);
     await server.listen(0);
-    const addr = (server as any).transport.server.address();
-    (server as any).port = addr.port;
+    const addr = (server as unknown as { transport: { server: { address(): { port: number } } } }).transport.server.address();
+    (server as unknown as { port: number }).port = addr.port;
     colyseus = new ColyseusTestServer(server);
   });
 

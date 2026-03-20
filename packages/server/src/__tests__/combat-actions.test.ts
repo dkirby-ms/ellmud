@@ -180,7 +180,7 @@ describe('resolveCombatEnd', () => {
   });
 
   it('unknown reason falls back to generic narration', () => {
-    const event = resolveCombatEnd('unknown_reason' as any);
+    const event = resolveCombatEnd('unknown_reason' as unknown as 'timeout');
     expect(event.narration).toBe('Combat has ended.');
   });
 

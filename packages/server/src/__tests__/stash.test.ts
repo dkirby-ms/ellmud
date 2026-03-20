@@ -12,7 +12,6 @@ import {
   StashService,
   DEFAULT_STASH_CAPACITY,
 } from '../stash/index.js';
-import type { StashRepository } from '../stash/index.js';
 
 // ─── Test Fixtures ──────────────────────────────────────────────────────────
 

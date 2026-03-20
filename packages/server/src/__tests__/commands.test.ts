@@ -9,7 +9,7 @@ import type { NarrateMessage, RoomHeaderMessage } from '@ellmud/shared';
 import { parseCommand } from '../commands/parser.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
-import { createTestRoomGraph, type Room, type Direction } from '../shard/RoomGraph.js';
+import { createTestRoomGraph } from '../shard/RoomGraph.js';
 
 // ─── Parser Unit Tests ────────────────────────────────────────────────────
 
@@ -354,8 +354,8 @@ describe('ShardRoom Commands (Integration)', () => {
     server.define('shard', ShardRoom);
     server.define('refuge', RefugeRoom);
     await server.listen(0);
-    const addr = (server as any).transport.server.address();
-    (server as any).port = addr.port;
+    const addr = (server as unknown as { transport: { server: { address(): { port: number } } } }).transport.server.address();
+    (server as unknown as { port: number }).port = addr.port;
     colyseus = new ColyseusTestServer(server);
   });
 

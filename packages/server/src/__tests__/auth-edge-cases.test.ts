@@ -206,7 +206,7 @@ describe('Colyseus Auth Edge Cases', () => {
 
   it('with auth required but null service, throws on join attempt', async () => {
     resetColyseusAuth();
-    initColyseusAuth(null as any, true);
+    initColyseusAuth(null as unknown as AuthService, true);
 
     await expect(authenticateClient(undefined))
       .rejects.toThrow('Auth service not initialized');

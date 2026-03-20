@@ -6,7 +6,6 @@ import { ColyseusTestServer } from '@colyseus/testing';
 import { MessageTypes } from '@ellmud/shared';
 import {
   bootTestServer,
-  connectToExistingRoom,
   wait,
   makeCommand,
 } from './helpers/index.js';

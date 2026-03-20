@@ -136,7 +136,7 @@ describe('Tick Resolution', () => {
     // p1 strikes (auto-queued), p2 dodges
     system.submitAction('p2', 'dodge');
 
-    const result = system.resolveTick();
+    system.resolveTick();
 
     // p2 took reduced damage: 10 * 0.5 - 2 = 3
     expect(p2.hp).toBe(100 - 3);
@@ -225,7 +225,7 @@ describe('Tick Resolution', () => {
     system.initiateCombat('p1', 'p2');
 
     // p1 strikes (auto-queued), p2 doesn't submit (defaults to dodge)
-    const result = system.resolveTick();
+    system.resolveTick();
 
     // p2 took 3 damage (10 * 0.5 - 2 = 3) — still alive at 2 HP
     expect(p2.hp).toBe(2);
@@ -281,7 +281,7 @@ describe('Tick Resolution', () => {
     system.initiateCombat('p1', 'goblin');
 
     // Player strikes (auto-queued), creature defaults to dodge
-    const result = system.resolveTick();
+    system.resolveTick();
 
     // Creature took: 10 * 0.5 - 1 = 4 damage
     expect(creature.hp).toBe(30 - 4);
@@ -306,7 +306,7 @@ describe('Tick Resolution', () => {
     // p1 strikes p2 (auto from first initiate), p3 strikes p1 (auto from second initiate)
     // p2 has no action → defaults to dodge
 
-    const result = system.resolveTick();
+    system.resolveTick();
 
     // p2 was struck by p1: 10 * 0.5 - 2 = 3 (p2 dodging)
     expect(p2.hp).toBe(100 - 3);

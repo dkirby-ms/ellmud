@@ -35,8 +35,6 @@ import {
   CORRODED_HALBERD,
   TATTERED_LEATHER,
   IRON_CHAINMAIL,
-  CORRODED_SHIELD,
-  REINFORCED_PLATE,
   WATERLOGGED_POTION,
   HEALING_DRAUGHT,
   STAMINA_TONIC,
@@ -50,7 +48,6 @@ import {
   spawnRoomLoot,
   generateCreatureLoot,
   rollDropCount,
-  CREATURE_DROP_COUNTS,
 } from '../items/loot-drops.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
