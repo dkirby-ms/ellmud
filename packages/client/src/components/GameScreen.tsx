@@ -10,7 +10,7 @@ import type {
   ShardStateMessage,
   CombatResultMessage,
 } from '@ellmud/shared';
-import type { Room } from 'colyseus.js';
+import type { Room } from '@colyseus/sdk';
 
 let msgCounter = 0;
 function nextMsgId(): string {

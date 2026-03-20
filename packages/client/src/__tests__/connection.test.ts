@@ -57,7 +57,7 @@ const mockRoom = {
   leave: vi.fn(),
 };
 
-vi.mock('colyseus.js', () => {
+vi.mock('@colyseus/sdk', () => {
   return {
     Client: class MockClient {
       joinOrCreate = vi.fn().mockResolvedValue(mockRoom);

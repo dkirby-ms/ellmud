@@ -4,7 +4,7 @@
  */
 
 import { createContext, useContext } from 'react';
-import type { Room } from 'colyseus.js';
+import type { Room } from '@colyseus/sdk';
 import type { NarrationType, RoomHeaderMessage, ShardState } from '@ellmud/shared';
 
 // ─── Message types for terminal display ──────────────────────────────────────

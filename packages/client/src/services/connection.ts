@@ -5,7 +5,7 @@
  * We subscribe ONLY to room.onMessage() handlers for narrated prose.
  */
 
-import { Client, Room } from 'colyseus.js';
+import { Client, Room } from '@colyseus/sdk';
 import {
   MessageTypes,
   type NarrateMessage,
