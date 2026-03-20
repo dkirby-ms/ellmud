@@ -4,7 +4,7 @@
  * Covers Issue #7 integration: creature systems wired into the live game loop.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { CreatureManager } from '../creatures/CreatureManager.js';
 import { DROWNED_REVENANT } from '../creatures/templates/drowned-revenant.js';
 import type { CreatureWorldState } from '../creatures/behavior.js';
@@ -17,7 +17,6 @@ import { handleLook } from '../commands/handlers/look.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
 import type { RoomGraph as LocalRoomGraph } from '../shard/RoomGraph.js';
-import type { RoomGraph as SharedRoomGraph } from '@ellmud/shared';
 
 // ─── Test Helpers ─────────────────────────────────────────────────────────────
 
@@ -186,11 +185,10 @@ describe('Creature AI Tick', () => {
   });
 
   it('combat tick resolves creature vs player simultaneously', () => {
-    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const { creatureManager, combatSystem, spawned } = createTestShard();
     const creature = spawned[0]!;
 
-    const player = new PlayerState('player-1', creature.currentRoomId);
-    const players = new Map([['player-1', player]]);
+    new PlayerState('player-1', creature.currentRoomId);
 
     // Register combatants
     combatSystem.registerCombatant(creatureManager.toCombatant(creature));

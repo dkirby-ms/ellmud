@@ -126,3 +126,34 @@
 
 ### Integration Test Harness Enhanced
 **For Minsc:** MessageCollector helper now captures ROOM_SWITCH messages. Integration tests can verify room transitions without mocking Colyseus internals.
+
+### PostgreSQL Persistence Layer (#3) — 2026-03-20
+**Task:** Implement PG repository implementations for the existing schema
+**Status:** ✅ Complete — PR #77
+
+**What was already done:**
+- SQL migrations 001-005 covering all 7 tables (players, identities, items, stash, skills, factions, run_history)
+- Migration runner with `_migrations` meta-table tracking
+- Connection pool (`pg.Pool` with `DATABASE_URL`)
+- TypeScript interfaces for all tables (`db/types.ts`)
+- In-memory repository interfaces + implementations
+
+### PR #77 CI Fix (lint errors)
+- **Files:** `persistence-schema-validation.test.ts`, `persistence-stash-repository.test.ts`, `creature-wiring.test.ts`
+- **Problem:** CI failed with 6 ESLint `no-unused-vars` errors — 2 from my persistence tests, 4 pre-existing in creature-wiring.
+- **Fix:** Removed unused `makeKeyItem` helper, used `table` variable in UUID assertion, removed unused imports and destructured variables in creature-wiring.
+- **Key insight:** The ESLint config only ignores `_`-prefixed **args** (`argsIgnorePattern: '^_'`), not variables or imports. Prefixing a loop variable with `_` won't silence the error.
+- **CI root cause:** The lint step runs `eslint src/` which catches errors in ALL files, not just changed ones. Pre-existing errors in other tests block unrelated PRs.
+
+**What I built:**
+1. `PgPlayerRepository` — transactional player+identity creation, case-insensitive username lookup, PG constraint → DuplicateUsernameError mapping
+2. `PgStashRepository` — full CRUD with auto-stacking, JSONB metadata for maxDurability, per-player capacity overrides
+3. Migration 006 — `player_stash_capacity` table
+4. Server startup wiring — `DATABASE_URL` auto-detection, migration execution, PG/in-memory repo selection
+5. 22 unit tests (mocked pg pool) + included 125 pre-existing contract tests
+
+**Key patterns:**
+- PG unique-violation code `23505` with constraint name for domain-specific error mapping
+- `FOR UPDATE` row locking in stash operations to prevent race conditions
+- JSONB metadata column for extensible item properties (maxDurability now, roll data later)
+- `DATABASE_URL` as the single toggle between in-memory and PG persistence
