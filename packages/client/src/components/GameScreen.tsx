@@ -164,6 +164,13 @@ export function GameScreen(): React.JSX.Element {
     sendRawCommand(room, input);
   }, [addMessage]);
 
+  const handleExitClick = useCallback((direction: string) => {
+    const room = roomRef.current;
+    if (!room) return;
+    addMessage(`> go ${direction}`, 'system');
+    sendRawCommand(room, `go ${direction}`);
+  }, [addMessage]);
+
   const handleLogout = useCallback(async () => {
     if (state.token) {
       try { await logout(state.token); } catch { /* best effort */ }
@@ -191,7 +198,11 @@ export function GameScreen(): React.JSX.Element {
         </button>
       </div>
 
-      <Terminal messages={state.messages} />
+      <Terminal
+        messages={state.messages}
+        availableExits={state.roomHeader?.exits}
+        onExitClick={handleExitClick}
+      />
 
       <CommandInput
         onCommand={handleCommand}
