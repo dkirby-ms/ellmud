@@ -41,6 +41,9 @@
   --font-serif: 'Crimson Text', serif;
   --font-sans: 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', 'Courier New', Courier, monospace;
+
+  /* ─── Borders ─── */
+  --border-muted: #2A2B35;
 }
 
 * {
@@ -340,4 +343,135 @@ body {
 
 .command-input input:disabled {
   opacity: 0.4;
+}
+
+/* ─── Button Design System ────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  line-height: 1;
+}
+
+.btn:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Icon + label layout ── */
+
+.btn__icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.btn__label {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ── Sizes ── */
+
+.btn--small {
+  padding: 8px 16px;
+}
+
+.btn--medium {
+  padding: 12px 24px;
+}
+
+.btn--large {
+  padding: 16px 32px;
+}
+
+/* ── Primary (gold) ── */
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--bg-elevated);
+  border-color: var(--accent);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-dim);
+  box-shadow: 0 0 8px rgba(201, 168, 76, 0.4);
+}
+
+.btn--primary:active:not(:disabled) {
+  background: #8e7735;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Secondary (muted) ── */
+
+.btn--secondary {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border-color: var(--border-muted);
+}
+
+.btn--secondary:hover:not(:disabled) {
+  border-color: var(--text-secondary);
+  box-shadow: 0 0 6px rgba(138, 139, 149, 0.2);
+}
+
+.btn--secondary:active:not(:disabled) {
+  background: #151620;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Danger (red) ── */
+
+.btn--danger {
+  background: var(--danger);
+  color: var(--text-primary);
+  border-color: var(--danger);
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: #a42e00;
+  box-shadow: 0 0 8px rgba(139, 37, 0, 0.5);
+}
+
+.btn--danger:active:not(:disabled) {
+  background: #6e1e00;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Ghost (transparent) ── */
+
+.btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-muted);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  border-color: var(--text-secondary);
+  box-shadow: 0 0 6px rgba(138, 139, 149, 0.15);
+}
+
+.btn--ghost:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Disabled state (all variants) ── */
+
+.btn--disabled,
+.btn:disabled {
+  color: var(--text-disabled);
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
 }
