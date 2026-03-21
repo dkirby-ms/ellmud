@@ -421,3 +421,40 @@ The UX overhaul moved 24 old components to `components/_old/` and replaced them 
 3. **Comment-out strategy for truly dead imports** — When `_old/` components have cascading import failures, the pragmatic fix is `// [SKIPPED]` commenting the import line. The test is already skipped, so the import isn't needed.
 4. **`createMemoryRouter` for route testing** — Export the route config as a `RouteObject[]` array, then use `createMemoryRouter(routes, { initialEntries: ['/path'] })` in tests. Wrap in `AppContext.Provider` for auth state.
 5. **Both Login and Refuge show "ELLMUD"** — Don't use brand text as a page-differentiating assertion. Use form fields (Username/Password) or page-specific content instead.
+
+## 2026-03-21: Dead Tests Cleanup — User Directive Implementation
+
+**Session:** Post-wave-7 sprint cleanup  
+**Status:** ✅ COMPLETE
+
+**Directive:** Remove tests that are no longer applicable due to the UX overhaul
+
+**Policy:** Don't skip tests (describe.skip), delete them entirely. Skipped tests are noise; clean removal preferred.
+
+**Task:** Delete 18 skipped test files for old components from `packages/client/src/components/_old/`
+
+**Rationale:**
+- Old component tests no longer applicable post-UX overhaul
+- Skipped tests create false signal that tests exist but are disabled
+- Clean deletion provides accurate test suite status
+- Repository cleaner; test suite focused on active components
+
+**Implementation:**
+- Identified 18 skipped test files for old components
+- Deleted files from `packages/client/src/components/_old/__tests__/`
+- Validated remaining test suite stability
+
+**Results:**
+- 18 dead test files deleted
+- 63 remaining tests all passing
+- Zero regressions in active test suite
+- Test run time: ~110s (unchanged)
+- Repository noise reduced; test suite status accurate
+
+**Impact:**
+- Team has clear visibility into actual tested functionality
+- No misleading "skipped" tests in CI output
+- Easier onboarding for new developers (no confusion about disabled tests)
+- Cleaner git history (dead tests removed rather than accumulating)
+
+**Status:** User directive fulfilled. Test suite ready for Phase 1 deployment.

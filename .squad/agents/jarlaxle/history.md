@@ -458,3 +458,38 @@ Improved the ACA deployment workflow in `.github/workflows/ci-cd.yml`:
 - `Login.tsx` — Already wired to real API with LOGIN_SUCCESS dispatch
 
 **TSC + Vite build:** Both clean, zero errors.
+
+## 2026-03-21: Combat Action Protocol Fix — ShardExploration.tsx
+
+**Session:** Post-wave-7 sprint fixes  
+**Status:** ✅ COMPLETE
+
+**Issue:** Combat action values don't match server protocol (ShardExploration.tsx, ~line 601)
+
+**Problem:**
+- Combat action bar sends **display labels** as action values: "Strike", "Heavy Strike", "Dodge", "Block", "Use Item", "Flee", "Observe"
+- Server expects `CombatAction` enum with snake_case values: 'strike', 'heavy_strike', 'dodge', 'block', 'use_item', 'skill', 'flee', 'observe'
+- Impact: Every combat action unrecognized by server; combat completely non-functional
+- TypeScript should have caught this (string not assignable to CombatAction) — type checking gap
+
+**Root cause:** Display labels used directly as action values without type-safe mapping
+
+**Solution:** Separated display labels from action values
+
+**Implementation:**
+- Created `{ label: string, action: CombatAction }` mapping array
+- Labels remain user-readable ("Strike", etc.)
+- Actions match protocol values ('strike', etc.)
+- Type signature tightened — now correctly typed against `CombatAction` enum from `@ellmud/shared`
+- TypeScript now catches any future label/action misalignment at compile time
+
+**Result:**
+- Combat actions correctly recognized by server
+- Combat fully functional
+- Type-safe: impossible to send wrong action format
+- Ready for merge with blocker #1 fix (Hooks violation)
+
+**Files modified:**
+- `packages/client/src/pages/ShardExploration.tsx`
+
+**Lock:** Drizzt (original author) — no conflicts

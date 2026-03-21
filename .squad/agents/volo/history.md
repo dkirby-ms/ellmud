@@ -216,3 +216,38 @@ Wave 7 will deliver final 3 client UI issues. Shardboard will integrate with Ref
 - **CharacterSelect & Leaderboard:** Already correctly wired — navigate to `/refuge`, no changes needed.
 - **Key pattern: Phase 1 skips character select.** Login goes straight to `/refuge` (no character API exists yet). CharacterSelect page still works if navigated to directly.
 - **Pre-existing test failures (18 files):** All from UX overhaul moving components to `_old/`. Not caused by this work. 1027 tests pass, 0 regressions.
+
+## 2026-03-21: Rules of Hooks Fix — Refuge.tsx
+
+**Session:** Post-wave-7 sprint fixes  
+**Status:** ✅ COMPLETE
+
+**Issue:** Rules of Hooks violation in Refuge.tsx (lines 78–130)
+
+**Problem:**
+- `useCallback`, `useReconnection`, `useRef`, and `useEffect` called **after** conditional early return
+- Code pattern: `if (!state.authenticated) return <Navigate ... />`  then hooks below
+- Impact: React crash ("Rendered more hooks than during the previous render") on logout/token expiry
+- This is a runtime crash that breaks the application when user transitions unauthenticated
+
+**Root cause:** Redundant auth guard in Refuge component
+
+**Solution:** Removed redundant conditional return entirely
+
+**Reasoning:**
+- Refuge route already wrapped in `ProtectedRoute` in routes.ts
+- ProtectedRoute handles unauthenticated redirection (to login)
+- Duplicate guard in Refuge component was both unnecessary and harmful
+- Component can now render–unmount–remount without hook count changing
+
+**Result:**
+- All hooks at component root level
+- No conditional returns before hooks
+- Auth flow unchanged (ProtectedRoute still handles redirect)
+- Component complies with React Rules of Hooks
+- Ready for merge with blocker #2 fix (combat actions)
+
+**Files modified:**
+- `packages/client/src/pages/Refuge.tsx`
+
+**Lock:** Drizzt (original author) — no conflicts
