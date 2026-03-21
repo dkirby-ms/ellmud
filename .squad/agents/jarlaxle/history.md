@@ -361,3 +361,43 @@ Wave 7 will deliver final 3 client UI issues (#68 Refuge Hub, #72 Extraction Scr
 - Orchestration logs written to .squad/orchestration-log/2026-03-21T15-09-jarlaxle.md
 - Docker port isolation decision merged (Drizzt co-authored)
 - CSS variable compliance decisions enforced
+
+---
+
+## Session: CI/CD ACA Deploy Revision Monitoring
+
+**Date:** 2025-03-21
+**Branch:** `uat`
+**Commit:** 3301444
+
+### What Changed
+
+Improved the ACA deployment workflow in `.github/workflows/ci-cd.yml`:
+
+1. **Removed `--args ""`**: The workaround created `[""]` (array with empty string) instead of clearing. Now rely on `--command` alone to replace Bicep bootstrap entrypoint.
+
+2. **Added revision monitoring**: Replace blind `sleep 15` with active polling of revision status. Monitor for 5 minutes (30 attempts × 10s), checking for Running/Failed/Degraded states. Exit early on success or failure.
+
+3. **Extended health check**: Increased from 10 to 20 attempts (50s → 100s window). Added case for empty response (server starting up) vs placeholder vs unexpected.
+
+4. **Enhanced rollback logging**: Capture failed revision status and container config (command/args/image) for post-mortem debugging.
+
+### Learnings
+
+1. **ACA revision lifecycle**: After `az containerapp update`, the new revision goes through states: Provisioning → Running (success) or Failed/Degraded (error). Polling this state is more reliable than blind sleeps.
+
+2. **`--args ""` creates `[""]` not `[]`**: Azure CLI treats empty string as single-element array. Better to omit `--args` entirely when `--command` provides full execution path.
+
+3. **Health check must tolerate connection errors**: During revision startup, the ingress may return connection refused or empty responses before the new revision is routed. Added specific handling for empty responses.
+
+4. **Revision query patterns**:
+   - Latest revision: `sort_by(@, &properties.createdTime)[-1].name`
+   - Revision status: `properties.runningState` (values: Provisioning, Running, Failed, Degraded)
+   - Container details: `properties.template.containers[0]` for debugging
+
+5. **Deployment flow timing**: Typical ACA revision startup takes 15-30s. 5-minute monitor window (30 × 10s) provides safety margin. Health check adds another 1.5 minutes (20 × 5s) for ingress routing.
+
+### Key Files
+- `.github/workflows/ci-cd.yml` — deploy step (lines 133-261)
+- Reference: `infra/modules/container-apps.bicep` (bootstrap entrypoint)
+- Reference: `packages/server/src/health.ts` (uptime field detection)
