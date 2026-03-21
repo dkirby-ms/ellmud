@@ -341,3 +341,759 @@ body {
 .command-input input:disabled {
   opacity: 0.4;
 }
+
+/* ─── Shardboard ─────────────────────────────────────────────────────────── */
+
+.shardboard {
+  padding: 1.5rem;
+}
+
+.shardboard__empty {
+  text-align: center;
+  color: var(--text-secondary);
+  font-family: var(--font-serif);
+  font-style: italic;
+  padding: 3rem 1rem;
+}
+
+.shardboard__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 1440px) {
+  .shardboard__grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 1024px) {
+  .shardboard__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .shardboard__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Shard Card ─────────────────────────────────────────────────────────── */
+
+.shard-card {
+  background: #12131A;
+  border: 1px solid #2A2B35;
+  border-radius: 6px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  cursor: default;
+}
+
+.shard-card:hover {
+  border-color: #3E3F4C;
+  box-shadow: 0 0 12px rgba(201, 168, 76, 0.08);
+}
+
+.shard-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Header: name + tier */
+
+.shard-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.shard-card__name {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #C9A84C;
+  line-height: 1.3;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shard-card__tier {
+  flex-shrink: 0;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+}
+
+.shard-tier--white {
+  color: #E8E0D0;
+  background: rgba(232, 224, 208, 0.12);
+  border: 1px solid rgba(232, 224, 208, 0.2);
+}
+
+.shard-tier--blue {
+  color: #4682B4;
+  background: rgba(70, 130, 180, 0.12);
+  border: 1px solid rgba(70, 130, 180, 0.25);
+}
+
+.shard-tier--purple {
+  color: #7B4FA0;
+  background: rgba(123, 79, 160, 0.12);
+  border: 1px solid rgba(123, 79, 160, 0.25);
+}
+
+/* Biome */
+
+.shard-card__biome {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+}
+
+.shard-card__biome svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+/* Modifiers */
+
+.shard-card__modifiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.shard-card__modifier {
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  padding: 0.1rem 0.45rem;
+}
+
+/* Player slots */
+
+.shard-card__players {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.shard-card__slots {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.shard-card__slot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.shard-card__slot--filled {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.shard-card__player-text {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Footer */
+
+.shard-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.shard-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.shard-card__time {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.shard-card__time--urgent {
+  color: var(--warning);
+}
+
+.shard-card__time--expired {
+  color: var(--text-disabled);
+}
+
+.shard-card__key {
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  color: var(--text-disabled);
+}
+
+.shard-card__enter {
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: none;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.8rem;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.shard-card__enter:hover:not(:disabled) {
+  background: #d4b35a;
+}
+
+.shard-card__enter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.shard-card__enter:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Reconnection Overlay ────────────────────────────────────────────────── */
+
+.reconnect-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.reconnect-overlay--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.reconnect-card {
+  background: var(--bg-panel);
+  border: 1px solid rgba(201, 168, 76, 0.15);
+  border-radius: 8px;
+  padding: 2.5rem 2rem;
+  min-width: 320px;
+  max-width: 420px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* ─── Icons ─── */
+
+.reconnect-icon {
+  font-size: 2.5rem;
+  line-height: 1;
+  margin-bottom: 0.25rem;
+}
+
+.reconnect-icon--warning {
+  color: var(--danger);
+}
+
+.reconnect-icon--success {
+  color: var(--success);
+}
+
+/* ─── Titles ─── */
+
+.reconnect-title {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.reconnect-title--disconnected {
+  color: var(--accent);
+}
+
+.reconnect-title--reconnecting {
+  color: var(--warning);
+}
+
+.reconnect-title--reconnected {
+  color: var(--success);
+}
+
+/* ─── Subtitle ─── */
+
+.reconnect-subtitle {
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+/* ─── Spinner ─── */
+
+.reconnect-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--bg-elevated);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: reconnect-spin 0.8s linear infinite;
+  margin-bottom: 0.25rem;
+}
+
+@keyframes reconnect-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Progress Bar ─── */
+
+.reconnect-progress {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-elevated);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.reconnect-progress__fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* ─── Action Buttons ─── */
+
+.reconnect-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.reconnect-btn {
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.65rem 1.25rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  border: 1px solid transparent;
+}
+
+.reconnect-btn--primary {
+  background: var(--accent);
+  color: var(--bg-primary);
+  border-color: var(--accent);
+}
+
+.reconnect-btn--primary:hover {
+  background: #d4b35a;
+  border-color: #d4b35a;
+}
+
+.reconnect-btn--secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.reconnect-btn--secondary:hover {
+  border-color: var(--accent-dim);
+  color: var(--text-primary);
+}
+
+.reconnect-btn--cancel {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.reconnect-btn--cancel:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ─── Game Body Layout ────────────────────────────────────────────────────── */
+
+.game-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.game-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.game-body--with-sidebar .game-main {
+  flex: 7;
+}
+
+/* ─── Shard Sidebar ───────────────────────────────────────────────────────── */
+
+.shard-sidebar {
+  flex: 3;
+  max-width: 30%;
+  background: var(--bg-panel);
+  border-left: 1px solid #222;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-section {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.sidebar-room-name {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+.sidebar-section-title {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+/* Collapse Timer */
+
+.sidebar-timer {
+  text-align: center;
+}
+
+.collapse-timer {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.timer-white { color: var(--text-primary); }
+.timer-amber { color: var(--warning); }
+.timer-red { color: var(--danger); }
+
+/* Sound Cues */
+
+.sidebar-cues {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.sound-cues-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sound-cues-list {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.sound-cue-item {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.sound-cue-time {
+  color: var(--text-disabled);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sound-cue-text {
+  color: var(--sound);
+  font-style: italic;
+}
+
+.sound-cue-empty {
+  margin: 0;
+  color: var(--text-disabled);
+  font-style: italic;
+  font-size: 0.8rem;
+}
+
+/* Quick Inventory */
+
+.sidebar-inventory {
+  flex-shrink: 0;
+}
+
+.inventory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.inventory-item {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  padding: 0.15rem 0;
+}
+
+.inventory-empty {
+  margin: 0;
+  color: var(--text-disabled);
+  font-style: italic;
+  font-size: 0.8rem;
+}
+
+/* Mini-Action Buttons */
+
+.sidebar-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.mini-action-btn {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid #2A2B35;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.mini-action-btn:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 6px rgba(201, 168, 76, 0.15);
+}
+
+/* ─── Combat Overlay ──────────────────────────────────────────────────────── */
+
+.combat-overlay {
+  background: rgba(10, 11, 15, 0.95);
+  padding: 0.75rem 1rem;
+  border-top: 1px solid rgba(139, 37, 0, 0.4);
+  flex-shrink: 0;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.combat-overlay--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.combat-overlay--hidden {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+}
+
+/* Combat Banner */
+
+.combat-banner {
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.combat-banner-text {
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-primary);
+}
+
+.combat-banner-accent {
+  height: 2px;
+  background: var(--danger);
+  margin-top: 0.25rem;
+  border-radius: 1px;
+}
+
+/* Tick Timer Bar */
+
+.tick-timer {
+  margin-bottom: 0.5rem;
+}
+
+.tick-timer-track {
+  height: 4px;
+  background: var(--bg-panel);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.tick-timer-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.05s linear;
+}
+
+.tick-timer-fill--pulse {
+  animation: tick-pulse 0.2s ease-in-out infinite alternate;
+}
+
+@keyframes tick-pulse {
+  from { opacity: 1; }
+  to { opacity: 0.5; }
+}
+
+/* Action Quickbar */
+
+.action-quickbar {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  flex: 1 1 auto;
+  min-width: 80px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid #2A2B35;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.5rem 0.35rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s, color 0.2s;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.action-btn:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 6px rgba(201, 168, 76, 0.2);
+}
+
+.action-btn--active {
+  background: var(--accent);
+  color: var(--bg-primary);
+  border-color: var(--accent);
+}
+
+.action-btn:disabled {
+  color: var(--text-disabled);
+  border-color: #2A2B35;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.action-btn:disabled:hover {
+  border-color: #2A2B35;
+  box-shadow: none;
+}
+
+.action-btn-key {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  margin-right: 0.15rem;
+}
+
+.action-btn--active .action-btn-key {
+  color: var(--bg-primary);
+}
+
+/* ─── Enemy Status Panel ──────────────────────────────────────────────────── */
+
+.enemy-status-panel {
+  padding: 0.25rem 0;
+}
+
+.enemy-name {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent-dim);
+}
+
+.enemy-hp-tier {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.hp-uninjured { color: var(--text-primary); }
+.hp-wounded { color: var(--warning); }
+.hp-badly-wounded { color: #cc4400; }
+.hp-near-death { color: var(--danger); }
+
+.enemy-telegraphed {
+  margin: 0.35rem 0 0;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
