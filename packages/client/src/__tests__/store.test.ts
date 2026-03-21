@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { appReducer, initialState, type TerminalMessage } from '../store.js';
+import { appReducer, initialState, type AppAction, type TerminalMessage } from '../store.js';
 
 function makeMsg(id: string, text = 'test'): TerminalMessage {
   return { id, text, type: 'room', timestamp: Date.now() };
@@ -74,7 +74,7 @@ describe('appReducer', () => {
   });
 
   it('returns current state for unknown action', () => {
-    const state = appReducer(initialState, { type: 'UNKNOWN' } as any);
+    const state = appReducer(initialState, { type: 'UNKNOWN' } as unknown as AppAction);
     expect(state).toBe(initialState);
   });
 });

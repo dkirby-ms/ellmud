@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CommandInput } from '../components/CommandInput.js';
-import { expandAlias, DEFAULT_ALIASES } from '../services/aliases.js';
+import { expandAlias } from '../services/aliases.js';
 
 // ─── Alias expansion unit tests ──────────────────────────────────────────────
 

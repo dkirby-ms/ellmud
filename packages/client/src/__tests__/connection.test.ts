@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import type { Room } from '@colyseus/sdk';
 import { MessageTypes } from '@ellmud/shared';
 
 // Read the connection source to verify no Schema subscriptions
@@ -50,7 +51,7 @@ describe('Connection — message-only protocol enforcement', () => {
 });
 
 // Mock Colyseus Client — shared mock so switchRoom can get a different return value
-let mockJoinOrCreate = vi.fn();
+const mockJoinOrCreate = vi.fn();
 const mockRoom = {
   onMessage: vi.fn(),
   onError: vi.fn(),
@@ -109,7 +110,7 @@ describe('Connection — runtime behavior', () => {
   it('sendRawCommand() parses input into verb and args', async () => {
     const { sendRawCommand } = await import('../services/connection.js');
 
-    sendRawCommand(mockRoom as any, 'go north');
+    sendRawCommand(mockRoom as unknown as Room, 'go north');
     expect(mockRoom.send).toHaveBeenCalledWith(MessageTypes.COMMAND, {
       verb: 'go',
       args: ['north'],
@@ -120,7 +121,7 @@ describe('Connection — runtime behavior', () => {
     const { sendRawCommand } = await import('../services/connection.js');
     mockRoom.send.mockClear();
 
-    sendRawCommand(mockRoom as any, '   ');
+    sendRawCommand(mockRoom as unknown as Room, '   ');
     expect(mockRoom.send).not.toHaveBeenCalled();
   });
 
@@ -153,7 +154,7 @@ describe('Connection — runtime behavior', () => {
       onLeave: vi.fn(),
     };
 
-    const result = await switchRoom(currentRoom as any, 'shard', 'test-token', handlers);
+    const result = await switchRoom(currentRoom as unknown as Room, 'shard', 'test-token', handlers);
 
     // Should have left the current room
     expect(currentRoom.leave).toHaveBeenCalled();
