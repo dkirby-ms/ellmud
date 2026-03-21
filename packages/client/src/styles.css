@@ -15,9 +15,14 @@
   --text-secondary: #8A8B95;
   --text-disabled: #4A4B55;
 
+  /* ─── Borders ─── */
+  --border-muted: #2A2B35;
+  --border-hover: #3E3F4C;
+
   /* ─── Accent / Semantic ─── */
   --accent: #C9A84C;
   --accent-dim: #a8893e;
+  --accent-hover: #d4b35a;
   --danger: #8B2500;
   --success: #2D6B4F;
   --interactive: #3A7D7B;
@@ -383,8 +388,8 @@ body {
 /* ─── Shard Card ─────────────────────────────────────────────────────────── */
 
 .shard-card {
-  background: #12131A;
-  border: 1px solid #2A2B35;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-muted);
   border-radius: 6px;
   padding: 1.25rem;
   display: flex;
@@ -395,7 +400,7 @@ body {
 }
 
 .shard-card:hover {
-  border-color: #3E3F4C;
+  border-color: var(--border-hover);
   box-shadow: 0 0 12px rgba(201, 168, 76, 0.08);
 }
 
@@ -418,7 +423,7 @@ body {
   font-family: var(--font-serif);
   font-size: 1.05rem;
   font-weight: 600;
-  color: #C9A84C;
+  color: var(--accent);
   line-height: 1.3;
   min-width: 0;
   overflow: hidden;
@@ -438,19 +443,19 @@ body {
 }
 
 .shard-tier--white {
-  color: #E8E0D0;
+  color: var(--loot-common);
   background: rgba(232, 224, 208, 0.12);
   border: 1px solid rgba(232, 224, 208, 0.2);
 }
 
 .shard-tier--blue {
-  color: #4682B4;
+  color: var(--loot-refined);
   background: rgba(70, 130, 180, 0.12);
   border: 1px solid rgba(70, 130, 180, 0.25);
 }
 
 .shard-tier--purple {
-  color: #7B4FA0;
+  color: var(--loot-masterwork);
   background: rgba(123, 79, 160, 0.12);
   border: 1px solid rgba(123, 79, 160, 0.25);
 }
@@ -575,7 +580,7 @@ body {
 }
 
 .shard-card__enter:hover:not(:disabled) {
-  background: #d4b35a;
+  background: var(--accent-hover);
 }
 
 .shard-card__enter:focus-visible {
