@@ -61,7 +61,7 @@ describe('RefugeHub – Layout', () => {
 
   it('three-column structure: left, center, right all present', () => {
     const { container } = renderHub();
-    const hub = container.querySelector('.refuge-hub')!;
+    const hub = container.querySelector('.refuge-hub')! as HTMLElement;
     expect(hub.children).toHaveLength(3);
   });
 });
@@ -137,7 +137,7 @@ describe('RefugeHub – Tabs', () => {
 describe('RefugeHub – Stash Panel', () => {
   it('shows Stash title when stash tab is active', () => {
     const { container } = renderHub({ activeTab: 'stash' });
-    const panel = container.querySelector('.refuge-hub__center')!;
+    const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
     expect(within(panel).getByText('Stash')).toBeInTheDocument();
   });
 
@@ -171,13 +171,13 @@ describe('RefugeHub – Stash Panel', () => {
 describe('RefugeHub – Loadout Panel', () => {
   it('shows Loadout title when loadout tab is active', () => {
     const { container } = renderHub({ activeTab: 'loadout' });
-    const panel = container.querySelector('.refuge-hub__center')!;
+    const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
     expect(within(panel).getByText('Loadout')).toBeInTheDocument();
   });
 
   it('renders 13 equipment slots', () => {
     const { container } = renderHub({ activeTab: 'loadout' });
-    const panel = container.querySelector('.refuge-hub__center')!;
+    const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
     const slots = within(panel).getAllByRole('listitem');
     expect(slots).toHaveLength(13);
   });
@@ -196,7 +196,7 @@ describe('RefugeHub – Loadout Panel', () => {
 describe('RefugeHub – Crafting Panel', () => {
   it('shows Crafting title when crafting tab is active', () => {
     const { container } = renderHub({ activeTab: 'crafting' });
-    const panel = container.querySelector('.refuge-hub__center')!;
+    const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
     expect(within(panel).getByText('Crafting')).toBeInTheDocument();
   });
 
@@ -208,7 +208,7 @@ describe('RefugeHub – Crafting Panel', () => {
 
   it('shows selected recipe details with materials', () => {
     const { container } = renderHub({ activeTab: 'crafting' });
-    const details = container.querySelector('.crafting__details')!;
+    const details = container.querySelector('.crafting__details')! as HTMLElement;
     expect(within(details).getByText('Steel Sword')).toBeInTheDocument();
     expect(within(details).getByText('Steel Ingot')).toBeInTheDocument();
     expect(within(details).getByText('Leather Wrap')).toBeInTheDocument();
@@ -230,7 +230,7 @@ describe('RefugeHub – Crafting Panel', () => {
 describe('RefugeHub – Marketplace Panel', () => {
   it('shows Marketplace title', () => {
     const { container } = renderHub({ activeTab: 'marketplace' });
-    const panel = container.querySelector('.refuge-hub__center')!;
+    const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
     expect(within(panel).getByText('Marketplace')).toBeInTheDocument();
   });
 
@@ -258,7 +258,7 @@ describe('RefugeHub – Marketplace Panel', () => {
 describe('RefugeHub – Factions Panel', () => {
   it('shows Factions title', () => {
     const { container } = renderHub({ activeTab: 'factions' });
-    const panel = container.querySelector('.refuge-hub__center')!;
+    const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
     expect(within(panel).getByText('Factions')).toBeInTheDocument();
   });
 
@@ -291,7 +291,7 @@ describe('RefugeHub – Factions Panel', () => {
 describe('RefugeHub – Contracts Panel', () => {
   it('shows Contracts title', () => {
     const { container } = renderHub({ activeTab: 'contracts' });
-    const panel = container.querySelector('.refuge-hub__center')!;
+    const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
     expect(within(panel).getByText('Contracts')).toBeInTheDocument();
   });
 
@@ -325,7 +325,7 @@ describe('RefugeHub – Contracts Panel', () => {
 describe('RefugeHub – Shardboard Panel', () => {
   it('shows Shardboard title', () => {
     const { container } = renderHub({ activeTab: 'shardboard' });
-    const panel = container.querySelector('.refuge-hub__center')!;
+    const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
     expect(within(panel).getByText('Shardboard')).toBeInTheDocument();
   });
 
@@ -374,7 +374,7 @@ describe('RefugeHub – Ambient Events', () => {
 
   it('handles empty events array', () => {
     const { container } = renderHub({ ambientEvents: [] });
-    const feed = container.querySelector('.ambient-events-feed')!;
+    const feed = container.querySelector('.ambient-events-feed')! as HTMLElement;
     expect(feed.querySelectorAll('.ambient-event')).toHaveLength(0);
   });
 });
@@ -449,7 +449,7 @@ describe('RefugeHub – Chat Panel', () => {
 
   it('handles empty chat messages array', () => {
     const { container } = renderHub({ chatMessages: [] });
-    const msgs = container.querySelector('.chat-panel__messages')!;
+    const msgs = container.querySelector('.chat-panel__messages')! as HTMLElement;
     expect(msgs.querySelectorAll('.chat-message')).toHaveLength(0);
   });
 });

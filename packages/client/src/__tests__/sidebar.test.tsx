@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ShardSidebar } from '../components/ShardSidebar.js';
 import { AppContext, initialState, type AppState, type SoundCue } from '../store.js';
+import type { Room } from '@colyseus/sdk';
 
 vi.mock('../services/connection.js', () => ({ sendRawCommand: vi.fn() }));
 import { sendRawCommand } from '../services/connection.js';
@@ -50,6 +51,6 @@ describe('ShardSidebar', () => {
     expect(screen.queryByText('Item 5')).not.toBeInTheDocument();
   });
   it('renders 4 mini-action buttons', () => { renderSidebar(); for (const b of ['Look', 'Map', 'Evasion', 'Loot']) expect(screen.getByText(b)).toBeInTheDocument(); });
-  it('mini-action sends command', () => { const r = { send: vi.fn() } as unknown; renderSidebar({ room: r }); fireEvent.click(screen.getByText('Look')); expect(sendRawCommand).toHaveBeenCalledWith(r, 'look'); });
+  it('mini-action sends command', () => { const r = { send: vi.fn() } as unknown as Room; renderSidebar({ room: r }); fireEvent.click(screen.getByText('Look')); expect(sendRawCommand).toHaveBeenCalledWith(r, 'look'); });
   it('has complementary role', () => { renderSidebar(); expect(screen.getByRole('complementary', { name: 'Shard exploration' })).toBeInTheDocument(); });
 });
