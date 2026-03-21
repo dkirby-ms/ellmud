@@ -132,16 +132,16 @@ jobs:
 
       - name: Deploy to Container App
         run: |
-          # --args "" clears the Bicep bootstrap args so the real server runs
-          # instead of the placeholder (see infra/modules/container-apps.bicep)
+          # Setting --command fully replaces the Bicep bootstrap entrypoint.
+          # The command array ["node", "packages/server/dist/index.js"] specifies
+          # the complete execution, no args needed.
           az containerapp update \
             --name ${{ secrets.CONTAINER_APP_NAME }} \
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
             --image ${{ secrets.ACR_NAME }}.azurecr.io/ellmud-${{ github.ref_name }}:${{ github.sha }} \
             --set-env-vars "NODE_ENV=production" "PORT=2567" \
             --container-name ellmud \
-            --command "node" "packages/server/dist/index.js" \
-            --args ""
+            --command "node" "packages/server/dist/index.js"
 
       - name: Update ingress target port
         run: |
@@ -150,8 +150,54 @@ jobs:
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
             --target-port 2567
 
-      - name: Wait for deployment
-        run: sleep 15
+      - name: Monitor revision deployment
+        run: |
+          APP="${{ secrets.CONTAINER_APP_NAME }}"
+          RG="${{ secrets.RESOURCE_GROUP }}"
+          
+          # Get the latest revision created by the update
+          LATEST_REV=$(az containerapp revision list \
+            --name "$APP" \
+            --resource-group "$RG" \
+            --query "sort_by(@, &properties.createdTime)[-1].name" -o tsv)
+          
+          echo "Monitoring revision: $LATEST_REV"
+          
+          # Poll until revision reaches a terminal state
+          for i in $(seq 1 30); do
+            STATUS=$(az containerapp revision show \
+              --name "$APP" \
+              --resource-group "$RG" \
+              --revision "$LATEST_REV" \
+              --query "properties.runningState" -o tsv)
+            
+            case "$STATUS" in
+              Running)
+                echo "✓ Revision $LATEST_REV is running"
+                break
+                ;;
+              Failed|Degraded)
+                echo "✗ Revision $LATEST_REV failed with status: $STATUS"
+                # Show provisioning errors if available
+                az containerapp revision show \
+                  --name "$APP" \
+                  --resource-group "$RG" \
+                  --revision "$LATEST_REV" \
+                  --query "properties.template.containers[0]" \
+                  -o json || true
+                exit 1
+                ;;
+              *)
+                echo "Revision status: $STATUS (attempt $i/30)"
+                sleep 10
+                ;;
+            esac
+          done
+          
+          if [ "$STATUS" != "Running" ]; then
+            echo "✗ Revision did not reach Running state after 5 minutes"
+            exit 1
+          fi
 
       - name: Health check
         id: healthcheck
@@ -163,19 +209,21 @@ jobs:
           HEALTH_URL="https://${FQDN}/health"
           echo "Checking health endpoint: $HEALTH_URL"
 
-          MAX_ATTEMPTS=10
+          MAX_ATTEMPTS=20
           ATTEMPT=0
           RESPONSE=""
 
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-            RESPONSE=$(curl -f -s "$HEALTH_URL" || true)
+            RESPONSE=$(curl -f -s "$HEALTH_URL" 2>/dev/null || true)
             # Real server returns "uptime" field; placeholder returns "mode":"placeholder"
             if echo "$RESPONSE" | grep -q '"uptime"'; then
               echo "✓ Health check passed (real server confirmed)"
               exit 0
             fi
             ATTEMPT=$((ATTEMPT + 1))
-            if echo "$RESPONSE" | grep -q '"mode":"placeholder"'; then
+            if [ -z "$RESPONSE" ]; then
+              echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS — no response (server starting?), retrying in 5s..."
+            elif echo "$RESPONSE" | grep -q '"mode":"placeholder"'; then
               echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS — placeholder still active, retrying in 5s..."
             else
               echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS — unexpected response, retrying in 5s..."
@@ -195,6 +243,26 @@ jobs:
             --name ${{ secrets.CONTAINER_APP_NAME }} \
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
             --query "[?properties.active].name | [0]" -o tsv)
+
+          # Log failed revision details for debugging
+          if [ -n "$FAILED_REVISION" ]; then
+            echo "Failed revision: $FAILED_REVISION"
+            FAILED_STATUS=$(az containerapp revision show \
+              --name ${{ secrets.CONTAINER_APP_NAME }} \
+              --resource-group ${{ secrets.RESOURCE_GROUP }} \
+              --revision "$FAILED_REVISION" \
+              --query "properties.runningState" -o tsv || echo "unknown")
+            echo "Failed revision status: $FAILED_STATUS"
+            
+            # Try to get provisioning errors
+            echo "Container details:"
+            az containerapp revision show \
+              --name ${{ secrets.CONTAINER_APP_NAME }} \
+              --resource-group ${{ secrets.RESOURCE_GROUP }} \
+              --revision "$FAILED_REVISION" \
+              --query "{command: properties.template.containers[0].command, args: properties.template.containers[0].args, image: properties.template.containers[0].image}" \
+              -o json || true
+          fi
 
           az containerapp revision set-mode \
             --name ${{ secrets.CONTAINER_APP_NAME }} \
