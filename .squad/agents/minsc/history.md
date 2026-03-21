@@ -248,3 +248,38 @@
 4. **Timer testing validated** — Toast pattern for `vi.useFakeTimers()` + `vi.useRealTimers()` swap useful for animation tests
 
 **Next Issues (7 remaining for Phase 1 client UI):** #66, #68, #69, #70, #71, #72, #73
+
+---
+
+## Wave 6 — Anticipatory Tests for Issues #66, #68–#73
+
+**Date:** Session following Wave 5 completion
+**Branch:** `dev` (all tests written on dev; anticipatory pattern)
+
+### What Was Done
+
+Created 5 new anticipatory test files covering Issues #68, #69, #71, #72, #73 (153 tests total). Issues #66 and #70 have tests on their feature branches (`sidebar.test.tsx`, `combat-overlay.test.tsx`, `ReconnectionOverlay.test.tsx`, `useReconnection.test.ts`) that will arrive when those branches merge.
+
+### New Test Files Created
+
+| File | Issue | Tests | Target Components |
+|------|-------|-------|-------------------|
+| `ShardboardCard.test.tsx` | #69 | 42 | ShardCard + ShardboardGrid |
+| `LoadingTransitions.test.tsx` | #71 | 24 | RoomTransitionLoader, ShardEntryLoader, CombatInitiationBanner, LongRunningIndicator |
+| `RefugeHub.test.tsx` | #68 | 26 | RefugeHub (3-column layout, 7 tabs) |
+| `ExtractionScreen.test.tsx` | #72 | 31 | ExtractionScreen (phases, tier colors, stats) |
+| `ChatSocialPanel.test.tsx` | #73 | 30 | ChatSocialPanel (messages, char limit, trade) |
+
+### Test Baseline After Wave 6
+
+- **46 tests passing** across 5 original test files (auth, command-input, connection, store, terminal)
+- **5 new files fail on import** (expected anticipatory): all components don't exist on dev yet
+- Tests activate automatically when feature branches merge
+
+### Key Learnings
+
+1. **Check dev before writing** — Other agents may have already written tests on feature branches. Always check existing coverage.
+2. **Context-based vs props-based APIs** — ShardSidebar/CombatOverlay use `useAppContext()` internally (wrap in `AppContext.Provider`). EnemyStatusPanel/ShardCard are props-based (pass data directly).
+3. **ShardCardData from @ellmud/shared** — ShardCard uses types from the shared package: `ShardCardData`, `ShardTier`, `BiomeType`, `ShardModifier`, `ShardKeyType`.
+4. **BEM naming convention** — Components use BEM: `shard-card__header`, `shard-tier--white`, `combat-overlay--visible`, `action-btn--active`.
+5. **Anticipatory files must be committed** — Untracked files get lost when branches switch. Always commit immediately after creation.
