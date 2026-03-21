@@ -197,3 +197,13 @@ Wave 6 delivered your Shardboard Cards component. This is the primary navigation
 ### Next Phase (Wave 7)
 
 Wave 7 will deliver final 3 client UI issues. Shardboard will integrate with Refuge Hub for navigation and #68 Extraction Screen for end-game flows.
+
+### 2026-03-21: Chat & Social Panel (Issue #73, PR #93)
+- **Built 3 components:** ChatPanel, PlayersNearby, TradeRequest + TradeRequestList
+- **ChatPanel:** Message history with auto-scroll, Enter to send / Shift+Enter for newline, 200 char limit with counter, @mention highlighting (gold accent via `var(--accent)`), emote italic, system mono styling, channel tabs (proximity/thinking/system), 100 message buffer limit
+- **PlayersNearby:** 5 faction types with icons, player count (singular/plural), trading badges, click handlers for profile + trade, keyboard accessible (tabIndex=0, Enter/Space), stopPropagation on trade button to prevent double-triggering
+- **TradeRequest:** Accept/decline with configurable auto-decline timer (default 30s), loot tier color coding using existing `--loot-*` CSS variables, dialog role, cleans up timer on unmount. TradeRequestList wraps multiple concurrent requests.
+- **CSS:** 456 lines added to styles.css — all using theme variables (`var(--bg-elevated)`, `var(--text-secondary)`, `var(--accent)`, `var(--font-serif)`, etc.). BEM naming throughout. `var(--border-muted, #2A2B35)` fallback pattern for border color.
+- **Key pattern:** Components are stateless/props-driven (no store extensions), matching RefugeHub pattern. Chat state management lives in the parent (GameScreen or RefugeHub) and feeds down via props.
+- **Tests:** 78 new tests (33 chat + 22 players + 23 trade), 124 total client passing, 0 lint errors
+- **Shared environment challenge:** Other agents were switching branches during my session. Had to use cherry-pick + amend workflow to keep my commit isolated on the correct branch.
