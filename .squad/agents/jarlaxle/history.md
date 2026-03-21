@@ -266,3 +266,44 @@ All topology enforcement in place. Creature AI can trust room types. Patrol logi
 4. **Anticipatory tests active** — 35 toast tests now validating your API; tests will pass immediately when feature branch merges
 
 **Next Issues (7 remaining for Phase 1 client UI):** #66, #68, #69, #70, #71, #72, #73
+
+## Wave 6 — Phase 1 Client UI Batch Continued
+
+**Status:** ✅ Complete — Shard Exploration Sidebar & Combat Overlay (#66, PR #90) merged to dev
+
+### What Happened
+
+Wave 6 delivered your Shard Exploration Sidebar & Combat Overlay component. This is the first major interactive client UI component, integrating real-time creature/player state into the game viewport. Combat overlay enables player-to-creature targeting. Sidebar provides exploration HUD with creature/item tracking.
+
+### Phase 1 Client UI Progress
+
+- ✅ #74 Button Design System (PR #84) — Wave 5
+- ✅ #75 Toast Notifications (PR #85) — Wave 5
+- ✅ #67 Clickable Exits (PR #86) — Wave 5
+- ✅ #70 Reconnection Overlay (PR #88) — Wave 6 (Drizzt)
+- ✅ #71 Loading & Transition States (PR #89) — Wave 6 (Drizzt)
+- ✅ #66 Shard Exploration Sidebar & Combat Overlay (PR #90) — Wave 6 (you)
+- ✅ #69 Shardboard Cards (PR #87) — Wave 6 (Volo)
+- 🟠 #68 Refuge Hub — Wave 7 (anticipatory tests ready)
+- 🟠 #72 Extraction Screen — Wave 7 (anticipatory tests ready)
+- 🟠 #73 Chat & Social Panel — Wave 7 (anticipatory tests ready)
+
+### Test Coverage Wave 6
+
+- Your PR #90: 68 new tests, 181 total client tests passing (113 prior + 68 new)
+- Drizzt PRs #88 + #89: 68 tests total
+- Volo PR #87: 37 tests
+- Minsc anticipatory: 153 tests across 5 files
+- **Wave 6 total:** 322 new tests, 0 regressions
+- **Phase 1 total:** 1,247+ passing (949 server + 80 shared + 218 client)
+
+### Technical Highlights
+
+- **Combat overlay integration:** Creature targeting fully functional with attack system
+- **Sidebar exploration HUD:** Real-time creature/item tracking with visual indicators
+- **Anticipatory tests activate:** When #68, #72, #73 implementations merge, 91 more tests will activate automatically
+- **Ready for next phase:** All infrastructure for Wave 7 in place
+
+### Next Phase (Wave 7)
+
+Wave 7 will deliver final 3 client UI issues (#68 Refuge Hub, #72 Extraction Screen, #73 Chat & Social Panel). Your combat overlay will integrate with character stats and extraction mechanics.

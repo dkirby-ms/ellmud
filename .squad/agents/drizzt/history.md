@@ -354,3 +354,37 @@ All 8 server issues closed. Ready for Phase 1 Client UI batch (#66–#75) or Pha
 - **Problem:** Shared environment caused HEAD to revert to another branch (`squad/66-shard-exploration-sidebar`) between commands. Cherry-picks from that branch hit merge conflicts.
 - **Fix:** Always verify `git branch --show-current` immediately before committing. When cherry-pick conflicts arise, recreate files directly on the target branch instead.
 - **Pattern:** For clean PRs from dev, always: `git checkout dev && git checkout -b squad/XX-slug`, verify branch name, create/edit files, commit.
+
+## Wave 6 — Phase 1 Client UI Batch Continued
+
+**Status:** ✅ Complete — Reconnection Overlay (#70, PR #88) + Loading & Transition States (#71, PR #89) merged to dev
+
+### What Happened
+
+Wave 6 delivered final 2 critical client UI foundation components. Reconnection Overlay and Loading/Transition States complete the Phase 1 core infrastructure. All 4 Wave 6 implementations (Drizzt, Jarlaxle, Volo, Minsc) now merged. Phase 1 client UI is 70% complete with 7 of 10 issues resolved.
+
+### Phase 1 Client UI Progress
+
+- ✅ #74 Button Design System (PR #84) — Wave 5
+- ✅ #75 Toast Notifications (PR #85) — Wave 5
+- ✅ #67 Clickable Exits (PR #86) — Wave 5
+- ✅ #70 Reconnection Overlay (PR #88) — Wave 6 (you)
+- ✅ #71 Loading & Transition States (PR #89) — Wave 6 (you)
+- ✅ #66 Shard Exploration Sidebar & Combat Overlay (PR #90) — Wave 6 (Jarlaxle)
+- ✅ #69 Shardboard Cards (PR #87) — Wave 6 (Volo)
+- 🟠 #68 Refuge Hub — Wave 7 (anticipatory tests ready)
+- 🟠 #72 Extraction Screen — Wave 7 (anticipatory tests ready)
+- 🟠 #73 Chat & Social Panel — Wave 7 (anticipatory tests ready)
+
+### Test Coverage Wave 6
+
+- Your PRs #88 + #89: 68 tests (39 + 29)
+- Jarlaxle PR #90: 68 new tests, 181 total client tests
+- Volo PR #87: 37 tests
+- Minsc anticipatory: 153 tests across 5 files
+- **Wave 6 total:** 322 new tests, 0 regressions
+- **Phase 1 total:** 1,247+ passing (949 server + 80 shared + 218 client)
+
+### Next Phase (Wave 7)
+
+Wave 7 will deliver final 3 client UI issues (#68, #72, #73) using locked anticipatory test contracts. Your reconnection and loading state infrastructure will support all remaining pages.

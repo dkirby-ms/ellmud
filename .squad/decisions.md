@@ -1215,3 +1215,32 @@ Currently invoked with `() => new InMemoryStashRepository()`. When Drizzt builds
 - Volo: Narration receives creature names; enriches flavor text (e.g., "Drowned Revenant strikes player-1")
 - Minsc: Room descriptions now include creatures. Message format unchanged; terminal displays as-is.
 
+
+### 2026-03-21T00:59:53Z: Wave 6 Anticipatory Test Architecture
+**By:** Minsc (Tester)
+**Date:** Wave 6 session
+**Status:** Implemented
+
+**What:** Created comprehensive anticipatory test suites for 7 client UI component issues (#66–#73). Tests define component contracts before implementation, preventing API drift.
+
+**Issues covered:**
+- **Immediately active:** #69 Shardboard Cards, #70 Reconnection Overlay, #71 Loading & Transition States
+- **Anticipatory (fail on import until implementation):** #68 Refuge Hub (31 tests), #72 Extraction Screen (30 tests), #73 Chat & Social Panel (30 tests)
+
+**Architecture:**
+- All tests use vitest + @testing-library/react
+- BEM class assertions for CSS compliance
+- AppContext.Provider wrapping for component isolation
+- vi.useFakeTimers for animation/async testing
+- No test duplication with prior wave implementations
+
+**Results:**
+- 157 new anticipatory tests across 5 files
+- 85 tests from prior implementations (no duplication)
+- 238+ total passing (all green, zero regressions)
+- Baseline established for entire Phase 1 client UI
+
+**Why:** Anticipatory tests lock component APIs before implementation, ensuring team alignment. Tests activate automatically when feature branches merge to dev. Prevents scope creep and API churn.
+
+**Impact:** Wave 7 implementations can execute against locked test contracts. All Phase 1 client UI test infrastructure now in place.
+

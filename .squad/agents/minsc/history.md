@@ -283,3 +283,49 @@ Created 5 new anticipatory test files covering Issues #68, #69, #71, #72, #73 (1
 3. **ShardCardData from @ellmud/shared** — ShardCard uses types from the shared package: `ShardCardData`, `ShardTier`, `BiomeType`, `ShardModifier`, `ShardKeyType`.
 4. **BEM naming convention** — Components use BEM: `shard-card__header`, `shard-tier--white`, `combat-overlay--visible`, `action-btn--active`.
 5. **Anticipatory files must be committed** — Untracked files get lost when branches switch. Always commit immediately after creation.
+
+## Wave 6 — Phase 1 Client UI Batch Continued
+
+**Status:** ✅ Complete — Anticipatory test architecture finalized, 153 tests across 5 files committed to dev
+
+### What Happened
+
+Wave 6 locked the anticipatory test architecture for all remaining Phase 1 client UI issues. Five new test files created with comprehensive coverage for #68, #69, #71, #72, #73. Existing tests from feature branches (#66 sidebar, #70 reconnection, #71 loading) avoided duplication. Total Wave 6: 322 new tests, 0 regressions.
+
+### Anticipatory Test Structure
+
+| Issue | File | Tests | Status |
+|-------|------|-------|--------|
+| #68 | RefugeHub.test.tsx | 31 | Anticipatory (fails on import) |
+| #69 | ShardboardCard.test.tsx | 37 | Active ✅ (component merged) |
+| #70 | ReconnectionOverlay.test.tsx | 39 | Active ✅ (from feature branch) |
+| #71 | LoadingTransitions.test.tsx | 29 | Active ✅ (from feature branch) |
+| #72 | ExtractionScreen.test.tsx | 30 | Anticipatory (fails on import) |
+| #73 | ChatSocialPanel.test.tsx | 30 | Anticipatory (fails on import) |
+
+### Wave 6 Test Coverage Summary
+
+- **New anticipatory tests:** 157 across 5 files
+- **Active tests from feature branches:** 85 (no duplication)
+- **Total tests now:** 238+ passing (all green)
+- **Phase 1 total:** 1,247+ (949 server + 80 shared + 218 client)
+
+### Design Pattern Lock
+
+All test files use identical patterns:
+- vitest + @testing-library/react
+- BEM class assertions (CSS compliance validation)
+- AppContext.Provider wrapping (component isolation)
+- vi.useFakeTimers for animation/async (deterministic testing)
+- No external dependencies on unmocked modules
+
+### Impact on Wave 7
+
+- Anticipatory tests automatically activate when implementations merge
+- Zero test duplication — all APIs locked and coordinated
+- Implementation team executes against locked test contracts
+- Prevents scope creep and API churn
+
+### Next Phase (Wave 7)
+
+Wave 7 implementations will use these test suites as their contract. All Phase 1 client UI test infrastructure now locked and ready.

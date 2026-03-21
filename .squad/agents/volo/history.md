@@ -156,3 +156,44 @@
 4. **Exit link rendering pattern set** — Use role="link" on span (not `<a>`) for keyboard/accessibility compliance
 
 **Next Issues (7 remaining for Phase 1 client UI):** #66, #68, #69, #70, #71, #72, #73
+
+## Wave 6 — Phase 1 Client UI Batch Continued
+
+**Status:** ✅ Complete — Shardboard Cards (#69, PR #87) merged to dev
+
+### What Happened
+
+Wave 6 delivered your Shardboard Cards component. This is the primary navigation interface for shard discovery and entry. Cards display shard metadata (tier, modifiers, discovered timestamp), integrate with reconnection overlay for retry logic, and establish the design system foundation for remaining Phase 1 pages.
+
+### Phase 1 Client UI Progress
+
+- ✅ #74 Button Design System (PR #84) — Wave 5
+- ✅ #75 Toast Notifications (PR #85) — Wave 5
+- ✅ #67 Clickable Exits (PR #86) — Wave 5
+- ✅ #70 Reconnection Overlay (PR #88) — Wave 6 (Drizzt)
+- ✅ #71 Loading & Transition States (PR #89) — Wave 6 (Drizzt)
+- ✅ #66 Shard Exploration Sidebar & Combat Overlay (PR #90) — Wave 6 (Jarlaxle)
+- ✅ #69 Shardboard Cards (PR #87) — Wave 6 (you)
+- 🟠 #68 Refuge Hub — Wave 7 (anticipatory tests ready)
+- 🟠 #72 Extraction Screen — Wave 7 (anticipatory tests ready)
+- 🟠 #73 Chat & Social Panel — Wave 7 (anticipatory tests ready)
+
+### Test Coverage Wave 6
+
+- Your PR #87: 37 new tests
+- Drizzt PRs #88 + #89: 68 tests total
+- Jarlaxle PR #90: 68 new tests, 181 total client
+- Minsc anticipatory: 153 tests across 5 files
+- **Wave 6 total:** 322 new tests, 0 regressions
+- **Phase 1 total:** 1,247+ passing (949 server + 80 shared + 218 client)
+
+### Technical Highlights
+
+- **Design system locked:** All BEM classes, typography, color variables established
+- **Responsive grid layout:** Shardboard handles variable shard counts
+- **Card component reusable:** Individual card exports support different shard states
+- **Anticipatory tests activate:** When #68, #72, #73 merge, 91 more tests activate automatically
+
+### Next Phase (Wave 7)
+
+Wave 7 will deliver final 3 client UI issues. Shardboard will integrate with Refuge Hub for navigation and #68 Extraction Screen for end-game flows.
