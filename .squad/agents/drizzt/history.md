@@ -402,3 +402,30 @@ Wave 7 will deliver final 3 client UI issues (#68, #72, #73) using locked antici
 3. **ExtractionFailure** — Items lost (red), debuffs (amber), run summary, return button
 4. **ExtractionScreen** — Unified phase-routing discriminated union component
 5. **52 tests** covering all phases, tier colors, accessibility, edge cases
+
+---
+
+## 2026-03-21T15:09:00Z: Docker Port Isolation & Orchestration Complete
+
+**Status:** ✅ Session complete, decisions archived
+
+**Docker-Compose Port Fix (2026-03-21):**
+- Changed PostgreSQL host port 5432 → 5434 to avoid collision with Playgrid (5433) and system Postgres
+- Added `name: ellmud` to docker-compose.yml for dedicated network namespace
+- Updated docs/setup.md with new DATABASE_URL format (localhost:5434)
+- Commit 9bc7c4e merged to dev
+
+**Extraction Screen API (PR #92):**
+- ExtractionScreen uses phase-discriminated union pattern (extracting | success | failure)
+- Documented decision: phase-specific sub-components with single entry point
+- Tier naming uses `anomalous` (not `relic`) per theme CSS
+
+**CSS Variable Enforcement:**
+- PR #90 rejected: 23 hardcoded hex values require variable migration
+- Decision documented: all colors must use `:root` variables pre-merge
+- Assigned to self for CSS-only fix (no logic changes)
+
+**Orchestration:**
+- Decisions inbox merged to decisions.md (5 new entries, deduplicated)
+- Orchestration logs written to .squad/orchestration-log/2026-03-21T15-09-drizzt.md
+- Session log written to .squad/log/2026-03-21T15-09-aca-fix-docker-ports.md
