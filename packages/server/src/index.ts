@@ -24,13 +24,19 @@ import { initStashProvider, isStashPg } from './stash/index.js';
 const config = getConfig();
 const PORT = config.port;
 const AUTH_REQUIRED = config.authRequired;
-const USE_PG = !!process.env.DATABASE_URL;
+let USE_PG = !!process.env.DATABASE_URL;
 
 // ─── Database Bootstrap ──────────────────────────────────────────────────────
 if (USE_PG) {
   console.log('[Ellmud] DATABASE_URL detected — running PostgreSQL migrations…');
-  await runMigrations();
-  console.log('[Ellmud] Migrations complete.');
+  try {
+    await runMigrations();
+    console.log('[Ellmud] Migrations complete.');
+  } catch (err) {
+    console.error('[Ellmud] ⚠ PostgreSQL migration failed — starting without database persistence');
+    console.error('[Ellmud] Error details:', err instanceof Error ? err.message : String(err));
+    USE_PG = false;
+  }
 }
 
 // ─── Stash Persistence ──────────────────────────────────────────────────────
