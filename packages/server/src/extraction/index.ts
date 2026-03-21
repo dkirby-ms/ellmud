@@ -8,3 +8,8 @@ export {
   type ExtractionTickResult,
   type NoiseEvent,
 } from './ExtractionSystem.js';
+
+export {
+  transferInventoryToStash,
+  type TransferResult,
+} from './stash-transfer.js';

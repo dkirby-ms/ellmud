@@ -22,6 +22,10 @@ export interface ExtractionChannel {
 export interface ExtractionStartResult {
   success: boolean;
   narration: string;
+  /** Total ticks for this channel (present when success = true). */
+  totalTicks?: number;
+  /** Ticks remaining when channel starts (equals totalTicks). */
+  ticksRemaining?: number;
 }
 
 export interface ExtractionTickResult {
@@ -91,6 +95,8 @@ export class ExtractionSystem {
     return {
       success: true,
       narration: `You begin the extraction ritual. The air crackles with energy... (${this.channelDurationTicks} ticks remaining)`,
+      totalTicks: this.channelDurationTicks,
+      ticksRemaining: this.channelDurationTicks,
     };
   }
 

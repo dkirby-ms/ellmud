@@ -29,6 +29,8 @@ export interface Room {
 export interface RoomGraph {
   rooms: Map<string, Room>;
   startRoomId: string;
+  extractionRoomIds?: string[];
+  bossRoomId?: string;
 }
 
 /** Build the 5-room development test graph. */

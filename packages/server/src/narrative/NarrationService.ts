@@ -160,10 +160,7 @@ export class NarrationService {
 
   /** Get timeout budget for a narration type (GDD §4.5). */
   private getTimeout(type: LLMNarrationType): number {
-    if (type === 'combat_action' || type === 'combat_round') {
-      return this.config.timeouts.combat_action;
-    }
-    return this.config.timeouts.room_description;
+    return this.config.timeouts[type];
   }
 
   /** Get cache TTL for a narration type. */

@@ -137,6 +137,7 @@ export const MessageTypes = {
   COMBAT_RESULT: 'combat_result',
   EXTRACTION_STATE: 'extraction_state',
   STASH_UPDATE: 'stash_update',
+  ROOM_SWITCH: 'room_switch',
 } as const;
 
 export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
@@ -221,6 +222,19 @@ export {
   validateLoadout,
 } from './items.js';
 
+
+// ─── Shard Card Types (Shardboard UI) ────────────────────────────────────────
+
+export type { ShardKeyType, ShardCardData } from './shard-card.js';
+
+// ─── Room Switching (GDD §3 — Refuge ↔ Shard) ────────────────────────────────
+
+/** Server → Client: Instruct client to switch rooms. */
+export interface RoomSwitchMessage {
+  target: string;       // Colyseus room name to join (e.g. 'shard', 'refuge')
+  options?: Record<string, unknown>; // Additional join options for the target room
+  reason: string;       // Human-readable reason for the switch
+}
 
 // ─── Extraction Types (GDD §3 step 6) ────────────────────────────────────────
 

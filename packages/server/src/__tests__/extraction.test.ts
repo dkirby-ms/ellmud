@@ -43,6 +43,20 @@ describe('ExtractionSystem', () => {
       expect(system.isExtracting('player1')).toBe(true);
     });
 
+    it('should return totalTicks and ticksRemaining on success', () => {
+      const result = system.startExtraction('player1', 'extraction-chamber', 'extraction');
+      expect(result.success).toBe(true);
+      expect(result.totalTicks).toBe(5);
+      expect(result.ticksRemaining).toBe(5);
+    });
+
+    it('should not include tick info on failure', () => {
+      const result = system.startExtraction('player1', 'corridor', 'corridor');
+      expect(result.success).toBe(false);
+      expect(result.totalTicks).toBeUndefined();
+      expect(result.ticksRemaining).toBeUndefined();
+    });
+
     it('should reject extraction in a non-extraction room', () => {
       const result = system.startExtraction('player1', 'corridor', 'corridor');
       expect(result.success).toBe(false);
@@ -422,6 +436,64 @@ describe('Extraction Full Flow', () => {
   });
 });
 
+// ─── Extraction State Protocol ──────────────────────────────────────────────
+
+describe('Extraction State Protocol', () => {
+  it('should return tick counts on successful start for EXTRACTION_STATE message', () => {
+    const system = new ExtractionSystem(5);
+    const result = system.startExtraction('player1', 'extraction-chamber', 'extraction');
+    expect(result.success).toBe(true);
+    expect(result.totalTicks).toBe(5);
+    expect(result.ticksRemaining).toBe(5);
+  });
+
+  it('should track ticksRemaining via getChannel during progress', () => {
+    const system = new ExtractionSystem(4);
+    system.startExtraction('player1', 'extraction-chamber', 'extraction');
+
+    system.tickExtraction('player1');
+    const channel1 = system.getChannel('player1');
+    expect(channel1?.ticksRemaining).toBe(3);
+    expect(channel1?.totalTicks).toBe(4);
+
+    system.tickExtraction('player1');
+    const channel2 = system.getChannel('player1');
+    expect(channel2?.ticksRemaining).toBe(2);
+  });
+
+  it('should remove channel on completion (no channel data for completed state)', () => {
+    const system = new ExtractionSystem(2);
+    system.startExtraction('player1', 'extraction-chamber', 'extraction');
+
+    system.tickExtraction('player1');
+    expect(system.getChannel('player1')).toBeDefined();
+
+    const final = system.tickExtraction('player1');
+    expect(final!.completed).toBe(true);
+    expect(system.getChannel('player1')).toBeUndefined();
+  });
+
+  it('should remove channel on interruption (for interrupted state)', () => {
+    const system = new ExtractionSystem(5);
+    system.startExtraction('player1', 'extraction-chamber', 'extraction');
+
+    const narration = system.interruptExtraction('player1', 'struck by an enemy');
+    expect(narration).toContain('shatters');
+    expect(system.getChannel('player1')).toBeUndefined();
+  });
+
+  it('interruptAll should return structured data for each interrupted player', () => {
+    const system = new ExtractionSystem(5);
+    system.startExtraction('p1', 'extraction-chamber', 'extraction');
+    system.startExtraction('p2', 'extraction-chamber', 'extraction');
+
+    const results = system.interruptAll('shard collapsed');
+    expect(results).toHaveLength(2);
+    expect(results.every(r => r.playerId && r.narration)).toBe(true);
+    expect(results.every(r => r.narration.includes('shard collapsed'))).toBe(true);
+  });
+});
+
 // ─── Room Graph Extraction Room ─────────────────────────────────────────────
 
 describe('Room Graph — Extraction Room', () => {
@@ -440,5 +512,119 @@ describe('Room Graph — Extraction Room', () => {
 
     const extraction = graph.rooms.get('extraction-chamber')!;
     expect(extraction.exits.get('up')).toBe('crypt');
+  });
+});
+
+// ─── Extraction Stash Transfer ──────────────────────────────────────────────
+
+import { transferInventoryToStash } from '../extraction/stash-transfer.js';
+import { StashService, InMemoryStashRepository } from '../stash/index.js';
+import type { StashItem } from '@ellmud/shared';
+import type { Item } from '../shard/RoomGraph.js';
+
+function makeItem(id: string, name: string, weight: number): Item {
+  return { id, name, weight, description: `A ${name}.` };
+}
+
+describe('Extraction Stash Transfer', () => {
+  let repo: InMemoryStashRepository;
+  let itemDefs: Map<string, StashItem>;
+  let stashService: StashService;
+
+  beforeEach(() => {
+    repo = new InMemoryStashRepository();
+    itemDefs = new Map();
+    stashService = new StashService(repo, itemDefs);
+  });
+
+  it('should transfer all carried items to the stash', async () => {
+    const player = new PlayerState('p1', 'entry');
+    const sword = makeItem('rusty-sword', 'Rusty Sword', 3);
+    const gem = makeItem('shard-gem', 'Shard Gem', 1);
+    player.addItem(sword);
+    player.addItem(gem);
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    expect(result.stored).toBe(2);
+    expect(result.lost).toBe(0);
+
+    // Verify items are in the stash
+    const stash = await repo.loadStash('p1');
+    expect(stash).toHaveLength(2);
+    expect(stash.some((e) => e.instance.itemId === 'rusty-sword')).toBe(true);
+    expect(stash.some((e) => e.instance.itemId === 'shard-gem')).toBe(true);
+  });
+
+  it('should respect stash weight limit — excess items are lost', async () => {
+    // Set a very small stash capacity
+    await repo.setCapacity('p1', 5);
+
+    const player = new PlayerState('p1', 'entry', 100); // high carry limit
+    const light = makeItem('light-item', 'Light Item', 2);
+    const heavy = makeItem('heavy-item', 'Heavy Item', 4);
+    player.addItem(light);
+    player.addItem(heavy);
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    // light (2) fits, heavy (4) would bring total to 6 > 5 — lost
+    expect(result.stored).toBe(1);
+    expect(result.lost).toBe(1);
+
+    const stash = await repo.loadStash('p1');
+    expect(stash).toHaveLength(1);
+  });
+
+  it('should handle empty inventory gracefully', async () => {
+    const player = new PlayerState('p1', 'entry');
+    expect(player.inventory.size).toBe(0);
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    expect(result.stored).toBe(0);
+    expect(result.lost).toBe(0);
+
+    const stash = await repo.loadStash('p1');
+    expect(stash).toHaveLength(0);
+  });
+
+  it('should handle stacked items (quantity > 1)', async () => {
+    const player = new PlayerState('p1', 'entry');
+    const arrow = makeItem('iron-arrow', 'Iron Arrow', 0.1);
+    player.addItem(arrow);
+    player.addItem(arrow);
+    player.addItem(arrow);
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    expect(result.stored).toBe(3);
+    expect(result.lost).toBe(0);
+  });
+
+  it('should register item definitions in itemDefs map', async () => {
+    const player = new PlayerState('p1', 'entry');
+    const relic = makeItem('ancient-relic', 'Ancient Relic', 5);
+    player.addItem(relic);
+
+    expect(itemDefs.has('ancient-relic')).toBe(false);
+
+    await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    expect(itemDefs.has('ancient-relic')).toBe(true);
+    expect(itemDefs.get('ancient-relic')!.weight).toBe(5);
+    expect(itemDefs.get('ancient-relic')!.type).toBe('material');
+  });
+
+  it('should lose all items when stash is completely full', async () => {
+    await repo.setCapacity('p1', 0);
+
+    const player = new PlayerState('p1', 'entry');
+    player.addItem(makeItem('coin', 'Coin', 0.1));
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    expect(result.stored).toBe(0);
+    expect(result.lost).toBe(1);
   });
 });

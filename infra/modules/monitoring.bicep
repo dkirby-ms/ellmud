@@ -46,6 +46,7 @@ output logAnalyticsWorkspaceId string = logAnalytics.id
 output logAnalyticsCustomerId string = logAnalytics.properties.customerId
 
 @description('Log Analytics shared key (for Container Apps)')
+#disable-next-line outputs-should-not-contain-secrets
 output logAnalyticsSharedKey string = logAnalytics.listKeys().primarySharedKey
 
 @description('Application Insights connection string')

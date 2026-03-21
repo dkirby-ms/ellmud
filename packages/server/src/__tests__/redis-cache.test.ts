@@ -299,6 +299,7 @@ describe('Redis config env vars', () => {
     envBackup['REDIS_PRESENCE_ENABLED'] = process.env['REDIS_PRESENCE_ENABLED'];
     envBackup['REDIS_CONNECTION_STRING'] = process.env['REDIS_CONNECTION_STRING'];
     envBackup['REDIS_CACHE_ENABLED'] = process.env['REDIS_CACHE_ENABLED'];
+    envBackup['REDIS_URL'] = process.env['REDIS_URL'];
     resetConfig();
   });
 
@@ -336,6 +337,20 @@ describe('Redis config env vars', () => {
     process.env['REDIS_CONNECTION_STRING'] = 'redis://custom-host:6380';
     const cfg = loadConfig();
     expect(cfg.redis.connectionString).toBe('redis://custom-host:6380');
+  });
+
+  it('REDIS_URL fallback when REDIS_CONNECTION_STRING is not set', () => {
+    delete process.env['REDIS_CONNECTION_STRING'];
+    process.env['REDIS_URL'] = 'redis://fallback-host:6380';
+    const cfg = loadConfig();
+    expect(cfg.redis.connectionString).toBe('redis://fallback-host:6380');
+  });
+
+  it('REDIS_CONNECTION_STRING takes precedence over REDIS_URL', () => {
+    process.env['REDIS_CONNECTION_STRING'] = 'redis://primary-host:6379';
+    process.env['REDIS_URL'] = 'redis://fallback-host:6380';
+    const cfg = loadConfig();
+    expect(cfg.redis.connectionString).toBe('redis://primary-host:6379');
   });
 
   it('presence and cache can be independently toggled', () => {

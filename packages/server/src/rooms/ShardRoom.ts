@@ -3,8 +3,11 @@ import {
   type CommandMessage,
   type NarrateMessage,
   type RoomHeaderMessage,
+  type RoomSwitchMessage,
   type ShardState as SharedShardState,
   type ShardStateMessage,
+  type StashItem,
+  type BiomeType,
   MessageTypes,
 } from '@ellmud/shared';
 import { ShardState } from '../state.js';
@@ -12,11 +15,19 @@ import { parseCommand } from '../commands/parser.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
 import { createTestRoomGraph, type RoomGraph } from '../shard/RoomGraph.js';
+import { generateShardGraph } from '../shard/generator.js';
+import { adaptRoomGraph } from '../shard/graph-adapter.js';
 import { handleLook } from '../commands/handlers/look.js';
-import { CombatSystem, type TickResult } from '../combat/index.js';
+import { CombatSystem, type TickResult, createCombatant } from '../combat/index.js';
 import { ExtractionSystem } from '../extraction/index.js';
 import { authenticateClient } from '../auth/colyseus-auth.js';
 import { getConfig } from '../config.js';
+import { StashService, InMemoryStashRepository, getStashRepository, getItemDefs } from '../stash/index.js';
+import type { StashRepository } from '../stash/index.js';
+import { transferInventoryToStash } from '../extraction/stash-transfer.js';
+import { CreatureManager, DROWNED_REVENANT, type CreatureAction } from '../creatures/index.js';
+import type { CreatureWorldState } from '../creatures/behavior.js';
+import { createPRNG } from '../shard/prng.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -41,6 +52,21 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private players = new Map<string, PlayerState>();
   private combatSystem!: CombatSystem;
   private extractionSystem!: ExtractionSystem;
+  private creatureManager!: CreatureManager;
+  private stashService?: StashService;
+  private itemDefs = new Map<string, StashItem>();
+
+  /**
+   * Inject stash dependencies. Called before room lifecycle if provided.
+   * Falls back to in-memory defaults for Phase 1.
+   */
+  initStash(repo?: StashRepository, itemDefs?: Map<string, StashItem>): void {
+    this.itemDefs = itemDefs ?? new Map();
+    this.stashService = new StashService(
+      repo ?? new InMemoryStashRepository(),
+      this.itemDefs,
+    );
+  }
 
   onCreate(options: Record<string, unknown>): void {
     // Initialize server-internal state (never sent to clients)
@@ -56,8 +82,20 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     this.state.collapseTimer = this.collapseTimerSeconds;
 
-    // Initialize room graph (will be replaced by procedural generator)
-    this.roomGraph = createTestRoomGraph();
+    // Initialize room graph — use procedural generator by default, test graph as fallback
+    this.creatureManager = new CreatureManager();
+    if (options['useTestGraph'] === true) {
+      this.roomGraph = createTestRoomGraph();
+    } else {
+      const seed = typeof options['seed'] === 'number' ? options['seed'] : Date.now();
+      const biome = (typeof options['biome'] === 'string' ? options['biome'] : 'flooded_crypt') as BiomeType;
+      const sharedGraph = generateShardGraph({ tier: 1, biome, seed });
+      this.roomGraph = adaptRoomGraph(sharedGraph);
+
+      // Spawn creatures using a derived seed (distinct from generator's PRNG)
+      const creaturePrng = createPRNG(seed + 7919);
+      this.creatureManager.spawnCreatures(sharedGraph, DROWNED_REVENANT, creaturePrng);
+    }
 
     // Initialize combat system with room exit resolver
     this.combatSystem = new CombatSystem((roomId: string) => {
@@ -67,6 +105,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Initialize extraction system (default 5-tick channel)
     this.extractionSystem = new ExtractionSystem();
+
+    // Initialize stash with shared provider if not already injected
+    if (!this.stashService) {
+      this.initStash(getStashRepository(), getItemDefs());
+    }
 
     // Register message handlers
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
@@ -149,9 +192,13 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       }
     }
 
+    // Creature AI tick — evaluate behavior trees, queue combat actions
+    this.tickCreatures();
+
     // Resolve combat tick
     if (this.combatSystem.hasActiveEncounters()) {
       const tickResult = this.combatSystem.resolveTick();
+      this.syncCreaturesAfterCombat(tickResult);
       this.deliverCombatResults(tickResult);
 
       // Check if any extracting players took damage — interrupt their channels
@@ -165,6 +212,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
               const client = this.findClient(event.targetId);
               if (client) {
                 this.sendNarrate(client, { text: narration, type: 'system', timestamp: Date.now() });
+                this.sendExtractionState(client, {
+                  playerId: event.targetId,
+                  state: 'interrupted',
+                  narration,
+                  timestamp: Date.now(),
+                });
               }
             }
           }
@@ -215,7 +268,20 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   private handleCollapse(): void {
     // Interrupt all active extractions
-    this.extractionSystem.interruptAll('the shard collapsed');
+    const interrupted = this.extractionSystem.interruptAll('the shard collapsed');
+
+    // Send EXTRACTION_STATE 'interrupted' to each affected player
+    for (const { playerId, narration } of interrupted) {
+      const client = this.findClient(playerId);
+      if (client) {
+        this.sendExtractionState(client, {
+          playerId,
+          state: 'interrupted',
+          narration,
+          timestamp: Date.now(),
+        });
+      }
+    }
 
     // Shard-sickness narration for all remaining players
     this.broadcast(MessageTypes.NARRATE, {
@@ -270,9 +336,23 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     this.log(`Command from ${client.sessionId}: ${verb} ${args.join(' ')}`);
 
+    const wasExtracting = this.extractionSystem.isExtracting(client.sessionId);
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
     this.deliverResult(client, result);
+
+    // Send EXTRACTION_STATE 'started' if this command initiated an extraction
+    if (!wasExtracting && this.extractionSystem.isExtracting(client.sessionId)) {
+      const channel = this.extractionSystem.getChannel(client.sessionId)!;
+      this.sendExtractionState(client, {
+        playerId: client.sessionId,
+        state: 'started',
+        totalTicks: channel.totalTicks,
+        ticksRemaining: channel.ticksRemaining,
+        narration: result.narrations[0]?.text ?? 'The extraction ritual begins...',
+        timestamp: Date.now(),
+      });
+    }
   }
 
   private buildCommandContext(player: PlayerState, args: string[]): CommandContext {
@@ -284,6 +364,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       }
     }
 
+    const creaturesInRoom = this.creatureManager.getCreaturesInRoom(player.currentRoomId)
+      .map(c => ({ id: c.id, name: c.name }));
+
     return {
       player,
       room,
@@ -293,6 +376,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       stability: this.state.stability,
       combatSystem: this.combatSystem,
       extractionSystem: this.extractionSystem,
+      creaturesInRoom,
     };
   }
 
@@ -351,6 +435,10 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     return this.clients.find((c) => c.sessionId === sessionId);
   }
 
+  private sendExtractionState(client: Client, msg: ExtractionMessage): void {
+    client.send(MessageTypes.EXTRACTION_STATE, msg);
+  }
+
   // ─── Extraction Tick Delivery ─────────────────────────────────────────────
 
   private tickExtractions(): void {
@@ -372,11 +460,29 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
       if (result.completed) {
         this.handleSuccessfulExtraction(client, playerId);
+      } else {
+        // Send progress update so the client can track channel state
+        const channel = this.extractionSystem.getChannel(playerId);
+        this.sendExtractionState(client, {
+          playerId,
+          state: 'progress',
+          ticksRemaining: channel?.ticksRemaining,
+          totalTicks: channel?.totalTicks,
+          narration: result.narration,
+          timestamp: Date.now(),
+        });
       }
     }
   }
 
-  private handleSuccessfulExtraction(client: Client, playerId: string): void {
+  private async handleSuccessfulExtraction(client: Client, playerId: string): Promise<void> {
+    const player = this.players.get(playerId);
+
+    // Transfer inventory to stash before removing player
+    if (player && this.stashService) {
+      await this.transferToStash(client, playerId, player);
+    }
+
     // Remove player from shard
     this.players.delete(playerId);
     this.combatSystem.removeCombatant(playerId);
@@ -384,7 +490,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     this.log(`Player extracted: ${playerId}`);
 
-    // Send extraction completion message — client should transition to Refuge
+    // Send extraction completion message
     client.send(MessageTypes.EXTRACTION_STATE, {
       playerId,
       state: 'completed',
@@ -392,8 +498,166 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       timestamp: Date.now(),
     });
 
-    // Disconnect the client from this shard room (they rejoin Refuge)
-    client.leave();
+    // Tell client to switch back to refuge
+    client.send(MessageTypes.ROOM_SWITCH, {
+      target: 'refuge',
+      reason: 'extraction_complete',
+    } satisfies RoomSwitchMessage);
+  }
+
+  /**
+   * Transfer a player's shard inventory into their persistent stash.
+   * Items are added until the stash weight limit is reached; excess is lost.
+   */
+  private async transferToStash(
+    client: Client, playerId: string, player: PlayerState,
+  ): Promise<void> {
+    if (player.inventory.size === 0) return;
+
+    const { stored, lost } = await transferInventoryToStash(
+      playerId, player.inventory, this.stashService!, this.itemDefs,
+    );
+
+    // Clear shard inventory after transfer
+    player.inventory.clear();
+
+    // Narrate the transfer
+    if (stored > 0 && lost === 0) {
+      this.sendNarrate(client, {
+        text: `You secured ${stored} item${stored !== 1 ? 's' : ''} in your stash.`,
+        type: 'system',
+        timestamp: Date.now(),
+      });
+    } else if (stored > 0 && lost > 0) {
+      this.sendNarrate(client, {
+        text: `You secured ${stored} item${stored !== 1 ? 's' : ''} in your stash, but ${lost} item${lost !== 1 ? 's were' : ' was'} lost — your stash is full.`,
+        type: 'system',
+        timestamp: Date.now(),
+      });
+    } else if (lost > 0) {
+      this.sendNarrate(client, {
+        text: `Your stash is full. ${lost} item${lost !== 1 ? 's were' : ' was'} lost in the rift.`,
+        type: 'system',
+        timestamp: Date.now(),
+      });
+    }
+  }
+
+  // ─── Creature AI Tick ──────────────────────────────────────────────────────
+
+  private tickCreatures(): void {
+    if (this.creatureManager.getLivingCreatures().length === 0) return;
+
+    const world = this.buildCreatureWorldState();
+    const actions = this.creatureManager.updateAll(world);
+
+    for (const action of actions) {
+      this.processCreatureAction(action);
+    }
+  }
+
+  private buildCreatureWorldState(): CreatureWorldState {
+    const playersInRoom = new Map<string, string[]>();
+    for (const [sid, ps] of this.players) {
+      const list = playersInRoom.get(ps.currentRoomId);
+      if (list) {
+        list.push(sid);
+      } else {
+        playersInRoom.set(ps.currentRoomId, [sid]);
+      }
+    }
+
+    const roomExits = new Map<string, string[]>();
+    for (const [id, room] of this.roomGraph.rooms) {
+      roomExits.set(id, Array.from(room.exits.values()));
+    }
+
+    const noisyRooms = new Set<string>(this.combatSystem.getActiveEncounterRoomIds());
+
+    return { playersInRoom, roomExits, noisyRooms };
+  }
+
+  private processCreatureAction(action: CreatureAction): void {
+    const creature = this.creatureManager.getCreature(action.creatureId);
+    if (!creature || !creature.isAlive) return;
+
+    switch (action.type) {
+      case 'combat_strike': {
+        // Register creature as combatant if needed
+        if (!this.combatSystem.getCombatant(creature.id)) {
+          this.combatSystem.registerCombatant(this.creatureManager.toCombatant(creature));
+        }
+        // Register target player as combatant if needed
+        if (action.targetCombatantId && !this.combatSystem.getCombatant(action.targetCombatantId)) {
+          const player = this.players.get(action.targetCombatantId);
+          if (player) {
+            this.combatSystem.registerCombatant(
+              createCombatant(player.sessionId, player.sessionId, player.currentRoomId, true),
+            );
+          }
+        }
+        // Initiate or join existing combat
+        if (!this.combatSystem.isInCombat(creature.id) && action.targetCombatantId) {
+          this.combatSystem.initiateCombat(creature.id, action.targetCombatantId);
+        } else if (action.targetCombatantId) {
+          this.combatSystem.submitAction(creature.id, 'strike', action.targetCombatantId);
+        }
+        break;
+      }
+      case 'combat_dodge': {
+        if (this.combatSystem.isInCombat(creature.id)) {
+          this.combatSystem.submitAction(creature.id, 'dodge');
+        }
+        break;
+      }
+      case 'combat_flee': {
+        if (this.combatSystem.isInCombat(creature.id)) {
+          this.combatSystem.submitAction(creature.id, 'flee', undefined, action.targetRoomId);
+        }
+        break;
+      }
+      // patrol_move and alert_move already handled by CreatureManager.updateAll()
+    }
+  }
+
+  private syncCreaturesAfterCombat(tickResult: TickResult): void {
+    // Handle creature deaths FIRST — drop loot before syncing marks them dead
+    for (const event of tickResult.events) {
+      if (event.type === 'defeated' && event.actorId.startsWith('creature-')) {
+        const loot = this.creatureManager.removeCreature(event.actorId);
+        const combatant = this.combatSystem.getCombatant(event.actorId);
+        const roomId = combatant?.roomId;
+        if (roomId && loot.length > 0) {
+          const room = this.roomGraph.rooms.get(roomId);
+          if (room) {
+            for (const item of loot) {
+              room.items.push(item);
+            }
+            for (const [sid, ps] of this.players) {
+              if (ps.currentRoomId === roomId) {
+                const client = this.findClient(sid);
+                if (client) {
+                  this.sendNarrate(client, {
+                    text: loot.map(i => `A ${i.name} drops to the ground.`).join('\n'),
+                    type: 'room',
+                    timestamp: Date.now(),
+                  });
+                }
+              }
+            }
+          }
+        }
+        this.combatSystem.removeCombatant(event.actorId);
+      }
+    }
+
+    // Sync HP and room for surviving creature combatants
+    for (const creature of this.creatureManager.getLivingCreatures()) {
+      const combatant = this.combatSystem.getCombatant(creature.id);
+      if (combatant) {
+        this.creatureManager.syncFromCombat(combatant);
+      }
+    }
   }
 
   // ─── Message Senders ─────────────────────────────────────────────────────

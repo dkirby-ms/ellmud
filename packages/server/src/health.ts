@@ -1,12 +1,18 @@
 /**
  * Health endpoint — lightweight liveness probe for load balancers and orchestrators.
  *
- * GET /health → 200 { status: 'ok', uptime, timestamp }
+ * GET /health → 200 { status: 'ok', uptime, timestamp, redis }
  */
 
 import { Router, type Request, type Response } from 'express';
 
-export function createHealthRouter(): Router {
+export interface HealthRouterDeps {
+  isCacheRedis?: boolean;
+  isPresenceRedis?: boolean;
+  isStashPg?: boolean;
+}
+
+export function createHealthRouter(deps: HealthRouterDeps = {}): Router {
   const router = Router();
 
   router.get('/health', (_req: Request, res: Response) => {
@@ -14,6 +20,13 @@ export function createHealthRouter(): Router {
       status: 'ok',
       uptime: process.uptime(),
       timestamp: Date.now(),
+      redis: {
+        cache: deps.isCacheRedis ? 'redis' : 'in-memory',
+        presence: deps.isPresenceRedis ? 'redis' : 'local',
+      },
+      persistence: {
+        stash: deps.isStashPg ? 'postgresql' : 'in-memory',
+      },
     });
   });
 

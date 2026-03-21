@@ -3,12 +3,13 @@ import {
   type CommandMessage,
   type NarrateMessage,
   type RoomHeaderMessage,
+  type RoomSwitchMessage,
   type StashItem,
   MessageTypes,
 } from '@ellmud/shared';
 import { RefugeState } from '../state.js';
 import { authenticateClient } from '../auth/colyseus-auth.js';
-import { StashService, InMemoryStashRepository } from '../stash/index.js';
+import { StashService, InMemoryStashRepository, getStashRepository, getItemDefs } from '../stash/index.js';
 import type { StashRepository } from '../stash/index.js';
 
 const TICK_INTERVAL_MS = 1000;
@@ -46,9 +47,9 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   onCreate(): void {
     this.setState(new RefugeState());
 
-    // Initialize stash with defaults if not already injected
+    // Initialize stash with shared provider if not already injected
     if (!this.stashService) {
-      this.initStash();
+      this.initStash(getStashRepository(), getItemDefs());
     }
 
 
@@ -84,7 +85,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
 
     client.send(MessageTypes.ROOM_HEADER, {
       roomName: 'The Refuge — Central Plaza',
-      exits: ['north', 'south', 'east', 'west'],
+      exits: [],
       stability: 1.0,
     } satisfies RoomHeaderMessage);
 
@@ -136,10 +137,14 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
 
       case 'shardboard':
         client.send(MessageTypes.NARRATE, {
-          text: 'The Shardboard displays available rift entries. Several shards shimmer with unstable energy.',
+          text: 'The Shardboard displays available rift entries:\n\n  ⌁ **Shard Rift** — An unstable portal shimmers with dark energy.\n    Type `enter shard` to step through.',
           type: 'system',
           timestamp: Date.now(),
         } satisfies NarrateMessage);
+        break;
+
+      case 'enter':
+        this.handleEnterCommand(client, message.args);
         break;
 
       case 'stash':
@@ -163,6 +168,33 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
         } satisfies NarrateMessage);
         break;
     }
+  }
+
+  // ─── Enter Command ──────────────────────────────────────────────────────
+
+  private handleEnterCommand(client: Client, args: string[]): void {
+    const target = args[0]?.toLowerCase();
+
+    if (!target || target === 'shard') {
+      // Narrate the transition, then send ROOM_SWITCH to tell the client to join a shard
+      client.send(MessageTypes.NARRATE, {
+        text: 'You step toward the rift. Reality bends around you as you are pulled into the shard...',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+
+      client.send(MessageTypes.ROOM_SWITCH, {
+        target: 'shard',
+        reason: 'enter_shard',
+      } satisfies RoomSwitchMessage);
+      return;
+    }
+
+    client.send(MessageTypes.NARRATE, {
+      text: `There is no "${target}" to enter. Check the shardboard for available rifts.`,
+      type: 'system',
+      timestamp: Date.now(),
+    } satisfies NarrateMessage);
   }
 
   // ─── Stash Commands ─────────────────────────────────────────────────────

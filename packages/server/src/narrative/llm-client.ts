@@ -71,7 +71,7 @@ const SCHEMA_KEYWORDS = [
  */
 export function validateLLMOutput(
   text: string,
-  _context: NarrationContext,
+  context: NarrationContext,
 ): string | null {
   // Check for mechanical numbers
   for (const pattern of FORBIDDEN_PATTERNS) {
@@ -84,6 +84,31 @@ export function validateLLMOutput(
   for (const keyword of SCHEMA_KEYWORDS) {
     if (text.toLowerCase().includes(keyword)) {
       return `Contains Schema keyword: ${keyword}`;
+    }
+  }
+
+  // Enforce narrative_directives.forbidden array (GDD §4.4)
+  const lower = text.toLowerCase();
+  for (const directive of context.narrative_directives.forbidden) {
+    if (directive === 'reveal_player_names') {
+      // Player names are never sent to the LLM, but defense-in-depth:
+      // reject output that looks like it names a specific player character
+      if (/\bplayer\s*\d+\b/i.test(text) || /\b(?:Player|CHARACTER):\s*\w+/i.test(text)) {
+        return 'Contains player name reference (reveal_player_names forbidden)';
+      }
+    }
+    if (directive === 'reveal_hidden_items') {
+      if (lower.includes('hidden') && lower.includes('item')) {
+        return 'References hidden items (reveal_hidden_items forbidden)';
+      }
+    }
+    if (directive === 'invent_entities') {
+      // Covered by system prompt; can't reliably validate without NLP
+    }
+    if (directive === 'resolve_mechanics') {
+      if (/\b(?:roll|dice|saving throw|ability check)\b/i.test(text)) {
+        return 'Contains mechanical resolution language (resolve_mechanics forbidden)';
+      }
     }
   }
 

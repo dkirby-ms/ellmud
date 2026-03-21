@@ -106,3 +106,71 @@
 - **Decision — Phase A priority:** Migrate all hardcoded hex → theme tokens BEFORE starting Phase B. The Tailwind v4 @theme inline block is ready — just need find-replace gruntwork across all components.
 - **Open for Phase C:** Add enemy status panel (sidebar, during combat), tick timer (below combat banner), reconnection overlay (full-screen). Add trade interface to ChatPanel. All other gaps are Phase D polish or post-MVP.
 - **Key files:** `docs/figma-v2-analysis.md` (full analysis with gap scorecard, component deep dives, theme audit, remaining gaps list).
+
+### 2025-07-25: Wave 4 PR Reviews (PRs #80, #81, #82, #83)
+- **Action:** Code review of four Wave 4 PRs. All four approved.
+- **PR #80 — Stash Persistence Wiring (Drizzt, #11):** APPROVED. Clean singleton provider pattern (`stash-provider.ts`). Rooms share repository via `getStashRepository()`/`getItemDefs()`. Health and admin endpoints report backend. 14 tests. No issues.
+- **PR #81 — Room Graph Topology (Jarlaxle, #5 reopened):** APPROVED. Critical fix — room types now enforce structural semantics. Dead-ends = exactly 1 exit (branched off backbone), junctions = ≥3 exits (post-distance-enforcement). Guaranteed ≥1 dead-end per graph. 7 tests across multiple seeds. Post-processing order matters: distance cuts → junction enforcement.
+- **PR #82 — Creature Admin Visibility (Jarlaxle, #7):** APPROVED with minor notes. `AdminCreatureInfo` type, `/admin/api/creatures` endpoint, creature data in shard detail, SSE creature counts, dashboard HTML table. Minor: `(room as any)['creatureManager']` pattern duplicated 3 times — accessing private field for admin inspection is acceptable per GDD §13.4 but the inline type cast should be extracted to a helper.
+- **PR #83 — Extraction State Messaging (Drizzt, #10):** APPROVED. All 4 EXTRACTION_STATE phases wired (started/progress/interrupted/completed). The `wasExtracting` → `isExtracting` detection pattern for 'started' is clean. `interruptAll()` return value now wired to per-player interruption messages. 9 protocol tests.
+- **Cross-system assessment:** All 4 PRs modify non-overlapping code paths and are architecturally compatible. PRs #80 and #83 both touch ShardRoom.ts but in different methods — will merge cleanly. Room topology (#81) gives creature behavior (#82) meaningful patrol semantics. Extraction messaging (#83) works correctly with stash transfer (#80).
+- **Lesson:** The `as any` bracket-access pattern for admin inspection of private fields is an acceptable compromise for debugging visibility, but duplication should be controlled — extract to a typed helper or add a public admin-only accessor method.
+
+## Wave 4b Completion — PR Review Gate + All Phase 1 Server Complete (2026-03-20T22:11Z)
+
+**Status:** ✅ Complete  
+**Role:** Lead / Architect  
+**Task:** Review PRs #80–#83 for architecture, cross-system integration, test coverage  
+**All Approved:** No rejections, no architecture regressions
+
+### Decisions Made
+
+#### 1. Stash Persistence Pattern (PR #80 — Drizzt, #11)
+- **Decision:** Singleton provider pattern is correct for server-wide state
+- **Rationale:** Rooms consume via accessor functions; tests bypass via initStash()
+- **Impact:** Extraction transfer, creature loot, persistent DB all share same repository
+- **Status:** APPROVED
+
+#### 2. Room Type Topology Enforcement (PR #81 — Jarlaxle, #5)
+- **Decision:** Room types now structurally enforced
+- **Semantics:** dead_end=1 exit, junction≥3 exits
+- **Foundational:** Creature AI, minimap, movement all rely on these guarantees
+- **Minor note:** Monitor ensureJunctionExits() at Tier 3 (60 rooms) — may need BFS caching
+- **Status:** APPROVED
+
+#### 3. Admin Dashboard Creature Visibility (PR #82 — Jarlaxle, #7)
+- **Decision:** `as any` bracket-access acceptable for Phase 1
+- **Follow-up:** Before Phase 2, extract to typed getAdminSnapshot() method
+- **Status:** APPROVED with phase-2-note
+
+#### 4. Extraction State Messaging (PR #83 — Drizzt, #10)
+- **Decision:** `wasExtracting` detection pattern is correct
+- **Why:** Decouples command handler from protocol messaging
+- **Integration:** Works correctly with stash (#80) and doesn't block creatures (#82)
+- **Status:** APPROVED
+
+### Cross-System Integration Verdict
+All four PRs merge cleanly to dev:
+- Stash provider (#80) + extraction transfer (#83) share same repository
+- Room topology (#81) enables creature patrol (#82)
+- Admin dashboard (#82) reports stash backend
+
+### Phase 1 Server Block Complete
+**Issues Closed:** #2, #3, #5, #7, #9, #10, #11, #18
+**Test Coverage:** 949 server + 80 shared = 1029+ passing
+**Infrastructure:** Production-ready
+
+---
+
+**Recommendation:** Server block complete. Next: Phase 1 client UI batch (#66–#75) or Phase 2.
+
+### 2025-07-25: Content Admin Tool Design Document
+- **Action:** Created comprehensive design document at `docs/content-admin-tool.md` (1,463 lines) for a designer-facing content management tool, separate from the existing debug/admin dashboard.
+- **Key architecture decision:** Content admin tool is a separate container (React + Express) in the same Container Apps Environment, sharing the PostgreSQL instance but introducing its own `content_*` tables. Does NOT use Redis — Redis remains game-server-only.
+- **Content domains covered (12):** Creatures, Items, Biomes, Shard Modifiers, Loot Tables, Skills, Factions, Room Templates, Narrative Templates, Balance Constants, Contracts (Phase 4), Crafting Recipes (Phase 3).
+- **Data flow:** Content Admin → PostgreSQL (content tables) → Game Server reads at startup / hot-reload / shard seeding. Atomic content snapshots for deployment and rollback.
+- **Content lifecycle:** Draft → In Review → Published → Deprecated, with version history per entry and atomic deployment snapshots.
+- **Integration pattern:** Game server gets `POST /admin/api/content/reload` endpoint for hot-reload. Backward compatible — falls back to hardcoded TypeScript content when content tables are absent.
+- **Key files:** `docs/content-admin-tool.md` (the design document), `.squad/decisions/inbox/elminster-content-admin-tool.md` (team decision).
+- **Audience:** Document is designed for UI/UX designers creating Figma mockups — includes ASCII wireframes for every major screen, field-level detail for every content type, and component descriptions.
+- **GDD relationship:** This tool is NOT the admin dashboard described in GDD §13.3 (which is a debug/inspection tool using Colyseus Schema sync). This is a content authoring tool that feeds content into the game.

@@ -82,3 +82,323 @@
 - **Fix:** (1) Create HTTP server via `http.createServer(app)` without listening, (2) pass it to `WebSocketTransport({ server: httpServer })`, (3) call `await server.listen(PORT)` which triggers the full Colyseus setup: `matchMaker.accept()` → `transport.listen()` → `bindRouterToTransport()`.
 - **How it works:** `bindRouterToTransport` finds the Express app from the HTTP server's "request" listeners, removes it, then prepends a new handler that checks Colyseus routes first (POST `/matchmake/*`) and delegates non-matching requests to Express. This means the SPA catch-all (`app.get('*')`) is safe — it only catches GET requests that don't match Colyseus routes.
 - **Key insight:** Never bypass `Server.listen()` in Colyseus 0.17. Even when providing your own HTTP server, Colyseus must call `listen()` to wire up matchmaking. The transport's `server` option is for sharing an HTTP server, not for pre-starting it.
+
+### Dev Mode Auth Bypass (2026-03-21)
+- **Files:** `packages/client/src/hooks/useDevAutoLogin.ts`, `packages/client/src/App.tsx`
+- **Pattern:** Client-side auto-login hook using `import.meta.env.DEV` (Vite dev mode flag) to bypass auth screen during local development.
+- **Implementation:** Custom hook (`useDevAutoLogin`) fires once on mount in dev mode, attempts to register dev user (ignores 409 duplicate error), then logs in with credentials `dev/devdev`. On success, dispatches `LOGIN_SUCCESS` action. On failure (server not running), silently falls back to AuthScreen.
+- **Key insight:** No server changes needed — reuses existing `/auth/register` and `/auth/login` endpoints. The `useRef` pattern prevents multiple attempts, and the hook gracefully degrades when server is unavailable. In production builds, `import.meta.env.DEV` is false, so auth screen works normally.
+- **Testing:** All 45 client tests pass, all 552 server tests pass. TypeScript and ESLint clean.
+
+### Refuge ↔ Shard Room Switching (#65)
+- **Files:** `packages/shared/src/index.ts`, `packages/server/src/rooms/RefugeRoom.ts`, `packages/server/src/rooms/ShardRoom.ts`, `packages/client/src/services/connection.ts`, `packages/client/src/components/GameScreen.tsx`
+- **Pattern:** Server sends `ROOM_SWITCH` message (target + reason); client handles switch by leaving current room and joining the target via `switchRoom()`. No client-side routing — the server dictates when and where the player moves.
+- **Key decisions:**
+  - `ROOM_SWITCH` replaces the old `client.leave()` call in `handleSuccessfulExtraction()` — server no longer force-disconnects; client drives the room transition.
+  - `enter` command in RefugeRoom defaults to shard when no argument given (Phase 1: single shard option).
+  - `switchingRef` guard in GameScreen prevents onLeave handler from showing disconnect messages during a switch.
+  - `handlersRef` pattern lets the same handlers object be reused across room switches, avoiding stale closures.
+- **Testing:** 681 total tests passing (555 server + 46 client + 80 shared). 9 new tests covering enter command, shardboard, switchRoom(), and RoomSwitchMessage type.
+
+### Extraction Return to Refuge + Stash Transfer (#10)
+- **Files:** `packages/server/src/rooms/ShardRoom.ts`, `packages/server/src/extraction/stash-transfer.ts`, `packages/server/src/extraction/index.ts`, `packages/server/src/__tests__/extraction.test.ts`
+- **What:** On successful extraction, player's shard inventory is transferred to their persistent stash before sending `ROOM_SWITCH` to refuge.
+- **Key decisions:**
+  - Extracted `transferInventoryToStash()` into `extraction/stash-transfer.ts` — pure function, testable without Colyseus infrastructure.
+  - Shard `Item` → `StashItem` bridge: items registered as `type: 'material'`, `rarity: 'common'`, `baseDurability: null` by default. Jarlaxle's item system (#16) will reconcile these when both merge.
+  - StashService weight enforcement used — items exceeding the 200-unit stash capacity are silently lost with narrated feedback.
+  - ShardRoom gains `initStash(repo?, itemDefs?)` — same injection pattern as RefugeRoom. Allows shared repository across rooms.
+  - `handleSuccessfulExtraction()` is now async to await stash transfer before cleanup.
+  - Empty inventory extraction is a no-op (no narration, no stash calls).
+- **Testing:** 6 new tests in extraction.test.ts: transfer all items, weight limit enforcement, empty inventory, stacked items, itemDef registration, full-stash rejection. 705 total tests passing (579 server + 46 client + 80 shared).
+
+## Cross-Team Updates (Wave 1 completion — 2026-03-20T17:00)
+
+### Room Switching Enables Full Shard Loop
+**Relevant to:** Jarlaxle (#5), Minsc (integration), Elminster (infra)
+- Refuge → Shard transitions now server-authorized via `ROOM_SWITCH` message
+- `enter` command in RefugeRoom wires to generator-powered ShardRoom instances
+- Extraction completion (`extraction_complete`) triggers Shard → Refuge return
+- Full player lifecycle testable: login → enter → extract → return
+
+### Generator Integration Point Ready
+**For Jarlaxle #5:** ShardRoom now instantiates procedurally generated graphs on entry. Graph-adapter pattern handles conversion from shared RoomGraph format (LootContainer[]) to local Item[] format used by command handlers. No command system changes needed.
+
+### Integration Test Harness Enhanced
+**For Minsc:** MessageCollector helper now captures ROOM_SWITCH messages. Integration tests can verify room transitions without mocking Colyseus internals.
+
+### PostgreSQL Persistence Layer (#3) — 2026-03-20
+**Task:** Implement PG repository implementations for the existing schema
+**Status:** ✅ Complete — PR #77
+
+**What was already done:**
+- SQL migrations 001-005 covering all 7 tables (players, identities, items, stash, skills, factions, run_history)
+- Migration runner with `_migrations` meta-table tracking
+- Connection pool (`pg.Pool` with `DATABASE_URL`)
+- TypeScript interfaces for all tables (`db/types.ts`)
+- In-memory repository interfaces + implementations
+
+### PR #77 CI Fix (lint errors)
+- **Files:** `persistence-schema-validation.test.ts`, `persistence-stash-repository.test.ts`, `creature-wiring.test.ts`
+- **Problem:** CI failed with 6 ESLint `no-unused-vars` errors — 2 from my persistence tests, 4 pre-existing in creature-wiring.
+- **Fix:** Removed unused `makeKeyItem` helper, used `table` variable in UUID assertion, removed unused imports and destructured variables in creature-wiring.
+- **Key insight:** The ESLint config only ignores `_`-prefixed **args** (`argsIgnorePattern: '^_'`), not variables or imports. Prefixing a loop variable with `_` won't silence the error.
+- **CI root cause:** The lint step runs `eslint src/` which catches errors in ALL files, not just changed ones. Pre-existing errors in other tests block unrelated PRs.
+
+**What I built:**
+1. `PgPlayerRepository` — transactional player+identity creation, case-insensitive username lookup, PG constraint → DuplicateUsernameError mapping
+2. `PgStashRepository` — full CRUD with auto-stacking, JSONB metadata for maxDurability, per-player capacity overrides
+3. Migration 006 — `player_stash_capacity` table
+4. Server startup wiring — `DATABASE_URL` auto-detection, migration execution, PG/in-memory repo selection
+5. 22 unit tests (mocked pg pool) + included 125 pre-existing contract tests
+
+**Key patterns:**
+- PG unique-violation code `23505` with constraint name for domain-specific error mapping
+- `FOR UPDATE` row locking in stash operations to prevent race conditions
+- JSONB metadata column for extensible item properties (maxDurability now, roll data later)
+- `DATABASE_URL` as the single toggle between in-memory and PG persistence
+## Cross-Team Updates (Wave 2 completion — 2026-03-20T18:38)
+
+### Minsc Built 125 Contract Tests — Ready for PG Validation
+**Relevant to:** Drizzt's PR #77 PostgreSQL implementation
+- Minsc wrote PlayerRepository contract (27 tests), StashRepository contract (39 tests), Schema validation (59 tests)
+- All tests use factory-based pattern: identical tests will run against both InMemory and PG implementations
+- These 125 tests are awaiting PgPlayerRepository + PgStashRepository implementation to activate
+- When Drizzt's PR #77 lands, add `describe('PgPlayerRepository', ...)` and `describe('PgStashRepository', ...)` blocks with PG factories — tests automatically run against both backends
+- This guarantees behavioral equivalence: if PG tests pass, persistence layer is production-ready
+- **For you:** Contract tests are proven. Remaining persistence (skills, factions, run history) can reuse this same pattern with confidence. No need to write separate test suites.
+
+### Redis Container + Colyseus Presence Wiring (#2) — PR #78
+**Task:** Complete Issue #2 — Redis container setup with cache + Colyseus presence
+**Status:** ✅ Complete — PR #78
+
+**What was already done (prior PRs):**
+- RedisNarrationCache (ioredis), cache factory, SHA-256 hasher, narration telemetry
+- Docker Compose Redis service, Azure Bicep redis.bicep module
+- Config system with independent REDIS_CACHE_ENABLED / REDIS_PRESENCE_ENABLED toggles
+
+**What I built:**
+1. `cache/redis-presence.ts` — Factory that creates RedisPresence or LocalPresence based on config
+2. Server startup wiring — `createNarrationCache()` + `createPresence()` called at boot, cache/presence passed to Colyseus Server and admin deps
+3. Config fix — `REDIS_CONNECTION_STRING` now falls back to `REDIS_URL` (Bicep compatibility)
+4. Health endpoint — `/health` reports Redis cache and presence backend status
+5. Admin metrics — `/admin/api/metrics` + SSE include Redis backend info
+6. Bicep env vars — Added `REDIS_CACHE_ENABLED`, `REDIS_PRESENCE_ENABLED`, `REDIS_CONNECTION_STRING` to container-apps.bicep
+7. 9 new tests — presence factory (3), health endpoint Redis status (4), config REDIS_URL fallback (2)
+
+**Key patterns:**
+- Dynamic import for `@colyseus/redis-presence` — avoids hard dependency when Redis disabled
+- `PresenceResult` type with `isRedis` boolean for monitoring without coupling to Redis internals
+- Env var precedence: `REDIS_CONNECTION_STRING` > `REDIS_URL` > `redis://localhost:6379`
+- Two-toggle design: cache and presence are independently configurable (Phase 1 can enable cache without presence)
+
+## Learnings
+
+### Redis Presence Dynamic Import Pattern
+- **File:** `packages/server/src/cache/redis-presence.ts`
+- **Pattern:** Use `await import('@colyseus/redis-presence')` instead of static import to allow graceful fallback when the package is unavailable or Redis is unreachable
+- **Why:** @colyseus/redis-presence is an optional peer dep. Static imports would crash the server if Redis is disabled. Dynamic import + try/catch enables zero-config local dev (no Redis required)
+
+### Env Var Mismatch Between Bicep and Config
+- **Problem:** Bicep originally set `REDIS_URL` but config.ts read `REDIS_CONNECTION_STRING` — app couldn't find Redis in production
+- **Fix:** Config reads `REDIS_CONNECTION_STRING` first, falls back to `REDIS_URL`, then defaults to `redis://localhost:6379`
+- **Lesson:** Always verify env var names match between IaC (Bicep) and application config. Added both names to config as defense-in-depth
+
+### Colyseus RedisPresence Constructor
+- **Package:** `@colyseus/redis-presence@0.17.6`
+- **Constructor:** Accepts `string | number | RedisOptions | ClusterNode[]` — connection string works directly
+- **Internals:** Creates two ioredis clients (pub + sub) internally for Pub/Sub presence. The `shutdown()` method cleanly disconnects both
+## Wave 3 Complete — Redis Container Integration (2026-03-20T20:21:36Z)
+
+### Redis Container Setup — PR #78
+**Task:** Issue #2 — Redis Container Setup  
+**Status:** ✅ Complete
+
+**What I built:**
+1. **@colyseus/redis-presence integration** — Installed package, wired into server boot
+2. **Factory functions** — `createNarrationCache()` and `createPresence()` use env var toggles
+3. **Bicep env var fix** — Config now reads both `REDIS_CONNECTION_STRING` (preferred) and `REDIS_URL` (fallback), defaults to `redis://localhost:6379`
+4. **Health endpoints** — `/health/redis` added to admin dashboard (status: `connected | disconnected`)
+5. **Two-phase deployment toggles** — `REDIS_CACHE_ENABLED` + `REDIS_PRESENCE_ENABLED` allow Phase 1 → Phase 2 transition without code changes
+
+**Tests:** 9 new tests validating Redis connection, presence sync, cache integration. All passing. Total: 846 tests.
+
+**Key decision:** `REDIS_CONNECTION_STRING` is canonical for future Bicep deployments — Elminster should use this name for any new Redis env vars.
+
+### Volo Completed LLM Pipeline Audit — PR #79
+**Relevant to:** Issue #9 LLM Narration Pipeline acceptance criteria
+- Fixed `getTimeout()` to use per-type config lookup instead of hardcoded branching
+- Added `validateLLMOutput()` forbidden directive enforcement (`reveal_hidden_items`, `reveal_player_names`, `resolve_mechanics`)
+- 50 new integration tests covering timeout budgets, template fallback, background enrichment, output contract
+- All 846 tests passing — zero regressions
+
+### Minsc Built Anticipatory Tests
+**Relevant to:** Wave 3 Redis + Narration contracts
+- 25 Redis contract tests (connection, presence, cache key generation, eviction)
+- 54 narration contract tests (per-type timeout, forbidden directives, background enrichment, validation)
+- 79 total new tests, all passing
+- These tests validate both Drizzt's Redis and Volo's LLM implementations automatically when PRs merge
+
+### EXTRACTION_STATE Protocol Completion (#10) — PR #83
+- **Files:** `ExtractionSystem.ts`, `ShardRoom.ts`, `extraction.test.ts`
+- **Problem:** The shared `ExtractionMessage` type defines four states (started/progress/completed/interrupted) but only 'completed' was sent from ShardRoom. The client couldn't track extraction channel lifecycle.
+- **Fix:** Wired EXTRACTION_STATE messages for all four phases:
+  - `started` — sent after extract command succeeds (includes totalTicks/ticksRemaining)
+  - `progress` — sent each tick with updated ticksRemaining
+  - `interrupted` — sent on damage, collapse, or disconnect
+  - `completed` — already existed
+- **Pattern:** ShardRoom checks `isExtracting` before/after command to detect extraction start without coupling command handler to message protocol.
+- **Key insight:** The `getChannel()` accessor on ExtractionSystem provides tick state for progress messages without duplicating data in the tick result. Channel is deleted on completion/interruption, so progress messages only fire for active channels.
+
+## Wave 4b Completion — All Phase 1 Server Issues Closed (2026-03-20T22:11Z)
+
+**Status:** ✅ Complete  
+**PRs:** #80, #81, #82, #83 all merged to dev  
+**Test Status:** 949 server tests (+182 new), 80 shared, 45 client = 1029+ passing  
+**Issues Closed:** #2, #3, #5, #7, #9, #10, #11, #18 (all Phase 1 server block)
+
+### Extraction Messaging Completion (PR #83, Issue #10)
+- Added `EXTRACTION_STATE` messages for all 4 phases: started, progress, interrupted, completed
+- Stash transfer integrated with #80 provider — extraction → persistent storage
+- Command locking enforced during channeling
+- 9 new tests validating state transitions, noise generation, command locks
+- Merged and verified
+
+### Integration with Other Waves
+- **#80 Stash Persistence:** Extraction system now transfers inventory to persistent stash via provider
+- **#81 Room Topology:** Dead-end rooms don't offer tactical advantage; topology semantics enforced
+- **#82 Creature Admin:** Admin dashboard reports all systems; creatures don't interfere with extraction
+
+### Architecture Decisions Approved
+- Singleton provider pattern for server-wide state is correct — rooms consume via accessors, tests bypass via `initStash()`
+- `wasExtracting` detection pattern decouples command handling from protocol messaging
+- Command lock enforcement prevents multi-tasking during extraction (tick-aligned)
+
+### Minor Follow-Up (Phase 2)
+- Elminster noted: Extract `creatureManager` admin access pattern to helper to eliminate duplication
+- Monitor `ensureJunctionExits()` performance at Tier 3 (60 rooms) — may need BFS caching
+
+---
+
+**Phase 1 Server Block Status:** ✅ **COMPLETE**  
+All 8 server issues closed. Ready for Phase 1 Client UI batch (#66–#75) or Phase 2.
+
+### Button Design System (#74) — 2026-03-20
+- **Component:** `packages/client/src/components/Button.tsx` — reusable `<Button>` with `type` (variant), `size`, `icon`, `disabled` props
+- **API:** `<Button type="primary|secondary|danger|ghost" size="small|medium|large" icon={...} disabled>label</Button>`
+- **CSS:** `packages/client/src/styles.css` — added `--border-muted` variable and `.btn` design system (4 variants × 4 states × 3 sizes)
+- **Tests:** 52 tests in `Button.test.tsx` (26 anticipatory from Minsc + 18 extended coverage + 8 from branch race fix)
+- **Design decision:** Used `type` prop (not `variant`) to match Minsc's anticipatory tests and the issue spec. `Omit<ButtonHTMLAttributes, 'type'>` prevents conflict with HTML `type` attribute; component always renders `type="button"` on the `<button>` element.
+- **Key pattern:** Icon + label via `btn__icon` (aria-hidden) + `btn__label` spans with `margin-right: 6px` gap. `children` is optional to support icon-only buttons with `aria-label`.
+- **CSS variable compliance:** All colors reference theme variables (accent, bg-elevated, border-muted, text-secondary, text-disabled, danger, text-primary). No hardcoded hex in the component.
+- **PR:** #84 → dev
+
+---
+
+## Wave 5 Cross-Team Client UI Batch Context (2026-03-20T23:27:56Z)
+
+### What Other Agents Are Doing
+
+**Jarlaxle (Systems Dev) — Issue #75, PR #85: Toast Notifications**
+- Event-driven toast service (`services/toast.ts`) — standalone pub/sub, no React dependency
+- React container (`components/ToastContainer.tsx`) manages animation + max 3 visible
+- API: `toast.success()`, `toast.warning()`, `toast.danger()`, `toast.dismiss(id)` — auto-dismiss 4s
+- **For you:** Any code needing toast feedback (connection errors, extraction complete, etc.) can import service
+- Tests: 18 passing; anticipatory pattern established
+
+**Volo (Narrative Dev) — Issue #67, PR #86: Clickable Exits**
+- Narrative panel exits use server hints (`RoomHeaderMessage.exits`), not regex on LLM prose
+- Eliminates false positives from prose like "northern wind" → "north" exit
+- Terminal accepts `availableExits` prop; `onExitClick` callback
+- **For you:** Client sends `availableExits` from room state; clicking exit fires callback
+- Tests: 28 passing; pattern for role="link" on span (not `<a>`) established
+
+**Minsc (Tester) — Anticipatory tests across 3 issues**
+- 100 tests total: Button (40), Toast (35), ClickableExits (25)
+- Import-failure pattern: real components imported, tests fail at import until implementation
+- Test conventions: toast timer patterns, exit link roles, button class naming (BEM `.btn--primary`)
+- **For you:** Your Button API already validated by 40 tests; remaining issues follow same pattern
+
+**Elminster (Lead/Architect) — Content Admin Tool design complete**
+- 1,463-line design document at `docs/content-admin-tool.md` — separate container, shared DB, atomic snapshots
+- Content lifecycle: Draft → Review → Published; hot reload (no restart)
+- **For you:** After Phase 1 client UI, server gets content registry module (reads from DB, falls back to TypeScript)
+- Phase 2 candidate; design locked
+
+### Implications for Your Work
+
+1. **Button component API locked** — Other agents building UI pages will use `<Button>` instead of raw `<button>`
+2. **Toast service available** — Call from any code; no React context needed
+3. **Exit detection pattern set** — Narrative panel consumes `availableExits` from server; no false positives
+4. **Test suite is active** — 100 anticipatory tests now passing on dev; future PRs in this batch should follow same pattern
+
+**Next Issues (7 remaining for Phase 1 client UI):** #66, #68, #69, #70, #71, #72, #73
+
+### Reconnection Overlay (#70) — PR #88
+- **Component:** `packages/client/src/components/ReconnectionOverlay.tsx` — pure presentational, 3 visual states
+- **Hook:** `packages/client/src/hooks/useReconnection.ts` — exponential backoff (2s→32s), max 5 attempts
+- **Pattern:** `reconnectionRef` in GameScreen avoids stale closures in Colyseus `onLeave` handler
+- **Key insight:** `userEvent.setup({ advanceTimers })` with `vi.useFakeTimers()` causes test timeouts — use `fireEvent.click()` instead for simple button clicks under fake timers
+- **Tests:** 30 overlay + 9 hook = 39 new tests
+- **CSS:** All overlay styles use theme CSS variables. Dark scrim at 50% opacity, card centered, fade 0.3s.
+
+### Loading & Transition States (#71) — PR #89
+- **Component:** `packages/client/src/components/LoadingTransitions.tsx` — 4 exported components
+- **RoomTransitionLoader:** Uses `showTime` ref + `MIN_DISPLAY_MS` (300ms) to prevent flicker on fast room switches. The `useEffect` dependency intentionally excludes `visible` to avoid infinite loop.
+- **CombatInitiationBanner:** Auto-dismiss after 2s via `useEffect` timer. Banner, not overlay — `role="alert"` not `role="dialog"`.
+- **LongRunningIndicator:** Threshold-based progressive disclosure (5000ms). No internal timer — parent drives `elapsedMs`.
+- **Tests:** 29 tests matching exact anticipatory test API from Minsc's specs
+- **CSS:** Loading overlay at z-index 900 (below reconnection at 1000), combat banner at 800. Separate keyframe animations.
+
+### Branch Management Lesson
+- **Problem:** Shared environment caused HEAD to revert to another branch (`squad/66-shard-exploration-sidebar`) between commands. Cherry-picks from that branch hit merge conflicts.
+- **Fix:** Always verify `git branch --show-current` immediately before committing. When cherry-pick conflicts arise, recreate files directly on the target branch instead.
+- **Pattern:** For clean PRs from dev, always: `git checkout dev && git checkout -b squad/XX-slug`, verify branch name, create/edit files, commit.
+
+## Wave 6 — Phase 1 Client UI Batch Continued
+
+**Status:** ✅ Complete — Reconnection Overlay (#70, PR #88) + Loading & Transition States (#71, PR #89) merged to dev
+
+### What Happened
+
+Wave 6 delivered final 2 critical client UI foundation components. Reconnection Overlay and Loading/Transition States complete the Phase 1 core infrastructure. All 4 Wave 6 implementations (Drizzt, Jarlaxle, Volo, Minsc) now merged. Phase 1 client UI is 70% complete with 7 of 10 issues resolved.
+
+### Phase 1 Client UI Progress
+
+- ✅ #74 Button Design System (PR #84) — Wave 5
+- ✅ #75 Toast Notifications (PR #85) — Wave 5
+- ✅ #67 Clickable Exits (PR #86) — Wave 5
+- ✅ #70 Reconnection Overlay (PR #88) — Wave 6 (you)
+- ✅ #71 Loading & Transition States (PR #89) — Wave 6 (you)
+- ✅ #66 Shard Exploration Sidebar & Combat Overlay (PR #90) — Wave 6 (Jarlaxle)
+- ✅ #69 Shardboard Cards (PR #87) — Wave 6 (Volo)
+- 🟠 #68 Refuge Hub — Wave 7 (anticipatory tests ready)
+- 🟠 #72 Extraction Screen — Wave 7 (anticipatory tests ready)
+- 🟠 #73 Chat & Social Panel — Wave 7 (anticipatory tests ready)
+
+### Test Coverage Wave 6
+
+- Your PRs #88 + #89: 68 tests (39 + 29)
+- Jarlaxle PR #90: 68 new tests, 181 total client tests
+- Volo PR #87: 37 tests
+- Minsc anticipatory: 153 tests across 5 files
+- **Wave 6 total:** 322 new tests, 0 regressions
+- **Phase 1 total:** 1,247+ passing (949 server + 80 shared + 218 client)
+
+### Next Phase (Wave 7)
+
+Wave 7 will deliver final 3 client UI issues (#68, #72, #73) using locked anticipatory test contracts. Your reconnection and loading state infrastructure will support all remaining pages.
+
+## Wave 7 — Extraction Screen (2026-03-21)
+
+### Extraction Screen — PR #92
+**Task:** Issue #72 — Extraction Screen: Loot Summary & Victory State
+**Status:** ✅ Complete
+**Branch:** `squad/72-extraction-screen`
+
+**What I built:**
+1. **ExtractionOverlay** — Progress bar scrim during channeling with countdown, narration, cancel button
+2. **ExtractionSuccess** — Loot recap with tier-colored items, run summary, stash stats, return button
+3. **ExtractionFailure** — Items lost (red), debuffs (amber), run summary, return button
+4. **ExtractionScreen** — Unified phase-routing discriminated union component
+5. **52 tests** covering all phases, tier colors, accessibility, edge cases

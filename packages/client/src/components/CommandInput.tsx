@@ -16,7 +16,7 @@ export function CommandInput({
 }: CommandInputProps): React.JSX.Element {
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [, setHistoryIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = useCallback((e: FormEvent) => {

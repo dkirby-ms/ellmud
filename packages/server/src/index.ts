@@ -10,35 +10,55 @@ import {
   AuthService,
   InMemoryTokenStore,
   InMemoryPlayerRepository,
+  PgPlayerRepository,
   createAuthRouter,
   initColyseusAuth,
 } from './auth/index.js';
 import { createHealthRouter } from './health.js';
 import { createAdminRouter, createDashboardRouter } from './admin/index.js';
 import { getConfig } from './config.js';
+import { runMigrations } from './db/index.js';
+import { createNarrationCache, createPresence } from './cache/index.js';
+import { initStashProvider, isStashPg } from './stash/index.js';
 
 const config = getConfig();
 const PORT = config.port;
 const AUTH_REQUIRED = config.authRequired;
+const USE_PG = !!process.env.DATABASE_URL;
+
+// ─── Database Bootstrap ──────────────────────────────────────────────────────
+if (USE_PG) {
+  console.log('[Ellmud] DATABASE_URL detected — running PostgreSQL migrations…');
+  await runMigrations();
+  console.log('[Ellmud] Migrations complete.');
+}
+
+// ─── Stash Persistence ──────────────────────────────────────────────────────
+initStashProvider(USE_PG);
+console.log(`[Ellmud] Stash persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Redis Bootstrap ─────────────────────────────────────────────────────────
+const { cache: narrationCache, isRedis: isCacheRedis } = await createNarrationCache(config);
+const { presence, isRedis: isPresenceRedis } = await createPresence(config);
 
 const app = express();
 app.use(express.json());
 
 // ─── Auth Setup ──────────────────────────────────────────────────────────────
 const tokenStore = new InMemoryTokenStore();
-const playerRepo = new InMemoryPlayerRepository();
+const playerRepo = USE_PG ? new PgPlayerRepository() : new InMemoryPlayerRepository();
 const authService = new AuthService(tokenStore, playerRepo);
 
 // Mount auth routes on the same Express app Colyseus uses
 app.use(createAuthRouter(authService));
 
-// Mount health check endpoint
-app.use(createHealthRouter());
+// Mount health check endpoint — includes Redis + persistence status
+app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));
 
 // ─── Admin Dashboard ─────────────────────────────────────────────────────────
 // Admin API at /admin/api/*, dashboard UI at /admin/
 // Protected by ADMIN_TOKEN env var — admin auth is separate from player auth.
-app.use(createAdminRouter());
+app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));
 app.use('/admin', createDashboardRouter());
 
 // Initialize Colyseus room auth hooks
@@ -67,6 +87,7 @@ const httpServer = http.createServer(app);
 
 const server = new Server({
   transport: new WebSocketTransport({ server: httpServer }),
+  presence,
 });
 
 // Register room types
@@ -79,4 +100,6 @@ console.log(`[Ellmud] Colyseus server listening on ws://localhost:${PORT}`);
 console.log(`[Ellmud] Admin monitor at http://localhost:${PORT}/colyseus`);
 console.log(`[Ellmud] Admin dashboard at http://localhost:${PORT}/admin`);
 console.log(`[Ellmud] Auth required: ${AUTH_REQUIRED}`);
-console.log(`[Ellmud] Max players/shard: ${config.maxPlayersPerShard}, Matchmaker: ${config.matchmakerMode}, Redis: ${config.redis.enabled ? 'enabled' : 'disabled'}`);
+console.log(`[Ellmud] Cache: ${isCacheRedis ? 'Redis' : 'in-memory'}, Presence: ${isPresenceRedis ? 'Redis' : 'local'}`);
+console.log(`[Ellmud] Stash persistence: ${isStashPg() ? 'PostgreSQL' : 'in-memory'}`);
+console.log(`[Ellmud] Max players/shard: ${config.maxPlayersPerShard}, Matchmaker: ${config.matchmakerMode}`);

@@ -37,6 +37,11 @@ export interface CommandResult {
   roomHeader?: RoomHeaderEntry;
 }
 
+export interface CreatureRef {
+  id: string;
+  name: string;
+}
+
 export interface CommandContext {
   player: PlayerState;
   room: Room;
@@ -51,6 +56,8 @@ export interface CommandContext {
   combatSystem?: CombatSystem;
   /** Extraction system reference (available in ShardRoom context). */
   extractionSystem?: ExtractionSystem;
+  /** Living creatures in the current room. */
+  creaturesInRoom?: CreatureRef[];
 }
 
 export type CommandHandler = (ctx: CommandContext) => CommandResult;
