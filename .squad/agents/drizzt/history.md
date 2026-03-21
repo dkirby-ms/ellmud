@@ -333,3 +333,24 @@ All 8 server issues closed. Ready for Phase 1 Client UI batch (#66–#75) or Pha
 4. **Test suite is active** — 100 anticipatory tests now passing on dev; future PRs in this batch should follow same pattern
 
 **Next Issues (7 remaining for Phase 1 client UI):** #66, #68, #69, #70, #71, #72, #73
+
+### Reconnection Overlay (#70) — PR #88
+- **Component:** `packages/client/src/components/ReconnectionOverlay.tsx` — pure presentational, 3 visual states
+- **Hook:** `packages/client/src/hooks/useReconnection.ts` — exponential backoff (2s→32s), max 5 attempts
+- **Pattern:** `reconnectionRef` in GameScreen avoids stale closures in Colyseus `onLeave` handler
+- **Key insight:** `userEvent.setup({ advanceTimers })` with `vi.useFakeTimers()` causes test timeouts — use `fireEvent.click()` instead for simple button clicks under fake timers
+- **Tests:** 30 overlay + 9 hook = 39 new tests
+- **CSS:** All overlay styles use theme CSS variables. Dark scrim at 50% opacity, card centered, fade 0.3s.
+
+### Loading & Transition States (#71) — PR #89
+- **Component:** `packages/client/src/components/LoadingTransitions.tsx` — 4 exported components
+- **RoomTransitionLoader:** Uses `showTime` ref + `MIN_DISPLAY_MS` (300ms) to prevent flicker on fast room switches. The `useEffect` dependency intentionally excludes `visible` to avoid infinite loop.
+- **CombatInitiationBanner:** Auto-dismiss after 2s via `useEffect` timer. Banner, not overlay — `role="alert"` not `role="dialog"`.
+- **LongRunningIndicator:** Threshold-based progressive disclosure (5000ms). No internal timer — parent drives `elapsedMs`.
+- **Tests:** 29 tests matching exact anticipatory test API from Minsc's specs
+- **CSS:** Loading overlay at z-index 900 (below reconnection at 1000), combat banner at 800. Separate keyframe animations.
+
+### Branch Management Lesson
+- **Problem:** Shared environment caused HEAD to revert to another branch (`squad/66-shard-exploration-sidebar`) between commands. Cherry-picks from that branch hit merge conflicts.
+- **Fix:** Always verify `git branch --show-current` immediately before committing. When cherry-pick conflicts arise, recreate files directly on the target branch instead.
+- **Pattern:** For clean PRs from dev, always: `git checkout dev && git checkout -b squad/XX-slug`, verify branch name, create/edit files, commit.
