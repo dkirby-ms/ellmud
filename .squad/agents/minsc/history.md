@@ -248,3 +248,59 @@
 4. **Timer testing validated** — Toast pattern for `vi.useFakeTimers()` + `vi.useRealTimers()` swap useful for animation tests
 
 **Next Issues (7 remaining for Phase 1 client UI):** #66, #68, #69, #70, #71, #72, #73
+
+---
+
+## Wave 6 — Anticipatory Tests for Issues #66, #68–#73
+
+**Date:** Session following Wave 5 completion
+**Branch:** `dev` (all tests written on dev; anticipatory pattern)
+
+### What Was Done
+
+Created 5 new anticipatory test files covering Issues #68, #69, #71, #72, #73. Issues #66 and #70 were already covered by existing tests (`sidebar.test.tsx`, `combat-overlay.test.tsx`, `ReconnectionOverlay.test.tsx`, `useReconnection.test.ts`) written by other agents.
+
+### New Test Files Created
+
+| File | Issue | Tests | Target Components |
+|------|-------|-------|-------------------|
+| `ShardboardCard.test.tsx` | #69 | 41 | ShardCard + ShardboardGrid |
+| `LoadingTransitions.test.tsx` | #71 | 29 | RoomTransitionLoader, ShardEntryLoader, CombatInitiationBanner, LongRunningIndicator |
+| `RefugeHub.test.tsx` | #68 | 26 | RefugeHub (3-column layout, 7 tabs) |
+| `ExtractionScreen.test.tsx` | #72 | 31 | ExtractionScreen (phases, tier colors, stats) |
+| `ChatSocialPanel.test.tsx` | #73 | 30 | ChatSocialPanel (messages, char limit, trade) |
+
+### Already Covered (Not Modified)
+
+| File | Issue | Tests | Notes |
+|------|-------|-------|-------|
+| `sidebar.test.tsx` | #66 | 19 | ShardSidebar — written by Boo (implementation agent) |
+| `combat-overlay.test.tsx` | #66 | 27 | CombatOverlay + EnemyStatusPanel + getHpTier |
+| `ReconnectionOverlay.test.tsx` | #70 | 30 | Full overlay + useReconnection hook |
+| `useReconnection.test.ts` | #70 | 9 | Hook-level tests |
+
+### Test Baseline After Wave 6
+
+- **238 tests passing** across 13 test files
+- **3 files fail on import** (expected anticipatory): ChatSocialPanel, ExtractionScreen, RefugeHub
+- Components for #66, #69, #70, #71 already exist on dev → tests activate immediately
+- Components for #68, #72, #73 don't exist yet → tests activate when implementations merge
+
+### Key Learnings
+
+1. **Check dev before writing** — Other agents (Boo) had already written comprehensive tests for #66 and #70. Always `ls __tests__/` and check existing coverage before creating new files.
+2. **Some components landed on dev between waves** — ShardSidebar, CombatOverlay, EnemyStatusPanel, ReconnectionOverlay, ShardCard, ShardboardGrid, and loading components all exist on dev now. Only RefugeHub, ExtractionScreen, ChatSocialPanel remain anticipatory.
+3. **Context-based vs props-based APIs** — ShardSidebar/CombatOverlay use `useAppContext()` internally (wrap in `<AppContext.Provider>`). EnemyStatusPanel/ShardCard are props-based (pass data directly). Must check actual component API, not assume.
+4. **ShardCardData from @ellmud/shared** — ShardCard uses types from the shared package: `ShardCardData`, `ShardTier`, `BiomeType`, `ShardModifier`, `ShardKeyType`. Tests import these types.
+5. **useCountdown hook** — ShardCard uses `useCountdown` internally for entry window timers. Tests need `vi.useFakeTimers()` to control countdown behavior.
+6. **BEM naming convention** — Components use BEM: `shard-card__header`, `shard-tier--white`, `combat-overlay--visible`, `action-btn--active`. Tests assert on CSS class names.
+7. **Keyboard shortcuts** — CombatOverlay uses `window.addEventListener('keydown')` for keys 1-8. Tests use `fireEvent.keyDown(window, { key: '3' })`.
+8. **getHpTier utility** — Exported from store.ts, pure function mapping HP ratio to tier string. combat-overlay.test.tsx tests it directly.
+
+### Patterns Established for Future Waves
+
+- **Anticipatory file naming**: `<ComponentName>.test.tsx` matching the component filename
+- **Import path convention**: `../components/<ComponentName>.js` (with .js extension per project ESM config)
+- **Props helper pattern**: `const defaultProps = { ... }` with spread override for test variations
+- **Context wrapper pattern**: `function renderX(overrides: Partial<AppState>) { ... }` wrapping in AppContext.Provider
+- **Timer pattern**: `beforeEach(() => vi.useFakeTimers())` / `afterEach(() => vi.useRealTimers())` for countdown/animation tests
