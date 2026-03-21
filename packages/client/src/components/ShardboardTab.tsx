@@ -62,11 +62,19 @@ const getTierColor = (tier: number) => {
   }
 };
 
-export default function ShardboardTab() {
+interface ShardboardTabProps {
+  onEnterShard?: (shardId: string) => void;
+}
+
+export default function ShardboardTab({ onEnterShard }: ShardboardTabProps) {
   const navigate = useNavigate();
 
   const handleEnterShard = (shardId: string) => {
-    navigate(`/shard/${shardId}`);
+    if (onEnterShard) {
+      onEnterShard(shardId);
+    } else {
+      navigate(`/shard/${shardId}`);
+    }
   };
 
   return (

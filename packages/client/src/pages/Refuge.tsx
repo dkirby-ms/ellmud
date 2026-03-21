@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate, Navigate, Link } from "react-router";
 import {
   Package,
   Shield,
@@ -12,9 +12,23 @@ import {
   Send,
   Wrench,
 } from "lucide-react";
+import { useAppContext, type TerminalMessage } from "../store";
+import { connect, sendRawCommand } from "../services/connection";
+import { useReconnection } from "../hooks/useReconnection";
+import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
+import { logout } from "../services/api";
 import ShardboardTab from "../components/ShardboardTab";
 import StashTab from "../components/StashTab";
 import LoadoutTab from "../components/LoadoutTab";
+import type {
+  NarrateMessage,
+  RoomHeaderMessage,
+  ShardStateMessage,
+  CombatResultMessage,
+  RoomSwitchMessage,
+} from "@ellmud/shared";
+import type { Room } from "@colyseus/sdk";
+import type { MessageHandlers } from "../services/connection";
 
 type TabType =
   | "stash"
@@ -43,43 +57,231 @@ const tabs: { id: TabType; icon: React.ReactNode; label: string }[] = [
   { id: "shardboard", icon: <Map className="w-5 h-5" />, label: "Shardboard" },
 ];
 
-const ambientEvents = [
-  "A hooded merchant sets up shop near the eastern gate.",
-  "Rain begins to fall across the Refuge.",
-  "Distant thunder echoes from the north.",
-  "A group of Shardwalkers return, bloodied but alive.",
-  "The market square grows quiet as dusk approaches.",
-];
-
-const nearbyPlayers = [
-  { name: "Valeria Shade", faction: "Veilkeepers" },
-  { name: "Thorn Ironhand", faction: "Ironwright Compact" },
-  { name: "Whisper", faction: "Ashen Guard" },
-];
+let msgCounter = 0;
+function nextMsgId(): string {
+  return `refuge-msg-${++msgCounter}`;
+}
 
 export default function Refuge() {
+  const { state, dispatch } = useAppContext();
   const [activeTab, setActiveTab] = useState<TabType>("shardboard");
   const [chatMessage, setChatMessage] = useState("");
-  const [chatMessages, setChatMessages] = useState([
-    { speaker: "System", message: "Welcome to the Refuge.", isSystem: true },
-    {
-      speaker: "Valeria Shade",
-      message: "Anyone heading to the Ashen Reach tonight?",
-      isSystem: false,
-    },
-  ]);
   const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
 
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatMessage.trim()) return;
+  const roomRef = useRef<Room | null>(null);
+  const switchingRef = useRef(false);
+  const handlersRef = useRef<MessageHandlers | null>(null);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
-    setChatMessages([
-      ...chatMessages,
-      { speaker: "You", message: chatMessage, isSystem: false },
-    ]);
-    setChatMessage("");
-  };
+  // Redirect unauthenticated users
+  if (!state.authenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  const addMessage = useCallback(
+    (text: string, type: TerminalMessage["type"]) => {
+      dispatch({
+        type: "ADD_MESSAGE",
+        message: { id: nextMsgId(), text, type, timestamp: Date.now() },
+      });
+    },
+    [dispatch],
+  );
+
+  // Reconnection logic
+  const reconnection = useReconnection({
+    maxAttempts: 5,
+    baseDelayMs: 2000,
+    onReconnect: async () => {
+      if (!state.token || !handlersRef.current) return false;
+      try {
+        dispatch({ type: "SET_CONNECTION_STATUS", status: "connecting" });
+        const room = await connect(
+          state.token,
+          "refuge",
+          handlersRef.current,
+        );
+        roomRef.current = room;
+        dispatch({ type: "SET_ROOM", room });
+        addMessage("Reconnected to the Refuge.", "system");
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    onReturnToRefuge: () => {
+      roomRef.current?.leave();
+      roomRef.current = null;
+      dispatch({ type: "LOGOUT" });
+    },
+  });
+
+  const reconnectionRef = useRef(reconnection);
+  reconnectionRef.current = reconnection;
+
+  // Connect to refuge room on mount
+  useEffect(() => {
+    if (!state.token) return;
+
+    let disposed = false;
+
+    const handlers: MessageHandlers = {
+      onNarrate: (msg: NarrateMessage) => {
+        if (!disposed) {
+          addMessage(msg.text, msg.type);
+        }
+      },
+      onRoomHeader: (msg: RoomHeaderMessage) => {
+        if (!disposed) {
+          dispatch({ type: "SET_ROOM_HEADER", header: msg });
+        }
+      },
+      onShardState: (msg: ShardStateMessage) => {
+        if (!disposed) {
+          dispatch({
+            type: "SET_SHARD_STATE",
+            state: msg.state,
+            collapseTimer: msg.collapseTimer,
+          });
+        }
+      },
+      onCombatResult: (msg: CombatResultMessage) => {
+        if (!disposed) {
+          for (const r of msg.results) {
+            addMessage(`${r.actorName} → ${r.action}`, "combat");
+          }
+        }
+      },
+      onRoomSwitch: (msg: RoomSwitchMessage) => {
+        if (disposed || switchingRef.current) return;
+        switchingRef.current = true;
+
+        addMessage("The world shifts around you...", "system");
+
+        // Leave refuge room — the target page will establish its own connection
+        roomRef.current?.leave();
+        roomRef.current = null;
+        dispatch({ type: "SET_CONNECTION_STATUS", status: "disconnected" });
+
+        if (msg.target === "shard") {
+          navigateRef.current("/shard/live", {
+            state: { fromRefuge: true, options: msg.options },
+          });
+        }
+
+        switchingRef.current = false;
+      },
+      onError: (code: number, message: string) => {
+        if (!disposed) {
+          addMessage(`[Error ${code}: ${message}]`, "system");
+          dispatch({ type: "SET_ERROR", error: message });
+        }
+      },
+      onLeave: (code: number) => {
+        if (!disposed && !switchingRef.current) {
+          dispatch({ type: "SET_CONNECTION_STATUS", status: "disconnected" });
+          roomRef.current = null;
+          if (code >= 4000) {
+            addMessage(
+              `Disconnected (code ${code}). You may need to log in again.`,
+              "system",
+            );
+          } else {
+            addMessage(
+              "Connection lost. Attempting to reconnect...",
+              "system",
+            );
+            reconnectionRef.current.reportDisconnect();
+          }
+        }
+      },
+    };
+
+    handlersRef.current = handlers;
+    dispatch({ type: "SET_CONNECTION_STATUS", status: "connecting" });
+
+    connect(state.token, "refuge", handlers)
+      .then((room) => {
+        if (!disposed) {
+          roomRef.current = room;
+          dispatch({ type: "SET_ROOM", room });
+          reconnectionRef.current.reportConnected();
+        } else {
+          room.leave();
+        }
+      })
+      .catch((err: Error) => {
+        if (!disposed) {
+          dispatch({ type: "SET_CONNECTION_STATUS", status: "error" });
+          addMessage(`Failed to connect: ${err.message}`, "system");
+        }
+      });
+
+    return () => {
+      disposed = true;
+      if (roomRef.current) {
+        roomRef.current.leave();
+        roomRef.current = null;
+      }
+    };
+  }, [state.token, dispatch, addMessage]);
+
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView?.({ behavior: "smooth" });
+  }, [state.messages.length]);
+
+  // Send chat message as command
+  const handleSendMessage = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!chatMessage.trim() || !roomRef.current) return;
+      sendRawCommand(roomRef.current, chatMessage);
+      setChatMessage("");
+    },
+    [chatMessage],
+  );
+
+  // Enter shard via server command
+  const handleEnterShard = useCallback(() => {
+    if (!roomRef.current) return;
+    sendRawCommand(roomRef.current, "enter shard");
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    if (state.token) {
+      try {
+        await logout(state.token);
+      } catch {
+        /* best effort */
+      }
+    }
+    roomRef.current?.leave();
+    roomRef.current = null;
+    dispatch({ type: "LOGOUT" });
+  }, [state.token, dispatch]);
+
+  // Derive display data from real state
+  const locationName = state.roomHeader?.roomName ?? "The Refuge";
+  const isConnected = state.connectionStatus === "connected";
+
+  // Ambient events: 'sound' and 'room' type messages
+  const ambientEvents = state.messages
+    .filter((m) => m.type === "sound" || m.type === "room")
+    .slice(-8);
+
+  // Chat messages: all messages for the feed
+  const chatMessages = state.messages.slice(-100);
+
+  // Connection status indicator color
+  const statusColor =
+    state.connectionStatus === "connected"
+      ? "#2D6B4F"
+      : state.connectionStatus === "connecting"
+        ? "#B8860B"
+        : "#8B2500";
 
   return (
     <div className="h-screen bg-[#0A0B0F] flex flex-col">
@@ -97,18 +299,24 @@ export default function Refuge() {
               className="text-[#8A8B95] text-sm"
               style={{ fontFamily: "var(--font-sans)" }}
             >
-              Kael Darkwater
+              {state.playerId ?? "Unknown"}
             </span>
             <span className="text-[#4A4B55]">|</span>
             <div className="flex items-center gap-2">
-              <div className="w-20 h-2 bg-[#1C1D27] rounded-full overflow-hidden">
-                <div className="h-full w-[75%] bg-gradient-to-r from-[#2D6B4F] to-[#8B2500]"></div>
-              </div>
+              <div
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: statusColor }}
+                title={state.connectionStatus}
+              />
               <span
                 className="text-[#8A8B95] text-xs"
                 style={{ fontFamily: "var(--font-mono)" }}
               >
-                Healthy
+                {state.connectionStatus === "connected"
+                  ? "Online"
+                  : state.connectionStatus === "connecting"
+                    ? "Connecting..."
+                    : "Offline"}
               </span>
             </div>
             <span className="text-[#4A4B55]">|</span>
@@ -116,7 +324,7 @@ export default function Refuge() {
               className="text-[#8A8B95] text-sm"
               style={{ fontFamily: "var(--font-sans)" }}
             >
-              The Refuge
+              {locationName}
             </span>
           </div>
         </div>
@@ -133,6 +341,13 @@ export default function Refuge() {
             className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors"
           >
             <Settings className="w-5 h-5" />
+          </button>
+          <button
+            onClick={handleLogout}
+            className="text-[#8A8B95] hover:text-[#8B2500] transition-colors text-sm"
+            style={{ fontFamily: "var(--font-sans)" }}
+          >
+            Logout
           </button>
         </div>
       </div>
@@ -158,7 +373,7 @@ export default function Refuge() {
             ))}
           </div>
 
-          {/* Ambient Events */}
+          {/* Ambient Events — real server narrate messages */}
           <div className="flex-1 p-4 overflow-y-auto">
             <h3
               className="text-[#8A8B95] text-sm mb-3"
@@ -167,22 +382,36 @@ export default function Refuge() {
               Ambient Events
             </h3>
             <div className="space-y-3">
-              {ambientEvents.map((event, i) => (
+              {ambientEvents.length === 0 ? (
                 <p
-                  key={i}
                   className="text-[#4A4B55] text-xs italic"
                   style={{ fontFamily: "var(--font-serif)", lineHeight: 1.6 }}
                 >
-                  {event}
+                  The Refuge hums with quiet activity...
                 </p>
-              ))}
+              ) : (
+                ambientEvents.map((event) => (
+                  <p
+                    key={event.id}
+                    className="text-[#4A4B55] text-xs italic"
+                    style={{
+                      fontFamily: "var(--font-serif)",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {event.text}
+                  </p>
+                ))
+              )}
             </div>
           </div>
         </div>
 
         {/* Center column - Content */}
         <div className="flex-1 bg-[#0A0B0F] overflow-y-auto">
-          {activeTab === "shardboard" && <ShardboardTab />}
+          {activeTab === "shardboard" && (
+            <ShardboardTab onEnterShard={handleEnterShard} />
+          )}
           {activeTab === "stash" && <StashTab />}
           {activeTab === "loadout" && <LoadoutTab />}
           {activeTab === "crafting" && (
@@ -261,58 +490,79 @@ export default function Refuge() {
               Players Nearby
             </h3>
             <div className="space-y-2">
-              {nearbyPlayers.map((player, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-[#2D6B4F]"></div>
-                  <div className="flex-1">
-                    <p
-                      className="text-[#E8E0D0] text-sm"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      {player.name}
-                    </p>
-                    <p
-                      className="text-[#4A4B55] text-xs"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      {player.faction}
-                    </p>
-                  </div>
-                </div>
-              ))}
+              {isConnected ? (
+                <p
+                  className="text-[#4A4B55] text-xs"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  Player presence updates coming soon...
+                </p>
+              ) : (
+                <p
+                  className="text-[#4A4B55] text-xs"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  Not connected
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Chat */}
+          {/* Chat — real WebSocket messages */}
           <div className="flex-1 flex flex-col">
             <div className="flex-1 p-4 overflow-y-auto space-y-3">
-              {chatMessages.map((msg, i) => (
-                <div key={i}>
-                  {msg.isSystem ? (
+              {chatMessages.length === 0 && (
+                <p
+                  className="text-[#4A4B55] text-xs"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  {isConnected
+                    ? "Connected. Type a command below."
+                    : "Connecting to the Refuge..."}
+                </p>
+              )}
+              {chatMessages.map((msg) => (
+                <div key={msg.id}>
+                  {msg.type === "system" || msg.type === "header" ? (
                     <p
                       className="text-[#4A4B55] text-xs"
                       style={{ fontFamily: "var(--font-mono)" }}
                     >
-                      {msg.message}
+                      {msg.text}
                     </p>
-                  ) : (
+                  ) : msg.type === "speech" ? (
                     <div>
                       <p
                         className="text-[#8A8B95] text-xs mb-1"
                         style={{ fontFamily: "var(--font-sans)" }}
                       >
-                        {msg.speaker}
+                        Speech
                       </p>
                       <p
                         className="text-[#E8E0D0] text-sm"
                         style={{ fontFamily: "var(--font-serif)" }}
                       >
-                        "{msg.message}"
+                        &ldquo;{msg.text}&rdquo;
                       </p>
                     </div>
+                  ) : msg.type === "combat" ? (
+                    <p
+                      className="text-[#8B2500] text-xs"
+                      style={{ fontFamily: "var(--font-mono)" }}
+                    >
+                      ⚔ {msg.text}
+                    </p>
+                  ) : (
+                    <p
+                      className="text-[#E8E0D0] text-sm"
+                      style={{ fontFamily: "var(--font-serif)", lineHeight: 1.6 }}
+                    >
+                      {msg.text}
+                    </p>
                   )}
                 </div>
               ))}
+              <div ref={chatEndRef} />
             </div>
 
             <form
@@ -324,13 +574,17 @@ export default function Refuge() {
                   type="text"
                   value={chatMessage}
                   onChange={(e) => setChatMessage(e.target.value)}
-                  placeholder="Type message..."
-                  className="flex-1 bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] text-sm focus:border-[#3A7D7B] focus:outline-none transition-colors placeholder-[#4A4B55]"
+                  placeholder={
+                    isConnected ? "Type a command..." : "Connecting..."
+                  }
+                  disabled={!isConnected}
+                  className="flex-1 bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] text-sm focus:border-[#3A7D7B] focus:outline-none transition-colors placeholder-[#4A4B55] disabled:opacity-50"
                   style={{ fontFamily: "var(--font-sans)" }}
                 />
                 <button
                   type="submit"
-                  className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors"
+                  disabled={!isConnected}
+                  className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors disabled:opacity-50"
                 >
                   <Send className="w-5 h-5" />
                 </button>
@@ -339,6 +593,17 @@ export default function Refuge() {
           </div>
         </div>
       </div>
+
+      {/* Reconnection overlay */}
+      <ReconnectionOverlay
+        state={reconnection.overlayState}
+        attempt={reconnection.attempt}
+        maxAttempts={5}
+        elapsedSeconds={reconnection.elapsedSeconds}
+        onReconnect={reconnection.reconnectNow}
+        onCancel={reconnection.cancel}
+        onReturnToRefuge={reconnection.returnToRefuge}
+      />
     </div>
   );
 }
