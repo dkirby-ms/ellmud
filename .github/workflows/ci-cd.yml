@@ -172,8 +172,8 @@ jobs:
               --query "properties.runningState" -o tsv)
             
             case "$STATUS" in
-              Running)
-                echo "✓ Revision $LATEST_REV is running"
+              Running|RunningAtMaxScale)
+                echo "✓ Revision $LATEST_REV is running (state: $STATUS)"
                 break
                 ;;
               Failed|Degraded)
@@ -194,7 +194,7 @@ jobs:
             esac
           done
           
-          if [ "$STATUS" != "Running" ]; then
+          if [ "$STATUS" != "Running" ] && [ "$STATUS" != "RunningAtMaxScale" ]; then
             echo "✗ Revision did not reach Running state after 5 minutes"
             exit 1
           fi
