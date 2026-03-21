@@ -13,7 +13,9 @@ import {
 
 // ─── Room Transition Loader ──────────────────────────────────────────────────
 
-describe('RoomTransitionLoader — rendering', () => {
+// TODO: LoadingTransitions.tsx moved to _old/ during UX overhaul. Loading/transition states will use new shadcn-based components.
+// Rewrite tests for new loading components.
+describe.skip('RoomTransitionLoader — rendering', () => {
   it('renders when active', () => {
     render(<RoomTransitionLoader active={true} />);
     expect(screen.getByText(/transitioning/i)).toBeInTheDocument();
@@ -46,7 +48,7 @@ describe('RoomTransitionLoader — rendering', () => {
   });
 });
 
-describe('RoomTransitionLoader — minimum display time', () => {
+describe.skip('RoomTransitionLoader — minimum display time', () => {
   beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -81,7 +83,7 @@ describe('RoomTransitionLoader — minimum display time', () => {
 
 // ─── Shard Entry Loader ──────────────────────────────────────────────────────
 
-describe('ShardEntryLoader — rendering', () => {
+describe.skip('ShardEntryLoader — rendering', () => {
   it('renders "Entering shard..." text when active', () => {
     render(<ShardEntryLoader active={true} />);
     expect(screen.getByText(/entering shard/i)).toBeInTheDocument();
@@ -108,7 +110,7 @@ describe('ShardEntryLoader — rendering', () => {
   });
 });
 
-describe('ShardEntryLoader — dismissed on first room', () => {
+describe.skip('ShardEntryLoader — dismissed on first room', () => {
   it('hides when active toggles to false', () => {
     const { container, rerender } = render(<ShardEntryLoader active={true} />);
     expect(container.querySelector('.shard-entry-loader')).toBeInTheDocument();
@@ -120,7 +122,7 @@ describe('ShardEntryLoader — dismissed on first room', () => {
 
 // ─── Combat Initiation Banner ────────────────────────────────────────────────
 
-describe('CombatInitiationBanner — rendering', () => {
+describe.skip('CombatInitiationBanner — rendering', () => {
   it('renders combat initiation text', () => {
     render(<CombatInitiationBanner active={true} />);
     expect(screen.getByText(/combat/i)).toBeInTheDocument();
@@ -152,7 +154,7 @@ describe('CombatInitiationBanner — rendering', () => {
   });
 });
 
-describe('CombatInitiationBanner — auto-dismiss', () => {
+describe.skip('CombatInitiationBanner — auto-dismiss', () => {
   beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -170,7 +172,7 @@ describe('CombatInitiationBanner — auto-dismiss', () => {
 
 // ─── Long-Running Indicator ──────────────────────────────────────────────────
 
-describe('LongRunningIndicator — rendering', () => {
+describe.skip('LongRunningIndicator — rendering', () => {
   it('does not show cancel button before 5s', () => {
     render(<LongRunningIndicator elapsedMs={3000} onCancel={vi.fn()} />);
     expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
@@ -196,7 +198,7 @@ describe('LongRunningIndicator — rendering', () => {
   });
 });
 
-describe('LongRunningIndicator — threshold crossing', () => {
+describe.skip('LongRunningIndicator — threshold crossing', () => {
   it('cancel button appears when elapsed crosses 5s threshold', () => {
     const { rerender } = render(
       <LongRunningIndicator elapsedMs={4000} onCancel={vi.fn()} />,
@@ -210,7 +212,7 @@ describe('LongRunningIndicator — threshold crossing', () => {
 
 // ─── CSS compliance ──────────────────────────────────────────────────────────
 
-describe('LoadingTransitions — CSS compliance', () => {
+describe.skip('LoadingTransitions — CSS compliance', () => {
   it('room transition does not use inline hardcoded hex colors', () => {
     const { container } = render(<RoomTransitionLoader active={true} />);
     container.querySelectorAll('[style]').forEach((el) => {

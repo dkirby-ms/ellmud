@@ -39,7 +39,9 @@ const defaultProps = {
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
-describe('TradeRequest', () => {
+// TODO: TradeRequest.tsx moved to _old/ during UX overhaul. Trade UI will be rebuilt in new design system.
+// Rewrite tests for new trade components.
+describe.skip('TradeRequest', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
@@ -227,7 +229,7 @@ describe('TradeRequest', () => {
 
 // ─── TradeRequestList ────────────────────────────────────────────────────────
 
-describe('TradeRequestList', () => {
+describe.skip('TradeRequestList', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();

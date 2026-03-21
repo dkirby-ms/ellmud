@@ -38,7 +38,9 @@ function renderHub(propsOverride: Partial<RefugeHubProps> = {}, dispatch = vi.fn
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
 
-describe('RefugeHub – Layout', () => {
+// TODO: RefugeHub.tsx moved to _old/ during UX overhaul. Replaced by pages/Refuge.tsx with tab-based layout (ShardboardTab, StashTab, LoadoutTab).
+// Rewrite tests for new Refuge page.
+describe.skip('RefugeHub – Layout', () => {
   it('renders with refuge-hub CSS class', () => {
     const { container } = renderHub();
     expect(container.querySelector('.refuge-hub')).toBeInTheDocument();
@@ -68,7 +70,7 @@ describe('RefugeHub – Layout', () => {
 
 // ─── Tab Navigation ──────────────────────────────────────────────────────────
 
-describe('RefugeHub – Tabs', () => {
+describe.skip('RefugeHub – Tabs', () => {
   it('renders a tablist', () => {
     renderHub();
     expect(screen.getByRole('tablist')).toBeInTheDocument();
@@ -134,7 +136,7 @@ describe('RefugeHub – Tabs', () => {
 
 // ─── Stash Panel ─────────────────────────────────────────────────────────────
 
-describe('RefugeHub – Stash Panel', () => {
+describe.skip('RefugeHub – Stash Panel', () => {
   it('shows Stash title when stash tab is active', () => {
     const { container } = renderHub({ activeTab: 'stash' });
     const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
@@ -168,7 +170,7 @@ describe('RefugeHub – Stash Panel', () => {
 
 // ─── Loadout Panel ───────────────────────────────────────────────────────────
 
-describe('RefugeHub – Loadout Panel', () => {
+describe.skip('RefugeHub – Loadout Panel', () => {
   it('shows Loadout title when loadout tab is active', () => {
     const { container } = renderHub({ activeTab: 'loadout' });
     const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
@@ -193,7 +195,7 @@ describe('RefugeHub – Loadout Panel', () => {
 
 // ─── Crafting Panel ──────────────────────────────────────────────────────────
 
-describe('RefugeHub – Crafting Panel', () => {
+describe.skip('RefugeHub – Crafting Panel', () => {
   it('shows Crafting title when crafting tab is active', () => {
     const { container } = renderHub({ activeTab: 'crafting' });
     const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
@@ -227,7 +229,7 @@ describe('RefugeHub – Crafting Panel', () => {
 
 // ─── Marketplace Panel ───────────────────────────────────────────────────────
 
-describe('RefugeHub – Marketplace Panel', () => {
+describe.skip('RefugeHub – Marketplace Panel', () => {
   it('shows Marketplace title', () => {
     const { container } = renderHub({ activeTab: 'marketplace' });
     const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
@@ -255,7 +257,7 @@ describe('RefugeHub – Marketplace Panel', () => {
 
 // ─── Factions Panel ──────────────────────────────────────────────────────────
 
-describe('RefugeHub – Factions Panel', () => {
+describe.skip('RefugeHub – Factions Panel', () => {
   it('shows Factions title', () => {
     const { container } = renderHub({ activeTab: 'factions' });
     const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
@@ -288,7 +290,7 @@ describe('RefugeHub – Factions Panel', () => {
 
 // ─── Contracts Panel ─────────────────────────────────────────────────────────
 
-describe('RefugeHub – Contracts Panel', () => {
+describe.skip('RefugeHub – Contracts Panel', () => {
   it('shows Contracts title', () => {
     const { container } = renderHub({ activeTab: 'contracts' });
     const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
@@ -322,7 +324,7 @@ describe('RefugeHub – Contracts Panel', () => {
 
 // ─── Shardboard Panel ────────────────────────────────────────────────────────
 
-describe('RefugeHub – Shardboard Panel', () => {
+describe.skip('RefugeHub – Shardboard Panel', () => {
   it('shows Shardboard title', () => {
     const { container } = renderHub({ activeTab: 'shardboard' });
     const panel = container.querySelector('.refuge-hub__center')! as HTMLElement;
@@ -344,7 +346,7 @@ describe('RefugeHub – Shardboard Panel', () => {
 
 // ─── Ambient Events ──────────────────────────────────────────────────────────
 
-describe('RefugeHub – Ambient Events', () => {
+describe.skip('RefugeHub – Ambient Events', () => {
   it('renders ambient-events-feed container', () => {
     const { container } = renderHub();
     expect(container.querySelector('.ambient-events-feed')).toBeInTheDocument();
@@ -381,7 +383,7 @@ describe('RefugeHub – Ambient Events', () => {
 
 // ─── Chat Panel ──────────────────────────────────────────────────────────────
 
-describe('RefugeHub – Chat Panel', () => {
+describe.skip('RefugeHub – Chat Panel', () => {
   it('renders a chat input', () => {
     renderHub();
     expect(screen.getByRole('textbox')).toBeInTheDocument();
@@ -456,7 +458,7 @@ describe('RefugeHub – Chat Panel', () => {
 
 // ─── Social Panel ────────────────────────────────────────────────────────────
 
-describe('RefugeHub – Social Panel', () => {
+describe.skip('RefugeHub – Social Panel', () => {
   it('shows Players Nearby section', () => {
     renderHub();
     expect(screen.getByText('Players Nearby')).toBeInTheDocument();

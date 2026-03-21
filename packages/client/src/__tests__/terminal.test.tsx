@@ -20,7 +20,9 @@ function makeMsg(
   };
 }
 
-describe('Terminal', () => {
+// TODO: Terminal.tsx moved to _old/ during UX overhaul. Terminal display is now part of ShardExploration page.
+// Rewrite tests for new narrative display component.
+describe.skip('Terminal', () => {
   it('renders messages', () => {
     const messages = [
       makeMsg('You enter the crypt.', 'room', 'msg-1'),
@@ -81,7 +83,7 @@ describe('Terminal', () => {
   });
 });
 
-describe('Terminal — message history buffer', () => {
+describe.skip('Terminal — message history buffer', () => {
   it('renders up to 500 messages without issue', () => {
     const messages = Array.from({ length: 500 }, (_, i) =>
       makeMsg(`Message ${i}`, 'room', `msg-${i}`),

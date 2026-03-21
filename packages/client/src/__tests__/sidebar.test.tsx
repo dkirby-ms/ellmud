@@ -13,7 +13,9 @@ function renderSidebar(overrides: Partial<AppState> = {}) {
   return { ...render(<AppContext.Provider value={{ state, dispatch }}><ShardSidebar /></AppContext.Provider>), dispatch };
 }
 
-describe('ShardSidebar', () => {
+// TODO: ShardSidebar.tsx moved to _old/ during UX overhaul. Sidebar UI is now part of new page layout components.
+// Rewrite tests for new sidebar implementation.
+describe.skip('ShardSidebar', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
