@@ -5,6 +5,9 @@
  * 1. RoomTransitionLoader — Full-screen overlay for room-to-room transitions (300ms min)
  * 2. ShardEntryLoader — Full-screen overlay for shard entry
  * 3. CombatInitiationBanner — Top banner slide-in for combat start
+ * 1. RoomTransitionLoader — Full-screen overlay for room-to-room transitions (300-500ms min)
+ * 2. ShardEntryLoader — Full-screen overlay for shard entry (dismissed on first room)
+ * 3. CombatInitiationBanner — Top banner slide-in for combat start (no full overlay)
  * 4. LongRunningIndicator — Cancel button shown after 5s elapsed
  */
 
@@ -40,6 +43,7 @@ export function RoomTransitionLoader({ active }: RoomTransitionLoaderProps): Rea
       if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
     };
   }, [active]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active]);  // eslint-disable-line react-hooks/exhaustive-deps -- visible excluded to avoid loop
 
   if (!visible) return null;
 

@@ -35,7 +35,6 @@ export function GameScreen(): React.JSX.Element {
     });
   }, [dispatch]);
 
-  // Build message handlers as a stable reference for room switching
   const handlersRef = useRef<import('../services/connection.js').MessageHandlers | null>(null);
 
   // Reconnection logic
@@ -118,6 +117,7 @@ export function GameScreen(): React.JSX.Element {
                   name: r.targetName ?? 'Unknown',
                   hp: r.newHp,
                   maxHp: r.maxHp,
+                  hp: r.newHp, maxHp: r.maxHp,
                   hpTier: getHpTier(r.newHp, r.maxHp),
                   telegraphedAction: null,
                 },
@@ -131,6 +131,7 @@ export function GameScreen(): React.JSX.Element {
                   name: r.actorName,
                   hp: r.newHp,
                   maxHp: r.maxHp,
+                  hp: r.newHp, maxHp: r.maxHp,
                   hpTier: getHpTier(r.newHp, r.maxHp),
                   telegraphedAction: null,
                 },
@@ -157,7 +158,6 @@ export function GameScreen(): React.JSX.Element {
         addMessage('The world shifts around you...', 'system');
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
 
-        // Clear shard state when returning to refuge
         if (msg.target === 'refuge') {
           dispatch({ type: 'SET_SHARD_STATE', state: null as unknown as import('@ellmud/shared').ShardState });
           dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
@@ -190,7 +190,6 @@ export function GameScreen(): React.JSX.Element {
         }
       },
       onLeave: (code: number) => {
-        // Don't show disconnect messages during a room switch
         if (!disposed && !switchingRef.current) {
           dispatch({ type: 'SET_CONNECTION_STATUS', status: 'disconnected' });
           roomRef.current = null;

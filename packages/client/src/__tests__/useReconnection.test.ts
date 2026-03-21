@@ -33,6 +33,7 @@ describe('useReconnection', () => {
     const { result } = renderHook(() => useReconnection({ onReconnect }));
 
     act(() => { result.current.reportDisconnect(); });
+    // Flush the async onReconnect
     await act(async () => { await vi.runAllTimersAsync(); });
 
     expect(result.current.overlayState).toBe('reconnected');
@@ -40,6 +41,7 @@ describe('useReconnection', () => {
 
   it('increments elapsed seconds', () => {
     const onReconnect = vi.fn().mockReturnValue(new Promise(() => {}));
+    const onReconnect = vi.fn().mockReturnValue(new Promise(() => {})); // never resolves
     const { result } = renderHook(() => useReconnection({ onReconnect }));
 
     act(() => { result.current.reportDisconnect(); });
@@ -55,11 +57,13 @@ describe('useReconnection', () => {
     );
 
     act(() => { result.current.reportDisconnect(); });
+    // Flush first attempt
     await act(async () => { await vi.runAllTimersAsync(); });
 
     act(() => { result.current.cancel(); });
     expect(result.current.overlayState).toBe('disconnected');
 
+    // Should not attempt again after cancel
     const callCount = onReconnect.mock.calls.length;
     act(() => { vi.advanceTimersByTime(10000); });
     expect(onReconnect.mock.calls.length).toBe(callCount);
@@ -107,11 +111,13 @@ describe('useReconnection', () => {
 
     act(() => { result.current.reportDisconnect(); });
 
+    // Run through all retry timers
     for (let i = 0; i < 5; i++) {
       await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
     }
 
     expect(result.current.overlayState).toBe('disconnected');
+    // Should have called onReconnect at most maxAttempts times
     expect(onReconnect.mock.calls.length).toBeLessThanOrEqual(3);
   });
 });

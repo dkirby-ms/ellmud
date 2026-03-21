@@ -23,6 +23,15 @@ export interface UseReconnectionResult {
   reportConnected: () => void;
   reconnectNow: () => void;
   cancel: () => void;
+  /** Call when connection is lost */
+  reportDisconnect: () => void;
+  /** Call when connection is re-established */
+  reportConnected: () => void;
+  /** Immediately try to reconnect */
+  reconnectNow: () => void;
+  /** Cancel automatic reconnection */
+  cancel: () => void;
+  /** Return to refuge (leave shard) */
   returnToRefuge: () => void;
 }
 
@@ -81,6 +90,7 @@ export function useReconnection({
 
     if (cancelled.current) return;
 
+    // Exponential backoff: 2s, 4s, 8s, 16s, 32s
     const delay = Math.min(baseDelayMs * Math.pow(2, currentAttempt - 1), 30000);
     setOverlayState('disconnected');
 
@@ -133,6 +143,7 @@ export function useReconnection({
     onReturnToRefuge?.();
   }, [clearTimers, onReturnToRefuge]);
 
+  // Cleanup on unmount
   useEffect(() => clearTimers, [clearTimers]);
 
   return {

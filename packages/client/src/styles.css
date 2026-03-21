@@ -9,6 +9,7 @@
   --bg-panel: #12131A;
   --bg-elevated: #1C1D27;
   --bg-input: #1C1D27;
+  --bg-gradient-mid: #0E0F15;
 
   /* ─── Text ─── */
   --text-primary: #E8E0D0;
@@ -21,12 +22,21 @@
 
   /* ─── Accent / Semantic ─── */
   --accent: #C9A84C;
+  --accent-hover: #d4b35a;
   --accent-dim: #a8893e;
   --accent-hover: #d4b35a;
   --danger: #8B2500;
+  --danger-hover: #cc4400;
+  --error: #cc4444;
   --success: #2D6B4F;
   --interactive: #3A7D7B;
   --warning: #B8860B;
+
+  /* ─── Borders ─── */
+  --border-subtle: #222222;
+  --border-default: #333333;
+  --border-muted: #2A2B35;
+  --border-hover: #3E3F4C;
 
   /* ─── Loot tiers ─── */
   --loot-common: #E8E0D0;
@@ -76,7 +86,7 @@ body {
   padding: 1rem;
   background:
     radial-gradient(ellipse at 50% 20%, rgba(201, 168, 76, 0.03) 0%, transparent 60%),
-    linear-gradient(180deg, #0A0B0F 0%, #0E0F15 50%, #0A0B0F 100%);
+    linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-gradient-mid) 50%, var(--bg-primary) 100%);
 }
 
 .auth-container {
@@ -182,7 +192,7 @@ body {
 }
 
 .auth-error {
-  color: #c44;
+  color: var(--error);
   font-size: 0.85rem;
   padding: 0.5rem 0.75rem;
   background: rgba(139, 37, 0, 0.15);
@@ -207,7 +217,7 @@ body {
 }
 
 .auth-button:hover:not(:disabled) {
-  background: #d4b35a;
+  background: var(--accent-hover);
 }
 
 .auth-button:disabled {
@@ -241,7 +251,7 @@ body {
   gap: 1rem;
   padding: 0.5rem 1rem;
   background: var(--bg-panel);
-  border-bottom: 1px solid #222;
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
 
@@ -276,7 +286,7 @@ body {
 
 .logout-button {
   background: none;
-  border: 1px solid #333;
+  border: 1px solid var(--border-default);
   color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 0.75rem;
@@ -343,7 +353,7 @@ body {
   align-items: center;
   padding: 0.5rem 1rem;
   background: var(--bg-panel);
-  border-top: 1px solid #222;
+  border-top: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
 
@@ -356,7 +366,7 @@ body {
 .command-input input {
   flex: 1;
   background: var(--bg-input);
-  border: 1px solid #333;
+  border: 1px solid var(--border-default);
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 1rem;
@@ -500,6 +510,162 @@ body {
 .btn:disabled {
   color: var(--text-disabled);
   opacity: 0.5;
+/* ─── Reconnection Overlay ────────────────────────────────────────────────── */
+
+.reconnect-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.reconnect-overlay--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.reconnect-card {
+  background: var(--bg-panel);
+  border: 1px solid rgba(201, 168, 76, 0.15);
+  border-radius: 8px;
+  padding: 2.5rem 2rem;
+  min-width: 320px;
+  max-width: 420px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.reconnect-icon {
+  font-size: 2.5rem;
+  line-height: 1;
+  margin-bottom: 0.25rem;
+}
+
+.reconnect-icon--warning {
+  color: var(--danger);
+}
+
+.reconnect-icon--success {
+  color: var(--success);
+}
+
+.reconnect-title {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.reconnect-title--disconnected {
+  color: var(--accent);
+}
+
+.reconnect-title--reconnecting {
+  color: var(--warning);
+}
+
+.reconnect-title--reconnected {
+  color: var(--success);
+}
+
+.reconnect-subtitle {
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.reconnect-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--bg-elevated);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: reconnect-spin 0.8s linear infinite;
+  margin-bottom: 0.25rem;
+}
+
+@keyframes reconnect-spin {
+  to { transform: rotate(360deg); }
+}
+
+.reconnect-progress {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-elevated);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.reconnect-progress__fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.reconnect-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.reconnect-btn {
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.65rem 1.25rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  border: 1px solid transparent;
+}
+
+.reconnect-btn--primary {
+  background: var(--accent);
+  color: var(--bg-primary);
+  border-color: var(--accent);
+}
+
+.reconnect-btn--primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.reconnect-btn--secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.reconnect-btn--secondary:hover {
+  border-color: var(--accent-dim);
+  color: var(--text-primary);
+}
+
+.reconnect-btn--cancel {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.reconnect-btn--cancel:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 /* ─── Shardboard ─────────────────────────────────────────────────────────── */
 
 .shardboard {
@@ -597,6 +763,7 @@ body {
 
 .shard-tier--white {
   color: var(--loot-common);
+  color: var(--text-primary);
   background: rgba(232, 224, 208, 0.12);
   border: 1px solid rgba(232, 224, 208, 0.2);
 }
@@ -890,6 +1057,8 @@ body {
 .reconnect-btn--primary:hover {
   background: #d4b35a;
   border-color: #d4b35a;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .reconnect-btn--secondary {
@@ -941,6 +1110,7 @@ body {
   max-width: 30%;
   background: var(--bg-panel);
   border-left: 1px solid #222;
+  border-left: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1074,6 +1244,7 @@ body {
   background: var(--bg-panel);
   color: var(--text-primary);
   border: 1px solid #2A2B35;
+  border: 1px solid var(--border-muted);
   font-family: var(--font-sans);
   font-size: 0.75rem;
   font-weight: 500;
@@ -1177,6 +1348,7 @@ body {
   background: var(--bg-panel);
   color: var(--text-primary);
   border: 1px solid #2A2B35;
+  border: 1px solid var(--border-muted);
   font-family: var(--font-sans);
   font-size: 0.75rem;
   font-weight: 500;
@@ -1202,6 +1374,7 @@ body {
 .action-btn:disabled {
   color: var(--text-disabled);
   border-color: #2A2B35;
+  border-color: var(--border-muted);
   cursor: not-allowed;
   box-shadow: none;
 }
@@ -1331,6 +1504,8 @@ body {
   color: var(--accent);
 .action-btn:disabled:hover {
   border-color: #2A2B35;
+.action-btn:disabled:hover {
+  border-color: var(--border-muted);
   box-shadow: none;
 }
 
@@ -1369,6 +1544,7 @@ body {
 .hp-uninjured { color: var(--text-primary); }
 .hp-wounded { color: var(--warning); }
 .hp-badly-wounded { color: #cc4400; }
+.hp-badly-wounded { color: var(--danger-hover); }
 .hp-near-death { color: var(--danger); }
 
 .enemy-telegraphed {
@@ -1377,6 +1553,8 @@ body {
   font-style: italic;
   font-size: 0.85rem;
   color: var(--text-secondary);
+}
+
 /* ─── Loading & Transition Overlays ───────────────────────────────────────── */
 
 .loading-overlay {
