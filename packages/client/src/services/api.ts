@@ -10,6 +10,14 @@ export interface AuthResponse {
   token: string;
 }
 
+// Global 401 handler — called when any API request returns 401 (stale token).
+let _on401: (() => void) | null = null;
+
+/** Register a callback to fire when any API call receives a 401 response. */
+export function onAuthError(handler: () => void): void {
+  _on401 = handler;
+}
+
 async function request<T>(path: string, options: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
@@ -20,6 +28,9 @@ async function request<T>(path: string, options: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      _on401?.();
+    }
     const body = await res.json().catch(() => ({ error: res.statusText }));
     throw new ApiError(res.status, body.error ?? body.message ?? 'Request failed');
   }
@@ -56,4 +67,21 @@ export async function logout(token: string): Promise<void> {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   });
+}
+
+/**
+ * Lightweight token validation — probes the server with the stored token.
+ * Returns false if the server responds with 401 (token revoked/expired).
+ * Returns true for any other outcome (valid, server unreachable, no /auth/me yet).
+ */
+export async function validateToken(token: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${BASE_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.status !== 401;
+  } catch {
+    // Server unreachable — keep token, let normal flow handle it
+    return true;
+  }
 }

@@ -493,3 +493,34 @@ Improved the ACA deployment workflow in `.github/workflows/ci-cd.yml`:
 - `packages/client/src/pages/ShardExploration.tsx`
 
 **Lock:** Drizzt (original author) — no conflicts
+
+### 2026-03-21: Fix Reconnection "Return to Refuge" — useShardConnection.ts
+
+**Branch:** `squad/ux-overhaul`
+**Task:** Elminster code review should-fix #5 (item #7 in decisions.md)
+
+**Problem:**
+- `onReturnToRefuge` callback in `useShardConnection.ts` dispatched `{ type: 'LOGOUT' }`
+- This nuked all auth state (token, playerId, messages) — user sent back to login screen
+- Correct behavior: navigate to `/refuge` while keeping user authenticated
+
+**Root cause:** The callback was copied from a "bail out entirely" pattern. On the Shard page, returning to Refuge is a navigation event, not a session-ending event.
+
+**Fix (1 file, surgical):**
+- `packages/client/src/hooks/useShardConnection.ts`
+  - Added `import { useNavigate } from 'react-router';`
+  - Added `const navigate = useNavigate();` in hook body
+  - Replaced `dispatch({ type: 'LOGOUT' });` with `navigate('/refuge');`
+  - Room leave + ref cleanup preserved (user disconnects from shard cleanly)
+  - Auth state (token, playerId) preserved — user stays logged in
+
+**What happens now:**
+1. User clicks "Return to Refuge" in reconnection overlay
+2. `useReconnection.returnToRefuge()` clears timers, hides overlay, calls callback
+3. Callback leaves the Colyseus shard room
+4. `navigate('/refuge')` triggers React Router navigation
+5. ShardExploration unmounts (cleanup effect fires — no double-leave since room already null)
+6. Refuge page mounts and establishes its own room connection
+7. User remains authenticated throughout
+
+**Verification:** `tsc --noEmit` clean, `vite build` succeeds (705KB bundle, unchanged).

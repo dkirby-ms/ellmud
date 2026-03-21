@@ -449,3 +449,6 @@ Originally used useRef for extraction state, but refs don't trigger re-renders. 
 
 ### AppContext Already Wired at App.tsx Level
 The App.tsx already had useReducer + AppContext.Provider + localStorage persistence. No need to create a separate AppProvider — just use useAppContext() in any page.
+
+### Extraction Handler Must Be Registered on Every Room
+The `extraction_state` handler was only registered after the initial `connect()` call. On `switchRoom()` and reconnection, the new room never got the handler — a latent bug. Fix: define the handler alongside other handler definitions, store in a ref, and register it in all three room-creation paths (connect, switchRoom, reconnect). The `MessageHandlers` interface in connection.ts doesn't cover extraction_state, so direct `room.onMessage` registration is needed at each site.

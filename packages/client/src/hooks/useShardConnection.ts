@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useCallback, useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useAppContext, getHpTier, type TerminalMessage } from '../store.js';
 import { connect, switchRoom, sendRawCommand, sendCommand } from '../services/connection.js';
 import { useReconnection } from './useReconnection.js';
@@ -55,6 +56,7 @@ const INITIAL_EXTRACTION: ExtractionState = { status: null, progress: 0, narrati
 
 export function useShardConnection(): UseShardConnectionResult {
   const { state, dispatch } = useAppContext();
+  const navigate = useNavigate();
   const roomRef = useRef<Room | null>(null);
   const switchingRef = useRef(false);
   const soundCueCounterRef = useRef(0);
@@ -68,6 +70,7 @@ export function useShardConnection(): UseShardConnectionResult {
   }, [dispatch]);
 
   const handlersRef = useRef<MessageHandlers | null>(null);
+  const extractionHandlerRef = useRef<((msg: ExtractionMessage) => void) | null>(null);
 
   const reconnection = useReconnection({
     maxAttempts: 5,
@@ -78,6 +81,9 @@ export function useShardConnection(): UseShardConnectionResult {
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
         const room = await connect(state.token, 'shard', handlersRef.current);
         roomRef.current = room;
+        if (extractionHandlerRef.current) {
+          room.onMessage('extraction_state', extractionHandlerRef.current);
+        }
         dispatch({ type: 'SET_ROOM', room });
         addMessage('Reconnected to the shard.', 'system');
         return true;
@@ -88,7 +94,7 @@ export function useShardConnection(): UseShardConnectionResult {
     onReturnToRefuge: () => {
       roomRef.current?.leave();
       roomRef.current = null;
-      dispatch({ type: 'LOGOUT' });
+      navigate('/refuge');
     },
   });
 
@@ -192,6 +198,7 @@ export function useShardConnection(): UseShardConnectionResult {
             if (!disposed) {
               roomRef.current = newRoom;
               dispatch({ type: 'SET_ROOM', room: newRoom });
+              newRoom.onMessage('extraction_state', handleExtraction);
               addMessage(`Connected to ${msg.target === 'refuge' ? 'the Refuge' : 'shard'}.`, 'system');
             } else {
               newRoom.leave();
@@ -229,6 +236,35 @@ export function useShardConnection(): UseShardConnectionResult {
     };
 
     handlersRef.current = handlers;
+
+    // Extraction state handler — co-located with other handler definitions
+    const handleExtraction = (msg: ExtractionMessage) => {
+      if (disposed) return;
+      switch (msg.state) {
+        case 'started':
+          setExtraction({ status: 'in-progress', progress: 0, narration: msg.narration });
+          addMessage(msg.narration, 'system');
+          break;
+        case 'progress': {
+          const progress = msg.totalTicks && msg.ticksRemaining != null
+            ? ((msg.totalTicks - msg.ticksRemaining) / msg.totalTicks) * 100
+            : 0;
+          setExtraction({ status: 'in-progress', progress, narration: msg.narration });
+          addMessage(msg.narration, 'system');
+          break;
+        }
+        case 'completed':
+          setExtraction({ status: 'success', progress: 100, narration: msg.narration });
+          addMessage(msg.narration, 'system');
+          break;
+        case 'interrupted':
+          setExtraction(INITIAL_EXTRACTION);
+          addMessage(msg.narration, 'system');
+          break;
+      }
+    };
+    extractionHandlerRef.current = handleExtraction;
+
     dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
 
     connect(state.token, 'shard', handlers).then((room) => {
@@ -237,33 +273,7 @@ export function useShardConnection(): UseShardConnectionResult {
         dispatch({ type: 'SET_ROOM', room });
         addMessage('Connected to the shard.', 'system');
         reconnectionRef.current.reportConnected();
-
-        // Wire extraction state messages
-        room.onMessage('extraction_state', (msg: ExtractionMessage) => {
-          if (disposed) return;
-          switch (msg.state) {
-            case 'started':
-              setExtraction({ status: 'in-progress', progress: 0, narration: msg.narration });
-              addMessage(msg.narration, 'system');
-              break;
-            case 'progress': {
-              const progress = msg.totalTicks && msg.ticksRemaining != null
-                ? ((msg.totalTicks - msg.ticksRemaining) / msg.totalTicks) * 100
-                : 0;
-              setExtraction({ status: 'in-progress', progress, narration: msg.narration });
-              addMessage(msg.narration, 'system');
-              break;
-            }
-            case 'completed':
-              setExtraction({ status: 'success', progress: 100, narration: msg.narration });
-              addMessage(msg.narration, 'system');
-              break;
-            case 'interrupted':
-              setExtraction(INITIAL_EXTRACTION);
-              addMessage(msg.narration, 'system');
-              break;
-          }
-        });
+        room.onMessage('extraction_state', handleExtraction);
       } else {
         room.leave();
       }
