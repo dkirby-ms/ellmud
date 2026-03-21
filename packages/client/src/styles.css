@@ -341,3 +341,112 @@ body {
 .command-input input:disabled {
   opacity: 0.4;
 }
+
+/* ─── Loading & Transition Overlays ───────────────────────────────────────── */
+
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  animation: loading-fade-in 0.2s ease;
+}
+
+@keyframes loading-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.loading-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--bg-elevated);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.loading-text--gold {
+  color: var(--accent-dim);
+}
+
+/* ─── Combat Initiation Banner ────────────────────────────────────────────── */
+
+.combat-initiation {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1rem;
+  background: rgba(139, 37, 0, 0.85);
+}
+
+.banner-slide-in {
+  animation: banner-slide-in 0.3s ease-in;
+}
+
+@keyframes banner-slide-in {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+.combat-initiation__text {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+/* ─── Long-Running Indicator ──────────────────────────────────────────────── */
+
+.long-running {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.75rem;
+}
+
+.long-running__cancel {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.4rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.long-running__cancel:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
