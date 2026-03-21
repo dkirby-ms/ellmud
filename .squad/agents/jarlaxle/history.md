@@ -401,3 +401,23 @@ Improved the ACA deployment workflow in `.github/workflows/ci-cd.yml`:
 - `.github/workflows/ci-cd.yml` — deploy step (lines 133-261)
 - Reference: `infra/modules/container-apps.bicep` (bootstrap entrypoint)
 - Reference: `packages/server/src/health.ts` (uptime field detection)
+
+### 2026-03-21: UX Overhaul Foundation (Figma → Client)
+- Extracted full Figma design export (`docs/ellmud-figma-v2.zip`) into client package
+- **Branch:** `squad/ux-overhaul`
+- **Dependencies added:** Tailwind CSS 4 + @tailwindcss/vite, 26 Radix UI primitives, shadcn/ui utilities (cva, clsx, tailwind-merge), React Router 7, recharts, sonner, motion, react-resizable-panels, cmdk, vaul, react-dnd, react-hook-form, react-day-picker, embla-carousel-react, input-otp, tw-animate-css
+- **UI library:** 50+ shadcn/ui components at `src/components/ui/`, each using relative imports to `./utils` (cn helper)
+- **Pages extracted:** 6 game pages (Login, CharacterSelect, Refuge, ShardExploration, Leaderboard, Settings) + 15+ admin CRUD pages under `src/pages/admin/`
+- **Shared components:** ShardboardTab, StashTab, LoadoutTab, InventoryOverlay, ExtractionOverlay, ChatPanel (all Figma versions)
+- **Old components:** Moved to `src/components/_old/` — preserved for wiring reference
+- **Routing:** React Router 7 `createBrowserRouter` in `src/routes.ts`, App.tsx uses `RouterProvider`
+- **Theme:** CSS variables in `src/styles/theme.css`, Tailwind in `src/styles/tailwind.css`, Google Fonts (Crimson Text, JetBrains Mono, Inter)
+- **Key fixes during extraction:**
+  - `sonner.tsx`: Removed `next-themes` dependency, hardcoded dark theme
+  - `calendar.tsx`: Fixed react-day-picker v9 API (IconLeft/IconRight → Chevron component)
+  - `AdminLayout.tsx`: Fixed TypeScript union type for nav items with optional `exact` property
+  - `StashTab.tsx`: Fixed handleDrop/onMove callback signature mismatch
+  - `useReconnection.ts`: Inlined `OverlayState` type (old component excluded from build)
+  - `tsconfig.json`: Excluded `_old/` and `__tests__/` from compilation (tests need updating for _old paths)
+- **Build status:** `tsc --noEmit` clean, `vite build` succeeds (577KB JS bundle)
+- **NOT touched:** services/, hooks/, store.ts, utils/ — all preserved for Phase B wiring
