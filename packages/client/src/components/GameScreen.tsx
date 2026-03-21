@@ -1,9 +1,11 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { useAppContext, type TerminalMessage } from '../store.js';
+import { useAppContext, getHpTier, type TerminalMessage } from '../store.js';
 import { connect, switchRoom, sendRawCommand } from '../services/connection.js';
 import { logout } from '../services/api.js';
 import { Terminal } from './Terminal.js';
 import { CommandInput } from './CommandInput.js';
+import { ShardSidebar } from './ShardSidebar.js';
+import { CombatOverlay } from './CombatOverlay.js';
 import { ReconnectionOverlay } from './ReconnectionOverlay.js';
 import { useReconnection } from '../hooks/useReconnection.js';
 import type {
@@ -24,6 +26,7 @@ export function GameScreen(): React.JSX.Element {
   const { state, dispatch } = useAppContext();
   const roomRef = useRef<Room | null>(null);
   const switchingRef = useRef(false);
+  const soundCueCounterRef = useRef(0);
 
   const addMessage = useCallback((text: string, type: TerminalMessage['type']) => {
     dispatch({
@@ -32,7 +35,6 @@ export function GameScreen(): React.JSX.Element {
     });
   }, [dispatch]);
 
-  // Build message handlers as a stable reference for room switching
   const handlersRef = useRef<import('../services/connection.js').MessageHandlers | null>(null);
 
   // Reconnection logic
@@ -59,7 +61,6 @@ export function GameScreen(): React.JSX.Element {
     },
   });
 
-  // Keep latest reconnection callbacks accessible from handlers via ref
   const reconnectionRef = useRef(reconnection);
   reconnectionRef.current = reconnection;
 
@@ -70,7 +71,15 @@ export function GameScreen(): React.JSX.Element {
 
     const handlers: import('../services/connection.js').MessageHandlers = {
       onNarrate: (msg: NarrateMessage) => {
-        if (!disposed) addMessage(msg.text, msg.type);
+        if (!disposed) {
+          addMessage(msg.text, msg.type);
+          if (msg.type === 'sound') {
+            dispatch({
+              type: 'ADD_SOUND_CUE',
+              cue: { id: `sc-${++soundCueCounterRef.current}`, text: msg.text, timestamp: msg.timestamp },
+            });
+          }
+        }
       },
       onRoomHeader: (msg: RoomHeaderMessage) => {
         if (!disposed) {
@@ -83,21 +92,50 @@ export function GameScreen(): React.JSX.Element {
       },
       onShardState: (msg: ShardStateMessage) => {
         if (!disposed) {
-          dispatch({ type: 'SET_SHARD_STATE', state: msg.state });
+          dispatch({ type: 'SET_SHARD_STATE', state: msg.state, collapseTimer: msg.collapseTimer });
           addMessage(`[Shard: ${msg.state}${msg.collapseTimer ? ` — ${msg.collapseTimer}s remaining` : ''}]`, 'system');
         }
       },
       onCombatResult: (msg: CombatResultMessage) => {
         if (!disposed) {
+          dispatch({ type: 'SET_COMBAT_STATE', inCombat: true });
+          dispatch({ type: 'SET_COMBAT_TICK', tick: msg.tick });
+          dispatch({ type: 'SET_PENDING_COMBAT_ACTION', action: null });
+
           for (const r of msg.results) {
             const dmg = r.damage != null ? ` (${r.damage} dmg)` : '';
             addMessage(
               `${r.actorName} → ${r.action}${r.targetName ? ` → ${r.targetName}` : ''}${dmg}`,
               'combat',
             );
+
+            if (r.targetId && r.targetId !== state.playerId && r.newHp != null && r.maxHp != null) {
+              dispatch({
+                type: 'SET_ENEMY_STATUS',
+                status: {
+                  name: r.targetName ?? 'Unknown',
+                  hp: r.newHp, maxHp: r.maxHp,
+                  hpTier: getHpTier(r.newHp, r.maxHp),
+                  telegraphedAction: null,
+                },
+              });
+            }
+            if (r.actorId !== state.playerId && r.newHp != null && r.maxHp != null) {
+              dispatch({
+                type: 'SET_ENEMY_STATUS',
+                status: {
+                  name: r.actorName,
+                  hp: r.newHp, maxHp: r.maxHp,
+                  hpTier: getHpTier(r.newHp, r.maxHp),
+                  telegraphedAction: null,
+                },
+              });
+            }
           }
+
           if (msg.combatEnded) {
             addMessage('— Combat ended —', 'system');
+            dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
           }
         }
       },
@@ -114,9 +152,9 @@ export function GameScreen(): React.JSX.Element {
         addMessage('The world shifts around you...', 'system');
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
 
-        // Clear shard state when returning to refuge
         if (msg.target === 'refuge') {
           dispatch({ type: 'SET_SHARD_STATE', state: null as unknown as import('@ellmud/shared').ShardState });
+          dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
         }
 
         switchRoom(currentRoom, msg.target, state.token, handlers, msg.options)
@@ -146,7 +184,6 @@ export function GameScreen(): React.JSX.Element {
         }
       },
       onLeave: (code: number) => {
-        // Don't show disconnect messages during a room switch
         if (!disposed && !switchingRef.current) {
           dispatch({ type: 'SET_CONNECTION_STATUS', status: 'disconnected' });
           roomRef.current = null;
@@ -205,6 +242,8 @@ export function GameScreen(): React.JSX.Element {
     dispatch({ type: 'LOGOUT' });
   }, [state.token, dispatch]);
 
+  const inShard = state.shardState != null;
+
   return (
     <div className="game-screen">
       <div className="game-header">
@@ -223,7 +262,13 @@ export function GameScreen(): React.JSX.Element {
         </button>
       </div>
 
-      <Terminal messages={state.messages} />
+      <div className={`game-body ${inShard ? 'game-body--with-sidebar' : ''}`}>
+        <div className="game-main">
+          <Terminal messages={state.messages} />
+          <CombatOverlay />
+        </div>
+        {inShard && <ShardSidebar />}
+      </div>
 
       <CommandInput
         onCommand={handleCommand}
