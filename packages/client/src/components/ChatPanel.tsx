@@ -5,6 +5,7 @@ interface ChatPanelProps {
   isOpen: boolean;
   onClose: () => void;
   context: "shard" | "refuge";
+  onSendMessage?: (text: string) => void;
 }
 
 type ChatTab = "proximity" | "whisper" | "refuge" | "squad";
@@ -20,6 +21,7 @@ export default function ChatPanel({
   isOpen,
   onClose,
   context,
+  onSendMessage,
 }: ChatPanelProps) {
   const [activeTab, setActiveTab] = useState<ChatTab>(
     context === "shard" ? "proximity" : "refuge"
@@ -48,6 +50,20 @@ export default function ChatPanel({
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
+
+    // Send via Colyseus if handler provided
+    if (onSendMessage) {
+      const text = message.trim();
+      if (text.startsWith("/whisper ")) {
+        onSendMessage(`whisper ${text.slice(9)}`);
+      } else if (text.startsWith("/emote ")) {
+        onSendMessage(`emote ${text.slice(7)}`);
+      } else if (text.startsWith("/say ")) {
+        onSendMessage(`say ${text.slice(5)}`);
+      } else {
+        onSendMessage(`say ${text}`);
+      }
+    }
 
     const newMessage: ChatMessage = {
       id: Date.now().toString(),

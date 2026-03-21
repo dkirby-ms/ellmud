@@ -1,85 +1,53 @@
-import { useState, useRef, useEffect } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router";
 import {
   Eye,
   Volume2,
-  Package,
   Sword,
-  Shield as ShieldIcon,
   ArrowLeft,
-  MessageSquare,
 } from "lucide-react";
 import InventoryOverlay from "../components/InventoryOverlay";
 import ExtractionOverlay from "../components/ExtractionOverlay";
 import ChatPanel from "../components/ChatPanel";
-
-interface NarrativeEntry {
-  type: "room" | "combat" | "trace" | "sound" | "system" | "speech";
-  content: string;
-  room?: string;
-  exits?: string[];
-  timestamp?: number;
-}
-
-const initialNarrative: NarrativeEntry[] = [
-  {
-    type: "room",
-    content:
-      "The stairwell descends into brackish water. Your torch sputters, casting long shadows across the walls. Something has been carved into the stone above the waterline — recent, by the look of it. The air smells of iron and rot.",
-    room: "Flooded Antechamber",
-    exits: ["north", "east"],
-  },
-  {
-    type: "trace",
-    content: "You notice faint boot prints leading east, still damp.",
-  },
-  {
-    type: "sound",
-    content: "Scraping metal — from the north",
-  },
-];
+import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
+import { useAppContext } from "../store.js";
+import { useShardConnection } from "../hooks/useShardConnection.js";
+import { useCountdown } from "../hooks/useCountdown.js";
+import type { CombatAction } from "@ellmud/shared";
 
 export default function ShardExploration() {
-  const { shardId } = useParams();
   const navigate = useNavigate();
-  const [narrative, setNarrative] = useState<NarrativeEntry[]>(initialNarrative);
+  const { state } = useAppContext();
+  const {
+    handleCommand: sendCommand,
+    handleExitClick,
+    handleCombatAction: sendCombatAction,
+    sendChatMessage,
+    extraction,
+    reconnection,
+  } = useShardConnection();
+
   const [command, setCommand] = useState("");
-  const [inCombat, setInCombat] = useState(false);
-  const [combatTick, setCombatTick] = useState(0);
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const [extractionState, setExtractionState] = useState<
-    "in-progress" | "success" | "death" | null
-  >(null);
-  const [extractionProgress, setExtractionProgress] = useState(0);
-  const [enemyStatus, setEnemyStatus] = useState<{
-    name: string;
-    hp: string;
-    telegraphed?: string;
-  } | null>(null);
   const narrativeRef = useRef<HTMLDivElement>(null);
 
-  const [collapseTime, setCollapseTime] = useState(900); // 15 minutes in seconds
-  const [currentRoom] = useState("Flooded Antechamber");
-  const [soundCues, setSoundCues] = useState<
-    { text: string; direction: string; id: number }[]
-  >([{ text: "Scraping metal", direction: "north", id: 1 }]);
-  const [autoComplete, setAutoComplete] = useState("");
+  // Derive collapse timer from server state, with client-side countdown
+  const collapseTime = useCountdown(state.collapseTimer ?? 0);
+  const collapseTimerMax = state.collapseTimerMax ?? 900;
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCollapseTime((prev) => Math.max(0, prev - 1));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+  // Derive room info from server state
+  const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
+  const exits = state.roomHeader?.exits ?? [];
 
+  // Auto-scroll narrative on new messages
   useEffect(() => {
     if (narrativeRef.current) {
       narrativeRef.current.scrollTop = narrativeRef.current.scrollHeight;
     }
-  }, [narrative]);
+  }, [state.messages]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -88,85 +56,25 @@ export default function ShardExploration() {
   };
 
   const getCollapseColor = () => {
-    const percentage = (collapseTime / 900) * 100;
+    if (collapseTimerMax <= 0) return "#E8E0D0";
+    const percentage = (collapseTime / collapseTimerMax) * 100;
     if (percentage > 50) return "#E8E0D0";
     if (percentage > 25) return "#B8860B";
     return "#8B2500";
   };
 
-  const handleCommand = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!command.trim()) return;
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!command.trim()) return;
 
-    setCommandHistory([...commandHistory, command]);
-    setHistoryIndex(-1);
-
-    // Mock command processing
-    const cmd = command.toLowerCase().trim();
-
-    if (cmd === "north" || cmd === "go north") {
-      setNarrative([
-        ...narrative,
-        {
-          type: "room",
-          content:
-            "You wade through the murky water, pushing north. The corridor opens into a larger chamber. Rusted chains hang from the ceiling, swaying gently despite the still air. To the west, you glimpse movement — something pale and hunched.",
-          room: "Chain Chamber",
-          exits: ["south", "west"],
-        },
-      ]);
-    } else if (cmd === "east" || cmd === "go east") {
-      setNarrative([
-        ...narrative,
-        {
-          type: "room",
-          content:
-            "Following the boot prints, you move east. The passage narrows. Water drips from above, echoing in the darkness. Ahead, the path splits.",
-          room: "Narrow Passage",
-          exits: ["west", "northeast", "southeast"],
-        },
-      ]);
-    } else if (cmd === "look" || cmd === "l") {
-      setNarrative([
-        ...narrative,
-        {
-          type: "system",
-          content:
-            "You take a moment to survey your surroundings carefully. Nothing new catches your eye.",
-        },
-      ]);
-    } else if (cmd === "listen") {
-      setNarrative([
-        ...narrative,
-        {
-          type: "sound",
-          content: "Distant footsteps — east, fading",
-        },
-      ]);
-    } else if (cmd === "attack" || cmd.startsWith("combat")) {
-      setInCombat(true);
-      setNarrative([
-        ...narrative,
-        {
-          type: "combat",
-          content:
-            "A drowned revenant lurches from the shadows! Its waterlogged form moves with unnatural speed.",
-        },
-      ]);
-    } else if (cmd === "extract") {
-      navigate("/refuge");
-    } else {
-      setNarrative([
-        ...narrative,
-        {
-          type: "system",
-          content: `Command not recognized: "${command}"`,
-        },
-      ]);
-    }
-
-    setCommand("");
-  };
+      setCommandHistory((prev) => [...prev, command]);
+      setHistoryIndex(-1);
+      sendCommand(command);
+      setCommand("");
+    },
+    [command, sendCommand]
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowUp") {
@@ -195,14 +103,47 @@ export default function ShardExploration() {
   };
 
   const handleCombatAction = (action: string) => {
-    setNarrative([
-      ...narrative,
-      {
-        type: "combat",
-        content: `You ${action}. The revenant staggers back, dark water streaming from its wounds. It prepares to strike again.`,
-      },
-    ]);
+    const actionMap: Record<string, CombatAction> = {
+      strike: "strike",
+      "heavy strike": "heavy_strike",
+      dodge: "dodge",
+      block: "block",
+      "use item": "use_item",
+      flee: "flee",
+      observe: "observe",
+    };
+    const mapped = actionMap[action.toLowerCase()];
+    if (mapped) {
+      sendCombatAction(mapped);
+    }
   };
+
+  // Map connection status for display
+  const connectionIndicator = () => {
+    switch (state.connectionStatus) {
+      case "connected":
+        return (
+          <span className="text-[#2D6B4F] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+            ● Connected
+          </span>
+        );
+      case "connecting":
+        return (
+          <span className="text-[#B8860B] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+            ○ Connecting...
+          </span>
+        );
+      default:
+        return (
+          <span className="text-[#8B2500] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+            ● Disconnected
+          </span>
+        );
+    }
+  };
+
+  // Enemy status derived from real combat data
+  const enemyStatus = state.enemyStatus;
 
   return (
     <div className="h-screen bg-[#0A0B0F] flex flex-col">
@@ -219,7 +160,7 @@ export default function ShardExploration() {
             className="text-[#8A8B95] text-sm"
             style={{ fontFamily: "var(--font-sans)" }}
           >
-            Kael Darkwater
+            {state.playerId ?? "Unknown"}
           </span>
           <span className="text-[#4A4B55]">|</span>
           <div className="flex items-center gap-2">
@@ -233,6 +174,7 @@ export default function ShardExploration() {
               Healthy
             </span>
           </div>
+          {connectionIndicator()}
         </div>
       </div>
 
@@ -258,7 +200,7 @@ export default function ShardExploration() {
                 <div
                   className="h-full transition-all"
                   style={{
-                    width: `${(collapseTime / 900) * 100}%`,
+                    width: collapseTimerMax > 0 ? `${(collapseTime / collapseTimerMax) * 100}%` : "100%",
                     backgroundColor: getCollapseColor(),
                   }}
                 ></div>
@@ -266,14 +208,14 @@ export default function ShardExploration() {
             </div>
           </div>
 
-          {/* Narrative text */}
+          {/* Narrative text — render from real AppContext messages */}
           <div
             ref={narrativeRef}
             className="flex-1 overflow-y-auto px-8 py-6 space-y-6"
           >
-            {narrative.map((entry, i) => (
-              <div key={i}>
-                {entry.type === "room" && (
+            {state.messages.map((msg) => (
+              <div key={msg.id}>
+                {msg.type === "header" && (
                   <div>
                     <h3
                       className="text-[#C9A84C] mb-3"
@@ -282,8 +224,14 @@ export default function ShardExploration() {
                         fontSize: "1.25rem",
                       }}
                     >
-                      {entry.room}
+                      {msg.text}
                     </h3>
+                    <div className="h-px bg-[#C9A84C] opacity-20 mt-4"></div>
+                  </div>
+                )}
+
+                {msg.type === "room" && (
+                  <div>
                     <p
                       className="text-[#E8E0D0] mb-3 max-w-[70ch]"
                       style={{
@@ -292,23 +240,23 @@ export default function ShardExploration() {
                         fontSize: "1rem",
                       }}
                     >
-                      {entry.content}
+                      {msg.text}
                     </p>
-                    {entry.exits && (
+                    {exits.length > 0 && (
                       <p
                         className="text-[#3A7D7B] text-sm"
                         style={{ fontFamily: "var(--font-sans)" }}
                       >
                         Exits:{" "}
-                        {entry.exits.map((exit, j) => (
+                        {exits.map((exit, j) => (
                           <span key={j}>
                             <button
-                              onClick={() => setCommand(`go ${exit}`)}
+                              onClick={() => handleExitClick(exit)}
                               className="hover:text-[#C9A84C] transition-colors underline"
                             >
                               [{exit}]
                             </button>
-                            {j < entry.exits!.length - 1 && " "}
+                            {j < exits.length - 1 && " "}
                           </span>
                         ))}
                       </p>
@@ -317,7 +265,7 @@ export default function ShardExploration() {
                   </div>
                 )}
 
-                {entry.type === "combat" && (
+                {msg.type === "combat" && (
                   <p
                     className="text-[#E8E0D0] max-w-[70ch]"
                     style={{
@@ -326,11 +274,11 @@ export default function ShardExploration() {
                       fontSize: "1rem",
                     }}
                   >
-                    {entry.content}
+                    {msg.text}
                   </p>
                 )}
 
-                {entry.type === "trace" && (
+                {msg.type === "trace" && (
                   <p
                     className="text-[#8A8B95] italic pl-6 max-w-[70ch] flex items-start gap-2"
                     style={{
@@ -340,11 +288,11 @@ export default function ShardExploration() {
                     }}
                   >
                     <Eye className="w-4 h-4 mt-1 flex-shrink-0" />
-                    <span>{entry.content}</span>
+                    <span>{msg.text}</span>
                   </p>
                 )}
 
-                {entry.type === "sound" && (
+                {msg.type === "sound" && (
                   <p
                     className="text-[#8A8B95] italic pl-6 max-w-[70ch] flex items-start gap-2"
                     style={{
@@ -354,16 +302,29 @@ export default function ShardExploration() {
                     }}
                   >
                     <Volume2 className="w-4 h-4 mt-1 flex-shrink-0" />
-                    <span>{entry.content}</span>
+                    <span>{msg.text}</span>
                   </p>
                 )}
 
-                {entry.type === "system" && (
+                {msg.type === "system" && (
                   <p
                     className="text-[#4A4B55] text-sm"
                     style={{ fontFamily: "var(--font-mono)" }}
                   >
-                    {entry.content}
+                    {msg.text}
+                  </p>
+                )}
+
+                {msg.type === "speech" && (
+                  <p
+                    className="text-[#E8E0D0] max-w-[70ch]"
+                    style={{
+                      fontFamily: "var(--font-serif)",
+                      lineHeight: 1.7,
+                      fontSize: "1rem",
+                    }}
+                  >
+                    "{msg.text}"
                   </p>
                 )}
               </div>
@@ -413,7 +374,7 @@ export default function ShardExploration() {
                   className="text-[#E8E0D0] text-sm"
                   style={{ fontFamily: "var(--font-mono)" }}
                 >
-                  Cautious
+                  {state.pendingCombatAction ?? "Cautious"}
                 </p>
               </div>
             </div>
@@ -428,40 +389,92 @@ export default function ShardExploration() {
               QUICK INVENTORY
             </h3>
             <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2">
-                <Sword className="w-4 h-4 text-[#8A8B95]" />
-                <span
-                  className="text-[#E8E0D0]"
-                  style={{ fontFamily: "var(--font-serif)" }}
-                >
-                  Corroded Halberd
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <ShieldIcon className="w-4 h-4 text-[#8A8B95]" />
-                <span
-                  className="text-[#E8E0D0]"
-                  style={{ fontFamily: "var(--font-serif)" }}
-                >
-                  Ironbound Chestplate
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span
-                  className="text-[#8A8B95] text-xs"
+              {state.inventory.length > 0 ? (
+                state.inventory.slice(0, 3).map((item) => (
+                  <div key={item.id} className="flex items-center gap-2">
+                    <Sword className="w-4 h-4 text-[#8A8B95]" />
+                    <span
+                      className="text-[#E8E0D0]"
+                      style={{ fontFamily: "var(--font-serif)" }}
+                    >
+                      {item.name}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p
+                  className="text-[#4A4B55] text-xs"
                   style={{ fontFamily: "var(--font-sans)" }}
                 >
-                  Healing Salve (3)
-                </span>
-                <button
-                  className="text-[#3A7D7B] hover:text-[#C9A84C] text-xs"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
-                  Use
-                </button>
-              </div>
+                  No items carried
+                </p>
+              )}
             </div>
           </div>
+
+          {/* Enemy Status (during combat) */}
+          {enemyStatus && (
+            <div className="p-4 border-b border-[#2A2B35]">
+              <h3
+                className="text-[#8B2500] text-xs mb-3"
+                style={{ fontFamily: "var(--font-sans)" }}
+              >
+                ENEMY
+              </h3>
+              <div className="space-y-2">
+                <p
+                  className="text-[#E8E0D0] text-sm"
+                  style={{ fontFamily: "var(--font-serif)" }}
+                >
+                  {enemyStatus.name}
+                </p>
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <span
+                      className="text-[#4A4B55] text-xs"
+                      style={{ fontFamily: "var(--font-sans)" }}
+                    >
+                      Health
+                    </span>
+                    <span
+                      className="text-xs"
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        color:
+                          enemyStatus.hpTier === "Near Death"
+                            ? "#8B2500"
+                            : enemyStatus.hpTier === "Badly Wounded"
+                            ? "#B8860B"
+                            : enemyStatus.hpTier === "Wounded"
+                            ? "#B8860B"
+                            : "#2D6B4F",
+                      }}
+                    >
+                      {enemyStatus.hpTier}
+                    </span>
+                  </div>
+                  <div className="h-2 bg-[#1C1D27] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#8B2500] to-[#2D6B4F] transition-all"
+                      style={{
+                        width: enemyStatus.maxHp > 0
+                          ? `${(enemyStatus.hp / enemyStatus.maxHp) * 100}%`
+                          : "0%",
+                      }}
+                    ></div>
+                  </div>
+                </div>
+                {enemyStatus.telegraphedAction && (
+                  <p
+                    className="text-[#B8860B] text-xs italic"
+                    style={{ fontFamily: "var(--font-serif)" }}
+                  >
+                    Telegraphing: {enemyStatus.telegraphedAction}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Collapse Timer */}
           <div className="p-4 border-b border-[#2A2B35]">
@@ -478,14 +491,22 @@ export default function ShardExploration() {
                 color: getCollapseColor(),
               }}
             >
-              {formatTime(collapseTime)}
+              {state.collapseTimer != null ? formatTime(collapseTime) : "--:--"}
             </div>
-            {collapseTime < 225 && (
+            {state.shardState === "destabilising" && (
               <p
                 className="text-[#8B2500] text-xs mt-2"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
                 Destabilising
+              </p>
+            )}
+            {state.shardState && (
+              <p
+                className="text-[#4A4B55] text-xs mt-1"
+                style={{ fontFamily: "var(--font-mono)" }}
+              >
+                Shard: {state.shardState}
               </p>
             )}
           </div>
@@ -499,15 +520,24 @@ export default function ShardExploration() {
               SOUND CUES
             </h3>
             <div className="space-y-2">
-              {soundCues.map((cue) => (
+              {state.soundCues.length > 0 ? (
+                state.soundCues.slice(-5).map((cue) => (
+                  <p
+                    key={cue.id}
+                    className="text-[#8A8B95] text-xs italic"
+                    style={{ fontFamily: "var(--font-serif)" }}
+                  >
+                    {cue.text}
+                  </p>
+                ))
+              ) : (
                 <p
-                  key={cue.id}
-                  className="text-[#8A8B95] text-xs italic"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                  className="text-[#4A4B55] text-xs"
+                  style={{ fontFamily: "var(--font-sans)" }}
                 >
-                  {cue.text} — from the {cue.direction}
+                  Silence.
                 </p>
-              ))}
+              )}
             </div>
           </div>
 
@@ -515,21 +545,21 @@ export default function ShardExploration() {
           <div className="p-4">
             <div className="grid grid-cols-3 gap-2">
               <button
-                onClick={() => setCommand("look")}
+                onClick={() => sendCommand("look")}
                 className="px-2 py-1 text-[#8A8B95] hover:bg-[#1C1D27] hover:text-[#E8E0D0] rounded text-xs transition-colors"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
                 Look
               </button>
               <button
-                onClick={() => setCommand("listen")}
+                onClick={() => sendCommand("listen")}
                 className="px-2 py-1 text-[#8A8B95] hover:bg-[#1C1D27] hover:text-[#E8E0D0] rounded text-xs transition-colors"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
                 Listen
               </button>
               <button
-                onClick={() => setCommand("inventory")}
+                onClick={() => setInventoryOpen(true)}
                 className="px-2 py-1 text-[#8A8B95] hover:bg-[#1C1D27] hover:text-[#E8E0D0] rounded text-xs transition-colors"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
@@ -541,14 +571,14 @@ export default function ShardExploration() {
       </div>
 
       {/* Combat Action Bar */}
-      {inCombat && (
+      {state.inCombat && (
         <div className="bg-[#1C1D27] border-t-2 border-[#8B2500] px-6 py-3">
           <div className="flex items-center justify-center gap-2">
             <span
               className="text-[#8B2500] text-sm mr-4"
               style={{ fontFamily: "var(--font-sans)" }}
             >
-              ⚔ COMBAT
+              ⚔ COMBAT — Tick {state.combatTick}
             </span>
             {[
               "Strike",
@@ -561,8 +591,11 @@ export default function ShardExploration() {
             ].map((action, i) => (
               <button
                 key={action}
-                onClick={() => handleCombatAction(action.toLowerCase())}
-                className="px-3 py-1 bg-[#12131A] hover:bg-[#C9A84C] hover:text-[#0A0B0F] text-[#E8E0D0] rounded text-sm transition-colors border border-[#2A2B35]"
+                onClick={() => handleCombatAction(action)}
+                disabled={state.pendingCombatAction != null}
+                className={`px-3 py-1 bg-[#12131A] hover:bg-[#C9A84C] hover:text-[#0A0B0F] text-[#E8E0D0] rounded text-sm transition-colors border border-[#2A2B35] ${
+                  state.pendingCombatAction != null ? "opacity-50 cursor-not-allowed" : ""
+                }`}
                 style={{ fontFamily: "var(--font-sans)" }}
               >
                 <span className="text-[#8A8B95] mr-1 text-xs">{i + 1}</span>
@@ -575,7 +608,7 @@ export default function ShardExploration() {
 
       {/* Command Input */}
       <div className="bg-[#12131A] border-t border-[#2A2B35] px-6 py-4">
-        <form onSubmit={handleCommand} className="flex items-center gap-2">
+        <form onSubmit={handleSubmit} className="flex items-center gap-2">
           <span
             className="text-[#C9A84C] text-lg"
             style={{ fontFamily: "var(--font-mono)" }}
@@ -587,8 +620,13 @@ export default function ShardExploration() {
             value={command}
             onChange={(e) => setCommand(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a command..."
-            className="flex-1 bg-transparent text-[#E8E0D0] placeholder-[#4A4B55] focus:outline-none"
+            placeholder={
+              state.connectionStatus === "connected"
+                ? "Type a command..."
+                : "Connecting to shard..."
+            }
+            disabled={state.connectionStatus !== "connected"}
+            className="flex-1 bg-transparent text-[#E8E0D0] placeholder-[#4A4B55] focus:outline-none disabled:opacity-50"
             style={{ fontFamily: "var(--font-mono)", fontSize: "1rem" }}
             autoFocus
           />
@@ -603,8 +641,8 @@ export default function ShardExploration() {
 
       {/* Extraction Overlay */}
       <ExtractionOverlay
-        state={extractionState}
-        progress={extractionProgress}
+        state={extraction.status}
+        progress={extraction.progress}
       />
 
       {/* Chat Panel */}
@@ -612,6 +650,18 @@ export default function ShardExploration() {
         isOpen={chatOpen}
         onClose={() => setChatOpen(false)}
         context="shard"
+        onSendMessage={sendChatMessage}
+      />
+
+      {/* Reconnection Overlay */}
+      <ReconnectionOverlay
+        state={reconnection.overlayState}
+        attempt={reconnection.attempt}
+        maxAttempts={5}
+        elapsedSeconds={reconnection.elapsedSeconds}
+        onReconnect={reconnection.reconnectNow}
+        onCancel={reconnection.cancel}
+        onReturnToRefuge={reconnection.returnToRefuge}
       />
     </div>
   );
