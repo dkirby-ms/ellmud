@@ -125,11 +125,11 @@ docker run -d --name ellmud-db \
   -e POSTGRES_DB=ellmud \
   -e POSTGRES_USER=ellmud \
   -e POSTGRES_PASSWORD=ellmud \
-  -p 5432:5432 \
+  -p 5434:5432 \
   postgres:16
 
 # Set the connection string
-export DATABASE_URL=postgresql://ellmud:ellmud@localhost:5432/ellmud
+export DATABASE_URL=postgresql://ellmud:ellmud@localhost:5434/ellmud
 
 # Migrations run automatically on server start
 npm run dev:server

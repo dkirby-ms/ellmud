@@ -4,6 +4,8 @@
 # Redis 7 — narration cache + Colyseus presence (Phase 2).
 # PostgreSQL 16 — player persistence (future; stubbed for local dev).
 
+name: ellmud
+
 services:
   redis:
     image: redis:7-alpine
@@ -29,7 +31,7 @@ services:
     image: postgres:16-alpine
     container_name: ellmud-postgres
     ports:
-      - "5432:5432"
+      - "5434:5432"
     environment:
       POSTGRES_USER: ellmud
       POSTGRES_PASSWORD: ellmud_dev
