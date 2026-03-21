@@ -388,3 +388,17 @@ Wave 6 delivered final 2 critical client UI foundation components. Reconnection 
 ### Next Phase (Wave 7)
 
 Wave 7 will deliver final 3 client UI issues (#68, #72, #73) using locked anticipatory test contracts. Your reconnection and loading state infrastructure will support all remaining pages.
+
+## Wave 7 — Extraction Screen (2026-03-21)
+
+### Extraction Screen — PR #92
+**Task:** Issue #72 — Extraction Screen: Loot Summary & Victory State
+**Status:** ✅ Complete
+**Branch:** `squad/72-extraction-screen`
+
+**What I built:**
+1. **ExtractionOverlay** — Progress bar scrim during channeling with countdown, narration, cancel button
+2. **ExtractionSuccess** — Loot recap with tier-colored items, run summary, stash stats, return button
+3. **ExtractionFailure** — Items lost (red), debuffs (amber), run summary, return button
+4. **ExtractionScreen** — Unified phase-routing discriminated union component
+5. **52 tests** covering all phases, tier colors, accessibility, edge cases
