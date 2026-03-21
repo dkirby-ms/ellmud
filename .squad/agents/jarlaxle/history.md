@@ -266,3 +266,50 @@ All topology enforcement in place. Creature AI can trust room types. Patrol logi
 4. **Anticipatory tests active** — 35 toast tests now validating your API; tests will pass immediately when feature branch merges
 
 **Next Issues (7 remaining for Phase 1 client UI):** #66, #68, #69, #70, #71, #72, #73
+
+---
+
+## Session: Issue #66 — Shard Exploration Sidebar & Combat Overlay
+
+**Date:** 2025-07-21
+**PR:** #90 (branch: `squad/66-shard-exploration-sidebar`)
+**Status:** PR opened, 181 tests passing
+
+### What Was Built
+
+**ShardSidebar** (30% right panel):
+- Room name (gold serif), collapse timer (color transitions), scrollable sound cues, quick inventory (5 items, tier colors), mini-action buttons (Look/Map/Evasion/Loot)
+
+**CombatOverlay**:
+- "⚔ COMBAT" banner, 1s tick timer with requestAnimationFrame + pulse at <200ms, 8 action buttons with keyboard shortcuts 1-8, fade transitions
+
+**EnemyStatusPanel**:
+- Replaces sound cues during combat. Enemy name, HP tier (Uninjured→Near Death with colors), telegraphed action display
+
+**Store extensions**: 8 new state fields, 8 action types, `getHpTier()` helper
+**GameScreen**: game-body 70/30 layout, message handlers for combat/sound cues/inventory
+
+### Learnings
+
+1. **Git worktree is essential for concurrent squad work.** Multiple agents switching branches in the main repo caused total loss of uncommitted changes 3+ times. Solution: `git worktree add /home/saitcho/ellmud-66 squad/66-shard-exploration-sidebar`. Always use worktrees when other agents may be active.
+
+2. **jsdom quirks**: `scrollTo` and `scrollIntoView` are not implemented. Guard with `if (ref.current?.scrollTo)` in components. The test setup already mocks `scrollIntoView` via `vi.fn()`.
+
+3. **Timer testing**: Use `vi.useFakeTimers({ shouldAdvanceTime: true })` for RAF-based animations. The `shouldAdvanceTime` flag is critical for requestAnimationFrame to work in vitest.
+
+4. **Keyboard shortcut pattern**: Global `keydown` listener on `window` in `useEffect`, cleaned up on unmount. Guard with `inCombat` check to avoid shortcuts firing outside combat. Use `parseInt(e.key)` for number key mapping.
+
+5. **Collapse timer max tracking**: Server sends current timer value but not max. Track max on first appearance, preserve across updates. Color thresholds use ratio to max (>60% white, 30-60% amber, <30% red).
+
+6. **Sound cue extraction**: Filter `NarrateMessage` where `type === 'sound'`. Cap at 20 entries FIFO to prevent memory growth.
+
+### Files Changed
+- `packages/client/src/store.ts` — types, reducer, getHpTier
+- `packages/client/src/components/GameScreen.tsx` — layout + handlers
+- `packages/client/src/components/ShardSidebar.tsx` — new
+- `packages/client/src/components/CombatOverlay.tsx` — new
+- `packages/client/src/components/EnemyStatusPanel.tsx` — new
+- `packages/client/src/styles.css` — ~200 lines appended
+- `packages/client/src/__tests__/sidebar.test.tsx` — 19 tests
+- `packages/client/src/__tests__/combat-overlay.test.tsx` — 26 tests
+- `packages/client/src/__tests__/store.test.ts` — 23 tests (15 new)
