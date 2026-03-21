@@ -102,20 +102,18 @@ export default function ShardExploration() {
     }
   };
 
-  const handleCombatAction = (action: string) => {
-    const actionMap: Record<string, CombatAction> = {
-      strike: "strike",
-      "heavy strike": "heavy_strike",
-      dodge: "dodge",
-      block: "block",
-      "use item": "use_item",
-      flee: "flee",
-      observe: "observe",
-    };
-    const mapped = actionMap[action.toLowerCase()];
-    if (mapped) {
-      sendCombatAction(mapped);
-    }
+  const combatActions: { label: string; action: CombatAction }[] = [
+    { label: "Strike", action: "strike" },
+    { label: "Heavy Strike", action: "heavy_strike" },
+    { label: "Dodge", action: "dodge" },
+    { label: "Block", action: "block" },
+    { label: "Use Item", action: "use_item" },
+    { label: "Flee", action: "flee" },
+    { label: "Observe", action: "observe" },
+  ];
+
+  const handleCombatAction = (action: CombatAction) => {
+    sendCombatAction(action);
   };
 
   // Map connection status for display
@@ -580,15 +578,7 @@ export default function ShardExploration() {
             >
               ⚔ COMBAT — Tick {state.combatTick}
             </span>
-            {[
-              "Strike",
-              "Heavy Strike",
-              "Dodge",
-              "Block",
-              "Use Item",
-              "Flee",
-              "Observe",
-            ].map((action, i) => (
+            {combatActions.map(({ label, action }, i) => (
               <button
                 key={action}
                 onClick={() => handleCombatAction(action)}
@@ -599,7 +589,7 @@ export default function ShardExploration() {
                 style={{ fontFamily: "var(--font-sans)" }}
               >
                 <span className="text-[#8A8B95] mr-1 text-xs">{i + 1}</span>
-                {action}
+                {label}
               </button>
             ))}
           </div>

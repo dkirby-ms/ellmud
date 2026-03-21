@@ -174,3 +174,12 @@ All four PRs merge cleanly to dev:
 - **Key files:** `docs/content-admin-tool.md` (the design document), `.squad/decisions/inbox/elminster-content-admin-tool.md` (team decision).
 - **Audience:** Document is designed for UI/UX designers creating Figma mockups — includes ASCII wireframes for every major screen, field-level detail for every content type, and component descriptions.
 - **GDD relationship:** This tool is NOT the admin dashboard described in GDD §13.3 (which is a debug/inspection tool using Colyseus Schema sync). This is a content authoring tool that feeds content into the game.
+
+### 2026-03-21: UX Overhaul Code Review (squad/ux-overhaul branch)
+- **Action:** Reviewed 149-file, ~21K-line UX overhaul branch. Figma SPA conversion with Tailwind CSS 4, shadcn/ui, React Router 7, and Colyseus wiring for Shard and Refuge pages.
+- **Verdict:** Conditional approval — two blockers must be fixed before merge.
+- **🔴 Blocker #1 — Rules of Hooks violation in Refuge.tsx:** `useCallback`, `useReconnection`, `useRef`, `useEffect` called after conditional early return. React will crash on auth state transitions. Fix: remove redundant auth guard (ProtectedRoute handles it).
+- **🔴 Blocker #2 — Combat action values don't match server protocol:** ShardExploration sends display labels ("Strike", "Heavy Strike") but CombatAction expects snake_case ("strike", "heavy_strike"). Combat is non-functional. Fix: separate labels from action values.
+- **🟡 Should fix:** Admin routes unprotected (no ProtectedRoute wrapper), no token validation on page load, no error boundaries, extraction_state handler registered outside connect(), reconnection "Return to Refuge" dispatches LOGOUT.
+- **Architecture validated:** Message-only Colyseus protocol correctly enforced (zero Schema leakage). React Router structure sound. AppContext+RouterProvider integration correct. Token persistence pattern clean.
+- **Key files:** `.squad/decisions/inbox/elminster-ux-review.md` (full review verdict).

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate, Navigate, Link } from "react-router";
+import { useNavigate, Link } from "react-router";
 import {
   Package,
   Shield,
@@ -74,11 +74,6 @@ export default function Refuge() {
   const switchingRef = useRef(false);
   const handlersRef = useRef<MessageHandlers | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
-
-  // Redirect unauthenticated users
-  if (!state.authenticated) {
-    return <Navigate to="/" replace />;
-  }
 
   const addMessage = useCallback(
     (text: string, type: TerminalMessage["type"]) => {

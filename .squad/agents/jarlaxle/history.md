@@ -421,3 +421,40 @@ Improved the ACA deployment workflow in `.github/workflows/ci-cd.yml`:
   - `tsconfig.json`: Excluded `_old/` and `__tests__/` from compilation (tests need updating for _old paths)
 - **Build status:** `tsc --noEmit` clean, `vite build` succeeds (577KB JS bundle)
 - **NOT touched:** services/, hooks/, store.ts, utils/ — all preserved for Phase B wiring
+
+## Learnings
+
+### 2026-03-21: Refuge Hub Wiring to Real Backend
+
+**Branch:** `squad/ux-overhaul`
+**Commit:** 453794d
+
+**What Was Done:**
+- Wired `Refuge.tsx` from fully mock data to real Colyseus WebSocket connection
+- Pattern follows old `GameScreen.tsx` (connect on mount, message handlers, switchRoom flow)
+- Created `ReconnectionOverlay.tsx` with Tailwind styling matching dark theme
+- Updated `ShardboardTab.tsx` with optional `onEnterShard` callback
+
+**Key Architecture Decisions:**
+1. **Page-scoped room lifecycle:** Each page (Refuge, ShardExploration) manages its own Colyseus room. When ROOM_SWITCH fires, Refuge leaves its room and navigates — the target page creates its own connection. This avoids coupling between pages being wired by different agents.
+2. **Auth gate:** Refuge uses `<Navigate to="/" />` if not authenticated. Token comes from AppContext (already persisted to localStorage by App.tsx).
+3. **Chat = narrate messages:** The right-column chat displays all `state.messages` (server narrate output). The chat input sends raw commands. No separate chat protocol exists yet.
+4. **Ambient events = sound/room messages:** Left column filters for 'sound' and 'room' type narrate messages. Falls back to placeholder text until the server sends periodic ambient events.
+5. **Players nearby:** Placeholder — server doesn't send player list messages. Structurally ready for when RefugeRoom broadcasts presence data.
+
+**What's NOT wired (server doesn't support yet):**
+- Shardboard shard listing (mock data preserved; button sends real `enter shard` command)
+- Stash/Loadout tabs (mock data; server stash is weight-based, not grid-based)
+- Player-to-player chat (no `say` command handler in RefugeRoom yet)
+- Players nearby list (no broadcast mechanism in RefugeRoom)
+
+**Key files changed:**
+- `packages/client/src/pages/Refuge.tsx` — Major rewrite (344→413 lines)
+- `packages/client/src/components/ReconnectionOverlay.tsx` — New (Tailwind version)
+- `packages/client/src/components/ShardboardTab.tsx` — Added `onEnterShard` prop
+
+**Already wired by other agent:**
+- `App.tsx` — Already had AppContext.Provider with useReducer + localStorage persistence
+- `Login.tsx` — Already wired to real API with LOGIN_SUCCESS dispatch
+
+**TSC + Vite build:** Both clean, zero errors.
