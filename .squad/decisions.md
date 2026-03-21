@@ -1244,3 +1244,68 @@ Currently invoked with `() => new InMemoryStashRepository()`. When Drizzt builds
 
 **Impact:** Wave 7 implementations can execute against locked test contracts. All Phase 1 client UI test infrastructure now in place.
 
+
+### 2026-03-21T19:34Z: Code Review — UX Overhaul Branch (squad/ux-overhaul)
+**By:** Elminster (Lead / Architect)
+**Review scope:** 149 files, ~21K lines (Figma SPA conversion, Colyseus wiring, React Router migration)
+**Status:** Conditional approval
+
+**Verdict:** 🟡 **CONDITIONAL APPROVAL** — Two blockers require fixes before merge.
+
+The architecture is sound. The message-only Colyseus protocol is correctly enforced (no Schema leakage anywhere). The React Router migration is clean. Auth flow is well-structured. The two blockers below are straightforward fixes (< 30 min combined).
+
+**🔴 BLOCKING ISSUES (must fix before merge):**
+
+1. **Rules of Hooks violation in Refuge.tsx (lines 78–130)**
+   - Issue: `useCallback`, `useReconnection`, `useRef`, and `useEffect` called after conditional early return
+   - Impact: React crash ("Rendered more hooks than during the previous render") on logout/token expiry
+   - Fix: Remove redundant auth guard (Refuge already wrapped in `ProtectedRoute` in routes.ts)
+   - Status: ✅ FIXED by Volo
+
+2. **Combat action values don't match server protocol (ShardExploration.tsx, ~line 601)**
+   - Issue: Sends display labels ("Strike", "Heavy Strike") instead of CombatAction enum values ('strike', 'heavy_strike')
+   - Impact: Every combat action unrecognized by server; combat completely non-functional
+   - Fix: Separate display labels from action values using `{ label, action }` mapping array
+   - Status: ✅ FIXED by Jarlaxle
+
+**🟡 SHOULD FIX (important, not merge-blocking):**
+
+3. Admin routes have no auth guard — `/admin/*` routes unprotected; should nest under ProtectedRoute or AdminProtectedRoute
+4. No persisted token validation on page load — token assumed valid; recommend `/auth/verify` endpoint or catch-401 pattern
+5. No error boundaries on any route — unhandled exceptions crash entire SPA; add root-level errorElement
+6. `extraction_state` handler registered outside `connect()` — architecturally inconsistent; move to `MessageHandlers` interface
+7. Reconnection "Return to Refuge" dispatches LOGOUT everywhere — misleading from Shard; should navigate to `/refuge` instead
+
+**🟢 NOTES (observations for future work):**
+
+8. Hardcoded hex values throughout; theme tokens unused — recommend token migration pass as separate PR
+9. ShardboardTab uses hardcoded mock data — fine for Phase 1 but misleading to testers
+10. 48 shadcn/ui components installed, few used — tree-shaking handles bundle (705KB reasonable); consider pruning later
+11. 450 skipped tests for _old/ components — schedule cleanup when old components deleted
+12. Bundle size optimization opportunity — code-split admin routes (26 components most users never visit)
+
+**Architecture Assessment:**
+
+What's correct:
+- Message-only Colyseus protocol enforced ✓
+- Connection service is single integration point with clean handler interface ✓
+- AppContext wrapping RouterProvider provides context across routes ✓
+- Token persistence via localStorage with sync-on-change pattern ✓
+- Reconnection hook with exponential backoff, imperative controls, overlay integration ✓
+- Clean separation: hooks own connection lifecycle, pages own UI rendering ✓
+
+What needs attention:
+- Protocol contract split across `connect()` and `.then()` callbacks — consolidate
+- Admin authorization structural gap that compounds if not fixed early
+- Error boundary absence acceptable for MVP but pain point quickly
+
+**Disposition:** Blockers #1–#2 fixed. Items #3–#7 should be filed as follow-up issues for Phase 1.1+.
+
+---
+
+### 2026-03-21T19:34Z: User Directive — Remove Dead Tests
+**By:** dkirby-ms (via Copilot)
+**What:** Remove tests that are no longer applicable due to the UX overhaul — don't skip them, delete entirely
+**Why:** User request — skipped tests for dead components are noise; clean removal preferred over describe.skip
+**Implementation:** ✅ Minsc deleted 18 old component test files; 63 tests remain, all passing
+**Result:** Repository cleaner; test suite focused on active components only

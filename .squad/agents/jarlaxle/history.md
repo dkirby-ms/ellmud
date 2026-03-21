@@ -401,3 +401,95 @@ Improved the ACA deployment workflow in `.github/workflows/ci-cd.yml`:
 - `.github/workflows/ci-cd.yml` — deploy step (lines 133-261)
 - Reference: `infra/modules/container-apps.bicep` (bootstrap entrypoint)
 - Reference: `packages/server/src/health.ts` (uptime field detection)
+
+### 2026-03-21: UX Overhaul Foundation (Figma → Client)
+- Extracted full Figma design export (`docs/ellmud-figma-v2.zip`) into client package
+- **Branch:** `squad/ux-overhaul`
+- **Dependencies added:** Tailwind CSS 4 + @tailwindcss/vite, 26 Radix UI primitives, shadcn/ui utilities (cva, clsx, tailwind-merge), React Router 7, recharts, sonner, motion, react-resizable-panels, cmdk, vaul, react-dnd, react-hook-form, react-day-picker, embla-carousel-react, input-otp, tw-animate-css
+- **UI library:** 50+ shadcn/ui components at `src/components/ui/`, each using relative imports to `./utils` (cn helper)
+- **Pages extracted:** 6 game pages (Login, CharacterSelect, Refuge, ShardExploration, Leaderboard, Settings) + 15+ admin CRUD pages under `src/pages/admin/`
+- **Shared components:** ShardboardTab, StashTab, LoadoutTab, InventoryOverlay, ExtractionOverlay, ChatPanel (all Figma versions)
+- **Old components:** Moved to `src/components/_old/` — preserved for wiring reference
+- **Routing:** React Router 7 `createBrowserRouter` in `src/routes.ts`, App.tsx uses `RouterProvider`
+- **Theme:** CSS variables in `src/styles/theme.css`, Tailwind in `src/styles/tailwind.css`, Google Fonts (Crimson Text, JetBrains Mono, Inter)
+- **Key fixes during extraction:**
+  - `sonner.tsx`: Removed `next-themes` dependency, hardcoded dark theme
+  - `calendar.tsx`: Fixed react-day-picker v9 API (IconLeft/IconRight → Chevron component)
+  - `AdminLayout.tsx`: Fixed TypeScript union type for nav items with optional `exact` property
+  - `StashTab.tsx`: Fixed handleDrop/onMove callback signature mismatch
+  - `useReconnection.ts`: Inlined `OverlayState` type (old component excluded from build)
+  - `tsconfig.json`: Excluded `_old/` and `__tests__/` from compilation (tests need updating for _old paths)
+- **Build status:** `tsc --noEmit` clean, `vite build` succeeds (577KB JS bundle)
+- **NOT touched:** services/, hooks/, store.ts, utils/ — all preserved for Phase B wiring
+
+## Learnings
+
+### 2026-03-21: Refuge Hub Wiring to Real Backend
+
+**Branch:** `squad/ux-overhaul`
+**Commit:** 453794d
+
+**What Was Done:**
+- Wired `Refuge.tsx` from fully mock data to real Colyseus WebSocket connection
+- Pattern follows old `GameScreen.tsx` (connect on mount, message handlers, switchRoom flow)
+- Created `ReconnectionOverlay.tsx` with Tailwind styling matching dark theme
+- Updated `ShardboardTab.tsx` with optional `onEnterShard` callback
+
+**Key Architecture Decisions:**
+1. **Page-scoped room lifecycle:** Each page (Refuge, ShardExploration) manages its own Colyseus room. When ROOM_SWITCH fires, Refuge leaves its room and navigates — the target page creates its own connection. This avoids coupling between pages being wired by different agents.
+2. **Auth gate:** Refuge uses `<Navigate to="/" />` if not authenticated. Token comes from AppContext (already persisted to localStorage by App.tsx).
+3. **Chat = narrate messages:** The right-column chat displays all `state.messages` (server narrate output). The chat input sends raw commands. No separate chat protocol exists yet.
+4. **Ambient events = sound/room messages:** Left column filters for 'sound' and 'room' type narrate messages. Falls back to placeholder text until the server sends periodic ambient events.
+5. **Players nearby:** Placeholder — server doesn't send player list messages. Structurally ready for when RefugeRoom broadcasts presence data.
+
+**What's NOT wired (server doesn't support yet):**
+- Shardboard shard listing (mock data preserved; button sends real `enter shard` command)
+- Stash/Loadout tabs (mock data; server stash is weight-based, not grid-based)
+- Player-to-player chat (no `say` command handler in RefugeRoom yet)
+- Players nearby list (no broadcast mechanism in RefugeRoom)
+
+**Key files changed:**
+- `packages/client/src/pages/Refuge.tsx` — Major rewrite (344→413 lines)
+- `packages/client/src/components/ReconnectionOverlay.tsx` — New (Tailwind version)
+- `packages/client/src/components/ShardboardTab.tsx` — Added `onEnterShard` prop
+
+**Already wired by other agent:**
+- `App.tsx` — Already had AppContext.Provider with useReducer + localStorage persistence
+- `Login.tsx` — Already wired to real API with LOGIN_SUCCESS dispatch
+
+**TSC + Vite build:** Both clean, zero errors.
+
+## 2026-03-21: Combat Action Protocol Fix — ShardExploration.tsx
+
+**Session:** Post-wave-7 sprint fixes  
+**Status:** ✅ COMPLETE
+
+**Issue:** Combat action values don't match server protocol (ShardExploration.tsx, ~line 601)
+
+**Problem:**
+- Combat action bar sends **display labels** as action values: "Strike", "Heavy Strike", "Dodge", "Block", "Use Item", "Flee", "Observe"
+- Server expects `CombatAction` enum with snake_case values: 'strike', 'heavy_strike', 'dodge', 'block', 'use_item', 'skill', 'flee', 'observe'
+- Impact: Every combat action unrecognized by server; combat completely non-functional
+- TypeScript should have caught this (string not assignable to CombatAction) — type checking gap
+
+**Root cause:** Display labels used directly as action values without type-safe mapping
+
+**Solution:** Separated display labels from action values
+
+**Implementation:**
+- Created `{ label: string, action: CombatAction }` mapping array
+- Labels remain user-readable ("Strike", etc.)
+- Actions match protocol values ('strike', etc.)
+- Type signature tightened — now correctly typed against `CombatAction` enum from `@ellmud/shared`
+- TypeScript now catches any future label/action misalignment at compile time
+
+**Result:**
+- Combat actions correctly recognized by server
+- Combat fully functional
+- Type-safe: impossible to send wrong action format
+- Ready for merge with blocker #1 fix (Hooks violation)
+
+**Files modified:**
+- `packages/client/src/pages/ShardExploration.tsx`
+
+**Lock:** Drizzt (original author) — no conflicts

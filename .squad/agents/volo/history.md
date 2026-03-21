@@ -207,3 +207,47 @@ Wave 7 will deliver final 3 client UI issues. Shardboard will integrate with Ref
 - **Key pattern:** Components are stateless/props-driven (no store extensions), matching RefugeHub pattern. Chat state management lives in the parent (GameScreen or RefugeHub) and feeds down via props.
 - **Tests:** 78 new tests (33 chat + 22 players + 23 trade), 124 total client passing, 0 lint errors
 - **Shared environment challenge:** Other agents were switching branches during my session. Had to use cherry-pick + amend workflow to keep my commit isolated on the correct branch.
+
+### 2025-07-25: Page Wiring — Login, Settings, ProtectedRoute (squad/ux-overhaul)
+- **Wired Login.tsx to real auth:** Calls `login()`/`register()` from `api.ts`, dispatches `LOGIN_SUCCESS` to AppContext, navigates to `/refuge` on success. Shows real API error messages with `role="alert"`, loading/disabled state during requests. If already authenticated, `<Navigate to="/refuge" replace />` skips the form entirely.
+- **App-level auth context:** `App.tsx` now wraps `RouterProvider` with `AppContext.Provider` using `useReducer(appReducer, ...)`. Auth token + playerId persisted to `localStorage` (`ellmud_token`, `ellmud_playerId`) via a `useEffect` sync. On reload, `loadPersistedState()` restores auth from localStorage — users don't re-login on refresh.
+- **ProtectedRoute layout:** Created `components/ProtectedRoute.tsx` — a React Router layout route that checks `state.authenticated` and renders `<Navigate to="/" replace />` if false, `<Outlet />` if true. All game routes (refuge, shard, characters, settings, leaderboard) wrapped under it in `routes.ts`.
+- **Settings logout:** Account section now has a real "Logout" button that calls `apiLogout(token)`, dispatches `LOGOUT`, and navigates to `/`. Catches server errors gracefully (clears local state even if server unreachable). Display preferences (fontSize, verbosity, narrationStyle) persist to localStorage.
+- **CharacterSelect & Leaderboard:** Already correctly wired — navigate to `/refuge`, no changes needed.
+- **Key pattern: Phase 1 skips character select.** Login goes straight to `/refuge` (no character API exists yet). CharacterSelect page still works if navigated to directly.
+- **Pre-existing test failures (18 files):** All from UX overhaul moving components to `_old/`. Not caused by this work. 1027 tests pass, 0 regressions.
+
+## 2026-03-21: Rules of Hooks Fix — Refuge.tsx
+
+**Session:** Post-wave-7 sprint fixes  
+**Status:** ✅ COMPLETE
+
+**Issue:** Rules of Hooks violation in Refuge.tsx (lines 78–130)
+
+**Problem:**
+- `useCallback`, `useReconnection`, `useRef`, and `useEffect` called **after** conditional early return
+- Code pattern: `if (!state.authenticated) return <Navigate ... />`  then hooks below
+- Impact: React crash ("Rendered more hooks than during the previous render") on logout/token expiry
+- This is a runtime crash that breaks the application when user transitions unauthenticated
+
+**Root cause:** Redundant auth guard in Refuge component
+
+**Solution:** Removed redundant conditional return entirely
+
+**Reasoning:**
+- Refuge route already wrapped in `ProtectedRoute` in routes.ts
+- ProtectedRoute handles unauthenticated redirection (to login)
+- Duplicate guard in Refuge component was both unnecessary and harmful
+- Component can now render–unmount–remount without hook count changing
+
+**Result:**
+- All hooks at component root level
+- No conditional returns before hooks
+- Auth flow unchanged (ProtectedRoute still handles redirect)
+- Component complies with React Rules of Hooks
+- Ready for merge with blocker #2 fix (combat actions)
+
+**Files modified:**
+- `packages/client/src/pages/Refuge.tsx`
+
+**Lock:** Drizzt (original author) — no conflicts

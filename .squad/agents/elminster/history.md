@@ -174,3 +174,53 @@ All four PRs merge cleanly to dev:
 - **Key files:** `docs/content-admin-tool.md` (the design document), `.squad/decisions/inbox/elminster-content-admin-tool.md` (team decision).
 - **Audience:** Document is designed for UI/UX designers creating Figma mockups — includes ASCII wireframes for every major screen, field-level detail for every content type, and component descriptions.
 - **GDD relationship:** This tool is NOT the admin dashboard described in GDD §13.3 (which is a debug/inspection tool using Colyseus Schema sync). This is a content authoring tool that feeds content into the game.
+
+### 2026-03-21: UX Overhaul Code Review (squad/ux-overhaul branch)
+- **Action:** Reviewed 149-file, ~21K-line UX overhaul branch. Figma SPA conversion with Tailwind CSS 4, shadcn/ui, React Router 7, and Colyseus wiring for Shard and Refuge pages.
+- **Verdict:** Conditional approval — two blockers must be fixed before merge.
+- **🔴 Blocker #1 — Rules of Hooks violation in Refuge.tsx:** `useCallback`, `useReconnection`, `useRef`, `useEffect` called after conditional early return. React will crash on auth state transitions. Fix: remove redundant auth guard (ProtectedRoute handles it).
+- **🔴 Blocker #2 — Combat action values don't match server protocol:** ShardExploration sends display labels ("Strike", "Heavy Strike") but CombatAction expects snake_case ("strike", "heavy_strike"). Combat is non-functional. Fix: separate labels from action values.
+- **🟡 Should fix:** Admin routes unprotected (no ProtectedRoute wrapper), no token validation on page load, no error boundaries, extraction_state handler registered outside connect(), reconnection "Return to Refuge" dispatches LOGOUT.
+- **Architecture validated:** Message-only Colyseus protocol correctly enforced (zero Schema leakage). React Router structure sound. AppContext+RouterProvider integration correct. Token persistence pattern clean.
+- **Key files:** `.squad/decisions/inbox/elminster-ux-review.md` (full review verdict).
+
+## 2026-03-21: UX Overhaul Branch Code Review
+
+**Session:** Post-wave-7 sprint review  
+**Scope:** 149 files, ~21K lines (squad/ux-overhaul branch)
+
+**Review focus:**
+- Figma SPA conversion (11 screens, dark fantasy theme, responsive layout)
+- Colyseus client integration (message-only protocol, no Schema leakage)
+- React Router migration (route hierarchy, protected routes, error handling)
+- Auth flow and token persistence
+- Reconnection strategy and overlay integration
+
+**Verdict:** 🟡 **CONDITIONAL APPROVAL** — Two blockers, five should-fixes, five notes
+
+**Blockers identified:**
+1. Rules of Hooks violation in Refuge.tsx (hooks after conditional return) → ✅ Fixed by Volo
+2. Combat action values don't match protocol in ShardExploration.tsx (labels vs enum) → ✅ Fixed by Jarlaxle
+
+**Should-fixes (filed as Phase 1.1+ issues):**
+- Admin routes lack auth guard
+- No token validation on page load
+- No error boundaries
+- `extraction_state` handler late registration
+- Reconnection button behavior inconsistency
+
+**Architecture findings:**
+- Message-only Colyseus protocol correctly enforced throughout
+- Connection service is clean single integration point
+- AppContext wrapping provides context across routes
+- Token persistence and reconnection patterns are sound
+- Protocol contract split across `connect()` and `.then()` — consolidation recommended
+
+**Notes for future work:**
+- Hardcoded hex values (theme tokens unused) — recommend migration pass
+- ShardboardTab mock data misleading to testers
+- 48 shadcn/ui components with low utilization — pruning candidate
+- 450 skipped tests for old components — cleanup candidate
+- Bundle size optimization (code-split admin routes)
+
+**Outcome:** Conditional approval granted. Two blockers fixed post-review. Branch ready for merge after final validation.
