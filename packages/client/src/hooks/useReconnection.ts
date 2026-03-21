@@ -19,10 +19,6 @@ export interface UseReconnectionResult {
   overlayState: OverlayState;
   attempt: number;
   elapsedSeconds: number;
-  reportDisconnect: () => void;
-  reportConnected: () => void;
-  reconnectNow: () => void;
-  cancel: () => void;
   /** Call when connection is lost */
   reportDisconnect: () => void;
   /** Call when connection is re-established */

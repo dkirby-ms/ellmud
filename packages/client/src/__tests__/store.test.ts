@@ -3,8 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { appReducer, initialState, type AppAction, type TerminalMessage } from '../store.js';
-import { appReducer, initialState, type TerminalMessage, type SoundCue, type EnemyStatus, type InventoryItem } from '../store.js';
+import { appReducer, initialState, type AppAction, type TerminalMessage, type SoundCue, type EnemyStatus, type InventoryItem } from '../store.js';
 
 function makeMsg(id: string, text = 'test'): TerminalMessage {
   return { id, text, type: 'room', timestamp: Date.now() };
