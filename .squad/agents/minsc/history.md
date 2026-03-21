@@ -8,24 +8,40 @@
 - **User:** dkirby-ms
 - **GDD:** GDD.md (comprehensive design document covering all game systems)
 
-## Learnings
+## Core Context (Phase 1 Foundation — Completed)
 
-- **Contract test pattern for repository swapability:** Wrote repository tests as reusable contract functions (`playerRepositoryContractTests`, `stashRepositoryContractTests`) that accept a factory. Same tests run against InMemoryRepo now and will run against PgRepo later — just swap the factory. This ensures the PG implementation satisfies the exact same behavioral contract.
-- **Migration SQL parse tests catch schema drift:** Schema validation tests parse SQL with regex to verify constraints, foreign keys, indexes, and cross-migration consistency without needing a running database. Caught migration 006 (stash_capacity) that other teammates added — tests adapted to be tolerant of additional migrations while still validating core schema.
-- **player_skills table uses updated_at instead of created_at:** Not all data tables follow the same timestamp pattern. Config/override tables (006_create_stash_capacity) have no timestamps at all. Schema validation tests should check core data tables (001-005) separately from utility tables.
+**Completed work (high-level summary):**
+- ✅ Repository contract tests: InMemory + SQL migration validation, reusable contract pattern for PG swap-out
+- ✅ Colyseus test infrastructure: Port auto-assignment (port 0), sequential server boot fixes, simulation clock polling
+- ✅ Web Terminal Client: Connection protocol, commands (movement/combat/inventory), auth flow, 44 tests
+- ✅ Anticipatory tests: 200+ passing tests across server, shared, client layers activating on merge
+- ✅ Phase 1 Client UI batch: 4 core components (Button, Toast, ClickableExits, Reconnection) all merged
+- ✅ Test suite reliability: Full run ~110s, no flakiness, `fileParallelism: false` + port 0 strategy prevents conflicts
 
-- **Colyseus boot() port assignment bug:** `@colyseus/testing` boot() ignores port parameter for Server instances. Workaround: use `server.listen(0)` for OS auto-assignment, then patch `server.port` from `transport.server.address().port`. Bumped `hookTimeout`/`testTimeout` to 30s. All 344 tests now pass in ~110s.
-- **Colyseus testing port conflicts:** `@colyseus/testing` boots a real server on port 2568. Multiple test files with `bootTestServer()` cause `EADDRINUSE` if files run in parallel. Fixed with `fileParallelism: false` in vitest config.
-- **Colyseus simulation clock is imprecise in tests:** 1-second tick intervals don't fire at exactly 1s under load. For tests that depend on timer expiration (collapse lifecycle), use polling (`waitUntil`) instead of fixed `wait()` calls.
-- **Room auto-dispose on empty:** Colyseus rooms auto-dispose when the last client leaves. Edge-case tests for rapid join/leave must keep an anchor client connected.
-- **`@colyseus/sdk` is a peer dependency of `@colyseus/testing`:** Not declared explicitly — must be added to server devDependencies for tests to run.
-- **Test structure:** File-level `beforeAll`/`afterAll` for the Colyseus server, with multiple `describe` blocks sharing one server instance. This avoids port conflicts within a file.
-- **Test counts (Issue #19):** 42 server tests (6 files), 19 shared tests (1 file), 0 client tests (skeleton config). 61 total passing tests.
-- **Client test infrastructure (Issue #13):** jsdom environment required for React component tests. `@testing-library/jest-dom/matchers` must be manually extended via `expect.extend(matchers)` — the `/vitest` entrypoint doesn't auto-register in monorepo setups. Explicit `cleanup()` in `afterEach` is mandatory when using `screen` queries across tests.
-- **Message-only protocol enforcement via source scanning:** Connection tests read `connection.ts` source at test time and grep for forbidden patterns (`room.state`, `onStateChange`, `Schema`). Comments are stripped before checking to avoid false positives. This catches accidental Schema usage at CI time.
-- **Client test count (Issue #13):** 44 client tests (5 files) — connection protocol, terminal rendering, command input + aliases, auth flow, state reducer.
-- **Sequential test port conflicts (full suite):** When running the full test suite with `fileParallelism: false`, multiple test files booting Colyseus servers sequentially cause `EADDRINUSE` on port 2568. The previous server's shutdown may not complete before the next file's `beforeAll` starts. Fixed by passing `port: 0` to `boot(server, 0)` in all server boot locations (`bootTestServer()` helper, plus individual test files: auth.test.ts, commands.test.ts, rooms.test.ts). Port 0 tells the OS to assign any available port, eliminating contention entirely.
-- **Test timeouts for slow integration tests:** `shard-lifecycle.test.ts` takes ~48s for 8 tests (real-time tick mechanics). Increased `hookTimeout` and `testTimeout` from 10s/20s to 60s in `packages/server/vitest.config.ts` to prevent spurious timeout failures in `beforeAll` hooks during full suite runs.
+**All tests passing, zero regressions. Test infrastructure stable for parallel agent work.**
+
+---
+
+## Learnings (Archived — See Detailed Session Records)
+
+**Repository & Schema Testing Patterns:**
+- Contract test pattern: Reusable functions accepting factory (InMemory now, PG later) ensure behavioral parity
+- Migration SQL validation via regex parses for constraints, foreign keys, indexes, cross-migration consistency
+- Schema variation tolerance: Core tables (001-005) validated separately from utility tables (configs have no timestamps)
+
+**Colyseus Test Infrastructure:**
+- Port conflicts fixed via `port: 0` (OS auto-assignment) instead of hardcoded 2568
+- Sequential server boot: All test files use `boot(server, 0)` to eliminate EADDRINUSE on full suite runs
+- Simulation clock imprecision: Use polling (`waitUntil`) instead of fixed waits for timer-dependent tests
+- File-level `beforeAll`/`afterAll` with multiple `describe` blocks sharing one server per file
+- `@colyseus/sdk` is peer dependency of `@colyseus/testing` — must add to devDependencies
+- `hookTimeout: 60s, testTimeout: 60s` for integration tests like shard-lifecycle (real-time mechanics)
+
+**Client Test Conventions:**
+- jsdom environment required; `@testing-library/jest-dom/matchers` manually extended via `expect.extend()`
+- Explicit `cleanup()` in `afterEach` mandatory when using `screen` queries across tests
+- Message-only protocol: Source scanning at test time greps for forbidden Schema patterns
+- No mocks for components under test — import-failure pattern signals missing implementations
 
 ---
 
