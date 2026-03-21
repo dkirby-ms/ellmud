@@ -421,3 +421,31 @@ Wave 7 will deliver final 3 client UI issues (#68, #72, #73) using locked antici
 - `packages/server/src/db/index.ts` — `runMigrations()` throws on failure (caught by index.ts)
 
 **User Preference:** Minimal changes only — no retry logic or complex connection pooling
+
+### ShardExploration Real Backend Wiring (2026-03-21)
+**Task:** Wire the Figma ShardExploration page to real Colyseus backend
+**Status:** ✅ Complete — committed on squad/ux-overhaul
+
+**What was done:**
+1. Created `packages/client/src/hooks/useShardConnection.ts` — encapsulates full Colyseus connection lifecycle for shard rooms. Handles onNarrate, onRoomHeader, onShardState, onCombatResult, onRoomSwitch, extraction_state messages. Manages reconnection, command dispatch, extraction state.
+2. Rewrote `packages/client/src/pages/ShardExploration.tsx` — replaced all mock data with real AppContext state. Narrative panel renders from state.messages, room header from state.roomHeader, collapse timer via useCountdown hook, combat from state.inCombat/enemyStatus, sound cues from state.soundCues, inventory from state.inventory.
+3. Updated `packages/client/src/components/ChatPanel.tsx` — added onSendMessage prop for real Colyseus chat dispatch (/say, /whisper, /emote routing).
+4. Added ReconnectionOverlay to the page for WebSocket disconnect recovery.
+
+**Key patterns:**
+- AppContext is already provided at App.tsx level with localStorage token persistence
+- useShardConnection hook follows the exact same handler pattern as old GameScreen.tsx
+- ExtractionOverlay driven by extraction_state messages (started/progress/completed/interrupted)
+- Combat action bar disables buttons while pendingCombatAction is set, shows real tick count
+- Command input disabled when connectionStatus !== 'connected'
+
+## Learnings
+
+### Hook-based Colyseus Connection Architecture
+The old GameScreen.tsx mixed connection lifecycle with rendering. Extracting it into useShardConnection.ts makes the pattern reusable — any page (shard, refuge, future lobby) can use a similar hook without duplicating handler boilerplate. The key is: refs for mutable state (roomRef, switchingRef), useState for render-triggering state (extraction), and useCallback for stable function references.
+
+### Extraction State Requires useState Not useRef
+Originally used useRef for extraction state, but refs don't trigger re-renders. The ExtractionOverlay wouldn't update. Switched to useState to properly drive the overlay component.
+
+### AppContext Already Wired at App.tsx Level
+The App.tsx already had useReducer + AppContext.Provider + localStorage persistence. No need to create a separate AppProvider — just use useAppContext() in any page.

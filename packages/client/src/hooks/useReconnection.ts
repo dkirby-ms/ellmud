@@ -6,7 +6,9 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type { OverlayState } from '../components/ReconnectionOverlay.js';
+// OverlayState was previously imported from ReconnectionOverlay.
+// Defined inline since old components are excluded from the build during UX overhaul.
+export type OverlayState = 'hidden' | 'reconnecting' | 'reconnected' | 'disconnected';
 
 export interface UseReconnectionOptions {
   maxAttempts?: number;
