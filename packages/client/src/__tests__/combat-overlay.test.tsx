@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { CombatOverlay } from '../components/CombatOverlay.js';
 import { EnemyStatusPanel } from '../components/EnemyStatusPanel.js';
 import { AppContext, initialState, getHpTier, type AppState, type EnemyStatus } from '../store.js';
+import type { Room } from '@colyseus/sdk';
 
 vi.mock('../services/connection.js', () => ({ sendRawCommand: vi.fn() }));
 import { sendRawCommand } from '../services/connection.js';
@@ -28,19 +29,19 @@ describe('CombatOverlay', () => {
   });
   it('has superscripts', () => { renderOverlay({ inCombat: true }); expect(screen.getByText('¹')).toBeInTheDocument(); expect(screen.getByText('⁸')).toBeInTheDocument(); });
   it('clicking action sends command', () => {
-    const r = { send: vi.fn() } as unknown;
+    const r = { send: vi.fn() } as unknown as Room;
     const { dispatch } = renderOverlay({ inCombat: true, room: r });
     fireEvent.click(screen.getByRole('button', { name: 'Strike (key 1)' }));
     expect(sendRawCommand).toHaveBeenCalledWith(r, 'strike');
     expect(dispatch).toHaveBeenCalledWith({ type: 'SET_PENDING_COMBAT_ACTION', action: 'strike' });
   });
   it('keyboard shortcut triggers action', () => {
-    const r = { send: vi.fn() } as unknown;
+    const r = { send: vi.fn() } as unknown as Room;
     renderOverlay({ inCombat: true, room: r });
     fireEvent.keyDown(window, { key: '3' });
     expect(sendRawCommand).toHaveBeenCalledWith(r, 'dodge');
   });
-  it('no shortcuts outside combat', () => { const r = { send: vi.fn() } as unknown; renderOverlay({ inCombat: false, room: r }); fireEvent.keyDown(window, { key: '1' }); expect(sendRawCommand).not.toHaveBeenCalled(); });
+  it('no shortcuts outside combat', () => { const r = { send: vi.fn() } as unknown as Room; renderOverlay({ inCombat: false, room: r }); fireEvent.keyDown(window, { key: '1' }); expect(sendRawCommand).not.toHaveBeenCalled(); });
   it('active button has gold class', () => { renderOverlay({ inCombat: true, pendingCombatAction: 'dodge' }); expect(screen.getByRole('button', { name: 'Dodge (key 3)' }).className).toContain('action-btn--active'); });
   it('fades in', () => { renderOverlay({ inCombat: true }); act(() => { vi.advanceTimersByTime(16); }); expect(screen.getByRole('region', { name: 'Combat' }).className).toContain('combat-overlay--visible'); });
   it('has toolbar role', () => { renderOverlay({ inCombat: true }); expect(screen.getByRole('toolbar', { name: 'Combat actions' })).toBeInTheDocument(); });

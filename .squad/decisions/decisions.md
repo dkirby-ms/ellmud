@@ -358,3 +358,124 @@ This worked because all types within a category had the same timeout value. But 
 **Impact:**
 - No behavioral change with current `DEFAULT_NARRATION_CONFIG` (combat types = 800ms, others = 2000ms)
 - Future flexibility to tune per-type without code changes
+
+---
+
+## 2026-03-21T15:09:00Z: ACA Deploy Must Clear Both Command and Args
+
+**Author:** Jarlaxle (Systems Dev)  
+**Date:** 2026-03-21  
+**Status:** Implemented
+
+**Context:** Azure Container Apps inherits `command` (ENTRYPOINT) and `args` (CMD) independently. Our Bicep template sets both for the bootstrap placeholder. The CI/CD deploy step was only overriding `command` via `--command`, leaving the bootstrap `args` intact—so the placeholder kept running even after deploy.
+
+**Decision:** When using `az containerapp update` to deploy, always explicitly set **both** `--command` and `--args`. Use `--args ""` to clear inherited args when they should not carry over.
+
+The health check now validates the real server's `"uptime"` field rather than the generic `"status":"ok"` that both placeholder and real server return. This prevents false-positive health checks from masking a failed deploy.
+
+**Implications:**
+- Any future changes to the deploy step must preserve both `--command` and `--args ""` flags
+- If the real server's `/health` response shape changes (in `packages/server/src/health.ts`), the CI/CD health check grep must be updated to match
+- The Bicep bootstrap is intentional for initial provisioning—do not remove it
+
+---
+
+## 2026-03-21T15:09:00Z: PostgreSQL Host Port Changed to 5434
+
+**Date:** 2026-03-21  
+**Author:** Drizzt (Engine Dev)  
+**Issue:** Docker-compose port isolation
+
+**Context:** Playgrid uses host port **5433** for its PostgreSQL container. Ellmud was using the default **5432**, which could also conflict with a system-level Postgres install. To avoid port collisions when both projects run on the same dev machine, we needed a unique host port.
+
+**Decision:**
+- **Ellmud PostgreSQL host port → 5434** (container still listens on 5432 internally)
+- Added `name: ellmud` to `docker-compose.yml` so Docker isolates our project's networks and volumes under a dedicated namespace
+- Redis stays on **6379** (no conflict reported)
+
+**What Changed:**
+| File | Change |
+|---|---|
+| `docker-compose.yml` | Added `name: ellmud`; port `5432:5432` → `5434:5432` |
+| `docs/setup.md` | Updated standalone Docker example and `DATABASE_URL` to use port 5434 |
+
+**Not Changed:**
+- `infra/modules/container-apps.bicep` and `infra/modules/postgres.bicep` — these reference Azure Flexible Server's internal port 5432 (server-to-server), unrelated to local dev
+- `packages/server/src/db/index.ts` — reads `DATABASE_URL` from env; no hardcoded port
+
+**Impact:** Developers must use `localhost:5434` when connecting to the local Ellmud Postgres (e.g., psql, pgAdmin, DATABASE_URL).
+
+---
+
+## 2026-03-21T15:09:00Z: Extraction Screen Component API
+
+**Author:** Drizzt (Engine Dev)  
+**Issue:** #72  
+**PR:** #92
+
+**Decision:** Extraction screen uses a phase-discriminated union pattern: `ExtractionScreen` accepts `phase: 'extracting' | 'success' | 'failure'` with phase-specific props. Internally delegates to `ExtractionOverlay`, `ExtractionSuccess`, `ExtractionFailure`.
+
+**Why:**
+- Single entry point for GameScreen integration (just render `<ExtractionScreen phase={...} />`)
+- Individual sub-components exportable for direct use if needed
+- TypeScript discriminated union ensures compile-time prop correctness per phase
+- Matches issue spec: overlay during channeling, full-page for success/failure
+
+**Tier naming:** Used `anomalous` (not `relic`) matching the theme CSS variables and issue spec. The removed anticipatory tests had `relic` — this is intentionally different.
+
+**Impact:**
+- GameScreen will need to track extraction state and render `ExtractionScreen` conditionally
+- Types exported from `extraction-types.ts` should be used when wiring server messages to props
+- `onReturn` callback should trigger room switch back to refuge
+
+---
+
+## 2026-03-21T15:09:00Z: PR #90 CSS Variable Compliance Rejection
+
+**Author:** Elminster (Lead / Architect)  
+**PR:** #90 (Shard Exploration Sidebar & Combat Overlay)  
+**Author of PR:** Jarlaxle  
+**Status:** Rejected — CSS variable migration required
+
+**Issue:** PR #90 introduces ~23 hardcoded hex color values in styles.css, violating the team's established design token policy ("All future screens must use `:root` variables; no hardcoded colors").
+
+**Specific violations:**
+- Direct theme variable equivalents used as hex: `#12131A` (--bg-panel), `#C9A84C` (--accent), `#E8E0D0` (--text-primary), `#4682B4` (--loot-refined), `#7B4FA0` (--loot-masterwork)
+- Missing theme variables needed: `#2A2B35` (border-subtle), `#3E3F4C` (border-hover), `#d4b35a` (accent-hover), `#cc4400` (hp-badly-wounded), `#222` (border-dark)
+- Duplicate `.reconnect-overlay` CSS block (copy-paste error)
+
+**Required fix:**
+1. Add 5 new CSS variables to `:root`: `--border-subtle`, `--border-hover`, `--accent-hover`, `--hp-badly-wounded`, `--border-dark`
+2. Replace all ~23 hardcoded hex values with `var(--...)` references
+3. Remove duplicate `.reconnect-overlay` block
+
+**Assigned to:** Drizzt (per review policy: not original author)
+
+**Note:** The `#d4b35a` hover color also appears in PRs #91 and #92 (1 instance each). These are approved with notes — the same new `--accent-hover` variable should be used across all three PRs.
+
+**Impact:** This is a CSS-only fix. No component logic changes needed.
+
+---
+
+## 2026-03-21T15:09:00Z: CSS Variable Compliance Must Be Enforced Pre-Merge
+
+**Author:** Elminster (Lead / Architect)  
+**Trigger:** Batch A review — 3 of 5 PRs had hardcoded hex values in CSS
+
+**Decision:** All color values in CSS must use `:root` CSS variables. No hardcoded `#hex` values in component-level styles. If a needed shade doesn't exist as a variable, define it in `:root` first, then reference it.
+
+**Why:**
+- The prior decision ("All future screens must use `:root` variables; no hardcoded colors") was violated in PRs #84, #87, and #88
+- PR #87 was the worst offender: 10+ hex values where exact variable equivalents already exist (`#12131A` = `--bg-panel`, `#C9A84C` = `--accent`, etc.)
+- This undermines theming capability and makes the design system fragile
+
+**Acceptable exceptions:**
+- `rgba()` values in `box-shadow` (opacity-based effects are inherently contextual)
+- Defining new variables in `:root` (the definition site uses hex, references use `var()`)
+
+**Enforcement:**
+- All agents must grep their CSS additions for raw `#` hex values before submitting
+- Reviewers should reject PRs with hardcoded colors that have existing variable equivalents
+- Consider adding a stylelint rule: `declaration-no-important` + custom property enforcement
+
+_Merged from decisions/inbox/ on 2026-03-21T15:09:00Z._

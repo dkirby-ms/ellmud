@@ -8,6 +8,7 @@ import {
   type ShardStateMessage,
   type StashItem,
   type BiomeType,
+  type ExtractionMessage,
   MessageTypes,
 } from '@ellmud/shared';
 import { ShardState } from '../state.js';

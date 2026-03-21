@@ -47,7 +47,9 @@ param deployApp bool = false
 
 var createEnvironment = existingEnvironmentId == ''
 
-// Bootstrap placeholder — replaced by real image after first CI push.
+// Bootstrap placeholder — replaced by real image after first CI/CD deploy.
+// The deploy step (ci-cd.yml) overrides command/args with the real entrypoint
+// and clears these bootstrap values via --command and --args "".
 // Listens on 2567 (Colyseus default) so ingress config stays stable.
 var bootstrapImage = 'node:22-alpine'
 var bootstrapCommand = 'node -e "require(\'http\').createServer((q,s)=>{s.writeHead(200,{\'Content-Type\':\'application/json\'});s.end(JSON.stringify({status:\'ok\',mode:\'placeholder\'}))}).listen(2567,\'0.0.0.0\')"'

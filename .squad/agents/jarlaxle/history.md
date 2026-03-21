@@ -8,7 +8,21 @@
 - **User:** dkirby-ms
 - **GDD:** GDD.md (comprehensive design document covering all game systems)
 
-## Learnings
+## Core Context (Phase 1 Foundation — Completed)
+
+**Completed work (high-level summary):**
+- ✅ PostgreSQL schema: Player/identity normalization, faction/skill types, JSONB item stats (Issue #3)
+- ✅ Room graph generation: Biome templates, PRNG, distance enforcement, 101 tests (Issue #5)
+- ✅ Combat system: Strike/dodge/flee, simultaneous resolution, pure game logic, 32 tests (Issue #6)
+- ✅ Creature AI: Behavior trees, deterministic spawning, loot system, 41 tests (Issue #7)
+- ✅ Shard exploration UI: Sidebar, combat overlay, HP tiers, 68 tests (Issue #66)
+- ✅ ACA deployment fix: Clear bootstrap args, improved health check validation
+
+**All tests passing, zero regressions. Phase 1 client UI 70% complete.**
+
+---
+
+## Learnings (Archived — See Detailed Session Records)
 
 ### 2026-03-19: PostgreSQL schema (Issue #3)
 - Created 5 migration files under `packages/server/src/db/migrations/` (001–005).
@@ -66,30 +80,6 @@
 - All 41 creature tests pass. All 208 pre-existing tests unaffected.
 
 ---
-
-## Wave 4 Cross-Team Context (2026-03-19T16:32:56Z)
-
-**Completed parallel:**
-- ✅ **Drizzt Issue #12:** Username/password auth with bcrypt, JWT tokens, optional auth by default
-- ✅ **Volo Issue #9:** LLM narration pipeline, in-memory cache, Azure AI + fallbacks
-- ✅ **Your Issue #6:** Combat system complete (strike, dodge, flee, 1s tick). 32 tests. Pure logic design proven.
-
-**Your Issue #7 — Drowned Revenant + AI Behavior Tree — can now proceed:**
-- Combat system (#6) provides tick loop and pure game logic → creature actions hook into same tick
-- Narration (#9) provides enrichment pipeline → creature narration (attack descriptions, death scenes) ready
-- Auth (#12) provides `playerId` tracking → creature state persists across sessions
-
-**Design notes for creature AI:**
-- Creature actions (swing, cast, flee) are implemented as handlers that call `combatSystem.strike()` etc. (no new combat paths)
-- Behavior tree evaluates each tick and queues actions into the combat system
-- `CombatSystem.resolveTick()` processes both player and creature actions simultaneously
-- Narration enrichment receives `{type: 'creature-strike', ...}` and fills in flavor text
-
-**Upcoming Wave 5:**
-- Drizzt #10: Extraction mechanic (safe zones, loot, death penalty)
-- Minsc #13: Web Terminal Client (displays creature actions, extraction UI)
-- Coordinate with both on message types for creature narration
-
 ### 2025-07-25: Login Screen Figma Rebuild
 - Rebuilt AuthScreen.tsx and styles.css to match `docs/figma-design-prompt.md` — the authoritative Figma design spec.
 - **CSS theme overhaul:** Replaced entire `:root` variable block with Figma palette (`#0A0B0F` bg, `#C9A84C` gold accent, `#E8E0D0` warm-bone text, `#12131A` panel, etc.). Added `--font-display` (Cinzel), `--font-serif` (Crimson Text), `--font-sans` (Inter), updated `--font-mono` to JetBrains Mono. Old cyan accent (`#4a9eff`) eliminated.
@@ -353,3 +343,21 @@ Wave 7 will deliver final 3 client UI issues (#68 Refuge Hub, #72 Extraction Scr
 - `packages/client/src/__tests__/sidebar.test.tsx` — 19 tests
 - `packages/client/src/__tests__/combat-overlay.test.tsx` — 26 tests
 - `packages/client/src/__tests__/store.test.ts` — 23 tests (15 new)
+
+### 2026-03-21: ACA Deploy Entrypoint Fix (CI/CD)
+- **Root cause:** `az containerapp update --command` sets the container command but does NOT clear `args`. The Bicep bootstrap sets `command: ['/bin/sh', '-c']` and `args: [bootstrapCommand]`. When CI/CD changed command to `["node", "packages/server/dist/index.js"]`, the old args persisted, so the placeholder kept running.
+- **Fix:** Added `--args ""` to the deploy step in `.github/workflows/ci-cd.yml`. Azure CLI treats empty string args as "clear existing values".
+- **Health check gap:** Old check grepped for `"status":"ok"` which both placeholder and real server return. Updated to check for `"uptime"` field (only in real server's `/health` response from `packages/server/src/health.ts`). Placeholder detection logs clearly during retries.
+- **Key files:** `.github/workflows/ci-cd.yml` (deploy step + health check), `infra/modules/container-apps.bicep` (bootstrap comment), `packages/server/src/health.ts` (real health response shape).
+- **Pattern:** Bicep provisions with bootstrap placeholder → CI/CD overrides on first deploy. Both command AND args must be explicitly set to fully replace the bootstrap.
+
+---
+
+## 2026-03-21T15:09:00Z: Orchestration Complete
+
+**Status:** ✅ Session complete, decisions archived
+
+- ACA entrypoint fix merged to decisions.md (decision: ACA Deploy Must Clear Both Command and Args)
+- Orchestration logs written to .squad/orchestration-log/2026-03-21T15-09-jarlaxle.md
+- Docker port isolation decision merged (Drizzt co-authored)
+- CSS variable compliance decisions enforced
