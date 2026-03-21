@@ -458,3 +458,17 @@ The UX overhaul moved 24 old components to `components/_old/` and replaced them 
 - Cleaner git history (dead tests removed rather than accumulating)
 
 **Status:** User directive fulfilled. Test suite ready for Phase 1 deployment.
+
+### Auth Guard & Error Boundary Tests (Should-Fix Coverage)
+
+**Files created:**
+- `packages/client/src/__tests__/auth-guards.test.tsx` — 10 tests covering admin route auth guards
+- `packages/client/src/__tests__/error-boundary.test.tsx` — 4 tests covering ErrorFallback error boundaries
+
+**Key patterns discovered:**
+- Admin Dashboard renders "Dashboard" in both sidebar nav label AND page `<h1>` — use `getByRole('heading', { name: 'Dashboard' })` to disambiguate
+- ErrorFallback uses a plain `<a href="/refuge">` tag (not React Router `<Link>`), so click navigation can't be tested in jsdom — verify `href` attribute instead
+- `ErrorBoundary: ErrorFallback` property (component ref) works on route config; tests can also use `errorElement: <ErrorFallback />` (JSX) for custom test routes
+- Volo's changes (ProtectedRoute on admin routes, ErrorFallback with ErrorBoundary) landed before tests — all 14 new tests pass immediately
+
+**Suite status:** 77 tests across 7 files, all passing, zero regressions.
