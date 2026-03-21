@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import {
   ArrowLeft,
@@ -8,7 +8,10 @@ import {
   Volume2,
   Keyboard,
   Accessibility,
+  LogOut,
 } from "lucide-react";
+import { logout as apiLogout } from "../services/api";
+import { useAppContext } from "../store";
 
 type SettingCategory =
   | "account"
@@ -44,12 +47,47 @@ const categories: {
 ];
 
 export default function Settings() {
+  const { state, dispatch } = useAppContext();
   const [activeCategory, setActiveCategory] =
     useState<SettingCategory>("narration");
-  const [fontSize, setFontSize] = useState(16);
-  const [verbosity, setVerbosity] = useState("standard");
-  const [narrationStyle, setNarrationStyle] = useState("default");
+  const [fontSize, setFontSize] = useState(() =>
+    Number(localStorage.getItem("ellmud_fontSize") ?? 16)
+  );
+  const [verbosity, setVerbosity] = useState(() =>
+    localStorage.getItem("ellmud_verbosity") ?? "standard"
+  );
+  const [narrationStyle, setNarrationStyle] = useState(() =>
+    localStorage.getItem("ellmud_narrationStyle") ?? "default"
+  );
+  const [loggingOut, setLoggingOut] = useState(false);
   const navigate = useNavigate();
+
+  // Persist display preferences to localStorage
+  useEffect(() => {
+    localStorage.setItem("ellmud_fontSize", String(fontSize));
+  }, [fontSize]);
+
+  useEffect(() => {
+    localStorage.setItem("ellmud_verbosity", verbosity);
+  }, [verbosity]);
+
+  useEffect(() => {
+    localStorage.setItem("ellmud_narrationStyle", narrationStyle);
+  }, [narrationStyle]);
+
+  const handleLogout = useCallback(async () => {
+    setLoggingOut(true);
+    try {
+      if (state.token) {
+        await apiLogout(state.token);
+      }
+    } catch {
+      // Server may be unreachable — still clear local state
+    } finally {
+      dispatch({ type: "LOGOUT" });
+      navigate("/");
+    }
+  }, [state.token, dispatch, navigate]);
 
   return (
     <div className="min-h-screen bg-[#0A0B0F]">
@@ -110,11 +148,11 @@ export default function Settings() {
                     className="block text-[#8A8B95] text-sm mb-2"
                     style={{ fontFamily: "var(--font-sans)" }}
                   >
-                    Username
+                    Player ID
                   </label>
                   <input
                     type="text"
-                    value="Kael Darkwater"
+                    value={state.playerId ?? "Unknown"}
                     readOnly
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-4 py-2 text-[#4A4B55]"
                     style={{ fontFamily: "var(--font-sans)" }}
@@ -133,6 +171,18 @@ export default function Settings() {
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-4 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
                     style={{ fontFamily: "var(--font-sans)" }}
                   />
+                </div>
+
+                <div className="pt-4 border-t border-[#2A2B35]">
+                  <button
+                    onClick={handleLogout}
+                    disabled={loggingOut}
+                    className="flex items-center gap-2 px-6 py-3 bg-[#8B2500]/20 border border-[#8B2500]/40 text-[#8B2500] hover:bg-[#8B2500]/30 rounded transition-colors disabled:opacity-50"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    <LogOut className="w-4 h-4" />
+                    {loggingOut ? "Logging out..." : "Logout"}
+                  </button>
                 </div>
               </div>
             </div>

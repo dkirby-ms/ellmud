@@ -5,6 +5,7 @@ import Refuge from "./pages/Refuge";
 import ShardExploration from "./pages/ShardExploration";
 import Leaderboard from "./pages/Leaderboard";
 import Settings from "./pages/Settings";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 import AdminLayout from "./pages/admin/AdminLayout";
 import Dashboard from "./pages/admin/Dashboard";
 import CreaturesList from "./pages/admin/CreaturesList";
@@ -38,24 +39,29 @@ export const router = createBrowserRouter([
     Component: Login,
   },
   {
-    path: "/characters",
-    Component: CharacterSelect,
-  },
-  {
-    path: "/refuge",
-    Component: Refuge,
-  },
-  {
-    path: "/shard/:shardId",
-    Component: ShardExploration,
-  },
-  {
-    path: "/leaderboard",
-    Component: Leaderboard,
-  },
-  {
-    path: "/settings",
-    Component: Settings,
+    Component: ProtectedRoute,
+    children: [
+      {
+        path: "/characters",
+        Component: CharacterSelect,
+      },
+      {
+        path: "/refuge",
+        Component: Refuge,
+      },
+      {
+        path: "/shard/:shardId",
+        Component: ShardExploration,
+      },
+      {
+        path: "/leaderboard",
+        Component: Leaderboard,
+      },
+      {
+        path: "/settings",
+        Component: Settings,
+      },
+    ],
   },
   {
     path: "/admin",
