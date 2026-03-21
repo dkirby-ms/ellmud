@@ -1,0 +1,166 @@
+import { createBrowserRouter } from "react-router";
+import Login from "./pages/Login";
+import CharacterSelect from "./pages/CharacterSelect";
+import Refuge from "./pages/Refuge";
+import ShardExploration from "./pages/ShardExploration";
+import Leaderboard from "./pages/Leaderboard";
+import Settings from "./pages/Settings";
+import AdminLayout from "./pages/admin/AdminLayout";
+import Dashboard from "./pages/admin/Dashboard";
+import CreaturesList from "./pages/admin/CreaturesList";
+import CreatureDetail from "./pages/admin/CreatureDetail";
+import ItemsList from "./pages/admin/ItemsList";
+import ItemsDetail from "./pages/admin/ItemsDetail";
+import BiomesList from "./pages/admin/BiomesList";
+import BiomesDetail from "./pages/admin/BiomesDetail";
+import ModifiersList from "./pages/admin/ModifiersList";
+import ModifiersDetail from "./pages/admin/ModifiersDetail";
+import LootTablesList from "./pages/admin/LootTablesList";
+import LootTablesDetail from "./pages/admin/LootTablesDetail";
+import SkillsList from "./pages/admin/SkillsList";
+import SkillsDetail from "./pages/admin/SkillsDetail";
+import FactionsList from "./pages/admin/FactionsList";
+import FactionsDetail from "./pages/admin/FactionsDetail";
+import RoomsList from "./pages/admin/RoomsList";
+import RoomsDetail from "./pages/admin/RoomsDetail";
+import NarrativeList from "./pages/admin/NarrativeList";
+import NarrativeDetail from "./pages/admin/NarrativeDetail";
+import Balance from "./pages/admin/Balance";
+import ContractsList from "./pages/admin/ContractsList";
+import RecipesList from "./pages/admin/RecipesList";
+import Deploy from "./pages/admin/Deploy";
+import AuditLog from "./pages/admin/AuditLog";
+import UsersList from "./pages/admin/UsersList";
+
+export const router = createBrowserRouter([
+  {
+    path: "/",
+    Component: Login,
+  },
+  {
+    path: "/characters",
+    Component: CharacterSelect,
+  },
+  {
+    path: "/refuge",
+    Component: Refuge,
+  },
+  {
+    path: "/shard/:shardId",
+    Component: ShardExploration,
+  },
+  {
+    path: "/leaderboard",
+    Component: Leaderboard,
+  },
+  {
+    path: "/settings",
+    Component: Settings,
+  },
+  {
+    path: "/admin",
+    Component: AdminLayout,
+    children: [
+      {
+        index: true,
+        Component: Dashboard,
+      },
+      {
+        path: "creatures",
+        Component: CreaturesList,
+      },
+      {
+        path: "creatures/:id",
+        Component: CreatureDetail,
+      },
+      {
+        path: "items",
+        Component: ItemsList,
+      },
+      {
+        path: "items/:id",
+        Component: ItemsDetail,
+      },
+      {
+        path: "biomes",
+        Component: BiomesList,
+      },
+      {
+        path: "biomes/:id",
+        Component: BiomesDetail,
+      },
+      {
+        path: "modifiers",
+        Component: ModifiersList,
+      },
+      {
+        path: "modifiers/:id",
+        Component: ModifiersDetail,
+      },
+      {
+        path: "loot-tables",
+        Component: LootTablesList,
+      },
+      {
+        path: "loot-tables/:id",
+        Component: LootTablesDetail,
+      },
+      {
+        path: "skills",
+        Component: SkillsList,
+      },
+      {
+        path: "skills/:id",
+        Component: SkillsDetail,
+      },
+      {
+        path: "factions",
+        Component: FactionsList,
+      },
+      {
+        path: "factions/:id",
+        Component: FactionsDetail,
+      },
+      {
+        path: "rooms",
+        Component: RoomsList,
+      },
+      {
+        path: "rooms/:id",
+        Component: RoomsDetail,
+      },
+      {
+        path: "narrative",
+        Component: NarrativeList,
+      },
+      {
+        path: "narrative/:id",
+        Component: NarrativeDetail,
+      },
+      {
+        path: "balance",
+        Component: Balance,
+      },
+      {
+        path: "contracts",
+        Component: ContractsList,
+      },
+      {
+        path: "recipes",
+        Component: RecipesList,
+      },
+      {
+        path: "deploy",
+        Component: Deploy,
+      },
+      {
+        path: "audit",
+        Component: AuditLog,
+      },
+      {
+        path: "users",
+        Component: UsersList,
+      },
+    ],
+  },
+]);

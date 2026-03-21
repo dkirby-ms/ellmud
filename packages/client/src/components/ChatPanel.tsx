@@ -1,209 +1,243 @@
-import { useState, useCallback, useRef, useEffect, type KeyboardEvent } from 'react';
+import { useState } from "react";
+import { X, Send } from "lucide-react";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+interface ChatPanelProps {
+  isOpen: boolean;
+  onClose: () => void;
+  context: "shard" | "refuge";
+}
 
-export type ChatChannel = 'proximity' | 'thinking' | 'system';
+type ChatTab = "proximity" | "whisper" | "refuge" | "squad";
 
-export interface ChatMessageData {
+interface ChatMessage {
   id: string;
-  sender: string;
-  text: string;
-  timestamp: number;
-  channel: ChatChannel;
-  type: 'message' | 'emote' | 'system';
+  type: "player" | "system" | "emote" | "whisper";
+  speaker?: string;
+  message: string;
 }
 
-export interface ChatPanelProps {
-  messages: ChatMessageData[];
-  onSend: (text: string, channel: ChatChannel) => void;
-  activeChannel?: ChatChannel;
-  onChannelChange?: (channel: ChatChannel) => void;
-  maxMessages?: number;
-  maxChars?: number;
-  title?: string;
-  showChannelTabs?: boolean;
-}
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const MAX_MESSAGES_DEFAULT = 100;
-const MAX_CHARS_DEFAULT = 200;
-
-const CHANNEL_LABELS: Record<ChatChannel, string> = {
-  proximity: 'Proximity',
-  thinking: 'Thinking',
-  system: 'System',
-};
-
-const CHANNEL_ICONS: Record<ChatChannel, string> = {
-  proximity: '📢',
-  thinking: '💭',
-  system: '⚙️',
-};
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatTimestamp(ts: number): string {
-  const d = new Date(ts);
-  const h = d.getHours().toString().padStart(2, '0');
-  const m = d.getMinutes().toString().padStart(2, '0');
-  return `${h}:${m}`;
-}
-
-/** Detect @mentions and wrap in gold spans */
-function formatMessageText(text: string): React.JSX.Element {
-  const mentionRegex = /@(\w+)/g;
-  const parts: React.JSX.Element[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = mentionRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(<span key={`t-${lastIndex}`}>{text.slice(lastIndex, match.index)}</span>);
-    }
-    parts.push(
-      <span key={`m-${match.index}`} className="chat-message__mention">{match[0]}</span>,
-    );
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (lastIndex < text.length) {
-    parts.push(<span key={`t-${lastIndex}`}>{text.slice(lastIndex)}</span>);
-  }
-
-  return <>{parts}</>;
-}
-
-// ─── ChatPanel ───────────────────────────────────────────────────────────────
-
-export function ChatPanel({
-  messages,
-  onSend,
-  activeChannel = 'proximity',
-  onChannelChange,
-  maxMessages = MAX_MESSAGES_DEFAULT,
-  maxChars = MAX_CHARS_DEFAULT,
-  title = 'Chat',
-  showChannelTabs = false,
-}: ChatPanelProps): React.JSX.Element {
-  const [input, setInput] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
-
-  // Filter messages by active channel and enforce buffer limit
-  const filteredMessages = messages
-    .filter((msg) => msg.channel === activeChannel)
-    .slice(-maxMessages);
-
-  // Auto-scroll to latest message
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [filteredMessages.length]);
-
-  const handleSend = useCallback(() => {
-    const trimmed = input.trim();
-    if (!trimmed) return;
-    onSend(trimmed, activeChannel);
-    setInput('');
-  }, [input, onSend, activeChannel]);
-
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      }
-    },
-    [handleSend],
+export default function ChatPanel({
+  isOpen,
+  onClose,
+  context,
+}: ChatPanelProps) {
+  const [activeTab, setActiveTab] = useState<ChatTab>(
+    context === "shard" ? "proximity" : "refuge"
   );
-
-  const handleInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const value = e.target.value;
-      if (value.length <= maxChars) {
-        setInput(value);
-      }
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: "1",
+      type: "system",
+      message: "You have entered the proximity chat.",
     },
-    [maxChars],
-  );
+    {
+      id: "2",
+      type: "player",
+      speaker: "A figure in dark leather",
+      message: "Anyone found the key?",
+    },
+    {
+      id: "3",
+      type: "emote",
+      speaker: "A hooded figure",
+      message: "A hooded figure listens carefully, hand on weapon.",
+    },
+  ]);
 
-  const charsRemaining = maxChars - input.length;
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim()) return;
+
+    const newMessage: ChatMessage = {
+      id: Date.now().toString(),
+      type: "player",
+      speaker: "You",
+      message: message,
+    };
+
+    setMessages([...messages, newMessage]);
+    setMessage("");
+  };
+
+  if (!isOpen) return null;
+
+  const tabs: { id: ChatTab; label: string; available: boolean }[] = [
+    { id: "proximity", label: "Proximity", available: context === "shard" },
+    { id: "whisper", label: "Whisper", available: true },
+    { id: "refuge", label: "Refuge", available: context === "refuge" },
+    { id: "squad", label: "Squad", available: false },
+  ];
 
   return (
-    <div className="chat-panel">
-      <h3 className="chat-panel__title">{title}</h3>
+    <div className="fixed inset-0 z-50 flex justify-end">
+      {/* Scrim */}
+      <div className="absolute inset-0 bg-black/60" onClick={onClose}></div>
 
-      {showChannelTabs && (
-        <div className="chat-panel__channels" role="tablist" aria-label="Chat channels">
-          {(Object.keys(CHANNEL_LABELS) as ChatChannel[]).map((ch) => (
-            <button
-              key={ch}
-              role="tab"
-              aria-selected={activeChannel === ch}
-              className={`chat-panel__channel-tab${activeChannel === ch ? ' chat-panel__channel-tab--active' : ''}`}
-              onClick={() => onChannelChange?.(ch)}
-              type="button"
-            >
-              <span className="chat-panel__channel-icon">{CHANNEL_ICONS[ch]}</span>
-              {CHANNEL_LABELS[ch]}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div
-        className="chat-panel__messages"
-        role="log"
-        aria-live="polite"
-        ref={messagesContainerRef}
-      >
-        {filteredMessages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`chat-message chat-message--${msg.type} chat-message--${msg.channel}`}
+      {/* Panel */}
+      <div className="relative w-[40%] bg-[#12131A] shadow-2xl flex flex-col">
+        {/* Header */}
+        <div className="bg-[#12131A] border-b border-[#2A2B35] p-4 flex items-center justify-between">
+          <h2
+            className="text-[#C9A84C]"
+            style={{ fontFamily: "var(--font-serif)", fontSize: "1.25rem" }}
           >
-            <span className="chat-message__timestamp">
-              {formatTimestamp(msg.timestamp)}
-            </span>
-            <span className="chat-message__sender">
-              {msg.channel === 'thinking' ? 'You think:' : `${msg.sender}:`}
-            </span>
-            <span
-              className={`chat-message__text${msg.type === 'emote' ? ' chat-message__text--emote' : ''}`}
-            >
-              {msg.type === 'system' ? msg.text : formatMessageText(msg.text)}
-            </span>
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-
-      <div className="chat-panel__input-area">
-        <textarea
-          className="chat-panel__textarea"
-          value={input}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder={activeChannel === 'thinking' ? 'Your thoughts...' : 'Say something...'}
-          aria-label="Chat message"
-          rows={1}
-        />
-        <div className="chat-panel__input-controls">
-          <span
-            className={`chat-panel__char-counter${charsRemaining <= 20 ? ' chat-panel__char-counter--warning' : ''}`}
-            aria-label="Characters remaining"
-          >
-            {charsRemaining}
-          </span>
+            Chat & Social
+          </h2>
           <button
-            className="chat-panel__send-btn"
-            type="button"
-            onClick={handleSend}
-            disabled={input.trim().length === 0}
+            onClick={onClose}
+            className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors"
           >
-            Send
+            <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Chat Tabs */}
+        <div className="flex gap-1 px-4 border-b border-[#2A2B35]">
+          {tabs
+            .filter((tab) => tab.available)
+            .map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 transition-colors ${
+                  activeTab === tab.id
+                    ? "border-b-2 border-[#C9A84C] text-[#C9A84C]"
+                    : "text-[#8A8B95] hover:text-[#E8E0D0]"
+                }`}
+                style={{ fontFamily: "var(--font-sans)" }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          <button
+            disabled
+            className="px-4 py-2 text-[#4A4B55] cursor-not-allowed"
+            style={{ fontFamily: "var(--font-sans)" }}
+          >
+            Squad
+          </button>
+        </div>
+
+        {/* Players Nearby (if in shard) */}
+        {context === "shard" && (
+          <div className="p-4 border-b border-[#2A2B35]">
+            <h3
+              className="text-[#8A8B95] text-xs mb-3"
+              style={{ fontFamily: "var(--font-sans)" }}
+            >
+              Nearby Presences
+            </h3>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-[#B8860B]"></div>
+                <span
+                  className="text-[#8A8B95] text-sm"
+                  style={{ fontFamily: "var(--font-serif)" }}
+                >
+                  A figure in dark leather
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-[#B8860B]"></div>
+                <span
+                  className="text-[#8A8B95] text-sm"
+                  style={{ fontFamily: "var(--font-serif)" }}
+                >
+                  A hooded figure
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Chat Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {messages.map((msg) => (
+            <div key={msg.id}>
+              {msg.type === "system" && (
+                <p
+                  className="text-[#4A4B55] text-xs"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  {msg.message}
+                </p>
+              )}
+
+              {msg.type === "player" && (
+                <div>
+                  <p
+                    className="text-[#8A8B95] text-xs mb-1"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    {msg.speaker}
+                  </p>
+                  <p
+                    className="text-[#E8E0D0] text-sm"
+                    style={{ fontFamily: "var(--font-serif)" }}
+                  >
+                    "{msg.message}"
+                  </p>
+                </div>
+              )}
+
+              {msg.type === "emote" && (
+                <p
+                  className="text-[#8A8B95] text-sm italic"
+                  style={{ fontFamily: "var(--font-serif)" }}
+                >
+                  {msg.message}
+                </p>
+              )}
+
+              {msg.type === "whisper" && (
+                <div>
+                  <p
+                    className="text-[#3A7D7B] text-xs mb-1"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    [whisper] {msg.speaker}
+                  </p>
+                  <p
+                    className="text-[#E8E0D0] text-sm"
+                    style={{ fontFamily: "var(--font-serif)" }}
+                  >
+                    "{msg.message}"
+                  </p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Chat Input */}
+        <form
+          onSubmit={handleSend}
+          className="p-4 border-t border-[#2A2B35] bg-[#0A0B0F]"
+        >
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Say something..."
+              className="flex-1 bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] placeholder-[#4A4B55] focus:border-[#3A7D7B] focus:outline-none"
+              style={{ fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 bg-[#3A7D7B] hover:bg-[#2D6B5F] text-[#E8E0D0] rounded transition-colors"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+          <p
+            className="text-[#4A4B55] text-xs mt-2"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
+            Commands: /say /whisper &lt;name&gt; /emote
+          </p>
+        </form>
       </div>
     </div>
   );
