@@ -223,6 +223,10 @@ export {
 } from './items.js';
 
 
+// ─── Shard Card Types (Shardboard UI) ────────────────────────────────────────
+
+export type { ShardKeyType, ShardCardData } from './shard-card.js';
+
 // ─── Room Switching (GDD §3 — Refuge ↔ Shard) ────────────────────────────────
 
 /** Server → Client: Instruct client to switch rooms. */
