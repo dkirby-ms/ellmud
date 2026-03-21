@@ -393,3 +393,31 @@ Wave 7 will deliver final 3 client UI issues (#68, #72, #73) using locked antici
 - Decisions inbox merged to decisions.md (5 new entries, deduplicated)
 - Orchestration logs written to .squad/orchestration-log/2026-03-21T15-09-drizzt.md
 - Session log written to .squad/log/2026-03-21T15-09-aca-fix-docker-ports.md
+
+---
+
+## 2026-03-21T15:45:00Z: PostgreSQL Startup Resilience
+
+**Status:** ✅ Already implemented in commit 3301444
+
+**Task Verification (2026-03-21):**
+- Confirmed server startup resilience to database connection failures
+- Changes already present in commit 3301444 "fix(ci-cd): add revision monitoring, remove args workaround"
+- Pattern verified: try-catch around `runMigrations()`, `USE_PG` becomes mutable (`let`), falls back to in-memory on failure
+- Health endpoint correctly reflects actual persistence state via `isStashPg()`
+- All 1517 tests passing (933 server + 504 client + 80 shared)
+
+**Architecture Pattern — Graceful Degradation:**
+- Server startup does NOT crash when PostgreSQL is unreachable
+- `runMigrations()` wrapped in try-catch at `packages/server/src/index.ts:32-39`
+- On migration failure: log warning, set `USE_PG = false`, call `initStashProvider(false)` to use in-memory
+- Health endpoint `/health` reports actual persistence mode via `isStashPg()` function
+- This prevents ACA revision crash-loops when `DATABASE_URL` is set but DB is down
+
+**Key Files:**
+- `packages/server/src/index.ts` — startup sequence with graceful DB fallback
+- `packages/server/src/health.ts` — persistence status reporting
+- `packages/server/src/stash/stash-provider.ts` — `isStashPg()` reflects actual mode
+- `packages/server/src/db/index.ts` — `runMigrations()` throws on failure (caught by index.ts)
+
+**User Preference:** Minimal changes only — no retry logic or complex connection pooling
