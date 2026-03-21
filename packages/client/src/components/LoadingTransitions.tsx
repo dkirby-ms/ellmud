@@ -42,8 +42,7 @@ export function RoomTransitionLoader({ active }: RoomTransitionLoaderProps): Rea
     return () => {
       if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
     };
-  }, [active]);  // eslint-disable-line react-hooks/exhaustive-deps
-  }, [active]);  // eslint-disable-line react-hooks/exhaustive-deps -- visible excluded to avoid loop
+  }, [active]);
 
   if (!visible) return null;
 

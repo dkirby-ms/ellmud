@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { useState, useEffect, useRef, useCallback } from 'react';
 
 /**
  * Counts down from `seconds` to 0, decrementing every second.
@@ -29,7 +28,6 @@ export function useCountdown(seconds: number): number {
     }, 1000);
 
     return () => clearInterval(id);
-  }, [remaining]);
   }, [remaining <= 0]); // only re-subscribe when crossing the zero boundary
 
   return remaining;

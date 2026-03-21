@@ -40,7 +40,7 @@ describe('ShardSidebar', () => {
   it('shows sound cues when not in combat', () => { renderSidebar({ inCombat: false }); expect(screen.getByText('Sound Cues')).toBeInTheDocument(); });
   it('shows Empty for no inventory', () => { renderSidebar({ inventory: [] }); expect(screen.getByText('Empty')).toBeInTheDocument(); });
   it('displays inventory items', () => {
-    renderSidebar({ inventory: [{ id: 'i1', name: 'Rusty Sword', tier: 'common' }, { id: 'i2', name: 'Iron Shield', tier: 'sturdy' }] });
+    renderSidebar({ inventory: [{ id: 'i1', name: 'Rusty Sword', tier: 'common' as const }, { id: 'i2', name: 'Iron Shield', tier: 'sturdy' as const }] });
     expect(screen.getByText('Rusty Sword')).toBeInTheDocument();
   });
   it('truncates inventory to 5', () => {
@@ -50,6 +50,6 @@ describe('ShardSidebar', () => {
     expect(screen.queryByText('Item 5')).not.toBeInTheDocument();
   });
   it('renders 4 mini-action buttons', () => { renderSidebar(); for (const b of ['Look', 'Map', 'Evasion', 'Loot']) expect(screen.getByText(b)).toBeInTheDocument(); });
-  it('mini-action sends command', () => { const r = { send: vi.fn() } as any; renderSidebar({ room: r }); fireEvent.click(screen.getByText('Look')); expect(sendRawCommand).toHaveBeenCalledWith(r, 'look'); });
+  it('mini-action sends command', () => { const r = { send: vi.fn() } as unknown; renderSidebar({ room: r }); fireEvent.click(screen.getByText('Look')); expect(sendRawCommand).toHaveBeenCalledWith(r, 'look'); });
   it('has complementary role', () => { renderSidebar(); expect(screen.getByRole('complementary', { name: 'Shard exploration' })).toBeInTheDocument(); });
 });

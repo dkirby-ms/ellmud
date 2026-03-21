@@ -40,7 +40,6 @@ describe('useReconnection', () => {
   });
 
   it('increments elapsed seconds', () => {
-    const onReconnect = vi.fn().mockReturnValue(new Promise(() => {}));
     const onReconnect = vi.fn().mockReturnValue(new Promise(() => {})); // never resolves
     const { result } = renderHook(() => useReconnection({ onReconnect }));
 
