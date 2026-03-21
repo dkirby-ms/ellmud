@@ -4,6 +4,8 @@ import { connect, switchRoom, sendRawCommand } from '../services/connection.js';
 import { logout } from '../services/api.js';
 import { Terminal } from './Terminal.js';
 import { CommandInput } from './CommandInput.js';
+import { ReconnectionOverlay } from './ReconnectionOverlay.js';
+import { useReconnection } from '../hooks/useReconnection.js';
 import type {
   NarrateMessage,
   RoomHeaderMessage,
@@ -32,6 +34,34 @@ export function GameScreen(): React.JSX.Element {
 
   // Build message handlers as a stable reference for room switching
   const handlersRef = useRef<import('../services/connection.js').MessageHandlers | null>(null);
+
+  // Reconnection logic
+  const reconnection = useReconnection({
+    maxAttempts: 5,
+    baseDelayMs: 2000,
+    onReconnect: async () => {
+      if (!state.token || !handlersRef.current) return false;
+      try {
+        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
+        const room = await connect(state.token, 'refuge', handlersRef.current);
+        roomRef.current = room;
+        dispatch({ type: 'SET_ROOM', room });
+        addMessage('Reconnected to the Refuge.', 'system');
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    onReturnToRefuge: () => {
+      roomRef.current?.leave();
+      roomRef.current = null;
+      dispatch({ type: 'LOGOUT' });
+    },
+  });
+
+  // Keep latest reconnection callbacks accessible from handlers via ref
+  const reconnectionRef = useRef(reconnection);
+  reconnectionRef.current = reconnection;
 
   useEffect(() => {
     if (!state.token) return;
@@ -124,6 +154,7 @@ export function GameScreen(): React.JSX.Element {
             addMessage(`Disconnected (code ${code}). You may need to log in again.`, 'system');
           } else {
             addMessage('Connection lost. Attempting to reconnect...', 'system');
+            reconnectionRef.current.reportDisconnect();
           }
         }
       },
@@ -137,6 +168,7 @@ export function GameScreen(): React.JSX.Element {
         roomRef.current = room;
         dispatch({ type: 'SET_ROOM', room });
         addMessage('Connected to the Refuge.', 'system');
+        reconnectionRef.current.reportConnected();
       } else {
         room.leave();
       }
@@ -196,6 +228,16 @@ export function GameScreen(): React.JSX.Element {
       <CommandInput
         onCommand={handleCommand}
         disabled={state.connectionStatus !== 'connected'}
+      />
+
+      <ReconnectionOverlay
+        state={reconnection.overlayState}
+        attempt={reconnection.attempt}
+        maxAttempts={5}
+        elapsedSeconds={reconnection.elapsedSeconds}
+        onReconnect={reconnection.reconnectNow}
+        onCancel={reconnection.cancel}
+        onReturnToRefuge={reconnection.returnToRefuge}
       />
     </div>
   );
