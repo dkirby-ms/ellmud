@@ -341,3 +341,307 @@ body {
 .command-input input:disabled {
   opacity: 0.4;
 }
+
+/* ─── Extraction Overlay (during channeling) ─────────────────────────────── */
+
+.extraction-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 11, 15, 0.85);
+  z-index: 100;
+  animation: extraction-fade-in 0.5s ease;
+}
+
+.extraction-overlay__content {
+  width: 60%;
+  max-width: 600px;
+  text-align: center;
+}
+
+.extraction-overlay__title {
+  font-family: var(--font-serif);
+  color: var(--accent);
+  font-size: 1.75rem;
+  margin: 0 0 1.5rem;
+}
+
+.extraction-overlay__track {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-elevated);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.extraction-overlay__fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.extraction-overlay--complete .extraction-overlay__fill {
+  animation: extraction-pulse 1.5s ease-in-out infinite;
+}
+
+.extraction-overlay__countdown {
+  margin-top: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.extraction-overlay__narration {
+  margin-top: 1rem;
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.extraction-overlay__cancel {
+  margin-top: 1.5rem;
+  background: none;
+  border: 1px solid var(--text-disabled);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  padding: 0.4rem 1.2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.extraction-overlay__cancel:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ─── Extraction Screen (success / failure) ──────────────────────────────── */
+
+.extraction-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3rem 2rem;
+  background: var(--bg-primary);
+  animation: extraction-fade-in 0.5s ease;
+}
+
+.extraction-screen__header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.extraction-screen__title {
+  font-family: var(--font-serif);
+  font-size: 2rem;
+  margin: 0 0 0.5rem;
+}
+
+.extraction-screen__title--success {
+  color: var(--accent);
+}
+
+.extraction-screen__title--failure {
+  color: var(--danger);
+}
+
+.extraction-screen__subtitle {
+  font-family: var(--font-serif);
+  color: var(--text-secondary);
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.extraction-screen__section-title {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  margin: 0 0 0.75rem;
+}
+
+.extraction-screen__section-title--danger {
+  color: var(--danger);
+}
+
+.extraction-screen__section-title--warning {
+  color: var(--warning);
+}
+
+/* Loot list */
+
+.extraction-screen__loot,
+.extraction-screen__lost,
+.extraction-screen__debuffs,
+.extraction-screen__summary,
+.extraction-screen__stash {
+  width: 100%;
+  max-width: 560px;
+  background: var(--bg-elevated);
+  border-radius: 6px;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.extraction-screen__loot-list,
+.extraction-screen__lost-list,
+.extraction-screen__debuff-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.loot-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.loot-item__name {
+  flex: 1;
+  font-family: var(--font-sans);
+  font-weight: 500;
+}
+
+.loot-item__quantity {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.loot-item__tier {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Tier colors — applied via BEM modifier on the loot-item row */
+
+.loot-tier--common .loot-item__name { color: var(--loot-common); }
+.loot-tier--common .loot-item__tier { color: var(--loot-common); }
+
+.loot-tier--sturdy .loot-item__name { color: var(--loot-sturdy); }
+.loot-tier--sturdy .loot-item__tier { color: var(--loot-sturdy); }
+
+.loot-tier--refined .loot-item__name { color: var(--loot-refined); }
+.loot-tier--refined .loot-item__tier { color: var(--loot-refined); }
+
+.loot-tier--masterwork .loot-item__name { color: var(--loot-masterwork); }
+.loot-tier--masterwork .loot-item__tier { color: var(--loot-masterwork); }
+
+.loot-tier--anomalous .loot-item__name { color: var(--loot-anomalous); }
+.loot-tier--anomalous .loot-item__tier { color: var(--loot-anomalous); }
+
+/* Lost items (failure screen) */
+
+.lost-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.3rem 0.6rem;
+  color: var(--danger);
+}
+
+.lost-item__name {
+  font-family: var(--font-sans);
+}
+
+.lost-item__quantity {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+/* Debuffs */
+
+.debuff-item {
+  padding: 0.3rem 0.6rem;
+  color: var(--warning);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+}
+
+/* Stats (shared between success/failure) */
+
+.extraction-screen__stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.extraction-screen__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.extraction-screen__stat dt {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.extraction-screen__stat dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  font-size: 1.1rem;
+}
+
+.extraction-screen__empty {
+  color: var(--text-disabled);
+  font-style: italic;
+}
+
+/* Return button */
+
+.extraction-screen__return {
+  margin-top: 1.5rem;
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: none;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 0.8rem 2.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: background 0.2s;
+}
+
+.extraction-screen__return:hover {
+  background: #d4b35a;
+}
+
+/* ─── Extraction Animations ──────────────────────────────────────────────── */
+
+@keyframes extraction-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes extraction-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
