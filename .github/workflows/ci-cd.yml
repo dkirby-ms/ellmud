@@ -132,13 +132,16 @@ jobs:
 
       - name: Deploy to Container App
         run: |
+          # --args "" clears the Bicep bootstrap args so the real server runs
+          # instead of the placeholder (see infra/modules/container-apps.bicep)
           az containerapp update \
             --name ${{ secrets.CONTAINER_APP_NAME }} \
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
             --image ${{ secrets.ACR_NAME }}.azurecr.io/ellmud-${{ github.ref_name }}:${{ github.sha }} \
             --set-env-vars "NODE_ENV=production" "PORT=2567" \
             --container-name ellmud \
-            --command "node" "packages/server/dist/index.js"
+            --command "node" "packages/server/dist/index.js" \
+            --args ""
 
       - name: Update ingress target port
         run: |
@@ -162,18 +165,26 @@ jobs:
 
           MAX_ATTEMPTS=10
           ATTEMPT=0
+          RESPONSE=""
 
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-            if curl -f -s "$HEALTH_URL" | grep -q '"status":"ok"'; then
-              echo "✓ Health check passed"
+            RESPONSE=$(curl -f -s "$HEALTH_URL" || true)
+            # Real server returns "uptime" field; placeholder returns "mode":"placeholder"
+            if echo "$RESPONSE" | grep -q '"uptime"'; then
+              echo "✓ Health check passed (real server confirmed)"
               exit 0
             fi
             ATTEMPT=$((ATTEMPT + 1))
-            echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS failed, retrying in 5s..."
+            if echo "$RESPONSE" | grep -q '"mode":"placeholder"'; then
+              echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS — placeholder still active, retrying in 5s..."
+            else
+              echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS — unexpected response, retrying in 5s..."
+            fi
             sleep 5
           done
 
           echo "✗ Health check failed after $MAX_ATTEMPTS attempts"
+          echo "Last response: $RESPONSE"
           exit 1
 
       - name: Rollback on failure
