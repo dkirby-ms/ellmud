@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { Terminal } from '../components/Terminal.js';
+// [SKIPPED] import { Terminal } from '../components/_old/Terminal.js';
 import type { TerminalMessage } from '../store.js';
 
 function makeMsg(

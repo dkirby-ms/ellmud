@@ -9,7 +9,7 @@ import {
   ShardEntryLoader,
   CombatInitiationBanner,
   LongRunningIndicator,
-} from '../components/LoadingTransitions.js';
+} from '../components/_old/LoadingTransitions.js';
 
 // ─── Room Transition Loader ──────────────────────────────────────────────────
 

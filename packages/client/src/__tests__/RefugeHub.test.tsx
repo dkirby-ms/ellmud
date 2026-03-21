@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { RefugeHub, type RefugeHubProps, type RefugeTab } from '../components/RefugeHub.js';
+import { RefugeHub, type RefugeHubProps, type RefugeTab } from '../components/_old/RefugeHub.js';
 import { AppContext, initialState, type AppContextValue } from '../store.js';
 
 vi.mock('../services/connection.js');

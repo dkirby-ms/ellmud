@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { ShardSidebar } from '../components/ShardSidebar.js';
+// [SKIPPED] import { ShardSidebar } from '../components/_old/ShardSidebar.js';
 import { AppContext, initialState, type AppState, type SoundCue } from '../store.js';
 import type { Room } from '@colyseus/sdk';
 

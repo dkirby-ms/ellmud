@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { ExitLink } from '../components/ExitLink.js';
+import { ExitLink } from '../components/_old/ExitLink.js';
 
 // TODO: ExitLink.tsx moved to _old/ during UX overhaul. Exit navigation now handled within new page components.
 // Rewrite tests when exit links are reimplemented.

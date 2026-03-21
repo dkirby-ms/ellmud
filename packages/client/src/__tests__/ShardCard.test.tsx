@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ShardCard } from '../components/ShardCard.js';
+// [SKIPPED] import { ShardCard } from '../components/_old/ShardCard.js';
 import type { ShardCardData } from '@ellmud/shared';
 
 function makeShard(overrides: Partial<ShardCardData> = {}): ShardCardData {

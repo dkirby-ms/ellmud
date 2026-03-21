@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, type RouteObject } from "react-router";
 import Login from "./pages/Login";
 import CharacterSelect from "./pages/CharacterSelect";
 import Refuge from "./pages/Refuge";
@@ -33,7 +33,8 @@ import Deploy from "./pages/admin/Deploy";
 import AuditLog from "./pages/admin/AuditLog";
 import UsersList from "./pages/admin/UsersList";
 
-export const router = createBrowserRouter([
+/** Exported for testing with createMemoryRouter. */
+export const routes: RouteObject[] = [
   {
     path: "/",
     Component: Login,
@@ -169,4 +170,6 @@ export const router = createBrowserRouter([
       },
     ],
   },
-]);
+];
+
+export const router = createBrowserRouter(routes);

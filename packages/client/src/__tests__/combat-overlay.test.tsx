@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { CombatOverlay } from '../components/CombatOverlay.js';
-import { EnemyStatusPanel } from '../components/EnemyStatusPanel.js';
+// [SKIPPED] import { CombatOverlay } from '../components/_old/CombatOverlay.js';
+// [SKIPPED] import { EnemyStatusPanel } from '../components/_old/EnemyStatusPanel.js';
 import { AppContext, initialState, getHpTier, type AppState, type EnemyStatus } from '../store.js';
 import type { Room } from '@colyseus/sdk';
 

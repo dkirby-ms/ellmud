@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { PlayersNearby, type NearbyPlayer } from '../components/PlayersNearby.js';
+import { PlayersNearby, type NearbyPlayer } from '../components/_old/PlayersNearby.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

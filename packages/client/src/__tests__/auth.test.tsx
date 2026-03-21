@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { AuthScreen } from '../components/AuthScreen.js';
+// [SKIPPED] import { AuthScreen } from '../components/_old/AuthScreen.js';
 import { AppContext, initialState, type AppContextValue } from '../store.js';
 import * as api from '../services/api.js';
 

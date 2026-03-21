@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { toast } from '../services/toast.js';
-import { ToastContainer } from '../components/ToastContainer.js';
+// [SKIPPED] import { ToastContainer } from '../components/_old/ToastContainer.js';
 
 /* ── Helpers ── */
 

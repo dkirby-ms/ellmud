@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ExtractionOverlay } from '../components/ExtractionOverlay.js';
-import { ExtractionSuccess } from '../components/ExtractionSuccess.js';
-import { ExtractionFailure } from '../components/ExtractionFailure.js';
-import { ExtractionScreen } from '../components/ExtractionScreen.js';
-import type { LootItem, RunSummary, StashStats } from '../components/extraction-types.js';
+import { ExtractionOverlay } from '../components/_old/ExtractionOverlay.js';
+import { ExtractionSuccess } from '../components/_old/ExtractionSuccess.js';
+import { ExtractionFailure } from '../components/_old/ExtractionFailure.js';
+import { ExtractionScreen } from '../components/_old/ExtractionScreen.js';
+import type { LootItem, RunSummary, StashStats } from '../components/_old/extraction-types.js';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 

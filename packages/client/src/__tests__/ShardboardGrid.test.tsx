@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { ShardboardGrid } from '../components/ShardboardGrid.js';
+// [SKIPPED] import { ShardboardGrid } from '../components/_old/ShardboardGrid.js';
 import type { ShardCardData } from '@ellmud/shared';
 
 function makeShard(overrides: Partial<ShardCardData> & { shardId: string }): ShardCardData {

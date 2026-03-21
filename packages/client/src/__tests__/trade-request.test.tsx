@@ -11,7 +11,7 @@ import {
   TradeRequest,
   TradeRequestList,
   type TradeRequestData,
-} from '../components/TradeRequest.js';
+} from '../components/_old/TradeRequest.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
