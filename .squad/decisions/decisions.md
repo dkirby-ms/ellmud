@@ -1081,3 +1081,49 @@ ___BEGIN___COMMAND_DONE_MARKER___0
 - **All:** `CombatAction` already includes `'skill'` type; quickbar just needs to add it (gap #21).
 
 **Status:** Test contracts stable and ready for implementation. File: `packages/client/src/__tests__/ux-batch2-combat-sidebar.test.tsx`.
+
+---
+
+## 2026-03-22T10:58:00Z: PR #104 Review — Combat/Sidebar Polish Batch 2 (APPROVED)
+
+**Date:** 2026-03-22  
+**Reviewer:** Elminster (Lead / Architect)  
+**Scope:** PR #104 feat(client): combat/sidebar polish — 10 UX gaps (Batch 2)  
+**Authors:** Volo (implementation), Drizzt (test regex fix), Minsc (anticipatory tests)  
+**Status:** ✅ **APPROVED** — Merge to `dev`
+
+**Branch:** `squad/ux-batch2-combat-sidebar` → `dev` (commit `afaa80b`)  
+**Files Changed:** 7 (+705 / -13 lines)  
+**Test Results:** 101/101 client tests pass (24 new + 77 existing). Zero regressions.
+
+**Gaps Verified:**
+| Gap | Feature | Status |
+|-----|---------|--------|
+| #10 | Combat text color-coding (hit_dealt→gold, hit_taken→red, dodge→silver) | ✅ |
+| #11 | Status effects in sidebar | ✅ |
+| #12 | Dynamic HP bar states (Healthy→Wounded→Critical) | ✅ |
+| #13 | Stability bar full width | ✅ |
+| #14-15 | Collapse imminent warning + pulse animation | ✅ |
+| #16 | Sound cue direction highlighting | ✅ |
+| #18 | Auto-complete command hint | ✅ |
+| #20 | Tick timer progress bar | ✅ |
+| #21 | Skill button in quickbar (8/8 actions complete) | ✅ |
+
+**Quality Strengths:**
+- `healthState` derivation is DRY (single computation, two render sites)
+- Regex pattern `^\d*\s*${label}$` safely handles numbered labels
+- All new rendering uses theme tokens (text-accent-gold, text-danger) — no hardcoded hex
+- Comprehensive `data-*` attributes for test targeting
+- State extensions minimal and well-typed
+
+**Non-Blocking Nits:**
+1. Dead code: `DIRECTIONS` const (ShardExploration.tsx:159) unused
+2. DRY opportunity: Stability bar color logic duplicates `getCollapseColor()` thresholds
+3. Test inconsistency: Gap #21 test uses unanchored regex (harmless)
+
+None warrant rejection. Flagged for future cleanup pass.
+
+**Impact:** Phase 1 UX polish complete. All 10 Batch 2 gaps shipped. Ready for Phase 2 planning.
+
+_Merged from decisions/inbox/ on 2026-03-22T10:58:00Z._
+

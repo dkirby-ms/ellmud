@@ -6,8 +6,9 @@
 - Server infrastructure: ✅ Complete (949 tests)
 - Shared packages: ✅ Complete (80 tests)
 - Client UI: ✅ Complete (10/10 issues merged to dev)
+- UX Polish Batch 2: ✅ Complete (PR #104 merged to dev, commit `afaa80b`)
 - Total: 1,247+ tests passing, zero regressions
-- Last commit: `f9d5933` — should-fix cleanup (PR #102)
+- Last commit: `afaa80b` — combat/sidebar polish (PR #104)
 
 **What Shipped (Phase 1 Client UI — all merged):**
 - #74 Button Design System (PR #84)
@@ -22,6 +23,7 @@
 - #73 Chat & Social Panel — Proximity Chat (PR #93)
 - #100 UX Overhaul — Figma SPA conversion with Colyseus wiring
 - #102 Should-fix items from code review
+- Batch 2 UX Polish — Combat/Sidebar (PR #104, 10 gaps shipped)
 
 **Key Infrastructure Locked:**
 - Button component API: `type` (variant), `size`, `icon`, `disabled` props, `.btn--{variant}` BEM classes
