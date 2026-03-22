@@ -189,7 +189,62 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     });
   }
 
-  onLeave(client: Client): void {
+  async onLeave(client: Client, code?: number): Promise<void> {
+    const config = getConfig();
+    const playerState = this.players.get(client.sessionId);
+    const isInCombat = this.combatSystem.isInCombat(client.sessionId);
+
+    // Allow reconnection for accidental disconnects (non-4000 codes)
+    // Code 4000 = consented leave (player clicked "leave game")
+    const consented = code === 4000;
+
+    if (!consented) {
+      // Mark player as disconnected
+      if (playerState) {
+        playerState.disconnected = true;
+      }
+      if (isInCombat) {
+        this.combatSystem.markDisconnected(client.sessionId);
+      }
+
+      this.log(`Player disconnected (code ${code}): ${client.sessionId} — allowing reconnection for ${config.reconnectionTimeoutS}s`);
+
+      try {
+        await this.allowReconnection(client, config.reconnectionTimeoutS);
+        
+        // Client reconnected successfully
+        this.log(`Player reconnected: ${client.sessionId}`);
+        
+        // Clear disconnected flags
+        if (playerState) {
+          playerState.disconnected = false;
+        }
+        if (isInCombat) {
+          this.combatSystem.clearDisconnected(client.sessionId);
+        }
+
+        // Send reconnection confirmation
+        this.sendNarrate(client, {
+          text: 'Reconnected to the shard.',
+          type: 'system',
+          timestamp: Date.now(),
+        });
+
+        // Resend current room state
+        if (playerState) {
+          const lookResult = handleLook(this.buildCommandContext(playerState, []));
+          this.deliverResult(client, lookResult);
+        }
+
+        return; // Player reconnected — keep them in the game
+      } catch {
+        // Reconnection timeout expired
+        this.log(`Reconnection timeout: ${client.sessionId} — applying death behavior`);
+        this.handleReconnectionTimeout(client.sessionId);
+      }
+    }
+
+    // Clean up player (consented leave or timeout expired)
     this.extractionSystem.interruptExtraction(client.sessionId, 'you left the shard');
     if (this.players.has(client.sessionId)) {
       this.state.playerCount = Math.max(0, this.state.playerCount - 1);
@@ -198,6 +253,38 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.updateMetadata();
     }
     this.log(`Player left: ${client.sessionId} (${this.state.playerCount} players)`);
+  }
+
+  /**
+   * Handle reconnection timeout expiry — kill or move to safe room.
+   */
+  private handleReconnectionTimeout(sessionId: string): void {
+    const config = getConfig();
+    const playerState = this.players.get(sessionId);
+    if (!playerState) return;
+
+    const combatant = this.combatSystem.getCombatant(sessionId);
+
+    if (config.reconnectDeathBehavior === 'kill') {
+      // Kill the player in place — their body and inventory become lootable
+      if (combatant) {
+        combatant.hp = 0;
+        this.log(`Player ${sessionId} killed in place after reconnection timeout`);
+      }
+      // Inventory handling would go here (drop as loot) — deferred for now
+    } else {
+      // Move to safe room (start room), clear combat state
+      const startRoomId = this.roomGraph.startRoomId;
+      playerState.currentRoomId = startRoomId;
+      
+      if (combatant) {
+        combatant.hp = Math.max(1, Math.floor(combatant.maxHp * 0.1)); // 10% HP
+        combatant.roomId = startRoomId;
+      }
+
+      this.combatSystem.removeCombatant(sessionId);
+      this.log(`Player ${sessionId} moved to safe room after reconnection timeout`);
+    }
   }
 
   onDispose(): void {

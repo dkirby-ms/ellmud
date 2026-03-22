@@ -34,6 +34,12 @@ export interface ServerConfig {
 
   /** Whether auth is required to join rooms. */
   authRequired: boolean;
+
+  /** WebSocket reconnection timeout in seconds (30-60s recommended). */
+  reconnectionTimeoutS: number;
+
+  /** Behavior when reconnection timeout expires: 'kill' or 'safe-room'. */
+  reconnectDeathBehavior: 'kill' | 'safe-room';
 }
 
 /**
@@ -80,6 +86,8 @@ export function loadConfig(): ServerConfig {
     },
     port: envInt('PORT', 2567),
     authRequired: envBool('AUTH_REQUIRED', false),
+    reconnectionTimeoutS: envInt('RECONNECTION_TIMEOUT_S', 30),
+    reconnectDeathBehavior: (envStr('RECONNECT_DEATH_BEHAVIOR', 'kill') === 'safe-room' ? 'safe-room' : 'kill') as 'kill' | 'safe-room',
   };
 }
 

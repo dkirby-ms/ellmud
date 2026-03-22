@@ -19,6 +19,7 @@ export class PlayerState {
   currentRoomId: string;
   readonly inventory: Map<string, InventoryEntry> = new Map();
   maxCarryWeight: number;
+  disconnected: boolean = false;
 
   constructor(sessionId: string, startRoomId: string, maxCarryWeight = DEFAULT_MAX_CARRY_WEIGHT) {
     this.sessionId = sessionId;

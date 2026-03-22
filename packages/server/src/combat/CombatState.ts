@@ -35,6 +35,7 @@ export interface Combatant {
   armour: number;
   roomId: string;
   isPlayer: boolean;
+  disconnected?: boolean;
 }
 
 export function createCombatant(
