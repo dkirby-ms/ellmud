@@ -867,12 +867,87 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       }
     }
 
+    // Handle player defeats — drop inventory, send death state, schedule refuge return
+    this.handlePlayerDefeats(tickResult);
+
     // Sync HP and room for surviving creature combatants
     for (const creature of this.creatureManager.getLivingCreatures()) {
       const combatant = this.combatSystem.getCombatant(creature.id);
       if (combatant) {
         this.creatureManager.syncFromCombat(combatant);
       }
+    }
+  }
+
+  /**
+   * Handle player defeat events — drops inventory, sends death screen,
+   * schedules return to refuge after a short delay.
+   */
+  private handlePlayerDefeats(tickResult: TickResult): void {
+    for (const event of tickResult.events) {
+      if (event.type !== 'defeated' || event.actorId.startsWith('creature-')) continue;
+
+      const playerId = event.actorId;
+      const player = this.players.get(playerId);
+      if (!player) continue;
+
+      const roomId = player.currentRoomId;
+      const room = this.roomGraph.rooms.get(roomId);
+
+      // Drop all inventory items to the room floor
+      const droppedItems: { name: string }[] = [];
+      if (room) {
+        for (const [, entry] of player.inventory) {
+          for (let i = 0; i < entry.quantity; i++) {
+            room.items.push(entry.item);
+            droppedItems.push(entry.item);
+          }
+        }
+      }
+      player.inventory.clear();
+
+      // Narrate dropped items to other players in the room
+      if (droppedItems.length > 0 && room) {
+        for (const [sid, ps] of this.players) {
+          if (sid === playerId || ps.currentRoomId !== roomId) continue;
+          const otherClient = this.findClient(sid);
+          if (otherClient) {
+            this.sendNarrate(otherClient, {
+              text: droppedItems.map(i => `${event.actorName} drops a ${i.name} as they fall.`).join('\n'),
+              type: 'room',
+              timestamp: Date.now(),
+            });
+          }
+        }
+      }
+
+      // Send death state to the defeated player
+      const client = this.findClient(playerId);
+      if (client) {
+        this.sendExtractionState(client, {
+          playerId,
+          state: 'death',
+          narration: 'You collapse, defeated. Darkness claims you…',
+          timestamp: Date.now(),
+        });
+
+        // Schedule return to refuge after 3 seconds
+        this.clock.setTimeout(() => {
+          client.send(MessageTypes.ROOM_SWITCH, {
+            target: 'refuge',
+            reason: 'player_death',
+          } satisfies RoomSwitchMessage);
+
+          // Clean up player from shard state
+          this.players.delete(playerId);
+          this.state.playerCount = Math.max(0, this.state.playerCount - 1);
+          this.updateMetadata();
+          this.log(`Player defeated and returned to refuge: ${playerId}`);
+        }, 3000);
+      }
+
+      // Remove from combat system immediately
+      this.combatSystem.removeCombatant(playerId);
     }
   }
 
