@@ -2928,3 +2928,32 @@ npx vitest run packages/server/src/__tests__/wave1-multiplayer.test.ts
 ---
 
 
+# PR #110 Review: Combat Message Colors
+
+**Date:** 2026-03-22  
+**Reviewer:** Elminster  
+**Status:** Approved with Suggestions
+
+## Analysis
+
+### 1. Protocol Changes
+- The extension to `NarrateMessage` with `combatEvent` is additive and optional.
+- **Verdict:** Safe and backward-compatible.
+
+### 2. Client Logic
+- **Concern:** The subtype derivation logic in `useShardConnection.ts` defaults to `'hit_dealt'` for any strike where the target is not the player.
+  - Code: `actorId === state.playerId ? 'hit_dealt' : targetId === state.playerId ? 'hit_taken' : 'hit_dealt'`
+  - Impact: Third-party combat (A hitting B) will render in Gold (`text-accent-gold`), which is the "Success/Loot" color. This is visually confusing for observers.
+- **Recommendation:** Fallback should be `undefined` (default text color) for neutral/observed combat.
+
+### 3. UX & Colors
+- **Defeated (Red Bold):** Appropriate for high-impact events.
+- **Flee (Warning):** Appropriate.
+- **Combat End (Teal Italic):** Good distinct style for state changes.
+- **Dodge (Dimmed):** Acceptable decision to de-noise the log, though it dims "good" dodges (player dodging) too.
+
+### 4. Performance
+- Broadcasting `actorId`/`targetId` (likely session IDs) is standard Colyseus practice and adds negligible overhead. No PII risk in this context.
+
+## Verdict
+The architectural approach is correct. The client-side logic needs a minor tweak to handle third-party perspective correctly.
