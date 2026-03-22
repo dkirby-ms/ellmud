@@ -1034,3 +1034,50 @@ But the two systemic issues (theme token adoption, inline fontFamily) are techni
 *— Elminster*
 ___BEGIN___COMMAND_DONE_MARKER___0
 ---
+
+---
+
+## 2026-03-22: Theme token migration (Batch 1)
+**By:** Volo (Narrative Dev)  
+**Date:** 2026-03-22  
+**Scope:** Client UI — 13 active files  
+
+**Decision:** Replace all hardcoded hex utilities with Tailwind theme tokens, and replace inline fontFamily styles with `font-serif`, `font-sans`, or `font-mono` utility classes.
+
+**Why:**
+- UX review flagged pervasive hardcoded Tailwind hex colors and inline fontFamily styles, creating dual-palette risk and costly maintenance surface.
+- `theme.css` already defines semantic tokens via `@theme inline`; components should consume these, not reinvent colors.
+- Theme-first approach ensures palette changes flow from single source of truth.
+
+**Impact:**
+- Components are now token-first; palette changes flow from CSS variables.
+- Dynamic color styles (tier/status) expressed via token variables instead of hex.
+- Future UI work must avoid reintroducing arbitrary hex values or fontFamily styles.
+- PR #103: 390 hardcoded hex → theme tokens, 0 remaining hex, 0 fontFamily remaining, TSC passes.
+
+**Follow-up:** Batch 2 (combat/sidebar polish) tests ready. Implementation may proceed on signal from prioritization.
+
+---
+
+## 2026-03-22: UX Batch 2 — Anticipatory Test Contracts
+**By:** Minsc (Tester)  
+**Date:** 2026-03-22  
+**Scope:** UX Review Batch 2 combat/sidebar polish (gaps #10-21)
+
+**Decision:** Define 24 anticipatory tests covering 10 UX gaps, establishing DOM contract that Batch 2 implementation must satisfy.
+
+**Key decisions:**
+1. **Theme token classes over hex**: All color assertions use Tailwind token classes (`text-accent-gold`, `text-danger`, `text-text-secondary`, `text-interactive`, `text-success`, `text-warning`) — compatible with Volo's Batch 1 token migration.
+2. **Combat subtypes via data attribute**: Color-coded combat messages tested via `[data-combat-type]` ancestor traversal. Implementation accommodates either `combatSubtype` field or content-based parsing.
+3. **State shape extension**: Tests document expected AppState additions: `statusEffects`, `playerHp`, `playerMaxHp`.
+4. **Accessibility-first tick timer**: `role="progressbar"` and `aria-valuenow` ensure screen-reader compatibility.
+5. **Test IDs for emerging elements**: `data-testid` on auto-complete hint and tick timer for elements not yet implemented.
+
+**Results:** 21 failing (expected) / 3 passing. Zero regressions on 77 existing tests.
+
+**Team impact:**
+- **Volo (Batch 2 implementer):** Run `npx vitest run packages/client/src/__tests__/ux-batch2-combat-sidebar.test.tsx` — all 24 should pass. If state field names differ, update test overrides.
+- **Drizzt:** Coordinate on `combatSubtype` values if COMBAT_RESULT handler changes.
+- **All:** `CombatAction` already includes `'skill'` type; quickbar just needs to add it (gap #21).
+
+**Status:** Test contracts stable and ready for implementation. File: `packages/client/src/__tests__/ux-batch2-combat-sidebar.test.tsx`.
