@@ -108,6 +108,7 @@ export default function ShardExploration() {
     { label: "Dodge", action: "dodge" },
     { label: "Block", action: "block" },
     { label: "Use Item", action: "use_item" },
+    { label: "Skill", action: "skill" },
     { label: "Flee", action: "flee" },
     { label: "Observe", action: "observe" },
   ];
@@ -143,6 +144,46 @@ export default function ShardExploration() {
   // Enemy status derived from real combat data
   const enemyStatus = state.enemyStatus;
 
+  // ─── HP State Helpers ──────────────────────────────────────────────────
+  const hpPercent = state.playerMaxHp > 0 ? state.playerHp / state.playerMaxHp : 0;
+  const healthState = hpPercent > 0.6
+    ? { label: 'Healthy', color: 'text-success', barColor: 'bg-success', pulse: false }
+    : hpPercent >= 0.25
+    ? { label: 'Wounded', color: 'text-warning', barColor: 'bg-warning', pulse: false }
+    : { label: 'Critical', color: 'text-danger', barColor: 'bg-danger', pulse: true };
+
+  // ─── Stability ─────────────────────────────────────────────────────────
+  const stability = state.roomHeader?.stability ?? 1;
+
+  // ─── Sound Cue Direction Highlighting ──────────────────────────────────
+  const DIRECTIONS = ['north', 'south', 'east', 'west', 'above', 'below'];
+  const highlightDirections = (text: string) => {
+    const directionRegex = /\b(north|south|east|west|above|below)\b/gi;
+    const parts: (string | JSX.Element)[] = [];
+    let lastIndex = 0;
+    let match;
+    while ((match = directionRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(text.slice(lastIndex, match.index));
+      }
+      parts.push(<span key={match.index} className="text-interactive">{match[0]}</span>);
+      lastIndex = directionRegex.lastIndex;
+    }
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex));
+    }
+    return parts.length > 0 ? parts : [text];
+  };
+
+  // ─── Auto-complete ─────────────────────────────────────────────────────
+  const KNOWN_COMMANDS = [
+    'strike', 'heavy strike', 'dodge', 'block', 'use item', 'skill', 'flee', 'observe',
+    'look', 'listen', 'go', 'inventory', 'help', 'say', 'shout', 'whisper', 'extract',
+  ];
+  const autoCompleteHint = command.trim()
+    ? KNOWN_COMMANDS.find(cmd => cmd.startsWith(command.trim().toLowerCase())) ?? null
+    : null;
+
   return (
     <div className="h-screen bg-bg-primary flex flex-col">
       {/* Top bar */}
@@ -160,10 +201,13 @@ export default function ShardExploration() {
           <span className="text-text-disabled">|</span>
           <div className="flex items-center gap-2">
             <div className="w-20 h-2 bg-bg-elevated rounded-full overflow-hidden">
-              <div className="h-full w-[75%] bg-gradient-to-r from-success to-danger"></div>
+              <div
+                className={`h-full ${healthState.barColor}`}
+                style={{ width: `${hpPercent * 100}%` }}
+              ></div>
             </div>
-            <span className="text-text-secondary text-xs font-mono">
-              Healthy
+            <span className={`${healthState.color} text-xs font-mono`}>
+              {Math.round(hpPercent * 100)}%
             </span>
           </div>
           {connectionIndicator()}
@@ -181,19 +225,24 @@ export default function ShardExploration() {
             >
               {currentRoom}
             </h2>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-1">
               <span className="text-text-secondary text-xs font-sans">
                 Shard Stability
               </span>
-              <div className="w-32 h-1.5 bg-bg-elevated rounded-full overflow-hidden">
+              <div className="flex-1 h-1.5 bg-bg-elevated rounded-full overflow-hidden">
                 <div
                   className="h-full transition-all"
                   style={{
-                    width: collapseTimerMax > 0 ? `${(collapseTime / collapseTimerMax) * 100}%` : "100%",
-                    backgroundColor: getCollapseColor(),
+                    width: `${stability * 100}%`,
+                    backgroundColor: stability > 0.5 ? 'var(--color-text-primary)' : stability > 0.25 ? 'var(--color-warning)' : 'var(--color-danger)',
                   }}
                 ></div>
               </div>
+              {stability < 0.25 && (
+                <span className="text-danger animate-pulse text-xs font-bold font-sans whitespace-nowrap">
+                  COLLAPSE IMMINENT
+                </span>
+              )}
             </div>
           </div>
 
@@ -246,7 +295,13 @@ export default function ShardExploration() {
 
                 {msg.type === "combat" && (
                   <p
-                    className="text-text-primary max-w-[70ch] font-serif"
+                    data-combat-type={msg.combatSubtype ?? 'default'}
+                    className={`max-w-[70ch] font-serif ${
+                      msg.combatSubtype === 'hit_dealt' ? 'text-accent-gold'
+                      : msg.combatSubtype === 'hit_taken' ? 'text-danger'
+                      : msg.combatSubtype === 'dodge' ? 'text-text-secondary'
+                      : 'text-text-primary'
+                    }`}
                     style={{ lineHeight: 1.7, fontSize: "1rem" }}
                   >
                     {msg.text}
@@ -312,13 +367,16 @@ export default function ShardExploration() {
                     Health
                   </span>
                   <span
-                    className="text-success text-xs font-mono"
+                    className={`${healthState.color} text-xs font-mono ${healthState.pulse ? 'animate-pulse' : ''}`}
                   >
-                    Healthy
+                    {healthState.label}
                   </span>
                 </div>
                 <div className="h-2 bg-bg-elevated rounded-full overflow-hidden">
-                  <div className="h-full w-[75%] bg-gradient-to-r from-success to-danger"></div>
+                  <div
+                    className={`h-full ${healthState.barColor}`}
+                    style={{ width: `${hpPercent * 100}%` }}
+                  ></div>
                 </div>
               </div>
 
@@ -336,6 +394,28 @@ export default function ShardExploration() {
               </div>
             </div>
           </div>
+
+          {/* Status Effects (Gap #11) */}
+          {state.statusEffects && state.statusEffects.length > 0 && (
+            <div className="p-4 border-b border-border-muted" data-testid="status-effects">
+              <h3 className="text-text-secondary text-xs mb-3 font-sans">STATUS EFFECTS</h3>
+              <div className="flex flex-wrap gap-2">
+                {state.statusEffects.map((effect) => (
+                  <span
+                    key={effect.id}
+                    data-effect={effect.id}
+                    className={`text-xs font-mono px-2 py-0.5 rounded border border-border-muted ${
+                      ['bleeding', 'poisoned', 'burning'].includes(effect.id.toLowerCase())
+                        ? 'text-danger'
+                        : 'text-warning'
+                    }`}
+                  >
+                    {effect.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Quick Inventory */}
           <div className="p-4 border-b border-border-muted">
@@ -456,9 +536,10 @@ export default function ShardExploration() {
                 state.soundCues.slice(-5).map((cue) => (
                   <p
                     key={cue.id}
+                    data-sound-cue={cue.id}
                     className="text-text-secondary text-xs italic font-serif"
                   >
-                    {cue.text}
+                    <span>{highlightDirections(cue.text)}</span>
                   </p>
                 ))
               ) : (
@@ -500,10 +581,23 @@ export default function ShardExploration() {
         <div className="bg-bg-elevated border-t-2 border-danger px-6 py-3">
           <div className="flex items-center justify-center gap-2">
             <span
-              className="text-danger text-sm mr-4 font-sans"
+              className="text-danger text-sm mr-2 font-sans"
             >
               ⚔ COMBAT — Tick {state.combatTick}
             </span>
+            <div
+              data-testid="tick-timer-bar"
+              role="progressbar"
+              aria-valuenow={state.combatTick}
+              aria-valuemin={0}
+              aria-valuemax={10}
+              className="w-24 h-1.5 bg-bg-elevated rounded-full overflow-hidden mr-4"
+            >
+              <div
+                className="h-full bg-danger transition-all"
+                style={{ width: `${Math.min(state.combatTick * 10, 100)}%` }}
+              ></div>
+            </div>
             {combatActions.map(({ label, action }, i) => (
               <button
                 key={action}
@@ -523,6 +617,11 @@ export default function ShardExploration() {
 
       {/* Command Input */}
       <div className="bg-bg-panel border-t border-border-muted px-6 py-4">
+        {autoCompleteHint && (
+          <div data-testid="autocomplete-hint" className="text-text-disabled text-xs font-mono mb-1 px-6">
+            {autoCompleteHint}
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
           <span
             className="text-accent-gold text-lg font-mono"
