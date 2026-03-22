@@ -214,6 +214,11 @@
 - **Pattern:** ShardRoom checks `isExtracting` before/after command to detect extraction start without coupling command handler to message protocol.
 - **Key insight:** The `getChannel()` accessor on ExtractionSystem provides tick state for progress messages without duplicating data in the tick result. Channel is deleted on completion/interruption, so progress messages only fire for active channels.
 
+### Shardboard Matchmaker Listing
+- **Pattern:** Use `matchMaker.query()` for shard listings and `matchMaker.getLocalRoomById()` to pull live lifecycle/biome/player counts from local rooms. Fall back to room metadata when state is unavailable.
+- **Why:** The shardboard needs authoritative, up-to-date joinability checks (open lifecycle + player count) without leaking Schema state to clients.
+- **Guard:** When extraction removes a player before `onLeave`, skip the second decrement by checking `players.has(sessionId)` so shard player counts stay accurate.
+
 ## Wave 4b Completion — All Phase 1 Server Issues Closed (2026-03-20T22:11Z)
 
 **Status:** ✅ Complete  

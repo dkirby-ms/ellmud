@@ -224,6 +224,7 @@ Directions: `north`, `south`, `east`, `west`, `up`, `down`
 | `stash` | — | View stash contents and weight |
 | `store <item>` | — | Place item into stash |
 | `shardboard` | — | View available shard entries |
+| `enter <shard-id>` | — | Enter an open shard listed on the shardboard |
 
 ### Command Errors
 

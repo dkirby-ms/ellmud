@@ -1,21 +1,34 @@
-import { Room, Client } from '@colyseus/core';
+import { Room, Client, matchMaker } from '@colyseus/core';
 import {
   type CommandMessage,
   type NarrateMessage,
   type RoomHeaderMessage,
   type RoomSwitchMessage,
   type StashItem,
+  type BiomeType,
+  type ShardTier,
   MessageTypes,
 } from '@ellmud/shared';
 import { RefugeState } from '../state.js';
 import { authenticateClient } from '../auth/colyseus-auth.js';
 import { StashService, InMemoryStashRepository, getStashRepository, getItemDefs } from '../stash/index.js';
 import type { StashRepository } from '../stash/index.js';
+import { getConfig } from '../config.js';
 
 const TICK_INTERVAL_MS = 1000;
 
 interface RefugeRoomOptions {
   state: RefugeState;
+}
+
+interface ShardListing {
+  roomId: string;
+  biome: BiomeType;
+  tier: ShardTier;
+  lifecycle: string;
+  playerCount: number;
+  maxPlayers: number;
+  locked: boolean;
 }
 
 /**
@@ -54,7 +67,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
 
 
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
-      this.handleCommand(client, message);
+      void this.handleCommand(client, message);
     });
 
     // Ambient tick — drives NPC movement, weather, faction events
@@ -123,75 +136,164 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
 
   // ─── Command Handling ────────────────────────────────────────────────────
 
-  private handleCommand(client: Client, message: CommandMessage): void {
+  private async handleCommand(client: Client, message: CommandMessage): Promise<void> {
     this.log(`Command from ${client.sessionId}: ${message.verb} ${message.args.join(' ')}`);
 
-    switch (message.verb) {
-      case 'look':
-        client.send(MessageTypes.NARRATE, {
-          text: 'The Refuge hums with quiet activity. Merchants hawk wares, refugees gather by fires.',
-          type: 'room',
-          timestamp: Date.now(),
-        } satisfies NarrateMessage);
-        break;
+    try {
+      switch (message.verb) {
+        case 'look':
+          client.send(MessageTypes.NARRATE, {
+            text: 'The Refuge hums with quiet activity. Merchants hawk wares, refugees gather by fires.',
+            type: 'room',
+            timestamp: Date.now(),
+          } satisfies NarrateMessage);
+          break;
 
-      case 'shardboard':
-        client.send(MessageTypes.NARRATE, {
-          text: 'The Shardboard displays available rift entries:\n\n  ⌁ **Shard Rift** — An unstable portal shimmers with dark energy.\n    Type `enter shard` to step through.',
-          type: 'system',
-          timestamp: Date.now(),
-        } satisfies NarrateMessage);
-        break;
+        case 'shardboard':
+          await this.handleShardboardCommand(client);
+          break;
 
-      case 'enter':
-        this.handleEnterCommand(client, message.args);
-        break;
+        case 'enter':
+          await this.handleEnterCommand(client, message.args);
+          break;
 
-      case 'stash':
-        this.handleStashCommand(client);
-        break;
+        case 'stash':
+          await this.handleStashCommand(client);
+          break;
 
-      case 'take':
-        this.handleTakeCommand(client, message.args);
-        break;
+        case 'take':
+          await this.handleTakeCommand(client, message.args);
+          break;
 
-      case 'store':
-        this.handleStoreCommand(client, message.args);
-        break;
+        case 'store':
+          await this.handleStoreCommand(client, message.args);
+          break;
 
 
-      default:
-        client.send(MessageTypes.NARRATE, {
-          text: `You try to "${message.verb}" but nothing happens here.`,
-          type: 'system',
-          timestamp: Date.now(),
-        } satisfies NarrateMessage);
-        break;
+        default:
+          client.send(MessageTypes.NARRATE, {
+            text: `You try to "${message.verb}" but nothing happens here.`,
+            type: 'system',
+            timestamp: Date.now(),
+          } satisfies NarrateMessage);
+          break;
+      }
+    } catch (err) {
+      this.log(`Refuge command failed: ${err}`);
+      client.send(MessageTypes.NARRATE, {
+        text: 'Something went wrong. Try again in a moment.',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
     }
   }
 
   // ─── Enter Command ──────────────────────────────────────────────────────
 
-  private handleEnterCommand(client: Client, args: string[]): void {
-    const target = args[0]?.toLowerCase();
+  private async handleEnterCommand(client: Client, args: string[]): Promise<void> {
+    const requestedId = args[0]?.trim();
+    const listings = await this.getShardListings();
 
-    if (!target || target === 'shard') {
-      // Narrate the transition, then send ROOM_SWITCH to tell the client to join a shard
-      client.send(MessageTypes.NARRATE, {
-        text: 'You step toward the rift. Reality bends around you as you are pulled into the shard...',
-        type: 'system',
-        timestamp: Date.now(),
-      } satisfies NarrateMessage);
+    if (requestedId && requestedId.toLowerCase() !== 'shard') {
+      const shard = listings.find((entry) => entry.roomId === requestedId);
+      if (!shard) {
+        client.send(MessageTypes.NARRATE, {
+          text: `No shard with id "${requestedId}" is listed. Check the shardboard for available rifts.`,
+          type: 'system',
+          timestamp: Date.now(),
+        } satisfies NarrateMessage);
+        return;
+      }
 
-      client.send(MessageTypes.ROOM_SWITCH, {
-        target: 'shard',
-        reason: 'enter_shard',
-      } satisfies RoomSwitchMessage);
+      if (!this.isShardJoinable(shard)) {
+        client.send(MessageTypes.NARRATE, {
+          text: this.describeShardRejection(shard),
+          type: 'system',
+          timestamp: Date.now(),
+        } satisfies NarrateMessage);
+        return;
+      }
+
+      this.sendShardSwitch(client, shard);
       return;
     }
 
+    let shard = this.pickOpenShard(listings);
+    if (!shard) {
+      const created = await this.createShardRoom();
+      if (created && this.isShardJoinable(created)) {
+        shard = created;
+      }
+    }
+
+    if (!shard) {
+      client.send(MessageTypes.NARRATE, {
+        text: 'No open rifts are available. Check the shardboard as new shards stabilize.',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+      return;
+    }
+
+    this.sendShardSwitch(client, shard);
+  }
+
+  private sendShardSwitch(client: Client, shard: ShardListing): void {
+    // Narrate the transition, then send ROOM_SWITCH to tell the client to join the shard
     client.send(MessageTypes.NARRATE, {
-      text: `There is no "${target}" to enter. Check the shardboard for available rifts.`,
+      text: 'You step toward the rift. Reality bends around you as you are pulled into the shard...',
+      type: 'system',
+      timestamp: Date.now(),
+    } satisfies NarrateMessage);
+
+    client.send(MessageTypes.ROOM_SWITCH, {
+      target: 'shard',
+      reason: 'enter_shard',
+      options: {
+        roomId: shard.roomId,
+        biome: shard.biome,
+        tier: shard.tier,
+      },
+    } satisfies RoomSwitchMessage);
+  }
+
+  private async handleShardboardCommand(client: Client): Promise<void> {
+    let listings = await this.getShardListings();
+    const hasOpenShard = listings.some((entry) => this.isShardJoinable(entry));
+
+    if (!hasOpenShard) {
+      const created = await this.createShardRoom();
+      if (created) {
+        listings = [...listings.filter((entry) => entry.roomId !== created.roomId), created];
+      }
+    }
+
+    if (listings.length === 0) {
+      client.send(MessageTypes.NARRATE, {
+        text: 'The shardboard is empty. The veil is quiet... for now.',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+      return;
+    }
+
+    const lines = listings.map((entry) => {
+      const biome = this.formatBiome(entry.biome);
+      const status = entry.locked
+        ? 'locked'
+        : entry.playerCount >= entry.maxPlayers
+          ? 'full'
+          : entry.lifecycle;
+      return `  • ${entry.roomId} — ${biome} | Tier ${entry.tier} | ${entry.playerCount}/${entry.maxPlayers} players | ${status}`;
+    });
+
+    const hasJoinable = listings.some((entry) => this.isShardJoinable(entry));
+    const suffix = hasJoinable
+      ? 'Type `enter <shard-id>` to step through a rift.'
+      : 'No rifts are open yet. Wait for a shard to stabilize, then enter.';
+
+    client.send(MessageTypes.NARRATE, {
+      text: `The Shardboard lists available rifts:\n\n${lines.join('\n')}\n\n${suffix}`,
       type: 'system',
       timestamp: Date.now(),
     } satisfies NarrateMessage);
@@ -267,6 +369,128 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
       type: 'system',
       timestamp: Date.now(),
     } satisfies NarrateMessage);
+  }
+
+
+  // ─── Shardboard Helpers ──────────────────────────────────────────────────
+
+  private async getShardListings(): Promise<ShardListing[]> {
+    const rooms = await this.safeQueryRooms();
+    const maxPlayers = getConfig().maxPlayersPerShard;
+
+    return rooms
+      .filter((room) => room.name === 'shard')
+      .map((room) => {
+        const localRoom = this.safeGetRoom(room.roomId);
+        const state = localRoom?.state as {
+          biome?: string;
+          tier?: number;
+          lifecycle?: string;
+          playerCount?: number;
+        } | undefined;
+        const metadata = (room.metadata ?? {}) as Record<string, unknown>;
+
+        const biome = (state?.biome ?? metadata['biome'] ?? 'flooded_crypt') as BiomeType;
+        const tier = (state?.tier ?? metadata['tier'] ?? 1) as ShardTier;
+        const lifecycle = (state?.lifecycle ?? metadata['lifecycle'] ?? 'unknown') as string;
+        const playerCount = typeof state?.playerCount === 'number'
+          ? state.playerCount
+          : (room.clients ?? (metadata['playerCount'] as number | undefined) ?? 0);
+        const maxPlayersForRoom = (metadata['maxPlayers'] as number | undefined) ?? room.maxClients ?? maxPlayers;
+
+        return {
+          roomId: room.roomId,
+          biome,
+          tier,
+          lifecycle,
+          playerCount,
+          maxPlayers: maxPlayersForRoom,
+          locked: room.locked ?? false,
+        };
+      });
+  }
+
+  private pickOpenShard(listings: ShardListing[]): ShardListing | null {
+    const open = listings
+      .filter((entry) => this.isShardJoinable(entry))
+      .sort((a, b) => a.playerCount - b.playerCount);
+    return open[0] ?? null;
+  }
+
+  private isShardJoinable(entry: ShardListing): boolean {
+    return entry.lifecycle === 'open'
+      && !entry.locked
+      && entry.playerCount < entry.maxPlayers;
+  }
+
+  private describeShardRejection(entry: ShardListing): string {
+    if (entry.locked) {
+      return `Shard "${entry.roomId}" is locked.`;
+    }
+    if (entry.lifecycle !== 'open') {
+      return `Shard "${entry.roomId}" is ${entry.lifecycle}. Wait for it to open.`;
+    }
+    if (entry.playerCount >= entry.maxPlayers) {
+      return `Shard "${entry.roomId}" is full.`;
+    }
+    return `Shard "${entry.roomId}" is not available.`;
+  }
+
+  private formatBiome(biome: string): string {
+    return biome
+      .split('_')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
+  private async createShardRoom(): Promise<ShardListing | null> {
+    const biome: BiomeType = 'flooded_crypt';
+    const tier: ShardTier = 1;
+    try {
+      const roomCache = await matchMaker.createRoom('shard', {
+        biome,
+        tier,
+        seed: Date.now(),
+        openDelayMs: 0,
+      });
+
+      const localRoom = this.safeGetRoom(roomCache.roomId);
+      const state = localRoom?.state as {
+        biome?: string;
+        tier?: number;
+        lifecycle?: string;
+        playerCount?: number;
+      } | undefined;
+
+      return {
+        roomId: roomCache.roomId,
+        biome: (state?.biome ?? biome) as BiomeType,
+        tier: (state?.tier ?? tier) as ShardTier,
+        lifecycle: state?.lifecycle ?? 'open',
+        playerCount: state?.playerCount ?? 0,
+        maxPlayers: roomCache.maxClients ?? getConfig().maxPlayersPerShard,
+        locked: roomCache.locked ?? false,
+      };
+    } catch (err) {
+      this.log(`Failed to create shard: ${err}`);
+      return null;
+    }
+  }
+
+  private async safeQueryRooms(): Promise<Awaited<ReturnType<typeof matchMaker.query>>> {
+    try {
+      return await matchMaker.query({});
+    } catch {
+      return [];
+    }
+  }
+
+  private safeGetRoom(roomId: string): Room | undefined {
+    try {
+      return matchMaker.getLocalRoomById(roomId) ?? undefined;
+    } catch {
+      return undefined;
+    }
   }
 
 

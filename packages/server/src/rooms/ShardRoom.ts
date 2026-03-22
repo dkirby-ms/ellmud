@@ -8,6 +8,7 @@ import {
   type ShardStateMessage,
   type StashItem,
   type BiomeType,
+  type ShardTier,
   type ExtractionMessage,
   MessageTypes,
 } from '@ellmud/shared';
@@ -49,6 +50,7 @@ interface ShardRoomOptions {
 export class ShardRoom extends Room<ShardRoomOptions> {
   private lifecycle: SharedShardState = 'seeding';
   private collapseTimerSeconds = 1200; // 20 minutes default
+  private openDelayMs = 1000;
   private roomGraph!: RoomGraph;
   private players = new Map<string, PlayerState>();
   private combatSystem!: CombatSystem;
@@ -56,6 +58,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
   private itemDefs = new Map<string, StashItem>();
+  private shardTier: ShardTier = 1;
 
   /**
    * Inject stash dependencies. Called before room lifecycle if provided.
@@ -73,12 +76,20 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Initialize server-internal state (never sent to clients)
     this.setState(new ShardState());
     this.state.shardId = this.roomId;
+    this.maxClients = getConfig().maxPlayersPerShard;
 
     if (typeof options['biome'] === 'string') {
       this.state.biome = options['biome'];
     }
+    if (typeof options['tier'] === 'number' && [1, 2, 3].includes(options['tier'])) {
+      this.shardTier = options['tier'] as ShardTier;
+    }
+    this.state.tier = this.shardTier;
     if (typeof options['collapseTimer'] === 'number') {
       this.collapseTimerSeconds = options['collapseTimer'];
+    }
+    if (typeof options['openDelayMs'] === 'number') {
+      this.openDelayMs = Math.max(0, options['openDelayMs']);
     }
 
     this.state.collapseTimer = this.collapseTimerSeconds;
@@ -90,7 +101,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     } else {
       const seed = typeof options['seed'] === 'number' ? options['seed'] : Date.now();
       const biome = (typeof options['biome'] === 'string' ? options['biome'] : 'flooded_crypt') as BiomeType;
-      const sharedGraph = generateShardGraph({ tier: 1, biome, seed });
+      const sharedGraph = generateShardGraph({ tier: this.shardTier, biome, seed });
       this.roomGraph = adaptRoomGraph(sharedGraph);
 
       // Spawn creatures using a derived seed (distinct from generator's PRNG)
@@ -120,7 +131,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // 1-second tick for all game simulation
     this.setSimulationInterval((deltaTime: number) => this.update(deltaTime), TICK_INTERVAL_MS);
 
-    this.log(`ShardRoom created: ${this.roomId} (biome=${this.state.biome})`);
+    this.updateMetadata();
+
+    this.log(`ShardRoom created: ${this.roomId} (biome=${this.state.biome}, tier=${this.shardTier})`);
 
     // Begin shard lifecycle
     this.transitionTo('seeding');
@@ -139,6 +152,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
 
     this.state.playerCount++;
+    this.updateMetadata();
 
     // Initialize player state at shard entry room
     const playerState = new PlayerState(client.sessionId, this.roomGraph.startRoomId);
@@ -164,10 +178,13 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
   onLeave(client: Client): void {
-    this.state.playerCount--;
     this.extractionSystem.interruptExtraction(client.sessionId, 'you left the shard');
-    this.players.delete(client.sessionId);
-    this.combatSystem.removeCombatant(client.sessionId);
+    if (this.players.has(client.sessionId)) {
+      this.state.playerCount = Math.max(0, this.state.playerCount - 1);
+      this.players.delete(client.sessionId);
+      this.combatSystem.removeCombatant(client.sessionId);
+      this.updateMetadata();
+    }
     this.log(`Player left: ${client.sessionId} (${this.state.playerCount} players)`);
   }
 
@@ -236,23 +253,32 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Placeholder: room graph generation, creature spawning, loot placement
     this.log('Seeding shard: generating room graph...');
 
-    // Transition to open after seeding is complete
-    this.clock.setTimeout(() => {
-      this.transitionTo('open');
-
-      // Open for entry for 5 minutes, then go active
+    const scheduleActiveTransition = () => {
       this.clock.setTimeout(() => {
         if (this.lifecycle === 'open') {
           this.transitionTo('active');
         }
       }, 5000); // Shortened for dev; production = 300_000 (5 min)
-    }, 1000); // Shortened for dev; production = seeding duration
+    };
+
+    if (this.openDelayMs <= 0) {
+      this.transitionTo('open');
+      scheduleActiveTransition();
+      return;
+    }
+
+    // Transition to open after seeding is complete
+    this.clock.setTimeout(() => {
+      this.transitionTo('open');
+      scheduleActiveTransition();
+    }, this.openDelayMs); // Shortened for dev; production = seeding duration
   }
 
   private transitionTo(newState: SharedShardState): void {
     const previousState = this.lifecycle;
     this.lifecycle = newState;
     this.state.lifecycle = newState;
+    this.updateMetadata();
 
     this.log(`Lifecycle: ${previousState} → ${newState}`);
 
@@ -295,6 +321,16 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     this.clock.setTimeout(() => {
       this.disconnect();
     }, 2000);
+  }
+
+  private updateMetadata(): void {
+    this.setMetadata({
+      biome: this.state.biome,
+      tier: this.state.tier,
+      lifecycle: this.lifecycle,
+      playerCount: this.state.playerCount,
+      maxPlayers: this.maxClients ?? getConfig().maxPlayersPerShard,
+    });
   }
 
   // ─── Command Handling ────────────────────────────────────────────────────
@@ -487,7 +523,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Remove player from shard
     this.players.delete(playerId);
     this.combatSystem.removeCombatant(playerId);
-    this.state.playerCount--;
+    this.state.playerCount = Math.max(0, this.state.playerCount - 1);
+    this.updateMetadata();
 
     this.log(`Player extracted: ${playerId}`);
 
