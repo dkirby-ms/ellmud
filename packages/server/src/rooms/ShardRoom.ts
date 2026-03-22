@@ -933,6 +933,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
         // Schedule return to refuge after 3 seconds
         this.clock.setTimeout(() => {
+          // Guard: player may have disconnected during the death delay
+          if (!this.players.has(playerId)) {
+            this.log(`Player ${playerId} already left during death delay — skipping cleanup`);
+            return;
+          }
+
           client.send(MessageTypes.ROOM_SWITCH, {
             target: 'refuge',
             reason: 'player_death',

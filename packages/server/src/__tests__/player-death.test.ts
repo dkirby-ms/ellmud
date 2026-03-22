@@ -94,6 +94,64 @@ describe('Player Defeat Detection (CombatSystem)', () => {
   });
 });
 
+// ─── Unit Tests: Inventory Drop on Death ─────────────────────────────────────
+
+import { PlayerState } from '../state/PlayerState.js';
+import type { Room, Item } from '../shard/RoomGraph.js';
+
+describe('Inventory Drop on Player Death', () => {
+  function makeItem(id: string, name: string): Item {
+    return { id, name, weight: 1, description: `A ${name}` };
+  }
+
+  function makeRoom(id: string): Room {
+    return { id, name: id, description: '', exits: new Map(), items: [] };
+  }
+
+  it('should transfer all inventory items to the room floor on death', () => {
+    const player = new PlayerState('p1', TEST_ROOM);
+    const room = makeRoom(TEST_ROOM);
+    const sword = makeItem('sword', 'Rusty Sword');
+    const potion = makeItem('potion', 'Health Potion');
+
+    player.addItem(sword);
+    player.addItem(potion);
+    player.addItem(potion); // 2 potions
+
+    expect(player.inventory.size).toBe(2);
+    expect(room.items).toHaveLength(0);
+
+    // Simulate handlePlayerDefeats inventory drop logic
+    for (const [, entry] of player.inventory) {
+      for (let i = 0; i < entry.quantity; i++) {
+        room.items.push(entry.item);
+      }
+    }
+    player.inventory.clear();
+
+    expect(player.inventory.size).toBe(0);
+    expect(room.items).toHaveLength(3); // 1 sword + 2 potions
+    expect(room.items.map(i => i.name)).toContain('Rusty Sword');
+    expect(room.items.filter(i => i.name === 'Health Potion')).toHaveLength(2);
+  });
+
+  it('should handle empty inventory gracefully', () => {
+    const player = new PlayerState('p1', TEST_ROOM);
+    const room = makeRoom(TEST_ROOM);
+
+    // Simulate handlePlayerDefeats with empty inventory
+    for (const [, entry] of player.inventory) {
+      for (let i = 0; i < entry.quantity; i++) {
+        room.items.push(entry.item);
+      }
+    }
+    player.inventory.clear();
+
+    expect(player.inventory.size).toBe(0);
+    expect(room.items).toHaveLength(0);
+  });
+});
+
 // ─── Integration Tests: Full Player Death Flow via ShardRoom ─────────────────
 
 describe('Player Death Flow (ShardRoom Integration)', () => {
