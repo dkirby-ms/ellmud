@@ -115,7 +115,7 @@ export function useShardConnection(): UseShardConnectionResult {
           if (eventType === 'strike') {
             combatSubtype = actorId === state.playerId ? 'hit_dealt'
               : targetId === state.playerId ? 'hit_taken'
-              : 'hit_dealt';
+              : undefined;
           } else if (eventType === 'dodge') {
             combatSubtype = 'dodge';
           } else if (eventType === 'defeated') {
