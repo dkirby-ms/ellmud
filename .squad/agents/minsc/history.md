@@ -472,3 +472,28 @@ The UX overhaul moved 24 old components to `components/_old/` and replaced them 
 - Volo's changes (ProtectedRoute on admin routes, ErrorFallback with ErrorBoundary) landed before tests — all 14 new tests pass immediately
 
 **Suite status:** 77 tests across 7 files, all passing, zero regressions.
+
+---
+
+## Learnings — UX Batch 2 Anticipatory Tests (2026-03-22)
+
+**Task:** Write anticipatory tests for UX Review Batch 2 (combat/sidebar polish gaps #10-21).
+
+**File created:** `packages/client/src/__tests__/ux-batch2-combat-sidebar.test.tsx`
+
+**Results:** 24 tests total — 21 correctly failing (features not implemented), 3 passing (negative assertions for absent-when-empty states). Zero regressions on existing 77 client tests.
+
+**Test architecture decisions:**
+- Render ShardExploration with mocked `useShardConnection` hook + AppContext state overrides — avoids Colyseus dependency
+- Combat color-coding tests use `data-combat-type` attribute traversal pattern, falling back to the text element itself — accommodates multiple implementation approaches
+- Status effects and HP state tested via state overrides cast as `Partial<AppState>` — these state fields don't exist yet, but the cast documents the expected API surface
+- Auto-complete tests use `data-testid="autocomplete-hint"` — testid pattern for elements that don't yet exist in the DOM
+- Tick timer tests assert `role="progressbar"` and `aria-valuenow` — accessibility-first contract
+- All theme classes use token names (text-accent-gold, text-danger, etc.) not hardcoded hex — compatible with Batch 1 token migration
+
+**Key conventions established:**
+- Each describe block maps 1:1 to a UX gap number
+- Each test has inline comment: `// UX Review Batch 2 — anticipatory test (gap #N)`
+- Tests define RENDERED contracts (DOM classes, text content, aria attributes) not data model internals
+
+**Suite status:** 77 existing + 24 new = 101 total client tests (21 anticipatory failures expected).
