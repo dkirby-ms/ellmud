@@ -497,3 +497,23 @@ The `extraction_state` handler was only registered after the initial `connect()`
 - `packages/server/src/__tests__/wave3-redis-contracts.test.ts` — Updated test fixture
 
 **Drizzt takeaway:** Reconnection tuning is now production-ready. The 30-60s window matches industry standard (Discord, Slack use similar), and the dual death-behavior system gives operators control over player experience vs world consistency trade-offs.
+
+### Player Death Handler Fix (PR #109)
+**Task:** Fix player death flow — players were stuck when defeated (HP=0)
+**Status:** ✅ Complete — PR #109 (fix/player-death-handler → dev)
+
+**Root cause:** `syncCreaturesAfterCombat()` only handled `event.actorId.startsWith('creature-')`. Player defeat events (where actorId is a session ID) fell through silently.
+
+**Fix:** Added `handlePlayerDefeats()` method to ShardRoom:
+1. Detects player defeat events (actorId NOT starting with 'creature-')
+2. Drops all inventory to room floor (other players can loot)
+3. Sends EXTRACTION_STATE `state: 'death'` → triggers client death screen
+4. Schedules ROOM_SWITCH to refuge after 3s via `this.clock.setTimeout()`
+5. Cleans up player from combat system and shard state
+
+**Also changed:**
+- Added `'death'` to ExtractionMessage state union in shared package
+- Updated MessageCollector to capture EXTRACTION_STATE messages
+- Added 5 new tests (3 unit, 2 integration), all 970 tests pass
+
+**Drizzt takeaway:** The creature-only filter on defeat events was a classic oversight — `startsWith('creature-')` was an implicit negative filter on all other entity types. When adding new entity types to any event handler, always check for the full set of possible actors. The `isPlayer` flag on Combatant is the canonical way to distinguish.
