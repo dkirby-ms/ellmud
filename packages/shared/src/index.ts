@@ -250,7 +250,7 @@ export interface RoomSwitchMessage {
 /** Server → Client: Extraction channel state update. */
 export interface ExtractionMessage {
   playerId: string;
-  state: 'started' | 'progress' | 'completed' | 'interrupted';
+  state: 'started' | 'progress' | 'completed' | 'interrupted' | 'death';
   ticksRemaining?: number;
   totalTicks?: number;
   narration: string;
