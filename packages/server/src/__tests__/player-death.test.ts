@@ -16,6 +16,8 @@ import { ColyseusTestServer } from '@colyseus/testing';
 import { MessageTypes } from '@ellmud/shared';
 import type { ExtractionMessage } from '@ellmud/shared';
 import { bootTestServer, wait } from './helpers/index.js';
+import type { PlayerState } from '../state/PlayerState.js';
+import type { Room, Item } from '../shard/RoomGraph.js';
 
 // ─── Unit Tests: Combat System Defeat Detection ─────────────────────────────
 
@@ -91,64 +93,6 @@ describe('Player Defeat Detection (CombatSystem)', () => {
 
     expect(player.hp).toBe(0);
     expect(system.isInCombat('p1')).toBe(false);
-  });
-});
-
-// ─── Unit Tests: Inventory Drop on Death ─────────────────────────────────────
-
-import { PlayerState } from '../state/PlayerState.js';
-import type { Room, Item } from '../shard/RoomGraph.js';
-
-describe('Inventory Drop on Player Death', () => {
-  function makeItem(id: string, name: string): Item {
-    return { id, name, weight: 1, description: `A ${name}` };
-  }
-
-  function makeRoom(id: string): Room {
-    return { id, name: id, description: '', exits: new Map(), items: [] };
-  }
-
-  it('should transfer all inventory items to the room floor on death', () => {
-    const player = new PlayerState('p1', TEST_ROOM);
-    const room = makeRoom(TEST_ROOM);
-    const sword = makeItem('sword', 'Rusty Sword');
-    const potion = makeItem('potion', 'Health Potion');
-
-    player.addItem(sword);
-    player.addItem(potion);
-    player.addItem(potion); // 2 potions
-
-    expect(player.inventory.size).toBe(2);
-    expect(room.items).toHaveLength(0);
-
-    // Simulate handlePlayerDefeats inventory drop logic
-    for (const [, entry] of player.inventory) {
-      for (let i = 0; i < entry.quantity; i++) {
-        room.items.push(entry.item);
-      }
-    }
-    player.inventory.clear();
-
-    expect(player.inventory.size).toBe(0);
-    expect(room.items).toHaveLength(3); // 1 sword + 2 potions
-    expect(room.items.map(i => i.name)).toContain('Rusty Sword');
-    expect(room.items.filter(i => i.name === 'Health Potion')).toHaveLength(2);
-  });
-
-  it('should handle empty inventory gracefully', () => {
-    const player = new PlayerState('p1', TEST_ROOM);
-    const room = makeRoom(TEST_ROOM);
-
-    // Simulate handlePlayerDefeats with empty inventory
-    for (const [, entry] of player.inventory) {
-      for (let i = 0; i < entry.quantity; i++) {
-        room.items.push(entry.item);
-      }
-    }
-    player.inventory.clear();
-
-    expect(player.inventory.size).toBe(0);
-    expect(room.items).toHaveLength(0);
   });
 });
 
@@ -252,6 +196,72 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
       expect(deathSwitches.length).toBeGreaterThanOrEqual(1);
       expect(deathSwitches[0]!.target).toBe('refuge');
     }
+
+    await client.leave();
+  }, 15_000);
+
+  it('should drop player inventory items to the room floor on death', async () => {
+    const room = await colyseus.createRoom('shard', { useTestGraph: true, openDelayMs: 0 });
+    const client = await colyseus.connectTo(room);
+
+    // Wait for room to be ready (seeding → open)
+    await wait(2000);
+
+    // Access room internals for test setup and verification
+    const roomInstance = room as unknown as {
+      players: Map<string, PlayerState>;
+      combatSystem: CombatSystem;
+      roomGraph: { rooms: Map<string, Room> };
+    };
+
+    const sessionId = client.sessionId;
+    const player = roomInstance.players.get(sessionId);
+    expect(player).toBeDefined();
+
+    const currentRoomId = player!.currentRoomId;
+    const currentRoom = roomInstance.roomGraph.rooms.get(currentRoomId);
+    expect(currentRoom).toBeDefined();
+
+    // Record how many items the room starts with
+    const initialItemCount = currentRoom!.items.length;
+
+    // Add items to the player's inventory
+    const sword: Item = { id: 'test-sword', name: 'Test Sword', weight: 2, description: 'A test sword' };
+    const potion: Item = { id: 'test-potion', name: 'Test Potion', weight: 1, description: 'A test potion' };
+    expect(player!.addItem(sword)).toBe(true);
+    expect(player!.addItem(potion)).toBe(true);
+    expect(player!.addItem(potion)).toBe(true); // stacks to quantity 2
+    expect(player!.inventory.size).toBe(2); // 2 unique item types
+
+    // Register a powerful creature and the player as combatants
+    const creature = createCombatant(
+      'creature-test-brute', 'Test Brute', currentRoomId, false,
+      { ...DEFAULT_PLAYER_STATS, attack: 100 },
+    );
+    roomInstance.combatSystem.registerCombatant(creature);
+
+    const playerCombatant = createCombatant(
+      sessionId, sessionId, currentRoomId, true, DEFAULT_PLAYER_STATS,
+    );
+    playerCombatant.hp = 1; // next tick will defeat this player
+    roomInstance.combatSystem.registerCombatant(playerCombatant);
+
+    // Initiate combat — creature attacks player
+    roomInstance.combatSystem.initiateCombat('creature-test-brute', sessionId);
+
+    // Wait for combat tick to resolve defeat + handlePlayerDefeats
+    await wait(2500);
+
+    // Player inventory must be empty after death
+    expect(player!.inventory.size).toBe(0);
+
+    // Room items must now contain the dropped items
+    const droppedItems = currentRoom!.items.slice(initialItemCount);
+    expect(droppedItems).toHaveLength(3); // 1 sword + 2 potions
+
+    const droppedNames = droppedItems.map(i => i.name);
+    expect(droppedNames).toContain('Test Sword');
+    expect(droppedNames.filter(n => n === 'Test Potion')).toHaveLength(2);
 
     await client.leave();
   }, 15_000);
