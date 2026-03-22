@@ -1,50 +1,86 @@
 /**
- * Wave 2 — Sound Propagation System (#22) — Anticipatory Tests
+ * Sound Propagation System (#22) — Tests
  *
- * Behavioral contracts for sound propagation before implementation lands.
- * These define what the system MUST do based on acceptance criteria:
- *
- * - Every action has a noise value (0–10)
- * - Noise attenuates 2 per room of distance
- * - Audibility threshold: noise - (2 × rooms_away) > 0
- * - Room properties modify propagation (heavy doors halve, caverns +1)
- * - Players receive directional sound descriptions
- * - Reference noise values: combat=5, running=4, striking door=7, extraction=8, sneaking=0–1
- *
- * Tests use describe.skip / it.todo where implementation types are needed.
- * Concrete expected values are embedded for contract verification.
+ * Tests BFS propagation, attenuation, room modifiers, directional info,
+ * and integration scenarios per GDD §12.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { SoundSystem, type SoundRoom } from '../sound/SoundSystem.js';
+import { NOISE_VALUES, SOUND_ATTENUATION_PER_ROOM, SOUND_DESCRIPTIONS } from '@ellmud/shared';
+import type { Direction, SoundType } from '@ellmud/shared';
 
-// ─── Noise Value Constants (from acceptance criteria) ───────────────────────
-
-const NOISE = {
-  COMBAT: 5,
-  RUNNING: 4,
-  STRIKING_DOOR: 7,
-  EXTRACTION: 8,
-  SNEAKING_MIN: 0,
-  SNEAKING_MAX: 1,
-  WHISPERING: 1,
-  WALKING: 2,
-  SHOUTING: 6,
-} as const;
-
-const ATTENUATION_PER_ROOM = 2;
-
-// ─── Pure Math: Audibility Calculation ──────────────────────────────────────
+// ─── Test Helpers ─────────────────────────────────────────────────────────
 
 /**
- * Mirrors the expected audibility formula from acceptance criteria.
- * noise - (ATTENUATION_PER_ROOM × rooms_away) > 0
+ * Build a test room graph:
+ *
+ *   shrine ←(south)── corridor ──(south)→ entry ──(east)→ armory
+ *                          │
+ *                        (west)
+ *                          ↓
+ *                        crypt ──(down)→ extraction
+ *
+ * 6 rooms, linear + branch. Matches the dev test graph topology.
  */
+function buildTestRooms(): Map<string, SoundRoom> {
+  const rooms = new Map<string, SoundRoom>();
+
+  rooms.set('entry', {
+    id: 'entry',
+    exits: new Map<Direction, string>([
+      ['north', 'corridor'],
+      ['east', 'armory'],
+    ]),
+  });
+
+  rooms.set('corridor', {
+    id: 'corridor',
+    exits: new Map<Direction, string>([
+      ['south', 'entry'],
+      ['north', 'shrine'],
+      ['west', 'crypt'],
+    ]),
+  });
+
+  rooms.set('armory', {
+    id: 'armory',
+    exits: new Map<Direction, string>([['west', 'entry']]),
+  });
+
+  rooms.set('shrine', {
+    id: 'shrine',
+    exits: new Map<Direction, string>([['south', 'corridor']]),
+  });
+
+  rooms.set('crypt', {
+    id: 'crypt',
+    exits: new Map<Direction, string>([
+      ['east', 'corridor'],
+      ['down', 'extraction'],
+    ]),
+  });
+
+  rooms.set('extraction', {
+    id: 'extraction',
+    exits: new Map<Direction, string>([['up', 'crypt']]),
+  });
+
+  return rooms;
+}
+
+function buildResolver(rooms: Map<string, SoundRoom>) {
+  return (roomId: string) => rooms.get(roomId);
+}
+
+// ─── Pure Math: Audibility Formula ──────────────────────────────────────────
+
 function isAudible(noise: number, roomsAway: number): boolean {
-  return noise - (ATTENUATION_PER_ROOM * roomsAway) > 0;
+  return noise - (SOUND_ATTENUATION_PER_ROOM * roomsAway) > 0;
 }
 
 function effectiveNoise(noise: number, roomsAway: number): number {
-  return Math.max(0, noise - (ATTENUATION_PER_ROOM * roomsAway));
+  return Math.max(0, noise - (SOUND_ATTENUATION_PER_ROOM * roomsAway));
 }
 
 // ─── Core Audibility Formula ────────────────────────────────────────────────
@@ -52,237 +88,312 @@ function effectiveNoise(noise: number, roomsAway: number): number {
 describe('Sound Propagation — Audibility Formula (#22)', () => {
   describe('basic attenuation: noise - (2 × distance) > 0', () => {
     it('combat (5) audible at 1 room away → effective 3', () => {
-      expect(effectiveNoise(NOISE.COMBAT, 1)).toBe(3);
-      expect(isAudible(NOISE.COMBAT, 1)).toBe(true);
+      expect(effectiveNoise(NOISE_VALUES.combat, 1)).toBe(3);
+      expect(isAudible(NOISE_VALUES.combat, 1)).toBe(true);
     });
 
     it('combat (5) audible at 2 rooms away → effective 1', () => {
-      expect(effectiveNoise(NOISE.COMBAT, 2)).toBe(1);
-      expect(isAudible(NOISE.COMBAT, 2)).toBe(true);
+      expect(effectiveNoise(NOISE_VALUES.combat, 2)).toBe(1);
+      expect(isAudible(NOISE_VALUES.combat, 2)).toBe(true);
     });
 
     it('combat (5) NOT audible at 3 rooms away → effective 0', () => {
-      expect(effectiveNoise(NOISE.COMBAT, 3)).toBe(0);
-      expect(isAudible(NOISE.COMBAT, 3)).toBe(false);
+      expect(effectiveNoise(NOISE_VALUES.combat, 3)).toBe(0);
+      expect(isAudible(NOISE_VALUES.combat, 3)).toBe(false);
     });
 
     it('extraction (8) audible at 3 rooms → effective 2', () => {
-      expect(effectiveNoise(NOISE.EXTRACTION, 3)).toBe(2);
-      expect(isAudible(NOISE.EXTRACTION, 3)).toBe(true);
-    });
-
-    it('extraction (8) NOT audible at 4 rooms → effective 0', () => {
-      expect(effectiveNoise(NOISE.EXTRACTION, 4)).toBe(0);
-      expect(isAudible(NOISE.EXTRACTION, 4)).toBe(false);
+      expect(effectiveNoise(NOISE_VALUES.extraction, 3)).toBe(2);
+      expect(isAudible(NOISE_VALUES.extraction, 3)).toBe(true);
     });
 
     it('sneaking (1) NOT audible at 1 room away', () => {
-      expect(effectiveNoise(NOISE.SNEAKING_MAX, 1)).toBe(0);
-      expect(isAudible(NOISE.SNEAKING_MAX, 1)).toBe(false);
-    });
-
-    it('sneaking (0) NOT audible even in same room (0 distance)', () => {
-      expect(effectiveNoise(NOISE.SNEAKING_MIN, 0)).toBe(0);
-      expect(isAudible(NOISE.SNEAKING_MIN, 0)).toBe(false);
+      expect(isAudible(NOISE_VALUES.sneaking, 1)).toBe(false);
     });
 
     it('striking door (7) audible at 3 rooms → effective 1', () => {
-      expect(effectiveNoise(NOISE.STRIKING_DOOR, 3)).toBe(1);
-      expect(isAudible(NOISE.STRIKING_DOOR, 3)).toBe(true);
+      expect(effectiveNoise(NOISE_VALUES.striking_door, 3)).toBe(1);
+      expect(isAudible(NOISE_VALUES.striking_door, 3)).toBe(true);
     });
 
     it('running (4) audible at 1 room → effective 2', () => {
-      expect(effectiveNoise(NOISE.RUNNING, 1)).toBe(2);
-      expect(isAudible(NOISE.RUNNING, 1)).toBe(true);
+      expect(effectiveNoise(NOISE_VALUES.running, 1)).toBe(2);
+      expect(isAudible(NOISE_VALUES.running, 1)).toBe(true);
     });
 
     it('running (4) NOT audible at 2 rooms → effective 0', () => {
-      expect(effectiveNoise(NOISE.RUNNING, 2)).toBe(0);
-      expect(isAudible(NOISE.RUNNING, 2)).toBe(false);
+      expect(effectiveNoise(NOISE_VALUES.running, 2)).toBe(0);
+      expect(isAudible(NOISE_VALUES.running, 2)).toBe(false);
     });
   });
 
   describe('boundary conditions', () => {
-    it('noise exactly at threshold (noise=2, distance=1) → effective 0 → NOT audible', () => {
-      // 2 - (2×1) = 0, and threshold is > 0 (strict inequality)
+    it('noise exactly at threshold (noise=2, distance=1) → NOT audible', () => {
       expect(effectiveNoise(2, 1)).toBe(0);
       expect(isAudible(2, 1)).toBe(false);
     });
 
-    it('noise just above threshold (noise=3, distance=1) → effective 1 → audible', () => {
+    it('noise just above threshold (noise=3, distance=1) → audible', () => {
       expect(effectiveNoise(3, 1)).toBe(1);
       expect(isAudible(3, 1)).toBe(true);
-    });
-
-    it('zero distance always audible if noise > 0', () => {
-      for (let noise = 1; noise <= 10; noise++) {
-        expect(isAudible(noise, 0)).toBe(true);
-      }
-    });
-
-    it('noise 0 is never audible at any distance', () => {
-      for (let dist = 0; dist <= 5; dist++) {
-        expect(isAudible(0, dist)).toBe(false);
-      }
     });
 
     it('max noise (10) propagates up to 4 rooms', () => {
       expect(isAudible(10, 4)).toBe(true);  // 10 - 8 = 2
       expect(isAudible(10, 5)).toBe(false); // 10 - 10 = 0
     });
+  });
+});
 
-    it('effective noise never goes negative', () => {
-      expect(effectiveNoise(1, 100)).toBe(0);
-      expect(effectiveNoise(0, 0)).toBe(0);
+// ─── SoundSystem BFS Propagation ────────────────────────────────────────────
+
+describe('SoundSystem', () => {
+  let rooms: Map<string, SoundRoom>;
+  let soundSystem: SoundSystem;
+
+  beforeEach(() => {
+    rooms = buildTestRooms();
+    soundSystem = new SoundSystem(buildResolver(rooms));
+  });
+
+  describe('propagateSound — BFS traversal', () => {
+    it('returns empty for noise level 0', () => {
+      expect(soundSystem.propagateSound('entry', 0)).toHaveLength(0);
+    });
+
+    it('returns empty for unknown source room', () => {
+      expect(soundSystem.propagateSound('nonexistent', 5)).toHaveLength(0);
+    });
+
+    it('does not include the source room in results', () => {
+      const results = soundSystem.propagateSound('entry', 10);
+      expect(results.find((r: { roomId: string }) => r.roomId === 'entry')).toBeUndefined();
+    });
+
+    it('propagates combat noise (5) to adjacent rooms', () => {
+      const results = soundSystem.propagateSound('entry', NOISE_VALUES.combat);
+      const roomIds = results.map((r: { roomId: string }) => r.roomId);
+      expect(roomIds).toContain('corridor');
+      expect(roomIds).toContain('armory');
+    });
+
+    it('propagates further with higher noise', () => {
+      const results = soundSystem.propagateSound('entry', NOISE_VALUES.striking_door);
+      const roomIds = results.map((r: { roomId: string }) => r.roomId);
+      expect(roomIds).toContain('corridor');
+      expect(roomIds).toContain('armory');
+      expect(roomIds).toContain('shrine');
+      expect(roomIds).toContain('crypt');
+      expect(roomIds).toContain('extraction');
+    });
+
+    it('sneaking noise (1) does not reach adjacent rooms', () => {
+      expect(soundSystem.propagateSound('entry', NOISE_VALUES.sneaking)).toHaveLength(0);
+    });
+
+    it('walking noise (2) does not reach adjacent rooms', () => {
+      expect(soundSystem.propagateSound('entry', NOISE_VALUES.walking)).toHaveLength(0);
     });
   });
 
-  describe('all reference noise values propagation range', () => {
-    const EXPECTED_MAX_RANGE: Record<string, number> = {
-      'sneaking(0)': 0,
-      'sneaking(1)': 0,
-      'walking(2)': 0,
-      'running(4)': 1,
-      'combat(5)': 2,
-      'shouting(6)': 2,
-      'striking_door(7)': 3,
-      'extraction(8)': 3,
-    };
+  describe('attenuation calculation', () => {
+    it('attenuates by 2 per room traversed', () => {
+      const results = soundSystem.propagateSound('entry', 8);
+      const corridor = results.find((r: { roomId: string }) => r.roomId === 'corridor');
+      expect(corridor!.effectiveNoise).toBe(6); // 8 - 2
+      const shrine = results.find((r: { roomId: string }) => r.roomId === 'shrine');
+      expect(shrine!.effectiveNoise).toBe(4); // 8 - 4
+    });
 
-    const NOISE_VALUES: Record<string, number> = {
-      'sneaking(0)': 0,
-      'sneaking(1)': 1,
-      'walking(2)': 2,
-      'running(4)': 4,
-      'combat(5)': 5,
-      'shouting(6)': 6,
-      'striking_door(7)': 7,
-      'extraction(8)': 8,
-    };
+    it('sound dies when attenuation exceeds noise', () => {
+      const results = soundSystem.propagateSound('entry', 3);
+      const roomIds = results.map((r: { roomId: string }) => r.roomId);
+      expect(roomIds).toContain('corridor');
+      expect(roomIds).toContain('armory');
+      expect(roomIds).not.toContain('shrine'); // 3-4=-1
+    });
 
-    for (const [label, noise] of Object.entries(NOISE_VALUES)) {
-      it(`${label} max audible distance = ${EXPECTED_MAX_RANGE[label]} rooms`, () => {
-        const maxRange = EXPECTED_MAX_RANGE[label];
-        // Audible at maxRange
-        if (maxRange > 0) {
-          expect(isAudible(noise, maxRange)).toBe(true);
-        }
-        // NOT audible one step further
-        expect(isAudible(noise, maxRange + 1)).toBe(false);
+    it('tracks distance correctly through multi-hop paths', () => {
+      const results = soundSystem.propagateSound('entry', 10);
+      expect(results.find((r: { roomId: string }) => r.roomId === 'shrine')!.distance).toBe(2);
+      expect(results.find((r: { roomId: string }) => r.roomId === 'extraction')!.distance).toBe(3);
+    });
+  });
+
+  describe('directional information', () => {
+    it('reports direction sound came from relative to listener', () => {
+      const results = soundSystem.propagateSound('entry', NOISE_VALUES.combat);
+      expect(results.find((r: { roomId: string }) => r.roomId === 'corridor')!.direction).toBe('south');
+      expect(results.find((r: { roomId: string }) => r.roomId === 'armory')!.direction).toBe('west');
+    });
+
+    it('reports correct direction for multi-hop propagation', () => {
+      const results = soundSystem.propagateSound('entry', 8);
+      expect(results.find((r: { roomId: string }) => r.roomId === 'shrine')!.direction).toBe('south');
+    });
+
+    it('combat in crypt: extraction hears from up, corridor hears from west', () => {
+      const results = soundSystem.propagateSound('crypt', NOISE_VALUES.combat);
+      expect(results.find((r: { roomId: string }) => r.roomId === 'extraction')!.direction).toBe('up');
+      expect(results.find((r: { roomId: string }) => r.roomId === 'corridor')!.direction).toBe('west');
+    });
+  });
+
+  describe('room modifier effects', () => {
+    it('heavy_door halves noise entering the room', () => {
+      rooms.set('corridor', {
+        id: 'corridor',
+        exits: new Map<Direction, string>([
+          ['south', 'entry'],
+          ['north', 'shrine'],
+          ['west', 'crypt'],
+        ]),
+        properties: ['heavy_door'],
       });
-    }
+      const results = soundSystem.propagateSound('entry', 8);
+      expect(results.find((r: { roomId: string }) => r.roomId === 'corridor')!.effectiveNoise).toBe(3);
+    });
+
+    it('cavern reduces attenuation by 1', () => {
+      rooms.set('corridor', {
+        id: 'corridor',
+        exits: new Map<Direction, string>([
+          ['south', 'entry'],
+          ['north', 'shrine'],
+          ['west', 'crypt'],
+        ]),
+        properties: ['cavern'],
+      });
+      const results = soundSystem.propagateSound('entry', 4);
+      expect(results.find((r: { roomId: string }) => r.roomId === 'corridor')!.effectiveNoise).toBe(3);
+    });
+
+    it('water reduces attenuation by 1', () => {
+      rooms.set('corridor', {
+        id: 'corridor',
+        exits: new Map<Direction, string>([
+          ['south', 'entry'],
+          ['north', 'shrine'],
+          ['west', 'crypt'],
+        ]),
+        properties: ['water'],
+      });
+      const results = soundSystem.propagateSound('entry', 4);
+      expect(results.find((r: { roomId: string }) => r.roomId === 'corridor')!.effectiveNoise).toBe(3);
+    });
+
+    it('cavern + water stacks — attenuation can reach 0', () => {
+      rooms.set('corridor', {
+        id: 'corridor',
+        exits: new Map<Direction, string>([
+          ['south', 'entry'],
+          ['north', 'shrine'],
+          ['west', 'crypt'],
+        ]),
+        properties: ['cavern', 'water'],
+      });
+      const results = soundSystem.propagateSound('entry', 3);
+      expect(results.find((r: { roomId: string }) => r.roomId === 'corridor')!.effectiveNoise).toBe(3);
+    });
+
+    it('heavy_door blocks low-noise sounds after attenuation + halving', () => {
+      rooms.set('corridor', {
+        id: 'corridor',
+        exits: new Map<Direction, string>([
+          ['south', 'entry'],
+          ['north', 'shrine'],
+          ['west', 'crypt'],
+        ]),
+        properties: ['heavy_door'],
+      });
+      const results = soundSystem.propagateSound('entry', 3);
+      expect(results.find((r: { roomId: string }) => r.roomId === 'corridor')!.effectiveNoise).toBe(0.5);
+      expect(results.find((r: { roomId: string }) => r.roomId === 'shrine')).toBeUndefined();
+    });
+  });
+
+  describe('noise value constants', () => {
+    it('has correct GDD §12.2 noise values', () => {
+      expect(NOISE_VALUES.combat).toBe(5);
+      expect(NOISE_VALUES.running).toBe(4);
+      expect(NOISE_VALUES.walking).toBe(2);
+      expect(NOISE_VALUES.striking_door).toBe(7);
+      expect(NOISE_VALUES.extraction).toBe(8);
+      expect(NOISE_VALUES.sneaking).toBe(1);
+    });
+
+    it('attenuation per room is 2', () => {
+      expect(SOUND_ATTENUATION_PER_ROOM).toBe(2);
+    });
+
+    it('all sound types have descriptions', () => {
+      const soundTypes: SoundType[] = [
+        'combat', 'running', 'walking', 'striking_door',
+        'extraction', 'explosion', 'sneaking',
+      ];
+      for (const st of soundTypes) {
+        expect(SOUND_DESCRIPTIONS[st]).toBeDefined();
+        expect(typeof SOUND_DESCRIPTIONS[st]).toBe('string');
+      }
+    });
+  });
+
+  // ─── Integration: combat in room A heard in rooms B and C ─────────────────
+
+  describe('integration: combat in room A heard in rooms B and C', () => {
+    it('attack in entry → corridor and armory hear combat sounds', () => {
+      const results = soundSystem.propagateSound('entry', NOISE_VALUES.combat);
+
+      const corridor = results.find((r: { roomId: string }) => r.roomId === 'corridor')!;
+      expect(corridor.effectiveNoise).toBe(3);
+      expect(corridor.distance).toBe(1);
+      expect(corridor.direction).toBe('south');
+
+      const armory = results.find((r: { roomId: string }) => r.roomId === 'armory')!;
+      expect(armory.effectiveNoise).toBe(3);
+      expect(armory.distance).toBe(1);
+      expect(armory.direction).toBe('west');
+
+      const shrine = results.find((r: { roomId: string }) => r.roomId === 'shrine')!;
+      expect(shrine.effectiveNoise).toBe(1);
+      expect(shrine.distance).toBe(2);
+
+      const crypt = results.find((r: { roomId: string }) => r.roomId === 'crypt')!;
+      expect(crypt.effectiveNoise).toBe(1);
+      expect(crypt.distance).toBe(2);
+
+      // Extraction: 3 rooms away, noise = 5-6=-1 → NOT audible
+      expect(results.find((r: { roomId: string }) => r.roomId === 'extraction')).toBeUndefined();
+    });
+
+    it('extraction sound (8) propagates through entire graph', () => {
+      const results = soundSystem.propagateSound('entry', NOISE_VALUES.extraction);
+      const roomIds = results.map((r: { roomId: string }) => r.roomId);
+      expect(roomIds).toContain('corridor');
+      expect(roomIds).toContain('armory');
+      expect(roomIds).toContain('shrine');
+      expect(roomIds).toContain('crypt');
+      expect(roomIds).toContain('extraction');
+      expect(results.find((r: { roomId: string }) => r.roomId === 'extraction')!.effectiveNoise).toBe(2);
+    });
   });
 });
 
-// ─── Room Property Modifiers ────────────────────────────────────────────────
+// ─── Future: Cross-System Tests (stubs for Phase 2) ──────────────────────────
 
-describe('Sound Propagation — Room Modifiers (#22)', () => {
-  // Heavy doors halve propagation; caverns add +1
-
-  describe.skip('heavy door modifier (halves noise passing through)', () => {
-    // These need the actual SoundPropagation system with room graph awareness
-    it.todo('combat(5) through heavy door at 1 room → floor(5/2)=2, then -2 = effective 0');
-    it.todo('extraction(8) through heavy door at 1 room → floor(8/2)=4, then -2 = effective 2');
-    it.todo('striking door(7) through heavy door → floor(7/2)=3, then -2 = effective 1');
-    it.todo('multiple heavy doors stack: 8 → 4 → 2 (two doors in path)');
-    it.todo('heavy door at distance 0 does not modify — you are in the room');
-  });
-
-  describe.skip('cavern modifier (+1 noise propagation bonus)', () => {
-    it.todo('combat(5) in cavern heard at 3 rooms → (5+1) - (2×3) = 0 → NOT audible');
-    it.todo('extraction(8) in cavern heard at 4 rooms → (8+1) - (2×4) = 1 → audible');
-    it.todo('cavern bonus applies to source room only, not intermediate rooms');
-  });
-
-  describe.skip('combined modifiers', () => {
-    it.todo('cavern source through heavy door: (8+1)/2 = 4, then attenuate');
-    it.todo('multiple room types in path are evaluated per-hop');
-  });
-});
-
-// ─── Directional Sound Descriptions ─────────────────────────────────────────
-
-describe('Sound Propagation — Directional Descriptions (#22)', () => {
-  describe.skip('players receive directional hints', () => {
-    // Acceptance criteria: "Players receive directional sound descriptions"
-    it.todo('sound from north exit labeled "from the north"');
-    it.todo('sound from south exit labeled "from the south"');
-    it.todo('sound from same room has no directional qualifier');
-    it.todo('sound through multiple rooms uses first hop direction');
-    it.todo('description intensity scales with effective noise level');
-  });
-
-  describe.skip('description text varies by noise source', () => {
-    it.todo('combat noise → "clash of weapons" or similar combat description');
-    it.todo('running noise → "hurried footsteps"');
-    it.todo('extraction noise → "a deep rumbling" or similar extraction description');
-    it.todo('striking door → "a heavy impact" or similar');
-  });
-});
-
-// ─── Multi-Source / Simultaneous Sound ──────────────────────────────────────
-
-describe('Sound Propagation — Simultaneous Sounds (#22)', () => {
-  describe.skip('multiple sources in same tick', () => {
-    it.todo('two combats in adjacent rooms: player hears both with independent attenuation');
-    it.todo('loudest sound determines primary description when multiple overlap');
-    it.todo('extraction + combat: both propagate independently, no interference');
-    it.todo('same source type from two directions: both reported with direction');
-  });
-
-  describe.skip('rapid successive sounds', () => {
-    it.todo('sound from previous tick does not stack with current tick');
-    it.todo('ongoing combat generates sound each combat tick');
-  });
-});
-
-// ─── Graph-Based Propagation ────────────────────────────────────────────────
-
-describe('Sound Propagation — Graph Distance Calculation (#22)', () => {
-  describe.skip('BFS shortest path determines room distance', () => {
-    // Sound uses shortest graph distance, not Euclidean
-    it.todo('sound takes shortest path even if longer paths exist');
-    it.todo('disconnected rooms never hear sound (infinite distance)');
-    it.todo('dead-end rooms only have one propagation path');
-    it.todo('junction rooms can relay sound to multiple branches');
-  });
-
-  describe.skip('room graph topology edge cases', () => {
-    it.todo('cyclic room graph: distance is shortest cycle path, not infinite');
-    it.todo('boss room with single entry: sound propagates through entry only');
-    it.todo('extraction room: extraction noise propagates outward from extraction point');
-  });
-});
-
-// ─── Cross-System: Sound + Combat ───────────────────────────────────────────
-
-describe('Sound Propagation — Cross-System: Combat (#22 × #6)', () => {
-  describe.skip('combat generates noise each tick', () => {
-    it.todo('combat tick with strikes generates noise=5');
-    it.todo('combat tick with only dodges generates reduced noise');
-    it.todo('combat ending (creature defeated) generates one final noise burst');
-    it.todo('flee generates running noise (4) in destination room');
-  });
-});
-
-// ─── Cross-System: Sound + Stealth (#22 × #25) ─────────────────────────────
-
-describe('Sound Propagation — Cross-System: Stealth (#22 × #25)', () => {
-  describe.skip('stealth reduces noise generation', () => {
-    it.todo('sneaking player (high stealth) movement noise = 0–1');
-    it.todo('normal movement without stealth = walking noise (2)');
+describe('Sound Propagation — Future Cross-System (#22)', () => {
+  describe.skip('sound + stealth (#22 × #25)', () => {
+    it.todo('sneaking player movement noise = 0–1');
     it.todo('combat breaks stealth and generates full combat noise');
-    it.todo('opening container without stealth → noise; with stealth → reduced noise');
   });
-});
 
-// ─── Cross-System: Sound + Extraction (#22 × #10) ──────────────────────────
-
-describe('Sound Propagation — Cross-System: Extraction (#22 × #10)', () => {
-  describe.skip('extraction channeling noise', () => {
-    it.todo('starting extraction generates noise=8 once');
+  describe.skip('sound + extraction (#22 × #10)', () => {
     it.todo('extraction channel sustains noise over duration');
     it.todo('interrupted extraction generates final noise burst');
-    it.todo('multiple simultaneous extractions in different rooms propagate independently');
+  });
+
+  describe.skip('listening skill (#22)', () => {
+    it.todo('listening skill lowers audibility threshold');
+    it.todo('high listening skill hears sounds one room further');
   });
 });

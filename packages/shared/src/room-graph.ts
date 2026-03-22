@@ -47,6 +47,11 @@ export interface LootContainer {
   items: string[]; // item IDs (populated at generation time)
 }
 
+// ─── Room Properties (GDD §12 — Sound Propagation Modifiers) ─────────────────
+
+/** Properties that affect sound propagation through a room. */
+export type RoomProperty = 'heavy_door' | 'cavern' | 'water';
+
 // ─── Room ────────────────────────────────────────────────────────────────────
 
 export interface Room {
@@ -57,6 +62,8 @@ export interface Room {
   exits: Map<Direction, string>; // direction → roomId
   items: LootContainer[];
   hazards: HazardPlaceholder[];
+  /** Optional properties affecting sound propagation (GDD §12). */
+  properties?: RoomProperty[];
 }
 
 // ─── Room Graph ──────────────────────────────────────────────────────────────
@@ -81,6 +88,7 @@ export interface SerializedRoom {
   exits: Record<string, string>;
   items: LootContainer[];
   hazards: HazardPlaceholder[];
+  properties?: RoomProperty[];
 }
 
 export interface SerializedRoomGraph {
@@ -105,6 +113,7 @@ export function serializeRoomGraph(graph: RoomGraph): SerializedRoomGraph {
       exits: Object.fromEntries(room.exits),
       items: room.items,
       hazards: room.hazards,
+      ...(room.properties?.length ? { properties: room.properties } : {}),
     });
   }
   return {
@@ -130,6 +139,7 @@ export function deserializeRoomGraph(data: SerializedRoomGraph): RoomGraph {
       exits: new Map(Object.entries(sr.exits)) as Map<Direction, string>,
       items: sr.items,
       hazards: sr.hazards,
+      ...(sr.properties?.length ? { properties: sr.properties } : {}),
     });
   }
   return {
