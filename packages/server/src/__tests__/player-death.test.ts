@@ -15,7 +15,7 @@ import type { CombatStats } from '../combat/CombatState.js';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { MessageTypes } from '@ellmud/shared';
 import type { ExtractionMessage } from '@ellmud/shared';
-import { bootTestServer, connectTestClient, wait, waitUntil } from './helpers/index.js';
+import { bootTestServer, wait } from './helpers/index.js';
 
 // ─── Unit Tests: Combat System Defeat Detection ─────────────────────────────
 
