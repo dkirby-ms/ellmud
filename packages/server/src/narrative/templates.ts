@@ -8,6 +8,7 @@
  */
 
 import type { NarrationContext, LLMNarrationType } from '@ellmud/shared';
+import { renderSensoryTemplate } from './sensory-templates.js';
 
 // ─── Atmospheric Fragments ───────────────────────────────────────────────────
 
@@ -270,6 +271,9 @@ const RENDERERS: Record<LLMNarrationType, (ctx: NarrationContext) => string> = {
   combat_round: renderCombatRound,
   movement: renderMovement,
   event: renderEvent,
+  sound_narration: (ctx) => renderSensoryTemplate('sound', 'nearby', ctx),
+  trace_narration: (ctx) => renderSensoryTemplate('trace', 'medium', ctx),
+  awareness_narration: (ctx) => renderSensoryTemplate('awareness', 'partial', ctx),
 };
 
 /**

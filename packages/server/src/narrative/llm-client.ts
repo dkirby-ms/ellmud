@@ -127,6 +127,45 @@ ABSOLUTE RULES:
 - Respect the tone and verbosity directives exactly.
 - Do not resolve mechanics or suggest actions. You describe; you do not decide.`;
 
+/**
+ * System prompt for sound narration.
+ * Emphasizes direction, quality, and atmospheric rendering of distant sounds.
+ */
+const SOUND_SYSTEM_PROMPT = `You are the auditory sense of a dark fantasy MUD. Describe sounds players hear from other locations.
+
+ABSOLUTE RULES:
+- Describe sound direction clearly ("from the north", "somewhere east")
+- Match sound quality to source type: combat = "clash of metal", running = "hurried footsteps"
+- Express intensity through language, never mechanically ("faint" vs "piercing" vs "barely perceptible")
+- Never use mechanical values (noise level, decibel, etc.)
+- Keep descriptions to 1-2 sentences max.`;
+
+/**
+ * System prompt for trace narration.
+ * Emphasizes skill-based detail progression and environmental storytelling.
+ */
+const TRACE_SYSTEM_PROMPT = `You are the tracking sense of a dark fantasy MUD. Describe environmental traces left by movement, combat, and interaction.
+
+ABSOLUTE RULES:
+- Scale detail to the player's tracking skill: low = vague ("footprints lead east"), high = detailed ("heavy boots, warrior bearing, passed 2 min ago")
+- Include age when evident: "fresh blood", "old bootprints", "fading traces"
+- Never name individuals. Describe only gear, bearing, and evidence
+- Never use mechanical skill values or percentages
+- Keep descriptions to 2-3 sentences max.`;
+
+/**
+ * System prompt for awareness/stealth narration.
+ * Emphasizes detection levels and equipment-based identification.
+ */
+const AWARENESS_SYSTEM_PROMPT = `You are the danger sense of a dark fantasy MUD. Describe how players detect the presence of other entities (players, creatures).
+
+ABSOLUTE RULES:
+- Match perception to stealth vs awareness: vague senses = "you sense presence", clear = equipment descriptions
+- NEVER use player names. Describe only visible equipment ("battered chainmail", "twin daggers")
+- Scale from: no detection (no message) → vague ("shadow shifts") → partial (equipment hint) → full (detailed appearance)
+- Never use mechanical skill values
+- Keep descriptions to 1-2 sentences max.`;
+
 function buildUserPrompt(context: NarrationContext): string {
   return `Narration type: ${context.narration_type}
 Tone: ${context.narrative_directives.tone}
@@ -134,17 +173,27 @@ Verbosity: ${context.narrative_directives.verbosity}
 
 Game state:
 ${JSON.stringify({
-    room: context.room,
-    player: {
-      condition: context.player.hp_pct > 0.6 ? 'healthy' : context.player.hp_pct > 0.3 ? 'wounded' : 'critical',
-      statuses: context.player.statuses,
-      stance: context.player.stance,
-      visited_before: context.player.visited_before,
-    },
-    recent_events: context.recent_events.map((e) => e.summary),
-  }, null, 2)}
+  room: context.room,
+  player: {
+    condition: context.player.hp_pct > 0.6 ? 'healthy' : context.player.hp_pct > 0.3 ? 'wounded' : 'critical',
+    statuses: context.player.statuses,
+    stance: context.player.stance,
+    visited_before: context.player.visited_before,
+  },
+  recent_events: context.recent_events.map((e) => e.summary),
+}, null, 2)}
 
 Generate atmospheric prose for this ${context.narration_type.replace(/_/g, ' ')}.`;
+}
+
+/**
+ * Select the appropriate system prompt based on narration type.
+ */
+function getSystemPrompt(narrationtype: string): string {
+  if (narrationtype === 'sound_narration') return SOUND_SYSTEM_PROMPT;
+  if (narrationtype === 'trace_narration') return TRACE_SYSTEM_PROMPT;
+  if (narrationtype === 'awareness_narration') return AWARENESS_SYSTEM_PROMPT;
+  return SYSTEM_PROMPT;
 }
 
 // ─── Default Transport (Azure AI Foundry) ────────────────────────────────────
@@ -203,7 +252,7 @@ export class LLMClient {
   ): Promise<{ text: string | null; rejected: boolean; reason?: string }> {
     const request: LLMRequest = {
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: getSystemPrompt(context.narration_type) },
         { role: 'user', content: buildUserPrompt(context) },
       ],
       max_tokens: modelConfig.max_tokens,
