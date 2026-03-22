@@ -14,11 +14,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { MessageTypes } from '@ellmud/shared';
-import type { RoomSwitchMessage, NarrateMessage } from '@ellmud/shared';
 import {
   bootTestServer,
   connectTestClient,
-  connectToExistingRoom,
   wait,
   waitUntil,
   makeCommand,
@@ -330,7 +328,7 @@ describe('Room Switching — Edge Cases (Integration)', () => {
 
   // ✅ PASS NOW — player disconnect during extraction → cleanup
   it('player disconnects mid-extraction → no orphaned extraction channel', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', { useTestGraph: true });
+    const { client } = await connectTestClient(colyseus, 'shard', { useTestGraph: true });
 
     // Navigate to extraction room
     client.send(MessageTypes.COMMAND, makeCommand('go', 'north'));
