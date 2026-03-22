@@ -155,6 +155,9 @@ export default function Refuge() {
 
         addMessage("The world shifts around you...", "system");
 
+        // Clear stale messages so the target page starts fresh
+        dispatch({ type: "CLEAR_MESSAGES" });
+
         // Leave refuge room — the target page will establish its own connection
         roomRef.current?.leave();
         roomRef.current = null;

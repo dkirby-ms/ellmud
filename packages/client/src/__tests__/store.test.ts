@@ -153,6 +153,26 @@ describe('appReducer', () => {
     expect(state.inventory).toEqual(items);
   });
 
+  it('CLEAR_MESSAGES empties messages array', () => {
+    let state = initialState;
+    for (let i = 0; i < 5; i++) {
+      state = appReducer(state, { type: 'ADD_MESSAGE', message: makeMsg(`m${i}`) });
+    }
+    expect(state.messages).toHaveLength(5);
+    state = appReducer(state, { type: 'CLEAR_MESSAGES' });
+    expect(state.messages).toHaveLength(0);
+    expect(state.messages).toEqual([]);
+  });
+
+  it('CLEAR_MESSAGES preserves other state', () => {
+    let state = appReducer(initialState, { type: 'LOGIN_SUCCESS', token: 'tok', playerId: 'p1' });
+    state = appReducer(state, { type: 'ADD_MESSAGE', message: makeMsg('m1') });
+    state = appReducer(state, { type: 'CLEAR_MESSAGES' });
+    expect(state.messages).toHaveLength(0);
+    expect(state.authenticated).toBe(true);
+    expect(state.token).toBe('tok');
+  });
+
   it('SET_CONNECTION_STATUS updates connectionStatus', () => {
     const state = appReducer(initialState, { type: 'SET_CONNECTION_STATUS', status: 'connecting' });
     expect(state.connectionStatus).toBe('connecting');
