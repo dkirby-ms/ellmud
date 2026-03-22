@@ -190,7 +190,11 @@ export function useShardConnection(): UseShardConnectionResult {
         if (msg.target === 'refuge') {
           dispatch({ type: 'SET_SHARD_STATE', state: null as unknown as import('@ellmud/shared').ShardState });
           dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
-          setExtraction({ status: 'success', progress: 100, narration: msg.reason });
+          setExtraction((prev) => ({
+            status: 'success',
+            progress: 100,
+            narration: prev.narration ?? msg.reason,
+          }));
         }
 
         switchRoom(currentRoom, msg.target, state.token, handlers, msg.options)
@@ -256,6 +260,12 @@ export function useShardConnection(): UseShardConnectionResult {
         case 'completed':
           setExtraction({ status: 'success', progress: 100, narration: msg.narration });
           addMessage(msg.narration, 'system');
+          if (!switchingRef.current) {
+            handlers.onRoomSwitch({
+              target: 'refuge',
+              reason: 'extraction_complete',
+            });
+          }
           break;
         case 'interrupted':
           setExtraction(INITIAL_EXTRACTION);

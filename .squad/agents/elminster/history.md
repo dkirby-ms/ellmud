@@ -263,3 +263,12 @@ All four PRs merge cleanly to dev:
 - **PR #92 — Extraction Screen (Drizzt, #72):** ⚠️ APPROVED WITH NOTES. Discriminated union props pattern for 3 phases (extracting/success/failure). Shared extraction-types.ts. 52 tests. Proper accessibility. 1 minor hex: #d4b35a hover. Minor: `formatTime()` duplicated across ExtractionSuccess and ExtractionFailure — should extract to shared util.
 - **PR #93 — Chat & Social Panel (Volo, #73):** ✅ APPROVED. ChatPanel with channel filtering + @mention highlighting. PlayersNearby with faction icons. TradeRequest with auto-decline timer. 78 tests. Zero hardcoded hex. Clean accessibility. Good edge case handling (empty states, char counter warning).
 - **Cross-PR assessment:** PR90 is the only blocker. The CSS variable violation is extensive (~23 instances) and directly contradicts the team's established design token policy. Fix is mechanical (find-replace hex → var()) but some new :root variables are needed. All other PRs meet the quality bar.
+
+### 2026-03-22: PR #104 Review — UX Batch 2 Combat/Sidebar Polish
+- **Action:** Code review of PR #104 (Volo implementation, Drizzt test regex fix, Minsc anticipatory tests). 7 files, +705/-13 lines.
+- **Verdict:** ✅ APPROVED. All 10 UX gaps correctly addressed. 101/101 client tests pass. Zero regressions.
+- **Regex fix validated:** `^\d*\s*${label}$` with `i` flag correctly anchors to prevent substring matching (e.g., "Strike" no longer matches "Heavy Strike"). Safe for all 8 current action labels.
+- **Quality notes:** healthState DRY pattern (one computation, two render sites). Theme tokens used consistently. Data attributes enable precise test targeting. State extensions minimal and well-typed.
+- **Minor nits (non-blocking):** Unused `DIRECTIONS` const (dead code), stability bar color logic duplicates `getCollapseColor()` thresholds (DRY opportunity), standalone Skill test uses unanchored regex.
+- **Key files:** `packages/client/src/pages/ShardExploration.tsx`, `packages/client/src/store.ts`, `packages/client/src/__tests__/ux-batch2-combat-sidebar.test.tsx`
+- **Decision output:** `.squad/decisions/inbox/elminster-pr104-review.md`

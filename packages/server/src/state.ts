@@ -11,6 +11,7 @@ import { Schema, defineTypes } from '@colyseus/schema';
 export class ShardState extends Schema {
   shardId: string = '';
   biome: string = 'flooded_crypt';
+  tier: number = 1;
   lifecycle: string = 'seeding';
   stability: number = 1.0;
   collapseTimer: number = 0;
@@ -21,6 +22,7 @@ export class ShardState extends Schema {
 defineTypes(ShardState, {
   shardId: 'string',
   biome: 'string',
+  tier: 'number',
   lifecycle: 'string',
   stability: 'number',
   collapseTimer: 'number',

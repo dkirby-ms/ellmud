@@ -112,6 +112,7 @@ The Refuge is your safe hub between shard runs. Here you can:
 > stash             — View your persistent stash (weight & items)
 > store sword       — Move an item from inventory to stash
 > shardboard        — See available shard entries
+> enter <shard-id>  — Enter an open shard listed on the shardboard
 > look              — Survey the Refuge
 ```
 
@@ -121,9 +122,11 @@ Your **stash** persists between runs. Default capacity: 200 weight units.
 
 The Shardboard shows available shard entries. Each shard has:
 
+- **Shard ID** — The identifier used with `enter <shard-id>`
 - **Biome** — The environment type (Flooded Crypt, Shattered Bastion, etc.)
 - **Tier** — Difficulty level (Tier 1 is the easiest)
 - **Modifiers** — Special conditions (darkness, bountiful loot, etc.)
+- **Lifecycle** — Seeding, Open, Active, Destabilising, or Collapse
 
 ## Items & Gear
 

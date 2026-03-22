@@ -123,9 +123,9 @@ describe('Message Type Shapes', () => {
     const msgWithOptions: RoomSwitchMessage = {
       target: 'refuge',
       reason: 'extraction_complete',
-      options: { biome: 'flooded_crypt' },
+      options: { biome: 'flooded_crypt', roomId: 'room-123' },
     };
-    expect(msgWithOptions.options).toEqual({ biome: 'flooded_crypt' });
+    expect(msgWithOptions.options).toEqual({ biome: 'flooded_crypt', roomId: 'room-123' });
   });
 });
 

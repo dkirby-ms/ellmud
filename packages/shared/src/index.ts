@@ -229,10 +229,19 @@ export type { ShardKeyType, ShardCardData } from './shard-card.js';
 
 // ─── Room Switching (GDD §3 — Refuge ↔ Shard) ────────────────────────────────
 
+/** Options for joining a target room. */
+export interface RoomSwitchOptions {
+  /** Join a specific room instance by ID (used for shard selection). */
+  roomId?: string;
+  /** Optional shard metadata for UI or future matchmaking. */
+  biome?: BiomeType;
+  tier?: ShardTier;
+}
+
 /** Server → Client: Instruct client to switch rooms. */
 export interface RoomSwitchMessage {
   target: string;       // Colyseus room name to join (e.g. 'shard', 'refuge')
-  options?: Record<string, unknown>; // Additional join options for the target room
+  options?: RoomSwitchOptions; // Additional join options for the target room
   reason: string;       // Human-readable reason for the switch
 }
 
