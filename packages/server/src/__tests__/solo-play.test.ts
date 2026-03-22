@@ -50,7 +50,8 @@ describe('Solo Play — Player Limit Enforcement', () => {
     }
 
     expect(joinError).not.toBeNull();
-    expect(joinError!.message).toContain('full');
+    // Colyseus auto-locks rooms at maxClients, so rejection may say "locked" or "full"
+    expect(joinError!.message).toMatch(/full|locked/i);
 
     await client1.leave();
   });
@@ -77,7 +78,8 @@ describe('Solo Play — Player Limit Enforcement', () => {
     }
 
     expect(joinError).not.toBeNull();
-    expect(joinError!.message).toContain('full');
+    // Colyseus auto-locks rooms at maxClients, so rejection may say "locked" or "full"
+    expect(joinError!.message).toMatch(/full|locked/i);
 
     await client1.leave();
     await client2.leave();
