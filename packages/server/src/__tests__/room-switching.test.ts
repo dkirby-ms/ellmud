@@ -263,7 +263,11 @@ describe('Room Switching — Edge Cases (Integration)', () => {
 
   // ✅ PASS NOW — shard full rejects join at Colyseus level
   it('shard full (maxPlayers) → second player rejected', async () => {
-    // Default: MAX_PLAYERS_PER_SHARD=1
+    // Force solo-play mode for this test
+    process.env['MAX_PLAYERS_PER_SHARD'] = '1';
+    const { resetConfig } = await import('../config.js');
+    resetConfig();
+
     const room = await colyseus.createRoom('shard', { useTestGraph: true });
     const client1 = await colyseus.connectTo(room);
     await wait(500);
@@ -283,6 +287,10 @@ describe('Room Switching — Edge Cases (Integration)', () => {
     ).toBe(true);
 
     await client1.leave();
+
+    // Restore default
+    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    resetConfig();
   });
 
   // 🔮 ANTICIPATORY — Phase 2: enter specific shard by ID when that shard is full
