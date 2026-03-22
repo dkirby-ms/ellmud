@@ -458,7 +458,7 @@ describe('Gap #21: Skill button in combat quickbar', () => {
     // All 8 expected actions: Strike, Heavy Strike, Dodge, Block, Use Item, Skill, Flee, Observe
     const expectedActions = ['Strike', 'Heavy Strike', 'Dodge', 'Block', 'Use Item', 'Skill', 'Flee', 'Observe'];
     for (const label of expectedActions) {
-      expect(screen.getByRole('button', { name: new RegExp(label, 'i') })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: new RegExp(`^\\d*\\s*${label}$`, 'i') })).toBeInTheDocument();
     }
   });
 
