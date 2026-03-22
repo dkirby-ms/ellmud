@@ -62,10 +62,10 @@ export function useShardConnection(): UseShardConnectionResult {
   const soundCueCounterRef = useRef(0);
   const [extraction, setExtraction] = useState<ExtractionState>(INITIAL_EXTRACTION);
 
-  const addMessage = useCallback((text: string, type: TerminalMessage['type']) => {
+  const addMessage = useCallback((text: string, type: TerminalMessage['type'], combatSubtype?: TerminalMessage['combatSubtype']) => {
     dispatch({
       type: 'ADD_MESSAGE',
-      message: { id: nextMsgId(), text, type, timestamp: Date.now() },
+      message: { id: nextMsgId(), text, type, timestamp: Date.now(), combatSubtype },
     });
   }, [dispatch]);
 
@@ -109,7 +109,24 @@ export function useShardConnection(): UseShardConnectionResult {
     const handlers: MessageHandlers = {
       onNarrate: (msg: NarrateMessage) => {
         if (disposed) return;
-        addMessage(msg.text, msg.type);
+        let combatSubtype: TerminalMessage['combatSubtype'];
+        if (msg.type === 'combat' && msg.combatEvent) {
+          const { eventType, actorId, targetId } = msg.combatEvent;
+          if (eventType === 'strike') {
+            combatSubtype = actorId === state.playerId ? 'hit_dealt'
+              : targetId === state.playerId ? 'hit_taken'
+              : 'hit_dealt';
+          } else if (eventType === 'dodge') {
+            combatSubtype = 'dodge';
+          } else if (eventType === 'defeated') {
+            combatSubtype = 'defeated';
+          } else if (eventType === 'flee') {
+            combatSubtype = 'flee';
+          } else if (eventType === 'combat_end') {
+            combatSubtype = 'combat_end';
+          }
+        }
+        addMessage(msg.text, msg.type, combatSubtype);
         if (msg.type === 'sound') {
           dispatch({
             type: 'ADD_SOUND_CUE',

@@ -30,6 +30,12 @@ export interface NarrateMessage {
   text: string;
   type: NarrationType;
   timestamp: number;
+  /** Optional combat metadata for colored message rendering. */
+  combatEvent?: {
+    eventType: 'strike' | 'dodge' | 'flee' | 'defeated' | 'combat_end';
+    actorId?: string;
+    targetId?: string;
+  };
 }
 
 /** Server → Client: Room header metadata (displayed separately from prose). */
