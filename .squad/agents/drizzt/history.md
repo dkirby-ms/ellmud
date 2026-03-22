@@ -517,3 +517,17 @@ The `extraction_state` handler was only registered after the initial `connect()`
 - Added 5 new tests (3 unit, 2 integration), all 970 tests pass
 
 **Drizzt takeaway:** The creature-only filter on defeat events was a classic oversight — `startsWith('creature-')` was an implicit negative filter on all other entity types. When adding new entity types to any event handler, always check for the full set of possible actors. The `isPlayer` flag on Combatant is the canonical way to distinguish.
+
+### Message Overflow on Death Return — Fix (PR #113)
+**Task:** Fix bug where shard messages persisted into refuge after player death
+**Status:** ✅ Complete — PR #113 against dev
+
+**Root cause:** No `CLEAR_MESSAGES` action existed in the store. Messages accumulated across room transitions because only `LOGOUT` cleared them.
+
+**Changes:**
+1. **store.ts** — Added `CLEAR_MESSAGES` action to AppAction union + reducer case
+2. **useShardConnection.ts** — Dispatch `CLEAR_MESSAGES` in `onRoomSwitch` (shard→refuge) and `onReturnToRefuge` (reconnect bailout)
+3. **Refuge.tsx** — Dispatch `CLEAR_MESSAGES` in `onRoomSwitch` (refuge→shard) for fresh start
+4. **store.test.ts** — 2 new tests covering CLEAR_MESSAGES behavior
+
+**Drizzt takeaway:** Global state that accumulates (messages, sound cues) must be explicitly cleared on context transitions. In a room-based architecture, every `ROOM_SWITCH` handler should audit which accumulated state needs resetting. Sound cues will likely need the same treatment eventually.
