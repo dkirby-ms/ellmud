@@ -14,7 +14,7 @@ export interface TerminalMessage {
   text: string;
   type: NarrationType | 'header' | 'combat';
   timestamp: number;
-  combatSubtype?: 'hit_dealt' | 'hit_taken' | 'dodge';
+  combatSubtype?: 'hit_dealt' | 'hit_taken' | 'dodge' | 'defeated' | 'flee' | 'combat_end';
 }
 
 // ─── Sidebar / Combat UI types ───────────────────────────────────────────────

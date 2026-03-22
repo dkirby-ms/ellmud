@@ -613,11 +613,15 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private deliverCombatResults(tickResult: TickResult): void {
     // Send combat event narrations to all clients in relevant rooms
     for (const event of tickResult.events) {
-      // Broadcast combat narrations to all connected clients
       this.broadcast(MessageTypes.NARRATE, {
         text: event.narration,
         type: 'combat',
         timestamp: Date.now(),
+        combatEvent: {
+          eventType: event.type,
+          actorId: event.actorId,
+          targetId: event.targetId,
+        },
       } satisfies NarrateMessage);
     }
 

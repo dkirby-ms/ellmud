@@ -300,6 +300,9 @@ export default function ShardExploration() {
                       msg.combatSubtype === 'hit_dealt' ? 'text-accent-gold'
                       : msg.combatSubtype === 'hit_taken' ? 'text-danger'
                       : msg.combatSubtype === 'dodge' ? 'text-text-secondary'
+                      : msg.combatSubtype === 'defeated' ? 'text-danger font-bold'
+                      : msg.combatSubtype === 'flee' ? 'text-warning'
+                      : msg.combatSubtype === 'combat_end' ? 'text-interactive italic'
                       : 'text-text-primary'
                     }`}
                     style={{ lineHeight: 1.7, fontSize: "1rem" }}
