@@ -124,7 +124,8 @@ export type AppAction =
   | { type: 'SET_ENEMY_STATUS'; status: EnemyStatus | null }
   | { type: 'SET_PENDING_COMBAT_ACTION'; action: CombatAction | null }
   | { type: 'SET_COLLAPSE_TIMER'; timer: number | null }
-  | { type: 'SET_INVENTORY'; items: InventoryItem[] };
+  | { type: 'SET_INVENTORY'; items: InventoryItem[] }
+  | { type: 'CLEAR_MESSAGES' };
 
 const MAX_MESSAGES = 500;
 
@@ -169,6 +170,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, collapseTimer: action.timer };
     case 'SET_INVENTORY':
       return { ...state, inventory: action.items };
+    case 'CLEAR_MESSAGES':
+      return { ...state, messages: [] };
     default:
       return state;
   }
