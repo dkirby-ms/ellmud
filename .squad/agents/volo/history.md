@@ -256,5 +256,10 @@ Wave 7 will deliver final 3 client UI issues. Shardboard will integrate with Ref
 - **Item 1 — Admin route auth guards:** Wrapped all `/admin/*` routes with `ProtectedRoute` layout route in `routes.ts`, mirroring the existing game-route pattern. Unauthenticated users now get redirected to login for admin pages.
 - **Item 2 — Token validation on page load:** Added two-layer token validation: (a) global 401 interceptor in `api.ts` that fires `onAuthError` callback on any 401 response, and (b) `validateToken()` probe that hits `GET /auth/me` on mount. App.tsx registers the 401 handler to dispatch LOGOUT. Server doesn't have `/auth/me` yet — the probe is optimistic (non-401 = keep token), and the 401 interceptor catches stale tokens on the first real API call.
 - **Item 3 — Error boundaries:** Created `ErrorFallback` component using `useRouteError` from React Router. Applied via `ErrorBoundary` prop on both game and admin route groups. Uses Ellmud dark-fantasy palette (#0A0B0F bg, #C9A84C gold heading, #3A7D7B teal link). Shows error message + "Return to Refuge" link.
-- **Key pattern:** Tokens are opaque UUIDs (not JWTs), so client-side expiry checking isn't possible. Server-side `/auth/me` endpoint is the right follow-up to make the mount-time validation actually effective.
-- **Files modified:** `routes.ts`, `App.tsx`, `services/api.ts`, new `components/ErrorFallback.tsx`
+  - **Key pattern:** Tokens are opaque UUIDs (not JWTs), so client-side expiry checking isn't possible. Server-side `/auth/me` endpoint is the right follow-up to make the mount-time validation actually effective.
+  - **Files modified:** `routes.ts`, `App.tsx`, `services/api.ts`, new `components/ErrorFallback.tsx`
+
+### 2026-03-21: Theme Token Migration Batch 1
+- Migrated hardcoded hex values in core client pages/components to Tailwind theme tokens from `theme.css` (`@theme inline`).
+- Replaced inline `fontFamily` styles with `font-serif`, `font-sans`, and `font-mono` utilities for consistent typography.
+- Swapped dynamic tier/status colors to CSS variable tokens to keep runtime styles on the same palette.

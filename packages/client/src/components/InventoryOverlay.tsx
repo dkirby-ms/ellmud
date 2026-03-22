@@ -44,17 +44,17 @@ const carriedItems: Item[] = [
 const getTierColor = (tier: string) => {
   switch (tier) {
     case "common":
-      return "#E8E0D0";
+      return "var(--color-tier-common)";
     case "sturdy":
-      return "#6B8E6B";
+      return "var(--color-tier-sturdy)";
     case "refined":
-      return "#4682B4";
+      return "var(--color-tier-refined)";
     case "masterwork":
-      return "#7B4FA0";
+      return "var(--color-tier-masterwork)";
     case "anomalous":
-      return "#DAA520";
+      return "var(--color-tier-anomalous)";
     default:
-      return "#E8E0D0";
+      return "var(--color-tier-common)";
   }
 };
 
@@ -73,18 +73,18 @@ export default function InventoryOverlay({
       ></div>
 
       {/* Panel */}
-      <div className="relative w-[60%] bg-[#12131A] shadow-2xl overflow-y-auto">
+      <div className="relative w-[60%] bg-bg-panel shadow-2xl overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-[#12131A] border-b border-[#2A2B35] p-6 flex items-center justify-between z-10">
+        <div className="sticky top-0 bg-bg-panel border-b border-border-muted p-6 flex items-center justify-between z-10">
           <h2
-            className="text-[#C9A84C]"
-            style={{ fontFamily: "var(--font-serif)", fontSize: "1.5rem" }}
+            className="text-accent-gold font-serif"
+            style={{ fontSize: "1.5rem" }}
           >
             Inventory
           </h2>
           <button
             onClick={onClose}
-            className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors"
+            className="text-text-secondary hover:text-accent-gold transition-colors"
           >
             <X className="w-6 h-6" />
           </button>
@@ -94,8 +94,7 @@ export default function InventoryOverlay({
           {/* Carried Items */}
           <div>
             <h3
-              className="text-[#8A8B95] text-sm mb-4"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-secondary text-sm mb-4 font-sans"
             >
               Carried Items
             </h3>
@@ -103,18 +102,17 @@ export default function InventoryOverlay({
               {carriedItems.map((item) => (
                 <div
                   key={item.id}
-                  className="bg-[#1C1D27] border rounded-lg p-4 hover:border-[#C9A84C] transition-colors cursor-pointer"
+                  className="bg-bg-elevated border rounded-lg p-4 hover:border-accent-gold transition-colors cursor-pointer"
                   style={{
-                    borderColor: getTierColor(item.tier) + "40",
+                    borderColor: `color-mix(in srgb, ${getTierColor(item.tier)} 25%, transparent)`,
                     borderLeftWidth: "4px",
                   }}
                 >
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex-1">
                       <h4
-                        className="mb-1"
+                        className="mb-1 font-serif"
                         style={{
-                          fontFamily: "var(--font-serif)",
                           fontSize: "1.125rem",
                           color: getTierColor(item.tier),
                         }}
@@ -122,16 +120,10 @@ export default function InventoryOverlay({
                         {item.name}
                       </h4>
                       <div className="flex items-center gap-3">
-                        <span
-                          className="text-[#8A8B95] text-sm"
-                          style={{ fontFamily: "var(--font-sans)" }}
-                        >
+                        <span className="text-text-secondary text-sm font-sans">
                           {item.type}
                         </span>
-                        <span
-                          className="flex items-center gap-1 text-[#8A8B95] text-sm"
-                          style={{ fontFamily: "var(--font-sans)" }}
-                        >
+                        <span className="flex items-center gap-1 text-text-secondary text-sm font-sans">
                           <Weight className="w-3 h-3" />
                           {item.weight} units
                         </span>
@@ -142,29 +134,27 @@ export default function InventoryOverlay({
                   <div className="mb-3">
                     <div className="flex justify-between mb-1">
                       <span
-                        className="text-[#4A4B55] text-xs"
-                        style={{ fontFamily: "var(--font-sans)" }}
+                        className="text-text-disabled text-xs font-sans"
                       >
                         Durability
                       </span>
                       <span
-                        className="text-[#8A8B95] text-xs"
-                        style={{ fontFamily: "var(--font-mono)" }}
+                        className="text-text-secondary text-xs font-mono"
                       >
                         {item.durability}%
                       </span>
                     </div>
-                    <div className="h-1.5 bg-[#0A0B0F] rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-bg-primary rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-[#2D6B4F] to-[#B8860B]"
+                        className="h-full bg-gradient-to-r from-success to-warning"
                         style={{ width: `${item.durability}%` }}
                       ></div>
                     </div>
                   </div>
 
                   <p
-                    className="text-[#8A8B95] text-sm italic mb-3"
-                    style={{ fontFamily: "var(--font-serif)", lineHeight: 1.6 }}
+                    className="text-text-secondary text-sm italic mb-3 font-serif"
+                    style={{ lineHeight: 1.6 }}
                   >
                     {item.flavorText}
                   </p>
@@ -173,8 +163,7 @@ export default function InventoryOverlay({
                     {item.stats.map((stat) => (
                       <span
                         key={stat}
-                        className="px-2 py-1 bg-[#0A0B0F] text-[#8A8B95] text-xs rounded"
-                        style={{ fontFamily: "var(--font-mono)" }}
+                        className="px-2 py-1 bg-bg-primary text-text-secondary text-xs rounded font-mono"
                       >
                         {stat}
                       </span>
@@ -183,20 +172,17 @@ export default function InventoryOverlay({
 
                   <div className="flex gap-2">
                     <button
-                      className="px-3 py-1 text-[#3A7D7B] hover:bg-[#1C1D27] rounded text-sm transition-colors"
-                      style={{ fontFamily: "var(--font-sans)" }}
+                      className="px-3 py-1 text-interactive hover:bg-bg-elevated rounded text-sm transition-colors font-sans"
                     >
                       Equip
                     </button>
                     <button
-                      className="px-3 py-1 text-[#8A8B95] hover:bg-[#1C1D27] rounded text-sm transition-colors"
-                      style={{ fontFamily: "var(--font-sans)" }}
+                      className="px-3 py-1 text-text-secondary hover:bg-bg-elevated rounded text-sm transition-colors font-sans"
                     >
                       Use
                     </button>
                     <button
-                      className="px-3 py-1 text-[#8B2500] hover:bg-[#1C1D27] rounded text-sm transition-colors"
-                      style={{ fontFamily: "var(--font-sans)" }}
+                      className="px-3 py-1 text-danger hover:bg-bg-elevated rounded text-sm transition-colors font-sans"
                     >
                       Drop
                     </button>
@@ -209,42 +195,29 @@ export default function InventoryOverlay({
           {/* Equipped Gear */}
           <div>
             <h3
-              className="text-[#8A8B95] text-sm mb-4"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-secondary text-sm mb-4 font-sans"
             >
               Equipped Gear
             </h3>
             <div className="space-y-2">
-              <div className="flex items-center gap-3 p-3 bg-[#1C1D27] rounded border border-[#2A2B35]">
-                <Sword className="w-4 h-4 text-[#8A8B95]" />
+              <div className="flex items-center gap-3 p-3 bg-bg-elevated rounded border border-border-muted">
+                <Sword className="w-4 h-4 text-text-secondary" />
                 <div className="flex-1">
-                  <p
-                    className="text-[#4A4B55] text-xs mb-1"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
+                  <p className="text-text-disabled text-xs mb-1 font-sans">
                     Primary Weapon
                   </p>
-                  <p
-                    className="text-[#6B8E6B]"
-                    style={{ fontFamily: "var(--font-serif)" }}
-                  >
+                  <p className="text-tier-sturdy font-serif">
                     Corroded Halberd
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 p-3 bg-[#1C1D27] rounded border border-[#2A2B35]">
-                <Shield className="w-4 h-4 text-[#8A8B95]" />
+              <div className="flex items-center gap-3 p-3 bg-bg-elevated rounded border border-border-muted">
+                <Shield className="w-4 h-4 text-text-secondary" />
                 <div className="flex-1">
-                  <p
-                    className="text-[#4A4B55] text-xs mb-1"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
+                  <p className="text-text-disabled text-xs mb-1 font-sans">
                     Chest Armour
                   </p>
-                  <p
-                    className="text-[#4682B4]"
-                    style={{ fontFamily: "var(--font-serif)" }}
-                  >
+                  <p className="text-tier-refined font-serif">
                     Ironbound Chestplate
                   </p>
                 </div>
@@ -253,23 +226,17 @@ export default function InventoryOverlay({
           </div>
 
           {/* Weight Indicator */}
-          <div className="border-t border-[#2A2B35] pt-4">
+          <div className="border-t border-border-muted pt-4">
             <div className="flex justify-between mb-2">
-              <span
-                className="text-[#8A8B95] text-sm"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
+              <span className="text-text-secondary text-sm font-sans">
                 Carried Weight
               </span>
-              <span
-                className="text-[#E8E0D0]"
-                style={{ fontFamily: "var(--font-mono)" }}
-              >
+              <span className="text-text-primary font-mono">
                 14 / 20 units
               </span>
             </div>
-            <div className="h-2 bg-[#1C1D27] rounded-full overflow-hidden">
-              <div className="h-full w-[70%] bg-[#2D6B4F]"></div>
+            <div className="h-2 bg-bg-elevated rounded-full overflow-hidden">
+              <div className="h-full w-[70%] bg-success"></div>
             </div>
           </div>
         </div>

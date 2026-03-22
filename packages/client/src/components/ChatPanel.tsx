@@ -91,25 +91,25 @@ export default function ChatPanel({
       <div className="absolute inset-0 bg-black/60" onClick={onClose}></div>
 
       {/* Panel */}
-      <div className="relative w-[40%] bg-[#12131A] shadow-2xl flex flex-col">
+      <div className="relative w-[40%] bg-bg-panel shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="bg-[#12131A] border-b border-[#2A2B35] p-4 flex items-center justify-between">
+        <div className="bg-bg-panel border-b border-border-muted p-4 flex items-center justify-between">
           <h2
-            className="text-[#C9A84C]"
-            style={{ fontFamily: "var(--font-serif)", fontSize: "1.25rem" }}
+            className="text-accent-gold font-serif"
+            style={{ fontSize: "1.25rem" }}
           >
             Chat & Social
           </h2>
           <button
             onClick={onClose}
-            className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors"
+            className="text-text-secondary hover:text-accent-gold transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Chat Tabs */}
-        <div className="flex gap-1 px-4 border-b border-[#2A2B35]">
+        <div className="flex gap-1 px-4 border-b border-border-muted">
           {tabs
             .filter((tab) => tab.available)
             .map((tab) => (
@@ -118,18 +118,16 @@ export default function ChatPanel({
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-4 py-2 transition-colors ${
                   activeTab === tab.id
-                    ? "border-b-2 border-[#C9A84C] text-[#C9A84C]"
-                    : "text-[#8A8B95] hover:text-[#E8E0D0]"
-                }`}
-                style={{ fontFamily: "var(--font-sans)" }}
+                    ? "border-b-2 border-accent-gold text-accent-gold"
+                    : "text-text-secondary hover:text-text-primary"
+                } font-sans`}
               >
                 {tab.label}
               </button>
             ))}
           <button
             disabled
-            className="px-4 py-2 text-[#4A4B55] cursor-not-allowed"
-            style={{ fontFamily: "var(--font-sans)" }}
+            className="px-4 py-2 text-text-disabled cursor-not-allowed font-sans"
           >
             Squad
           </button>
@@ -137,29 +135,22 @@ export default function ChatPanel({
 
         {/* Players Nearby (if in shard) */}
         {context === "shard" && (
-          <div className="p-4 border-b border-[#2A2B35]">
+          <div className="p-4 border-b border-border-muted">
             <h3
-              className="text-[#8A8B95] text-xs mb-3"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-secondary text-xs mb-3 font-sans"
             >
               Nearby Presences
             </h3>
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-[#B8860B]"></div>
-                <span
-                  className="text-[#8A8B95] text-sm"
-                  style={{ fontFamily: "var(--font-serif)" }}
-                >
+                <div className="w-2 h-2 rounded-full bg-warning"></div>
+                <span className="text-text-secondary text-sm font-serif">
                   A figure in dark leather
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-[#B8860B]"></div>
-                <span
-                  className="text-[#8A8B95] text-sm"
-                  style={{ fontFamily: "var(--font-serif)" }}
-                >
+                <div className="w-2 h-2 rounded-full bg-warning"></div>
+                <span className="text-text-secondary text-sm font-serif">
                   A hooded figure
                 </span>
               </div>
@@ -172,10 +163,7 @@ export default function ChatPanel({
           {messages.map((msg) => (
             <div key={msg.id}>
               {msg.type === "system" && (
-                <p
-                  className="text-[#4A4B55] text-xs"
-                  style={{ fontFamily: "var(--font-mono)" }}
-                >
+                <p className="text-text-disabled text-xs font-mono">
                   {msg.message}
                 </p>
               )}
@@ -183,25 +171,18 @@ export default function ChatPanel({
               {msg.type === "player" && (
                 <div>
                   <p
-                    className="text-[#8A8B95] text-xs mb-1"
-                    style={{ fontFamily: "var(--font-sans)" }}
+                    className="text-text-secondary text-xs mb-1 font-sans"
                   >
                     {msg.speaker}
                   </p>
-                  <p
-                    className="text-[#E8E0D0] text-sm"
-                    style={{ fontFamily: "var(--font-serif)" }}
-                  >
+                  <p className="text-text-primary text-sm font-serif">
                     "{msg.message}"
                   </p>
                 </div>
               )}
 
               {msg.type === "emote" && (
-                <p
-                  className="text-[#8A8B95] text-sm italic"
-                  style={{ fontFamily: "var(--font-serif)" }}
-                >
+                <p className="text-text-secondary text-sm italic font-serif">
                   {msg.message}
                 </p>
               )}
@@ -209,15 +190,11 @@ export default function ChatPanel({
               {msg.type === "whisper" && (
                 <div>
                   <p
-                    className="text-[#3A7D7B] text-xs mb-1"
-                    style={{ fontFamily: "var(--font-sans)" }}
+                    className="text-interactive text-xs mb-1 font-sans"
                   >
                     [whisper] {msg.speaker}
                   </p>
-                  <p
-                    className="text-[#E8E0D0] text-sm"
-                    style={{ fontFamily: "var(--font-serif)" }}
-                  >
+                  <p className="text-text-primary text-sm font-serif">
                     "{msg.message}"
                   </p>
                 </div>
@@ -229,7 +206,7 @@ export default function ChatPanel({
         {/* Chat Input */}
         <form
           onSubmit={handleSend}
-          className="p-4 border-t border-[#2A2B35] bg-[#0A0B0F]"
+          className="p-4 border-t border-border-muted bg-bg-primary"
         >
           <div className="flex gap-2">
             <input
@@ -237,20 +214,17 @@ export default function ChatPanel({
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Say something..."
-              className="flex-1 bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] placeholder-[#4A4B55] focus:border-[#3A7D7B] focus:outline-none"
-              style={{ fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}
+              className="flex-1 bg-bg-elevated border border-border-muted rounded px-3 py-2 text-text-primary placeholder:text-text-disabled focus:border-interactive focus:outline-none font-mono"
+              style={{ fontSize: "0.875rem" }}
             />
             <button
               type="submit"
-              className="px-4 py-2 bg-[#3A7D7B] hover:bg-[#2D6B5F] text-[#E8E0D0] rounded transition-colors"
+              className="px-4 py-2 bg-interactive hover:bg-interactive/90 text-text-primary rounded transition-colors"
             >
               <Send className="w-4 h-4" />
             </button>
           </div>
-          <p
-            className="text-[#4A4B55] text-xs mt-2"
-            style={{ fontFamily: "var(--font-mono)" }}
-          >
+          <p className="text-text-disabled text-xs mt-2 font-mono">
             Commands: /say /whisper &lt;name&gt; /emote
           </p>
         </form>

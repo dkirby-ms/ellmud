@@ -224,3 +224,17 @@ All four PRs merge cleanly to dev:
 - Bundle size optimization (code-split admin routes)
 
 **Outcome:** Conditional approval granted. Two blockers fixed post-review. Branch ready for merge after final validation.
+
+### 2026-03-22: Comprehensive UX Design Alignment Review
+- **Action:** Full screen-by-screen audit of all 12 screens/overlays against 4 design spec documents.
+- **Findings:** 38 total gaps: 2 critical, 24 moderate, 12 minor.
+- **🔴 Critical #1 — Theme token adoption:** 478 hardcoded hex values across 13 files, zero theme tokens used. `theme.css` @theme inline block exists but is completely unused.
+- **🔴 Critical #2 — Combat text not color-coded:** Spec requires hits dealt in gold (#C9A84C), hits taken in red (#8B2500), dodges in silver (#8A8B95). Implementation renders all combat text uniformly in bone white (#E8E0D0).
+- **Screens fully aligned:** Login, Settings match spec precisely. Extraction overlay is 90%+ aligned.
+- **Screens with gaps:** ShardExploration (10 gaps — most of any screen), Refuge (6 gaps, mostly Phase 2 stubs), Combat (4 gaps), all others 1-3 gaps.
+- **Systemic issues:** Inline `style={{ fontFamily }}` on every text element instead of Tailwind utility classes; button state variants not systematically defined; no responsive breakpoints; no atmospheric empty states; toast notifications not styled per spec.
+- **All hex values match spec:** Every hardcoded color is correct — #0A0B0F, #12131A, #C9A84C, etc. One non-spec color: #B89840 used for button hover (reasonable approximation). The palette is consistent by accident (same hex everywhere) but unmaintainable.
+- **Font strategy is correct:** Serif (Crimson Text) for narrative, mono (JetBrains Mono) for commands/system, sans (Inter) for UI chrome. No font mismatches found.
+- **Key files reviewed:** All 6 pages, 7 overlay/tab components, theme.css, styles.css, store.ts, App.tsx, routes.ts.
+- **Decision output:** `.squad/decisions/inbox/elminster-ux-alignment-review.md`
+- **Prioritized fix batches:** (1) Theme token migration, (2) ShardExploration combat/sidebar polish, (3) Overlay refinements, (4) Structural gaps, (5) Minor polish.

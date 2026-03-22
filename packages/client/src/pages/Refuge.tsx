@@ -273,30 +273,27 @@ export default function Refuge() {
   // Connection status indicator color
   const statusColor =
     state.connectionStatus === "connected"
-      ? "#2D6B4F"
+      ? "var(--color-success)"
       : state.connectionStatus === "connecting"
-        ? "#B8860B"
-        : "#8B2500";
+        ? "var(--color-warning)"
+        : "var(--color-danger)";
 
   return (
-    <div className="h-screen bg-[#0A0B0F] flex flex-col">
+    <div className="h-screen bg-bg-primary flex flex-col">
       {/* Top bar */}
-      <div className="bg-[#12131A] border-b border-[#2A2B35] px-6 py-3 flex items-center justify-between">
+      <div className="bg-bg-panel border-b border-border-muted px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <h1
-            className="text-[#C9A84C] tracking-wider"
-            style={{ fontFamily: "var(--font-serif)", fontSize: "1.25rem" }}
+            className="text-accent-gold tracking-wider font-serif"
+            style={{ fontSize: "1.25rem" }}
           >
             ELLMUD
           </h1>
           <div className="flex items-center gap-2">
-            <span
-              className="text-[#8A8B95] text-sm"
-              style={{ fontFamily: "var(--font-sans)" }}
-            >
+            <span className="text-text-secondary text-sm font-sans">
               {state.playerId ?? "Unknown"}
             </span>
-            <span className="text-[#4A4B55]">|</span>
+            <span className="text-text-disabled">|</span>
             <div className="flex items-center gap-2">
               <div
                 className="w-2 h-2 rounded-full"
@@ -304,8 +301,7 @@ export default function Refuge() {
                 title={state.connectionStatus}
               />
               <span
-                className="text-[#8A8B95] text-xs"
-                style={{ fontFamily: "var(--font-mono)" }}
+                className="text-text-secondary text-xs font-mono"
               >
                 {state.connectionStatus === "connected"
                   ? "Online"
@@ -314,11 +310,8 @@ export default function Refuge() {
                     : "Offline"}
               </span>
             </div>
-            <span className="text-[#4A4B55]">|</span>
-            <span
-              className="text-[#8A8B95] text-sm"
-              style={{ fontFamily: "var(--font-sans)" }}
-            >
+            <span className="text-text-disabled">|</span>
+            <span className="text-text-secondary text-sm font-sans">
               {locationName}
             </span>
           </div>
@@ -326,21 +319,20 @@ export default function Refuge() {
         <div className="flex items-center gap-3">
           <Link
             to="/admin"
-            className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors"
+            className="text-text-secondary hover:text-accent-gold transition-colors"
             title="Admin Panel"
           >
             <Wrench className="w-5 h-5" />
           </Link>
           <button
             onClick={() => navigate("/settings")}
-            className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors"
+            className="text-text-secondary hover:text-accent-gold transition-colors"
           >
             <Settings className="w-5 h-5" />
           </button>
           <button
             onClick={handleLogout}
-            className="text-[#8A8B95] hover:text-[#8B2500] transition-colors text-sm"
-            style={{ fontFamily: "var(--font-sans)" }}
+            className="text-text-secondary hover:text-danger transition-colors text-sm font-sans"
           >
             Logout
           </button>
@@ -349,7 +341,7 @@ export default function Refuge() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left column - Navigation */}
-        <div className="w-[25%] bg-[#12131A] border-r border-[#2A2B35] flex flex-col">
+        <div className="w-[25%] bg-bg-panel border-r border-border-muted flex flex-col">
           <div className="p-4 space-y-1">
             {tabs.map((tab) => (
               <button
@@ -357,10 +349,9 @@ export default function Refuge() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded transition-colors ${
                   activeTab === tab.id
-                    ? "bg-[#1C1D27] text-[#C9A84C]"
-                    : "text-[#8A8B95] hover:bg-[#1C1D27] hover:text-[#E8E0D0]"
-                }`}
-                style={{ fontFamily: "var(--font-sans)" }}
+                    ? "bg-bg-elevated text-accent-gold"
+                    : "text-text-secondary hover:bg-bg-elevated hover:text-text-primary"
+                } font-sans`}
               >
                 {tab.icon}
                 <span>{tab.label}</span>
@@ -371,16 +362,15 @@ export default function Refuge() {
           {/* Ambient Events — real server narrate messages */}
           <div className="flex-1 p-4 overflow-y-auto">
             <h3
-              className="text-[#8A8B95] text-sm mb-3"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-secondary text-sm mb-3 font-sans"
             >
               Ambient Events
             </h3>
             <div className="space-y-3">
               {ambientEvents.length === 0 ? (
                 <p
-                  className="text-[#4A4B55] text-xs italic"
-                  style={{ fontFamily: "var(--font-serif)", lineHeight: 1.6 }}
+                  className="text-text-disabled text-xs italic font-serif"
+                  style={{ lineHeight: 1.6 }}
                 >
                   The Refuge hums with quiet activity...
                 </p>
@@ -388,11 +378,8 @@ export default function Refuge() {
                 ambientEvents.map((event) => (
                   <p
                     key={event.id}
-                    className="text-[#4A4B55] text-xs italic"
-                    style={{
-                      fontFamily: "var(--font-serif)",
-                      lineHeight: 1.6,
-                    }}
+                    className="text-text-disabled text-xs italic font-serif"
+                    style={{ lineHeight: 1.6 }}
                   >
                     {event.text}
                   </p>
@@ -403,7 +390,7 @@ export default function Refuge() {
         </div>
 
         {/* Center column - Content */}
-        <div className="flex-1 bg-[#0A0B0F] overflow-y-auto">
+        <div className="flex-1 bg-bg-primary overflow-y-auto">
           {activeTab === "shardboard" && (
             <ShardboardTab onEnterShard={handleEnterShard} />
           )}
@@ -412,15 +399,12 @@ export default function Refuge() {
           {activeTab === "crafting" && (
             <div className="p-8">
               <h2
-                className="text-[#C9A84C] mb-4"
-                style={{ fontFamily: "var(--font-serif)", fontSize: "1.5rem" }}
+                className="text-accent-gold mb-4 font-serif"
+                style={{ fontSize: "1.5rem" }}
               >
                 Crafting
               </h2>
-              <p
-                className="text-[#8A8B95]"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
+              <p className="text-text-secondary font-sans">
                 Crafting system coming soon...
               </p>
             </div>
@@ -428,15 +412,12 @@ export default function Refuge() {
           {activeTab === "marketplace" && (
             <div className="p-8">
               <h2
-                className="text-[#C9A84C] mb-4"
-                style={{ fontFamily: "var(--font-serif)", fontSize: "1.5rem" }}
+                className="text-accent-gold mb-4 font-serif"
+                style={{ fontSize: "1.5rem" }}
               >
                 Marketplace
               </h2>
-              <p
-                className="text-[#8A8B95]"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
+              <p className="text-text-secondary font-sans">
                 Marketplace coming soon...
               </p>
             </div>
@@ -444,15 +425,12 @@ export default function Refuge() {
           {activeTab === "factions" && (
             <div className="p-8">
               <h2
-                className="text-[#C9A84C] mb-4"
-                style={{ fontFamily: "var(--font-serif)", fontSize: "1.5rem" }}
+                className="text-accent-gold mb-4 font-serif"
+                style={{ fontSize: "1.5rem" }}
               >
                 Factions
               </h2>
-              <p
-                className="text-[#8A8B95]"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
+              <p className="text-text-secondary font-sans">
                 Faction details coming soon...
               </p>
             </div>
@@ -460,15 +438,12 @@ export default function Refuge() {
           {activeTab === "contracts" && (
             <div className="p-8">
               <h2
-                className="text-[#C9A84C] mb-4"
-                style={{ fontFamily: "var(--font-serif)", fontSize: "1.5rem" }}
+                className="text-accent-gold mb-4 font-serif"
+                style={{ fontSize: "1.5rem" }}
               >
                 Contracts
               </h2>
-              <p
-                className="text-[#8A8B95]"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
+              <p className="text-text-secondary font-sans">
                 Contracts coming soon...
               </p>
             </div>
@@ -476,27 +451,20 @@ export default function Refuge() {
         </div>
 
         {/* Right column - Social & Chat */}
-        <div className="w-[25%] bg-[#12131A] border-l border-[#2A2B35] flex flex-col">
-          <div className="p-4 border-b border-[#2A2B35]">
+        <div className="w-[25%] bg-bg-panel border-l border-border-muted flex flex-col">
+          <div className="p-4 border-b border-border-muted">
             <h3
-              className="text-[#8A8B95] text-sm mb-3"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-secondary text-sm mb-3 font-sans"
             >
               Players Nearby
             </h3>
             <div className="space-y-2">
               {isConnected ? (
-                <p
-                  className="text-[#4A4B55] text-xs"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
+                <p className="text-text-disabled text-xs font-sans">
                   Player presence updates coming soon...
                 </p>
               ) : (
-                <p
-                  className="text-[#4A4B55] text-xs"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
+                <p className="text-text-disabled text-xs font-sans">
                   Not connected
                 </p>
               )}
@@ -508,8 +476,7 @@ export default function Refuge() {
             <div className="flex-1 p-4 overflow-y-auto space-y-3">
               {chatMessages.length === 0 && (
                 <p
-                  className="text-[#4A4B55] text-xs"
-                  style={{ fontFamily: "var(--font-mono)" }}
+                  className="text-text-disabled text-xs font-mono"
                 >
                   {isConnected
                     ? "Connected. Type a command below."
@@ -520,37 +487,33 @@ export default function Refuge() {
                 <div key={msg.id}>
                   {msg.type === "system" || msg.type === "header" ? (
                     <p
-                      className="text-[#4A4B55] text-xs"
-                      style={{ fontFamily: "var(--font-mono)" }}
+                      className="text-text-disabled text-xs font-mono"
                     >
                       {msg.text}
                     </p>
                   ) : msg.type === "speech" ? (
                     <div>
                       <p
-                        className="text-[#8A8B95] text-xs mb-1"
-                        style={{ fontFamily: "var(--font-sans)" }}
+                        className="text-text-secondary text-xs mb-1 font-sans"
                       >
                         Speech
                       </p>
                       <p
-                        className="text-[#E8E0D0] text-sm"
-                        style={{ fontFamily: "var(--font-serif)" }}
+                        className="text-text-primary text-sm font-serif"
                       >
                         &ldquo;{msg.text}&rdquo;
                       </p>
                     </div>
                   ) : msg.type === "combat" ? (
                     <p
-                      className="text-[#8B2500] text-xs"
-                      style={{ fontFamily: "var(--font-mono)" }}
+                      className="text-danger text-xs font-mono"
                     >
                       ⚔ {msg.text}
                     </p>
                   ) : (
                     <p
-                      className="text-[#E8E0D0] text-sm"
-                      style={{ fontFamily: "var(--font-serif)", lineHeight: 1.6 }}
+                      className="text-text-primary text-sm font-serif"
+                      style={{ lineHeight: 1.6 }}
                     >
                       {msg.text}
                     </p>
@@ -562,7 +525,7 @@ export default function Refuge() {
 
             <form
               onSubmit={handleSendMessage}
-              className="p-4 border-t border-[#2A2B35]"
+              className="p-4 border-t border-border-muted"
             >
               <div className="flex gap-2">
                 <input
@@ -573,13 +536,12 @@ export default function Refuge() {
                     isConnected ? "Type a command..." : "Connecting..."
                   }
                   disabled={!isConnected}
-                  className="flex-1 bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] text-sm focus:border-[#3A7D7B] focus:outline-none transition-colors placeholder-[#4A4B55] disabled:opacity-50"
-                  style={{ fontFamily: "var(--font-sans)" }}
+                  className="flex-1 bg-bg-elevated border border-border-muted rounded px-3 py-2 text-text-primary text-sm focus:border-interactive focus:outline-none transition-colors placeholder:text-text-disabled disabled:opacity-50 font-sans"
                 />
                 <button
                   type="submit"
                   disabled={!isConnected}
-                  className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors disabled:opacity-50"
+                  className="text-text-secondary hover:text-accent-gold transition-colors disabled:opacity-50"
                 >
                   <Send className="w-5 h-5" />
                 </button>

@@ -63,17 +63,16 @@ export default function Login() {
   );
 
   return (
-    <div className="min-h-screen bg-[#0A0B0F] flex flex-col items-center justify-center p-8 relative overflow-hidden">
+    <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-8 relative overflow-hidden">
       {/* Subtle background texture */}
-      <div className="absolute inset-0 opacity-5 bg-gradient-to-b from-[#1C1D27] to-transparent"></div>
+      <div className="absolute inset-0 opacity-5 bg-gradient-to-b from-bg-elevated to-transparent"></div>
 
       {/* Main card */}
-      <div className="relative z-10 w-full max-w-[480px] bg-[#12131A] border border-[#2A2B35] rounded-lg shadow-2xl p-8">
+      <div className="relative z-10 w-full max-w-[480px] bg-bg-panel border border-border-muted rounded-lg shadow-2xl p-8">
         {/* Title */}
         <h1
-          className="text-center mb-2 tracking-[0.2em] text-[#C9A84C]"
+          className="text-center mb-2 tracking-[0.2em] text-accent-gold font-serif"
           style={{
-            fontFamily: "var(--font-serif)",
             fontSize: "2.5rem",
             fontWeight: 700,
           }}
@@ -81,34 +80,29 @@ export default function Login() {
           ELLMUD
         </h1>
 
-        <p
-          className="text-center text-[#8A8B95] mb-8 italic"
-          style={{ fontFamily: "var(--font-serif)" }}
-        >
+        <p className="text-center text-text-secondary mb-8 italic font-serif">
           The shards are calling.
         </p>
 
         {/* Tabs */}
-        <div className="flex gap-4 mb-6 border-b border-[#2A2B35]">
+        <div className="flex gap-4 mb-6 border-b border-border-muted">
           <button
             onClick={() => switchMode(false)}
-            className={`pb-2 px-4 transition-colors ${
+            className={`pb-2 px-4 transition-colors font-sans ${
               !isRegister
-                ? "border-b-2 border-[#C9A84C] text-[#C9A84C]"
-                : "text-[#8A8B95] hover:text-[#E8E0D0]"
+                ? "border-b-2 border-accent-gold text-accent-gold"
+                : "text-text-secondary hover:text-text-primary"
             }`}
-            style={{ fontFamily: "var(--font-sans)" }}
           >
             Login
           </button>
           <button
             onClick={() => switchMode(true)}
-            className={`pb-2 px-4 transition-colors ${
+            className={`pb-2 px-4 transition-colors font-sans ${
               isRegister
-                ? "border-b-2 border-[#C9A84C] text-[#C9A84C]"
-                : "text-[#8A8B95] hover:text-[#E8E0D0]"
+                ? "border-b-2 border-accent-gold text-accent-gold"
+                : "text-text-secondary hover:text-text-primary"
             }`}
-            style={{ fontFamily: "var(--font-sans)" }}
           >
             Register
           </button>
@@ -119,8 +113,7 @@ export default function Login() {
           <div>
             <label
               htmlFor="username"
-              className="block text-[#8A8B95] text-sm mb-2"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="block text-text-secondary text-sm mb-2 font-sans"
             >
               Username
             </label>
@@ -129,8 +122,7 @@ export default function Login() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-4 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none transition-colors"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-primary focus:border-accent-gold focus:outline-none transition-colors font-sans"
               disabled={loading}
               required
             />
@@ -139,8 +131,7 @@ export default function Login() {
           <div>
             <label
               htmlFor="password"
-              className="block text-[#8A8B95] text-sm mb-2"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="block text-text-secondary text-sm mb-2 font-sans"
             >
               Password
             </label>
@@ -149,8 +140,7 @@ export default function Login() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-4 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none transition-colors"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-primary focus:border-accent-gold focus:outline-none transition-colors font-sans"
               disabled={loading}
               required
             />
@@ -160,8 +150,7 @@ export default function Login() {
             <div>
               <label
                 htmlFor="confirmPassword"
-                className="block text-[#8A8B95] text-sm mb-2"
-                style={{ fontFamily: "var(--font-sans)" }}
+                className="block text-text-secondary text-sm mb-2 font-sans"
               >
                 Confirm Password
               </label>
@@ -170,8 +159,7 @@ export default function Login() {
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-4 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none transition-colors"
-                style={{ fontFamily: "var(--font-sans)" }}
+                className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-primary focus:border-accent-gold focus:outline-none transition-colors font-sans"
                 disabled={loading}
                 required
               />
@@ -180,9 +168,8 @@ export default function Login() {
 
           {error && (
             <div
-              className="text-[#8B2500] text-sm px-4 py-2 bg-[#8B2500]/10 border border-[#8B2500]/30 rounded"
+              className="text-danger text-sm px-4 py-2 bg-danger/10 border border-danger/30 rounded font-sans"
               role="alert"
-              style={{ fontFamily: "var(--font-sans)" }}
             >
               {error}
             </div>
@@ -191,8 +178,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] font-medium py-3 rounded transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ fontFamily: "var(--font-sans)" }}
+            className="w-full bg-accent-gold hover:bg-accent-gold/90 text-bg-primary font-medium py-3 rounded transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-sans"
           >
             {loading
               ? "Connecting..."
@@ -204,10 +190,7 @@ export default function Login() {
       </div>
 
       {/* Flavor text */}
-      <p
-        className="relative z-10 mt-6 text-[#8A8B95] text-sm italic text-center"
-        style={{ fontFamily: "var(--font-serif)" }}
-      >
+      <p className="relative z-10 mt-6 text-text-secondary text-sm italic text-center font-serif">
         {flavorText}
       </p>
     </div>

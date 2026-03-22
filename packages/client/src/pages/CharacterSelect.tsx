@@ -71,12 +71,12 @@ export default function CharacterSelect() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0B0F] flex">
+    <div className="min-h-screen bg-bg-primary flex">
       {/* Left panel - Character list */}
-      <div className="w-[40%] bg-[#12131A] border-r border-[#2A2B35] p-8 overflow-y-auto">
+      <div className="w-[40%] bg-bg-panel border-r border-border-muted p-8 overflow-y-auto">
         <h2
-          className="text-[#C9A84C] mb-6"
-          style={{ fontFamily: "var(--font-serif)", fontSize: "1.5rem" }}
+          className="text-accent-gold mb-6 font-serif"
+          style={{ fontSize: "1.5rem" }}
         >
           Your Shardwalkers
         </h2>
@@ -85,20 +85,17 @@ export default function CharacterSelect() {
           {mockCharacters.map((char) => (
             <div
               key={char.id}
-              className="bg-[#1C1D27] border border-[#2A2B35] rounded-lg p-4 hover:border-[#C9A84C] transition-colors"
+              className="bg-bg-elevated border border-border-muted rounded-lg p-4 hover:border-accent-gold transition-colors"
             >
               <h3
-                className="text-[#C9A84C] mb-2"
-                style={{ fontFamily: "var(--font-serif)", fontSize: "1.25rem" }}
+                className="text-accent-gold mb-2 font-serif"
+                style={{ fontSize: "1.25rem" }}
               >
                 {char.name}
               </h3>
               <div className="flex items-center gap-2 mb-2">
-                <Shield className="w-4 h-4 text-[#8A8B95]" />
-                <span
-                  className="text-[#8A8B95] text-sm"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
+                <Shield className="w-4 h-4 text-text-secondary" />
+                <span className="text-text-secondary text-sm font-sans">
                   {char.faction}
                 </span>
               </div>
@@ -106,23 +103,18 @@ export default function CharacterSelect() {
                 {char.skills.map((skill) => (
                   <span
                     key={skill}
-                    className="px-2 py-1 bg-[#0A0B0F] text-[#8A8B95] text-xs rounded"
-                    style={{ fontFamily: "var(--font-sans)" }}
+                    className="px-2 py-1 bg-bg-primary text-text-secondary text-xs rounded font-sans"
                   >
                     {skill}
                   </span>
                 ))}
               </div>
-              <p
-                className="text-[#4A4B55] text-xs mb-3"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
+              <p className="text-text-disabled text-xs mb-3 font-sans">
                 Last played: {char.lastPlayed}
               </p>
               <button
                 onClick={handleEnterRefuge}
-                className="w-full bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] font-medium py-2 rounded transition-colors"
-                style={{ fontFamily: "var(--font-sans)" }}
+                className="w-full bg-accent-gold hover:bg-accent-gold/90 text-bg-primary font-medium py-2 rounded transition-colors font-sans"
               >
                 Enter Refuge
               </button>
@@ -131,8 +123,7 @@ export default function CharacterSelect() {
 
           <button
             onClick={() => setIsCreating(true)}
-            className="w-full border-2 border-dashed border-[#2A2B35] hover:border-[#C9A84C] text-[#8A8B95] hover:text-[#C9A84C] py-6 rounded-lg transition-colors"
-            style={{ fontFamily: "var(--font-sans)" }}
+            className="w-full border-2 border-dashed border-border-muted hover:border-accent-gold text-text-secondary hover:text-accent-gold py-6 rounded-lg transition-colors font-sans"
           >
             + New Shardwalker
           </button>
@@ -144,8 +135,8 @@ export default function CharacterSelect() {
         {isCreating ? (
           <div className="max-w-3xl mx-auto">
             <h2
-              className="text-[#C9A84C] mb-6"
-              style={{ fontFamily: "var(--font-serif)", fontSize: "1.5rem" }}
+              className="text-accent-gold mb-6 font-serif"
+              style={{ fontSize: "1.5rem" }}
             >
               Create New Shardwalker
             </h2>
@@ -154,8 +145,7 @@ export default function CharacterSelect() {
               <div>
                 <label
                   htmlFor="charName"
-                  className="block text-[#8A8B95] text-sm mb-2"
-                  style={{ fontFamily: "var(--font-sans)" }}
+                  className="block text-text-secondary text-sm mb-2 font-sans"
                 >
                   Character Name
                 </label>
@@ -164,17 +154,13 @@ export default function CharacterSelect() {
                   type="text"
                   value={newCharName}
                   onChange={(e) => setNewCharName(e.target.value)}
-                  className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-4 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none transition-colors"
-                  style={{ fontFamily: "var(--font-sans)" }}
+                  className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-primary focus:border-accent-gold focus:outline-none transition-colors font-sans"
                   required
                 />
               </div>
 
               <div>
-                <label
-                  className="block text-[#8A8B95] text-sm mb-4"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
+                <label className="block text-text-secondary text-sm mb-4 font-sans">
                   Choose Your Faction
                 </label>
                 <div className="grid gap-4">
@@ -182,34 +168,25 @@ export default function CharacterSelect() {
                     <div
                       key={faction.id}
                       onClick={() => setSelectedFaction(faction.id)}
-                      className={`bg-[#1C1D27] border rounded-lg p-4 cursor-pointer transition-colors ${
+                      className={`bg-bg-elevated border rounded-lg p-4 cursor-pointer transition-colors ${
                         selectedFaction === faction.id
-                          ? "border-[#C9A84C]"
-                          : "border-[#2A2B35] hover:border-[#3A7D7B]"
+                          ? "border-accent-gold"
+                          : "border-border-muted hover:border-interactive"
                       }`}
                     >
                       <div className="flex items-start gap-4">
-                        <div className="text-[#C9A84C] mt-1">{faction.icon}</div>
+                        <div className="text-accent-gold mt-1">{faction.icon}</div>
                         <div className="flex-1">
                           <h3
-                            className="text-[#E8E0D0] mb-2"
-                            style={{
-                              fontFamily: "var(--font-serif)",
-                              fontSize: "1.125rem",
-                            }}
+                            className="text-text-primary mb-2 font-serif"
+                            style={{ fontSize: "1.125rem" }}
                           >
                             {faction.name}
                           </h3>
-                          <p
-                            className="text-[#8A8B95] text-sm mb-2"
-                            style={{ fontFamily: "var(--font-sans)" }}
-                          >
+                          <p className="text-text-secondary text-sm mb-2 font-sans">
                             {faction.description}
                           </p>
-                          <p
-                            className="text-[#C9A84C] text-xs"
-                            style={{ fontFamily: "var(--font-sans)" }}
-                          >
+                          <p className="text-accent-gold text-xs font-sans">
                             Specialty: {faction.specialty}
                           </p>
                         </div>
@@ -223,16 +200,14 @@ export default function CharacterSelect() {
                 <button
                   type="button"
                   onClick={() => setIsCreating(false)}
-                  className="flex-1 border border-[#2A2B35] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] py-3 rounded transition-colors"
-                  style={{ fontFamily: "var(--font-sans)" }}
+                  className="flex-1 border border-border-muted hover:bg-bg-elevated text-text-secondary hover:text-text-primary py-3 rounded transition-colors font-sans"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!newCharName || !selectedFaction}
-                  className="flex-1 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] font-medium py-3 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ fontFamily: "var(--font-sans)" }}
+                  className="flex-1 bg-accent-gold hover:bg-accent-gold/90 text-bg-primary font-medium py-3 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-sans"
                 >
                   Create
                 </button>
@@ -242,8 +217,8 @@ export default function CharacterSelect() {
         ) : (
           <div className="flex items-center justify-center h-full">
             <p
-              className="text-[#4A4B55] italic text-center"
-              style={{ fontFamily: "var(--font-serif)", fontSize: "1.125rem" }}
+              className="text-text-disabled italic text-center font-serif"
+              style={{ fontSize: "1.125rem" }}
             >
               Select an existing character or create a new one.
             </p>

@@ -479,3 +479,558 @@ The health check now validates the real server's `"uptime"` field rather than th
 - Consider adding a stylelint rule: `declaration-no-important` + custom property enforcement
 
 _Merged from decisions/inbox/ on 2026-03-21T15:09:00Z._
+# UX Design Alignment Review — Comprehensive Audit
+
+> **Author:** Elminster (Lead / Architect)
+> **Date:** 2026-03-22
+> **Scope:** Full screen-by-screen audit of all design specs vs. client implementation
+> **Status:** REVIEW FINDINGS — Action Required
+
+---
+
+## Executive Summary
+
+I have read every design document (`figma-design-prompt.md`, `figma-conversion-strategy.md`, `figma-gaps-brief.md`, `figma-v2-analysis.md`) and every client source file (`pages/*.tsx`, `components/*.tsx`, `styles/theme.css`, `store.ts`, `App.tsx`, `routes.ts`). This is a line-by-line audit.
+
+**Overall verdict: 🟡 PARTIALLY ALIGNED — strong foundations, significant gaps remain.**
+
+The implementation preserves the visual language and screen architecture from the Figma spec. Layout proportions, font strategy (serif/mono/sans), color palette hex values, and screen flow are all correct. However, there are two systemic issues and 28 discrete gaps across screens.
+
+**Systemic Issues:**
+1. **Zero theme token adoption** — 478 hardcoded hex values across 13 files, 0 theme token references. The `theme.css` Tailwind `@theme inline` block exists and maps every color, but no component uses `bg-bg-panel`, `text-accent-gold`, etc. Every file uses `bg-[#12131A]`, `text-[#C9A84C]`, etc.
+2. **Pervasive inline fontFamily** — Every text element uses `style={{ fontFamily: "var(--font-serif)" }}` instead of Tailwind utility classes (`font-serif`). This works but is inconsistent with the Tailwind-first approach.
+
+---
+
+## Screen-by-Screen Audit
+
+### 1. Login / Register
+
+**Spec ref:** `figma-design-prompt.md` §1
+
+| Element | Spec | Implementation | Status |
+|---------|------|----------------|--------|
+| Full-screen dark background | `#0A0B0F` | `bg-[#0A0B0F]` | ✅ Match |
+| Subtle texture/gradient | Faint cracks or parchment grain | `opacity-5 bg-gradient-to-b from-[#1C1D27] to-transparent` | ✅ Match (gradient approach) |
+| Centered card, 480px max-width | `max-width 480px` | `max-w-[480px]` | ✅ Match |
+| Title "ELLMUD" in display serif, gold | Serif, `#C9A84C`, tracked/spaced | `font-serif, text-[#C9A84C], tracking-[0.2em], 2.5rem` | ✅ Match |
+| Subtitle italic serif, muted silver | Italic serif, `#8A8B95` | `italic, font-serif, text-[#8A8B95]` | ✅ Match |
+| Login \| Register tabs | Two tabs | Tab buttons with gold underline on active | ✅ Match |
+| Login fields | Username, Password | Both present | ✅ Match |
+| Register fields | Username, Password, Confirm | All three present | ✅ Match |
+| "Enter the Refuge" button | Gold accent | `bg-[#C9A84C] text-[#0A0B0F]` | ✅ Match |
+| "Create Shardwalker" button | Register button text | Present | ✅ Match |
+| Flavor text below card | Muted silver, small serif italic, rotating | Random selection from 4 texts, serif italic, `#8A8B95` | ✅ Match |
+| No social login | Phase 1 | None present | ✅ Match |
+
+**Gaps found:** 0  
+**Verdict:** ✅ **Fully aligned.** Login screen matches spec precisely.
+
+---
+
+### 2. Character Select / Create
+
+**Spec ref:** `figma-design-prompt.md` §2
+
+| Element | Spec | Implementation | Status |
+|---------|------|----------------|--------|
+| Left panel 40% | Character list | `w-[40%]` | ✅ Match |
+| Right panel 60% | Creation form | `flex-1` (fills remaining 60%) | ✅ Match |
+| Character cards | Name (serif, gold), faction icon+name, skills, last played | Gold serif name, Shield icon + faction, skill badges, last played date | ✅ Match |
+| "Enter Refuge" button per card | Present | `bg-[#C9A84C]` button | ✅ Match |
+| Creation form: name input | Present | Text input with label | ✅ Match |
+| Faction selector | Three faction cards with icon, name, description, specialty | Three factions (Ironwright, Veilwardens, Ashen Covenant) with icons, descriptions, specialties | ✅ Match |
+| Starting loadout preview | Cosmetic for Phase 1 | 🟡 Not present — right panel shows either creation form or empty state | 🟡 Minor |
+| "Create" button | Present | Gold CTA button | ✅ Match |
+
+**Gaps found:** 1
+
+| # | Gap | Severity | Spec Ref | Fix Owner |
+|---|-----|----------|----------|-----------|
+| 1 | Starting loadout preview missing from creation form | 🟢 Minor | design-prompt §2 | Volo (UI) |
+
+---
+
+### 3. The Refuge — Hub Screen
+
+**Spec ref:** `figma-design-prompt.md` §3
+
+| Element | Spec | Implementation | Status |
+|---------|------|----------------|--------|
+| Three-column layout | Left 25%, Center 50%, Right 25% | Left `w-[25%]`, Center `flex-1`, Right `w-[25%]` | ✅ Match |
+| Left: Vertical tab list | Stash, Loadout, Crafting, Marketplace, Factions, Contracts, Shardboard | All 7 tabs present with icons | ✅ Match |
+| Left: Ambient Events feed | Scrolling text below tabs, serif italic, muted | Present — shows last 8 messages filtered by type, serif italic styling | ✅ Match |
+| Center: Context panel per tab | Changes based on selected tab | Tab switching works, renders tab-specific content | ✅ Match |
+| Stash tab | Grid/list of items, filter/sort | **Full grid-based stash (10×12)** with drag-drop, tier coloring, inspector panel | ✅ Match (exceeds spec) |
+| Loadout tab | Paper-doll text layout, equipment slots | 6 equipment slots, 4 consumables, 2 tools, shard key, stats summary | ✅ Match |
+| Crafting tab | Recipe list, details, craft button | **Stub only:** "Crafting system coming soon..." | 🟡 Expected (Phase 2) |
+| Marketplace tab | Listings table, post listing | **Stub only:** "Marketplace coming soon..." | 🟡 Expected (Phase 2) |
+| Factions tab | Faction info, reputation, perks | **Stub only:** "Faction details coming soon..." | 🟡 Expected (Phase 2) |
+| Contracts tab | Contract cards with progress | **Stub only:** "Contracts coming soon..." | 🟡 Expected (Phase 2) |
+| Shardboard tab | Shard selection cards | Fully implemented with tier badges, biome, modifiers, player slots, rumoured loot | ✅ Match |
+| Right: Chat panel | Refuge-wide chat, input, players nearby | Chat input/output present, "Players Nearby" section present (stub: "coming soon") | 🟡 Partial |
+| Top bar | Character name, HP, location breadcrumb, settings gear | Player ID, connection status, settings icon, admin link, logout | 🟡 Partial |
+
+**Gaps found:** 6
+
+| # | Gap | Severity | Spec Ref | Fix Owner |
+|---|-----|----------|----------|-----------|
+| 2 | Crafting tab is a stub | 🟡 Moderate | design-prompt §3 (Crafting) | Phase 2 scope — acceptable |
+| 3 | Marketplace tab is a stub | 🟡 Moderate | design-prompt §3 (Marketplace) | Phase 2 scope — acceptable |
+| 4 | Factions tab is a stub | 🟡 Moderate | design-prompt §3 (Factions) | Phase 2 scope — acceptable |
+| 5 | Contracts tab is a stub | 🟡 Moderate | design-prompt §3 (Contracts) | Phase 2 scope — acceptable |
+| 6 | Players Nearby is a stub ("coming soon") | 🟡 Moderate | design-prompt §3 (Right column) | Jarlaxle (Colyseus presence) |
+| 7 | Top bar missing HP indicator and location breadcrumb (shows player ID + connection status instead) | 🟡 Moderate | design-prompt §3 (persistent elements) | Volo (UI) |
+
+---
+
+### 4. Shardboard (Shard Selection)
+
+**Spec ref:** `figma-design-prompt.md` §4
+
+| Element | Spec | Implementation | Status |
+|---------|------|----------------|--------|
+| Card-based bulletin board | Cards on dark surface | Grid of cards, `bg-[#12131A]`, borders | ✅ Match |
+| Shard name in serif gold | Procedural names | Serif, `#C9A84C` | ✅ Match |
+| Tier badge | Tier 1/2/3, color-coded white/blue/purple | Tier colors: `#E8E0D0`/`#4682B4`/`#7B4FA0` | ✅ Match |
+| Biome icon + name | Present | Biome label present (no distinct icon per biome) | 🟡 Partial |
+| Modifiers as tags/chips | Dense, Hunted, Dark | Modifier badges styled in `#B8860B` | ✅ Match |
+| Player slots | "2/4 players entered" | Present as info grid | ✅ Match |
+| Time remaining | Countdown | Present | ✅ Match |
+| Shard Key cost | Key type required | Present | ✅ Match |
+| "Enter Shard" button | Gold, prominent | `bg-[#C9A84C]` | ✅ Match |
+| Filters | By tier, biome, modifier | ❌ Missing | 🟡 Moderate |
+| Rumoured Loot | Vague hints | Present in a nested panel | ✅ Match |
+
+**Gaps found:** 2
+
+| # | Gap | Severity | Spec Ref | Fix Owner |
+|---|-----|----------|----------|-----------|
+| 8 | Shard filters (tier, biome, modifier) missing | 🟡 Moderate | design-prompt §4 | Volo (UI) |
+| 9 | Biome-specific icons not implemented (text label only) | 🟢 Minor | design-prompt §4 | Volo (UI) |
+
+---
+
+### 5. Shard Exploration — Main Gameplay Screen
+
+**Spec ref:** `figma-design-prompt.md` §5
+
+| Element | Spec | Implementation | Status |
+|---------|------|----------------|--------|
+| 70/30 split panel | Narrative 70%, Sidebar 30% | `w-[70%]` / `w-[30%]` | ✅ Match |
+| Narrative panel: scrollable text | Richly styled prose | Server-driven `TerminalMessage` rendering | ✅ Match |
+| Room title in serif gold | Room name header | `text-[#C9A84C]`, serif, 1.125rem | ✅ Match |
+| Exits as teal clickable links | `[north] [east]` in teal | `text-[#3A7D7B]`, underlined, clickable | ✅ Match |
+| Narrative max width ~70ch | Readable prose width | `max-w-[70ch]` on all text types | ✅ Match |
+| Line height 1.6–1.8 | Readable line spacing | `lineHeight: 1.7` | ✅ Match |
+| Room descriptions: serif, bone white | Warm, book-like | `text-[#E8E0D0]`, serif | ✅ Match |
+| Combat text: color-coded | Hits dealt gold, hits taken red, dodges silver | ❌ **All combat text is uniform `#E8E0D0`** — no color differentiation | 🔴 Critical |
+| Traces: italic, muted, with Eye icon | Indented, `#8A8B95` | Italic, `#8A8B95`, Eye icon, indented | ✅ Match |
+| Sound cues: italic, muted, with Volume2 icon | Indented, `#8A8B95` | Italic, `#8A8B95`, Volume2 icon, indented | ✅ Match |
+| System messages: monospace, muted grey | Small, `#4A4B55` | `font-mono`, `text-[#4A4B55]`, text-sm | ✅ Match |
+| NPC speech: quoted | Different styling from narration | Quoted in serif, `#E8E0D0` (no left-border accent or distinct weight) | 🟡 Partial |
+| Room header bar | Room name + shard stability indicator | Room name (gold) + stability bar (w-32, color-transitions) | ✅ Match |
+| Shard stability bar in narrative header | Thin bar (3-4px) spanning header, color transitions | Present but **only w-32 (128px), not full-width** — placed at right edge of header | 🟡 Partial |
+| **Sidebar: Character Status** | HP bar (qualitative), status effects, stance | HP bar present (gradient, 75% width). Stance shown. **Status effects section completely missing.** | 🟡 Partial |
+| HP bar: no numbers, qualitative | "Healthy" / "Wounded" / "Critical" | Shows "Healthy" label with green text. **HP bar is static at 75% — no dynamic state-based color transitions** | 🟡 Partial |
+| Status effects tags | "Bleeding (light)", "Shard-sick" | ❌ **Not implemented** — no status effect rendering | 🟡 Moderate |
+| Sidebar: Quick Inventory | Equipped weapon, consumables, clickable | Shows top 3 inventory items with sword icons | ✅ Match |
+| Sidebar: Collapse Timer | Prominent countdown, color transitions | Large monospace text, `getCollapseColor()` transitions (green→amber→red) | ✅ Match |
+| Collapse timer: "Destabilising" label | Warning label at 50% | Present: "Destabilising" shown when `state.shardState === "destabilising"` | ✅ Match |
+| Collapse timer: "COLLAPSE IMMINENT" label | Red phase warning | ❌ **Missing** — no "COLLAPSE IMMINENT" label at <25% | 🟡 Moderate |
+| Collapse timer: pulse animation in red phase | Gentle pulse at <25% | ❌ **Missing** — no CSS pulse animation on timer | 🟡 Moderate |
+| Sidebar: Sound Cues | Ephemeral, fade out, "Silence." empty state | Shows last 5 cues, "Silence." empty state present. **No fade-out animation** | 🟡 Partial |
+| Sound cues: directional highlighting | Direction word in teal `#3A7D7B` | ❌ **Not implemented** — entire cue text is uniform `#8A8B95` | 🟡 Moderate |
+| Sidebar: Mini-action buttons | Look, Listen, Inventory | ✅ Present: 3 buttons in grid with hover effects | ✅ Match |
+| Mini-action icons | Eye, Ear, Backpack (Lucide) | ❌ **No icons** — text-only buttons | 🟢 Minor |
+| Command input: monospace | Terminal-style prompt | `font-mono` | ✅ Match |
+| Command input: gold `>` prompt | `#C9A84C` | `text-[#C9A84C]` on `>` character | ✅ Match |
+| Command input: placeholder | "Type a command..." | Present, changes based on connection status | ✅ Match |
+| Command input: arrow history | Up/down cycles previous commands | Implemented with `onKeyDown` handler | ✅ Match |
+| Auto-complete hint | Ghost text above input | ❌ **Not implemented** — no auto-complete UI | 🟡 Moderate |
+
+**Gaps found:** 10
+
+| # | Gap | Severity | Spec Ref | Fix Owner |
+|---|-----|----------|----------|-----------|
+| 10 | Combat text not color-coded (hits dealt should be gold, hits taken red, dodges silver) | 🔴 Critical | design-prompt §5, gaps-brief §2A | Volo (UI) |
+| 11 | Status effects (Bleeding, Shard-sick) section missing from sidebar | 🟡 Moderate | design-prompt §5 (sidebar) | Volo (UI) |
+| 12 | HP bar is static — no dynamic Healthy→Wounded→Critical color transitions | 🟡 Moderate | gaps-brief §4C | Volo (UI) |
+| 13 | Shard stability bar is 128px, not full narrative header width | 🟡 Moderate | design-prompt §5, gaps-brief §3A | Volo (UI) |
+| 14 | "COLLAPSE IMMINENT" warning label missing at <25% | 🟡 Moderate | gaps-brief §4D | Volo (UI) |
+| 15 | Collapse timer has no pulse animation in red phase | 🟡 Moderate | gaps-brief §4D | Volo (UI) |
+| 16 | Sound cue direction words not highlighted in teal | 🟡 Moderate | gaps-brief §3B | Volo (UI) |
+| 17 | Sound cues don't fade out (no ephemeral animation) | 🟢 Minor | gaps-brief §3B | Volo (UI) |
+| 18 | Auto-complete hint above command input not implemented | 🟡 Moderate | design-prompt §5, gaps-brief §3E | Volo (UI) |
+| 19 | Mini-action buttons missing Lucide icons (Eye, Ear, Backpack) | 🟢 Minor | gaps-brief §3C | Volo (UI) |
+
+---
+
+### 6. Combat Mode (Overlay on Exploration)
+
+**Spec ref:** `figma-design-prompt.md` §6, `figma-gaps-brief.md` §2A
+
+| Element | Spec | Implementation | Status |
+|---------|------|----------------|--------|
+| Combat banner | "⚔ COMBAT" with blood-red accent line | `border-t-2 border-[#8B2500]`, text "⚔ COMBAT — Tick N" | ✅ Match |
+| Tick timer | 1-second countdown bar that fills and resets | ❌ **Missing** — tick number shown as text, no visual countdown bar | 🟡 Moderate |
+| Action quickbar | 8 buttons: Strike, Heavy Strike, Dodge, Block, Use Item, Skill, Flee, Observe | **7 buttons** (missing "Skill"). Present: Strike, Heavy Strike, Dodge, Block, Use Item, Flee, Observe | 🟡 Partial |
+| Keyboard shortcuts | Superscript numbers | Numbers shown as small text before labels | ✅ Match (close enough) |
+| Button hover: gold glow | Border brightens to gold, subtle glow | `hover:bg-[#C9A84C] hover:text-[#0A0B0F]` — gold fill, not border glow | 🟡 Partial |
+| Button disabled state | Grey text `#4A4B55` | `opacity-50 cursor-not-allowed` | ✅ Match (functional) |
+| Enemy status panel | Sidebar: target name, HP tier, telegraphed action | Present in sidebar with name, HP bar, HP tier labels, telegraphed action | ✅ Match |
+| Combat narrative color-coding | Hits dealt gold, hits taken red | ❌ **All combat text uniform color** (already flagged in §5) | 🔴 Critical |
+| Combat transitions (fade in/out) | 0.3s ease animations | ❌ **No transition animations** — abrupt show/hide | 🟢 Minor |
+
+**Gaps found:** 4
+
+| # | Gap | Severity | Spec Ref | Fix Owner |
+|---|-----|----------|----------|-----------|
+| 20 | Tick timer countdown bar missing (only text "Tick N") | 🟡 Moderate | design-prompt §6, gaps-brief §2A | Volo (UI) |
+| 21 | "Skill" button missing from action quickbar (7 of 8 actions) | 🟡 Moderate | design-prompt §6 | Volo (UI) |
+| 22 | Combat enter/exit has no fade transition animation | 🟢 Minor | gaps-brief §2A | Volo (UI) |
+| 10 | (Already counted) Combat text color-coding missing | 🔴 Critical | design-prompt §5-6 | Volo (UI) |
+
+---
+
+### 7. Inventory / Loadout Detail Overlay
+
+**Spec ref:** `figma-design-prompt.md` §7, `figma-gaps-brief.md` §2B
+
+| Element | Spec | Implementation | Status |
+|---------|------|----------------|--------|
+| Slides from right, 60% width | Overlay panel | `w-[60%]` overlay, z-50, scrim | ✅ Match |
+| Carried items: tier-colored names | Per-tier colors | `getTierColor()` function, all 5 tiers correct | ✅ Match |
+| Type icon per item | Lucide icons | Not per-type — shows generic categories | 🟢 Minor |
+| Durability bar | Thin, grey fill, degrades visually | Gradient bar `from-[#2D6B4F] to-[#B8860B]` | ✅ Match |
+| Weight per item | Muted silver, right-aligned | Present | ✅ Match |
+| Action buttons | Equip, Drop, Use, Inspect | Equip (`#3A7D7B`), Use (`#8A8B95`), Drop (`#8B2500`). **Inspect missing** | 🟢 Minor |
+| Equipped gear section | Slot-based layout | 2 slots shown (Primary Weapon, Chest Armour) | ✅ Match |
+| Item inspect sub-panel | Right side within overlay | ❌ **Not implemented** — flavor text and stats are inline per card | 🟡 Moderate |
+| Flavor text: italic serif, muted | LLM-generated prose | Italic serif, `#8A8B95`, line-height 1.6 | ✅ Match |
+| Stats: qualitative, monospace | "Moderate damage", etc. | Monospace tags: "Moderate damage", "Heavy", etc. | ✅ Match |
+| Weight indicator | Carried N/M, progress bar | "14 / 20 units" with green bar | ✅ Match |
+| Close button | ✕ button + Escape + `close` command | Close button present, scrim click dismisses | ✅ Match |
+| Left-border accent per tier | 3px tier-colored | 4px tier-colored left border | ✅ Match |
+
+**Gaps found:** 2
+
+| # | Gap | Severity | Spec Ref | Fix Owner |
+|---|-----|----------|----------|-----------|
+| 23 | Item inspect sub-panel (click → side panel with large details) missing | 🟡 Moderate | design-prompt §7, gaps-brief §2B | Volo (UI) |
+| 24 | "Inspect" action button missing from item cards | 🟢 Minor | design-prompt §7 | Volo (UI) |
+
+---
+
+### 8. Extraction Screen
+
+**Spec ref:** `figma-design-prompt.md` §8, `figma-gaps-brief.md` §2C
+
+| Element | Spec | Implementation | Status |
+|---------|------|----------------|--------|
+| **In-Progress state** | | | |
+| Progress bar: centered overlay | Large, 60% narrative width, 8px height | Centered bar with pulse animation | ✅ Match |
+| Label: "Extraction Ritual — Hold Your Ground" | Serif, bone white | Present, serif | ✅ Match |
+| Fill: muted gold with pulse | `#C9A84C`, gentle pulse | `bg-[#C9A84C]`, CSS `@keyframes pulse` animation | ✅ Match |
+| Multi-phase segments | Discrete segments per tick | ❌ **Smooth fill, not segmented** | 🟢 Minor |
+| Noise warning | Amber text below bar | "Noise generated: HIGH..." in `#B8860B` | ✅ Match |
+| **Success state** | | | |
+| Full overlay with scrim | 80% dark scrim, centered card | Present, dark scrim, centered | ✅ Match |
+| "Extraction Successful" in gold serif | `#C9A84C`, large serif | `text-[#C9A84C]`, serif, 1.75rem | ✅ Match |
+| Items extracted: tier-colored | Correct tier colors | Green `#6B8E6B`, Blue `#4682B4`, White `#E8E0D0` | ✅ Match |
+| Experience: qualitative text | Muted silver | "Significant combat experience gained" | ✅ Match |
+| Contracts completed: emerald | `#2D6B4F` | ✅ Match | ✅ Match |
+| Run stats: monospace | Time, rooms, creatures, players evaded | All four stats present, monospace | ✅ Match |
+| "Return to Refuge" gold button | Primary gold | `bg-[#C9A84C]` | ✅ Match |
+| Gold border on card | 1px gold | `borderColor: "#C9A84C"` | ✅ Match |
+| **Death state** | | | |
+| "You Have Fallen" in blood red | `#8B2500`, serif | `text-[#8B2500]`, serif, 1.75rem | ✅ Match |
+| Items lost: crossed-out | Line-through, muted | Strikethrough text, `#4A4B55` bullets | ✅ Match |
+| Status acquired | Amber text | "Shard-sickness (moderate)" in `#B8860B` | ✅ Match |
+| Secondary button (outlined) | No gold fill, muted border | `border-[#8A8B95]`, text `#8A8B95` | ✅ Match |
+| **Interrupted state** | Combat during extraction | ❌ **Not implemented** | 🟡 Moderate |
+
+**Gaps found:** 2
+
+| # | Gap | Severity | Spec Ref | Fix Owner |
+|---|-----|----------|----------|-----------|
+| 25 | Extraction interrupted state (combat during ritual) not implemented | 🟡 Moderate | gaps-brief §4E | Volo (UI) + Jarlaxle (protocol) |
+| 26 | Multi-phase segments (discrete tick segments) not implemented (smooth fill instead) | 🟢 Minor | gaps-brief §2C | Volo (UI) |
+
+---
+
+### 9. Chat & Social Panel
+
+**Spec ref:** `figma-design-prompt.md` §9, `figma-gaps-brief.md` §2D
+
+| Element | Spec | Implementation | Status |
+|---------|------|----------------|--------|
+| Panel slides from right | 40% width overlay | `w-[40%]`, z-50, fixed overlay | ✅ Match |
+| Chat tabs: Proximity, Whisper, Refuge, Squad | All four | All four present. Squad disabled. Context-aware availability | ✅ Match |
+| Tab styling | Ghost text, gold underline on active | `border-b-2 border-[#C9A84C]` active, `text-[#8A8B95]` inactive | ✅ Match |
+| Player speech styling | Quoted, serif italic, speaker description | Quoted serif with speaker prefix | ✅ Match |
+| System messages | Monospace, muted grey | `font-mono`, `text-[#4A4B55]` | ✅ Match |
+| Emotes | Italic, no quotes | `italic`, serif, `text-[#8A8B95]` | ✅ Match |
+| Whispers | Teal prefix `[whisper]` | `text-[#3A7D7B]` whisper label | ✅ Match |
+| Chat input | Monospace, "Say something..." | `font-mono`, placeholder present | ✅ Match |
+| Commands hint | `/say /whisper /emote` | Present below input | ✅ Match |
+| Players Nearby | Character name + faction icon, clickable | Present ("Nearby Presences") but with generic descriptors, **not clickable for whisper/trade** | 🟡 Partial |
+| Trade interface | Two-column offer panel | ❌ **Not implemented** | 🟡 Moderate |
+
+**Gaps found:** 2
+
+| # | Gap | Severity | Spec Ref | Fix Owner |
+|---|-----|----------|----------|-----------|
+| 27 | Trade interface (two-column offer panel) not implemented | 🟡 Moderate | design-prompt §9, gaps-brief §2D | Phase 2 scope — acceptable |
+| 28 | Nearby players not clickable for whisper/trade actions | 🟢 Minor | gaps-brief §2D | Volo (UI) |
+
+---
+
+### 10. Leaderboard & Contracts
+
+**Spec ref:** `figma-design-prompt.md` §10
+
+| Element | Spec | Implementation | Status |
+|---------|------|----------------|--------|
+| Three tabs | Seasonal Leaderboard, Personal Stats, Active Contracts | All three present (Trophy, Target, Swords icons) | ✅ Match |
+| Table columns | Rank, Player, Faction, Shards, Items, PvP | All 6 columns present | ✅ Match |
+| Current player highlighted gold | Gold row | `bg-[#C9A84C]/10` on player row | ✅ Match |
+| Faction leaderboard tab | Collective progress | ❌ **Missing** — no faction-level leaderboard sub-tab | 🟡 Moderate |
+| Personal Stats | Runs, survival rate, favorite biome, items, streak | 6 stat cards with correct data | ✅ Match |
+| Contract cards | Objective, reward, deadline, progress, abandon | Objective, reward, progress bar present. **Deadline not shown**. Abandon button present | 🟡 Partial |
+
+**Gaps found:** 2
+
+| # | Gap | Severity | Spec Ref | Fix Owner |
+|---|-----|----------|----------|-----------|
+| 29 | Faction leaderboard sub-tab missing | 🟡 Moderate | design-prompt §10 | Volo (UI) |
+| 30 | Contract deadline not displayed | 🟢 Minor | design-prompt §10 | Volo (UI) |
+
+---
+
+### 11. Settings
+
+**Spec ref:** `figma-design-prompt.md` §11
+
+| Element | Spec | Implementation | Status |
+|---------|------|----------------|--------|
+| Left sidebar + right content | Full-screen overlay, two-column | Two-column: 64rem sidebar + flex-1 content | ✅ Match |
+| 6 categories | Account, Display, Narration, Audio, Keybinds, Accessibility | All 6 present with icons | ✅ Match |
+| Verbosity: Terse/Standard/Verbose | Radio with preview text | Three options with prose previews | ✅ Match |
+| Narration style | Default/Gothic/Noir/Clinical | Dropdown with all four options | ✅ Match |
+| Font size slider | Slider for narrative text | Range input min=12 max=24 | ✅ Match |
+| Panel layout options | Sidebar left vs right | Two buttons (Sidebar Right / Sidebar Left) | ✅ Match |
+| Color contrast mode | High contrast toggle | Toggle present | ✅ Match |
+| Keybinds | Rebindable table | 7 keybind rows (Strike through Observe) | ✅ Match |
+| Accessibility | Screen reader, color-dependent, animations | All 3 toggles present with descriptions | ✅ Match |
+| Audio | Audio settings | **Stub:** "Audio features coming soon..." | 🟡 Expected |
+
+**Gaps found:** 0  
+**Verdict:** ✅ **Fully aligned.** Settings matches spec comprehensively.
+
+---
+
+### 12. Reconnection Overlay
+
+**Spec ref:** `figma-gaps-brief.md` §2E
+
+| Element | Spec | Implementation | Status |
+|---------|------|----------------|--------|
+| Dark scrim overlay | Semi-transparent | `bg-black/80`, z-100 | ✅ Match |
+| "Connection lost" text | Bone white, serif | `text-[#B8860B]` (amber, not bone white), serif | 🟡 Partial |
+| Reconnecting progress bar | Visual progress | Gold bar with attempt/max progress | ✅ Match |
+| "Your character will defend..." text | Muted silver | ❌ **Missing** — shows attempt count instead | 🟢 Minor |
+| Reconnected state | Fade overlay, emerald toast | "Connection Restored" in `#2D6B4F`, auto-dismisses after 2s | ✅ Match |
+| Failed state: "Return to Login" | Button | "Return to Refuge" button (not "Return to Login") | 🟡 Partial |
+
+**Gaps found:** 2
+
+| # | Gap | Severity | Spec Ref | Fix Owner |
+|---|-----|----------|----------|-----------|
+| 31 | "Your character will defend themselves..." reassurance text missing | 🟢 Minor | gaps-brief §2E | Volo (UI) |
+| 32 | Failed reconnection says "Return to Refuge" instead of "Return to Login" | 🟢 Minor | gaps-brief §2E | Volo (UI) |
+
+---
+
+## Cross-Cutting Issues
+
+### Theme Token Adoption: 🔴 CRITICAL
+
+| File | Hardcoded Hex Count | Theme Token Count |
+|------|--------------------:|------------------:|
+| ShardExploration.tsx | 74 | 0 |
+| Leaderboard.tsx | 58 | 0 |
+| Settings.tsx | 56 | 0 |
+| StashTab.tsx | 44 | 0 |
+| Refuge.tsx | 43 | 0 |
+| InventoryOverlay.tsx | 37 | 0 |
+| LoadoutTab.tsx | 35 | 0 |
+| ExtractionOverlay.tsx | 31 | 0 |
+| CharacterSelect.tsx | 25 | 0 |
+| ChatPanel.tsx | 24 | 0 |
+| ShardboardTab.tsx | 19 | 0 |
+| Login.tsx | 19 | 0 |
+| ReconnectionOverlay.tsx | 13 | 0 |
+| **TOTAL** | **478** | **0** |
+
+The `theme.css` `@theme inline` block correctly exposes all tokens (`bg-bg-panel`, `text-accent-gold`, `text-text-primary`, etc.). **Zero components use them.** This means the palette is consistent by accident (all files hardcode the same hex values) but unmaintainable. A single palette change requires editing 478 occurrences.
+
+### Color Accuracy
+
+All hardcoded hex values match the design spec exactly:
+- `#0A0B0F` = bg-primary ✅
+- `#12131A` = bg-panel ✅
+- `#1C1D27` = bg-elevated ✅
+- `#E8E0D0` = text-primary ✅
+- `#8A8B95` = text-secondary ✅
+- `#4A4B55` = text-disabled ✅
+- `#C9A84C` = accent-gold ✅
+- `#8B2500` = danger ✅
+- `#2D6B4F` = success ✅
+- `#3A7D7B` = interactive ✅
+- `#B8860B` = warning ✅
+- `#6B8E6B` = tier-sturdy ✅
+- `#4682B4` = tier-refined ✅
+- `#7B4FA0` = tier-masterwork ✅
+- `#DAA520` = tier-anomalous ✅
+
+**One non-spec color found:** `#B89840` used for button hover states (6 occurrences). This is not in the design spec; the spec defines button hover as "subtle outer glow" not a darker fill. However, it's a reasonable UX approximation. The `styles.css` file defines `--accent-hover: #d4b35a` which is also unused.
+
+### Font Strategy
+
+| Usage | Spec Font | Implementation | Status |
+|-------|-----------|----------------|--------|
+| Narrative prose | Serif (Crimson Text) | `var(--font-serif)` = Crimson Text | ✅ Match |
+| Commands/system | Mono (JetBrains Mono) | `var(--font-mono)` = JetBrains Mono | ✅ Match |
+| UI labels/buttons | Sans (Inter) | `var(--font-sans)` = Inter | ✅ Match |
+| Titles/headers | Serif/decorative (Cinzel option) | Uses Crimson Text (serif), not Cinzel | ✅ Acceptable |
+
+Font assignments are **correct throughout**. Room names use serif. System messages use mono. UI chrome uses sans. Narrative prose uses serif. No mismatches found.
+
+### Missing State Variants (gaps-brief §4)
+
+| Variant | Status |
+|---------|--------|
+| §4A Button states (4 types × 4 states) | ❌ **Missing** — only primary gold button has hover. No danger, ghost, or secondary hover/active/disabled variants systematically defined |
+| §4B Item card tier variants | ✅ Implemented via `getTierColor()` in StashTab, InventoryOverlay |
+| §4C HP bar states (Healthy/Wounded/Critical) | ❌ **Missing** — static at 75%, always green |
+| §4D Collapse timer phases | 🟡 Partial — color transitions work, "Destabilising" label exists, "COLLAPSE IMMINENT" missing, no pulse |
+| §4E Extraction progress phases | 🟡 Partial — in-progress and success/death work. Interrupted state missing |
+| §4F Toast notifications | ❌ **Missing** — Sonner `<Toaster />` imported in App.tsx but no custom styled toasts matching spec (4 types with left accent) |
+| §4G Empty states (6 atmospheric) | ❌ **Missing** — only Sound Cues has "Silence." empty state. No atmospheric empty states for stash, contracts, characters, chat, shards, squad |
+
+### Responsive Design
+
+| Breakpoint | Spec | Implementation | Status |
+|------------|------|----------------|--------|
+| 1440px+ (Desktop) | Full experience | Fixed percentage widths | ✅ Functional |
+| 1024px (Tablet Landscape) | Collapsible sidebar | ❌ No responsive behavior | ❌ Missing |
+| 768px (Tablet Portrait) | Single-column + bottom sheet | ❌ No responsive behavior | ❌ Missing |
+| <768px (Mobile) | Simplified | ❌ No responsive behavior | ❌ Missing |
+
+---
+
+## Consolidated Gap Table
+
+| # | Screen | Gap | Severity | Spec Ref | Fix Owner |
+|---|--------|-----|----------|----------|-----------|
+| 1 | CharacterSelect | Starting loadout preview missing | 🟢 Minor | design-prompt §2 | Volo |
+| 2 | Refuge | Crafting tab is stub | 🟡 Moderate | design-prompt §3 | Phase 2 |
+| 3 | Refuge | Marketplace tab is stub | 🟡 Moderate | design-prompt §3 | Phase 2 |
+| 4 | Refuge | Factions tab is stub | 🟡 Moderate | design-prompt §3 | Phase 2 |
+| 5 | Refuge | Contracts tab is stub | 🟡 Moderate | design-prompt §3 | Phase 2 |
+| 6 | Refuge | Players Nearby is stub | 🟡 Moderate | design-prompt §3 | Jarlaxle |
+| 7 | Refuge | Top bar missing HP indicator + location breadcrumb | 🟡 Moderate | design-prompt §3 | Volo |
+| 8 | Shardboard | Shard filters (tier/biome/modifier) missing | 🟡 Moderate | design-prompt §4 | Volo |
+| 9 | Shardboard | Biome-specific icons not implemented | 🟢 Minor | design-prompt §4 | Volo |
+| 10 | ShardExploration | **Combat text not color-coded** (gold/red/silver) | 🔴 Critical | design-prompt §5-6 | Volo |
+| 11 | ShardExploration | Status effects section missing from sidebar | 🟡 Moderate | design-prompt §5 | Volo |
+| 12 | ShardExploration | HP bar static — no dynamic state color transitions | 🟡 Moderate | gaps-brief §4C | Volo |
+| 13 | ShardExploration | Stability bar is 128px, not full header width | 🟡 Moderate | design-prompt §5, gaps-brief §3A | Volo |
+| 14 | ShardExploration | "COLLAPSE IMMINENT" label missing at <25% | 🟡 Moderate | gaps-brief §4D | Volo |
+| 15 | ShardExploration | Collapse timer no pulse animation in red phase | 🟡 Moderate | gaps-brief §4D | Volo |
+| 16 | ShardExploration | Sound cue direction words not teal-highlighted | 🟡 Moderate | gaps-brief §3B | Volo |
+| 17 | ShardExploration | Sound cues no fade-out animation | 🟢 Minor | gaps-brief §3B | Volo |
+| 18 | ShardExploration | Auto-complete hint above command input missing | 🟡 Moderate | design-prompt §5, gaps-brief §3E | Volo |
+| 19 | ShardExploration | Mini-action buttons missing icons | 🟢 Minor | gaps-brief §3C | Volo |
+| 20 | Combat | Tick timer countdown bar missing | 🟡 Moderate | design-prompt §6, gaps-brief §2A | Volo |
+| 21 | Combat | "Skill" button missing from quickbar (7/8) | 🟡 Moderate | design-prompt §6 | Volo |
+| 22 | Combat | No fade transitions on combat enter/exit | 🟢 Minor | gaps-brief §2A | Volo |
+| 23 | Inventory | Item inspect sub-panel not implemented | 🟡 Moderate | design-prompt §7 | Volo |
+| 24 | Inventory | "Inspect" action button missing | 🟢 Minor | design-prompt §7 | Volo |
+| 25 | Extraction | Interrupted state not implemented | 🟡 Moderate | gaps-brief §4E | Volo + Jarlaxle |
+| 26 | Extraction | Segmented progress bar (smooth instead) | 🟢 Minor | gaps-brief §2C | Volo |
+| 27 | Chat | Trade interface not implemented | 🟡 Moderate | design-prompt §9 | Phase 2 |
+| 28 | Chat | Nearby players not clickable | 🟢 Minor | gaps-brief §2D | Volo |
+| 29 | Leaderboard | Faction leaderboard sub-tab missing | 🟡 Moderate | design-prompt §10 | Volo |
+| 30 | Leaderboard | Contract deadline not displayed | 🟢 Minor | design-prompt §10 | Volo |
+| 31 | Reconnection | "Character will defend..." text missing | 🟢 Minor | gaps-brief §2E | Volo |
+| 32 | Reconnection | Says "Return to Refuge" not "Return to Login" on failure | 🟢 Minor | gaps-brief §2E | Volo |
+| S1 | **ALL FILES** | **478 hardcoded hex values, zero theme tokens used** | 🔴 Critical | conversion-strategy §1.3 | Volo |
+| S2 | **ALL FILES** | Pervasive inline `style={{ fontFamily }}` instead of Tailwind classes | 🟡 Moderate | conversion-strategy §1.3 | Volo |
+| S3 | Cross-cutting | Button state variants not systematically defined | 🟡 Moderate | gaps-brief §4A | Volo |
+| S4 | Cross-cutting | Toast notification system not styled per spec | 🟡 Moderate | gaps-brief §4F | Volo |
+| S5 | Cross-cutting | Empty states not implemented (6 contexts) | 🟡 Moderate | gaps-brief §4G | Volo |
+| S6 | Cross-cutting | No responsive breakpoints (1024px, 768px) | 🟡 Moderate | gaps-brief §5B-C | Phase 2 |
+
+---
+
+## Summary Metrics
+
+| Category | Count |
+|----------|------:|
+| Total gaps identified | **38** |
+| 🔴 Critical | **2** (combat text coloring, theme token adoption) |
+| 🟡 Moderate | **24** |
+| 🟢 Minor | **12** |
+| Screens fully aligned | 3 of 12 (Login, Settings, Extraction mostly) |
+| Phase 2 deferrals | 6 (Crafting, Marketplace, Factions, Contracts stubs, Trade interface, Responsive) |
+| Actionable now | **32** |
+
+---
+
+## Prioritized Fix Batches
+
+### Batch 1: Foundation (unblocks everything)
+- **S1:** Theme token migration — replace all 478 hardcoded hex values with Tailwind theme tokens. This is the highest-leverage change.
+- **S2:** Replace inline `fontFamily` styles with Tailwind `font-serif`/`font-mono`/`font-sans` utility classes.
+
+### Batch 2: Core Gameplay Polish (Shard Exploration)
+- **#10:** Combat text color-coding (hits dealt → gold, taken → red, dodges → silver)
+- **#12:** Dynamic HP bar states (Healthy green → Wounded amber → Critical red pulse)
+- **#11:** Status effects tags in sidebar
+- **#13:** Full-width stability bar in narrative header
+- **#14-15:** Collapse timer "COLLAPSE IMMINENT" label + pulse animation
+- **#16:** Sound cue directional highlighting in teal
+- **#18:** Auto-complete hint above command input
+- **#20:** Tick timer countdown bar in combat
+- **#21:** Add "Skill" button to combat quickbar
+
+### Batch 3: Overlay Refinements
+- **#23:** Item inspect sub-panel in inventory overlay
+- **#25:** Extraction interrupted state
+- **S3:** Button state variant system (primary/secondary/danger/ghost × default/hover/active/disabled)
+- **S5:** Atmospheric empty states (6 contexts)
+
+### Batch 4: Structural Gaps
+- **#7:** Top bar: add HP indicator + location breadcrumb
+- **#8:** Shardboard filters
+- **#29:** Faction leaderboard sub-tab
+- **S4:** Toast notification styling per spec
+
+### Batch 5: Polish (defer to Phase 1.1)
+- All 🟢 Minor items (#1, #9, #17, #19, #22, #24, #26, #28, #30, #31, #32)
+
+---
+
+## Disposition
+
+The implementation has strong bones. The visual language is correct — palette, fonts, layout proportions all match the Figma spec. The architecture (Colyseus message-only protocol, React Context, server-authoritative state) is sound.
+
+But the two systemic issues (theme token adoption, inline fontFamily) are technical debt that compounds with every new feature. And the combat text color-coding gap directly undermines the core gameplay readability — the spec explicitly states hits dealt in gold, hits taken in red, dodges in silver, and the current implementation renders all combat text in uniform bone white.
+
+**Recommendation:** Batch 1 (theme token migration) should be the next sprint. It touches every file but is mechanical — a skilled agent can do it in a focused session. Batch 2 (Shard Exploration polish) follows immediately because that's where players spend 60%+ of their time.
+
+*— Elminster*
+___BEGIN___COMMAND_DONE_MARKER___0
+---

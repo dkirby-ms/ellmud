@@ -52,13 +52,13 @@ const mockShards: Shard[] = [
 const getTierColor = (tier: number) => {
   switch (tier) {
     case 1:
-      return "#E8E0D0";
+      return "var(--color-tier-common)";
     case 2:
-      return "#4682B4";
+      return "var(--color-tier-refined)";
     case 3:
-      return "#7B4FA0";
+      return "var(--color-tier-masterwork)";
     default:
-      return "#E8E0D0";
+      return "var(--color-tier-common)";
   }
 };
 
@@ -80,8 +80,8 @@ export default function ShardboardTab({ onEnterShard }: ShardboardTabProps) {
   return (
     <div className="p-8">
       <h2
-        className="text-[#C9A84C] mb-6"
-        style={{ fontFamily: "var(--font-serif)", fontSize: "1.5rem" }}
+        className="text-accent-gold mb-6 font-serif"
+        style={{ fontSize: "1.5rem" }}
       >
         Shardboard
       </h2>
@@ -90,34 +90,27 @@ export default function ShardboardTab({ onEnterShard }: ShardboardTabProps) {
         {mockShards.map((shard) => (
           <div
             key={shard.id}
-            className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6 hover:border-[#C9A84C] transition-colors"
+            className="bg-bg-panel border border-border-muted rounded-lg p-6 hover:border-accent-gold transition-colors"
           >
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h3
-                  className="text-[#C9A84C] mb-2"
-                  style={{
-                    fontFamily: "var(--font-serif)",
-                    fontSize: "1.25rem",
-                  }}
+                  className="text-accent-gold mb-2 font-serif"
+                  style={{ fontSize: "1.25rem" }}
                 >
                   {shard.name}
                 </h3>
                 <div className="flex items-center gap-3">
                   <span
-                    className="px-2 py-1 rounded text-xs font-semibold"
+                    className="px-2 py-1 rounded text-xs font-semibold font-sans"
                     style={{
-                      fontFamily: "var(--font-sans)",
-                      backgroundColor: getTierColor(shard.tier) + "20",
+                      backgroundColor: `color-mix(in srgb, ${getTierColor(shard.tier)} 20%, transparent)`,
                       color: getTierColor(shard.tier),
                     }}
                   >
                     Tier {shard.tier}
                   </span>
-                  <span
-                    className="text-[#8A8B95] text-sm"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
+                  <span className="text-text-secondary text-sm font-sans">
                     {shard.biome}
                   </span>
                 </div>
@@ -125,8 +118,7 @@ export default function ShardboardTab({ onEnterShard }: ShardboardTabProps) {
 
               <button
                 onClick={() => handleEnterShard(shard.id)}
-                className="bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] font-medium px-6 py-2 rounded transition-colors"
-                style={{ fontFamily: "var(--font-sans)" }}
+                className="bg-accent-gold hover:bg-accent-gold/90 text-bg-primary font-medium px-6 py-2 rounded transition-colors font-sans"
               >
                 Enter Shard
               </button>
@@ -136,8 +128,7 @@ export default function ShardboardTab({ onEnterShard }: ShardboardTabProps) {
               {shard.modifiers.map((mod) => (
                 <span
                   key={mod}
-                  className="px-3 py-1 bg-[#1C1D27] text-[#B8860B] text-xs rounded border border-[#B8860B]/30"
-                  style={{ fontFamily: "var(--font-sans)" }}
+                  className="px-3 py-1 bg-bg-elevated text-warning text-xs rounded border border-warning/30 font-sans"
                 >
                   {mod}
                 </span>
@@ -146,46 +137,34 @@ export default function ShardboardTab({ onEnterShard }: ShardboardTabProps) {
 
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-[#8A8B95]" />
-                <span
-                  className="text-[#8A8B95] text-sm"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
+                <Users className="w-4 h-4 text-text-secondary" />
+                <span className="text-text-secondary text-sm font-sans">
                   {shard.players.current}/{shard.players.max} players
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[#8A8B95]" />
-                <span
-                  className="text-[#8A8B95] text-sm"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
+                <Clock className="w-4 h-4 text-text-secondary" />
+                <span className="text-text-secondary text-sm font-sans">
                   {shard.timeRemaining}
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
-                <Key className="w-4 h-4 text-[#8A8B95]" />
-                <span
-                  className="text-[#8A8B95] text-sm"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
+                <Key className="w-4 h-4 text-text-secondary" />
+                <span className="text-text-secondary text-sm font-sans">
                   {shard.keyType}
                 </span>
               </div>
             </div>
 
-            <div className="bg-[#1C1D27] border border-[#2A2B35] rounded p-3">
-              <p
-                className="text-[#4A4B55] text-xs mb-1"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
+            <div className="bg-bg-elevated border border-border-muted rounded p-3">
+              <p className="text-text-disabled text-xs mb-1 font-sans">
                 Rumoured Loot
               </p>
               <p
-                className="text-[#8A8B95] text-sm italic"
-                style={{ fontFamily: "var(--font-serif)", lineHeight: 1.6 }}
+                className="text-text-secondary text-sm italic font-serif"
+                style={{ lineHeight: 1.6 }}
               >
                 {shard.rumor}
               </p>
