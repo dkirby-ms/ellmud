@@ -497,3 +497,57 @@ The UX overhaul moved 24 old components to `components/_old/` and replaced them 
 - Tests define RENDERED contracts (DOM classes, text content, aria attributes) not data model internals
 
 **Suite status:** 77 existing + 24 new = 101 total client tests (21 anticipatory failures expected).
+
+---
+
+## Learnings — Wave 1 Multiplayer Anticipatory Tests (2026-03-22)
+
+**Task:** Write anticipatory integration tests for Phase 2 Wave 1 features (#21, #26, #28). Create a SINGLE test file on `dev` branch (no separate PR branch).
+
+**File created:** `packages/server/src/__tests__/wave1-multiplayer.test.ts`
+
+**Results:** 58 tests total — 5 passing (verify existing behavior), 53 `.todo()` (anticipatory contracts). Zero regressions on 949 existing server tests.
+
+**Test architecture decisions:**
+- `connectToExistingRoom` pattern for multi-client tests — create room once, then connect multiple clients to same instance
+- MAX_PLAYERS_PER_SHARD env var with `resetConfig()` in beforeEach/afterEach — ensures each suite gets clean config state
+- MessageCollector pattern to verify narration/message routing — already established in existing tests
+- No imports of types/functions that don't exist yet — `.todo()` tests describe contracts in test names only
+
+**Key patterns discovered:**
+- Parser already accepts 'say' verb — can test at parser level without handler implementation
+- Multi-player join/capacity enforcement works with existing maxClients logic — tests pass immediately
+- Colyseus rejection messages vary between "full" and "locked" — test regex `/full|locked/i` for robustness
+- Player count tracking visible in server logs (`[ShardRoom] Player joined: xyz (N players)`) — can validate via log output or future state API
+
+**Test categories:**
+1. **Multi-Player Shards (#21)** — 13 tests (4 passing: join/capacity/tracking; 9 todo: tier-based limits, Redis presence, entry distribution)
+2. **Proximity Communication (#26)** — 14 tests (1 passing: parser accepts say; 13 todo: routing, filtering, sanitization)
+3. **Say Command End-to-End** — 3 tests (all todo: room-scoped broadcast, speaker identity)
+4. **Reconnection Tuning (#28)** — 8 tests (all todo: state preservation, combat dodge, timeout)
+5. **Tier-Based Limits** — 5 tests (all todo: Tier 1/2/3 max players)
+6. **Shard Metadata** — 6 tests (all todo: player count/list exposure)
+7. **Entry Point Distribution** — 5 tests (all todo: spawn location logic)
+8. **Proximity Sanitization** — 6 tests (all todo: HTML stripping, length limits, prompt injection)
+
+**Behavioral contracts defined:**
+- Tier 1 shards allow 4 players (new default for Phase 2)
+- Tier 2 shards allow 5 players
+- Tier 3 shards allow 6 players
+- `say` broadcasts to same room only, uses "speech" narration type
+- `whisper` delivers to target only (others in room don't see it)
+- `emote` broadcasts to same room, formatted as third-person
+- Message length limits: >200 chars truncated or rejected
+- Prompt injection attempts sanitized (no LLM leakage)
+- Reconnection window: 30 seconds state preservation
+- Disconnected players in combat: apply dodge action
+
+**Integration with parallel work:**
+- Drizzt (#21): tier-based max players, Redis presence, KEDA scaling
+- Jarlaxle (#26): say/whisper/emote handlers, message routing
+- Volo (#26): LLM prompts for social narration
+- Tests will pass incrementally as each agent's PR lands on dev
+
+**Suite status:** 949 existing + 58 new = 1,007 total server tests (5 passing, 53 anticipatory todo).
+
+**Commit:** `1d5b6e1` pushed directly to `dev` branch (no separate PR).
