@@ -124,6 +124,8 @@ function makeServerConfig(overrides: Partial<ServerConfig['redis']> = {}): Serve
     },
     port: 2567,
     authRequired: false,
+    reconnectionTimeoutS: 30,
+    reconnectDeathBehavior: 'kill',
   };
 }
 

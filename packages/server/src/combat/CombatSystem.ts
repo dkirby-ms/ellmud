@@ -212,7 +212,8 @@ export class CombatSystem {
     for (const c of combatants) {
       if (!this.queuedActions.has(c.id)) {
         this.queuedActions.set(c.id, { action: 'dodge' });
-        this.debug(`Default dodge for ${c.name} (no input)`);
+        const reason = c.disconnected ? '(disconnected)' : '(no input)';
+        this.debug(`Default dodge for ${c.name} ${reason}`);
       }
     }
 
@@ -401,6 +402,24 @@ export class CombatSystem {
     }
     this.queuedActions.delete(id);
     this.combatants.delete(id);
+  }
+
+  /** Mark a combatant as disconnected — will auto-dodge until reconnection. */
+  markDisconnected(id: string): void {
+    const combatant = this.combatants.get(id);
+    if (combatant) {
+      combatant.disconnected = true;
+      this.debug(`Combatant ${combatant.name} marked as disconnected`);
+    }
+  }
+
+  /** Clear disconnected flag on reconnection. */
+  clearDisconnected(id: string): void {
+    const combatant = this.combatants.get(id);
+    if (combatant) {
+      combatant.disconnected = false;
+      this.debug(`Combatant ${combatant.name} reconnected`);
+    }
   }
 
   private debug(msg: string): void {
