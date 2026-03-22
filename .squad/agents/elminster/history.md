@@ -238,3 +238,28 @@ All four PRs merge cleanly to dev:
 - **Key files reviewed:** All 6 pages, 7 overlay/tab components, theme.css, styles.css, store.ts, App.tsx, routes.ts.
 - **Decision output:** `.squad/decisions/inbox/elminster-ux-alignment-review.md`
 - **Prioritized fix batches:** (1) Theme token migration, (2) ShardExploration combat/sidebar polish, (3) Overlay refinements, (4) Structural gaps, (5) Minor polish.
+**Next:** Phase 2 planning — content admin tool design ready (docs/content-admin-tool.md), implement per priority.
+
+## Learnings
+
+### 2026-03-21: Batch A Phase 1 Client UI Review (#84–#88)
+**Context:** Reviewed 5 PRs for Phase 1 client UI: Button (#84, Drizzt), Toast (#85, Jarlaxle), Clickable Exits (#86, Volo), Shardboard (#87, Volo), Reconnection Overlay (#88, Drizzt).
+
+**Key findings:**
+- **Test quality across all 5 PRs is excellent.** Every PR has meaningful behavioral tests with proper assertions, not just smoke tests. Multi-layered testing (unit, component, integration) where appropriate.
+- **Accessibility is consistently strong.** ARIA attributes, role attributes, keyboard support, aria-live regions.
+- **CSS variable compliance is inconsistent.** PR #87 (Shardboard) had 10+ hardcoded hex values where exact CSS variable equivalents exist (e.g., `#12131A` instead of `var(--bg-panel)`, `#C9A84C` instead of `var(--accent)`). PRs #84 and #88 had minor hex values for interactive states that lack existing variables.
+- **Pattern consistency is good.** Components follow BEM naming, use TypeScript interfaces for props, export named functions.
+
+**Decision:** Rejected #87 for systemic CSS variable violations. Approved #84/#88 with notes on minor hex values. Clean approval for #85/#86.
+
+**Enforcement note:** The team decision "All future screens must use `:root` variables; no hardcoded colors" needs teeth. Three of five PRs had some level of hex leakage. May need a CSS lint rule.
+
+### 2025-07-25: Batch B PR Review — Phase 1 Client UI (PRs #89–#93)
+- **Action:** Code review of 5 Wave 7 client UI PRs for code quality, pattern consistency, CSS compliance, accessibility, and correctness.
+- **PR #89 — Loading & Transition States (Drizzt, #71):** ✅ APPROVED. 4 transition components (RoomTransitionLoader, ShardEntryLoader, CombatInitiationBanner, LongRunningIndicator). 300ms minimum display time, 2s auto-dismiss, 5s cancel threshold. All CSS uses theme variables — zero hardcoded hex. 27 tests with behavioral verification. Excellent accessibility (role="status", role="alert", aria-labels). Clean PR.
+- **PR #90 — Shard Exploration Sidebar & Combat Overlay (Jarlaxle, #66+#70):** ❌ REJECTED. Massive PR (24 files, 135 tests, 1200+ lines CSS). Components and logic are excellent — CombatOverlay with keyboard shortcuts, ShardSidebar with sound cues + timer, ReconnectionOverlay with exponential backoff, ShardCard with countdown. Store properly extended. However: **~23 hardcoded hex values in CSS** violating team decision (no hardcoded colors). Values like #12131A (=--bg-panel), #C9A84C (=--accent), #4682B4 (=--loot-refined), #7B4FA0 (=--loot-masterwork) have direct theme variable equivalents. Also: duplicate `.reconnect-overlay` CSS block (copy-paste). Also need new theme variables for: --border-subtle (#2A2B35), --border-hover (#3E3F4C), --accent-hover (#d4b35a), --hp-badly-wounded (#cc4400), --border-dark (#222). **Assigned to Drizzt for CSS variable migration.**
+- **PR #91 — Refuge Hub (Jarlaxle, #68):** ⚠️ APPROVED WITH NOTES. 7-tab tabbed navigation matching issue spec exactly. Controlled component pattern (parent manages tab state). 59 tests. Stub panels appropriate for Phase 1 scaffold. 1 minor hex: #d4b35a hover state. Clean accessibility (tablist/tab/tabpanel pattern). Tab names match issue spec per decisions.md.
+- **PR #92 — Extraction Screen (Drizzt, #72):** ⚠️ APPROVED WITH NOTES. Discriminated union props pattern for 3 phases (extracting/success/failure). Shared extraction-types.ts. 52 tests. Proper accessibility. 1 minor hex: #d4b35a hover. Minor: `formatTime()` duplicated across ExtractionSuccess and ExtractionFailure — should extract to shared util.
+- **PR #93 — Chat & Social Panel (Volo, #73):** ✅ APPROVED. ChatPanel with channel filtering + @mention highlighting. PlayersNearby with faction icons. TradeRequest with auto-decline timer. 78 tests. Zero hardcoded hex. Clean accessibility. Good edge case handling (empty states, char counter warning).
+- **Cross-PR assessment:** PR90 is the only blocker. The CSS variable violation is extensive (~23 instances) and directly contradicts the team's established design token policy. Fix is mechanical (find-replace hex → var()) but some new :root variables are needed. All other PRs meet the quality bar.

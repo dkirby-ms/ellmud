@@ -263,3 +263,11 @@ Wave 7 will deliver final 3 client UI issues. Shardboard will integrate with Ref
 - Migrated hardcoded hex values in core client pages/components to Tailwind theme tokens from `theme.css` (`@theme inline`).
 - Replaced inline `fontFamily` styles with `font-serif`, `font-sans`, and `font-mono` utilities for consistent typography.
 - Swapped dynamic tier/status colors to CSS variable tokens to keep runtime styles on the same palette.
+
+### 2025-07-26: UX Batch 2 — Combat & Sidebar Polish (PR #104)
+- Implemented 10 UX gaps from Elminster's design alignment review for ShardExploration screen.
+- **State extensions:** Added `combatSubtype` to `TerminalMessage`, `StatusEffect` interface, `statusEffects`/`playerHp`/`playerMaxHp` to `AppState`.
+- **Key pattern: health state derivation** — Single `healthState` computed from `playerHp/playerMaxHp` ratio, returns label/color/barColor/pulse. Used in both top bar and sidebar for DRY rendering.
+- **Key pattern: direction highlighting in sound cues** — Regex-based text splitting with `exec()` loop produces mixed text/JSX array. `data-sound-cue` attribute enables scoped RTL queries.
+- **Test spec bug found:** Anticipatory test for Gap #21 uses `getByRole('button', { name: /Strike/i })` which matches both "Strike" and "Heavy Strike" buttons via substring regex. RTL's `matchRegExp` is `regex.test(text)` — no exact matching. Test needs anchored regex (`/^Strike$/i`) or `getAllByRole`.
+- **23/24 tests passing**, 0 type errors, 0 lint errors.
