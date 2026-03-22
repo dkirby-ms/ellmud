@@ -62,8 +62,8 @@ export default function LoadoutTab() {
   return (
     <div className="p-8">
       <h2
-        className="text-[#C9A84C] mb-6"
-        style={{ fontFamily: "var(--font-serif)", fontSize: "1.5rem" }}
+        className="text-accent-gold mb-6 font-serif"
+        style={{ fontSize: "1.5rem" }}
       >
         Loadout
       </h2>
@@ -72,8 +72,7 @@ export default function LoadoutTab() {
         {/* Equipment */}
         <div>
           <h3
-            className="text-[#8A8B95] text-sm mb-4"
-            style={{ fontFamily: "var(--font-sans)" }}
+            className="text-text-secondary text-sm mb-4 font-sans"
           >
             Equipment
           </h3>
@@ -81,37 +80,29 @@ export default function LoadoutTab() {
             {equipmentSlots.map((slot) => (
               <div
                 key={slot.id}
-                className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-4 hover:border-[#3A7D7B] transition-colors"
+                className="bg-bg-panel border border-border-muted rounded-lg p-4 hover:border-interactive transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <div className="text-[#8A8B95]">{slot.icon}</div>
+                  <div className="text-text-secondary">{slot.icon}</div>
                   <div className="flex-1">
                     <p
-                      className="text-[#4A4B55] text-xs mb-1"
-                      style={{ fontFamily: "var(--font-sans)" }}
+                      className="text-text-disabled text-xs mb-1 font-sans"
                     >
                       {slot.label}
                     </p>
                     {slot.equipped ? (
-                      <p
-                        className="text-[#E8E0D0]"
-                        style={{ fontFamily: "var(--font-serif)" }}
-                      >
+                      <p className="text-text-primary font-serif">
                         {slot.equipped}
                       </p>
                     ) : (
-                      <p
-                        className="text-[#4A4B55] italic"
-                        style={{ fontFamily: "var(--font-serif)" }}
-                      >
+                      <p className="text-text-disabled italic font-serif">
                         [empty]
                       </p>
                     )}
                   </div>
                   {slot.equipped && (
                     <button
-                      className="text-[#8A8B95] hover:text-[#8B2500] text-xs"
-                      style={{ fontFamily: "var(--font-sans)" }}
+                      className="text-text-secondary hover:text-danger text-xs font-sans"
                     >
                       Remove
                     </button>
@@ -126,8 +117,7 @@ export default function LoadoutTab() {
         <div>
           <div className="mb-6">
             <h3
-              className="text-[#8A8B95] text-sm mb-4"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-secondary text-sm mb-4 font-sans"
             >
               Consumables
             </h3>
@@ -135,29 +125,22 @@ export default function LoadoutTab() {
               {consumableSlots.map((slot) => (
                 <div
                   key={slot.id}
-                  className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-4 hover:border-[#3A7D7B] transition-colors"
+                  className="bg-bg-panel border border-border-muted rounded-lg p-4 hover:border-interactive transition-colors"
                 >
                   <div className="flex items-center gap-2 mb-2">
-                    <Droplet className="w-4 h-4 text-[#8A8B95]" />
+                    <Droplet className="w-4 h-4 text-text-secondary" />
                     <p
-                      className="text-[#4A4B55] text-xs"
-                      style={{ fontFamily: "var(--font-sans)" }}
+                      className="text-text-disabled text-xs font-sans"
                     >
                       Slot {slot.id.replace("c", "")}
                     </p>
                   </div>
                   {slot.equipped ? (
-                    <p
-                      className="text-[#E8E0D0] text-sm"
-                      style={{ fontFamily: "var(--font-serif)" }}
-                    >
+                    <p className="text-text-primary text-sm font-serif">
                       {slot.equipped}
                     </p>
                   ) : (
-                    <p
-                      className="text-[#4A4B55] italic text-sm"
-                      style={{ fontFamily: "var(--font-serif)" }}
-                    >
+                    <p className="text-text-disabled italic text-sm font-serif">
                       [empty]
                     </p>
                   )}
@@ -168,8 +151,7 @@ export default function LoadoutTab() {
 
           <div className="mb-6">
             <h3
-              className="text-[#8A8B95] text-sm mb-4"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-secondary text-sm mb-4 font-sans"
             >
               Tools
             </h3>
@@ -177,29 +159,22 @@ export default function LoadoutTab() {
               {toolSlots.map((slot) => (
                 <div
                   key={slot.id}
-                  className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-4 hover:border-[#3A7D7B] transition-colors"
+                  className="bg-bg-panel border border-border-muted rounded-lg p-4 hover:border-interactive transition-colors"
                 >
                   <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="w-4 h-4 text-[#8A8B95]" />
+                    <Wrench className="w-4 h-4 text-text-secondary" />
                     <p
-                      className="text-[#4A4B55] text-xs"
-                      style={{ fontFamily: "var(--font-sans)" }}
+                      className="text-text-disabled text-xs font-sans"
                     >
                       Slot {slot.id.replace("t", "")}
                     </p>
                   </div>
                   {slot.equipped ? (
-                    <p
-                      className="text-[#E8E0D0] text-sm"
-                      style={{ fontFamily: "var(--font-serif)" }}
-                    >
+                    <p className="text-text-primary text-sm font-serif">
                       {slot.equipped}
                     </p>
                   ) : (
-                    <p
-                      className="text-[#4A4B55] italic text-sm"
-                      style={{ fontFamily: "var(--font-serif)" }}
-                    >
+                    <p className="text-text-disabled italic text-sm font-serif">
                       [empty]
                     </p>
                   )}
@@ -210,25 +185,18 @@ export default function LoadoutTab() {
 
           <div>
             <h3
-              className="text-[#8A8B95] text-sm mb-4"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-secondary text-sm mb-4 font-sans"
             >
               Shard Key
             </h3>
-            <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-4">
+            <div className="bg-bg-panel border border-border-muted rounded-lg p-4">
               <div className="flex items-center gap-3">
-                <Key className="w-5 h-5 text-[#C9A84C]" />
+                <Key className="w-5 h-5 text-accent-gold" />
                 <div>
-                  <p
-                    className="text-[#E8E0D0]"
-                    style={{ fontFamily: "var(--font-serif)" }}
-                  >
+                  <p className="text-text-primary font-serif">
                     Corrupted Iron Key
                   </p>
-                  <p
-                    className="text-[#4A4B55] text-xs"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
+                  <p className="text-text-disabled text-xs font-sans">
                     Grants access to Tier 1 shards
                   </p>
                 </div>
@@ -239,67 +207,50 @@ export default function LoadoutTab() {
       </div>
 
       {/* Stats Summary */}
-      <div className="mt-8 bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
+      <div className="mt-8 bg-bg-panel border border-border-muted rounded-lg p-6">
         <h3
-          className="text-[#8A8B95] text-sm mb-4"
-          style={{ fontFamily: "var(--font-sans)" }}
+          className="text-text-secondary text-sm mb-4 font-sans"
         >
           Current Stats
         </h3>
         <div className="grid grid-cols-4 gap-6">
           <div>
             <p
-              className="text-[#4A4B55] text-xs mb-1"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-disabled text-xs mb-1 font-sans"
             >
               Attack Power
             </p>
-            <p
-              className="text-[#E8E0D0]"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
+            <p className="text-text-primary font-mono">
               Moderate
             </p>
           </div>
           <div>
             <p
-              className="text-[#4A4B55] text-xs mb-1"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-disabled text-xs mb-1 font-sans"
             >
               Defence
             </p>
-            <p
-              className="text-[#E8E0D0]"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
+            <p className="text-text-primary font-mono">
               Light
             </p>
           </div>
           <div>
             <p
-              className="text-[#4A4B55] text-xs mb-1"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-disabled text-xs mb-1 font-sans"
             >
               Carry Weight
             </p>
-            <p
-              className="text-[#E8E0D0]"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
+            <p className="text-text-primary font-mono">
               23 / 50 units
             </p>
           </div>
           <div>
             <p
-              className="text-[#4A4B55] text-xs mb-1"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-disabled text-xs mb-1 font-sans"
             >
               Mobility
             </p>
-            <p
-              className="text-[#E8E0D0]"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
+            <p className="text-text-primary font-mono">
               High
             </p>
           </div>

@@ -131,19 +131,19 @@ const mockItems: GridItem[] = [
 const getTierColor = (tier: string) => {
   switch (tier) {
     case "scrap":
-      return "#4A4B55";
+      return "var(--color-text-disabled)";
     case "common":
-      return "#8A8B95";
+      return "var(--color-text-secondary)";
     case "sturdy":
-      return "#6B8E6B";
+      return "var(--color-tier-sturdy)";
     case "refined":
-      return "#4682B4";
+      return "var(--color-tier-refined)";
     case "masterwork":
-      return "#7B4FA0";
+      return "var(--color-tier-masterwork)";
     case "anomalous":
-      return "#DAA520";
+      return "var(--color-tier-anomalous)";
     default:
-      return "#8A8B95";
+      return "var(--color-text-secondary)";
   }
 };
 
@@ -187,14 +187,13 @@ function InventoryItem({ item, onMove, onRotate, onDelete }: InventoryItemProps)
         className="w-full h-full border-2 rounded flex flex-col items-center justify-center p-1 relative overflow-hidden"
         style={{
           borderColor: getTierColor(item.tier),
-          backgroundColor: getTierColor(item.tier) + "20",
+          backgroundColor: `color-mix(in srgb, ${getTierColor(item.tier)} 20%, transparent)`,
         }}
       >
         {/* Item name - truncated */}
         <div
-          className="text-center text-xs leading-tight px-1"
+          className="text-center text-xs leading-tight px-1 font-serif"
           style={{
-            fontFamily: "var(--font-serif)",
             color: getTierColor(item.tier),
             fontSize: width === 1 ? "0.65rem" : "0.75rem",
           }}
@@ -203,18 +202,15 @@ function InventoryItem({ item, onMove, onRotate, onDelete }: InventoryItemProps)
         </div>
 
         {/* Weight indicator */}
-        <div
-          className="text-[#8A8B95] text-[0.6rem] mt-auto"
-          style={{ fontFamily: "var(--font-mono)" }}
-        >
+        <div className="text-text-secondary text-[0.6rem] mt-auto font-mono">
           {item.weight}kg
         </div>
 
         {/* Durability bar */}
         {item.durability < 100 && (
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#1C1D27]">
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-bg-elevated">
             <div
-              className="h-full bg-gradient-to-r from-[#8B2500] via-[#B8860B] to-[#2D6B4F]"
+              className="h-full bg-gradient-to-r from-danger via-warning to-success"
               style={{ width: `${item.durability}%` }}
             />
           </div>
@@ -228,20 +224,20 @@ function InventoryItem({ item, onMove, onRotate, onDelete }: InventoryItemProps)
                 e.stopPropagation();
                 onRotate(item.id);
               }}
-              className="bg-[#1C1D27] hover:bg-[#2A2B35] p-1 rounded"
+              className="bg-bg-elevated hover:bg-border-muted p-1 rounded"
               title="Rotate"
             >
-              <RotateCw className="w-3 h-3 text-[#8A8B95]" />
+              <RotateCw className="w-3 h-3 text-text-secondary" />
             </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onDelete(item.id);
               }}
-              className="bg-[#1C1D27] hover:bg-[#8B2500] p-1 rounded"
+              className="bg-bg-elevated hover:bg-danger p-1 rounded"
               title="Delete"
             >
-              <Trash2 className="w-3 h-3 text-[#8A8B95]" />
+              <Trash2 className="w-3 h-3 text-text-secondary" />
             </button>
           </div>
         )}
@@ -270,12 +266,15 @@ function GridCell({ x, y, onDrop, isOccupied }: GridCellProps) {
     }),
   }));
 
-  const bgColor = isOver && canDrop ? "#C9A84C20" : "transparent";
+  const bgColor =
+    isOver && canDrop
+      ? "color-mix(in srgb, var(--color-accent-gold) 20%, transparent)"
+      : "transparent";
 
   return (
     <div
       ref={drop}
-      className="border border-[#2A2B35]"
+      className="border border-border-muted"
       style={{
         width: CELL_SIZE,
         height: CELL_SIZE,
@@ -339,27 +338,21 @@ function StashTabContent() {
     <div className="p-8 h-full flex flex-col">
       <div className="flex justify-between items-center mb-6">
         <h2
-          className="text-[#C9A84C]"
-          style={{ fontFamily: "var(--font-serif)", fontSize: "1.5rem" }}
+          className="text-accent-gold font-serif"
+          style={{ fontSize: "1.5rem" }}
         >
           Stash
         </h2>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
-            <Weight className="w-4 h-4 text-[#8A8B95]" />
-            <span
-              className="text-[#E8E0D0]"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
+            <Weight className="w-4 h-4 text-text-secondary" />
+            <span className="text-text-primary font-mono">
               {totalWeight.toFixed(1)} / {maxWeight} kg
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Package className="w-4 h-4 text-[#8A8B95]" />
-            <span
-              className="text-[#E8E0D0]"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
+            <Package className="w-4 h-4 text-text-secondary" />
+            <span className="text-text-primary font-mono">
               {usedCells} / {totalCells} cells
             </span>
           </div>
@@ -369,7 +362,7 @@ function StashTabContent() {
       <div className="flex gap-6 flex-1 min-h-0">
         {/* Main Stash Grid */}
         <div className="flex-1">
-          <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-4 inline-block">
+          <div className="bg-bg-panel border border-border-muted rounded-lg p-4 inline-block">
             <div className="relative" style={{ width: GRID_WIDTH * CELL_SIZE, height: GRID_HEIGHT * CELL_SIZE }}>
               {/* Grid cells */}
               <div className="grid" style={{ gridTemplateColumns: `repeat(${GRID_WIDTH}, ${CELL_SIZE}px)` }}>
@@ -403,10 +396,10 @@ function StashTabContent() {
 
         {/* Item Inspector */}
         <div className="w-80 flex flex-col gap-4">
-          <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
+          <div className="bg-bg-panel border border-border-muted rounded-lg p-6">
             <h3
-              className="text-[#C9A84C] mb-4"
-              style={{ fontFamily: "var(--font-serif)", fontSize: "1.125rem" }}
+              className="text-accent-gold mb-4 font-serif"
+              style={{ fontSize: "1.125rem" }}
             >
               Item Details
             </h3>
@@ -414,9 +407,8 @@ function StashTabContent() {
               <div className="space-y-4">
                 <div>
                   <h4
-                    className="mb-2"
+                    className="mb-2 font-serif"
                     style={{
-                      fontFamily: "var(--font-serif)",
                       fontSize: "1rem",
                       color: getTierColor(selectedItem.tier),
                     }}
@@ -425,19 +417,15 @@ function StashTabContent() {
                   </h4>
                   <div className="flex items-center gap-2 mb-2">
                     <span
-                      className="px-2 py-1 rounded text-xs capitalize"
+                      className="px-2 py-1 rounded text-xs capitalize font-sans"
                       style={{
-                        backgroundColor: getTierColor(selectedItem.tier) + "20",
+                        backgroundColor: `color-mix(in srgb, ${getTierColor(selectedItem.tier)} 20%, transparent)`,
                         color: getTierColor(selectedItem.tier),
-                        fontFamily: "var(--font-sans)",
                       }}
                     >
                       {selectedItem.tier}
                     </span>
-                    <span
-                      className="text-[#8A8B95] text-sm"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
+                    <span className="text-text-secondary text-sm font-sans">
                       {selectedItem.type}
                     </span>
                   </div>
@@ -445,51 +433,33 @@ function StashTabContent() {
 
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span
-                      className="text-[#8A8B95] text-sm"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
+                    <span className="text-text-secondary text-sm font-sans">
                       Weight
                     </span>
-                    <span
-                      className="text-[#E8E0D0] text-sm"
-                      style={{ fontFamily: "var(--font-mono)" }}
-                    >
+                    <span className="text-text-primary text-sm font-mono">
                       {selectedItem.weight} kg
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span
-                      className="text-[#8A8B95] text-sm"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
+                    <span className="text-text-secondary text-sm font-sans">
                       Size
                     </span>
-                    <span
-                      className="text-[#E8E0D0] text-sm"
-                      style={{ fontFamily: "var(--font-mono)" }}
-                    >
+                    <span className="text-text-primary text-sm font-mono">
                       {selectedItem.width}×{selectedItem.height}
                     </span>
                   </div>
                   <div>
                     <div className="flex justify-between mb-1">
-                      <span
-                        className="text-[#8A8B95] text-sm"
-                        style={{ fontFamily: "var(--font-sans)" }}
-                      >
+                      <span className="text-text-secondary text-sm font-sans">
                         Durability
                       </span>
-                      <span
-                        className="text-[#E8E0D0] text-sm"
-                        style={{ fontFamily: "var(--font-mono)" }}
-                      >
+                      <span className="text-text-primary text-sm font-mono">
                         {selectedItem.durability}%
                       </span>
                     </div>
-                    <div className="h-2 bg-[#1C1D27] rounded-full overflow-hidden">
+                    <div className="h-2 bg-bg-elevated rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-[#8B2500] via-[#B8860B] to-[#2D6B4F]"
+                        className="h-full bg-gradient-to-r from-danger via-warning to-success"
                         style={{ width: `${selectedItem.durability}%` }}
                       />
                     </div>
@@ -498,14 +468,12 @@ function StashTabContent() {
 
                 <div className="flex gap-2 pt-2">
                   <button
-                    className="flex-1 px-3 py-2 bg-[#3A7D7B] hover:bg-[#2D6B4F] text-[#E8E0D0] rounded text-sm transition-colors"
-                    style={{ fontFamily: "var(--font-sans)" }}
+                    className="flex-1 px-3 py-2 bg-interactive hover:bg-success text-text-primary rounded text-sm transition-colors font-sans"
                   >
                     Equip
                   </button>
                   <button
-                    className="flex-1 px-3 py-2 bg-[#1C1D27] hover:bg-[#2A2B35] text-[#8A8B95] rounded text-sm transition-colors"
-                    style={{ fontFamily: "var(--font-sans)" }}
+                    className="flex-1 px-3 py-2 bg-bg-elevated hover:bg-border-muted text-text-secondary rounded text-sm transition-colors font-sans"
                   >
                     Sell
                   </button>
@@ -513,8 +481,7 @@ function StashTabContent() {
               </div>
             ) : (
               <div
-                className="text-[#4A4B55] text-sm text-center py-8"
-                style={{ fontFamily: "var(--font-serif)" }}
+                className="text-text-disabled text-sm text-center py-8 font-serif"
               >
                 Click an item to view details
               </div>
@@ -522,32 +489,29 @@ function StashTabContent() {
           </div>
 
           {/* Quick Stats */}
-          <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
+          <div className="bg-bg-panel border border-border-muted rounded-lg p-6">
             <h3
-              className="text-[#C9A84C] mb-4"
-              style={{ fontFamily: "var(--font-serif)", fontSize: "1.125rem" }}
+              className="text-accent-gold mb-4 font-serif"
+              style={{ fontSize: "1.125rem" }}
             >
               Stash Summary
             </h3>
-            <div
-              className="space-y-2 text-sm"
-              style={{ fontFamily: "var(--font-mono)", color: "#E8E0D0" }}
-            >
+            <div className="space-y-2 text-sm font-mono text-text-primary">
               <div className="flex justify-between">
-                <span className="text-[#8A8B95]">Total Items:</span>
+                <span className="text-text-secondary">Total Items:</span>
                 <span>{items.length}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#8A8B95]">Weight Usage:</span>
+                <span className="text-text-secondary">Weight Usage:</span>
                 <span>{((totalWeight / maxWeight) * 100).toFixed(1)}%</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#8A8B95]">Space Usage:</span>
+                <span className="text-text-secondary">Space Usage:</span>
                 <span>{((usedCells / totalCells) * 100).toFixed(1)}%</span>
               </div>
-              <div className="border-t border-[#2A2B35] pt-2 mt-2">
+              <div className="border-t border-border-muted pt-2 mt-2">
                 <div className="flex justify-between">
-                  <span className="text-[#8A8B95]">By Tier:</span>
+                  <span className="text-text-secondary">By Tier:</span>
                 </div>
                 {Object.entries(
                   items.reduce((acc, item) => {
