@@ -598,3 +598,16 @@ Implemented server-side proximity-based communication system with three social c
 - LLM narration enhancement (Volo — narrative system integration)
 - Player display names for whisper target matching (depends on PlayerState.displayName field)
 - RefugeRoom social commands (separate issue — Refuge may want different social mechanics)
+
+### 2025-07-26: Sound Propagation System (Issue #22)
+- Created 3 new files: `packages/server/src/sound/SoundSystem.ts`, `packages/server/src/sound/index.ts`, and rewrote `packages/server/src/__tests__/sound-system.test.ts` from anticipatory stubs to live tests.
+- Modified 3 existing files: `packages/shared/src/room-graph.ts` (added `RoomProperty` type + `properties` field), `packages/shared/src/index.ts` (added sound types/constants), `packages/server/src/rooms/ShardRoom.ts` (integration).
+- **SoundSystem is pure game logic** — no Colyseus dependency, same pattern as CombatSystem. Takes a `RoomResolver` callback that returns `{id, exits, properties}`. ShardRoom constructs this from its room graph.
+- **BFS propagation:** Visits rooms breadth-first, attenuating noise by 2 per hop. Room properties (heavy_door, cavern, water) modify propagation per-room. Heavy door halves noise; cavern/water each reduce attenuation by 1.
+- **Direction tracking:** For each receiving room, finds which of the listener's exits points toward the BFS parent. This gives the direction the sound "comes from" (e.g., "from the south").
+- **Integration point:** After combat tick resolution in `ShardRoom.update()`, if any strikes occurred, propagates combat noise (5) from each encounter room. Sound narrations delivered via existing NARRATE pipeline with type='sound'.
+- **RoomProperty is optional and backward-compatible.** Existing rooms without `properties` work normally — no attenuation modifiers applied. The serialization/deserialization functions skip `properties` when empty.
+- **Noise constants live in @ellmud/shared** — both server and (future) client can reference them. Values match GDD §12.2 exactly: combat=5, running=4, walking=2, striking_door=7, extraction=8, explosion=9, sneaking=1.
+- 34 tests passing, 6 todo stubs for future cross-system work (stealth, sustained extraction noise, listening skill).
+- **Edge case:** Walking (noise=2) and sneaking (noise=1) cannot be heard even in adjacent rooms under default attenuation. This is by GDD design — these actions are meant to be silent.
+- PR #118 opened against dev. Branch: `feat/sound-propagation-system`.
