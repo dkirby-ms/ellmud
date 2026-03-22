@@ -91,9 +91,24 @@ app.get('*', (_req, res) => {
 // routes before Express sees them.
 const httpServer = http.createServer(app);
 
+// ─── Matchmaker Driver Setup ────────────────────────────────────────────────
+// When Redis driver is enabled, use RedisDriver for matchmaker coordination
+// across replicas. Otherwise, use default local driver (single replica only).
+let driver = undefined;
+if (config.redis.driverEnabled && config.redis.enabled) {
+  try {
+    const { RedisDriver } = await import('@colyseus/redis-driver');
+    driver = new RedisDriver(config.redis.connectionString);
+    console.log('[Ellmud] Matchmaker driver: Redis (multi-replica)');
+  } catch (err) {
+    console.warn('[Ellmud] Redis driver unavailable — using local driver:', (err as Error).message);
+  }
+}
+
 const server = new Server({
   transport: new WebSocketTransport({ server: httpServer }),
   presence,
+  driver,
 });
 
 // Register room types
@@ -107,5 +122,6 @@ console.log(`[Ellmud] Admin monitor at http://localhost:${PORT}/colyseus`);
 console.log(`[Ellmud] Admin dashboard at http://localhost:${PORT}/admin`);
 console.log(`[Ellmud] Auth required: ${AUTH_REQUIRED}`);
 console.log(`[Ellmud] Cache: ${isCacheRedis ? 'Redis' : 'in-memory'}, Presence: ${isPresenceRedis ? 'Redis' : 'local'}`);
+console.log(`[Ellmud] Matchmaker driver: ${config.redis.driverEnabled ? 'Redis' : 'local'}`);
 console.log(`[Ellmud] Stash persistence: ${isStashPg() ? 'PostgreSQL' : 'in-memory'}`);
-console.log(`[Ellmud] Max players/shard: ${config.maxPlayersPerShard}, Matchmaker: ${config.matchmakerMode}`);
+console.log(`[Ellmud] Max players/shard (default): ${config.maxPlayersPerShard}, Max replicas: ${config.maxReplicas}`);
