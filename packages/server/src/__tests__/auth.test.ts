@@ -34,7 +34,7 @@ function createTestApp(authService: AuthService) {
 
 async function requestJson(
   app: express.Express,
-  method: 'post',
+  method: 'get' | 'post',
   path: string,
   body?: Record<string, unknown>,
   headers?: Record<string, string>,
@@ -306,6 +306,45 @@ describe('Auth HTTP Routes', () => {
     it('should return 400 without auth header', async () => {
       const res = await requestJson(app, 'post', '/auth/logout');
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('GET /auth/me', () => {
+    it('should return 200 with player info for valid token', async () => {
+      const reg = await requestJson(app, 'post', '/auth/register', {
+        username: 'TestHero',
+        password: 'password123',
+      });
+      const token = reg.body['token'] as string;
+
+      const res = await requestJson(app, 'get', '/auth/me', undefined, {
+        Authorization: `Bearer ${token}`,
+      });
+      expect(res.status).toBe(200);
+      expect(res.body['playerId']).toBe(reg.body['playerId']);
+      expect(res.body['username']).toBe('TestHero');
+    });
+
+    it('should return 401 for invalid token', async () => {
+      const res = await requestJson(app, 'get', '/auth/me', undefined, {
+        Authorization: 'Bearer bogus-token-xyz',
+      });
+      expect(res.status).toBe(401);
+      expect(res.body['error']).toBeDefined();
+    });
+
+    it('should return 401 when no Authorization header is present', async () => {
+      const res = await requestJson(app, 'get', '/auth/me');
+      expect(res.status).toBe(401);
+      expect(res.body['error']).toBeDefined();
+    });
+
+    it('should return 401 for malformed Authorization header', async () => {
+      const res = await requestJson(app, 'get', '/auth/me', undefined, {
+        Authorization: 'Token some-value',
+      });
+      expect(res.status).toBe(401);
+      expect(res.body['error']).toBeDefined();
     });
   });
 });
