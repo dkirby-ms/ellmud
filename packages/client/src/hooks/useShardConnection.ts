@@ -94,6 +94,7 @@ export function useShardConnection(): UseShardConnectionResult {
     onReturnToRefuge: () => {
       roomRef.current?.leave();
       roomRef.current = null;
+      dispatch({ type: 'CLEAR_MESSAGES' });
       navigate('/refuge');
     },
   });
@@ -205,6 +206,7 @@ export function useShardConnection(): UseShardConnectionResult {
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
 
         if (msg.target === 'refuge') {
+          dispatch({ type: 'CLEAR_MESSAGES' });
           dispatch({ type: 'SET_SHARD_STATE', state: null as unknown as import('@ellmud/shared').ShardState });
           dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
           setExtraction((prev) => ({
