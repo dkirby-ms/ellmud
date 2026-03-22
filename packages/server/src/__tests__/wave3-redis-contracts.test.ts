@@ -119,6 +119,7 @@ function makeServerConfig(overrides: Partial<ServerConfig['redis']> = {}): Serve
       enabled: false,
       connectionString: 'redis://localhost:6379',
       cacheEnabled: false,
+      driverEnabled: false,
       ...overrides,
     },
     port: 2567,

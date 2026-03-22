@@ -92,6 +92,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
         targetPort: 2567
         transport: 'http'
         allowInsecure: false
+        // Sticky sessions for WebSocket — ensures all messages from same client
+        // route to same replica (required for shard state isolation)
+        stickySessions: {
+          affinity: 'sticky'
+        }
         traffic: [
           {
             latestRevision: true
@@ -119,12 +124,30 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             { name: 'REDIS_CONNECTION_STRING', value: 'redis://${redisHost}:6379' }
             { name: 'REDIS_CACHE_ENABLED', value: 'true' }
             { name: 'REDIS_PRESENCE_ENABLED', value: 'true' }
+            { name: 'REDIS_DRIVER_ENABLED', value: 'true' }
+            { name: 'MAX_PLAYERS_PER_SHARD', value: '4' }
+            { name: 'MAX_REPLICAS', value: '4' }
           ]
         }
       ]
       scale: {
         minReplicas: 1
-        maxReplicas: 1
+        maxReplicas: 4
+        rules: [
+          {
+            name: 'websocket-connections'
+            custom: {
+              type: 'azure-monitor'
+              metadata: {
+                metricName: 'Requests'
+                metricNamespace: 'Microsoft.App/containerApps'
+                targetValue: '30'
+                activationTargetValue: '10'
+              }
+              identity: 'system'
+            }
+          }
+        ]
       }
     }
   }

@@ -23,7 +23,7 @@ import { handleLook } from '../commands/handlers/look.js';
 import { CombatSystem, type TickResult, createCombatant } from '../combat/index.js';
 import { ExtractionSystem } from '../extraction/index.js';
 import { authenticateClient } from '../auth/colyseus-auth.js';
-import { getConfig } from '../config.js';
+import { getConfig, getMaxPlayersForTier } from '../config.js';
 import { StashService, InMemoryStashRepository, getStashRepository, getItemDefs } from '../stash/index.js';
 import type { StashRepository } from '../stash/index.js';
 import { transferInventoryToStash } from '../extraction/stash-transfer.js';
@@ -52,6 +52,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private collapseTimerSeconds = 1200; // 20 minutes default
   private openDelayMs = 1000;
   private roomGraph!: RoomGraph;
+  private entryRoomIds: string[] = []; // Multiple entry points for player distribution
   private players = new Map<string, PlayerState>();
   private combatSystem!: CombatSystem;
   private extractionSystem!: ExtractionSystem;
@@ -76,15 +77,19 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Initialize server-internal state (never sent to clients)
     this.setState(new ShardState());
     this.state.shardId = this.roomId;
-    this.maxClients = getConfig().maxPlayersPerShard;
-
-    if (typeof options['biome'] === 'string') {
-      this.state.biome = options['biome'];
-    }
+    
+    // Parse tier first (needed for max players)
     if (typeof options['tier'] === 'number' && [1, 2, 3].includes(options['tier'])) {
       this.shardTier = options['tier'] as ShardTier;
     }
     this.state.tier = this.shardTier;
+    
+    // Set tier-based max players
+    this.maxClients = getMaxPlayersForTier(this.shardTier, getConfig());
+
+    if (typeof options['biome'] === 'string') {
+      this.state.biome = options['biome'];
+    }
     if (typeof options['collapseTimer'] === 'number') {
       this.collapseTimerSeconds = options['collapseTimer'];
     }
@@ -98,11 +103,13 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     this.creatureManager = new CreatureManager();
     if (options['useTestGraph'] === true) {
       this.roomGraph = createTestRoomGraph();
+      this.entryRoomIds = [this.roomGraph.startRoomId]; // Test graph has single entry
     } else {
       const seed = typeof options['seed'] === 'number' ? options['seed'] : Date.now();
       const biome = (typeof options['biome'] === 'string' ? options['biome'] : 'flooded_crypt') as BiomeType;
       const sharedGraph = generateShardGraph({ tier: this.shardTier, biome, seed });
       this.roomGraph = adaptRoomGraph(sharedGraph);
+      this.entryRoomIds = sharedGraph.entryRoomIds; // Store all entry points
 
       // Spawn creatures using a derived seed (distinct from generator's PRNG)
       const creaturePrng = createPRNG(seed + 7919);
@@ -145,8 +152,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
   onJoin(client: Client): void {
-    // Enforce max players per shard (Phase 1: solo play = 1)
-    const maxPlayers = getConfig().maxPlayersPerShard;
+    // Enforce tier-based max players
+    const maxPlayers = this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig());
     if (this.state.playerCount >= maxPlayers) {
       throw new Error(`Shard is full (${maxPlayers}/${maxPlayers} players).`);
     }
@@ -154,11 +161,16 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     this.state.playerCount++;
     this.updateMetadata();
 
-    // Initialize player state at shard entry room
-    const playerState = new PlayerState(client.sessionId, this.roomGraph.startRoomId);
+    // Distribute players across entry points for spatial separation
+    // Use player count to cycle through available entry rooms
+    const entryIndex = (this.state.playerCount - 1) % this.entryRoomIds.length;
+    const startRoom = this.entryRoomIds[entryIndex] || this.roomGraph.startRoomId;
+
+    // Initialize player state at assigned entry room
+    const playerState = new PlayerState(client.sessionId, startRoom);
     this.players.set(client.sessionId, playerState);
 
-    this.log(`Player joined: ${client.sessionId} (${this.state.playerCount} players)`);
+    this.log(`Player joined: ${client.sessionId} at ${startRoom} (${this.state.playerCount}/${maxPlayers} players)`);
 
     // Send initial system narration
     this.sendNarrate(client, {
@@ -324,12 +336,19 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
   private updateMetadata(): void {
+    // Build player list with room locations for matchmaker
+    const playerList = Array.from(this.players.entries()).map(([sessionId, state]) => ({
+      sessionId,
+      roomId: state.currentRoomId,
+    }));
+
     this.setMetadata({
       biome: this.state.biome,
       tier: this.state.tier,
       lifecycle: this.lifecycle,
       playerCount: this.state.playerCount,
-      maxPlayers: this.maxClients ?? getConfig().maxPlayersPerShard,
+      maxPlayers: this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig()),
+      players: playerList,
     });
   }
 
