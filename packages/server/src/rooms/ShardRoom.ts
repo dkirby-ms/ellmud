@@ -376,7 +376,22 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     const wasExtracting = this.extractionSystem.isExtracting(client.sessionId);
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
-    this.deliverResult(client, result);
+
+    // Social commands (say, emote) broadcast to all players in the same room
+    // Whisper is handled separately with targeted delivery
+    const isSocialBroadcast = verb === 'say' || verb === 'emote';
+    const isWhisper = verb === 'whisper';
+
+    if (isSocialBroadcast) {
+      // Broadcast to all players in the same room (including sender)
+      this.broadcastToRoom(player.currentRoomId, result);
+    } else if (isWhisper) {
+      // Deliver whisper: sender gets confirmation, target gets the message
+      this.deliverWhisper(client, player, result, ctx.otherPlayersInRoom);
+    } else {
+      // Normal command: deliver only to sender
+      this.deliverResult(client, result);
+    }
 
     // Send EXTRACTION_STATE 'started' if this command initiated an extraction
     if (!wasExtracting && this.extractionSystem.isExtracting(client.sessionId)) {
@@ -427,6 +442,63 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
     if (result.roomHeader) {
       this.sendRoomHeader(client, result.roomHeader);
+    }
+  }
+
+  /**
+   * Broadcast narrations to all players in a specific room.
+   * Used for proximity-based social commands (say, emote).
+   */
+  private broadcastToRoom(roomId: string, result: import('../commands/index.js').CommandResult): void {
+    for (const narration of result.narrations) {
+      // Send to all players in the room
+      for (const [sid, ps] of this.players) {
+        if (ps.currentRoomId === roomId) {
+          const targetClient = this.clients.find(c => c.sessionId === sid);
+          if (targetClient) {
+            this.sendNarrate(targetClient, {
+              text: narration.text,
+              type: narration.type,
+              timestamp: Date.now(),
+            });
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Deliver a whisper message to a specific target.
+   * Sender gets confirmation, target gets the actual message.
+   */
+  private deliverWhisper(
+    sender: Client, 
+    senderPlayer: PlayerState, 
+    result: import('../commands/index.js').CommandResult,
+    otherPlayersInRoom: string[]
+  ): void {
+    // Sender always gets the result (confirmation message)
+    this.deliverResult(sender, result);
+
+    // Extract the whispered message from the sender's confirmation
+    // Format: "You whisper to a nearby figure: "message""
+    const confirmationText = result.narrations[0]?.text ?? '';
+    const match = confirmationText.match(/"(.+)"/);
+    
+    if (match && otherPlayersInRoom.length > 0) {
+      const whisperedMessage = match[1];
+      // For Phase 1, send to the first other player in the room
+      // Future: use proper target matching from whisper handler
+      const targetSessionId = otherPlayersInRoom[0];
+      const targetClient = this.clients.find(c => c.sessionId === targetSessionId);
+      
+      if (targetClient) {
+        this.sendNarrate(targetClient, {
+          text: `A figure whispers to you: "${whisperedMessage}"`,
+          type: 'speech',
+          timestamp: Date.now(),
+        });
+      }
     }
   }
 
