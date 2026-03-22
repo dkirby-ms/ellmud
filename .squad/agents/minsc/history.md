@@ -551,3 +551,13 @@ The UX overhaul moved 24 old components to `components/_old/` and replaced them 
 **Suite status:** 949 existing + 58 new = 1,007 total server tests (5 passing, 53 anticipatory todo).
 
 **Commit:** `1d5b6e1` pushed directly to `dev` branch (no separate PR).
+
+## Learnings
+
+**Integration tests must assert room state, not simulate logic inline.**
+The original "Inventory Drop on Player Death" unit tests manually iterated player inventory and pushed to a local array — they never called ShardRoom code. This meant disabling the actual drop logic in ShardRoom.ts didn't break any tests. The fix: use a full integration test that creates a ShardRoom, connects a client, adds inventory items via room internals, forces combat defeat via `combatSystem.registerCombatant()` + `initiateCombat()`, then asserts `room.items[]` contains the dropped items. Verified the test fails when `room.items.push()` is commented out.
+
+**Test graph has no creatures — register combatants manually for combat tests.**
+With `useTestGraph: true`, creatures are not spawned automatically (spawn code only runs for procedural graphs). To test combat-dependent flows like player death, register both the creature and player combatant directly via `roomInstance.combatSystem.registerCombatant()` and `initiateCombat()`. This is more reliable than sending `attack creature` commands that may silently no-op.
+
+**Commit:** `8901e90` on `fix/player-death-handler` branch.
