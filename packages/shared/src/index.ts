@@ -30,6 +30,12 @@ export interface NarrateMessage {
   text: string;
   type: NarrationType;
   timestamp: number;
+  /** Optional combat metadata for colored message rendering. */
+  combatEvent?: {
+    eventType: 'strike' | 'dodge' | 'flee' | 'defeated' | 'combat_end';
+    actorId?: string;
+    targetId?: string;
+  };
 }
 
 /** Server → Client: Room header metadata (displayed separately from prose). */
@@ -229,10 +235,19 @@ export type { ShardKeyType, ShardCardData } from './shard-card.js';
 
 // ─── Room Switching (GDD §3 — Refuge ↔ Shard) ────────────────────────────────
 
+/** Options for joining a target room. */
+export interface RoomSwitchOptions {
+  /** Join a specific room instance by ID (used for shard selection). */
+  roomId?: string;
+  /** Optional shard metadata for UI or future matchmaking. */
+  biome?: BiomeType;
+  tier?: ShardTier;
+}
+
 /** Server → Client: Instruct client to switch rooms. */
 export interface RoomSwitchMessage {
   target: string;       // Colyseus room name to join (e.g. 'shard', 'refuge')
-  options?: Record<string, unknown>; // Additional join options for the target room
+  options?: RoomSwitchOptions; // Additional join options for the target room
   reason: string;       // Human-readable reason for the switch
 }
 
@@ -241,7 +256,7 @@ export interface RoomSwitchMessage {
 /** Server → Client: Extraction channel state update. */
 export interface ExtractionMessage {
   playerId: string;
-  state: 'started' | 'progress' | 'completed' | 'interrupted';
+  state: 'started' | 'progress' | 'completed' | 'interrupted' | 'death';
   ticksRemaining?: number;
   totalTicks?: number;
   narration: string;

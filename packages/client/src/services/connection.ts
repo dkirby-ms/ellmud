@@ -13,6 +13,7 @@ import {
   type ShardStateMessage,
   type CombatResultMessage,
   type RoomSwitchMessage,
+  type RoomSwitchOptions,
 } from '@ellmud/shared';
 
 const WS_ENDPOINT = import.meta.env.VITE_WS_URL ??
@@ -73,14 +74,21 @@ export async function switchRoom(
   targetRoomName: string,
   token: string,
   handlers: MessageHandlers,
-  options?: Record<string, unknown>,
+  options?: RoomSwitchOptions,
 ): Promise<Room> {
   // Leave the current room cleanly
   await currentRoom.leave();
 
   // Join or create the target room
   const colyseus = getClient();
-  const newRoom = await colyseus.joinOrCreate(targetRoomName, { token, ...options });
+  const roomId = typeof options?.roomId === 'string' ? options.roomId : undefined;
+  const joinOptions = options ? { ...options } : {};
+  if (roomId) {
+    delete (joinOptions as { roomId?: string }).roomId;
+  }
+  const newRoom = roomId
+    ? await colyseus.joinById(roomId, { token, ...joinOptions })
+    : await colyseus.joinOrCreate(targetRoomName, { token, ...joinOptions });
 
   // Re-register all message handlers on the new room
   newRoom.onMessage(MessageTypes.NARRATE, handlers.onNarrate);

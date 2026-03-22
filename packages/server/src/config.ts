@@ -2,14 +2,16 @@
  * Centralized server configuration — env vars with sensible defaults.
  *
  * Phase 1: Solo play only. One player per shard, one replica, in-process matchmaker.
- * Phase 2: Flip MAX_PLAYERS_PER_SHARD, enable Redis presence, scale replicas.
+ * Phase 2: Multi-player shards (2-6 players), Redis presence, KEDA auto-scaling.
  */
 
+import type { ShardTier } from '@ellmud/shared';
+
 export interface ServerConfig {
-  /** Max concurrent players allowed in a single shard room. Phase 1 = 1 (solo). */
+  /** Max concurrent players allowed in a single shard room. Phase 2 = 4 (default). */
   maxPlayersPerShard: number;
 
-  /** Max Container Apps replicas. Phase 1 = 1 (no scale-out). */
+  /** Max Container Apps replicas. Phase 2 = 4 (KEDA auto-scaling). */
   maxReplicas: number;
 
   /** Matchmaker mode. 'in-process' = Colyseus default built-in matchmaker. */
@@ -23,6 +25,8 @@ export interface ServerConfig {
     connectionString: string;
     /** Enable Redis-backed narration cache (falls back to in-memory when false). */
     cacheEnabled: boolean;
+    /** Enable Redis-backed matchmaker driver for multi-replica coordination. */
+    driverEnabled: boolean;
   };
 
   /** Server listen port. */
@@ -30,6 +34,26 @@ export interface ServerConfig {
 
   /** Whether auth is required to join rooms. */
   authRequired: boolean;
+
+  /** WebSocket reconnection timeout in seconds (30-60s recommended). */
+  reconnectionTimeoutS: number;
+
+  /** Behavior when reconnection timeout expires: 'kill' or 'safe-room'. */
+  reconnectDeathBehavior: 'kill' | 'safe-room';
+}
+
+/**
+ * Get tier-specific max players. Tier 1/2 = 4 players, Tier 3 = 6 players.
+ * Respects MAX_PLAYERS_PER_SHARD env override if set.
+ */
+export function getMaxPlayersForTier(tier: ShardTier, config: ServerConfig): number {
+  // If env override is set, use it for all tiers
+  if (process.env.MAX_PLAYERS_PER_SHARD) {
+    return config.maxPlayersPerShard;
+  }
+  
+  // Tier-based defaults
+  return tier === 3 ? 6 : 4;
 }
 
 function envInt(key: string, fallback: number): number {
@@ -51,16 +75,19 @@ function envStr(key: string, fallback: string): string {
 
 export function loadConfig(): ServerConfig {
   return {
-    maxPlayersPerShard: envInt('MAX_PLAYERS_PER_SHARD', 1),
-    maxReplicas: envInt('MAX_REPLICAS', 1),
+    maxPlayersPerShard: envInt('MAX_PLAYERS_PER_SHARD', 4),
+    maxReplicas: envInt('MAX_REPLICAS', 4),
     matchmakerMode: 'in-process', // Only mode supported — Colyseus built-in
     redis: {
       enabled: envBool('REDIS_PRESENCE_ENABLED', false),
       connectionString: envStr('REDIS_CONNECTION_STRING', envStr('REDIS_URL', 'redis://localhost:6379')),
       cacheEnabled: envBool('REDIS_CACHE_ENABLED', false),
+      driverEnabled: envBool('REDIS_DRIVER_ENABLED', false),
     },
     port: envInt('PORT', 2567),
     authRequired: envBool('AUTH_REQUIRED', false),
+    reconnectionTimeoutS: envInt('RECONNECTION_TIMEOUT_S', 30),
+    reconnectDeathBehavior: (envStr('RECONNECT_DEATH_BEHAVIOR', 'kill') === 'safe-room' ? 'safe-room' : 'kill') as 'kill' | 'safe-room',
   };
 }
 

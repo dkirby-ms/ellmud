@@ -109,8 +109,8 @@ describe('RefugeRoom Multi-Player', () => {
     expect(collector.narrate.length).toBeGreaterThan(initialCount);
     const response = collector.narrate[collector.narrate.length - 1]!;
     expect(response.text).toContain('Shardboard');
-    // Phase 1: should mention 'enter shard' instruction
-    expect(response.text).toContain('enter shard');
+    expect(response.text).toContain('Tier');
+    expect(response.text).toContain('enter <shard-id>');
 
     await client.leave();
   });
@@ -128,6 +128,7 @@ describe('RefugeRoom Multi-Player', () => {
     expect(collector.roomSwitch.length).toBe(1);
     expect(collector.roomSwitch[0]!.target).toBe('shard');
     expect(collector.roomSwitch[0]!.reason).toBe('enter_shard');
+    expect(collector.roomSwitch[0]!.options?.roomId).toBeDefined();
 
     // Should also receive transition narration
     const transitionMsg = collector.narrate.find((m) => m.text.includes('rift'));
@@ -147,6 +148,23 @@ describe('RefugeRoom Multi-Player', () => {
 
     expect(collector.roomSwitch.length).toBe(1);
     expect(collector.roomSwitch[0]!.target).toBe('shard');
+    expect(collector.roomSwitch[0]!.options?.roomId).toBeDefined();
+
+    await client.leave();
+  });
+
+  it('should send ROOM_SWITCH when entering a specific shard id', async () => {
+    const shard = await colyseus.createRoom('shard', { openDelayMs: 0 });
+    const room = await colyseus.createRoom('refuge', {});
+    const client = await colyseus.connectTo(room);
+    const collector = new MessageCollector(client);
+    await wait(500);
+
+    client.send(MessageTypes.COMMAND, makeCommand('enter', shard.roomId));
+    await wait(500);
+
+    expect(collector.roomSwitch.length).toBe(1);
+    expect(collector.roomSwitch[0]!.options?.roomId).toBe(shard.roomId);
 
     await client.leave();
   });
@@ -168,6 +186,7 @@ describe('RefugeRoom Multi-Player', () => {
     expect(collector.narrate.length).toBeGreaterThan(initialCount);
     const errorMsg = collector.narrate[collector.narrate.length - 1]!;
     expect(errorMsg.text).toContain('tavern');
+    expect(errorMsg.text).toContain('No shard with id');
     expect(errorMsg.type).toBe('system');
 
     await client.leave();

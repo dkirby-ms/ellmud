@@ -4,6 +4,7 @@ import { router } from './routes.js';
 import { Toaster } from 'sonner';
 import { AppContext, appReducer, initialState } from './store.js';
 import type { AppState } from './store.js';
+import { onAuthError, validateToken } from './services/api.js';
 
 const TOKEN_KEY = 'ellmud_token';
 const PLAYER_KEY = 'ellmud_playerId';
@@ -19,6 +20,23 @@ function loadPersistedState(): AppState {
 
 export function App(): React.JSX.Element {
   const [state, dispatch] = useReducer(appReducer, null as never, loadPersistedState);
+
+  // Register global 401 interceptor — any API call that gets a 401
+  // automatically clears auth state so stale tokens don't linger.
+  useEffect(() => {
+    onAuthError(() => dispatch({ type: 'LOGOUT' }));
+  }, [dispatch]);
+
+  // Validate persisted token on mount (non-blocking).
+  // If the server rejects it with 401, clear auth immediately.
+  useEffect(() => {
+    if (state.authenticated && state.token) {
+      validateToken(state.token).then((valid) => {
+        if (!valid) dispatch({ type: 'LOGOUT' });
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only on initial mount
 
   // Sync auth state to localStorage
   useEffect(() => {

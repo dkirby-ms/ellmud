@@ -56,11 +56,11 @@ export default function ShardExploration() {
   };
 
   const getCollapseColor = () => {
-    if (collapseTimerMax <= 0) return "#E8E0D0";
+    if (collapseTimerMax <= 0) return "var(--color-text-primary)";
     const percentage = (collapseTime / collapseTimerMax) * 100;
-    if (percentage > 50) return "#E8E0D0";
-    if (percentage > 25) return "#B8860B";
-    return "#8B2500";
+    if (percentage > 50) return "var(--color-text-primary)";
+    if (percentage > 25) return "var(--color-warning)";
+    return "var(--color-danger)";
   };
 
   const handleSubmit = useCallback(
@@ -108,6 +108,7 @@ export default function ShardExploration() {
     { label: "Dodge", action: "dodge" },
     { label: "Block", action: "block" },
     { label: "Use Item", action: "use_item" },
+    { label: "Skill", action: "skill" },
     { label: "Flee", action: "flee" },
     { label: "Observe", action: "observe" },
   ];
@@ -121,19 +122,19 @@ export default function ShardExploration() {
     switch (state.connectionStatus) {
       case "connected":
         return (
-          <span className="text-[#2D6B4F] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+          <span className="text-success text-xs font-mono">
             ● Connected
           </span>
         );
       case "connecting":
         return (
-          <span className="text-[#B8860B] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+          <span className="text-warning text-xs font-mono">
             ○ Connecting...
           </span>
         );
       default:
         return (
-          <span className="text-[#8B2500] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+          <span className="text-danger text-xs font-mono">
             ● Disconnected
           </span>
         );
@@ -143,33 +144,70 @@ export default function ShardExploration() {
   // Enemy status derived from real combat data
   const enemyStatus = state.enemyStatus;
 
+  // ─── HP State Helpers ──────────────────────────────────────────────────
+  const hpPercent = state.playerMaxHp > 0 ? state.playerHp / state.playerMaxHp : 0;
+  const healthState = hpPercent > 0.6
+    ? { label: 'Healthy', color: 'text-success', barColor: 'bg-success', pulse: false }
+    : hpPercent >= 0.25
+    ? { label: 'Wounded', color: 'text-warning', barColor: 'bg-warning', pulse: false }
+    : { label: 'Critical', color: 'text-danger', barColor: 'bg-danger', pulse: true };
+
+  // ─── Stability ─────────────────────────────────────────────────────────
+  const stability = state.roomHeader?.stability ?? 1;
+
+  // ─── Sound Cue Direction Highlighting ──────────────────────────────────
+  const DIRECTIONS = ['north', 'south', 'east', 'west', 'above', 'below'];
+  const highlightDirections = (text: string) => {
+    const directionRegex = /\b(north|south|east|west|above|below)\b/gi;
+    const parts: (string | JSX.Element)[] = [];
+    let lastIndex = 0;
+    let match;
+    while ((match = directionRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(text.slice(lastIndex, match.index));
+      }
+      parts.push(<span key={match.index} className="text-interactive">{match[0]}</span>);
+      lastIndex = directionRegex.lastIndex;
+    }
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex));
+    }
+    return parts.length > 0 ? parts : [text];
+  };
+
+  // ─── Auto-complete ─────────────────────────────────────────────────────
+  const KNOWN_COMMANDS = [
+    'strike', 'heavy strike', 'dodge', 'block', 'use item', 'skill', 'flee', 'observe',
+    'look', 'listen', 'go', 'inventory', 'help', 'say', 'shout', 'whisper', 'extract',
+  ];
+  const autoCompleteHint = command.trim()
+    ? KNOWN_COMMANDS.find(cmd => cmd.startsWith(command.trim().toLowerCase())) ?? null
+    : null;
+
   return (
-    <div className="h-screen bg-[#0A0B0F] flex flex-col">
+    <div className="h-screen bg-bg-primary flex flex-col">
       {/* Top bar */}
-      <div className="bg-[#12131A] border-b border-[#2A2B35] px-6 py-3 flex items-center justify-between">
+      <div className="bg-bg-panel border-b border-border-muted px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate("/refuge")}
-            className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors"
+            className="text-text-secondary hover:text-accent-gold transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <span
-            className="text-[#8A8B95] text-sm"
-            style={{ fontFamily: "var(--font-sans)" }}
-          >
+          <span className="text-text-secondary text-sm font-sans">
             {state.playerId ?? "Unknown"}
           </span>
-          <span className="text-[#4A4B55]">|</span>
+          <span className="text-text-disabled">|</span>
           <div className="flex items-center gap-2">
-            <div className="w-20 h-2 bg-[#1C1D27] rounded-full overflow-hidden">
-              <div className="h-full w-[75%] bg-gradient-to-r from-[#2D6B4F] to-[#8B2500]"></div>
+            <div className="w-20 h-2 bg-bg-elevated rounded-full overflow-hidden">
+              <div
+                className={`h-full ${healthState.barColor}`}
+                style={{ width: `${hpPercent * 100}%` }}
+              ></div>
             </div>
-            <span
-              className="text-[#8A8B95] text-xs"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
-              Healthy
+            <span className={`${healthState.color} text-xs font-mono`}>
+              {Math.round(hpPercent * 100)}%
             </span>
           </div>
           {connectionIndicator()}
@@ -178,31 +216,33 @@ export default function ShardExploration() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Narrative Panel (70%) */}
-        <div className="w-[70%] flex flex-col bg-[#0A0B0F]">
+        <div className="w-[70%] flex flex-col bg-bg-primary">
           {/* Room header */}
-          <div className="bg-[#12131A] border-b border-[#2A2B35] px-6 py-3 flex items-center justify-between">
+          <div className="bg-bg-panel border-b border-border-muted px-6 py-3 flex items-center justify-between">
             <h2
-              className="text-[#C9A84C]"
-              style={{ fontFamily: "var(--font-serif)", fontSize: "1.125rem" }}
+              className="text-accent-gold font-serif"
+              style={{ fontSize: "1.125rem" }}
             >
               {currentRoom}
             </h2>
-            <div className="flex items-center gap-2">
-              <span
-                className="text-[#8A8B95] text-xs"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
+            <div className="flex items-center gap-2 flex-1">
+              <span className="text-text-secondary text-xs font-sans">
                 Shard Stability
               </span>
-              <div className="w-32 h-1.5 bg-[#1C1D27] rounded-full overflow-hidden">
+              <div className="flex-1 h-1.5 bg-bg-elevated rounded-full overflow-hidden">
                 <div
                   className="h-full transition-all"
                   style={{
-                    width: collapseTimerMax > 0 ? `${(collapseTime / collapseTimerMax) * 100}%` : "100%",
-                    backgroundColor: getCollapseColor(),
+                    width: `${stability * 100}%`,
+                    backgroundColor: stability > 0.5 ? 'var(--color-text-primary)' : stability > 0.25 ? 'var(--color-warning)' : 'var(--color-danger)',
                   }}
                 ></div>
               </div>
+              {stability < 0.25 && (
+                <span className="text-danger animate-pulse text-xs font-bold font-sans whitespace-nowrap">
+                  COLLAPSE IMMINENT
+                </span>
+              )}
             </div>
           </div>
 
@@ -216,41 +256,31 @@ export default function ShardExploration() {
                 {msg.type === "header" && (
                   <div>
                     <h3
-                      className="text-[#C9A84C] mb-3"
-                      style={{
-                        fontFamily: "var(--font-serif)",
-                        fontSize: "1.25rem",
-                      }}
+                      className="text-accent-gold mb-3 font-serif"
+                      style={{ fontSize: "1.25rem" }}
                     >
                       {msg.text}
                     </h3>
-                    <div className="h-px bg-[#C9A84C] opacity-20 mt-4"></div>
+                    <div className="h-px bg-accent-gold opacity-20 mt-4"></div>
                   </div>
                 )}
 
                 {msg.type === "room" && (
                   <div>
                     <p
-                      className="text-[#E8E0D0] mb-3 max-w-[70ch]"
-                      style={{
-                        fontFamily: "var(--font-serif)",
-                        lineHeight: 1.7,
-                        fontSize: "1rem",
-                      }}
+                      className="text-text-primary mb-3 max-w-[70ch] font-serif"
+                      style={{ lineHeight: 1.7, fontSize: "1rem" }}
                     >
                       {msg.text}
                     </p>
                     {exits.length > 0 && (
-                      <p
-                        className="text-[#3A7D7B] text-sm"
-                        style={{ fontFamily: "var(--font-sans)" }}
-                      >
+                      <p className="text-interactive text-sm font-sans">
                         Exits:{" "}
                         {exits.map((exit, j) => (
                           <span key={j}>
                             <button
                               onClick={() => handleExitClick(exit)}
-                              className="hover:text-[#C9A84C] transition-colors underline"
+                              className="hover:text-accent-gold transition-colors underline"
                             >
                               [{exit}]
                             </button>
@@ -259,18 +289,23 @@ export default function ShardExploration() {
                         ))}
                       </p>
                     )}
-                    <div className="h-px bg-[#C9A84C] opacity-20 mt-4"></div>
+                    <div className="h-px bg-accent-gold opacity-20 mt-4"></div>
                   </div>
                 )}
 
                 {msg.type === "combat" && (
                   <p
-                    className="text-[#E8E0D0] max-w-[70ch]"
-                    style={{
-                      fontFamily: "var(--font-serif)",
-                      lineHeight: 1.7,
-                      fontSize: "1rem",
-                    }}
+                    data-combat-type={msg.combatSubtype ?? 'default'}
+                    className={`max-w-[70ch] font-serif ${
+                      msg.combatSubtype === 'hit_dealt' ? 'text-accent-gold'
+                      : msg.combatSubtype === 'hit_taken' ? 'text-danger'
+                      : msg.combatSubtype === 'dodge' ? 'text-text-secondary'
+                      : msg.combatSubtype === 'defeated' ? 'text-danger font-bold'
+                      : msg.combatSubtype === 'flee' ? 'text-warning'
+                      : msg.combatSubtype === 'combat_end' ? 'text-interactive italic'
+                      : 'text-text-primary'
+                    }`}
+                    style={{ lineHeight: 1.7, fontSize: "1rem" }}
                   >
                     {msg.text}
                   </p>
@@ -278,12 +313,8 @@ export default function ShardExploration() {
 
                 {msg.type === "trace" && (
                   <p
-                    className="text-[#8A8B95] italic pl-6 max-w-[70ch] flex items-start gap-2"
-                    style={{
-                      fontFamily: "var(--font-serif)",
-                      lineHeight: 1.7,
-                      fontSize: "0.95rem",
-                    }}
+                    className="text-text-secondary italic pl-6 max-w-[70ch] flex items-start gap-2 font-serif"
+                    style={{ lineHeight: 1.7, fontSize: "0.95rem" }}
                   >
                     <Eye className="w-4 h-4 mt-1 flex-shrink-0" />
                     <span>{msg.text}</span>
@@ -292,12 +323,8 @@ export default function ShardExploration() {
 
                 {msg.type === "sound" && (
                   <p
-                    className="text-[#8A8B95] italic pl-6 max-w-[70ch] flex items-start gap-2"
-                    style={{
-                      fontFamily: "var(--font-serif)",
-                      lineHeight: 1.7,
-                      fontSize: "0.95rem",
-                    }}
+                    className="text-text-secondary italic pl-6 max-w-[70ch] flex items-start gap-2 font-serif"
+                    style={{ lineHeight: 1.7, fontSize: "0.95rem" }}
                   >
                     <Volume2 className="w-4 h-4 mt-1 flex-shrink-0" />
                     <span>{msg.text}</span>
@@ -306,8 +333,7 @@ export default function ShardExploration() {
 
                 {msg.type === "system" && (
                   <p
-                    className="text-[#4A4B55] text-sm"
-                    style={{ fontFamily: "var(--font-mono)" }}
+                    className="text-text-disabled text-sm font-mono"
                   >
                     {msg.text}
                   </p>
@@ -315,12 +341,8 @@ export default function ShardExploration() {
 
                 {msg.type === "speech" && (
                   <p
-                    className="text-[#E8E0D0] max-w-[70ch]"
-                    style={{
-                      fontFamily: "var(--font-serif)",
-                      lineHeight: 1.7,
-                      fontSize: "1rem",
-                    }}
+                    className="text-text-primary max-w-[70ch] font-serif"
+                    style={{ lineHeight: 1.7, fontSize: "1rem" }}
                   >
                     "{msg.text}"
                   </p>
@@ -331,12 +353,11 @@ export default function ShardExploration() {
         </div>
 
         {/* Sidebar (30%) */}
-        <div className="w-[30%] bg-[#12131A] border-l border-[#2A2B35] flex flex-col">
+        <div className="w-[30%] bg-bg-panel border-l border-border-muted flex flex-col">
           {/* Character Status */}
-          <div className="p-4 border-b border-[#2A2B35]">
+          <div className="p-4 border-b border-border-muted">
             <h3
-              className="text-[#8A8B95] text-xs mb-3"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-secondary text-xs mb-3 font-sans"
             >
               STATUS
             </h3>
@@ -344,33 +365,32 @@ export default function ShardExploration() {
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <span
-                    className="text-[#4A4B55] text-xs"
-                    style={{ fontFamily: "var(--font-sans)" }}
+                    className="text-text-disabled text-xs font-sans"
                   >
                     Health
                   </span>
                   <span
-                    className="text-[#2D6B4F] text-xs"
-                    style={{ fontFamily: "var(--font-mono)" }}
+                    className={`${healthState.color} text-xs font-mono ${healthState.pulse ? 'animate-pulse' : ''}`}
                   >
-                    Healthy
+                    {healthState.label}
                   </span>
                 </div>
-                <div className="h-2 bg-[#1C1D27] rounded-full overflow-hidden">
-                  <div className="h-full w-[75%] bg-gradient-to-r from-[#2D6B4F] to-[#8B2500]"></div>
+                <div className="h-2 bg-bg-elevated rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${healthState.barColor}`}
+                    style={{ width: `${hpPercent * 100}%` }}
+                  ></div>
                 </div>
               </div>
 
               <div>
                 <span
-                  className="text-[#4A4B55] text-xs"
-                  style={{ fontFamily: "var(--font-sans)" }}
+                  className="text-text-disabled text-xs font-sans"
                 >
                   Stance
                 </span>
                 <p
-                  className="text-[#E8E0D0] text-sm"
-                  style={{ fontFamily: "var(--font-mono)" }}
+                  className="text-text-primary text-sm font-mono"
                 >
                   {state.pendingCombatAction ?? "Cautious"}
                 </p>
@@ -378,11 +398,32 @@ export default function ShardExploration() {
             </div>
           </div>
 
+          {/* Status Effects (Gap #11) */}
+          {state.statusEffects && state.statusEffects.length > 0 && (
+            <div className="p-4 border-b border-border-muted" data-testid="status-effects">
+              <h3 className="text-text-secondary text-xs mb-3 font-sans">STATUS EFFECTS</h3>
+              <div className="flex flex-wrap gap-2">
+                {state.statusEffects.map((effect) => (
+                  <span
+                    key={effect.id}
+                    data-effect={effect.id}
+                    className={`text-xs font-mono px-2 py-0.5 rounded border border-border-muted ${
+                      ['bleeding', 'poisoned', 'burning'].includes(effect.id.toLowerCase())
+                        ? 'text-danger'
+                        : 'text-warning'
+                    }`}
+                  >
+                    {effect.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Quick Inventory */}
-          <div className="p-4 border-b border-[#2A2B35]">
+          <div className="p-4 border-b border-border-muted">
             <h3
-              className="text-[#8A8B95] text-xs mb-3"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-secondary text-xs mb-3 font-sans"
             >
               QUICK INVENTORY
             </h3>
@@ -390,20 +431,14 @@ export default function ShardExploration() {
               {state.inventory.length > 0 ? (
                 state.inventory.slice(0, 3).map((item) => (
                   <div key={item.id} className="flex items-center gap-2">
-                    <Sword className="w-4 h-4 text-[#8A8B95]" />
-                    <span
-                      className="text-[#E8E0D0]"
-                      style={{ fontFamily: "var(--font-serif)" }}
-                    >
+                    <Sword className="w-4 h-4 text-text-secondary" />
+                    <span className="text-text-primary font-serif">
                       {item.name}
                     </span>
                   </div>
                 ))
               ) : (
-                <p
-                  className="text-[#4A4B55] text-xs"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
+                <p className="text-text-disabled text-xs font-sans">
                   No items carried
                 </p>
               )}
@@ -412,48 +447,42 @@ export default function ShardExploration() {
 
           {/* Enemy Status (during combat) */}
           {enemyStatus && (
-            <div className="p-4 border-b border-[#2A2B35]">
+            <div className="p-4 border-b border-border-muted">
               <h3
-                className="text-[#8B2500] text-xs mb-3"
-                style={{ fontFamily: "var(--font-sans)" }}
+                className="text-danger text-xs mb-3 font-sans"
               >
                 ENEMY
               </h3>
               <div className="space-y-2">
-                <p
-                  className="text-[#E8E0D0] text-sm"
-                  style={{ fontFamily: "var(--font-serif)" }}
-                >
+                <p className="text-text-primary text-sm font-serif">
                   {enemyStatus.name}
                 </p>
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <span
-                      className="text-[#4A4B55] text-xs"
-                      style={{ fontFamily: "var(--font-sans)" }}
+                      className="text-text-disabled text-xs font-sans"
                     >
                       Health
                     </span>
                     <span
-                      className="text-xs"
+                      className="text-xs font-mono"
                       style={{
-                        fontFamily: "var(--font-mono)",
                         color:
                           enemyStatus.hpTier === "Near Death"
-                            ? "#8B2500"
+                            ? "var(--color-danger)"
                             : enemyStatus.hpTier === "Badly Wounded"
-                            ? "#B8860B"
+                            ? "var(--color-warning)"
                             : enemyStatus.hpTier === "Wounded"
-                            ? "#B8860B"
-                            : "#2D6B4F",
+                            ? "var(--color-warning)"
+                            : "var(--color-success)",
                       }}
                     >
                       {enemyStatus.hpTier}
                     </span>
                   </div>
-                  <div className="h-2 bg-[#1C1D27] rounded-full overflow-hidden">
+                  <div className="h-2 bg-bg-elevated rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-[#8B2500] to-[#2D6B4F] transition-all"
+                      className="h-full bg-gradient-to-r from-danger to-success transition-all"
                       style={{
                         width: enemyStatus.maxHp > 0
                           ? `${(enemyStatus.hp / enemyStatus.maxHp) * 100}%`
@@ -464,8 +493,7 @@ export default function ShardExploration() {
                 </div>
                 {enemyStatus.telegraphedAction && (
                   <p
-                    className="text-[#B8860B] text-xs italic"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                    className="text-warning text-xs italic font-serif"
                   >
                     Telegraphing: {enemyStatus.telegraphedAction}
                   </p>
@@ -475,45 +503,34 @@ export default function ShardExploration() {
           )}
 
           {/* Collapse Timer */}
-          <div className="p-4 border-b border-[#2A2B35]">
+          <div className="p-4 border-b border-border-muted">
             <h3
-              className="text-[#8A8B95] text-xs mb-2"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-secondary text-xs mb-2 font-sans"
             >
               COLLAPSE TIMER
             </h3>
             <div
-              className="text-3xl font-bold"
-              style={{
-                fontFamily: "var(--font-mono)",
-                color: getCollapseColor(),
-              }}
+              className="text-3xl font-bold font-mono"
+              style={{ color: getCollapseColor() }}
             >
               {state.collapseTimer != null ? formatTime(collapseTime) : "--:--"}
             </div>
             {state.shardState === "destabilising" && (
-              <p
-                className="text-[#8B2500] text-xs mt-2"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
+              <p className="text-danger text-xs mt-2 font-sans">
                 Destabilising
               </p>
             )}
             {state.shardState && (
-              <p
-                className="text-[#4A4B55] text-xs mt-1"
-                style={{ fontFamily: "var(--font-mono)" }}
-              >
+              <p className="text-text-disabled text-xs mt-1 font-mono">
                 Shard: {state.shardState}
               </p>
             )}
           </div>
 
           {/* Sound Cues */}
-          <div className="p-4 border-b border-[#2A2B35]">
+          <div className="p-4 border-b border-border-muted">
             <h3
-              className="text-[#8A8B95] text-xs mb-3"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-text-secondary text-xs mb-3 font-sans"
             >
               SOUND CUES
             </h3>
@@ -522,17 +539,14 @@ export default function ShardExploration() {
                 state.soundCues.slice(-5).map((cue) => (
                   <p
                     key={cue.id}
-                    className="text-[#8A8B95] text-xs italic"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                    data-sound-cue={cue.id}
+                    className="text-text-secondary text-xs italic font-serif"
                   >
-                    {cue.text}
+                    <span>{highlightDirections(cue.text)}</span>
                   </p>
                 ))
               ) : (
-                <p
-                  className="text-[#4A4B55] text-xs"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
+                <p className="text-text-disabled text-xs font-sans">
                   Silence.
                 </p>
               )}
@@ -544,22 +558,19 @@ export default function ShardExploration() {
             <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => sendCommand("look")}
-                className="px-2 py-1 text-[#8A8B95] hover:bg-[#1C1D27] hover:text-[#E8E0D0] rounded text-xs transition-colors"
-                style={{ fontFamily: "var(--font-sans)" }}
+                className="px-2 py-1 text-text-secondary hover:bg-bg-elevated hover:text-text-primary rounded text-xs transition-colors font-sans"
               >
                 Look
               </button>
               <button
                 onClick={() => sendCommand("listen")}
-                className="px-2 py-1 text-[#8A8B95] hover:bg-[#1C1D27] hover:text-[#E8E0D0] rounded text-xs transition-colors"
-                style={{ fontFamily: "var(--font-sans)" }}
+                className="px-2 py-1 text-text-secondary hover:bg-bg-elevated hover:text-text-primary rounded text-xs transition-colors font-sans"
               >
                 Listen
               </button>
               <button
                 onClick={() => setInventoryOpen(true)}
-                className="px-2 py-1 text-[#8A8B95] hover:bg-[#1C1D27] hover:text-[#E8E0D0] rounded text-xs transition-colors"
-                style={{ fontFamily: "var(--font-sans)" }}
+                className="px-2 py-1 text-text-secondary hover:bg-bg-elevated hover:text-text-primary rounded text-xs transition-colors font-sans"
               >
                 Inventory
               </button>
@@ -570,25 +581,36 @@ export default function ShardExploration() {
 
       {/* Combat Action Bar */}
       {state.inCombat && (
-        <div className="bg-[#1C1D27] border-t-2 border-[#8B2500] px-6 py-3">
+        <div className="bg-bg-elevated border-t-2 border-danger px-6 py-3">
           <div className="flex items-center justify-center gap-2">
             <span
-              className="text-[#8B2500] text-sm mr-4"
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="text-danger text-sm mr-2 font-sans"
             >
               ⚔ COMBAT — Tick {state.combatTick}
             </span>
+            <div
+              data-testid="tick-timer-bar"
+              role="progressbar"
+              aria-valuenow={state.combatTick}
+              aria-valuemin={0}
+              aria-valuemax={10}
+              className="w-24 h-1.5 bg-bg-elevated rounded-full overflow-hidden mr-4"
+            >
+              <div
+                className="h-full bg-danger transition-all"
+                style={{ width: `${Math.min(state.combatTick * 10, 100)}%` }}
+              ></div>
+            </div>
             {combatActions.map(({ label, action }, i) => (
               <button
                 key={action}
                 onClick={() => handleCombatAction(action)}
                 disabled={state.pendingCombatAction != null}
-                className={`px-3 py-1 bg-[#12131A] hover:bg-[#C9A84C] hover:text-[#0A0B0F] text-[#E8E0D0] rounded text-sm transition-colors border border-[#2A2B35] ${
+                className={`px-3 py-1 bg-bg-panel hover:bg-accent-gold hover:text-bg-primary text-text-primary rounded text-sm transition-colors border border-border-muted ${
                   state.pendingCombatAction != null ? "opacity-50 cursor-not-allowed" : ""
-                }`}
-                style={{ fontFamily: "var(--font-sans)" }}
+                } font-sans`}
               >
-                <span className="text-[#8A8B95] mr-1 text-xs">{i + 1}</span>
+                <span className="text-text-secondary mr-1 text-xs">{i + 1}</span>
                 {label}
               </button>
             ))}
@@ -597,11 +619,15 @@ export default function ShardExploration() {
       )}
 
       {/* Command Input */}
-      <div className="bg-[#12131A] border-t border-[#2A2B35] px-6 py-4">
+      <div className="bg-bg-panel border-t border-border-muted px-6 py-4">
+        {autoCompleteHint && (
+          <div data-testid="autocomplete-hint" className="text-text-disabled text-xs font-mono mb-1 px-6">
+            {autoCompleteHint}
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
           <span
-            className="text-[#C9A84C] text-lg"
-            style={{ fontFamily: "var(--font-mono)" }}
+            className="text-accent-gold text-lg font-mono"
           >
             &gt;
           </span>
@@ -616,8 +642,8 @@ export default function ShardExploration() {
                 : "Connecting to shard..."
             }
             disabled={state.connectionStatus !== "connected"}
-            className="flex-1 bg-transparent text-[#E8E0D0] placeholder-[#4A4B55] focus:outline-none disabled:opacity-50"
-            style={{ fontFamily: "var(--font-mono)", fontSize: "1rem" }}
+            className="flex-1 bg-transparent text-text-primary placeholder:text-text-disabled focus:outline-none disabled:opacity-50 font-mono"
+            style={{ fontSize: "1rem" }}
             autoFocus
           />
         </form>

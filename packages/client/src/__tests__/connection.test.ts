@@ -52,6 +52,7 @@ describe('Connection — message-only protocol enforcement', () => {
 
 // Mock Colyseus Client — shared mock so switchRoom can get a different return value
 const mockJoinOrCreate = vi.fn();
+const mockJoinById = vi.fn();
 const mockRoom = {
   onMessage: vi.fn(),
   onError: vi.fn(),
@@ -60,11 +61,13 @@ const mockRoom = {
   leave: vi.fn(),
 };
 mockJoinOrCreate.mockResolvedValue(mockRoom);
+mockJoinById.mockResolvedValue(mockRoom);
 
 vi.mock('@colyseus/sdk', () => {
   return {
     Client: class MockClient {
       joinOrCreate = (...args: unknown[]) => mockJoinOrCreate(...args);
+      joinById = (...args: unknown[]) => mockJoinById(...args);
     },
     Room: class MockRoom {},
   };
@@ -168,6 +171,50 @@ describe('Connection — runtime behavior', () => {
     expect(newMockRoom.onError).toHaveBeenCalledTimes(1);
     expect(newMockRoom.onLeave).toHaveBeenCalledTimes(1);
 
+    expect(result).toBe(newMockRoom);
+  });
+
+  it('switchRoom() joins by id when roomId is provided', async () => {
+    const { switchRoom, resetClient } = await import('../services/connection.js');
+    resetClient();
+
+    const newMockRoom = {
+      onMessage: vi.fn(),
+      onError: vi.fn(),
+      onLeave: vi.fn(),
+      send: vi.fn(),
+      leave: vi.fn(),
+    };
+
+    mockJoinById.mockResolvedValueOnce(newMockRoom);
+
+    const currentRoom = {
+      leave: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const handlers = {
+      onNarrate: vi.fn(),
+      onRoomHeader: vi.fn(),
+      onShardState: vi.fn(),
+      onCombatResult: vi.fn(),
+      onRoomSwitch: vi.fn(),
+      onError: vi.fn(),
+      onLeave: vi.fn(),
+    };
+
+    const result = await switchRoom(
+      currentRoom as unknown as Room,
+      'shard',
+      'test-token',
+      handlers,
+      { roomId: 'room-123', biome: 'flooded_crypt', tier: 1 },
+    );
+
+    expect(mockJoinById).toHaveBeenCalledWith('room-123', {
+      token: 'test-token',
+      biome: 'flooded_crypt',
+      tier: 1,
+    });
     expect(result).toBe(newMockRoom);
   });
 });

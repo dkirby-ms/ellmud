@@ -8,6 +8,7 @@ import {
   type ShardStateMessage,
   type StashItem,
   type BiomeType,
+  type ShardTier,
   type ExtractionMessage,
   MessageTypes,
 } from '@ellmud/shared';
@@ -22,7 +23,7 @@ import { handleLook } from '../commands/handlers/look.js';
 import { CombatSystem, type TickResult, createCombatant } from '../combat/index.js';
 import { ExtractionSystem } from '../extraction/index.js';
 import { authenticateClient } from '../auth/colyseus-auth.js';
-import { getConfig } from '../config.js';
+import { getConfig, getMaxPlayersForTier } from '../config.js';
 import { StashService, InMemoryStashRepository, getStashRepository, getItemDefs } from '../stash/index.js';
 import type { StashRepository } from '../stash/index.js';
 import { transferInventoryToStash } from '../extraction/stash-transfer.js';
@@ -49,13 +50,16 @@ interface ShardRoomOptions {
 export class ShardRoom extends Room<ShardRoomOptions> {
   private lifecycle: SharedShardState = 'seeding';
   private collapseTimerSeconds = 1200; // 20 minutes default
+  private openDelayMs = 1000;
   private roomGraph!: RoomGraph;
+  private entryRoomIds: string[] = []; // Multiple entry points for player distribution
   private players = new Map<string, PlayerState>();
   private combatSystem!: CombatSystem;
   private extractionSystem!: ExtractionSystem;
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
   private itemDefs = new Map<string, StashItem>();
+  private shardTier: ShardTier = 1;
 
   /**
    * Inject stash dependencies. Called before room lifecycle if provided.
@@ -73,12 +77,24 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Initialize server-internal state (never sent to clients)
     this.setState(new ShardState());
     this.state.shardId = this.roomId;
+    
+    // Parse tier first (needed for max players)
+    if (typeof options['tier'] === 'number' && [1, 2, 3].includes(options['tier'])) {
+      this.shardTier = options['tier'] as ShardTier;
+    }
+    this.state.tier = this.shardTier;
+    
+    // Set tier-based max players
+    this.maxClients = getMaxPlayersForTier(this.shardTier, getConfig());
 
     if (typeof options['biome'] === 'string') {
       this.state.biome = options['biome'];
     }
     if (typeof options['collapseTimer'] === 'number') {
       this.collapseTimerSeconds = options['collapseTimer'];
+    }
+    if (typeof options['openDelayMs'] === 'number') {
+      this.openDelayMs = Math.max(0, options['openDelayMs']);
     }
 
     this.state.collapseTimer = this.collapseTimerSeconds;
@@ -87,11 +103,13 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     this.creatureManager = new CreatureManager();
     if (options['useTestGraph'] === true) {
       this.roomGraph = createTestRoomGraph();
+      this.entryRoomIds = [this.roomGraph.startRoomId]; // Test graph has single entry
     } else {
       const seed = typeof options['seed'] === 'number' ? options['seed'] : Date.now();
       const biome = (typeof options['biome'] === 'string' ? options['biome'] : 'flooded_crypt') as BiomeType;
-      const sharedGraph = generateShardGraph({ tier: 1, biome, seed });
+      const sharedGraph = generateShardGraph({ tier: this.shardTier, biome, seed });
       this.roomGraph = adaptRoomGraph(sharedGraph);
+      this.entryRoomIds = sharedGraph.entryRoomIds; // Store all entry points
 
       // Spawn creatures using a derived seed (distinct from generator's PRNG)
       const creaturePrng = createPRNG(seed + 7919);
@@ -120,7 +138,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // 1-second tick for all game simulation
     this.setSimulationInterval((deltaTime: number) => this.update(deltaTime), TICK_INTERVAL_MS);
 
-    this.log(`ShardRoom created: ${this.roomId} (biome=${this.state.biome})`);
+    this.updateMetadata();
+
+    this.log(`ShardRoom created: ${this.roomId} (biome=${this.state.biome}, tier=${this.shardTier})`);
 
     // Begin shard lifecycle
     this.transitionTo('seeding');
@@ -132,19 +152,25 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
   onJoin(client: Client): void {
-    // Enforce max players per shard (Phase 1: solo play = 1)
-    const maxPlayers = getConfig().maxPlayersPerShard;
+    // Enforce tier-based max players
+    const maxPlayers = this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig());
     if (this.state.playerCount >= maxPlayers) {
       throw new Error(`Shard is full (${maxPlayers}/${maxPlayers} players).`);
     }
 
     this.state.playerCount++;
+    this.updateMetadata();
 
-    // Initialize player state at shard entry room
-    const playerState = new PlayerState(client.sessionId, this.roomGraph.startRoomId);
+    // Distribute players across entry points for spatial separation
+    // Use player count to cycle through available entry rooms
+    const entryIndex = (this.state.playerCount - 1) % this.entryRoomIds.length;
+    const startRoom = this.entryRoomIds[entryIndex] || this.roomGraph.startRoomId;
+
+    // Initialize player state at assigned entry room
+    const playerState = new PlayerState(client.sessionId, startRoom);
     this.players.set(client.sessionId, playerState);
 
-    this.log(`Player joined: ${client.sessionId} (${this.state.playerCount} players)`);
+    this.log(`Player joined: ${client.sessionId} at ${startRoom} (${this.state.playerCount}/${maxPlayers} players)`);
 
     // Send initial system narration
     this.sendNarrate(client, {
@@ -163,12 +189,102 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     });
   }
 
-  onLeave(client: Client): void {
-    this.state.playerCount--;
+  async onLeave(client: Client, code?: number): Promise<void> {
+    const config = getConfig();
+    const playerState = this.players.get(client.sessionId);
+    const isInCombat = this.combatSystem.isInCombat(client.sessionId);
+
+    // Allow reconnection for accidental disconnects (non-4000 codes)
+    // Code 4000 = consented leave (player clicked "leave game")
+    const consented = code === 4000;
+
+    if (!consented) {
+      // Mark player as disconnected
+      if (playerState) {
+        playerState.disconnected = true;
+      }
+      if (isInCombat) {
+        this.combatSystem.markDisconnected(client.sessionId);
+      }
+
+      this.log(`Player disconnected (code ${code}): ${client.sessionId} — allowing reconnection for ${config.reconnectionTimeoutS}s`);
+
+      try {
+        await this.allowReconnection(client, config.reconnectionTimeoutS);
+        
+        // Client reconnected successfully
+        this.log(`Player reconnected: ${client.sessionId}`);
+        
+        // Clear disconnected flags
+        if (playerState) {
+          playerState.disconnected = false;
+        }
+        if (isInCombat) {
+          this.combatSystem.clearDisconnected(client.sessionId);
+        }
+
+        // Send reconnection confirmation
+        this.sendNarrate(client, {
+          text: 'Reconnected to the shard.',
+          type: 'system',
+          timestamp: Date.now(),
+        });
+
+        // Resend current room state
+        if (playerState) {
+          const lookResult = handleLook(this.buildCommandContext(playerState, []));
+          this.deliverResult(client, lookResult);
+        }
+
+        return; // Player reconnected — keep them in the game
+      } catch {
+        // Reconnection timeout expired
+        this.log(`Reconnection timeout: ${client.sessionId} — applying death behavior`);
+        this.handleReconnectionTimeout(client.sessionId);
+      }
+    }
+
+    // Clean up player (consented leave or timeout expired)
     this.extractionSystem.interruptExtraction(client.sessionId, 'you left the shard');
-    this.players.delete(client.sessionId);
-    this.combatSystem.removeCombatant(client.sessionId);
+    if (this.players.has(client.sessionId)) {
+      this.state.playerCount = Math.max(0, this.state.playerCount - 1);
+      this.players.delete(client.sessionId);
+      this.combatSystem.removeCombatant(client.sessionId);
+      this.updateMetadata();
+    }
     this.log(`Player left: ${client.sessionId} (${this.state.playerCount} players)`);
+  }
+
+  /**
+   * Handle reconnection timeout expiry — kill or move to safe room.
+   */
+  private handleReconnectionTimeout(sessionId: string): void {
+    const config = getConfig();
+    const playerState = this.players.get(sessionId);
+    if (!playerState) return;
+
+    const combatant = this.combatSystem.getCombatant(sessionId);
+
+    if (config.reconnectDeathBehavior === 'kill') {
+      // Kill the player in place — their body and inventory become lootable
+      if (combatant) {
+        combatant.hp = 0;
+        this.log(`Player ${sessionId} killed in place after reconnection timeout`);
+      }
+      // Inventory handling would go here (drop as loot) — deferred for now
+    } else {
+      // Move to safe room (start room), clear combat state
+      const startRoomId = this.roomGraph.startRoomId;
+      playerState.currentRoomId = startRoomId;
+      
+      if (combatant) {
+        combatant.hp = Math.max(1, Math.floor(combatant.maxHp * 0.1)); // 10% HP
+        combatant.roomId = startRoomId;
+      }
+
+      this.combatSystem.removeCombatant(sessionId);
+      this.log(`Player ${sessionId} moved to safe room after reconnection timeout`);
+    }
   }
 
   onDispose(): void {
@@ -236,23 +352,32 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Placeholder: room graph generation, creature spawning, loot placement
     this.log('Seeding shard: generating room graph...');
 
-    // Transition to open after seeding is complete
-    this.clock.setTimeout(() => {
-      this.transitionTo('open');
-
-      // Open for entry for 5 minutes, then go active
+    const scheduleActiveTransition = () => {
       this.clock.setTimeout(() => {
         if (this.lifecycle === 'open') {
           this.transitionTo('active');
         }
       }, 5000); // Shortened for dev; production = 300_000 (5 min)
-    }, 1000); // Shortened for dev; production = seeding duration
+    };
+
+    if (this.openDelayMs <= 0) {
+      this.transitionTo('open');
+      scheduleActiveTransition();
+      return;
+    }
+
+    // Transition to open after seeding is complete
+    this.clock.setTimeout(() => {
+      this.transitionTo('open');
+      scheduleActiveTransition();
+    }, this.openDelayMs); // Shortened for dev; production = seeding duration
   }
 
   private transitionTo(newState: SharedShardState): void {
     const previousState = this.lifecycle;
     this.lifecycle = newState;
     this.state.lifecycle = newState;
+    this.updateMetadata();
 
     this.log(`Lifecycle: ${previousState} → ${newState}`);
 
@@ -295,6 +420,23 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     this.clock.setTimeout(() => {
       this.disconnect();
     }, 2000);
+  }
+
+  private updateMetadata(): void {
+    // Build player list with room locations for matchmaker
+    const playerList = Array.from(this.players.entries()).map(([sessionId, state]) => ({
+      sessionId,
+      roomId: state.currentRoomId,
+    }));
+
+    this.setMetadata({
+      biome: this.state.biome,
+      tier: this.state.tier,
+      lifecycle: this.lifecycle,
+      playerCount: this.state.playerCount,
+      maxPlayers: this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig()),
+      players: playerList,
+    });
   }
 
   // ─── Command Handling ────────────────────────────────────────────────────
@@ -340,7 +482,22 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     const wasExtracting = this.extractionSystem.isExtracting(client.sessionId);
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
-    this.deliverResult(client, result);
+
+    // Social commands (say, emote) broadcast to all players in the same room
+    // Whisper is handled separately with targeted delivery
+    const isSocialBroadcast = verb === 'say' || verb === 'emote';
+    const isWhisper = verb === 'whisper';
+
+    if (isSocialBroadcast) {
+      // Broadcast to all players in the same room (including sender)
+      this.broadcastToRoom(player.currentRoomId, result);
+    } else if (isWhisper) {
+      // Deliver whisper: sender gets confirmation, target gets the message
+      this.deliverWhisper(client, player, result, ctx.otherPlayersInRoom);
+    } else {
+      // Normal command: deliver only to sender
+      this.deliverResult(client, result);
+    }
 
     // Send EXTRACTION_STATE 'started' if this command initiated an extraction
     if (!wasExtracting && this.extractionSystem.isExtracting(client.sessionId)) {
@@ -394,16 +551,77 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
   }
 
+  /**
+   * Broadcast narrations to all players in a specific room.
+   * Used for proximity-based social commands (say, emote).
+   */
+  private broadcastToRoom(roomId: string, result: import('../commands/index.js').CommandResult): void {
+    for (const narration of result.narrations) {
+      // Send to all players in the room
+      for (const [sid, ps] of this.players) {
+        if (ps.currentRoomId === roomId) {
+          const targetClient = this.clients.find(c => c.sessionId === sid);
+          if (targetClient) {
+            this.sendNarrate(targetClient, {
+              text: narration.text,
+              type: narration.type,
+              timestamp: Date.now(),
+            });
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Deliver a whisper message to a specific target.
+   * Sender gets confirmation, target gets the actual message.
+   */
+  private deliverWhisper(
+    sender: Client, 
+    senderPlayer: PlayerState, 
+    result: import('../commands/index.js').CommandResult,
+    otherPlayersInRoom: string[]
+  ): void {
+    // Sender always gets the result (confirmation message)
+    this.deliverResult(sender, result);
+
+    // Extract the whispered message from the sender's confirmation
+    // Format: "You whisper to a nearby figure: "message""
+    const confirmationText = result.narrations[0]?.text ?? '';
+    const match = confirmationText.match(/"(.+)"/);
+    
+    if (match && otherPlayersInRoom.length > 0) {
+      const whisperedMessage = match[1];
+      // For Phase 1, send to the first other player in the room
+      // Future: use proper target matching from whisper handler
+      const targetSessionId = otherPlayersInRoom[0];
+      const targetClient = this.clients.find(c => c.sessionId === targetSessionId);
+      
+      if (targetClient) {
+        this.sendNarrate(targetClient, {
+          text: `A figure whispers to you: "${whisperedMessage}"`,
+          type: 'speech',
+          timestamp: Date.now(),
+        });
+      }
+    }
+  }
+
   // ─── Combat Result Delivery ──────────────────────────────────────────────
 
   private deliverCombatResults(tickResult: TickResult): void {
     // Send combat event narrations to all clients in relevant rooms
     for (const event of tickResult.events) {
-      // Broadcast combat narrations to all connected clients
       this.broadcast(MessageTypes.NARRATE, {
         text: event.narration,
         type: 'combat',
         timestamp: Date.now(),
+        combatEvent: {
+          eventType: event.type,
+          actorId: event.actorId,
+          targetId: event.targetId,
+        },
       } satisfies NarrateMessage);
     }
 
@@ -487,7 +705,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Remove player from shard
     this.players.delete(playerId);
     this.combatSystem.removeCombatant(playerId);
-    this.state.playerCount--;
+    this.state.playerCount = Math.max(0, this.state.playerCount - 1);
+    this.updateMetadata();
 
     this.log(`Player extracted: ${playerId}`);
 
@@ -652,12 +871,93 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       }
     }
 
+    // Handle player defeats — drop inventory, send death state, schedule refuge return
+    this.handlePlayerDefeats(tickResult);
+
     // Sync HP and room for surviving creature combatants
     for (const creature of this.creatureManager.getLivingCreatures()) {
       const combatant = this.combatSystem.getCombatant(creature.id);
       if (combatant) {
         this.creatureManager.syncFromCombat(combatant);
       }
+    }
+  }
+
+  /**
+   * Handle player defeat events — drops inventory, sends death screen,
+   * schedules return to refuge after a short delay.
+   */
+  private handlePlayerDefeats(tickResult: TickResult): void {
+    for (const event of tickResult.events) {
+      if (event.type !== 'defeated' || event.actorId.startsWith('creature-')) continue;
+
+      const playerId = event.actorId;
+      const player = this.players.get(playerId);
+      if (!player) continue;
+
+      const roomId = player.currentRoomId;
+      const room = this.roomGraph.rooms.get(roomId);
+
+      // Drop all inventory items to the room floor
+      const droppedItems: { name: string }[] = [];
+      if (room) {
+        for (const [, entry] of player.inventory) {
+          for (let i = 0; i < entry.quantity; i++) {
+            room.items.push(entry.item);
+            droppedItems.push(entry.item);
+          }
+        }
+      }
+      player.inventory.clear();
+
+      // Narrate dropped items to other players in the room
+      if (droppedItems.length > 0 && room) {
+        for (const [sid, ps] of this.players) {
+          if (sid === playerId || ps.currentRoomId !== roomId) continue;
+          const otherClient = this.findClient(sid);
+          if (otherClient) {
+            this.sendNarrate(otherClient, {
+              text: droppedItems.map(i => `${event.actorName} drops a ${i.name} as they fall.`).join('\n'),
+              type: 'room',
+              timestamp: Date.now(),
+            });
+          }
+        }
+      }
+
+      // Send death state to the defeated player
+      const client = this.findClient(playerId);
+      if (client) {
+        this.sendExtractionState(client, {
+          playerId,
+          state: 'death',
+          narration: 'You collapse, defeated. Darkness claims you…',
+          timestamp: Date.now(),
+        });
+
+        // Schedule return to refuge after 3 seconds
+        this.clock.setTimeout(() => {
+          // Guard: player may have disconnected during the death delay
+          if (!this.players.has(playerId)) {
+            this.log(`Player ${playerId} already left during death delay — skipping cleanup`);
+            return;
+          }
+
+          client.send(MessageTypes.ROOM_SWITCH, {
+            target: 'refuge',
+            reason: 'player_death',
+          } satisfies RoomSwitchMessage);
+
+          // Clean up player from shard state
+          this.players.delete(playerId);
+          this.state.playerCount = Math.max(0, this.state.playerCount - 1);
+          this.updateMetadata();
+          this.log(`Player defeated and returned to refuge: ${playerId}`);
+        }, 3000);
+      }
+
+      // Remove from combat system immediately
+      this.combatSystem.removeCombatant(playerId);
     }
   }
 

@@ -493,3 +493,108 @@ Improved the ACA deployment workflow in `.github/workflows/ci-cd.yml`:
 - `packages/client/src/pages/ShardExploration.tsx`
 
 **Lock:** Drizzt (original author) — no conflicts
+
+### 2026-03-21: Fix Reconnection "Return to Refuge" — useShardConnection.ts
+
+**Branch:** `squad/ux-overhaul`
+**Task:** Elminster code review should-fix #5 (item #7 in decisions.md)
+
+**Problem:**
+- `onReturnToRefuge` callback in `useShardConnection.ts` dispatched `{ type: 'LOGOUT' }`
+- This nuked all auth state (token, playerId, messages) — user sent back to login screen
+- Correct behavior: navigate to `/refuge` while keeping user authenticated
+
+**Root cause:** The callback was copied from a "bail out entirely" pattern. On the Shard page, returning to Refuge is a navigation event, not a session-ending event.
+
+**Fix (1 file, surgical):**
+- `packages/client/src/hooks/useShardConnection.ts`
+  - Added `import { useNavigate } from 'react-router';`
+  - Added `const navigate = useNavigate();` in hook body
+  - Replaced `dispatch({ type: 'LOGOUT' });` with `navigate('/refuge');`
+  - Room leave + ref cleanup preserved (user disconnects from shard cleanly)
+  - Auth state (token, playerId) preserved — user stays logged in
+
+**What happens now:**
+1. User clicks "Return to Refuge" in reconnection overlay
+2. `useReconnection.returnToRefuge()` clears timers, hides overlay, calls callback
+3. Callback leaves the Colyseus shard room
+4. `navigate('/refuge')` triggers React Router navigation
+5. ShardExploration unmounts (cleanup effect fires — no double-leave since room already null)
+6. Refuge page mounts and establishes its own room connection
+7. User remains authenticated throughout
+
+**Verification:** `tsc --noEmit` clean, `vite build` succeeds (705KB bundle, unchanged).
+
+### 2026-03-21: Proximity Communication Commands — say, whisper, emote (Issue #26)
+
+**Branch:** `squad/26-proximity-communication`
+**PR:** #107
+**Status:** ✅ COMPLETE
+
+**What Was Done:**
+Implemented server-side proximity-based communication system with three social commands: say, whisper, and emote.
+
+**Command Handlers Created:**
+1. **say.ts** — `say [message]`: Broadcasts message to all players in sender's current room
+   - Max length: 200 characters
+   - Simple template: `"A figure says: '{message}'"`
+   - Uses 'speech' NarrationType
+   
+2. **whisper.ts** — `whisper [target_description] [message]`: Private message to specific player in same room
+   - Max length: 200 characters
+   - Sender confirmation: `"You whisper to a nearby figure: '{message}'"`
+   - Target receives: `"A figure whispers to you: '{message}'"`
+   - Phase 1: targets first other player in room (proper matching deferred)
+   
+3. **emote.ts** — `emote [action]`: Broadcasts action description to all players in same room
+   - Max length: 100 characters
+   - Template: `"A figure {action}"`
+   - Uses 'speech' NarrationType
+
+**Input Sanitization:**
+- Strips HTML-like tags with regex: `/<[^>]*>/g`
+- Removes control characters: `/[\x00-\x1F\x7F]/g` (with eslint-disable-line no-control-regex)
+- Enforces max length limits
+- Empty/whitespace-only input returns system error message
+
+**Message Routing (ShardRoom.ts):**
+- Modified `handleCommandMessage()` to detect social commands (say/emote/whisper)
+- `broadcastToRoom()`: sends narration to ALL clients with `currentRoomId === roomId`
+- `deliverWhisper()`: sender gets confirmation, extracts message from confirmation text, sends to first otherPlayerInRoom
+- Normal commands continue to use `deliverResult()` (sender-only)
+
+**Proximity Enforcement:**
+- Only players in the SAME room receive social messages
+- Players in different rooms receive NOTHING (no cross-room visibility)
+- otherPlayersInRoom already computed in `buildCommandContext()` — reused for whisper target list
+
+**Architecture Decisions:**
+1. **Simple templates for Phase 1:** No LLM narration enhancement. Volo will add that later when integrating with narrative system.
+2. **Reused existing 'speech' NarrationType:** Already defined in shared types, appropriate for all social communication.
+3. **No new message types needed:** All communication flows through existing COMMAND → NARRATE protocol.
+4. **Whisper target matching deferred:** Phase 1 uses "first other player in room" for simplicity. Future: match by player name/description when PlayerState includes display names.
+5. **Input delimiters ready but unused:** `<user_input>{text}</user_input>` pattern implemented in code but not yet wired to LLM context (Volo's domain).
+
+**Testing:**
+- ✅ Build passes (`npm run build`)
+- ✅ Lint passes (0 errors, only pre-existing warnings about non-null assertions in tests)
+- Commands registered in registry and accessible via command parser
+- All three handlers return CommandResult with proper narration types
+
+**Key Files Modified:**
+- `packages/server/src/commands/handlers/say.ts` — New (59 lines)
+- `packages/server/src/commands/handlers/whisper.ts` — New (104 lines)
+- `packages/server/src/commands/handlers/emote.ts` — New (52 lines)
+- `packages/server/src/commands/index.ts` — Added imports + registry entries
+- `packages/server/src/rooms/ShardRoom.ts` — Added broadcastToRoom() and deliverWhisper() methods, modified handleCommandMessage()
+
+**Lessons Learned:**
+1. **Lint control character regex:** `no-control-regex` rule fires on `[\x00-\x1F]` patterns. Fix: `// eslint-disable-next-line no-control-regex` above the regex.
+2. **Phase separation:** Simple templates for Phase 1, LLM enhancement deferred to narrative specialist. Keeps systems decoupled.
+3. **Proximity = currentRoomId filter:** ShardRoom already tracks player room IDs. Proximity logic is just filtering players by matching roomId — no new data structures needed.
+4. **Whisper extraction via regex:** Sender's confirmation message format is stable (`"You whisper ... : "message""`), so regex extraction is reliable. If format changes, update both whisper handler and deliverWhisper() simultaneously.
+
+**Future Work (not in scope):**
+- LLM narration enhancement (Volo — narrative system integration)
+- Player display names for whisper target matching (depends on PlayerState.displayName field)
+- RefugeRoom social commands (separate issue — Refuge may want different social mechanics)

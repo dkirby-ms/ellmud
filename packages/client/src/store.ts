@@ -14,6 +14,7 @@ export interface TerminalMessage {
   text: string;
   type: NarrationType | 'header' | 'combat';
   timestamp: number;
+  combatSubtype?: 'hit_dealt' | 'hit_taken' | 'dodge' | 'defeated' | 'flee' | 'combat_end';
 }
 
 // ─── Sidebar / Combat UI types ───────────────────────────────────────────────
@@ -38,6 +39,12 @@ export interface InventoryItem {
   id: string;
   name: string;
   tier: GearTier;
+}
+
+export interface StatusEffect {
+  id: string;
+  name: string;
+  duration: number;
 }
 
 export function getHpTier(hp: number, maxHp: number): HpTier {
@@ -69,6 +76,9 @@ export interface AppState {
   enemyStatus: EnemyStatus | null;
   inventory: InventoryItem[];
   pendingCombatAction: CombatAction | null;
+  statusEffects: StatusEffect[];
+  playerHp: number;
+  playerMaxHp: number;
 }
 
 export const initialState: AppState = {
@@ -89,6 +99,9 @@ export const initialState: AppState = {
   enemyStatus: null,
   inventory: [],
   pendingCombatAction: null,
+  statusEffects: [],
+  playerHp: 100,
+  playerMaxHp: 100,
 };
 
 // ─── Actions ─────────────────────────────────────────────────────────────────

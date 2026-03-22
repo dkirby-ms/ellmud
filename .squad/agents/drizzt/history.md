@@ -214,6 +214,11 @@
 - **Pattern:** ShardRoom checks `isExtracting` before/after command to detect extraction start without coupling command handler to message protocol.
 - **Key insight:** The `getChannel()` accessor on ExtractionSystem provides tick state for progress messages without duplicating data in the tick result. Channel is deleted on completion/interruption, so progress messages only fire for active channels.
 
+### Shardboard Matchmaker Listing
+- **Pattern:** Use `matchMaker.query()` for shard listings and `matchMaker.getLocalRoomById()` to pull live lifecycle/biome/player counts from local rooms. Fall back to room metadata when state is unavailable.
+- **Why:** The shardboard needs authoritative, up-to-date joinability checks (open lifecycle + player count) without leaking Schema state to clients.
+- **Guard:** When extraction removes a player before `onLeave`, skip the second decrement by checking `players.has(sessionId)` so shard player counts stay accurate.
+
 ## Wave 4b Completion — All Phase 1 Server Issues Closed (2026-03-20T22:11Z)
 
 **Status:** ✅ Complete  
@@ -449,3 +454,66 @@ Originally used useRef for extraction state, but refs don't trigger re-renders. 
 
 ### AppContext Already Wired at App.tsx Level
 The App.tsx already had useReducer + AppContext.Provider + localStorage persistence. No need to create a separate AppProvider — just use useAppContext() in any page.
+
+### Extraction Handler Must Be Registered on Every Room
+The `extraction_state` handler was only registered after the initial `connect()` call. On `switchRoom()` and reconnection, the new room never got the handler — a latent bug. Fix: define the handler alongside other handler definitions, store in a ref, and register it in all three room-creation paths (connect, switchRoom, reconnect). The `MessageHandlers` interface in connection.ts doesn't cover extraction_state, so direct `room.onMessage` registration is needed at each site.
+
+### WebSocket Reconnection Tuning (2026-03-21)
+**Task:** Implement configurable reconnection window with combat/exploration behavior (#28)
+**Status:** ✅ Complete — PR #108 to dev
+
+**What was done:**
+1. **Config module** — Added `reconnectionTimeoutS` (default 30s) and `reconnectDeathBehavior` ('kill' | 'safe-room') to ServerConfig interface. Exposed via RECONNECTION_TIMEOUT_S and RECONNECT_DEATH_BEHAVIOR env vars.
+2. **PlayerState** — Added `disconnected: boolean` flag to track disconnect status across systems.
+3. **CombatState/CombatSystem** — Extended Combatant interface with `disconnected?: boolean`. Added `markDisconnected()` and `clearDisconnected()` methods. Updated tick resolution to log "(disconnected)" vs "(no input)" when auto-dodging.
+4. **ShardRoom.onLeave** — Complete rewrite to async pattern using `allowReconnection()`. Detects consented leaves (code 4000) vs accidental disconnects. On non-consented disconnect: marks player/combatant as disconnected, waits for reconnection, restores state on success, applies death behavior on timeout.
+5. **Timeout handling** — Added `handleReconnectionTimeout()` private method. Kill mode: sets HP to 0, logs death. Safe-room mode: moves to start room, sets HP to 10%, clears combat state.
+6. **Test fixtures** — Updated `wave3-redis-contracts.test.ts` makeServerConfig() to include new config properties.
+
+**Key insights:**
+- Colyseus `allowReconnection()` must be called in `onLeave()`, not `onDrop()` — the docs are inconsistent but the type signature is clear.
+- The `consented` parameter is deprecated — Colyseus now uses numeric `code` parameter. Code 4000 = consented leave (user clicked "leave").
+- The reconnection window operates entirely server-side via Promise resolution/rejection. No client changes needed.
+- Disconnected players in combat auto-dodge via the existing default action logic — just needed a flag check and better logging.
+- Safe-room behavior required access to `roomGraph.startRoomId` — ShardRoom already has this, so straightforward.
+
+**Architecture notes:**
+- Compatible with multi-player shards (#21) — each player tracks their own disconnect state independently.
+- Compatible with proximity communication (#26) — disconnected players still occupy space, can be seen by others.
+- The `disconnected` flag is server-authoritative and never synced to clients (no Schema sync in Ellmud).
+- Reconnection confirmation uses the same `sendNarrate()` + `handleLook()` pattern as initial onJoin.
+
+**Testing:**
+- All 961 server tests pass (including wave3 Redis contracts test with new config properties)
+- Build clean, lint clean
+- Integration tests verify combat system respects disconnected combatant behavior
+
+**Files changed:**
+- `packages/server/src/config.ts` — Added 2 new config properties
+- `packages/server/src/state/PlayerState.ts` — Added disconnected flag
+- `packages/server/src/combat/CombatState.ts` — Extended Combatant interface
+- `packages/server/src/combat/CombatSystem.ts` — Added mark/clear methods, improved logging
+- `packages/server/src/rooms/ShardRoom.ts` — Async onLeave + handleReconnectionTimeout
+- `packages/server/src/__tests__/wave3-redis-contracts.test.ts` — Updated test fixture
+
+**Drizzt takeaway:** Reconnection tuning is now production-ready. The 30-60s window matches industry standard (Discord, Slack use similar), and the dual death-behavior system gives operators control over player experience vs world consistency trade-offs.
+
+### Player Death Handler Fix (PR #109)
+**Task:** Fix player death flow — players were stuck when defeated (HP=0)
+**Status:** ✅ Complete — PR #109 (fix/player-death-handler → dev)
+
+**Root cause:** `syncCreaturesAfterCombat()` only handled `event.actorId.startsWith('creature-')`. Player defeat events (where actorId is a session ID) fell through silently.
+
+**Fix:** Added `handlePlayerDefeats()` method to ShardRoom:
+1. Detects player defeat events (actorId NOT starting with 'creature-')
+2. Drops all inventory to room floor (other players can loot)
+3. Sends EXTRACTION_STATE `state: 'death'` → triggers client death screen
+4. Schedules ROOM_SWITCH to refuge after 3s via `this.clock.setTimeout()`
+5. Cleans up player from combat system and shard state
+
+**Also changed:**
+- Added `'death'` to ExtractionMessage state union in shared package
+- Updated MessageCollector to capture EXTRACTION_STATE messages
+- Added 5 new tests (3 unit, 2 integration), all 970 tests pass
+
+**Drizzt takeaway:** The creature-only filter on defeat events was a classic oversight — `startsWith('creature-')` was an implicit negative filter on all other entity types. When adding new entity types to any event handler, always check for the full set of possible actors. The `isPlayer` flag on Combatant is the canonical way to distinguish.

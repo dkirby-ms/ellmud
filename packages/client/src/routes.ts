@@ -6,6 +6,7 @@ import ShardExploration from "./pages/ShardExploration";
 import Leaderboard from "./pages/Leaderboard";
 import Settings from "./pages/Settings";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ErrorFallback } from "./components/ErrorFallback";
 import AdminLayout from "./pages/admin/AdminLayout";
 import Dashboard from "./pages/admin/Dashboard";
 import CreaturesList from "./pages/admin/CreaturesList";
@@ -41,6 +42,7 @@ export const routes: RouteObject[] = [
   },
   {
     Component: ProtectedRoute,
+    ErrorBoundary: ErrorFallback,
     children: [
       {
         path: "/characters",
@@ -65,108 +67,114 @@ export const routes: RouteObject[] = [
     ],
   },
   {
-    path: "/admin",
-    Component: AdminLayout,
+    Component: ProtectedRoute,
+    ErrorBoundary: ErrorFallback,
     children: [
       {
-        index: true,
-        Component: Dashboard,
-      },
-      {
-        path: "creatures",
-        Component: CreaturesList,
-      },
-      {
-        path: "creatures/:id",
-        Component: CreatureDetail,
-      },
-      {
-        path: "items",
-        Component: ItemsList,
-      },
-      {
-        path: "items/:id",
-        Component: ItemsDetail,
-      },
-      {
-        path: "biomes",
-        Component: BiomesList,
-      },
-      {
-        path: "biomes/:id",
-        Component: BiomesDetail,
-      },
-      {
-        path: "modifiers",
-        Component: ModifiersList,
-      },
-      {
-        path: "modifiers/:id",
-        Component: ModifiersDetail,
-      },
-      {
-        path: "loot-tables",
-        Component: LootTablesList,
-      },
-      {
-        path: "loot-tables/:id",
-        Component: LootTablesDetail,
-      },
-      {
-        path: "skills",
-        Component: SkillsList,
-      },
-      {
-        path: "skills/:id",
-        Component: SkillsDetail,
-      },
-      {
-        path: "factions",
-        Component: FactionsList,
-      },
-      {
-        path: "factions/:id",
-        Component: FactionsDetail,
-      },
-      {
-        path: "rooms",
-        Component: RoomsList,
-      },
-      {
-        path: "rooms/:id",
-        Component: RoomsDetail,
-      },
-      {
-        path: "narrative",
-        Component: NarrativeList,
-      },
-      {
-        path: "narrative/:id",
-        Component: NarrativeDetail,
-      },
-      {
-        path: "balance",
-        Component: Balance,
-      },
-      {
-        path: "contracts",
-        Component: ContractsList,
-      },
-      {
-        path: "recipes",
-        Component: RecipesList,
-      },
-      {
-        path: "deploy",
-        Component: Deploy,
-      },
-      {
-        path: "audit",
-        Component: AuditLog,
-      },
-      {
-        path: "users",
-        Component: UsersList,
+        path: "/admin",
+        Component: AdminLayout,
+        children: [
+          {
+            index: true,
+            Component: Dashboard,
+          },
+          {
+            path: "creatures",
+            Component: CreaturesList,
+          },
+          {
+            path: "creatures/:id",
+            Component: CreatureDetail,
+          },
+          {
+            path: "items",
+            Component: ItemsList,
+          },
+          {
+            path: "items/:id",
+            Component: ItemsDetail,
+          },
+          {
+            path: "biomes",
+            Component: BiomesList,
+          },
+          {
+            path: "biomes/:id",
+            Component: BiomesDetail,
+          },
+          {
+            path: "modifiers",
+            Component: ModifiersList,
+          },
+          {
+            path: "modifiers/:id",
+            Component: ModifiersDetail,
+          },
+          {
+            path: "loot-tables",
+            Component: LootTablesList,
+          },
+          {
+            path: "loot-tables/:id",
+            Component: LootTablesDetail,
+          },
+          {
+            path: "skills",
+            Component: SkillsList,
+          },
+          {
+            path: "skills/:id",
+            Component: SkillsDetail,
+          },
+          {
+            path: "factions",
+            Component: FactionsList,
+          },
+          {
+            path: "factions/:id",
+            Component: FactionsDetail,
+          },
+          {
+            path: "rooms",
+            Component: RoomsList,
+          },
+          {
+            path: "rooms/:id",
+            Component: RoomsDetail,
+          },
+          {
+            path: "narrative",
+            Component: NarrativeList,
+          },
+          {
+            path: "narrative/:id",
+            Component: NarrativeDetail,
+          },
+          {
+            path: "balance",
+            Component: Balance,
+          },
+          {
+            path: "contracts",
+            Component: ContractsList,
+          },
+          {
+            path: "recipes",
+            Component: RecipesList,
+          },
+          {
+            path: "deploy",
+            Component: Deploy,
+          },
+          {
+            path: "audit",
+            Component: AuditLog,
+          },
+          {
+            path: "users",
+            Component: UsersList,
+          },
+        ],
       },
     ],
   },

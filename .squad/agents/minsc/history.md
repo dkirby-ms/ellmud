@@ -458,3 +458,106 @@ The UX overhaul moved 24 old components to `components/_old/` and replaced them 
 - Cleaner git history (dead tests removed rather than accumulating)
 
 **Status:** User directive fulfilled. Test suite ready for Phase 1 deployment.
+
+### Auth Guard & Error Boundary Tests (Should-Fix Coverage)
+
+**Files created:**
+- `packages/client/src/__tests__/auth-guards.test.tsx` — 10 tests covering admin route auth guards
+- `packages/client/src/__tests__/error-boundary.test.tsx` — 4 tests covering ErrorFallback error boundaries
+
+**Key patterns discovered:**
+- Admin Dashboard renders "Dashboard" in both sidebar nav label AND page `<h1>` — use `getByRole('heading', { name: 'Dashboard' })` to disambiguate
+- ErrorFallback uses a plain `<a href="/refuge">` tag (not React Router `<Link>`), so click navigation can't be tested in jsdom — verify `href` attribute instead
+- `ErrorBoundary: ErrorFallback` property (component ref) works on route config; tests can also use `errorElement: <ErrorFallback />` (JSX) for custom test routes
+- Volo's changes (ProtectedRoute on admin routes, ErrorFallback with ErrorBoundary) landed before tests — all 14 new tests pass immediately
+
+**Suite status:** 77 tests across 7 files, all passing, zero regressions.
+
+---
+
+## Learnings — UX Batch 2 Anticipatory Tests (2026-03-22)
+
+**Task:** Write anticipatory tests for UX Review Batch 2 (combat/sidebar polish gaps #10-21).
+
+**File created:** `packages/client/src/__tests__/ux-batch2-combat-sidebar.test.tsx`
+
+**Results:** 24 tests total — 21 correctly failing (features not implemented), 3 passing (negative assertions for absent-when-empty states). Zero regressions on existing 77 client tests.
+
+**Test architecture decisions:**
+- Render ShardExploration with mocked `useShardConnection` hook + AppContext state overrides — avoids Colyseus dependency
+- Combat color-coding tests use `data-combat-type` attribute traversal pattern, falling back to the text element itself — accommodates multiple implementation approaches
+- Status effects and HP state tested via state overrides cast as `Partial<AppState>` — these state fields don't exist yet, but the cast documents the expected API surface
+- Auto-complete tests use `data-testid="autocomplete-hint"` — testid pattern for elements that don't yet exist in the DOM
+- Tick timer tests assert `role="progressbar"` and `aria-valuenow` — accessibility-first contract
+- All theme classes use token names (text-accent-gold, text-danger, etc.) not hardcoded hex — compatible with Batch 1 token migration
+
+**Key conventions established:**
+- Each describe block maps 1:1 to a UX gap number
+- Each test has inline comment: `// UX Review Batch 2 — anticipatory test (gap #N)`
+- Tests define RENDERED contracts (DOM classes, text content, aria attributes) not data model internals
+
+**Suite status:** 77 existing + 24 new = 101 total client tests (21 anticipatory failures expected).
+
+---
+
+## Learnings — Wave 1 Multiplayer Anticipatory Tests (2026-03-22)
+
+**Task:** Write anticipatory integration tests for Phase 2 Wave 1 features (#21, #26, #28). Create a SINGLE test file on `dev` branch (no separate PR branch).
+
+**File created:** `packages/server/src/__tests__/wave1-multiplayer.test.ts`
+
+**Results:** 58 tests total — 5 passing (verify existing behavior), 53 `.todo()` (anticipatory contracts). Zero regressions on 949 existing server tests.
+
+**Test architecture decisions:**
+- `connectToExistingRoom` pattern for multi-client tests — create room once, then connect multiple clients to same instance
+- MAX_PLAYERS_PER_SHARD env var with `resetConfig()` in beforeEach/afterEach — ensures each suite gets clean config state
+- MessageCollector pattern to verify narration/message routing — already established in existing tests
+- No imports of types/functions that don't exist yet — `.todo()` tests describe contracts in test names only
+
+**Key patterns discovered:**
+- Parser already accepts 'say' verb — can test at parser level without handler implementation
+- Multi-player join/capacity enforcement works with existing maxClients logic — tests pass immediately
+- Colyseus rejection messages vary between "full" and "locked" — test regex `/full|locked/i` for robustness
+- Player count tracking visible in server logs (`[ShardRoom] Player joined: xyz (N players)`) — can validate via log output or future state API
+
+**Test categories:**
+1. **Multi-Player Shards (#21)** — 13 tests (4 passing: join/capacity/tracking; 9 todo: tier-based limits, Redis presence, entry distribution)
+2. **Proximity Communication (#26)** — 14 tests (1 passing: parser accepts say; 13 todo: routing, filtering, sanitization)
+3. **Say Command End-to-End** — 3 tests (all todo: room-scoped broadcast, speaker identity)
+4. **Reconnection Tuning (#28)** — 8 tests (all todo: state preservation, combat dodge, timeout)
+5. **Tier-Based Limits** — 5 tests (all todo: Tier 1/2/3 max players)
+6. **Shard Metadata** — 6 tests (all todo: player count/list exposure)
+7. **Entry Point Distribution** — 5 tests (all todo: spawn location logic)
+8. **Proximity Sanitization** — 6 tests (all todo: HTML stripping, length limits, prompt injection)
+
+**Behavioral contracts defined:**
+- Tier 1 shards allow 4 players (new default for Phase 2)
+- Tier 2 shards allow 5 players
+- Tier 3 shards allow 6 players
+- `say` broadcasts to same room only, uses "speech" narration type
+- `whisper` delivers to target only (others in room don't see it)
+- `emote` broadcasts to same room, formatted as third-person
+- Message length limits: >200 chars truncated or rejected
+- Prompt injection attempts sanitized (no LLM leakage)
+- Reconnection window: 30 seconds state preservation
+- Disconnected players in combat: apply dodge action
+
+**Integration with parallel work:**
+- Drizzt (#21): tier-based max players, Redis presence, KEDA scaling
+- Jarlaxle (#26): say/whisper/emote handlers, message routing
+- Volo (#26): LLM prompts for social narration
+- Tests will pass incrementally as each agent's PR lands on dev
+
+**Suite status:** 949 existing + 58 new = 1,007 total server tests (5 passing, 53 anticipatory todo).
+
+**Commit:** `1d5b6e1` pushed directly to `dev` branch (no separate PR).
+
+## Learnings
+
+**Integration tests must assert room state, not simulate logic inline.**
+The original "Inventory Drop on Player Death" unit tests manually iterated player inventory and pushed to a local array — they never called ShardRoom code. This meant disabling the actual drop logic in ShardRoom.ts didn't break any tests. The fix: use a full integration test that creates a ShardRoom, connects a client, adds inventory items via room internals, forces combat defeat via `combatSystem.registerCombatant()` + `initiateCombat()`, then asserts `room.items[]` contains the dropped items. Verified the test fails when `room.items.push()` is commented out.
+
+**Test graph has no creatures — register combatants manually for combat tests.**
+With `useTestGraph: true`, creatures are not spawned automatically (spawn code only runs for procedural graphs). To test combat-dependent flows like player death, register both the creature and player combatant directly via `roomInstance.combatSystem.registerCombatant()` and `initiateCombat()`. This is more reliable than sending `attack creature` commands that may silently no-op.
+
+**Commit:** `8901e90` on `fix/player-death-handler` branch.

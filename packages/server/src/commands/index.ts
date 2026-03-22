@@ -18,6 +18,9 @@ import { handleInventory } from './handlers/inventory.js';
 import { handleAttack } from './handlers/attack.js';
 import { handleStrike, handleDodge, handleFlee } from './handlers/combat-actions.js';
 import { handleExtract } from './handlers/extract.js';
+import { handleSay } from './handlers/say.js';
+import { handleWhisper } from './handlers/whisper.js';
+import { handleEmote } from './handlers/emote.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -76,6 +79,9 @@ handlers.set('strike', handleStrike);
 handlers.set('dodge', handleDodge);
 handlers.set('flee', handleFlee);
 handlers.set('extract', handleExtract);
+handlers.set('say', handleSay);
+handlers.set('whisper', handleWhisper);
+handlers.set('emote', handleEmote);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(

@@ -53,19 +53,17 @@ export function ReconnectionOverlay({
       aria-label="Connection status"
       aria-live="assertive"
     >
-      <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-8 max-w-sm w-full mx-4 text-center shadow-2xl">
+      <div className="bg-bg-panel border border-border-muted rounded-lg p-8 max-w-sm w-full mx-4 text-center shadow-2xl">
         {state === 'disconnected' && (
           <>
             <div className="text-4xl mb-4" aria-hidden="true">⚠</div>
             <h2
-              className="text-[#B8860B] text-lg mb-2"
-              style={{ fontFamily: 'var(--font-serif)' }}
+              className="text-warning text-lg mb-2 font-serif"
             >
               Connection Lost
             </h2>
             <p
-              className="text-[#8A8B95] text-sm mb-6"
-              style={{ fontFamily: 'var(--font-sans)' }}
+              className="text-text-secondary text-sm mb-6 font-sans"
             >
               Attempt {attempt} of {maxAttempts}
             </p>
@@ -73,16 +71,14 @@ export function ReconnectionOverlay({
               <button
                 onClick={onReconnect}
                 type="button"
-                className="flex-1 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] font-medium py-2 rounded transition-colors"
-                style={{ fontFamily: 'var(--font-sans)' }}
+                className="flex-1 bg-accent-gold hover:bg-accent-gold/90 text-bg-primary font-medium py-2 rounded transition-colors font-sans"
               >
                 Reconnect Now
               </button>
               <button
                 onClick={onReturnToRefuge}
                 type="button"
-                className="flex-1 border border-[#2A2B35] hover:bg-[#1C1D27] text-[#8A8B95] py-2 rounded transition-colors"
-                style={{ fontFamily: 'var(--font-sans)' }}
+                className="flex-1 border border-border-muted hover:bg-bg-elevated text-text-secondary py-2 rounded transition-colors font-sans"
               >
                 Return to Refuge
               </button>
@@ -92,30 +88,27 @@ export function ReconnectionOverlay({
 
         {state === 'reconnecting' && (
           <>
-            <div className="w-8 h-8 border-2 border-[#C9A84C] border-t-transparent rounded-full animate-spin mx-auto mb-4" aria-hidden="true" />
+            <div className="w-8 h-8 border-2 border-accent-gold border-t-transparent rounded-full animate-spin mx-auto mb-4" aria-hidden="true" />
             <h2
-              className="text-[#C9A84C] text-lg mb-2"
-              style={{ fontFamily: 'var(--font-serif)' }}
+              className="text-accent-gold text-lg mb-2 font-serif"
             >
               Reconnecting…
             </h2>
-            <div className="h-2 bg-[#1C1D27] rounded-full overflow-hidden mb-3">
+            <div className="h-2 bg-bg-elevated rounded-full overflow-hidden mb-3">
               <div
-                className="h-full bg-[#C9A84C] transition-all duration-300"
+                className="h-full bg-accent-gold transition-all duration-300"
                 style={{ width: `${maxAttempts > 0 ? Math.min((attempt / maxAttempts) * 100, 100) : 0}%` }}
               />
             </div>
             <p
-              className="text-[#8A8B95] text-sm mb-4"
-              style={{ fontFamily: 'var(--font-sans)' }}
+              className="text-text-secondary text-sm mb-4 font-sans"
             >
               Attempt {attempt} of {maxAttempts} · {elapsedSeconds}s elapsed
             </p>
             <button
               onClick={onCancel}
               type="button"
-              className="border border-[#2A2B35] hover:bg-[#1C1D27] text-[#8A8B95] px-6 py-2 rounded transition-colors"
-              style={{ fontFamily: 'var(--font-sans)' }}
+              className="border border-border-muted hover:bg-bg-elevated text-text-secondary px-6 py-2 rounded transition-colors font-sans"
             >
               Cancel
             </button>
@@ -124,10 +117,9 @@ export function ReconnectionOverlay({
 
         {state === 'reconnected' && (
           <>
-            <div className="text-4xl mb-4 text-[#2D6B4F]" aria-hidden="true">✓</div>
+            <div className="text-4xl mb-4 text-success" aria-hidden="true">✓</div>
             <h2
-              className="text-[#2D6B4F] text-lg"
-              style={{ fontFamily: 'var(--font-serif)' }}
+              className="text-success text-lg font-serif"
             >
               Connection Restored
             </h2>

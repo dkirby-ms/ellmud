@@ -15,8 +15,8 @@ describe('Solo Play — Player Limit Enforcement', () => {
   });
 
   beforeEach(() => {
-    // Ensure default config (MAX_PLAYERS_PER_SHARD=1)
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    // Force solo-play config (MAX_PLAYERS_PER_SHARD=1)
+    process.env['MAX_PLAYERS_PER_SHARD'] = '1';
     resetConfig();
   });
 
@@ -50,7 +50,8 @@ describe('Solo Play — Player Limit Enforcement', () => {
     }
 
     expect(joinError).not.toBeNull();
-    expect(joinError!.message).toContain('full');
+    // Colyseus auto-locks rooms at maxClients, so rejection may say "locked" or "full"
+    expect(joinError!.message).toMatch(/full|locked/i);
 
     await client1.leave();
   });
@@ -77,7 +78,8 @@ describe('Solo Play — Player Limit Enforcement', () => {
     }
 
     expect(joinError).not.toBeNull();
-    expect(joinError!.message).toContain('full');
+    // Colyseus auto-locks rooms at maxClients, so rejection may say "locked" or "full"
+    expect(joinError!.message).toMatch(/full|locked/i);
 
     await client1.leave();
     await client2.leave();
@@ -106,8 +108,8 @@ describe('Solo Play — Config Module', () => {
     resetConfig();
     const config = getConfig();
 
-    expect(config.maxPlayersPerShard).toBe(1);
-    expect(config.maxReplicas).toBe(1);
+    expect(config.maxPlayersPerShard).toBe(4);
+    expect(config.maxReplicas).toBe(4);
     expect(config.matchmakerMode).toBe('in-process');
     expect(config.redis.enabled).toBe(false);
     expect(config.redis.connectionString).toBe('redis://localhost:6379');
@@ -138,7 +140,7 @@ describe('Solo Play — Config Module', () => {
     const config = getConfig();
 
     // Falls back to defaults for unparseable values
-    expect(config.maxPlayersPerShard).toBe(1);
+    expect(config.maxPlayersPerShard).toBe(4);
     expect(config.redis.enabled).toBe(false);
   });
 
