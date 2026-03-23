@@ -67,8 +67,9 @@ app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg
 app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));
 
 // Content CRUD API — admin-managed game content (items, creatures, biomes, etc.)
-const contentStores = initializeContentStores();
+const contentStores = initializeContentStores(USE_PG);
 app.use(createContentRouter({ stores: contentStores }));
+console.log(`[Ellmud] Content store: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 app.use('/admin', createDashboardRouter());
 

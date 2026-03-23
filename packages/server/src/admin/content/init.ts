@@ -1,23 +1,44 @@
 /**
- * Content store initialization — creates and seeds all 9 content stores.
+ * Content store initialization — creates all 9 content stores.
  *
- * Pre-populates from existing game registries:
+ * When usePg=true (DATABASE_URL set), returns PgContentStore instances backed
+ * by the content_definitions table. Seed data is applied via migration 008.
+ *
+ * When usePg=false (dev mode), returns in-memory ContentStore instances
+ * pre-populated from existing game registries:
  *   - Items: from ITEM_REGISTRY (18 items)
  *   - Creatures: from creature template exports
- *   - Biomes: from BiomeType enum (5 biomes with placeholder descriptors)
- *   - Modifiers: from ShardModifier enum (5 modifiers)
- *   - Factions: from FactionId enum (3 factions)
+ *   - Biomes: 5 biomes with placeholder descriptors
+ *   - Modifiers: 5 shard modifiers
+ *   - Factions: 3 known factions
  *
- * Skills, loot-tables, rooms, and narrative start empty — ready for admin population.
+ * Skills, loot-tables, rooms, and narrative start empty in both backends.
  */
 
-import { ContentStore, type ContentEntity } from './ContentStore.js';
+import { ContentStore, type ContentEntity, type IContentStore } from './ContentStore.js';
 import type { ContentEntityType } from './content-types.js';
+import { PgContentStore } from './PgContentStore.js';
 import { getAllItemDefinitions } from '../../items/registry.js';
 import { DROWNED_REVENANT } from '../../creatures/templates/drowned-revenant.js';
+import { CONTENT_ENTITY_TYPES } from './content-types.js';
 
-export function initializeContentStores(): Map<ContentEntityType, ContentStore<ContentEntity>> {
-  const stores = new Map<ContentEntityType, ContentStore<ContentEntity>>();
+export function initializeContentStores(usePg = false): Map<ContentEntityType, IContentStore<ContentEntity>> {
+  if (usePg) {
+    return initializePgStores();
+  }
+  return initializeInMemoryStores();
+}
+
+function initializePgStores(): Map<ContentEntityType, IContentStore<ContentEntity>> {
+  const stores = new Map<ContentEntityType, IContentStore<ContentEntity>>();
+  for (const entityType of CONTENT_ENTITY_TYPES) {
+    stores.set(entityType, new PgContentStore<ContentEntity>(entityType));
+  }
+  return stores;
+}
+
+function initializeInMemoryStores(): Map<ContentEntityType, IContentStore<ContentEntity>> {
+  const stores = new Map<ContentEntityType, IContentStore<ContentEntity>>();
 
   // ─── Items — seed from existing registry ─────────────────────────
   const items = getAllItemDefinitions().map((item) => ({

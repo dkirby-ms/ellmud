@@ -2,7 +2,8 @@
  * Admin content module barrel export.
  */
 
-export { ContentStore, ContentStoreError, type ContentEntity } from './ContentStore.js';
+export { ContentStore, ContentStoreError, type ContentEntity, type IContentStore } from './ContentStore.js';
+export { PgContentStore } from './PgContentStore.js';
 export { createContentRouter, type ContentRouterDeps } from './content-routes.js';
 export { initializeContentStores } from './init.js';
 export { validateContent } from './content-validation.js';

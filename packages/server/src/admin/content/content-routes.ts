@@ -11,12 +11,12 @@
 import { randomUUID } from 'crypto';
 import { Router, type Request, type Response } from 'express';
 import { adminAuth } from '../middleware.js';
-import { ContentStore, ContentStoreError, type ContentEntity } from './ContentStore.js';
+import { ContentStoreError, type ContentEntity, type IContentStore } from './ContentStore.js';
 import { validateContent } from './content-validation.js';
 import { CONTENT_ENTITY_TYPES, type ContentEntityType } from './content-types.js';
 
 export interface ContentRouterDeps {
-  stores: Map<ContentEntityType, ContentStore<ContentEntity>>;
+  stores: Map<ContentEntityType, IContentStore<ContentEntity>>;
 }
 
 export function createContentRouter(deps: ContentRouterDeps): Router {

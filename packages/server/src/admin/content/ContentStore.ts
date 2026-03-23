@@ -1,12 +1,12 @@
 /**
- * ContentStore — Generic in-memory store for admin-editable game content.
+ * ContentStore — Generic content store for admin-editable game content.
  *
- * Follows the in-memory repository pattern used across the codebase
+ * Follows the repository pattern used across the codebase
  * (PlayerRepository, StashRepository). All methods are async so the interface
- * can swap to PostgreSQL in Phase 3 without changing callers.
+ * works with both in-memory and PostgreSQL backends.
  *
- * One store instance per entity type. Pre-populated from existing registries
- * at server startup.
+ * IContentStore defines the contract; InMemoryContentStore is the in-memory
+ * implementation used as a dev fallback when DATABASE_URL is not set.
  */
 
 export interface ContentEntity {
@@ -14,7 +14,18 @@ export interface ContentEntity {
   [key: string]: unknown;
 }
 
-export class ContentStore<T extends ContentEntity> {
+/** Store contract — implemented by InMemoryContentStore and PgContentStore. */
+export interface IContentStore<T extends ContentEntity> {
+  readonly entityType: string;
+  getAll(): Promise<T[]>;
+  getById(id: string): Promise<T | undefined>;
+  create(entity: T): Promise<T>;
+  update(id: string, partial: Partial<T>): Promise<T>;
+  delete(id: string): Promise<boolean>;
+}
+
+/** In-memory implementation — dev fallback when DATABASE_URL is not set. */
+export class ContentStore<T extends ContentEntity> implements IContentStore<T> {
   private readonly entities: Map<string, T> = new Map();
   readonly entityType: string;
 
