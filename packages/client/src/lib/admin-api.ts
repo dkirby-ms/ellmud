@@ -250,4 +250,51 @@ export async function spawnInRoom(
     method: 'POST',
     body: JSON.stringify({ type, id: templateId, targetRoomId }),
   });
+
+// ─── Dashboard endpoints ─────────────────────────────────────────────────────
+
+export interface DashboardMetrics {
+  totalItems: number;
+  entityCounts: Record<string, number>;
+  activeRooms: number;
+  activePlayers: number;
+  entityTypes: string[];
+}
+
+export interface RecentChange {
+  id: string;
+  entityType: string;
+  name: string;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface RecentChangesResponse {
+  changes: RecentChange[];
+}
+
+export interface ValidationWarning {
+  entityType: string;
+  entityId: string;
+  entityName: string;
+  message: string;
+  severity: 'warning' | 'error';
+}
+
+export interface ValidationWarningsResponse {
+  warnings: ValidationWarning[];
+  totalWarnings: number;
+  totalErrors: number;
+}
+
+export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
+  return adminFetch<DashboardMetrics>('/admin/api/dashboard/metrics');
+}
+
+export async function fetchRecentChanges(): Promise<RecentChangesResponse> {
+  return adminFetch<RecentChangesResponse>('/admin/api/dashboard/recent-changes');
+}
+
+export async function fetchValidationWarnings(): Promise<ValidationWarningsResponse> {
+  return adminFetch<ValidationWarningsResponse>('/admin/api/dashboard/validation-warnings');
 }

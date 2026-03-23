@@ -15,7 +15,7 @@ import {
   initColyseusAuth,
 } from './auth/index.js';
 import { createHealthRouter } from './health.js';
-import { createAdminRouter, createDashboardRouter, createContentRouter, initializeContentStores } from './admin/index.js';
+import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores } from './admin/index.js';
 import { getConfig } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence } from './cache/index.js';
@@ -68,6 +68,7 @@ app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg
 // Content CRUD API — admin-managed game content (items, creatures, biomes, etc.)
 const contentStores = initializeContentStores(USE_PG);
 app.use(createContentRouter({ stores: contentStores }));
+app.use(createDashboardApiRouter({ stores: contentStores, usePg: USE_PG }));
 console.log(`[Ellmud] Content store: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // Admin runtime API — room management, metrics, SSE. Receives contentStores for spawn.

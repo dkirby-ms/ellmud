@@ -15,3 +15,4 @@ export type {
   AdminSSEEvent,
 } from './types.js';
 export { createContentRouter, initializeContentStores, type ContentRouterDeps } from './content/index.js';
+export { createDashboardApiRouter, type DashboardRouterDeps } from './content/index.js';
