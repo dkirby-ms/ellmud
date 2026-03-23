@@ -948,3 +948,120 @@ The admin-api utility is extensible — just add new functions for each entity t
 
 ---
 
+
+---
+
+## Issue #131: Wire Remaining 6 Admin Pages (2026-03-23)
+
+### Task Summary
+Wired the remaining 6 admin entity types to Content CRUD API using centralized API client and reusable React hooks.
+
+### Files Created (3 infrastructure files)
+
+**`packages/client/src/lib/admin-api.ts`** — Generic API client for all entity CRUD operations
+- Bearer token auth from localStorage (`x-admin-token`)
+- Type-safe functions: `listEntities`, `getEntity`, `createEntity`, `updateEntity`, `deleteEntity`
+- Error handling with descriptive messages
+- Single source of truth for API base path and entity types
+
+**`packages/client/src/hooks/useAdminEntity.ts`** — Hook for detail pages
+- Manages loading, error, saving, and saveError states
+- Auto-loads data on mount for existing entities
+- Generic `save` function handling both create and update
+- `refresh` function for manual reload
+
+**`packages/client/src/hooks/useAdminEntityList.ts`** — Hook for list pages
+- Manages loading and error states
+- Auto-fetches on mount
+- `refresh` function for manual reload
+
+### Files Wired (12 entity files)
+
+**Modifiers** (2 files):
+- `ModifiersList.tsx`: List with search, loading/error states
+- `ModifiersDetail.tsx`: Detail with save, form validation, stackable checkbox
+
+**Skills** (2 files):
+- `SkillsList.tsx`: Wired to API with category filtering
+- `SkillsDetail.tsx`: Wired with category dropdown, cooldown/stamina fields
+
+**Loot Tables** (2 files):
+- `LootTablesList.tsx`: Wired with min/max drops display
+- `LootTablesDetail.tsx`: Wired with entries management
+
+**Factions** (2 files):
+- `FactionsList.tsx`: Wired with milestone count
+- `FactionsDetail.tsx`: Wired with milestones/events management
+
+**Rooms** (2 files):
+- `RoomsList.tsx`: Wired with type/properties display
+- `RoomsDetail.tsx`: Wired with hazards/loot containers
+
+**Narrative** (2 files):
+- `NarrativeList.tsx`: Wired with type/biome filters
+- `NarrativeDetail.tsx`: Wired with template/tone/verbosity fields
+
+### API Pattern
+
+All entities use consistent REST endpoints:
+- `GET /admin/api/content/{entity}` — List all
+- `GET /admin/api/content/{entity}/:id` — Get by ID
+- `POST /admin/api/content/{entity}` — Create
+- `PUT /admin/api/content/{entity}/:id` — Update
+- `DELETE /admin/api/content/{entity}/:id` — Delete
+
+Entity slugs: `modifiers`, `skills`, `loot-tables` (hyphenated!), `factions`, `rooms`, `narrative`
+
+### Technical Approach
+
+**Hooks Pattern:**
+- `useAdminEntityList<T>(entityType)` for list pages → loading, error, data, refresh
+- `useAdminEntity<T>(entityType, id, isNew)` for detail pages → loading, error, saving, saveError, save, refresh
+- Both hooks use `useEffect` to auto-fetch on mount
+- Both expose error/loading states for UI display
+
+**Form Flow:**
+1. Detail page calls `useAdminEntity` hook
+2. Hook auto-loads data via `useEffect` on mount (if not `isNew`)
+3. `useEffect` populates local `formData` state when `apiData` changes
+4. User edits form fields → updates `formData`
+5. Save button calls `handleSave` → calls hook's `save(formData)`
+6. Hook handles create vs update logic internally
+7. On success, navigate back to list (for new entities)
+
+**Reusability:**
+- Generic hooks work for all entity types
+- Just pass entity slug and type parameter
+- No code duplication across 12 files
+- Adding new entity types is trivial
+
+### Testing
+
+- ✅ TypeScript compilation passes (`npx tsc --noEmit`)
+- ✅ All pages load without errors
+- ✅ Loading states display correctly
+- ✅ Error states display correctly
+- 🔄 Save functionality wired (integration testing needed)
+
+### PR & Branch
+
+- **Branch:** `squad/131-wire-remaining-admin`
+- **PR:** #145 → `dev`
+- **Status:** Ready for review
+
+### Key Learnings
+
+**Task agent coordination:** Task agent completed 5 of 6 entity types (Skills, Loot Tables, Factions, Rooms, Narrative) but switched to wrong branch (`squad/130-wire-biomes-admin`). Recovered by cherry-picking commit and completing Modifiers manually on correct branch.
+
+**Pattern consistency:** Using task agent for repetitive work (5 entities) saved significant time. Final entity (Modifiers) done manually to ensure quality and pattern alignment.
+
+**Hook architecture:** Generic hooks eliminate code duplication. Each detail page is ~200 lines instead of ~600 lines with duplicated fetch/save/error logic.
+
+**Auth flow:** Admin token stored in localStorage, passed as Bearer token in all API requests. Centralized in `admin-api.ts` so any auth changes only need one place updated.
+
+### Cross-Reference
+
+- Part of Phase 2.5 admin wiring initiative
+- Follows pattern established in PR #142 (Items wiring)
+- Builds on PR #141 (Content CRUD API)
+- All 6 entity backend types defined in `packages/server/src/admin/content/content-types.ts`
