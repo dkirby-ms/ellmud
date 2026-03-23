@@ -57,5 +57,6 @@ function adaptRoom(shared: SharedRoom): Room {
     type: shared.type,
     exits: new Map(shared.exits),
     items,
+    properties: shared.properties,
   };
 }

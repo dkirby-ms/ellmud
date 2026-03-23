@@ -2957,3 +2957,388 @@ npx vitest run packages/server/src/__tests__/wave1-multiplayer.test.ts
 
 ## Verdict
 The architectural approach is correct. The client-side logic needs a minor tweak to handle third-party perspective correctly.
+
+---
+
+# Wave 2 Decision Log
+
+## PR #117 Review: Trace System (Initial)
+
+**Date:** 2026-03-22  
+**Reviewer:** Elminster  
+**PR:** #117  
+**Issue:** #23  
+**Verdict:** Request Changes
+
+### Blocking Issues
+1. **ShardRoom integration missing** — TraceSystem exists but not wired into ShardRoom
+2. **SoundSystem bundled** — PR mixes Trace + Sound changes
+3. **No per-room trace cap** — Unbounded trace accumulation
+
+### Non-Blocking
+- Module-level counter shared across instances (use UUID)
+- Missing pruning optimization
+- RoomProperty export may break if merged before sound branch
+
+### What's Good
+- Clean TraceSystem class design with TTL decay and stealth suppression
+- 33 solid unit tests
+- Well-structured shared types
+- Good API for narration composition
+
+---
+
+## PR #117 Re-Review: Trace System (APPROVED)
+
+**Date:** 2026-03-23  
+**Reviewer:** Elminster  
+**Status:** APPROVED  
+**Context:** Jarlaxle pushed fixes (commit `8056f42`)
+
+### Blockers Resolved
+| Issue | Status | Evidence |
+|-------|--------|----------|
+| ShardRoom integration | ✅ Resolved | onCreate(), tick() in loop, traces on events |
+| Bundled SoundSystem | ✅ Resolved | Clean separation, separate test files OK |
+| No trace cap | ✅ Resolved | MAX_TRACES_PER_ROOM = 50 with eviction |
+
+### Follow-up (non-blocking)
+1. Wire tracking skill into `sendTraceNarrations` (currently hardcoded BASIC)
+2. Use character display name instead of sessionId in footprint actorName
+
+### Architectural Notes
+- Pure logic class, no framework dependencies
+- Memory management: cap + eviction + TTL + shard-collapse cleanup
+- Follows CombatSystem/ExtractionSystem pattern
+- Shared types enforce contract
+
+---
+
+## PR #118 Review: Sound Propagation (Initial)
+
+**Date:** 2026-03-22  
+**Reviewer:** Elminster  
+**PR:** #118  
+**Issue:** #22  
+**Verdict:** Request Changes
+
+### Blocking Issues
+1. **RoomResolver drops properties** — room modifiers (heavy_door, cavern, water) are dead code
+2. **Redundant BFS** — computeDistance() does second O(N²) pass
+3. **Parent/distance disagreement risk** — asymmetric graphs may have path conflicts
+
+### Non-Blocking Recommendations
+- Add MAX_PROPAGATION_DEPTH safety cap (~10 rooms)
+- Document fractional noise handling
+- Fix indentation
+
+### Architecture Assessment
+- Clean pattern compliance
+- Shared types well-exported
+- Composes with Trace (#23) and Awareness (#25)
+- No memory leaks, thread safety good
+- 34 concrete + 6 todo tests
+
+---
+
+## PR #118 Re-Review: Sound Propagation (APPROVED)
+
+**Date:** 2026-03-23  
+**Reviewer:** Elminster  
+**Status:** APPROVED  
+**Context:** Drizzt implemented fixes
+
+### Blockers Resolved
+1. **Properties preserved** — ShardRoom resolver now passes properties to SoundSystem
+2. **Redundant BFS removed** — Distance calculated during primary traversal, O(N) now
+3. **Tests verify correctness** — Attenuation and property modifiers validated
+
+### Production Readiness
+- Sound system ready for integration into game loop
+- Modifiers (heavy_door, cavern, water) function as designed in GDD §12
+- Performance impact minimized to O(N)
+
+---
+
+## Decision: Trace System Architecture
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-03-22  
+**Issue:** #23
+
+### Decision
+Traces are suppressed at creation time (not at query time). High stealth prevents footprint traces. Low damage prevents blood trails. More efficient than filtering on every query.
+
+### Systems Directory
+Created `packages/server/src/systems/` for new game systems. Combat remains separate. Future systems (sound, awareness) go here.
+
+### Tracking Skill Thresholds
+Four progressive thresholds: NONE(0), BASIC(10), DETAILED(50), EXPERT(80). Map to prose detail levels. LLM can use output directly as context.
+
+### Description Templates
+Pure functions indexed by TraceType, one set per detail level. Easy to extend without touching logic.
+
+---
+
+## Decision: Sound Propagation Architecture
+
+**Author:** Jarlaxle (Combat Dev)  
+**Date:** 2026-03-22  
+**Issue:** #22
+
+### Decision
+Sound propagation uses per-room BFS, not coordinates. Room modifiers stored as `properties` on `Room` interface, not per-exit.
+
+### Rationale
+1. BFS matches game topology (rooms connected by exits, not coordinates)
+2. Per-room properties simpler than per-exit (room marked heavy_door → halves ALL incoming sound)
+3. Noise constants in @ellmud/shared for server logic + future client UI
+4. SoundSystem follows CombatSystem pattern: pure logic, callback DI, no Colyseus coupling
+
+### Impacts
+- **Drizzt:** Movement handlers can call `emitSound(roomId, 'walking')`
+- **Minsc:** Sound narrations arrive as NarrateMessage type 'sound'
+- **Volo:** LLM can enrich pre-written sound descriptions
+- **Room generators:** Use `properties?: RoomProperty[]` on Room
+
+---
+
+## Decision: TraceSystem Phase 1 Default Tracking Level
+
+**Author:** Jarlaxle (Combat Dev)  
+**Date:** 2026-03-22  
+**Context:** PR #117 integration
+
+### Decision
+Phase 1: all players see traces at BASIC level (10) by default, bypassing skill check.
+
+### Rationale
+- `getTracesForPlayer()` returns empty when tracking < 10. Without default, all traces invisible.
+- BASIC descriptions ("Footprints leading east") provide gameplay value without expert detail
+- When skill system lands, replace with actual tracking skill
+
+### Impact
+- **Drizzt:** CommandContext doesn't carry trace skills (narrations sent from ShardRoom after results)
+- **Minsc:** Trace narrations use type 'trace' (already in NarrationType)
+
+### Per-Room Trace Cap
+MAX_TRACES_PER_ROOM = 50. Eviction: oldest expired first, then oldest active.
+
+---
+
+## Decision: Room Properties Must Flow Through All Adapter Layers
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-03-21  
+**Context:** PR #118 review fix
+
+### Decision
+When shared `Room` interface adds optional fields (like `properties`), all adapters must preserve them:
+1. Local `Room` interface in RoomGraph.ts
+2. `adaptRoom()` function in graph-adapter.ts
+3. Any subsystem resolvers that consume them
+
+### Rationale
+Properties were in shared type and SoundRoom, but silently dropped at 3 points. Unit tests passed (mock data), production failed. Systemic risk.
+
+### Rule
+Any new field on @ellmud/shared Room that affects gameplay:
+1. Add to local Room in RoomGraph.ts
+2. Copy in adaptRoom() in graph-adapter.ts
+3. Forward in subsystem resolvers
+
+---
+
+## Decision: Clear Accumulated State on Room Transitions
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-03-20  
+**PR:** #113
+
+### Decision
+Messages cleared on every ROOM_SWITCH transition (shard↔refuge). Each room context starts clean.
+
+### Rationale
+Messages array is global and accumulates. When dying and returning to refuge, hundreds of combat messages rendered in refuge chat, breaking layout. Only LOGOUT cleared before.
+
+### Pattern
+Added CLEAR_MESSAGES action dispatched on all transition paths (death/extraction to refuge, reconnection bailout, refuge→shard).
+
+### Impact
+- **Jarlaxle:** New accumulated UI state must follow CLEAR_MESSAGES pattern
+- **Minsc:** Message state tests should expect reset after transitions
+- **All:** soundCues array may need similar treatment (accumulates globally)
+
+---
+
+## Review: PR #113 — Clear messages on room switch
+
+**Reviewer:** Elminster  
+**Date:** 2026-03-22  
+**Status:** APPROVED
+
+### Summary
+CLEAR_MESSAGES correctly resets messages on room transitions. Three dispatch sites cover all paths. No race conditions. Tests behavioral. Both clearing and preservation verified.
+
+### Non-Blocking Notes
+1. Dead "world shifts" messages added then wiped (cleanup in follow-up)
+2. soundCues accumulation same pattern (flagged as future concern)
+3. Test should assert soundCues NOT cleared (document scope boundary)
+
+---
+
+## Review: PR #115 — Anticipatory Test Scaffolding for Wave 2
+
+**Reviewer:** Elminster  
+**Date:** 2026-03-22  
+**Status:** APPROVED
+
+### Executive Summary
+208 executable tests establishing behavioral contracts for sound (#22), traces (#23), awareness (#25). 53 formula tests passing (math locked in). 155 scaffolded tests (describe.skip/it.todo) define boundaries.
+
+### Contract Accuracy
+
+**Sound Propagation:**
+- All actions have noise 0–10
+- Attenuation = 2 per room; threshold: noise - (2 × distance) > 0
+- Room properties modify (heavy_door halves, caverns +1)
+- ✅ All criteria encoded in tests
+
+**Trace System:**
+- Traces suppressed at creation (stealth/damage gates)
+- 50 per room with eviction
+- 3-tier skill descriptions (BASIC/DETAILED/EXPERT)
+- TTL decay with freshness markers
+- ✅ All criteria encoded
+
+**Awareness/Stealth:**
+- Detection tiers: none/vague/partial/full based on awareness − stealth
+- Player names NEVER revealed
+- Equipment/bearing/posture only
+- ✅ All criteria encoded
+
+### Verdict
+✅ APPROVED — Test design sound, contracts accurate, scaffolding specific enough for implementers.
+
+---
+
+## Review: PR #116 — Sensory Narration Templates
+
+**Reviewer:** Elminster  
+**Date:** 2026-03-23  
+**Status:** APPROVED
+
+### Summary
+Three new LLM narration types (Sound, Trace, Awareness) with system prompts, fallback templates, token budgets, integration contracts. All safety constraints enforced.
+
+### Narrative Quality
+- **Sound:** Direction-aware, intensity-scaled (faint/moderate/loud), no mechanics
+- **Traces:** Age-aware, skill-scaled detail, no player names
+- **Awareness:** Vague→Partial→Full, randomized equipment, NEVER player names
+- No mechanical leakage (no numbers, percentages, skill values)
+
+### Safety
+- **Cardinal rule: Player names NEVER revealed** (PvP espionage protection)
+- System prompt contains explicit safeguard
+- Fallback generators use fixed equipment arrays only
+- Trace safety: corpses as "A warrior" (creature type), never player identity
+- Sound safety: no character references, only direction/source/intensity
+
+### Token Budgets
+| Type | Tokens | Timeout | Purpose |
+|------|--------|---------|---------|
+| sound_narration | 40 | 500ms | Short atmospheric cues |
+| trace_narration | 60 | 600ms | Informational traces |
+| awareness_narration | 50 | 500ms | Player detection |
+
+### Integration Pattern
+Unified `NarrationService.narrate()` pipeline. All sensory narration:
+1. Set narration_type
+2. Populate context with sensory data
+3. Service handles LLM + fallback + caching
+
+---
+
+## Decision: Integration Tests Must Assert Actual Game State
+
+**Author:** Minsc (Tester)  
+**Date:** 2026-03-22  
+**Context:** PR #109 inventory drop tests
+
+### Decision
+Tests verifying game-state mutations MUST:
+1. Exercise actual ShardRoom code path (combat tick, command handler, etc.)
+2. Assert on real data structures (room.items[], player.inventory)
+3. Never copy-paste implementation logic into test body
+
+### Pattern
+For combat-dependent tests: Register combatants manually via `combatSystem.registerCombatant()` + `initiateCombat()` instead of relying on `attack creature` commands that no-op.
+
+### Why
+PR #109 tests simulated ShardRoom logic inline, passed even with feature disabled. Production-only failures.
+
+### Applies To
+All future game system tests, especially death/loot/inventory flows.
+
+---
+
+## Decision: Wave 2 Anticipatory Test Contracts
+
+**Author:** Minsc (Tester)  
+**Date:** 2026-03-22  
+**PR:** #115
+
+### Decision
+208 anticipatory test cases defining behavioral contracts for #22, #23, #25 before implementations land.
+
+### Design Choices
+1. **Pure formula tests pass now** — audibility, TTL expiry, detection thresholds locked with concrete values
+2. **Assumed detection formula:** awareness − stealth → none(≤0)/vague(1–4)/full(≥5)
+3. **Cross-system sections** use describe.skip (will activate when all systems wired)
+4. **No mocks of unbuilt systems** — imports only existing types
+
+### Impact
+- **Implementers:** Tests are acceptance contract. Convert todos to passing as you build.
+- **Contract:** "Names never revealed" encoded as contract (all implementations must respect)
+
+---
+
+## Review: PR #109 (Round 2) — Player Death Handler
+
+**Reviewer:** Elminster  
+**Date:** 2026-03-22  
+**Status:** REJECTED
+
+### Race Condition (Timeout Guard)
+✅ FIXED — setTimeout callback now guards with `if (!this.players.has(playerId))`
+
+### Inventory Drop Test Coverage
+❌ INADEQUATE — Test simulates expected behavior inline instead of invoking actual ShardRoom logic. Verified by commenting out drop code — tests still passed.
+
+### Requirements for Approval
+1. Update integration test to assert items present in room after death
+2. Ensure test fails if ShardRoom stops dropping items
+
+---
+
+## Review: PR #109 (Round 3) — Player Death Handler
+
+**Reviewer:** Elminster  
+**Date:** 2026-03-22  
+**Status:** APPROVED
+
+### Race Condition Fix
+✅ CONFIRMED — Guard in place: `if (!this.players.has(playerId)) { return }`
+
+### Inventory Drop Integration Test
+✅ CONFIRMED — True integration test:
+- Spins up real ShardRoom via ColyseusTestServer
+- Simulates defeat by manipulating combatant HP
+- Explicitly checks room.items for transfer
+- Exercises handlePlayerDefeats in main loop
+
+### Verdict
+Merge PR #109.
+
+---
+

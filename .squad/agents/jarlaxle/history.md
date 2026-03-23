@@ -90,6 +90,33 @@
 
 ---
 
+## Wave 2 Work
+
+### 2026-03-23: PR #117 (Trace System) Fixes & Merge
+
+**Status:** ✅ MERGED to dev
+
+**Recap of fixes applied:**
+- Connected TraceSystem to ShardRoom game loop (onCreate, tick, event handlers)
+- Added MAX_TRACES_PER_ROOM = 50 with eviction (oldest expired first, then oldest active)
+- Removed bundled SoundSystem changes (separated concerns)
+
+**Architecture locked in:**
+- Traces suppressed at creation (stealth/damage gates prevent storage)
+- TTL decay + skill-scaled descriptions (BASIC/DETAILED/EXPERT)
+- Per-room trace cap with memory management
+- Shared types enforce cross-package contract
+
+**Follow-up items (non-blocking):**
+1. Wire tracking skill into `sendTraceNarrations` (currently hardcoded BASIC)
+2. Replace sessionId with character display name in footprint actorName
+
+**Tests:** 1061 total passing, 120 anticipatory scaffolds active
+
+**Key decision:** Traces suppressed at creation is more efficient than filtering on every narration query.
+
+---
+
 ## Cross-Team Updates (2026-03-19T22:30)
 
 ### Figma Design Tokens Now Team Standard
@@ -598,3 +625,72 @@ Implemented server-side proximity-based communication system with three social c
 - LLM narration enhancement (Volo — narrative system integration)
 - Player display names for whisper target matching (depends on PlayerState.displayName field)
 - RefugeRoom social commands (separate issue — Refuge may want different social mechanics)
+
+### 2025-07-26: Sound Propagation System (Issue #22)
+- Created 3 new files: `packages/server/src/sound/SoundSystem.ts`, `packages/server/src/sound/index.ts`, and rewrote `packages/server/src/__tests__/sound-system.test.ts` from anticipatory stubs to live tests.
+- Modified 3 existing files: `packages/shared/src/room-graph.ts` (added `RoomProperty` type + `properties` field), `packages/shared/src/index.ts` (added sound types/constants), `packages/server/src/rooms/ShardRoom.ts` (integration).
+- **SoundSystem is pure game logic** — no Colyseus dependency, same pattern as CombatSystem. Takes a `RoomResolver` callback that returns `{id, exits, properties}`. ShardRoom constructs this from its room graph.
+- **BFS propagation:** Visits rooms breadth-first, attenuating noise by 2 per hop. Room properties (heavy_door, cavern, water) modify propagation per-room. Heavy door halves noise; cavern/water each reduce attenuation by 1.
+- **Direction tracking:** For each receiving room, finds which of the listener's exits points toward the BFS parent. This gives the direction the sound "comes from" (e.g., "from the south").
+- **Integration point:** After combat tick resolution in `ShardRoom.update()`, if any strikes occurred, propagates combat noise (5) from each encounter room. Sound narrations delivered via existing NARRATE pipeline with type='sound'.
+- **RoomProperty is optional and backward-compatible.** Existing rooms without `properties` work normally — no attenuation modifiers applied. The serialization/deserialization functions skip `properties` when empty.
+- **Noise constants live in @ellmud/shared** — both server and (future) client can reference them. Values match GDD §12.2 exactly: combat=5, running=4, walking=2, striking_door=7, extraction=8, explosion=9, sneaking=1.
+- 34 tests passing, 6 todo stubs for future cross-system work (stealth, sustained extraction noise, listening skill).
+- **Edge case:** Walking (noise=2) and sneaking (noise=1) cannot be heard even in adjacent rooms under default attenuation. This is by GDD design — these actions are meant to be silent.
+- PR #118 opened against dev. Branch: `feat/sound-propagation-system`.
+---
+
+### 2025-07-26: PR #117 Fix — TraceSystem Integration (Issue #23)
+
+**Context:** Drizzt authored the Trace System PR but Elminster rejected it with 3 blocking issues. Drizzt was locked out; I picked up the fix.
+
+**What I fixed:**
+
+1. **TraceSystem wired into ShardRoom** — TraceSystem was a standalone class with good tests but zero integration. Wired it fully:
+   - Footprint traces on movement (`go` and `flee`) in the room LEFT, with direction
+   - Blood trail traces on combat damage ≥ `BLOOD_TRAIL_DAMAGE_THRESHOLD` (5)
+   - Corpse traces on player and creature death
+   - `traceSystem.tick()` called every game tick
+   - Trace narrations delivered on room entry, flee, `look`, and initial join
+   - `traceSystem.clear()` on shard collapse
+   - Phase 1 uses `TRACKING_THRESHOLDS.BASIC` as default skill level so traces are visible
+
+2. **SoundSystem code removed** — Drizzt bundled SoundSystem integration into the Trace PR (should be PR #118). Removed `SoundSystem` import/property/initialization/methods from ShardRoom, removed all Sound types from `@ellmud/shared`, restored deleted anticipatory test files and Minsc history, fixed broken `RoomProperty` re-export.
+
+3. **Per-room trace cap** — `MAX_TRACES_PER_ROOM = 50`. On overflow: evict oldest expired trace first, then oldest active trace. 4 new tests.
+
+**Key decisions:**
+- Default tracking skill for Phase 1 display is `TRACKING_THRESHOLDS.BASIC` (10) — players see basic descriptions ("Footprints leading east.", "A trail of blood.") without a full skill system.
+- Trace narrations sent as `type: 'trace'` NarrationType, already defined in shared.
+- Eviction strategy: expired-first preserves fresh/relevant traces; oldest-active is last resort to cap unbounded growth.
+
+**Test results:** 43 files, 1051 passed, 158 todo, 0 failures. TypeScript clean.
+
+**Commit:** `8056f42` on `feat/trace-system` branch. PR #117.
+
+### 2026-03-23: PR #119 Fix — Awareness & Stealth Detection (Issue #25)
+
+**Context:** Drizzt authored PR #119 but Elminster rejected it with 3 blocking issues. Drizzt locked out; I picked up the fix.
+
+**What I fixed:**
+
+1. **PlayerState gets skills + equipment** — Added `skills: { stealth, awareness, tracking? }` (default 5/5) and `equipment: VisibleEquipment | undefined` to `PlayerState`. Constructor accepts optional overrides.
+
+2. **ShardRoom reads real data** — `runAwarenessChecks()` now reads `PlayerState.skills` and `PlayerState.equipment` instead of hardcoded `{ stealth: 0, awareness: 0 }`. System is functional: equal-skill (5/5) players get 'none' detection, variance produces vague/full.
+
+3. **Tests verify actual AwarenessSystem** — Removed local `expectedDetectionTier()` helper. All tests import real `AwarenessSystem` and exercise `calculateDetectionTier`, `generateEquipmentDescription`, `generateDetectionMessage`, `checkRoomEntry` (multi-observer, self-filter, arrival/departure), name concealment, footprint suppression.
+
+**Key decisions:**
+- Default skills 5/5 (not 0/0) — equal-skill players get 'none' by formula design (score=0), but variance is possible
+- `PlayerSkills` interface lives in PlayerState.ts, `AwarenessSkills` stays in AwarenessSystem.ts — keeps the pure-logic boundary clean
+- VisibleEquipment imported from @ellmud/shared into PlayerState — equipment descriptions ready for item system integration
+
+**Test results:** 43 files, 1084 passed, 103 todo, 0 failures. TypeScript clean.
+
+**Commit:** `f368e3e` on `feat/awareness-stealth-system` branch. PR #119.
+
+## Learnings
+
+- **Don't hardcode zeros as "Phase 1" defaults.** Hardcoded 0 for skills makes the entire system a no-op (score=0 → 'none' always). Use sensible baselines (5/5) so the system actually exercises its tiers when players interact. Zero is not a baseline, it's an off switch.
+- **Tests must test the real class, not a local reimplementation.** Drizzt's tests redefined the detection formula locally — they'd pass even if the system was deleted. Always import the actual production class.
+- **PlayerState is the integration seam.** When a new game system needs player data (skills, equipment, status), PlayerState is where it lives. Keep the constructor backward-compatible with optional params and spread defaults.

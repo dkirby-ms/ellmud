@@ -283,12 +283,8 @@ describe('AC: Timeout budgets per narration type (GDD §4.5)', () => {
 
     const config = makeConfig({
       timeouts: {
-        combat_action: 800,
-        combat_round: 800,
-        room_description: 2000,
+        ...DEFAULT_NARRATION_CONFIG.timeouts,
         movement: 150, // Distinct from room_description
-        event: 2000,
-        hard_limit: 3000,
       },
     });
     const service = new NarrationService({
@@ -310,6 +306,7 @@ describe('AC: Timeout budgets per narration type (GDD §4.5)', () => {
     const transport = makeSlowTransport(5000);
     const config = makeConfig({
       timeouts: {
+        ...DEFAULT_NARRATION_CONFIG.timeouts,
         combat_action: 50,
         combat_round: 50,
         room_description: 80,
@@ -753,6 +750,7 @@ describe('AC: Full pipeline integration — mock Foundry timeout', () => {
     const transport = makeSlowTransport(10000);
     const config = makeConfig({
       timeouts: {
+        ...DEFAULT_NARRATION_CONFIG.timeouts,
         combat_action: 50,
         combat_round: 50,
         room_description: 80,

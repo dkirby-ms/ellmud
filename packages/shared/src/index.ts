@@ -23,7 +23,8 @@ export type NarrationType =
   | 'system'     // System messages (join, disconnect, errors)
   | 'speech'     // Player/NPC speech, proximity chat
   | 'sound'      // Sound propagation cues
-  | 'trace';     // Footprints, blood trails, environmental traces
+  | 'trace'      // Footprints, blood trails, environmental traces
+  | 'awareness'; // Stealth detection, player presence cues
 
 /** Server → Client: Narrated prose output. */
 export interface NarrateMessage {
@@ -153,6 +154,7 @@ export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
 export type {
   Direction,
   RoomType,
+  RoomProperty,
   HazardPlaceholder,
   LootContainer,
   Room,
@@ -167,6 +169,56 @@ export {
   serializeRoomGraph,
   deserializeRoomGraph,
 } from './room-graph.js';
+
+// ─── Sound System (GDD §12) ──────────────────────────────────────────────────
+
+/** Types of actions that generate noise. */
+export type SoundType =
+  | 'combat'
+  | 'running'
+  | 'walking'
+  | 'striking_door'
+  | 'extraction'
+  | 'explosion'
+  | 'sneaking';
+
+/** Noise values per action type (GDD §12.2). Scale: 0–10. */
+export const NOISE_VALUES: Record<SoundType, number> = {
+  combat: 5,
+  running: 4,
+  walking: 2,
+  striking_door: 7,
+  extraction: 8,
+  explosion: 9,
+  sneaking: 1,
+} as const;
+
+/** Qualitative sound descriptions for narration. */
+export const SOUND_DESCRIPTIONS: Record<SoundType, string> = {
+  combat: 'a clash of metal',
+  running: 'hurried footsteps',
+  walking: 'soft footsteps',
+  striking_door: 'a heavy impact against a door',
+  extraction: 'a rising hum of energy',
+  explosion: 'a thunderous explosion',
+  sneaking: 'a faint rustle',
+} as const;
+
+/** Base attenuation per room traversed. */
+export const SOUND_ATTENUATION_PER_ROOM = 2;
+
+/** A sound event received by a listener in a particular room. */
+export interface SoundEvent {
+  soundType: SoundType;
+  /** Direction the sound came from, relative to the listener. */
+  direction: string;
+  /** Effective noise level after attenuation. */
+  effectiveNoise: number;
+  /** Human-readable description for narration. */
+  description: string;
+  /** Distance in rooms from the source. */
+  distance: number;
+}
 
 // ─── Narrative Types (GDD §4) ────────────────────────────────────────────────
 
@@ -250,6 +302,104 @@ export interface RoomSwitchMessage {
   options?: RoomSwitchOptions; // Additional join options for the target room
   reason: string;       // Human-readable reason for the switch
 }
+
+// ─── Trace System (GDD §11.2) ─────────────────────────────────────────────
+
+// ─── Awareness & Stealth Detection (GDD §8.1) ──────────────────────────────
+
+/**
+ * Detection tiers returned by stealth-vs-awareness checks.
+ * 'none'  — target is completely hidden (high stealth, low awareness)
+ * 'vague' — observer senses something (moderate match)
+ * 'full'  — target fully detected, equipment-based description provided
+ */
+export type DetectionTier = 'none' | 'vague' | 'full';
+
+/**
+ * Detection thresholds. detection_score = awareness - stealth.
+ * score <= NONE_UPPER  → 'none'
+ * VAGUE_LOWER <= score <= VAGUE_UPPER → 'vague'
+ * score >= FULL_LOWER  → 'full'
+ */
+export const DETECTION_THRESHOLDS = {
+  NONE_UPPER: 0,
+  VAGUE_LOWER: 1,
+  VAGUE_UPPER: 4,
+  FULL_LOWER: 5,
+} as const;
+
+/** Describes equipment visible on a detected player. */
+export interface VisibleEquipment {
+  weapon?: string;
+  armour?: string;
+  tier?: string;
+}
+
+/** An awareness event delivered to an observer when a player enters/leaves a room. */
+export interface AwarenessEvent {
+  /** Session ID of the observer receiving this event. */
+  observerId: string;
+  /** Session ID of the detected (or undetected) player. */
+  targetId: string;
+  /** Detection result. */
+  tier: DetectionTier;
+  /** Narration text for the observer (empty string for 'none'). */
+  message: string;
+  /** Whether the target is arriving or departing. */
+  direction: 'arrival' | 'departure';
+}
+
+/** Types of environmental traces left by player/creature actions. */
+export type TraceType =
+  | 'footprint'
+  | 'blood_trail'
+  | 'opened_container'
+  | 'broken_door'
+  | 'corpse'
+  | 'discarded_item'
+  | 'residue';
+
+/** Default TTLs per trace type (seconds). Infinity = permanent for shard lifetime. */
+export const TRACE_TTLS: Record<TraceType, number> = {
+  footprint: 300,
+  blood_trail: 600,
+  opened_container: Infinity,
+  broken_door: Infinity,
+  corpse: Infinity,
+  discarded_item: Infinity,
+  residue: 120,
+};
+
+/** An ephemeral trace left in a shard room. */
+export interface Trace {
+  id: string;
+  type: TraceType;
+  roomId: string;
+  createdAt: number;
+  ttl: number;
+  direction?: string;
+  metadata: {
+    actorId?: string;
+    actorName?: string;
+    severity?: number;
+    stealthModifier?: number;
+    description?: string;
+  };
+}
+
+/** Tracking skill thresholds for trace detail levels. */
+export const TRACKING_THRESHOLDS = {
+  NONE: 0,
+  BASIC: 10,
+  DETAILED: 50,
+  EXPERT: 80,
+} as const;
+
+/** Stealth threshold: damage below this leaves no blood trail. */
+export const BLOOD_TRAIL_DAMAGE_THRESHOLD = 5;
+
+/** Stealth modifier above this suppresses footprint traces entirely. */
+export const STEALTH_FOOTPRINT_THRESHOLD = 80;
 
 // ─── Extraction Types (GDD §3 step 6) ────────────────────────────────────────
 
