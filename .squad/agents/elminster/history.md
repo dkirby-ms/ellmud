@@ -1,4 +1,9 @@
-# Elminster — History
+# elminster — History
+
+**For a quick overview, see [summary.md](./summary.md)**
+
+---
+
 
 ## Project Context
 

@@ -1,4 +1,9 @@
-# Jarlaxle — History
+# jarlaxle — History
+
+**For a quick overview, see [summary.md](./summary.md)**
+
+---
+
 
 ## Project Context
 
