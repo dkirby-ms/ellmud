@@ -14,3 +14,4 @@ export type {
   AdminMetrics,
   AdminSSEEvent,
 } from './types.js';
+export { createContentRouter, initializeContentStores, type ContentRouterDeps } from './content/index.js';

@@ -689,3 +689,152 @@ Also added PvP-specific death narration and imported `PvPKillEvent`/`SHARD_SICKN
 - ✅ 1332 total tests, 343 new in Phase 2, 0 regressions
 - ✅ All Phase 2 issues closed (#21, #24, #27, #29)
 - ✅ PR #126 (dev → uat) created for QA validation
+
+---
+
+## Phase 2.5: Admin Panel Wiring (2026-03-23)
+
+**Status:** Planning  
+**Orchestration Log:** `.squad/orchestration-log/2026-03-23T18-45-00Z-elminster.md`
+
+### Context
+
+Minsc (Tester) audited all 25 React admin pages and found the entire UI is cosmetic — zero API calls, 27 dead buttons, all mock data. Elminster (Lead) decomposed findings into 12 well-scoped GitHub issues (#128–139) grouped by functional area and dependency chain.
+
+### Phase 2.5 Issues (New Labels: `phase:2.5`, `admin`)
+
+| # | Title | Owner | Depends On | Status |
+|---|-------|-------|-----------|--------|
+| 139 | **FOUNDATIONAL: Content CRUD API** | Drizzt | — | 🔴 P1 Blocker (Design review pending) |
+| 128 | Wire Creatures List + Detail | TBD | #139 | ⏳ Blocked by #139 |
+| 129 | Wire Items List + Detail | TBD | #139 | ⏳ Blocked by #139 |
+| 130 | Wire Biomes List + Detail + Stubs | TBD | #139 | ⏳ Blocked by #139 |
+| 131 | Wire 6 Remaining Detail Pages | TBD | #139 | ⏳ Blocked by #139 |
+| 132 | Wire Dashboard | TBD | #139 | ⏳ Blocked by #139 |
+| 133 | Deploy Page Implementation | TBD | — | ⏳ P3 |
+| 134 | User Management | TBD | — | ⏳ P3 |
+| 135 | Audit Log | TBD | — | ⏳ P3 |
+| 136 | Simulator Features | Jarlaxle | #128, #131 | ⏳ Blocked by #128, #131 |
+| 137 | Orphan Endpoints Finalization | Drizzt | #131 | ⏳ Blocked by #131 |
+| 138 | Stub Pages + Layout Features | TBD | — | ⏳ P3 |
+
+### Your Assignment (Drizzt)
+
+1. **#139 Content CRUD API (P1 Blocker):**
+   - Design endpoint schema: `GET/POST/PUT/DELETE /admin/api/{entity}` pattern
+   - Implement for: items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narrative
+   - Define authorization strategy (all-or-nothing admin or granular per entity?)
+   - Add server-side validation, audit logging, conflict resolution
+   - All endpoints require integration tests before merging
+   - **Early code review required before implementation** to catch design changes that would cascade to 7 detail pages
+
+2. **#137 Orphan Endpoints Finalization (P3):**
+   - Clarify SSE usage: Is this for real-time updates? If yes, wire to #138 notifications. If no, document or remove.
+   - Wire pause/resume buttons to RoomsDetail page (#131)
+   - Implement actual spawn logic (create NPC in room state, currently only broadcasts chat)
+   - Verify Dashboard actually calls `/admin/api/metrics` or flag for removal
+
+3. **#133 Deployment Flow (P3, coordination needed):**
+   - Open questions: How are pending changes tracked? Git branch? Database flag? Staging environment? Rollback mechanism?
+   - Spike on deployment logic early; discuss with Elminster (Lead) in issue comments
+
+### Decision Documents
+
+- **Minsc's audit findings:** `.squad/decisions/inbox/minsc-admin-audit.md`
+- **Elminster's decomposition:** `.squad/decisions/inbox/elminster-phase25-admin.md`
+- **Merged to:** `.squad/decisions/decisions.md` (2026-03-23 section)
+
+### Execution Sequence (Recommended)
+
+```
+PHASE 1 (Foundational):
+  #139 ← must complete first (Drizzt)
+
+PHASE 2 (Detail Pages + Dashboard):
+  #128, #129, #130, #131 (depend on #139)
+  #132 (Dashboard wiring, depends on #139)
+  #135 (Audit Log, independent)
+
+PHASE 3 (Supporting Features + Management):
+  #134 (User Management, independent)
+  #136 (Simulators, depends on #128 + #131, Jarlaxle)
+  #137 (Orphan endpoints, depends on #131, Drizzt)
+
+PHASE 4 (Polish):
+  #133 (Deploy, Drizzt coordination)
+  #138 (Stubs + Layout, independent)
+```
+
+### Risks & Mitigations
+
+| Risk | Mitigation |
+|------|-----------|
+| Endpoint design changes mid-implementation | Review #139 early in code review (before merging) |
+| Authorization model unclear | Define admin role strategy before #139 merge |
+| SSE scope creep | Clarify requirements in #137 before starting #138 |
+| Database performance (1000+ items) | Add pagination + indexes in #139; note in AC |
+
+### 2026-03-24: PR #141 — Content CRUD API (Issue #139)
+
+**Status:** ✅ PR Created → dev
+
+**What:** Full REST CRUD API for 9 content entity types: items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narrative. This is the P1 foundational blocker for all Phase 2.5 admin work.
+
+**Architecture decisions:**
+1. **ContentStore** — Generic in-memory Map store with async interface, following the repository pattern (PlayerRepository, StashRepository). Uses `structuredClone` for isolation. Swappable to PG when ready.
+2. **Content namespace** — Routes at `/admin/api/content/{entity}` to avoid collision with existing live-data admin routes (`/admin/api/rooms`, `/admin/api/creatures`). Existing endpoints untouched.
+3. **Pre-seeded from registries** — Items (18), creatures (1 template), biomes (5), modifiers (5), factions (3) populated from existing game data at startup. Skills, loot-tables, rooms, narrative start empty.
+4. **Auto-generated UUIDs** — POST without `id` field gets `crypto.randomUUID()`.
+5. **Validation** — Required field checks per entity type (name required for all, type-specific checks). Intentionally permissive for Phase 1 admin flexibility.
+
+**Files:** 6 new files in `admin/content/`, 3 modified (admin/index.ts, server index.ts, test file).
+**Tests:** 73 CRUD tests passing. 1485 total tests green, zero regressions.
+**Pre-existing issue:** Build error in `narrative/templates.ts` (ambient_narration key) — not related to this work.
+
+---
+
+## Cross-Team Update (2026-03-23T19:15Z)
+
+### User Directives Captured
+
+Two critical directives require changes to PR #141:
+
+1. **No Statically Defined Game Assets** — All content must use PostgreSQL, not in-memory `ContentStore`
+   - Static registries like `items/registry.ts` must migrate to DB
+   - Admin screens manage templates at runtime
+   - **Impact:** PR #141 blocked until PostgreSQL persistence layer added
+
+2. **Microsoft Entra External Identities for OAuth** — Production auth via Entra, local auth behind dev toggle for testing
+   - External tenant deployed; app registration done by user
+   - App implements OAuth flow (authorization code, token exchange, refresh)
+   - **Impact:** Admin routes must enforce OAuth roles, not static ADMIN_TOKEN
+
+### Orchestration Log Created
+- `.squad/orchestration-log/2026-03-23T19-15Z-drizzt-content-crud.md` — Full CRUD outcome, blockers
+- Cross-reference: Minsc tests (27 pass, 46 await routes), auth audit complete
+
+### Next Steps
+1. ~~Migrate `ContentStore` to `ContentRepository` with PostgreSQL backend~~ ✅ Done (PR #141 updated)
+2. Integrate OAuth middleware for admin endpoint protection
+3. Coordinate with Minsc: OAuth implementation may require new auth test patterns
+4. ~~Update PR #141 description to note PostgreSQL + OAuth requirements~~ ✅ Done
+
+## Learnings
+
+### PostgreSQL Content Store (PR #141 revision — 2026-03-24)
+
+**Architecture decisions:**
+- Single `content_definitions` table with JSONB `data` column — avoids 9 separate tables, allows schema flexibility without migration churn
+- Composite TEXT PK `(entity_type, id)` — content IDs are admin slugs, not UUIDs. Updated schema validation test to allow this exception.
+- `IContentStore<T>` interface extracted from concrete `ContentStore` class. Both `ContentStore` (in-memory) and `PgContentStore` implement it.
+- Routes accept `IContentStore` — storage backend invisible to API layer
+- `initializeContentStores(usePg: boolean)` factory pattern follows existing `DATABASE_URL` toggle
+
+**Key files:**
+- `packages/server/src/db/migrations/007_create_content_definitions.sql` — table schema
+- `packages/server/src/db/migrations/008_seed_content_definitions.sql` — 32 seed entities
+- `packages/server/src/admin/content/PgContentStore.ts` — PostgreSQL implementation
+- `packages/server/src/admin/content/ContentStore.ts` — IContentStore interface + in-memory impl
+- `packages/server/src/admin/content/init.ts` — PG/in-memory factory
+
+**User preference:** No statically defined assets in production. Static registries can remain for backward compat but are NOT the source of truth when DATABASE_URL is set.

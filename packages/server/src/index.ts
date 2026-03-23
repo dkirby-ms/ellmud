@@ -15,7 +15,7 @@ import {
   initColyseusAuth,
 } from './auth/index.js';
 import { createHealthRouter } from './health.js';
-import { createAdminRouter, createDashboardRouter } from './admin/index.js';
+import { createAdminRouter, createDashboardRouter, createContentRouter, initializeContentStores } from './admin/index.js';
 import { getConfig } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence } from './cache/index.js';
@@ -65,6 +65,12 @@ app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg
 // Admin API at /admin/api/*, dashboard UI at /admin/
 // Protected by ADMIN_TOKEN env var — admin auth is separate from player auth.
 app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));
+
+// Content CRUD API — admin-managed game content (items, creatures, biomes, etc.)
+const contentStores = initializeContentStores(USE_PG);
+app.use(createContentRouter({ stores: contentStores }));
+console.log(`[Ellmud] Content store: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
 app.use('/admin', createDashboardRouter());
 
 // Initialize Colyseus room auth hooks
