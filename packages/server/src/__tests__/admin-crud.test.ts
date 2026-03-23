@@ -8,11 +8,11 @@
  * Drizzt lands the implementation on this branch.
  *
  * Endpoint spec per entity:
- *   GET    /admin/api/{entity}        → 200 (array)
- *   GET    /admin/api/{entity}/:id    → 200 | 404
- *   POST   /admin/api/{entity}        → 201 | 400
- *   PUT    /admin/api/{entity}/:id    → 200 | 404
- *   DELETE /admin/api/{entity}/:id    → 204 | 404
+ *   GET    /admin/api/content/{entity}        → 200 (array)
+ *   GET    /admin/api/content/{entity}/:id    → 200 | 404
+ *   POST   /admin/api/content/{entity}        → 201 | 400
+ *   PUT    /admin/api/content/{entity}/:id    → 200 | 404
+ *   DELETE /admin/api/content/{entity}/:id    → 204 | 404
  *
  * All endpoints require: Authorization: Bearer {ADMIN_TOKEN}
  */
@@ -147,11 +147,11 @@ describe('Admin Content CRUD — Auth Enforcement', () => {
 
   // Test a representative subset — one list, one get, one create, one update, one delete
   const authProbes: Array<{ method: 'get' | 'post' | 'put' | 'delete'; path: string; body?: Record<string, unknown> }> = [
-    { method: 'get', path: '/admin/api/items' },
-    { method: 'get', path: '/admin/api/items/some-id' },
-    { method: 'post', path: '/admin/api/items', body: ENTITY_FIXTURES.items.create },
-    { method: 'put', path: '/admin/api/items/some-id', body: ENTITY_FIXTURES.items.update },
-    { method: 'delete', path: '/admin/api/items/some-id' },
+    { method: 'get', path: '/admin/api/content/items' },
+    { method: 'get', path: '/admin/api/content/items/some-id' },
+    { method: 'post', path: '/admin/api/content/items', body: ENTITY_FIXTURES.items.create },
+    { method: 'put', path: '/admin/api/content/items/some-id', body: ENTITY_FIXTURES.items.update },
+    { method: 'delete', path: '/admin/api/content/items/some-id' },
   ];
 
   for (const probe of authProbes) {
@@ -191,7 +191,7 @@ describe('Admin Content CRUD — Lifecycle', () => {
 
   for (const entityType of ENTITY_TYPES) {
     describe(`${entityType}`, () => {
-      const basePath = `/admin/api/${entityType}`;
+      const basePath = `/admin/api/content/${entityType}`;
       const fixtures = ENTITY_FIXTURES[entityType];
 
       it(`full CRUD lifecycle: create → read → update → read → delete → verify 404`, async () => {
@@ -320,7 +320,7 @@ describe('Admin Content CRUD — 404 on Non-Existent ID', () => {
   const PHANTOM_ID = 'nonexistent-id-00000000';
 
   for (const entityType of ENTITY_TYPES) {
-    const basePath = `/admin/api/${entityType}`;
+    const basePath = `/admin/api/content/${entityType}`;
 
     it(`GET ${basePath}/${PHANTOM_ID} → 404`, async () => {
       const app = createTestApp();
@@ -363,7 +363,7 @@ describe('Admin Content CRUD — Validation (400 on bad input)', () => {
   });
 
   for (const entityType of ENTITY_TYPES) {
-    const basePath = `/admin/api/${entityType}`;
+    const basePath = `/admin/api/content/${entityType}`;
 
     it(`POST ${basePath} with empty body → 400`, async () => {
       const app = createTestApp();
