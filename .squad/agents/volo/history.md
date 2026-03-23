@@ -294,3 +294,25 @@ Wave 7 will deliver final 3 client UI issues. Shardboard will integrate with Ref
 - **Key pattern: sensory data via traces field** — Sound and Traces populate `room.traces[]` with `type`, `direction`, `source`, `intensity`, `age_seconds`. LLM and fallback read this unified interface.
 - **Cache inheritance:** Sensory narration uses same hash → cache → LLM → template pipeline. State hash includes sensory trace data, so identical sensory input = identical prose = consistent atmosphere.
 - **Testing:** Type-checked all narrative files; shared package builds cleanly. Ready for Sound/Trace/Awareness systems to populate context and invoke pipeline.
+
+---
+
+## Phase 2: Feature Implementation & Fixes (2026-03-23)
+
+### PR #123 — Refuge Ambient (REJECTED→REJECTED→APPROVED)
+**Status:** ✅ Merged to dev
+**What:** WeatherSystem, NPCSystem, AmbientSystem, 180+ narration templates
+**Tests:** 76 Weather + 84 NPC + 38 Ambient = 198 total
+**Rejection 1:** Stale DowningSystem/ShardSickness exports (merge artifact from other PRs)
+**Rejection 2:** TypeScript build failure (WeatherSystem enum type mismatch)
+**Approval:** After Jarlaxle removed stale exports + Drizzt fixed enum types
+
+### Fixed PR #122 (Jarlaxle+Drizzt Locked)
+**What:** Rebased feat/pvp-combat on dev, resolved 3 merge conflicts
+**Result:** PR #122 ready for final review (0 regressions)
+
+### Phase 2 Complete
+- ✅ 1 feature authored, 1 fix executed
+- ✅ 198 tests for Refuge ambient systems
+- ✅ Template fallback narration primary, LLM enhancement wired
+- ✅ NarrationType 'ambient' added to shared types for client

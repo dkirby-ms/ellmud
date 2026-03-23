@@ -610,3 +610,29 @@ Each test file includes sections marked with × notation (e.g., `#23 × #25`) th
 
 **What's next:** Run Phase 2 QA on UAT branch, validate Wave 2 systems work end-to-end in staging environment. Once approved, Wave 2 ships to prod. Then Phase 2 development begins: Multi-Player Shards (#21), PvP Combat (#24), Proximity Communication (#26), Death & Downing (#27), Phase 2–4 backlog.
 
+
+---
+
+## Phase 2: QA & Test Architecture (2026-03-23)
+
+### Phase 2 QA Test Strategy
+**Status:** ✅ Active across all Phase 2 PRs
+**What:** Split cross-system tests (direct instantiation) from E2E tests (full Colyseus)
+- Fast unit-level tests: Instantiate systems together without Colyseus (~1s)
+- Slow E2E tests: Boot server, connect clients, send commands (~2s each)
+- Infrastructure-dependent tests: Labeled .todo, ready for Phase 3
+
+### Requirements Established
+- TraceSystem.tick() uses Date.now() → all timer tests use vi.advanceTimersByTime()
+- Commands use MessageTypes.COMMAND ('cmd') — wrong type silently drops
+- Dodge is 0.5x damage reduction, not elimination → reconnection tests account for this
+
+### Phase 2 QA Issue #31
+**Status:** ✅ Tests made it onto dev via pvp-combat branch merge
+**Note:** Silent success bug caught during QA review and fixed
+
+### Phase 2 Complete
+- ✅ 1332 total tests, 343 new in Phase 2
+- ✅ 0 regressions
+- ✅ All 4 Phase 2 features validated
+- ✅ PR #126 (dev → uat) ready for QA sign-off

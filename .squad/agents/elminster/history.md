@@ -318,3 +318,37 @@ All four PRs merge cleanly to dev:
 
 **Phase 2 readiness:** UAT branch now has all Wave 2 systems. Phase 2 QA (Minsc) can begin testing. All systems follow the same architecture: pure logic classes, ShardRoom wiring, state passed as params.
 
+
+---
+
+## Phase 2: Code Review (2026-03-23)
+
+### Review Cycle: All 4 PRs Reviewed (Round 1, 2, 3)
+
+**PR #124 (Matchmaker):** ✅ APPROVED Round 1
+- Clean design, 0 regressions, ready immediately
+
+**PR #122 (PvP Combat):** ❌→❌→✅
+- Round 1: Missing shard-sickness integration in acceptance criteria
+- Round 2: Stale DowningSystem reference after rebasing
+- Round 3: Approved after wiring complete + merge conflicts resolved
+
+**PR #125 (Death & Downing):** ❌→✅
+- Round 1: killingBlow + ShardSickness not wired into game loop
+- Round 2: Approved after Drizzt wired both systems + E2E test added
+
+**PR #123 (Refuge Ambient):** ❌→❌→✅
+- Round 1: Stale system exports (DowningSystem/ShardSickness not in branch)
+- Round 2: TypeScript build failure (WEATHER_TRANSITIONS enum type)
+- Round 3: Approved after stale exports removed + types fixed
+
+### Review Standards Locked
+
+1. Acceptance criteria verified against implementation (not just PR body claims)
+2. All wiring required (pure logic classes must be instantiated + called)
+3. Integration tests required (end-to-end feature validation)
+4. Build must pass (TypeScript types resolve, no circular deps)
+
+### Phase 2 Complete
+- ✅ All 4 PRs reviewed, 5 rejection rounds caught issues early
+- ✅ Final approvals: 2026-03-23T0100Z–0106Z

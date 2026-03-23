@@ -731,3 +731,32 @@ Implemented server-side proximity-based communication system with three social c
 
 **What's next:** Phase 2 QA (Minsc) testing Wave 2 in UAT. Then Phase 2 features: Multi-Player Shards (#21), PvP Combat (#24), Proximity Communication (#26), Death & Downing (#27), Phase 2–4 backlog (#28–#49).
 
+
+---
+
+## Phase 2: Feature Implementation & Fixes (2026-03-23)
+
+### PR #122 — PvP Combat (REJECTED→REJECTED→APPROVED)
+**Status:** ✅ Merged to dev
+**What:** Friendly fire, death drops, shard-sickness application
+**Tests:** 44 tests
+**Rejection 1:** Missing shard-sickness integration (spec incomplete)
+**Rejection 2:** Stale DowningSystem ref (rebased on dev while PR #125 pending)
+**Approval:** After Drizzt wired killingBlow + shard-sickness, Volo rebased & resolved conflicts
+
+### PR #125 — Death & Downing (REJECTED→APPROVED)
+**Status:** ✅ Merged to dev
+**What:** DowningSystem (10-tick bleed-out), ShardSickness (exponential decay), bandage channel
+**Tests:** 42 DowningSystem + 8 integration
+**Rejection 1:** killingBlow + ShardSickness not wired into ShardRoom.update()
+**Approval:** After Drizzt wired both systems + added E2E test
+
+### Fixed PR #123 (Volo Locked)
+**What:** Removed stale DowningSystem/ShardSickness exports from systems/index.ts (merge artifacts)
+**Result:** PR #123 unblocked, build passes
+
+### Phase 2 Complete
+- ✅ 2 features authored, 1 fix executed
+- ✅ 94 tests authored (44 + 50)
+- ✅ Core death/downing/PvP flow complete
+- ✅ PR #122–#125 merged to dev

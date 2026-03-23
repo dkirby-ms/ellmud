@@ -659,3 +659,33 @@ Also added PvP-specific death narration and imported `PvPKillEvent`/`SHARD_SICKN
 - The `edit` tool requires exact byte-for-byte match of `old_str` — escaped template literals and Unicode can silently mismatch. Always verify edits with grep after applying.
 - Branch confusion across `feat/pvp-combat` vs `feat/death-downing` is a real risk — always verify with `git branch --show-current` before committing.
 
+
+---
+
+## Phase 2: Feature Implementation & Fixes (2026-03-23)
+
+### PR #124 — Multi-Player Shards (APPROVED Round 1)
+**Status:** ✅ Merged to dev
+**What:** Matchmaker pure logic class, tier capacity enforcement, KEDA auto-scaling
+**Tests:** 48 matchmaker + 3 integration (0 regressions)
+**Key pattern:** Matchmaker has zero Colyseus coupling — pure logic, same as AwarenessSystem
+
+### Fixed PR #125 (Jarlaxle Locked)
+**What:** Wired DowningSystem.killingBlow() + ShardSickness into ShardRoom.update()
+**Added:** E2E test (Player → 0 HP → Downed → Stabilized → Bleed-out)
+**Result:** PR #125 unblocked, approved round 2
+
+### Fixed PR #122 (Jarlaxle Locked)
+**What:** Wired PvPKillEvent + ShardSickness.addDeathPenalty() into combat flow
+**Pattern:** killerIds attribute tracks player kills vs NPC kills
+**Result:** PR #122 unblocked, approved round 3
+
+### Fixed PR #123 (Volo Locked)
+**What:** Fixed WeatherSystem enum types (WEATHER_TRANSITIONS), verified TypeScript build
+**Result:** PR #123 ready for final approval
+
+### Phase 2 Complete
+- ✅ 4 features merged (Matchmaker, PvP Combat, Death & Downing, Refuge Ambient)
+- ✅ 1332 total tests, 343 new in Phase 2, 0 regressions
+- ✅ All Phase 2 issues closed (#21, #24, #27, #29)
+- ✅ PR #126 (dev → uat) created for QA validation

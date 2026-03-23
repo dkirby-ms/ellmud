@@ -3501,3 +3501,240 @@ All future game systems needing player attributes. When adding new skills or equ
 - Issue #27 — Death & Downing
 - Issues #28–#49 — Phase 2–4 features
 
+
+---
+
+## Phase 2 Decisions
+
+### 2026-03-23: Multi-Player Shard Architecture (Issue #21)
+
+**Author:** Drizzt (Engine)
+**Date:** 2026-03-23
+**PR:** #124
+
+#### GDD Tier Capacities Are Now Enforced
+
+The `TIER_MAX_PLAYERS` constant in `config.ts` is the source of truth:
+- Tier 1 (Shallow): max 3 players, 2 entry points
+- Tier 2 (Deep): max 4 players, 3 entry points  
+- Tier 3 (Abyssal): max 6 players, 4 entry points
+
+`MAX_PLAYERS_PER_SHARD` env var overrides all tiers (useful for testing).
+
+#### Matchmaker Is a Pure Logic Class
+
+`Matchmaker` has zero Colyseus dependencies. It manages:
+- Player queue with timeout pruning
+- Shard registration and player count tracking
+- Entry point assignment (round-robin)
+- Match scoring (tier preference > biome preference > social density)
+
+ShardRoom and RefugeRoom call into it — the matchmaker never calls Colyseus APIs directly. This follows the established game system pattern (AwarenessSystem, SoundSystem, TraceSystem).
+
+#### Entry Point Distribution Is Round-Robin
+
+Players are distributed across entry points using modulo of assignment count, not random selection. This ensures deterministic distribution for testing and even spatial spread.
+
+#### KEDA Scaling Strategy
+
+- Min 1, max 4 replicas
+- Scale trigger: 30 WebSocket connections per replica
+- Activation threshold: 10 connections (first scale from 1→2)
+- 5-minute cooldown before scale-down
+- Documented in both KEDA YAML (for AKS portability) and Bicep (native Container Apps)
+
+#### Impact on Other Agents
+
+- **Jarlaxle:** PvP Combat (#24) and Proximity Communication (#26) should use the Matchmaker for shard capacity checks
+- **Minsc:** 48 new matchmaker tests + 3 integration tests added to test suite
+- **Coordinator:** PR #124 ready for review, 0 regressions
+
+---
+
+### 2026-03-23: Death & Downing Architecture (Issue #27)
+
+**Author:** Jarlaxle (Systems)
+**Date:** 2026-03-23
+**PR:** #125
+
+#### Downed-First Death Flow
+
+Player reaches 0 HP → enters downed state (10-tick bleed-out timer) → dies only if timer expires or killing blow lands. This replaces instant death.
+
+**Rationale:** Creates a rescue window for squadmates, adds tactical depth. The GDD specifies this flow.
+
+#### Stabilize Channel: Item Consumed on Start
+
+The bandage is consumed when channeling begins, not when it completes. Refunded only on validation errors (no target, wrong room, etc.), NOT on interruption.
+
+**Rationale:** Prevents bandage duplication exploits (start channel → interrupt → retry indefinitely with same bandage). Once you commit to stabilizing, the bandage is spent.
+
+#### Shard-Sickness via Exponential Decay
+
+Formula: `multiplier = 1 - 0.5 * (1 - e^(-0.2 * deathCount))`. This gives diminishing returns — each additional death hurts less than the last, capping at 50% stat reduction.
+
+**Rationale:** Punishes death without making the game unplayable. A player with 5 deaths still has 60%+ stats. The exponential curve ensures the first death matters most.
+
+#### ShardSicknessStore Interface
+
+Persistence abstracted behind an interface. InMemoryStore for Phase 1; PostgreSQL implementation deferred.
+
+**Rationale:** No DB layer exists for player profiles yet. The interface is ready for when it does.
+
+#### ExtractionMessage State Extension
+
+Added 'downed', 'stabilized', 'bleed_out' states to ExtractionMessage rather than creating a new message type.
+
+**Rationale:** The client already handles ExtractionMessage state transitions. Adding states is simpler than a new message type + new client handler.
+
+#### Impact on Other Systems
+
+- **Combat:** Downed players are removed from combat immediately (can't be targeted)
+- **Commands:** Downed players are blocked from all commands
+- **Traces:** Corpse trace created on actual death (not downing)
+- **Sound/Awareness:** No changes needed — downed players are still "present" in the room
+
+---
+
+### 2026-03-23: Phase 2 QA Test Architecture (Issue #31)
+
+**Author:** Minsc (QA Lead)
+**Date:** 2026-03-23
+**PR:** #122
+
+#### Test Strategy: Direct System Instantiation + Colyseus E2E
+
+Phase 2 QA tests use direct system instantiation (no Colyseus server) for cross-system integration tests, reserving full Colyseus boot for end-to-end smoke tests. This splits the 71-test file into:
+
+- **Unit-level cross-system tests** (fast, ~1s): Instantiate CombatSystem + SoundSystem + TraceSystem + AwarenessSystem together, simulate what ShardRoom.update() does.
+- **Colyseus integration tests** (slow, ~2s each): Boot real server, connect clients, send commands.
+
+**Rationale:**
+
+- Cross-system bugs (combat → sound → traces → awareness) are best caught by wiring real system instances together without Colyseus overhead.
+- Full Colyseus boot adds ~500ms per test. Direct instantiation keeps the feedback loop fast.
+- Infrastructure-dependent tests (.todo) are clearly labeled and ready to activate when Redis/KEDA land.
+
+#### Timer Requirements
+
+- TraceSystem.tick() uses `Date.now()`, not deltaMs — all timer tests MUST use `vi.advanceTimersByTime()`.
+- Commands must use `MessageTypes.COMMAND` ('cmd') message type — wrong type silently drops.
+- Dodge is a damage reduction (0.5x), not elimination — reconnection tests must account for this.
+
+#### Status
+
+Active — applies to all future Phase 2+ test work.
+
+---
+
+### 2026-03-23: Ambient System Architecture (Issue #29)
+
+**Author:** Volo (Content/Narration)
+**Date:** 2026-03-23
+**PR:** #123
+
+#### Pure Logic Classes Pattern
+
+The Refuge ambient world uses three standalone systems (WeatherSystem, NPCSystem, AmbientSystem) orchestrated by a single `AmbientSystem.tick()` call from RefugeRoom's simulation interval. All output goes through template fallback narration. LLM enhancement is wired but not required.
+
+#### Architecture Choices
+
+1. **Systems are pure logic classes** — no Colyseus coupling, no DI frameworks. Same pattern as TraceSystem/AwarenessSystem. Testable in isolation.
+
+2. **AmbientSystem is the orchestrator** — WeatherSystem and NPCSystem are composed inside it. RefugeRoom only calls `ambientSystem.tick()` and broadcasts the returned events.
+
+3. **Faction milestones are threshold-triggered, not real-time** — `addFactionScore()` checks thresholds and emits events. No polling, no resource tracking state machine. Simple and predictable.
+
+4. **Wandering merchants use schedule + probability** — Checked at `arrivalInterval` ticks with `arrivalChance` probability. Duration-based departure. Inventory restocks between visits.
+
+5. **Template fallback is the primary narration path** — `ambient-templates.ts` covers every event type with atmospheric prose. `ambient_narration` LLMNarrationType is registered but templates are designed to be production-quality standalone.
+
+6. **`NarrationType: 'ambient'`** added to shared types for client-side message routing. Client can style ambient messages differently from room/combat/system.
+
+#### Impact on Other Agents
+
+- **Client team**: New `NarrationType: 'ambient'` — style these messages with muted/atmospheric treatment
+- **Jarlaxle**: `addFactionScore()` API ready for integration with extraction rewards
+- **Drizzt**: No RefugeRoom schema changes. All communication remains message-based.
+
+---
+
+### 2026-03-23: PvP Combat with Death Penalties (Issue #24)
+
+**Author:** Jarlaxle (Systems)
+**Date:** 2026-03-23
+**PR:** #122
+
+#### Friendly Fire Enabled
+
+All player targets (including squadmates) receive full damage. No special handling for team damage — combat is open PvP.
+
+#### Death Drop System
+
+When a player dies:
+1. Player's inventory drops all items to the room
+2. Room traces are created for each item (if trace system enabled)
+3. Other players see items available for looting
+
+**Implementation:** CombatSystem tracks `killerIds` (array of player IDs who delivered damage). On death, `PlayerInventory.drop()` called, items placed in room, traces triggered.
+
+#### Shard-Sickness Application
+
+When a player kills another player, `ShardSickness.addDeathPenalty()` called on the victim. The formula and decay are defined in Death & Downing decision above.
+
+**Wiring:** CombatSystem emits `PvPKillEvent` with victim + killer info. ShardRoom listens and updates victim's shard-sickness state.
+
+#### Impact on Combat System
+
+- Damage no longer capped by team affiliation
+- Removal from shard on death is coordinated with ShardSickness instantiation
+- All PvP kills trigger shard-sickness, differentiating from NPC kills
+
+---
+
+### 2026-03-23: Tier-Based Shard Capacities
+
+**Date:** 2026-03-23
+**Reviewer:** Elminster
+
+#### Capacity Limits
+
+We have codified the following capacity limits in `server/src/config.ts`:
+
+| Tier | Max Players | Entry Points |
+|---|---|---|
+| 1 (Shallow) | 3 | 2 |
+| 2 (Deep) | 4 | 3 |
+| 3 (Abyssal) | 6 | 4 |
+
+**Rationale:**
+- **Tier 1:** Low player count prevents overcrowding in small maps (15-25 rooms).
+- **Tier 3:** Higher count enables squad v squad scenarios.
+- **Entry Points:** Scaling entry points with player count reduces spawn camping risk.
+
+#### Impact
+
+- Matchmaker must enforce these limits strictly.
+- Room generation must ensure enough distinct entry points exist (verified in PR #124 tests).
+
+---
+
+### 2026-03-23: Rejection Review Standards
+
+**Date:** 2026-03-23
+**Reviewer:** Elminster
+
+#### Standard Applied to Phase 2 PRs
+
+When a PR is submitted for review:
+1. **Acceptance criteria must be verified against implementation** — not just declarations in PR body.
+2. **All wiring must be present** — pure logic classes are good, but they must be instantiated and called in the actual game loop.
+3. **Integration tests required** — at least one test that exercises the full feature end-to-end (not just unit tests of logic classes).
+4. **Build must pass** — all TypeScript types must resolve, no broken imports, no circular dependencies.
+
+#### Learnings from Phase 2
+
+- **Combat System attribution:** PvP relies on `killerIds` in `CombatEvent` to distinguish player vs creature kills. This is a robust pattern for attributing events in a simultaneous tick system.
+- **Testing Gaps:** Acceptance criteria (shard-sickness, killing blow, etc.) were declared "done" but only constants were added, not wiring.
+- **Merge artifacts:** When multiple PRs land in parallel, stale exports can cause builds to fail. Always verify import paths resolve after rebasing.
+
