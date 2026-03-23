@@ -153,6 +153,7 @@ export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
 export type {
   Direction,
   RoomType,
+  RoomProperty,
   HazardPlaceholder,
   LootContainer,
   Room,
@@ -167,6 +168,56 @@ export {
   serializeRoomGraph,
   deserializeRoomGraph,
 } from './room-graph.js';
+
+// ─── Sound System (GDD §12) ──────────────────────────────────────────────────
+
+/** Types of actions that generate noise. */
+export type SoundType =
+  | 'combat'
+  | 'running'
+  | 'walking'
+  | 'striking_door'
+  | 'extraction'
+  | 'explosion'
+  | 'sneaking';
+
+/** Noise values per action type (GDD §12.2). Scale: 0–10. */
+export const NOISE_VALUES: Record<SoundType, number> = {
+  combat: 5,
+  running: 4,
+  walking: 2,
+  striking_door: 7,
+  extraction: 8,
+  explosion: 9,
+  sneaking: 1,
+} as const;
+
+/** Qualitative sound descriptions for narration. */
+export const SOUND_DESCRIPTIONS: Record<SoundType, string> = {
+  combat: 'a clash of metal',
+  running: 'hurried footsteps',
+  walking: 'soft footsteps',
+  striking_door: 'a heavy impact against a door',
+  extraction: 'a rising hum of energy',
+  explosion: 'a thunderous explosion',
+  sneaking: 'a faint rustle',
+} as const;
+
+/** Base attenuation per room traversed. */
+export const SOUND_ATTENUATION_PER_ROOM = 2;
+
+/** A sound event received by a listener in a particular room. */
+export interface SoundEvent {
+  soundType: SoundType;
+  /** Direction the sound came from, relative to the listener. */
+  direction: string;
+  /** Effective noise level after attenuation. */
+  effectiveNoise: number;
+  /** Human-readable description for narration. */
+  description: string;
+  /** Distance in rooms from the source. */
+  distance: number;
+}
 
 // ─── Narrative Types (GDD §4) ────────────────────────────────────────────────
 

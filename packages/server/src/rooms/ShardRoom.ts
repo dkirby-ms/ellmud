@@ -21,8 +21,12 @@ import { generateShardGraph } from '../shard/generator.js';
 import { adaptRoomGraph } from '../shard/graph-adapter.js';
 import { handleLook } from '../commands/handlers/look.js';
 import { CombatSystem, type TickResult, createCombatant } from '../combat/index.js';
+import { SoundSystem } from '../sound/index.js';
 import { TraceSystem } from '../systems/index.js';
 import {
+  NOISE_VALUES,
+  SOUND_DESCRIPTIONS,
+  type SoundType,
   BLOOD_TRAIL_DAMAGE_THRESHOLD,
   TRACKING_THRESHOLDS,
 } from '@ellmud/shared';
@@ -60,6 +64,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private entryRoomIds: string[] = []; // Multiple entry points for player distribution
   private players = new Map<string, PlayerState>();
   private combatSystem!: CombatSystem;
+  private soundSystem!: SoundSystem;
   private traceSystem!: TraceSystem;
   private extractionSystem!: ExtractionSystem;
   private creatureManager!: CreatureManager;
@@ -126,6 +131,13 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     this.combatSystem = new CombatSystem((roomId: string) => {
       const room = this.roomGraph.rooms.get(roomId);
       return room ? Array.from(room.exits.values()) : [];
+    });
+
+    // Initialize sound propagation system (GDD §12)
+    this.soundSystem = new SoundSystem((roomId: string) => {
+      const room = this.roomGraph.rooms.get(roomId);
+      if (!room) return undefined;
+      return { id: room.id, exits: room.exits, properties: room.properties };
     });
 
     // Initialize trace system (GDD §11.2)
@@ -327,6 +339,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       const tickResult = this.combatSystem.resolveTick();
       this.syncCreaturesAfterCombat(tickResult);
       this.deliverCombatResults(tickResult);
+
+      // Propagate combat sounds to nearby rooms (GDD §12)
+      this.propagateCombatSounds(tickResult);
 
       // Create blood trail traces for combat damage
       this.createCombatTraces(tickResult);
@@ -700,6 +715,53 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     client.send(MessageTypes.EXTRACTION_STATE, msg);
   }
 
+  // ─── Sound Propagation (GDD §12) ─────────────────────────────────────────
+
+  /**
+   * After combat resolves, emit combat sounds from each encounter room
+   * and deliver sound narrations to players in nearby rooms.
+   */
+  private propagateCombatSounds(tickResult: TickResult): void {
+    const strikeRoomIds = new Set<string>();
+    for (const event of tickResult.events) {
+      if (event.type === 'strike' && event.targetId) {
+        const combatant = this.combatSystem.getCombatant(event.actorId);
+        if (combatant) strikeRoomIds.add(combatant.roomId);
+      }
+    }
+    for (const roomId of strikeRoomIds) {
+      this.emitSound(roomId, 'combat');
+    }
+  }
+
+  /**
+   * Emit a sound from a room and deliver narrations to all affected players.
+   */
+  private emitSound(sourceRoomId: string, soundType: SoundType): void {
+    const noiseLevel = NOISE_VALUES[soundType];
+    const results = this.soundSystem.propagateSound(sourceRoomId, noiseLevel);
+    const description = SOUND_DESCRIPTIONS[soundType];
+
+    for (const result of results) {
+      const qualifier = result.effectiveNoise >= 4 ? '' :
+        result.effectiveNoise >= 2 ? 'distant ' : 'faint ';
+            const text = `You hear ${qualifier}${description} from the ${result.direction}.`;
+
+      for (const [sid, ps] of this.players) {
+        if (ps.currentRoomId === result.roomId) {
+          const client = this.findClient(sid);
+          if (client) {
+            this.sendNarrate(client, {
+              text,
+              type: 'sound',
+              timestamp: Date.now(),
+            });
+          }
+        }
+      }
+    }
+  }
+
   // ─── Trace System (GDD §11.2) ──────────────────────────────────────────
 
   /** Create blood_trail traces for combat damage events that exceed the threshold. */
@@ -727,6 +789,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     const text = descriptions.map(d => d.text).join('\n');
     this.sendNarrate(client, { text, type: 'trace', timestamp: Date.now() });
   }
+
 
   // ─── Extraction Tick Delivery ─────────────────────────────────────────────
 

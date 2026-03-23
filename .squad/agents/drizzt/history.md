@@ -531,3 +531,22 @@ The `extraction_state` handler was only registered after the initial `connect()`
 4. **store.test.ts** — 2 new tests covering CLEAR_MESSAGES behavior
 
 **Drizzt takeaway:** Global state that accumulates (messages, sound cues) must be explicitly cleared on context transitions. In a room-based architecture, every `ROOM_SWITCH` handler should audit which accumulated state needs resetting. Sound cues will likely need the same treatment eventually.
+
+---
+
+### Fix PR #118 Review Feedback — Sound Propagation System (2026-03-21)
+**Task:** Fix two blocking issues from Elminster's review of Jarlaxle's Sound Propagation PR
+**Status:** ✅ Complete — commit 0aef6a0, pushed to feat/sound-propagation-system
+
+**Issue 1: Room properties dropped — modifiers dead code**
+Properties (heavy_door, cavern, water) were silently lost at three layers:
+- `RoomGraph.ts` — Local `Room` interface missing `properties` field. Added `RoomProperty` type and optional `properties` field.
+- `graph-adapter.ts` — `adaptRoom()` didn't copy `shared.properties`. Added it.
+- `ShardRoom.ts` — SoundSystem resolver returned `{ id, exits }` without `properties`. Now includes it.
+
+**Issue 2: Redundant BFS in computeDistance()**
+`computeDistance()` ran O(N²) BFS per result room, but `propagateSound()` already had distance in its queue. Added a `distances` Map to the main BFS traversal, used it in result building, and deleted `computeDistance()` entirely.
+
+**Verification:** 43/43 test files pass, 1034 tests green, tsc --noEmit clean.
+
+**Drizzt takeaway:** When data flows through adapter layers (shared → local → subsystem), every field that matters to downstream consumers must be explicitly plumbed through. Type safety alone doesn't catch omissions when the downstream field is optional. The BFS distance fix is textbook — never run a second traversal when the first one already has the data.
