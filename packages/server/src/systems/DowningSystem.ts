@@ -55,6 +55,7 @@ export interface DowningEvent {
   roomId: string;
   stabilizerId?: string;
   stabilizerName?: string;
+  killerIds?: string[];
 }
 
 // ─── System ──────────────────────────────────────────────────────────────────
@@ -174,6 +175,7 @@ export class DowningSystem {
       playerId,
       playerName: target.playerName,
       roomId: target.roomId,
+      killerIds: target.killerIds,
     };
   }
 
@@ -214,6 +216,7 @@ export class DowningSystem {
           playerId,
           playerName: downed.playerName,
           roomId: downed.roomId,
+          killerIds: downed.killerIds,
         });
         this.downedPlayers.delete(playerId);
         // Clean up any stabilize channels targeting this player

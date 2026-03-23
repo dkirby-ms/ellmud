@@ -267,3 +267,119 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
     await client.leave();
   }, 25_000);
 });
+
+// ─── E2E Integration: Downed → Stabilized → Extract ──────────────────────────────────────────────
+
+describe('Player Death E2E: down → stabilize → extract', () => {
+  let colyseus: ColyseusTestServer;
+
+  beforeAll(async () => {
+    colyseus = await bootTestServer();
+  });
+
+  afterAll(async () => {
+    await colyseus.shutdown();
+  });
+
+  it('player reaches 0 HP, squadmate stabilizes, squad extracts', async () => {
+    const room = await colyseus.createRoom('shard', { useTestGraph: true, openDelayMs: 0 });
+    const victim = await colyseus.connectTo(room);
+    const healer = await colyseus.connectTo(room);
+
+    const victimExtraction: ExtractionMessage[] = [];
+    const healerExtraction: ExtractionMessage[] = [];
+    const healerRoomSwitch: Array<{ target: string; reason: string }> = [];
+
+    victim.onMessage(MessageTypes.EXTRACTION_STATE, (data: ExtractionMessage) => {
+      victimExtraction.push(data);
+    });
+    healer.onMessage(MessageTypes.EXTRACTION_STATE, (data: ExtractionMessage) => {
+      healerExtraction.push(data);
+    });
+    healer.onMessage(MessageTypes.ROOM_SWITCH, (data: { target: string; reason: string }) => {
+      healerRoomSwitch.push(data);
+    });
+
+    // Wait for shard to reach 'open' state
+    await wait(2000);
+
+    // ── Step 1: Down the victim via combat ──────────────────────────────
+    const roomInstance = room as unknown as {
+      players: Map<string, PlayerState>;
+      combatSystem: CombatSystem;
+      roomGraph: { rooms: Map<string, Room> };
+      downingSystem: { isPlayerDowned: (id: string) => boolean };
+    };
+
+    const victimId = victim.sessionId;
+    const healerId = healer.sessionId;
+    const victimPlayer = roomInstance.players.get(victimId);
+    expect(victimPlayer).toBeDefined();
+
+    const startRoomId = victimPlayer!.currentRoomId;
+
+    // Create a powerful creature to one-shot the victim
+    const creature = createCombatant(
+      'creature-e2e-brute', 'E2E Brute', startRoomId, false,
+      { ...DEFAULT_PLAYER_STATS, attack: 200 },
+    );
+    roomInstance.combatSystem.registerCombatant(creature);
+
+    const victimCombatant = createCombatant(
+      victimId, victimId, startRoomId, true, DEFAULT_PLAYER_STATS,
+    );
+    victimCombatant.hp = 1;
+    roomInstance.combatSystem.registerCombatant(victimCombatant);
+    roomInstance.combatSystem.initiateCombat('creature-e2e-brute', victimId);
+
+    // Wait for combat tick to down the victim
+    await wait(2000);
+
+    // Verify victim is downed
+    expect(roomInstance.downingSystem.isPlayerDowned(victimId)).toBe(true);
+
+    const downedMessages = victimExtraction.filter(m => m.state === 'downed');
+    expect(downedMessages.length).toBeGreaterThanOrEqual(1);
+
+    // ── Step 2: Healer stabilizes the victim ────────────────────────────
+    const healerPlayer = roomInstance.players.get(healerId);
+    expect(healerPlayer).toBeDefined();
+    const bandage: Item = { id: 'bandage', name: 'Bandage', weight: 0.5, description: 'A bandage.' };
+    healerPlayer!.addItem(bandage);
+
+    // Send stabilize command
+    healer.send(MessageTypes.COMMAND, { verb: 'stabilize', args: [victimId] });
+
+    // Wait for stabilize channel (2 ticks) + processing time
+    await wait(4000);
+
+    // Verify victim received stabilized state
+    const stabilizedMessages = victimExtraction.filter(m => m.state === 'stabilized');
+    expect(stabilizedMessages.length).toBeGreaterThanOrEqual(1);
+
+    // ── Step 3: Healer extracts (moves to extraction room, extracts) ────
+    // Test graph path: entry → north → corridor → west → crypt → down → extraction-chamber
+    healer.send(MessageTypes.COMMAND, { verb: 'go', args: ['north'] });
+    await wait(1500);
+    healer.send(MessageTypes.COMMAND, { verb: 'go', args: ['west'] });
+    await wait(1500);
+    healer.send(MessageTypes.COMMAND, { verb: 'go', args: ['down'] });
+    await wait(1500);
+
+    // Start extraction
+    healer.send(MessageTypes.COMMAND, { verb: 'extract', args: [] });
+
+    // Wait for extraction channel (5 ticks default) + processing time
+    await wait(8000);
+
+    // Verify healer received extraction complete + room switch to refuge
+    const completedExtractions = healerExtraction.filter(m => m.state === 'completed');
+    expect(completedExtractions.length).toBeGreaterThanOrEqual(1);
+
+    const refugeSwitches = healerRoomSwitch.filter(m => m.reason === 'extraction_complete');
+    expect(refugeSwitches.length).toBeGreaterThanOrEqual(1);
+    expect(refugeSwitches[0]!.target).toBe('refuge');
+
+    await victim.leave();
+  }, 30_000);
+});

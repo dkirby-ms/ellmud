@@ -4,11 +4,11 @@
  * When a player dies and returns to Refuge, they receive shard-sickness.
  * Repeated deaths intensify the debuff with diminishing returns.
  *
- * Formula: stat_multiplier = 1 - (BASE_PENALTY * (1 - e^(-STACK_RATE * deathCount)))
- *   - 1 death:  ~9.5% reduction
- *   - 2 deaths: ~18.1% reduction
- *   - 3 deaths: ~25.9% reduction
- *   - 5 deaths: ~39.3% reduction
+ * Formula: stat_multiplier = 1 - (MAX_PENALTY * (1 - e^(-STACK_RATE * deathCount)))
+ *   - 1 death:  ~9.1% reduction
+ *   - 2 deaths: ~16.5% reduction
+ *   - 3 deaths: ~22.6% reduction
+ *   - 5 deaths: ~31.6% reduction
  *   - asymptote: 50% max reduction
  *
  * Shard-sickness persists across shard runs. The persistence layer is abstracted
@@ -24,7 +24,7 @@ export const MAX_PENALTY = 0.5;
 
 /**
  * Rate at which penalties stack. Higher = faster approach to MAX_PENALTY.
- * At 0.2: 1 death ≈ 9.5%, 3 deaths ≈ 25.9%, 5 deaths ≈ 39.3%.
+ * At 0.2: 1 death ≈ 9.1%, 3 deaths ≈ 22.6%, 5 deaths ≈ 31.6%.
  */
 export const STACK_RATE = 0.2;
 

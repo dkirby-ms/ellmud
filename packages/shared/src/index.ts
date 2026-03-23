@@ -427,3 +427,20 @@ export interface ShardSicknessInfo {
   /** Whether shard-sickness is currently active. */
   active: boolean;
 }
+
+/** Default shard-sickness parameters (GDD §6.4). */
+export const SHARD_SICKNESS_DEFAULTS = {
+  durationMs: 120_000,
+  attackPenalty: -5,
+  defencePenalty: -3,
+} as const;
+
+/** Analytics event logged when a player kills another player. */
+export interface PvPKillEvent {
+  type: 'pvp_kill';
+  killerId: string;
+  victimId: string;
+  victimName: string;
+  roomId: string;
+  timestamp: number;
+}

@@ -10,6 +10,8 @@ import {
   type BiomeType,
   type ShardTier,
   type ExtractionMessage,
+  type PvPKillEvent,
+  SHARD_SICKNESS_DEFAULTS,
   MessageTypes,
 } from '@ellmud/shared';
 import { ShardState } from '../state.js';
@@ -25,6 +27,7 @@ import { SoundSystem } from '../sound/index.js';
 import { TraceSystem } from '../systems/index.js';
 import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
 import { DowningSystem, type DowningEvent } from '../systems/DowningSystem.js';
+import { InMemoryShardSicknessStore, type ShardSicknessStore } from '../systems/ShardSickness.js';
 import {
   NOISE_VALUES,
   SOUND_DESCRIPTIONS,
@@ -70,6 +73,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private traceSystem!: TraceSystem;
   private awarenessSystem!: AwarenessSystem;
   private downingSystem!: DowningSystem;
+  private shardSicknessStore!: ShardSicknessStore;
   private extractionSystem!: ExtractionSystem;
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
@@ -152,6 +156,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Initialize downing system (GDD §6.4 — bleed-out timers, stabilization)
     this.downingSystem = new DowningSystem();
+    this.shardSicknessStore = new InMemoryShardSicknessStore();
 
     // Initialize extraction system (default 5-tick channel)
     this.extractionSystem = new ExtractionSystem();
@@ -348,6 +353,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Resolve combat tick
     if (this.combatSystem.hasActiveEncounters()) {
       const tickResult = this.combatSystem.resolveTick();
+
+      // Killing blow: finish off downed (unstabilized) players in rooms with active combat.
+      // Runs BEFORE handlePlayerDefeats so newly-downed players aren't instantly killed.
+      this.checkKillingBlows(tickResult);
+
       this.syncCreaturesAfterCombat(tickResult);
       this.deliverCombatResults(tickResult);
 
@@ -1072,7 +1082,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       const roomId = player.currentRoomId;
 
       // Enter downed state instead of dying immediately
-      this.downingSystem.downPlayer(playerId, event.actorName, roomId);
+      this.downingSystem.downPlayer(playerId, event.actorName, roomId, event.killerIds);
       this.log(`Player downed: ${playerId} in ${roomId}`);
 
       // Notify the downed player
@@ -1113,7 +1123,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     for (const event of events) {
       switch (event.type) {
         case 'player_bleed_out':
-          this.handlePlayerDeath(event.playerId, event.playerName, event.roomId);
+          this.handlePlayerDeath(event.playerId, event.playerName, event.roomId, event.killerIds);
           break;
         case 'player_stabilized':
           this.handlePlayerStabilized(event);
@@ -1123,14 +1133,55 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
   /**
-   * Handle actual player death (from bleed-out or killing blow).
-   * Drops inventory, creates corpse trace, schedules return to refuge.
+   * Check if active combat in a room should finish off downed (unstabilized) players.
+   * Any strike in a room with a bleeding-out player triggers a killing blow.
    */
-  private handlePlayerDeath(playerId: string, playerName: string, roomId: string): void {
+  private checkKillingBlows(tickResult: TickResult): void {
+    const strikeRooms = new Set<string>();
+    for (const event of tickResult.events) {
+      if (event.type === 'strike') {
+        const combatant = this.combatSystem.getCombatant(event.actorId);
+        if (combatant) strikeRooms.add(combatant.roomId);
+      }
+    }
+
+    if (strikeRooms.size === 0) return;
+
+    for (const downed of this.downingSystem.getAllDownedPlayers()) {
+      if (downed.state !== 'downed') continue;
+      if (!strikeRooms.has(downed.roomId)) continue;
+
+      const killEvent = this.downingSystem.killingBlow(downed.playerId);
+      if (killEvent) {
+        this.log(`Killing blow on downed player: ${downed.playerId} in ${downed.roomId}`);
+
+        const client = this.findClient(downed.playerId);
+        if (client) {
+          this.sendNarrate(client, {
+            text: 'An enemy strikes you while you lie helpless. The final blow lands…',
+            type: 'combat',
+            timestamp: Date.now(),
+          });
+        }
+
+        this.handlePlayerDeath(downed.playerId, downed.playerName, downed.roomId, killEvent.killerIds);
+      }
+    }
+  }
+
+  /**
+   * Handle actual player death (from bleed-out or killing blow).
+   * Drops inventory, creates corpse trace, applies shard-sickness on PvP death,
+   * emits PvPKillEvent, and schedules return to refuge.
+   */
+  private handlePlayerDeath(playerId: string, playerName: string, roomId: string, killerIds?: string[]): void {
     const player = this.players.get(playerId);
     if (!player) return;
 
     const room = this.roomGraph.rooms.get(roomId);
+
+    // PvP detection: any non-creature attacker means this was a PvP kill
+    const isPvPKill = (killerIds ?? []).some(id => !id.startsWith('creature-'));
 
     // Drop all inventory items to the room floor
     const droppedItems: { name: string }[] = [];
@@ -1149,6 +1200,36 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       actorId: playerId,
       actorName: playerName,
     });
+
+    // Apply shard-sickness death penalty (increment death count, record time)
+    void this.shardSicknessStore.incrementDeathCount(playerId).then((newCount: number) => {
+      void this.shardSicknessStore.setLastDeathTime(playerId, Date.now());
+      this.log(`Shard-sickness: ${"${playerId}"} death count now ${"${newCount}"}`);
+    });
+
+    // Apply shard-sickness debuff to player state on PvP death
+    if (isPvPKill) {
+      player.shardSickness = {
+        appliedAt: Date.now(),
+        durationMs: SHARD_SICKNESS_DEFAULTS.durationMs,
+        attackPenalty: SHARD_SICKNESS_DEFAULTS.attackPenalty,
+        defencePenalty: SHARD_SICKNESS_DEFAULTS.defencePenalty,
+      };
+
+      // Log PvPKillEvent for each player killer
+      for (const killerId of killerIds ?? []) {
+        if (killerId.startsWith('creature-')) continue;
+        const pvpEvent: PvPKillEvent = {
+          type: 'pvp_kill',
+          killerId,
+          victimId: playerId,
+          victimName: playerName,
+          roomId,
+          timestamp: Date.now(),
+        };
+        this.log(`PvPKillEvent: ${JSON.stringify(pvpEvent)}`);
+      }
+    }
 
     // Narrate dropped items to other players in the room
     if (droppedItems.length > 0 && room) {
@@ -1171,7 +1252,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.sendExtractionState(client, {
         playerId,
         state: 'death',
-        narration: 'The darkness claims you. You awaken in the Refuge, weakened by shard-sickness…',
+        narration: isPvPKill
+          ? 'A rival adventurer fells you. You awaken in the Refuge, wracked with shard-sickness…'
+          : 'The darkness claims you. You awaken in the Refuge, weakened by shard-sickness…',
         timestamp: Date.now(),
       });
 
