@@ -1,24 +1,81 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { useState, useEffect } from "react";
+import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Send } from "lucide-react";
+import { useAdminEntity } from "../../hooks/useAdminEntity.js";
+
+interface SkillData {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  cooldownTicks: number;
+  staminaCost: number;
+  effects: Record<string, unknown>;
+  requirements: Record<string, unknown>;
+}
 
 export default function SkillsDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const isNew = id === "new";
 
+  const { data: apiData, loading, error, saving, saveError, save } = useAdminEntity<SkillData>(
+    "skills",
+    id,
+    isNew
+  );
+
   const [formData, setFormData] = useState({
-    slug: "blade_mastery",
-    displayName: "Blade Mastery",
+    id: "",
+    name: "",
     category: "combat",
-    description: "Proficiency with bladed weapons. Increases damage and reduces stamina cost.",
-    maxLevel: 100,
-    softCapLevel: 50,
-    softCapMultiplier: 0.5,
+    description: "",
+    cooldownTicks: 0,
+    staminaCost: 0,
+    effects: {} as Record<string, unknown>,
+    requirements: {} as Record<string, unknown>,
   });
+
+  useEffect(() => {
+    if (apiData && !isNew) {
+      setFormData(apiData);
+    }
+  }, [apiData, isNew]);
 
   const updateField = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
+
+  const handleSave = async () => {
+    try {
+      await save(formData);
+      if (isNew) {
+        navigate("/admin/skills");
+      }
+    } catch (err) {
+      console.error("Failed to save:", err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+          Loading...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8B2500]" style={{ fontFamily: "var(--font-sans)" }}>
+          Error: {error}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col">
@@ -34,16 +91,26 @@ export default function SkillsDetail() {
             className="text-[#C9A84C] text-xl"
             style={{ fontFamily: "var(--font-serif)" }}
           >
-            {isNew ? "New Skill" : formData.displayName}
+            {isNew ? "New Skill" : formData.name}
           </h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {saveError && (
+            <span
+              className="px-2 py-1 bg-[#8B2500]/20 text-[#8B2500] rounded text-sm"
+              style={{ fontFamily: "var(--font-sans)" }}
+            >
+              Error: {saveError}
+            </span>
+          )}
           <button
-            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2 disabled:opacity-50"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
             <Save className="w-4 h-4" />
-            Save Draft
+            {saving ? "Saving..." : "Save Draft"}
           </button>
           <button
             className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2"
@@ -71,12 +138,12 @@ export default function SkillsDetail() {
                     className="block text-[#8A8B95] text-sm mb-2"
                     style={{ fontFamily: "var(--font-sans)" }}
                   >
-                    Slug
+                    Skill ID
                   </label>
                   <input
                     type="text"
-                    value={formData.slug}
-                    onChange={(e) => updateField("slug", e.target.value)}
+                    value={formData.id}
+                    onChange={(e) => updateField("id", e.target.value)}
                     disabled={!isNew}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none disabled:opacity-50"
                     style={{ fontFamily: "var(--font-mono)" }}
@@ -87,12 +154,12 @@ export default function SkillsDetail() {
                     className="block text-[#8A8B95] text-sm mb-2"
                     style={{ fontFamily: "var(--font-sans)" }}
                   >
-                    Display Name
+                    Name
                   </label>
                   <input
                     type="text"
-                    value={formData.displayName}
-                    onChange={(e) => updateField("displayName", e.target.value)}
+                    value={formData.name}
+                    onChange={(e) => updateField("name", e.target.value)}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
                     style={{ fontFamily: "var(--font-serif)" }}
                   />
@@ -133,18 +200,18 @@ export default function SkillsDetail() {
                     style={{ fontFamily: "var(--font-serif)" }}
                   />
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label
                       className="block text-[#8A8B95] text-sm mb-2"
                       style={{ fontFamily: "var(--font-sans)" }}
                     >
-                      Max Level
+                      Cooldown (Ticks)
                     </label>
                     <input
                       type="number"
-                      value={formData.maxLevel}
-                      onChange={(e) => updateField("maxLevel", parseInt(e.target.value))}
+                      value={formData.cooldownTicks}
+                      onChange={(e) => updateField("cooldownTicks", parseInt(e.target.value))}
                       className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
                       style={{ fontFamily: "var(--font-mono)" }}
                     />
@@ -154,28 +221,12 @@ export default function SkillsDetail() {
                       className="block text-[#8A8B95] text-sm mb-2"
                       style={{ fontFamily: "var(--font-sans)" }}
                     >
-                      Soft Cap Level
+                      Stamina Cost
                     </label>
                     <input
                       type="number"
-                      value={formData.softCapLevel}
-                      onChange={(e) => updateField("softCapLevel", parseInt(e.target.value))}
-                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                      style={{ fontFamily: "var(--font-mono)" }}
-                    />
-                  </div>
-                  <div>
-                    <label
-                      className="block text-[#8A8B95] text-sm mb-2"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      Soft Cap Multiplier
-                    </label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={formData.softCapMultiplier}
-                      onChange={(e) => updateField("softCapMultiplier", parseFloat(e.target.value))}
+                      value={formData.staminaCost}
+                      onChange={(e) => updateField("staminaCost", parseInt(e.target.value))}
                       className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
                       style={{ fontFamily: "var(--font-mono)" }}
                     />
@@ -197,14 +248,14 @@ export default function SkillsDetail() {
                 className="bg-[#1C1D27] rounded p-4 text-sm space-y-2"
                 style={{ fontFamily: "var(--font-sans)", color: "#E8E0D0" }}
               >
-                <div className="text-[#C9A84C]">{formData.displayName}</div>
+                <div className="text-[#C9A84C]">{formData.name}</div>
                 <div className="text-[#8A8B95] text-xs">{formData.category}</div>
                 <div className="border-t border-[#2A2B35] my-2"></div>
                 <div className="text-xs text-[#8A8B95]">
-                  Max Level: {formData.maxLevel}
+                  Cooldown: {formData.cooldownTicks} ticks
                 </div>
                 <div className="text-xs text-[#8A8B95]">
-                  Soft Cap: Level {formData.softCapLevel}
+                  Stamina Cost: {formData.staminaCost}
                 </div>
               </div>
             </div>

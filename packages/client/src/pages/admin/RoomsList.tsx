@@ -1,11 +1,16 @@
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
+import { useAdminEntityList } from "../../hooks/useAdminEntityList.js";
 
-const rooms = [
-  { id: "1", name: "Drowned Vestibule", roomType: "entry", biome: "Flooded Crypt", lightLevel: 0.2 },
-  { id: "2", name: "Flooded Passage", roomType: "corridor", biome: "Flooded Crypt", lightLevel: 0.1 },
-  { id: "3", name: "Drowned Cathedral", roomType: "boss", biome: "Flooded Crypt", lightLevel: 0.3 },
-];
+interface Room {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  properties: string[];
+  hazards: Array<{ type: string; severity: number }>;
+  lootContainers: Array<{ type: string; itemIds: string[] }>;
+}
 
 const roomTypeColors: Record<string, string> = {
   entry: "#2D6B4F",
@@ -17,6 +22,28 @@ const roomTypeColors: Record<string, string> = {
 };
 
 export default function RoomsList() {
+  const { data: rooms, loading, error } = useAdminEntityList<Room>("rooms");
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+          Loading rooms...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8B2500]" style={{ fontFamily: "var(--font-sans)" }}>
+          Error: {error}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
@@ -50,19 +77,19 @@ export default function RoomsList() {
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Room Type
+                Type
               </th>
               <th
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Biome
+                Description
               </th>
               <th
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Light Level
+                Hazards
               </th>
             </tr>
           </thead>
@@ -85,20 +112,22 @@ export default function RoomsList() {
                   <span
                     className="px-2 py-1 rounded text-xs"
                     style={{
-                      backgroundColor: roomTypeColors[room.roomType] + "20",
-                      color: roomTypeColors[room.roomType],
+                      backgroundColor: (roomTypeColors[room.type] ?? "#4A4B55") + "20",
+                      color: roomTypeColors[room.type] ?? "#4A4B55",
                       fontFamily: "var(--font-sans)",
                     }}
                   >
-                    {room.roomType}
+                    {room.type}
                   </span>
                 </td>
                 <td className="p-4">
                   <span
-                    className="text-[#E8E0D0] text-sm"
+                    className="text-[#8A8B95] text-sm"
                     style={{ fontFamily: "var(--font-serif)" }}
                   >
-                    {room.biome}
+                    {room.description && room.description.length > 60
+                      ? room.description.substring(0, 60) + "..."
+                      : room.description}
                   </span>
                 </td>
                 <td className="p-4">
@@ -106,7 +135,7 @@ export default function RoomsList() {
                     className="text-[#8A8B95] text-sm"
                     style={{ fontFamily: "var(--font-mono)" }}
                   >
-                    {room.lightLevel}
+                    {room.hazards.length}
                   </span>
                 </td>
               </tr>

@@ -1,13 +1,38 @@
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
+import { useAdminEntityList } from "../../hooks/useAdminEntityList.js";
 
-const factions = [
-  { id: "1", name: "The Forgebound", slug: "forgebound", philosophy: "Craft your fate", specialty: "Smithing & Gear", rankCount: 5 },
-  { id: "2", name: "The Veilwalkers", slug: "veilwalkers", philosophy: "Knowledge through shadow", specialty: "Stealth & Subterfuge", rankCount: 6 },
-  { id: "3", name: "The Ironroot", slug: "ironroot", philosophy: "Survival above all", specialty: "Resilience & Survival", rankCount: 5 },
-];
+interface Faction {
+  id: string;
+  name: string;
+  description: string;
+  milestones: Array<{ name: string; threshold: number; description: string }>;
+  events: Array<{ milestone: string; narratives: string[] }>;
+}
 
 export default function FactionsList() {
+  const { data: factions, loading, error } = useAdminEntityList<Faction>("factions");
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+          Loading factions...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8B2500]" style={{ fontFamily: "var(--font-sans)" }}>
+          Error: {error}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
@@ -41,25 +66,25 @@ export default function FactionsList() {
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Slug
+                ID
               </th>
               <th
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Philosophy
+                Description
               </th>
               <th
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Specialty
+                Milestones
               </th>
               <th
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Ranks
+                Events
               </th>
             </tr>
           </thead>
@@ -83,7 +108,7 @@ export default function FactionsList() {
                     className="text-[#8A8B95] text-sm"
                     style={{ fontFamily: "var(--font-mono)" }}
                   >
-                    {faction.slug}
+                    {faction.id}
                   </span>
                 </td>
                 <td className="p-4">
@@ -91,15 +116,7 @@ export default function FactionsList() {
                     className="text-[#8A8B95] text-sm"
                     style={{ fontFamily: "var(--font-serif)" }}
                   >
-                    {faction.philosophy}
-                  </span>
-                </td>
-                <td className="p-4">
-                  <span
-                    className="text-[#8A8B95] text-sm"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
-                    {faction.specialty}
+                    {faction.description?.slice(0, 60)}{(faction.description?.length ?? 0) > 60 ? "…" : ""}
                   </span>
                 </td>
                 <td className="p-4">
@@ -107,7 +124,15 @@ export default function FactionsList() {
                     className="text-[#E8E0D0] text-sm"
                     style={{ fontFamily: "var(--font-mono)" }}
                   >
-                    {faction.rankCount}
+                    {faction.milestones?.length ?? 0}
+                  </span>
+                </td>
+                <td className="p-4">
+                  <span
+                    className="text-[#E8E0D0] text-sm"
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  >
+                    {faction.events?.length ?? 0}
                   </span>
                 </td>
               </tr>

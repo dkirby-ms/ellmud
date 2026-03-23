@@ -1,24 +1,64 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { useState, useEffect } from "react";
+import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Send } from "lucide-react";
+import { useAdminEntity } from "../../hooks/useAdminEntity.js";
+
+interface RoomData {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  properties: string[];
+  hazards: Array<{ type: string; severity: number }>;
+  lootContainers: Array<{ type: string; itemIds: string[] }>;
+}
 
 export default function RoomsDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const isNew = id === "new";
 
+  const { data: apiData, loading, error, saving, saveError, save } = useAdminEntity<RoomData>(
+    "rooms",
+    id,
+    isNew
+  );
+
   const [formData, setFormData] = useState({
-    name: "Drowned Vestibule",
-    biome: "flooded_crypt",
-    roomType: "entry",
-    lightLevel: 0.2,
-    description: "Water drips from ancient stone arches as you enter this crumbling antechamber. The floor is covered in a thin layer of murky water that ripples with each step.",
-    exits: 2,
-    minSize: 8,
-    maxSize: 12,
+    name: "",
+    description: "",
+    type: "",
+    properties: [] as string[],
+    hazards: [] as Array<{ type: string; severity: number }>,
+    lootContainers: [] as Array<{ type: string; itemIds: string[] }>,
   });
+
+  useEffect(() => {
+    if (apiData && !isNew) {
+      setFormData({
+        name: apiData.name,
+        description: apiData.description,
+        type: apiData.type,
+        properties: apiData.properties,
+        hazards: apiData.hazards,
+        lootContainers: apiData.lootContainers,
+      });
+    }
+  }, [apiData, isNew]);
 
   const updateField = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = async () => {
+    try {
+      await save(formData);
+      if (isNew) {
+        navigate("/admin/rooms");
+      }
+    } catch (err) {
+      console.error("Failed to save:", err);
+    }
   };
 
   const roomTypeColors: Record<string, string> = {
@@ -29,6 +69,26 @@ export default function RoomsDetail() {
     junction: "#3A7D7B",
     dead_end: "#6B4E9B",
   };
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+          Loading room...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8B2500]" style={{ fontFamily: "var(--font-sans)" }}>
+          Error: {error}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col">
@@ -46,22 +106,24 @@ export default function RoomsDetail() {
           >
             {isNew ? "New Room Template" : formData.name}
           </h1>
-          {!isNew && (
+          {saveError && (
             <span
-              className="px-2 py-1 bg-[#2D6B4F] text-[#E8E0D0] text-xs rounded"
+              className="px-2 py-1 bg-[#8B2500] text-[#E8E0D0] text-xs rounded"
               style={{ fontFamily: "var(--font-sans)" }}
             >
-              ✅ Published v1
+              Error: {saveError}
             </span>
           )}
         </div>
         <div className="flex gap-2">
           <button
-            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2 disabled:opacity-50"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
             <Save className="w-4 h-4" />
-            Save Draft
+            {saving ? "Saving..." : "Save Draft"}
           </button>
           <button
             className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2"
@@ -99,45 +161,27 @@ export default function RoomsDetail() {
                     style={{ fontFamily: "var(--font-serif)" }}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      className="block text-[#8A8B95] text-sm mb-2"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      Biome
-                    </label>
-                    <select
-                      value={formData.biome}
-                      onChange={(e) => updateField("biome", e.target.value)}
-                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                      style={{ fontFamily: "var(--font-serif)" }}
-                    >
-                      <option value="flooded_crypt">Flooded Crypt</option>
-                      <option value="shattered_bastion">Shattered Bastion</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label
-                      className="block text-[#8A8B95] text-sm mb-2"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      Room Type
-                    </label>
-                    <select
-                      value={formData.roomType}
-                      onChange={(e) => updateField("roomType", e.target.value)}
-                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      <option value="entry">Entry</option>
-                      <option value="extraction">Extraction</option>
-                      <option value="boss">Boss</option>
-                      <option value="corridor">Corridor</option>
-                      <option value="junction">Junction</option>
-                      <option value="dead_end">Dead End</option>
-                    </select>
-                  </div>
+                <div>
+                  <label
+                    className="block text-[#8A8B95] text-sm mb-2"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    Room Type
+                  </label>
+                  <select
+                    value={formData.type}
+                    onChange={(e) => updateField("type", e.target.value)}
+                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
+                    style={{ fontFamily: "var(--font-serif)" }}
+                  >
+                    <option value="">Select type...</option>
+                    <option value="entry">Entry</option>
+                    <option value="extraction">Extraction</option>
+                    <option value="boss">Boss</option>
+                    <option value="corridor">Corridor</option>
+                    <option value="junction">Junction</option>
+                    <option value="dead_end">Dead End</option>
+                  </select>
                 </div>
                 <div>
                   <label
@@ -164,65 +208,26 @@ export default function RoomsDetail() {
               >
                 Room Properties
               </h2>
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label
-                    className="block text-[#8A8B95] text-sm mb-2"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
-                    Light Level
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="1"
-                    value={formData.lightLevel}
-                    onChange={(e) => updateField("lightLevel", parseFloat(e.target.value))}
-                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-mono)" }}
-                  />
-                </div>
-                <div>
-                  <label
-                    className="block text-[#8A8B95] text-sm mb-2"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
-                    Exit Count
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.exits}
-                    onChange={(e) => updateField("exits", parseInt(e.target.value))}
-                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-mono)" }}
-                  />
-                </div>
-                <div>
-                  <label
-                    className="block text-[#8A8B95] text-sm mb-2"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
-                    Size Range
-                  </label>
-                  <div className="flex gap-2 items-center">
-                    <input
-                      type="number"
-                      value={formData.minSize}
-                      onChange={(e) => updateField("minSize", parseInt(e.target.value))}
-                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none text-sm"
-                      style={{ fontFamily: "var(--font-mono)" }}
-                    />
-                    <span className="text-[#8A8B95]">–</span>
-                    <input
-                      type="number"
-                      value={formData.maxSize}
-                      onChange={(e) => updateField("maxSize", parseInt(e.target.value))}
-                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none text-sm"
-                      style={{ fontFamily: "var(--font-mono)" }}
-                    />
-                  </div>
-                </div>
+              <div>
+                <label
+                  className="block text-[#8A8B95] text-sm mb-2"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  Properties (comma-separated)
+                </label>
+                <input
+                  type="text"
+                  value={formData.properties.join(", ")}
+                  onChange={(e) =>
+                    updateField(
+                      "properties",
+                      e.target.value.split(",").map((s) => s.trim()).filter(Boolean)
+                    )
+                  }
+                  className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                  placeholder="e.g. dark, flooded, narrow"
+                />
               </div>
             </div>
           </div>
@@ -248,12 +253,12 @@ export default function RoomsDetail() {
                 <div
                   className="px-2 py-1 rounded text-xs inline-block"
                   style={{
-                    backgroundColor: roomTypeColors[formData.roomType] + "20",
-                    color: roomTypeColors[formData.roomType],
+                    backgroundColor: (roomTypeColors[formData.type] ?? "#4A4B55") + "20",
+                    color: roomTypeColors[formData.type] ?? "#4A4B55",
                     fontFamily: "var(--font-sans)",
                   }}
                 >
-                  {formData.roomType}
+                  {formData.type || "—"}
                 </div>
                 <div className="border-t border-[#2A2B35] my-2"></div>
                 <div
@@ -267,9 +272,9 @@ export default function RoomsDetail() {
                   className="text-xs text-[#8A8B95] space-y-1"
                   style={{ fontFamily: "var(--font-mono)" }}
                 >
-                  <div>Light: {formData.lightLevel}</div>
-                  <div>Exits: {formData.exits}</div>
-                  <div>Size: {formData.minSize}–{formData.maxSize}</div>
+                  <div>Properties: {formData.properties.length > 0 ? formData.properties.join(", ") : "—"}</div>
+                  <div>Hazards: {formData.hazards.length}</div>
+                  <div>Loot Containers: {formData.lootContainers.length}</div>
                 </div>
               </div>
             </div>

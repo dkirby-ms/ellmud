@@ -1,11 +1,16 @@
+import { useState } from "react";
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
+import { useAdminEntityList } from "../../hooks/useAdminEntityList.js";
 
-const skills = [
-  { id: "1", name: "Blade Mastery", slug: "blade_mastery", category: "combat", maxLevel: 100, softCap: 50 },
-  { id: "2", name: "Shield Wall", slug: "shield_wall", category: "defence", maxLevel: 100, softCap: 50 },
-  { id: "3", name: "Stealth", slug: "stealth", category: "subterfuge", maxLevel: 100, softCap: 60 },
-];
+interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  cooldownTicks: number;
+  staminaCost: number;
+}
 
 const categoryColors: Record<string, string> = {
   combat: "#8B2500",
@@ -17,6 +22,29 @@ const categoryColors: Record<string, string> = {
 };
 
 export default function SkillsList() {
+  const { data: skills, loading, error } = useAdminEntityList<Skill>("skills");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+          Loading skills...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8B2500]" style={{ fontFamily: "var(--font-sans)" }}>
+          Error: {error}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
@@ -50,25 +78,19 @@ export default function SkillsList() {
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Slug
-              </th>
-              <th
-                className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
                 Category
               </th>
               <th
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Max Level
+                Cooldown
               </th>
               <th
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Soft Cap
+                Stamina Cost
               </th>
             </tr>
           </thead>
@@ -89,14 +111,6 @@ export default function SkillsList() {
                 </td>
                 <td className="p-4">
                   <span
-                    className="text-[#8A8B95] text-sm"
-                    style={{ fontFamily: "var(--font-mono)" }}
-                  >
-                    {skill.slug}
-                  </span>
-                </td>
-                <td className="p-4">
-                  <span
                     className="px-2 py-1 rounded text-xs capitalize"
                     style={{
                       backgroundColor: categoryColors[skill.category] + "20",
@@ -112,7 +126,7 @@ export default function SkillsList() {
                     className="text-[#E8E0D0] text-sm"
                     style={{ fontFamily: "var(--font-mono)" }}
                   >
-                    {skill.maxLevel}
+                    {skill.cooldownTicks}
                   </span>
                 </td>
                 <td className="p-4">
@@ -120,7 +134,7 @@ export default function SkillsList() {
                     className="text-[#8A8B95] text-sm"
                     style={{ fontFamily: "var(--font-mono)" }}
                   >
-                    {skill.softCap}
+                    {skill.staminaCost}
                   </span>
                 </td>
               </tr>
