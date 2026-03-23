@@ -20,6 +20,9 @@ import {
   BLOOD_TRAIL_DAMAGE_THRESHOLD,
 } from '@ellmud/shared';
 
+/** Maximum traces stored per room before eviction kicks in. */
+export const MAX_TRACES_PER_ROOM = 50;
+
 let nextTraceId = 0;
 
 export interface TraceDescription {
@@ -65,6 +68,10 @@ export class TraceSystem {
 
     const roomTraces = this.traces.get(roomId);
     if (roomTraces) {
+      // Enforce per-room trace cap
+      if (roomTraces.length >= MAX_TRACES_PER_ROOM) {
+        this.evictTrace(roomTraces);
+      }
       roomTraces.push(trace);
     } else {
       this.traces.set(roomId, [trace]);
@@ -124,6 +131,36 @@ export class TraceSystem {
   }
 
   // ─── Internal ──────────────────────────────────────────────────────────
+
+  /** Evict one trace to make room. Prefers oldest expired, then oldest active. */
+  private evictTrace(roomTraces: Trace[]): void {
+    const now = Date.now();
+
+    // First try to evict the oldest expired trace
+    let oldestExpiredIdx = -1;
+    let oldestExpiredTime = Infinity;
+    for (let i = 0; i < roomTraces.length; i++) {
+      const t = roomTraces[i]!;
+      if (!this.isAlive(t, now) && t.createdAt < oldestExpiredTime) {
+        oldestExpiredIdx = i;
+        oldestExpiredTime = t.createdAt;
+      }
+    }
+
+    if (oldestExpiredIdx >= 0) {
+      roomTraces.splice(oldestExpiredIdx, 1);
+      return;
+    }
+
+    // No expired traces — evict the oldest active trace
+    let oldestIdx = 0;
+    for (let i = 1; i < roomTraces.length; i++) {
+      if (roomTraces[i]!.createdAt < roomTraces[oldestIdx]!.createdAt) {
+        oldestIdx = i;
+      }
+    }
+    roomTraces.splice(oldestIdx, 1);
+  }
 
   private isAlive(trace: Trace, now: number): boolean {
     if (trace.ttl === Infinity) return true;

@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { TraceSystem, resetTraceIdCounter, type PlayerSkills } from '../systems/TraceSystem.js';
+import { TraceSystem, resetTraceIdCounter, MAX_TRACES_PER_ROOM, type PlayerSkills } from '../systems/TraceSystem.js';
 import {
   type TraceType,
   TRACE_TTLS,
@@ -379,6 +379,67 @@ describe('TraceSystem', () => {
       system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' }, 'east');
       system.addTrace(ROOM_A, 'footprint', { actorId: 'p2' }, 'west');
       expect(system.getTracesInRoom(ROOM_A)).toHaveLength(2);
+    });
+  });
+
+  // ─── Per-Room Trace Cap ─────────────────────────────────────────────────
+
+  describe('per-room trace cap', () => {
+    it('should enforce MAX_TRACES_PER_ROOM limit', () => {
+      for (let i = 0; i < MAX_TRACES_PER_ROOM + 10; i++) {
+        system.addTrace(ROOM_A, 'footprint', { actorId: `p${i}` });
+      }
+      expect(system.getTracesInRoom(ROOM_A).length).toBeLessThanOrEqual(MAX_TRACES_PER_ROOM);
+    });
+
+    it('should evict oldest expired trace first when at cap', () => {
+      // Fill the room to capacity
+      for (let i = 0; i < MAX_TRACES_PER_ROOM; i++) {
+        system.addTrace(ROOM_A, 'footprint', { actorId: `p${i}` });
+      }
+
+      // Expire the first trace by advancing time past footprint TTL
+      vi.advanceTimersByTime(301_000);
+
+      // Adding a new trace should evict the expired one, not a live one
+      const newTrace = system.addTrace(ROOM_A, 'corpse', { actorId: 'c1' });
+      expect(newTrace).not.toBeNull();
+
+      const traces = system.getTracesInRoom(ROOM_A);
+      // Only 1 alive: the new corpse (all footprints expired)
+      expect(traces.length).toBe(1);
+      expect(traces[0].type).toBe('corpse');
+    });
+
+    it('should evict oldest active trace when no expired traces exist', () => {
+      // Fill with permanent corpses — none will expire
+      for (let i = 0; i < MAX_TRACES_PER_ROOM; i++) {
+        system.addTrace(ROOM_A, 'corpse', { actorId: `c${i}` });
+      }
+
+      // The first trace added should be evicted
+      const firstTraceId = 'trace-0';
+      const newTrace = system.addTrace(ROOM_A, 'corpse', { actorId: 'new' });
+      expect(newTrace).not.toBeNull();
+
+      const traces = system.getTracesInRoom(ROOM_A);
+      expect(traces).toHaveLength(MAX_TRACES_PER_ROOM);
+      expect(traces.find(t => t.id === firstTraceId)).toBeUndefined();
+      expect(traces[traces.length - 1].metadata.actorId).toBe('new');
+    });
+
+    it('should not affect traces in other rooms', () => {
+      for (let i = 0; i < MAX_TRACES_PER_ROOM + 5; i++) {
+        system.addTrace(ROOM_A, 'footprint', { actorId: `p${i}` });
+      }
+      system.addTrace(ROOM_B, 'footprint', { actorId: 'solo' });
+
+      expect(system.getTracesInRoom(ROOM_A).length).toBeLessThanOrEqual(MAX_TRACES_PER_ROOM);
+      expect(system.getTracesInRoom(ROOM_B)).toHaveLength(1);
+    });
+
+    it('MAX_TRACES_PER_ROOM should be 50', () => {
+      expect(MAX_TRACES_PER_ROOM).toBe(50);
     });
   });
 });

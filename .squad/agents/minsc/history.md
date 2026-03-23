@@ -561,3 +561,12 @@ The original "Inventory Drop on Player Death" unit tests manually iterated playe
 With `useTestGraph: true`, creatures are not spawned automatically (spawn code only runs for procedural graphs). To test combat-dependent flows like player death, register both the creature and player combatant directly via `roomInstance.combatSystem.registerCombatant()` and `initiateCombat()`. This is more reliable than sending `attack creature` commands that may silently no-op.
 
 **Commit:** `8901e90` on `fix/player-death-handler` branch.
+
+**Wave 2 anticipatory tests define behavioral contracts before implementation.**
+Created 208 test cases (53 passing, 155 todo) across 3 files for Sound Propagation (#22), Trace System (#23), and Player Awareness & Stealth (#25). Pure formula tests (audibility attenuation, TTL expiry, detection tiers) pass now as contract verification. `describe.skip`/`it.todo` blocks scaffold integration tests that will activate when implementation types land. Cross-system interaction tests (sound×stealth, traces×awareness, stealth×traces) ensure the three parallel implementations stay compatible. PR #115 on branch `test/wave2-anticipatory-tests`.
+
+**Anticipatory test pattern: embed concrete expected values, not just structure.**
+The sound tests encode `effectiveNoise(COMBAT, 3) === 0` and the awareness tests encode the full 0–10 detection tier sweep. When implementers build these systems, any deviation from acceptance criteria will immediately surface as a failing test — no ambiguity about what the formula should produce. This is more valuable than empty `it.todo` shells.
+
+**Cross-system test sections prevent integration gaps.**
+Each test file includes sections marked with × notation (e.g., `#23 × #25`) that test interactions between the three systems. These are all `describe.skip` since they need multiple systems wired together, but they document the expected behavior at system boundaries — the places bugs are most likely to hide.
