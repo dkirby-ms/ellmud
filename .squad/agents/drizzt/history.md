@@ -773,3 +773,20 @@ PHASE 4 (Polish):
 | Authorization model unclear | Define admin role strategy before #139 merge |
 | SSE scope creep | Clarify requirements in #137 before starting #138 |
 | Database performance (1000+ items) | Add pagination + indexes in #139; note in AC |
+
+### 2026-03-24: PR #141 — Content CRUD API (Issue #139)
+
+**Status:** ✅ PR Created → dev
+
+**What:** Full REST CRUD API for 9 content entity types: items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narrative. This is the P1 foundational blocker for all Phase 2.5 admin work.
+
+**Architecture decisions:**
+1. **ContentStore** — Generic in-memory Map store with async interface, following the repository pattern (PlayerRepository, StashRepository). Uses `structuredClone` for isolation. Swappable to PG when ready.
+2. **Content namespace** — Routes at `/admin/api/content/{entity}` to avoid collision with existing live-data admin routes (`/admin/api/rooms`, `/admin/api/creatures`). Existing endpoints untouched.
+3. **Pre-seeded from registries** — Items (18), creatures (1 template), biomes (5), modifiers (5), factions (3) populated from existing game data at startup. Skills, loot-tables, rooms, narrative start empty.
+4. **Auto-generated UUIDs** — POST without `id` field gets `crypto.randomUUID()`.
+5. **Validation** — Required field checks per entity type (name required for all, type-specific checks). Intentionally permissive for Phase 1 admin flexibility.
+
+**Files:** 6 new files in `admin/content/`, 3 modified (admin/index.ts, server index.ts, test file).
+**Tests:** 73 CRUD tests passing. 1485 total tests green, zero regressions.
+**Pre-existing issue:** Build error in `narrative/templates.ts` (ambient_narration key) — not related to this work.
