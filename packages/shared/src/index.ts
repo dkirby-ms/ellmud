@@ -24,7 +24,8 @@ export type NarrationType =
   | 'speech'     // Player/NPC speech, proximity chat
   | 'sound'      // Sound propagation cues
   | 'trace'      // Footprints, blood trails, environmental traces
-  | 'awareness'; // Stealth detection, player presence cues
+  | 'awareness'  // Stealth detection, player presence cues
+  | 'ambient';   // Ambient world events (weather, NPCs, faction)
 
 /** Server → Client: Narrated prose output. */
 export interface NarrateMessage {
@@ -401,14 +402,89 @@ export const BLOOD_TRAIL_DAMAGE_THRESHOLD = 5;
 /** Stealth modifier above this suppresses footprint traces entirely. */
 export const STEALTH_FOOTPRINT_THRESHOLD = 80;
 
+// ─── Ambient World Types (GDD §2.1) ──────────────────────────────────────────
+
+export type {
+  WeatherState,
+  TimeOfDay,
+  WeatherSnapshot,
+  NPCRole,
+  NPCDefinition,
+  NPCState,
+  FactionId,
+  FactionMilestone,
+  FactionEventDef,
+  WanderingMerchantDef,
+  WanderingMerchantItem,
+  WanderingMerchantState,
+  AmbientEventType,
+  AmbientEvent,
+} from './ambient-types.js';
+
+export {
+  WEATHER_TRANSITIONS,
+  TIME_CYCLE,
+  WEATHER_CHECK_INTERVAL,
+  TIME_PERIOD_TICKS,
+} from './ambient-types.js';
+
 // ─── Extraction Types (GDD §3 step 6) ────────────────────────────────────────
 
 /** Server → Client: Extraction channel state update. */
 export interface ExtractionMessage {
   playerId: string;
-  state: 'started' | 'progress' | 'completed' | 'interrupted' | 'death';
+  state: 'started' | 'progress' | 'completed' | 'interrupted' | 'death' | 'downed' | 'stabilized' | 'bleed_out';
   ticksRemaining?: number;
   totalTicks?: number;
   narration: string;
   timestamp: number;
+}
+
+// ─── PvP Combat Types ──────────────────────────────────────────────────────────
+
+/** Shard-sickness debuff applied on PvP death. Full bleed-out timer in Issue #27. */
+export interface ShardSickness {
+  /** Unique debuff instance ID. */
+  id: string;
+  /** Timestamp (ms) when the debuff was applied. */
+  appliedAt: number;
+  /** Duration in seconds. */
+  durationSeconds: number;
+  /** Stat penalty multiplier (0–1, lower = more penalty). Applied to attack/defence. */
+  statPenalty: number;
+  /** Source of the sickness — 'pvp_death' or 'shard_collapse'. */
+  source: 'pvp_death' | 'shard_collapse';
+}
+
+/** Default shard-sickness parameters for PvP death. */
+export const SHARD_SICKNESS_DEFAULTS = {
+  durationSeconds: 300,  // 5 minutes
+  statPenalty: 0.5,      // 50% stat reduction
+} as const;
+
+/** Metadata attached to a PvP kill event for tracking/narration. */
+export interface PvPKillEvent {
+  killerId: string;
+  killerName: string;
+  victimId: string;
+  victimName: string;
+  roomId: string;
+  timestamp: number;
+  /** Items dropped by victim (non-soulbound). */
+  droppedItemCount: number;
+}
+
+// ─── Downing & Shard-Sickness Types (GDD §6.4) ──────────────────────────────
+
+/** Player status in the downing lifecycle. */
+export type PlayerVitalStatus = 'alive' | 'downed' | 'stabilized' | 'dead';
+
+/** Shard-sickness debuff summary sent to the client. */
+export interface ShardSicknessInfo {
+  /** Number of recent deaths contributing to sickness. */
+  deathCount: number;
+  /** Stat penalty as percentage (0–50). */
+  penaltyPercent: number;
+  /** Whether shard-sickness is currently active. */
+  active: boolean;
 }
