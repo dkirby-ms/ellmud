@@ -39,6 +39,7 @@ export default function LootTablesDetail() {
   });
 
   const [lootEntries, setLootEntries] = useState<LootTableEntry[]>([]);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (apiData && !isNew) {
@@ -53,7 +54,24 @@ export default function LootTablesDetail() {
     }
   }, [apiData, isNew]);
 
+  const validateForm = (): string | null => {
+    if (!formData.name.trim()) {
+      return "Name is required";
+    }
+    if (!formData.id.trim()) {
+      return "ID is required";
+    }
+    return null;
+  };
+
   const handleSave = async () => {
+    const error = validateForm();
+    if (error) {
+      setValidationError(error);
+      return;
+    }
+    
+    setValidationError(null);
     try {
       await save({
         ...formData,
@@ -102,6 +120,8 @@ export default function LootTablesDetail() {
     return ((weight / totalWeight) * 100).toFixed(2);
   };
 
+  const isValid = validateForm() === null;
+
   if (loading) {
     return (
       <div className="p-8">
@@ -139,19 +159,19 @@ export default function LootTablesDetail() {
           >
             {isNew ? "New Loot Table" : formData.name}
           </h1>
-          {saveError && (
+          {(saveError || validationError) && (
             <span
               className="px-2 py-1 bg-[#8B2500] text-[#E8E0D0] text-xs rounded"
               style={{ fontFamily: "var(--font-sans)" }}
             >
-              Error: {saveError}
+              Error: {saveError || validationError}
             </span>
           )}
         </div>
         <div className="flex gap-2">
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || !isValid}
             className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2 disabled:opacity-50"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
@@ -437,15 +457,27 @@ export default function LootTablesDetail() {
             </div>
 
             {/* Validation */}
-            <div className="bg-[#2D6B4F] border border-[#256B4A] rounded-lg p-4">
-              <p
-                className="text-[#E8E0D0] text-sm flex items-center gap-2"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
-                <span>✅</span>
-                <span>All fields valid</span>
-              </p>
-            </div>
+            {isValid ? (
+              <div className="bg-[#2D6B4F] border border-[#256B4A] rounded-lg p-4">
+                <p
+                  className="text-[#E8E0D0] text-sm flex items-center gap-2"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  <span>✅</span>
+                  <span>All fields valid</span>
+                </p>
+              </div>
+            ) : (
+              <div className="bg-[#8B2500]/20 border border-[#8B2500] rounded-lg p-4">
+                <p
+                  className="text-[#E8E0D0] text-sm flex items-center gap-2"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  <span>⚠️</span>
+                  <span>{validateForm()}</span>
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -36,19 +36,63 @@ export default function SkillsDetail() {
     requirements: {} as Record<string, unknown>,
   });
 
+  const [effectsJson, setEffectsJson] = useState("");
+  const [requirementsJson, setRequirementsJson] = useState("");
+  const [validationError, setValidationError] = useState<string | null>(null);
+
   useEffect(() => {
     if (apiData && !isNew) {
       setFormData(apiData);
+      setEffectsJson(JSON.stringify(apiData.effects || {}, null, 2));
+      setRequirementsJson(JSON.stringify(apiData.requirements || {}, null, 2));
     }
   }, [apiData, isNew]);
+
+  const validateForm = (): string | null => {
+    if (!formData.name.trim()) {
+      return "Name is required";
+    }
+    if (!formData.id.trim()) {
+      return "ID is required";
+    }
+    
+    // Validate JSON fields
+    try {
+      if (effectsJson.trim()) JSON.parse(effectsJson);
+    } catch {
+      return "Effects must be valid JSON";
+    }
+    
+    try {
+      if (requirementsJson.trim()) JSON.parse(requirementsJson);
+    } catch {
+      return "Requirements must be valid JSON";
+    }
+    
+    return null;
+  };
 
   const updateField = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSave = async () => {
+    const error = validateForm();
+    if (error) {
+      setValidationError(error);
+      return;
+    }
+    
+    setValidationError(null);
+    
     try {
-      await save(formData);
+      // Parse JSON fields before saving
+      const dataToSave = {
+        ...formData,
+        effects: effectsJson.trim() ? JSON.parse(effectsJson) : {},
+        requirements: requirementsJson.trim() ? JSON.parse(requirementsJson) : {},
+      };
+      await save(dataToSave);
       if (isNew) {
         navigate("/admin/skills");
       }
@@ -56,6 +100,8 @@ export default function SkillsDetail() {
       console.error("Failed to save:", err);
     }
   };
+
+  const isValid = validateForm() === null;
 
   if (loading) {
     return (
@@ -95,17 +141,17 @@ export default function SkillsDetail() {
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          {saveError && (
+          {(saveError || validationError) && (
             <span
               className="px-2 py-1 bg-[#8B2500]/20 text-[#8B2500] rounded text-sm"
               style={{ fontFamily: "var(--font-sans)" }}
             >
-              Error: {saveError}
+              Error: {saveError || validationError}
             </span>
           )}
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || !isValid}
             className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2 disabled:opacity-50"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
@@ -234,6 +280,49 @@ export default function SkillsDetail() {
                 </div>
               </div>
             </div>
+
+            <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
+              <h2
+                className="text-[#C9A84C] text-lg mb-4"
+                style={{ fontFamily: "var(--font-serif)" }}
+              >
+                Effects & Requirements
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label
+                    className="block text-[#8A8B95] text-sm mb-2"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    Effects (JSON)
+                  </label>
+                  <textarea
+                    value={effectsJson}
+                    onChange={(e) => setEffectsJson(e.target.value)}
+                    rows={4}
+                    placeholder='{"damage": 10, "type": "physical"}'
+                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
+                    style={{ fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}
+                  />
+                </div>
+                <div>
+                  <label
+                    className="block text-[#8A8B95] text-sm mb-2"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    Requirements (JSON)
+                  </label>
+                  <textarea
+                    value={requirementsJson}
+                    onChange={(e) => setRequirementsJson(e.target.value)}
+                    rows={4}
+                    placeholder='{"level": 5, "skill": "combat"}'
+                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
+                    style={{ fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="space-y-6">
@@ -260,15 +349,27 @@ export default function SkillsDetail() {
               </div>
             </div>
 
-            <div className="bg-[#2D6B4F] border border-[#256B4A] rounded-lg p-4">
-              <p
-                className="text-[#E8E0D0] text-sm flex items-center gap-2"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
-                <span>✅</span>
-                <span>All fields valid</span>
-              </p>
-            </div>
+            {isValid ? (
+              <div className="bg-[#2D6B4F] border border-[#256B4A] rounded-lg p-4">
+                <p
+                  className="text-[#E8E0D0] text-sm flex items-center gap-2"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  <span>✅</span>
+                  <span>All fields valid</span>
+                </p>
+              </div>
+            ) : (
+              <div className="bg-[#8B2500]/20 border border-[#8B2500] rounded-lg p-4">
+                <p
+                  className="text-[#E8E0D0] text-sm flex items-center gap-2"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  <span>⚠️</span>
+                  <span>{validateForm()}</span>
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
