@@ -55,6 +55,12 @@ export default function BiomesDetail() {
   }
 
   async function handleSave() {
+    // Prevent saving invalid data
+    if (!formData.name || !formData.description) {
+      setError("Name and description are required");
+      return;
+    }
+
     try {
       setSaving(true);
       setError(null);
@@ -73,6 +79,12 @@ export default function BiomesDetail() {
   }
 
   async function handleSubmit() {
+    // Prevent submitting invalid data
+    if (!formData.name || !formData.description) {
+      setError("Name and description are required");
+      return;
+    }
+
     // For now, just save - in future could trigger review workflow
     await handleSave();
   }
