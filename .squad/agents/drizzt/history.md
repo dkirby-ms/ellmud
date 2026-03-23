@@ -814,7 +814,27 @@ Two critical directives require changes to PR #141:
 - Cross-reference: Minsc tests (27 pass, 46 await routes), auth audit complete
 
 ### Next Steps
-1. Migrate `ContentStore` to `ContentRepository` with PostgreSQL backend
+1. ~~Migrate `ContentStore` to `ContentRepository` with PostgreSQL backend~~ ✅ Done (PR #141 updated)
 2. Integrate OAuth middleware for admin endpoint protection
 3. Coordinate with Minsc: OAuth implementation may require new auth test patterns
-4. Update PR #141 description to note PostgreSQL + OAuth requirements
+4. ~~Update PR #141 description to note PostgreSQL + OAuth requirements~~ ✅ Done
+
+## Learnings
+
+### PostgreSQL Content Store (PR #141 revision — 2026-03-24)
+
+**Architecture decisions:**
+- Single `content_definitions` table with JSONB `data` column — avoids 9 separate tables, allows schema flexibility without migration churn
+- Composite TEXT PK `(entity_type, id)` — content IDs are admin slugs, not UUIDs. Updated schema validation test to allow this exception.
+- `IContentStore<T>` interface extracted from concrete `ContentStore` class. Both `ContentStore` (in-memory) and `PgContentStore` implement it.
+- Routes accept `IContentStore` — storage backend invisible to API layer
+- `initializeContentStores(usePg: boolean)` factory pattern follows existing `DATABASE_URL` toggle
+
+**Key files:**
+- `packages/server/src/db/migrations/007_create_content_definitions.sql` — table schema
+- `packages/server/src/db/migrations/008_seed_content_definitions.sql` — 32 seed entities
+- `packages/server/src/admin/content/PgContentStore.ts` — PostgreSQL implementation
+- `packages/server/src/admin/content/ContentStore.ts` — IContentStore interface + in-memory impl
+- `packages/server/src/admin/content/init.ts` — PG/in-memory factory
+
+**User preference:** No statically defined assets in production. Static registries can remain for backward compat but are NOT the source of truth when DATABASE_URL is set.
