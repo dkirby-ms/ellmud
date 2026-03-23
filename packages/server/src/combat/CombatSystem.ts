@@ -229,6 +229,7 @@ export class CombatSystem {
 
     // 3. Calculate all damage simultaneously (from start-of-tick state)
     const damageAccumulator = new Map<string, number>(); // targetId → total damage
+    const damageContributors = new Map<string, Set<string>>(); // targetId → attackerIds
     const strikeEvents: CombatEvent[] = [];
 
     for (const c of combatants) {
@@ -247,6 +248,10 @@ export class CombatSystem {
 
       const accumulated = (damageAccumulator.get(targetId) ?? 0) + dmg.finalDamage;
       damageAccumulator.set(targetId, accumulated);
+
+      // Track who contributed damage (for kill attribution)
+      if (!damageContributors.has(targetId)) damageContributors.set(targetId, new Set());
+      damageContributors.get(targetId)!.add(c.id);
 
       // We'll compute newHp after all damage is accumulated
       strikeEvents.push({
@@ -319,10 +324,15 @@ export class CombatSystem {
       }
     }
 
-    // 7. Handle defeated combatants
+    // 7. Handle defeated combatants -- attach killer attribution
     for (const c of combatants) {
       if (c.hp <= 0) {
-        events.push(resolveDefeated(c));
+        const defeatedEvent = resolveDefeated(c);
+        const contributors = damageContributors.get(c.id);
+        if (contributors) {
+          defeatedEvent.killerIds = [...contributors];
+        }
+        events.push(defeatedEvent);
         encounter.combatantIds.delete(c.id);
         this.combatantEncounter.delete(c.id);
         this.queuedActions.delete(c.id);

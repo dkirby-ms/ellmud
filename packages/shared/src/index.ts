@@ -412,3 +412,22 @@ export interface ExtractionMessage {
   narration: string;
   timestamp: number;
 }
+
+// ─── PvP Combat Types (GDD §5) ───────────────────────────────────────────────
+
+/** Default shard-sickness debuff applied after PvP kills. */
+export const SHARD_SICKNESS_DEFAULTS = {
+  durationMs: 120_000,
+  attackPenalty: -5,
+  defencePenalty: -3,
+  description: 'A sickness seeps through you after taking a life in the shard.',
+} as const;
+
+/** Event emitted when a player is killed by another player. */
+export interface PvPKillEvent {
+  victimId: string;
+  victimName: string;
+  killerIds: string[];
+  roomId: string;
+  timestamp: number;
+}

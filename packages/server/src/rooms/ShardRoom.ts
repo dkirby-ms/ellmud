@@ -38,6 +38,7 @@ import { StashService, InMemoryStashRepository, getStashRepository, getItemDefs 
 import type { StashRepository } from '../stash/index.js';
 import { transferInventoryToStash } from '../extraction/stash-transfer.js';
 import { CreatureManager, DROWNED_REVENANT, type CreatureAction } from '../creatures/index.js';
+import { getItemDefinition } from '../items/registry.js';
 import type { CreatureWorldState } from '../creatures/behavior.js';
 import { createPRNG } from '../shard/prng.js';
 
@@ -1049,10 +1050,16 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       const roomId = player.currentRoomId;
       const room = this.roomGraph.rooms.get(roomId);
 
-      // Drop all inventory items to the room floor
+      // PvP detection: check if any killer is a player (non-creature)
+      const killerIds = event.killerIds ?? [];
+      const isPvPKill = killerIds.some(id => !id.startsWith('creature-'));
+
+      // Drop non-soulbound inventory items to the room floor
       const droppedItems: { name: string }[] = [];
       if (room) {
         for (const [, entry] of player.inventory) {
+          const def = getItemDefinition(entry.item.id);
+          if (def?.soulbound) continue; // Soulbound items are not dropped
           for (let i = 0; i < entry.quantity; i++) {
             room.items.push(entry.item);
             droppedItems.push(entry.item);
@@ -1078,6 +1085,24 @@ export class ShardRoom extends Room<ShardRoomOptions> {
               type: 'room',
               timestamp: Date.now(),
             });
+          }
+        }
+      }
+
+      // PvP-specific: no XP awarded, announce to room
+      if (isPvPKill) {
+        this.log(`PvP kill: ${event.actorName} slain by players [${killerIds.join(', ')}] — no XP awarded`);
+        if (room) {
+          for (const [sid, ps] of this.players) {
+            if (sid === playerId || ps.currentRoomId !== roomId) continue;
+            const otherClient = this.findClient(sid);
+            if (otherClient) {
+              this.sendNarrate(otherClient, {
+                text: `${event.actorName} has been slain by another player.`,
+                type: 'room',
+                timestamp: Date.now(),
+              });
+            }
           }
         }
       }
