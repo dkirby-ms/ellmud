@@ -23,6 +23,7 @@ import { handleLook } from '../commands/handlers/look.js';
 import { CombatSystem, type TickResult, createCombatant } from '../combat/index.js';
 import { SoundSystem } from '../sound/index.js';
 import { TraceSystem } from '../systems/index.js';
+import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
 import {
   NOISE_VALUES,
   SOUND_DESCRIPTIONS,
@@ -66,6 +67,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private combatSystem!: CombatSystem;
   private soundSystem!: SoundSystem;
   private traceSystem!: TraceSystem;
+  private awarenessSystem!: AwarenessSystem;
   private extractionSystem!: ExtractionSystem;
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
@@ -142,6 +144,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Initialize trace system (GDD §11.2)
     this.traceSystem = new TraceSystem();
+
+    // Initialize awareness/stealth detection system (GDD §8.1)
+    this.awarenessSystem = new AwarenessSystem();
 
     // Initialize extraction system (default 5-tick channel)
     this.extractionSystem = new ExtractionSystem();
@@ -526,6 +531,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         actorId: client.sessionId,
         actorName: client.sessionId,
       }, direction);
+
+      // Awareness: notify observers in destination room about entering player
+      this.runAwarenessChecks(client.sessionId, player.currentRoomId, 'arrival');
+      // Awareness: notify observers in source room about departing player
+      this.runAwarenessChecks(client.sessionId, previousRoomId, 'departure');
     }
 
     // Social commands (say, emote) broadcast to all players in the same room
@@ -1105,6 +1115,55 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
       // Remove from combat system immediately
       this.combatSystem.removeCombatant(playerId);
+    }
+  }
+
+  /**
+   * Run awareness checks for a player entering/leaving a room.
+   * Notifies each observer in the room with a detection-tier-appropriate message.
+   */
+  private runAwarenessChecks(
+    playerId: string,
+    roomId: string,
+    direction: 'arrival' | 'departure',
+  ): void {
+    const enteringPlayerState = this.players.get(playerId);
+    if (!enteringPlayerState) return;
+
+    // Build AwarenessPlayer for the entering player
+    const enteringPlayer: AwarenessPlayer = {
+      sessionId: playerId,
+      skills: { stealth: 0, awareness: 0 },
+      equipment: undefined,
+    };
+
+    // Build observers list from other players in the room
+    const observers: AwarenessPlayer[] = [];
+    for (const [sid, ps] of this.players) {
+      if (sid === playerId) continue;
+      if (ps.currentRoomId !== roomId) continue;
+      observers.push({
+        sessionId: sid,
+        skills: { stealth: 0, awareness: 0 },
+        equipment: undefined,
+      });
+    }
+
+    if (observers.length === 0) return;
+
+    const events = this.awarenessSystem.checkRoomEntry(enteringPlayer, observers, direction);
+
+    for (const event of events) {
+      if (event.tier === 'none' || !event.message) continue;
+
+      const observerClient = this.clients.find(c => c.sessionId === event.observerId);
+      if (observerClient) {
+        this.sendNarrate(observerClient, {
+          text: event.message,
+          type: 'awareness',
+          timestamp: Date.now(),
+        });
+      }
     }
   }
 
