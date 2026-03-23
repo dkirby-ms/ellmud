@@ -17,6 +17,8 @@ export type Direction = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
 
 export type RoomType = 'entry' | 'extraction' | 'boss' | 'corridor' | 'junction' | 'dead_end';
 
+export type RoomProperty = 'heavy_door' | 'cavern' | 'water';
+
 export interface Room {
   id: string;
   name: string;
@@ -24,6 +26,7 @@ export interface Room {
   type?: RoomType;
   exits: Map<Direction, string>;
   items: Item[];
+  properties?: RoomProperty[];
 }
 
 export interface RoomGraph {

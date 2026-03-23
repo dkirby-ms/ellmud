@@ -59,9 +59,12 @@ export class SoundSystem {
 
     const results: PropagationResult[] = [];
 
-    // BFS: track best noise arriving at each room
+    // BFS: track best noise and distance arriving at each room
     const visited = new Map<string, number>();
     visited.set(sourceRoomId, noiseLevel);
+
+    const distances = new Map<string, number>();
+    distances.set(sourceRoomId, 0);
 
     // Queue: [roomId, noiseAtRoom, distance]
     const queue: Array<[string, number, number]> = [[sourceRoomId, noiseLevel, 0]];
@@ -106,6 +109,7 @@ export class SoundSystem {
 
         visited.set(adjacentRoomId, arrivedNoise);
         const newDistance = distance + 1;
+        distances.set(adjacentRoomId, newDistance);
 
         // Track parent for direction calculation (update on better path)
         if (!parent.has(adjacentRoomId) || previousBest === undefined || previousBest < arrivedNoise) {
@@ -128,12 +132,11 @@ export class SoundSystem {
       const direction = this.findDirectionToRoom(room, parentRoomId);
 
       if (direction) {
-        const distance = this.computeDistance(sourceRoomId, roomId);
         results.push({
           roomId,
           effectiveNoise: Math.round(noise * 10) / 10,
           direction,
-          distance,
+          distance: distances.get(roomId) ?? Infinity,
         });
       }
     }
@@ -152,29 +155,4 @@ export class SoundSystem {
     return undefined;
   }
 
-  /**
-   * BFS distance between two rooms (unweighted hop count).
-   */
-  private computeDistance(fromRoomId: string, toRoomId: string): number {
-    if (fromRoomId === toRoomId) return 0;
-
-    const visited = new Set<string>([fromRoomId]);
-    const queue: Array<[string, number]> = [[fromRoomId, 0]];
-
-    while (queue.length > 0) {
-      const [currentId, dist] = queue.shift()!;
-      const room = this.resolveRoom(currentId);
-      if (!room) continue;
-
-      for (const adjId of room.exits.values()) {
-        if (adjId === toRoomId) return dist + 1;
-        if (!visited.has(adjId)) {
-          visited.add(adjId);
-          queue.push([adjId, dist + 1]);
-        }
-      }
-    }
-
-    return Infinity;
-  }
 }

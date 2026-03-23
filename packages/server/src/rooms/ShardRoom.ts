@@ -133,7 +133,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     this.soundSystem = new SoundSystem((roomId: string) => {
       const room = this.roomGraph.rooms.get(roomId);
       if (!room) return undefined;
-      return { id: room.id, exits: room.exits };
+      return { id: room.id, exits: room.exits, properties: room.properties };
     });
 
     // Initialize extraction system (default 5-tick channel)
