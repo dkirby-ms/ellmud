@@ -838,3 +838,83 @@ Two critical directives require changes to PR #141:
 - `packages/server/src/admin/content/init.ts` — PG/in-memory factory
 
 **User preference:** No statically defined assets in production. Static registries can remain for backward compat but are NOT the source of truth when DATABASE_URL is set.
+
+---
+
+## Creatures Admin Wiring (#128) — 2026-03-24
+
+**Task:** Wire CreaturesList & CreaturesDetail pages to Content CRUD API  
+**Branch:** `squad/128-wire-creatures-admin`  
+**Status:** ✅ Complete  
+**PR:** #143 (open, awaiting review)
+
+### What Was Done
+
+1. **Created `admin-api.ts`** (`packages/client/src/lib/admin-api.ts`)
+   - Centralized API client for Content CRUD endpoints
+   - Uses `localStorage.getItem('admin_token')` for Authorization Bearer header
+   - Generic fetch wrapper with error handling (AdminAPIError class)
+   - Added 5 creature endpoints: listCreatures, getCreature, createCreature, updateCreature, deleteCreature
+   - Follows pattern from existing items endpoints
+
+2. **Wired CreaturesList.tsx**
+   - Replaced mock data with `listCreatures()` call in useEffect
+   - Added loading/error states with retry button
+   - Updated interface: `hp` → `maxHp`, `biomes` → `biomeAffinity` (optional)
+   - Wrapped UI sections in `{!loading && (...)}` conditionals
+   - Status defaults to "draft" if missing
+
+3. **Wired CreaturesDetail.tsx**
+   - Added useEffect to fetch creature when editing (not new)
+   - Created CreatureFormData interface matching API schema + status field
+   - Added `validateForm()` with field-level validation (required fields, positive values)
+   - Added `handleSave(submitForReview: boolean)` calling create/update API
+   - Wired buttons to handleSave with disabled state during save
+   - Added error banner and validation errors UI
+   - Added loading spinner for edit mode
+   - Stubbed Re-roll Simulation button with TODO comment
+
+### Type Safety
+
+All changes verified with `npx tsc --noEmit` (zero errors).
+
+### Learnings
+
+**Admin Token Storage Pattern:**
+- Client uses `localStorage` key `admin_token` (set manually in dev/staging)
+- Server expects `Authorization: Bearer <token>` header
+- adminAuth middleware validates against `ADMIN_TOKEN` env var
+- No admin login flow yet (Phase 2.5 scope: functionality over UX)
+
+**API Endpoint Path:**
+- Content CRUD lives at `/admin/api/content/{entity-type}`
+- NOT `/admin/api/{entity-type}` (that's for live room data)
+- Routes defined in `packages/server/src/admin/content/content-routes.ts`
+
+**Form Validation Strategy:**
+- Client-side validation before save (UX feedback)
+- Server-side validation in ContentStore (authoritative)
+- Display validation errors from server response in UI
+- Required fields: type, name, positive HP/stats
+
+**Status Field:**
+- Optional on creature entity (defaults to "draft")
+- Submit Review button sets status to "review"
+- Save Draft button preserves current status
+- Status badge updates conditionally in UI
+
+**Pagination:**
+- Works with real data set size (client-side filtering)
+- No server-side pagination yet (Phase 2.5 out of scope)
+- Total count shown: filtered vs. total
+
+### Files Changed
+- `packages/client/src/lib/admin-api.ts` (new)
+- `packages/client/src/pages/admin/CreaturesList.tsx` (wired to API)
+- `packages/client/src/pages/admin/CreatureDetail.tsx` (wired to API)
+
+### Next Steps
+- Manual test with admin token in localStorage
+- Test create/edit/save flows
+- Verify error handling
+- Consider adding success toast notifications (future enhancement)
