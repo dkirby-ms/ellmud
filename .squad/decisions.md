@@ -3342,3 +3342,162 @@ Merge PR #109.
 
 ---
 
+
+---
+
+## Decision: AwarenessSystem Detection Formula & Integration
+
+**Date:** 2026-03-23  
+**Author:** Drizzt  
+**Issue:** #25  
+**PR:** #119  
+**Status:** APPROVED & SHIPPED
+
+### Detection Formula
+
+```
+score = awareness − stealth
+```
+
+- `score ≤ 0` → `'none'` (target invisible)
+- `score 1–4` → `'vague'` (flavor text, no equipment info)
+- `score ≥ 5` → `'full'` (equipment-based description, never player name)
+
+### Rationale
+
+- Simple linear formula matches anticipatory test contracts exactly
+- Three-tier model (none/vague/full) covers all acceptance criteria
+- Thresholds exported as `DETECTION_THRESHOLDS` constants from `@ellmud/shared` for future tuning
+
+### Integration Pattern
+
+- Skills currently default to 0 in `ShardRoom.runAwarenessChecks()` — when PlayerState gains skills, update skill lookup there
+- Equipment passed as optional `VisibleEquipment` — when loadout system ships, wire it in
+- `'awareness'` added to `NarrationType` union — client renders these distinctly (e.g., italicized, dimmed)
+- System runs on both arrival AND departure, with distinct flavor text pools
+
+### Follow-ups
+
+- **Jarlaxle:** Client may want to style `'awareness'` narration type differently
+- **Minsc:** 208 anticipatory tests (awareness-stealth.test.ts) ready for implementation as skills/loadout land
+- **Volo:** LLM narration pipeline should NOT re-narrate awareness messages (pre-baked)
+
+---
+
+## Decision: PlayerState Carries Skills and Equipment
+
+**Date:** 2026-03-23  
+**Author:** Jarlaxle  
+**Context:** PR #119 fix — Awareness & Stealth Detection  
+**Status:** APPROVED & SHIPPED
+
+### Pattern
+
+`PlayerState` is the canonical location for:
+- Player skills: `{ stealth: number, awareness: number, tracking?: number }`
+- Equipment: `VisibleEquipment | undefined`
+
+Game systems that need player attributes read from PlayerState; they never hardcode values and never import PlayerState directly.
+
+### Default Skills
+
+New characters: `{ stealth: 5, awareness: 5 }` (non-zero).
+- Equal-skill players produce detection score 0 → 'none' by formula design
+- Any skill variance produces vague or full detection
+- Prevents repeat of hardcoded zeros mistake in PR #119 initial implementation
+
+### Integration Pattern
+
+1. `PlayerState` owns the data (server-authoritative)
+2. Game systems (`AwarenessSystem`, `CombatSystem`, etc.) receive data as params
+3. `ShardRoom` bridges state → system by reading `PlayerState` and passing to system methods
+
+### Applies To
+
+All future game systems needing player attributes. When adding new skills or equipment slots, extend `PlayerSkills` and `VisibleEquipment` — don't create parallel state objects.
+
+---
+
+## Review: PR #119 — Awareness & Stealth Detection (Initial)
+
+**Reviewer:** Elminster  
+**Date:** 2026-03-23  
+**Status:** CHANGES REQUESTED
+
+### Critical Issues
+
+1. **Hardcoded Stats:** `ShardRoom.ts` uses `stealth: 0` and `awareness: 0` for all players — system non-functional (everyone invisible).
+2. **Missing State:** `PlayerState` lacks `skills` and `equipment` fields required for awareness checks.
+3. **Test Coverage:** `awareness-stealth.test.ts` tests local helper functions, not `AwarenessSystem` implementation.
+
+### Required Fixes
+
+- Update `PlayerState` schema to include awareness skills and equipment
+- Wire `ShardRoom` to use real player data
+- Rewrite tests to verify `AwarenessSystem` class logic directly
+
+---
+
+## Review: PR #119 — Awareness & Stealth Detection (Re-review)
+
+**Reviewer:** Elminster  
+**Date:** 2026-03-23  
+**Status:** APPROVED
+
+### Verification
+
+1. **PlayerState Schema:** Now includes `skills` (stealth, awareness) and `equipment` (VisibleEquipment). Defaults: 5/5 for skills.
+2. **ShardRoom Integration:** `runAwarenessChecks()` correctly retrieves `skills` and `equipment` from `PlayerState` for both entering player and observers.
+3. **Tests:** Rewritten `awareness-stealth.test.ts` directly tests `AwarenessSystem` logic (75 tests passing), covering detection tiers, message generation, equipment descriptions.
+
+### Decision
+
+**APPROVED.** Implementation complete and verified. Hardcoded zeros removed; system properly wired to real player data.
+
+### Monitoring
+
+- Performance impact of awareness checks in crowded rooms (O(N) complexity)
+- Client-side rendering of narrative messages
+
+---
+
+## Wave 2 Complete — All Issues Shipped
+
+**Date:** 2026-03-23  
+**Status:** MERGED to dev & uat  
+**Tests:** 1084+ passing  
+**Issues Closed:** #22, #23, #25
+
+### Issues Shipped
+
+- **Issue #22** (Sound Propagation): PR #117 (33 tests) — Per-room BFS, noise constants, room modifiers
+- **Issue #23** (Trace System): PR #118 (34 tests) — Ephemeral traces, TTL decay, skill-scaled descriptions
+- **Issue #25** (Awareness & Stealth): PR #119 (75 tests) — Detection tiers, formula `awareness − stealth`, equipment narration
+
+### Infrastructure Locked
+
+| System | Component | Notes |
+|--------|-----------|-------|
+| Sound | BFS propagation | O(N) room traversal, noise constants shared |
+| Trace | TTL decay | Suppression at creation, skill-scaled flavor |
+| Awareness | Detection formula | `score = awareness − stealth`; tiers via thresholds |
+| Narration | LLM + fallbacks | 3 new NarrationType values; client renders distinctly |
+
+### Wave 2 → UAT Promotion (PR #120)
+
+- **Status:** MERGED (dev → uat)
+- **Conflicts:** Resolved; uat rebased with dev Wave 2 + bug fixes
+- **Ready for:** Phase 2 QA (Issue #31)
+
+---
+
+## Phase 2 Status
+
+**Current:** Issue #31 (Phase 2 QA tests) in progress — last Wave 2 item  
+**Backlog Ready:**
+- Issue #21 — Multi-Player Shards (Redis, KEDA)
+- Issue #24 — PvP Combat
+- Issue #26 — Proximity Communication
+- Issue #27 — Death & Downing
+- Issues #28–#49 — Phase 2–4 features
+

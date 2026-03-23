@@ -694,3 +694,35 @@ Implemented server-side proximity-based communication system with three social c
 - **Don't hardcode zeros as "Phase 1" defaults.** Hardcoded 0 for skills makes the entire system a no-op (score=0 → 'none' always). Use sensible baselines (5/5) so the system actually exercises its tiers when players interact. Zero is not a baseline, it's an off switch.
 - **Tests must test the real class, not a local reimplementation.** Drizzt's tests redefined the detection formula locally — they'd pass even if the system was deleted. Always import the actual production class.
 - **PlayerState is the integration seam.** When a new game system needs player data (skills, equipment, status), PlayerState is where it lives. Keep the constructor backward-compatible with optional params and spread defaults.
+
+---
+
+## Wave 2 Complete — All Issues Shipped (2026-03-23)
+
+**Status:** ✅ Complete — PR #119 fixes approved and merged, dev → uat promotion (PR #120) complete
+
+**My role in Wave 2:**
+1. **PR #119 fix & re-review cycle**
+   - Received PR #119 with 3 blocking issues from Elminster (hardcoded zeros, missing PlayerState fields, tests not real)
+   - Fixed all 3: added skills/equipment to PlayerState, wired ShardRoom to read real data, rewrote tests to exercise actual AwarenessSystem
+   - Elminster re-reviewed and **APPROVED**
+   - Coordinator merged to dev
+
+2. **Key decisions I made**
+   - **Default skills 5/5 (not 0/0):** Equal-skill players get 'none' detection by formula design (score=0), but this allows the system to actually function and tier differentiation to emerge when skills vary. Zero is not a baseline, it's an off-switch.
+   - **PlayerState owns all player attributes:** Skills, equipment, status — all live here. No parallel state objects. Future systems (Combat, Tracking, etc.) read from PlayerState; they never hardcode or import specific state classes.
+   - **VisibleEquipment in PlayerState:** Equipment descriptions ready for item system integration, no plumbing work needed when loadout lands.
+
+3. **Pattern established for Phase 2**
+   - All game systems follow ShardRoom wiring: pure logic class → ShardRoom reads PlayerState → passes data as params
+   - This scales to PvP Combat (#24), Proximity Communication (#26), Death & Downing (#27), etc.
+   - PlayerState is the integration contract — extend it with new fields as systems need them
+
+**Wave 2 summary:**
+- Sound: 33 tests, per-room BFS + modifiers functional
+- Trace: 34 tests, TTL decay + skill scaling working
+- Awareness: 75 tests (+ 208 anticipatory), detection formula + equipment narration working
+- Total: 1084+ tests passing, zero regressions
+
+**What's next:** Phase 2 QA (Minsc) testing Wave 2 in UAT. Then Phase 2 features: Multi-Player Shards (#21), PvP Combat (#24), Proximity Communication (#26), Death & Downing (#27), Phase 2–4 backlog (#28–#49).
+
