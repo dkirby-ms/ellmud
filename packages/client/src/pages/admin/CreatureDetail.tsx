@@ -94,8 +94,18 @@ export default function CreatureDetail() {
       try {
         setLoading(true);
         setError(null);
-        const creature = await getCreature<CreatureFormData>(id!);
+        const creature = await getCreature<any>(id!);
         setFormData(creature);
+        // Load lootTable from API response
+        if (creature.lootTable && Array.isArray(creature.lootTable)) {
+          setLootTable(
+            creature.lootTable.map((entry: any) => ({
+              itemId: entry.itemId || "",
+              itemName: entry.name || entry.itemName || "Unknown Item",
+              weight: entry.dropWeight || entry.weight || 50,
+            }))
+          );
+        }
       } catch (err) {
         if (err instanceof AdminAPIError) {
           setError(err.message);
@@ -137,12 +147,22 @@ export default function CreatureDetail() {
     try {
       setSaving(true);
       setError(null);
-      const data = submitForReview ? { ...formData, status: 'review' as Status } : formData;
+      // Include lootTable in payload
+      const payload = {
+        ...formData,
+        lootTable: lootTable.map((entry) => ({
+          itemId: entry.itemId,
+          name: entry.itemName,
+          dropWeight: entry.weight,
+          weight: entry.weight,
+        })),
+        status: submitForReview ? ('review' as Status) : formData.status,
+      };
       if (isNew) {
-        await createCreature(data);
+        await createCreature(payload);
         navigate('/admin/creatures');
       } else {
-        await updateCreature(id!, data);
+        await updateCreature(id!, payload);
       }
     } catch (err) {
       if (err instanceof AdminAPIError) {
