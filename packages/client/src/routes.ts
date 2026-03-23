@@ -25,6 +25,8 @@ import FactionsList from "./pages/admin/FactionsList";
 import FactionsDetail from "./pages/admin/FactionsDetail";
 import RoomsList from "./pages/admin/RoomsList";
 import RoomsDetail from "./pages/admin/RoomsDetail";
+import LiveRooms from "./pages/admin/LiveRooms";
+import LiveRoomDetail from "./pages/admin/LiveRoomDetail";
 import NarrativeList from "./pages/admin/NarrativeList";
 import NarrativeDetail from "./pages/admin/NarrativeDetail";
 import Balance from "./pages/admin/Balance";
@@ -141,6 +143,14 @@ export const routes: RouteObject[] = [
           {
             path: "rooms/:id",
             Component: RoomsDetail,
+          },
+          {
+            path: "live-rooms",
+            Component: LiveRooms,
+          },
+          {
+            path: "live-rooms/:roomId",
+            Component: LiveRoomDetail,
           },
           {
             path: "narrative",

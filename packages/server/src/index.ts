@@ -64,13 +64,15 @@ app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg
 // ─── Admin Dashboard ─────────────────────────────────────────────────────────
 // Admin API at /admin/api/*, dashboard UI at /admin/
 // Protected by ADMIN_TOKEN env var — admin auth is separate from player auth.
-app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));
 
 // Content CRUD API — admin-managed game content (items, creatures, biomes, etc.)
 const contentStores = initializeContentStores(USE_PG);
 app.use(createContentRouter({ stores: contentStores }));
 app.use(createDashboardApiRouter({ stores: contentStores, usePg: USE_PG }));
 console.log(`[Ellmud] Content store: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// Admin runtime API — room management, metrics, SSE. Receives contentStores for spawn.
+app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis, isStashPg: isStashPg(), contentStores }));
 
 app.use('/admin', createDashboardRouter());
 

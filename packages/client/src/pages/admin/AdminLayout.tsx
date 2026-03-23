@@ -19,6 +19,7 @@ import {
   Bell,
   Search,
   ArrowLeft,
+  Radio,
 } from "lucide-react";
 
 const navSections = [
@@ -47,6 +48,7 @@ const navSections = [
   {
     label: "System",
     items: [
+      { path: "/admin/live-rooms", icon: Radio, label: "Live Rooms" },
       { path: "/admin/deploy", icon: Upload, label: "Deploy" },
       { path: "/admin/audit", icon: ScrollText, label: "Audit Log" },
       { path: "/admin/users", icon: Users, label: "Users" },
