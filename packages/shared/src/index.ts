@@ -406,9 +406,24 @@ export const STEALTH_FOOTPRINT_THRESHOLD = 80;
 /** Server → Client: Extraction channel state update. */
 export interface ExtractionMessage {
   playerId: string;
-  state: 'started' | 'progress' | 'completed' | 'interrupted' | 'death';
+  state: 'started' | 'progress' | 'completed' | 'interrupted' | 'death' | 'downed' | 'stabilized' | 'bleed_out';
   ticksRemaining?: number;
   totalTicks?: number;
   narration: string;
   timestamp: number;
+}
+
+// ─── Downing & Shard-Sickness Types (GDD §6.4) ──────────────────────────────
+
+/** Player status in the downing lifecycle. */
+export type PlayerVitalStatus = 'alive' | 'downed' | 'stabilized' | 'dead';
+
+/** Shard-sickness debuff summary sent to the client. */
+export interface ShardSicknessInfo {
+  /** Number of recent deaths contributing to sickness. */
+  deathCount: number;
+  /** Stat penalty as percentage (0–50). */
+  penaltyPercent: number;
+  /** Whether shard-sickness is currently active. */
+  active: boolean;
 }

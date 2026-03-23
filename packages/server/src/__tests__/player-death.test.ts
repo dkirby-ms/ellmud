@@ -142,10 +142,10 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
       combatant.hp = 1;
     }
 
-    // Wait for combat ticks to resolve defeat
-    await wait(3000);
+    // Wait for combat ticks to resolve defeat + downing bleed-out timer
+    await wait(15_000);
 
-    // Check for death extraction message
+    // Check for death extraction message (downed → bleed-out → death)
     const deathMessages = extractionMessages.filter(m => m.state === 'death');
     if (combatant) {
       // If combat was initiated, we should have a death message
@@ -156,7 +156,7 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
     // If no creature was in the starting room, the test still passes (no combat = no death)
 
     await client.leave();
-  }, 15_000);
+  }, 25_000);
 
   it('should send ROOM_SWITCH to refuge after death delay', async () => {
     const room = await colyseus.createRoom('shard', { useTestGraph: true, openDelayMs: 0 });
@@ -188,8 +188,8 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
       combatant.hp = 1;
     }
 
-    // Wait for death + 3s delay for ROOM_SWITCH
-    await wait(6000);
+    // Wait for death + downing bleed-out + 3s delay for ROOM_SWITCH
+    await wait(16_000);
 
     if (combatant) {
       const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
@@ -198,7 +198,7 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
     }
 
     await client.leave();
-  }, 15_000);
+  }, 25_000);
 
   it('should drop player inventory items to the room floor on death', async () => {
     const room = await colyseus.createRoom('shard', { useTestGraph: true, openDelayMs: 0 });
@@ -249,8 +249,9 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
     // Initiate combat — creature attacks player
     roomInstance.combatSystem.initiateCombat('creature-test-brute', sessionId);
 
-    // Wait for combat tick to resolve defeat + handlePlayerDefeats
-    await wait(2500);
+    // Wait for combat tick to resolve defeat + downing bleed-out + death
+    // With downing system: 1 tick to down, 10 ticks to bleed out, 3s death delay
+    await wait(15_000);
 
     // Player inventory must be empty after death
     expect(player!.inventory.size).toBe(0);
@@ -264,5 +265,5 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
     expect(droppedNames.filter(n => n === 'Test Potion')).toHaveLength(2);
 
     await client.leave();
-  }, 15_000);
+  }, 25_000);
 });
