@@ -1339,6 +1339,7 @@ describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
   it('4 players join same shard and all receive room descriptions', async () => {
     const room = await colyseus.createRoom('shard', {
       useTestGraph: true,
+      tier: 2,
       ...quickCollapseOptions(300),
     });
 

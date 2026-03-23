@@ -406,28 +406,41 @@ export const STEALTH_FOOTPRINT_THRESHOLD = 80;
 /** Server → Client: Extraction channel state update. */
 export interface ExtractionMessage {
   playerId: string;
-  state: 'started' | 'progress' | 'completed' | 'interrupted' | 'death';
+  state: 'started' | 'progress' | 'completed' | 'interrupted' | 'death' | 'downed' | 'stabilized' | 'bleed_out';
   ticksRemaining?: number;
   totalTicks?: number;
   narration: string;
   timestamp: number;
 }
 
-// ─── PvP Combat Types (GDD §5) ───────────────────────────────────────────────
+// ─── Downing & Shard-Sickness Types (GDD §6.4) ──────────────────────────────
 
-/** Default shard-sickness debuff applied after PvP kills. */
+/** Player status in the downing lifecycle. */
+export type PlayerVitalStatus = 'alive' | 'downed' | 'stabilized' | 'dead';
+
+/** Shard-sickness debuff summary sent to the client. */
+export interface ShardSicknessInfo {
+  /** Number of recent deaths contributing to sickness. */
+  deathCount: number;
+  /** Stat penalty as percentage (0–50). */
+  penaltyPercent: number;
+  /** Whether shard-sickness is currently active. */
+  active: boolean;
+}
+
+/** Default shard-sickness parameters (GDD §6.4). */
 export const SHARD_SICKNESS_DEFAULTS = {
   durationMs: 120_000,
   attackPenalty: -5,
   defencePenalty: -3,
-  description: 'A sickness seeps through you after taking a life in the shard.',
 } as const;
 
-/** Event emitted when a player is killed by another player. */
+/** Analytics event logged when a player kills another player. */
 export interface PvPKillEvent {
+  type: 'pvp_kill';
+  killerId: string;
   victimId: string;
   victimName: string;
-  killerIds: string[];
   roomId: string;
   timestamp: number;
 }

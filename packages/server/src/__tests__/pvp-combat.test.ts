@@ -245,22 +245,22 @@ describe('Shard-Sickness Defaults', () => {
     expect(SHARD_SICKNESS_DEFAULTS.durationMs).toBe(120_000);
     expect(SHARD_SICKNESS_DEFAULTS.attackPenalty).toBe(-5);
     expect(SHARD_SICKNESS_DEFAULTS.defencePenalty).toBe(-3);
-    expect(typeof SHARD_SICKNESS_DEFAULTS.description).toBe('string');
   });
 });
 
 describe('PvPKillEvent Interface', () => {
   it('can be constructed with required fields', () => {
     const event: PvPKillEvent = {
+      type: 'pvp_kill',
+      killerId: 'player-a',
       victimId: 'player-b',
       victimName: 'Bob',
-      killerIds: ['player-a'],
       roomId: 'room-1',
       timestamp: Date.now(),
     };
 
     expect(event.victimId).toBe('player-b');
-    expect(event.killerIds).toContain('player-a');
+    expect(event.killerId).toBe('player-a');
   });
 });
 
