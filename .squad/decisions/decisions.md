@@ -1296,3 +1296,81 @@ Each detail page follows:
 - ⏳ #139 Content CRUD API design awaiting Drizzt review
 - ⏳ Sprint planning with team to estimate timeline
 
+---
+
+## User Directives Captured (2026-03-23)
+
+### 1. No Statically Defined Game Assets (2026-03-23T18:53:39Z)
+
+**By:** dkirby-ms (via Copilot)
+
+**Directive:** All content definitions (items, creatures, biomes, modifiers, skills, loot tables, factions, rooms, narrative) must be stored in PostgreSQL, not hardcoded in TypeScript registries. The CRUD API must create proper DB tables and migrate existing static data.
+
+**Why:** Admin screens need to manage real persistent data, not code-level constants. Static registries like `items/registry.ts` should be replaced with DB-backed repositories.
+
+**Implications:**
+- Content CRUD (#139) must use PostgreSQL storage, not in-memory `ContentStore`
+- Migration strategy needed to move `ITEM_REGISTRY` and other static data to DB
+- Admin UI can manage templates at runtime
+
+### 2. Microsoft Entra External Identities for OAuth (2026-03-23T18:55:27Z)
+
+**By:** dkirby-ms (via Copilot)
+
+**Directive:** Use Microsoft Entra External Identities for user authentication. An external tenant is already deployed. App registration and user flow configuration will be done manually by the user. The app must implement the OAuth flow against Entra External ID.
+
+**Why:** Cloud instances are live; need proper auth instead of dev-mode tokens.
+
+**Implementation Notes:**
+- External tenant deployed; app registration + user flow config done manually by user
+- App must implement OAuth flow (authorization code, token exchange, refresh)
+- Local auth behind dev toggle for testing (current bcrypt + JWT kept for dev)
+- Admin routes must enforce OAuth roles (not just static ADMIN_TOKEN)
+
+**Implications:**
+- Issue #140 [Auth] Implement Entra External ID OAuth for player authentication created
+- Auth audit completed; no OIDC libraries exist (clean slate)
+- OAuth implementation unblocks PR #141 (Content CRUD + PostgreSQL storage)
+
+---
+
+## Decision: Content CRUD API Architecture (2026-03-24)
+
+**By:** Drizzt (Engine Dev)
+
+**PR:** #141 (awaiting PostgreSQL + OAuth before merge approval)
+
+**Issue:** #139
+
+### Context
+
+Phase 2.5 admin pages need a content management API. The existing admin routes serve live runtime data (Colyseus rooms, creature instances, metrics). Content CRUD serves game *definition* data (templates, schemas) — conceptually different.
+
+### Decisions
+
+#### 1. Content Namespace: `/admin/api/content/{entity}`
+
+Routes namespaced under `/admin/api/content/` to avoid collision with existing live-data routes at `/admin/api/rooms` and `/admin/api/creatures`. Existing endpoints remain untouched.
+
+**Relevant to:** Jarlaxle (admin UI fetch URLs must use `/admin/api/content/` prefix), Minsc (integration test paths).
+
+#### 2. In-Memory ContentStore with Repository Pattern
+
+Generic `ContentStore<T>` class using `Map<string, T>` with async interface. Follows the same pattern as `PlayerRepository` and `StashRepository`. Ready for PG swap when needed.
+
+**⚠️ Update (2026-03-23):** User directive requires PostgreSQL storage. In-memory approach blocks PR #141 merge. Next phase: migrate to `ContentRepository` with PostgreSQL backend.
+
+**Relevant to:** Anyone adding persistence features.
+
+#### 3. Pre-Seeded from Existing Registries
+
+Content stores initialized from `ITEM_REGISTRY` (18 items), creature templates (1), plus biome/modifier/faction descriptors derived from shared type enums. Skills, loot-tables, rooms, and narrative start empty.
+
+**Relevant to:** Admin UI should expect pre-populated data for items, creatures, biomes, modifiers, factions.
+
+#### 4. Validation: Permissive for Phase 1
+
+Only `name` is universally required. Entity-specific checks are minimal (type enums for items, entries array for loot-tables). Full schema validation can be tightened as content schemas stabilize.
+
+**Relevant to:** Anyone building admin forms — server accepts flexible payloads.
+

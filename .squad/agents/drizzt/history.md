@@ -790,3 +790,31 @@ PHASE 4 (Polish):
 **Files:** 6 new files in `admin/content/`, 3 modified (admin/index.ts, server index.ts, test file).
 **Tests:** 73 CRUD tests passing. 1485 total tests green, zero regressions.
 **Pre-existing issue:** Build error in `narrative/templates.ts` (ambient_narration key) — not related to this work.
+
+---
+
+## Cross-Team Update (2026-03-23T19:15Z)
+
+### User Directives Captured
+
+Two critical directives require changes to PR #141:
+
+1. **No Statically Defined Game Assets** — All content must use PostgreSQL, not in-memory `ContentStore`
+   - Static registries like `items/registry.ts` must migrate to DB
+   - Admin screens manage templates at runtime
+   - **Impact:** PR #141 blocked until PostgreSQL persistence layer added
+
+2. **Microsoft Entra External Identities for OAuth** — Production auth via Entra, local auth behind dev toggle for testing
+   - External tenant deployed; app registration done by user
+   - App implements OAuth flow (authorization code, token exchange, refresh)
+   - **Impact:** Admin routes must enforce OAuth roles, not static ADMIN_TOKEN
+
+### Orchestration Log Created
+- `.squad/orchestration-log/2026-03-23T19-15Z-drizzt-content-crud.md` — Full CRUD outcome, blockers
+- Cross-reference: Minsc tests (27 pass, 46 await routes), auth audit complete
+
+### Next Steps
+1. Migrate `ContentStore` to `ContentRepository` with PostgreSQL backend
+2. Integrate OAuth middleware for admin endpoint protection
+3. Coordinate with Minsc: OAuth implementation may require new auth test patterns
+4. Update PR #141 description to note PostgreSQL + OAuth requirements

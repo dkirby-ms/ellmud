@@ -682,3 +682,27 @@ items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narra
 - Existing admin routes use `createAdminRouter(deps)` with dependency injection for telemetry/cache
 - The CRUD tests don't need those deps — they test new content endpoints, not metrics
 - Express returns 404 for unmatched routes, which means 404 tests coincidentally pass before implementation
+
+---
+
+## Cross-Team Update (2026-03-23T19:15Z)
+
+### User Directives & Auth Audit Completed
+
+1. **PostgreSQL Persistence Required** — In-memory `ContentStore` insufficient for production; tests assume DB backend
+   - 27 passing tests validated; 46 pending await route stability
+   - Once Drizzt migrates to PostgreSQL, all 73 tests should run end-to-end
+
+2. **Entra External ID OAuth Implemented** — Admin route protection requires OAuth middleware
+   - Auth audit complete (no OIDC libraries exist; clean slate)
+   - OAuth implementation may require new auth test patterns for admin endpoints
+   - **Impact on tests:** May need to mock OAuth tokens for admin route auth enforcement
+
+### Orchestration Log Created
+- `.squad/orchestration-log/2026-03-23T19-15Z-minsc-crud-tests.md` — Test outcome (27 pass, 46 pending)
+- Cross-reference: Drizzt's CRUD routes (stable), auth audit complete
+
+### Next Steps
+1. Monitor Drizzt's PostgreSQL migration; coordinate test patterns
+2. Plan OAuth token mocking for admin route auth tests (once #140 implemented)
+3. Consider load testing spike: concurrent writes, 1000+ items (post-Phase 2.5)
