@@ -706,3 +706,43 @@ items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narra
 1. Monitor Drizzt's PostgreSQL migration; coordinate test patterns
 2. Plan OAuth token mocking for admin route auth tests (once #140 implemented)
 3. Consider load testing spike: concurrent writes, 1000+ items (post-Phase 2.5)
+
+## Wave 1 Admin Wiring Tests (2026-03-23T19:45Z)
+
+### Test Delivery: admin-wiring.test.ts
+
+**File:** `packages/server/src/__tests__/admin-wiring.test.ts`
+- 31 new integration tests (all passing ✅)
+- Zero regressions: Existing `admin-crud.test.ts` (73 tests) untouched
+
+**Test Coverage:**
+- Items (15 tests): Type validation, field validation, update behavior, duplicate IDs, edge cases, large data sets
+- Creatures (14 tests): Field validation, update behavior, duplicate IDs, edge cases, large data sets
+- Cross-Entity (2 tests): Independent ID spaces, deletion isolation
+
+### Architecture Decision
+
+**Why Separate File?**
+- `admin-crud.test.ts` (CRUD lifecycle) + `admin-wiring.test.ts` (edge cases)
+- Each file <400 lines; clear purpose; easier discovery
+- Wiring tests can evolve independently (pagination, search, bulk ops)
+- No merge conflicts with parallel agent work
+
+### Integration with PRs
+
+**PR #142 (Jarlaxle — Items):**
+- Validates all 15 item tests pass
+- Field validation + type checking + large data sets all covered
+
+**PR #143 (Drizzt — Creatures):**
+- Validates all 14 creature tests pass
+- Field validation + type checking + edge cases all covered
+
+### Next Steps
+
+1. Both PRs merge → wiring tests become regression suite
+2. Extend pattern to remaining 7 entity types
+3. Add pagination/search/bulk operation tests as UI evolves
+
+---
+

@@ -981,3 +981,37 @@ Wire the BiomesList and BiomesDetail admin pages to the real Content CRUD API en
 - Array editors in forms need careful state management (`updateArrayItem`, `removeArrayItem`, `addArrayItem`)
 - localStorage token pattern works but is Phase 1 — production will need secure auth flow
 
+## Wave 1 Admin Wiring (2026-03-23T19:45Z)
+
+### Cross-Team Coordination Note
+
+**Parallel Pattern Creation:**
+- Jarlaxle created `admin-api.ts` generic CRUD pattern for Items wiring (#129)
+- Drizzt (CreaturesList/CreaturesDetail #128) uses same pattern from Jarlaxle
+- Both agents independently implemented localStorage token storage decision
+- Result: Consistent architecture across all admin pages, extensible for 7 remaining entity types
+
+### Drizzt's Creatures Wiring (PR #143)
+
+**Deliverables:**
+- `packages/client/src/pages/admin/CreaturesList.tsx` — Table listing creatures with search/sort
+- `packages/client/src/pages/admin/CreaturesDetail.tsx` — Create/edit/delete forms with validation
+- Token auth integrated via `admin-api.ts` pattern (Bearer header on all requests)
+- Form validation on save, visual error/success messaging
+
+**Decisions Logged:**
+- Admin Token Storage Pattern (localStorage with `admin_token` key)
+- PostgreSQL Content Store (single `content_definitions` table with JSONB)
+
+**Testing:**
+- Minsc's admin-wiring.test.ts covers 14 creature-specific test cases
+- All tests passing; validates edge cases, duplicate IDs, large data sets
+
+### Team Outcome
+
+- PR #142 (Items) + PR #143 (Creatures) ready for Elminster review
+- Pattern established: Replicable for Biomes, LootTables, Skills, Factions, Rooms, Narrative
+- Admin infrastructure solid; Phase 2.5 wiring on track
+
+---
+

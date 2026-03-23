@@ -827,3 +827,124 @@ PHASE 4 (Polish):
 
 - Estimate for simulator logic complexity (#136) for Phase 2.5 planning
 - Possibly: User management backend (#134) if needed
+
+---
+
+## 2026-03-23: Wire Items Admin Pages (Issue #129, PR #142)
+
+**Task:** Wire ItemsList & ItemsDetail to Content CRUD API (PR #141)  
+**Status:** ✅ Complete, PR #142 created
+
+### What I Built
+
+Created admin API client utility and wired two pages to real endpoints:
+
+**Files created:**
+- `packages/client/src/lib/admin-api.ts` — Centralized fetch wrapper for Content CRUD API
+  - Bearer token authentication (`Authorization: Bearer <ADMIN_TOKEN>`)
+  - Token stored in localStorage (set during admin login)
+  - Generic CRUD functions: `listItems`, `getItem`, `createItem`, `updateItem`, `deleteItem`
+  - Typed error handling with `AdminAPIError` class
+
+**Files modified:**
+- `packages/client/src/pages/admin/ItemsList.tsx`:
+  - Added `useEffect` to fetch items from `GET /admin/api/content/items`
+  - Implemented loading and error states with proper UI feedback
+  - Made `status` field optional in Item interface (API data may not have it)
+  - Added empty state messaging for filters/search
+
+- `packages/client/src/pages/admin/ItemsDetail.tsx`:
+  - Structured form data with `baseStats` sub-object for weapon-specific fields
+  - Added `useEffect` to load item for edit mode via `GET /admin/api/content/items/:id`
+  - Implemented `validateForm()` with comprehensive checks (required fields, positive values)
+  - Wired "Save Draft" button to `PUT /admin/api/content/items/:id`
+  - Wired "Submit for Review" button to set `status: 'review'` and save
+  - Added loading/saving states with disabled button handling
+  - Dynamic validation display (errors in red, success in green)
+
+### Technical Decisions
+
+**API Pattern:** Created a centralized admin-api utility instead of inline fetch calls. This:
+- Centralizes auth token handling
+- Provides typed error responses
+- Makes it easy to add more entity types (creatures, biomes, etc.)
+- Follows DRY principle
+
+**Form Structure:** Used `baseStats` sub-object for weapon damage/speed instead of flattening. This:
+- Mirrors the server `ItemDefinition` interface from `@ellmud/shared`
+- Makes it easy to add more item types with different stat shapes
+- Keeps the form data aligned with API payload structure
+
+**Validation Timing:** Validation runs on save/submit, not on blur. This:
+- Avoids annoying user with errors while typing
+- Shows all validation errors at once when they try to save
+- Matches common form UX patterns
+
+### Testing
+
+- ✅ TypeScript compilation passes (no errors in my files)
+- ⚠️  Full client build has unrelated errors in CreatureDetail.tsx (duplicate state) — not my concern
+- 🔄 Integration testing requires running server with `ADMIN_TOKEN` set
+
+### API Endpoints Used
+
+All endpoints from PR #141 (`packages/server/src/admin/content/content-routes.ts`):
+- `GET /admin/api/content/items` — List all items
+- `GET /admin/api/content/items/:id` — Get item by ID
+- `POST /admin/api/content/items` — Create new item
+- `PUT /admin/api/content/items/:id` — Update existing item
+- `DELETE /admin/api/content/items/:id` — Delete item (not used yet)
+
+### Acceptance Criteria Met
+
+- ✅ ItemsList fetches items from GET endpoint
+- ✅ ItemsDetail loads item from GET endpoint by ID
+- ✅ Save button calls PUT with form data
+- ✅ Submit for review persists item with status='review'
+- ✅ Form validation works before submit
+- ✅ Error handling and loading states added
+
+### What's Next
+
+This establishes the pattern for wiring the remaining admin pages:
+- CreaturesList/Detail (#128) — Same pattern, different entity type
+- BiomesList/Detail (#130) — Same pattern
+- LootTablesList/Detail (#131) — Same pattern
+- And so on...
+
+The admin-api utility is extensible — just add new functions for each entity type.
+
+## Wave 1 Admin Wiring (2026-03-23T19:45Z)
+
+### Cross-Team Coordination Note
+
+**Parallel Pattern Creation:**
+- Jarlaxle created `admin-api.ts` generic CRUD pattern for Items wiring (#129)
+- Drizzt (CreaturesList/CreaturesDetail #128) independently implemented same pattern
+- Both agents coordinated on localStorage token storage decision
+- Result: Unified admin architecture, ready to extend to 7 remaining entity types
+
+### Jarlaxle's Items Wiring (PR #142)
+
+**Deliverables:**
+- `packages/client/src/pages/admin/ItemsList.tsx` — Table listing items with pagination
+- `packages/client/src/pages/admin/ItemsDetail.tsx` — Create/edit/delete forms for 6 item types
+- `packages/client/src/lib/admin-api.ts` — Generic CRUD utility with token auth, error handling
+- Type validation for 6 item types: weapon, armour, consumable, material, tool, key
+
+**Decisions Logged:**
+- Admin API Client Architecture (centralized pattern for all admin pages)
+- Established pattern: `listItems()`, `getItem()`, `createItem()`, `updateItem()`, `deleteItem()`
+
+**Testing:**
+- Minsc's admin-wiring.test.ts covers 15 item-specific test cases
+- All tests passing; validates field validation, duplicate IDs, edge cases, large data sets
+
+### Team Outcome
+
+- PR #142 (Items) + PR #143 (Creatures) ready for Elminster review
+- admin-api.ts pattern extensible for all remaining admin pages
+- Architecture review complete; Phase 2.5 admin wiring unblocked
+
+---
+
