@@ -90,6 +90,33 @@
 
 ---
 
+## Wave 2 Work
+
+### 2026-03-23: PR #117 (Trace System) Fixes & Merge
+
+**Status:** ✅ MERGED to dev
+
+**Recap of fixes applied:**
+- Connected TraceSystem to ShardRoom game loop (onCreate, tick, event handlers)
+- Added MAX_TRACES_PER_ROOM = 50 with eviction (oldest expired first, then oldest active)
+- Removed bundled SoundSystem changes (separated concerns)
+
+**Architecture locked in:**
+- Traces suppressed at creation (stealth/damage gates prevent storage)
+- TTL decay + skill-scaled descriptions (BASIC/DETAILED/EXPERT)
+- Per-room trace cap with memory management
+- Shared types enforce cross-package contract
+
+**Follow-up items (non-blocking):**
+1. Wire tracking skill into `sendTraceNarrations` (currently hardcoded BASIC)
+2. Replace sessionId with character display name in footprint actorName
+
+**Tests:** 1061 total passing, 120 anticipatory scaffolds active
+
+**Key decision:** Traces suppressed at creation is more efficient than filtering on every narration query.
+
+---
+
 ## Cross-Team Updates (2026-03-19T22:30)
 
 ### Figma Design Tokens Now Team Standard

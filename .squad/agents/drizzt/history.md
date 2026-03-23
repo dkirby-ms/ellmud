@@ -76,7 +76,37 @@
 
 **Stash Transfer:** On extraction, shard inventory transferred to persistent stash before `ROOM_SWITCH`. Weight enforcement caps at 200 units; excess items lost with narration.
 
----## Cross-Team Updates (Wave 1 completion — 2026-03-20T17:00)
+---
+
+## Wave 2 Work
+
+### 2026-03-23: PR #118 (Sound Propagation System) Fixes & Merge
+
+**Status:** ✅ MERGED to dev
+
+**Recap of fixes applied:**
+- Fixed RoomResolver to pass room properties through to SoundSystem
+- Eliminated redundant O(N²) BFS by calculating distance in primary traversal
+- Sound system now O(N) performance
+
+**Architecture locked in:**
+- Per-room BFS propagation (matches topology, not coordinates)
+- Room modifiers stored as `properties` on Room interface
+- Noise constants in @ellmud/shared for server + future client UI
+- SoundSystem follows CombatSystem pattern (pure logic, callback DI)
+
+**Key architectural decision:** Room-level properties (heavy_door halves all sound) simpler than per-exit. All incoming sound to a room is modified uniformly.
+
+**Tests:** 1061 total passing, 34 concrete + 6 todo + anticipatory scaffolds
+
+**Integration notes:**
+- Movement handlers can call `emitSound(roomId, 'walking')`
+- Sound narrations arrive as type 'sound' in NarrateMessage
+- Modifiers (heavy_door, cavern, water) now function as designed in GDD §12
+
+---
+
+## Cross-Team Updates (2026-03-19T22:30)
 
 ### Room Switching Enables Full Shard Loop
 **Relevant to:** Jarlaxle (#5), Minsc (integration), Elminster (infra)
