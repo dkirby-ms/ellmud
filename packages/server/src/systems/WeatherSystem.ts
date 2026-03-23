@@ -73,7 +73,7 @@ export class WeatherSystem {
     this.ticksInWeather++;
     this.ticksInTime++;
 
-    const result: ReturnType<WeatherSystem['tick']> = {
+    const result: { weatherChanged: boolean; timeChanged: boolean; oldWeather?: WeatherState; oldTime?: TimeOfDay } = {
       weatherChanged: false,
       timeChanged: false,
     };

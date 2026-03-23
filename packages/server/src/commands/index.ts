@@ -21,6 +21,8 @@ import { handleExtract } from './handlers/extract.js';
 import { handleSay } from './handlers/say.js';
 import { handleWhisper } from './handlers/whisper.js';
 import { handleEmote } from './handlers/emote.js';
+import { handleStabilize } from './handlers/stabilize.js';
+import type { DowningSystem } from '../systems/DowningSystem.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -61,6 +63,8 @@ export interface CommandContext {
   extractionSystem?: ExtractionSystem;
   /** Living creatures in the current room. */
   creaturesInRoom?: CreatureRef[];
+  /** Downing system reference (available in ShardRoom context). */
+  downingSystem?: DowningSystem;
 }
 
 export type CommandHandler = (ctx: CommandContext) => CommandResult;
@@ -82,6 +86,7 @@ handlers.set('extract', handleExtract);
 handlers.set('say', handleSay);
 handlers.set('whisper', handleWhisper);
 handlers.set('emote', handleEmote);
+handlers.set('stabilize', handleStabilize);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(

@@ -48,7 +48,7 @@ describe('WeatherSystem', () => {
     });
 
     it('should report weatherChanged when transitioning', () => {
-      let result = { weatherChanged: false, timeChanged: false };
+      let result: ReturnType<WeatherSystem['tick']> = { weatherChanged: false, timeChanged: false };
       for (let i = 0; i < 5; i++) result = system.tick();
       expect(result.weatherChanged).toBe(true);
       expect(result.oldWeather).toBe('clear');
@@ -90,7 +90,7 @@ describe('WeatherSystem', () => {
     });
 
     it('should report timeChanged on transition', () => {
-      let result = { weatherChanged: false, timeChanged: false };
+      let result: ReturnType<WeatherSystem['tick']> = { weatherChanged: false, timeChanged: false };
       for (let i = 0; i < 10; i++) result = system.tick();
       expect(result.timeChanged).toBe(true);
       expect(result.oldTime).toBe('morning');

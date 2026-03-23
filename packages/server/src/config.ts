@@ -43,7 +43,19 @@ export interface ServerConfig {
 }
 
 /**
- * Get tier-specific max players. Tier 1/2 = 4 players, Tier 3 = 6 players.
+ * GDD-defined player capacity per shard tier (GDD §10.1).
+ *   Tier 1 (Shallow): 1–3 players
+ *   Tier 2 (Deep):    2–4 players
+ *   Tier 3 (Abyssal): 3–6 players
+ */
+export const TIER_MAX_PLAYERS: Record<number, number> = {
+  1: 3,
+  2: 4,
+  3: 6,
+};
+
+/**
+ * Get tier-specific max players. Uses GDD tier table by default.
  * Respects MAX_PLAYERS_PER_SHARD env override if set.
  */
 export function getMaxPlayersForTier(tier: ShardTier, config: ServerConfig): number {
@@ -52,8 +64,8 @@ export function getMaxPlayersForTier(tier: ShardTier, config: ServerConfig): num
     return config.maxPlayersPerShard;
   }
   
-  // Tier-based defaults
-  return tier === 3 ? 6 : 4;
+  // GDD tier-based defaults
+  return TIER_MAX_PLAYERS[tier] ?? 4;
 }
 
 function envInt(key: string, fallback: number): number {

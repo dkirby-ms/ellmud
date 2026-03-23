@@ -440,40 +440,6 @@ export interface ExtractionMessage {
   timestamp: number;
 }
 
-// ─── PvP Combat Types ──────────────────────────────────────────────────────────
-
-/** Shard-sickness debuff applied on PvP death. Full bleed-out timer in Issue #27. */
-export interface ShardSickness {
-  /** Unique debuff instance ID. */
-  id: string;
-  /** Timestamp (ms) when the debuff was applied. */
-  appliedAt: number;
-  /** Duration in seconds. */
-  durationSeconds: number;
-  /** Stat penalty multiplier (0–1, lower = more penalty). Applied to attack/defence. */
-  statPenalty: number;
-  /** Source of the sickness — 'pvp_death' or 'shard_collapse'. */
-  source: 'pvp_death' | 'shard_collapse';
-}
-
-/** Default shard-sickness parameters for PvP death. */
-export const SHARD_SICKNESS_DEFAULTS = {
-  durationSeconds: 300,  // 5 minutes
-  statPenalty: 0.5,      // 50% stat reduction
-} as const;
-
-/** Metadata attached to a PvP kill event for tracking/narration. */
-export interface PvPKillEvent {
-  killerId: string;
-  killerName: string;
-  victimId: string;
-  victimName: string;
-  roomId: string;
-  timestamp: number;
-  /** Items dropped by victim (non-soulbound). */
-  droppedItemCount: number;
-}
-
 // ─── Downing & Shard-Sickness Types (GDD §6.4) ──────────────────────────────
 
 /** Player status in the downing lifecycle. */
@@ -487,4 +453,21 @@ export interface ShardSicknessInfo {
   penaltyPercent: number;
   /** Whether shard-sickness is currently active. */
   active: boolean;
+}
+
+/** Default shard-sickness parameters (GDD §6.4). */
+export const SHARD_SICKNESS_DEFAULTS = {
+  durationMs: 120_000,
+  attackPenalty: -5,
+  defencePenalty: -3,
+} as const;
+
+/** Analytics event logged when a player kills another player. */
+export interface PvPKillEvent {
+  type: 'pvp_kill';
+  killerId: string;
+  victimId: string;
+  victimName: string;
+  roomId: string;
+  timestamp: number;
 }
