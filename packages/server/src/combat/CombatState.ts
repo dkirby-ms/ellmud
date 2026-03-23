@@ -88,6 +88,7 @@ export interface CombatEvent {
   newHp?: number;
   maxHp?: number;
   narration: string;
+  killerIds?: string[];
 }
 
 export interface FleeResult {
