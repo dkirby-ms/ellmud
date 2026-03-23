@@ -10,6 +10,8 @@ import {
   type BiomeType,
   type ShardTier,
   type ExtractionMessage,
+  type PvPKillEvent,
+  SHARD_SICKNESS_DEFAULTS,
   MessageTypes,
 } from '@ellmud/shared';
 import { ShardState } from '../state.js';
@@ -1089,9 +1091,28 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         }
       }
 
-      // PvP-specific: no XP awarded, announce to room
+      // PvP-specific: no XP awarded, apply shard-sickness, emit PvPKillEvent
       if (isPvPKill) {
         this.log(`PvP kill: ${event.actorName} slain by players [${killerIds.join(', ')}] — no XP awarded`);
+
+        // Apply shard-sickness debuff to the victim
+        player.shardSickness = {
+          appliedAt: Date.now(),
+          durationMs: SHARD_SICKNESS_DEFAULTS.durationMs,
+          attackPenalty: SHARD_SICKNESS_DEFAULTS.attackPenalty,
+          defencePenalty: SHARD_SICKNESS_DEFAULTS.defencePenalty,
+        };
+
+        // Emit PvPKillEvent for analytics
+        const pvpEvent: PvPKillEvent = {
+          victimId: playerId,
+          victimName: event.actorName,
+          killerIds,
+          roomId,
+          timestamp: Date.now(),
+        };
+        this.log(`PvPKillEvent: ${JSON.stringify(pvpEvent)}`);
+
         if (room) {
           for (const [sid, ps] of this.players) {
             if (sid === playerId || ps.currentRoomId !== roomId) continue;
@@ -1113,7 +1134,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         this.sendExtractionState(client, {
           playerId,
           state: 'death',
-          narration: 'You collapse, defeated. Darkness claims you…',
+          narration: isPvPKill
+            ? 'A rival adventurer fells you. You awaken in the Refuge, wracked with shard-sickness…'
+            : 'You collapse, defeated. Darkness claims you…',
           timestamp: Date.now(),
         });
 
