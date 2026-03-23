@@ -24,7 +24,8 @@ export type NarrationType =
   | 'speech'     // Player/NPC speech, proximity chat
   | 'sound'      // Sound propagation cues
   | 'trace'      // Footprints, blood trails, environmental traces
-  | 'awareness'; // Stealth detection, player presence cues
+  | 'awareness'  // Stealth detection, player presence cues
+  | 'ambient';   // Ambient world events (weather, NPCs, faction)
 
 /** Server → Client: Narrated prose output. */
 export interface NarrateMessage {
@@ -400,6 +401,32 @@ export const BLOOD_TRAIL_DAMAGE_THRESHOLD = 5;
 
 /** Stealth modifier above this suppresses footprint traces entirely. */
 export const STEALTH_FOOTPRINT_THRESHOLD = 80;
+
+// ─── Ambient World Types (GDD §2.1) ──────────────────────────────────────────
+
+export type {
+  WeatherState,
+  TimeOfDay,
+  WeatherSnapshot,
+  NPCRole,
+  NPCDefinition,
+  NPCState,
+  FactionId,
+  FactionMilestone,
+  FactionEventDef,
+  WanderingMerchantDef,
+  WanderingMerchantItem,
+  WanderingMerchantState,
+  AmbientEventType,
+  AmbientEvent,
+} from './ambient-types.js';
+
+export {
+  WEATHER_TRANSITIONS,
+  TIME_CYCLE,
+  WEATHER_CHECK_INTERVAL,
+  TIME_PERIOD_TICKS,
+} from './ambient-types.js';
 
 // ─── Extraction Types (GDD §3 step 6) ────────────────────────────────────────
 
