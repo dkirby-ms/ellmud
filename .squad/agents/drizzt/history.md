@@ -918,3 +918,66 @@ All changes verified with `npx tsc --noEmit` (zero errors).
 - Test create/edit/save flows
 - Verify error handling
 - Consider adding success toast notifications (future enhancement)
+## Issue #130 - Wire BiomesList & BiomesDetail to Content CRUD API (2025-01-21)
+
+### Task
+Wire the BiomesList and BiomesDetail admin pages to the real Content CRUD API endpoints, replacing hardcoded mock data with live server data.
+
+### Implementation
+**Branch**: `squad/130-wire-biomes-admin` → PR #144
+
+**BiomesList Changes**:
+- Added React hooks (`useState`, `useEffect`) for data fetching
+- Integrated with `listEntities<Biome>("biomes")` from `admin-api.ts`
+- Added loading state with "Loading biomes..." message
+- Added error state with retry button
+- Added empty state with "Create Biome" CTA
+- Adapted table columns to match `BiomeDefinition` schema:
+  - Name, Description (truncated), Tier, Features count, Hazards count
+  - Removed: Type, Signature Creature, Signature Hazard, Room Templates, Status
+
+**BiomesDetail Changes**:
+- Rewrote form state to use `BiomeDefinition` schema:
+  - `name`, `description`, `tier`, `features[]`, `hazardTypes[]`, `roomProperties[]`, `narrationHints[]`
+- Added data loading via `getEntity<Biome>("biomes", id)` on mount
+- Added save handlers calling `createEntity` (new) or `updateEntity` (existing)
+- Wired "Save Draft" button to `handleSave()` → PUT/POST
+- Wired "Submit Review" button to `handleSubmit()` (currently same as save)
+- Added loading state for initial data fetch
+- Added saving state for button feedback
+- Added error state display in header
+- Adapted Overview tab to new schema (removed old fields like `type`, `flavour`, `signatureCreature`, `signatureHazard`, `lightLevelMin/Max`)
+- Added dynamic array editors for `features`, `hazardTypes`, `roomProperties`, `narrationHints`
+- Renamed "Room Names" tab to "Room Properties" and wired to `roomProperties` + `narrationHints`
+- Kept "Room Descriptions", "Loot Table" tabs as "Coming soon..." stubs
+- Wired "Hazards" tab to `hazardTypes` array editor
+- Updated preview panel to reflect current form state
+- Added form validation indicator (green/red status based on required fields)
+
+**API Utility**:
+- Reused existing `packages/client/src/lib/admin-api.ts`
+- Uses `Bearer` token from `localStorage.getItem('x-admin-token')`
+- Generic CRUD functions: `listEntities`, `getEntity`, `createEntity`, `updateEntity`, `deleteEntity`
+
+### Technical Decisions
+1. **Schema Adaptation**: UI fully adapted to match server `BiomeDefinition` (dropped old mock fields, embraced backend schema)
+2. **Loading/Error States**: All API calls wrapped with try/catch and proper UX feedback
+3. **Form Validation**: Basic check for required fields (`name`, `description`) before save
+4. **Navigation on Create**: After creating new biome, navigate to detail view with generated ID
+5. **Submit vs Save**: "Submit Review" currently identical to "Save Draft" — placeholder for future workflow
+
+### Files Modified
+- `packages/client/src/pages/admin/BiomesList.tsx` (332 line diff)
+- `packages/client/src/pages/admin/BiomesDetail.tsx` (large refactor)
+
+### Testing
+- TypeScript validation passed for modified files
+- Pre-existing errors in `ModifiersDetail.tsx` are unrelated
+- Manual testing required with server running and admin token configured
+
+### Learnings
+- The `admin-api.ts` utility was already present and well-structured — good foundation from prior work (#128, #129)
+- Backend `BiomeDefinition` schema is simpler than initial mock (good — less scope creep)
+- Array editors in forms need careful state management (`updateArrayItem`, `removeArrayItem`, `addArrayItem`)
+- localStorage token pattern works but is Phase 1 — production will need secure auth flow
+

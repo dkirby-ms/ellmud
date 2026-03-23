@@ -1,6 +1,18 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router";
-import { ArrowLeft, Save, Send, Plus, X, Eye } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link, useParams, useNavigate } from "react-router";
+import { ArrowLeft, Save, Plus, X, Eye } from "lucide-react";
+import { useAdminEntity } from "../../hooks/useAdminEntity.js";
+
+interface NarrativeData {
+  id: string;
+  name: string;
+  narrativeType: string;
+  biome: string;
+  template: string;
+  tone: string;
+  verbosity: string;
+  tags: string[];
+}
 
 type NarrativeType = "dialogue" | "lore" | "quest" | "event" | "discovery" | "epilogue";
 
@@ -24,45 +36,57 @@ interface Choice {
 
 export default function NarrativeDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const isNew = id === "new";
 
+  const { data: apiData, loading, error, saving, saveError, save } = useAdminEntity<NarrativeData>(
+    "narrative",
+    id,
+    isNew
+  );
+
   const [formData, setFormData] = useState({
-    slug: "warden_warning",
-    title: "The Warden's Warning",
-    type: "dialogue" as NarrativeType,
-    category: "The Refuge",
-    description: "Initial dialogue with the Warden when first entering The Refuge.",
-    // Content
-    bodyText: `The dim lanterns flicker as you approach the Warden's post. His armor is battered, scarred from countless incursions into the depths below.
-
-"Another seeker of fortune, I see. They all come eventually—drawn by the whispers of treasure, of power, of redemption." He gestures to the yawning portal behind him, its edges crackling with unstable energy.
-
-"The Shards are not forgiving. Each one is a fragment of a broken world, teeming with creatures that should not exist. But the Pale King's corruption runs deep, and only by venturing into these rifts can we hope to stem the tide."
-
-He hands you a worn leather satchel. "Take this. You'll need it to carry what you find—assuming you make it back."`,
-    showInGame: true,
-    playOnce: false,
-    // Trigger settings
-    triggerType: "automatic",
-    triggerEvent: "first_refuge_entry",
+    id: "",
+    name: "",
+    narrativeType: "dialogue" as string,
+    biome: "",
+    template: "",
+    tone: "",
+    verbosity: "",
+    tags: [] as string[],
   });
 
-  const [dialogueLines, setDialogueLines] = useState<DialogueLine[]>([
-    { speaker: "Warden", text: "Another seeker of fortune, I see.", emotion: "weary" },
-    { speaker: "Warden", text: "The Shards are not forgiving. Each one is a fragment of a broken world.", emotion: "serious" },
-    { speaker: "Player", text: "What happened to the others?", emotion: "curious" },
-    { speaker: "Warden", text: "Some returned. Most didn't. That's the way of things here.", emotion: "grim" },
-  ]);
+  const [dialogueLines, setDialogueLines] = useState<DialogueLine[]>([]);
 
-  const [conditions, setConditions] = useState<Condition[]>([
-    { type: "player_level", operator: ">=", value: "1" },
-  ]);
+  const [conditions, setConditions] = useState<Condition[]>([]);
 
-  const [choices, setChoices] = useState<Choice[]>([
-    { text: "Tell me more about the Shards.", nextSlug: "warden_shards_info" },
-    { text: "I'm ready to go.", nextSlug: "refuge_hub" },
-    { text: "Who is the Pale King?", nextSlug: "warden_pale_king", condition: "lore_unlocked" },
-  ]);
+  const [choices, setChoices] = useState<Choice[]>([]);
+
+  useEffect(() => {
+    if (apiData && !isNew) {
+      setFormData({
+        id: apiData.id,
+        name: apiData.name,
+        narrativeType: apiData.narrativeType,
+        biome: apiData.biome,
+        template: apiData.template,
+        tone: apiData.tone,
+        verbosity: apiData.verbosity,
+        tags: apiData.tags ?? [],
+      });
+    }
+  }, [apiData, isNew]);
+
+  const handleSave = async () => {
+    try {
+      await save(formData);
+      if (isNew) {
+        navigate("/admin/narrative");
+      }
+    } catch (err) {
+      console.error("Failed to save:", err);
+    }
+  };
 
   const updateField = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -110,7 +134,7 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
     );
   };
 
-  const wordCount = formData.bodyText.split(/\s+/).filter(Boolean).length;
+  const wordCount = formData.template.split(/\s+/).filter(Boolean).length;
 
   const typeColors: Record<NarrativeType, string> = {
     dialogue: "#3A7D7B",
@@ -120,6 +144,26 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
     discovery: "#B8860B",
     epilogue: "#8B2500",
   };
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+          Loading narrative...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8B2500]" style={{ fontFamily: "var(--font-sans)" }}>
+          Error: {error}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col">
@@ -136,9 +180,17 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
             className="text-[#C9A84C] text-xl"
             style={{ fontFamily: "var(--font-serif)" }}
           >
-            {isNew ? "New Narrative" : formData.title}
+            {isNew ? "New Narrative" : formData.name}
           </h1>
-          {!isNew && (
+          {saveError && (
+            <span
+              className="px-2 py-1 bg-[#8B2500] text-[#E8E0D0] text-xs rounded"
+              style={{ fontFamily: "var(--font-sans)" }}
+            >
+              Error: {saveError}
+            </span>
+          )}
+          {!isNew && !saveError && (
             <span
               className="px-2 py-1 bg-[#2D6B4F] text-[#E8E0D0] text-xs rounded"
               style={{ fontFamily: "var(--font-sans)" }}
@@ -149,18 +201,13 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
         </div>
         <div className="flex gap-2">
           <button
-            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2 disabled:opacity-50"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
             <Save className="w-4 h-4" />
-            Save Draft
-          </button>
-          <button
-            className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2"
-            style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
-          >
-            <Send className="w-4 h-4" />
-            Submit Review
+            {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
@@ -183,12 +230,12 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
                     className="block text-[#8A8B95] text-sm mb-2"
                     style={{ fontFamily: "var(--font-sans)" }}
                   >
-                    Slug
+                    ID
                   </label>
                   <input
                     type="text"
-                    value={formData.slug}
-                    onChange={(e) => updateField("slug", e.target.value)}
+                    value={formData.id}
+                    onChange={(e) => updateField("id", e.target.value)}
                     disabled={!isNew}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none disabled:opacity-50"
                     style={{ fontFamily: "var(--font-mono)" }}
@@ -199,12 +246,12 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
                     className="block text-[#8A8B95] text-sm mb-2"
                     style={{ fontFamily: "var(--font-sans)" }}
                   >
-                    Title
+                    Name
                   </label>
                   <input
                     type="text"
-                    value={formData.title}
-                    onChange={(e) => updateField("title", e.target.value)}
+                    value={formData.name}
+                    onChange={(e) => updateField("name", e.target.value)}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
                     style={{ fontFamily: "var(--font-serif)" }}
                   />
@@ -218,8 +265,8 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
                       Type
                     </label>
                     <select
-                      value={formData.type}
-                      onChange={(e) => updateField("type", e.target.value)}
+                      value={formData.narrativeType}
+                      onChange={(e) => updateField("narrativeType", e.target.value)}
                       className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
                       style={{ fontFamily: "var(--font-sans)" }}
                     >
@@ -236,35 +283,48 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
                       className="block text-[#8A8B95] text-sm mb-2"
                       style={{ fontFamily: "var(--font-sans)" }}
                     >
-                      Category
+                      Biome
                     </label>
-                    <select
-                      value={formData.category}
-                      onChange={(e) => updateField("category", e.target.value)}
+                    <input
+                      type="text"
+                      value={formData.biome}
+                      onChange={(e) => updateField("biome", e.target.value)}
                       className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
                       style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      <option value="The Refuge">The Refuge</option>
-                      <option value="Flooded Crypt">Flooded Crypt</option>
-                      <option value="Tutorial">Tutorial</option>
-                      <option value="World Lore">World Lore</option>
-                    </select>
+                    />
                   </div>
                 </div>
-                <div>
-                  <label
-                    className="block text-[#8A8B95] text-sm mb-2"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
-                    Description (internal)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.description}
-                    onChange={(e) => updateField("description", e.target.value)}
-                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label
+                      className="block text-[#8A8B95] text-sm mb-2"
+                      style={{ fontFamily: "var(--font-sans)" }}
+                    >
+                      Tone
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.tone}
+                      onChange={(e) => updateField("tone", e.target.value)}
+                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
+                      style={{ fontFamily: "var(--font-sans)" }}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      className="block text-[#8A8B95] text-sm mb-2"
+                      style={{ fontFamily: "var(--font-sans)" }}
+                    >
+                      Verbosity
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.verbosity}
+                      onChange={(e) => updateField("verbosity", e.target.value)}
+                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
+                      style={{ fontFamily: "var(--font-sans)" }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -276,7 +336,7 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
                   className="text-[#C9A84C] text-lg"
                   style={{ fontFamily: "var(--font-serif)" }}
                 >
-                  {formData.type === "dialogue" ? "Dialogue Lines" : "Narrative Content"}
+                  {formData.narrativeType === "dialogue" ? "Dialogue Lines" : "Narrative Content"}
                 </h2>
                 <span
                   className="text-[#8A8B95] text-sm"
@@ -286,7 +346,7 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
                 </span>
               </div>
 
-              {formData.type === "dialogue" ? (
+              {formData.narrativeType === "dialogue" ? (
                 <div className="space-y-3">
                   {dialogueLines.map((line, index) => (
                     <div
@@ -348,8 +408,8 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
                 </div>
               ) : (
                 <textarea
-                  value={formData.bodyText}
-                  onChange={(e) => updateField("bodyText", e.target.value)}
+                  value={formData.template}
+                  onChange={(e) => updateField("template", e.target.value)}
                   rows={12}
                   className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-4 py-3 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
                   style={{ fontFamily: "var(--font-serif)", lineHeight: "1.7" }}
@@ -358,7 +418,7 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
             </div>
 
             {/* Player Choices */}
-            {formData.type === "dialogue" && (
+            {formData.narrativeType === "dialogue" && (
               <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2
@@ -488,84 +548,6 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
                 ))}
               </div>
             </div>
-
-            {/* Trigger Settings */}
-            <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
-              <h2
-                className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
-              >
-                Trigger Settings
-              </h2>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      className="block text-[#8A8B95] text-sm mb-2"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      Trigger Type
-                    </label>
-                    <select
-                      value={formData.triggerType}
-                      onChange={(e) => updateField("triggerType", e.target.value)}
-                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      <option value="automatic">Automatic</option>
-                      <option value="interact">Interact</option>
-                      <option value="discovery">Discovery</option>
-                      <option value="event">Event</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label
-                      className="block text-[#8A8B95] text-sm mb-2"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      Event ID
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.triggerEvent}
-                      onChange={(e) => updateField("triggerEvent", e.target.value)}
-                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                      style={{ fontFamily: "var(--font-mono)" }}
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.playOnce}
-                      onChange={(e) => updateField("playOnce", e.target.checked)}
-                      className="w-4 h-4"
-                    />
-                    <span
-                      className="text-[#E8E0D0] text-sm"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      Play only once per character
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.showInGame}
-                      onChange={(e) => updateField("showInGame", e.target.checked)}
-                      className="w-4 h-4"
-                    />
-                    <span
-                      className="text-[#E8E0D0] text-sm"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      Show in game
-                    </span>
-                  </label>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Right Column */}
@@ -580,7 +562,7 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
                 In-Game Preview
               </h3>
               <div className="bg-[#0A0B0F] rounded p-4 border border-[#2A2B35]">
-                {formData.type === "dialogue" ? (
+                {formData.narrativeType === "dialogue" ? (
                   <div className="space-y-3">
                     {dialogueLines.slice(0, 3).map((line, i) => (
                       <div key={i} className="space-y-1">
@@ -612,8 +594,8 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
                     className="text-[#E8E0D0] text-sm"
                     style={{ fontFamily: "var(--font-serif)", lineHeight: "1.7" }}
                   >
-                    {formData.bodyText.slice(0, 300)}
-                    {formData.bodyText.length > 300 && "..."}
+                    {formData.template.slice(0, 300)}
+                    {formData.template.length > 300 && "..."}
                   </div>
                 )}
               </div>
@@ -630,12 +612,12 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
               <span
                 className="px-3 py-2 rounded inline-block capitalize"
                 style={{
-                  backgroundColor: typeColors[formData.type] + "20",
-                  color: typeColors[formData.type],
+                  backgroundColor: (typeColors[formData.narrativeType as NarrativeType] ?? "#4A4B55") + "20",
+                  color: typeColors[formData.narrativeType as NarrativeType] ?? "#4A4B55",
                   fontFamily: "var(--font-sans)",
                 }}
               >
-                {formData.type}
+                {formData.narrativeType}
               </span>
             </div>
 
@@ -655,7 +637,7 @@ He hands you a worn leather satchel. "Take this. You'll need it to carry what yo
                   <span className="text-[#8A8B95]">Word Count:</span>
                   <span>{wordCount}</span>
                 </div>
-                {formData.type === "dialogue" && (
+                {formData.narrativeType === "dialogue" && (
                   <>
                     <div className="flex justify-between">
                       <span className="text-[#8A8B95]">Lines:</span>

@@ -1,94 +1,71 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router";
-import { ArrowLeft, Save, Send, Plus, X, Dice6 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link, useParams, useNavigate } from "react-router";
+import { ArrowLeft, Save, Plus, X, Dice6 } from "lucide-react";
+import { useAdminEntity } from "../../hooks/useAdminEntity.js";
 
-type SourceType = "creature" | "chest" | "boss" | "quest" | "event" | "biome";
-
-interface LootEntry {
+interface LootTableEntry {
   itemId: string;
-  itemName: string;
-  tier: string;
-  weight: number;
+  dropWeight: number;
   minQuantity: number;
   maxQuantity: number;
-  guaranteed: boolean;
+}
+
+interface LootTableData {
+  id: string;
+  name: string;
+  description: string;
+  entries: LootTableEntry[];
+  minDrops: number;
+  maxDrops: number;
 }
 
 export default function LootTablesDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const isNew = id === "new";
 
+  const { data: apiData, loading, error, saving, saveError, save } = useAdminEntity<LootTableData>(
+    "loot-tables",
+    id,
+    isNew
+  );
+
   const [formData, setFormData] = useState({
-    slug: "drowned_revenant_loot",
-    displayName: "Drowned Revenant",
-    description: "Loot dropped by Drowned Revenants in the Flooded Crypt.",
-    sourceType: "creature" as SourceType,
-    sourceEntity: "drowned_revenant",
-    // Drop settings
-    minDrops: 1,
-    maxDrops: 3,
-    dropChance: 0.85,
-    // Conditions
-    requiresKillingBlow: false,
-    scalesWithLuck: true,
+    id: "",
+    name: "",
+    description: "",
+    minDrops: 0,
+    maxDrops: 0,
   });
 
-  const [lootEntries, setLootEntries] = useState<LootEntry[]>([
-    {
-      itemId: "rusty_sword",
-      itemName: "Rusty Sword",
-      tier: "common",
-      weight: 30,
-      minQuantity: 1,
-      maxQuantity: 1,
-      guaranteed: false,
-    },
-    {
-      itemId: "waterlogged_leather",
-      itemName: "Waterlogged Leather",
-      tier: "common",
-      weight: 25,
-      minQuantity: 1,
-      maxQuantity: 3,
-      guaranteed: false,
-    },
-    {
-      itemId: "ancient_coin",
-      itemName: "Ancient Coin",
-      tier: "common",
-      weight: 20,
-      minQuantity: 5,
-      maxQuantity: 15,
-      guaranteed: true,
-    },
-    {
-      itemId: "drowned_essence",
-      itemName: "Drowned Essence",
-      tier: "sturdy",
-      weight: 15,
-      minQuantity: 1,
-      maxQuantity: 2,
-      guaranteed: false,
-    },
-    {
-      itemId: "revenant_blade",
-      itemName: "Revenant Blade",
-      tier: "refined",
-      weight: 8,
-      minQuantity: 1,
-      maxQuantity: 1,
-      guaranteed: false,
-    },
-    {
-      itemId: "cursed_amulet",
-      itemName: "Cursed Amulet",
-      tier: "anomalous",
-      weight: 2,
-      minQuantity: 1,
-      maxQuantity: 1,
-      guaranteed: false,
-    },
-  ]);
+  const [lootEntries, setLootEntries] = useState<LootTableEntry[]>([]);
+
+  useEffect(() => {
+    if (apiData && !isNew) {
+      setFormData({
+        id: apiData.id,
+        name: apiData.name,
+        description: apiData.description,
+        minDrops: apiData.minDrops,
+        maxDrops: apiData.maxDrops,
+      });
+      setLootEntries(apiData.entries ?? []);
+    }
+  }, [apiData, isNew]);
+
+  const handleSave = async () => {
+    try {
+      await save({
+        ...formData,
+        entries: lootEntries,
+      } as LootTableData);
+      if (isNew) {
+        navigate("/admin/loot-tables");
+      }
+    } catch (err) {
+      console.error("Failed to save:", err);
+    }
+  };
 
   const updateField = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -99,12 +76,9 @@ export default function LootTablesDetail() {
       ...prev,
       {
         itemId: "",
-        itemName: "",
-        tier: "common",
-        weight: 10,
+        dropWeight: 10,
         minQuantity: 1,
         maxQuantity: 1,
-        guaranteed: false,
       },
     ]);
   };
@@ -121,21 +95,32 @@ export default function LootTablesDetail() {
     );
   };
 
-  const totalWeight = lootEntries.reduce((sum, entry) => sum + (entry.guaranteed ? 0 : entry.weight), 0);
+  const totalWeight = lootEntries.reduce((sum, entry) => sum + entry.dropWeight, 0);
 
   const calculateDropChance = (weight: number) => {
     if (totalWeight === 0) return 0;
     return ((weight / totalWeight) * 100).toFixed(2);
   };
 
-  const tierColors: Record<string, string> = {
-    scrap: "#4A4B55",
-    common: "#8A8B95",
-    sturdy: "#2D6B4F",
-    refined: "#3A7D7B",
-    masterwork: "#6B4E9B",
-    anomalous: "#C9A84C",
-  };
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+          Loading...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8B2500]" style={{ fontFamily: "var(--font-sans)" }}>
+          Error: {error}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col">
@@ -152,31 +137,26 @@ export default function LootTablesDetail() {
             className="text-[#C9A84C] text-xl"
             style={{ fontFamily: "var(--font-serif)" }}
           >
-            {isNew ? "New Loot Table" : formData.displayName}
+            {isNew ? "New Loot Table" : formData.name}
           </h1>
-          {!isNew && (
+          {saveError && (
             <span
-              className="px-2 py-1 bg-[#2D6B4F] text-[#E8E0D0] text-xs rounded"
+              className="px-2 py-1 bg-[#8B2500] text-[#E8E0D0] text-xs rounded"
               style={{ fontFamily: "var(--font-sans)" }}
             >
-              ✅ Published v2
+              Error: {saveError}
             </span>
           )}
         </div>
         <div className="flex gap-2">
           <button
-            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2 disabled:opacity-50"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
             <Save className="w-4 h-4" />
-            Save Draft
-          </button>
-          <button
-            className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2"
-            style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
-          >
-            <Send className="w-4 h-4" />
-            Submit Review
+            {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
@@ -199,12 +179,12 @@ export default function LootTablesDetail() {
                     className="block text-[#8A8B95] text-sm mb-2"
                     style={{ fontFamily: "var(--font-sans)" }}
                   >
-                    Slug
+                    ID
                   </label>
                   <input
                     type="text"
-                    value={formData.slug}
-                    onChange={(e) => updateField("slug", e.target.value)}
+                    value={formData.id}
+                    onChange={(e) => updateField("id", e.target.value)}
                     disabled={!isNew}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none disabled:opacity-50"
                     style={{ fontFamily: "var(--font-mono)" }}
@@ -215,12 +195,12 @@ export default function LootTablesDetail() {
                     className="block text-[#8A8B95] text-sm mb-2"
                     style={{ fontFamily: "var(--font-sans)" }}
                   >
-                    Display Name
+                    Name
                   </label>
                   <input
                     type="text"
-                    value={formData.displayName}
-                    onChange={(e) => updateField("displayName", e.target.value)}
+                    value={formData.name}
+                    onChange={(e) => updateField("name", e.target.value)}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
                     style={{ fontFamily: "var(--font-serif)" }}
                   />
@@ -240,46 +220,6 @@ export default function LootTablesDetail() {
                     style={{ fontFamily: "var(--font-serif)" }}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      className="block text-[#8A8B95] text-sm mb-2"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      Source Type
-                    </label>
-                    <select
-                      value={formData.sourceType}
-                      onChange={(e) => updateField("sourceType", e.target.value)}
-                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      <option value="creature">Creature</option>
-                      <option value="chest">Chest</option>
-                      <option value="boss">Boss</option>
-                      <option value="quest">Quest</option>
-                      <option value="event">Event</option>
-                      <option value="biome">Biome</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label
-                      className="block text-[#8A8B95] text-sm mb-2"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      Source Entity
-                    </label>
-                    <select
-                      value={formData.sourceEntity}
-                      onChange={(e) => updateField("sourceEntity", e.target.value)}
-                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                      style={{ fontFamily: "var(--font-serif)" }}
-                    >
-                      <option value="drowned_revenant">Drowned Revenant</option>
-                      <option value="crypt_guardian">Crypt Guardian</option>
-                    </select>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -291,7 +231,7 @@ export default function LootTablesDetail() {
               >
                 Drop Settings
               </h2>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label
                     className="block text-[#8A8B95] text-sm mb-2"
@@ -322,54 +262,6 @@ export default function LootTablesDetail() {
                     style={{ fontFamily: "var(--font-mono)" }}
                   />
                 </div>
-                <div>
-                  <label
-                    className="block text-[#8A8B95] text-sm mb-2"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
-                    Drop Chance
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="1"
-                    value={formData.dropChance}
-                    onChange={(e) => updateField("dropChance", parseFloat(e.target.value))}
-                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-mono)" }}
-                  />
-                </div>
-              </div>
-              <div className="mt-4 space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.requiresKillingBlow}
-                    onChange={(e) => updateField("requiresKillingBlow", e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                  <span
-                    className="text-[#E8E0D0] text-sm"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
-                    Requires killing blow (no loot sharing)
-                  </span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.scalesWithLuck}
-                    onChange={(e) => updateField("scalesWithLuck", e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                  <span
-                    className="text-[#E8E0D0] text-sm"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
-                    Scales with luck stat
-                  </span>
-                </label>
               </div>
             </div>
 
@@ -405,39 +297,16 @@ export default function LootTablesDetail() {
                     key={index}
                     className="bg-[#1C1D27] rounded p-3 flex items-center gap-3"
                   >
-                    <div className="flex-1 grid grid-cols-6 gap-2">
+                    <div className="flex-1 grid grid-cols-5 gap-2">
                       <div className="col-span-2">
-                        <select
+                        <input
+                          type="text"
                           value={entry.itemId}
-                          onChange={(e) => {
-                            updateLootEntry(index, "itemId", e.target.value);
-                            updateLootEntry(index, "itemName", e.target.options[e.target.selectedIndex].text);
-                          }}
+                          onChange={(e) => updateLootEntry(index, "itemId", e.target.value)}
+                          placeholder="Item ID"
                           className="w-full bg-[#0A0B0F] border border-[#2A2B35] rounded px-2 py-1.5 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none text-sm"
-                          style={{ fontFamily: "var(--font-serif)" }}
-                        >
-                          <option value="rusty_sword">Rusty Sword</option>
-                          <option value="waterlogged_leather">Waterlogged Leather</option>
-                          <option value="ancient_coin">Ancient Coin</option>
-                          <option value="drowned_essence">Drowned Essence</option>
-                          <option value="revenant_blade">Revenant Blade</option>
-                          <option value="cursed_amulet">Cursed Amulet</option>
-                        </select>
-                      </div>
-                      <div>
-                        <select
-                          value={entry.tier}
-                          onChange={(e) => updateLootEntry(index, "tier", e.target.value)}
-                          className="w-full bg-[#0A0B0F] border border-[#2A2B35] rounded px-2 py-1.5 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none text-sm"
-                          style={{ fontFamily: "var(--font-sans)" }}
-                        >
-                          <option value="scrap">Scrap</option>
-                          <option value="common">Common</option>
-                          <option value="sturdy">Sturdy</option>
-                          <option value="refined">Refined</option>
-                          <option value="masterwork">Masterwork</option>
-                          <option value="anomalous">Anomalous</option>
-                        </select>
+                          style={{ fontFamily: "var(--font-mono)" }}
+                        />
                       </div>
                       <div className="flex gap-1 items-center">
                         <input
@@ -461,37 +330,20 @@ export default function LootTablesDetail() {
                       <div>
                         <input
                           type="number"
-                          value={entry.weight}
-                          onChange={(e) => updateLootEntry(index, "weight", parseInt(e.target.value))}
-                          disabled={entry.guaranteed}
+                          value={entry.dropWeight}
+                          onChange={(e) => updateLootEntry(index, "dropWeight", parseInt(e.target.value))}
                           placeholder="Weight"
-                          className="w-full bg-[#0A0B0F] border border-[#2A2B35] rounded px-2 py-1.5 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none text-sm disabled:opacity-50"
+                          className="w-full bg-[#0A0B0F] border border-[#2A2B35] rounded px-2 py-1.5 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none text-sm"
                           style={{ fontFamily: "var(--font-mono)" }}
                         />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <label className="flex items-center gap-1 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={entry.guaranteed}
-                            onChange={(e) => updateLootEntry(index, "guaranteed", e.target.checked)}
-                            className="w-3 h-3"
-                          />
-                          <span
-                            className="text-[#E8E0D0] text-xs"
-                            style={{ fontFamily: "var(--font-sans)" }}
-                          >
-                            100%
-                          </span>
-                        </label>
-                        {!entry.guaranteed && (
-                          <span
-                            className="text-[#8A8B95] text-xs"
-                            style={{ fontFamily: "var(--font-mono)" }}
-                          >
-                            {calculateDropChance(entry.weight)}%
-                          </span>
-                        )}
+                      <div className="flex items-center">
+                        <span
+                          className="text-[#8A8B95] text-xs"
+                          style={{ fontFamily: "var(--font-mono)" }}
+                        >
+                          {calculateDropChance(entry.dropWeight)}%
+                        </span>
                       </div>
                     </div>
                     <button
@@ -525,14 +377,6 @@ export default function LootTablesDetail() {
                   <span>{lootEntries.length}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#8A8B95]">Guaranteed:</span>
-                  <span>{lootEntries.filter(e => e.guaranteed).length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#8A8B95]">Weighted:</span>
-                  <span>{lootEntries.filter(e => !e.guaranteed).length}</span>
-                </div>
-                <div className="flex justify-between">
                   <span className="text-[#8A8B95]">Total Weight:</span>
                   <span>{totalWeight}</span>
                 </div>
@@ -540,10 +384,6 @@ export default function LootTablesDetail() {
                 <div className="flex justify-between">
                   <span className="text-[#8A8B95]">Drop Range:</span>
                   <span>{formData.minDrops}–{formData.maxDrops}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#8A8B95]">Drop Rate:</span>
-                  <span>{(formData.dropChance * 100).toFixed(0)}%</span>
                 </div>
               </div>
             </div>
@@ -568,37 +408,28 @@ export default function LootTablesDetail() {
               </div>
             </div>
 
-            {/* Tier Distribution */}
+            {/* Weight Distribution */}
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h3
                 className="text-[#C9A84C] text-sm mb-4"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Tier Distribution
+                Weight Distribution
               </h3>
               <div className="space-y-2">
-                {Object.entries(
-                  lootEntries.reduce((acc, entry) => {
-                    acc[entry.tier] = (acc[entry.tier] || 0) + 1;
-                    return acc;
-                  }, {} as Record<string, number>)
-                ).map(([tier, count]) => (
-                  <div key={tier} className="flex items-center gap-2">
-                    <div
-                      className="px-2 py-1 rounded text-xs capitalize flex-1"
-                      style={{
-                        backgroundColor: tierColors[tier] + "20",
-                        color: tierColors[tier],
-                        fontFamily: "var(--font-sans)",
-                      }}
-                    >
-                      {tier}
-                    </div>
+                {lootEntries.map((entry, index) => (
+                  <div key={index} className="flex items-center gap-2">
                     <span
-                      className="text-[#8A8B95] text-sm"
+                      className="text-[#E8E0D0] text-xs flex-1 truncate"
                       style={{ fontFamily: "var(--font-mono)" }}
                     >
-                      {count}
+                      {entry.itemId || "(empty)"}
+                    </span>
+                    <span
+                      className="text-[#8A8B95] text-xs"
+                      style={{ fontFamily: "var(--font-mono)" }}
+                    >
+                      {calculateDropChance(entry.dropWeight)}%
                     </span>
                   </div>
                 ))}

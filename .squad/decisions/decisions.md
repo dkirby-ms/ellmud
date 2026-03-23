@@ -1374,3 +1374,88 @@ Only `name` is universally required. Entity-specific checks are minimal (type en
 
 **Relevant to:** Anyone building admin forms — server accepts flexible payloads.
 
+# Decision: Biome Admin UI Schema Adaptation
+
+**Date:** 2025-01-21  
+**Decider:** Drizzt (Engine Dev)  
+**Context:** Issue #130 — Wire BiomesList & BiomesDetail to Content CRUD API  
+**Status:** Implemented
+
+## Problem
+The BiomesList and BiomesDetail pages were built with mock data that didn't match the backend `BiomeDefinition` schema. The UI needed to be adapted to work with the real Content CRUD API.
+
+## Mock Schema (Before)
+```typescript
+interface Biome {
+  id: string;
+  name: string;
+  type: string;                    // e.g., "flooded_crypt"
+  signatureCreature: string;       // e.g., "Drowned Revenant"
+  signatureHazard: string;         // e.g., "Rising Waters"
+  roomCount: number;               // 18
+  status: "published" | "draft";
+  // ... plus detail fields like flavour, ambientSounds, lightLevelMin/Max, roomNames map
+}
+```
+
+## Backend Schema (Actual)
+```typescript
+interface BiomeDefinition {
+  id: string;
+  name: string;
+  description: string;
+  tier: number;
+  features: string[];
+  hazardTypes: string[];
+  roomProperties: string[];
+  narrationHints: string[];
+}
+```
+
+## Decision
+**Adapt the UI to fully embrace the backend schema**, removing all mock-specific fields and implementing proper CRUD operations.
+
+### Changes Made:
+1. **BiomesList Table Columns**:
+   - Removed: Type, Signature Creature, Signature Hazard, Room Templates, Status
+   - Added: Description (truncated), Tier, Features count, Hazards count
+   
+2. **BiomesDetail Form Fields**:
+   - Removed: type (slug), flavour, signatureCreature, signatureHazard, ambientSounds, lightLevelMin/Max, roomNames map
+   - Added: description (textarea), tier (number), features (array), hazardTypes (array), roomProperties (array), narrationHints (array)
+   
+3. **Tab Structure**:
+   - "Overview" → Basic info (name, description, tier) + features array
+   - "Room Names" → Renamed to "Room Properties" → roomProperties + narrationHints arrays
+   - "Room Descriptions" → Kept as stub ("Coming soon...")
+   - "Loot Table" → Kept as stub ("Coming soon...")
+   - "Hazards" → Wired to hazardTypes array editor
+
+## Rationale
+1. **Single Source of Truth**: Backend schema is authoritative. UI must adapt, not the other way around.
+2. **Simplicity**: Backend schema is simpler and more focused than mock — good for Phase 1.
+3. **Future-Proof**: Stubs for unimplemented tabs (Room Descriptions, Loot Table) allow for future expansion.
+4. **Array Editors**: Dynamic array fields (features, hazardTypes, etc.) are flexible and user-friendly.
+
+## Alternatives Considered
+1. **Keep mock fields, adapt backend**: ❌ Wrong direction — backend is frozen, UI is flexible.
+2. **Gradual migration**: ❌ Adds complexity, tech debt. Better to rip the band-aid off.
+3. **Dual schema support**: ❌ Unnecessary — no real biome data exists yet in dev.
+
+## Implementation Notes
+- Reused existing `admin-api.ts` utility (from #128, #129)
+- Loading/error states added for all API calls
+- Form validation checks required fields (name, description)
+- Navigation to detail view after create (with generated ID)
+
+## Follow-Up Work
+- Room Descriptions tab: Needs template editor (future)
+- Loot Table tab: Needs loot table selector (future)
+- Status/Publishing workflow: Submit Review button is placeholder
+- Admin auth: localStorage token is Phase 1 — needs secure flow for production
+
+## Related
+- Issue #130
+- PR #144
+- `packages/server/src/admin/content/content-types.ts` (BiomeDefinition)
+- `packages/client/src/lib/admin-api.ts` (CRUD utility)
