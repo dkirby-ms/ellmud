@@ -1065,3 +1065,42 @@ Entity slugs: `modifiers`, `skills`, `loot-tables` (hyphenated!), `factions`, `r
 - Follows pattern established in PR #142 (Items wiring)
 - Builds on PR #141 (Content CRUD API)
 - All 6 entity backend types defined in `packages/server/src/admin/content/content-types.ts`
+
+
+## Wave 2 Admin Wiring: Remaining 6 Entities (2026-03-23T20:00Z)
+
+### PR #145: LootTables, Skills, Factions, Rooms, Narratives, Modifiers Wiring
+
+**Deliverables:** All 6 entity types with 12 list/detail page pairs
+
+**Architecture:** Generic hooks eliminate 70% code duplication. Pattern approved by Elminster.
+
+**Review Feedback (Elminster — CHANGES REQUESTED):**
+
+**Critical Issues:**
+1. **Fake Validation** — Hardcoded UI (✅ always shown), no logic enforcement
+2. **Missing Critical Fields** — Modifiers: effects/tags; Skills: effects/requirements
+3. **Incomplete Forms** — Loot Tables itemId not validated
+
+**Required Fixes:**
+1. Implement real `validate()` function blocking save on invalid data
+2. Create KeyValueEditor component for effects maps
+3. Create TagEditor component for tags arrays
+4. Wire missing fields to UI inputs
+
+**Status:** Awaiting fix implementation.
+
+---
+
+## Wave 1 Admin Wiring Fixes: PR #143 Creatures (2026-03-23T20:00Z)
+
+### Surgical Fix Applied to Creatures Wiring
+
+**Issue (Elminster Review):** Loot Table disconnected from form data causing data loss on save
+
+**Fix Pattern Applied:**
+1. Load lootTable in useEffect after getCreature call
+2. Include in handleSave payload
+
+**Status:** Fixes pushed to squad/128-wire-creatures-admin; awaiting re-review.
+

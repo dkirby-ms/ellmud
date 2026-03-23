@@ -1015,3 +1015,24 @@ Wire the BiomesList and BiomesDetail admin pages to the real Content CRUD API en
 
 ---
 
+
+
+## Wave 2 Admin Wiring: Biomes (2026-03-23T20:00Z)
+
+### PR #144: BiomesList & BiomesDetail Wiring
+
+**Deliverables:**
+- `packages/client/src/pages/admin/BiomesList.tsx` — Biomes table with search/sort
+- `packages/client/src/pages/admin/BiomesDetail.tsx` — Create/edit forms, Hazards array editor
+- API wiring via `admin-api.ts` (Bearer token auth)
+- Form validation with error handling
+
+**Review Feedback (Elminster — CHANGES REQUESTED):**
+
+**Blocking Issue:** Form validation non-functional
+- Current: Validation warnings shown, but save buttons remain enabled with invalid data
+- Required: Add guard clauses in `handleSave` to check required fields
+- Pattern: Early return with error state if validation fails
+
+**Status:** Awaiting fix implementation.
+
