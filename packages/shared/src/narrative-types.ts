@@ -16,8 +16,7 @@ export type LLMNarrationType =
   | 'event'
   | 'sound_narration'
   | 'trace_narration'
-  | 'awareness_narration'
-  | 'ambient_narration';
+  | 'awareness_narration';
 
 // ─── State Snapshot (GDD §4.3 Input Schema) ─────────────────────────────────
 
@@ -109,7 +108,6 @@ export interface NarrationTimeoutConfig {
   sound_narration: number;
   trace_narration: number;
   awareness_narration: number;
-  ambient_narration: number;
   hard_limit: number;
 }
 
@@ -140,7 +138,6 @@ export const DEFAULT_NARRATION_CONFIG: NarrationConfig = {
     sound_narration: 500,
     trace_narration: 600,
     awareness_narration: 500,
-    ambient_narration: 1500,
     hard_limit: 3000,
   },
   model: {
@@ -152,7 +149,6 @@ export const DEFAULT_NARRATION_CONFIG: NarrationConfig = {
     sound_narration: { max_tokens: 40, temperature: 0.7 },
     trace_narration: { max_tokens: 60, temperature: 0.75 },
     awareness_narration: { max_tokens: 50, temperature: 0.7 },
-    ambient_narration: { max_tokens: 100, temperature: 0.8 },
   },
   cache_ttl: {
     combat: 30_000,
