@@ -689,3 +689,87 @@ Also added PvP-specific death narration and imported `PvPKillEvent`/`SHARD_SICKN
 - ✅ 1332 total tests, 343 new in Phase 2, 0 regressions
 - ✅ All Phase 2 issues closed (#21, #24, #27, #29)
 - ✅ PR #126 (dev → uat) created for QA validation
+
+---
+
+## Phase 2.5: Admin Panel Wiring (2026-03-23)
+
+**Status:** Planning  
+**Orchestration Log:** `.squad/orchestration-log/2026-03-23T18-45-00Z-elminster.md`
+
+### Context
+
+Minsc (Tester) audited all 25 React admin pages and found the entire UI is cosmetic — zero API calls, 27 dead buttons, all mock data. Elminster (Lead) decomposed findings into 12 well-scoped GitHub issues (#128–139) grouped by functional area and dependency chain.
+
+### Phase 2.5 Issues (New Labels: `phase:2.5`, `admin`)
+
+| # | Title | Owner | Depends On | Status |
+|---|-------|-------|-----------|--------|
+| 139 | **FOUNDATIONAL: Content CRUD API** | Drizzt | — | 🔴 P1 Blocker (Design review pending) |
+| 128 | Wire Creatures List + Detail | TBD | #139 | ⏳ Blocked by #139 |
+| 129 | Wire Items List + Detail | TBD | #139 | ⏳ Blocked by #139 |
+| 130 | Wire Biomes List + Detail + Stubs | TBD | #139 | ⏳ Blocked by #139 |
+| 131 | Wire 6 Remaining Detail Pages | TBD | #139 | ⏳ Blocked by #139 |
+| 132 | Wire Dashboard | TBD | #139 | ⏳ Blocked by #139 |
+| 133 | Deploy Page Implementation | TBD | — | ⏳ P3 |
+| 134 | User Management | TBD | — | ⏳ P3 |
+| 135 | Audit Log | TBD | — | ⏳ P3 |
+| 136 | Simulator Features | Jarlaxle | #128, #131 | ⏳ Blocked by #128, #131 |
+| 137 | Orphan Endpoints Finalization | Drizzt | #131 | ⏳ Blocked by #131 |
+| 138 | Stub Pages + Layout Features | TBD | — | ⏳ P3 |
+
+### Your Assignment (Drizzt)
+
+1. **#139 Content CRUD API (P1 Blocker):**
+   - Design endpoint schema: `GET/POST/PUT/DELETE /admin/api/{entity}` pattern
+   - Implement for: items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narrative
+   - Define authorization strategy (all-or-nothing admin or granular per entity?)
+   - Add server-side validation, audit logging, conflict resolution
+   - All endpoints require integration tests before merging
+   - **Early code review required before implementation** to catch design changes that would cascade to 7 detail pages
+
+2. **#137 Orphan Endpoints Finalization (P3):**
+   - Clarify SSE usage: Is this for real-time updates? If yes, wire to #138 notifications. If no, document or remove.
+   - Wire pause/resume buttons to RoomsDetail page (#131)
+   - Implement actual spawn logic (create NPC in room state, currently only broadcasts chat)
+   - Verify Dashboard actually calls `/admin/api/metrics` or flag for removal
+
+3. **#133 Deployment Flow (P3, coordination needed):**
+   - Open questions: How are pending changes tracked? Git branch? Database flag? Staging environment? Rollback mechanism?
+   - Spike on deployment logic early; discuss with Elminster (Lead) in issue comments
+
+### Decision Documents
+
+- **Minsc's audit findings:** `.squad/decisions/inbox/minsc-admin-audit.md`
+- **Elminster's decomposition:** `.squad/decisions/inbox/elminster-phase25-admin.md`
+- **Merged to:** `.squad/decisions/decisions.md` (2026-03-23 section)
+
+### Execution Sequence (Recommended)
+
+```
+PHASE 1 (Foundational):
+  #139 ← must complete first (Drizzt)
+
+PHASE 2 (Detail Pages + Dashboard):
+  #128, #129, #130, #131 (depend on #139)
+  #132 (Dashboard wiring, depends on #139)
+  #135 (Audit Log, independent)
+
+PHASE 3 (Supporting Features + Management):
+  #134 (User Management, independent)
+  #136 (Simulators, depends on #128 + #131, Jarlaxle)
+  #137 (Orphan endpoints, depends on #131, Drizzt)
+
+PHASE 4 (Polish):
+  #133 (Deploy, Drizzt coordination)
+  #138 (Stubs + Layout, independent)
+```
+
+### Risks & Mitigations
+
+| Risk | Mitigation |
+|------|-----------|
+| Endpoint design changes mid-implementation | Review #139 early in code review (before merging) |
+| Authorization model unclear | Define admin role strategy before #139 merge |
+| SSE scope creep | Clarify requirements in #137 before starting #138 |
+| Database performance (1000+ items) | Add pagination + indexes in #139; note in AC |

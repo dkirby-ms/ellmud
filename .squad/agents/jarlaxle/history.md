@@ -760,3 +760,70 @@ Implemented server-side proximity-based communication system with three social c
 - ✅ 94 tests authored (44 + 50)
 - ✅ Core death/downing/PvP flow complete
 - ✅ PR #122–#125 merged to dev
+
+---
+
+## Phase 2.5: Admin Panel Wiring (2026-03-23)
+
+**Status:** Planning  
+**Orchestration Log:** `.squad/orchestration-log/2026-03-23T18-45-00Z-elminster.md`
+
+### Context
+
+Minsc (Tester) audited all 25 React admin pages and found the entire UI is cosmetic — zero API calls, 27 dead buttons, all mock data. Elminster (Lead) decomposed findings into 12 well-scoped GitHub issues (#128–139) grouped by functional area and dependency chain.
+
+### Phase 2.5 Issues (New Labels: `phase:2.5`, `admin`)
+
+| # | Title | Owner | Depends On | Status |
+|---|-------|-------|-----------|--------|
+| 139 | **FOUNDATIONAL: Content CRUD API** | Drizzt | — | 🔴 P1 Blocker (Design review pending) |
+| 128 | Wire Creatures List + Detail | TBD | #139 | ⏳ Blocked by #139 |
+| 129 | Wire Items List + Detail | TBD | #139 | ⏳ Blocked by #139 |
+| 130 | Wire Biomes List + Detail + Stubs | TBD | #139 | ⏳ Blocked by #139 |
+| 131 | Wire 6 Remaining Detail Pages | TBD | #139 | ⏳ Blocked by #139 |
+| 132 | Wire Dashboard | TBD | #139 | ⏳ Blocked by #139 |
+| 133 | Deploy Page Implementation | TBD | — | ⏳ P3 |
+| 134 | User Management | TBD | — | ⏳ P3 |
+| 135 | Audit Log | TBD | — | ⏳ P3 |
+| 136 | Simulator Features | Jarlaxle | #128, #131 | ⏳ Blocked by #128, #131 |
+| 137 | Orphan Endpoints Finalization | Drizzt | #131 | ⏳ Blocked by #131 |
+| 138 | Stub Pages + Layout Features | TBD | — | ⏳ P3 |
+
+### Your Assignment (Jarlaxle)
+
+1. **#136 Simulator Features (P3):**
+   - Implement simulator logic: Loot drop simulator (10x roll), creature re-roll
+   - Depends on #128 (Creatures List wired) and #131 (Detail pages wired)
+   - Provide estimate for simulator logic complexity during Phase 2.5 planning
+
+### Decision Documents
+
+- **Minsc's audit findings:** `.squad/decisions/inbox/minsc-admin-audit.md`
+- **Elminster's decomposition:** `.squad/decisions/inbox/elminster-phase25-admin.md`
+- **Merged to:** `.squad/decisions/decisions.md` (2026-03-23 section)
+
+### Execution Sequence (Recommended)
+
+```
+PHASE 1 (Foundational):
+  #139 ← Drizzt must complete first
+
+PHASE 2 (Detail Pages + Dashboard):
+  #128, #129, #130, #131 (depend on #139)
+  #132 (Dashboard wiring, depends on #139)
+  #135 (Audit Log, independent)
+
+PHASE 3 (Supporting Features + Management):
+  #134 (User Management, independent)
+  #136 (Simulators, depends on #128 + #131, **your work**)
+  #137 (Orphan endpoints, depends on #131, Drizzt)
+
+PHASE 4 (Polish):
+  #133 (Deploy)
+  #138 (Stubs + Layout)
+```
+
+### Inputs Needed from You
+
+- Estimate for simulator logic complexity (#136) for Phase 2.5 planning
+- Possibly: User management backend (#134) if needed

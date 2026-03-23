@@ -636,3 +636,16 @@ Each test file includes sections marked with × notation (e.g., `#23 × #25`) th
 - ✅ 0 regressions
 - ✅ All 4 Phase 2 features validated
 - ✅ PR #126 (dev → uat) ready for QA sign-off
+
+## Comprehensive Admin Screen Audit (2025-07-25)
+
+### Key Findings
+- **Zero API wiring across all 25 admin pages.** Not a single client page makes any fetch/API call. Every page uses hardcoded mock data in local state. Every form, filter, and list is purely cosmetic.
+- **16 "Save Draft" / "Submit Review" button pairs across 8 detail pages** — all without onClick handlers (dead buttons).
+- **3 additional dead buttons** — "Simulate 10 Drops" (LootTablesDetail), "Re-roll Simulation" (CreatureDetail), "Add User" (UsersList) — none have handlers.
+- **Bulk action buttons** on CreaturesList ("Publish", "Deprecate", "Delete Draft") — no handlers.
+- **Deploy page** has "Preview Diff", "Deploy to Staging", "Deploy to Production" — all dead buttons.
+- **Dashboard** "View All Activity →" and "Review All →" — dead buttons.
+- **Server has 8 real admin API endpoints** (rooms list, room detail, creatures, players, metrics, pause, resume, spawn, SSE) — none are called by any client page.
+- **Server spawn endpoint** is a stub: only broadcasts a chat message, doesn't actually spawn entities.
+- **Two parallel admin systems exist**: server-side dashboard.ts (inline HTML+JS, functional) vs React client admin pages (full UI, zero wiring). These are disconnected systems.

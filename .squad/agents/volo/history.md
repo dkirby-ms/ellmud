@@ -316,3 +316,88 @@ Wave 7 will deliver final 3 client UI issues. Shardboard will integrate with Ref
 - ✅ 198 tests for Refuge ambient systems
 - ✅ Template fallback narration primary, LLM enhancement wired
 - ✅ NarrationType 'ambient' added to shared types for client
+
+---
+
+## Phase 2.5: Admin Panel Wiring (2026-03-23)
+
+**Status:** Planning  
+**Orchestration Log:** `.squad/orchestration-log/2026-03-23T18-45-00Z-elminster.md`
+
+### Context
+
+Minsc (Tester) audited all 25 React admin pages and found the entire UI is cosmetic — zero API calls, 27 dead buttons, all mock data. Elminster (Lead) decomposed findings into 12 well-scoped GitHub issues (#128–139) grouped by functional area and dependency chain.
+
+### Phase 2.5 Issues (New Labels: `phase:2.5`, `admin`)
+
+| # | Title | Owner | Depends On | Status |
+|---|-------|-------|-----------|--------|
+| 139 | **FOUNDATIONAL: Content CRUD API** | Drizzt | — | 🔴 P1 Blocker (Design review pending) |
+| 128 | Wire Creatures List + Detail | TBD | #139 | ⏳ Blocked by #139 |
+| 129 | Wire Items List + Detail | TBD | #139 | ⏳ Blocked by #139 |
+| 130 | Wire Biomes List + Detail + Stubs | TBD | #139 | ⏳ Blocked by #139 |
+| 131 | Wire 6 Remaining Detail Pages | TBD | #139 | ⏳ Blocked by #139 |
+| 132 | Wire Dashboard | TBD | #139 | ⏳ Blocked by #139 |
+| 133 | Deploy Page Implementation | TBD | — | ⏳ P3 |
+| 134 | User Management | TBD | — | ⏳ P3 |
+| 135 | Audit Log | TBD | — | ⏳ P3 |
+| 136 | Simulator Features | Jarlaxle | #128, #131 | ⏳ Blocked by #128, #131 |
+| 137 | Orphan Endpoints Finalization | Drizzt | #131 | ⏳ Blocked by #131 |
+| 138 | Stub Pages + Layout Features | TBD | — | ⏳ P3 |
+
+### Your Assignment (Volo)
+
+Phase 2.5 introduces 12 admin panel wiring issues. Your likely work:
+- **#128–131:** Wire React admin detail/list pages to Content CRUD API (depends on Drizzt's #139)
+- **#132:** Dashboard wiring (metrics, recent changes, pending reviews)
+- **#138:** Stub pages, layout features, notification bell
+- Possibly: User management UI (#134) if needed
+
+All client work depends on Drizzt completing #139 (Content CRUD API) first. Begin planning/design once #139 endpoint design is approved.
+
+### Decision Documents
+
+- **Minsc's audit findings:** `.squad/decisions/inbox/minsc-admin-audit.md`
+- **Elminster's decomposition:** `.squad/decisions/inbox/elminster-phase25-admin.md`
+- **Merged to:** `.squad/decisions/decisions.md` (2026-03-23 section)
+
+### Execution Sequence (Recommended)
+
+```
+PHASE 1 (Foundational):
+  #139 ← Drizzt must complete first
+
+PHASE 2 (Detail Pages + Dashboard):
+  #128, #129, #130, #131 (depend on #139) — **your client work**
+  #132 (Dashboard wiring, depends on #139) — **your work**
+  #135 (Audit Log, independent)
+
+PHASE 3 (Supporting Features + Management):
+  #134 (User Management, independent, possibly your work)
+  #136 (Simulators, depends on #128 + #131, Jarlaxle)
+  #137 (Orphan endpoints, depends on #131, Drizzt)
+
+PHASE 4 (Polish):
+  #133 (Deploy)
+  #138 (Stubs + Layout, **your work**)
+```
+
+### Key Pattern: Content CRUD API (#139)
+
+From Elminster's decomposition, all detail pages follow this pattern:
+
+```javascript
+// Detail page wiring pattern
+useEffect(() => {
+  fetch(`/admin/api/${entity}/${id}`).then(setFormData)
+}, [id])
+
+const handleSave = () => {
+  fetch(`/admin/api/${entity}/${id}`, { 
+    method: 'PUT', 
+    body: formData 
+  }).then(...).catch(...)
+}
+```
+
+Wait for #139 endpoint design approval before implementing client side.

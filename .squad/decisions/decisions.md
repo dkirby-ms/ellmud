@@ -1127,3 +1127,172 @@ None warrant rejection. Flagged for future cleanup pass.
 
 _Merged from decisions/inbox/ on 2026-03-22T10:58:00Z._
 
+
+---
+
+## 2026-03-23T18:45:00Z: Admin UI Requires Full API Wiring Pass
+
+**Author:** Minsc (Tester/QA)  
+**Date:** 2026-03-23  
+**Status:** DECIDED  
+**Scope:** Admin panel audit findings → Phase 2.5 decomposition  
+
+### Context
+
+Comprehensive audit of all 25 React admin pages and 8 server admin endpoints reveals that the admin UI is entirely cosmetic — zero API calls, zero endpoint wiring. All data is hardcoded mock data in local component state.
+
+### Findings Summary
+
+- **27 dead buttons** across detail/list/action pages (Save Draft, Submit Review, Simulate, Re-roll, Add User, Deploy ×3, Publish, Deprecate, Delete Draft, View All Activity, Review All)
+- **8 cosmetic forms** with no data binding to backend
+- **12 mock data lists** (all using hardcoded local component state)
+- **0 out of 25 pages make any API call**
+- **8 server endpoints** exist but are uncalled by React admin:
+  - `GET /admin/api/rooms`, `GET /admin/api/rooms/:roomId`
+  - `POST /admin/api/rooms/:roomId/pause`, `POST /admin/api/rooms/:roomId/resume`
+  - `GET /admin/api/creatures`, `GET /admin/api/players`, `GET /admin/api/metrics`, `GET /admin/api/sse`
+- **1 stub server endpoint** (`POST /admin/api/rooms/:roomId/spawn` — broadcasts chat message only, no NPC spawn logic)
+
+### Impact
+
+All admin pages render correctly but cannot persist any data. Designers using these screens would lose all work on page refresh.
+
+### Recommendation
+
+Before treating admin screens as "done", a wiring pass is needed:
+1. Define content CRUD API endpoints (GET/POST/PUT/DELETE for items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narrative)
+2. Wire list pages to fetch data from server
+3. Wire detail page Save/Submit buttons to POST/PUT endpoints
+4. Clarify purpose of orphan endpoints and SSE
+5. Implement spawn endpoint logic
+
+**Next:** See decision below (Elminster's Phase 2.5 decomposition).
+
+---
+
+## 2026-03-23T18:45:00Z: Phase 2.5 Admin Audit Decomposition
+
+**Author:** Elminster (Lead)  
+**Date:** 2026-03-23  
+**Status:** DECIDED  
+**Scope:** Admin screen audit findings → GitHub issue decomposition  
+**Audience:** Drizzt (Engine Dev), Jarlaxle (Systems Dev), Minsc (Tester), Volo (Client Dev)
+
+### Problem Statement
+
+Minsc's audit found 27 dead buttons and 8 orphan endpoints across admin UI. Risk: decomposing as 27 separate issues creates unmaintainable backlog with invisible dependency chains.
+
+**Decision:** Decompose into **12 well-scoped GitHub issues** (#128–139), grouped by functional area and dependency chain.
+
+### Issue Decomposition
+
+| # | Title | Type | Depends On | Priority |
+|---|-------|------|-----------|----------|
+| 139 | **FOUNDATIONAL: Content CRUD API** | Server | — | P1 Blocker |
+| 128 | Wire Creatures List + Detail | Client | #139 | P2 |
+| 129 | Wire Items List + Detail | Client | #139 | P2 |
+| 130 | Wire Biomes List + Detail + Stubs | Client | #139 | P2 |
+| 131 | Wire 6 Remaining Detail Pages | Client | #139 | P2 |
+| 132 | Wire Dashboard | Client+Server | #139 | P2 |
+| 133 | Deploy Page Implementation | Client+Server | — | P3 |
+| 134 | User Management | Client+Server | — | P3 |
+| 135 | Audit Log | Client+Server | — | P3 |
+| 136 | Simulator Features | Client+Server | #128, #131 | P3 |
+| 137 | Orphan Endpoints Finalization | Server | #131 | P3 |
+| 138 | Stub Pages + Layout Features | Client+Server | — | P3 |
+
+### Execution Sequence
+
+```
+PHASE 1 (Foundational):
+  #139 ← must complete first
+
+PHASE 2 (Detail Pages + Dashboard):
+  #128, #129, #130, #131 (all depend on #139)
+  #132 (Dashboard wiring)
+  #135 (Audit Log)
+
+PHASE 3 (Supporting Features + Management):
+  #134 (User Management)
+  #136 (Simulators, after creatures + loot tables work)
+  #137 (Room endpoints finalization)
+
+PHASE 4 (Polish):
+  #133 (Deploy)
+  #138 (Stubs + Layout)
+```
+
+### Rationale
+
+**Why not 27 separate issues?**
+- All 8 detail page Save buttons have identical requirements
+- Bulk actions cluster into 1 feature (not 3)
+- Pagination Previous/Next is 1 feature (not 2)
+- Result: 27 issues → confusing dependency graph, unclear ownership
+
+**Why group by entity type?**
+- Admin pages follow consistent CRUD pattern (List → Detail → Save)
+- Grouping allows engineers to build once per entity and reuse pattern
+
+**Why is #139 P1 blocker?**
+- All detail pages depend on GET/:id and PUT/:id endpoints
+- Prevents wasted effort on UI wiring without backend infrastructure
+
+### Content CRUD API Design (#139)
+
+**Pattern (per entity):**
+```
+GET    /admin/api/{entity}           → list (paginated)
+GET    /admin/api/{entity}/:id       → fetch one
+POST   /admin/api/{entity}           → create
+PUT    /admin/api/{entity}/:id       → update
+DELETE /admin/api/{entity}/:id       → soft delete or mark as draft
+```
+
+**Entities:** items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narrative
+
+**Server responsibility:**
+- Validation (required fields, enum values, numeric ranges)
+- Authorization (admin-only? or role-based per entity type?)
+- Audit logging (all mutations recorded)
+- Conflict resolution (optimistic locking or last-write-wins?)
+
+### Form Wiring Pattern (Detail Pages)
+
+Each detail page follows:
+1. Load data: `useEffect(() => { fetch(GET /admin/api/{entity}/:id) }, [id])`
+2. Update local state: `useState(entity)`
+3. Save: `onClick={() => fetch(PUT /admin/api/{entity}/:id, state)}`
+4. Handle errors: Show toast/modal on failure
+5. Handle loading: Disable buttons, show spinner
+
+### Labels
+
+- `phase:2.5` — Phase 2.5 scope (new label created)
+- `admin` — Admin panel (new label created)
+- `priority:p1` — #139 only (blocker)
+
+### Risks & Mitigations
+
+| Risk | Mitigation |
+|------|-----------|
+| Endpoint design changes mid-implementation | Review #139 endpoint design early in code review |
+| Authorization model unclear | Define admin role strategy before #139 merge |
+| Deployment flow complexity underestimated | Spike on deployment logic early; coordinate with Drizzt |
+| SSE scope creep | Clarify requirements in #137 before starting #138 |
+| Database performance (1000+ items) | Add pagination + indexes in #139; note in AC |
+
+### Follow-Up Actions
+
+1. **Drizzt (Engine Dev):** Review #139 endpoint design, implement Content CRUD API, clarify SSE usage
+2. **Jarlaxle (Systems Dev):** Estimate simulator logic (#136), possibly user management backend (#134)
+3. **Minsc (Tester):** Plan end-to-end test strategy, load testing (1000+ creatures)
+4. **Elminster (Lead):** Code review #139 before approval, monitor cross-system integration
+
+### Status
+
+- ✅ All 12 issues created and labeled `phase:2.5`
+- ✅ Dependency chain documented (in issue descriptions)
+- ⏳ #139 Content CRUD API design awaiting Drizzt review
+- ⏳ Sprint planning with team to estimate timeline
+
