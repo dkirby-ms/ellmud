@@ -1,18 +1,27 @@
 /**
  * In-memory player state for a shard session.
  *
- * Tracks current room, inventory, and weight budget per player.
+ * Tracks current room, inventory, weight budget, skills, and equipment per player.
  * This is server-authoritative — the client never sees this directly.
  */
 
 import type { Item } from '../shard/RoomGraph.js';
+import type { VisibleEquipment } from '@ellmud/shared';
 
 export interface InventoryEntry {
   item: Item;
   quantity: number;
 }
 
+/** Skills relevant to awareness and stealth checks. */
+export interface PlayerSkills {
+  stealth: number;
+  awareness: number;
+  tracking?: number;
+}
+
 const DEFAULT_MAX_CARRY_WEIGHT = 20;
+const DEFAULT_SKILLS: PlayerSkills = { stealth: 5, awareness: 5 };
 
 export class PlayerState {
   readonly sessionId: string;
@@ -20,11 +29,21 @@ export class PlayerState {
   readonly inventory: Map<string, InventoryEntry> = new Map();
   maxCarryWeight: number;
   disconnected: boolean = false;
+  skills: PlayerSkills;
+  equipment: VisibleEquipment | undefined;
 
-  constructor(sessionId: string, startRoomId: string, maxCarryWeight = DEFAULT_MAX_CARRY_WEIGHT) {
+  constructor(
+    sessionId: string,
+    startRoomId: string,
+    maxCarryWeight = DEFAULT_MAX_CARRY_WEIGHT,
+    skills?: Partial<PlayerSkills>,
+    equipment?: VisibleEquipment,
+  ) {
     this.sessionId = sessionId;
     this.currentRoomId = startRoomId;
     this.maxCarryWeight = maxCarryWeight;
+    this.skills = { ...DEFAULT_SKILLS, ...skills };
+    this.equipment = equipment;
   }
 
   get currentWeight(): number {

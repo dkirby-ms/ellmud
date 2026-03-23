@@ -1130,22 +1130,28 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     const enteringPlayerState = this.players.get(playerId);
     if (!enteringPlayerState) return;
 
-    // Build AwarenessPlayer for the entering player
+    // Build AwarenessPlayer for the entering player from real PlayerState
     const enteringPlayer: AwarenessPlayer = {
       sessionId: playerId,
-      skills: { stealth: 0, awareness: 0 },
-      equipment: undefined,
+      skills: {
+        stealth: enteringPlayerState.skills.stealth,
+        awareness: enteringPlayerState.skills.awareness,
+      },
+      equipment: enteringPlayerState.equipment,
     };
 
-    // Build observers list from other players in the room
+    // Build observers list from other players in the room using real PlayerState
     const observers: AwarenessPlayer[] = [];
     for (const [sid, ps] of this.players) {
       if (sid === playerId) continue;
       if (ps.currentRoomId !== roomId) continue;
       observers.push({
         sessionId: sid,
-        skills: { stealth: 0, awareness: 0 },
-        equipment: undefined,
+        skills: {
+          stealth: ps.skills.stealth,
+          awareness: ps.skills.awareness,
+        },
+        equipment: ps.equipment,
       });
     }
 

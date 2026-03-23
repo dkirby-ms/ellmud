@@ -580,3 +580,25 @@ Properties (heavy_door, cavern, water) were silently lost at three layers:
 **Verification:** 43/43 test files pass, 1034 tests green, tsc --noEmit clean.
 
 **Drizzt takeaway:** When data flows through adapter layers (shared → local → subsystem), every field that matters to downstream consumers must be explicitly plumbed through. Type safety alone doesn't catch omissions when the downstream field is optional. The BFS distance fix is textbook — never run a second traversal when the first one already has the data.
+
+### AwarenessSystem — Player Stealth Detection (#25) — PR #119
+**Task:** Issue #25 — Player Awareness & Stealth Detection
+**Status:** ✅ Complete — PR #119
+
+**What I built:**
+1. **Shared types** (`@ellmud/shared`): `DetectionTier`, `AwarenessEvent`, `VisibleEquipment`, `DETECTION_THRESHOLDS` constants, `'awareness'` narration type
+2. **AwarenessSystem** (`packages/server/src/systems/AwarenessSystem.ts`): Pure game logic — `calculateDetectionTier()`, `generateEquipmentDescription()`, `checkRoomEntry()` for observer notification
+3. **ShardRoom wiring**: Instantiates in `onCreate()`, runs awareness checks on player movement (arrival + departure notifications)
+
+**Detection formula:** `score = awareness - stealth` → none (≤0), vague (1–4), full (≥5)
+**Key constraint:** Player names NEVER revealed — descriptions use visible equipment only.
+
+**Tests:** 1061 existing pass (zero regressions), 18/18 anticipatory tests pass.
+
+**Design decisions:**
+- Skills default to 0 — ready for skill system integration when PlayerState gets skills
+- Equipment descriptions accept optional `VisibleEquipment` — ready for loadout integration
+- Follows TraceSystem/SoundSystem pattern: pure logic class, no Colyseus coupling
+- Vague messages use random flavor text pool (arrival/departure have distinct pools)
+
+**Drizzt takeaway:** The system is intentionally thin right now — skills hardcoded to 0 means every player gets 'none' detection in practice. This is correct: the awareness system is structurally complete, but needs the skill system (Phase 2) to light up. Pure-logic pattern pays off — no mocking needed for tests.
