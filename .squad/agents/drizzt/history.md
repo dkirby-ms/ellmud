@@ -641,3 +641,21 @@ Properties (heavy_door, cavern, water) were silently lost at three layers:
 
 **What's next:** Phase 2 QA (Minsc, Issue #31) testing Wave 2 in UAT. Phase 2 backlog ready: #21 (Multi-Player Shards), #24 (PvP Combat), #26 (Proximity Communication), #27 (Death & Downing), #28–#49 (Phase 2–4 features).
 
+---
+
+## PR #122 Fix — Shard-Sickness + PvPKillEvent (2026-03-23)
+
+**Branch:** `feat/pvp-combat` (commit 72c2b76)
+
+Fixed two blockers from Elminster's review of PR #122:
+1. **Shard-sickness debuff not applied on PvP death** — Added `ShardSicknessDebuff` interface to `PlayerState`, applied via `SHARD_SICKNESS_DEFAULTS` in the `isPvPKill` block of `handlePlayerDefeats()`.
+2. **PvPKillEvent defined but never emitted** — Constructed `PvPKillEvent` with killerIds and logged via `this.log()` in the PvP kill block.
+
+Also added PvP-specific death narration and imported `PvPKillEvent`/`SHARD_SICKNESS_DEFAULTS` from shared.
+
+### Learnings
+- On `feat/pvp-combat`, death is instant on defeat (no DowningSystem). The `feat/death-downing` branch adds the downed→bleed-out→stabilize flow on top.
+- `SHARD_SICKNESS_DEFAULTS` and `PvPKillEvent` were already defined in shared/index.ts by the original PvP PR — they just weren't imported or used in ShardRoom.
+- The `edit` tool requires exact byte-for-byte match of `old_str` — escaped template literals and Unicode can silently mismatch. Always verify edits with grep after applying.
+- Branch confusion across `feat/pvp-combat` vs `feat/death-downing` is a real risk — always verify with `git branch --show-current` before committing.
+
