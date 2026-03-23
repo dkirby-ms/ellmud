@@ -649,3 +649,36 @@ Each test file includes sections marked with × notation (e.g., `#23 × #25`) th
 - **Server has 8 real admin API endpoints** (rooms list, room detail, creatures, players, metrics, pause, resume, spawn, SSE) — none are called by any client page.
 - **Server spawn endpoint** is a stub: only broadcasts a chat message, doesn't actually spawn entities.
 - **Two parallel admin systems exist**: server-side dashboard.ts (inline HTML+JS, functional) vs React client admin pages (full UI, zero wiring). These are disconnected systems.
+
+## Issue #139 — Content CRUD API Integration Tests (TDD)
+
+### What Was Done
+- Created `packages/server/src/__tests__/admin-crud.test.ts` with 73 integration tests
+- Tests written TDD-style: they define the contract for the Content CRUD API that Drizzt is building in parallel
+- Branch: `squad/139-admin-crud-api`, pushed to remote
+
+### Test Coverage (per entity type × 9 types)
+- **Full CRUD lifecycle** (create → read → update → read again → delete → verify 404)
+- **List endpoint** (returns array, includes created entities, cleanup after)
+- **Auth enforcement** (401 without token, 403 with wrong token — tested on representative subset)
+- **Validation** (400 on empty body, 400 on missing required `name` field)
+- **404 handling** (GET/PUT/DELETE non-existent ID)
+
+### Entity Types Covered
+items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narrative
+
+### Current Status
+- 27 tests pass (404 cases — routes don't exist yet, Express returns 404)
+- 46 tests fail (expected — awaiting Drizzt's implementation)
+- Existing 1332 tests: all passing, zero regressions
+
+### Patterns Followed
+- Native `fetch` (no supertest) — matches existing `admin.test.ts` pattern
+- `app.listen(0)` for port isolation
+- `process.env['ADMIN_TOKEN']` with save/restore in beforeEach/afterEach
+- `request()` helper extended for PUT and DELETE methods
+
+### Learnings
+- Existing admin routes use `createAdminRouter(deps)` with dependency injection for telemetry/cache
+- The CRUD tests don't need those deps — they test new content endpoints, not metrics
+- Express returns 404 for unmatched routes, which means 404 tests coincidentally pass before implementation
