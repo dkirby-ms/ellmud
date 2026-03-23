@@ -1119,3 +1119,13 @@ Entity slugs: `modifiers`, `skills`, `loot-tables` (hyphenated!), `factions`, `r
 
 **Next:** Phase 2.5 continues; entity wiring complete. Validation pattern established for future admin pages.
 
+
+### 2025-07-28: Orphan Endpoint Finalization (Issue #137, PR #147)
+- Wired all 8 orphan admin API endpoints to new React admin UI.
+- **Spawn upgraded**: POST `/admin/api/rooms/:roomId/spawn` now creates real creatures via `CreatureManager.spawnSingleCreature()` — a new public method that doesn't require PRNG or RoomGraph (uses midpoint idle ticks instead of random).
+- **Architecture decision**: Created separate Live Rooms pages (`/admin/live-rooms`) rather than adding runtime controls to the content-editor RoomsDetail.tsx. Content editing (templates) and runtime operations (pause/resume/spawn) stay cleanly separated.
+- **admin-api.ts**: Added generic `EntityType`, `listEntities`, `getEntity`, `createEntity`, `updateEntity`, `deleteEntity` exports — these were missing despite being imported by `useAdminEntity` and `useAdminEntityList` hooks.
+- **Content store injection**: `AdminRouterDeps` now accepts `contentStores` map. Server `index.ts` reordered to initialize content stores before admin router.
+- **Pause/resume**: Verified Colyseus `clock.stop()/start()` works correctly — no custom implementation needed.
+- **Metrics/SSE documented**: GET `/admin/api/metrics` and GET `/admin/api/sse` annotated with purpose and future wiring TODOs.
+- Pre-existing issues NOT fixed: narrative/templates.ts build error, BiomesList import path.
