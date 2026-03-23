@@ -91,6 +91,38 @@ export class CreatureManager {
     };
   }
 
+  /**
+   * Admin-triggered spawn: place a single creature of the given template in a specific room.
+   * Unlike spawnCreatures(), this is not PRNG-seeded — used for runtime admin actions.
+   */
+  spawnSingleCreature(template: CreatureTemplate, roomId: string): Creature {
+    const id = `creature-${this.nextCreatureId++}`;
+    const idleTarget = Math.floor(
+      (template.idleTicksMin + template.idleTicksMax) / 2
+    );
+
+    const creature: Creature = {
+      id,
+      type: template.type,
+      name: template.name,
+      hp: template.stats.maxHp,
+      maxHp: template.stats.maxHp,
+      attack: template.stats.attack,
+      defence: template.stats.defence,
+      armour: template.stats.armour,
+      currentRoomId: roomId,
+      behaviorState: 'idle',
+      idleTicks: 0,
+      idleTicksTarget: idleTarget,
+      alertTargetRoomId: null,
+      lootTable: [...template.lootTable],
+      isAlive: true,
+    };
+
+    this.creatures.set(creature.id, creature);
+    return creature;
+  }
+
   // ─── Tick Update ───────────────────────────────────────────────────────────
 
   /**
