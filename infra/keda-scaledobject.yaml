@@ -1,0 +1,87 @@
+# KEDA Auto-Scaling Configuration for Ellmud Game Server
+#
+# Azure Container Apps uses KEDA-compatible scaling rules natively.
+# This file documents the scaling strategy for reference and for
+# environments that use standalone KEDA (e.g., AKS migration).
+#
+# Scaling Strategy:
+#   - Min replicas: 1 (always-on for low-latency first connection)
+#   - Max replicas: 4 (cost ceiling for Phase 2)
+#   - Scale trigger: concurrent WebSocket connections per replica
+#   - Target: 30 connections per replica (scale-up threshold)
+#   - Activation: 10 connections (first scale from 1→2)
+#
+# The Bicep config (infra/modules/container-apps.bicep) implements this
+# natively via Container Apps scale rules. This YAML is for documentation
+# and AKS/standalone-KEDA portability.
+
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: ellmud-game-server
+  namespace: ellmud
+  labels:
+    app: ellmud-game-server
+    component: game-server
+spec:
+  scaleTargetRef:
+    name: ellmud-game-server
+  pollingInterval: 15           # Check metrics every 15 seconds
+  cooldownPeriod: 300           # 5 min cooldown before scale-down
+  idleReplicaCount: 1           # Scale to 1 during zero traffic
+  minReplicaCount: 1            # Minimum 1 replica (always-on)
+  maxReplicaCount: 4            # Maximum 4 replicas (Phase 2 ceiling)
+  triggers:
+    # Primary: Scale on active WebSocket connections (Colyseus rooms)
+    - type: metrics-api
+      metadata:
+        # Custom metrics endpoint exposed by the game server
+        targetValue: "30"           # 30 connections per replica = scale up
+        activationTargetValue: "10" # First scale-up at 10 connections
+        url: "http://ellmud-game-server.ellmud.svc.cluster.local:2567/admin/api/metrics"
+        valueLocation: "totalConnections"
+        method: "GET"
+      authenticationRef:
+        name: ellmud-admin-auth
+
+---
+# Authentication for admin metrics endpoint
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: ellmud-admin-auth
+  namespace: ellmud
+spec:
+  secretTargetRef:
+    - parameter: token
+      name: ellmud-secrets
+      key: ADMIN_TOKEN
+
+---
+# Container Apps Native Scaling (reference — actual config in Bicep)
+#
+# The Container Apps Bicep module (infra/modules/container-apps.bicep)
+# configures equivalent scaling via:
+#
+#   scale: {
+#     minReplicas: 1
+#     maxReplicas: 4
+#     rules: [{
+#       name: 'websocket-connections'
+#       custom: {
+#         type: 'azure-monitor'
+#         metadata: {
+#           metricName: 'Requests'
+#           metricNamespace: 'Microsoft.App/containerApps'
+#           targetValue: '30'
+#           activationTargetValue: '10'
+#         }
+#       }
+#     }]
+#   }
+#
+# Sticky sessions are enabled for WebSocket affinity:
+#   stickySessions: { affinity: 'sticky' }
+#
+# This ensures all messages from the same player route to the same replica,
+# which is critical for shard state isolation.
