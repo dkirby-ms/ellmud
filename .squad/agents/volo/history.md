@@ -271,3 +271,26 @@ Wave 7 will deliver final 3 client UI issues. Shardboard will integrate with Ref
 - **Key pattern: direction highlighting in sound cues** — Regex-based text splitting with `exec()` loop produces mixed text/JSX array. `data-sound-cue` attribute enables scoped RTL queries.
 - **Test spec bug found:** Anticipatory test for Gap #21 uses `getByRole('button', { name: /Strike/i })` which matches both "Strike" and "Heavy Strike" buttons via substring regex. RTL's `matchRegExp` is `regex.test(text)` — no exact matching. Test needs anchored regex (`/^Strike$/i`) or `getAllByRole`.
 - **23/24 tests passing**, 0 type errors, 0 lint errors.
+
+### 2026-03-22: Wave 2 Sensory Narration Templates (Branch: feat/sensory-narration-templates)
+- **Prompt templates + fallback narration** for Sound, Trace, and Awareness systems
+- **LLMNarrationType extended:** Added `sound_narration`, `trace_narration`, `awareness_narration`
+  - Sound: 40 tokens, 500ms timeout (distant/nearby/same-room variants)
+  - Trace: 60 tokens, 600ms timeout (low/medium/high skill scaling)
+  - Awareness: 50 tokens, 500ms timeout (vague/partial/full detection)
+- **System prompts per narration type** in `llm-client.ts` — Sound emphasizes direction/quality, Trace emphasizes skill scaling, Awareness emphasizes stealth vs observer awareness
+- **Fallback templates in sensory-templates.ts** — 34 functions generating atmospheric prose without mechanical leakage
+  - Sound: direction phrases + intensity qualifiers (faint/moderate/loud)
+  - Trace: age descriptors (fresh/recent/old/fading) + skill-scaled detail
+  - Awareness: randomized equipment descriptions (never player names)
+- **CRITICAL safeguard:** Player names never revealed in any narration. All descriptions use equipment, bearing, and posture.
+- **Integration schema documented** for Sound, Trace, Awareness systems — how to invoke `narrationService.narrate()` with context
+- **Files changed:** 
+  - `packages/shared/src/narrative-types.ts` — Extended LLMNarrationType and NarrationTimeoutConfig
+  - `packages/server/src/narrative/sensory-templates.ts` (new) — ~450 lines of fallback generators
+  - `packages/server/src/narrative/templates.ts` — Added 3 renderers to RENDERERS map
+  - `packages/server/src/narrative/llm-client.ts` — Added 3 system prompts, `getSystemPrompt()` selector
+  - `packages/server/src/__tests__/narration-pipeline-integration.test.ts` — Fixed timeout config spread syntax
+- **Key pattern: sensory data via traces field** — Sound and Traces populate `room.traces[]` with `type`, `direction`, `source`, `intensity`, `age_seconds`. LLM and fallback read this unified interface.
+- **Cache inheritance:** Sensory narration uses same hash → cache → LLM → template pipeline. State hash includes sensory trace data, so identical sensory input = identical prose = consistent atmosphere.
+- **Testing:** Type-checked all narrative files; shared package builds cleanly. Ready for Sound/Trace/Awareness systems to populate context and invoke pipeline.
