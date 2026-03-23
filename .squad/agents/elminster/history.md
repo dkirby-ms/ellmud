@@ -272,3 +272,9 @@ All four PRs merge cleanly to dev:
 - **Minor nits (non-blocking):** Unused `DIRECTIONS` const (dead code), stability bar color logic duplicates `getCollapseColor()` thresholds (DRY opportunity), standalone Skill test uses unanchored regex.
 - **Key files:** `packages/client/src/pages/ShardExploration.tsx`, `packages/client/src/store.ts`, `packages/client/src/__tests__/ux-batch2-combat-sidebar.test.tsx`
 - **Decision output:** `.squad/decisions/inbox/elminster-pr104-review.md`
+
+### 2026-03-23: PR #119 Review — Awareness & Stealth
+- **Action:** Code review of PR #119 (Drizzt implementation).
+- **Verdict:** ❌ CHANGES REQUESTED. Core logic is correct but integration is incomplete.
+- **Issues:** Hardcoded zero stats in ShardRoom (feature disabled), missing PlayerState updates for skills/equipment, tests verify local helpers not implementation.
+- **Key files:** packages/server/src/systems/AwarenessSystem.ts, packages/server/src/rooms/ShardRoom.ts, packages/server/src/__tests__/awareness-stealth.test.ts

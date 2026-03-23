@@ -23,7 +23,8 @@ export type NarrationType =
   | 'system'     // System messages (join, disconnect, errors)
   | 'speech'     // Player/NPC speech, proximity chat
   | 'sound'      // Sound propagation cues
-  | 'trace';     // Footprints, blood trails, environmental traces
+  | 'trace'      // Footprints, blood trails, environmental traces
+  | 'awareness'; // Stealth detection, player presence cues
 
 /** Server → Client: Narrated prose output. */
 export interface NarrateMessage {
@@ -303,6 +304,50 @@ export interface RoomSwitchMessage {
 }
 
 // ─── Trace System (GDD §11.2) ─────────────────────────────────────────────
+
+// ─── Awareness & Stealth Detection (GDD §8.1) ──────────────────────────────
+
+/**
+ * Detection tiers returned by stealth-vs-awareness checks.
+ * 'none'  — target is completely hidden (high stealth, low awareness)
+ * 'vague' — observer senses something (moderate match)
+ * 'full'  — target fully detected, equipment-based description provided
+ */
+export type DetectionTier = 'none' | 'vague' | 'full';
+
+/**
+ * Detection thresholds. detection_score = awareness - stealth.
+ * score <= NONE_UPPER  → 'none'
+ * VAGUE_LOWER <= score <= VAGUE_UPPER → 'vague'
+ * score >= FULL_LOWER  → 'full'
+ */
+export const DETECTION_THRESHOLDS = {
+  NONE_UPPER: 0,
+  VAGUE_LOWER: 1,
+  VAGUE_UPPER: 4,
+  FULL_LOWER: 5,
+} as const;
+
+/** Describes equipment visible on a detected player. */
+export interface VisibleEquipment {
+  weapon?: string;
+  armour?: string;
+  tier?: string;
+}
+
+/** An awareness event delivered to an observer when a player enters/leaves a room. */
+export interface AwarenessEvent {
+  /** Session ID of the observer receiving this event. */
+  observerId: string;
+  /** Session ID of the detected (or undetected) player. */
+  targetId: string;
+  /** Detection result. */
+  tier: DetectionTier;
+  /** Narration text for the observer (empty string for 'none'). */
+  message: string;
+  /** Whether the target is arriving or departing. */
+  direction: 'arrival' | 'departure';
+}
 
 /** Types of environmental traces left by player/creature actions. */
 export type TraceType =

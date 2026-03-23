@@ -90,6 +90,33 @@
 
 ---
 
+## Wave 2 Work
+
+### 2026-03-23: PR #117 (Trace System) Fixes & Merge
+
+**Status:** ✅ MERGED to dev
+
+**Recap of fixes applied:**
+- Connected TraceSystem to ShardRoom game loop (onCreate, tick, event handlers)
+- Added MAX_TRACES_PER_ROOM = 50 with eviction (oldest expired first, then oldest active)
+- Removed bundled SoundSystem changes (separated concerns)
+
+**Architecture locked in:**
+- Traces suppressed at creation (stealth/damage gates prevent storage)
+- TTL decay + skill-scaled descriptions (BASIC/DETAILED/EXPERT)
+- Per-room trace cap with memory management
+- Shared types enforce cross-package contract
+
+**Follow-up items (non-blocking):**
+1. Wire tracking skill into `sendTraceNarrations` (currently hardcoded BASIC)
+2. Replace sessionId with character display name in footprint actorName
+
+**Tests:** 1061 total passing, 120 anticipatory scaffolds active
+
+**Key decision:** Traces suppressed at creation is more efficient than filtering on every narration query.
+
+---
+
 ## Cross-Team Updates (2026-03-19T22:30)
 
 ### Figma Design Tokens Now Team Standard
@@ -640,3 +667,30 @@ Implemented server-side proximity-based communication system with three social c
 **Test results:** 43 files, 1051 passed, 158 todo, 0 failures. TypeScript clean.
 
 **Commit:** `8056f42` on `feat/trace-system` branch. PR #117.
+
+### 2026-03-23: PR #119 Fix — Awareness & Stealth Detection (Issue #25)
+
+**Context:** Drizzt authored PR #119 but Elminster rejected it with 3 blocking issues. Drizzt locked out; I picked up the fix.
+
+**What I fixed:**
+
+1. **PlayerState gets skills + equipment** — Added `skills: { stealth, awareness, tracking? }` (default 5/5) and `equipment: VisibleEquipment | undefined` to `PlayerState`. Constructor accepts optional overrides.
+
+2. **ShardRoom reads real data** — `runAwarenessChecks()` now reads `PlayerState.skills` and `PlayerState.equipment` instead of hardcoded `{ stealth: 0, awareness: 0 }`. System is functional: equal-skill (5/5) players get 'none' detection, variance produces vague/full.
+
+3. **Tests verify actual AwarenessSystem** — Removed local `expectedDetectionTier()` helper. All tests import real `AwarenessSystem` and exercise `calculateDetectionTier`, `generateEquipmentDescription`, `generateDetectionMessage`, `checkRoomEntry` (multi-observer, self-filter, arrival/departure), name concealment, footprint suppression.
+
+**Key decisions:**
+- Default skills 5/5 (not 0/0) — equal-skill players get 'none' by formula design (score=0), but variance is possible
+- `PlayerSkills` interface lives in PlayerState.ts, `AwarenessSkills` stays in AwarenessSystem.ts — keeps the pure-logic boundary clean
+- VisibleEquipment imported from @ellmud/shared into PlayerState — equipment descriptions ready for item system integration
+
+**Test results:** 43 files, 1084 passed, 103 todo, 0 failures. TypeScript clean.
+
+**Commit:** `f368e3e` on `feat/awareness-stealth-system` branch. PR #119.
+
+## Learnings
+
+- **Don't hardcode zeros as "Phase 1" defaults.** Hardcoded 0 for skills makes the entire system a no-op (score=0 → 'none' always). Use sensible baselines (5/5) so the system actually exercises its tiers when players interact. Zero is not a baseline, it's an off switch.
+- **Tests must test the real class, not a local reimplementation.** Drizzt's tests redefined the detection formula locally — they'd pass even if the system was deleted. Always import the actual production class.
+- **PlayerState is the integration seam.** When a new game system needs player data (skills, equipment, status), PlayerState is where it lives. Keep the constructor backward-compatible with optional params and spread defaults.
