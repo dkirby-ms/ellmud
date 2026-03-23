@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { Plus, Search, Filter } from "lucide-react";
+import { Plus, Search, Filter, AlertCircle } from "lucide-react";
+import { listCreatures, AdminAPIError } from "../../lib/admin-api";
 
 type Status = "draft" | "review" | "published" | "deprecated";
 
@@ -8,53 +9,10 @@ interface Creature {
   id: string;
   name: string;
   type: string;
-  hp: number;
-  biomes: string[];
-  status: Status;
+  maxHp: number;
+  biomeAffinity?: string[];
+  status?: Status;
 }
-
-const creatures: Creature[] = [
-  {
-    id: "1",
-    name: "Drowned Revenant",
-    type: "drowned_revenant",
-    hp: 50,
-    biomes: ["FC"],
-    status: "published",
-  },
-  {
-    id: "2",
-    name: "Ironbound Sentinel",
-    type: "ironbound_sentinel",
-    hp: 80,
-    biomes: ["SB"],
-    status: "published",
-  },
-  {
-    id: "3",
-    name: "Sporeweaver",
-    type: "sporeweaver",
-    hp: 40,
-    biomes: ["FD"],
-    status: "review",
-  },
-  {
-    id: "4",
-    name: "Cinder Wraith",
-    type: "cinder_wraith",
-    hp: 60,
-    biomes: ["ER"],
-    status: "draft",
-  },
-  {
-    id: "5",
-    name: "Ink Horror",
-    type: "ink_horror",
-    hp: 70,
-    biomes: ["HA"],
-    status: "draft",
-  },
-];
 
 const getStatusBadge = (status: Status) => {
   const badges = {
@@ -80,9 +38,34 @@ const getStatusBadge = (status: Status) => {
 };
 
 export default function CreaturesList() {
+  const [creatures, setCreatures] = useState<Creature[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<Status | "all">("all");
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
+
+  useEffect(() => {
+    loadCreatures();
+  }, []);
+
+  const loadCreatures = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await listCreatures<Creature>();
+      setCreatures(data);
+    } catch (err) {
+      if (err instanceof AdminAPIError) {
+        setError(err.message);
+      } else {
+        setError('Failed to load creatures');
+      }
+      console.error('Failed to load creatures:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredCreatures = creatures.filter((creature) => {
     const matchesSearch =
@@ -126,7 +109,32 @@ export default function CreaturesList() {
         </Link>
       </div>
 
+      {/* Error State */}
+      {error && (
+        <div className="bg-[#8B2500] border border-[#A52A00] rounded-lg p-4 mb-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-[#E8E0D0]" />
+          <div>
+            <p className="text-[#E8E0D0] font-semibold" style={{ fontFamily: "var(--font-sans)" }}>
+              Failed to load creatures
+            </p>
+            <p className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-sans)" }}>
+              {error}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-8 text-center">
+          <p className="text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+            Loading creatures...
+          </p>
+        </div>
+      )}
+
       {/* Filters */}
+      {!loading && (
       <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-4 mb-4 flex items-center gap-4">
         <Filter className="w-4 h-4 text-[#8A8B95]" />
         <select
@@ -154,9 +162,10 @@ export default function CreaturesList() {
           />
         </div>
       </div>
+      )}
 
       {/* Bulk Actions */}
-      {selectedRows.length > 0 && (
+      {!loading && selectedRows.length > 0 && (
         <div className="bg-[#3A7D7B] border border-[#2D6B4F] rounded-lg p-3 mb-4 flex items-center justify-between">
           <span
             className="text-[#E8E0D0] text-sm"
@@ -188,6 +197,7 @@ export default function CreaturesList() {
       )}
 
       {/* Table */}
+      {!loading && (
       <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg overflow-hidden">
         <table className="w-full">
           <thead className="bg-[#1C1D27] border-b border-[#2A2B35]">
@@ -268,12 +278,12 @@ export default function CreaturesList() {
                     className="text-[#E8E0D0] text-sm"
                     style={{ fontFamily: "var(--font-mono)" }}
                   >
-                    {creature.hp}
+                    {creature.maxHp}
                   </span>
                 </td>
                 <td className="p-4">
                   <div className="flex gap-1">
-                    {creature.biomes.map((biome) => (
+                    {creature.biomeAffinity?.map((biome) => (
                       <span
                         key={biome}
                         className="px-2 py-1 bg-[#1C1D27] text-[#8A8B95] text-xs rounded"
@@ -284,14 +294,16 @@ export default function CreaturesList() {
                     ))}
                   </div>
                 </td>
-                <td className="p-4">{getStatusBadge(creature.status)}</td>
+                <td className="p-4">{getStatusBadge(creature.status || "draft")}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Pagination */}
+      {!loading && (
       <div className="mt-4 flex items-center justify-between">
         <span
           className="text-[#8A8B95] text-sm"
@@ -320,6 +332,7 @@ export default function CreaturesList() {
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }
