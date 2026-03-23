@@ -19,6 +19,9 @@ import type {
   AdminCreatureInfo,
   AdminMetrics,
 } from './types.js';
+import type { ContentEntity, IContentStore } from './content/ContentStore.js';
+import type { ContentEntityType } from './content/content-types.js';
+import type { CreatureTemplate } from '../creatures/types.js';
 
 export interface AdminRouterDeps {
   /** Narration telemetry tracker instance (optional — metrics degrade gracefully). */
@@ -31,6 +34,8 @@ export interface AdminRouterDeps {
   isPresenceRedis?: boolean;
   /** Whether stash persistence uses PostgreSQL. */
   isStashPg?: boolean;
+  /** Content stores — used by spawn endpoint to look up creature templates. */
+  contentStores?: Map<ContentEntityType, IContentStore<ContentEntity>>;
 }
 
 export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
@@ -165,6 +170,11 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
   });
 
   // ─── GET /admin/api/metrics — Server + narration metrics ─────────────────
+  // NOTE: Also available via SSE stream (/admin/api/sse) for real-time polling.
+  // The React admin dashboard fetches metrics via /admin/api/dashboard/metrics
+  // (content-focused). This endpoint returns server runtime metrics (uptime,
+  // room counts, narration cache stats). Wire to admin UI when server monitoring
+  // page is added.
   router.get('/admin/api/metrics', adminAuth, async (_req: Request, res: Response) => {
     try {
       const rooms = await safeQueryRooms();
@@ -255,7 +265,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         return;
       }
 
-      const { type, id } = req.body as { type?: string; id?: string };
+      const { type, id, targetRoomId } = req.body as { type?: string; id?: string; targetRoomId?: string };
       if (!type || !id) {
         res.status(400).json({ error: 'Missing required fields: type, id' });
         return;
@@ -266,8 +276,84 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         return;
       }
 
-      // Phase 1: Broadcast a system message about the spawn.
-      // Full spawn integration (adding to room graph, creature AI) comes later.
+      if (type === 'creature') {
+        // Look up creature template from content store
+        const creatureStore = deps.contentStores?.get('creatures');
+        if (!creatureStore) {
+          res.status(500).json({ error: 'Content store not available — cannot resolve creature template' });
+          return;
+        }
+
+        const templateEntity = await creatureStore.getById(id);
+        if (!templateEntity) {
+          res.status(404).json({ error: `Creature template "${id}" not found` });
+          return;
+        }
+
+        // Access the room's CreatureManager
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cm = (room as any)['creatureManager'] as
+          | import('../creatures/CreatureManager.js').CreatureManager
+          | undefined;
+
+        if (!cm) {
+          // Room doesn't have a creature manager (e.g., refuge) — fall back to broadcast
+          const { MessageTypes } = await import('@ellmud/shared');
+          room.broadcast(MessageTypes.NARRATE, {
+            text: `[ADMIN] A ${templateEntity.name ?? id} materializes from thin air.`,
+            type: 'system',
+            timestamp: Date.now(),
+          });
+
+          res.json({
+            roomId: room.roomId,
+            spawned: { type, id },
+            message: `Broadcast spawn of "${id}" — room has no creature manager (non-shard room)`,
+          });
+          return;
+        }
+
+        // Determine spawn room — use targetRoomId if provided, otherwise pick
+        // first room from the shard's room graph
+        let spawnRoomId = targetRoomId;
+        if (!spawnRoomId) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const roomGraph = (room as any)['roomGraph'] as
+            | { rooms: Map<string, { id: string }> }
+            | undefined;
+
+          if (roomGraph && roomGraph.rooms.size > 0) {
+            spawnRoomId = roomGraph.rooms.values().next().value?.id;
+          }
+        }
+
+        if (!spawnRoomId) {
+          res.status(400).json({ error: 'No targetRoomId provided and room graph unavailable' });
+          return;
+        }
+
+        // Cast to CreatureTemplate (content store entity has the same shape + id field)
+        const template = templateEntity as unknown as CreatureTemplate;
+        const creature = cm.spawnSingleCreature(template, spawnRoomId);
+
+        // Broadcast spawn notification to players in the room
+        const { MessageTypes } = await import('@ellmud/shared');
+        room.broadcast(MessageTypes.NARRATE, {
+          text: `[ADMIN] A ${creature.name} materializes from thin air in room ${spawnRoomId}.`,
+          type: 'system',
+          timestamp: Date.now(),
+        });
+
+        res.json({
+          roomId: room.roomId,
+          spawned: { type, id, creatureId: creature.id, spawnRoomId },
+          message: `Spawned creature "${creature.name}" (${creature.id}) in room ${spawnRoomId}`,
+        });
+        return;
+      }
+
+      // type === 'item' — Phase 1 stub: broadcast only
+      // TODO: Implement item spawn via inventory/room loot system
       const { MessageTypes } = await import('@ellmud/shared');
       room.broadcast(MessageTypes.NARRATE, {
         text: `[ADMIN] A ${type} (${id}) materializes from thin air.`,
@@ -278,7 +364,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
       res.json({
         roomId: room.roomId,
         spawned: { type, id },
-        message: `Spawned ${type} "${id}" in room ${room.roomId}`,
+        message: `Spawned ${type} "${id}" in room ${room.roomId} (broadcast only — item spawn not yet implemented)`,
       });
     } catch (err) {
       console.error('[Admin] Failed to spawn:', err);
@@ -287,7 +373,10 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
   });
 
   // ─── GET /admin/api/sse — Server-Sent Events stream ─────────────────────
-  // SSE doesn't support custom headers — auth via query param ?token=
+  // Real-time metrics stream consumed by the inline HTML dashboard (/admin/).
+  // TODO: Wire to React admin UI for live-updating server monitoring. The stream
+  // sends room counts, creature stats, narration metrics, and backend flags
+  // every 2 seconds. Auth via query param ?token= (SSE doesn't support headers).
   router.get('/admin/api/sse', (req: Request, res: Response) => {
     const adminToken = process.env['ADMIN_TOKEN'];
     const queryToken = req.query['token'] as string | undefined;

@@ -1,5 +1,6 @@
 /**
- * Admin API utility — centralized fetch wrapper for admin content endpoints.
+ * Admin API utility — centralized fetch wrapper for admin content endpoints
+ * and live room management.
  *
  * All requests include Authorization: Bearer <ADMIN_TOKEN> header.
  * Token is read from localStorage (set during admin login).
@@ -66,7 +67,48 @@ async function adminFetch<T>(
   return response.json();
 }
 
-// ─── Content CRUD API ────────────────────────────────────────────────────────
+// ─── Generic Content CRUD API ────────────────────────────────────────────────
+
+export type EntityType =
+  | 'items'
+  | 'creatures'
+  | 'biomes'
+  | 'modifiers'
+  | 'skills'
+  | 'loot-tables'
+  | 'factions'
+  | 'rooms'
+  | 'narrative';
+
+export async function listEntities<T>(entityType: EntityType): Promise<T[]> {
+  return adminFetch<T[]>(`/admin/api/content/${entityType}`);
+}
+
+export async function getEntity<T>(entityType: EntityType, id: string): Promise<T> {
+  return adminFetch<T>(`/admin/api/content/${entityType}/${id}`);
+}
+
+export async function createEntity<T>(entityType: EntityType, data: Partial<T>): Promise<T> {
+  return adminFetch<T>(`/admin/api/content/${entityType}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateEntity<T>(entityType: EntityType, id: string, data: Partial<T>): Promise<T> {
+  return adminFetch<T>(`/admin/api/content/${entityType}/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteEntity(entityType: EntityType, id: string): Promise<void> {
+  return adminFetch<void>(`/admin/api/content/${entityType}/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+// ─── Content CRUD API (typed shortcuts) ──────────────────────────────────────
 
 export async function listItems<T>(): Promise<T[]> {
   return adminFetch<T[]>('/admin/api/content/items');
@@ -123,5 +165,89 @@ export async function updateCreature<T>(id: string, data: Partial<T>): Promise<T
 export async function deleteCreature(id: string): Promise<void> {
   return adminFetch<void>(`/admin/api/content/creatures/${id}`, {
     method: 'DELETE',
+  });
+}
+
+// ─── Live Room Management API ────────────────────────────────────────────────
+
+export interface LiveRoomSummary {
+  roomId: string;
+  name: string;
+  clients: number;
+  maxClients: number;
+  locked: boolean;
+  createdAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface LiveRoomPlayer {
+  sessionId: string;
+  currentRoomId: string;
+  inventoryCount: number;
+  currentWeight: number;
+  maxCarryWeight: number;
+}
+
+export interface LiveRoomCreature {
+  id: string;
+  name: string;
+  type: string;
+  hp: number;
+  maxHp: number;
+  currentRoomId: string;
+  behaviorState: string;
+  isAlive: boolean;
+}
+
+export interface LiveRoomDetail {
+  roomId: string;
+  name: string;
+  clients: number;
+  biome?: string;
+  lifecycle?: string;
+  stability?: number;
+  collapseTimer?: number;
+  tick?: number;
+  playerCount?: number;
+  paused: boolean;
+  players?: LiveRoomPlayer[];
+  creatures?: LiveRoomCreature[];
+}
+
+export interface SpawnResult {
+  roomId: string;
+  spawned: { type: string; id: string; creatureId?: string; spawnRoomId?: string };
+  message: string;
+}
+
+export async function fetchLiveRooms(): Promise<{ rooms: LiveRoomSummary[] }> {
+  return adminFetch<{ rooms: LiveRoomSummary[] }>('/admin/api/rooms');
+}
+
+export async function fetchLiveRoomDetail(roomId: string): Promise<LiveRoomDetail> {
+  return adminFetch<LiveRoomDetail>(`/admin/api/rooms/${roomId}`);
+}
+
+export async function pauseRoom(roomId: string): Promise<{ roomId: string; paused: boolean }> {
+  return adminFetch<{ roomId: string; paused: boolean }>(`/admin/api/rooms/${roomId}/pause`, {
+    method: 'POST',
+  });
+}
+
+export async function resumeRoom(roomId: string): Promise<{ roomId: string; paused: boolean }> {
+  return adminFetch<{ roomId: string; paused: boolean }>(`/admin/api/rooms/${roomId}/resume`, {
+    method: 'POST',
+  });
+}
+
+export async function spawnInRoom(
+  roomId: string,
+  type: 'creature' | 'item',
+  templateId: string,
+  targetRoomId?: string
+): Promise<SpawnResult> {
+  return adminFetch<SpawnResult>(`/admin/api/rooms/${roomId}/spawn`, {
+    method: 'POST',
+    body: JSON.stringify({ type, id: templateId, targetRoomId }),
   });
 }
