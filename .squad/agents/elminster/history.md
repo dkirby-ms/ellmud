@@ -455,3 +455,41 @@ The admin UI was built as a purely visual scaffold. It's not broken—it's incom
 
 4. **Form Handling:** React forms without backend wiring lose data on refresh—this caught immediately because forms are cosmetic. Fixture: add error message if form has unsaved changes (client-side warning).
 
+
+
+## Wave 2 Review Cycle: Admin Wiring PRs #142-#145 (2026-03-23T20:00Z)
+
+### Review Summary
+
+**Role:** Lead/Architect Review  
+
+**PRs Reviewed:**
+1. PR #142 (Items) — ✅ APPROVED & MERGED
+2. PR #143 (Creatures) — ⚠️ CHANGES REQUESTED → FIXED
+3. PR #144 (Biomes) — ⚠️ CHANGES REQUESTED
+4. PR #145 (Remaining 6 entities) — ⚠️ CHANGES REQUESTED
+
+### Key Verdicts
+
+**PR #142:** Implementation solid, correct patterns. Merged.
+
+**PR #143:** Loot Table disconnected from API → data loss. Fix applied: load in useEffect, include in save payload.
+
+**PR #144:** Validation warnings only, no enforcement. Fix required: add guard clauses in handlers.
+
+**PR #145:** Fake validation + missing fields (effects, tags, requirements). Fixes required: real validation function + component editors.
+
+### New Standards Established
+
+**Validation Enforcement:** Form validation requires both UX warnings AND handler-level enforcement.
+
+**State Wiring:** All component state must be explicitly loaded from API and included in save payloads.
+
+**Surgical Fixes:** When fixing reviewer feedback, address specific issues without rewriting files.
+
+**Next Steps:**
+1. Drizzt: Fix PR #144 validation
+2. Jarlaxle: Fix PR #145 validation + fields  
+3. Elminster: Re-review PRs upon fixes
+4. Merge: Approved PRs to dev
+

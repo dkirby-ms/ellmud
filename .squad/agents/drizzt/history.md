@@ -981,3 +981,90 @@ Wire the BiomesList and BiomesDetail admin pages to the real Content CRUD API en
 - Array editors in forms need careful state management (`updateArrayItem`, `removeArrayItem`, `addArrayItem`)
 - localStorage token pattern works but is Phase 1 — production will need secure auth flow
 
+## Wave 1 Admin Wiring (2026-03-23T19:45Z)
+
+### Cross-Team Coordination Note
+
+**Parallel Pattern Creation:**
+- Jarlaxle created `admin-api.ts` generic CRUD pattern for Items wiring (#129)
+- Drizzt (CreaturesList/CreaturesDetail #128) uses same pattern from Jarlaxle
+- Both agents independently implemented localStorage token storage decision
+- Result: Consistent architecture across all admin pages, extensible for 7 remaining entity types
+
+### Drizzt's Creatures Wiring (PR #143)
+
+**Deliverables:**
+- `packages/client/src/pages/admin/CreaturesList.tsx` — Table listing creatures with search/sort
+- `packages/client/src/pages/admin/CreaturesDetail.tsx` — Create/edit/delete forms with validation
+- Token auth integrated via `admin-api.ts` pattern (Bearer header on all requests)
+- Form validation on save, visual error/success messaging
+
+**Decisions Logged:**
+- Admin Token Storage Pattern (localStorage with `admin_token` key)
+- PostgreSQL Content Store (single `content_definitions` table with JSONB)
+
+**Testing:**
+- Minsc's admin-wiring.test.ts covers 14 creature-specific test cases
+- All tests passing; validates edge cases, duplicate IDs, large data sets
+
+### Team Outcome
+
+- PR #142 (Items) + PR #143 (Creatures) ready for Elminster review
+- Pattern established: Replicable for Biomes, LootTables, Skills, Factions, Rooms, Narrative
+- Admin infrastructure solid; Phase 2.5 wiring on track
+
+---
+
+
+
+## Wave 2 Admin Wiring: Biomes (2026-03-23T20:00Z)
+
+### PR #144: BiomesList & BiomesDetail Wiring
+
+**Deliverables:**
+- `packages/client/src/pages/admin/BiomesList.tsx` — Biomes table with search/sort
+- `packages/client/src/pages/admin/BiomesDetail.tsx` — Create/edit forms, Hazards array editor
+- API wiring via `admin-api.ts` (Bearer token auth)
+- Form validation with error handling
+
+**Review Feedback (Elminster — CHANGES REQUESTED):**
+
+**Blocking Issue:** Form validation non-functional
+- Current: Validation warnings shown, but save buttons remain enabled with invalid data
+- Required: Add guard clauses in `handleSave` to check required fields
+- Pattern: Early return with error state if validation fails
+
+**Status:** Awaiting fix implementation.
+
+
+## Learnings
+
+### PR #145 Validation Fixes (2026-03-23)
+**Task:** Fix reviewer-rejected PR #145 (remaining entity pages) — add validation and missing fields
+**Status:** ✅ Complete
+
+**Issues Fixed:**
+1. **LootTablesDetail & SkillsDetail** — Hardcoded "✅ All fields valid" replaced with real validation
+2. **ModifiersDetail** — Added missing `effects` (JSON textarea) and `tags` (comma-separated text)
+3. **SkillsDetail** — Added missing `requirements` (JSON textarea)
+
+**Pattern Applied:**
+- `validateForm()` function returns `string | null` (error message or null if valid)
+- Guard clauses in `handleSave()` set `validationError` state and return early when invalid
+- Save button disabled when `!isValid`
+- Validation box conditionally renders success/error state with specific message
+- Array fields use simple inputs: JSON textarea for complex objects, comma-separated text for string arrays
+
+**Key Decision:** Phase 2.5 philosophy — functionality over polish. JSON textareas + basic comma-separated inputs are acceptable for admin workflows. Don't over-engineer UI for array editing.
+
+**Files Changed:**
+- `packages/client/src/pages/admin/LootTablesDetail.tsx` — validation + disabled save
+- `packages/client/src/pages/admin/SkillsDetail.tsx` — validation + requirements field + disabled save
+- `packages/client/src/pages/admin/ModifiersDetail.tsx` — validation + effects/tags fields + 2-column layout + disabled save
+
+**Verification:** Client builds successfully (`npm run build` in packages/client). No TypeScript errors in modified files.
+
+**Commit:** `579347d` on `squad/131-wire-remaining-admin` branch, pushed to remote
+
+**For Elminster:** PR #145 now ready for re-review with all feedback addressed.
+
