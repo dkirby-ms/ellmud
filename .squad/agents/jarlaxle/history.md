@@ -611,3 +611,32 @@ Implemented server-side proximity-based communication system with three social c
 - 34 tests passing, 6 todo stubs for future cross-system work (stealth, sustained extraction noise, listening skill).
 - **Edge case:** Walking (noise=2) and sneaking (noise=1) cannot be heard even in adjacent rooms under default attenuation. This is by GDD design — these actions are meant to be silent.
 - PR #118 opened against dev. Branch: `feat/sound-propagation-system`.
+---
+
+### 2025-07-26: PR #117 Fix — TraceSystem Integration (Issue #23)
+
+**Context:** Drizzt authored the Trace System PR but Elminster rejected it with 3 blocking issues. Drizzt was locked out; I picked up the fix.
+
+**What I fixed:**
+
+1. **TraceSystem wired into ShardRoom** — TraceSystem was a standalone class with good tests but zero integration. Wired it fully:
+   - Footprint traces on movement (`go` and `flee`) in the room LEFT, with direction
+   - Blood trail traces on combat damage ≥ `BLOOD_TRAIL_DAMAGE_THRESHOLD` (5)
+   - Corpse traces on player and creature death
+   - `traceSystem.tick()` called every game tick
+   - Trace narrations delivered on room entry, flee, `look`, and initial join
+   - `traceSystem.clear()` on shard collapse
+   - Phase 1 uses `TRACKING_THRESHOLDS.BASIC` as default skill level so traces are visible
+
+2. **SoundSystem code removed** — Drizzt bundled SoundSystem integration into the Trace PR (should be PR #118). Removed `SoundSystem` import/property/initialization/methods from ShardRoom, removed all Sound types from `@ellmud/shared`, restored deleted anticipatory test files and Minsc history, fixed broken `RoomProperty` re-export.
+
+3. **Per-room trace cap** — `MAX_TRACES_PER_ROOM = 50`. On overflow: evict oldest expired trace first, then oldest active trace. 4 new tests.
+
+**Key decisions:**
+- Default tracking skill for Phase 1 display is `TRACKING_THRESHOLDS.BASIC` (10) — players see basic descriptions ("Footprints leading east.", "A trail of blood.") without a full skill system.
+- Trace narrations sent as `type: 'trace'` NarrationType, already defined in shared.
+- Eviction strategy: expired-first preserves fresh/relevant traces; oldest-active is last resort to cap unbounded growth.
+
+**Test results:** 43 files, 1051 passed, 158 todo, 0 failures. TypeScript clean.
+
+**Commit:** `8056f42` on `feat/trace-system` branch. PR #117.

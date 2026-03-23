@@ -302,6 +302,60 @@ export interface RoomSwitchMessage {
   reason: string;       // Human-readable reason for the switch
 }
 
+// ─── Trace System (GDD §11.2) ─────────────────────────────────────────────
+
+/** Types of environmental traces left by player/creature actions. */
+export type TraceType =
+  | 'footprint'
+  | 'blood_trail'
+  | 'opened_container'
+  | 'broken_door'
+  | 'corpse'
+  | 'discarded_item'
+  | 'residue';
+
+/** Default TTLs per trace type (seconds). Infinity = permanent for shard lifetime. */
+export const TRACE_TTLS: Record<TraceType, number> = {
+  footprint: 300,
+  blood_trail: 600,
+  opened_container: Infinity,
+  broken_door: Infinity,
+  corpse: Infinity,
+  discarded_item: Infinity,
+  residue: 120,
+};
+
+/** An ephemeral trace left in a shard room. */
+export interface Trace {
+  id: string;
+  type: TraceType;
+  roomId: string;
+  createdAt: number;
+  ttl: number;
+  direction?: string;
+  metadata: {
+    actorId?: string;
+    actorName?: string;
+    severity?: number;
+    stealthModifier?: number;
+    description?: string;
+  };
+}
+
+/** Tracking skill thresholds for trace detail levels. */
+export const TRACKING_THRESHOLDS = {
+  NONE: 0,
+  BASIC: 10,
+  DETAILED: 50,
+  EXPERT: 80,
+} as const;
+
+/** Stealth threshold: damage below this leaves no blood trail. */
+export const BLOOD_TRAIL_DAMAGE_THRESHOLD = 5;
+
+/** Stealth modifier above this suppresses footprint traces entirely. */
+export const STEALTH_FOOTPRINT_THRESHOLD = 80;
+
 // ─── Extraction Types (GDD §3 step 6) ────────────────────────────────────────
 
 /** Server → Client: Extraction channel state update. */

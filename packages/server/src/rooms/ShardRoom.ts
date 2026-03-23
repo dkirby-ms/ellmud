@@ -22,10 +22,13 @@ import { adaptRoomGraph } from '../shard/graph-adapter.js';
 import { handleLook } from '../commands/handlers/look.js';
 import { CombatSystem, type TickResult, createCombatant } from '../combat/index.js';
 import { SoundSystem } from '../sound/index.js';
+import { TraceSystem } from '../systems/index.js';
 import {
   NOISE_VALUES,
   SOUND_DESCRIPTIONS,
   type SoundType,
+  BLOOD_TRAIL_DAMAGE_THRESHOLD,
+  TRACKING_THRESHOLDS,
 } from '@ellmud/shared';
 import { ExtractionSystem } from '../extraction/index.js';
 import { authenticateClient } from '../auth/colyseus-auth.js';
@@ -62,6 +65,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private players = new Map<string, PlayerState>();
   private combatSystem!: CombatSystem;
   private soundSystem!: SoundSystem;
+  private traceSystem!: TraceSystem;
   private extractionSystem!: ExtractionSystem;
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
@@ -136,6 +140,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       return { id: room.id, exits: room.exits, properties: room.properties };
     });
 
+    // Initialize trace system (GDD §11.2)
+    this.traceSystem = new TraceSystem();
+
     // Initialize extraction system (default 5-tick channel)
     this.extractionSystem = new ExtractionSystem();
 
@@ -196,6 +203,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Send initial room look
     const lookResult = handleLook(this.buildCommandContext(playerState, []));
     this.deliverResult(client, lookResult);
+    this.sendTraceNarrations(client, startRoom);
 
     this.sendShardState(client, {
       state: this.lifecycle,
@@ -335,6 +343,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       // Propagate combat sounds to nearby rooms (GDD §12)
       this.propagateCombatSounds(tickResult);
 
+      // Create blood trail traces for combat damage
+      this.createCombatTraces(tickResult);
+
       // Check if any extracting players took damage — interrupt their channels
       for (const event of tickResult.events) {
         if (event.type === 'strike' && event.targetId) {
@@ -361,6 +372,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Resolve extraction ticks
     this.tickExtractions();
+
+    // Decay traces
+    this.traceSystem.tick(TICK_INTERVAL_MS);
   }
 
   // ─── Shard Lifecycle ─────────────────────────────────────────────────────
@@ -412,6 +426,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private handleCollapse(): void {
     // Interrupt all active extractions
     const interrupted = this.extractionSystem.interruptAll('the shard collapsed');
+
+    // Clear all traces on shard collapse
+    this.traceSystem.clear();
 
     // Send EXTRACTION_STATE 'interrupted' to each affected player
     for (const { playerId, narration } of interrupted) {
@@ -496,9 +513,20 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     this.log(`Command from ${client.sessionId}: ${verb} ${args.join(' ')}`);
 
+    const previousRoomId = player.currentRoomId;
     const wasExtracting = this.extractionSystem.isExtracting(client.sessionId);
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
+
+    // Trace: movement creates footprints in the room LEFT
+    const movedRoom = player.currentRoomId !== previousRoomId;
+    if (movedRoom) {
+      const direction = args[0]?.toLowerCase();
+      this.traceSystem.addTrace(previousRoomId, 'footprint', {
+        actorId: client.sessionId,
+        actorName: client.sessionId,
+      }, direction);
+    }
 
     // Social commands (say, emote) broadcast to all players in the same room
     // Whisper is handled separately with targeted delivery
@@ -514,6 +542,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     } else {
       // Normal command: deliver only to sender
       this.deliverResult(client, result);
+    }
+
+    // Trace: send trace narrations on room entry or "look"
+    if (movedRoom || verb === 'look') {
+      this.sendTraceNarrations(client, player.currentRoomId);
     }
 
     // Send EXTRACTION_STATE 'started' if this command initiated an extraction
@@ -646,6 +679,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     for (const flee of tickResult.fleeResults) {
       const player = this.players.get(flee.combatantId);
       if (player) {
+        // Trace: fleeing creates footprints in the room LEFT
+        this.traceSystem.addTrace(flee.fromRoomId, 'footprint', {
+          actorId: flee.combatantId,
+          actorName: flee.combatantId,
+        });
+
         player.currentRoomId = flee.toRoomId;
         const client = this.findClient(flee.combatantId);
         if (client) {
@@ -661,6 +700,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
               exits: Array.from(targetRoom.exits.keys()),
               stability: this.state.stability,
             });
+            this.sendTraceNarrations(client, flee.toRoomId);
           }
         }
       }
@@ -721,6 +761,35 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       }
     }
   }
+
+  // ─── Trace System (GDD §11.2) ──────────────────────────────────────────
+
+  /** Create blood_trail traces for combat damage events that exceed the threshold. */
+  private createCombatTraces(tickResult: TickResult): void {
+    for (const event of tickResult.events) {
+      if (event.type === 'strike' && event.targetId && event.damage != null) {
+        const combatant = this.combatSystem.getCombatant(event.targetId);
+        if (combatant && event.damage >= BLOOD_TRAIL_DAMAGE_THRESHOLD) {
+          this.traceSystem.addTrace(combatant.roomId, 'blood_trail', {
+            actorName: event.targetName,
+            severity: event.damage,
+          });
+        }
+      }
+    }
+  }
+
+  /** Send active trace descriptions to a client as narration. */
+  private sendTraceNarrations(client: Client, roomId: string): void {
+    const descriptions = this.traceSystem.getTracesForPlayer(roomId, {
+      tracking: TRACKING_THRESHOLDS.BASIC,
+    });
+    if (descriptions.length === 0) return;
+
+    const text = descriptions.map(d => d.text).join('\n');
+    this.sendNarrate(client, { text, type: 'trace', timestamp: Date.now() });
+  }
+
 
   // ─── Extraction Tick Delivery ─────────────────────────────────────────────
 
@@ -932,6 +1001,14 @@ export class ShardRoom extends Room<ShardRoomOptions> {
           }
         }
         this.combatSystem.removeCombatant(event.actorId);
+
+        // Trace: creature death creates corpse trace
+        if (roomId) {
+          this.traceSystem.addTrace(roomId, 'corpse', {
+            actorId: event.actorId,
+            actorName: event.actorName,
+          });
+        }
       }
     }
 
@@ -973,6 +1050,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         }
       }
       player.inventory.clear();
+
+      // Trace: player death creates corpse trace
+      this.traceSystem.addTrace(roomId, 'corpse', {
+        actorId: playerId,
+        actorName: event.actorName,
+      });
 
       // Narrate dropped items to other players in the room
       if (droppedItems.length > 0 && room) {

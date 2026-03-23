@@ -1,274 +1,445 @@
 /**
- * Wave 2 — Trace System (#23) — Anticipatory Tests
+ * TraceSystem tests — creation, TTL decay, skill filtering, integration.
  *
- * Behavioral contracts for the trace system before implementation lands.
- * Acceptance criteria:
- *
- * - Trace types: footprints (300s TTL), blood trail (600s TTL),
- *   opened container (permanent), corpse (permanent)
- * - Traces stored in shard-instance memory, destroyed on shard collapse
- * - Tracking skill reveals detail level
- * - Stealth skill reduces traces left
- *
- * Tests use describe.skip / it.todo where implementation types are needed.
- * Concrete TTL values and expected behaviors are embedded for contract verification.
+ * Replaces anticipatory tests with concrete implementation tests.
+ * GDD §11.2 — Trace System
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { TraceSystem, resetTraceIdCounter, MAX_TRACES_PER_ROOM, type PlayerSkills } from '../systems/TraceSystem.js';
+import {
+  type TraceType,
+  TRACE_TTLS,
+  TRACKING_THRESHOLDS,
+  STEALTH_FOOTPRINT_THRESHOLD,
+  BLOOD_TRAIL_DAMAGE_THRESHOLD,
+} from '@ellmud/shared';
 
-// ─── Trace Constants (from acceptance criteria) ─────────────────────────────
+const ROOM_A = 'room-a';
+const ROOM_B = 'room-b';
 
-const TRACE_TTL = {
-  FOOTPRINTS: 300,      // seconds
-  BLOOD_TRAIL: 600,     // seconds
-  OPENED_CONTAINER: -1, // permanent (never expires)
-  CORPSE: -1,           // permanent (never expires)
-} as const;
+describe('TraceSystem', () => {
+  let system: TraceSystem;
 
-type TraceType = 'footprints' | 'blood_trail' | 'opened_container' | 'corpse';
-
-interface TraceFixture {
-  type: TraceType;
-  ttl: number;
-  roomId: string;
-  sourcePlayerId?: string;
-  createdAt: number;
-}
-
-function makeTrace(
-  type: TraceType,
-  roomId: string,
-  createdAt: number = 0,
-  sourcePlayerId?: string,
-): TraceFixture {
-  return {
-    type,
-    ttl: TRACE_TTL[type.toUpperCase() as keyof typeof TRACE_TTL],
-    roomId,
-    sourcePlayerId,
-    createdAt,
-  };
-}
-
-function isExpired(trace: TraceFixture, currentTime: number): boolean {
-  if (trace.ttl === -1) return false; // permanent
-  return (currentTime - trace.createdAt) >= trace.ttl;
-}
-
-// ─── TTL Behavior ───────────────────────────────────────────────────────────
-
-describe('Trace System — TTL Contracts (#23)', () => {
-  describe('footprints (300s TTL)', () => {
-    it('footprints alive at 299 seconds', () => {
-      const trace = makeTrace('footprints', 'room-1', 0);
-      expect(isExpired(trace, 299)).toBe(false);
-    });
-
-    it('footprints expired at exactly 300 seconds', () => {
-      const trace = makeTrace('footprints', 'room-1', 0);
-      expect(isExpired(trace, 300)).toBe(true);
-    });
-
-    it('footprints expired well past TTL', () => {
-      const trace = makeTrace('footprints', 'room-1', 0);
-      expect(isExpired(trace, 1000)).toBe(true);
-    });
+  beforeEach(() => {
+    system = new TraceSystem();
+    resetTraceIdCounter();
+    vi.useFakeTimers();
   });
 
-  describe('blood trail (600s TTL)', () => {
-    it('blood trail alive at 599 seconds', () => {
-      const trace = makeTrace('blood_trail', 'room-1', 0);
-      expect(isExpired(trace, 599)).toBe(false);
-    });
-
-    it('blood trail expired at exactly 600 seconds', () => {
-      const trace = makeTrace('blood_trail', 'room-1', 0);
-      expect(isExpired(trace, 600)).toBe(true);
-    });
-
-    it('blood trail has double the lifespan of footprints', () => {
-      expect(TRACE_TTL.BLOOD_TRAIL).toBe(TRACE_TTL.FOOTPRINTS * 2);
-    });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  describe('permanent traces', () => {
-    it('opened container never expires', () => {
-      const trace = makeTrace('opened_container', 'room-1', 0);
-      expect(isExpired(trace, 0)).toBe(false);
-      expect(isExpired(trace, 86400)).toBe(false); // 24 hours
-      expect(isExpired(trace, 999999)).toBe(false);
+  // ─── Creation & Retrieval ──────────────────────────────────────────────
+
+  describe('trace creation and retrieval', () => {
+    it('should create a footprint trace in a room', () => {
+      const trace = system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' }, 'east');
+
+      expect(trace).not.toBeNull();
+      expect(trace!.type).toBe('footprint');
+      expect(trace!.roomId).toBe(ROOM_A);
+      expect(trace!.direction).toBe('east');
+      expect(trace!.metadata.actorId).toBe('p1');
+      expect(trace!.ttl).toBe(TRACE_TTLS.footprint);
     });
 
-    it('corpse never expires', () => {
-      const trace = makeTrace('corpse', 'room-1', 0);
-      expect(isExpired(trace, 0)).toBe(false);
-      expect(isExpired(trace, 86400)).toBe(false);
-      expect(isExpired(trace, 999999)).toBe(false);
+    it('should retrieve all active traces in a room', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' }, 'east');
+      system.addTrace(ROOM_A, 'blood_trail', { actorId: 'p2', severity: 15 });
+      system.addTrace(ROOM_B, 'footprint', { actorId: 'p3' }, 'west');
+
+      const tracesA = system.getTracesInRoom(ROOM_A);
+      const tracesB = system.getTracesInRoom(ROOM_B);
+
+      expect(tracesA).toHaveLength(2);
+      expect(tracesB).toHaveLength(1);
+    });
+
+    it('should return empty array for room with no traces', () => {
+      expect(system.getTracesInRoom('empty-room')).toHaveLength(0);
+    });
+
+    it('should assign unique IDs to traces', () => {
+      const t1 = system.addTrace(ROOM_A, 'footprint', {});
+      const t2 = system.addTrace(ROOM_A, 'footprint', {});
+      expect(t1!.id).not.toBe(t2!.id);
+    });
+
+    it('should create all trace types', () => {
+      const types: TraceType[] = [
+        'footprint', 'blood_trail', 'opened_container',
+        'broken_door', 'corpse', 'discarded_item', 'residue',
+      ];
+
+      for (const type of types) {
+        const metadata = type === 'blood_trail' ? { severity: 10 } : {};
+        const trace = system.addTrace(ROOM_A, type, metadata);
+        expect(trace).not.toBeNull();
+        expect(trace!.type).toBe(type);
+        expect(trace!.ttl).toBe(TRACE_TTLS[type]);
+      }
+    });
+
+    it('should track total trace count', () => {
+      system.addTrace(ROOM_A, 'footprint', {});
+      system.addTrace(ROOM_A, 'corpse', {});
+      system.addTrace(ROOM_B, 'residue', {});
+      expect(system.totalTraceCount).toBe(3);
     });
   });
 
-  describe('boundary conditions', () => {
-    it('trace created at non-zero time: TTL relative to creation', () => {
-      const trace = makeTrace('footprints', 'room-1', 1000);
-      expect(isExpired(trace, 1299)).toBe(false); // 299s elapsed
-      expect(isExpired(trace, 1300)).toBe(true);  // 300s elapsed
+  // ─── TTL Decay ─────────────────────────────────────────────────────────
+
+  describe('TTL decay', () => {
+    it('should expire footprint traces after TTL', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' });
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(1);
+
+      vi.advanceTimersByTime(301_000);
+      system.tick(1000);
+
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(0);
     });
 
-    it('multiple traces in same room have independent TTLs', () => {
-      const early = makeTrace('footprints', 'room-1', 0);
-      const late = makeTrace('footprints', 'room-1', 200);
-      const checkTime = 350;
+    it('should expire residue traces after TTL', () => {
+      system.addTrace(ROOM_A, 'residue', {});
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(1);
 
-      expect(isExpired(early, checkTime)).toBe(true);  // 350s elapsed
-      expect(isExpired(late, checkTime)).toBe(false);   // 150s elapsed
+      vi.advanceTimersByTime(121_000);
+      system.tick(1000);
+
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(0);
     });
 
-    it('blood trail outlives footprints from same event', () => {
-      const footprints = makeTrace('footprints', 'room-1', 0);
-      const blood = makeTrace('blood_trail', 'room-1', 0);
+    it('should NOT expire permanent traces', () => {
+      system.addTrace(ROOM_A, 'corpse', { actorId: 'c1' });
+      system.addTrace(ROOM_A, 'opened_container', {});
+      system.addTrace(ROOM_A, 'broken_door', {});
+      system.addTrace(ROOM_A, 'discarded_item', {});
 
-      // At 400s: footprints gone, blood still present
-      expect(isExpired(footprints, 400)).toBe(true);
-      expect(isExpired(blood, 400)).toBe(false);
+      vi.advanceTimersByTime(10_000_000);
+      system.tick(1000);
+
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(4);
+    });
+
+    it('should expire only traces past their TTL', () => {
+      system.addTrace(ROOM_A, 'residue', {}); // 120s
+      system.addTrace(ROOM_A, 'footprint', {}); // 300s
+      system.addTrace(ROOM_A, 'blood_trail', { severity: 10 }); // 600s
+
+      vi.advanceTimersByTime(130_000);
+      system.tick(1000);
+
+      const traces = system.getTracesInRoom(ROOM_A);
+      expect(traces).toHaveLength(2);
+      expect(traces.map(t => t.type)).toContain('footprint');
+      expect(traces.map(t => t.type)).toContain('blood_trail');
+    });
+
+    it('should clean up empty room entries after all traces expire', () => {
+      system.addTrace(ROOM_A, 'residue', {});
+      vi.advanceTimersByTime(121_000);
+      system.tick(1000);
+      expect(system.totalTraceCount).toBe(0);
+    });
+
+    it('footprints alive at 299 seconds, expired at 300', () => {
+      system.addTrace(ROOM_A, 'footprint', {});
+
+      vi.advanceTimersByTime(299_000);
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(1);
+
+      vi.advanceTimersByTime(2_000);
+      system.tick(1000);
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(0);
+    });
+
+    it('blood trail outlives footprints from the same event', () => {
+      system.addTrace(ROOM_A, 'footprint', {});
+      system.addTrace(ROOM_A, 'blood_trail', { severity: 10 });
+
+      vi.advanceTimersByTime(400_000);
+      system.tick(1000);
+
+      const traces = system.getTracesInRoom(ROOM_A);
+      expect(traces).toHaveLength(1);
+      expect(traces[0].type).toBe('blood_trail');
+    });
+
+    it('should support clear() for shard collapse', () => {
+      system.addTrace(ROOM_A, 'corpse', {});
+      system.addTrace(ROOM_B, 'footprint', {});
+      system.clear();
+      expect(system.totalTraceCount).toBe(0);
     });
   });
-});
 
-// ─── Shard-Instance Memory ──────────────────────────────────────────────────
+  // ─── Stealth Suppression ───────────────────────────────────────────────
 
-describe('Trace System — Shard Memory Lifecycle (#23)', () => {
-  describe.skip('traces bound to shard instance', () => {
-    it.todo('traces created in shard are queryable within that shard');
-    it.todo('traces from one shard are NOT visible in another shard');
-    it.todo('all traces destroyed when shard collapses');
-    it.todo('shard collapse during active trace TTL countdown destroys trace immediately');
+  describe('stealth suppression', () => {
+    it('should suppress footprints when stealth modifier is high', () => {
+      const trace = system.addTrace(ROOM_A, 'footprint', {
+        actorId: 'rogue',
+        stealthModifier: STEALTH_FOOTPRINT_THRESHOLD,
+      }, 'east');
+      expect(trace).toBeNull();
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(0);
+    });
+
+    it('should create footprints when stealth is below threshold', () => {
+      const trace = system.addTrace(ROOM_A, 'footprint', {
+        actorId: 'warrior',
+        stealthModifier: STEALTH_FOOTPRINT_THRESHOLD - 1,
+      }, 'east');
+      expect(trace).not.toBeNull();
+    });
+
+    it('should suppress blood trails when damage is below threshold', () => {
+      const trace = system.addTrace(ROOM_A, 'blood_trail', {
+        actorId: 'p1',
+        severity: BLOOD_TRAIL_DAMAGE_THRESHOLD - 1,
+      });
+      expect(trace).toBeNull();
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(0);
+    });
+
+    it('should create blood trails when damage meets threshold', () => {
+      const trace = system.addTrace(ROOM_A, 'blood_trail', {
+        actorId: 'p1',
+        severity: BLOOD_TRAIL_DAMAGE_THRESHOLD,
+      });
+      expect(trace).not.toBeNull();
+    });
+
+    it('should NOT suppress permanent traces regardless of stealth', () => {
+      const corpse = system.addTrace(ROOM_A, 'corpse', { stealthModifier: 100 });
+      expect(corpse).not.toBeNull();
+    });
   });
 
-  describe.skip('trace storage capacity', () => {
-    it.todo('room can hold multiple traces of different types simultaneously');
-    it.todo('room can hold multiple footprint traces from different players');
-    it.todo('expired traces are garbage-collected and do not count toward storage');
-    it.todo('trace overflow: oldest non-permanent traces evicted first if limit reached');
-  });
-});
+  // ─── Skill-Based Filtering ──────────────────────────────────────────────
 
-// ─── Tracking Skill → Detail Level ─────────────────────────────────────────
+  describe('tracking skill filtering', () => {
+    beforeEach(() => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1', actorName: 'Warrior' }, 'east');
+      system.addTrace(ROOM_A, 'blood_trail', { actorId: 'p2', severity: 15 }, 'west');
+    });
 
-describe('Trace System — Tracking Skill Detail Levels (#23)', () => {
-  describe.skip('low tracking skill', () => {
-    it.todo('low tracking: footprints → "You see some marks on the ground"');
-    it.todo('low tracking: blood trail → "There are dark stains here"');
-    it.todo('low tracking: opened container → sees container is open (always visible)');
-    it.todo('low tracking: corpse → sees corpse (always visible)');
-  });
+    it('should return no descriptions when tracking is below BASIC threshold', () => {
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.NONE,
+      });
+      expect(descriptions).toHaveLength(0);
+    });
 
-  describe.skip('moderate tracking skill', () => {
-    it.todo('moderate tracking: footprints → reveals approximate age (fresh/old)');
-    it.todo('moderate tracking: blood trail → reveals direction of travel');
-    it.todo('moderate tracking: corpse → reveals cause of death category');
-  });
+    it('should return basic descriptions at BASIC tracking level', () => {
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.BASIC,
+      });
+      expect(descriptions).toHaveLength(2);
+      expect(descriptions[0].text).toContain('Footprints');
+      expect(descriptions[0].text).toContain('east');
+      expect(descriptions[1].text).toContain('blood');
+    });
 
-  describe.skip('high tracking skill', () => {
-    it.todo('high tracking: footprints → reveals direction, weight estimate, freshness');
-    it.todo('high tracking: blood trail → reveals severity, direction, recency');
-    it.todo('high tracking: corpse → reveals detailed cause of death, time since death');
-    it.todo('high tracking: opened container → reveals approximate time opened');
-  });
+    it('should return detailed descriptions at DETAILED tracking level', () => {
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.DETAILED,
+      });
+      expect(descriptions).toHaveLength(2);
+      expect(descriptions[0].text).toMatch(/Fresh|Recent|boot prints/);
+      expect(descriptions[1].text).toMatch(/Fresh|Recent|bloodstains/);
+    });
 
-  describe.skip('skill thresholds', () => {
-    it.todo('tracking skill 0: minimal detail on all trace types');
-    it.todo('tracking skill 5: moderate detail threshold');
-    it.todo('tracking skill 8: full detail on all trace types');
-    it.todo('skill level exactly at threshold: includes that tier detail');
-  });
-});
+    it('should return expert descriptions at EXPERT tracking level', () => {
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.EXPERT,
+      });
+      expect(descriptions).toHaveLength(2);
+      expect(descriptions[0].text).toContain('Warrior');
+      expect(descriptions[1].text).toContain('severity 15');
+    });
 
-// ─── Stealth Reduces Traces ─────────────────────────────────────────────────
+    it('should default to no tracking when skills omitted', () => {
+      const descriptions = system.getTracesForPlayer(ROOM_A);
+      expect(descriptions).toHaveLength(0);
+    });
 
-describe('Trace System — Stealth Interaction (#23 × #25)', () => {
-  describe.skip('stealth skill reduces trace generation', () => {
-    it.todo('stealth 0: full footprint traces left on movement');
-    it.todo('stealth 5: reduced footprint frequency or lighter traces');
-    it.todo('stealth 8+: no footprints left on normal movement');
-    it.todo('stealth does NOT prevent blood trail when damaged');
-    it.todo('stealth does NOT prevent corpse trace on death');
-    it.todo('stealth reduces but does not eliminate container interaction traces');
-  });
-
-  describe.skip('combat breaks stealth trace reduction', () => {
-    it.todo('entering combat leaves full footprints regardless of stealth');
-    it.todo('combat damage always leaves blood trail regardless of stealth');
-    it.todo('fleeing from combat leaves running footprints (stealth ineffective)');
-  });
-});
-
-// ─── Trace Creation from Game Events ────────────────────────────────────────
-
-describe('Trace System — Event-Driven Trace Creation (#23)', () => {
-  describe.skip('movement creates footprints', () => {
-    it.todo('moving from room A to room B creates footprints in room A');
-    it.todo('footprint trace indicates direction of travel');
-    it.todo('rapid sequential moves create footprints in each traversed room');
+    it('should include direction in trace descriptions', () => {
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.BASIC,
+      });
+      expect(descriptions[0].direction).toBe('east');
+      expect(descriptions[1].direction).toBe('west');
+    });
   });
 
-  describe.skip('combat creates blood trails', () => {
-    it.todo('taking damage in combat creates blood trail in combat room');
-    it.todo('blood trail intensity scales with damage taken');
-    it.todo('lethal blow creates both blood trail and corpse trace');
+  // ─── Age-Based Description Changes ─────────────────────────────────────
+
+  describe('trace age in descriptions', () => {
+    it('should describe fresh traces as "Fresh"', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' }, 'east');
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.DETAILED,
+      });
+      expect(descriptions[0].text).toMatch(/^Fresh/);
+    });
+
+    it('should describe older traces as "Recent"', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' }, 'east');
+      vi.advanceTimersByTime(60_000);
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.DETAILED,
+      });
+      expect(descriptions[0].text).toMatch(/^Recent/);
+    });
+
+    it('should describe aged traces as "Fading"', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' }, 'east');
+      vi.advanceTimersByTime(150_000);
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.DETAILED,
+      });
+      expect(descriptions[0].text).toMatch(/^Fading/);
+    });
+
+    it('should include exact time at expert level', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1', actorName: 'p1' }, 'east');
+      vi.advanceTimersByTime(120_000);
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.EXPERT,
+      });
+      expect(descriptions[0].text).toContain('2 minutes old');
+    });
   });
 
-  describe.skip('container interaction', () => {
-    it.todo('opening a loot container creates permanent opened_container trace');
-    it.todo('already-opened container does not create duplicate trace');
-    it.todo('container trace includes container type metadata');
+  // ─── Integration: Movement + Decay Lifecycle ──────────────────────────
+
+  describe('integration: movement and decay lifecycle', () => {
+    it('should simulate a player moving through rooms with trace decay', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' }, 'east');
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(1);
+
+      vi.advanceTimersByTime(60_000);
+      system.addTrace(ROOM_B, 'footprint', { actorId: 'p1' }, 'west');
+      expect(system.totalTraceCount).toBe(2);
+
+      vi.advanceTimersByTime(241_000);
+      system.tick(1000);
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(0);
+      expect(system.getTracesInRoom(ROOM_B)).toHaveLength(1);
+
+      vi.advanceTimersByTime(300_000);
+      system.tick(1000);
+      expect(system.getTracesInRoom(ROOM_B)).toHaveLength(0);
+      expect(system.totalTraceCount).toBe(0);
+    });
+
+    it('should handle combat creating multiple trace types in one room', () => {
+      system.addTrace(ROOM_A, 'blood_trail', { actorId: 'p1', severity: 20 });
+      system.addTrace(ROOM_A, 'corpse', { actorId: 'creature-1', actorName: 'Revenant' });
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' }, 'north');
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(3);
+
+      vi.advanceTimersByTime(301_000);
+      system.tick(1000);
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(2);
+
+      vi.advanceTimersByTime(300_000);
+      system.tick(1000);
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(1);
+      expect(system.getTracesInRoom(ROOM_A)[0].type).toBe('corpse');
+
+      vi.advanceTimersByTime(999_000_000);
+      system.tick(1000);
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(1);
+    });
+
+    it('should support a tracker following a trail through rooms', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'quarry', actorName: 'Quarry' }, 'east');
+      vi.advanceTimersByTime(30_000);
+      system.addTrace(ROOM_B, 'footprint', { actorId: 'quarry', actorName: 'Quarry' }, 'north');
+
+      const skills: PlayerSkills = { tracking: TRACKING_THRESHOLDS.EXPERT };
+
+      const trailA = system.getTracesForPlayer(ROOM_A, skills);
+      expect(trailA).toHaveLength(1);
+      expect(trailA[0].direction).toBe('east');
+      expect(trailA[0].text).toContain('Quarry');
+
+      const trailB = system.getTracesForPlayer(ROOM_B, skills);
+      expect(trailB).toHaveLength(1);
+      expect(trailB[0].direction).toBe('north');
+    });
+
+    it('two players moving through same room create separate footprints', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' }, 'east');
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p2' }, 'west');
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(2);
+    });
   });
 
-  describe.skip('player death', () => {
-    it.todo('player death creates permanent corpse trace');
-    it.todo('creature death creates permanent corpse trace');
-    it.todo('corpse trace includes entity type (player vs creature)');
-  });
-});
+  // ─── Per-Room Trace Cap ─────────────────────────────────────────────────
 
-// ─── Concurrent / Edge Cases ────────────────────────────────────────────────
+  describe('per-room trace cap', () => {
+    it('should enforce MAX_TRACES_PER_ROOM limit', () => {
+      for (let i = 0; i < MAX_TRACES_PER_ROOM + 10; i++) {
+        system.addTrace(ROOM_A, 'footprint', { actorId: `p${i}` });
+      }
+      expect(system.getTracesInRoom(ROOM_A).length).toBeLessThanOrEqual(MAX_TRACES_PER_ROOM);
+    });
 
-describe('Trace System — Edge Cases (#23)', () => {
-  describe.skip('concurrent trace creation', () => {
-    it.todo('two players moving through same room in same tick: two footprint traces');
-    it.todo('combat + movement in same room same tick: both trace types created');
-    it.todo('trace creation during shard collapse: no crash, traces discarded');
-  });
+    it('should evict oldest expired trace first when at cap', () => {
+      // Fill the room to capacity
+      for (let i = 0; i < MAX_TRACES_PER_ROOM; i++) {
+        system.addTrace(ROOM_A, 'footprint', { actorId: `p${i}` });
+      }
 
-  describe.skip('trace decay during active scenarios', () => {
-    it.todo('footprints expire during ongoing combat in the room');
-    it.todo('blood trail survives room revisit (does not reset TTL)');
-    it.todo('new footprints in room with expired footprints: only new trace visible');
-  });
+      // Expire the first trace by advancing time past footprint TTL
+      vi.advanceTimersByTime(301_000);
 
-  describe.skip('trace interaction with room types', () => {
-    it.todo('traces in extraction room persist until shard collapse');
-    it.todo('traces in boss room persist across boss respawn');
-    it.todo('entry room traces from multiple players coexist');
-  });
-});
+      // Adding a new trace should evict the expired one, not a live one
+      const newTrace = system.addTrace(ROOM_A, 'corpse', { actorId: 'c1' });
+      expect(newTrace).not.toBeNull();
 
-// ─── Cross-System: Traces + Sound (#23 × #22) ──────────────────────────────
+      const traces = system.getTracesInRoom(ROOM_A);
+      // Only 1 alive: the new corpse (all footprints expired)
+      expect(traces.length).toBe(1);
+      expect(traces[0].type).toBe('corpse');
+    });
 
-describe('Trace System — Cross-System: Sound (#23 × #22)', () => {
-  describe.skip('sound and trace from same event', () => {
-    it.todo('combat generates both noise (sound system) and blood trail (trace system)');
-    it.todo('movement generates both footstep noise and footprint traces');
-    it.todo('extraction generates noise but no trace (extraction is not a trace event)');
-    it.todo('opening container generates noise + permanent trace');
-  });
-});
+    it('should evict oldest active trace when no expired traces exist', () => {
+      // Fill with permanent corpses — none will expire
+      for (let i = 0; i < MAX_TRACES_PER_ROOM; i++) {
+        system.addTrace(ROOM_A, 'corpse', { actorId: `c${i}` });
+      }
 
-// ─── Cross-System: Traces + Awareness (#23 × #25) ──────────────────────────
+      // The first trace added should be evicted
+      const firstTraceId = 'trace-0';
+      const newTrace = system.addTrace(ROOM_A, 'corpse', { actorId: 'new' });
+      expect(newTrace).not.toBeNull();
 
-describe('Trace System — Cross-System: Awareness (#23 × #25)', () => {
-  describe.skip('awareness skill enhances trace perception', () => {
-    it.todo('high awareness sees traces that low awareness misses');
-    it.todo('awareness + tracking combined: best detail level of either');
-    it.todo('trace visibility independent of stealth detection (separate systems)');
+      const traces = system.getTracesInRoom(ROOM_A);
+      expect(traces).toHaveLength(MAX_TRACES_PER_ROOM);
+      expect(traces.find(t => t.id === firstTraceId)).toBeUndefined();
+      expect(traces[traces.length - 1].metadata.actorId).toBe('new');
+    });
+
+    it('should not affect traces in other rooms', () => {
+      for (let i = 0; i < MAX_TRACES_PER_ROOM + 5; i++) {
+        system.addTrace(ROOM_A, 'footprint', { actorId: `p${i}` });
+      }
+      system.addTrace(ROOM_B, 'footprint', { actorId: 'solo' });
+
+      expect(system.getTracesInRoom(ROOM_A).length).toBeLessThanOrEqual(MAX_TRACES_PER_ROOM);
+      expect(system.getTracesInRoom(ROOM_B)).toHaveLength(1);
+    });
+
+    it('MAX_TRACES_PER_ROOM should be 50', () => {
+      expect(MAX_TRACES_PER_ROOM).toBe(50);
+    });
   });
 });
