@@ -20,6 +20,14 @@ export interface PlayerSkills {
   tracking?: number;
 }
 
+/** Active shard-sickness debuff applied after PvP death. */
+export interface ShardSicknessDebuff {
+  appliedAt: number;
+  durationMs: number;
+  attackPenalty: number;
+  defencePenalty: number;
+}
+
 const DEFAULT_MAX_CARRY_WEIGHT = 20;
 const DEFAULT_SKILLS: PlayerSkills = { stealth: 5, awareness: 5 };
 
@@ -31,6 +39,7 @@ export class PlayerState {
   disconnected: boolean = false;
   skills: PlayerSkills;
   equipment: VisibleEquipment | undefined;
+  shardSickness: ShardSicknessDebuff | null = null;
 
   constructor(
     sessionId: string,

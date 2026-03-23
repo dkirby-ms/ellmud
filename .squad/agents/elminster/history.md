@@ -1,4 +1,9 @@
-# Elminster — History
+# elminster — History
+
+**For a quick overview, see [summary.md](./summary.md)**
+
+---
+
 
 ## Project Context
 
@@ -278,3 +283,72 @@ All four PRs merge cleanly to dev:
 - **Verdict:** ❌ CHANGES REQUESTED. Core logic is correct but integration is incomplete.
 - **Issues:** Hardcoded zero stats in ShardRoom (feature disabled), missing PlayerState updates for skills/equipment, tests verify local helpers not implementation.
 - **Key files:** packages/server/src/systems/AwarenessSystem.ts, packages/server/src/rooms/ShardRoom.ts, packages/server/src/__tests__/awareness-stealth.test.ts
+
+---
+
+## Wave 2 Complete — All Issues Shipped (2026-03-23)
+
+**Status:** ✅ Complete — PR #119 re-reviewed and approved, dev → uat promotion (PR #120) complete
+
+**My review cycle on PR #119:**
+1. **Initial review:** ❌ CHANGES REQUESTED
+   - Found hardcoded stealth: 0, awareness: 0 in ShardRoom — system non-functional
+   - PlayerState missing skills/equipment fields
+   - Tests verifying local helpers, not AwarenessSystem implementation
+   - Forwarded to Jarlaxle with requirements
+
+2. **Re-review after Jarlaxle fixes:** ✅ APPROVED
+   - PlayerState now carries `skills: { stealth, awareness, tracking? }` and `equipment: VisibleEquipment | undefined`
+   - ShardRoom.runAwarenessChecks() correctly reads real data from PlayerState
+   - Tests rewritten to verify AwarenessSystem logic directly (75 tests passing)
+   - All acceptance criteria met
+
+3. **Deployment notes**
+   - Performance monitoring needed: awareness checks are O(N) where N = players in room
+   - Client rendering of narrative messages should be validated
+   - Formula `awareness - stealth` with thresholds (0, 5) locked and exported as constants
+
+**Wave 2 verification:**
+- Issue #22 (Sound): ✅ 33 tests, per-room BFS functional
+- Issue #23 (Trace): ✅ 34 tests, TTL decay + skill scaling working
+- Issue #25 (Awareness): ✅ 75 tests, detection formula + equipment narration working
+- Total: 1084+ tests passing, zero regressions, all systems production-ready
+
+**Key pattern:** Code review caught that hardcoding game stats at the system layer breaks integration. The fix (PlayerState as source of truth) establishes the pattern for all Phase 2 systems. Jarlaxle's decision doc on PlayerState ownership is reference material.
+
+**Phase 2 readiness:** UAT branch now has all Wave 2 systems. Phase 2 QA (Minsc) can begin testing. All systems follow the same architecture: pure logic classes, ShardRoom wiring, state passed as params.
+
+
+---
+
+## Phase 2: Code Review (2026-03-23)
+
+### Review Cycle: All 4 PRs Reviewed (Round 1, 2, 3)
+
+**PR #124 (Matchmaker):** ✅ APPROVED Round 1
+- Clean design, 0 regressions, ready immediately
+
+**PR #122 (PvP Combat):** ❌→❌→✅
+- Round 1: Missing shard-sickness integration in acceptance criteria
+- Round 2: Stale DowningSystem reference after rebasing
+- Round 3: Approved after wiring complete + merge conflicts resolved
+
+**PR #125 (Death & Downing):** ❌→✅
+- Round 1: killingBlow + ShardSickness not wired into game loop
+- Round 2: Approved after Drizzt wired both systems + E2E test added
+
+**PR #123 (Refuge Ambient):** ❌→❌→✅
+- Round 1: Stale system exports (DowningSystem/ShardSickness not in branch)
+- Round 2: TypeScript build failure (WEATHER_TRANSITIONS enum type)
+- Round 3: Approved after stale exports removed + types fixed
+
+### Review Standards Locked
+
+1. Acceptance criteria verified against implementation (not just PR body claims)
+2. All wiring required (pure logic classes must be instantiated + called)
+3. Integration tests required (end-to-end feature validation)
+4. Build must pass (TypeScript types resolve, no circular deps)
+
+### Phase 2 Complete
+- ✅ All 4 PRs reviewed, 5 rejection rounds caught issues early
+- ✅ Final approvals: 2026-03-23T0100Z–0106Z

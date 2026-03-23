@@ -1,4 +1,9 @@
-# Drizzt — History
+# drizzt — History
+
+**For a quick overview, see [summary.md](./summary.md)**
+
+---
+
 
 ## Project Context
 
@@ -602,3 +607,85 @@ Properties (heavy_door, cavern, water) were silently lost at three layers:
 - Vague messages use random flavor text pool (arrival/departure have distinct pools)
 
 **Drizzt takeaway:** The system is intentionally thin right now — skills hardcoded to 0 means every player gets 'none' detection in practice. This is correct: the awareness system is structurally complete, but needs the skill system (Phase 2) to light up. Pure-logic pattern pays off — no mocking needed for tests.
+
+---
+
+## Wave 2 Complete — All Issues Shipped (2026-03-23)
+
+**Status:** ✅ Complete — PR #119 merged to dev, dev → uat promotion (PR #120) complete
+
+**Overview:** Wave 2 delivered all three sensory systems (Sound, Trace, Awareness). All 1084+ tests passing, zero regressions. Ready for Phase 2 QA.
+
+**My contributions:**
+1. **AwarenessSystem implementation (PR #119, Issue #25)**
+   - Pure game logic: `calculateDetectionTier()` via formula `awareness - stealth`
+   - Three-tier detection: none (invisible), vague (flavor text), full (equipment descriptions, never names)
+   - ShardRoom wiring: checks on arrival + departure
+   - 75 tests pass; anticipatory scaffolds (208 tests) ready for skill system integration
+   - Detection thresholds exported as constants for future tuning
+
+2. **PR #119 review cycle**
+   - Initial implementation shipped with **hardcoded zero skills** (everyone invisible)
+   - Elminster rejected with requirements: add skills/equipment to PlayerState, wire real data, rewrite tests
+   - Jarlaxle fixed: PlayerState now carries `skills` and `equipment`, ShardRoom reads real data, tests rewritten
+   - Elminster re-reviewed and **APPROVED**
+   - Coordinator merged to dev
+
+3. **Infrastructure locked**
+   - Sound: Per-room BFS (O(N)), room modifiers functional, noise constants shared
+   - Trace: TTL decay, suppression at creation, skill-scaled descriptions
+   - Awareness: Formula-driven detection, equipment-based narration (never names)
+   - Narration: 3 new LLM types + fallbacks, client renders distinctly
+
+**Key pattern established:** Game systems (Awareness, Sound, Trace) are pure logic classes with no Colyseus coupling. ShardRoom wires them by reading PlayerState and passing data as params. This pattern scales to Phase 2 systems (Combat, Proximity Communication, etc.).
+
+**What's next:** Phase 2 QA (Minsc, Issue #31) testing Wave 2 in UAT. Phase 2 backlog ready: #21 (Multi-Player Shards), #24 (PvP Combat), #26 (Proximity Communication), #27 (Death & Downing), #28–#49 (Phase 2–4 features).
+
+---
+
+## PR #122 Fix — Shard-Sickness + PvPKillEvent (2026-03-23)
+
+**Branch:** `feat/pvp-combat` (commit 72c2b76)
+
+Fixed two blockers from Elminster's review of PR #122:
+1. **Shard-sickness debuff not applied on PvP death** — Added `ShardSicknessDebuff` interface to `PlayerState`, applied via `SHARD_SICKNESS_DEFAULTS` in the `isPvPKill` block of `handlePlayerDefeats()`.
+2. **PvPKillEvent defined but never emitted** — Constructed `PvPKillEvent` with killerIds and logged via `this.log()` in the PvP kill block.
+
+Also added PvP-specific death narration and imported `PvPKillEvent`/`SHARD_SICKNESS_DEFAULTS` from shared.
+
+### Learnings
+- On `feat/pvp-combat`, death is instant on defeat (no DowningSystem). The `feat/death-downing` branch adds the downed→bleed-out→stabilize flow on top.
+- `SHARD_SICKNESS_DEFAULTS` and `PvPKillEvent` were already defined in shared/index.ts by the original PvP PR — they just weren't imported or used in ShardRoom.
+- The `edit` tool requires exact byte-for-byte match of `old_str` — escaped template literals and Unicode can silently mismatch. Always verify edits with grep after applying.
+- Branch confusion across `feat/pvp-combat` vs `feat/death-downing` is a real risk — always verify with `git branch --show-current` before committing.
+
+
+---
+
+## Phase 2: Feature Implementation & Fixes (2026-03-23)
+
+### PR #124 — Multi-Player Shards (APPROVED Round 1)
+**Status:** ✅ Merged to dev
+**What:** Matchmaker pure logic class, tier capacity enforcement, KEDA auto-scaling
+**Tests:** 48 matchmaker + 3 integration (0 regressions)
+**Key pattern:** Matchmaker has zero Colyseus coupling — pure logic, same as AwarenessSystem
+
+### Fixed PR #125 (Jarlaxle Locked)
+**What:** Wired DowningSystem.killingBlow() + ShardSickness into ShardRoom.update()
+**Added:** E2E test (Player → 0 HP → Downed → Stabilized → Bleed-out)
+**Result:** PR #125 unblocked, approved round 2
+
+### Fixed PR #122 (Jarlaxle Locked)
+**What:** Wired PvPKillEvent + ShardSickness.addDeathPenalty() into combat flow
+**Pattern:** killerIds attribute tracks player kills vs NPC kills
+**Result:** PR #122 unblocked, approved round 3
+
+### Fixed PR #123 (Volo Locked)
+**What:** Fixed WeatherSystem enum types (WEATHER_TRANSITIONS), verified TypeScript build
+**Result:** PR #123 ready for final approval
+
+### Phase 2 Complete
+- ✅ 4 features merged (Matchmaker, PvP Combat, Death & Downing, Refuge Ambient)
+- ✅ 1332 total tests, 343 new in Phase 2, 0 regressions
+- ✅ All Phase 2 issues closed (#21, #24, #27, #29)
+- ✅ PR #126 (dev → uat) created for QA validation

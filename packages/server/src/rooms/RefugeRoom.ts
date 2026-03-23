@@ -14,6 +14,7 @@ import { authenticateClient } from '../auth/colyseus-auth.js';
 import { StashService, InMemoryStashRepository, getStashRepository, getItemDefs } from '../stash/index.js';
 import type { StashRepository } from '../stash/index.js';
 import { getConfig } from '../config.js';
+import { AmbientSystem } from '../systems/AmbientSystem.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -43,6 +44,7 @@ interface ShardListing {
  */
 export class RefugeRoom extends Room<RefugeRoomOptions> {
   private stashService!: StashService;
+  private ambientSystem!: AmbientSystem;
   /** Maps sessionId → playerId for stash lookups. */
   private playerIds = new Map<string, string>();
 
@@ -65,6 +67,8 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
       this.initStash(getStashRepository(), getItemDefs());
     }
 
+    // Initialize ambient world simulation
+    this.ambientSystem = new AmbientSystem();
 
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
       void this.handleCommand(client, message);
@@ -93,6 +97,13 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
     client.send(MessageTypes.NARRATE, {
       text: 'You emerge into the Refuge. The air is warm, the walls are solid. You are safe — for now.',
       type: 'system',
+      timestamp: Date.now(),
+    } satisfies NarrateMessage);
+
+    // Ambient world snapshot on join
+    client.send(MessageTypes.NARRATE, {
+      text: this.ambientSystem.getJoinNarration(),
+      type: 'ambient',
       timestamp: Date.now(),
     } satisfies NarrateMessage);
 
@@ -130,8 +141,17 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   private update(_deltaTime: number): void {
     this.state.tick++;
 
-    // Placeholder: ambient NPC movement, weather cycles, faction events
-    // This will be expanded in later issues.
+    // Drive ambient world simulation
+    const events = this.ambientSystem.tick();
+
+    // Broadcast ambient events to all connected clients
+    for (const event of events) {
+      this.broadcast(MessageTypes.NARRATE, {
+        text: event.narrative,
+        type: 'ambient',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    }
   }
 
   // ─── Command Handling ────────────────────────────────────────────────────
@@ -143,7 +163,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
       switch (message.verb) {
         case 'look':
           client.send(MessageTypes.NARRATE, {
-            text: 'The Refuge hums with quiet activity. Merchants hawk wares, refugees gather by fires.',
+            text: this.ambientSystem.getJoinNarration(),
             type: 'room',
             timestamp: Date.now(),
           } satisfies NarrateMessage);

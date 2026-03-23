@@ -9,6 +9,7 @@
 
 import type { NarrationContext, LLMNarrationType } from '@ellmud/shared';
 import { renderSensoryTemplate } from './sensory-templates.js';
+import { renderAmbientTemplate } from './ambient-templates.js';
 
 // ─── Atmospheric Fragments ───────────────────────────────────────────────────
 
@@ -274,6 +275,7 @@ const RENDERERS: Record<LLMNarrationType, (ctx: NarrationContext) => string> = {
   sound_narration: (ctx) => renderSensoryTemplate('sound', 'nearby', ctx),
   trace_narration: (ctx) => renderSensoryTemplate('trace', 'medium', ctx),
   awareness_narration: (ctx) => renderSensoryTemplate('awareness', 'partial', ctx),
+  ambient_narration: () => renderAmbientTemplate('ambient_atmosphere', {}),
 };
 
 /**
