@@ -1,4 +1,9 @@
-# Elminster — History
+# elminster — History
+
+**For a quick overview, see [summary.md](./summary.md)**
+
+---
+
 
 ## Project Context
 
@@ -278,3 +283,38 @@ All four PRs merge cleanly to dev:
 - **Verdict:** ❌ CHANGES REQUESTED. Core logic is correct but integration is incomplete.
 - **Issues:** Hardcoded zero stats in ShardRoom (feature disabled), missing PlayerState updates for skills/equipment, tests verify local helpers not implementation.
 - **Key files:** packages/server/src/systems/AwarenessSystem.ts, packages/server/src/rooms/ShardRoom.ts, packages/server/src/__tests__/awareness-stealth.test.ts
+
+---
+
+## Wave 2 Complete — All Issues Shipped (2026-03-23)
+
+**Status:** ✅ Complete — PR #119 re-reviewed and approved, dev → uat promotion (PR #120) complete
+
+**My review cycle on PR #119:**
+1. **Initial review:** ❌ CHANGES REQUESTED
+   - Found hardcoded stealth: 0, awareness: 0 in ShardRoom — system non-functional
+   - PlayerState missing skills/equipment fields
+   - Tests verifying local helpers, not AwarenessSystem implementation
+   - Forwarded to Jarlaxle with requirements
+
+2. **Re-review after Jarlaxle fixes:** ✅ APPROVED
+   - PlayerState now carries `skills: { stealth, awareness, tracking? }` and `equipment: VisibleEquipment | undefined`
+   - ShardRoom.runAwarenessChecks() correctly reads real data from PlayerState
+   - Tests rewritten to verify AwarenessSystem logic directly (75 tests passing)
+   - All acceptance criteria met
+
+3. **Deployment notes**
+   - Performance monitoring needed: awareness checks are O(N) where N = players in room
+   - Client rendering of narrative messages should be validated
+   - Formula `awareness - stealth` with thresholds (0, 5) locked and exported as constants
+
+**Wave 2 verification:**
+- Issue #22 (Sound): ✅ 33 tests, per-room BFS functional
+- Issue #23 (Trace): ✅ 34 tests, TTL decay + skill scaling working
+- Issue #25 (Awareness): ✅ 75 tests, detection formula + equipment narration working
+- Total: 1084+ tests passing, zero regressions, all systems production-ready
+
+**Key pattern:** Code review caught that hardcoding game stats at the system layer breaks integration. The fix (PlayerState as source of truth) establishes the pattern for all Phase 2 systems. Jarlaxle's decision doc on PlayerState ownership is reference material.
+
+**Phase 2 readiness:** UAT branch now has all Wave 2 systems. Phase 2 QA (Minsc) can begin testing. All systems follow the same architecture: pure logic classes, ShardRoom wiring, state passed as params.
+

@@ -1,4 +1,9 @@
-# Minsc — History
+# minsc — History
+
+**For a quick overview, see [summary.md](./summary.md)**
+
+---
+
 
 ## Project Context
 
@@ -570,3 +575,38 @@ The sound tests encode `effectiveNoise(COMBAT, 3) === 0` and the awareness tests
 
 **Cross-system test sections prevent integration gaps.**
 Each test file includes sections marked with × notation (e.g., `#23 × #25`) that test interactions between the three systems. These are all `describe.skip` since they need multiple systems wired together, but they document the expected behavior at system boundaries — the places bugs are most likely to hide.
+
+---
+
+## Wave 2 Complete — Phase 2 QA Starting (2026-03-23)
+
+**Status:** 🔨 In Progress — Issue #31 (Phase 2 QA tests) active, Wave 2 ready for UAT testing
+
+**My contributions to Wave 2:**
+1. **Anticipatory test scaffolding (PR #115, Issue #31)**
+   - Created 208 test cases across 3 files for systems shipping in Wave 2
+   - 53 tests passing (pure formula tests: sound audibility, TTL decay, detection tiers)
+   - 155 tests todo (integration + cross-system interactions)
+   - Embedded concrete expected values (e.g., `effectiveNoise(COMBAT, 3) === 0`, full tier sweep for awareness)
+   - When implementers build systems, any deviation from acceptance criteria surfaces immediately
+
+2. **Integration testing learnings applied**
+   - Tests assert room state, not simulate logic inline
+   - Combat tests register combatants manually, don't rely on spawn code
+   - Cross-system sections document boundaries (Sound×Awareness, Trace×Awareness, etc.)
+
+3. **Phase 2 QA scope**
+   - Sound Propagation: 33 tests + anticipatory scaffolds → verify per-room BFS, noise modifiers, audibility formula
+   - Trace System: 34 tests + anticipatory scaffolds → verify TTL decay, skill-scaled descriptions, room cap enforcement
+   - Awareness & Stealth: 75 tests + anticipatory scaffolds → verify detection tiers, equipment narration, name concealment
+   - Cross-system interactions: ensure sound, traces, and awareness integrate without conflicts
+
+**Wave 2 verification checklist:**
+- ✅ All 1084+ tests passing on dev
+- ✅ Wave 2 systems locked (Sound, Trace, Awareness)
+- ✅ PR #119 (Awareness) merged after Jarlaxle fix
+- ✅ PR #120 (dev → uat) merged, conflicts resolved
+- ✅ Anticipatory tests ready for production-ready validation
+
+**What's next:** Run Phase 2 QA on UAT branch, validate Wave 2 systems work end-to-end in staging environment. Once approved, Wave 2 ships to prod. Then Phase 2 development begins: Multi-Player Shards (#21), PvP Combat (#24), Proximity Communication (#26), Death & Downing (#27), Phase 2–4 backlog.
+

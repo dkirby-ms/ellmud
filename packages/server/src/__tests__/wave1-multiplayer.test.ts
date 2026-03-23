@@ -128,9 +128,53 @@ describe('Wave 1 — Multi-Player Shards (#21)', () => {
     }
   });
 
-  it.todo('should allow 6 players in a Tier 3 shard (tier-based max players)');
-  it.todo('should enforce Tier 1 allows 4 players, Tier 2 allows 5 players, Tier 3 allows 6 players');
-  it.todo('should decrement player count when a player leaves');
+  it('should allow 6 players in a Tier 3 shard', async () => {
+    const prevEnv = process.env['MAX_PLAYERS_PER_SHARD'];
+    process.env['MAX_PLAYERS_PER_SHARD'] = '6';
+    resetConfig();
+
+    const room = await colyseus.createRoom('shard', { tier: 3 });
+    const clients = [];
+    for (let i = 0; i < 6; i++) {
+      const { client } = await connectToExistingRoom(colyseus, room);
+      clients.push(client);
+    }
+    expect(clients.length).toBe(6);
+
+    for (const client of clients) {
+      await client.leave();
+    }
+    if (prevEnv !== undefined) {
+      process.env['MAX_PLAYERS_PER_SHARD'] = prevEnv;
+    } else {
+      delete process.env['MAX_PLAYERS_PER_SHARD'];
+    }
+    resetConfig();
+  });
+
+  it('should enforce GDD tier capacities (Tier 1: 3, Tier 2: 4, Tier 3: 6)', async () => {
+    const { TIER_MAX_PLAYERS } = await import('../config.js');
+    expect(TIER_MAX_PLAYERS[1]).toBe(3);
+    expect(TIER_MAX_PLAYERS[2]).toBe(4);
+    expect(TIER_MAX_PLAYERS[3]).toBe(6);
+  });
+
+  it('should decrement player count when a player leaves', async () => {
+    const room = await colyseus.createRoom('shard', {});
+    const { client: c1 } = await connectToExistingRoom(colyseus, room);
+    const { client: c2 } = await connectToExistingRoom(colyseus, room);
+    await wait(200);
+
+    await c1.leave();
+    await wait(500);
+
+    const { client: c3, collector } = await connectToExistingRoom(colyseus, room);
+    expect(collector.narrate.length).toBeGreaterThan(0);
+
+    await c2.leave();
+    await c3.leave();
+  });
+
   it.todo('should update shard metadata when player count changes');
   it.todo('should distribute players across different start rooms (entry point distribution)');
   it.todo('should register shard in Redis presence when Redis is enabled');

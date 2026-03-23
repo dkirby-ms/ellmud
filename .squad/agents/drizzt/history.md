@@ -1,4 +1,9 @@
-# Drizzt — History
+# drizzt — History
+
+**For a quick overview, see [summary.md](./summary.md)**
+
+---
+
 
 ## Project Context
 
@@ -602,3 +607,37 @@ Properties (heavy_door, cavern, water) were silently lost at three layers:
 - Vague messages use random flavor text pool (arrival/departure have distinct pools)
 
 **Drizzt takeaway:** The system is intentionally thin right now — skills hardcoded to 0 means every player gets 'none' detection in practice. This is correct: the awareness system is structurally complete, but needs the skill system (Phase 2) to light up. Pure-logic pattern pays off — no mocking needed for tests.
+
+---
+
+## Wave 2 Complete — All Issues Shipped (2026-03-23)
+
+**Status:** ✅ Complete — PR #119 merged to dev, dev → uat promotion (PR #120) complete
+
+**Overview:** Wave 2 delivered all three sensory systems (Sound, Trace, Awareness). All 1084+ tests passing, zero regressions. Ready for Phase 2 QA.
+
+**My contributions:**
+1. **AwarenessSystem implementation (PR #119, Issue #25)**
+   - Pure game logic: `calculateDetectionTier()` via formula `awareness - stealth`
+   - Three-tier detection: none (invisible), vague (flavor text), full (equipment descriptions, never names)
+   - ShardRoom wiring: checks on arrival + departure
+   - 75 tests pass; anticipatory scaffolds (208 tests) ready for skill system integration
+   - Detection thresholds exported as constants for future tuning
+
+2. **PR #119 review cycle**
+   - Initial implementation shipped with **hardcoded zero skills** (everyone invisible)
+   - Elminster rejected with requirements: add skills/equipment to PlayerState, wire real data, rewrite tests
+   - Jarlaxle fixed: PlayerState now carries `skills` and `equipment`, ShardRoom reads real data, tests rewritten
+   - Elminster re-reviewed and **APPROVED**
+   - Coordinator merged to dev
+
+3. **Infrastructure locked**
+   - Sound: Per-room BFS (O(N)), room modifiers functional, noise constants shared
+   - Trace: TTL decay, suppression at creation, skill-scaled descriptions
+   - Awareness: Formula-driven detection, equipment-based narration (never names)
+   - Narration: 3 new LLM types + fallbacks, client renders distinctly
+
+**Key pattern established:** Game systems (Awareness, Sound, Trace) are pure logic classes with no Colyseus coupling. ShardRoom wires them by reading PlayerState and passing data as params. This pattern scales to Phase 2 systems (Combat, Proximity Communication, etc.).
+
+**What's next:** Phase 2 QA (Minsc, Issue #31) testing Wave 2 in UAT. Phase 2 backlog ready: #21 (Multi-Player Shards), #24 (PvP Combat), #26 (Proximity Communication), #27 (Death & Downing), #28–#49 (Phase 2–4 features).
+
