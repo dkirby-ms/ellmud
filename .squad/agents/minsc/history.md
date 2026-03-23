@@ -746,3 +746,17 @@ items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narra
 
 ---
 
+
+---
+
+## 2026-03-23: Milestone — Entity Wiring Complete (All Issues Closed)
+
+**Status:** Entity wiring phase concluded successfully.
+- **Issues closed:** #128 (Creatures), #129 (?, part of #130?), #130 (Biomes), #131 (Remaining entities)
+- **PRs merged:** #141–#145 (all entity-related work)
+- **Team:** Jarlaxle (implementation), Drizzt (fixes), Elminster (reviews), Scribe (documentation)
+
+**Milestone:** Admin dashboard fully functional for all entity types. Validation pattern established.
+
+**Next:** Phase 2.5 continues; no entity wiring blockers.
+

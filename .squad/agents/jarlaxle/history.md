@@ -1104,3 +1104,18 @@ Entity slugs: `modifiers`, `skills`, `loot-tables` (hyphenated!), `factions`, `r
 
 **Status:** Fixes pushed to squad/128-wire-creatures-admin; awaiting re-review.
 
+
+---
+
+## 2026-03-23: Milestone — Entity Wiring Complete (PRs #143–#144 Merged)
+
+**Work:** Implemented entity wiring for remaining entities across two PRs
+- **PR #143:** Loot Tables wiring (merged, closes #128)
+- **PR #144:** Biomes wiring with validation guard (merged, closes #130)
+
+**Note:** PR #145 (remaining entities) required validation fixes by Drizzt due to fake validation and missing fields. Drizzt's fixes approved and merged.
+
+**Milestone:** All entity wiring complete (issues #128–#131 closed). Admin dashboard fully functional for all entity types. 5 PRs merged this session (#141–#145).
+
+**Next:** Phase 2.5 continues; entity wiring complete. Validation pattern established for future admin pages.
+

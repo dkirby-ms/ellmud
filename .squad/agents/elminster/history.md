@@ -493,3 +493,16 @@ The admin UI was built as a purely visual scaffold. It's not broken—it's incom
 3. Elminster: Re-review PRs upon fixes
 4. Merge: Approved PRs to dev
 
+
+---
+
+## 2026-03-23: Milestone — Entity Wiring Complete (All PRs Approved)
+
+**Work:** Re-reviewed and approved PR #145 (validation fixes by Drizzt)
+- **Status:** Validation logic correct, guard clauses proper, field additions correct, error display working
+- **Decision:** Approved for merge
+
+**Milestone:** All entity wiring complete (issues #128–#131 closed). PRs #143, #144, #145 all merged. Admin dashboard fully functional for all entity types. Validation pattern established and documented.
+
+**Next:** Phase 2.5 continues; entity wiring closed. Validation pattern available for future admin components.
+

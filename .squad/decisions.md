@@ -3924,3 +3924,66 @@ Created separate test file `packages/server/src/__tests__/admin-wiring.test.ts` 
 2. **Search/Filtering:** Add server-side search endpoint tests
 3. **Bulk Operations:** Add multi-select delete/update bulk tests
 4. **Schema Evolution:** Update wiring tests when validation rules tighten
+
+---
+
+### 2026-03-23T23:00: Decision: Validation Pattern for Admin Entity Pages
+**By:** Drizzt (Engine Dev)  
+**Context:** PR #145 review — fake validation and missing fields across remaining entity pages
+
+**Problem:**
+- LootTablesDetail and SkillsDetail showed hardcoded "✅ All fields valid" with no actual validation logic
+- ModifiersDetail missing `effects` and `tags` fields; SkillsDetail missing `requirements` field
+- Per lockout rules, Jarlaxle (PR author) cannot self-fix rejected PRs
+
+**Decision:**
+Implement consistent validation pattern across all entity detail pages:
+
+1. **Validation Logic:**
+   - `validateForm()` checking required fields → returns error string or null
+   - Guard clause in `handleSave()` prevents API calls when validation fails
+   - `isValid = validateForm() === null` for UI state
+
+2. **UI:**
+   - Save button disabled when `!isValid`
+   - Error badge in header shows `saveError || validationError`
+   - Validation panel in sidebar: green ✅ when valid, red ⚠️ with message when invalid
+
+3. **Array Fields (Phase 2.5 scope):**
+   - Complex objects (effects, requirements): JSON textarea with example
+   - String arrays (tags): comma-separated input
+   - Parse on save, validate JSON syntax
+   - Simple acceptable for admin workflows; polish deferred to Phase 3+
+
+**Rationale:**
+- Prevents invalid data persistence (guard clauses in `handleSave()`)
+- Consistent with PR #144 BiomesDetail fix
+- Component-level validation simpler than hook extension
+- Phase 2.5 pragmatism: functional > polished
+
+**Implementation Status:** ✅ Implemented, tested, approved by Elminster
+- LootTablesDetail: validation + disabled save
+- SkillsDetail: validation + requirements field + disabled save
+- ModifiersDetail: validation + effects/tags fields + 2-column layout + disabled save
+
+**Impact:** PR #145 ready for merge; pattern documented for future admin pages; Phase 2.5 scoping reinforced
+
+---
+
+### 2026-03-23T23:00: Decision: PR #145 Re-review Approval (Drizzt's Fixes)
+**By:** Elminster (Architecture)  
+**Context:** PR #145 (Remaining 6 entity pages) — Drizzt's validation fixes
+
+**Findings:**
+- ✅ Validation logic correct across LootTablesDetail, SkillsDetail, ModifiersDetail
+- ✅ Guard clauses properly prevent submission of invalid data
+- ✅ Field additions (effects, tags, requirements) correctly parsed into payloads
+- ✅ Save button states correct (disabled on validation failure)
+- ✅ Error messages display appropriately in UI
+
+**Decision:** **APPROVED** for merge
+
+**Impact:** Closes issue #131; completes all entity wiring work (issues #128–#131 closed)
+
+---
+

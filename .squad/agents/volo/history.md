@@ -401,3 +401,15 @@ const handleSave = () => {
 ```
 
 Wait for #139 endpoint design approval before implementing client side.
+
+---
+
+## 2026-03-23: Milestone — Entity Wiring Complete
+
+**Status:** Entity wiring phase concluded.
+- **Issues closed:** #128–#131 (all entity-related work)
+- **PRs merged:** #141–#145
+- **Outcome:** Admin dashboard fully functional for all entity types
+
+**Next:** Phase 2.5 continues; entity wiring closed.
+
