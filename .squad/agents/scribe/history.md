@@ -71,3 +71,16 @@ Initial setup complete. Scribe orchestration workflow established: create orches
 - Launch OAuth implementation task (#140) — Coordinate auth + PostgreSQL changes
 - Monitor PR #141 rebase (PostgreSQL + OAuth requirements)
 - Plan Sprint timing for Phase 2.5 admin work
+
+## 2026-03-23: Milestone — Entity Wiring Complete (Documentation Complete)
+
+**Work:** Scribe orchestration tasks on entity wiring milestone
+1. **Orchestration log:** Full review/fix/merge cycle documented
+2. **Session log:** Milestone entry created
+3. **Decision inbox:** Merged 2 decisions into decisions.md, deleted inbox files
+4. **Agent histories:** Updated all agents' history.md with milestone entry
+
+**Milestone:** All entity wiring complete (issues #128–#131 closed). 5 PRs merged (#141–#145). Admin dashboard fully functional.
+
+**Next:** Phase 2.5 continues; entity wiring closed.
+

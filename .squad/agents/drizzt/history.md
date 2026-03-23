@@ -1068,3 +1068,18 @@ Wire the BiomesList and BiomesDetail admin pages to the real Content CRUD API en
 
 **For Elminster:** PR #145 now ready for re-review with all feedback addressed.
 
+
+---
+
+## 2026-03-23: Milestone — Entity Wiring Complete (PR #145 Fixes + Merge)
+
+**Work:** Fixed validation issues in PR #145 (remaining 6 entity admin pages)
+- **Issue:** Fake validation (hardcoded "✅ All fields valid") + missing fields (effects, tags, requirements)
+- **Solution:** Implemented consistent `validateForm()` pattern with guard clauses in `handleSave()`
+- **Files:** LootTablesDetail.tsx, SkillsDetail.tsx, ModifiersDetail.tsx
+- **PR Status:** Drizzt's fixes approved by Elminster, PR #145 merged
+
+**Milestone:** All entity wiring complete (issues #128–#131 closed). 5 PRs merged this session (#141–#145). Admin dashboard fully functional for all entity types.
+
+**Next:** Phase 2.5 continues; entity wiring complete. Validation pattern documented for future admin pages.
+
