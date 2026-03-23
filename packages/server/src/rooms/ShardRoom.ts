@@ -1207,14 +1207,16 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.log(`Shard-sickness: ${"${playerId}"} death count now ${"${newCount}"}`);
     });
 
-    // Apply shard-sickness debuff to player state on PvP death
+    // Apply shard-sickness debuff to player state (on any death)
+    player.shardSickness = {
+      appliedAt: Date.now(),
+      durationMs: SHARD_SICKNESS_DEFAULTS.durationMs,
+      attackPenalty: SHARD_SICKNESS_DEFAULTS.attackPenalty,
+      defencePenalty: SHARD_SICKNESS_DEFAULTS.defencePenalty,
+    };
+
+    // Log PvPKillEvent for each player killer on PvP death
     if (isPvPKill) {
-      player.shardSickness = {
-        appliedAt: Date.now(),
-        durationMs: SHARD_SICKNESS_DEFAULTS.durationMs,
-        attackPenalty: SHARD_SICKNESS_DEFAULTS.attackPenalty,
-        defencePenalty: SHARD_SICKNESS_DEFAULTS.defencePenalty,
-      };
 
       // Log PvPKillEvent for each player killer
       for (const killerId of killerIds ?? []) {
