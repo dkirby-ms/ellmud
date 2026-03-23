@@ -1036,3 +1036,35 @@ Wire the BiomesList and BiomesDetail admin pages to the real Content CRUD API en
 
 **Status:** Awaiting fix implementation.
 
+
+## Learnings
+
+### PR #145 Validation Fixes (2026-03-23)
+**Task:** Fix reviewer-rejected PR #145 (remaining entity pages) — add validation and missing fields
+**Status:** ✅ Complete
+
+**Issues Fixed:**
+1. **LootTablesDetail & SkillsDetail** — Hardcoded "✅ All fields valid" replaced with real validation
+2. **ModifiersDetail** — Added missing `effects` (JSON textarea) and `tags` (comma-separated text)
+3. **SkillsDetail** — Added missing `requirements` (JSON textarea)
+
+**Pattern Applied:**
+- `validateForm()` function returns `string | null` (error message or null if valid)
+- Guard clauses in `handleSave()` set `validationError` state and return early when invalid
+- Save button disabled when `!isValid`
+- Validation box conditionally renders success/error state with specific message
+- Array fields use simple inputs: JSON textarea for complex objects, comma-separated text for string arrays
+
+**Key Decision:** Phase 2.5 philosophy — functionality over polish. JSON textareas + basic comma-separated inputs are acceptable for admin workflows. Don't over-engineer UI for array editing.
+
+**Files Changed:**
+- `packages/client/src/pages/admin/LootTablesDetail.tsx` — validation + disabled save
+- `packages/client/src/pages/admin/SkillsDetail.tsx` — validation + requirements field + disabled save
+- `packages/client/src/pages/admin/ModifiersDetail.tsx` — validation + effects/tags fields + 2-column layout + disabled save
+
+**Verification:** Client builds successfully (`npm run build` in packages/client). No TypeScript errors in modified files.
+
+**Commit:** `579347d` on `squad/131-wire-remaining-admin` branch, pushed to remote
+
+**For Elminster:** PR #145 now ready for re-review with all feedback addressed.
+
