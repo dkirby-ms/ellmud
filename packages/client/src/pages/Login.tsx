@@ -31,7 +31,25 @@ export default function Login() {
     }
   }, []);
 
+  const switchMode = useCallback((registerMode: boolean) => {
+    setIsRegister(registerMode);
+    setError(null);
+    setConfirmPassword("");
+  }, []);
+
+  const flavorTexts = [
+    "The ground trembles. Another shard opens.",
+    "Deep below, something stirs in the darkness.",
+    "The Refuge calls to those who would risk everything.",
+    "Shadows lengthen. Time grows short.",
+  ];
+
+  const [flavorText] = useState(
+    flavorTexts[Math.floor(Math.random() * flavorTexts.length)]
+  );
+
   // Already authenticated — skip straight to refuge
+  // NOTE: This must come AFTER all hooks to satisfy React's rules of hooks.
   if (state.authenticated) {
     return <Navigate to="/refuge" replace />;
   }
@@ -40,12 +58,6 @@ export default function Login() {
     // Redirect to server OAuth endpoint
     window.location.href = "/auth/entra/login";
   };
-
-  const switchMode = useCallback((registerMode: boolean) => {
-    setIsRegister(registerMode);
-    setError(null);
-    setConfirmPassword("");
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,17 +85,6 @@ export default function Login() {
       setLoading(false);
     }
   };
-
-  const flavorTexts = [
-    "The ground trembles. Another shard opens.",
-    "Deep below, something stirs in the darkness.",
-    "The Refuge calls to those who would risk everything.",
-    "Shadows lengthen. Time grows short.",
-  ];
-
-  const [flavorText] = useState(
-    flavorTexts[Math.floor(Math.random() * flavorTexts.length)]
-  );
 
   return (
     <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-8 relative overflow-hidden">
