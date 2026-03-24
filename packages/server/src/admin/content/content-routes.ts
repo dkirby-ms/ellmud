@@ -11,6 +11,7 @@
 import { randomUUID } from 'crypto';
 import { Router, type Request, type Response } from 'express';
 import { adminAuth } from '../middleware.js';
+import { logAuditEvent } from '../audit/audit-routes.js';
 import { ContentStoreError, type ContentEntity, type IContentStore } from './ContentStore.js';
 import { validateContent } from './content-validation.js';
 import { CONTENT_ENTITY_TYPES, type ContentEntityType } from './content-types.js';
@@ -75,6 +76,14 @@ export function createContentRouter(deps: ContentRouterDeps): Router {
         };
 
         const created = await store.create(entity);
+        await logAuditEvent({
+          action: 'create',
+          entityType,
+          entityId: created.id,
+          entityName: (created as { name?: string }).name,
+          actor: 'admin',
+          details: { created },
+        }).catch(() => {});
         res.status(201).json(created);
       } catch (err) {
         if (err instanceof ContentStoreError) {
@@ -99,7 +108,16 @@ export function createContentRouter(deps: ContentRouterDeps): Router {
           return;
         }
 
+        const oldEntity = await store.getById(req.params.id);
         const updated = await store.update(req.params.id, data as Partial<ContentEntity>);
+        await logAuditEvent({
+          action: 'update',
+          entityType,
+          entityId: updated.id,
+          entityName: (updated as { name?: string }).name,
+          actor: 'admin',
+          details: { old: oldEntity, new: updated },
+        }).catch(() => {});
         res.json(updated);
       } catch (err) {
         if (err instanceof ContentStoreError && err.code === 'NOT_FOUND') {
@@ -114,11 +132,20 @@ export function createContentRouter(deps: ContentRouterDeps): Router {
     // ─── DELETE /admin/api/{entity}/:id — Delete ────────────────────
     router.delete(`${basePath}/:id`, adminAuth, async (req: Request, res: Response) => {
       try {
+        const entity = await store.getById(req.params.id);
         const deleted = await store.delete(req.params.id);
         if (!deleted) {
           res.status(404).json({ error: `${entityType} '${req.params.id}' not found` });
           return;
         }
+        await logAuditEvent({
+          action: 'delete',
+          entityType,
+          entityId: req.params.id,
+          entityName: entity ? (entity as { name?: string }).name : undefined,
+          actor: 'admin',
+          details: { deleted: entity },
+        }).catch(() => {});
         res.status(204).send();
       } catch (err) {
         console.error(`[Admin] Failed to delete ${entityType}:`, err);
