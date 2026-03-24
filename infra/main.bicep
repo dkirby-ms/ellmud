@@ -86,16 +86,8 @@ module containerAppsEnv 'modules/container-apps.bicep' = {
   }
 }
 
-// 5. Redis — deploys into the Container Apps Environment
-module redis 'modules/redis.bicep' = {
-  name: 'redis'
-  params: {
-    resourcePrefix: resourcePrefix
-    location: location
-    tags: tags
-    containerAppEnvironmentId: containerAppsEnv.outputs.environmentId
-  }
-}
+// 5. Redis — managed as ACA add-on via CLI (az containerapp add-on redis create)
+// Not deployed via Bicep. Service bind references the CLI-managed add-on by name.
 
 // 6. Container Apps Game Server (reuses existing environment, deploys the app)
 module containerAppsApp 'modules/container-apps.bicep' = {
@@ -110,7 +102,7 @@ module containerAppsApp 'modules/container-apps.bicep' = {
     postgresDatabaseName: postgres.outputs.databaseName
     postgresAdminUsername: postgresAdminUsername
     postgresAdminPassword: postgresAdminPassword
-    redisServiceId: redis.outputs.redisServiceId
+    redisServiceName: '${resourcePrefix}-redis'
     deployApp: true
   }
 }
@@ -158,6 +150,5 @@ output containerAppFqdn string = containerAppsApp.outputs.containerAppFqdn
 output containerAppEnvironmentName string = containerAppsEnv.outputs.environmentName
 output postgresServerFqdn string = postgres.outputs.serverFqdn
 output postgresDatabaseName string = postgres.outputs.databaseName
-output redisServiceId string = redis.outputs.redisServiceId
 output aiServicesEndpoint string = aiFoundry.outputs.aiServicesEndpoint
 output appInsightsConnectionString string = monitoring.outputs.appInsightsConnectionString

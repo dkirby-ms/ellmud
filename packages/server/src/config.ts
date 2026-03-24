@@ -97,7 +97,7 @@ export function loadConfig(): ServerConfig {
         envStr(
           'REDIS_URL',
           process.env.REDIS_HOST
-            ? `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT || '6379'}`
+            ? `redis://${process.env.REDIS_PASSWORD ? `:${process.env.REDIS_PASSWORD}@` : ''}${process.env.REDIS_HOST}:${process.env.REDIS_PORT || '6379'}`
             : 'redis://localhost:6379'
         )
       ),
