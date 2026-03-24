@@ -21,7 +21,7 @@ import { createHealthRouter } from './health.js';
 import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter, createDeployRouter } from './admin/index.js';
 import { getConfig } from './config.js';
 import { runMigrations } from './db/index.js';
-import { createNarrationCache, createPresence } from './cache/index.js';
+import { createNarrationCache, createPresence, testRedisConnection } from './cache/index.js';
 import { initStashProvider, isStashPg } from './stash/index.js';
 
 const config = getConfig();
@@ -156,12 +156,19 @@ const httpServer = http.createServer(app);
 // across replicas. Otherwise, use default local driver (single replica only).
 let driver = undefined;
 if (config.redis.driverEnabled && config.redis.enabled) {
-  try {
-    const { RedisDriver } = await import('@colyseus/redis-driver');
-    driver = new RedisDriver(config.redis.connectionString);
-    console.log('[Ellmud] Matchmaker driver: Redis (multi-replica)');
-  } catch (err) {
-    console.warn('[Ellmud] Redis driver unavailable — using local driver:', (err as Error).message);
+  // Pre-validate Redis before constructing RedisDriver — the Colyseus
+  // package emits unhandled ioredis `error` events on connection failure.
+  const driverProbe = await testRedisConnection(config.redis.connectionString);
+  if (!driverProbe.reachable) {
+    console.warn('[Ellmud] Redis unreachable — using local matchmaker driver:', driverProbe.error);
+  } else {
+    try {
+      const { RedisDriver } = await import('@colyseus/redis-driver');
+      driver = new RedisDriver(config.redis.connectionString);
+      console.log('[Ellmud] Matchmaker driver: Redis (multi-replica)');
+    } catch (err) {
+      console.warn('[Ellmud] Redis driver unavailable — using local driver:', (err as Error).message);
+    }
   }
 }
 

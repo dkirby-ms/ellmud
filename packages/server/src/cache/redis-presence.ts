@@ -6,11 +6,16 @@
  *
  * The RedisPresence import is dynamic to avoid hard dependency when Redis
  * is disabled — @colyseus/redis-presence is an optional peer dep.
+ *
+ * Pre-validates Redis connectivity before constructing RedisPresence to
+ * prevent unhandled ioredis `error` events from crashing the process
+ * (the Colyseus package does not register its own error handler).
  */
 
 import type { Presence } from '@colyseus/core';
 import { LocalPresence } from '@colyseus/core';
 import type { ServerConfig } from '../config.js';
+import { testRedisConnection } from './redis-test.js';
 
 export interface PresenceResult {
   presence: Presence;
@@ -19,11 +24,21 @@ export interface PresenceResult {
 
 /**
  * Build a Colyseus Presence from config. If Redis presence is enabled,
- * dynamically imports @colyseus/redis-presence and connects. Falls back
- * to LocalPresence on failure.
+ * probes connectivity first, then dynamically imports @colyseus/redis-presence.
+ * Falls back to LocalPresence if Redis is unreachable or import fails.
  */
 export async function createPresence(config: ServerConfig): Promise<PresenceResult> {
   if (!config.redis.enabled) {
+    return { presence: new LocalPresence(), isRedis: false };
+  }
+
+  // Pre-validate — avoid handing an unreachable URL to RedisPresence
+  const probe = await testRedisConnection(config.redis.connectionString);
+  if (!probe.reachable) {
+    console.warn(
+      '[Presence] Redis unreachable — falling back to LocalPresence:',
+      probe.error,
+    );
     return { presence: new LocalPresence(), isRedis: false };
   }
 
