@@ -1282,3 +1282,31 @@ Drizzt wired `useDevAutoLogin` hook into `Login.tsx`. No visual UI changes — j
   - *decisions.md:* Append-only doc. Dev had one new entry (Dev Auto-Login Hook), uat had nothing. Kept dev.
 - **Verification:** 0 eslint errors, 1444/1444 server tests passing, PR #158 now MERGEABLE.
 - **Learning:** Python regex with `re.DOTALL` for conflict resolution is dangerous when conflicts are close together — `.*?` can span across conflict boundaries consuming valid code. For files with many conflicts, use line-by-line state machine or `git checkout --ours` instead.
+
+### Elminster GDD Review Findings (2026-03-25T15:17Z)
+
+**Cross-agent update from Elminster's comprehensive review:**
+
+**Areas affecting Jarlaxle's work:**
+
+1. **Modifier Integration Gap** — Phase 3 priority
+   - **Finding:** 5 modifiers exist (Darkness, Hunted, Silent, Echoing, Bountiful) as types but NOT wired to gameplay
+   - **Impact:** Modifiers don't affect room descriptions, creature behavior, loot tables, or sound propagation
+   - **Gap:** Issue #35 (Shard Modifiers) exists but very high-level; needs sub-issues per modifier with acceptance criteria
+   - **Recommendation:** Split #35 into 5 sub-issues; coordinate with creature behavior and loot system
+
+2. **Creature Variety Needs** — Phase 3 content expansion
+   - **Finding:** Only 1 creature type exists (Drowned Revenant)
+   - **Status:** Creature AI system ✅ complete and deterministic, but content variety ❌ zero
+   - **Gap:** No backlog issues for additional creature types (should have 5+ by Phase 3)
+   - **Recommendation:** Create issue for creature type expansion; template is proven (behavior trees work)
+
+3. **Skill Leveling Gap** — Phase 3 progression systems
+   - **Finding:** 6 skills tracked in database but NEVER increase through use
+   - **Impact:** Character progression is non-functional; players can't improve
+   - **Gap:** Issue #32 (skill tree implementation) exists but doesn't cover leveling logic
+   - **Status:** Skill checks NOT integrated with crafting/abilities
+   - **Recommendation:** Create Phase 3 issue for XP system and skill leveling (scales with shard tier per GDD §7.1)
+
+**Phase 1 Status on Systems:** ✅ Room generation, combat, creature AI, shard lifecycle fully implemented. Content variety (biomes, creatures, modifiers) ready for Phase 3 expansion.
+

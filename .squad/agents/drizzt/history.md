@@ -1163,3 +1163,28 @@ Updated `createPresence()` and the RedisDriver init in `index.ts` to probe conne
 - Colyseus Redis packages don't handle ioredis connection errors — always probe first.
 - Pattern: `lazyConnect: true` + `retryStrategy: () => null` + no-op error handler = safe probe that never lingers.
 - The `createNarrationCache()` factory was already the gold standard for Redis resilience in this codebase — the probe pattern mirrors it.
+
+### Elminster GDD Review Findings (2026-03-25T15:17Z)
+
+**Cross-agent update from Elminster's comprehensive review:**
+
+**Areas affecting Drizzt's work:**
+
+1. **Dodge Damage Bug** — Critical for Phase 2
+   - **Finding:** Dodge action sets state flag but damage reduction is NOT calculated
+   - **Impact:** Combat balance broken; dodge is non-functional
+   - **Gap:** No GitHub issue tracking this
+   - **Recommendation:** Create Phase 2 issue for dodge % calculation (AGI + skill rank based)
+
+2. **Stash Overflow Silence** — Medium priority
+   - **Finding:** Stash system correctly enforces weight capacity (200 units)
+   - **Status:** ✅ Fully implemented, extraction transfer logic correct
+   - **Note:** Mentioned here because stash is critical to Phase 2 multiplayer (persistence across shards)
+
+3. **Combat-Blocks-Movement Enforcement** — Critical blocker for Phase 2
+   - **Finding:** No GitHub issue for combat movement restrictions
+   - **Status:** Risk identified but not in backlog
+   - **Recommendation:** Escalate to Phase 2 critical priorities (alongside #157 CI/CD, auth rate limiting)
+
+**Phase 1 Status on Auth/Engine:** ✅ Production-ready (server-authoritative, anti-cheat hardened, deterministic combat). Auth rate limiting needed for Phase 2 security.
+
