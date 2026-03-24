@@ -72,7 +72,12 @@ export function createAuditRouter(): Router {
         return;
       }
 
-      const { action, entity, actor, limit, offset } = req.query as Record<string, string | undefined>;
+      const str = (v: unknown): string | undefined => typeof v === 'string' ? v : undefined;
+      const action = str(req.query.action);
+      const entity = str(req.query.entity);
+      const actor = str(req.query.actor);
+      const limit = str(req.query.limit);
+      const offset = str(req.query.offset);
 
       const conditions: string[] = [];
       const values: unknown[] = [];
