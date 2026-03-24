@@ -49,12 +49,13 @@ export function createDeployRouter(): Router {
   // GET /admin/api/deploy/diff — Compare current content vs last deployment
   router.get('/diff', adminAuth, async (req: Request, res: Response) => {
     try {
-      // Find the last completed deployment for each environment
+      // Find the most recent completed deployment regardless of environment
       const lastDeploysResult = await query<DeployHistoryRow>(
-        `SELECT DISTINCT ON (environment) *
+        `SELECT *
          FROM deploy_history
          WHERE status = 'completed'
-         ORDER BY environment, completed_at DESC NULLS LAST`,
+         ORDER BY completed_at DESC NULLS LAST
+         LIMIT 1`,
       );
 
       const lastDeploy = lastDeploysResult.rows[0] || null;
@@ -141,7 +142,7 @@ export function createDeployRouter(): Router {
     try {
       const { confirm, deployedBy = 'admin' } = req.body;
 
-      if (!confirm) {
+      if (confirm !== 'DEPLOY') {
         res.status(400).json({ error: 'Confirmation required for production deployment' });
         return;
       }

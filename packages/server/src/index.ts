@@ -79,7 +79,7 @@ console.log('[Ellmud] Audit log API: enabled');
 app.use(createSimulateRouter({ stores: contentStores }));
 
 // Deploy API — content deployment simulation (staging, production)
-app.use(createDeployRouter());
+app.use('/admin/api/deploy', createDeployRouter());
 console.log('[Ellmud] Deploy API: enabled');
 
 // Admin runtime API — room management, metrics, SSE. Receives contentStores for spawn.

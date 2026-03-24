@@ -518,7 +518,7 @@ export async function deployToStaging(deployedBy = 'admin'): Promise<DeployHisto
 export async function deployToProduction(deployedBy = 'admin'): Promise<DeployHistoryRecord> {
   return adminFetch<DeployHistoryRecord>('/admin/api/deploy/production', {
     method: 'POST',
-    body: JSON.stringify({ confirm: true, deployedBy }),
+    body: JSON.stringify({ confirm: 'DEPLOY', deployedBy }),
   });
 }
 
