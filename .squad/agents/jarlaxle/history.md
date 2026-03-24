@@ -1310,3 +1310,41 @@ Drizzt wired `useDevAutoLogin` hook into `Login.tsx`. No visual UI changes — j
 
 **Phase 1 Status on Systems:** ✅ Room generation, combat, creature AI, shard lifecycle fully implemented. Content variety (biomes, creatures, modifiers) ready for Phase 3 expansion.
 
+---
+
+## 2026-03-24: Elminster GDD Gap Analysis → 12 New Backlog Issues
+
+**Timestamp:** 2026-03-24T15:22:00Z  
+**Agent:** Elminster (Lead)  
+**Scope:** GDD coverage gap analysis + backlog planning  
+
+Elminster completed a full code review comparing GDD (Game Design Document) against implementation and existing backlog. Identified 3 critical issues, 5 medium priorities, and 3 maintenance items affecting systems across your domain (combat, systems, economy).
+
+**12 New Issues Created:**
+
+**Critical (4):**
+- #160: Durability/Degradation System (GDD §7.2) — Items currently have durability fields but no degradation logic on use
+- #161: Skill Leveling Through Use + XP (GDD §7.1) — Skills tracked but never increase; needs XP grants and use-based leveling
+- #162: Dodge Chance Calculation (GDD §6.4) — Dodge sets state flag but damage reduction is missing
+- #163: Currency & Resource Types (GDD §9.1) — 5 resource types (Shardsteel, Echo Dust, Anomalous Fragments, Shard Keys, Blueprints) have no database entries
+
+**Medium (5):**
+- #164: Shard Modifiers Integration (GDD §2.2) — Modifiers exist but not fully wired into shard difficulty scaling
+- #165: Loot Scaling by Shard Tier (GDD §7.3) — Loot drop rates should scale with tier; currently flat
+- #166: PvP Trading (`offer <item> to <target>`) (GDD §8.2) — Combat/corpse looting works, trading doesn't
+- #167: Narration Verbosity Control (UX request) — No player choice for narration detail level
+- #168: Squad System (Party Size, Scaling) (GDD §8.5 anti-griefing section mentions squads but not implemented)
+
+**Maintenance (3):**
+- #169: KNOWN_ISSUES #1 Promotion (Stash overflow when item weight not enforced)
+- #170: KNOWN_ISSUES #6 Promotion (Combat blocks movement after resolve)
+- #171: Marketplace & Crafting Backend (database schema ready, client UI stubs, no server logic)
+
+**Cross-Impact to Your Work:**
+- Dodge/durability issues affect combat balance — skip #162/#160 until Phase 2 multiplayer testing baseline
+- Skill leveling (#161) requires XP grant events — coordinate with economy systems
+- PvP trading (#166) affects your awareness/detection systems (must verify target in range)
+- Squad system (#168) affects creature AI aggro decisions and loot distribution
+
+**Next:** Phase 2 multiplayer testing ready pending CI fix (#157). Phase 3 economic systems need prioritization before implementation.
+
