@@ -1129,3 +1129,10 @@ Entity slugs: `modifiers`, `skills`, `loot-tables` (hyphenated!), `factions`, `r
 - **Pause/resume**: Verified Colyseus `clock.stop()/start()` works correctly — no custom implementation needed.
 - **Metrics/SSE documented**: GET `/admin/api/metrics` and GET `/admin/api/sse` annotated with purpose and future wiring TODOs.
 - Pre-existing issues NOT fixed: narrative/templates.ts build error, BiomesList import path.
+
+### 2025-07-28: Stub Pages + Admin Search/Notifications (Issue #138, PR #149)
+- Upgraded Balance, Contracts, Recipes from "coming soon" placeholders to rich roadmap pages with phase tags, dependency grids, planned features, and GitHub issue links (#44, #33).
+- **AdminLayout search**: Fetches all entity names from 9 content types on mount, filters locally by name/id on keystroke, shows top-10 in dropdown linking to `/admin/{entityType}/{id}`.
+- **Notification bell**: `fetchNotifications()` wraps existing dashboard validation-warnings + recent-changes endpoints. Count badge, typed icons (error/warning/change), localStorage-based dismiss. No new server endpoint needed.
+- **Pattern**: Client-side aggregation of server data (notifications from dashboard endpoints) avoids new API surface. Mark-as-read is localStorage-only for Phase 2.5.
+- Pre-existing BiomesList import path error noted but not fixed (separate issue).
