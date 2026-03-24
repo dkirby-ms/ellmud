@@ -97,15 +97,15 @@ export default function CreatureDetail() {
       try {
         setLoading(true);
         setError(null);
-        const creature = await getCreature<any>(id!);
+        const creature = await getCreature<Record<string, unknown>>(id!);
         setFormData(creature);
         // Load lootTable from API response
         if (creature.lootTable && Array.isArray(creature.lootTable)) {
           setLootTable(
-            creature.lootTable.map((entry: any) => ({
-              itemId: entry.itemId || "",
-              itemName: entry.name || entry.itemName || "Unknown Item",
-              weight: entry.dropWeight || entry.weight || 50,
+            creature.lootTable.map((entry: Record<string, unknown>) => ({
+              itemId: (entry.itemId as string) || "",
+              itemName: (entry.name as string) || (entry.itemName as string) || "Unknown Item",
+              weight: (entry.dropWeight as number) || (entry.weight as number) || 50,
             }))
           );
         }
@@ -123,7 +123,7 @@ export default function CreatureDetail() {
     fetchCreature();
   }, [id, isNew]);
 
-  const updateField = (field: string, value: any) => {
+  const updateField = (field: string, value: string | number | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -193,7 +193,7 @@ export default function CreatureDetail() {
   const updateLootEntry = (
     index: number,
     field: keyof LootEntry,
-    value: any
+    value: string | number
   ) => {
     const updated = [...lootTable];
     updated[index] = { ...updated[index], [field]: value };

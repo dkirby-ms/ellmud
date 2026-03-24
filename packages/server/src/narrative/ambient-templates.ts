@@ -96,11 +96,6 @@ const NPC_DEPART_TEMPLATES: Record<NPCRole, (name: string) => string> = {
 
 // ─── Atmosphere ──────────────────────────────────────────────────────────────
 
-interface AtmosphereKey {
-  weather: WeatherState;
-  timeOfDay: TimeOfDay;
-}
-
 const ATMOSPHERE_FRAGMENTS: Record<WeatherState, Record<TimeOfDay, string[]>> = {
   clear: {
     dawn: ['Mist clings to the cobblestones as the first light touches the walls.'],

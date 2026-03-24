@@ -9,7 +9,6 @@
 
 import type { NarrationContext, LLMNarrationType } from '@ellmud/shared';
 import { renderSensoryTemplate } from './sensory-templates.js';
-import { renderAmbientTemplate } from './ambient-templates.js';
 
 // ─── Atmospheric Fragments ───────────────────────────────────────────────────
 

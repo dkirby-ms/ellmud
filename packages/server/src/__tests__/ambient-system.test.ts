@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { AmbientSystem, ATMOSPHERE_INTERVAL } from '../systems/AmbientSystem.js';
+import { AmbientSystem } from '../systems/AmbientSystem.js';
 import type { FactionMilestone, NPCDefinition } from '@ellmud/shared';
 
 const FAST_NPCS: NPCDefinition[] = [

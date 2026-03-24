@@ -54,7 +54,7 @@ export default function ItemsDetail() {
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
-  const updateField = (field: string, value: any) => {
+  const updateField = (field: string, value: string | number | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 

@@ -156,7 +156,6 @@ export default function ShardExploration() {
   const stability = state.roomHeader?.stability ?? 1;
 
   // ─── Sound Cue Direction Highlighting ──────────────────────────────────
-  const DIRECTIONS = ['north', 'south', 'east', 'west', 'above', 'below'];
   const highlightDirections = (text: string) => {
     const directionRegex = /\b(north|south|east|west|above|below)\b/gi;
     const parts: (string | JSX.Element)[] = [];

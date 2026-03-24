@@ -35,7 +35,6 @@ export function App(): React.JSX.Element {
         if (!valid) dispatch({ type: 'LOGOUT' });
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only on initial mount
 
   // Sync auth state to localStorage

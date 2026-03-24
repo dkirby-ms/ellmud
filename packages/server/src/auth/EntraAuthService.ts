@@ -47,7 +47,7 @@ export class EntraAuthService {
       );
     } catch (err) {
       console.error('[EntraAuthService] OIDC discovery failed:', err);
-      throw new Error('Failed to initialize Entra OIDC client');
+      throw new Error('Failed to initialize Entra OIDC client', { cause: err });
     }
   }
 

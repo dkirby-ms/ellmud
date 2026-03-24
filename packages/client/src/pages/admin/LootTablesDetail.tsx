@@ -89,7 +89,7 @@ export default function LootTablesDetail() {
     }
   };
 
-  const updateField = (field: string, value: any) => {
+  const updateField = (field: string, value: string | number | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -109,7 +109,7 @@ export default function LootTablesDetail() {
     setLootEntries((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateLootEntry = (index: number, field: string, value: any) => {
+  const updateLootEntry = (index: number, field: string, value: string | number | boolean) => {
     setLootEntries((prev) =>
       prev.map((entry, i) =>
         i === index ? { ...entry, [field]: value } : entry

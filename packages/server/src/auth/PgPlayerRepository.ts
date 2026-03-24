@@ -145,7 +145,7 @@ export class PgPlayerRepository implements PlayerRepository {
           throw new DuplicateUsernameError(username);
         }
         if (err.constraint === 'uq_identity_provider') {
-          throw new Error('OAuth identity already exists');
+          throw new Error('OAuth identity already exists', { cause: err });
         }
       }
       throw err;

@@ -46,7 +46,7 @@ export default function RoomsDetail() {
     }
   }, [apiData, isNew]);
 
-  const updateField = (field: string, value: any) => {
+  const updateField = (field: string, value: string | number | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 

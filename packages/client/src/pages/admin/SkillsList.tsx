@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
 import { useAdminEntityList } from "../../hooks/useAdminEntityList.js";
@@ -23,7 +22,6 @@ const categoryColors: Record<string, string> = {
 
 export default function SkillsList() {
   const { data: skills, loading, error } = useAdminEntityList<Skill>("skills");
-  const [searchQuery, setSearchQuery] = useState("");
 
   if (loading) {
     return (

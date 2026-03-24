@@ -103,7 +103,7 @@ export async function updateEntity<T>(entityType: EntityType, id: string, data: 
 }
 
 export async function deleteEntity(entityType: EntityType, id: string): Promise<void> {
-  return adminFetch<void>(`/admin/api/content/${entityType}/${id}`, {
+  return adminFetch<undefined>(`/admin/api/content/${entityType}/${id}`, {
     method: 'DELETE',
   });
 }
@@ -133,7 +133,7 @@ export async function updateItem<T>(id: string, data: Partial<T>): Promise<T> {
 }
 
 export async function deleteItem(id: string): Promise<void> {
-  return adminFetch<void>(`/admin/api/content/items/${id}`, {
+  return adminFetch<undefined>(`/admin/api/content/items/${id}`, {
     method: 'DELETE',
   });
 }
@@ -163,7 +163,7 @@ export async function updateCreature<T>(id: string, data: Partial<T>): Promise<T
 }
 
 export async function deleteCreature(id: string): Promise<void> {
-  return adminFetch<void>(`/admin/api/content/creatures/${id}`, {
+  return adminFetch<undefined>(`/admin/api/content/creatures/${id}`, {
     method: 'DELETE',
   });
 }
@@ -349,7 +349,7 @@ export async function updateUser(id: string, data: UpdateUserPayload): Promise<A
 }
 
 export async function deleteUser(id: string): Promise<void> {
-  return adminFetch<void>(`/admin/api/users/${id}`, {
+  return adminFetch<undefined>(`/admin/api/users/${id}`, {
     method: 'DELETE',
   });
 }

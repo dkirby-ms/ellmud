@@ -1,4 +1,4 @@
-import { X, Sword, Shield, Droplet, Wrench, Weight } from "lucide-react";
+import { X, Sword, Shield, Weight } from "lucide-react";
 
 interface InventoryOverlayProps {
   isOpen: boolean;

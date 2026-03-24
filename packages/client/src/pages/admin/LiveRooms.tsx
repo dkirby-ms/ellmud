@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { Radio, Users, Pause, Play, RefreshCw } from "lucide-react";
+import { Radio, Users, RefreshCw } from "lucide-react";
 import {
   fetchLiveRooms,
   type LiveRoomSummary,

@@ -88,7 +88,7 @@ export default function NarrativeDetail() {
     }
   };
 
-  const updateField = (field: string, value: any) => {
+  const updateField = (field: string, value: string | number | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -100,7 +100,7 @@ export default function NarrativeDetail() {
     setDialogueLines((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateDialogueLine = (index: number, field: string, value: any) => {
+  const updateDialogueLine = (index: number, field: string, value: string | number | boolean) => {
     setDialogueLines((prev) =>
       prev.map((line, i) => (i === index ? { ...line, [field]: value } : line))
     );
@@ -114,7 +114,7 @@ export default function NarrativeDetail() {
     setConditions((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateCondition = (index: number, field: string, value: any) => {
+  const updateCondition = (index: number, field: string, value: string | number | boolean) => {
     setConditions((prev) =>
       prev.map((cond, i) => (i === index ? { ...cond, [field]: value } : cond))
     );
@@ -128,7 +128,7 @@ export default function NarrativeDetail() {
     setChoices((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateChoice = (index: number, field: string, value: any) => {
+  const updateChoice = (index: number, field: string, value: string | number | boolean) => {
     setChoices((prev) =>
       prev.map((choice, i) => (i === index ? { ...choice, [field]: value } : choice))
     );

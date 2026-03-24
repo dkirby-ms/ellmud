@@ -379,6 +379,7 @@ describe('Admin Content CRUD — Validation (400 on bad input)', () => {
     it(`POST ${basePath} with missing name → 400`, async () => {
       const app = createTestApp();
       const { name: _omitted, ...incomplete } = ENTITY_FIXTURES[entityType].create;
+      void _omitted;
       const res = await request(app, 'post', basePath, {
         token: TEST_TOKEN,
         body: incomplete,
