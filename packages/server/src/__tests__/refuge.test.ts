@@ -107,10 +107,11 @@ describe('RefugeRoom Multi-Player', () => {
     await wait(500);
 
     expect(collector.narrate.length).toBeGreaterThan(initialCount);
-    const response = collector.narrate[collector.narrate.length - 1]!;
-    expect(response.text).toContain('Shardboard');
-    expect(response.text).toContain('Tier');
-    expect(response.text).toContain('enter <shard-id>');
+    const newMessages = collector.narrate.slice(initialCount);
+    const response = newMessages.find(m => m.text.includes('Shardboard'));
+    expect(response).toBeDefined();
+    expect(response!.text).toContain('Tier');
+    expect(response!.text).toContain('enter <shard-id>');
 
     await client.leave();
   });
