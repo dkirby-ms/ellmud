@@ -413,3 +413,64 @@ Wait for #139 endpoint design approval before implementing client side.
 
 **Next:** Phase 2.5 continues; entity wiring closed.
 
+
+---
+
+## 2026-03-24: Documentation Refresh for Phase 2/2.5 Completion
+
+**Task:** Comprehensive README and docs refresh to reflect Phase 2/2.5 completion (PR #153)
+
+**Outcome:** ✅ Complete — Documentation updated across README, setup.md, and admin-guide.md
+
+### Changes Made
+
+1. **README.md — Major Overhaul**
+   - **Quick Start:** Added Docker/PostgreSQL/Redis setup with `docker compose up -d`
+   - **Architecture Diagram:** Expanded with full component flow (ShardRoom, RefugeRoom, Admin API), Entra OAuth auth flow, and design principles
+   - **Tech Stack:** Updated from "Redis planned" → Redis (implemented), "In-memory cache" → Redis, added "Admin UI: React + Vite"
+   - **Auth:** Updated from "bcryptjs + UUID tokens" → "Microsoft Entra External ID (OAuth/OIDC) + bcrypt fallback"
+   - **Phase Status:** Restructured as 3 sections:
+     - **Phase 1 ✅:** Solo extraction (unchanged)
+     - **Phase 2 ✅:** Multiplayer shards, React client, admin dashboard, PostgreSQL, Redis (NEW)
+     - **Phase 2.5 ✅:** Admin CRUD, user management, audit log, loot/creature simulators, deploy page, Entra OAuth (NEW)
+     - **Phase 3 ��:** SSH client, advanced AI, PvP, procedural narrative (NEW)
+   - **Environment Variables:** New comprehensive section listing all current env vars
+   - **Admin Dashboard URL:** Updated from `/colyseus` to `http://localhost:3000/admin`
+   - **Access Points:** Added game client (3000), admin dashboard, server health, Colyseus monitor
+
+2. **docs/setup.md — Phase 2/2.5 Alignment**
+   - **Prerequisites:** Added Docker and Docker Compose to required tools
+   - **Quick Start:** Added `docker compose up -d` step; added `npm run dev:client` instruction
+   - **Docker Development Services:** NEW section explaining PostgreSQL (port 5434) and Redis (port 6379) setup
+   - **Database Setup:** Renamed "Phase 2" to "Phase 2+"; added "Option 1: Docker Compose" and "Option 2: Manual"; expanded migrations list to 7 (added audit log, admin users)
+   - **Environment Variables:** Expanded from 9 to 20 entries; added Entra OAuth vars, USE_PG_REPOS, ADMIN_TOKEN
+   - **Tech Stack Table:** Updated Redis from "planned" to "implemented"; added React/Vite/Tailwind for admin UI
+
+3. **docs/admin-guide.md — Phase 2.5 Comprehensive Update**
+   - **Intro:** Reframed as React dashboard (not just Colyseus monitor)
+   - **Quick Access:** NEW section with admin dashboard URL, API endpoint, Colyseus monitor
+   - **Authentication:** NEW section covering admin login, roles (content, audit, deploy, users), protected endpoints with ADMIN_TOKEN
+   - **Admin Dashboard Features:** NEW comprehensive section:
+     - **Content Management:** Table of 11 entity types with CRUD capabilities (creatures, items, biomes, modifiers, loot tables, skills, factions, rooms, narrative templates, contracts stub, recipes stub)
+     - **Audit Log:** Real-time tracking of admin actions; filters by entity type, action, user, date range; CSV export
+     - **Simulators:** Loot drop simulator (verify distribution); creature stat re-roll simulator (verify rolls)
+     - **Deploy Page:** Preview diffs, deploy to staging, promote to production; requires deploy role
+   - **Colyseus Monitor:** Moved down; clarified as "internal" tool for development
+   - **Narration Telemetry:** Updated to reference `/admin/api/metrics` (SSE stream)
+   - **Database Migrations:** Renamed "Phase 2" to "Phase 2+"; expanded from 5 to 7 migrations
+   - **Phase 2 Admin Features:** Replaced with "Phase 3+ Planned Features" (player analytics, leaderboards, social, PvP, loot analysis)
+
+### Key Decisions Documented
+
+- **Admin Dashboard Port:** Confirmed at `http://localhost:3000` (Vite dev server on React client)
+- **Docker Services:** `docker-compose.yml` already configured; docs now prescribe usage
+- **Entra OAuth:** Documented as Phase 2.5-complete auth system; bcrypt fallback for local dev
+- **Admin Token:** Added to env vars; defaults to random UUID, logged at startup
+
+### Review Notes
+
+- All changes surgical: focused on accurate reflection of implemented features
+- No invention of future systems; only documented what's actually built (Phase 2/2.5)
+- Cross-referenced GDD.md where relevant for design context
+- Maintained existing tone and structure; extended with Phase 2/2.5-specific sections
+

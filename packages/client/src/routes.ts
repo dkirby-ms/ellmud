@@ -1,5 +1,6 @@
 import { createBrowserRouter, type RouteObject } from "react-router";
 import Login from "./pages/Login";
+import AuthCallback from "./pages/AuthCallback";
 import CharacterSelect from "./pages/CharacterSelect";
 import Refuge from "./pages/Refuge";
 import ShardExploration from "./pages/ShardExploration";
@@ -41,6 +42,10 @@ export const routes: RouteObject[] = [
   {
     path: "/",
     Component: Login,
+  },
+  {
+    path: "/auth/callback",
+    Component: AuthCallback,
   },
   {
     Component: ProtectedRoute,

@@ -86,6 +86,54 @@ export class AuthService {
     await this.tokenStore.delete(token);
   }
 
+  /**
+   * Login or auto-register via OAuth provider.
+   * If the provider identity exists, issue a token.
+   * If not, auto-create a player with a generated username.
+   */
+  async loginOAuth(
+    provider: string,
+    providerId: string,
+    email: string | null,
+    displayName: string | null,
+  ): Promise<AuthResult> {
+    // Try to find existing player by provider identity
+    let player = await this.playerRepo.findByProvider(provider, providerId);
+
+    if (!player) {
+      // Auto-register: generate username from displayName or email
+      const username = this.generateUsername(displayName, email);
+      player = await this.playerRepo.createOAuthPlayer(provider, providerId, email, username);
+    }
+
+    // Issue session token
+    const token = crypto.randomUUID();
+    await this.tokenStore.set(token, { playerId: player.id, username: player.username }, TOKEN_TTL_SECONDS);
+
+    return { playerId: player.id, token };
+  }
+
+  /**
+   * Generate a valid username from OAuth user info.
+   * Falls back to "player_<random>" if no displayName or email.
+   */
+  private generateUsername(displayName: string | null, email: string | null): string {
+    if (displayName) {
+      // Strip invalid characters and truncate
+      const cleaned = displayName.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 20);
+      if (cleaned.length >= 3) return cleaned;
+    }
+
+    if (email) {
+      // Use email local part
+      const localPart = email.split('@')[0].replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 20);
+      if (localPart.length >= 3) return localPart;
+    }
+
+    // Fallback: random username
+    return `player_${crypto.randomUUID().substring(0, 8)}`;
+  }
+
   private validateInput(username: string, password: string): void {
     if (!username || typeof username !== 'string') {
       throw new AuthError('Username is required', 400);

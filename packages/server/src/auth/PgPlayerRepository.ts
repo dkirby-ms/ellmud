@@ -94,6 +94,65 @@ export class PgPlayerRepository implements PlayerRepository {
 
     return result.rows[0] ?? null;
   }
+
+  async findByProvider(provider: string, providerId: string): Promise<Player | null> {
+    const result = await query<Player>(
+      `SELECT p.id, p.identity_id, p.username, p.created_at, p.updated_at
+       FROM players p
+       JOIN player_identities i ON i.id = p.identity_id
+       WHERE i.provider = $1 AND i.provider_id = $2`,
+      [provider, providerId],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async createOAuthPlayer(
+    provider: string,
+    providerId: string,
+    email: string | null,
+    username: string,
+  ): Promise<Player> {
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+
+      // Create the identity row (OAuth provider)
+      const identityResult = await client.query<{ id: string }>(
+        `INSERT INTO player_identities (provider, provider_id, email)
+         VALUES ($1, $2, $3)
+         RETURNING id`,
+        [provider, providerId, email],
+      );
+      const identityId = identityResult.rows[0].id;
+
+      // Create the player profile linked to the identity
+      const playerResult = await client.query<Player>(
+        `INSERT INTO players (identity_id, username)
+         VALUES ($1, $2)
+         RETURNING id, identity_id, username, created_at, updated_at`,
+        [identityId, username],
+      );
+
+      await client.query('COMMIT');
+
+      return playerResult.rows[0];
+    } catch (err: unknown) {
+      await client.query('ROLLBACK');
+      // PostgreSQL unique-violation code: 23505
+      if (isPgError(err) && err.code === '23505') {
+        if (err.constraint === 'uq_player_username') {
+          throw new DuplicateUsernameError(username);
+        }
+        if (err.constraint === 'uq_identity_provider') {
+          throw new Error('OAuth identity already exists');
+        }
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 /** Type guard for PostgreSQL error objects. */
