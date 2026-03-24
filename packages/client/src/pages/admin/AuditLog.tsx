@@ -1,34 +1,75 @@
+import { useEffect, useState } from 'react';
+import { fetchAuditLog, type AuditEvent } from '../../lib/admin-api';
+
 export default function AuditLog() {
-  const logs = [
-    {
-      timestamp: "2025-07-25 14:30",
-      author: "Jane",
-      domain: "Creatures",
-      action: "Published",
-      entity: "Cinder Wraith",
-    },
-    {
-      timestamp: "2025-07-25 14:28",
-      author: "Bob",
-      domain: "Balance",
-      action: "Edited",
-      entity: "Combat group",
-    },
-    {
-      timestamp: "2025-07-25 13:00",
-      author: "Jane",
-      domain: "Items",
-      action: "Created",
-      entity: "Ember Shard",
-    },
-    {
-      timestamp: "2025-07-25 12:45",
-      author: "Admin",
-      domain: "Deploy",
-      action: "Deployed",
-      entity: "v47 → Prod",
-    },
-  ];
+  const [logs, setLogs] = useState<AuditEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [actionFilter, setActionFilter] = useState('');
+  const [entityFilter, setEntityFilter] = useState('');
+  const [actorFilter, setActorFilter] = useState('');
+  
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const LIMIT = 50;
+
+  const loadLogs = async (resetOffset = false) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const currentOffset = resetOffset ? 0 : offset;
+      
+      const response = await fetchAuditLog({
+        action: actionFilter || undefined,
+        entity: entityFilter || undefined,
+        actor: actorFilter || undefined,
+        limit: LIMIT,
+        offset: currentOffset,
+      });
+      
+      if (resetOffset) {
+        setLogs(response.events);
+        setOffset(0);
+      } else {
+        setLogs((prev) => [...prev, ...response.events]);
+      }
+      
+      setHasMore(response.events.length === LIMIT);
+    } catch (err) {
+      console.error('Failed to fetch audit log:', err);
+      setError('Failed to load audit log');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadLogs(true);
+  }, [actionFilter, entityFilter, actorFilter]);
+
+  const loadMore = () => {
+    const newOffset = offset + LIMIT;
+    setOffset(newOffset);
+    loadLogs(false);
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
+  const formatAction = (action: string) => {
+    return action.charAt(0).toUpperCase() + action.slice(1);
+  };
 
   return (
     <div className="p-8">
@@ -43,33 +84,52 @@ export default function AuditLog() {
         <select
           className="bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-1.5 text-[#E8E0D0] text-sm focus:border-[#C9A84C] focus:outline-none"
           style={{ fontFamily: "var(--font-sans)" }}
+          value={entityFilter}
+          onChange={(e) => setEntityFilter(e.target.value)}
         >
-          <option>All Domains</option>
-          <option>Creatures</option>
-          <option>Items</option>
-          <option>Biomes</option>
+          <option value="">All Entities</option>
+          <option value="items">Items</option>
+          <option value="creatures">Creatures</option>
+          <option value="biomes">Biomes</option>
+          <option value="modifiers">Modifiers</option>
+          <option value="skills">Skills</option>
+          <option value="loot-tables">Loot Tables</option>
+          <option value="factions">Factions</option>
+          <option value="rooms">Rooms</option>
+          <option value="narrative">Narrative</option>
         </select>
 
         <select
           className="bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-1.5 text-[#E8E0D0] text-sm focus:border-[#C9A84C] focus:outline-none"
           style={{ fontFamily: "var(--font-sans)" }}
+          value={actorFilter}
+          onChange={(e) => setActorFilter(e.target.value)}
         >
-          <option>All Authors</option>
-          <option>Jane</option>
-          <option>Bob</option>
+          <option value="">All Actors</option>
+          <option value="admin">Admin</option>
+          <option value="system">System</option>
         </select>
 
         <select
           className="bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-1.5 text-[#E8E0D0] text-sm focus:border-[#C9A84C] focus:outline-none"
           style={{ fontFamily: "var(--font-sans)" }}
+          value={actionFilter}
+          onChange={(e) => setActionFilter(e.target.value)}
         >
-          <option>All Actions</option>
-          <option>Created</option>
-          <option>Edited</option>
-          <option>Published</option>
-          <option>Deployed</option>
+          <option value="">All Actions</option>
+          <option value="create">Create</option>
+          <option value="update">Update</option>
+          <option value="delete">Delete</option>
+          <option value="deploy">Deploy</option>
+          <option value="review">Review</option>
         </select>
       </div>
+
+      {error && (
+        <div className="bg-red-900/20 border border-red-500 rounded-lg p-4 mb-4 text-red-300">
+          {error}
+        </div>
+      )}
 
       <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg overflow-hidden">
         <table className="w-full">
@@ -85,13 +145,13 @@ export default function AuditLog() {
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Author
+                Actor
               </th>
               <th
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Domain
+                Entity Type
               </th>
               <th
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
@@ -108,45 +168,72 @@ export default function AuditLog() {
             </tr>
           </thead>
           <tbody>
-            {logs.map((log, i) => (
-              <tr
-                key={i}
-                className="border-b border-[#2A2B35] hover:bg-[#1C1D27] transition-colors"
-              >
-                <td
-                  className="p-4 text-[#8A8B95] text-sm"
-                  style={{ fontFamily: "var(--font-mono)" }}
-                >
-                  {log.timestamp}
-                </td>
-                <td
-                  className="p-4 text-[#E8E0D0] text-sm"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
-                  {log.author}
-                </td>
-                <td
-                  className="p-4 text-[#8A8B95] text-sm"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
-                  {log.domain}
-                </td>
-                <td
-                  className="p-4 text-[#3A7D7B] text-sm"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
-                  {log.action}
-                </td>
-                <td
-                  className="p-4 text-[#E8E0D0] text-sm"
-                  style={{ fontFamily: "var(--font-serif)" }}
-                >
-                  {log.entity}
+            {loading && logs.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="p-8 text-center text-[#8A8B95]">
+                  Loading...
                 </td>
               </tr>
-            ))}
+            ) : logs.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="p-8 text-center text-[#8A8B95]">
+                  No audit events found
+                </td>
+              </tr>
+            ) : (
+              logs.map((log) => (
+                <tr
+                  key={log.id}
+                  className="border-b border-[#2A2B35] hover:bg-[#1C1D27] transition-colors"
+                >
+                  <td
+                    className="p-4 text-[#8A8B95] text-sm"
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  >
+                    {formatTimestamp(log.created_at)}
+                  </td>
+                  <td
+                    className="p-4 text-[#E8E0D0] text-sm"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    {log.actor}
+                  </td>
+                  <td
+                    className="p-4 text-[#8A8B95] text-sm"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    {log.entity_type || '-'}
+                  </td>
+                  <td
+                    className="p-4 text-[#3A7D7B] text-sm"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    {formatAction(log.action)}
+                  </td>
+                  <td
+                    className="p-4 text-[#E8E0D0] text-sm"
+                    style={{ fontFamily: "var(--font-serif)" }}
+                  >
+                    {log.entity_name || log.entity_id || '-'}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
+        
+        {hasMore && logs.length > 0 && (
+          <div className="p-4 border-t border-[#2A2B35] text-center">
+            <button
+              onClick={loadMore}
+              disabled={loading}
+              className="bg-[#1C1D27] hover:bg-[#2A2B35] border border-[#2A2B35] rounded px-4 py-2 text-[#E8E0D0] text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              style={{ fontFamily: "var(--font-sans)" }}
+            >
+              {loading ? 'Loading...' : 'Load More'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -17,3 +17,4 @@ export type {
 export { createContentRouter, initializeContentStores, type ContentRouterDeps } from './content/index.js';
 export { createUserRouter } from './users/index.js';
 export { createDashboardApiRouter, type DashboardRouterDeps } from './content/index.js';
+export { createAuditRouter } from './audit/audit-routes.js';

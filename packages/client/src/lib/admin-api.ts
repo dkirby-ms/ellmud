@@ -300,87 +300,6 @@ export async function fetchValidationWarnings(): Promise<ValidationWarningsRespo
   return adminFetch<ValidationWarningsResponse>('/admin/api/dashboard/validation-warnings');
 }
 
-// ─── Live Room Management API ────────────────────────────────────────────────
-
-export interface LiveRoomSummary {
-  roomId: string;
-  name: string;
-  clients: number;
-  maxClients: number;
-  locked: boolean;
-  createdAt?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface LiveRoomPlayer {
-  sessionId: string;
-  currentRoomId: string;
-  inventoryCount: number;
-  currentWeight: number;
-  maxCarryWeight: number;
-}
-
-export interface LiveRoomCreature {
-  id: string;
-  name: string;
-  type: string;
-  hp: number;
-  maxHp: number;
-  currentRoomId: string;
-  behaviorState: string;
-  isAlive: boolean;
-}
-
-export interface LiveRoomDetail {
-  roomId: string;
-  name: string;
-  clients: number;
-  biome?: string;
-  lifecycle?: string;
-  stability?: number;
-  collapseTimer?: number;
-  tick?: number;
-  playerCount?: number;
-  paused: boolean;
-  players?: LiveRoomPlayer[];
-  creatures?: LiveRoomCreature[];
-}
-
-export interface SpawnResult {
-  roomId: string;
-  spawned: { type: string; id: string; creatureId?: string; spawnRoomId?: string };
-  message: string;
-}
-
-export async function fetchLiveRooms(): Promise<{ rooms: LiveRoomSummary[] }> {
-  return adminFetch<{ rooms: LiveRoomSummary[] }>('/admin/api/rooms');
-}
-
-export async function fetchLiveRoomDetail(roomId: string): Promise<LiveRoomDetail> {
-  return adminFetch<LiveRoomDetail>(`/admin/api/rooms/${roomId}`);
-}
-
-export async function pauseRoom(roomId: string): Promise<{ roomId: string; paused: boolean }> {
-  return adminFetch<{ roomId: string; paused: boolean }>(`/admin/api/rooms/${roomId}/pause`, {
-    method: 'POST',
-  });
-}
-
-export async function resumeRoom(roomId: string): Promise<{ roomId: string; paused: boolean }> {
-  return adminFetch<{ roomId: string; paused: boolean }>(`/admin/api/rooms/${roomId}/resume`, {
-    method: 'POST',
-  });
-}
-
-export async function spawnInRoom(
-  roomId: string,
-  type: 'creature' | 'item',
-  templateId: string,
-  targetRoomId?: string
-): Promise<SpawnResult> {
-  return adminFetch<SpawnResult>(`/admin/api/rooms/${roomId}/spawn`, {
-    method: 'POST',
-    body: JSON.stringify({ type, id: templateId, targetRoomId }),
 // ─── User Management API ─────────────────────────────────────────────────────
 
 export interface AdminUser {
@@ -480,4 +399,44 @@ export async function fetchNotifications(): Promise<AdminNotification[]> {
   }
 
   return notifications;
+}
+
+// ─── Audit Log API ───────────────────────────────────────────────────────────
+
+export interface AuditEvent {
+  id: string;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  entity_name: string | null;
+  actor: string;
+  details: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AuditLogResponse {
+  events: AuditEvent[];
+}
+
+export interface AuditLogFilters {
+  action?: string;
+  entity?: string;
+  actor?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function fetchAuditLog(filters?: AuditLogFilters): Promise<AuditLogResponse> {
+  const params = new URLSearchParams();
+  
+  if (filters?.action) params.append('action', filters.action);
+  if (filters?.entity) params.append('entity', filters.entity);
+  if (filters?.actor) params.append('actor', filters.actor);
+  if (filters?.limit) params.append('limit', filters.limit.toString());
+  if (filters?.offset) params.append('offset', filters.offset.toString());
+  
+  const query = params.toString();
+  const url = query ? `/admin/api/audit-log?${query}` : '/admin/api/audit-log';
+  
+  return adminFetch<AuditLogResponse>(url);
 }

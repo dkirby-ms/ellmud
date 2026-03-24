@@ -15,7 +15,7 @@ import {
   initColyseusAuth,
 } from './auth/index.js';
 import { createHealthRouter } from './health.js';
-import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter } from './admin/index.js';
+import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter } from './admin/index.js';
 import { getConfig } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence } from './cache/index.js';
@@ -70,6 +70,10 @@ const contentStores = initializeContentStores(USE_PG);
 app.use(createContentRouter({ stores: contentStores }));
 app.use(createDashboardApiRouter({ stores: contentStores, usePg: USE_PG }));
 console.log(`[Ellmud] Content store: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// Audit log API — query admin action history
+app.use(createAuditRouter());
+console.log('[Ellmud] Audit log API: enabled');
 
 // Admin runtime API — room management, metrics, SSE. Receives contentStores for spawn.
 app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis, isStashPg: isStashPg(), contentStores }));

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
-import { listEntities } from "../lib/admin-api";
+import { listEntities } from "../../lib/admin-api";
 
 interface Biome {
   id: string;
