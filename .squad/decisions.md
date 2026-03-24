@@ -3987,3 +3987,57 @@ Implement consistent validation pattern across all entity detail pages:
 
 ---
 
+
+---
+
+### 2026-03-24T10:33: Decision: Issue #127 UserStore Interface & PgUserStore/InMemoryUserStore
+**By:** Drizzt (Engine Dev)  
+**Status:** ✅ RESOLVED in PR #154
+
+**Problem:**
+Admin users 500 errors due to inconsistent user management patterns across PgUserStore and InMemoryUserStore.
+
+**Decision:**
+Extract `UserStore` interface defining the contract for user operations. Implement:
+- `PgUserStore` — PostgreSQL-backed user storage (production)
+- `InMemoryUserStore` — In-memory storage (testing/development)
+
+**Rationale:**
+- Interface-based architecture separates concerns between storage backends
+- Improves testability and enables future extensibility
+- Maintains backward compatibility with existing admin API
+
+**Impact:**
+- All 39 admin-users tests pass
+- PR #154 ready for code review
+- Admin API stabilized
+
+---
+
+### 2026-03-24T10:33: Decision: Lint Error Resolution Across 30 Files
+**By:** Jarlaxle (Systems Dev)  
+**Status:** ✅ RESOLVED & COMMITTED to dev
+
+**Problem:**
+60 lint errors blocking Phase 3 development:
+- `no-explicit-any` violations
+- `no-unused-vars` violations
+- `no-invalid-void-type` violations
+- `preserve-caught-error` violations
+
+**Decision:**
+Systematically resolve all violations:
+1. Applied proper TypeScript type annotations where needed
+2. Removed unused imports and variables
+3. Improved error handling patterns with typed catch blocks
+4. Added void return type annotations where appropriate
+
+**Rationale:**
+- Clean lint baseline required before Phase 3
+- Type safety improvements reduce future bugs
+- Error handling improvements align with best practices
+
+**Impact:**
+- Zero lint errors remaining in scope
+- Ready for Phase 3 development
+- Code quality baseline established

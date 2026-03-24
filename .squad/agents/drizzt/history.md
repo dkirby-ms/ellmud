@@ -1083,3 +1083,29 @@ Wire the BiomesList and BiomesDetail admin pages to the real Content CRUD API en
 
 **Next:** Phase 2.5 continues; entity wiring complete. Validation pattern documented for future admin pages.
 
+
+---
+
+### Issue #127: UserStore Interface & PgUserStore/InMemoryUserStore (2026-03-24T10:33)
+**Status:** ✅ COMPLETE
+
+**Objective:**
+Fix admin users 500 errors by extracting consistent user management interface and implementing separate storage backends.
+
+**Solution:**
+1. Extracted `UserStore` interface defining user operations contract
+2. Implemented `PgUserStore` for PostgreSQL-backed user storage (production)
+3. Implemented `InMemoryUserStore` for testing/development (in-memory)
+
+**Key Pattern:**
+- Interface-based architecture enables testability and future extensibility
+- Both implementations satisfy the same contract
+- Zero breaking changes to admin API
+
+**Results:**
+- ✅ All 39 admin-users tests passing
+- ✅ PR #154 opened and ready for review
+- ✅ Admin user management stabilized
+
+**Impact:**
+This pattern can be reused for other storage-backend abstractions in the codebase.

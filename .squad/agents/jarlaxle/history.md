@@ -1147,3 +1147,33 @@ Entity slugs: `modifiers`, `skills`, `loot-tables` (hyphenated!), `factions`, `r
 - **Pattern:** Bicep params → env array, CI/CD secrets → --set-env-vars, docker-compose → .env references. Consistent with existing DATABASE_URL/REDIS_CONNECTION_STRING pattern.
 - **Edge case:** ALLOW_LOCAL_AUTH is string-typed ("true"/"false") not boolean in Bicep env arrays; server code should handle both.
 - **Note:** Existing .env file already had real Entra values (likely from Drizzt's dev setup); .env.example shows structure without leaking secrets.
+
+---
+
+### Lint Error Resolution: 60 Errors Across 30 Files (2026-03-24T10:33)
+**Status:** ✅ COMPLETE & COMMITTED to dev
+
+**Objective:**
+Resolve all lint errors blocking Phase 3 development across ESLint scope.
+
+**Violations Resolved:**
+1. `no-explicit-any` — Applied proper TypeScript type annotations
+2. `no-unused-vars` — Removed unused imports and variables
+3. `no-invalid-void-type` — Added void return type annotations where appropriate
+4. `preserve-caught-error` — Improved error handling with typed catch blocks
+
+**Scope:** 30 files across `packages/server` and `packages/client`
+
+**Results:**
+- ✅ 60 lint errors resolved
+- ✅ Zero lint violations remaining in scope
+- ✅ Committed to dev branch
+- ✅ Ready for Phase 3 development
+
+**Quality Improvements:**
+- Type safety baseline raised (fewer implicit any casts)
+- Error handling standardized (all caught errors properly typed)
+- Codebase hygiene improved (no unused variables/imports)
+
+**Impact:**
+Lint baseline clean, enabling confident Phase 3 development without lint noise masking real issues.
