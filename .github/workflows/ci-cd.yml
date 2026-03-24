@@ -139,7 +139,14 @@ jobs:
             --name ${{ secrets.CONTAINER_APP_NAME }} \
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
             --image ${{ secrets.ACR_NAME }}.azurecr.io/ellmud-${{ github.ref_name }}:${{ github.sha }} \
-            --set-env-vars "NODE_ENV=production" "PORT=2567" \
+            --set-env-vars \
+              "NODE_ENV=production" \
+              "PORT=2567" \
+              "ENTRA_CLIENT_ID=${{ secrets.ENTRA_CLIENT_ID }}" \
+              "ENTRA_CLIENT_SECRET=${{ secrets.ENTRA_CLIENT_SECRET }}" \
+              "ENTRA_TENANT_ID=${{ secrets.ENTRA_TENANT_ID }}" \
+              "ENTRA_REDIRECT_URI=${{ secrets.ENTRA_REDIRECT_URI }}" \
+              "ALLOW_LOCAL_AUTH=false" \
             --container-name ellmud \
             --command "node" "packages/server/dist/index.js"
 

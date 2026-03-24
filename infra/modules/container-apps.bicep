@@ -45,6 +45,22 @@ param redisHost string = ''
 @description('Deploy the game server container app (false = environment only)')
 param deployApp bool = false
 
+@description('Entra External ID client ID')
+param entraClientId string = ''
+
+@secure()
+@description('Entra External ID client secret')
+param entraClientSecret string = ''
+
+@description('Entra External ID tenant ID')
+param entraTenantId string = ''
+
+@description('OAuth callback URL')
+param entraRedirectUri string = ''
+
+@description('Allow local username/password authentication')
+param allowLocalAuth string = 'false'
+
 var createEnvironment = existingEnvironmentId == ''
 
 // Bootstrap placeholder — replaced by real image after first CI/CD deploy.
@@ -127,6 +143,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             { name: 'REDIS_DRIVER_ENABLED', value: 'true' }
             { name: 'MAX_PLAYERS_PER_SHARD', value: '4' }
             { name: 'MAX_REPLICAS', value: '4' }
+            { name: 'ENTRA_CLIENT_ID', value: entraClientId }
+            { name: 'ENTRA_CLIENT_SECRET', value: entraClientSecret }
+            { name: 'ENTRA_TENANT_ID', value: entraTenantId }
+            { name: 'ENTRA_REDIRECT_URI', value: entraRedirectUri }
+            { name: 'ALLOW_LOCAL_AUTH', value: allowLocalAuth }
           ]
         }
       ]
