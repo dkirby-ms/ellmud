@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router";
 import { login, register, ApiError } from "../services/api";
 import { useAppContext } from "../store";
+import { useDevAutoLogin } from "../hooks/useDevAutoLogin";
 
 export default function Login() {
   const { state, dispatch } = useAppContext();
@@ -12,6 +13,9 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // In dev mode, auto-login with dev/devdev credentials
+  useDevAutoLogin();
 
   // Check if local auth is enabled (default to true for dev)
   const allowLocalAuth = import.meta.env.VITE_ALLOW_LOCAL_AUTH !== "false";
@@ -27,7 +31,25 @@ export default function Login() {
     }
   }, []);
 
+  const switchMode = useCallback((registerMode: boolean) => {
+    setIsRegister(registerMode);
+    setError(null);
+    setConfirmPassword("");
+  }, []);
+
+  const flavorTexts = [
+    "The ground trembles. Another shard opens.",
+    "Deep below, something stirs in the darkness.",
+    "The Refuge calls to those who would risk everything.",
+    "Shadows lengthen. Time grows short.",
+  ];
+
+  const [flavorText] = useState(
+    flavorTexts[Math.floor(Math.random() * flavorTexts.length)]
+  );
+
   // Already authenticated — skip straight to refuge
+  // NOTE: This must come AFTER all hooks to satisfy React's rules of hooks.
   if (state.authenticated) {
     return <Navigate to="/refuge" replace />;
   }
@@ -36,12 +58,6 @@ export default function Login() {
     // Redirect to server OAuth endpoint
     window.location.href = "/auth/entra/login";
   };
-
-  const switchMode = useCallback((registerMode: boolean) => {
-    setIsRegister(registerMode);
-    setError(null);
-    setConfirmPassword("");
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,17 +85,6 @@ export default function Login() {
       setLoading(false);
     }
   };
-
-  const flavorTexts = [
-    "The ground trembles. Another shard opens.",
-    "Deep below, something stirs in the darkness.",
-    "The Refuge calls to those who would risk everything.",
-    "Shadows lengthen. Time grows short.",
-  ];
-
-  const [flavorText] = useState(
-    flavorTexts[Math.floor(Math.random() * flavorTexts.length)]
-  );
 
   return (
     <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-8 relative overflow-hidden">

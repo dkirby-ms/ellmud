@@ -3987,3 +3987,170 @@ Implement consistent validation pattern across all entity detail pages:
 
 ---
 
+
+---
+
+### 2026-03-24T10:33: Decision: Issue #127 UserStore Interface & PgUserStore/InMemoryUserStore
+**By:** Drizzt (Engine Dev)  
+**Status:** ✅ RESOLVED in PR #154
+
+**Problem:**
+Admin users 500 errors due to inconsistent user management patterns across PgUserStore and InMemoryUserStore.
+
+**Decision:**
+Extract `UserStore` interface defining the contract for user operations. Implement:
+- `PgUserStore` — PostgreSQL-backed user storage (production)
+- `InMemoryUserStore` — In-memory storage (testing/development)
+
+**Rationale:**
+- Interface-based architecture separates concerns between storage backends
+- Improves testability and enables future extensibility
+- Maintains backward compatibility with existing admin API
+
+**Impact:**
+- All 39 admin-users tests pass
+- PR #154 ready for code review
+- Admin API stabilized
+
+---
+
+### 2026-03-24T10:33: Decision: Lint Error Resolution Across 30 Files
+**By:** Jarlaxle (Systems Dev)  
+**Status:** ✅ RESOLVED & COMMITTED to dev
+
+**Problem:**
+60 lint errors blocking Phase 3 development:
+- `no-explicit-any` violations
+- `no-unused-vars` violations
+- `no-invalid-void-type` violations
+- `preserve-caught-error` violations
+
+**Decision:**
+Systematically resolve all violations:
+1. Applied proper TypeScript type annotations where needed
+2. Removed unused imports and variables
+3. Improved error handling patterns with typed catch blocks
+4. Added void return type annotations where appropriate
+
+**Rationale:**
+- Clean lint baseline required before Phase 3
+- Type safety improvements reduce future bugs
+- Error handling improvements align with best practices
+
+**Impact:**
+- Zero lint errors remaining in scope
+- Ready for Phase 3 development
+- Code quality baseline established
+
+---
+
+### 2026-03-24T11:07: Decision: Elminster Review — PR #154 (UserStore Fix) + Lint Sweep Approval
+**By:** Elminster (Lead/Architect)  
+**Status:** ✅ PR #154 APPROVED WITH NOTES; Lint Sweep APPROVED
+
+#### Part 1: PR #154 Code Review
+
+**Verdict: APPROVED WITH NOTES**
+
+**Assessment:**
+The UserStore abstraction is architecturally sound. It follows the existing repository pattern (StashRepository, PlayerRepository) and solves the CI/CD failure correctly. All 39 tests pass on the PR branch — the 19 previously-failing CRUD tests now exercise InMemoryUserStore without any PostgreSQL dependency.
+
+**What's right:**
+- `UserStore` interface with 5 clean async methods — consistent with `StashRepository` and `PlayerRepository`
+- `PgUserStore` preserves all original SQL logic exactly: transactions, `BEGIN`/`COMMIT`/`ROLLBACK`, constraint error mapping (`23505` → domain errors)
+- `InMemoryUserStore` faithfully simulates key DB behaviours: case-insensitive username uniqueness, cascading deletes (identity + player + username index), sort order (`createdAt DESC`)
+- `DuplicateUsernameError`/`DuplicateProviderError` as domain errors — clean separation from PG-specific error codes
+- Auto-selection via `DATABASE_URL` is consistent with the `USE_PG` pattern in `index.ts`
+- `createUserRouter(store?)` accepts optional DI — backwards-compatible, testable
+- `toJson()` helper eliminates 4 repeated camelCase mapping blocks
+
+**Non-blocking notes (post-merge cleanup):**
+
+1. **Dead code in test file:** `admin-users.test.ts` still imports `getClient` from `db/index.js` and contains `cleanupTestUser()` which uses direct DB queries. These silently fail in CI (caught + ignored). Should be removed to avoid confusion. Import of `db/index.js` also eagerly creates a `pg.Pool` — harmless but wasteful.
+
+2. **No `resetStore()` for test isolation:** The `sharedInMemoryStore` singleton in `user-routes.ts` has no reset mechanism. The stash-provider pattern provides `resetStashProvider()` for exactly this purpose. Currently safe because vitest isolates per file, but fragile if test architecture changes. Consider adding `resetInMemoryStore()` export or using explicit DI in the test file (`createUserRouter(new InMemoryUserStore())`).
+
+3. **InMemoryUserStore fidelity gap:** `createUser()` does not enforce the `uq_identity_provider` unique constraint (no `DuplicateProviderError`). `PgUserStore` does. Not tested currently (all tests use `'local'` provider), but if duplicate-provider tests are added later, they'll pass in CI but not in production. Consider adding a provider index to InMemoryUserStore for parity.
+
+**Assignee for post-merge cleanup:** Jarlaxle
+
+**Decision:** Merge PR #154. Jarlaxle to schedule 3 non-blocking cleanup items.
+
+**Impact:** Admin users API stabilized; UserStore interface pattern established; all 39 tests passing
+
+---
+
+#### Part 2: Lint Sweep Review
+
+**Verdict: APPROVED**
+
+**Assessment:**
+Zero lint errors remain (verified: `npx eslint` returns 0 errors, 549 warnings). All fixes are mechanical with no behaviour changes. Spot-checked 10+ files across server, client, and shared packages.
+
+**Fix categories verified:**
+- **`no-explicit-any`**: `any` → `Record<string, unknown>` with appropriate type assertions in map callbacks (CreatureDetail, admin-api). Correct.
+- **`no-unused-vars`**: Unused imports removed (`useState` in SkillsList, `query` in admin-users.test, `TickResult`/`TRACKING_THRESHOLDS`/etc in phase2-qa.test). Unused callback params prefixed with `_` (`_ctx`, `_newCount`). Correct.
+- **`no-invalid-void-type`**: `adminFetch<void>` → `adminFetch<undefined>` in generic positions (admin-api). Correct per TypeScript semantics.
+- **`preserve-caught-error`**: `catch (err)` → `catch` where error unused (admin-users cleanup). Correct.
+- **Unused variables removed entirely** when truly dead (`searchQuery`/`setSearchQuery` in SkillsList, `result` in phase2 test). Correct.
+
+**One minor observation (non-blocking):** In `phase2-qa.test.ts`, `const traceCount = ...` was changed to `void traces.getTracesInRoom(ROOMS.ENTRY).length` rather than being removed or asserted. The `void` prefix suppresses the linter but the line computes a value for nothing. Pre-existing issue — the assertion was probably removed in an earlier refactor.
+
+**Decision:** Approved. No action needed; already committed to dev.
+
+**Impact:** Clean lint baseline established; zero errors; Phase 3 ready to proceed
+
+
+---
+
+### 2026-03-24T12:01: Decision: Jarlaxle Post-Merge Cleanup — PR #154 Follow-Up
+**By:** Jarlaxle (Systems Dev)  
+**Status:** ✅ COMPLETED
+
+**Three Non-Blocking Notes Addressed:**
+
+1. **Dead Code in Test File** — Removed
+   - Deleted unused `getClient` import from `db/index.js` (caused silent CI failures)
+   - Removed `cleanupTestUser()` helper that used direct DB queries
+   - Eliminated wasteful `pg.Pool` side effect in test initialization
+
+2. **Test Isolation via resetStore()** — Implemented
+   - Exported `resetInMemoryStore()` from user-routes.ts
+   - Wired into `beforeEach()` in admin-users.test.ts
+   - Follows `resetStashProvider()` pattern from stash module
+   - Ensures clean store state between test runs, prevents fragility
+
+3. **InMemoryUserStore Constraint Parity** — Added
+   - Implemented `providerIndex` Map tracking `(provider, email)` tuples
+   - `createUser()` now throws `DuplicateProviderError` (matches PgUserStore)
+   - `deleteUser()` cleans up providerIndex entries
+   - Ensures test constraints match production behavior
+
+**Verification:**
+- ✅ TypeScript type check passes
+- ✅ All 39 tests pass (admin-users suite)
+- ✅ Test isolation verified (no state leakage between test runs)
+- ✅ Committed: af769a5
+
+**Impact:**
+- Admin-users test suite is now robust, maintainable, and production-faithful
+- Pattern established for future store-based tests
+- No breaking changes or production impact
+
+## 2026-03-24: Decision: Lint Error Fix Patterns for UAT CI
+
+**Author:** Jarlaxle  
+**Context:** Fixing 27 lint errors blocking CI on `uat` branch (#156)
+
+### Patterns Applied
+
+1. **Unused imports** → Remove entirely (don't prefix with `_`).
+2. **Unused function parameters** needed for signature compliance → Prefix with `_` (e.g. `_ctx`).
+3. **Destructured-to-omit variables** (`const { name: _omitted, ...rest }`) → `eslint-disable-next-line` since `_` prefix doesn't suppress for assigned vars.
+4. **Unused catch bindings** → Use empty `catch { }` (ES2019 optional catch binding).
+5. **`preserve-caught-error`** → Add `{ cause: err }` to re-thrown `new Error()` calls so the original error isn't lost.
+6. **`no-explicit-any`** → Replace `as any` with type-safe casts (`as unknown as T`).
+
+### Team Impact
+
+These patterns should be followed for future lint fixes to keep CI green. The 540 warnings (mostly `no-non-null-assertion`) are not blocking CI and can be addressed separately.

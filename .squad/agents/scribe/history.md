@@ -84,3 +84,22 @@ Initial setup complete. Scribe orchestration workflow established: create orches
 
 **Next:** Phase 2.5 continues; entity wiring closed.
 
+---
+
+## Session: CI Fix & Orchestration (2026-03-24T13:30Z)
+
+### Tasks Completed
+
+1. ✅ **Orchestration Log Written**
+   - Jarlaxle: Fixed 27 no-unused-vars errors on uat, commit c2e69b9, build-and-test now passes
+
+2. ✅ **Session Log Created**
+   - Ralph: Round 1 work-check identified #156; Round 2 pending verification
+
+3. ✅ **Decision Inbox Merged → decisions.md**
+   - Deduplicated: 1 lint fix decision from Jarlaxle
+   - Inbox file deleted
+   - New section: "2026-03-24: Decision: Lint Error Fix Patterns for UAT CI"
+
+4. ✅ **Git commit prepared**
+   - .squad/ changes staged

@@ -77,8 +77,7 @@ export class SoundSystem {
       const currentRoom = this.resolveRoom(currentRoomId);
       if (!currentRoom) continue;
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      for (const [_exitDir, adjacentRoomId] of currentRoom.exits) {
+      for (const [, adjacentRoomId] of currentRoom.exits) {
         const adjacentRoom = this.resolveRoom(adjacentRoomId);
         if (!adjacentRoom) continue;
 

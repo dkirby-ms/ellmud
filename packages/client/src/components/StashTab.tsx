@@ -154,7 +154,7 @@ interface InventoryItemProps {
   onDelete: (id: string) => void;
 }
 
-function InventoryItem({ item, onMove, onRotate, onDelete }: InventoryItemProps) {
+function InventoryItem({ item, onMove: _onMove, onRotate, onDelete }: InventoryItemProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: "ITEM",
     item: { id: item.id, width: item.width, height: item.height },
@@ -249,14 +249,14 @@ function InventoryItem({ item, onMove, onRotate, onDelete }: InventoryItemProps)
 interface GridCellProps {
   x: number;
   y: number;
-  onDrop: (x: number, y: number, item: any) => void;
+  onDrop: (x: number, y: number, item: Record<string, unknown>) => void;
   isOccupied: boolean;
 }
 
 function GridCell({ x, y, onDrop, isOccupied }: GridCellProps) {
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
     accept: "ITEM",
-    drop: (item: any) => {
+    drop: (item: Record<string, unknown>) => {
       onDrop(x, y, item);
     },
     canDrop: () => !isOccupied,
@@ -288,7 +288,7 @@ function StashTabContent() {
   const [items, setItems] = useState<GridItem[]>(mockItems);
   const [selectedItem, setSelectedItem] = useState<GridItem | null>(null);
 
-  const handleDrop = (x: number, y: number, draggedItem: any) => {
+  const handleDrop = (x: number, y: number, draggedItem: Record<string, unknown>) => {
     setItems((prev) =>
       prev.map((item) =>
         item.id === draggedItem.id ? { ...item, x, y } : item

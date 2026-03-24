@@ -21,7 +21,7 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from
 import express from 'express';
 import { createAdminRouter } from '../admin/routes.js';
 import { createUserRouter } from '../admin/users/index.js';
-import { getClient } from '../db/index.js';
+import { InMemoryUserStore } from '../admin/users/user-store.js';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -29,11 +29,14 @@ const TEST_TOKEN = 'test-admin-token-12345';
 
 // ─── Test Helpers ───────────────────────────────────────────────────────────
 
+// Shared store for all tests - ensures consistent state management
+const testUserStore = new InMemoryUserStore();
+
 function createTestApp(): express.Express {
   const app = express();
   app.use(express.json());
   app.use(createAdminRouter());
-  app.use(createUserRouter());
+  app.use(createUserRouter(testUserStore));
   return app;
 }
 
@@ -80,31 +83,10 @@ async function request(
 
 /**
  * Clean up test users created during tests.
+ * Not needed for InMemoryUserStore since resetStore() handles cleanup.
  */
-async function cleanupTestUser(username: string): Promise<void> {
-  try {
-    const client = await getClient();
-    try {
-      await client.query('BEGIN');
-      // Find player by username
-      const result = await client.query<{ identity_id: string }>(
-        'SELECT identity_id FROM players WHERE username = $1',
-        [username],
-      );
-      if (result.rows.length > 0) {
-        // Delete identity (CASCADE will delete player)
-        await client.query('DELETE FROM player_identities WHERE id = $1', [result.rows[0].identity_id]);
-      }
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
-  } catch {
-    // Ignore cleanup errors
-  }
+async function cleanupTestUser(_username: string): Promise<void> {
+  // No-op: InMemoryUserStore is reset in beforeEach
 }
 
 // ─── Auth Enforcement (shared across all CRUD endpoints) ────────────────────
@@ -113,6 +95,7 @@ describe('Admin User Management — Auth Enforcement', () => {
   const originalEnv = process.env['ADMIN_TOKEN'];
 
   beforeEach(() => {
+    testUserStore.resetStore();
     process.env['ADMIN_TOKEN'] = TEST_TOKEN;
   });
 
@@ -156,6 +139,7 @@ describe('Admin User Management — CRUD Lifecycle', () => {
   const originalEnv = process.env['ADMIN_TOKEN'];
 
   beforeEach(() => {
+    testUserStore.resetStore();
     process.env['ADMIN_TOKEN'] = TEST_TOKEN;
   });
 
@@ -279,6 +263,7 @@ describe('Admin User Management — POST Validation', () => {
   const originalEnv = process.env['ADMIN_TOKEN'];
 
   beforeEach(() => {
+    testUserStore.resetStore();
     process.env['ADMIN_TOKEN'] = TEST_TOKEN;
   });
 
@@ -447,6 +432,7 @@ describe('Admin User Management — PUT Validation', () => {
   const testUsername = `puttest_${Date.now()}`;
 
   beforeAll(async () => {
+    testUserStore.resetStore();
     process.env['ADMIN_TOKEN'] = TEST_TOKEN;
     // Create a test user
     const app = createTestApp();
@@ -471,6 +457,7 @@ describe('Admin User Management — PUT Validation', () => {
   });
 
   beforeEach(() => {
+    // Don't reset store here - we need the user created in beforeAll
     process.env['ADMIN_TOKEN'] = TEST_TOKEN;
   });
 
@@ -560,6 +547,7 @@ describe('Admin User Management — DELETE', () => {
   const originalEnv = process.env['ADMIN_TOKEN'];
 
   beforeEach(() => {
+    testUserStore.resetStore();
     process.env['ADMIN_TOKEN'] = TEST_TOKEN;
   });
 
@@ -614,6 +602,7 @@ describe('Admin User Management — Role Validation', () => {
   const originalEnv = process.env['ADMIN_TOKEN'];
 
   beforeEach(() => {
+    testUserStore.resetStore();
     process.env['ADMIN_TOKEN'] = TEST_TOKEN;
   });
 
@@ -658,6 +647,7 @@ describe('Admin User Management — Password Hash Security', () => {
   const originalEnv = process.env['ADMIN_TOKEN'];
 
   beforeEach(() => {
+    testUserStore.resetStore();
     process.env['ADMIN_TOKEN'] = TEST_TOKEN;
   });
 

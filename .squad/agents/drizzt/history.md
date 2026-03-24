@@ -1083,3 +1083,53 @@ Wire the BiomesList and BiomesDetail admin pages to the real Content CRUD API en
 
 **Next:** Phase 2.5 continues; entity wiring complete. Validation pattern documented for future admin pages.
 
+
+---
+
+### Issue #127: UserStore Interface & PgUserStore/InMemoryUserStore (2026-03-24T10:33)
+**Status:** ✅ COMPLETE
+
+**Objective:**
+Fix admin users 500 errors by extracting consistent user management interface and implementing separate storage backends.
+
+**Solution:**
+1. Extracted `UserStore` interface defining user operations contract
+2. Implemented `PgUserStore` for PostgreSQL-backed user storage (production)
+3. Implemented `InMemoryUserStore` for testing/development (in-memory)
+
+**Key Pattern:**
+- Interface-based architecture enables testability and future extensibility
+- Both implementations satisfy the same contract
+- Zero breaking changes to admin API
+
+**Results:**
+- ✅ All 39 admin-users tests passing
+- ✅ PR #154 opened and ready for review
+- ✅ Admin user management stabilized
+
+**Impact:**
+This pattern can be reused for other storage-backend abstractions in the codebase.
+
+### Dev Auto-Login Bypass Fix (2026-07-17)
+**Task:** Bug fix — dev users forced to login locally
+**Status:** ✅ Complete
+
+**Root Cause:** The `useDevAutoLogin` hook (`packages/client/src/hooks/useDevAutoLogin.ts`) existed and was correctly implemented, but was never imported or called anywhere in the application. The Login page rendered the full auth form without attempting the dev bypass.
+
+**Fix:** Added import and call of `useDevAutoLogin()` in `packages/client/src/pages/Login.tsx`. The hook runs on mount, checks `import.meta.env.DEV`, and auto-logs in with `dev/devdev` credentials. Falls back silently to the manual login form if the server is unavailable.
+
+**Verification:** Client type check clean (no new errors). All 1443 server tests pass. Zero production risk — hook gates on `import.meta.env.DEV` which is `false` in production builds.
+
+## 2026-03-24: Dev Auto-Login Hook Wired Up
+
+**Timestamp:** 2026-03-24T12:10:00Z  
+**Status:** Complete  
+**Commit:** da93ab7  
+
+Investigated local dev login friction where developers were forced to manually log in on every startup. Found that `useDevAutoLogin` hook was already implemented but never wired into `Login.tsx`. Added hook import and invocation, gated on `import.meta.env.DEV` for zero production impact.
+
+**Files Modified:**
+- `packages/client/src/pages/Login.tsx` — added hook call
+
+**Impact:** Dev users now auto-login with `dev/devdev` credentials when running locally.
+

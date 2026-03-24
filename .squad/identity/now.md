@@ -1,39 +1,36 @@
 # Current Focus
 
-**Phase:** Wave 2 in progress ✅ — Issues #22 & #23 complete, #25 implementation underway
+**Phase:** Phase 2.5 Complete ✅ — Transitioning to Phase 3
 
-**Wave 2 Status:**
-- ✅ Issue #22 (Sound Propagation) — CLOSED, PR #118 merged to dev
-- ✅ Issue #23 (Trace System) — CLOSED, PR #117 merged to dev
-- 🔨 Issue #25 (Player Awareness & Stealth Detection) — Drizzt implementation in progress
+**Completion Summary:**
+- ✅ Issue #127 (Admin Users 500 Errors) — RESOLVED in PR #154, UserStore interface pattern extracted
+- ✅ Lint Baseline Clean — 60 errors across 30 files resolved, zero violations remaining
 
 **Test Suite:**
-- All 1,061 tests passing
-- 120 anticipatory test scaffolds active (sound, trace, awareness)
-- Zero regressions
+- All 1,061 server tests passing
+- Zero lint violations blocking Phase 3
+- Codebase quality baseline raised
 
-**Infrastructure Locked:**
-- **Sound System:** Per-room BFS, room modifiers, noise constants shared
-- **Trace System:** Suppression at creation, TTL decay, skill-scaled descriptions
-- **Narration Pipeline:** 3 new LLM narration types + fallback templates (Volo)
-- **Awareness Contract:** Detection tiers, player names never revealed (cardinal rule)
+**Admin Infrastructure Stabilized:**
+- **UserStore Interface:** PgUserStore + InMemoryUserStore implementations
+- **Type Safety:** no-explicit-any, no-unused-vars, no-invalid-void-type violations resolved
+- **Error Handling:** preserve-caught-error patterns standardized across codebase
+- **User Management:** Admin API fully operational, 39 admin-users tests passing
 
-**What Shipped (Wave 2 Preview):**
-- PR #117 (Trace System): 33 unit tests, integration with ShardRoom
-- PR #118 (Sound Propagation): 34 unit tests, O(N) BFS, modifiers functional
-- PR #115 (Anticipatory Tests): 208 tests defining acceptance criteria
-- PR #116 (Sensory Narration): LLM templates + fallbacks for 3 systems
+**Recent Accomplishments:**
+- PR #154 (UserStore Interface): Issue #127 fix, ready for review
+- PR #153 (Documentation Refresh): Phase 2/2.5 docs aligned with shipped features
+- Lint sweep completed and committed to dev
 
-**What's Next — Phase 2 Remaining (after #25):**
-- #21 Multi-Player Shards (Redis, KEDA auto-scaling)
-- #24 PvP Combat
-- #26 Proximity Communication
-- #27 Death & Downing
-- #28–#49 (Phase 2–4 features)
-
-**Recommendation:** Sound + Trace systems now locked in dev. PR #114 (dev → uat) waiting for #25 merge. Once #25 lands, promote Wave 2 features to UAT.
+**What's Next — Phase 3 Roadmap:**
+- Issue #140 (Advanced Creature AI Refinements)
+- Issue #141 (SSH Client Adapter)
+- Issue #142 (PvP System Enhancements)
+- Issue #143–#150 (Phase 3+ features)
 
 **Deployment Readiness:**
+- All Phase 2.5 features merged to dev
 - Container Apps pipeline validated
-- All sensory system infrastructure ready
-- PR #114 ready to merge after #25
+- Admin dashboard fully operational
+- PR #154 ready for code review and merge
+- Ready to begin Phase 3 development

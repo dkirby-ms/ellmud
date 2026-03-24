@@ -54,7 +54,7 @@ export default function FactionsDetail() {
     }
   }, [apiData, isNew]);
 
-  const updateField = (field: string, value: any) => {
+  const updateField = (field: string, value: string | number | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -69,7 +69,7 @@ export default function FactionsDetail() {
     setMilestones((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateMilestone = (index: number, field: string, value: any) => {
+  const updateMilestone = (index: number, field: string, value: string | number | boolean) => {
     setMilestones((prev) =>
       prev.map((m, i) =>
         i === index ? { ...m, [field]: value } : m

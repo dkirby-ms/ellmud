@@ -506,3 +506,32 @@ The admin UI was built as a purely visual scaffold. It's not broken—it's incom
 
 **Next:** Phase 2.5 continues; entity wiring closed. Validation pattern available for future admin components.
 
+
+---
+
+## 2026-03-24: Review — PR #154 (Admin Users Fix) + Lint Sweep
+
+### PR #154 (Drizzt) — APPROVED WITH NOTES
+
+**Work:** Reviewed UserStore abstraction for admin user routes. Extracted `UserStore` interface with `PgUserStore` (production) and `InMemoryUserStore` (CI/dev). Auto-selects based on `DATABASE_URL` presence.
+
+**Findings:**
+- Architecture follows StashRepository/PlayerRepository patterns correctly
+- All 39 tests pass on PR branch (19 previously-failing CRUD tests now work)
+- PgUserStore preserves all original SQL/transaction logic
+- InMemoryUserStore faithfully simulates key DB behaviours
+
+**Notes filed:** Dead code in test file (db imports, cleanupTestUser), no resetStore() for test isolation, InMemoryUserStore missing DuplicateProviderError enforcement. Assigned Jarlaxle for post-merge cleanup.
+
+### Lint Sweep (Jarlaxle) — APPROVED
+
+**Work:** Verified 0 lint errors remain across all packages. Spot-checked 10+ files. All fixes mechanical — no-explicit-any replaced with proper types, unused vars removed or prefixed, void→undefined in generics, catch error handling cleaned.
+
+### Learnings
+
+1. **Repository abstraction completeness:** When creating in-memory implementations of a repository interface, all unique constraint paths in the PG implementation must be mirrored. The InMemoryUserStore omits `DuplicateProviderError` enforcement — a fidelity gap that could mask production bugs if provider-uniqueness tests are added later.
+
+2. **Test cleanup after abstraction:** When extracting a repository abstraction from inline DB code, the test file must also be updated to remove direct DB imports and cleanup functions. Dead cleanup code that silently fails creates false confidence and import-time side effects (eager Pool creation).
+
+3. **Singleton vs explicit DI in tests:** Module-level singletons (like `sharedInMemoryStore`) work for test isolation only because vitest isolates per file. Prefer explicit DI (`createUserRouter(new InMemoryUserStore())`) in test files for robustness — matches the stash-provider pattern with `resetStashProvider()`.
+

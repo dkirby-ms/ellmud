@@ -1063,7 +1063,7 @@ describe('Phase 2 QA — Cross-System Integration', () => {
     // All 4 systems produced results from one combat tick
     const combatEventCount = tickResult.events.length;
     const soundReachCount = allSoundResults.length;
-    traces.getTracesInRoom(ROOMS.ENTRY); // verify traces exist (value checked above)
+    void traces.getTracesInRoom(ROOMS.ENTRY).length;
     const awarenessEventCount = awarenessEvents.length;
 
     expect(combatEventCount).toBeGreaterThan(0);
@@ -1372,9 +1372,6 @@ describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
 
     // p1 should see awareness notification about p2 entering corridor
     // (depends on awareness system being wired in ShardRoom)
-    p1.collector.narrate.filter(
-      n => n.type === 'awareness' || n.type === 'sound' || n.type === 'room',
-    );
     // At minimum, p1 should receive SOME notification about activity
     // The exact message type depends on awareness tier calculation
     expect(p1.collector.narrate.length).toBeGreaterThanOrEqual(0);
