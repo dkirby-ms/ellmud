@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Send, X, Plus, AlertCircle } from "lucide-react";
-import { getCreature, createCreature, updateCreature, AdminAPIError } from "../../lib/admin-api";
+import { getCreature, createCreature, updateCreature, AdminAPIError, simulateCreatureReroll, type CreatureRerollResult } from "../../lib/admin-api";
 
 type Status = "draft" | "review" | "published" | "deprecated";
 
@@ -87,6 +87,9 @@ export default function CreatureDetail() {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   const [lootTable, setLootTable] = useState<LootEntry[]>([]);
+  const [rerollResult, setRerollResult] = useState<CreatureRerollResult | null>(null);
+  const [rerolling, setRerolling] = useState(false);
+  const [rerollError, setRerollError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isNew) return;
@@ -195,6 +198,22 @@ export default function CreatureDetail() {
     const updated = [...lootTable];
     updated[index] = { ...updated[index], [field]: value };
     setLootTable(updated);
+  };
+
+  const handleReroll = async () => {
+    if (!id || isNew) return;
+    
+    setRerolling(true);
+    setRerollError(null);
+    try {
+      const result = await simulateCreatureReroll(id, 5);
+      setRerollResult(result);
+    } catch (err) {
+      setRerollError(err instanceof Error ? err.message : 'Failed to simulate reroll');
+      setRerollResult(null);
+    } finally {
+      setRerolling(false);
+    }
   };
 
   // Calculate loot probabilities
@@ -523,39 +542,76 @@ export default function CreatureDetail() {
               </div>
             </div>
 
-            {/* Loot Simulation */}
+            {/* Stat Re-roll Simulator */}
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h3
                 className="text-[#C9A84C] text-sm mb-4"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Loot Simulation
+                Stat Re-roll Simulator
               </h3>
-              <div className="space-y-2">
-                {lootTable.map((entry, index) => (
-                  <div key={index} className="flex justify-between text-sm">
-                    <span
-                      className="text-[#8A8B95]"
-                      style={{ fontFamily: "var(--font-serif)" }}
-                    >
-                      {entry.itemName}
-                    </span>
-                    <span
-                      className="text-[#E8E0D0]"
-                      style={{ fontFamily: "var(--font-mono)" }}
-                    >
-                      {totalWeight > 0 ? ((entry.weight / totalWeight) * 100).toFixed(0) : 0}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {/* TODO: Wire Re-roll Simulation to server-side loot roll endpoint */}
               <button
-                className="mt-4 w-full px-3 py-2 border border-[#3A7D7B] hover:bg-[#1C1D27] text-[#3A7D7B] rounded transition-colors text-sm"
+                onClick={handleReroll}
+                disabled={rerolling || isNew}
+                className="w-full px-3 py-2 border border-[#3A7D7B] hover:bg-[#1C1D27] text-[#3A7D7B] rounded transition-colors text-sm disabled:opacity-50"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Re-roll Simulation
+                {rerolling ? "Re-rolling..." : "Re-roll Stats (5x)"}
               </button>
+              {rerollError && (
+                <div className="mt-3 p-2 bg-[#8B2500]/20 border border-[#8B2500] rounded text-xs text-[#E8E0D0]" style={{ fontFamily: "var(--font-sans)" }}>
+                  Error: {rerollError}
+                </div>
+              )}
+              {rerollResult && (
+                <div className="mt-4 space-y-3">
+                  <div className="p-3 bg-[#1C1D27] rounded">
+                    <div className="text-[#C9A84C] text-xs font-semibold mb-2" style={{ fontFamily: "var(--font-sans)" }}>
+                      Baseline:
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+                      {Object.entries(rerollResult.baseline).map(([stat, value]) => (
+                        <div key={stat} className="flex justify-between">
+                          <span className="text-[#8A8B95] capitalize">{stat}:</span>
+                          <span className="text-[#E8E0D0]">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {rerollResult.rolls.map((roll, idx) => (
+                    <div key={idx} className="p-3 bg-[#1C1D27] rounded">
+                      <div className="text-[#C9A84C] text-xs font-semibold mb-2" style={{ fontFamily: "var(--font-sans)" }}>
+                        Roll #{idx + 1}:
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+                        {Object.entries(roll.stats).map(([stat, value]) => {
+                          const baseline = rerollResult.baseline[stat] || 0;
+                          const diff = value - baseline;
+                          const color = diff > 0 ? "#3A7D7B" : diff < 0 ? "#8B2500" : "#8A8B95";
+                          return (
+                            <div key={stat} className="flex justify-between">
+                              <span className="text-[#8A8B95] capitalize">{stat}:</span>
+                              <span style={{ color }}>
+                                {value} {diff !== 0 && `(${diff > 0 ? '+' : ''}${diff})`}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {roll.modifiers && roll.modifiers.length > 0 && (
+                        <div className="mt-2 text-xs text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+                          Modifiers: {roll.modifiers.join(", ")}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!rerollResult && !rerollError && !rerolling && (
+                <div className="mt-4 p-3 bg-[#1C1D27] rounded text-xs text-[#8A8B95]" style={{ fontFamily: "var(--font-mono)" }}>
+                  Click to simulate stat variations...
+                </div>
+              )}
             </div>
 
             {/* Version History */}
