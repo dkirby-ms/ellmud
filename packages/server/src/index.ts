@@ -75,6 +75,13 @@ console.log(`[Ellmud] Content store: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 app.use(createAuditRouter());
 console.log('[Ellmud] Audit log API: enabled');
 
+// Simulation API — test game mechanics (loot drops, creature stat rolls)
+app.use(createSimulateRouter({ stores: contentStores }));
+
+// Audit log API — query admin action history
+app.use(createAuditRouter());
+console.log('[Ellmud] Audit log API: enabled');
+
 // Admin runtime API — room management, metrics, SSE. Receives contentStores for spawn.
 app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis, isStashPg: isStashPg(), contentStores }));
 

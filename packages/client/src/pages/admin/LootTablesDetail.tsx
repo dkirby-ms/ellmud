@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Plus, X, Dice6 } from "lucide-react";
 import { useAdminEntity } from "../../hooks/useAdminEntity.js";
+import { simulateLootDrops, type LootSimulationResult } from "../../lib/admin-api.js";
 
 interface LootTableEntry {
   itemId: string;
@@ -40,6 +41,9 @@ export default function LootTablesDetail() {
 
   const [lootEntries, setLootEntries] = useState<LootTableEntry[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [simulationResult, setSimulationResult] = useState<LootSimulationResult | null>(null);
+  const [simulating, setSimulating] = useState(false);
+  const [simulationError, setSimulationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (apiData && !isNew) {
@@ -118,6 +122,22 @@ export default function LootTablesDetail() {
   const calculateDropChance = (weight: number) => {
     if (totalWeight === 0) return 0;
     return ((weight / totalWeight) * 100).toFixed(2);
+  };
+
+  const handleSimulate = async () => {
+    if (!id || isNew) return;
+    
+    setSimulating(true);
+    setSimulationError(null);
+    try {
+      const result = await simulateLootDrops(id, 10);
+      setSimulationResult(result);
+    } catch (err) {
+      setSimulationError(err instanceof Error ? err.message : 'Failed to simulate');
+      setSimulationResult(null);
+    } finally {
+      setSimulating(false);
+    }
   };
 
   const isValid = validateForm() === null;
@@ -418,14 +438,57 @@ export default function LootTablesDetail() {
                 Drop Simulator
               </h3>
               <button
-                className="w-full px-4 py-2 bg-[#1C1D27] hover:bg-[#2A2B35] border border-[#2A2B35] text-[#E8E0D0] rounded transition-colors text-sm"
+                onClick={handleSimulate}
+                disabled={simulating || isNew}
+                className="w-full px-4 py-2 bg-[#1C1D27] hover:bg-[#2A2B35] border border-[#2A2B35] text-[#E8E0D0] rounded transition-colors text-sm disabled:opacity-50"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Simulate 10 Drops
+                {simulating ? "Simulating..." : "Simulate 10 Drops"}
               </button>
-              <div className="mt-4 p-3 bg-[#1C1D27] rounded text-xs space-y-1" style={{ fontFamily: "var(--font-mono)", color: "#8A8B95" }}>
-                <div>Click to simulate drops...</div>
-              </div>
+              {simulationError && (
+                <div className="mt-3 p-2 bg-[#8B2500]/20 border border-[#8B2500] rounded text-xs text-[#E8E0D0]" style={{ fontFamily: "var(--font-sans)" }}>
+                  Error: {simulationError}
+                </div>
+              )}
+              {simulationResult && (
+                <div className="mt-4 p-3 bg-[#1C1D27] rounded text-xs space-y-2" style={{ fontFamily: "var(--font-mono)", color: "#E8E0D0" }}>
+                  <div className="text-[#C9A84C] font-semibold mb-2">Summary:</div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8A8B95]">Total Drops:</span>
+                    <span>{simulationResult.summary.totalDrops}</span>
+                  </div>
+                  {simulationResult.summary.rarityBreakdown && Object.keys(simulationResult.summary.rarityBreakdown).length > 0 && (
+                    <>
+                      <div className="text-[#C9A84C] font-semibold mt-2 mb-1">Rarity Breakdown:</div>
+                      {Object.entries(simulationResult.summary.rarityBreakdown).map(([rarity, count]) => (
+                        <div key={rarity} className="flex justify-between">
+                          <span className="text-[#8A8B95] capitalize">{rarity}:</span>
+                          <span>{count}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {Object.keys(simulationResult.summary.itemDistribution).length > 0 && (
+                    <>
+                      <div className="text-[#C9A84C] font-semibold mt-2 mb-1">Item Distribution:</div>
+                      {Object.entries(simulationResult.summary.itemDistribution)
+                        .sort((a, b) => b[1] - a[1])
+                        .slice(0, 5)
+                        .map(([itemId, count]) => (
+                          <div key={itemId} className="flex justify-between">
+                            <span className="text-[#8A8B95] truncate flex-1 mr-2">{itemId}:</span>
+                            <span>{count}</span>
+                          </div>
+                        ))}
+                    </>
+                  )}
+                </div>
+              )}
+              {!simulationResult && !simulationError && !simulating && (
+                <div className="mt-4 p-3 bg-[#1C1D27] rounded text-xs space-y-1" style={{ fontFamily: "var(--font-mono)", color: "#8A8B95" }}>
+                  <div>Click to simulate drops...</div>
+                </div>
+              )}
             </div>
 
             {/* Weight Distribution */}

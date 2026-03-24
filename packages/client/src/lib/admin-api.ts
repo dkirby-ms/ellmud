@@ -440,3 +440,27 @@ export async function fetchAuditLog(filters?: AuditLogFilters): Promise<AuditLog
   
   return adminFetch<AuditLogResponse>(url);
 }
+
+// ─── Simulation API ──────────────────────────────────────────────────────────
+
+export interface LootDropResult {
+  items: Array<{ id: string; name: string; rarity?: string; quantity: number }>;
+}
+
+export interface LootSimulationResult {
+  drops: LootDropResult[];
+  summary: { totalDrops: number; itemDistribution: Record<string, number>; rarityBreakdown?: Record<string, number> };
+}
+
+export interface CreatureRerollResult {
+  rolls: Array<{ stats: Record<string, number>; modifiers?: string[] }>;
+  baseline: Record<string, number>;
+}
+
+export async function simulateLootDrops(id: string, count = 10): Promise<LootSimulationResult> {
+  return adminFetch<LootSimulationResult>(`/admin/api/simulate/loot-table/${id}?count=${count}`, { method: 'POST' });
+}
+
+export async function simulateCreatureReroll(id: string, count = 5): Promise<CreatureRerollResult> {
+  return adminFetch<CreatureRerollResult>(`/admin/api/simulate/creature/${id}/reroll?count=${count}`, { method: 'POST' });
+}
