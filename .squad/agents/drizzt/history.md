@@ -1204,3 +1204,14 @@ Updated `createPresence()` and the RedisDriver init in `index.ts` to probe conne
 
 **Pattern:** When using ACA add-on services, the Bicep resource uses `configuration.service.type` instead of `configuration.ingress`. Consumers reference via `template.serviceBinds[].serviceId` rather than constructing connection strings from FQDNs.
 
+
+### Dev Auto-Login Respects Auth Mode (2026-07-22)
+**Task:** Fix `useDevAutoLogin` hook to respect `VITE_ALLOW_LOCAL_AUTH` env var
+**Status:** ✅ Complete — all 1591 tests passing
+
+**Changes:**
+1. **`packages/client/src/hooks/useDevAutoLogin.ts`** — Added `import.meta.env.VITE_ALLOW_LOCAL_AUTH === 'false'` to the guard condition in the useEffect. When local auth is disabled (OAuth-only mode), the hook bails out immediately, letting the user see the login screen and test the Entra OAuth flow.
+
+**No change needed for OAuth redirect:** The `/auth/entra/login` relative URL in Login.tsx already works because `packages/client/vite.config.ts` has a proxy rule forwarding `/auth` → `http://localhost:2567`.
+
+**Pattern:** Client env vars must use the `VITE_` prefix to be exposed via `import.meta.env`. The `VITE_ALLOW_LOCAL_AUTH` var is checked as a string comparison (`=== 'false'`) since env vars are always strings. Default behavior (var unset) is to allow local auth + dev auto-login.
