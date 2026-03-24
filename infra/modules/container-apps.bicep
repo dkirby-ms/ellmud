@@ -61,6 +61,9 @@ param entraRedirectUri string = ''
 @description('Allow local username/password authentication')
 param allowLocalAuth string = 'false'
 
+@description('Client app URL for OAuth redirects (e.g. https://ellmud-test.kirbytoso.xyz)')
+param clientUrl string = ''
+
 var createEnvironment = existingEnvironmentId == ''
 
 // Bootstrap placeholder — replaced by real image after first CI/CD deploy.
@@ -148,6 +151,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             { name: 'ENTRA_TENANT_ID', value: entraTenantId }
             { name: 'ENTRA_REDIRECT_URI', value: entraRedirectUri }
             { name: 'ALLOW_LOCAL_AUTH', value: allowLocalAuth }
+            { name: 'CLIENT_URL', value: clientUrl }
           ]
         }
       ]
