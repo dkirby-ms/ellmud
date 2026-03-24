@@ -165,7 +165,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
                 targetValue: '30'
                 activationTargetValue: '10'
               }
-              identity: 'system'
             }
           }
         ]
