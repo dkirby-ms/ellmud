@@ -87,7 +87,7 @@ module containerAppsEnv 'modules/container-apps.bicep' = {
 }
 
 // 5. Redis — managed as ACA add-on via CLI (az containerapp add-on redis create)
-// Not deployed via Bicep. Service bind configured via CLI.
+// Not deployed via Bicep. Service bind references the CLI-managed add-on by name.
 
 // 6. Container Apps Game Server (reuses existing environment, deploys the app)
 module containerAppsApp 'modules/container-apps.bicep' = {
@@ -102,6 +102,7 @@ module containerAppsApp 'modules/container-apps.bicep' = {
     postgresDatabaseName: postgres.outputs.databaseName
     postgresAdminUsername: postgresAdminUsername
     postgresAdminPassword: postgresAdminPassword
+    redisServiceName: '${resourcePrefix}-redis'
     deployApp: true
   }
 }

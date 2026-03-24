@@ -39,6 +39,9 @@ param postgresAdminUsername string = ''
 @secure()
 param postgresAdminPassword string = ''
 
+@description('Redis add-on service name (CLI-managed, used for service bind)')
+param redisServiceName string = ''
+
 @description('Deploy the game server container app (false = environment only)')
 param deployApp bool = false
 
@@ -114,7 +117,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
       }
     }
     template: {
-      serviceBinds: []
+      serviceBinds: redisServiceName != '' ? [
+        {
+          serviceId: resourceId('Microsoft.App/containerApps', redisServiceName)
+          name: 'redis'
+        }
+      ] : []
       containers: [
         {
           name: 'ellmud'
