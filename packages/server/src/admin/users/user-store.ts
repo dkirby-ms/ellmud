@@ -274,6 +274,14 @@ export class InMemoryUserStore implements UserStore {
   private identities = new Map<string, InMemoryIdentity>();
   private players = new Map<string, InMemoryPlayer>();
   private usernameIndex = new Map<string, string>(); // lowercase username → player id
+  private providerIndex = new Map<string, string>(); // provider+email → identity id
+
+  resetStore(): void {
+    this.identities.clear();
+    this.players.clear();
+    this.usernameIndex.clear();
+    this.providerIndex.clear();
+  }
 
   async listUsers(): Promise<UserRecord[]> {
     const records: UserRecord[] = [];
@@ -317,6 +325,12 @@ export class InMemoryUserStore implements UserStore {
       throw new DuplicateUsernameError(input.username);
     }
 
+    // Check for duplicate provider entry (same as PgUserStore uq_identity_provider)
+    const providerKey = `local:${input.email ?? ''}`;
+    if (this.providerIndex.has(providerKey)) {
+      throw new DuplicateProviderError();
+    }
+
     const now = new Date();
     const identityId = crypto.randomUUID();
     const playerId = crypto.randomUUID();
@@ -341,6 +355,7 @@ export class InMemoryUserStore implements UserStore {
     this.identities.set(identityId, identity);
     this.players.set(playerId, player);
     this.usernameIndex.set(input.username.toLowerCase(), playerId);
+    this.providerIndex.set(providerKey, identityId);
 
     return {
       id: playerId,
@@ -395,6 +410,12 @@ export class InMemoryUserStore implements UserStore {
   async deleteUser(id: string): Promise<boolean> {
     const player = this.players.get(id);
     if (!player) return false;
+
+    const identity = this.identities.get(player.identityId);
+    if (identity) {
+      const providerKey = `${identity.provider}:${identity.email ?? ''}`;
+      this.providerIndex.delete(providerKey);
+    }
 
     this.usernameIndex.delete(player.username.toLowerCase());
     this.players.delete(id);
