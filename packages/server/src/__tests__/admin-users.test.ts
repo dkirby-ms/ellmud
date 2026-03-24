@@ -21,7 +21,7 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from
 import express from 'express';
 import { createAdminRouter } from '../admin/routes.js';
 import { createUserRouter } from '../admin/users/index.js';
-import { query, getClient } from '../db/index.js';
+import { getClient } from '../db/index.js';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -102,7 +102,7 @@ async function cleanupTestUser(username: string): Promise<void> {
     } finally {
       client.release();
     }
-  } catch (err) {
+  } catch {
     // Ignore cleanup errors
   }
 }

@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { AmbientSystem } from '../systems/AmbientSystem.js';
-import type { NPCDefinition } from '@ellmud/shared';
 
 /**
  * Integration test: simulate joining the Refuge and observing 3+ ambient

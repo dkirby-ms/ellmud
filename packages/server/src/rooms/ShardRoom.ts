@@ -1202,7 +1202,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     });
 
     // Apply shard-sickness death penalty (increment death count, record time)
-    void this.shardSicknessStore.incrementDeathCount(playerId).then((newCount: number) => {
+    void this.shardSicknessStore.incrementDeathCount(playerId).then((_newCount: number) => {
       void this.shardSicknessStore.setLastDeathTime(playerId, Date.now());
       this.log(`Shard-sickness: ${"${playerId}"} death count now ${"${newCount}"}`);
     });

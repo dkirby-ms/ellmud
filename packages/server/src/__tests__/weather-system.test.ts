@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { WeatherSystem } from '../systems/WeatherSystem.js';
-import { TIME_CYCLE } from '@ellmud/shared';
 
 describe('WeatherSystem', () => {
   let system: WeatherSystem;
@@ -113,7 +112,7 @@ describe('WeatherSystem', () => {
     });
 
     it('should reject invalid time values in setTimeOfDay', () => {
-      system.setTimeOfDay('invalid' as any);
+      system.setTimeOfDay('invalid' as unknown as Parameters<typeof system.setTimeOfDay>[0]);
       expect(system.getTimeOfDay()).toBe('morning'); // unchanged
     });
   });

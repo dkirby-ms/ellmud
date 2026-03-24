@@ -19,7 +19,6 @@ import {
   COMBAT_TIMEOUT_TICKS,
   type Combatant,
   type CombatStats,
-  type TickResult,
 } from '../combat/CombatState.js';
 import { TraceSystem, resetTraceIdCounter, type PlayerSkills } from '../systems/TraceSystem.js';
 import { SoundSystem, type SoundRoom } from '../sound/SoundSystem.js';
@@ -32,12 +31,8 @@ import {
   TRACE_TTLS,
   BLOOD_TRAIL_DAMAGE_THRESHOLD,
   STEALTH_FOOTPRINT_THRESHOLD,
-  TRACKING_THRESHOLDS,
   MessageTypes,
   type Direction,
-  type TraceType,
-  type SoundType,
-  type DetectionTier,
 } from '@ellmud/shared';
 
 // --- Integration helpers ---
@@ -46,9 +41,6 @@ import {
   connectTestClient,
   connectToExistingRoom,
   wait,
-  waitUntil,
-  MessageCollector,
-  MOCK_PLAYERS,
   makeCommand,
   quickCollapseOptions,
 } from './helpers/index.js';
@@ -347,7 +339,7 @@ describe('Phase 2 QA — PvP Conflict', () => {
     combat.submitAction('p1', 'strike', 'p2');
     combat.submitAction('p2', 'strike', 'p1');
 
-    const result = combat.resolveTick();
+    combat.resolveTick();
 
     // Both should have taken damage (simultaneous resolution)
     expect(p1.hp).toBeLessThan(100);
@@ -1071,7 +1063,7 @@ describe('Phase 2 QA — Cross-System Integration', () => {
     // All 4 systems produced results from one combat tick
     const combatEventCount = tickResult.events.length;
     const soundReachCount = allSoundResults.length;
-    const traceCount = traces.getTracesInRoom(ROOMS.ENTRY).length;
+    traces.getTracesInRoom(ROOMS.ENTRY); // verify traces exist (value checked above)
     const awarenessEventCount = awarenessEvents.length;
 
     expect(combatEventCount).toBeGreaterThan(0);
@@ -1380,7 +1372,7 @@ describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
 
     // p1 should see awareness notification about p2 entering corridor
     // (depends on awareness system being wired in ShardRoom)
-    const awarenessMessages = p1.collector.narrate.filter(
+    p1.collector.narrate.filter(
       n => n.type === 'awareness' || n.type === 'sound' || n.type === 'room',
     );
     // At minimum, p1 should receive SOME notification about activity

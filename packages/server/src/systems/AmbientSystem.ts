@@ -13,7 +13,6 @@ import type {
   AmbientEventType,
   FactionId,
   FactionMilestone,
-  FactionEventDef,
   WanderingMerchantDef,
   WanderingMerchantState,
 } from '@ellmud/shared';

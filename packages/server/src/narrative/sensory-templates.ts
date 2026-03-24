@@ -308,7 +308,7 @@ export function renderAwarenessVague(): string {
 /**
  * Partial detection — some details visible but not clear identification.
  */
-export function renderAwarenessPartial(ctx: NarrationContext): string {
+export function renderAwarenessPartial(_ctx: NarrationContext): string {
   // Equipment hints from visible gear — never a name
   const gearHints = [
     'a figure in dark leather lingers',
@@ -338,7 +338,7 @@ export function renderAwarenessPartial(ctx: NarrationContext): string {
 /**
  * Full detection — clear description of equipment and bearing.
  */
-export function renderAwarenessFullDetection(ctx: NarrationContext): string {
+export function renderAwarenessFullDetection(_ctx: NarrationContext): string {
   // Detailed equipment description — still no name
   const sizes = ['tall', 'lean', 'broad-shouldered', 'wiry', 'imposing'];
   const armors = [
