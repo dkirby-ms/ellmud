@@ -5,6 +5,16 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# TypeScript build output (config files)
+*.config.js
+*.config.js.map
+*.config.d.ts
+*.config.d.ts.map
+vitest.workspace.js
+vitest.workspace.js.map
+vitest.workspace.d.ts
+vitest.workspace.d.ts.map
+
 # Environment
 .env
 .env.local
