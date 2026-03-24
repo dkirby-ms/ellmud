@@ -1,50 +1,112 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { useState, useEffect } from "react";
+import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Send, Plus, X } from "lucide-react";
+import { useAdminEntity } from "../../hooks/useAdminEntity.js";
+
+interface FactionMilestoneEntry {
+  name: string;
+  threshold: number;
+  description: string;
+}
+
+interface FactionEventEntry {
+  milestone: string;
+  narratives: string[];
+}
+
+interface FactionData {
+  id: string;
+  name: string;
+  description: string;
+  milestones: FactionMilestoneEntry[];
+  events: FactionEventEntry[];
+}
 
 export default function FactionsDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const isNew = id === "new";
 
+  const { data: apiData, loading, error, saving, saveError, save } = useAdminEntity<FactionData>(
+    "factions",
+    id,
+    isNew
+  );
+
   const [formData, setFormData] = useState({
-    slug: "forgebound",
-    displayName: "The Forgebound",
-    philosophy: "Craft your fate",
-    description: "Master smiths and artificers who believe that power is earned through creation. They value craftsmanship, resilience, and the transformation of raw materials into legendary gear.",
-    specialty: "Smithing & Gear",
-    color: "#C9A84C",
+    id: "",
+    name: "",
+    description: "",
   });
 
-  const [ranks, setRanks] = useState([
-    { level: 1, name: "Apprentice", reqPoints: 0 },
-    { level: 2, name: "Journeyman", reqPoints: 500 },
-    { level: 3, name: "Craftsman", reqPoints: 1500 },
-    { level: 4, name: "Master Smith", reqPoints: 3500 },
-    { level: 5, name: "Forgelord", reqPoints: 7500 },
-  ]);
+  const [milestones, setMilestones] = useState<FactionMilestoneEntry[]>([]);
+  const [events, setEvents] = useState<FactionEventEntry[]>([]);
+
+  useEffect(() => {
+    if (apiData && !isNew) {
+      setFormData({
+        id: apiData.id ?? "",
+        name: apiData.name ?? "",
+        description: apiData.description ?? "",
+      });
+      setMilestones(apiData.milestones ?? []);
+      setEvents(apiData.events ?? []);
+    }
+  }, [apiData, isNew]);
 
   const updateField = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const addRank = () => {
-    setRanks((prev) => [
+  const addMilestone = () => {
+    setMilestones((prev) => [
       ...prev,
-      { level: prev.length + 1, name: "", reqPoints: 0 },
+      { name: "", threshold: 0, description: "" },
     ]);
   };
 
-  const removeRank = (index: number) => {
-    setRanks((prev) => prev.filter((_, i) => i !== index));
+  const removeMilestone = (index: number) => {
+    setMilestones((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateRank = (index: number, field: string, value: any) => {
-    setRanks((prev) =>
-      prev.map((rank, i) =>
-        i === index ? { ...rank, [field]: value } : rank
+  const updateMilestone = (index: number, field: string, value: any) => {
+    setMilestones((prev) =>
+      prev.map((m, i) =>
+        i === index ? { ...m, [field]: value } : m
       )
     );
   };
+
+  const handleSave = async () => {
+    try {
+      await save({ ...formData, milestones, events });
+      if (isNew) {
+        navigate("/admin/factions");
+      }
+    } catch (err) {
+      console.error("Failed to save:", err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+          Loading...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8B2500]" style={{ fontFamily: "var(--font-sans)" }}>
+          Error: {error}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col">
@@ -60,7 +122,7 @@ export default function FactionsDetail() {
             className="text-[#C9A84C] text-xl"
             style={{ fontFamily: "var(--font-serif)" }}
           >
-            {isNew ? "New Faction" : formData.displayName}
+            {isNew ? "New Faction" : formData.name}
           </h1>
           {!isNew && (
             <span
@@ -71,13 +133,20 @@ export default function FactionsDetail() {
             </span>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {saveError && (
+            <span className="text-[#8B2500] text-sm" style={{ fontFamily: "var(--font-sans)" }}>
+              {saveError}
+            </span>
+          )}
           <button
-            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2 disabled:opacity-50"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
             <Save className="w-4 h-4" />
-            Save Draft
+            {saving ? "Saving..." : "Save Draft"}
           </button>
           <button
             className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2"
@@ -106,12 +175,12 @@ export default function FactionsDetail() {
                     className="block text-[#8A8B95] text-sm mb-2"
                     style={{ fontFamily: "var(--font-sans)" }}
                   >
-                    Slug
+                    ID
                   </label>
                   <input
                     type="text"
-                    value={formData.slug}
-                    onChange={(e) => updateField("slug", e.target.value)}
+                    value={formData.id}
+                    onChange={(e) => updateField("id", e.target.value)}
                     disabled={!isNew}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none disabled:opacity-50"
                     style={{ fontFamily: "var(--font-mono)" }}
@@ -122,27 +191,12 @@ export default function FactionsDetail() {
                     className="block text-[#8A8B95] text-sm mb-2"
                     style={{ fontFamily: "var(--font-sans)" }}
                   >
-                    Display Name
+                    Name
                   </label>
                   <input
                     type="text"
-                    value={formData.displayName}
-                    onChange={(e) => updateField("displayName", e.target.value)}
-                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
-                  />
-                </div>
-                <div>
-                  <label
-                    className="block text-[#8A8B95] text-sm mb-2"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
-                    Philosophy
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.philosophy}
-                    onChange={(e) => updateField("philosophy", e.target.value)}
+                    value={formData.name}
+                    onChange={(e) => updateField("name", e.target.value)}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
                     style={{ fontFamily: "var(--font-serif)" }}
                   />
@@ -162,78 +216,39 @@ export default function FactionsDetail() {
                     style={{ fontFamily: "var(--font-serif)" }}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      className="block text-[#8A8B95] text-sm mb-2"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      Specialty
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.specialty}
-                      onChange={(e) => updateField("specialty", e.target.value)}
-                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    />
-                  </div>
-                  <div>
-                    <label
-                      className="block text-[#8A8B95] text-sm mb-2"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      Color
-                    </label>
-                    <input
-                      type="color"
-                      value={formData.color}
-                      onChange={(e) => updateField("color", e.target.value)}
-                      className="w-full h-10 bg-[#1C1D27] border border-[#2A2B35] rounded px-2 cursor-pointer"
-                    />
-                  </div>
-                </div>
               </div>
             </div>
 
-            {/* Ranks */}
+            {/* Milestones */}
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2
                   className="text-[#C9A84C] text-lg"
                   style={{ fontFamily: "var(--font-serif)" }}
                 >
-                  Ranks
+                  Milestones
                 </h2>
                 <button
-                  onClick={addRank}
+                  onClick={addMilestone}
                   className="px-3 py-1.5 border border-[#3A7D7B] hover:bg-[#1C1D27] text-[#3A7D7B] rounded transition-colors flex items-center gap-2 text-sm"
                   style={{ fontFamily: "var(--font-sans)" }}
                 >
                   <Plus className="w-3 h-3" />
-                  Add Rank
+                  Add Milestone
                 </button>
               </div>
               <div className="space-y-3">
-                {ranks.map((rank, index) => (
+                {milestones.map((milestone, index) => (
                   <div
                     key={index}
                     className="bg-[#1C1D27] rounded p-4 flex items-center gap-4"
                   >
-                    <div className="w-16">
-                      <span
-                        className="text-[#8A8B95] text-sm"
-                        style={{ fontFamily: "var(--font-sans)" }}
-                      >
-                        Rank {rank.level}
-                      </span>
-                    </div>
                     <div className="flex-1">
                       <input
                         type="text"
-                        value={rank.name}
-                        onChange={(e) => updateRank(index, "name", e.target.value)}
-                        placeholder="Rank name"
+                        value={milestone.name}
+                        onChange={(e) => updateMilestone(index, "name", e.target.value)}
+                        placeholder="Milestone name"
                         className="w-full bg-[#0A0B0F] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none text-sm"
                         style={{ fontFamily: "var(--font-serif)" }}
                       />
@@ -241,15 +256,25 @@ export default function FactionsDetail() {
                     <div className="w-32">
                       <input
                         type="number"
-                        value={rank.reqPoints}
-                        onChange={(e) => updateRank(index, "reqPoints", parseInt(e.target.value))}
-                        placeholder="Points"
+                        value={milestone.threshold}
+                        onChange={(e) => updateMilestone(index, "threshold", parseInt(e.target.value) || 0)}
+                        placeholder="Threshold"
                         className="w-full bg-[#0A0B0F] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none text-sm"
                         style={{ fontFamily: "var(--font-mono)" }}
                       />
                     </div>
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        value={milestone.description}
+                        onChange={(e) => updateMilestone(index, "description", e.target.value)}
+                        placeholder="Description"
+                        className="w-full bg-[#0A0B0F] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none text-sm"
+                        style={{ fontFamily: "var(--font-serif)" }}
+                      />
+                    </div>
                     <button
-                      onClick={() => removeRank(index)}
+                      onClick={() => removeMilestone(index)}
                       className="text-[#8B2500] hover:text-[#E8E0D0] transition-colors"
                     >
                       <X className="w-4 h-4" />
@@ -275,19 +300,16 @@ export default function FactionsDetail() {
               >
                 <div
                   className="text-lg"
-                  style={{ fontFamily: "var(--font-serif)", color: formData.color }}
+                  style={{ fontFamily: "var(--font-serif)", color: "#C9A84C" }}
                 >
-                  {formData.displayName}
+                  {formData.name}
                 </div>
-                <div className="text-[#8A8B95] text-xs italic">
-                  "{formData.philosophy}"
-                </div>
-                <div className="text-xs text-[#8A8B95]">
-                  {formData.specialty}
+                <div className="text-[#8A8B95] text-xs">
+                  {formData.description?.slice(0, 100)}{(formData.description?.length ?? 0) > 100 ? "…" : ""}
                 </div>
                 <div className="border-t border-[#2A2B35] my-2"></div>
                 <div className="text-xs text-[#8A8B95]">
-                  {ranks.length} ranks
+                  {milestones.length} milestones · {events.length} events
                 </div>
               </div>
             </div>

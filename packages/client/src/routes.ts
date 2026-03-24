@@ -1,5 +1,6 @@
 import { createBrowserRouter, type RouteObject } from "react-router";
 import Login from "./pages/Login";
+import AuthCallback from "./pages/AuthCallback";
 import CharacterSelect from "./pages/CharacterSelect";
 import Refuge from "./pages/Refuge";
 import ShardExploration from "./pages/ShardExploration";
@@ -25,6 +26,8 @@ import FactionsList from "./pages/admin/FactionsList";
 import FactionsDetail from "./pages/admin/FactionsDetail";
 import RoomsList from "./pages/admin/RoomsList";
 import RoomsDetail from "./pages/admin/RoomsDetail";
+import LiveRooms from "./pages/admin/LiveRooms";
+import LiveRoomDetail from "./pages/admin/LiveRoomDetail";
 import NarrativeList from "./pages/admin/NarrativeList";
 import NarrativeDetail from "./pages/admin/NarrativeDetail";
 import Balance from "./pages/admin/Balance";
@@ -39,6 +42,10 @@ export const routes: RouteObject[] = [
   {
     path: "/",
     Component: Login,
+  },
+  {
+    path: "/auth/callback",
+    Component: AuthCallback,
   },
   {
     Component: ProtectedRoute,
@@ -141,6 +148,14 @@ export const routes: RouteObject[] = [
           {
             path: "rooms/:id",
             Component: RoomsDetail,
+          },
+          {
+            path: "live-rooms",
+            Component: LiveRooms,
+          },
+          {
+            path: "live-rooms/:roomId",
+            Component: LiveRoomDetail,
           },
           {
             path: "narrative",

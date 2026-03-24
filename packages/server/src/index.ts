@@ -13,9 +13,12 @@ import {
   PgPlayerRepository,
   createAuthRouter,
   initColyseusAuth,
+  EntraAuthService,
+  createEntraRouter,
+  type EntraConfig,
 } from './auth/index.js';
 import { createHealthRouter } from './health.js';
-import { createAdminRouter, createDashboardRouter } from './admin/index.js';
+import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter, createDeployRouter } from './admin/index.js';
 import { getConfig } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence } from './cache/index.js';
@@ -50,13 +53,44 @@ const { presence, isRedis: isPresenceRedis } = await createPresence(config);
 const app = express();
 app.use(express.json());
 
+// Trust the Azure Container Apps load balancer for correct protocol detection
+app.set('trust proxy', 1);
+
 // ─── Auth Setup ──────────────────────────────────────────────────────────────
 const tokenStore = new InMemoryTokenStore();
 const playerRepo = USE_PG ? new PgPlayerRepository() : new InMemoryPlayerRepository();
 const authService = new AuthService(tokenStore, playerRepo);
 
-// Mount auth routes on the same Express app Colyseus uses
-app.use(createAuthRouter(authService));
+// Mount local auth routes (only if ALLOW_LOCAL_AUTH is true)
+const ALLOW_LOCAL_AUTH = process.env.ALLOW_LOCAL_AUTH !== 'false';
+if (ALLOW_LOCAL_AUTH) {
+  app.use(createAuthRouter(authService));
+  console.log('[Ellmud] Local authentication: enabled');
+} else {
+  console.log('[Ellmud] Local authentication: disabled (OAuth only)');
+}
+
+// Initialize and mount Entra OAuth routes
+const entraConfig: EntraConfig = {
+  clientId: process.env.ENTRA_CLIENT_ID || '',
+  clientSecret: process.env.ENTRA_CLIENT_SECRET || '',
+  tenantId: process.env.ENTRA_TENANT_ID || '',
+  redirectUri: process.env.ENTRA_REDIRECT_URI || 'http://localhost:3000/auth/callback',
+};
+
+if (entraConfig.clientId && entraConfig.clientSecret && entraConfig.tenantId) {
+  const entraService = new EntraAuthService(entraConfig);
+  try {
+    await entraService.initialize();
+    app.use(createEntraRouter(authService, entraService));
+    console.log('[Ellmud] Entra External ID OAuth: enabled');
+  } catch (err) {
+    console.error('[Ellmud] ⚠ Entra OAuth initialization failed:', err instanceof Error ? err.message : String(err));
+    console.error('[Ellmud] Continuing without Entra authentication');
+  }
+} else {
+  console.log('[Ellmud] Entra OAuth: disabled (missing ENTRA_* env vars)');
+}
 
 // Mount health check endpoint — includes Redis + persistence status
 app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));
@@ -64,7 +98,33 @@ app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg
 // ─── Admin Dashboard ─────────────────────────────────────────────────────────
 // Admin API at /admin/api/*, dashboard UI at /admin/
 // Protected by ADMIN_TOKEN env var — admin auth is separate from player auth.
-app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));
+
+// Content CRUD API — admin-managed game content (items, creatures, biomes, etc.)
+const contentStores = initializeContentStores(USE_PG);
+app.use(createContentRouter({ stores: contentStores }));
+app.use(createDashboardApiRouter({ stores: contentStores, usePg: USE_PG }));
+console.log(`[Ellmud] Content store: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// Audit log API — query admin action history
+app.use(createAuditRouter());
+console.log('[Ellmud] Audit log API: enabled');
+
+// Simulation API — test game mechanics (loot drops, creature stat rolls)
+app.use(createSimulateRouter({ stores: contentStores }));
+
+// Deploy API — content deployment simulation (staging, production)
+app.use('/admin/api/deploy', createDeployRouter());
+console.log('[Ellmud] Deploy API: enabled');
+
+// Admin runtime API — room management, metrics, SSE. Receives contentStores for spawn.
+app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis, isStashPg: isStashPg(), contentStores }));
+
+// User management CRUD — admin-only user accounts
+if (USE_PG) {
+  app.use(createUserRouter());
+  console.log('[Ellmud] User management API: enabled (PostgreSQL)');
+}
+
 app.use('/admin', createDashboardRouter());
 
 // Initialize Colyseus room auth hooks

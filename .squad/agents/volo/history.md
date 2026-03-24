@@ -316,3 +316,161 @@ Wave 7 will deliver final 3 client UI issues. Shardboard will integrate with Ref
 - ✅ 198 tests for Refuge ambient systems
 - ✅ Template fallback narration primary, LLM enhancement wired
 - ✅ NarrationType 'ambient' added to shared types for client
+
+---
+
+## Phase 2.5: Admin Panel Wiring (2026-03-23)
+
+**Status:** Planning  
+**Orchestration Log:** `.squad/orchestration-log/2026-03-23T18-45-00Z-elminster.md`
+
+### Context
+
+Minsc (Tester) audited all 25 React admin pages and found the entire UI is cosmetic — zero API calls, 27 dead buttons, all mock data. Elminster (Lead) decomposed findings into 12 well-scoped GitHub issues (#128–139) grouped by functional area and dependency chain.
+
+### Phase 2.5 Issues (New Labels: `phase:2.5`, `admin`)
+
+| # | Title | Owner | Depends On | Status |
+|---|-------|-------|-----------|--------|
+| 139 | **FOUNDATIONAL: Content CRUD API** | Drizzt | — | 🔴 P1 Blocker (Design review pending) |
+| 128 | Wire Creatures List + Detail | TBD | #139 | ⏳ Blocked by #139 |
+| 129 | Wire Items List + Detail | TBD | #139 | ⏳ Blocked by #139 |
+| 130 | Wire Biomes List + Detail + Stubs | TBD | #139 | ⏳ Blocked by #139 |
+| 131 | Wire 6 Remaining Detail Pages | TBD | #139 | ⏳ Blocked by #139 |
+| 132 | Wire Dashboard | TBD | #139 | ⏳ Blocked by #139 |
+| 133 | Deploy Page Implementation | TBD | — | ⏳ P3 |
+| 134 | User Management | TBD | — | ⏳ P3 |
+| 135 | Audit Log | TBD | — | ⏳ P3 |
+| 136 | Simulator Features | Jarlaxle | #128, #131 | ⏳ Blocked by #128, #131 |
+| 137 | Orphan Endpoints Finalization | Drizzt | #131 | ⏳ Blocked by #131 |
+| 138 | Stub Pages + Layout Features | TBD | — | ⏳ P3 |
+
+### Your Assignment (Volo)
+
+Phase 2.5 introduces 12 admin panel wiring issues. Your likely work:
+- **#128–131:** Wire React admin detail/list pages to Content CRUD API (depends on Drizzt's #139)
+- **#132:** Dashboard wiring (metrics, recent changes, pending reviews)
+- **#138:** Stub pages, layout features, notification bell
+- Possibly: User management UI (#134) if needed
+
+All client work depends on Drizzt completing #139 (Content CRUD API) first. Begin planning/design once #139 endpoint design is approved.
+
+### Decision Documents
+
+- **Minsc's audit findings:** `.squad/decisions/inbox/minsc-admin-audit.md`
+- **Elminster's decomposition:** `.squad/decisions/inbox/elminster-phase25-admin.md`
+- **Merged to:** `.squad/decisions/decisions.md` (2026-03-23 section)
+
+### Execution Sequence (Recommended)
+
+```
+PHASE 1 (Foundational):
+  #139 ← Drizzt must complete first
+
+PHASE 2 (Detail Pages + Dashboard):
+  #128, #129, #130, #131 (depend on #139) — **your client work**
+  #132 (Dashboard wiring, depends on #139) — **your work**
+  #135 (Audit Log, independent)
+
+PHASE 3 (Supporting Features + Management):
+  #134 (User Management, independent, possibly your work)
+  #136 (Simulators, depends on #128 + #131, Jarlaxle)
+  #137 (Orphan endpoints, depends on #131, Drizzt)
+
+PHASE 4 (Polish):
+  #133 (Deploy)
+  #138 (Stubs + Layout, **your work**)
+```
+
+### Key Pattern: Content CRUD API (#139)
+
+From Elminster's decomposition, all detail pages follow this pattern:
+
+```javascript
+// Detail page wiring pattern
+useEffect(() => {
+  fetch(`/admin/api/${entity}/${id}`).then(setFormData)
+}, [id])
+
+const handleSave = () => {
+  fetch(`/admin/api/${entity}/${id}`, { 
+    method: 'PUT', 
+    body: formData 
+  }).then(...).catch(...)
+}
+```
+
+Wait for #139 endpoint design approval before implementing client side.
+
+---
+
+## 2026-03-23: Milestone — Entity Wiring Complete
+
+**Status:** Entity wiring phase concluded.
+- **Issues closed:** #128–#131 (all entity-related work)
+- **PRs merged:** #141–#145
+- **Outcome:** Admin dashboard fully functional for all entity types
+
+**Next:** Phase 2.5 continues; entity wiring closed.
+
+
+---
+
+## 2026-03-24: Documentation Refresh for Phase 2/2.5 Completion
+
+**Task:** Comprehensive README and docs refresh to reflect Phase 2/2.5 completion (PR #153)
+
+**Outcome:** ✅ Complete — Documentation updated across README, setup.md, and admin-guide.md
+
+### Changes Made
+
+1. **README.md — Major Overhaul**
+   - **Quick Start:** Added Docker/PostgreSQL/Redis setup with `docker compose up -d`
+   - **Architecture Diagram:** Expanded with full component flow (ShardRoom, RefugeRoom, Admin API), Entra OAuth auth flow, and design principles
+   - **Tech Stack:** Updated from "Redis planned" → Redis (implemented), "In-memory cache" → Redis, added "Admin UI: React + Vite"
+   - **Auth:** Updated from "bcryptjs + UUID tokens" → "Microsoft Entra External ID (OAuth/OIDC) + bcrypt fallback"
+   - **Phase Status:** Restructured as 3 sections:
+     - **Phase 1 ✅:** Solo extraction (unchanged)
+     - **Phase 2 ✅:** Multiplayer shards, React client, admin dashboard, PostgreSQL, Redis (NEW)
+     - **Phase 2.5 ✅:** Admin CRUD, user management, audit log, loot/creature simulators, deploy page, Entra OAuth (NEW)
+     - **Phase 3 ��:** SSH client, advanced AI, PvP, procedural narrative (NEW)
+   - **Environment Variables:** New comprehensive section listing all current env vars
+   - **Admin Dashboard URL:** Updated from `/colyseus` to `http://localhost:3000/admin`
+   - **Access Points:** Added game client (3000), admin dashboard, server health, Colyseus monitor
+
+2. **docs/setup.md — Phase 2/2.5 Alignment**
+   - **Prerequisites:** Added Docker and Docker Compose to required tools
+   - **Quick Start:** Added `docker compose up -d` step; added `npm run dev:client` instruction
+   - **Docker Development Services:** NEW section explaining PostgreSQL (port 5434) and Redis (port 6379) setup
+   - **Database Setup:** Renamed "Phase 2" to "Phase 2+"; added "Option 1: Docker Compose" and "Option 2: Manual"; expanded migrations list to 7 (added audit log, admin users)
+   - **Environment Variables:** Expanded from 9 to 20 entries; added Entra OAuth vars, USE_PG_REPOS, ADMIN_TOKEN
+   - **Tech Stack Table:** Updated Redis from "planned" to "implemented"; added React/Vite/Tailwind for admin UI
+
+3. **docs/admin-guide.md — Phase 2.5 Comprehensive Update**
+   - **Intro:** Reframed as React dashboard (not just Colyseus monitor)
+   - **Quick Access:** NEW section with admin dashboard URL, API endpoint, Colyseus monitor
+   - **Authentication:** NEW section covering admin login, roles (content, audit, deploy, users), protected endpoints with ADMIN_TOKEN
+   - **Admin Dashboard Features:** NEW comprehensive section:
+     - **Content Management:** Table of 11 entity types with CRUD capabilities (creatures, items, biomes, modifiers, loot tables, skills, factions, rooms, narrative templates, contracts stub, recipes stub)
+     - **Audit Log:** Real-time tracking of admin actions; filters by entity type, action, user, date range; CSV export
+     - **Simulators:** Loot drop simulator (verify distribution); creature stat re-roll simulator (verify rolls)
+     - **Deploy Page:** Preview diffs, deploy to staging, promote to production; requires deploy role
+   - **Colyseus Monitor:** Moved down; clarified as "internal" tool for development
+   - **Narration Telemetry:** Updated to reference `/admin/api/metrics` (SSE stream)
+   - **Database Migrations:** Renamed "Phase 2" to "Phase 2+"; expanded from 5 to 7 migrations
+   - **Phase 2 Admin Features:** Replaced with "Phase 3+ Planned Features" (player analytics, leaderboards, social, PvP, loot analysis)
+
+### Key Decisions Documented
+
+- **Admin Dashboard Port:** Confirmed at `http://localhost:3000` (Vite dev server on React client)
+- **Docker Services:** `docker-compose.yml` already configured; docs now prescribe usage
+- **Entra OAuth:** Documented as Phase 2.5-complete auth system; bcrypt fallback for local dev
+- **Admin Token:** Added to env vars; defaults to random UUID, logged at startup
+
+### Review Notes
+
+- All changes surgical: focused on accurate reflection of implemented features
+- No invention of future systems; only documented what's actually built (Phase 2/2.5)
+- Cross-referenced GDD.md where relevant for design context
+- Maintained existing tone and structure; extended with Phase 2/2.5-specific sections
+

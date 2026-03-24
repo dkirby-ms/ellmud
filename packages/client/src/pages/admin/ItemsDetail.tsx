@@ -1,9 +1,25 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router";
-import { ArrowLeft, Save, Send } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link, useParams, useNavigate } from "react-router";
+import { ArrowLeft, Save, Send, AlertCircle } from "lucide-react";
+import { getItem, createItem, updateItem, AdminAPIError } from "../../lib/admin-api";
 
 type ItemType = "weapon" | "armour" | "consumable" | "material" | "tool" | "key" | "blueprint";
 type GearTier = "scrap" | "common" | "sturdy" | "refined" | "masterwork" | "anomalous";
+
+interface ItemFormData {
+  id: string;
+  name: string;
+  description: string;
+  type: ItemType;
+  tier: GearTier;
+  soulbound: boolean;
+  weight: number;
+  baseDurability: number | null;
+  baseStats?: {
+    damage?: number;
+    speed?: number;
+  };
+}
 
 const tierColors = {
   scrap: "#4A4B55",
@@ -16,25 +32,140 @@ const tierColors = {
 
 export default function ItemsDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const isNew = id === "new";
 
-  const [formData, setFormData] = useState({
-    id: "iron_greatsword",
-    name: "Iron Greatsword",
-    description: "A heavy blade forged from crude iron. Slow but devastating.",
-    type: "weapon" as ItemType,
-    tier: "common" as GearTier,
+  const [formData, setFormData] = useState<ItemFormData>({
+    id: "",
+    name: "",
+    description: "",
+    type: "weapon",
+    tier: "common",
     soulbound: false,
-    weight: 8.5,
-    baseDurability: 150,
-    // Weapon-specific
-    damage: 35,
-    speed: 8,
+    weight: 0,
+    baseDurability: 100,
+    baseStats: {
+      damage: 10,
+      speed: 5,
+    },
   });
+  const [loading, setLoading] = useState(!isNew);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   const updateField = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
+
+  const updateStatField = (field: string, value: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      baseStats: { ...prev.baseStats, [field]: value },
+    }));
+  };
+
+  const validateForm = (): boolean => {
+    const errors: string[] = [];
+    
+    if (!formData.id.trim()) errors.push("ID is required");
+    if (!formData.name.trim()) errors.push("Name is required");
+    if (formData.weight < 0) errors.push("Weight cannot be negative");
+    if (formData.baseDurability !== null && formData.baseDurability < 0) {
+      errors.push("Durability cannot be negative");
+    }
+
+    if (formData.type === "weapon") {
+      if (!formData.baseStats?.damage || formData.baseStats.damage < 0) {
+        errors.push("Weapon must have positive damage");
+      }
+      if (!formData.baseStats?.speed || formData.baseStats.speed < 0) {
+        errors.push("Weapon must have positive speed");
+      }
+    }
+
+    setValidationErrors(errors);
+    return errors.length === 0;
+  };
+
+  const handleSave = async () => {
+    if (!validateForm()) return;
+    try {
+      setSaving(true);
+      setError(null);
+      if (isNew) {
+        await createItem(formData);
+        navigate('/admin/items');
+      } else {
+        await updateItem(id!, formData);
+      }
+    } catch (err) {
+      if (err instanceof AdminAPIError) {
+        setError(err.message);
+      } else {
+        setError('Failed to save item');
+      }
+      console.error('Failed to save item:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSubmitReview = async () => {
+    if (!validateForm()) return;
+    try {
+      setSaving(true);
+      setError(null);
+      const dataWithStatus = { ...formData, status: 'review' };
+      if (isNew) {
+        await createItem(dataWithStatus);
+        navigate('/admin/items');
+      } else {
+        await updateItem(id!, dataWithStatus);
+      }
+    } catch (err) {
+      if (err instanceof AdminAPIError) {
+        setError(err.message);
+      } else {
+        setError('Failed to submit for review');
+      }
+      console.error('Failed to submit for review:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isNew) return;
+    const fetchItem = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const item = await getItem<ItemFormData>(id!);
+        setFormData(item);
+      } catch (err) {
+        if (err instanceof AdminAPIError) {
+          setError(err.message);
+        } else {
+          setError('Failed to load item');
+        }
+        console.error('Failed to fetch item:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchItem();
+  }, [id, isNew]);
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <p className="text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+          Loading item...
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col">
@@ -64,23 +195,36 @@ export default function ItemsDetail() {
         </div>
         <div className="flex gap-2">
           <button
-            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
             <Save className="w-4 h-4" />
-            Save Draft
+            {saving ? 'Saving...' : 'Save Draft'}
           </button>
           <button
-            className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2"
+            onClick={handleSubmitReview}
+            disabled={saving}
+            className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
             <Send className="w-4 h-4" />
-            Submit Review
+            {saving ? 'Submitting...' : 'Submit Review'}
           </button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        {error && (
+          <div className="m-8 bg-[#8B2500] border border-[#A52A00] rounded-lg p-4 flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-[#E8E0D0]" />
+            <div>
+              <p className="text-[#E8E0D0] font-semibold" style={{ fontFamily: "var(--font-sans)" }}>Error</p>
+              <p className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-sans)" }}>{error}</p>
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-6 p-8">
           {/* Left Column */}
           <div className="col-span-2 space-y-6">
@@ -238,8 +382,8 @@ export default function ItemsDetail() {
                     </label>
                     <input
                       type="number"
-                      value={formData.damage}
-                      onChange={(e) => updateField("damage", parseInt(e.target.value))}
+                      value={formData.baseStats?.damage ?? 0}
+                      onChange={(e) => updateStatField("damage", parseInt(e.target.value))}
                       className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
                       style={{ fontFamily: "var(--font-mono)" }}
                     />
@@ -253,8 +397,8 @@ export default function ItemsDetail() {
                     </label>
                     <input
                       type="number"
-                      value={formData.speed}
-                      onChange={(e) => updateField("speed", parseInt(e.target.value))}
+                      value={formData.baseStats?.speed ?? 0}
+                      onChange={(e) => updateStatField("speed", parseInt(e.target.value))}
                       className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
                       style={{ fontFamily: "var(--font-mono)" }}
                     />
@@ -297,8 +441,8 @@ export default function ItemsDetail() {
                   </label>
                   <input
                     type="number"
-                    value={formData.baseDurability}
-                    onChange={(e) => updateField("baseDurability", parseInt(e.target.value))}
+                    value={formData.baseDurability ?? ""}
+                    onChange={(e) => updateField("baseDurability", e.target.value ? parseInt(e.target.value) : null)}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
                     style={{ fontFamily: "var(--font-mono)" }}
                   />
@@ -338,8 +482,8 @@ export default function ItemsDetail() {
                     className="text-sm space-y-1 mb-3"
                     style={{ fontFamily: "var(--font-mono)", color: "#E8E0D0" }}
                   >
-                    <div>Damage: {formData.damage}</div>
-                    <div>Speed: {formData.speed} ticks</div>
+                    <div>Damage: {formData.baseStats?.damage ?? 0}</div>
+                    <div>Speed: {formData.baseStats?.speed ?? 0} ticks</div>
                   </div>
                 )}
                 <div className="border-t border-[#2A2B35] pt-2 mt-2">
@@ -387,15 +531,22 @@ export default function ItemsDetail() {
             </div>
 
             {/* Validation */}
-            <div className="bg-[#2D6B4F] border border-[#256B4A] rounded-lg p-4">
-              <p
-                className="text-[#E8E0D0] text-sm flex items-center gap-2"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
-                <span>✅</span>
-                <span>All fields valid</span>
-              </p>
-            </div>
+            {validationErrors.length > 0 ? (
+              <div className="bg-[#8B2500] border border-[#A52A00] rounded-lg p-4">
+                <p className="text-[#E8E0D0] text-sm font-semibold mb-2" style={{ fontFamily: "var(--font-sans)" }}>
+                  ⚠️ Validation Errors
+                </p>
+                <ul className="text-[#E8E0D0] text-sm space-y-1" style={{ fontFamily: "var(--font-sans)" }}>
+                  {validationErrors.map((err, idx) => <li key={idx}>• {err}</li>)}
+                </ul>
+              </div>
+            ) : (
+              <div className="bg-[#2D6B4F] border border-[#256B4A] rounded-lg p-4">
+                <p className="text-[#E8E0D0] text-sm flex items-center gap-2" style={{ fontFamily: "var(--font-sans)" }}>
+                  <span>✅</span><span>All fields valid</span>
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

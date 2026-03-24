@@ -28,7 +28,7 @@ function allMigrationFiles(): string[] {
 
 /** Extract CREATE TABLE statements from SQL. */
 function extractCreateTables(sql: string): string[] {
-  const regex = /CREATE TABLE\s+(\w+)/gi;
+  const regex = /CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)/gi;
   const tables: string[] = [];
   let match;
   while ((match = regex.exec(sql)) !== null) {
@@ -406,11 +406,17 @@ describe('cross-migration consistency', () => {
   });
 
   it('all tables use UUID primary keys', () => {
+    // content_definitions uses a composite TEXT PK (entity_type, id) because
+    // content IDs are admin-defined slugs (e.g. 'rusty_blade', 'flooded_crypt'),
+    // not auto-generated UUIDs.
+    const COMPOSITE_PK_TABLES = ['content_definitions'];
+
     for (const file of allMigrationFiles()) {
       const sql = readMigration(file);
       const tables = extractCreateTables(sql);
       for (const table of tables) {
-        // Every CREATE TABLE should have UUID PRIMARY KEY
+        if (COMPOSITE_PK_TABLES.includes(table)) continue;
+        // Every other CREATE TABLE should have UUID PRIMARY KEY
         expect(sql).toMatch(new RegExp(`CREATE TABLE.*${table}[\\s\\S]*UUID PRIMARY KEY`, 'i'));
       }
     }

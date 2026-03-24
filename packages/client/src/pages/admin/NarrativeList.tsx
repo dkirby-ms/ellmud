@@ -1,89 +1,20 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { Plus, Search, Filter, Book } from "lucide-react";
+import { useAdminEntityList } from "../../hooks/useAdminEntityList.js";
 
 type NarrativeType = "dialogue" | "lore" | "quest" | "event" | "discovery" | "epilogue";
 
-interface NarrativeEntry {
+interface NarrativeTemplate {
   id: string;
-  title: string;
-  slug: string;
-  type: NarrativeType;
-  category: string;
-  wordCount: number;
-  conditions: number;
-  lastEdited: string;
-  status: "published" | "draft" | "review";
+  name: string;
+  narrativeType: string;
+  biome: string;
+  template: string;
+  tone: string;
+  verbosity: string;
+  tags: string[];
 }
-
-const narrativeEntries: NarrativeEntry[] = [
-  {
-    id: "1",
-    title: "The Warden's Warning",
-    slug: "warden_warning",
-    type: "dialogue",
-    category: "The Refuge",
-    wordCount: 245,
-    conditions: 0,
-    lastEdited: "2 hours ago",
-    status: "published",
-  },
-  {
-    id: "2",
-    title: "Chronicle of the Drowned",
-    slug: "chronicle_drowned",
-    type: "lore",
-    category: "Flooded Crypt",
-    wordCount: 512,
-    conditions: 1,
-    lastEdited: "1 day ago",
-    status: "published",
-  },
-  {
-    id: "3",
-    title: "Reclaim the Lost Relic",
-    slug: "reclaim_relic",
-    type: "quest",
-    category: "The Refuge",
-    wordCount: 320,
-    conditions: 3,
-    lastEdited: "3 days ago",
-    status: "review",
-  },
-  {
-    id: "4",
-    title: "First Shard Entry",
-    slug: "first_shard_entry",
-    type: "event",
-    category: "Tutorial",
-    wordCount: 180,
-    conditions: 2,
-    lastEdited: "5 days ago",
-    status: "published",
-  },
-  {
-    id: "5",
-    title: "Ancient Inscription",
-    slug: "ancient_inscription",
-    type: "discovery",
-    category: "Flooded Crypt",
-    wordCount: 95,
-    conditions: 1,
-    lastEdited: "1 week ago",
-    status: "published",
-  },
-  {
-    id: "6",
-    title: "Merchant's Bargain",
-    slug: "merchant_bargain",
-    type: "dialogue",
-    category: "The Refuge",
-    wordCount: 420,
-    conditions: 2,
-    lastEdited: "2 weeks ago",
-    status: "draft",
-  },
-];
 
 const typeColors: Record<NarrativeType, string> = {
   dialogue: "#3A7D7B",
@@ -103,43 +34,42 @@ const typeIcons: Record<NarrativeType, string> = {
   epilogue: "🏁",
 };
 
-const getStatusBadge = (status: string) => {
-  const badges = {
-    draft: { emoji: "📝", label: "Draft", color: "#4A4B55" },
-    review: { emoji: "⏳", label: "In Review", color: "#B8860B" },
-    published: { emoji: "✅", label: "Published", color: "#2D6B4F" },
-  };
-  const badge = badges[status as keyof typeof badges];
-  return (
-    <span
-      className="px-2 py-1 rounded text-xs inline-flex items-center gap-1"
-      style={{
-        backgroundColor: badge.color + "20",
-        color: badge.color,
-        fontFamily: "var(--font-sans)",
-      }}
-    >
-      <span>{badge.emoji}</span>
-      <span>{badge.label}</span>
-    </span>
-  );
-};
-
 export default function NarrativeList() {
+  const { data: narrativeEntries, loading, error } = useAdminEntityList<NarrativeTemplate>("narrative");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState<NarrativeType | "all">("all");
   const [selectedCategory, setSelectedCategory] = useState("all");
 
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+          Loading narratives...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <div className="text-[#8B2500]" style={{ fontFamily: "var(--font-sans)" }}>
+          Error: {error}
+        </div>
+      </div>
+    );
+  }
+
   const filteredEntries = narrativeEntries.filter((entry) => {
     const matchesSearch =
-      entry.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      entry.category.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = selectedType === "all" || entry.type === selectedType;
-    const matchesCategory = selectedCategory === "all" || entry.category === selectedCategory;
+      entry.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      entry.biome.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesType = selectedType === "all" || entry.narrativeType === selectedType;
+    const matchesCategory = selectedCategory === "all" || entry.biome === selectedCategory;
     return matchesSearch && matchesType && matchesCategory;
   });
 
-  const categories = Array.from(new Set(narrativeEntries.map(e => e.category)));
+  const categories = Array.from(new Set(narrativeEntries.map(e => e.biome)));
 
   return (
     <div className="p-8">
@@ -215,7 +145,7 @@ export default function NarrativeList() {
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Title
+                Name
               </th>
               <th
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
@@ -227,31 +157,13 @@ export default function NarrativeList() {
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Category
+                Biome
               </th>
               <th
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Words
-              </th>
-              <th
-                className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
-                Conditions
-              </th>
-              <th
-                className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
-                Last Edited
-              </th>
-              <th
-                className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
-                Status
+                Tags
               </th>
             </tr>
           </thead>
@@ -267,20 +179,20 @@ export default function NarrativeList() {
                     className="text-[#E8E0D0] hover:text-[#C9A84C] transition-colors"
                     style={{ fontFamily: "var(--font-serif)" }}
                   >
-                    {entry.title}
+                    {entry.name}
                   </Link>
                 </td>
                 <td className="p-4">
                   <span
                     className="px-2 py-1 rounded text-xs capitalize inline-flex items-center gap-1"
                     style={{
-                      backgroundColor: typeColors[entry.type] + "20",
-                      color: typeColors[entry.type],
+                      backgroundColor: (typeColors[entry.narrativeType as NarrativeType] ?? "#4A4B55") + "20",
+                      color: typeColors[entry.narrativeType as NarrativeType] ?? "#4A4B55",
                       fontFamily: "var(--font-sans)",
                     }}
                   >
-                    <span>{typeIcons[entry.type]}</span>
-                    <span>{entry.type}</span>
+                    <span>{typeIcons[entry.narrativeType as NarrativeType] ?? "📄"}</span>
+                    <span>{entry.narrativeType}</span>
                   </span>
                 </td>
                 <td className="p-4">
@@ -288,34 +200,22 @@ export default function NarrativeList() {
                     className="text-[#8A8B95] text-sm"
                     style={{ fontFamily: "var(--font-sans)" }}
                   >
-                    {entry.category}
+                    {entry.biome}
                   </span>
                 </td>
                 <td className="p-4">
-                  <span
-                    className="text-[#E8E0D0] text-sm"
-                    style={{ fontFamily: "var(--font-mono)" }}
-                  >
-                    {entry.wordCount.toLocaleString()}
-                  </span>
+                  <div className="flex gap-1 flex-wrap">
+                    {(entry.tags ?? []).map((tag) => (
+                      <span
+                        key={tag}
+                        className="px-2 py-0.5 bg-[#1C1D27] text-[#8A8B95] text-xs rounded"
+                        style={{ fontFamily: "var(--font-sans)" }}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                 </td>
-                <td className="p-4">
-                  <span
-                    className="text-[#8A8B95] text-sm"
-                    style={{ fontFamily: "var(--font-mono)" }}
-                  >
-                    {entry.conditions > 0 ? entry.conditions : "—"}
-                  </span>
-                </td>
-                <td className="p-4">
-                  <span
-                    className="text-[#8A8B95] text-sm"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
-                    {entry.lastEdited}
-                  </span>
-                </td>
-                <td className="p-4">{getStatusBadge(entry.status)}</td>
               </tr>
             ))}
           </tbody>

@@ -352,3 +352,157 @@ All four PRs merge cleanly to dev:
 ### Phase 2 Complete
 - ✅ All 4 PRs reviewed, 5 rejection rounds caught issues early
 - ✅ Final approvals: 2026-03-23T0100Z–0106Z
+
+---
+
+## Phase 2.5: Admin Audit Decomposition (2026-03-23)
+
+### Admin Screen Audit Results (Minsc)
+
+**Finding:** All 25 React admin pages render hardcoded mock data with ZERO API integration.
+- 27 dead buttons (Save/Submit, Deploy, Bulk Actions, Pagination, etc.)
+- 8 non-functional cosmetic forms (data lost on refresh)
+- 12 mock data lists (Dashboard, entity lists, etc.)
+- 3 stub pages ("Coming soon": Balance, Contracts, Recipes)
+- 8 orphan server endpoints (implemented but no client calls them)
+- 1 stub server endpoint (Spawn only broadcasts chat)
+
+**Architecture Assessment:**
+The admin UI was built as a purely visual scaffold. It's not broken—it's incomplete. This is Phase 2.5 work: wire the client UI to existing/new API endpoints.
+
+### Phase 2.5 Decomposition Strategy
+
+**Principle:** Group by functional area + dependency order, not by individual button.
+
+**Issue Structure (12 issues total):**
+
+1. **#139 FOUNDATIONAL**: Content CRUD API endpoints (blocker for all detail pages)
+   - GET/POST/PUT/DELETE endpoints for: items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narrative
+   - All detail pages depend on this
+
+2. **#128**: CreaturesList + CreaturesDetail wiring (creatures CRUD)
+   - Fetch, save, re-roll simulation
+
+3. **#129**: ItemsList + ItemsDetail wiring (items CRUD)
+   - Fetch, save
+
+4. **#130**: BiomesList + BiomesDetail wiring (biomes CRUD)
+   - Fetch, save + 3 stub tabs (Room Descriptions, Loot Table, Hazards)
+
+5. **#131**: Remaining detail pages wiring (modifiers, skills, loot-tables, factions, rooms, narrative)
+   - Same pattern repeated for 6 entity types
+
+6. **#132**: Dashboard wiring (metrics, recent changes, pending reviews, validation warnings)
+   - NEW endpoints: /admin/api/dashboard/metrics, /recent-changes, /pending-reviews, /validation-warnings
+
+7. **#133**: Deploy page implementation (Preview Diff, Deploy Staging, Deploy Production)
+   - NEW endpoints: /admin/api/deploy/diff, /deploy/staging, /deploy/production
+   - Deployment flow, status tracking, logs
+
+8. **#134**: User Management implementation (Add, Edit, Roles)
+   - NEW endpoints: GET/POST/PUT/DELETE /admin/api/users
+   - Role-based access (admin, moderator, viewer), permission granularity
+
+9. **#135**: Audit Log implementation (filtering by action, user, entity)
+   - NEW endpoint: /admin/api/audit-log with query params
+   - Real audit trail (not hardcoded), export functionality
+
+10. **#136**: Loot Drop Simulator + Creature Re-roll (simulation features)
+    - POST /admin/api/loot-tables/:id/simulate (count parameter)
+    - GET /admin/api/creatures/:id/simulate
+
+11. **#137**: Orphan endpoints finalization (rooms pause/resume, spawn, SSE)
+    - Wire existing pause/resume endpoints to UI buttons
+    - Implement actual spawn logic (not just chat broadcast)
+    - Document or remove SSE endpoint
+
+12. **#138**: Stub pages + AdminLayout features (Balance, Contracts, Recipes, search, notifications)
+    - Replace "Coming soon" with roadmaps + GitHub links
+    - Search input handler + global admin search
+    - Notification bell + notification system
+
+### Dependency Order (Suggested execution sequence)
+```
+#139 (CRUD API) ←─ must complete first
+  ├─→ #128, #129, #130, #131 (all detail pages)
+  ├─→ #132 (Dashboard depends on CRUD endpoints existing)
+  ├─→ #135 (Audit Log)
+  ├─→ #134 (User Management)
+  ├─→ #136 (Simulators)
+  ├─→ #137 (Room endpoints)
+  └─→ #133, #138 (Deploy + Stubs can start in parallel)
+```
+
+### Key Decisions
+
+1. **Do not create 27 separate issues for each button.** Group by functional area and entity type.
+
+2. **Content CRUD API is foundational.** All detail pages must complete before Deploy/Dashboard, since they need stable CRUD endpoints.
+
+3. **Endpoint design:** No breaking changes to existing data model. Admin endpoints are additive.
+
+4. **Labels used:** `phase:2.5` (new), `admin` (new), `type:feature`, `server`, `client` (as appropriate), `priority:p1` (foundational only)
+
+5. **No milestone yet.** These 12 issues define the scope. Timeline to be determined after Drizzt/Jarlaxle assess endpoint complexity.
+
+### Learnings
+
+1. **Admin UI Pattern:** Visual scaffold without wiring is valid for early iterations, but requires explicit tracking (audit) to identify all missing endpoints.
+
+2. **Decomposition Rule:** Group by data model entity + feature area, not by UI widget. This reduces issue count by 75% and clarifies dependencies.
+
+3. **Orphan Endpoints:** Server endpoints without client callers should be flagged in code review. Add a linting check or docs policy.
+
+4. **Form Handling:** React forms without backend wiring lose data on refresh—this caught immediately because forms are cosmetic. Fixture: add error message if form has unsaved changes (client-side warning).
+
+
+
+## Wave 2 Review Cycle: Admin Wiring PRs #142-#145 (2026-03-23T20:00Z)
+
+### Review Summary
+
+**Role:** Lead/Architect Review  
+
+**PRs Reviewed:**
+1. PR #142 (Items) — ✅ APPROVED & MERGED
+2. PR #143 (Creatures) — ⚠️ CHANGES REQUESTED → FIXED
+3. PR #144 (Biomes) — ⚠️ CHANGES REQUESTED
+4. PR #145 (Remaining 6 entities) — ⚠️ CHANGES REQUESTED
+
+### Key Verdicts
+
+**PR #142:** Implementation solid, correct patterns. Merged.
+
+**PR #143:** Loot Table disconnected from API → data loss. Fix applied: load in useEffect, include in save payload.
+
+**PR #144:** Validation warnings only, no enforcement. Fix required: add guard clauses in handlers.
+
+**PR #145:** Fake validation + missing fields (effects, tags, requirements). Fixes required: real validation function + component editors.
+
+### New Standards Established
+
+**Validation Enforcement:** Form validation requires both UX warnings AND handler-level enforcement.
+
+**State Wiring:** All component state must be explicitly loaded from API and included in save payloads.
+
+**Surgical Fixes:** When fixing reviewer feedback, address specific issues without rewriting files.
+
+**Next Steps:**
+1. Drizzt: Fix PR #144 validation
+2. Jarlaxle: Fix PR #145 validation + fields  
+3. Elminster: Re-review PRs upon fixes
+4. Merge: Approved PRs to dev
+
+
+---
+
+## 2026-03-23: Milestone — Entity Wiring Complete (All PRs Approved)
+
+**Work:** Re-reviewed and approved PR #145 (validation fixes by Drizzt)
+- **Status:** Validation logic correct, guard clauses proper, field additions correct, error display working
+- **Decision:** Approved for merge
+
+**Milestone:** All entity wiring complete (issues #128–#131 closed). PRs #143, #144, #145 all merged. Admin dashboard fully functional for all entity types. Validation pattern established and documented.
+
+**Next:** Phase 2.5 continues; entity wiring closed. Validation pattern available for future admin components.
+

@@ -3738,3 +3738,252 @@ When a PR is submitted for review:
 - **Testing Gaps:** Acceptance criteria (shard-sickness, killing blow, etc.) were declared "done" but only constants were added, not wiring.
 - **Merge artifacts:** When multiple PRs land in parallel, stale exports can cause builds to fail. Always verify import paths resolve after rebasing.
 
+
+---
+
+### 2026-03-24: Admin Token Storage Pattern
+
+**Date:** 2026-03-24  
+**Author:** Drizzt (Engine Dev)  
+**Context:** Issue #128 — Wire CreaturesList & CreaturesDetail to Content CRUD API  
+**Status:** ✅ Implemented
+
+#### Problem
+
+Admin pages need to authenticate requests to Content CRUD API endpoints. Server requires `Authorization: Bearer <token>` header (adminAuth middleware validates against `ADMIN_TOKEN` env var). How should the client store and retrieve this token?
+
+#### Decision
+
+Use **localStorage** with key `admin_token` for Phase 2.5.
+
+#### Rationale
+
+1. **Phase 2.5 Scope: Functionality Over UX**
+   - No admin login flow required (out of scope for Phase 2.5)
+   - Manual token setup acceptable for dev/staging environments
+   - Focus on wiring pages to real API, not auth flows
+
+2. **Simplicity**
+   - Follows existing pattern in `admin-api.ts` (already has `getAdminToken()` helper)
+   - No additional infrastructure (cookies, secure storage, token refresh)
+   - Consistent with existing player token storage pattern
+
+3. **Security Trade-offs Acceptable for Now**
+   - Admin panel not exposed to production users yet
+   - Dev/staging environments have network-level protections
+   - XSS risks mitigated by CSP and framework defaults
+   - Token can be rotated via env var on server
+
+#### Implementation
+
+Client token helpers in `packages/client/src/lib/admin-api.ts`:
+
+```typescript
+const ADMIN_TOKEN_KEY = 'admin_token';
+
+function getAdminToken(): string | null {
+  return localStorage.getItem(ADMIN_TOKEN_KEY);
+}
+
+export function setAdminToken(token: string): void {
+  localStorage.setItem(ADMIN_TOKEN_KEY, token);
+}
+
+export function clearAdminToken(): void {
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+}
+```
+
+#### Future Considerations
+
+1. **Admin Login Flow** — Add `/admin/auth/login` endpoint, store token in httpOnly cookie
+2. **Role-Based Access Control** — Granular permissions per entity type
+3. **Token Refresh** — Short-lived access tokens + refresh tokens
+
+---
+
+### 2026-03-24: Admin API Client Architecture
+
+**Author:** Jarlaxle (Systems Dev)  
+**Date:** 2026-03-24  
+**Context:** Issue #129 (Wire Items admin pages)  
+**Status:** ✅ Implemented (Pattern established for all admin pages)
+
+#### Decision
+
+Created centralized admin-api utility (`packages/client/src/lib/admin-api.ts`) for Content CRUD API calls instead of inline fetch calls in each page.
+
+#### Rationale
+
+**Pattern Benefits:**
+1. **Single auth point:** Bearer token handling centralized, easier to debug auth issues
+2. **Typed errors:** `AdminAPIError` class provides consistent error structure across all pages
+3. **DRY:** CRUD operations follow same pattern, easy to add new entity types
+4. **Testability:** Mock the utility instead of mocking fetch in every test
+
+**API Structure:**
+```ts
+// Generic fetch wrapper
+async function adminFetch<T>(path, options): Promise<T>
+
+// Per-entity CRUD functions
+export async function listItems<T>(): Promise<T[]>
+export async function getItem<T>(id: string): Promise<T>
+export async function createItem<T>(data: Partial<T>): Promise<T>
+export async function updateItem<T>(id: string, data: Partial<T>): Promise<T>
+export async function deleteItem(id: string): Promise<void>
+```
+
+#### Token Management
+
+- Token stored in localStorage (`admin_token` key)
+- Set during admin login (not yet implemented, future work)
+- Cleared on logout or 401 errors
+- Helper functions: `setAdminToken()`, `getAdminToken()`, `clearAdminToken()`
+
+#### Alternatives Considered
+
+1. **Inline fetch in components** — Rejected: Duplicates auth logic, harder to maintain
+2. **React Query/SWR wrapper** — Rejected: Overkill for admin panel, adds dependency
+3. **Global axios instance** — Rejected: No need for axios features, native fetch is fine
+
+#### Impact
+
+- ✅ Establishes pattern for 8 remaining admin page pairs
+- ✅ Makes auth debugging easier (single point of failure)
+- ✅ Reduces boilerplate in page components
+- Extends to: Creatures (#128), Biomes (#130), LootTables (#131), Skills, Factions, Rooms, Narrative, etc.
+
+---
+
+### 2026-03-24: Admin Wiring Test File Structure
+
+**Date:** 2026-03-24  
+**Decider:** Minsc (Tester/QA)  
+**Status:** ✅ Implemented  
+**Context:** Issue #128 (CreaturesList/Detail), #129 (ItemsList/Detail)
+
+#### Decision
+
+Created separate test file `packages/server/src/__tests__/admin-wiring.test.ts` for wiring-specific integration tests, rather than extending existing `admin-crud.test.ts`.
+
+#### Rationale
+
+**Separation of Concerns:**
+- `admin-crud.test.ts` (73 tests): Basic CRUD lifecycle, auth enforcement, 404 handling, validation fundamentals
+- `admin-wiring.test.ts` (31 tests): Edge cases, update patterns, large data sets, unicode/special characters
+- Each file has clear purpose; easier to navigate
+
+**Readability & Maintenance:**
+- Existing file already 390 lines; adding 31 tests would bloat to 600+ lines
+- Separate file keeps each under 400 lines
+- Developers can quickly find relevant tests for their PRs
+
+**Discoverability & Evolution:**
+- Clear naming: `admin-wiring.test.ts` signals "these are the tests for UI wiring"
+- Wiring tests can evolve independently (e.g., add pagination tests when UI needs it)
+- CRUD contract tests remain stable reference
+- Easier to disable/skip wiring tests if needed without affecting core suite
+
+#### Test Coverage
+
+**Items (15 tests):**
+- Type validation (6 valid types: weapon, armour, consumable, material, tool, key)
+- Field-level validation (description required on create, optional on update)
+- Update behavior (partial updates, field preservation)
+- Duplicate ID handling (409 conflicts)
+- Edge cases (long names, special chars, unicode, custom fields)
+- Large data sets (100-item creation/retrieval)
+
+**Creatures (14 tests):**
+- Field-level validation (name+type required on create)
+- Update behavior (partial updates, field preservation)
+- Duplicate ID handling (409 conflicts)
+- Edge cases (long names, special chars, unicode, custom fields, zero/negative stats)
+- Large data sets (100-creature creation/retrieval)
+
+**Cross-Entity (2 tests):**
+- Independent ID spaces (same ID in items + creatures allowed)
+- Deletion isolation (deleting item doesn't affect creature)
+
+#### Alternatives Considered
+
+1. **Extend `admin-crud.test.ts`** — ❌ Would bloat to 600+ lines, mixes concerns
+2. **Entity-specific files** — ❌ Overkill for 15-14 tests per entity, duplicates shared patterns
+3. **Inline with UI components** — ❌ Different concerns (API contract vs UI rendering)
+
+#### Impact
+
+- Zero regressions: All 104 tests pass (73 existing + 31 new)
+- Clear test organization: Two files with distinct purposes
+- Easier for Drizzt/Jarlaxle: Can reference wiring tests for validation patterns
+
+#### Future Considerations
+
+1. **Pagination:** Add limit/offset/cursor param tests when UI needs them
+2. **Search/Filtering:** Add server-side search endpoint tests
+3. **Bulk Operations:** Add multi-select delete/update bulk tests
+4. **Schema Evolution:** Update wiring tests when validation rules tighten
+
+---
+
+### 2026-03-23T23:00: Decision: Validation Pattern for Admin Entity Pages
+**By:** Drizzt (Engine Dev)  
+**Context:** PR #145 review — fake validation and missing fields across remaining entity pages
+
+**Problem:**
+- LootTablesDetail and SkillsDetail showed hardcoded "✅ All fields valid" with no actual validation logic
+- ModifiersDetail missing `effects` and `tags` fields; SkillsDetail missing `requirements` field
+- Per lockout rules, Jarlaxle (PR author) cannot self-fix rejected PRs
+
+**Decision:**
+Implement consistent validation pattern across all entity detail pages:
+
+1. **Validation Logic:**
+   - `validateForm()` checking required fields → returns error string or null
+   - Guard clause in `handleSave()` prevents API calls when validation fails
+   - `isValid = validateForm() === null` for UI state
+
+2. **UI:**
+   - Save button disabled when `!isValid`
+   - Error badge in header shows `saveError || validationError`
+   - Validation panel in sidebar: green ✅ when valid, red ⚠️ with message when invalid
+
+3. **Array Fields (Phase 2.5 scope):**
+   - Complex objects (effects, requirements): JSON textarea with example
+   - String arrays (tags): comma-separated input
+   - Parse on save, validate JSON syntax
+   - Simple acceptable for admin workflows; polish deferred to Phase 3+
+
+**Rationale:**
+- Prevents invalid data persistence (guard clauses in `handleSave()`)
+- Consistent with PR #144 BiomesDetail fix
+- Component-level validation simpler than hook extension
+- Phase 2.5 pragmatism: functional > polished
+
+**Implementation Status:** ✅ Implemented, tested, approved by Elminster
+- LootTablesDetail: validation + disabled save
+- SkillsDetail: validation + requirements field + disabled save
+- ModifiersDetail: validation + effects/tags fields + 2-column layout + disabled save
+
+**Impact:** PR #145 ready for merge; pattern documented for future admin pages; Phase 2.5 scoping reinforced
+
+---
+
+### 2026-03-23T23:00: Decision: PR #145 Re-review Approval (Drizzt's Fixes)
+**By:** Elminster (Architecture)  
+**Context:** PR #145 (Remaining 6 entity pages) — Drizzt's validation fixes
+
+**Findings:**
+- ✅ Validation logic correct across LootTablesDetail, SkillsDetail, ModifiersDetail
+- ✅ Guard clauses properly prevent submission of invalid data
+- ✅ Field additions (effects, tags, requirements) correctly parsed into payloads
+- ✅ Save button states correct (disabled on validation failure)
+- ✅ Error messages display appropriately in UI
+
+**Decision:** **APPROVED** for merge
+
+**Impact:** Closes issue #131; completes all entity wiring work (issues #128–#131 closed)
+
+---
+

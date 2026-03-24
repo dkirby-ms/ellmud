@@ -14,3 +14,9 @@ export type {
   AdminMetrics,
   AdminSSEEvent,
 } from './types.js';
+export { createContentRouter, initializeContentStores, type ContentRouterDeps } from './content/index.js';
+export { createUserRouter } from './users/index.js';
+export { createDashboardApiRouter, type DashboardRouterDeps } from './content/index.js';
+export { createAuditRouter } from './audit/audit-routes.js';
+export { createSimulateRouter, type SimulateRouterDeps } from './simulate/index.js';
+export { createDeployRouter } from './deploy/index.js';

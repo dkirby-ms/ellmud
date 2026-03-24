@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { Plus, Search, Filter } from "lucide-react";
+import { Plus, Search, Filter, AlertCircle } from "lucide-react";
+import { listItems, AdminAPIError } from "../../lib/admin-api";
 
 type Status = "draft" | "review" | "published" | "deprecated";
 type ItemType = "weapon" | "armour" | "consumable" | "material" | "tool" | "key" | "blueprint";
@@ -13,47 +14,10 @@ interface Item {
   tier: GearTier;
   weight: number;
   soulbound: boolean;
-  status: Status;
+  status?: Status;
 }
 
-const items: Item[] = [
-  {
-    id: "1",
-    name: "Iron Greatsword",
-    type: "weapon",
-    tier: "common",
-    weight: 8.5,
-    soulbound: false,
-    status: "published",
-  },
-  {
-    id: "2",
-    name: "Leather Jerkin",
-    type: "armour",
-    tier: "common",
-    weight: 3.2,
-    soulbound: false,
-    status: "published",
-  },
-  {
-    id: "3",
-    name: "Health Tonic",
-    type: "consumable",
-    tier: "sturdy",
-    weight: 0.5,
-    soulbound: false,
-    status: "published",
-  },
-  {
-    id: "4",
-    name: "Anomalous Shard",
-    type: "material",
-    tier: "anomalous",
-    weight: 0.1,
-    soulbound: true,
-    status: "review",
-  },
-];
+
 
 const tierColors = {
   scrap: "#4A4B55",
@@ -88,8 +52,32 @@ const getStatusBadge = (status: Status) => {
 };
 
 export default function ItemsList() {
+  const [items, setItems] = useState<Item[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<Status | "all">("all");
+
+  useEffect(() => {
+    const fetchItems = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await listItems<Item>();
+        setItems(data);
+      } catch (err) {
+        if (err instanceof AdminAPIError) {
+          setError(err.message);
+        } else {
+          setError('Failed to load items');
+        }
+        console.error('Failed to fetch items:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchItems();
+  }, []);
 
   const filteredItems = items.filter((item) => {
     const matchesSearch =
@@ -147,7 +135,32 @@ export default function ItemsList() {
         </div>
       </div>
 
+      {/* Error State */}
+      {error && (
+        <div className="bg-[#8B2500] border border-[#A52A00] rounded-lg p-4 mb-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-[#E8E0D0]" />
+          <div>
+            <p className="text-[#E8E0D0] font-semibold" style={{ fontFamily: "var(--font-sans)" }}>
+              Failed to load items
+            </p>
+            <p className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-sans)" }}>
+              {error}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-8 text-center">
+          <p className="text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+            Loading items...
+          </p>
+        </div>
+      )}
+
       {/* Table */}
+      {!loading && !error && (
       <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg overflow-hidden">
         <table className="w-full">
           <thead className="bg-[#1C1D27] border-b border-[#2A2B35]">
@@ -241,12 +254,20 @@ export default function ItemsList() {
                     {item.soulbound ? "✓" : "—"}
                   </span>
                 </td>
-                <td className="p-4">{getStatusBadge(item.status)}</td>
+                <td className="p-4">{item.status ? getStatusBadge(item.status) : <span className="text-[#4A4B55] text-sm">—</span>}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        {filteredItems.length === 0 && (
+          <div className="p-8 text-center">
+            <p className="text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+              {searchQuery || selectedStatus !== "all" ? "No items match your filters" : "No items found"}
+            </p>
+          </div>
+        )}
       </div>
+      )}
     </div>
   );
 }

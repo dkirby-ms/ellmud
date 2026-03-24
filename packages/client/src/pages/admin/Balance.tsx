@@ -1,18 +1,70 @@
+import { Scale, ExternalLink, Swords, Shield, Heart, Zap } from "lucide-react";
+
 export default function Balance() {
   return (
-    <div className="p-8">
-      <h1
-        className="text-[#C9A84C] text-2xl"
-        style={{ fontFamily: "var(--font-serif)" }}
-      >
-        Balance Constants
-      </h1>
-      <p
-        className="text-[#8A8B95] mt-4"
-        style={{ fontFamily: "var(--font-sans)" }}
-      >
-        Balance constants editor coming soon...
-      </p>
+    <div className="p-8 max-w-4xl">
+      <div className="flex items-center gap-3 mb-6">
+        <Scale className="w-8 h-8 text-[#C9A84C]" />
+        <div>
+          <h1 className="text-[#C9A84C] text-2xl" style={{ fontFamily: "var(--font-serif)" }}>Balance Constants</h1>
+          <p className="text-[#8A8B95] text-sm" style={{ fontFamily: "var(--font-sans)" }}>
+            Centralized tuning for combat, economy, and progression values
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6 mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="px-3 py-1 bg-[#B8860B]/20 text-[#B8860B] text-xs rounded-full font-semibold" style={{ fontFamily: "var(--font-sans)" }}>
+            PLANNED — PHASE 3
+          </span>
+        </div>
+        <p className="text-[#E8E0D0] mb-4 leading-relaxed" style={{ fontFamily: "var(--font-sans)" }}>
+          The Balance Constants editor will provide a single interface for tuning all core game
+          parameters — damage formulas, stance multipliers, HP scaling, stamina costs, loot drop
+          rates, and economy values. This is part of the Contracts System which governs
+          risk/reward loops across shards.
+        </p>
+        <a href="https://github.com/dkirby-ms/ellmud/issues/44" target="_blank" rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-[#1C1D27] border border-[#2A2B35] rounded text-[#C9A84C] hover:bg-[#2A2B35] transition-colors"
+          style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}>
+          <ExternalLink className="w-4 h-4" />
+          Track on GitHub — Issue #44: Contracts System
+        </a>
+      </div>
+
+      <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6 mb-6">
+        <h2 className="text-[#E8E0D0] text-lg mb-4" style={{ fontFamily: "var(--font-serif)" }}>Dependencies</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            { icon: Swords, label: "Combat System (Phase 1)", done: true, desc: "Damage formulas, stance multipliers" },
+            { icon: Shield, label: "Creature AI (Phase 1)", done: true, desc: "Behavior trees, spawn rates" },
+            { icon: Heart, label: "Progression System (Phase 3)", done: false, desc: "XP curves, skill unlock thresholds" },
+            { icon: Zap, label: "Economy Loop (Phase 3)", done: false, desc: "Loot value scaling, vendor prices" },
+          ].map(({ icon: Icon, label, done, desc }) => (
+            <div key={label} className={`flex items-start gap-3 p-3 rounded border ${done ? "border-[#2D6B4F]/50 bg-[#2D6B4F]/10" : "border-[#2A2B35] bg-[#1C1D27]"}`}>
+              <Icon className={`w-4 h-4 mt-0.5 ${done ? "text-[#2D6B4F]" : "text-[#4A4B55]"}`} />
+              <div>
+                <p className={`text-sm font-medium ${done ? "text-[#2D6B4F]" : "text-[#8A8B95]"}`} style={{ fontFamily: "var(--font-sans)" }}>
+                  {label} {done && "✓"}
+                </p>
+                <p className="text-xs text-[#4A4B55] mt-0.5" style={{ fontFamily: "var(--font-sans)" }}>{desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
+        <h2 className="text-[#E8E0D0] text-lg mb-3" style={{ fontFamily: "var(--font-serif)" }}>Planned Features</h2>
+        <ul className="space-y-2">
+          {["Live-preview damage calculator with stance combinations", "HP/stamina curve editor with graph visualization", "Loot probability simulator with expected-value analysis", "Per-shard-tier modifier overrides", "Versioned snapshots for A/B testing balance patches"].map((item) => (
+            <li key={item} className="flex items-center gap-2 text-[#8A8B95] text-sm" style={{ fontFamily: "var(--font-sans)" }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C] flex-shrink-0" />{item}
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

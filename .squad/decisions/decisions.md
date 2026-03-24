@@ -1127,3 +1127,335 @@ None warrant rejection. Flagged for future cleanup pass.
 
 _Merged from decisions/inbox/ on 2026-03-22T10:58:00Z._
 
+
+---
+
+## 2026-03-23T18:45:00Z: Admin UI Requires Full API Wiring Pass
+
+**Author:** Minsc (Tester/QA)  
+**Date:** 2026-03-23  
+**Status:** DECIDED  
+**Scope:** Admin panel audit findings → Phase 2.5 decomposition  
+
+### Context
+
+Comprehensive audit of all 25 React admin pages and 8 server admin endpoints reveals that the admin UI is entirely cosmetic — zero API calls, zero endpoint wiring. All data is hardcoded mock data in local component state.
+
+### Findings Summary
+
+- **27 dead buttons** across detail/list/action pages (Save Draft, Submit Review, Simulate, Re-roll, Add User, Deploy ×3, Publish, Deprecate, Delete Draft, View All Activity, Review All)
+- **8 cosmetic forms** with no data binding to backend
+- **12 mock data lists** (all using hardcoded local component state)
+- **0 out of 25 pages make any API call**
+- **8 server endpoints** exist but are uncalled by React admin:
+  - `GET /admin/api/rooms`, `GET /admin/api/rooms/:roomId`
+  - `POST /admin/api/rooms/:roomId/pause`, `POST /admin/api/rooms/:roomId/resume`
+  - `GET /admin/api/creatures`, `GET /admin/api/players`, `GET /admin/api/metrics`, `GET /admin/api/sse`
+- **1 stub server endpoint** (`POST /admin/api/rooms/:roomId/spawn` — broadcasts chat message only, no NPC spawn logic)
+
+### Impact
+
+All admin pages render correctly but cannot persist any data. Designers using these screens would lose all work on page refresh.
+
+### Recommendation
+
+Before treating admin screens as "done", a wiring pass is needed:
+1. Define content CRUD API endpoints (GET/POST/PUT/DELETE for items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narrative)
+2. Wire list pages to fetch data from server
+3. Wire detail page Save/Submit buttons to POST/PUT endpoints
+4. Clarify purpose of orphan endpoints and SSE
+5. Implement spawn endpoint logic
+
+**Next:** See decision below (Elminster's Phase 2.5 decomposition).
+
+---
+
+## 2026-03-23T18:45:00Z: Phase 2.5 Admin Audit Decomposition
+
+**Author:** Elminster (Lead)  
+**Date:** 2026-03-23  
+**Status:** DECIDED  
+**Scope:** Admin screen audit findings → GitHub issue decomposition  
+**Audience:** Drizzt (Engine Dev), Jarlaxle (Systems Dev), Minsc (Tester), Volo (Client Dev)
+
+### Problem Statement
+
+Minsc's audit found 27 dead buttons and 8 orphan endpoints across admin UI. Risk: decomposing as 27 separate issues creates unmaintainable backlog with invisible dependency chains.
+
+**Decision:** Decompose into **12 well-scoped GitHub issues** (#128–139), grouped by functional area and dependency chain.
+
+### Issue Decomposition
+
+| # | Title | Type | Depends On | Priority |
+|---|-------|------|-----------|----------|
+| 139 | **FOUNDATIONAL: Content CRUD API** | Server | — | P1 Blocker |
+| 128 | Wire Creatures List + Detail | Client | #139 | P2 |
+| 129 | Wire Items List + Detail | Client | #139 | P2 |
+| 130 | Wire Biomes List + Detail + Stubs | Client | #139 | P2 |
+| 131 | Wire 6 Remaining Detail Pages | Client | #139 | P2 |
+| 132 | Wire Dashboard | Client+Server | #139 | P2 |
+| 133 | Deploy Page Implementation | Client+Server | — | P3 |
+| 134 | User Management | Client+Server | — | P3 |
+| 135 | Audit Log | Client+Server | — | P3 |
+| 136 | Simulator Features | Client+Server | #128, #131 | P3 |
+| 137 | Orphan Endpoints Finalization | Server | #131 | P3 |
+| 138 | Stub Pages + Layout Features | Client+Server | — | P3 |
+
+### Execution Sequence
+
+```
+PHASE 1 (Foundational):
+  #139 ← must complete first
+
+PHASE 2 (Detail Pages + Dashboard):
+  #128, #129, #130, #131 (all depend on #139)
+  #132 (Dashboard wiring)
+  #135 (Audit Log)
+
+PHASE 3 (Supporting Features + Management):
+  #134 (User Management)
+  #136 (Simulators, after creatures + loot tables work)
+  #137 (Room endpoints finalization)
+
+PHASE 4 (Polish):
+  #133 (Deploy)
+  #138 (Stubs + Layout)
+```
+
+### Rationale
+
+**Why not 27 separate issues?**
+- All 8 detail page Save buttons have identical requirements
+- Bulk actions cluster into 1 feature (not 3)
+- Pagination Previous/Next is 1 feature (not 2)
+- Result: 27 issues → confusing dependency graph, unclear ownership
+
+**Why group by entity type?**
+- Admin pages follow consistent CRUD pattern (List → Detail → Save)
+- Grouping allows engineers to build once per entity and reuse pattern
+
+**Why is #139 P1 blocker?**
+- All detail pages depend on GET/:id and PUT/:id endpoints
+- Prevents wasted effort on UI wiring without backend infrastructure
+
+### Content CRUD API Design (#139)
+
+**Pattern (per entity):**
+```
+GET    /admin/api/{entity}           → list (paginated)
+GET    /admin/api/{entity}/:id       → fetch one
+POST   /admin/api/{entity}           → create
+PUT    /admin/api/{entity}/:id       → update
+DELETE /admin/api/{entity}/:id       → soft delete or mark as draft
+```
+
+**Entities:** items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narrative
+
+**Server responsibility:**
+- Validation (required fields, enum values, numeric ranges)
+- Authorization (admin-only? or role-based per entity type?)
+- Audit logging (all mutations recorded)
+- Conflict resolution (optimistic locking or last-write-wins?)
+
+### Form Wiring Pattern (Detail Pages)
+
+Each detail page follows:
+1. Load data: `useEffect(() => { fetch(GET /admin/api/{entity}/:id) }, [id])`
+2. Update local state: `useState(entity)`
+3. Save: `onClick={() => fetch(PUT /admin/api/{entity}/:id, state)}`
+4. Handle errors: Show toast/modal on failure
+5. Handle loading: Disable buttons, show spinner
+
+### Labels
+
+- `phase:2.5` — Phase 2.5 scope (new label created)
+- `admin` — Admin panel (new label created)
+- `priority:p1` — #139 only (blocker)
+
+### Risks & Mitigations
+
+| Risk | Mitigation |
+|------|-----------|
+| Endpoint design changes mid-implementation | Review #139 endpoint design early in code review |
+| Authorization model unclear | Define admin role strategy before #139 merge |
+| Deployment flow complexity underestimated | Spike on deployment logic early; coordinate with Drizzt |
+| SSE scope creep | Clarify requirements in #137 before starting #138 |
+| Database performance (1000+ items) | Add pagination + indexes in #139; note in AC |
+
+### Follow-Up Actions
+
+1. **Drizzt (Engine Dev):** Review #139 endpoint design, implement Content CRUD API, clarify SSE usage
+2. **Jarlaxle (Systems Dev):** Estimate simulator logic (#136), possibly user management backend (#134)
+3. **Minsc (Tester):** Plan end-to-end test strategy, load testing (1000+ creatures)
+4. **Elminster (Lead):** Code review #139 before approval, monitor cross-system integration
+
+### Status
+
+- ✅ All 12 issues created and labeled `phase:2.5`
+- ✅ Dependency chain documented (in issue descriptions)
+- ⏳ #139 Content CRUD API design awaiting Drizzt review
+- ⏳ Sprint planning with team to estimate timeline
+
+---
+
+## User Directives Captured (2026-03-23)
+
+### 1. No Statically Defined Game Assets (2026-03-23T18:53:39Z)
+
+**By:** dkirby-ms (via Copilot)
+
+**Directive:** All content definitions (items, creatures, biomes, modifiers, skills, loot tables, factions, rooms, narrative) must be stored in PostgreSQL, not hardcoded in TypeScript registries. The CRUD API must create proper DB tables and migrate existing static data.
+
+**Why:** Admin screens need to manage real persistent data, not code-level constants. Static registries like `items/registry.ts` should be replaced with DB-backed repositories.
+
+**Implications:**
+- Content CRUD (#139) must use PostgreSQL storage, not in-memory `ContentStore`
+- Migration strategy needed to move `ITEM_REGISTRY` and other static data to DB
+- Admin UI can manage templates at runtime
+
+### 2. Microsoft Entra External Identities for OAuth (2026-03-23T18:55:27Z)
+
+**By:** dkirby-ms (via Copilot)
+
+**Directive:** Use Microsoft Entra External Identities for user authentication. An external tenant is already deployed. App registration and user flow configuration will be done manually by the user. The app must implement the OAuth flow against Entra External ID.
+
+**Why:** Cloud instances are live; need proper auth instead of dev-mode tokens.
+
+**Implementation Notes:**
+- External tenant deployed; app registration + user flow config done manually by user
+- App must implement OAuth flow (authorization code, token exchange, refresh)
+- Local auth behind dev toggle for testing (current bcrypt + JWT kept for dev)
+- Admin routes must enforce OAuth roles (not just static ADMIN_TOKEN)
+
+**Implications:**
+- Issue #140 [Auth] Implement Entra External ID OAuth for player authentication created
+- Auth audit completed; no OIDC libraries exist (clean slate)
+- OAuth implementation unblocks PR #141 (Content CRUD + PostgreSQL storage)
+
+---
+
+## Decision: Content CRUD API Architecture (2026-03-24)
+
+**By:** Drizzt (Engine Dev)
+
+**PR:** #141 (awaiting PostgreSQL + OAuth before merge approval)
+
+**Issue:** #139
+
+### Context
+
+Phase 2.5 admin pages need a content management API. The existing admin routes serve live runtime data (Colyseus rooms, creature instances, metrics). Content CRUD serves game *definition* data (templates, schemas) — conceptually different.
+
+### Decisions
+
+#### 1. Content Namespace: `/admin/api/content/{entity}`
+
+Routes namespaced under `/admin/api/content/` to avoid collision with existing live-data routes at `/admin/api/rooms` and `/admin/api/creatures`. Existing endpoints remain untouched.
+
+**Relevant to:** Jarlaxle (admin UI fetch URLs must use `/admin/api/content/` prefix), Minsc (integration test paths).
+
+#### 2. In-Memory ContentStore with Repository Pattern
+
+Generic `ContentStore<T>` class using `Map<string, T>` with async interface. Follows the same pattern as `PlayerRepository` and `StashRepository`. Ready for PG swap when needed.
+
+**⚠️ Update (2026-03-23):** User directive requires PostgreSQL storage. In-memory approach blocks PR #141 merge. Next phase: migrate to `ContentRepository` with PostgreSQL backend.
+
+**Relevant to:** Anyone adding persistence features.
+
+#### 3. Pre-Seeded from Existing Registries
+
+Content stores initialized from `ITEM_REGISTRY` (18 items), creature templates (1), plus biome/modifier/faction descriptors derived from shared type enums. Skills, loot-tables, rooms, and narrative start empty.
+
+**Relevant to:** Admin UI should expect pre-populated data for items, creatures, biomes, modifiers, factions.
+
+#### 4. Validation: Permissive for Phase 1
+
+Only `name` is universally required. Entity-specific checks are minimal (type enums for items, entries array for loot-tables). Full schema validation can be tightened as content schemas stabilize.
+
+**Relevant to:** Anyone building admin forms — server accepts flexible payloads.
+
+# Decision: Biome Admin UI Schema Adaptation
+
+**Date:** 2025-01-21  
+**Decider:** Drizzt (Engine Dev)  
+**Context:** Issue #130 — Wire BiomesList & BiomesDetail to Content CRUD API  
+**Status:** Implemented
+
+## Problem
+The BiomesList and BiomesDetail pages were built with mock data that didn't match the backend `BiomeDefinition` schema. The UI needed to be adapted to work with the real Content CRUD API.
+
+## Mock Schema (Before)
+```typescript
+interface Biome {
+  id: string;
+  name: string;
+  type: string;                    // e.g., "flooded_crypt"
+  signatureCreature: string;       // e.g., "Drowned Revenant"
+  signatureHazard: string;         // e.g., "Rising Waters"
+  roomCount: number;               // 18
+  status: "published" | "draft";
+  // ... plus detail fields like flavour, ambientSounds, lightLevelMin/Max, roomNames map
+}
+```
+
+## Backend Schema (Actual)
+```typescript
+interface BiomeDefinition {
+  id: string;
+  name: string;
+  description: string;
+  tier: number;
+  features: string[];
+  hazardTypes: string[];
+  roomProperties: string[];
+  narrationHints: string[];
+}
+```
+
+## Decision
+**Adapt the UI to fully embrace the backend schema**, removing all mock-specific fields and implementing proper CRUD operations.
+
+### Changes Made:
+1. **BiomesList Table Columns**:
+   - Removed: Type, Signature Creature, Signature Hazard, Room Templates, Status
+   - Added: Description (truncated), Tier, Features count, Hazards count
+   
+2. **BiomesDetail Form Fields**:
+   - Removed: type (slug), flavour, signatureCreature, signatureHazard, ambientSounds, lightLevelMin/Max, roomNames map
+   - Added: description (textarea), tier (number), features (array), hazardTypes (array), roomProperties (array), narrationHints (array)
+   
+3. **Tab Structure**:
+   - "Overview" → Basic info (name, description, tier) + features array
+   - "Room Names" → Renamed to "Room Properties" → roomProperties + narrationHints arrays
+   - "Room Descriptions" → Kept as stub ("Coming soon...")
+   - "Loot Table" → Kept as stub ("Coming soon...")
+   - "Hazards" → Wired to hazardTypes array editor
+
+## Rationale
+1. **Single Source of Truth**: Backend schema is authoritative. UI must adapt, not the other way around.
+2. **Simplicity**: Backend schema is simpler and more focused than mock — good for Phase 1.
+3. **Future-Proof**: Stubs for unimplemented tabs (Room Descriptions, Loot Table) allow for future expansion.
+4. **Array Editors**: Dynamic array fields (features, hazardTypes, etc.) are flexible and user-friendly.
+
+## Alternatives Considered
+1. **Keep mock fields, adapt backend**: ❌ Wrong direction — backend is frozen, UI is flexible.
+2. **Gradual migration**: ❌ Adds complexity, tech debt. Better to rip the band-aid off.
+3. **Dual schema support**: ❌ Unnecessary — no real biome data exists yet in dev.
+
+## Implementation Notes
+- Reused existing `admin-api.ts` utility (from #128, #129)
+- Loading/error states added for all API calls
+- Form validation checks required fields (name, description)
+- Navigation to detail view after create (with generated ID)
+
+## Follow-Up Work
+- Room Descriptions tab: Needs template editor (future)
+- Loot Table tab: Needs loot table selector (future)
+- Status/Publishing workflow: Submit Review button is placeholder
+- Admin auth: localStorage token is Phase 1 — needs secure flow for production
+
+## Related
+- Issue #130
+- PR #144
+- `packages/server/src/admin/content/content-types.ts` (BiomeDefinition)
+- `packages/client/src/lib/admin-api.ts` (CRUD utility)

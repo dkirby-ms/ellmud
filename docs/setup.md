@@ -4,8 +4,9 @@
 
 - **Node.js** ≥ 20.0.0 (see `.nvmrc` — currently pinned to 20)
 - **npm** (comes with Node.js)
-- **PostgreSQL** (optional, Phase 2 — in-memory repos used by default)
-- **Redis** (optional, Phase 2 — in-memory cache used by default)
+- **Docker** and **Docker Compose** (for PostgreSQL, Redis)
+- **PostgreSQL** (via Docker, or local installation)
+- **Redis** (via Docker, or local installation)
 
 ## Quick Start
 
@@ -20,14 +21,27 @@ nvm use  # reads .nvmrc
 # Install all dependencies (workspaces)
 npm install
 
+# Start PostgreSQL and Redis services (Phase 2+; skip for in-memory Phase 1)
+docker compose up -d
+
 # Build all packages (shared must build first)
 npm run build
 
-# Start the server
+# Start the server (watch mode)
 npm run dev:server
+
+# In another terminal, start the client (watch mode)
+npm run dev:client
 ```
 
-The server will start on `ws://localhost:2567` with the admin monitor at `http://localhost:2567/colyseus`.
+**Access Points:**
+- **Game Client & Admin Dashboard:** http://localhost:3000
+- **Server:** ws://localhost:2567
+- **Colyseus Monitor (internal):** http://localhost:2567/colyseus
+- **PostgreSQL:** localhost:5434 (user: `ellmud`, password: `ellmud_dev`, db: `ellmud`)
+- **Redis:** localhost:6379
+
+For Phase 1 (solo, in-memory mode), you can skip the `docker compose up -d` step and run with defaults.
 
 ## Project Structure
 
@@ -76,26 +90,36 @@ All environment variables have sensible defaults for local development. No `.env
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `2567` | Server listen port |
+| `CLIENT_URL` | `http://localhost:3000` | React client URL (for OAuth redirects) |
 | `AUTH_REQUIRED` | `false` | Require auth tokens to join rooms |
-| `MAX_PLAYERS_PER_SHARD` | `1` | Max concurrent players per shard (Phase 1: solo) |
+| `MAX_PLAYERS_PER_SHARD` | `1` | Max concurrent players per shard (Phase 1: solo, Phase 2+: scale) |
 | `MAX_REPLICAS` | `1` | Max Container Apps replicas |
+| `ENTRA_CLIENT_ID` | *(none)* | Microsoft Entra External ID client ID |
+| `ENTRA_CLIENT_SECRET` | *(none)* | Microsoft Entra External ID client secret |
+| `ENTRA_TENANT_ID` | *(none)* | Microsoft Entra tenant ID |
+| `ALLOW_LOCAL_AUTH` | `true` | Allow local username/password auth (Phase 2.5+) |
 | `REDIS_PRESENCE_ENABLED` | `false` | Enable Redis-backed Colyseus presence |
 | `REDIS_CONNECTION_STRING` | `redis://localhost:6379` | Redis connection string |
-| `DATABASE_URL` | *(none)* | PostgreSQL connection string (Phase 2) |
+| `DATABASE_URL` | *(none)* | PostgreSQL connection string (Phase 2+) |
+| `USE_PG_REPOS` | `false` | Use PostgreSQL repos instead of in-memory |
 | `AZURE_ENDPOINT` | *(none)* | Azure AI Foundry endpoint URL |
 | `AZURE_API_KEY` | *(none)* | Azure AI Foundry API key |
 | `AZURE_DEPLOYMENT_NAME` | `gpt-4o-mini` | Azure AI Foundry model deployment |
 | `AZURE_API_VERSION` | `2024-10-01` | Azure AI Foundry API version |
 | `LOG_LEVEL` | `info` | Logging level (debug, info, warn, error) |
+| `ADMIN_TOKEN` | *(random UUID)* | Admin API secret token for protected endpoints |
 
-### Phase 1 Defaults
+### Phase 1 & 2 Defaults
 
-Phase 1 runs entirely in-memory — no PostgreSQL, no Redis, no LLM required:
+Phase 1 and early Phase 2 can run entirely in-memory:
 
 - **Auth:** Optional. Anonymous join allowed when `AUTH_REQUIRED=false`.
-- **Database:** In-memory repositories (`InMemoryPlayerRepository`, `InMemoryStashRepository`, `InMemoryTokenStore`).
+- **Database:** In-memory repositories (players, stash, skills, etc.).
 - **Cache:** In-memory LRU narration cache (1000 entries).
 - **LLM:** Template fallback fires when no Azure credentials are configured.
+- **Colyseus Presence:** In-process matchmaker; single replica.
+
+For full Phase 2+ multiplayer and persistence, enable PostgreSQL and Redis via `.env`.
 
 ## Running Tests
 
@@ -115,46 +139,90 @@ npx vitest run --coverage -w @ellmud/server
 
 Tests use Vitest and are co-located in `__tests__/` directories alongside source code.
 
-## Database Setup (Phase 2)
+## Docker Development Services
 
-When moving to persistent storage:
+The `docker-compose.yml` starts PostgreSQL (port 5434) and Redis (port 6379) with sensible defaults for local development.
 
 ```bash
-# Start PostgreSQL locally
-docker run -d --name ellmud-db \
-  -e POSTGRES_DB=ellmud \
-  -e POSTGRES_USER=ellmud \
-  -e POSTGRES_PASSWORD=ellmud \
-  -p 5434:5432 \
-  postgres:16
+# Start services
+docker compose up -d
 
-# Set the connection string
-export DATABASE_URL=postgresql://ellmud:ellmud@localhost:5434/ellmud
+# Check status
+docker compose ps
 
-# Migrations run automatically on server start
+# Stop services
+docker compose down
+```
+
+### PostgreSQL
+
+- **Container:** ellmud-postgres
+- **Host:** localhost:5434 (external port)
+- **Port:** 5432 (internal)
+- **User:** ellmud
+- **Password:** ellmud_dev
+- **Database:** ellmud
+
+Migrations run automatically on server start when `DATABASE_URL` is set. See the "Database Setup" section below.
+
+### Redis
+
+- **Container:** ellmud-redis
+- **Host:** localhost:6379
+- **Memory limit:** 128MB with LRU eviction
+- **Persistence:** Disabled (ephemeral for local dev)
+
+## Database Setup (Phase 2+)
+
+When `DATABASE_URL` is set, migrations run automatically on server start.
+
+**Option 1: Docker Compose (Recommended)**
+```bash
+docker compose up -d  # starts ellmud-postgres
+export DATABASE_URL=postgresql://ellmud:ellmud_dev@localhost:5434/ellmud
 npm run dev:server
 ```
 
-Migration files are in `packages/server/src/db/migrations/`:
+**Option 2: Manual PostgreSQL**
+```bash
+# If you have PostgreSQL installed locally
+export DATABASE_URL=postgresql://user:password@localhost:5432/ellmud
+npm run dev:server
+```
 
-| Migration | Tables |
-|-----------|--------|
-| `001_create_players.sql` | `players`, `player_identities` |
-| `002_create_items.sql` | `item_definitions`, `stash_entries` |
-| `003_create_skills.sql` | `player_skills` |
-| `004_create_factions.sql` | `factions`, `faction_memberships` |
-| `005_create_run_history.sql` | `run_history` |
+### Available Migrations
 
-## Redis Setup (Phase 2)
+| File | Tables Created |
+|------|-----------------|
+| `001_create_players.sql` | `players`, `player_identities` (auth) |
+| `002_create_items.sql` | `item_definitions`, `stash_entries` (inventory) |
+| `003_create_skills.sql` | `player_skills` (progression) |
+| `004_create_factions.sql` | `factions`, `faction_memberships` (groups) |
+| `005_create_run_history.sql` | `run_history` (extraction runs) |
+| `006_create_audit_log.sql` | `audit_log` (admin actions) |
+| `007_create_admin_users.sql` | `admin_users`, `admin_sessions` (admin accounts) |
+
+Track applied migrations in the `_migrations` table:
+```sql
+SELECT * FROM _migrations ORDER BY applied_at;
+```
+
+## Redis Setup (Phase 2+)
 
 ```bash
-# Start Redis locally
+# Via Docker Compose (recommended)
+docker compose up -d
+
+# Or manually
 docker run -d --name ellmud-redis -p 6379:6379 redis:7
 
-# Enable Redis presence
+# Enable Redis presence in server config
 export REDIS_PRESENCE_ENABLED=true
 export REDIS_CONNECTION_STRING=redis://localhost:6379
+npm run dev:server
 ```
+
+**Note:** Colyseus uses Redis for presence (multi-replica awareness) and narration cache eviction. Not required for single-server local dev, but recommended for testing multiplayer.
 
 ## Tech Stack
 
@@ -164,11 +232,12 @@ export REDIS_CONNECTION_STRING=redis://localhost:6379
 | Language | TypeScript (strict) |
 | WebSocket Framework | Colyseus 0.17.x |
 | HTTP Framework | Express 4 |
-| Auth | bcryptjs + UUID tokens |
+| Auth | Microsoft Entra External ID (OAuth/OIDC) + bcryptjs + UUID tokens |
 | Database | PostgreSQL (pg driver, raw SQL) |
-| Cache | In-memory LRU (Redis planned) |
+| Cache | Redis (presence, narration) |
+| Admin UI | React 18 + Vite + Tailwind CSS |
 | LLM | Azure AI Foundry (GPT-4o-mini) |
 | Testing | Vitest |
 | Linting | ESLint |
-| Build | TypeScript compiler (tsc) |
+| Build | TypeScript compiler (tsc) + Vite |
 | Monorepo | npm workspaces |

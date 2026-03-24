@@ -15,6 +15,7 @@ export interface PlayerIdentity {
   provider_id: string | null;
   email: string | null;
   password_hash: string | null;
+  role: string;
   created_at: Date;
 }
 
