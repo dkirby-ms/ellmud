@@ -24,18 +24,6 @@ resource redisService 'Microsoft.App/containerApps@2024-03-01' = {
         type: 'redis'
       }
     }
-    template: {
-      containers: [
-        {
-          name: 'redis'
-          image: 'redis:7-alpine'
-          resources: {
-            cpu: json('0.25')
-            memory: '0.5Gi'
-          }
-        }
-      ]
-    }
   }
 }
 
