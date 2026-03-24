@@ -1271,3 +1271,14 @@ Drizzt wired `useDevAutoLogin` hook into `Login.tsx`. No visual UI changes — j
   - `preserve-caught-error`: Added `{ cause: err }` to thrown errors in EntraAuthService.ts and PgPlayerRepository.ts.
   - `no-explicit-any`: Replaced `as any` with type-safe cast in weather-system.test.ts.
 - **Learning:** ESLint `no-unused-vars` rule's `argsIgnorePattern: /^_/` only applies to function parameters, not destructured variables or catch bindings. For destructured-to-omit patterns, use eslint-disable-next-line. For catch blocks, use empty `catch { }` (no binding).
+
+### 2025-07-18: Merge Conflict Resolution — PR #158 (dev → uat)
+- **Task:** Resolve 19 conflicting files between dev and uat branches, caused by parallel lint-fix sweeps (60 on dev, 27 on uat).
+- **Strategy:** Merged `origin/uat` into `dev` locally. For every conflict, kept dev's (ours) version since dev is the superset branch with more lint fixes, newer features (InMemoryUserStore, useDevAutoLogin hook, providerIndex), and cleaner lint patterns (void expressions vs eslint-disable comments, explicit types vs `any`).
+- **Conflict categories:**
+  - *Lint-fix overlaps (11 files):* Both branches fixed the same lint issues but with different approaches. Dev's explicit-type lint fixes (`string | number | boolean`) beat uat's `any`. Dev's `void expr` pattern beat uat's `// eslint-disable-next-line`.
+  - *Duplicated blocks (5 files):* UAT's lint sweep re-introduced useEffect/validateForm/handleSave blocks that dev had already consolidated. Kept dev (empty side = no duplication).
+  - *Add/add conflicts (5 files):* New files on both branches with different content. Dev versions canonical (InMemoryUserStore pattern, barrel exports, etc.).
+  - *decisions.md:* Append-only doc. Dev had one new entry (Dev Auto-Login Hook), uat had nothing. Kept dev.
+- **Verification:** 0 eslint errors, 1444/1444 server tests passing, PR #158 now MERGEABLE.
+- **Learning:** Python regex with `re.DOTALL` for conflict resolution is dangerous when conflicts are close together — `.*?` can span across conflict boundaries consuming valid code. For files with many conflicts, use line-by-line state machine or `git checkout --ours` instead.
