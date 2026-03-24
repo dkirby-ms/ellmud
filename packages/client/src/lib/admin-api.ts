@@ -250,6 +250,7 @@ export async function spawnInRoom(
     method: 'POST',
     body: JSON.stringify({ type, id: templateId, targetRoomId }),
   });
+}
 
 // ─── Dashboard endpoints ─────────────────────────────────────────────────────
 
@@ -297,4 +298,105 @@ export async function fetchRecentChanges(): Promise<RecentChangesResponse> {
 
 export async function fetchValidationWarnings(): Promise<ValidationWarningsResponse> {
   return adminFetch<ValidationWarningsResponse>('/admin/api/dashboard/validation-warnings');
+}
+
+// ─── User Management API ─────────────────────────────────────────────────────
+
+export interface AdminUser {
+  id: string;
+  identityId: string;
+  username: string;
+  email: string | null;
+  role: string;
+  provider: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateUserPayload {
+  username: string;
+  email?: string;
+  password: string;
+  role?: string;
+}
+
+export interface UpdateUserPayload {
+  username?: string;
+  email?: string;
+  role?: string;
+}
+
+export async function listUsers(): Promise<AdminUser[]> {
+  return adminFetch<AdminUser[]>('/admin/api/users');
+}
+
+export async function getUser(id: string): Promise<AdminUser> {
+  return adminFetch<AdminUser>(`/admin/api/users/${id}`);
+}
+
+export async function createUser(data: CreateUserPayload): Promise<AdminUser> {
+  return adminFetch<AdminUser>('/admin/api/users', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateUser(id: string, data: UpdateUserPayload): Promise<AdminUser> {
+  return adminFetch<AdminUser>(`/admin/api/users/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  return adminFetch<void>(`/admin/api/users/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+// ─── Notifications (wraps validation warnings + recent changes) ──────────────
+
+export interface AdminNotification {
+  id: string;
+  type: 'warning' | 'error' | 'change';
+  title: string;
+  message: string;
+  entityType?: string;
+  entityId?: string;
+  timestamp: string;
+}
+
+export async function fetchNotifications(): Promise<AdminNotification[]> {
+  const [warningsRes, changesRes] = await Promise.all([
+    fetchValidationWarnings().catch(() => ({ warnings: [], totalWarnings: 0, totalErrors: 0 })),
+    fetchRecentChanges().catch(() => ({ changes: [] })),
+  ]);
+
+  const notifications: AdminNotification[] = [];
+
+  for (const w of warningsRes.warnings) {
+    notifications.push({
+      id: `warn-${w.entityType}-${w.entityId}`,
+      type: w.severity,
+      title: `${w.entityName} (${w.entityType})`,
+      message: w.message,
+      entityType: w.entityType,
+      entityId: w.entityId,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  for (const c of changesRes.changes.slice(0, 5)) {
+    notifications.push({
+      id: `change-${c.entityType}-${c.id}`,
+      type: 'change',
+      title: `${c.name} updated`,
+      message: `${c.entityType} was modified`,
+      entityType: c.entityType,
+      entityId: c.id,
+      timestamp: c.updatedAt,
+    });
+  }
+
+  return notifications;
 }
