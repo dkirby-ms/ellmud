@@ -4100,3 +4100,39 @@ Zero lint errors remain (verified: `npx eslint` returns 0 errors, 549 warnings).
 
 **Impact:** Clean lint baseline established; zero errors; Phase 3 ready to proceed
 
+
+---
+
+### 2026-03-24T12:01: Decision: Jarlaxle Post-Merge Cleanup — PR #154 Follow-Up
+**By:** Jarlaxle (Systems Dev)  
+**Status:** ✅ COMPLETED
+
+**Three Non-Blocking Notes Addressed:**
+
+1. **Dead Code in Test File** — Removed
+   - Deleted unused `getClient` import from `db/index.js` (caused silent CI failures)
+   - Removed `cleanupTestUser()` helper that used direct DB queries
+   - Eliminated wasteful `pg.Pool` side effect in test initialization
+
+2. **Test Isolation via resetStore()** — Implemented
+   - Exported `resetInMemoryStore()` from user-routes.ts
+   - Wired into `beforeEach()` in admin-users.test.ts
+   - Follows `resetStashProvider()` pattern from stash module
+   - Ensures clean store state between test runs, prevents fragility
+
+3. **InMemoryUserStore Constraint Parity** — Added
+   - Implemented `providerIndex` Map tracking `(provider, email)` tuples
+   - `createUser()` now throws `DuplicateProviderError` (matches PgUserStore)
+   - `deleteUser()` cleans up providerIndex entries
+   - Ensures test constraints match production behavior
+
+**Verification:**
+- ✅ TypeScript type check passes
+- ✅ All 39 tests pass (admin-users suite)
+- ✅ Test isolation verified (no state leakage between test runs)
+- ✅ Committed: af769a5
+
+**Impact:**
+- Admin-users test suite is now robust, maintainable, and production-faithful
+- Pattern established for future store-based tests
+- No breaking changes or production impact

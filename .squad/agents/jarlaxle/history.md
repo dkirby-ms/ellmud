@@ -1177,3 +1177,77 @@ Resolve all lint errors blocking Phase 3 development across ESLint scope.
 
 **Impact:**
 Lint baseline clean, enabling confident Phase 3 development without lint noise masking real issues.
+
+---
+
+### Post-Merge Cleanup: UserStore Abstraction (PR #154) (2026-03-24T12:06)
+**Status:** ✅ COMPLETE & COMMITTED to dev
+
+**Objective:**
+Address three non-blocking cleanup items from Elminster's PR #154 review.
+
+**Changes Made:**
+
+1. **Removed Dead Import** (test file)
+   - Deleted unused `getClient` import from `admin-users.test.ts`
+   - Test file now only uses InMemoryUserStore, no direct DB calls
+
+2. **Added Test Isolation via resetStore()** (InMemoryUserStore)
+   - Added `resetStore()` method that clears all Maps (identities, players, usernameIndex, providerIndex)
+   - Tests now use a shared `testUserStore` instance passed to `createUserRouter()`
+   - Each test suite calls `resetStore()` in `beforeEach` for clean state
+   - Exception: PUT Validation suite uses `beforeAll` to create a persistent user, so its `beforeEach` skips reset
+   - Simplified `cleanupTestUser()` to a no-op since resetStore handles cleanup
+
+3. **Added Duplicate Provider Enforcement** (InMemoryUserStore)
+   - Added `providerIndex` Map tracking `provider:email` combinations
+   - `createUser()` now throws `DuplicateProviderError` when trying to create a second local identity (matching PgUserStore behavior)
+   - `deleteUser()` properly cleans up providerIndex entries
+   - Ensures InMemoryUserStore has full parity with PgUserStore constraints
+
+**Results:**
+- ✅ Type check passes (TypeScript happy)
+- ✅ All 39 tests pass
+- ✅ Test isolation verified (no state leakage between tests)
+- ✅ Committed to dev branch
+
+## Learnings
+
+**Test Isolation Pattern:**
+When using shared store instances in tests, a `resetStore()` method is cleaner than recreating instances. However, be careful with `beforeAll` setup - if a test suite creates resources in `beforeAll`, its `beforeEach` should NOT reset the store.
+
+**In-Memory Store Parity:**
+In-memory test implementations should enforce the same constraints as production stores. The providerIndex addition ensures InMemoryUserStore throws the same errors as PgUserStore for duplicate provider entries, maintaining test validity.
+
+---
+
+## 2026-03-24T12:01 — Post-Merge Cleanup (PR #154 Follow-Up)
+
+**Task:** Address 3 non-blocking cleanup notes from Elminster's review
+
+**Completed:**
+
+1. **Removed Dead Code from admin-users.test.ts**
+   - Deleted unused `getClient` import from `db/index.js`
+   - Removed `cleanupTestUser()` function (used direct DB queries that silently failed in CI)
+   - Eliminated wasteful `pg.Pool` creation side effect
+
+2. **Implemented Test Isolation via resetStore()**
+   - Added `resetInMemoryStore()` export from user-routes.ts
+   - Wired into test file's `beforeEach()`
+   - Follows `resetStashProvider()` pattern established in stash module
+   - Ensures clean state between test runs
+
+3. **Added InMemoryUserStore Constraint Parity**
+   - Implemented `providerIndex` Map tracking `(provider, email)` tuples
+   - `createUser()` now enforces `DuplicateProviderError` (matches PgUserStore)
+   - `deleteUser()` cleans up providerIndex entries
+   - Full production behavior fidelity in test store
+
+**Verification:**
+- ✅ All 39 tests pass
+- ✅ Test isolation confirmed
+- ✅ Committed: af769a5
+
+**Pattern Established:** Store-backed tests now follow the abstraction + reset pattern, enabling maintainable, production-faithful test implementations.
+
