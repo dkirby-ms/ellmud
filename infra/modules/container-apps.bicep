@@ -108,11 +108,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
         targetPort: 2567
         transport: 'http'
         allowInsecure: false
-        // Sticky sessions for WebSocket — ensures all messages from same client
-        // route to same replica (required for shard state isolation)
-        stickySessions: {
-          affinity: 'sticky'
-        }
         traffic: [
           {
             latestRevision: true
