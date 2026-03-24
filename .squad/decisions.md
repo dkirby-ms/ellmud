@@ -4041,3 +4041,62 @@ Systematically resolve all violations:
 - Zero lint errors remaining in scope
 - Ready for Phase 3 development
 - Code quality baseline established
+
+---
+
+### 2026-03-24T11:07: Decision: Elminster Review — PR #154 (UserStore Fix) + Lint Sweep Approval
+**By:** Elminster (Lead/Architect)  
+**Status:** ✅ PR #154 APPROVED WITH NOTES; Lint Sweep APPROVED
+
+#### Part 1: PR #154 Code Review
+
+**Verdict: APPROVED WITH NOTES**
+
+**Assessment:**
+The UserStore abstraction is architecturally sound. It follows the existing repository pattern (StashRepository, PlayerRepository) and solves the CI/CD failure correctly. All 39 tests pass on the PR branch — the 19 previously-failing CRUD tests now exercise InMemoryUserStore without any PostgreSQL dependency.
+
+**What's right:**
+- `UserStore` interface with 5 clean async methods — consistent with `StashRepository` and `PlayerRepository`
+- `PgUserStore` preserves all original SQL logic exactly: transactions, `BEGIN`/`COMMIT`/`ROLLBACK`, constraint error mapping (`23505` → domain errors)
+- `InMemoryUserStore` faithfully simulates key DB behaviours: case-insensitive username uniqueness, cascading deletes (identity + player + username index), sort order (`createdAt DESC`)
+- `DuplicateUsernameError`/`DuplicateProviderError` as domain errors — clean separation from PG-specific error codes
+- Auto-selection via `DATABASE_URL` is consistent with the `USE_PG` pattern in `index.ts`
+- `createUserRouter(store?)` accepts optional DI — backwards-compatible, testable
+- `toJson()` helper eliminates 4 repeated camelCase mapping blocks
+
+**Non-blocking notes (post-merge cleanup):**
+
+1. **Dead code in test file:** `admin-users.test.ts` still imports `getClient` from `db/index.js` and contains `cleanupTestUser()` which uses direct DB queries. These silently fail in CI (caught + ignored). Should be removed to avoid confusion. Import of `db/index.js` also eagerly creates a `pg.Pool` — harmless but wasteful.
+
+2. **No `resetStore()` for test isolation:** The `sharedInMemoryStore` singleton in `user-routes.ts` has no reset mechanism. The stash-provider pattern provides `resetStashProvider()` for exactly this purpose. Currently safe because vitest isolates per file, but fragile if test architecture changes. Consider adding `resetInMemoryStore()` export or using explicit DI in the test file (`createUserRouter(new InMemoryUserStore())`).
+
+3. **InMemoryUserStore fidelity gap:** `createUser()` does not enforce the `uq_identity_provider` unique constraint (no `DuplicateProviderError`). `PgUserStore` does. Not tested currently (all tests use `'local'` provider), but if duplicate-provider tests are added later, they'll pass in CI but not in production. Consider adding a provider index to InMemoryUserStore for parity.
+
+**Assignee for post-merge cleanup:** Jarlaxle
+
+**Decision:** Merge PR #154. Jarlaxle to schedule 3 non-blocking cleanup items.
+
+**Impact:** Admin users API stabilized; UserStore interface pattern established; all 39 tests passing
+
+---
+
+#### Part 2: Lint Sweep Review
+
+**Verdict: APPROVED**
+
+**Assessment:**
+Zero lint errors remain (verified: `npx eslint` returns 0 errors, 549 warnings). All fixes are mechanical with no behaviour changes. Spot-checked 10+ files across server, client, and shared packages.
+
+**Fix categories verified:**
+- **`no-explicit-any`**: `any` → `Record<string, unknown>` with appropriate type assertions in map callbacks (CreatureDetail, admin-api). Correct.
+- **`no-unused-vars`**: Unused imports removed (`useState` in SkillsList, `query` in admin-users.test, `TickResult`/`TRACKING_THRESHOLDS`/etc in phase2-qa.test). Unused callback params prefixed with `_` (`_ctx`, `_newCount`). Correct.
+- **`no-invalid-void-type`**: `adminFetch<void>` → `adminFetch<undefined>` in generic positions (admin-api). Correct per TypeScript semantics.
+- **`preserve-caught-error`**: `catch (err)` → `catch` where error unused (admin-users cleanup). Correct.
+- **Unused variables removed entirely** when truly dead (`searchQuery`/`setSearchQuery` in SkillsList, `result` in phase2 test). Correct.
+
+**One minor observation (non-blocking):** In `phase2-qa.test.ts`, `const traceCount = ...` was changed to `void traces.getTracesInRoom(ROOMS.ENTRY).length` rather than being removed or asserted. The `void` prefix suppresses the linter but the line computes a value for nothing. Pre-existing issue — the assertion was probably removed in an earlier refactor.
+
+**Decision:** Approved. No action needed; already committed to dev.
+
+**Impact:** Clean lint baseline established; zero errors; Phase 3 ready to proceed
+
