@@ -464,3 +464,71 @@ export async function simulateLootDrops(id: string, count = 10): Promise<LootSim
 export async function simulateCreatureReroll(id: string, count = 5): Promise<CreatureRerollResult> {
   return adminFetch<CreatureRerollResult>(`/admin/api/simulate/creature/${id}/reroll?count=${count}`, { method: 'POST' });
 }
+
+// ─── Deploy API ──────────────────────────────────────────────────────────────
+
+export interface DeployHistoryRecord {
+  id: string;
+  environment: 'staging' | 'production';
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'rolled_back';
+  deployed_by: string;
+  entity_count: number;
+  changes_summary: Record<string, number>;
+  started_at: string;
+  completed_at: string | null;
+  notes: string | null;
+}
+
+export interface PendingChange {
+  entityType: string;
+  entityId: string;
+  name: string;
+  action: 'created' | 'modified' | 'deleted';
+  modifiedAt: string;
+}
+
+export interface DeployDiffResponse {
+  pendingChanges: PendingChange[];
+  lastDeploy: {
+    environment: string;
+    completedAt: string;
+    entityCount: number;
+    deployedBy: string;
+  } | null;
+}
+
+export interface DeployHistoryResponse {
+  deployments: DeployHistoryRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export async function fetchDeployDiff(): Promise<DeployDiffResponse> {
+  return adminFetch<DeployDiffResponse>('/admin/api/deploy/diff');
+}
+
+export async function deployToStaging(deployedBy = 'admin'): Promise<DeployHistoryRecord> {
+  return adminFetch<DeployHistoryRecord>('/admin/api/deploy/staging', {
+    method: 'POST',
+    body: JSON.stringify({ deployedBy }),
+  });
+}
+
+export async function deployToProduction(deployedBy = 'admin'): Promise<DeployHistoryRecord> {
+  return adminFetch<DeployHistoryRecord>('/admin/api/deploy/production', {
+    method: 'POST',
+    body: JSON.stringify({ confirm: 'DEPLOY', deployedBy }),
+  });
+}
+
+export async function fetchDeployHistory(limit = 20, offset = 0): Promise<DeployHistoryResponse> {
+  return adminFetch<DeployHistoryResponse>(`/admin/api/deploy/history?limit=${limit}&offset=${offset}`);
+}
+
+export async function rollbackDeployment(id: string): Promise<DeployHistoryRecord> {
+  return adminFetch<DeployHistoryRecord>(`/admin/api/deploy/${id}/rollback`, {
+    method: 'POST',
+  });
+}
+

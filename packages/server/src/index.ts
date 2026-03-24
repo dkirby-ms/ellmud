@@ -15,7 +15,7 @@ import {
   initColyseusAuth,
 } from './auth/index.js';
 import { createHealthRouter } from './health.js';
-import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter } from './admin/index.js';
+import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter, createDeployRouter } from './admin/index.js';
 import { getConfig } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence } from './cache/index.js';
@@ -77,6 +77,10 @@ console.log('[Ellmud] Audit log API: enabled');
 
 // Simulation API — test game mechanics (loot drops, creature stat rolls)
 app.use(createSimulateRouter({ stores: contentStores }));
+
+// Deploy API — content deployment simulation (staging, production)
+app.use('/admin/api/deploy', createDeployRouter());
+console.log('[Ellmud] Deploy API: enabled');
 
 // Admin runtime API — room management, metrics, SSE. Receives contentStores for spawn.
 app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis, isStashPg: isStashPg(), contentStores }));
