@@ -168,6 +168,90 @@ export async function deleteCreature(id: string): Promise<void> {
   });
 }
 
+// ─── Live Room Management API ────────────────────────────────────────────────
+
+export interface LiveRoomSummary {
+  roomId: string;
+  name: string;
+  clients: number;
+  maxClients: number;
+  locked: boolean;
+  createdAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface LiveRoomPlayer {
+  sessionId: string;
+  currentRoomId: string;
+  inventoryCount: number;
+  currentWeight: number;
+  maxCarryWeight: number;
+}
+
+export interface LiveRoomCreature {
+  id: string;
+  name: string;
+  type: string;
+  hp: number;
+  maxHp: number;
+  currentRoomId: string;
+  behaviorState: string;
+  isAlive: boolean;
+}
+
+export interface LiveRoomDetail {
+  roomId: string;
+  name: string;
+  clients: number;
+  biome?: string;
+  lifecycle?: string;
+  stability?: number;
+  collapseTimer?: number;
+  tick?: number;
+  playerCount?: number;
+  paused: boolean;
+  players?: LiveRoomPlayer[];
+  creatures?: LiveRoomCreature[];
+}
+
+export interface SpawnResult {
+  roomId: string;
+  spawned: { type: string; id: string; creatureId?: string; spawnRoomId?: string };
+  message: string;
+}
+
+export async function fetchLiveRooms(): Promise<{ rooms: LiveRoomSummary[] }> {
+  return adminFetch<{ rooms: LiveRoomSummary[] }>('/admin/api/rooms');
+}
+
+export async function fetchLiveRoomDetail(roomId: string): Promise<LiveRoomDetail> {
+  return adminFetch<LiveRoomDetail>(`/admin/api/rooms/${roomId}`);
+}
+
+export async function pauseRoom(roomId: string): Promise<{ roomId: string; paused: boolean }> {
+  return adminFetch<{ roomId: string; paused: boolean }>(`/admin/api/rooms/${roomId}/pause`, {
+    method: 'POST',
+  });
+}
+
+export async function resumeRoom(roomId: string): Promise<{ roomId: string; paused: boolean }> {
+  return adminFetch<{ roomId: string; paused: boolean }>(`/admin/api/rooms/${roomId}/resume`, {
+    method: 'POST',
+  });
+}
+
+export async function spawnInRoom(
+  roomId: string,
+  type: 'creature' | 'item',
+  templateId: string,
+  targetRoomId?: string
+): Promise<SpawnResult> {
+  return adminFetch<SpawnResult>(`/admin/api/rooms/${roomId}/spawn`, {
+    method: 'POST',
+    body: JSON.stringify({ type, id: templateId, targetRoomId }),
+  });
+}
+
 // ─── Dashboard endpoints ─────────────────────────────────────────────────────
 
 export interface DashboardMetrics {
@@ -297,6 +381,57 @@ export async function spawnInRoom(
   return adminFetch<SpawnResult>(`/admin/api/rooms/${roomId}/spawn`, {
     method: 'POST',
     body: JSON.stringify({ type, id: templateId, targetRoomId }),
+// ─── User Management API ─────────────────────────────────────────────────────
+
+export interface AdminUser {
+  id: string;
+  identityId: string;
+  username: string;
+  email: string | null;
+  role: string;
+  provider: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateUserPayload {
+  username: string;
+  email?: string;
+  password: string;
+  role?: string;
+}
+
+export interface UpdateUserPayload {
+  username?: string;
+  email?: string;
+  role?: string;
+}
+
+export async function listUsers(): Promise<AdminUser[]> {
+  return adminFetch<AdminUser[]>('/admin/api/users');
+}
+
+export async function getUser(id: string): Promise<AdminUser> {
+  return adminFetch<AdminUser>(`/admin/api/users/${id}`);
+}
+
+export async function createUser(data: CreateUserPayload): Promise<AdminUser> {
+  return adminFetch<AdminUser>('/admin/api/users', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateUser(id: string, data: UpdateUserPayload): Promise<AdminUser> {
+  return adminFetch<AdminUser>(`/admin/api/users/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  return adminFetch<void>(`/admin/api/users/${id}`, {
+    method: 'DELETE',
   });
 }
 
