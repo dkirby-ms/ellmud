@@ -1,14 +1,41 @@
 # Admin Guide
 
-## Colyseus Monitor Dashboard
+The admin dashboard is a comprehensive React application for managing game content, monitoring live state, and deploying updates. It runs alongside the game server.
 
-The admin dashboard is available at:
+## Quick Access
 
+- **Admin Dashboard:** http://localhost:3000/admin (after running `npm run dev:client`)
+- **Admin API:** http://localhost:2567/admin/api/* (protected by `ADMIN_TOKEN`)
+- **Server Monitor:** http://localhost:2567/colyseus (built-in Colyseus dashboard)
+
+## Authentication
+
+### Admin Login
+
+Admin accounts are managed in the `admin_users` table (PostgreSQL). To create an admin account:
+
+1. Use the **User Management** section in the admin dashboard (admin-only)
+2. Or insert directly into the database:
+   ```sql
+   INSERT INTO admin_users (username, password_hash, roles) 
+   VALUES ('admin', bcrypt_hash('password'), '["content", "audit", "deploy"]');
+   ```
+
+Admin roles:
+- **content:** Create, read, update, delete game entities (creatures, items, biomes, etc.)
+- **audit:** View audit log and admin action history
+- **deploy:** Promote changes to staging/production environments
+- **users:** Manage admin users and permissions
+
+### Protected Endpoints
+
+All `/admin/api/*` endpoints require the `ADMIN_TOKEN` header:
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:2567/admin/api/creatures
 ```
-http://localhost:2567/colyseus
-```
 
-This is the built-in [Colyseus Monitor](https://docs.colyseus.io/tools/monitor/) providing real-time visibility into server state.
+The token defaults to a random UUID at startup (logged to console). Override via `ADMIN_TOKEN` env var.
 
 ### Dashboard Features
 
@@ -17,14 +44,69 @@ This is the built-in [Colyseus Monitor](https://docs.colyseus.io/tools/monitor/)
 - **Connected Clients** — See which clients are connected to which rooms
 - **Server Metrics** — Uptime, memory usage, room count
 
-> **Note:** The monitor uses Colyseus Schema state sync internally. This is the *only* consumer of Schema sync — game clients receive narrated prose only.
+## Admin Dashboard Features
 
-### Room Types Visible
+### Content Management (Phase 2+)
 
-| Room | Identifier | Schema State Includes |
-|------|-----------|----------------------|
-| `ShardRoom` | `shard` | Shard lifecycle, collapse timer, stability, player count, room graph |
-| `RefugeRoom` | `refuge` | Connected players, stash metadata |
+The admin dashboard provides full CRUD operations for 11 entity types:
+
+| Entity | Management |
+|--------|------------|
+| **Creatures** | List, create, edit stats/behaviors/drops |
+| **Items** | List, create, edit tiers/weights/attributes |
+| **Biomes** | List, create, edit atmospheres/creatures/loot |
+| **Modifiers** | List, create, edit stat bonuses/restrictions |
+| **Loot Tables** | List, create, edit drop rates and creature associations |
+| **Skills** | List, create, edit progression/abilities |
+| **Factions** | List, create, edit memberships/rewards |
+| **Rooms** | List, create, edit graph connections and properties |
+| **Narrative Templates** | List, create, edit prose for game events |
+| **Contracts** | View planned contract system (stub) |
+| **Recipes** | View planned crafting system (stub) |
+
+All changes are tracked in the **Audit Log** with full admin attribution.
+
+### Audit Log (Phase 2.5)
+
+Real-time log of all admin actions:
+- **What:** Entity type, action (create/update/delete), changes
+- **Who:** Admin username
+- **When:** Timestamp
+- **Why:** Change reason (optional note)
+
+Filter by:
+- Entity type
+- Action (create, update, delete)
+- Admin user
+- Date range
+
+Exports to CSV for compliance/record-keeping.
+
+### Simulators (Phase 2.5)
+
+#### Loot Drop Simulator
+Test loot distribution logic:
+1. Select a creature type
+2. Simulate N drops (default 1000)
+3. View distribution: item name, tier, drop percentage
+4. Verify balance against design targets
+
+#### Creature Stat Re-roll Simulator
+Verify creature stat rolls:
+1. Select a creature type
+2. Simulate N rolls
+3. View min/max/average for health, armor, damage
+4. Adjust roll formulas and re-test
+
+### Deploy Page (Phase 2.5)
+
+Promote content changes to different environments:
+
+1. **Preview Diff** — Show all pending changes (creatures, items, etc.) vs. production
+2. **Deploy to Staging** — Push changes to staging environment for testing
+3. **Promote to Production** — Live deploy to all players
+
+Requires **deploy** role. Audit log records all deployments.
 
 ## Health Check
 
@@ -79,7 +161,7 @@ The narration service tracks performance counters in-memory:
 - **Timeout rate** — How often the LLM exceeds its budget
 - **Fallback rate** — How often templates fire instead of LLM prose
 
-Access via code or future admin API (Phase 2).
+Access via `/admin/api/metrics` (SSE stream for real-time updates).
 
 ### Combat Debugging
 
@@ -100,7 +182,7 @@ Combat encounters are deterministic. Given the same initial state and actions, t
 | Player can't join shard | `MAX_PLAYERS_PER_SHARD=1` and shard occupied | Increase limit or wait for shard to collapse |
 | Extraction fails | Player not in extraction-type room | Check room type via monitor dashboard |
 
-### Database Migrations (Phase 2)
+### Database Migrations (Phase 2+)
 
 Migrations run automatically on server start when `DATABASE_URL` is set. Track applied migrations in the `_migrations` table:
 
@@ -109,17 +191,18 @@ SELECT * FROM _migrations ORDER BY applied_at;
 ```
 
 Migration files in `packages/server/src/db/migrations/`:
-- `001_create_players.sql`
-- `002_create_items.sql`
-- `003_create_skills.sql`
-- `004_create_factions.sql`
-- `005_create_run_history.sql`
+- `001_create_players.sql` — Player accounts, identities, authentication
+- `002_create_items.sql` — Item definitions, stash entries, inventory
+- `003_create_skills.sql` — Player skill progression
+- `004_create_factions.sql` — Faction definitions, memberships
+- `005_create_run_history.sql` — Extraction run history, analytics
+- `006_create_audit_log.sql` — Admin action audit trail
+- `007_create_admin_users.sql` — Admin accounts, roles, sessions
 
-## Phase 2 Admin Features (Planned)
+## Phase 3+ Planned Features
 
-- `GET /admin/stashes` — Dump all player stashes
-- `GET /admin/players` — List all registered players
-- `GET /admin/shards/:id` — Inspect active shard state
-- `POST /admin/spawn-creature` — Manually spawn creatures
-- Narration telemetry dashboard
-- Player ban/mute controls
+- Player analytics dashboard (session duration, favorite biomes, combat stats)
+- Leaderboard and achievements
+- Social features (friend lists, guilds, trading)
+- PvP arena matchmaking
+- Advanced loot table analysis
