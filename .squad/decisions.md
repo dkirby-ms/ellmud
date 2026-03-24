@@ -4154,3 +4154,112 @@ Zero lint errors remain (verified: `npx eslint` returns 0 errors, 549 warnings).
 ### Team Impact
 
 These patterns should be followed for future lint fixes to keep CI green. The 540 warnings (mostly `no-non-null-assertion`) are not blocking CI and can be addressed separately.
+
+---
+
+### 2026-03-24T12:34: Decision: Admin User Routes — UserStore Abstraction
+**By:** Drizzt (Engine Dev)  
+**Issue:** #127
+
+**What:** Extracted `UserStore` interface from admin user routes with two implementations:
+- `PgUserStore` (production, PostgreSQL)
+- `InMemoryUserStore` (CI/dev without DB)
+
+**Why:** Admin-users test was the only test hitting real PostgreSQL without mocking. CI has no DB service → HTTP 500. All other tests mock via repository pattern. Fix follows `StashRepository`/`PlayerRepository` abstraction.
+
+**Impact:** 
+- `createUserRouter(store?)` now accepts optional DI (backwards-compatible)
+- Tests pass without PostgreSQL
+- Production behavior unchanged
+- InMemoryUserStore is module-level singleton (shared state within test file)
+
+**Status:** ✅ Approved. Jarlaxle scheduled cleanup for dead code, resetStore() isolation, and provider constraint parity.
+
+---
+
+### 2026-03-24T14:25: Decision: Dev Branch is Canonical for Merge Conflicts
+**By:** Jarlaxle (Systems Dev)  
+**Date:** 2026-03-24  
+**Context:** PR #158 merge conflict resolution (dev → uat, 19 files)
+
+**Decision:** When resolving merge conflicts between `dev` and `uat`, prefer `dev`'s version as canonical. Dev is the active development branch with superset of changes.
+
+**Rationale:**
+- Dev had 60 lint fixes vs uat's 27 — most uat fixes were subsets
+- Dev uses cleaner lint patterns: `void expr` over `// eslint-disable-next-line`, explicit types
+- Dev has newer features: InMemoryUserStore, useDevAutoLogin, providerIndex
+- UAT's lint sweep duplicated consolidated blocks
+
+**Impact:**
+- Future dev↔uat merges follow same principle
+- Lint fixes coordinated to avoid parallel sweeps
+- Squad docs (decisions.md) union merge when both sides add entries
+
+---
+
+### 2026-03-24T14:27: Decision: Separate Live Rooms UI from Content Editor
+**By:** Jarlaxle (Systems Dev)  
+**Date:** 2026-03-24  
+**Issue:** #137 — Orphan Endpoint Finalization  
+**PR:** #147
+
+**Context:** Task specified adding pause/resume/spawn buttons to `RoomsDetail.tsx` (content template editor). However, orphan endpoints operate on **live Colyseus room instances** — fundamentally different from content CRUD.
+
+**Decision:** Created separate **Live Rooms** pages at `/admin/live-rooms`:
+- `/admin/rooms` + `/admin/rooms/:id` → Content templates (CRUD)
+- `/admin/live-rooms` + `/admin/live-rooms/:roomId` → Runtime room management (pause/resume/spawn/status)
+
+**Rationale:**
+- Conflating content editing with runtime operations confuses admin UI
+- Content rooms use `useAdminEntity` hook (CRUD); live rooms use direct API calls (action pattern)
+- Live Rooms page can evolve into full monitoring without impacting content workflow
+
+**Impact:**
+- AdminLayout sidebar: "Live Rooms" added under System section
+- Routes: `/admin/live-rooms` and `/admin/live-rooms/:roomId` added
+- API functions available in `admin-api.ts` for reuse if needed
+
+---
+
+### 2026-03-25T15:17:00Z: Elminster GDD Gap Analysis — Phase 1/2 Readiness Assessment
+**By:** Elminster (Lead/Architect)  
+**Task:** Full code review against GDD + backlog gap analysis  
+**Source:** Full report archived at `.squad/decisions/inbox/elminster-gdd-code-review.md` (34KB)
+
+**Executive Finding:** Ellmud Phase 1 core systems **✅ production-ready** (14/30 systems fully implemented, deterministic combat, server-authoritative state, anti-cheat hardened). Phase 2 multiplayer **⏸️ conditional** on 3 critical fixes. Phase 3 economic systems **❌ not implemented**.
+
+**Systems Coverage:**
+- ✅ Fully (14): Combat, extraction, detection, traces, downing, narration, command parsing, stash, creature AI, auth, accessibility (color), anti-cheat, tech architecture
+- ⚠️ Partial (12): Shard lifecycle (no destabilizing), damage (dodge % missing), skills (no leveling), durability (no degrade), faction (no join/rep), biomes (1/5), modifiers (types exist, no integration), loot (flat distribution), sound (incomplete), accessibility (no verbosity), PvP (no trading)
+- ❌ Not (4): Crafting (zero logic), marketplace (zero logic), currency types, resource types
+
+**13 Backlog Gaps** (GDD features with no GitHub issue):
+1. Durability & gear degradation (§7.2) — fields exist, no mechanics
+2. Skill leveling (§7.1) — tracked, never increase
+3. Dodge chance (§6.4) — flag set, calculation missing
+4. Currency types (§9.1) — 5 resources undefined
+5. Shard modifiers (§10.3) — types exist, not wired
+6. Loot tier scaling (§10.4) — flat, no danger adjustment
+7. Faction mechanics (§9.4) — reputation tracked, no join/perks/recipes
+8. Destabilizing phase (§2.3) — hard collapse timer, not progressive
+9. Skill checks (§7.1) — no crafting/ability integration
+10. PvP trading (§8.4) — no offer/accept system
+11. Configurable verbosity (§15) — color exists, not terse/standard/verbose
+12. Content variety (§10.1-10.2) — 1 biome/creature type, need 5/many
+13. Multi-replica testing (§17 Phase 2) — infrastructure ready, not validated
+
+**Critical Issues for Phase 2:**
+- #157 CI/CD failure (blocking deployment)
+- Combat-blocks-movement enforcement (balance risk)
+- Auth rate limiting (Phase 2 security)
+
+**KNOWN_ISSUES Review:** 3 items need GitHub promotion (#6, #8, #9); #7 flagged obsolete.
+
+**Recommendation:** ✅ Proceed Phase 2 after 3 critical fixes. Phase 3 needs sprint planning (30+ points estimated). Create 13 backlog issues from gaps.
+
+**Impact:** 
+- Phase 2 readiness validation complete
+- 13 backlog gaps documented for Phase 3 sprint kickoff
+- Priority guidance established (CI/CD, balance, security)
+- Content roadmap clarified (biome variety, creature types)
+

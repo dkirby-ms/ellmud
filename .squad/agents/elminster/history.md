@@ -535,3 +535,89 @@ The admin UI was built as a purely visual scaffold. It's not broken—it's incom
 
 3. **Singleton vs explicit DI in tests:** Module-level singletons (like `sharedInMemoryStore`) work for test isolation only because vitest isolates per file. Prefer explicit DI (`createUserRouter(new InMemoryUserStore())`) in test files for robustness — matches the stash-provider pattern with `resetStashProvider()`.
 
+
+### 2026-03-25: Full GDD vs. Implementation Code Review
+**By:** Elminster (Lead)
+**Requested by:** dkirby-ms
+**Output:** `.squad/decisions/inbox/elminster-gdd-code-review.md` (comprehensive gap analysis report)
+
+**What**
+Performed comprehensive code review of entire Ellmud codebase against GDD.md and 19-issue open backlog. Produced structured report with GDD coverage matrix, backlog gaps, implementation concerns, backlog prioritization recommendations, KNOWN_ISSUES triage, and top 10 priority recommendations.
+
+**Key Findings — Architecture & Core Loop**
+- ✅ **Architecture is sound**: Server-authoritative state enforcement is clean. Message-only client protocol is correctly implemented (no Schema leakage). LLM cache-first architecture works as designed. Deterministic combat with simultaneous resolution matches GDD §6.3 exactly.
+- ✅ **Core loop is complete**: Login → Loadout → Shard Entry → Combat → Extraction → Stash Persistence works end-to-end. Solo play tested (`__tests__/solo-play.test.ts`).
+- ✅ **Production patterns**: PostgreSQL persistence with repository pattern, Redis content-addressable cache, Azure Container Apps deployment with GitHub Actions CI/CD, admin dashboard with SSE updates.
+
+**Key Findings — Missing Systems**
+- ❌ **Economy systems designed but not implemented**: Marketplace, crafting, contracts have database schema and client UI stubs, but zero server logic. No trade transactions, no recipe resolution, no contract assignment.
+- ❌ **Currency/resource types missing**: GDD §9.1 specifies 5 resource types (Shardsteel, Echo Dust, Anomalous Fragments, Shard Keys, Blueprints). None exist in database or code. Without these, economy cannot function.
+- ⚠️ **Skill progression non-functional**: Skills are tracked in database (`003_create_skills.sql`) but never increase. No XP system, no skill checks, no use-based leveling. GDD §7.1 core mechanic is missing.
+- ⚠️ **Durability/degradation missing**: GDD §7.2 specifies gear durability depletes during runs and must be repaired. Item definitions have durability fields but no degradation logic. Players can reuse gear indefinitely (removes economic sink).
+- ⚠️ **Dodge is non-functional**: GDD §6.4 specifies dodge grants % chance to avoid damage. Code sets dodge state flag but damage calculation never checks it. Dodge action does nothing.
+
+**Key Findings — Content Variety**
+- ⚠️ **Only 1 of 5 biomes implemented**: `shard/biomes/flooded-crypt.ts` is the only biome. GDD §10.2 specifies 5 biomes. 4 are missing.
+- ⚠️ **Shard modifiers not integrated**: 5 modifier types exist as data structures but are not applied to gameplay. Modifiers don't affect room descriptions, creature behavior, loot quality, sound propagation, etc.
+- ⚠️ **Limited creature variety**: Only 1 creature type exists (Drowned Revenant). GDD implies 25+ creatures across 5 biomes. Creature AI framework is solid but content is minimal.
+
+**Key Findings — Implementation Quality Issues**
+- ⚠️ **Combat does not block movement** (KNOWN_ISSUES #1): Players can use `go north` to escape combat without fleeing. Violates GDD §6.3.
+- ⚠️ **No rate limiting on auth endpoints** (KNOWN_ISSUES #6): `/auth/register` and `/auth/login` vulnerable to brute-force attacks.
+- ⚠️ **Azure LLM transport not tested** (KNOWN_ISSUES #2): Zero integration test coverage. Transport bugs won't be caught until deployment.
+- ⚠️ **Background LLM enrichment errors swallowed** (KNOWN_ISSUES #4): No logging or telemetry for persistent LLM failures.
+- ⚠️ **Stash capacity overflow silent failure**: Items disappear silently when stash is full.
+
+**Key Findings — Backlog Gaps**
+Identified 13 GDD features that are not implemented AND have no corresponding backlog issue:
+1. Durability & gear degradation (§7.2) — High impact
+2. Skill leveling through use (§7.1) — High impact
+3. Dodge chance calculation (§6.4) — High impact
+4. Currency & resource types (§9.1) — High impact (blocks all economy)
+5. Shard modifier integration (§10.3) — Medium impact
+6. Loot tier scaling with room danger (§10.4) — Medium impact
+7. PvP trading (`offer <item>`) (§8.4) — Medium impact
+8. Configurable narration verbosity (§15) — Low impact
+9. Squad formation (§8.4) — Medium impact
+10. Extraction noise attenuation tuning (§12) — Low impact
+11. Pause on prompt (solo mode) (§15) — Low impact
+12. Respec mechanic (§7.1) — Low impact
+13. Creature loot drop tables (§10.4) — Medium impact
+
+**Key Findings — Backlog Prioritization**
+- **Issue #157 (CI/CD failure on UAT)** is blocking deployments. Mislabeled as `phase:4-world`. Should be `critical, infra`.
+- **Phase 3 issues (#32-#42) are blocked by untracked foundational issues**: Skill leveling logic, resource types, faction commands not tracked.
+- **3 issues should be split**: #32 (Skill Tree), #35 (Shard Modifiers), #37 (Creature Variety) are too broad.
+- **3 KNOWN_ISSUES should be promoted to backlog**: #1 (combat-blocks-movement), #2 (Azure transport test), #6 (rate limiting).
+- **1 KNOWN_ISSUE is obsolete**: #7 (Token TTL configurable) — fixed by PR #53 `config.ts` module.
+
+**Recommendations — Top 10 Priorities**
+1. Fix CI/CD failure (#157) — CRITICAL blocker
+2. Implement combat-blocks-movement — Phase 2 PvP blocker
+3. Add rate limiting to auth endpoints — Phase 2 security gap
+4. Add Azure LLM transport integration test — Phase 2 reliability
+5. Implement currency & resource types (§9.1) — Phase 3 foundation
+6. Implement skill leveling logic (§7.1) — Phase 3 foundation
+7. Implement dodge damage reduction (§6.4) — Phase 2 combat fix
+8. Implement durability & gear degradation (§7.2) — Phase 3 economy sink
+9. Implement all five biomes (§10.2) — Phase 3 content variety
+10. Split and prioritize shard modifiers (§10.3) — Phase 3 variety
+
+**Architectural Insight — "Schema-First, Logic-Later" Pattern**
+Multiple systems follow a pattern: database schema + client UI stub are created first, server logic is deferred. Examples:
+- Marketplace: `item_definitions` table + client Marketplace tab exist, but no trade transaction logic.
+- Crafting: `RecipesList.tsx` admin page exists, but no recipe resolution engine.
+- Factions: `004_create_factions.sql` + 3 factions seeded, but no faction commands or reputation gain.
+- Skills: `003_create_skills.sql` + 6 categories tracked, but no skill leveling or XP system.
+
+This pattern is efficient for rapid iteration (UI can be mocked against real schema), but creates a **"last 20% takes 80% of the time"** risk — the schema is done, but the complex server logic (transaction atomicity, skill checks, reputation thresholds, crafting RNG) is all deferred.
+
+**Lesson for Future Phases**
+When planning Phase 3 work:
+1. **Identify foundational systems first** (currency types, skill leveling, durability) and implement before dependent features.
+2. **Split broad issues into sub-issues** with explicit acceptance criteria and dependencies.
+3. **Promote KNOWN_ISSUES to backlog** with priority labels before starting new feature work.
+4. **Test multi-replica deployment** in Phase 2 before declaring Phase 2 complete.
+
+**Files Created**
+- `.squad/decisions/inbox/elminster-gdd-code-review.md` — Full review report (30+ pages, structured analysis)

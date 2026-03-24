@@ -1282,3 +1282,69 @@ Drizzt wired `useDevAutoLogin` hook into `Login.tsx`. No visual UI changes — j
   - *decisions.md:* Append-only doc. Dev had one new entry (Dev Auto-Login Hook), uat had nothing. Kept dev.
 - **Verification:** 0 eslint errors, 1444/1444 server tests passing, PR #158 now MERGEABLE.
 - **Learning:** Python regex with `re.DOTALL` for conflict resolution is dangerous when conflicts are close together — `.*?` can span across conflict boundaries consuming valid code. For files with many conflicts, use line-by-line state machine or `git checkout --ours` instead.
+
+### Elminster GDD Review Findings (2026-03-25T15:17Z)
+
+**Cross-agent update from Elminster's comprehensive review:**
+
+**Areas affecting Jarlaxle's work:**
+
+1. **Modifier Integration Gap** — Phase 3 priority
+   - **Finding:** 5 modifiers exist (Darkness, Hunted, Silent, Echoing, Bountiful) as types but NOT wired to gameplay
+   - **Impact:** Modifiers don't affect room descriptions, creature behavior, loot tables, or sound propagation
+   - **Gap:** Issue #35 (Shard Modifiers) exists but very high-level; needs sub-issues per modifier with acceptance criteria
+   - **Recommendation:** Split #35 into 5 sub-issues; coordinate with creature behavior and loot system
+
+2. **Creature Variety Needs** — Phase 3 content expansion
+   - **Finding:** Only 1 creature type exists (Drowned Revenant)
+   - **Status:** Creature AI system ✅ complete and deterministic, but content variety ❌ zero
+   - **Gap:** No backlog issues for additional creature types (should have 5+ by Phase 3)
+   - **Recommendation:** Create issue for creature type expansion; template is proven (behavior trees work)
+
+3. **Skill Leveling Gap** — Phase 3 progression systems
+   - **Finding:** 6 skills tracked in database but NEVER increase through use
+   - **Impact:** Character progression is non-functional; players can't improve
+   - **Gap:** Issue #32 (skill tree implementation) exists but doesn't cover leveling logic
+   - **Status:** Skill checks NOT integrated with crafting/abilities
+   - **Recommendation:** Create Phase 3 issue for XP system and skill leveling (scales with shard tier per GDD §7.1)
+
+**Phase 1 Status on Systems:** ✅ Room generation, combat, creature AI, shard lifecycle fully implemented. Content variety (biomes, creatures, modifiers) ready for Phase 3 expansion.
+
+---
+
+## 2026-03-24: Elminster GDD Gap Analysis → 12 New Backlog Issues
+
+**Timestamp:** 2026-03-24T15:22:00Z  
+**Agent:** Elminster (Lead)  
+**Scope:** GDD coverage gap analysis + backlog planning  
+
+Elminster completed a full code review comparing GDD (Game Design Document) against implementation and existing backlog. Identified 3 critical issues, 5 medium priorities, and 3 maintenance items affecting systems across your domain (combat, systems, economy).
+
+**12 New Issues Created:**
+
+**Critical (4):**
+- #160: Durability/Degradation System (GDD §7.2) — Items currently have durability fields but no degradation logic on use
+- #161: Skill Leveling Through Use + XP (GDD §7.1) — Skills tracked but never increase; needs XP grants and use-based leveling
+- #162: Dodge Chance Calculation (GDD §6.4) — Dodge sets state flag but damage reduction is missing
+- #163: Currency & Resource Types (GDD §9.1) — 5 resource types (Shardsteel, Echo Dust, Anomalous Fragments, Shard Keys, Blueprints) have no database entries
+
+**Medium (5):**
+- #164: Shard Modifiers Integration (GDD §2.2) — Modifiers exist but not fully wired into shard difficulty scaling
+- #165: Loot Scaling by Shard Tier (GDD §7.3) — Loot drop rates should scale with tier; currently flat
+- #166: PvP Trading (`offer <item> to <target>`) (GDD §8.2) — Combat/corpse looting works, trading doesn't
+- #167: Narration Verbosity Control (UX request) — No player choice for narration detail level
+- #168: Squad System (Party Size, Scaling) (GDD §8.5 anti-griefing section mentions squads but not implemented)
+
+**Maintenance (3):**
+- #169: KNOWN_ISSUES #1 Promotion (Stash overflow when item weight not enforced)
+- #170: KNOWN_ISSUES #6 Promotion (Combat blocks movement after resolve)
+- #171: Marketplace & Crafting Backend (database schema ready, client UI stubs, no server logic)
+
+**Cross-Impact to Your Work:**
+- Dodge/durability issues affect combat balance — skip #162/#160 until Phase 2 multiplayer testing baseline
+- Skill leveling (#161) requires XP grant events — coordinate with economy systems
+- PvP trading (#166) affects your awareness/detection systems (must verify target in range)
+- Squad system (#168) affects creature AI aggro decisions and loot distribution
+
+**Next:** Phase 2 multiplayer testing ready pending CI fix (#157). Phase 3 economic systems need prioritization before implementation.
+
