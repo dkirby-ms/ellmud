@@ -142,7 +142,7 @@ export function createUserRouter(): Router {
         errors.push('Invalid email format');
       }
 
-      if (role && !isValidRole(role)) {
+      if (role !== undefined && role.trim() !== '' && !isValidRole(role)) {
         errors.push(`Invalid role. Must be one of: ${VALID_ROLES.join(', ')}`);
       }
 
@@ -152,7 +152,7 @@ export function createUserRouter(): Router {
       }
 
       const passwordHash = await bcrypt.hash(password!, BCRYPT_ROUNDS);
-      const userRole = role || 'player';
+      const userRole = role && role.trim() && isValidRole(role) ? role : 'player';
 
       const client = await getClient();
       try {
