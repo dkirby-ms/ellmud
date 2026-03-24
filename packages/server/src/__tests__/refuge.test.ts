@@ -183,12 +183,13 @@ describe('RefugeRoom Multi-Player', () => {
     // Should NOT send ROOM_SWITCH
     expect(collector.roomSwitch.length).toBe(0);
 
-    // Should narrate the error
+    // Should narrate the error (search by content, not position — ambient narration may arrive after)
     expect(collector.narrate.length).toBeGreaterThan(initialCount);
-    const errorMsg = collector.narrate[collector.narrate.length - 1]!;
-    expect(errorMsg.text).toContain('tavern');
-    expect(errorMsg.text).toContain('No shard with id');
-    expect(errorMsg.type).toBe('system');
+    const newMessages = collector.narrate.slice(initialCount);
+    const errorMsg = newMessages.find(m => m.text.includes('No shard with id'));
+    expect(errorMsg, 'Expected a system narration containing "No shard with id"').toBeTruthy();
+    expect(errorMsg!.text).toContain('tavern');
+    expect(errorMsg!.type).toBe('system');
 
     await client.leave();
   });
@@ -204,9 +205,10 @@ describe('RefugeRoom Multi-Player', () => {
     await wait(500);
 
     expect(collector.narrate.length).toBeGreaterThan(initialCount);
-    const response = collector.narrate[collector.narrate.length - 1]!;
-    expect(response.type).toBe('system');
-    expect(response.text).toContain('dance');
+    const newMessages = collector.narrate.slice(initialCount);
+    const response = newMessages.find(m => m.text.includes('dance'));
+    expect(response, 'Expected a system narration containing "dance"').toBeTruthy();
+    expect(response!.type).toBe('system');
 
     await client.leave();
   });
