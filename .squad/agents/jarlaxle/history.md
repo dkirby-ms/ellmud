@@ -1360,3 +1360,31 @@ Drizzt fixed a two-part local dev auth bypass:
 2. Set `VITE_DEV_AUTO_LOGIN=true` in `packages/client/.env` to restore old behavior
 
 This aligns local dev with production behavior, making auth bugs surface earlier. All 1,677 tests pass.
+
+### 2026-03-24T22:19Z: Entra OAuth Architecture Review (Cross-system awareness)
+
+**Context:** Elminster reviewed Entra External ID OAuth scope. Drizzt ran diagnostic on broken OAuth in local dev/UAT.
+
+**Relevant to Jarlaxle:** Auth-adjacent systems (admin routes, creature AI, event systems) depend on the auth boundary being correctly defined.
+
+**Key Finding:** Entra is identity provider only. All authorization happens in Postgres. This means:
+- Admin dashboard can rely on `AuthService.currentPlayerId()` returning the authorized player
+- Creature AI and game events don't need to check Entra; they check `player_identities.role`
+- Future cross-shard features can assume auth is validated at the entry point
+
+**Scope Boundary:**
+- ✅ Login flow: handled by Entra + EntraAuthService + AuthService
+- ✅ Authorization: handled by checking `player_identities.role` and `player_identities.permissions`
+- ✅ Session validation: handled by colyseus-auth.ts (validates our own UUID tokens, not Entra tokens)
+
+**6 Configuration Bugs Found** (not architectural):
+1. No dotenv loading in local dev
+2. Redirect URI path mismatch
+3. openid-client v6 API misuse
+4. Tenant subdomain vs GUID confusion
+5. main.bicep missing Entra params
+6. No login fallback if Entra broken
+
+**Action for Jarlaxle:** Monitor these fixes in PR reviews. If any auth-adjacent systems need changes after OAuth unblocking, they should be small (no auth logic should live outside the auth layer).
+
+**Decision File:** `.squad/decisions.md` — See "Entra External ID OAuth Scope" and "Diagnostic - Entra OAuth 6 Issues" entries (2026-03-24T22:19:00Z).

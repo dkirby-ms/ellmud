@@ -1237,3 +1237,84 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - `AUTH_REQUIRED` only flows through `index.ts` → `initColyseusAuth()`. Tests call `initColyseusAuth()` directly with explicit booleans, so config default changes don't break tests.
 - Module-level `_authRequired` in `colyseus-auth.ts` defaults to `false` independently of config — tests that don't call `initColyseusAuth()` get anonymous access regardless.
 - All 1,677 tests passed after the change (server: 1,573, client: 104, shared: 80).
+
+### Entra OAuth Diagnostic Investigation (2026-03-24)
+
+**Task:** Investigate why Entra OAuth is completely non-functional in local dev and UAT.
+**Status:** Investigation complete — 6 issues identified, 0 code changes made.
+
+**Findings (prioritized by severity):**
+
+**BUG 1 (CRITICAL — Root Cause in Local Dev): Server doesn't load `.env` file**
+- No `dotenv` package in server dependencies
+- `tsx watch src/index.ts` doesn't use Node's `--env-file` flag
+- Vite auto-loads `.env` for client vars (`VITE_*`), but the Express server has no mechanism
+- Result: `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET`, `ENTRA_TENANT_ID` are all empty → condition fails → "Entra OAuth: disabled (missing ENTRA_* env vars)"
+- Fix: Add `--env-file ../../.env` to the server `dev` script, or install `dotenv`
+
+**BUG 2 (CRITICAL — Redirect URI Path Mismatch)**
+- `.env` / `.env.example` set `ENTRA_REDIRECT_URI=http://localhost:3000/auth/callback`
+- Server route registered at `/auth/entra/callback` (in entra-routes.ts line 51)
+- Vite proxy on port 3000 forwards `/auth/*` → Express on port 2567 ✅
+- But Express has no handler for GET `/auth/callback` — falls through to catch-all → serves HTML
+- The authorization code from Entra never gets exchanged for tokens
+- Fix: Change redirect URI to `http://localhost:3000/auth/entra/callback`
+
+**BUG 3 (HIGH — openid-client v6 API Misuse in EntraAuthService.ts)**
+- `discovery()` signature: `(server, clientId, metadata?: Partial<ClientMetadata> | string, clientAuth?)`
+- When 3rd arg is a string, openid-client treats it as `client_secret`
+- Current code passes `redirectUri` (a URL string) as 3rd arg → stored as client_secret
+- Correct usage: pass `undefined` or `clientSecret` string as 3rd arg
+- Line 42-47: `client.discovery(issuerUrl, clientId, redirectUri, ClientSecretPost(clientSecret))` — wrong
+- Should be: `client.discovery(issuerUrl, clientId, undefined, ClientSecretPost(clientSecret))`
+
+**BUG 4 (HIGH — Entra External ID Issuer URL)**
+- Current URL: `https://${tenantId}.ciamlogin.com/${tenantId}/v2.0`
+- Uses tenant GUID (`7a9da048...`) as the subdomain — this is wrong
+- CIAM subdomain must be the tenant custom domain name (e.g., `ellmud`)
+- Needs separate env var `ENTRA_TENANT_SUBDOMAIN` or use the non-CIAM URL pattern
+- OIDC discovery will fail because `7a9da048-83f3-4666-8dbb-8ee824fcb897.ciamlogin.com` doesn't resolve
+
+**GAP 5 (MEDIUM — main.bicep doesn't pass Entra params)**
+- `main.bicep` line 93-108: `containerAppsApp` module call omits `entraClientId`, `entraClientSecret`, `entraTenantId`, `entraRedirectUri`, `allowLocalAuth`, `clientUrl`
+- Module defaults all to empty string → container created without Entra config
+- CI/CD partially compensates: `ci-cd.yml` line 145-148 uses `az containerapp update --set-env-vars` with GitHub secrets
+- But initial Bicep deployment has no Entra → first deploy is broken until CI/CD runs
+- Fix: Add params to main.bicep or document the CI/CD-only deployment path
+
+**GAP 6 (LOW — Env var inconsistency between client and server)**
+- Client `.env`: `VITE_ALLOW_LOCAL_AUTH=true`
+- Root `.env`: `ALLOW_LOCAL_AUTH=false`
+- In UAT (CI/CD sets `ALLOW_LOCAL_AUTH=false`), if Entra is broken, there's NO login path
+
+**Architecture Assessment: ✅ CORRECT**
+- Entra is used ONLY for login authentication (not API protection)
+- After OAuth callback, server issues its own opaque session token (UUID)
+- Colyseus room auth validates session token, not Entra tokens
+- Player data/roles stored in own DB (player_identities table supports provider-based lookup)
+- This matches the stated intent: "Entra's only job: verify users have an account"
+
+**Key File Map:**
+- Server auth entry: `packages/server/src/index.ts` lines 60-93
+- Entra service: `packages/server/src/auth/EntraAuthService.ts`
+- Entra routes: `packages/server/src/auth/entra-routes.ts`
+- Auth service: `packages/server/src/auth/AuthService.ts` (loginOAuth at line 94)
+- Client callback: `packages/client/src/pages/AuthCallback.tsx`
+- Login page: `packages/client/src/pages/Login.tsx` (handleMicrosoftSignIn at line 57)
+- Vite proxy: `packages/client/vite.config.ts` (port 3000, proxies /auth → :2567)
+- Bicep container: `infra/modules/container-apps.bicep` lines 48-66, 149-155
+- CI/CD deploy: `.github/workflows/ci-cd.yml` lines 145-148
+- Root .env: `.env` (has actual Entra values, git-ignored)
+- .env.example: `.env.example` (placeholder values + documentation)
+
+**Env Vars Needed:**
+| Variable | Local Dev | UAT | Prod | Source |
+|---|---|---|---|---|
+| `ENTRA_CLIENT_ID` | `.env` (must load) | GH Secrets → CI/CD | GH Secrets → CI/CD | Entra App Registration |
+| `ENTRA_CLIENT_SECRET` | `.env` (must load) | GH Secrets → CI/CD | GH Secrets → CI/CD | Entra App Registration |
+| `ENTRA_TENANT_ID` | `.env` (must load) | GH Secrets → CI/CD | GH Secrets → CI/CD | Entra External ID Directory |
+| `ENTRA_REDIRECT_URI` | `http://localhost:3000/auth/entra/callback` | `https://<app>.azurecontainerapps.io/auth/entra/callback` | `https://kirbytoso.xyz/auth/entra/callback` | Derived from deployment URL |
+| `ALLOW_LOCAL_AUTH` | `true` | `false` | `false` | Operator choice |
+| `CLIENT_URL` | `http://localhost:3000` | `https://<app>.azurecontainerapps.io` | `https://kirbytoso.xyz` | Derived from deployment URL |
+| `ENTRA_TENANT_SUBDOMAIN` | (NEW — needed) | (NEW — needed) | (NEW — needed) | Entra External ID tenant name |
+
