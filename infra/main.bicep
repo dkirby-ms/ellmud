@@ -110,7 +110,7 @@ module containerAppsApp 'modules/container-apps.bicep' = {
     postgresDatabaseName: postgres.outputs.databaseName
     postgresAdminUsername: postgresAdminUsername
     postgresAdminPassword: postgresAdminPassword
-    redisHost: redis.outputs.redisHost
+    redisServiceId: redis.outputs.redisServiceId
     deployApp: true
   }
 }
@@ -158,6 +158,6 @@ output containerAppFqdn string = containerAppsApp.outputs.containerAppFqdn
 output containerAppEnvironmentName string = containerAppsEnv.outputs.environmentName
 output postgresServerFqdn string = postgres.outputs.serverFqdn
 output postgresDatabaseName string = postgres.outputs.databaseName
-output redisHost string = redis.outputs.redisHost
+output redisServiceId string = redis.outputs.redisServiceId
 output aiServicesEndpoint string = aiFoundry.outputs.aiServicesEndpoint
 output appInsightsConnectionString string = monitoring.outputs.appInsightsConnectionString

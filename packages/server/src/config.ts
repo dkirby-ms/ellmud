@@ -92,7 +92,15 @@ export function loadConfig(): ServerConfig {
     matchmakerMode: 'in-process', // Only mode supported — Colyseus built-in
     redis: {
       enabled: envBool('REDIS_PRESENCE_ENABLED', false),
-      connectionString: envStr('REDIS_CONNECTION_STRING', envStr('REDIS_URL', 'redis://localhost:6379')),
+      connectionString: envStr(
+        'REDIS_CONNECTION_STRING',
+        envStr(
+          'REDIS_URL',
+          process.env.REDIS_HOST
+            ? `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT || '6379'}`
+            : 'redis://localhost:6379'
+        )
+      ),
       cacheEnabled: envBool('REDIS_CACHE_ENABLED', false),
       driverEnabled: envBool('REDIS_DRIVER_ENABLED', false),
     },
