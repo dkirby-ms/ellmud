@@ -1188,3 +1188,19 @@ Updated `createPresence()` and the RedisDriver init in `index.ts` to probe conne
 
 **Phase 1 Status on Auth/Engine:** ✅ Production-ready (server-authoritative, anti-cheat hardened, deterministic combat). Auth rate limiting needed for Phase 2 security.
 
+## Learnings
+
+### ACA Redis Add-on Migration (2026-03-24)
+**Task:** Replace standalone Redis container with Azure Container Apps Redis add-on service
+**Status:** ✅ Complete — all 1447 tests passing
+
+**Changes:**
+1. **`infra/modules/redis.bicep`** — Rewrote from standalone container (TCP ingress on 6379) to ACA add-on (`configuration.service.type: 'redis'`). No ingress config needed. Output changed from `redisHost` (FQDN) to `redisServiceId` (resource ID).
+2. **`infra/main.bicep`** — Updated module param from `redisHost` to `redisServiceId`, updated output section.
+3. **`infra/modules/container-apps.bicep`** — Replaced `param redisHost` with `param redisServiceId`. Added `serviceBinds` to template (conditional on non-empty ID). Removed manual `REDIS_CONNECTION_STRING` env var — ACA injects `REDIS_HOST`/`REDIS_PORT` automatically via service bind. Kept feature flag env vars (`REDIS_CACHE_ENABLED`, `REDIS_PRESENCE_ENABLED`, `REDIS_DRIVER_ENABLED`).
+4. **`packages/server/src/config.ts`** — Updated Redis connection string fallback chain: `REDIS_CONNECTION_STRING` → `REDIS_URL` → ACA-injected `REDIS_HOST`+`REDIS_PORT` → `redis://localhost:6379`.
+
+**Key Insight:** ACA service binds inject env vars automatically (`REDIS_HOST`, `REDIS_PORT`, `REDIS_ENDPOINT`, `REDIS_PASSWORD`). No manual wiring needed. The app just reads from env. Fallback chain in config.ts ensures docker-compose local dev still works via `REDIS_CONNECTION_STRING`.
+
+**Pattern:** When using ACA add-on services, the Bicep resource uses `configuration.service.type` instead of `configuration.ingress`. Consumers reference via `template.serviceBinds[].serviceId` rather than constructing connection strings from FQDNs.
+
