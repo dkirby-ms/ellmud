@@ -1259,3 +1259,15 @@ In-memory test implementations should enforce the same constraints as production
 
 Drizzt wired `useDevAutoLogin` hook into `Login.tsx`. No visual UI changes — just a hook invocation gated on `import.meta.env.DEV`. Be aware that in dev mode, the login page now auto-authenticates on mount.
 
+### 2025-07-29: Fix 27 Lint Errors for UAT CI (#156)
+- **Context:** CI on `uat` branch failing due to 27 `@typescript-eslint/no-unused-vars` errors (plus 2 `preserve-caught-error` and 1 `no-explicit-any`). 540 warnings remain (acceptable).
+- **Fixes across 14 files:**
+  - Removed dead imports: `query`, `ATMOSPHERE_INTERVAL`, `TickResult`, `TRACKING_THRESHOLDS`, `TraceType`, `SoundType`, `DetectionTier`, `waitUntil`, `MessageCollector`, `MOCK_PLAYERS`, `NPCDefinition`, `TIME_CYCLE`, `renderAmbientTemplate`, `FactionEventDef`.
+  - Removed dead interface: `AtmosphereKey` in ambient-templates.ts.
+  - Prefixed unused function params with `_`: `ctx` → `_ctx` in sensory-templates.ts (×2), `newCount` → `_newCount` in ShardRoom.ts.
+  - Empty catch binding (no variable): admin-users.test.ts cleanup error handler.
+  - Removed unused variable assignments: `result`, `traceCount`, `awarenessMessages` in phase2-qa.test.ts.
+  - eslint-disable-next-line for intentional destructuring patterns: `_omitted` in admin-crud.test.ts, `_exitDir` in SoundSystem.ts.
+  - `preserve-caught-error`: Added `{ cause: err }` to thrown errors in EntraAuthService.ts and PgPlayerRepository.ts.
+  - `no-explicit-any`: Replaced `as any` with type-safe cast in weather-system.test.ts.
+- **Learning:** ESLint `no-unused-vars` rule's `argsIgnorePattern: /^_/` only applies to function parameters, not destructured variables or catch bindings. For destructured-to-omit patterns, use eslint-disable-next-line. For catch blocks, use empty `catch { }` (no binding).
