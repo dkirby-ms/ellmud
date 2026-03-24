@@ -105,7 +105,7 @@ export function loadConfig(): ServerConfig {
       driverEnabled: envBool('REDIS_DRIVER_ENABLED', false),
     },
     port: envInt('PORT', 2567),
-    authRequired: envBool('AUTH_REQUIRED', false),
+    authRequired: envBool('AUTH_REQUIRED', true),
     reconnectionTimeoutS: envInt('RECONNECTION_TIMEOUT_S', 30),
     reconnectDeathBehavior: (envStr('RECONNECT_DEATH_BEHAVIOR', 'kill') === 'safe-room' ? 'safe-room' : 'kill') as 'kill' | 'safe-room',
   };

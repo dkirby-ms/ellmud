@@ -14,7 +14,7 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  // In dev mode, auto-login with dev/devdev credentials
+  // Auto-login with dev credentials when VITE_DEV_AUTO_LOGIN=true
   useDevAutoLogin();
 
   // Check if local auth is enabled (default to true for dev)
