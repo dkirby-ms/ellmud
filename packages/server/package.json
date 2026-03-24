@@ -20,14 +20,17 @@
     "@colyseus/ws-transport": "~0.17.0",
     "@ellmud/shared": "*",
     "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
     "express": "^4.21.0",
     "ioredis": "^5.10.1",
+    "openid-client": "^6.8.2",
     "pg": "^8.20.0"
   },
   "devDependencies": {
     "@colyseus/sdk": "^0.17.35",
     "@colyseus/testing": "~0.17.0",
     "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.10",
     "@types/express": "^4.17.21",
     "@types/pg": "^8.18.0",
     "@vitest/coverage-v8": "^4.1.0",

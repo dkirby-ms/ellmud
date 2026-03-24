@@ -275,7 +275,6 @@ const RENDERERS: Record<LLMNarrationType, (ctx: NarrationContext) => string> = {
   sound_narration: (ctx) => renderSensoryTemplate('sound', 'nearby', ctx),
   trace_narration: (ctx) => renderSensoryTemplate('trace', 'medium', ctx),
   awareness_narration: (ctx) => renderSensoryTemplate('awareness', 'partial', ctx),
-  ambient_narration: () => renderAmbientTemplate('ambient_atmosphere', {}),
 };
 
 /**

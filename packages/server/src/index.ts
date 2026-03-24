@@ -13,6 +13,9 @@ import {
   PgPlayerRepository,
   createAuthRouter,
   initColyseusAuth,
+  EntraAuthService,
+  createEntraRouter,
+  type EntraConfig,
 } from './auth/index.js';
 import { createHealthRouter } from './health.js';
 import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter, createDeployRouter } from './admin/index.js';
@@ -55,8 +58,36 @@ const tokenStore = new InMemoryTokenStore();
 const playerRepo = USE_PG ? new PgPlayerRepository() : new InMemoryPlayerRepository();
 const authService = new AuthService(tokenStore, playerRepo);
 
-// Mount auth routes on the same Express app Colyseus uses
-app.use(createAuthRouter(authService));
+// Mount local auth routes (only if ALLOW_LOCAL_AUTH is true)
+const ALLOW_LOCAL_AUTH = process.env.ALLOW_LOCAL_AUTH !== 'false';
+if (ALLOW_LOCAL_AUTH) {
+  app.use(createAuthRouter(authService));
+  console.log('[Ellmud] Local authentication: enabled');
+} else {
+  console.log('[Ellmud] Local authentication: disabled (OAuth only)');
+}
+
+// Initialize and mount Entra OAuth routes
+const entraConfig: EntraConfig = {
+  clientId: process.env.ENTRA_CLIENT_ID || '',
+  clientSecret: process.env.ENTRA_CLIENT_SECRET || '',
+  tenantId: process.env.ENTRA_TENANT_ID || '',
+  redirectUri: process.env.ENTRA_REDIRECT_URI || 'http://localhost:3000/auth/callback',
+};
+
+if (entraConfig.clientId && entraConfig.clientSecret && entraConfig.tenantId) {
+  const entraService = new EntraAuthService(entraConfig);
+  try {
+    await entraService.initialize();
+    app.use(createEntraRouter(authService, entraService));
+    console.log('[Ellmud] Entra External ID OAuth: enabled');
+  } catch (err) {
+    console.error('[Ellmud] ⚠ Entra OAuth initialization failed:', err instanceof Error ? err.message : String(err));
+    console.error('[Ellmud] Continuing without Entra authentication');
+  }
+} else {
+  console.log('[Ellmud] Entra OAuth: disabled (missing ENTRA_* env vars)');
+}
 
 // Mount health check endpoint — includes Redis + persistence status
 app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));

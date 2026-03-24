@@ -1136,3 +1136,14 @@ Entity slugs: `modifiers`, `skills`, `loot-tables` (hyphenated!), `factions`, `r
 - **Notification bell**: `fetchNotifications()` wraps existing dashboard validation-warnings + recent-changes endpoints. Count badge, typed icons (error/warning/change), localStorage-based dismiss. No new server endpoint needed.
 - **Pattern**: Client-side aggregation of server data (notifications from dashboard endpoints) avoids new API surface. Mark-as-read is localStorage-only for Phase 2.5.
 - Pre-existing BiomesList import path error noted but not fixed (separate issue).
+
+### 2026-03-24: Entra OAuth Infrastructure Config (Issue #140)
+- **Context:** Drizzt implementing Entra External ID OAuth on separate branch; infrastructure needs to support the env vars across all deployment targets.
+- **Changed files:**
+  - `infra/modules/container-apps.bicep`: Added 5 new parameters (entraClientId, entraClientSecret, entraTenantId, entraRedirectUri, allowLocalAuth) and passed to container env array.
+  - `.github/workflows/ci-cd.yml`: Added Entra secrets to `--set-env-vars` in deploy step; secrets sourced from GitHub environment (like existing AZURE_CLIENT_ID). ALLOW_LOCAL_AUTH=false for prod deployments.
+  - `docker-compose.yml`: Added game-server service with Entra env vars referencing .env file using `${VAR}` syntax. Service in `profiles: [full]` to keep default `docker compose up` lightweight (just redis/postgres).
+  - `.env.example`: Created with all 5 Entra vars + CLIENT_URL, no actual secret values (placeholders only).
+- **Pattern:** Bicep params → env array, CI/CD secrets → --set-env-vars, docker-compose → .env references. Consistent with existing DATABASE_URL/REDIS_CONNECTION_STRING pattern.
+- **Edge case:** ALLOW_LOCAL_AUTH is string-typed ("true"/"false") not boolean in Bicep env arrays; server code should handle both.
+- **Note:** Existing .env file already had real Entra values (likely from Drizzt's dev setup); .env.example shows structure without leaking secrets.
