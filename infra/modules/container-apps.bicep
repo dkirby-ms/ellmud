@@ -39,8 +39,8 @@ param postgresAdminUsername string = ''
 @secure()
 param postgresAdminPassword string = ''
 
-@description('Redis host (internal Container Apps FQDN)')
-param redisHost string = ''
+@description('Redis add-on service resource ID (for service binds)')
+param redisServiceId string = ''
 
 @description('Deploy the game server container app (false = environment only)')
 param deployApp bool = false
@@ -117,6 +117,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
       }
     }
     template: {
+      serviceBinds: redisServiceId != '' ? [
+        {
+          serviceId: redisServiceId
+          name: 'redis'
+        }
+      ] : []
       containers: [
         {
           name: 'ellmud'
@@ -132,7 +138,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             { name: 'PORT', value: '2567' }
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
             { name: 'DATABASE_URL', value: 'postgresql://${postgresAdminUsername}:${postgresAdminPassword}@${postgresServerFqdn}:5432/${postgresDatabaseName}?sslmode=require' }
-            { name: 'REDIS_CONNECTION_STRING', value: 'redis://${redisHost}:6379' }
             { name: 'REDIS_CACHE_ENABLED', value: 'true' }
             { name: 'REDIS_PRESENCE_ENABLED', value: 'true' }
             { name: 'REDIS_DRIVER_ENABLED', value: 'true' }
