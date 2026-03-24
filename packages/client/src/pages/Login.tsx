@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router";
 import { login, register, ApiError } from "../services/api";
 import { useAppContext } from "../store";
@@ -15,6 +15,17 @@ export default function Login() {
 
   // Check if local auth is enabled (default to true for dev)
   const allowLocalAuth = import.meta.env.VITE_ALLOW_LOCAL_AUTH !== "false";
+
+  // On mount, check for OAuth error in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthError = params.get('error');
+    if (oauthError) {
+      setError('Sign-in failed. Please try again.');
+      // Clean up URL
+      window.history.replaceState({}, '', '/');
+    }
+  }, []);
 
   // Already authenticated — skip straight to refuge
   if (state.authenticated) {

@@ -86,7 +86,7 @@ export function createEntraRouter(
       res.redirect(redirectUrl);
     } catch (err) {
       console.error('[Entra] OAuth callback failed:', err);
-      res.status(500).send('OAuth authentication failed');
+      res.redirect('/?error=oauth_failed');
     }
   });
 

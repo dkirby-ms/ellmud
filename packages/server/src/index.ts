@@ -53,6 +53,9 @@ const { presence, isRedis: isPresenceRedis } = await createPresence(config);
 const app = express();
 app.use(express.json());
 
+// Trust the Azure Container Apps load balancer for correct protocol detection
+app.set('trust proxy', 1);
+
 // ─── Auth Setup ──────────────────────────────────────────────────────────────
 const tokenStore = new InMemoryTokenStore();
 const playerRepo = USE_PG ? new PgPlayerRepository() : new InMemoryPlayerRepository();
