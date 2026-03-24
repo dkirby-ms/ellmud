@@ -28,7 +28,7 @@ function allMigrationFiles(): string[] {
 
 /** Extract CREATE TABLE statements from SQL. */
 function extractCreateTables(sql: string): string[] {
-  const regex = /CREATE TABLE\s+(\w+)/gi;
+  const regex = /CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)/gi;
   const tables: string[] = [];
   let match;
   while ((match = regex.exec(sql)) !== null) {
