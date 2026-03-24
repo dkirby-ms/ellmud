@@ -98,7 +98,7 @@ export default function CreatureDetail() {
         setLoading(true);
         setError(null);
         const creature = await getCreature<Record<string, unknown>>(id!);
-        setFormData(creature);
+        setFormData(creature as unknown as CreatureFormData);
         // Load lootTable from API response
         if (creature.lootTable && Array.isArray(creature.lootTable)) {
           setLootTable(

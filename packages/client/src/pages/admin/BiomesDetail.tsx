@@ -97,7 +97,7 @@ export default function BiomesDetail() {
     { id: "hazards" as Tab, label: "Hazards" },
   ];
 
-  const updateField = (field: keyof Biome, value: string | number | boolean) => {
+  const updateField = (field: keyof Biome, value: string | number | boolean | string[] | null) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
