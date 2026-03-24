@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router";
 import { login, register, ApiError } from "../services/api";
 import { useAppContext } from "../store";
+import { useDevAutoLogin } from "../hooks/useDevAutoLogin";
 
 export default function Login() {
   const { state, dispatch } = useAppContext();
@@ -12,6 +13,9 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // In dev mode, auto-login with dev/devdev credentials
+  useDevAutoLogin();
 
   // Check if local auth is enabled (default to true for dev)
   const allowLocalAuth = import.meta.env.VITE_ALLOW_LOCAL_AUTH !== "false";
