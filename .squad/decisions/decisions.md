@@ -1459,3 +1459,30 @@ interface BiomeDefinition {
 - PR #144
 - `packages/server/src/admin/content/content-types.ts` (BiomeDefinition)
 - `packages/client/src/lib/admin-api.ts` (CRUD utility)
+
+---
+
+## 2026-03-24: Dev Auto-Login Hook Wired Up
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-07-17  
+**Commit:** da93ab7  
+
+**Decision:** Wire the existing `useDevAutoLogin` hook into Login.tsx to auto-authenticate local dev users.
+
+**Why:**
+- Developers were forced to manually log in every time they started the app locally
+- Hook already existed with correct logic — it just needed to be invoked
+- Hook checks `import.meta.env.DEV` which Vite strips from production builds
+
+**Impact:**
+- **Dev experience:** No more manual login in local dev. Page auto-authenticates with `dev/devdev` credentials and redirects to `/refuge`
+- **Production safety:** Zero risk — `import.meta.env.DEV` code is eliminated at build time
+- **Fallback:** If server isn't running, hook silently fails and the manual login form remains available
+
+**Relevant To:**
+- **Jarlaxle:** Client UI changes in Login.tsx — no visual changes, just an added hook call
+- **Minsc:** Integration tests may now see auto-login behavior in dev mode
+
+**Files Modified:**
+- `packages/client/src/pages/Login.tsx`

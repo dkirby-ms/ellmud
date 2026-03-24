@@ -1251,3 +1251,11 @@ In-memory test implementations should enforce the same constraints as production
 
 **Pattern Established:** Store-backed tests now follow the abstraction + reset pattern, enabling maintainable, production-faithful test implementations.
 
+
+## 2026-03-24: Dev Auto-Login Hook — Cross-Agent Update
+
+**Timestamp:** 2026-03-24T12:10:00Z  
+**Source:** Drizzt (Engine Dev)  
+
+Drizzt wired `useDevAutoLogin` hook into `Login.tsx`. No visual UI changes — just a hook invocation gated on `import.meta.env.DEV`. Be aware that in dev mode, the login page now auto-authenticates on mount.
+

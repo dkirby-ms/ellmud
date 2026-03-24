@@ -1109,3 +1109,27 @@ Fix admin users 500 errors by extracting consistent user management interface an
 
 **Impact:**
 This pattern can be reused for other storage-backend abstractions in the codebase.
+
+### Dev Auto-Login Bypass Fix (2026-07-17)
+**Task:** Bug fix — dev users forced to login locally
+**Status:** ✅ Complete
+
+**Root Cause:** The `useDevAutoLogin` hook (`packages/client/src/hooks/useDevAutoLogin.ts`) existed and was correctly implemented, but was never imported or called anywhere in the application. The Login page rendered the full auth form without attempting the dev bypass.
+
+**Fix:** Added import and call of `useDevAutoLogin()` in `packages/client/src/pages/Login.tsx`. The hook runs on mount, checks `import.meta.env.DEV`, and auto-logs in with `dev/devdev` credentials. Falls back silently to the manual login form if the server is unavailable.
+
+**Verification:** Client type check clean (no new errors). All 1443 server tests pass. Zero production risk — hook gates on `import.meta.env.DEV` which is `false` in production builds.
+
+## 2026-03-24: Dev Auto-Login Hook Wired Up
+
+**Timestamp:** 2026-03-24T12:10:00Z  
+**Status:** Complete  
+**Commit:** da93ab7  
+
+Investigated local dev login friction where developers were forced to manually log in on every startup. Found that `useDevAutoLogin` hook was already implemented but never wired into `Login.tsx`. Added hook import and invocation, gated on `import.meta.env.DEV` for zero production impact.
+
+**Files Modified:**
+- `packages/client/src/pages/Login.tsx` — added hook call
+
+**Impact:** Dev users now auto-login with `dev/devdev` credentials when running locally.
+

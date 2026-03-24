@@ -760,3 +760,11 @@ items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narra
 
 **Next:** Phase 2.5 continues; no entity wiring blockers.
 
+
+## 2026-03-24: Dev Auto-Login Hook — Cross-Agent Update
+
+**Timestamp:** 2026-03-24T12:10:00Z  
+**Source:** Drizzt (Engine Dev)  
+
+Drizzt wired `useDevAutoLogin` hook into `Login.tsx` to auto-authenticate dev users locally. Integration tests may now see auto-login behavior in dev mode — hook checks `import.meta.env.DEV` so production tests are unaffected.
+
