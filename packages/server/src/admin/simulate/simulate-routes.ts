@@ -64,7 +64,7 @@ interface SimulationSummary {
 
 interface CreatureRoll {
   stats: {
-    hp: number;
+    maxHp: number;
     attack: number;
     defence: number;
     armour: number;
@@ -240,7 +240,7 @@ function rollCreatureStats(baseline: CreatureDefinition['stats']): CreatureRoll 
 
   return {
     stats: {
-      hp: Math.round(baseline.maxHp * (1 + hpVariance)),
+      maxHp: Math.round(baseline.maxHp * (1 + hpVariance)),
       attack: Math.round(baseline.attack * (1 + attackVariance)),
       defence: Math.round(baseline.defence * (1 + defenceVariance)),
       armour: Math.round(baseline.armour * (1 + armourVariance)),
