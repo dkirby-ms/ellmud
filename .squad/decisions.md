@@ -4263,3 +4263,49 @@ These patterns should be followed for future lint fixes to keep CI green. The 54
 - Priority guidance established (CI/CD, balance, security)
 - Content roadmap clarified (biome variety, creature types)
 
+
+### 2026-03-24T16:04:22Z: User directive - Central US deployment location
+**By:** dkirby-ms (via Copilot)
+**What:** All infrastructure must remain in the centralus Azure region. Stop changing the deployment location from centralus to eastus2.
+**Why:** User request — captured for team memory
+
+### 2026-03-24T19:54:00Z: Architecture - ACA Redis Add-on Service Bind
+**By:** Drizzt (Engine Dev)
+**What:** Replaced standalone Redis container deployment with Azure Container Apps Redis add-on service. The add-on uses `configuration.service.type: 'redis'` and connects via `template.serviceBinds` — ACA automatically injects `REDIS_HOST`, `REDIS_PORT`, `REDIS_ENDPOINT`, and `REDIS_PASSWORD`.
+**Why:** Simpler networking (no manual TCP ingress), managed lifecycle, follows ACA best practices.
+**Impact:**
+- Bicep: `redis.bicep` outputs `redisServiceId` instead of `redisHost`. `container-apps.bicep` uses `serviceBinds`.
+- Server config: `config.ts` has extended fallback chain: `REDIS_CONNECTION_STRING` → `REDIS_URL` → `REDIS_HOST`+`REDIS_PORT` → `redis://localhost:6379`.
+- No app code changes needed beyond config.ts.
+- CI/CD: No pipeline changes.
+**Files Changed:** `infra/modules/redis.bicep`, `infra/main.bicep`, `infra/modules/container-apps.bicep`, `packages/server/src/config.ts`
+**Verification:** All 1,447 server tests passing.
+
+### 2026-03-24T17:25:00Z: Testing - Content-based message matching in shardboard test
+**By:** Drizzt (Engine Dev)
+**What:** Changed flaky shardboard test to search for message content (`'Shardboard'`) rather than assuming it's the last message. Handles race conditions where ambient narration events arrive concurrently.
+**Why:** Test was grabbing the last narrate message, but background ambient events could arrive after, causing false failures in CI.
+**Impact:**
+- Test is now resilient to message ordering — depends only on content.
+- Future ambient narration additions won't break this test.
+- Similar "grab last message" patterns in other tests should be reviewed.
+
+### 2026-03-24T19:54:00Z: Team process - Dev branch as canonical for merge conflicts
+**By:** Jarlaxle (Systems Dev)
+**What:** When resolving merge conflicts between `dev` and `uat` branches, prefer dev's version as the canonical source. Dev is the active development branch with the superset of changes.
+**Why:** Dev typically has more recent fixes and features than uat. PR #158 example: dev had 60 lint fixes vs uat's 27; dev uses cleaner lint patterns.
+**Impact:**
+- Future merges should follow the same principle: dev is the source of truth.
+- Lint fixes should be coordinated to avoid parallel sweeps.
+- Squad docs (decisions.md) are append-only — union merge when both sides add entries.
+
+### 2026-03-24T22:05:00Z: Security - AUTH_REQUIRED defaults to true in local dev
+**By:** Drizzt (Engine Dev)
+**What:** `AUTH_REQUIRED` now defaults to `true` in local dev (was `false`). Client's `useDevAutoLogin` hook is now opt-in via `VITE_DEV_AUTO_LOGIN=true` environment variable.
+**Why:** Local dev was bypassing auth entirely, masking login flow bugs before deployment. Dev behavior should match production.
+**Impact:**
+- **Team:** All local dev workflows now require login. Register through login form or set `VITE_DEV_AUTO_LOGIN=true` for auto-login convenience.
+- **Tests:** No impact. All 1,677 tests pass. Tests call `initColyseusAuth()` directly.
+- **CI/CD:** No impact. Production already had auth configured.
+- **Security:** Local dev now surfaces auth bugs before production deployment.
+**Files Changed:** `packages/server/src/config.ts`, `packages/client/src/hooks/useDevAutoLogin.ts`, `packages/client/src/pages/Login.tsx`, `.env.example`

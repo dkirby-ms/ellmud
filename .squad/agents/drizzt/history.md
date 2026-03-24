@@ -1215,3 +1215,25 @@ Updated `createPresence()` and the RedisDriver init in `index.ts` to probe conne
 **No change needed for OAuth redirect:** The `/auth/entra/login` relative URL in Login.tsx already works because `packages/client/vite.config.ts` has a proxy rule forwarding `/auth` → `http://localhost:2567`.
 
 **Pattern:** Client env vars must use the `VITE_` prefix to be exposed via `import.meta.env`. The `VITE_ALLOW_LOCAL_AUTH` var is checked as a string comparison (`=== 'false'`) since env vars are always strings. Default behavior (var unset) is to allow local auth + dev auto-login.
+
+---
+
+## Session: Fix auth bypass in local dev (2025-07-24)
+
+### Problem
+Local dev was skipping auth in two ways:
+1. Server: `AUTH_REQUIRED` defaulted to `false` in config.ts — Colyseus rooms allowed anonymous joins without tokens
+2. Client: `useDevAutoLogin` hook fired automatically on `import.meta.env.DEV`, silently auto-logging in with `dev/devdev` and swallowing failures
+
+Combined effect: auth was completely invisible in local development. Broken auth wouldn't surface until deployment.
+
+### Changes
+1. **`packages/server/src/config.ts`** — Changed `AUTH_REQUIRED` default from `false` to `true`. Server now enforces token validation on room join by default.
+2. **`packages/client/src/hooks/useDevAutoLogin.ts`** — Changed guard from `!import.meta.env.DEV` to `import.meta.env.VITE_DEV_AUTO_LOGIN !== 'true'`. Auto-login is now opt-in, not automatic.
+3. **`packages/client/src/pages/Login.tsx`** — Updated comment to reflect new behavior.
+4. **`.env.example`** — Added `AUTH_REQUIRED=true` and documented `VITE_DEV_AUTO_LOGIN`.
+
+### Learnings
+- `AUTH_REQUIRED` only flows through `index.ts` → `initColyseusAuth()`. Tests call `initColyseusAuth()` directly with explicit booleans, so config default changes don't break tests.
+- Module-level `_authRequired` in `colyseus-auth.ts` defaults to `false` independently of config — tests that don't call `initColyseusAuth()` get anonymous access regardless.
+- All 1,677 tests passed after the change (server: 1,573, client: 104, shared: 80).

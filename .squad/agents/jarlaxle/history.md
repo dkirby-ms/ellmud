@@ -1348,3 +1348,15 @@ Elminster completed a full code review comparing GDD (Game Design Document) agai
 
 **Next:** Phase 2 multiplayer testing ready pending CI fix (#157). Phase 3 economic systems need prioritization before implementation.
 
+
+## 2026-03-24: Auth bypass fix (Drizzt) — may affect your local dev workflow
+
+Drizzt fixed a two-part local dev auth bypass:
+- **Server:** `AUTH_REQUIRED` now defaults to `true` (was `false`)
+- **Client:** `useDevAutoLogin` is now opt-in via `VITE_DEV_AUTO_LOGIN=true`
+
+**Impact on your work:** Local dev now requires login by default. You can either:
+1. Register a user through the login form each session, or
+2. Set `VITE_DEV_AUTO_LOGIN=true` in `packages/client/.env` to restore old behavior
+
+This aligns local dev with production behavior, making auth bugs surface earlier. All 1,677 tests pass.
