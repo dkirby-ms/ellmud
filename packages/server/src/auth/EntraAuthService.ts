@@ -11,6 +11,8 @@ export interface EntraConfig {
   clientId: string;
   clientSecret: string;
   tenantId: string;
+  /** Entra External ID (CIAM) tenant subdomain name — NOT the GUID. */
+  tenantSubdomain: string;
   redirectUri: string;
 }
 
@@ -31,18 +33,20 @@ export class EntraAuthService {
 
   /**
    * Initialize the OIDC client using Entra External ID discovery.
-   * For Entra External ID (CIAM), use the ciamlogin.com issuer.
+   * For Entra External ID (CIAM), the subdomain is the tenant's custom name, not the GUID.
+   * URL format: https://{subdomain}.ciamlogin.com/{tenantId}/v2.0
    */
   async initialize(): Promise<void> {
+    const subdomain = this.entraConfig.tenantSubdomain || this.entraConfig.tenantId;
     const issuerUrl = new URL(
-      `https://${this.entraConfig.tenantId}.ciamlogin.com/${this.entraConfig.tenantId}/v2.0`
+      `https://${subdomain}.ciamlogin.com/${this.entraConfig.tenantId}/v2.0`
     );
 
     try {
       this.config = await client.discovery(
         issuerUrl,
         this.entraConfig.clientId,
-        this.entraConfig.redirectUri,
+        this.entraConfig.clientSecret,
         client.ClientSecretPost(this.entraConfig.clientSecret),
       );
     } catch (err) {

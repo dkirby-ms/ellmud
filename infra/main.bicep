@@ -28,6 +28,28 @@ param postgresAdminPassword string
 @description('PostgreSQL database name')
 param postgresDatabaseName string = 'ellmud'
 
+@description('Entra External ID client ID')
+param entraClientId string = ''
+
+@description('Entra External ID client secret')
+@secure()
+param entraClientSecret string = ''
+
+@description('Entra External ID tenant ID (GUID)')
+param entraTenantId string = ''
+
+@description('Entra External ID CIAM tenant subdomain (custom domain name, not GUID)')
+param entraTenantSubdomain string = ''
+
+@description('OAuth callback URL (must match Entra app registration redirect URI)')
+param entraRedirectUri string = ''
+
+@description('Allow local username/password authentication (false for production)')
+param allowLocalAuth string = 'false'
+
+@description('Client app URL for OAuth redirects')
+param clientUrl string = ''
+
 // ─── Variables ──────────────────────────────────────────────────────────────
 
 var resourcePrefix = 'ellmud-${environmentName}'
@@ -104,6 +126,13 @@ module containerAppsApp 'modules/container-apps.bicep' = {
     postgresAdminPassword: postgresAdminPassword
     redisServiceName: '${resourcePrefix}-redis'
     deployApp: true
+    entraClientId: entraClientId
+    entraClientSecret: entraClientSecret
+    entraTenantId: entraTenantId
+    entraTenantSubdomain: entraTenantSubdomain
+    entraRedirectUri: entraRedirectUri
+    allowLocalAuth: allowLocalAuth
+    clientUrl: clientUrl
   }
 }
 

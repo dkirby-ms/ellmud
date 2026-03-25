@@ -4263,3 +4263,127 @@ These patterns should be followed for future lint fixes to keep CI green. The 54
 - Priority guidance established (CI/CD, balance, security)
 - Content roadmap clarified (biome variety, creature types)
 
+
+### 2026-03-24T16:04:22Z: User directive - Central US deployment location
+**By:** dkirby-ms (via Copilot)
+**What:** All infrastructure must remain in the centralus Azure region. Stop changing the deployment location from centralus to eastus2.
+**Why:** User request — captured for team memory
+
+### 2026-03-24T19:54:00Z: Architecture - ACA Redis Add-on Service Bind
+**By:** Drizzt (Engine Dev)
+**What:** Replaced standalone Redis container deployment with Azure Container Apps Redis add-on service. The add-on uses `configuration.service.type: 'redis'` and connects via `template.serviceBinds` — ACA automatically injects `REDIS_HOST`, `REDIS_PORT`, `REDIS_ENDPOINT`, and `REDIS_PASSWORD`.
+**Why:** Simpler networking (no manual TCP ingress), managed lifecycle, follows ACA best practices.
+**Impact:**
+- Bicep: `redis.bicep` outputs `redisServiceId` instead of `redisHost`. `container-apps.bicep` uses `serviceBinds`.
+- Server config: `config.ts` has extended fallback chain: `REDIS_CONNECTION_STRING` → `REDIS_URL` → `REDIS_HOST`+`REDIS_PORT` → `redis://localhost:6379`.
+- No app code changes needed beyond config.ts.
+- CI/CD: No pipeline changes.
+**Files Changed:** `infra/modules/redis.bicep`, `infra/main.bicep`, `infra/modules/container-apps.bicep`, `packages/server/src/config.ts`
+**Verification:** All 1,447 server tests passing.
+
+### 2026-03-24T17:25:00Z: Testing - Content-based message matching in shardboard test
+**By:** Drizzt (Engine Dev)
+**What:** Changed flaky shardboard test to search for message content (`'Shardboard'`) rather than assuming it's the last message. Handles race conditions where ambient narration events arrive concurrently.
+**Why:** Test was grabbing the last narrate message, but background ambient events could arrive after, causing false failures in CI.
+**Impact:**
+- Test is now resilient to message ordering — depends only on content.
+- Future ambient narration additions won't break this test.
+- Similar "grab last message" patterns in other tests should be reviewed.
+
+### 2026-03-24T19:54:00Z: Team process - Dev branch as canonical for merge conflicts
+**By:** Jarlaxle (Systems Dev)
+**What:** When resolving merge conflicts between `dev` and `uat` branches, prefer dev's version as the canonical source. Dev is the active development branch with the superset of changes.
+**Why:** Dev typically has more recent fixes and features than uat. PR #158 example: dev had 60 lint fixes vs uat's 27; dev uses cleaner lint patterns.
+**Impact:**
+- Future merges should follow the same principle: dev is the source of truth.
+- Lint fixes should be coordinated to avoid parallel sweeps.
+- Squad docs (decisions.md) are append-only — union merge when both sides add entries.
+
+### 2026-03-24T22:05:00Z: Security - AUTH_REQUIRED defaults to true in local dev
+**By:** Drizzt (Engine Dev)
+**What:** `AUTH_REQUIRED` now defaults to `true` in local dev (was `false`). Client's `useDevAutoLogin` hook is now opt-in via `VITE_DEV_AUTO_LOGIN=true` environment variable.
+**Why:** Local dev was bypassing auth entirely, masking login flow bugs before deployment. Dev behavior should match production.
+**Impact:**
+- **Team:** All local dev workflows now require login. Register through login form or set `VITE_DEV_AUTO_LOGIN=true` for auto-login convenience.
+- **Tests:** No impact. All 1,677 tests pass. Tests call `initColyseusAuth()` directly.
+- **CI/CD:** No impact. Production already had auth configured.
+- **Security:** Local dev now surfaces auth bugs before production deployment.
+**Files Changed:** `packages/server/src/config.ts`, `packages/client/src/hooks/useDevAutoLogin.ts`, `packages/client/src/pages/Login.tsx`, `.env.example`
+
+### 2026-03-24T22:19:00Z: Architecture - Entra External ID OAuth Scope
+**By:** Elminster (Lead/Architect)
+**Requested by:** dkirby-ms
+**Date:** 2026-03-24
+**Status:** Scope confirmed, implementation bugs identified
+
+**What:**
+Entra External ID is used ONLY for user login authentication (identity verification). We do NOT protect specific APIs with Entra. All granular role and permission management lives in our own Postgres DB. Entra's sole job: verify a user has an account in our Entra External ID tenant, then we issue our own session token.
+
+**Verdict: Architecture is correctly scoped and minimally engineered.**
+
+| Requirement | Implementation | Status |
+|---|---|---|
+| Entra = login only | `EntraAuthService` does OIDC login, returns `oid`+claims, nothing more | ✅ Correct |
+| No API protection via Entra | `colyseus-auth.ts` validates our own UUID tokens, not Entra tokens | ✅ Correct |
+| Roles in our DB | `player_identities.role` column (migration 009), no Entra role claims consumed | ✅ Correct |
+| Verify user → create in our DB → issue own token | `AuthService.loginOAuth()` does find-or-create by provider+oid, issues UUID session token | ✅ Correct |
+
+**Implementation Bugs** (configuration and wiring, not architectural):
+- 🔴 Redirect URI mismatch: `.env` has `/auth/callback`, server route is `/auth/entra/callback` → OAuth code never exchanged
+- 🔴 Tenant ID vs subdomain confusion: CIAM issuer URL uses GUID as subdomain → DNS resolution fails. Must use tenant custom domain name (e.g., `contoso`)
+- 🟡 Token in URL query params (security hygiene, not critical for Phase 1)
+- 🟡 Entra config reads from `process.env` instead of centralized `config.ts` (consistency)
+
+**Recommendations:**
+- Immediate: Fix redirect URI in `.env.example` and all deployed environments to `/auth/entra/callback`. Resolve tenant ID semantics.
+- Short-term: Move Entra config into `config.ts`. Add OIDC integration test (mock flow end-to-end).
+- Medium-term: Replace token-in-URL with one-time code exchange. Move `ENTRA_CLIENT_SECRET` to Container Apps secrets.
+
+**Why:**
+User directive from dkirby-ms clarified Entra's role. This decision confirms the implementation matches intent despite configuration bugs.
+
+**Impact:**
+- Fixes Bugs 1 and 2 will unblock Entra login in local dev and UAT
+- Architecture audit is complete; focus now on configuration and deployment wiring
+- Decision boundary established for future auth work (Entra = identity only, our system = authorization)
+
+---
+
+### 2026-03-24T22:19:00Z: Diagnostic - Entra OAuth 6 Issues in Local Dev & UAT
+**By:** Drizzt (Engine Dev)
+**Requested by:** dkirby-ms
+**Date:** 2026-03-24
+**Status:** Investigation complete, fixes identified
+
+**Issues Found:**
+
+| # | Issue | Severity | Impact | Fix |
+|---|-------|----------|--------|-----|
+| 1 | Server doesn't load `.env` (no dotenv import) | Critical | Entra config undefined at runtime | Add `import 'dotenv/config'` |
+| 2 | Redirect URI path mismatch (`/auth/callback` vs `/auth/entra/callback`) | Critical | OAuth code never exchanged | Update `.env.example` and env vars |
+| 3 | openid-client v6 API misuse (3rd arg to discovery) | Critical | Discovery fails or wrong secret | Check and fix discovery() call |
+| 4 | CIAM issuer URL uses GUID as subdomain | Critical | DNS resolution fails, OIDC discovery unreachable | Add `ENTRA_TENANT_SUBDOMAIN`, use in URL |
+| 5 | main.bicep doesn't pass Entra params to container app | Medium | UAT deployment missing Entra config | Declare Entra vars in Bicep module |
+| 6 | No login fallback if Entra broken + `ALLOW_LOCAL_AUTH=false` | Low | Complete lockout, blocks testing | Document workaround or add rollback |
+
+**Architectural Validation:**
+✅ Entra is correctly scoped as identity provider only. Minimal viable integration detected. No over-engineering.
+
+**Team Impact:**
+- All members testing auth in local dev or UAT are affected
+- Issues 1–4 must be fixed before Entra testing proceeds
+- All 6 should be addressed this sprint
+
+**Why:**
+Investigation into deployment errors and local dev auth failures. Issues 1–4 are code/config bugs; 5–6 are deployment/process gaps.
+
+**Next Steps:**
+Assign fixes to sprint backlog. Issues 1–4 are ~2 points each; 5–6 are process/docs.
+
+---
+
+### 2026-03-24T22:19:00Z: Directive - Entra auth scope confirmed
+**By:** dkirby-ms (via Copilot)
+**Captured:** 2026-03-24T22:19:00Z
+
+Entra External ID is ONLY for user login authentication. We are NOT protecting specific APIs with Entra. All granular role assignments are managed in our own user DB in Postgres. Entra's only job is to verify users have an account in our Entra External ID tenant.

@@ -3,9 +3,11 @@ import { login, register } from '../services/api.js';
 import { useAppContext } from '../store.js';
 
 /**
- * Dev mode auto-login hook.
- * When running in Vite dev mode, automatically logs in with dev credentials.
- * Ensures the dev user exists (registers if needed), then logs in.
+ * Dev mode auto-login hook — OPT-IN only.
+ * Set VITE_DEV_AUTO_LOGIN=true in your .env to enable automatic login
+ * with dev/devdev credentials. Disabled by default so that auth is
+ * exercised during local development.
+ * Skipped when VITE_ALLOW_LOCAL_AUTH is "false" (OAuth-only mode).
  * On failure (server not running), silently continues to AuthScreen.
  */
 export function useDevAutoLogin(): void {
@@ -13,7 +15,12 @@ export function useDevAutoLogin(): void {
   const attemptedRef = useRef(false);
 
   useEffect(() => {
-    if (!import.meta.env.DEV || state.authenticated || attemptedRef.current) {
+    if (
+      import.meta.env.VITE_DEV_AUTO_LOGIN !== 'true' ||
+      import.meta.env.VITE_ALLOW_LOCAL_AUTH === 'false' ||
+      state.authenticated ||
+      attemptedRef.current
+    ) {
       return;
     }
 

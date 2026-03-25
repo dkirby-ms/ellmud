@@ -55,11 +55,17 @@ param entraClientSecret string = ''
 @description('Entra External ID tenant ID')
 param entraTenantId string = ''
 
+@description('Entra External ID CIAM tenant subdomain (custom domain name, not GUID)')
+param entraTenantSubdomain string = ''
+
 @description('OAuth callback URL')
 param entraRedirectUri string = ''
 
 @description('Allow local username/password authentication')
 param allowLocalAuth string = 'false'
+
+@description('Client app URL for OAuth redirects (e.g. https://ellmud-test.kirbytoso.xyz)')
+param clientUrl string = ''
 
 var createEnvironment = existingEnvironmentId == ''
 
@@ -146,8 +152,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             { name: 'ENTRA_CLIENT_ID', value: entraClientId }
             { name: 'ENTRA_CLIENT_SECRET', value: entraClientSecret }
             { name: 'ENTRA_TENANT_ID', value: entraTenantId }
+            { name: 'ENTRA_TENANT_SUBDOMAIN', value: entraTenantSubdomain }
             { name: 'ENTRA_REDIRECT_URI', value: entraRedirectUri }
             { name: 'ALLOW_LOCAL_AUTH', value: allowLocalAuth }
+            { name: 'CLIENT_URL', value: clientUrl }
           ]
         }
       ]

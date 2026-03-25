@@ -621,3 +621,14 @@ When planning Phase 3 work:
 
 **Files Created**
 - `.squad/decisions/inbox/elminster-gdd-code-review.md` — Full review report (30+ pages, structured analysis)
+
+### 2026-03-20: Entra External ID Auth Architecture Assessment
+- **Decision:** Entra auth architecture is correctly scoped — identity-only provider, no API protection, no role claims. The design matches the stated intent precisely. Filed at `.squad/decisions/inbox/elminster-entra-auth-scope.md`.
+- **Critical finding — Redirect URI mismatch:** `.env.example` documents `ENTRA_REDIRECT_URI=http://localhost:3000/auth/callback` but the server route is `/auth/entra/callback`. This is the primary blocker — Entra redirects to a path the server doesn't handle.
+- **Critical finding — Tenant ID vs. subdomain:** `EntraAuthService` uses `tenantId` as both the `ciamlogin.com` subdomain AND the OIDC path segment. For Entra External ID, the subdomain must be the tenant name (e.g., `contoso`), not the GUID. Using a GUID as subdomain produces an unresolvable DNS hostname.
+- **Architecture confirmed correct:** `EntraAuthService` → OIDC code flow → extract `oid` → `AuthService.loginOAuth()` → find-or-create player → issue our own UUID session token. No Entra tokens stored, no Entra APIs called post-login, no Entra middleware on any API. This is the minimal viable integration.
+- **Security note:** Session token passed in redirect URL query params (browser history, logs). Recommend one-time code exchange pattern.
+- **Config inconsistency:** Entra env vars read from `process.env` in `index.ts` instead of centralized `config.ts` module.
+- **Bicep correct:** `@secure()` on `entraClientSecret` param. But `ENTRA_CLIENT_SECRET` is plain env var in container spec (should be secretRef long-term).
+- **Key files:** `packages/server/src/auth/EntraAuthService.ts`, `packages/server/src/auth/entra-routes.ts`, `packages/server/src/auth/AuthService.ts` (loginOAuth), `packages/client/src/pages/Login.tsx`, `packages/client/src/pages/AuthCallback.tsx`, `infra/modules/container-apps.bicep` (lines 48-65, 149-154).
+- **User preference:** dkirby-ms wants Entra as identity-only. No Entra roles, groups, or API protection. All authorization is ours.

@@ -1,10 +1,15 @@
+// Load .env from monorepo root (no-op in production where env vars come from the container)
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __dirnameInit = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirnameInit, '../../../.env') });
+
 import { Server } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { monitor } from '@colyseus/monitor';
 import express from 'express';
 import http from 'http';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { ShardRoom, RefugeRoom } from './rooms/index.js';
 import {
   AuthService,
@@ -75,7 +80,8 @@ const entraConfig: EntraConfig = {
   clientId: process.env.ENTRA_CLIENT_ID || '',
   clientSecret: process.env.ENTRA_CLIENT_SECRET || '',
   tenantId: process.env.ENTRA_TENANT_ID || '',
-  redirectUri: process.env.ENTRA_REDIRECT_URI || 'http://localhost:3000/auth/callback',
+  tenantSubdomain: process.env.ENTRA_TENANT_SUBDOMAIN || '',
+  redirectUri: process.env.ENTRA_REDIRECT_URI || 'http://localhost:3000/auth/entra/callback',
 };
 
 if (entraConfig.clientId && entraConfig.clientSecret && entraConfig.tenantId) {
@@ -134,8 +140,7 @@ initColyseusAuth(authService, AUTH_REQUIRED);
 app.use('/colyseus', monitor());
 
 // Serve client static files
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const publicPath = path.resolve(__dirname, 'public');
+const publicPath = path.resolve(__dirnameInit, 'public');
 app.use(express.static(publicPath));
 
 // Catch-all: serve index.html for client-side routing (GET only — does not
