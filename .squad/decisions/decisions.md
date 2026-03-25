@@ -1536,3 +1536,35 @@ Rate limiter instances are created **inside** `createAuthRouter()`, not at modul
 - Production: single router instance, single set of limiters — no change in behavior
 - Tests: each `createTestApp()` call gets isolated rate limit state
 - If someone needs to share limiter state across multiple routers (e.g., cluster-wide limiting), they'll need to pass a custom `store` option — but that's a future concern
+
+---
+
+## 2026-03-25T12:16: Player identity keying pattern (sessionId → playerId)
+
+**By:** Jarlaxle (Systems Dev)  
+**Issue:** #197  
+**PR:** #200  
+**Date:** 2026-03-25  
+**Status:** Implemented
+
+### What
+
+All room types (RefugeRoom, ShardRoom) must key player state to the persistent `playerId` from auth context, never to `client.sessionId`. Both rooms now use the same identity resolution pattern:
+
+```typescript
+const playerId = (options['playerId'] as string) || client.sessionId;
+this.playerIds.set(client.sessionId, playerId);
+```
+
+The `playerIds` map (`sessionId → playerId`) provides forward lookup. `findClient()` does reverse lookup (`playerId → sessionId → Client`).
+
+### Why
+
+`client.sessionId` is ephemeral — a new one is assigned on every WebSocket connection. Using it as the player identity key causes all player-facing data (stash, combat state, extraction progress, traces) to become orphaned on reconnect.
+
+### Impact
+
+- Any future room types must follow this pattern — never key game state by `client.sessionId`.
+- Combat system, extraction system, downing system, trace system, and awareness system all receive `playerId`, not `sessionId`.
+- `findClient()` accepts `playerId` and reverse-lookups through the `playerIds` map. Direct `this.clients.find(c => c.sessionId === sid)` should only be used inside `findClient()` itself.
+- Phase 2 consideration: `options['playerId']` is client-supplied and not validated against `client.auth.playerId`. This is fine for Phase 1 simple auth but should be hardened when OAuth lands.

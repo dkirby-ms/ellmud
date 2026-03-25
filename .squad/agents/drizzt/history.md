@@ -1400,3 +1400,23 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - **express-rate-limit v7+ uses standardHeaders by default** — set `legacyHeaders: false` to avoid duplicate X-RateLimit-* headers alongside the new RateLimit-* standard headers.
 - **Module-level middleware singletons cause cross-test contamination** — rate limiters (or any stateful middleware) must be instantiated per-router when tests create multiple Express app instances. Factory-inside-factory pattern solves this cleanly.
 - **fetch interception for transport tests** — overriding `globalThis.fetch` in test scope lets you validate URL construction, headers, and request shape without hitting a real endpoint. Always restore in `finally` block.
+
+## Cross-Agent Notice: ShardRoom Identity Keying (Jarlaxle #197)
+
+**Date:** 2026-03-25T12:16Z  
+**Impacts:** Engine domain (room types, player identity patterns)
+
+**What changed:**
+- ShardRoom now uses `playerId` (persistent, auth-sourced) as the key for all player state instead of `sessionId` (ephemeral per WebSocket).
+- Same pattern as RefugeRoom: `options['playerId'] || client.sessionId`, with `playerIds` map for `sessionId → playerId` lookup.
+- `findClient(playerId)` does reverse lookup.
+
+**Why it matters to you:**
+- Any new room types must follow this pattern — consistency across all rooms.
+- Combat system, extraction, downing, traces, awareness, and sound all now receive and key by `playerId`.
+- If you wire new subsystems, use `playerId` throughout; never key by `sessionId` directly.
+
+**For your reference:**
+- Issue #197, PR #200 (staged)
+- Decision: `.squad/decisions/decisions.md` (2026-03-25 entry)
+- Tests validate reconnection recovery, stash persistence, combat continuity
