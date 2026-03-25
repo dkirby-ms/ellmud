@@ -9,7 +9,7 @@
  * user creation/lookup in the player repository).
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import type { Server } from 'node:http';
 import { AuthService } from '../auth/AuthService.js';
@@ -100,22 +100,6 @@ async function requestNoRedirect(
   });
   const body = await res.text();
   return { status: res.status, headers: res.headers, body };
-}
-
-/**
- * Make a GET request following redirects and returning the final response.
- */
-async function requestFollow(
-  port: number,
-  path: string,
-  options?: { headers?: Record<string, string> },
-): Promise<{ status: number; headers: Headers; body: string; url: string }> {
-  const res = await fetch(`http://127.0.0.1:${port}${path}`, {
-    redirect: 'follow',
-    headers: options?.headers ?? {},
-  });
-  const body = await res.text();
-  return { status: res.status, headers: res.headers, body, url: res.url };
 }
 
 // ─── 1. Login Redirect ─────────────────────────────────────────────────────

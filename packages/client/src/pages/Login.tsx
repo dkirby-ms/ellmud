@@ -17,8 +17,8 @@ export default function Login() {
   // Auto-login with dev credentials when VITE_DEV_AUTO_LOGIN=true
   useDevAutoLogin();
 
-  // Check if local auth is enabled (default to true for dev)
-  const allowLocalAuth = import.meta.env.VITE_ALLOW_LOCAL_AUTH !== "false";
+  // Local auth is hidden by default — set VITE_ALLOW_LOCAL_AUTH=true to enable
+  const allowLocalAuth = import.meta.env.VITE_ALLOW_LOCAL_AUTH === "true";
 
   // On mount, check for OAuth error in URL
   useEffect(() => {
@@ -126,6 +126,15 @@ export default function Login() {
           <span>Sign in with Microsoft</span>
         </button>
 
+        {error && (
+          <div
+            className="text-danger text-sm px-4 py-2 bg-danger/10 border border-danger/30 rounded font-sans mb-6"
+            role="alert"
+          >
+            {error}
+          </div>
+        )}
+
         {allowLocalAuth && (
           <>
             {/* Divider */}
@@ -217,15 +226,6 @@ export default function Login() {
                   disabled={loading}
                   required
                 />
-              </div>
-            )}
-
-            {error && (
-              <div
-                className="text-danger text-sm px-4 py-2 bg-danger/10 border border-danger/30 rounded font-sans"
-                role="alert"
-              >
-                {error}
               </div>
             )}
 

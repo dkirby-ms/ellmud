@@ -8,13 +8,34 @@
  */
 
 import { Router, type Request, type Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import type { AuthService } from './AuthService.js';
 import { AuthError, DuplicateUsernameError } from './AuthService.js';
+
+/** Rate limit config for login: 10 attempts per 15 min per IP. */
+export const LOGIN_RATE_LIMIT = { windowMs: 15 * 60 * 1000, max: 10 } as const;
+
+/** Rate limit config for registration: 5 attempts per hour per IP. */
+export const REGISTER_RATE_LIMIT = { windowMs: 60 * 60 * 1000, max: 5 } as const;
 
 export function createAuthRouter(authService: AuthService): Router {
   const router = Router();
 
-  router.post('/auth/register', async (req: Request, res: Response) => {
+  const loginLimiter = rateLimit({
+    ...LOGIN_RATE_LIMIT,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many login attempts. Please try again later.' },
+  });
+
+  const registerLimiter = rateLimit({
+    ...REGISTER_RATE_LIMIT,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many registration attempts. Please try again later.' },
+  });
+
+  router.post('/auth/register', registerLimiter, async (req: Request, res: Response) => {
     try {
       const { username, password } = req.body as { username?: string; password?: string };
       const result = await authService.register(username as string, password as string);
@@ -24,7 +45,7 @@ export function createAuthRouter(authService: AuthService): Router {
     }
   });
 
-  router.post('/auth/login', async (req: Request, res: Response) => {
+  router.post('/auth/login', loginLimiter, async (req: Request, res: Response) => {
     try {
       const { username, password } = req.body as { username?: string; password?: string };
       const result = await authService.login(username as string, password as string);

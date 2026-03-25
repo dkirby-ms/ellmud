@@ -2,7 +2,7 @@
  * Combat module barrel export.
  */
 
-export { CombatSystem, type ExitResolver } from './CombatSystem.js';
+export { CombatSystem, type ExitResolver, type RollFn } from './CombatSystem.js';
 export {
   type Combatant,
   type CombatStats,
@@ -16,7 +16,14 @@ export {
   EMPTY_TICK_RESULT,
   createCombatant,
 } from './CombatState.js';
-export { calculateDamage, type DamageResult } from './damage.js';
+export {
+  calculateDamage,
+  getDodgeChance,
+  DODGE_CHANCE_PER_DEFENCE,
+  MAX_DODGE_CHANCE,
+  type DamageResult,
+  type DamageOptions,
+} from './damage.js';
 export {
   resolveStrike,
   resolveDodge,

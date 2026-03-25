@@ -7,9 +7,12 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/auth': {
-        target: 'http://localhost:2567',
-      },
+      // Proxy server auth API routes — but NOT /auth/callback (React route)
+      '/auth/register': { target: 'http://localhost:2567' },
+      '/auth/login': { target: 'http://localhost:2567' },
+      '/auth/logout': { target: 'http://localhost:2567' },
+      '/auth/me': { target: 'http://localhost:2567' },
+      '/auth/entra': { target: 'http://localhost:2567' },
       '/colyseus': {
         target: 'http://localhost:2567',
         ws: true,

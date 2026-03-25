@@ -89,6 +89,8 @@ export interface CombatEvent {
   maxHp?: number;
   narration: string;
   killerIds?: string[];
+  /** True when the target successfully dodged the attack (GDD §6.4). */
+  dodged?: boolean;
 }
 
 export interface FleeResult {

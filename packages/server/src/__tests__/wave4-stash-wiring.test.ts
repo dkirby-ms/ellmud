@@ -102,14 +102,14 @@ describe('Extraction → Stash Transfer (Issue #11)', () => {
     const result = await transferInventoryToStash(PLAYER_ID, inventory, service, defs);
 
     expect(result.stored).toBe(4); // 1 blade + 3 potions
-    expect(result.lost).toBe(0);
+    expect(result.retained).toBe(0);
 
     const view = await service.loadStash(PLAYER_ID);
     expect(view.entries.length).toBeGreaterThanOrEqual(1);
     expect(view.currentWeight).toBeCloseTo(8.0); // 5 + 3×1
   });
 
-  it('loses items that exceed stash weight capacity', async () => {
+  it('retains items that exceed stash weight capacity', async () => {
     await repo.setCapacity(PLAYER_ID, 10);
 
     const inventory = buildInventory([
@@ -118,9 +118,12 @@ describe('Extraction → Stash Transfer (Issue #11)', () => {
 
     const result = await transferInventoryToStash(PLAYER_ID, inventory, service, defs);
 
-    // Capacity 10 / weight 5 each → can fit 2, third is lost
+    // Capacity 10 / weight 5 each → can fit 2, third is retained
     expect(result.stored).toBe(2);
-    expect(result.lost).toBe(1);
+    expect(result.retained).toBe(1);
+    expect(result.retainedItems).toHaveLength(1);
+    expect(result.retainedItems[0]!.itemId).toBe('rusty_blade');
+    expect(result.retainedItems[0]!.quantity).toBe(1);
   });
 
   it('handles empty inventory gracefully', async () => {
@@ -128,7 +131,7 @@ describe('Extraction → Stash Transfer (Issue #11)', () => {
     const result = await transferInventoryToStash(PLAYER_ID, emptyInv, service, defs);
 
     expect(result.stored).toBe(0);
-    expect(result.lost).toBe(0);
+    expect(result.retained).toBe(0);
   });
 
   it('registers unknown item definitions during transfer', async () => {
@@ -155,14 +158,14 @@ describe('Extraction → Stash Transfer (Issue #11)', () => {
 
     const result = await transferInventoryToStash(PLAYER_ID, inventory, service, defs);
     expect(result.stored).toBe(4);
-    expect(result.lost).toBe(0);
+    expect(result.retained).toBe(0);
 
     const view = await service.loadStash(PLAYER_ID);
     // 5 + 2×1 + 2 = 9 weight
     expect(view.currentWeight).toBeCloseTo(9.0);
   });
 
-  it('all items lost when stash has zero remaining capacity', async () => {
+  it('all items retained when stash has zero remaining capacity', async () => {
     await repo.setCapacity(PLAYER_ID, 5);
 
     // Fill stash to capacity
@@ -180,7 +183,13 @@ describe('Extraction → Stash Transfer (Issue #11)', () => {
 
     const result = await transferInventoryToStash(PLAYER_ID, inventory, service, defs);
     expect(result.stored).toBe(0);
-    expect(result.lost).toBe(3);
+    expect(result.retained).toBe(3);
+    expect(result.retainedItems).toHaveLength(1);
+    expect(result.retainedItems[0]!.itemId).toBe('waterlogged_potion');
+    expect(result.retainedItems[0]!.quantity).toBe(3);
+    expect(result.narrations).toHaveLength(1);
+    expect(result.narrations[0]).toContain('stash is full');
+    expect(result.narrations[0]).toContain('Waterlogged Potion');
   });
 });
 
@@ -466,7 +475,7 @@ describe('Stash Load on Refuge Entry (Issue #11)', () => {
       defs,
     );
     expect(result.stored).toBe(2);
-    expect(result.lost).toBe(0);
+    expect(result.retained).toBe(0);
 
     // Player returns to Refuge → stash summary is loaded
     const summary = await service.getStashSummary(PLAYER_ID);

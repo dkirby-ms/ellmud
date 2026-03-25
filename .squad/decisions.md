@@ -4387,3 +4387,18 @@ Assign fixes to sprint backlog. Issues 1–4 are ~2 points each; 5–6 are proce
 **Captured:** 2026-03-24T22:19:00Z
 
 Entra External ID is ONLY for user login authentication. We are NOT protecting specific APIs with Entra. All granular role assignments are managed in our own user DB in Postgres. Entra's only job is to verify users have an account in our Entra External ID tenant.
+
+---
+
+## Reference: UAT Deployment Checklist — Entra OAuth Fix
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-03-25 (updated from drizzt-entra-uat-checklist.md)  
+**Status:** Ready for deployment  
+**Reference:** See `.squad/decisions/inbox/drizzt-entra-uat-checklist.md` for full checklist including environment variable mappings and Entra app registration settings.
+
+**Summary of UAT Requirements:**
+- Entra app registration must have redirect URI: `https://<your-app-fqdn>/auth/entra/callback`
+- All 7 environment variables must be set (client ID, secret, tenant ID, tenant subdomain, redirect URI, allow local auth, client URL)
+- Post-deploy verification: Check logs for "Entra OAuth: enabled" message
+- Test full flow: login → redirect to Entra → callback → session creation

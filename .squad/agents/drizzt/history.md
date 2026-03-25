@@ -1318,3 +1318,85 @@ Combined effect: auth was completely invisible in local development. Broken auth
 | `CLIENT_URL` | `http://localhost:3000` | `https://<app>.azurecontainerapps.io` | `https://kirbytoso.xyz` | Derived from deployment URL |
 | `ENTRA_TENANT_SUBDOMAIN` | (NEW — needed) | (NEW — needed) | (NEW — needed) | Entra External ID tenant name |
 
+
+### Entra OAuth 5-Bug Fix (2025-07-25)
+**Task:** Fix all 5 Entra OAuth issues identified in prior diagnostic investigation.
+**Status:** ✅ Complete — all 1477 tests passing (1603 including 126 todo).
+
+**Fixes Applied:**
+
+1. **dotenv loading** — Added `dotenv` dependency + `dotenv.config()` at top of `index.ts`, resolving `.env` from monorepo root via `__dirname`. Production unaffected (no `.env` file in container).
+
+2. **Redirect URI mismatch** — Updated `.env.example` and `index.ts` default from `/auth/callback` to `/auth/entra/callback` to match the actual server route in `entra-routes.ts`.
+
+3. **openid-client v6 API misuse** — Changed `discovery()` 3rd arg from `this.entraConfig.redirectUri` (was being treated as client_secret) to `this.entraConfig.clientSecret`. ClientSecretPost 4th arg unchanged.
+
+4. **CIAM issuer URL** — Added `tenantSubdomain` field to `EntraConfig` interface. Discovery URL now uses `{subdomain}.ciamlogin.com/{tenantId}/v2.0` where subdomain is the tenant custom domain name (not GUID). Falls back to tenantId if subdomain not set.
+
+5. **Infra Bicep gap** — Added 7 new params to `main.bicep` (entraClientId, entraClientSecret, entraTenantId, entraTenantSubdomain, entraRedirectUri, allowLocalAuth, clientUrl) and wired them through to the `containerAppsApp` module. Also added `entraTenantSubdomain` param and env var to `container-apps.bicep`.
+
+**Files Modified:**
+- `packages/server/package.json` — added `dotenv` dependency
+- `packages/server/src/index.ts` — dotenv import, fixed redirect URI default, added tenantSubdomain, cleaned up duplicate __dirname
+- `packages/server/src/auth/EntraAuthService.ts` — added tenantSubdomain to EntraConfig, fixed discovery() API call, fixed issuer URL
+- `.env.example` — added ENTRA_TENANT_SUBDOMAIN, fixed redirect URI path
+- `infra/main.bicep` — added 7 Entra/auth params, wired to container app module
+- `infra/modules/container-apps.bicep` — added entraTenantSubdomain param + env var
+
+**Deliverables:**
+- `.squad/decisions/inbox/drizzt-entra-uat-checklist.md` — full UAT deployment checklist
+- `.squad/skills/entra-ciam-oauth/SKILL.md` — reusable CIAM OIDC integration patterns
+
+---
+
+## 2026-03-25 — Entra OAuth Fix Deployment Complete
+
+**Status:** Deployed to origin/dev  
+**Commit:** e59ca32  
+**Team Outcome:** All 5 Entra OAuth bugs fixed + 30 tests passing
+
+**What This Means for Drizzt:**
+- Your 5 fixes are now live on dev branch and ready for UAT
+- Team testing will verify the fixes work end-to-end
+- UAT checklist captured in decisions.md for deployment reference
+
+**Next Phase:**
+- Monitor UAT feedback on Entra auth flow
+- Be ready to troubleshoot deployment-specific issues (env var passing, DNS, etc.)
+
+---
+
+## 2026-03-25 — Phase 2 Backlog: Rate Limiting + Azure Transport Tests
+
+**Status:** ✅ Complete — 14 new tests, all 1491 server tests passing
+
+### BUG 1: Auth Rate Limiting (KNOWN_ISSUES #6)
+**Problem:** `/auth/register` and `/auth/login` had no rate limiting — brute-force or spam attacks were unmitigated.
+**Fix:**
+- Installed `express-rate-limit` in `@ellmud/server`
+- Added `loginLimiter` (10 req/15min/IP) and `registerLimiter` (5 req/hour/IP) inside `createAuthRouter()`
+- Limiters created per-router-instance to avoid shared state across test suites
+- Exported `LOGIN_RATE_LIMIT` and `REGISTER_RATE_LIMIT` config constants for test assertions
+- Uses `standardHeaders: true` (RateLimit-* headers), `legacyHeaders: false`
+- Returns 429 with JSON `{ error: "Too many ... attempts" }` and `Retry-After` header
+
+**Test file:** `auth-rate-limit.test.ts` — 7 tests covering:
+- Under-limit requests pass through
+- Over-limit returns 429 with retry-after
+- Per-IP isolation (different IPs don't share counters)
+- Cross-endpoint independence (login limit doesn't affect register)
+
+### BUG 2: Azure LLM Transport Integration Tests (KNOWN_ISSUES #2)
+**Problem:** `createAzureTransport()` was exported but never tested. All narration tests used mock transports.
+**Fix:**
+- Created `azure-llm-transport.integration.test.ts` with two test suites:
+  1. **Always-run structure tests** (7 tests): verify transport shape, URL construction, header injection, request body serialization, error handling (401/403), and AbortSignal support — all using fetch interception, no live calls
+  2. **Live integration suite** (gated behind `AZURE_AI_TEST=true`): health-check call to real endpoint, invalid credential rejection against live service
+
+**Key decision:** Moved rate limiters from module-level singletons into `createAuthRouter()` to prevent shared state between test suites. Each Express app instance gets fresh rate limit counters.
+
+## Learnings
+
+- **express-rate-limit v7+ uses standardHeaders by default** — set `legacyHeaders: false` to avoid duplicate X-RateLimit-* headers alongside the new RateLimit-* standard headers.
+- **Module-level middleware singletons cause cross-test contamination** — rate limiters (or any stateful middleware) must be instantiated per-router when tests create multiple Express app instances. Factory-inside-factory pattern solves this cleanly.
+- **fetch interception for transport tests** — overriding `globalThis.fetch` in test scope lets you validate URL construction, headers, and request shape without hitting a real endpoint. Always restore in `finally` block.

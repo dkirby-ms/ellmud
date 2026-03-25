@@ -31,6 +31,9 @@ import {
 
 export type ExitResolver = (roomId: string) => string[];
 
+/** A function returning a float in [0, 1) — used for dodge rolls. */
+export type RollFn = () => number;
+
 export class CombatSystem {
   private combatants = new Map<string, Combatant>();
   private encounters = new Map<string, CombatEncounter>();
@@ -39,9 +42,12 @@ export class CombatSystem {
   private combatantEncounter = new Map<string, string>();
   private nextEncounterId = 0;
   private resolveExits: ExitResolver;
+  private roll: RollFn;
 
-  constructor(resolveExits: ExitResolver) {
+  constructor(resolveExits: ExitResolver, roll?: RollFn) {
     this.resolveExits = resolveExits;
+    // Default: always fail dodge (backward compatible with existing deterministic tests)
+    this.roll = roll ?? (() => 1);
   }
 
   // ─── Registration ─────────────────────────────────────────────────────────
@@ -244,14 +250,20 @@ export class CombatSystem {
       if (!target || target.hp <= 0) continue;
 
       const defenderAction = actions.get(targetId)?.action ?? 'dodge';
-      const dmg = calculateDamage(c.attack, target.armour, 'strike', defenderAction);
+      const dodgeRoll = defenderAction === 'dodge' ? this.roll() : undefined;
+      const dmg = calculateDamage(c.attack, target.armour, 'strike', defenderAction, {
+        defenderDefence: target.defence,
+        dodgeRoll,
+      });
 
       const accumulated = (damageAccumulator.get(targetId) ?? 0) + dmg.finalDamage;
       damageAccumulator.set(targetId, accumulated);
 
       // Track who contributed damage for kill attribution
       if (!damageContributors.has(targetId)) damageContributors.set(targetId, new Set());
-      damageContributors.get(targetId)!.add(c.id);
+      if (dmg.finalDamage > 0) {
+        damageContributors.get(targetId)!.add(c.id);
+      }
 
       // We'll compute newHp after all damage is accumulated
       strikeEvents.push({
@@ -264,9 +276,10 @@ export class CombatSystem {
         newHp: 0, // placeholder, filled below
         maxHp: target.maxHp,
         narration: '', // placeholder
+        dodged: dmg.dodged,
       });
 
-      this.debug(`Damage roll: ${c.name} → ${target.name}: raw=${dmg.rawDamage} ×${dmg.multiplier} -${dmg.armourReduction} = ${dmg.finalDamage}`);
+      this.debug(`Damage roll: ${c.name} → ${target.name}: raw=${dmg.rawDamage} ×${dmg.multiplier} -${dmg.armourReduction} = ${dmg.finalDamage}${dmg.dodged ? ' (DODGED)' : ''}`);
     }
 
     // 4. Apply all damage at once
@@ -279,10 +292,14 @@ export class CombatSystem {
     for (const evt of strikeEvents) {
       const target = this.combatants.get(evt.targetId!)!;
       evt.newHp = target.hp;
-      const defeated = target.hp <= 0;
-      evt.narration = defeated
-        ? `${evt.actorName} strikes ${evt.targetName} for ${evt.damage} damage — ${evt.targetName} is defeated!`
-        : `${evt.actorName} strikes ${evt.targetName} for ${evt.damage} damage. [${target.hp}/${target.maxHp} HP]`;
+      if (evt.dodged) {
+        evt.narration = `${evt.actorName} strikes at ${evt.targetName} but ${evt.targetName} dodges the blow!`;
+      } else {
+        const defeated = target.hp <= 0;
+        evt.narration = defeated
+          ? `${evt.actorName} strikes ${evt.targetName} for ${evt.damage} damage — ${evt.targetName} is defeated!`
+          : `${evt.actorName} strikes ${evt.targetName} for ${evt.damage} damage. [${target.hp}/${target.maxHp} HP]`;
+      }
     }
     events.push(...strikeEvents);
 
