@@ -1568,3 +1568,52 @@ The `playerIds` map (`sessionId → playerId`) provides forward lookup. `findCli
 - Combat system, extraction system, downing system, trace system, and awareness system all receive `playerId`, not `sessionId`.
 - `findClient()` accepts `playerId` and reverse-lookups through the `playerIds` map. Direct `this.clients.find(c => c.sessionId === sid)` should only be used inside `findClient()` itself.
 - Phase 2 consideration: `options['playerId']` is client-supplied and not validated against `client.auth.playerId`. This is fine for Phase 1 simple auth but should be hardened when OAuth lands.
+
+## 2026-03-25: Fix Player Identity Handoff in Room onJoin
+
+**By:** Elminster (Lead/Architect)  
+**Date:** 2026-03-25  
+**Status:** Bug identified, fix required  
+**Severity:** 🔴 Critical — all player persistence is non-functional
+
+### Problem
+
+`ShardRoom.onJoin()` and `RefugeRoom.onJoin()` read `options['playerId']` to resolve the player's identity. In Colyseus 0.17, the return value of `onAuth()` is passed as `client.auth`, NOT merged into `options`. The client sends `{ token }` — there is no `playerId` in options.
+
+The code falls back to `client.sessionId`, a 9-character nanoid that:
+1. Is not a UUID (all game tables use `player_id UUID`)
+2. Does not exist in the `players` table (FK violations)
+3. Changes every connection (no persistence across sessions)
+
+### Impact
+
+- ALL game persistence is broken: profiles, stash, factions, run history
+- Postgres saves fail silently (type error or FK violation)
+- InMemory stores accept the wrong key but data is transient and unlinked
+- Tests pass because `@colyseus/testing` bypasses `onAuth` and passes options directly
+
+### Required Fix
+
+Both rooms must read from `client.auth`:
+
+```typescript
+// ShardRoom.ts line 252 and RefugeRoom.ts line 91
+const authData = client.auth as { playerId?: string; username?: string } | undefined;
+const playerId = authData?.playerId || (options['playerId'] as string) || client.sessionId;
+```
+
+### Files Affected
+
+- `packages/server/src/rooms/ShardRoom.ts:252`
+- `packages/server/src/rooms/RefugeRoom.ts:91`
+
+### Testing
+
+- Existing tests will continue to pass (they use `options['playerId']` path)
+- NEW integration test needed: verify `client.auth` path works with real auth flow
+- Manual verification: register → login → join shard → leave → check `player_skills` table has rows with the correct `players.id` UUID
+
+### Team Impact
+
+- **Drizzt:** Implement the fix + integration test
+- **All:** Any future room types must use `client.auth?.playerId`, not `options['playerId']`
