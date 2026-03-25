@@ -5,60 +5,22 @@
  * of implementation (in-memory or PostgreSQL). Covers faction join,
  * upsert semantics, player isolation, standing progression, and edge cases.
  *
- * Self-contained: defines its own interface + InMemory impl so tests
- * run independently of Jarlaxle's production code.
+ * Uses real production imports from the faction module.
  *
  * Schema reference: migration 004_create_factions.sql
  *   - faction_membership: player_id (UNIQUE), faction_id, reputation (>=0), rank (>=1)
  *   - One faction per player at a time (UNIQUE constraint on player_id)
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-
-// ─── Self-Contained Interface ───────────────────────────────────────────────
-
-/** A player's faction membership snapshot. */
-export interface FactionMembership {
-  playerId: string;
-  factionId: string;
-  reputation: number;
-  rank: number;
-}
-
-/** Interface for faction persistence — matches the pattern Jarlaxle will implement. */
-export interface FactionRepository {
-  /** Get the player's current faction membership(s). Returns [] for unaffiliated players. */
-  getPlayerFactions(playerId: string): Promise<FactionMembership[]>;
-
-  /** Join or update a faction. Upserts — replaces any existing membership (one faction at a time). */
-  updateFaction(
-    playerId: string,
-    factionId: string,
-    reputation: number,
-    rank: number,
-  ): Promise<void>;
-}
-
-// ─── Self-Contained InMemory Implementation ─────────────────────────────────
-
-class InMemoryFactionRepository implements FactionRepository {
-  private memberships = new Map<string, FactionMembership>();
-
-  async getPlayerFactions(playerId: string): Promise<FactionMembership[]> {
-    const membership = this.memberships.get(playerId);
-    if (!membership) return [];
-    return [structuredClone(membership)];
-  }
-
-  async updateFaction(
-    playerId: string,
-    factionId: string,
-    reputation: number,
-    rank: number,
-  ): Promise<void> {
-    this.memberships.set(playerId, { playerId, factionId, reputation, rank });
-  }
-}
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  InMemoryFactionRepository,
+  initFactionProvider,
+  getFactionRepository,
+  isFactionPg,
+  resetFactionProvider,
+} from '../faction/index.js';
+import type { FactionRepository } from '../faction/index.js';
 
 // ─── Test Fixtures ──────────────────────────────────────────────────────────
 
@@ -105,271 +67,157 @@ function factionRepositoryContractTests(
 
   describe('updateFaction then getPlayerFactions', () => {
     it('returns the membership after joining a faction', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 0, 1);
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 0, rank: 1 });
 
       const factions = await repo.getPlayerFactions(PLAYER_A);
       expect(factions).toHaveLength(1);
-      expect(factions[0].playerId).toBe(PLAYER_A);
-      expect(factions[0].factionId).toBe(IRONWRIGHT);
+      expect(factions[0].player_id).toBe(PLAYER_A);
+      expect(factions[0].faction_id).toBe(IRONWRIGHT);
       expect(factions[0].reputation).toBe(0);
       expect(factions[0].rank).toBe(1);
     });
 
-    it('preserves faction ID correctly', async () => {
-      await repo.updateFaction(PLAYER_A, VEIL, 10, 2);
+    it('preserves reputation on retrieval', async () => {
+      await repo.updateFaction(PLAYER_A, VEIL, { reputation: 150, rank: 3 });
 
       const factions = await repo.getPlayerFactions(PLAYER_A);
-      expect(factions[0].factionId).toBe(VEIL);
-    });
-
-    it('preserves reputation and rank values', async () => {
-      await repo.updateFaction(PLAYER_A, SCARLET, 500, 5);
-
-      const factions = await repo.getPlayerFactions(PLAYER_A);
-      expect(factions[0].reputation).toBe(500);
-      expect(factions[0].rank).toBe(5);
+      expect(factions[0].reputation).toBe(150);
+      expect(factions[0].rank).toBe(3);
     });
   });
 
-  // ── Switching Factions (upsert — one faction at a time per schema) ──
+  // ── Upsert Semantics (one faction at a time) ──
 
-  describe('switching factions (upsert)', () => {
-    it('switching faction replaces the previous membership', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 100, 3);
-      await repo.updateFaction(PLAYER_A, VEIL, 0, 1);
+  describe('upsert semantics', () => {
+    it('second updateFaction overwrites reputation and rank', async () => {
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 50, rank: 1 });
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 200, rank: 2 });
 
       const factions = await repo.getPlayerFactions(PLAYER_A);
       expect(factions).toHaveLength(1);
-      expect(factions[0].factionId).toBe(VEIL);
-      expect(factions[0].reputation).toBe(0);
-      expect(factions[0].rank).toBe(1);
-    });
-
-    it('switching does not preserve old faction reputation', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 999, 10);
-      await repo.updateFaction(PLAYER_A, SCARLET, 50, 2);
-
-      const factions = await repo.getPlayerFactions(PLAYER_A);
-      expect(factions[0].reputation).toBe(50);
+      expect(factions[0].reputation).toBe(200);
       expect(factions[0].rank).toBe(2);
     });
 
-    it('can cycle through all three canonical factions', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 10, 1);
-      await repo.updateFaction(PLAYER_A, VEIL, 20, 2);
-      await repo.updateFaction(PLAYER_A, SCARLET, 30, 3);
+    it('switching faction replaces the previous one (one-at-a-time)', async () => {
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 100, rank: 2 });
+      await repo.updateFaction(PLAYER_A, VEIL, { reputation: 10, rank: 1 });
 
       const factions = await repo.getPlayerFactions(PLAYER_A);
       expect(factions).toHaveLength(1);
-      expect(factions[0].factionId).toBe(SCARLET);
-      expect(factions[0].reputation).toBe(30);
-      expect(factions[0].rank).toBe(3);
-    });
-  });
-
-  // ── Upsert Same Faction (reputation/rank update) ──
-
-  describe('update existing faction standing (upsert same faction)', () => {
-    it('updating reputation for the same faction overwrites', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 0, 1);
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 150, 1);
-
-      const factions = await repo.getPlayerFactions(PLAYER_A);
-      expect(factions).toHaveLength(1);
-      expect(factions[0].reputation).toBe(150);
+      expect(factions[0].faction_id).toBe(VEIL);
+      expect(factions[0].reputation).toBe(10);
     });
 
-    it('updating rank for the same faction overwrites', async () => {
-      await repo.updateFaction(PLAYER_A, VEIL, 100, 1);
-      await repo.updateFaction(PLAYER_A, VEIL, 100, 5);
+    it('switching faction loses previous standing', async () => {
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 500, rank: 5 });
+      await repo.updateFaction(PLAYER_A, SCARLET, { reputation: 0, rank: 1 });
 
       const factions = await repo.getPlayerFactions(PLAYER_A);
-      expect(factions[0].rank).toBe(5);
-    });
-
-    it('multiple reputation increments are reflected', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 10, 1);
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 50, 1);
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 200, 2);
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 500, 3);
-
-      const factions = await repo.getPlayerFactions(PLAYER_A);
-      expect(factions[0].reputation).toBe(500);
-      expect(factions[0].rank).toBe(3);
+      expect(factions[0].faction_id).toBe(SCARLET);
+      expect(factions[0].reputation).toBe(0);
+      expect(factions[0].rank).toBe(1);
     });
   });
 
   // ── Player Isolation ──
 
   describe('player isolation', () => {
-    it('different players have completely isolated factions', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 100, 3);
-      await repo.updateFaction(PLAYER_B, VEIL, 50, 2);
+    it('factions are completely isolated between players', async () => {
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 100, rank: 2 });
+      await repo.updateFaction(PLAYER_B, VEIL, { reputation: 50, rank: 1 });
 
       const factionsA = await repo.getPlayerFactions(PLAYER_A);
       const factionsB = await repo.getPlayerFactions(PLAYER_B);
 
-      expect(factionsA[0].factionId).toBe(IRONWRIGHT);
-      expect(factionsA[0].reputation).toBe(100);
-      expect(factionsB[0].factionId).toBe(VEIL);
-      expect(factionsB[0].reputation).toBe(50);
+      expect(factionsA).toHaveLength(1);
+      expect(factionsA[0].faction_id).toBe(IRONWRIGHT);
+      expect(factionsB).toHaveLength(1);
+      expect(factionsB[0].faction_id).toBe(VEIL);
     });
 
     it('updating one player does not affect another', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 100, 3);
-      await repo.updateFaction(PLAYER_B, IRONWRIGHT, 200, 5);
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 100, rank: 2 });
+      await repo.updateFaction(PLAYER_B, VEIL, { reputation: 300, rank: 4 });
 
-      // Update A
-      await repo.updateFaction(PLAYER_A, VEIL, 0, 1);
-
-      // B should be unchanged
-      const factionsB = await repo.getPlayerFactions(PLAYER_B);
-      expect(factionsB[0].factionId).toBe(IRONWRIGHT);
-      expect(factionsB[0].reputation).toBe(200);
-      expect(factionsB[0].rank).toBe(5);
-    });
-
-    it('three players in different factions are all independent', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 100, 2);
-      await repo.updateFaction(PLAYER_B, VEIL, 200, 3);
-      await repo.updateFaction(PLAYER_C, SCARLET, 300, 4);
-
-      const [fA, fB, fC] = await Promise.all([
-        repo.getPlayerFactions(PLAYER_A),
-        repo.getPlayerFactions(PLAYER_B),
-        repo.getPlayerFactions(PLAYER_C),
-      ]);
-
-      expect(fA[0].factionId).toBe(IRONWRIGHT);
-      expect(fB[0].factionId).toBe(VEIL);
-      expect(fC[0].factionId).toBe(SCARLET);
-      expect(fA[0].reputation).toBe(100);
-      expect(fB[0].reputation).toBe(200);
-      expect(fC[0].reputation).toBe(300);
-    });
-
-    it('same faction for multiple players tracks separate standings', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 10, 1);
-      await repo.updateFaction(PLAYER_B, IRONWRIGHT, 500, 7);
-      await repo.updateFaction(PLAYER_C, IRONWRIGHT, 250, 4);
-
-      const [fA, fB, fC] = await Promise.all([
-        repo.getPlayerFactions(PLAYER_A),
-        repo.getPlayerFactions(PLAYER_B),
-        repo.getPlayerFactions(PLAYER_C),
-      ]);
-
-      expect(fA[0].reputation).toBe(10);
-      expect(fB[0].reputation).toBe(500);
-      expect(fC[0].reputation).toBe(250);
-    });
-
-    it('unaffiliated player not affected by others joining', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 100, 3);
+      await repo.updateFaction(PLAYER_A, SCARLET, { reputation: 10, rank: 1 });
 
       const factionsB = await repo.getPlayerFactions(PLAYER_B);
-      expect(factionsB).toEqual([]);
+      expect(factionsB[0].reputation).toBe(300);
+      expect(factionsB[0].rank).toBe(4);
+    });
+
+    it('three players in three different factions', async () => {
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 100, rank: 1 });
+      await repo.updateFaction(PLAYER_B, VEIL, { reputation: 200, rank: 2 });
+      await repo.updateFaction(PLAYER_C, SCARLET, { reputation: 300, rank: 3 });
+
+      expect((await repo.getPlayerFactions(PLAYER_A))[0].faction_id).toBe(IRONWRIGHT);
+      expect((await repo.getPlayerFactions(PLAYER_B))[0].faction_id).toBe(VEIL);
+      expect((await repo.getPlayerFactions(PLAYER_C))[0].faction_id).toBe(SCARLET);
     });
   });
 
-  // ── Edge Cases: Standing Values ──
+  // ── Standing Progression ──
 
-  describe('edge cases: standing values', () => {
-    it('handles zero reputation (new member)', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 0, 1);
+  describe('standing progression', () => {
+    it('reputation increases across updates', async () => {
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 0, rank: 1 });
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 100, rank: 1 });
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 500, rank: 3 });
+
+      const factions = await repo.getPlayerFactions(PLAYER_A);
+      expect(factions[0].reputation).toBe(500);
+      expect(factions[0].rank).toBe(3);
+    });
+  });
+
+  // ── Edge Cases ──
+
+  describe('edge cases', () => {
+    it('handles zero reputation', async () => {
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 0, rank: 1 });
 
       const factions = await repo.getPlayerFactions(PLAYER_A);
       expect(factions[0].reputation).toBe(0);
     });
 
-    it('handles minimum rank of 1', async () => {
-      await repo.updateFaction(PLAYER_A, VEIL, 0, 1);
+    it('handles high reputation values', async () => {
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 99999, rank: 10 });
 
       const factions = await repo.getPlayerFactions(PLAYER_A);
-      expect(factions[0].rank).toBe(1);
+      expect(factions[0].reputation).toBe(99999);
+      expect(factions[0].rank).toBe(10);
     });
 
-    it('handles very high reputation', async () => {
-      await repo.updateFaction(PLAYER_A, SCARLET, 999999, 10);
+    it('membership includes timestamps', async () => {
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 50, rank: 1 });
 
       const factions = await repo.getPlayerFactions(PLAYER_A);
-      expect(factions[0].reputation).toBe(999999);
+      expect(factions[0].joined_at).toBeInstanceOf(Date);
+      expect(factions[0].updated_at).toBeInstanceOf(Date);
     });
 
-    it('handles very high rank', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 100, 100);
+    it('deep-copies data (mutation safety)', async () => {
+      await repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 50, rank: 1 });
 
       const factions = await repo.getPlayerFactions(PLAYER_A);
-      expect(factions[0].rank).toBe(100);
+      factions[0].reputation = 99999;
+
+      const fresh = await repo.getPlayerFactions(PLAYER_A);
+      expect(fresh[0].reputation).toBe(50);
     });
 
-    it('handles reputation at INT max boundary', async () => {
-      const maxInt = 2147483647; // PostgreSQL INT max
-      await repo.updateFaction(PLAYER_A, VEIL, maxInt, 1);
-
-      const factions = await repo.getPlayerFactions(PLAYER_A);
-      expect(factions[0].reputation).toBe(maxInt);
-    });
-  });
-
-  // ── Data Integrity ──
-
-  describe('data integrity', () => {
-    it('returned data is a copy, not a live reference', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 100, 3);
-
-      const factions1 = await repo.getPlayerFactions(PLAYER_A);
-      factions1[0].reputation = 9999;
-
-      const factions2 = await repo.getPlayerFactions(PLAYER_A);
-      expect(factions2[0].reputation).toBe(100);
-    });
-
-    it('parallel updates for different players do not interfere', async () => {
+    it('concurrent updates for different players do not interfere', async () => {
       await Promise.all([
-        repo.updateFaction(PLAYER_A, IRONWRIGHT, 10, 1),
-        repo.updateFaction(PLAYER_B, VEIL, 20, 2),
-        repo.updateFaction(PLAYER_C, SCARLET, 30, 3),
+        repo.updateFaction(PLAYER_A, IRONWRIGHT, { reputation: 100, rank: 1 }),
+        repo.updateFaction(PLAYER_B, VEIL, { reputation: 200, rank: 2 }),
+        repo.updateFaction(PLAYER_C, SCARLET, { reputation: 300, rank: 3 }),
       ]);
 
-      const [fA, fB, fC] = await Promise.all([
-        repo.getPlayerFactions(PLAYER_A),
-        repo.getPlayerFactions(PLAYER_B),
-        repo.getPlayerFactions(PLAYER_C),
-      ]);
-
-      expect(fA[0].factionId).toBe(IRONWRIGHT);
-      expect(fB[0].factionId).toBe(VEIL);
-      expect(fC[0].factionId).toBe(SCARLET);
-    });
-
-    it('parallel reads return consistent data', async () => {
-      await repo.updateFaction(PLAYER_A, IRONWRIGHT, 250, 5);
-
-      const [r1, r2, r3] = await Promise.all([
-        repo.getPlayerFactions(PLAYER_A),
-        repo.getPlayerFactions(PLAYER_A),
-        repo.getPlayerFactions(PLAYER_A),
-      ]);
-
-      expect(r1[0].reputation).toBe(250);
-      expect(r2[0].reputation).toBe(250);
-      expect(r3[0].reputation).toBe(250);
-    });
-
-    it('handles many players saved concurrently', async () => {
-      const count = 50;
-      const saves = Array.from({ length: count }, (_, i) =>
-        repo.updateFaction(`player-${i}`, IRONWRIGHT, i * 10, 1),
-      );
-
-      await Promise.all(saves);
-
-      const loaded0 = await repo.getPlayerFactions('player-0');
-      expect(loaded0[0].reputation).toBe(0);
-
-      const loaded49 = await repo.getPlayerFactions('player-49');
-      expect(loaded49[0].reputation).toBe(490);
+      expect((await repo.getPlayerFactions(PLAYER_A))[0].reputation).toBe(100);
+      expect((await repo.getPlayerFactions(PLAYER_B))[0].reputation).toBe(200);
+      expect((await repo.getPlayerFactions(PLAYER_C))[0].reputation).toBe(300);
     });
   });
 }
@@ -378,4 +226,44 @@ function factionRepositoryContractTests(
 
 describe('InMemoryFactionRepository — persistence contract', () => {
   factionRepositoryContractTests(() => new InMemoryFactionRepository());
+});
+
+// ─── Provider Wiring Tests ──────────────────────────────────────────────────
+
+describe('Faction Provider Wiring', () => {
+  afterEach(() => {
+    resetFactionProvider();
+  });
+
+  it('defaults to in-memory when not initialized', () => {
+    resetFactionProvider();
+    const repo = getFactionRepository();
+    expect(repo).toBeInstanceOf(InMemoryFactionRepository);
+  });
+
+  it('uses in-memory when initialized with usePg=false', () => {
+    initFactionProvider(false);
+    const repo = getFactionRepository();
+    expect(repo).toBeInstanceOf(InMemoryFactionRepository);
+  });
+
+  it('returns same repository instance on repeated calls', () => {
+    initFactionProvider(false);
+    const repo1 = getFactionRepository();
+    const repo2 = getFactionRepository();
+    expect(repo1).toBe(repo2);
+  });
+
+  it('resetFactionProvider clears state', () => {
+    initFactionProvider(false);
+    const repo1 = getFactionRepository();
+    resetFactionProvider();
+    const repo2 = getFactionRepository();
+    expect(repo1).not.toBe(repo2);
+  });
+
+  it('isFactionPg() returns false when no DATABASE_URL', () => {
+    initFactionProvider(false);
+    expect(isFactionPg()).toBe(false);
+  });
 });

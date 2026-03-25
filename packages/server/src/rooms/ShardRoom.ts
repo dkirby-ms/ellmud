@@ -51,6 +51,10 @@ import {
   DEFAULT_PROFILE,
 } from '../player/index.js';
 import type { PlayerProfile } from '../player/index.js';
+import type { FactionRepository } from '../faction/index.js';
+import { InMemoryFactionRepository, getFactionRepository } from '../faction/index.js';
+import type { RunHistoryRepository, RunRecord } from '../run-history/index.js';
+import { InMemoryRunHistoryRepository, getRunHistoryRepository } from '../run-history/index.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -89,6 +93,10 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private itemDefs = new Map<string, StashItem>();
   private shardTier: ShardTier = 1;
   private profileRepo: PlayerProfileRepository = new InMemoryPlayerProfileRepository();
+  private factionRepo: FactionRepository = new InMemoryFactionRepository();
+  private runHistoryRepo: RunHistoryRepository = new InMemoryRunHistoryRepository();
+  /** Tracks when each player joined the shard (for run duration calculation). */
+  private playerJoinTimes = new Map<string, number>();
 
   /**
    * Inject profile repository. Called before room lifecycle if provided.
@@ -96,6 +104,16 @@ export class ShardRoom extends Room<ShardRoomOptions> {
    */
   initProfile(repo?: PlayerProfileRepository): void {
     this.profileRepo = repo ?? new InMemoryPlayerProfileRepository();
+  }
+
+  /** Inject faction repository for testing. */
+  initFaction(repo?: FactionRepository): void {
+    this.factionRepo = repo ?? new InMemoryFactionRepository();
+  }
+
+  /** Inject run history repository for testing. */
+  initRunHistory(repo?: RunHistoryRepository): void {
+    this.runHistoryRepo = repo ?? new InMemoryRunHistoryRepository();
   }
 
   /**
@@ -189,6 +207,16 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.profileRepo = getProfileRepository();
     }
 
+    // Initialize faction repo with shared provider
+    if (this.factionRepo instanceof InMemoryFactionRepository) {
+      this.factionRepo = getFactionRepository();
+    }
+
+    // Initialize run history repo with shared provider
+    if (this.runHistoryRepo instanceof InMemoryRunHistoryRepository) {
+      this.runHistoryRepo = getRunHistoryRepository();
+    }
+
     // Register message handlers
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
       this.handleCommandMessage(client, message);
@@ -233,6 +261,19 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.log(`Failed to load profile for ${playerId}: ${err}`);
       profile = { ...DEFAULT_PROFILE };
     }
+
+    // Load faction membership (fire-and-forget — faction data is informational)
+    try {
+      const factions = await this.factionRepo.getPlayerFactions(playerId);
+      if (factions.length > 0) {
+        this.log(`Player ${playerId} faction: ${factions[0].faction_id}`);
+      }
+    } catch (err) {
+      this.log(`Failed to load factions for ${playerId}: ${err}`);
+    }
+
+    // Track join time for run duration calculation
+    this.playerJoinTimes.set(playerId, Date.now());
 
     // Distribute players across entry points for spatial separation
     // Use player count to cycle through available entry rooms
@@ -331,6 +372,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     if (this.players.has(playerId)) {
       // Persist player profile (skills, stats) before cleanup
       await this.savePlayerProfile(playerId, this.players.get(playerId)!);
+
+      // Record non-extraction run (player left or timed out)
+      await this.recordRunHistory(playerId, this.players.get(playerId), false);
 
       this.state.playerCount = Math.max(0, this.state.playerCount - 1);
       this.players.delete(playerId);
@@ -932,6 +976,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       await this.transferToStash(client, playerId, player);
     }
 
+    // Record run history
+    await this.recordRunHistory(playerId, player, true);
+
     // Remove player from shard
     this.players.delete(playerId);
     this.combatSystem.removeCombatant(playerId);
@@ -1482,6 +1529,43 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       await this.profileRepo.save(playerId, profile);
     } catch (err) {
       this.log(`Failed to save profile for ${playerId}: ${err}`);
+    }
+  }
+
+  // ─── Run History Persistence ────────────────────────────────────────────
+
+  /** Record a shard run when a player extracts or the shard collapses. */
+  private async recordRunHistory(
+    playerId: string,
+    player: PlayerState | undefined,
+    extracted: boolean,
+  ): Promise<void> {
+    try {
+      const joinTime = this.playerJoinTimes.get(playerId);
+      const durationSec = joinTime
+        ? Math.floor((Date.now() - joinTime) / 1000)
+        : 0;
+
+      const run: RunRecord = {
+        runId: this.roomId,
+        playerId,
+        shardTier: this.shardTier,
+        biome: (this.state.biome as BiomeType) || null,
+        durationSec,
+        extracted,
+        extractedItems: player
+          ? Array.from(player.inventory.values()).map((entry) => ({
+              itemId: entry.item.id,
+              name: entry.item.name,
+            }))
+          : [],
+        xpGained: 0,
+      };
+
+      await this.runHistoryRepo.recordRun(run);
+      this.playerJoinTimes.delete(playerId);
+    } catch (err) {
+      this.log(`Failed to record run history for ${playerId}: ${err}`);
     }
   }
 
