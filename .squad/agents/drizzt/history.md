@@ -1420,3 +1420,28 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - Issue #197, PR #200 (staged)
 - Decision: `.squad/decisions/decisions.md` (2026-03-25 entry)
 - Tests validate reconnection recovery, stash persistence, combat continuity
+
+## Cross-Agent Notice: Player Identity Handoff Bug (Elminster Investigation)
+
+**Date:** 2026-03-25T15:23Z  
+**Impact:** CRITICAL — all player persistence non-functional  
+
+**What:** Root cause identified in the auth → onJoin handoff:
+- Auth system correctly sets `client.auth.playerId` ✓
+- ShardRoom.onJoin and RefugeRoom.onJoin read from `options['playerId']` instead (always undefined) ✗
+- Falls back to `client.sessionId` (9-char nanoid, not UUID)
+- All FK writes fail silently; no data persists
+
+**For your implementation:**
+- Both rooms must read: `client.auth?.playerId || options['playerId'] || sessionId`
+- Files: `packages/server/src/rooms/ShardRoom.ts:252`, `packages/server/src/rooms/RefugeRoom.ts:91`
+- Need integration test: verify `client.auth` path works with real auth flow
+- Existing tests will continue to pass (they use the `options` path)
+
+**Decision:** `.squad/decisions/decisions.md` (2026-03-25 entry)
+
+### client.auth is the Canonical Source for Player Identity
+- **File:** `packages/server/src/rooms/ShardRoom.ts:251`, `packages/server/src/rooms/RefugeRoom.ts:90`
+- **Pattern:** In Colyseus 0.17, `onAuth` return value lands on `client.auth`. Always read player identity from `client.auth.playerId` first, with `options['playerId']` as test fallback and `client.sessionId` as last resort.
+- **Gotcha:** `authenticateClient` returns `{ playerId: 'anonymous' }` when auth is uninitialized/optional. The resolution chain must skip the `'anonymous'` sentinel to avoid identity collisions in tests.
+- **Why:** Production clients send `{ token }` not `{ playerId }`. Reading `options['playerId']` always returns undefined in production, causing all persistence to break (nanoid sessionId used as FK → silent FK violations).

@@ -751,3 +751,96 @@ When planning Phase 3 work:
 | Regressions | ✅ None (1648 pass) |
 
 **Recommendation:** Merge. Closes issue #198.
+
+
+### 2026-03-25: Player Persistence Lifecycle Investigation
+- **Requested by:** dkirby-ms
+- **Status:** Root cause identified — critical identity handoff bug
+
+**Root Cause: `client.auth.playerId` never read by rooms**
+
+The `onAuth()` → `onJoin()` handoff in Colyseus 0.17 works like this:
+1. `onAuth(client, options)` returns `{ playerId, username }`
+2. Colyseus assigns this to `client.auth`
+3. `onJoin(client, joinOptions, client.auth)` is called
+
+But both `ShardRoom.onJoin` and `RefugeRoom.onJoin` read `options['playerId']` — which is the client's raw join options (`{ token }`), NOT the auth return value. `options['playerId']` is always `undefined` in production. The code falls back to `client.sessionId`, a 9-character nanoid that is:
+- Not a UUID (Postgres `player_id` columns are UUID type)
+- Not in the `players` table (FK violations on every game table)
+- Transient (changes every connection)
+
+**Impact Chain:**
+1. Auth (register/login) correctly creates `players` + `player_identities` rows with real UUIDs ✅
+2. Token store maps token → `{ playerId: <real-uuid>, username }` ✅
+3. `onAuth` validates token and returns `{ playerId: <real-uuid>, username }` ✅
+4. `onJoin` ignores `client.auth` and uses `client.sessionId` (nanoid) ❌
+5. All game persistence (profile, stash, factions, run-history) keyed to nanoid ❌
+6. Pg saves fail silently (nanoid isn't a valid UUID for FK-constrained columns) ❌
+7. InMemory stores accept it but data is unlinked and transient ❌
+
+**Why user sees "placeholders":**
+- The `players`/`player_identities` rows ARE real (created during registration)
+- But they look bare — no associated skills, stash, factions, or run history
+- Game tables (`player_skills`, `player_stash`, `faction_membership`, `run_history`) are empty
+- All game writes silently fail because `client.sessionId` (nanoid) violates UUID type + FK constraints
+
+**Fix:** Both ShardRoom and RefugeRoom must read `client.auth?.playerId`:
+```typescript
+const authData = client.auth as { playerId?: string; username?: string } | undefined;
+const playerId = authData?.playerId || (options['playerId'] as string) || client.sessionId;
+```
+
+**Tests pass because** `@colyseus/testing`'s `connectTo()` passes options directly to `onJoin` — the test helper bypasses `onAuth` and merges `{ playerId }` into `options`. Production auth flow does NOT do this.
+
+**Two separate systems confirmed:**
+| System | Tables | Written By | Written When |
+|--------|--------|-----------|-------------|
+| Auth/Identity | `players`, `player_identities` | `PgPlayerRepository` | Registration |
+| Player Profile | `player_skills` | `PgPlayerProfileRepository` | Shard onLeave |
+| Stash | `player_stash`, `player_stash_capacity` | `PgStashRepository` | Extraction, stash commands |
+| Factions | `faction_membership` | `PgFactionRepository` | Faction events |
+| Run History | `run_history` | `PgRunHistoryRepository` | Shard onLeave/extraction |
+
+The link between them is `players.id` = `player_skills.player_id` = `player_stash.player_id` etc. This link is never established because rooms use the wrong ID.
+
+**Key files:**
+- `packages/server/src/rooms/ShardRoom.ts:252` — the bug (reads `options['playerId']`)
+- `packages/server/src/rooms/RefugeRoom.ts:91` — same bug
+- `packages/server/src/auth/colyseus-auth.ts` — auth returns correct data
+- `node_modules/@colyseus/core/build/Room.mjs:735` — Colyseus passes `client.auth` as 3rd arg
+- `packages/server/src/auth/PgPlayerRepository.ts` — correct auth persistence
+- `packages/server/src/player/PgPlayerProfileRepository.ts` — correct profile persistence (but receives wrong ID)
+
+---
+
+## 2026-03-25: Identity Handoff Bug Fixed
+
+**Status:** ✅ Resolved and test-covered  
+**Teams:** Drizzt (Engine Dev) + Minsc (Tester)  
+**Branch:** fix/player-identity-handoff
+
+The critical player persistence bug identified in the 2026-03-25T15:23Z investigation has been **fully resolved**:
+
+### Root Cause (Previously Identified)
+- ShardRoom and RefugeRoom read `options['playerId']` (always `undefined` in production)
+- Fallback to `client.sessionId` (9-char nanoid, not a UUID)
+- All player_skills FK writes failed silently; no persistence
+
+### Fix Implemented
+- Both rooms now read `client.auth.playerId → options['playerId'] → client.sessionId`
+- The `'anonymous'` sentinel is excluded from the chain
+- `playerIds` map now contains correct persistent UUIDs
+
+### Test Coverage
+- **11 new integration tests** exercise the real `onAuth → client.auth → onJoin` pipeline
+- Tests verify server-side state with UUID keying
+- 1659 total tests passing (1657 baseline + 11 new, 1 duplicate removed)
+- No regressions
+
+### Key Learning
+`client.auth` only exists on server-side `Client` objects, not SDK-side clients. Auth handoff tests must inspect server-side room state, not SDK properties.
+
+### Canonical Pattern Filed
+All future rooms must follow: `client.auth?.playerId` (excluding 'anonymous') → `options['playerId']` → `client.sessionId`. Decision documented in `.squad/decisions/decisions.md`.
+
+**Next:** This branch is ready to merge to main.

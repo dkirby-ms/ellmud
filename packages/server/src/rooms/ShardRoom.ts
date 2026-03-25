@@ -248,8 +248,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     this.state.playerCount++;
     this.updateMetadata();
 
-    // Resolve player ID: from auth context or fallback to sessionId
-    const playerId = (options['playerId'] as string) || client.sessionId;
+    // Resolve player ID: prefer onAuth result (client.auth), then join options, then sessionId fallback.
+    // The 'anonymous' sentinel from authenticateClient means no real identity was established.
+    const authData = client.auth as { playerId?: string } | undefined;
+    const authPlayerId = authData?.playerId && authData.playerId !== 'anonymous' ? authData.playerId : undefined;
+    const playerId = authPlayerId || (options['playerId'] as string) || client.sessionId;
     this.playerIds.set(client.sessionId, playerId);
 
     // Load persisted profile (skills, carry weight, equipment) or use defaults

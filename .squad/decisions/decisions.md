@@ -1568,3 +1568,108 @@ The `playerIds` map (`sessionId → playerId`) provides forward lookup. `findCli
 - Combat system, extraction system, downing system, trace system, and awareness system all receive `playerId`, not `sessionId`.
 - `findClient()` accepts `playerId` and reverse-lookups through the `playerIds` map. Direct `this.clients.find(c => c.sessionId === sid)` should only be used inside `findClient()` itself.
 - Phase 2 consideration: `options['playerId']` is client-supplied and not validated against `client.auth.playerId`. This is fine for Phase 1 simple auth but should be hardened when OAuth lands.
+
+## 2026-03-25: Fix Player Identity Handoff in Room onJoin
+
+**By:** Elminster (Lead/Architect)  
+**Date:** 2026-03-25  
+**Status:** Bug identified, fix required  
+**Severity:** 🔴 Critical — all player persistence is non-functional
+
+### Problem
+
+`ShardRoom.onJoin()` and `RefugeRoom.onJoin()` read `options['playerId']` to resolve the player's identity. In Colyseus 0.17, the return value of `onAuth()` is passed as `client.auth`, NOT merged into `options`. The client sends `{ token }` — there is no `playerId` in options.
+
+The code falls back to `client.sessionId`, a 9-character nanoid that:
+1. Is not a UUID (all game tables use `player_id UUID`)
+2. Does not exist in the `players` table (FK violations)
+3. Changes every connection (no persistence across sessions)
+
+### Impact
+
+- ALL game persistence is broken: profiles, stash, factions, run history
+- Postgres saves fail silently (type error or FK violation)
+- InMemory stores accept the wrong key but data is transient and unlinked
+- Tests pass because `@colyseus/testing` bypasses `onAuth` and passes options directly
+
+### Required Fix
+
+Both rooms must read from `client.auth`:
+
+```typescript
+// ShardRoom.ts line 252 and RefugeRoom.ts line 91
+const authData = client.auth as { playerId?: string; username?: string } | undefined;
+const playerId = authData?.playerId || (options['playerId'] as string) || client.sessionId;
+```
+
+### Files Affected
+
+- `packages/server/src/rooms/ShardRoom.ts:252`
+- `packages/server/src/rooms/RefugeRoom.ts:91`
+
+### Testing
+
+- Existing tests will continue to pass (they use `options['playerId']` path)
+- NEW integration test needed: verify `client.auth` path works with real auth flow
+- Manual verification: register → login → join shard → leave → check `player_skills` table has rows with the correct `players.id` UUID
+
+### Team Impact
+
+- **Drizzt:** Implement the fix + integration test
+- **All:** Any future room types must use `client.auth?.playerId`, not `options['playerId']`
+
+---
+
+# Decision: client.auth is the canonical player identity source in onJoin
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-03-25  
+**Branch:** fix/player-identity-handoff
+
+## What
+
+Changed ShardRoom and RefugeRoom `onJoin` to read `client.auth.playerId` (set by Colyseus from `onAuth` return value) as the primary source of player identity, falling back to `options['playerId']` (for tests) then `client.sessionId` (last resort). The `'anonymous'` sentinel from `authenticateClient` is excluded from the chain.
+
+## Why
+
+Production clients send `{ token }` in join options — never `{ playerId }`. The old code read `options['playerId']` which was always `undefined` in production, causing fallback to `client.sessionId` (a 9-char nanoid). This nanoid is not a valid UUID and doesn't match any `players.id` FK, silently breaking all persistence writes.
+
+## Impact
+
+- All rooms that resolve player identity must follow this pattern: `client.auth.playerId → options.playerId → client.sessionId`
+- The `'anonymous'` sentinel from `authenticateClient` must be excluded from the chain (it signals "no real auth")
+- Existing tests pass playerId in options — they continue to work via the second fallback
+- The `playerIds` map (sessionId→playerId) in both rooms now contains the correct persistent identity
+
+---
+
+# Decision: Identity Handoff Integration Test Strategy
+
+**Author:** Minsc (Tester)  
+**Date:** 2026-03-25  
+**Status:** Implemented  
+**Branch:** fix/player-identity-handoff
+
+## Context
+
+The existing test suite used `connectTo(room, { playerId })` which puts `playerId` directly in `options` — completely bypassing the `onAuth → client.auth → onJoin` pipeline. This gave false green results while the production auth path (token-based) silently used `sessionId` instead of the persistent player UUID.
+
+## Decision
+
+Created `player-identity-handoff.test.ts` (11 tests) that:
+
+1. **Initializes real auth** (`initColyseusAuth` with `AuthService` + in-memory stores) in the test server
+2. **Registers actual players** (gets real UUIDs from `InMemoryPlayerRepository`)
+3. **Connects with `{ token }` only** — exercises the real production code path
+4. **Verifies server-side state** (`.players` map, `.playerIds` map) to confirm UUID keying
+
+## Key Finding for Team
+
+`client.auth` on the SDK-side client is always `undefined`. The `.auth` property only exists on the **server-side** `Client` object. Any test that checks auth handoff must inspect server-side room state — you cannot assert on the SDK client's `.auth`.
+
+The `'anonymous'` sentinel from `authenticateClient()` must be filtered in the resolution logic, or it shadows `options['playerId']` and breaks all existing tests. Drizzt's fix handles this correctly.
+
+## Impact
+
+- 11 new passing tests, 0 regressions (1659 total tests green)
+- The auth handoff path is now covered — this specific bug class cannot recur silently

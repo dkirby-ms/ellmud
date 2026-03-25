@@ -1444,3 +1444,21 @@ This aligns local dev with production behavior, making auth bugs surface earlier
 - **Tests:** Rewrote anticipatory test file from Minsc's placeholders to use real imports. 34 contract tests + 5 provider wiring tests. All 1600+ tests pass.
 - **Key design decision:** `onJoin` became async to support profile loading. This is safe — Colyseus supports async lifecycle methods, and RefugeRoom already uses async `onJoin`.
 - **Lesson:** Anticipatory test files from other team members may use different interface shapes. When implementing, replace local test doubles with real imports rather than adapting implementation to match placeholders.
+
+## Cross-Agent Notice: Player Identity Handoff Bug Found (Elminster)
+
+**Date:** 2026-03-25T15:23Z  
+**Scope:** Auth system investigation  
+
+**Finding:** Despite correct auth implementation, persistence is broken due to identity loss in onJoin:
+- Auth sets `client.auth.playerId` correctly
+- onJoin reads from `options['playerId']` (undefined in production)
+- Fallback to `sessionId` (not a UUID) causes FK violations
+- Your identity keying work was sound; the bug is upstream in the handoff
+
+**Context for your work:**
+- Root cause: ShardRoom.ts:252 and RefugeRoom.ts:91
+- Fix: Read `client.auth?.playerId` instead of options
+- Your `playerIds` map and `findClient()` pattern will work once the correct playerId flows through
+
+**Decision:** `.squad/decisions/decisions.md` (2026-03-25 entry)
