@@ -33,13 +33,16 @@ export class EntraAuthService {
 
   /**
    * Initialize the OIDC client using Entra External ID discovery.
-   * For Entra External ID (CIAM), the subdomain is the tenant's custom name, not the GUID.
-   * URL format: https://{subdomain}.ciamlogin.com/{tenantId}/v2.0
+   *
+   * Entra External ID (CIAM) quirk: the discovery endpoint works with the
+   * custom subdomain (e.g. bloodwar.ciamlogin.com) but the `issuer` claim
+   * in the metadata uses the tenant GUID as subdomain
+   * (e.g. {tenantId}.ciamlogin.com). openid-client validates issuer match,
+   * so we must use the GUID form.
    */
   async initialize(): Promise<void> {
-    const subdomain = this.entraConfig.tenantSubdomain || this.entraConfig.tenantId;
     const issuerUrl = new URL(
-      `https://${subdomain}.ciamlogin.com/${this.entraConfig.tenantId}/v2.0`
+      `https://${this.entraConfig.tenantId}.ciamlogin.com/${this.entraConfig.tenantId}/v2.0`
     );
 
     try {
