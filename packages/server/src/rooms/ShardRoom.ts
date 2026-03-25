@@ -68,6 +68,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private roomGraph!: RoomGraph;
   private entryRoomIds: string[] = []; // Multiple entry points for player distribution
   private players = new Map<string, PlayerState>();
+  /** Maps sessionId → playerId for persistent identity across reconnects. */
+  private playerIds = new Map<string, string>();
   private combatSystem!: CombatSystem;
   private soundSystem!: SoundSystem;
   private traceSystem!: TraceSystem;
@@ -187,7 +189,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     return authenticateClient(options['token'] as string | undefined);
   }
 
-  onJoin(client: Client): void {
+  onJoin(client: Client, options: Record<string, unknown>): void {
     // Enforce tier-based max players
     const maxPlayers = this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig());
     if (this.state.playerCount >= maxPlayers) {
@@ -197,16 +199,20 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     this.state.playerCount++;
     this.updateMetadata();
 
+    // Resolve player ID: from auth context or fallback to sessionId
+    const playerId = (options['playerId'] as string) || client.sessionId;
+    this.playerIds.set(client.sessionId, playerId);
+
     // Distribute players across entry points for spatial separation
     // Use player count to cycle through available entry rooms
     const entryIndex = (this.state.playerCount - 1) % this.entryRoomIds.length;
     const startRoom = this.entryRoomIds[entryIndex] || this.roomGraph.startRoomId;
 
     // Initialize player state at assigned entry room
-    const playerState = new PlayerState(client.sessionId, startRoom);
-    this.players.set(client.sessionId, playerState);
+    const playerState = new PlayerState(playerId, startRoom);
+    this.players.set(playerId, playerState);
 
-    this.log(`Player joined: ${client.sessionId} at ${startRoom} (${this.state.playerCount}/${maxPlayers} players)`);
+    this.log(`Player joined: ${playerId} at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${maxPlayers} players)`);
 
     // Send initial system narration
     this.sendNarrate(client, {
@@ -228,8 +234,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   async onLeave(client: Client, code?: number): Promise<void> {
     const config = getConfig();
-    const playerState = this.players.get(client.sessionId);
-    const isInCombat = this.combatSystem.isInCombat(client.sessionId);
+    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+    const playerState = this.players.get(playerId);
+    const isInCombat = this.combatSystem.isInCombat(playerId);
 
     // Allow reconnection for accidental disconnects (non-4000 codes)
     // Code 4000 = consented leave (player clicked "leave game")
@@ -241,23 +248,23 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         playerState.disconnected = true;
       }
       if (isInCombat) {
-        this.combatSystem.markDisconnected(client.sessionId);
+        this.combatSystem.markDisconnected(playerId);
       }
 
-      this.log(`Player disconnected (code ${code}): ${client.sessionId} — allowing reconnection for ${config.reconnectionTimeoutS}s`);
+      this.log(`Player disconnected (code ${code}): ${playerId} — allowing reconnection for ${config.reconnectionTimeoutS}s`);
 
       try {
         await this.allowReconnection(client, config.reconnectionTimeoutS);
         
         // Client reconnected successfully
-        this.log(`Player reconnected: ${client.sessionId}`);
+        this.log(`Player reconnected: ${playerId}`);
         
         // Clear disconnected flags
         if (playerState) {
           playerState.disconnected = false;
         }
         if (isInCombat) {
-          this.combatSystem.clearDisconnected(client.sessionId);
+          this.combatSystem.clearDisconnected(playerId);
         }
 
         // Send reconnection confirmation
@@ -276,21 +283,22 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         return; // Player reconnected — keep them in the game
       } catch {
         // Reconnection timeout expired
-        this.log(`Reconnection timeout: ${client.sessionId} — applying death behavior`);
-        this.handleReconnectionTimeout(client.sessionId);
+        this.log(`Reconnection timeout: ${playerId} — applying death behavior`);
+        this.handleReconnectionTimeout(playerId);
       }
     }
 
     // Clean up player (consented leave or timeout expired)
-    this.extractionSystem.interruptExtraction(client.sessionId, 'you left the shard');
-    this.downingSystem.removePlayer(client.sessionId);
-    if (this.players.has(client.sessionId)) {
+    this.extractionSystem.interruptExtraction(playerId, 'you left the shard');
+    this.downingSystem.removePlayer(playerId);
+    if (this.players.has(playerId)) {
       this.state.playerCount = Math.max(0, this.state.playerCount - 1);
-      this.players.delete(client.sessionId);
-      this.combatSystem.removeCombatant(client.sessionId);
+      this.players.delete(playerId);
+      this.combatSystem.removeCombatant(playerId);
       this.updateMetadata();
     }
-    this.log(`Player left: ${client.sessionId} (${this.state.playerCount} players)`);
+    this.playerIds.delete(client.sessionId);
+    this.log(`Player left: ${playerId} (${this.state.playerCount} players)`);
   }
 
   /**
@@ -485,8 +493,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   private updateMetadata(): void {
     // Build player list with room locations for matchmaker
-    const playerList = Array.from(this.players.entries()).map(([sessionId, state]) => ({
-      sessionId,
+    const playerList = Array.from(this.players.entries()).map(([playerId, state]) => ({
+      playerId,
       roomId: state.currentRoomId,
     }));
 
@@ -503,7 +511,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   // ─── Command Handling ────────────────────────────────────────────────────
 
   private handleCommandMessage(client: Client, message: CommandMessage): void {
-    const player = this.players.get(client.sessionId);
+    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+    const player = this.players.get(playerId);
     if (!player) {
       this.sendNarrate(client, {
         text: 'Your presence flickers. You are not fully in this shard.',
@@ -538,10 +547,10 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       return;
     }
 
-    this.log(`Command from ${client.sessionId}: ${verb} ${args.join(' ')}`);
+    this.log(`Command from ${playerId}: ${verb} ${args.join(' ')}`);
 
     // Block commands from downed players (they're incapacitated)
-    if (this.downingSystem.isPlayerDowned(client.sessionId)) {
+    if (this.downingSystem.isPlayerDowned(playerId)) {
       this.sendNarrate(client, {
         text: 'You are too wounded to act. You can only hope someone comes to your aid…',
         type: 'system',
@@ -551,7 +560,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
 
     const previousRoomId = player.currentRoomId;
-    const wasExtracting = this.extractionSystem.isExtracting(client.sessionId);
+    const wasExtracting = this.extractionSystem.isExtracting(playerId);
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
 
@@ -560,14 +569,14 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     if (movedRoom) {
       const direction = args[0]?.toLowerCase();
       this.traceSystem.addTrace(previousRoomId, 'footprint', {
-        actorId: client.sessionId,
-        actorName: client.sessionId,
+        actorId: playerId,
+        actorName: playerId,
       }, direction);
 
       // Awareness: notify observers in destination room about entering player
-      this.runAwarenessChecks(client.sessionId, player.currentRoomId, 'arrival');
+      this.runAwarenessChecks(playerId, player.currentRoomId, 'arrival');
       // Awareness: notify observers in source room about departing player
-      this.runAwarenessChecks(client.sessionId, previousRoomId, 'departure');
+      this.runAwarenessChecks(playerId, previousRoomId, 'departure');
     }
 
     // Social commands (say, emote) broadcast to all players in the same room
@@ -592,10 +601,10 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
 
     // Send EXTRACTION_STATE 'started' if this command initiated an extraction
-    if (!wasExtracting && this.extractionSystem.isExtracting(client.sessionId)) {
-      const channel = this.extractionSystem.getChannel(client.sessionId)!;
+    if (!wasExtracting && this.extractionSystem.isExtracting(playerId)) {
+      const channel = this.extractionSystem.getChannel(playerId)!;
       this.sendExtractionState(client, {
-        playerId: client.sessionId,
+        playerId,
         state: 'started',
         totalTicks: channel.totalTicks,
         ticksRemaining: channel.ticksRemaining,
@@ -651,9 +660,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private broadcastToRoom(roomId: string, result: import('../commands/index.js').CommandResult): void {
     for (const narration of result.narrations) {
       // Send to all players in the room
-      for (const [sid, ps] of this.players) {
+      for (const [pid, ps] of this.players) {
         if (ps.currentRoomId === roomId) {
-          const targetClient = this.clients.find(c => c.sessionId === sid);
+          const targetClient = this.findClient(pid);
           if (targetClient) {
             this.sendNarrate(targetClient, {
               text: narration.text,
@@ -689,7 +698,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       // For Phase 1, send to the first other player in the room
       // Future: use proper target matching from whisper handler
       const targetSessionId = otherPlayersInRoom[0];
-      const targetClient = this.clients.find(c => c.sessionId === targetSessionId);
+      const targetClient = this.findClient(targetSessionId);
       
       if (targetClient) {
         this.sendNarrate(targetClient, {
@@ -750,8 +759,13 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
   }
 
-  private findClient(sessionId: string): Client | undefined {
-    return this.clients.find((c) => c.sessionId === sessionId);
+  private findClient(playerId: string): Client | undefined {
+    for (const [sessionId, pid] of this.playerIds) {
+      if (pid === playerId) {
+        return this.clients.find((c) => c.sessionId === sessionId);
+      }
+    }
+    return undefined;
   }
 
   private sendExtractionState(client: Client, msg: ExtractionMessage): void {
@@ -1390,7 +1404,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     for (const event of events) {
       if (event.tier === 'none' || !event.message) continue;
 
-      const observerClient = this.clients.find(c => c.sessionId === event.observerId);
+      const observerClient = this.findClient(event.observerId);
       if (observerClient) {
         this.sendNarrate(observerClient, {
           text: event.message,
