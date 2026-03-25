@@ -1420,3 +1420,14 @@ This aligns local dev with production behavior, making auth bugs surface earlier
 - **Narration format:** "Your stash is full! The [item name] could not be transferred. Carry it out manually or drop it." Stacked overflow includes quantity: "(x3)".
 - **Tests:** 6 new integration tests in `extraction.test.ts` under "Stash Overflow — No Silent Item Loss (#183)". Updated 8 existing tests across `extraction.test.ts` and `wave4-stash-wiring.test.ts` to use `retained` instead of `lost`. All 1520 server tests pass.
 - **Key invariant enforced:** `stored + retained === totalInventoryItems` — no items ever vanish.
+
+### 2025-07-28: ShardRoom sessionId → playerId Fix (Issue #197, PR #200)
+- **Bug:** ShardRoom.onJoin() keyed all PlayerState to `client.sessionId` (ephemeral WebSocket ID). On reconnect, new sessionId orphaned stash, combat, extraction, and traces.
+- **Fix:** Added `playerIds` map (`sessionId → playerId`), mirroring RefugeRoom's established pattern. Resolve `playerId` from `options['playerId']` with `client.sessionId` fallback.
+- **Scope:** Updated all downstream references — `players` map key, combat registration, stash transfer, extraction keying, downing system, trace actor IDs, awareness checks, sound propagation, whisper/broadcast delivery, and metadata. Updated `findClient()` to reverse-lookup sessionId from playerId.
+- **Test:** Pre-staged `shardroom-player-id.test.ts` (11 tests) validates identity keying, reconnection, stash, combat, multi-player, and auth integration. Fixed reconnection test to keep a second client alive preventing room auto-disposal. All 1566 server tests pass, zero regressions.
+- **Pattern:** Both RefugeRoom and ShardRoom now use the same identity resolution: `options['playerId'] || client.sessionId`. The `playerIds` map provides `sessionId → playerId` lookup; `findClient()` does the reverse.
+
+## Orchestration Log: 2026-03-25T12:16Z
+
+**Outcome (Jarlaxle):** Fixed ShardRoom sessionId → playerId keying across all player state (players map, combat, extraction, downing, traces, awareness, sound, messaging). Scope: Combat registration, stash transfer, extraction tracking, trace actor IDs, awareness lookups, sound propagation, and client delivery. Test: `shardroom-player-id.test.ts` (11 cases, 6 scenarios). Result: 1566 tests pass, zero regressions. PR #200 staged.

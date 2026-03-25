@@ -819,3 +819,33 @@ Drizzt wired `useDevAutoLogin` hook into `Login.tsx` to auto-authenticate dev us
 **Next Phase:**
 - Monitor test pass rate in CI
 - Add more integration tests as new auth features roll out
+
+## Learnings — Issue #197 ShardRoom playerId Tests
+
+**Date:** $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+**Context:** Proactive test writing for ShardRoom sessionId → playerId fix (parallel with Jarlaxle).
+
+**Test file:** `packages/server/src/__tests__/shardroom-player-id.test.ts`
+
+**What I learned:**
+- ShardRoom currently keys ALL player state (players map, combat, extraction) by `client.sessionId`
+- RefugeRoom already has the correct pattern: `playerIds = new Map<string, string>()` mapping sessionId → playerId, with `options['playerId']` resolution and sessionId fallback
+- `@colyseus/testing` `connectTo(room, clientOptions)` passes options to onJoin/onAuth (not createRoom)
+- The existing `connectTestClient` helper only passes options to `createRoom` (for onCreate), so playerId join tests need direct `colyseus.connectTo(room, { playerId })` calls
+- Server-side room internals (players map, combatSystem, extractionSystem) can be accessed via type assertion in tests
+- ExtractionSystem already names its param `playerId` but currently receives sessionId values — semantic mismatch
+
+**Test coverage (6 scenarios, 11 test cases):**
+1. Basic identity — player state keyed by playerId, not sessionId
+2. Reconnection — new session + same playerId recovers state
+3. Stash persistence — extraction system uses playerId for keying
+4. Combat continuity — combatants registered under playerId
+5. Multiple players — distinct playerIds = distinct state
+6. Auth integration — playerId from join options, sessionId fallback
+
+**Pre-existing compile errors (not ours):** 4 errors in creature-wiring/creatures tests (missing `agility` in CombatStats). Zero errors in our test file.
+
+## Orchestration Log: 2026-03-25T12:16Z
+
+**Outcome (Minsc):** Wrote `packages/server/src/__tests__/shardroom-player-id.test.ts` with 11 test cases across 6 describe blocks: identity keying (2 cases), reconnection with stash survival (2 cases), stash persistence (2 cases), combat continuity (2 cases), multi-player isolation (2 cases), auth integration (1 case). Tests verify playerId-based keying, sessionId→playerId mapping, reconnect recovery, and identity isolation. Compiles clean. Zero pre-test errors on this file.
