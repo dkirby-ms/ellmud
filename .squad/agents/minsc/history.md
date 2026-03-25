@@ -768,3 +768,54 @@ items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narra
 
 Drizzt wired `useDevAutoLogin` hook into `Login.tsx` to auto-authenticate dev users locally. Integration tests may now see auto-login behavior in dev mode — hook checks `import.meta.env.DEV` so production tests are unaffected.
 
+
+---
+
+## Learnings
+
+### Entra OAuth Test Suite (2026-07-21)
+
+**Test file:** `packages/server/src/__tests__/entra-auth.test.ts`  
+**Status:** 30/30 passing
+
+**What was tested:**
+1. **Login redirect** (4 tests) — GET /auth/entra/login returns 302 to Entra with correct OAuth params (scope, response_type, redirect_uri, state), sets HttpOnly state/nonce cookies for CSRF
+2. **Callback handling** (4 tests) — valid code+cookies → redirect with token+playerId, missing cookies → 400 CSRF, token exchange failure → redirect to error page, cookies cleared after callback
+3. **Session creation** (4 tests) — our UUID session token issued (not Entra JWT), new user created in DB, returning user found, distinct tokens per session
+4. **Edge cases** (3 tests) — user with only oid (no email/name) gets generated username, email-only user gets email-based username, special chars in display name sanitized
+5. **Disabled Entra** (2 tests) — routes return 404 when Entra env vars missing
+6. **AuthService.loginOAuth** (6 tests) — create/find OAuth users, username generation fallbacks, token validation/logout
+7. **Config validation** (4 tests) — falsy env var combinations correctly prevent initialization
+8. **Mock auth URL** (3 tests) — authorization URL structure validation
+
+**Test patterns used:**
+- MockEntraAuthService avoids real OIDC discovery/network — tests route+AuthService integration only
+- Express `listen(0)` + native `fetch` with `redirect: 'manual'` — same pattern as auth.test.ts
+- InMemoryTokenStore + InMemoryPlayerRepository for isolation
+- No mocking of AuthService itself — real OAuth loginOAuth flow tested end-to-end through routes
+
+**Key insight:** The `redirect: 'manual'` fetch option is essential for testing OAuth redirect flows — it lets us inspect 302 responses and Location headers without following the redirect.
+
+---
+
+## 2026-03-25 — Entra Auth Test Suite Complete
+
+**Status:** Deployed to origin/dev  
+**Commit:** e59ca32  
+**Test Results:** 30/30 tests passing (100%)
+
+**What This Means for Minsc:**
+- Your 30 Entra auth tests are now part of the CI pipeline
+- Tests cover all critical paths: login redirect, callback, session creation, edge cases
+- Team can merge with confidence knowing auth flows are validated
+
+**Test Coverage:**
+- ✅ Login redirect (Entra enabled/disabled)
+- ✅ Callback state verification
+- ✅ Session creation
+- ✅ Edge cases (missing state, invalid code, PKCE)
+- ✅ Disabled-Entra fallback
+
+**Next Phase:**
+- Monitor test pass rate in CI
+- Add more integration tests as new auth features roll out

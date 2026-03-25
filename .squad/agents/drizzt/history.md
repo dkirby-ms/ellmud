@@ -1318,3 +1318,48 @@ Combined effect: auth was completely invisible in local development. Broken auth
 | `CLIENT_URL` | `http://localhost:3000` | `https://<app>.azurecontainerapps.io` | `https://kirbytoso.xyz` | Derived from deployment URL |
 | `ENTRA_TENANT_SUBDOMAIN` | (NEW — needed) | (NEW — needed) | (NEW — needed) | Entra External ID tenant name |
 
+
+### Entra OAuth 5-Bug Fix (2025-07-25)
+**Task:** Fix all 5 Entra OAuth issues identified in prior diagnostic investigation.
+**Status:** ✅ Complete — all 1477 tests passing (1603 including 126 todo).
+
+**Fixes Applied:**
+
+1. **dotenv loading** — Added `dotenv` dependency + `dotenv.config()` at top of `index.ts`, resolving `.env` from monorepo root via `__dirname`. Production unaffected (no `.env` file in container).
+
+2. **Redirect URI mismatch** — Updated `.env.example` and `index.ts` default from `/auth/callback` to `/auth/entra/callback` to match the actual server route in `entra-routes.ts`.
+
+3. **openid-client v6 API misuse** — Changed `discovery()` 3rd arg from `this.entraConfig.redirectUri` (was being treated as client_secret) to `this.entraConfig.clientSecret`. ClientSecretPost 4th arg unchanged.
+
+4. **CIAM issuer URL** — Added `tenantSubdomain` field to `EntraConfig` interface. Discovery URL now uses `{subdomain}.ciamlogin.com/{tenantId}/v2.0` where subdomain is the tenant custom domain name (not GUID). Falls back to tenantId if subdomain not set.
+
+5. **Infra Bicep gap** — Added 7 new params to `main.bicep` (entraClientId, entraClientSecret, entraTenantId, entraTenantSubdomain, entraRedirectUri, allowLocalAuth, clientUrl) and wired them through to the `containerAppsApp` module. Also added `entraTenantSubdomain` param and env var to `container-apps.bicep`.
+
+**Files Modified:**
+- `packages/server/package.json` — added `dotenv` dependency
+- `packages/server/src/index.ts` — dotenv import, fixed redirect URI default, added tenantSubdomain, cleaned up duplicate __dirname
+- `packages/server/src/auth/EntraAuthService.ts` — added tenantSubdomain to EntraConfig, fixed discovery() API call, fixed issuer URL
+- `.env.example` — added ENTRA_TENANT_SUBDOMAIN, fixed redirect URI path
+- `infra/main.bicep` — added 7 Entra/auth params, wired to container app module
+- `infra/modules/container-apps.bicep` — added entraTenantSubdomain param + env var
+
+**Deliverables:**
+- `.squad/decisions/inbox/drizzt-entra-uat-checklist.md` — full UAT deployment checklist
+- `.squad/skills/entra-ciam-oauth/SKILL.md` — reusable CIAM OIDC integration patterns
+
+---
+
+## 2026-03-25 — Entra OAuth Fix Deployment Complete
+
+**Status:** Deployed to origin/dev  
+**Commit:** e59ca32  
+**Team Outcome:** All 5 Entra OAuth bugs fixed + 30 tests passing
+
+**What This Means for Drizzt:**
+- Your 5 fixes are now live on dev branch and ready for UAT
+- Team testing will verify the fixes work end-to-end
+- UAT checklist captured in decisions.md for deployment reference
+
+**Next Phase:**
+- Monitor UAT feedback on Entra auth flow
+- Be ready to troubleshoot deployment-specific issues (env var passing, DNS, etc.)
