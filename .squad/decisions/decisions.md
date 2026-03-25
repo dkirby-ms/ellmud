@@ -1486,3 +1486,53 @@ interface BiomeDefinition {
 
 **Files Modified:**
 - `packages/client/src/pages/Login.tsx`
+
+---
+
+## 2025-07-26: Dodge Chance Formula and PRNG Integration
+
+**By:** Jarlaxle  
+**Date:** 2025-07-26  
+**Status:** Implemented  
+**Scope:** Combat System (damage.ts, CombatSystem.ts)
+
+### Context
+
+GDD §6.4 specifies that dodge grants a "% chance to fully avoid an attack (based on AGI stat + dodge skill rank)." This was missing from the Phase 1 combat implementation — dodge only halved damage via the 0.5 stance multiplier.
+
+### Decision
+
+- **Dodge chance formula:** `min(0.75, defence × 0.05)` — 5% per point of defence, capped at 75%.
+- **PRNG injection:** CombatSystem accepts an optional `RollFn` at construction. Default returns 1 (never dodge) for backward compatibility.
+- **Successful dodge:** `finalDamage = 0`, overriding the min-1-damage rule. The stance multiplier (0.5) still applies when dodge fails.
+- **Defence stat mapping:** In Phase 1, the `defence` stat on Combatant serves as AGI/evasion. When skills are added in later phases, the formula should incorporate dodge skill rank additively.
+
+### Impact
+
+- The `calculateDamage()` signature gained an optional `DamageOptions` parameter — existing callers are unaffected.
+- `CombatSystem` constructor gained an optional second `RollFn` argument — existing instantiations in ShardRoom need no changes until a real PRNG is wired in.
+- Balance constants (`DODGE_CHANCE_PER_DEFENCE`, `MAX_DODGE_CHANCE`) are exported for easy tuning.
+
+### For Other Agents
+
+- **ShardRoom wiring:** When a seeded PRNG is available per shard, pass `prng.next` as the second arg to `new CombatSystem(exitResolver, prng.next)`.
+- **Creature AI:** No changes needed — creatures use the same Combatant interface, their defence stat now affects dodge chance when they choose dodge action.
+
+---
+
+## 2026-03-25: Rate Limiters Per-Router Instance
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-03-25  
+**Status:** Implemented
+
+### Context
+Adding `express-rate-limit` to auth endpoints. Module-level singleton limiters caused cross-test contamination — shared counters between test suites meant early register tests exhausted the limit before login tests could register their fixture users.
+
+### Decision
+Rate limiter instances are created **inside** `createAuthRouter()`, not at module scope. Each call to `createAuthRouter` gets fresh limiters with independent counters. Config constants (`LOGIN_RATE_LIMIT`, `REGISTER_RATE_LIMIT`) are exported for test assertions.
+
+### Implications
+- Production: single router instance, single set of limiters — no change in behavior
+- Tests: each `createTestApp()` call gets isolated rate limit state
+- If someone needs to share limiter state across multiple routers (e.g., cluster-wide limiting), they'll need to pass a custom `store` option — but that's a future concern
