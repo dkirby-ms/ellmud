@@ -849,3 +849,14 @@ Drizzt wired `useDevAutoLogin` hook into `Login.tsx` to auto-authenticate dev us
 ## Orchestration Log: 2026-03-25T12:16Z
 
 **Outcome (Minsc):** Wrote `packages/server/src/__tests__/shardroom-player-id.test.ts` with 11 test cases across 6 describe blocks: identity keying (2 cases), reconnection with stash survival (2 cases), stash persistence (2 cases), combat continuity (2 cases), multi-player isolation (2 cases), auth integration (1 case). Tests verify playerId-based keying, sessionId→playerId mapping, reconnect recovery, and identity isolation. Compiles clean. Zero pre-test errors on this file.
+
+## Learnings
+
+**PlayerProfileRepository Contract Tests (Issue #199):**
+- Wrote proactive contract tests for PlayerProfileRepository ahead of Jarlaxle's implementation
+- Used self-contained interface + InMemory implementation in the test file itself — once Jarlaxle's code lands, swap local types for real imports
+- Contract test function pattern (`playerProfileRepositoryContractTests(factory)`) matches StashRepository and PlayerRepository precedent
+- Profile data model mirrors PlayerState fields that persist: skills (stealth, awareness, tracking?), maxCarryWeight, equipment (VisibleEquipment)
+- 41 passing tests: save/load round-trip (8), upsert semantics (5), player isolation (4), delete (4), listPlayerIds (4), skill progression (4), edge cases (8), concurrency (3), full veteran profile (1)
+- 11 `.todo` tests documented for provider wiring (5) and ShardRoom lifecycle integration (6) — activate when implementation lands
+- Test file: `packages/server/src/__tests__/player-profile-repository.test.ts`

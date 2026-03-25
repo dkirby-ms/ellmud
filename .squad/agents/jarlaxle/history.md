@@ -1431,3 +1431,16 @@ This aligns local dev with production behavior, making auth bugs surface earlier
 ## Orchestration Log: 2026-03-25T12:16Z
 
 **Outcome (Jarlaxle):** Fixed ShardRoom sessionId → playerId keying across all player state (players map, combat, extraction, downing, traces, awareness, sound, messaging). Scope: Combat registration, stash transfer, extraction tracking, trace actor IDs, awareness lookups, sound propagation, and client delivery. Test: `shardroom-player-id.test.ts` (11 cases, 6 scenarios). Result: 1566 tests pass, zero regressions. PR #200 staged.
+
+### 2025-07-25: PlayerProfileRepository Save/Load Cycle (Issue #199)
+- Created `packages/server/src/player/` module: Interface + InMemory + Pg implementations + provider pattern.
+- **PlayerProfile type:** `{ skills: PlayerSkills, maxCarryWeight: number, equipment?: VisibleEquipment }`. Mirrors the mutable fields of `PlayerState` that should survive sessions.
+- **Interface:** `load(playerId): Promise<PlayerProfile | null>`, `save(playerId, profile): Promise<void>`. PlayerId is a separate parameter (not embedded in the profile), matching the established `StashRepository` pattern.
+- **PgPlayerProfileRepository** reads/writes `player_skills` table (migration 003). Maps `stealth→subterfuge`, `awareness→awareness`, `tracking→awareness` categories. Uses `ON CONFLICT` upsert.
+- **InMemoryPlayerProfileRepository** uses `structuredClone` for deep-copy isolation between save/load calls.
+- **Provider pattern** (`player-profile-provider.ts`): `initProfileProvider(usePg)` at boot, `getProfileRepository()` for singleton access. Follows `stash-provider.ts` exactly.
+- **ShardRoom wiring:** `onJoin` loads profile (with error fallback to defaults), `onLeave` saves before cleanup. `initProfile()` injection for test overrides. `onCreate` auto-initializes from shared provider.
+- **Server boot** (`index.ts`): `initProfileProvider(USE_PG)` added after stash provider.
+- **Tests:** Rewrote anticipatory test file from Minsc's placeholders to use real imports. 34 contract tests + 5 provider wiring tests. All 1600+ tests pass.
+- **Key design decision:** `onJoin` became async to support profile loading. This is safe — Colyseus supports async lifecycle methods, and RefugeRoom already uses async `onJoin`.
+- **Lesson:** Anticipatory test files from other team members may use different interface shapes. When implementing, replace local test doubles with real imports rather than adapting implementation to match placeholders.
