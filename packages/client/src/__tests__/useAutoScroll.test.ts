@@ -5,10 +5,9 @@ import { useAutoScroll } from "../hooks/useAutoScroll";
 function mockContainer(overrides: Partial<HTMLDivElement> = {}) {
   return {
     scrollHeight: 1000,
-    scrollTop: 0,
+    scrollTop: 952,
     clientHeight: 400,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
+    scrollTo: vi.fn(),
     ...overrides,
   } as unknown as HTMLDivElement;
 }
@@ -23,8 +22,8 @@ describe("useAutoScroll", () => {
     expect(result.current).toHaveProperty("current");
   });
 
-  it("scrolls to bottom when dependency changes and auto-scroll is engaged", () => {
-    const el = mockContainer();
+  it("scrolls to bottom when dependency changes and near bottom", () => {
+    const el = mockContainer({ scrollTop: 952 });
     const { result, rerender } = renderHook(
       ({ dep }) => useAutoScroll(dep),
       { initialProps: { dep: 1 } },
@@ -36,10 +35,13 @@ describe("useAutoScroll", () => {
     });
 
     rerender({ dep: 2 });
-    expect(el.scrollTop).toBe(el.scrollHeight);
+    expect(el.scrollTo).toHaveBeenCalledWith({
+      top: el.scrollHeight,
+      behavior: "smooth",
+    });
   });
 
-  it("auto-scroll defaults to engaged (scrolls on each new dependency)", () => {
+  it("does not scroll when user has scrolled up beyond threshold", () => {
     const el = mockContainer({ scrollTop: 0 });
     const { result, rerender } = renderHook(
       ({ dep }) => useAutoScroll(dep),
@@ -52,11 +54,32 @@ describe("useAutoScroll", () => {
     });
 
     rerender({ dep: 1 });
-    expect(el.scrollTop).toBe(1000);
+    expect(el.scrollTo).not.toHaveBeenCalled();
+  });
 
-    Object.assign(el, { scrollHeight: 1500 });
+  it("re-engages auto-scroll when user scrolls back near bottom", () => {
+    const el = mockContainer({ scrollTop: 0 });
+    const { result, rerender } = renderHook(
+      ({ dep }) => useAutoScroll(dep),
+      { initialProps: { dep: 0 } },
+    );
+
+    Object.defineProperty(result.current, "current", {
+      value: el,
+      writable: true,
+    });
+
+    // User scrolled up — should not scroll
+    rerender({ dep: 1 });
+    expect(el.scrollTo).not.toHaveBeenCalled();
+
+    // User scrolls back to bottom
+    Object.assign(el, { scrollTop: 960 });
     rerender({ dep: 2 });
-    expect(el.scrollTop).toBe(1500);
+    expect(el.scrollTo).toHaveBeenCalledWith({
+      top: 1000,
+      behavior: "smooth",
+    });
   });
 
   it("cleans up without crashing when ref is null", () => {
