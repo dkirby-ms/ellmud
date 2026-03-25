@@ -70,23 +70,8 @@ describe('Routing', () => {
       await waitFor(() => {
         expect(screen.getByText('ELLMUD')).toBeInTheDocument();
       });
-      expect(screen.getByLabelText('Username')).toBeInTheDocument();
-      expect(screen.getByLabelText('Password')).toBeInTheDocument();
-    });
-
-    it('shows Login and Register tabs', async () => {
-      renderWithRouter('/');
-      await waitFor(() => {
-        expect(screen.getByText('Login')).toBeInTheDocument();
-      });
-      expect(screen.getByText('Register')).toBeInTheDocument();
-    });
-
-    it('shows "Enter the Refuge" submit button', async () => {
-      renderWithRouter('/');
-      await waitFor(() => {
-        expect(screen.getByText('Enter the Refuge')).toBeInTheDocument();
-      });
+      // Microsoft sign-in is always visible regardless of VITE_ALLOW_LOCAL_AUTH
+      expect(screen.getByText('Sign in with Microsoft')).toBeInTheDocument();
     });
 
     it('redirects /refuge to / when not authenticated', async () => {
