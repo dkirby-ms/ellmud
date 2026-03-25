@@ -28,6 +28,7 @@ import { getConfig } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence, testRedisConnection } from './cache/index.js';
 import { initStashProvider, isStashPg } from './stash/index.js';
+import { initProfileProvider } from './player/index.js';
 
 const config = getConfig();
 const PORT = config.port;
@@ -50,6 +51,10 @@ if (USE_PG) {
 // ─── Stash Persistence ──────────────────────────────────────────────────────
 initStashProvider(USE_PG);
 console.log(`[Ellmud] Stash persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Player Profile Persistence ─────────────────────────────────────────────
+initProfileProvider(USE_PG);
+console.log(`[Ellmud] Profile persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Redis Bootstrap ─────────────────────────────────────────────────────────
 const { cache: narrationCache, isRedis: isCacheRedis } = await createNarrationCache(config);

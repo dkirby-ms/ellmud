@@ -44,6 +44,13 @@ import { transferInventoryToStash } from '../extraction/stash-transfer.js';
 import { CreatureManager, DROWNED_REVENANT, type CreatureAction } from '../creatures/index.js';
 import type { CreatureWorldState } from '../creatures/behavior.js';
 import { createPRNG } from '../shard/prng.js';
+import {
+  type PlayerProfileRepository,
+  InMemoryPlayerProfileRepository,
+  getProfileRepository,
+  DEFAULT_PROFILE,
+} from '../player/index.js';
+import type { PlayerProfile } from '../player/index.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -81,6 +88,15 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private stashService?: StashService;
   private itemDefs = new Map<string, StashItem>();
   private shardTier: ShardTier = 1;
+  private profileRepo: PlayerProfileRepository = new InMemoryPlayerProfileRepository();
+
+  /**
+   * Inject profile repository. Called before room lifecycle if provided.
+   * Falls back to in-memory defaults.
+   */
+  initProfile(repo?: PlayerProfileRepository): void {
+    this.profileRepo = repo ?? new InMemoryPlayerProfileRepository();
+  }
 
   /**
    * Inject stash dependencies. Called before room lifecycle if provided.
@@ -168,6 +184,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.initStash(getStashRepository(), getItemDefs());
     }
 
+    // Initialize profile repo with shared provider
+    if (this.profileRepo instanceof InMemoryPlayerProfileRepository) {
+      this.profileRepo = getProfileRepository();
+    }
+
     // Register message handlers
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
       this.handleCommandMessage(client, message);
@@ -189,7 +210,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     return authenticateClient(options['token'] as string | undefined);
   }
 
-  onJoin(client: Client, options: Record<string, unknown>): void {
+  async onJoin(client: Client, options: Record<string, unknown>): Promise<void> {
     // Enforce tier-based max players
     const maxPlayers = this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig());
     if (this.state.playerCount >= maxPlayers) {
@@ -203,13 +224,29 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     const playerId = (options['playerId'] as string) || client.sessionId;
     this.playerIds.set(client.sessionId, playerId);
 
+    // Load persisted profile (skills, carry weight, equipment) or use defaults
+    let profile: PlayerProfile;
+    try {
+      const saved = await this.profileRepo.load(playerId);
+      profile = saved ?? { ...DEFAULT_PROFILE };
+    } catch (err) {
+      this.log(`Failed to load profile for ${playerId}: ${err}`);
+      profile = { ...DEFAULT_PROFILE };
+    }
+
     // Distribute players across entry points for spatial separation
     // Use player count to cycle through available entry rooms
     const entryIndex = (this.state.playerCount - 1) % this.entryRoomIds.length;
     const startRoom = this.entryRoomIds[entryIndex] || this.roomGraph.startRoomId;
 
-    // Initialize player state at assigned entry room
-    const playerState = new PlayerState(playerId, startRoom);
+    // Initialize player state at assigned entry room with persisted profile
+    const playerState = new PlayerState(
+      playerId,
+      startRoom,
+      profile.maxCarryWeight,
+      profile.skills,
+      profile.equipment,
+    );
     this.players.set(playerId, playerState);
 
     this.log(`Player joined: ${playerId} at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${maxPlayers} players)`);
@@ -292,6 +329,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     this.extractionSystem.interruptExtraction(playerId, 'you left the shard');
     this.downingSystem.removePlayer(playerId);
     if (this.players.has(playerId)) {
+      // Persist player profile (skills, stats) before cleanup
+      await this.savePlayerProfile(playerId, this.players.get(playerId)!);
+
       this.state.playerCount = Math.max(0, this.state.playerCount - 1);
       this.players.delete(playerId);
       this.combatSystem.removeCombatant(playerId);
@@ -1427,6 +1467,22 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   private sendShardState(client: Client, message: ShardStateMessage): void {
     client.send(MessageTypes.SHARD_STATE, message);
+  }
+
+  // ─── Profile Persistence ─────────────────────────────────────────────────
+
+  /** Extract persistable profile from player state and save it. */
+  private async savePlayerProfile(playerId: string, playerState: PlayerState): Promise<void> {
+    try {
+      const profile: PlayerProfile = {
+        skills: { ...playerState.skills },
+        maxCarryWeight: playerState.maxCarryWeight,
+        equipment: playerState.equipment,
+      };
+      await this.profileRepo.save(playerId, profile);
+    } catch (err) {
+      this.log(`Failed to save profile for ${playerId}: ${err}`);
+    }
   }
 
   // ─── Logging ─────────────────────────────────────────────────────────────
