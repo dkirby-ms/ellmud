@@ -1470,3 +1470,17 @@ This aligns local dev with production behavior, making auth bugs surface earlier
 - Added `.narrative-scroll` CSS class to `theme.css` for game-themed scrollbar: 6px width, `--border-muted` thumb, `--accent-gold` hover, Firefox `scrollbar-color` fallback.
 - Added `min-h-0` to Refuge chat flex container to fix overflow containment in nested flex layouts.
 - 4 unit tests for the hook. All 114 client tests pass, zero regressions.
+
+### 2025-07-25: LoadoutService — Server-Authoritative Equipment System
+- Created 4 files in `packages/server/src/loadout/`: LoadoutRepository, LoadoutService, loadout-provider, index barrel.
+- **LoadoutRepository**: Interface + InMemoryLoadoutRepository, maps player → slot-keyed equipment. `load()`, `save()`, `setSlot()`, `getSlot()`, `clear()`.
+- **LoadoutService**: Server-authoritative equip/unequip/swap with per-player mutex lock preventing race conditions. Two constructor forms: `(stashRepo, itemDefs)` for tests, `(loadoutRepo, stashRepo, itemDefs)` for rooms.
+- **Atomic operations**: Remove-from-source + add-to-destination in single locked operation. Displaced items returned to stash on swap. Item count invariant enforced — no duplication, no vanishing.
+- **Slot restrictions**: Uses `SLOT_ACCEPTS` from shared types. Weapon→weapon, armour→head/chest/legs/feet/hands, tool→offhand, material→ring/amulet slots.
+- **Shard operations**: `equipFromInventory()` for equipping items found mid-shard. `unequipToInventory()` for removing to shard inventory (not stash). `validateShardEntry()` checks for required keys, weapons optional.
+- **Shared types already existed**: EquipmentSlotType, SLOT_ACCEPTS, DisplayItem, EquipmentSlots, createEmptyEquipmentSlots, EquipItemMessage, UnequipItemMessage, LoadoutUpdateMessage — added SWAP_ITEM message type and validateSlotRestriction().
+- **Room integration**: EQUIP_ITEM, UNEQUIP_ITEM, SWAP_ITEM message handlers in both RefugeRoom and ShardRoom. ShardRoom blocks equipment changes during extraction. ShardRoom supports equipping from shard inventory (tries stash first, falls back to inventory).
+- **Anti-exploit**: Per-player mutex, item existence verification, cross-player isolation, malformed input rejection. 95 tests cover all equip/unequip/swap operations, slot restrictions, race conditions, item count invariants.
+- **Pre-existing test fixture file** `loadout-fixtures.ts` was already in place (proactive tests written before implementation). All 95 proactive tests pass against the implementation.
+- Fixed shared types test that expected 8 message types (now 12 with EQUIP_ITEM, UNEQUIP_ITEM, SWAP_ITEM, LOADOUT_UPDATE).
+- Build clean, all server tests pass. Client test failures in ux-batch2 are pre-existing and unrelated.

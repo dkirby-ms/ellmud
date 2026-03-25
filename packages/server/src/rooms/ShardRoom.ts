@@ -11,6 +11,14 @@ import {
   type ShardTier,
   type ExtractionMessage,
   type PvPKillEvent,
+  type EquipItemMessage,
+  type UnequipItemMessage,
+  type SwapItemMessage,
+  type LoadoutUpdateMessage,
+  type StashUpdateMessage,
+  type DisplayItem,
+  SLOT_ACCEPTS,
+  EQUIPMENT_SLOT_ORDER,
   SHARD_SICKNESS_DEFAULTS,
   MessageTypes,
 } from '@ellmud/shared';
@@ -55,6 +63,8 @@ import type { FactionRepository } from '../faction/index.js';
 import { InMemoryFactionRepository, getFactionRepository } from '../faction/index.js';
 import type { RunHistoryRepository, RunRecord } from '../run-history/index.js';
 import { InMemoryRunHistoryRepository, getRunHistoryRepository } from '../run-history/index.js';
+import { LoadoutService, getLoadoutRepository } from '../loadout/index.js';
+import type { LoadoutRepository } from '../loadout/index.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -90,6 +100,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private extractionSystem!: ExtractionSystem;
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
+  private loadoutService?: LoadoutService;
   private itemDefs = new Map<string, StashItem>();
   private shardTier: ShardTier = 1;
   private profileRepo: PlayerProfileRepository = new InMemoryPlayerProfileRepository();
@@ -126,6 +137,22 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       repo ?? new InMemoryStashRepository(),
       this.itemDefs,
     );
+  }
+
+  /** Inject loadout dependencies for testing. */
+  initLoadout(loadoutRepo?: LoadoutRepository, stashRepo?: StashRepository, itemDefs?: Map<string, StashItem>): void {
+    if (loadoutRepo) {
+      this.loadoutService = new LoadoutService(
+        loadoutRepo,
+        stashRepo ?? getStashRepository(),
+        itemDefs ?? this.itemDefs,
+      );
+    } else {
+      this.loadoutService = new LoadoutService(
+        stashRepo ?? getStashRepository(),
+        itemDefs ?? this.itemDefs,
+      );
+    }
   }
 
   onCreate(options: Record<string, unknown>): void {
@@ -202,6 +229,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.initStash(getStashRepository(), getItemDefs());
     }
 
+    // Initialize loadout with shared provider if not already injected
+    if (!this.loadoutService) {
+      this.initLoadout(getLoadoutRepository(), getStashRepository(), getItemDefs());
+    }
+
     // Initialize profile repo with shared provider
     if (this.profileRepo instanceof InMemoryPlayerProfileRepository) {
       this.profileRepo = getProfileRepository();
@@ -220,6 +252,19 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Register message handlers
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
       this.handleCommandMessage(client, message);
+    });
+
+    // Equipment message handlers (server-authoritative — players can equip mid-shard)
+    this.onMessage(MessageTypes.EQUIP_ITEM, (client: Client, message: EquipItemMessage) => {
+      void this.handleEquipItem(client, message);
+    });
+
+    this.onMessage(MessageTypes.UNEQUIP_ITEM, (client: Client, message: UnequipItemMessage) => {
+      void this.handleUnequipItem(client, message);
+    });
+
+    this.onMessage(MessageTypes.SWAP_ITEM, (client: Client, message: SwapItemMessage) => {
+      void this.handleSwapItem(client, message);
     });
 
     // 1-second tick for all game simulation
@@ -1570,6 +1615,233 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     } catch (err) {
       this.log(`Failed to record run history for ${playerId}: ${err}`);
     }
+  }
+
+  // ─── Equipment Message Handlers (Server-Authoritative — Mid-Shard) ────
+
+  private async handleEquipItem(client: Client, message: EquipItemMessage): Promise<void> {
+    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+    const player = this.players.get(client.sessionId);
+
+    if (!this.loadoutService || !player) {
+      client.send(MessageTypes.NARRATE, {
+        text: 'Equipment system unavailable.',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+      return;
+    }
+
+    // Check extraction lock
+    if (this.extractionSystem.isExtracting(client.sessionId)) {
+      client.send(MessageTypes.NARRATE, {
+        text: 'Cannot change equipment while extracting!',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+      return;
+    }
+
+    try {
+      // First try stash, then shard inventory
+      const result = await this.loadoutService.equipItem(playerId, message.itemId, message.targetSlot);
+
+      if (!result.ok) {
+        // Try equipping from shard inventory
+        const invEntry = this.findInInventory(player, message.itemId);
+        if (invEntry) {
+          const invItem = this.toStashItemInstance(invEntry);
+          const invResult = await this.loadoutService.equipFromInventory(playerId, invItem, message.targetSlot);
+
+          if (invResult.ok) {
+            // Remove from shard inventory
+            player.inventory.delete(invEntry.item.id);
+
+            // If displaced item, add it back to shard inventory
+            if (invResult.displaced) {
+              const displacedDef = this.itemDefs.get(invResult.displaced.itemId);
+              if (displacedDef) {
+                player.addItem({
+                  id: displacedDef.id,
+                  name: displacedDef.name,
+                  weight: displacedDef.weight,
+                  description: displacedDef.description,
+                });
+              }
+            }
+
+            await this.sendShardLoadoutUpdate(client, playerId);
+            client.send(MessageTypes.NARRATE, {
+              text: `Equipped from inventory to ${message.targetSlot}.`,
+              type: 'system',
+              timestamp: Date.now(),
+            } satisfies NarrateMessage);
+            return;
+          }
+
+          client.send(MessageTypes.NARRATE, {
+            text: invResult.error ?? 'Failed to equip from inventory.',
+            type: 'system',
+            timestamp: Date.now(),
+          } satisfies NarrateMessage);
+          return;
+        }
+
+        client.send(MessageTypes.NARRATE, {
+          text: result.error!,
+          type: 'system',
+          timestamp: Date.now(),
+        } satisfies NarrateMessage);
+        return;
+      }
+
+      await this.sendShardLoadoutUpdate(client, playerId);
+      client.send(MessageTypes.NARRATE, {
+        text: `Item equipped to ${message.targetSlot}.`,
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    } catch (err) {
+      this.log(`Equip failed for ${playerId}: ${err}`);
+      client.send(MessageTypes.NARRATE, {
+        text: 'Failed to equip item.',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    }
+  }
+
+  private async handleUnequipItem(client: Client, message: UnequipItemMessage): Promise<void> {
+    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+
+    if (!this.loadoutService) {
+      client.send(MessageTypes.NARRATE, {
+        text: 'Equipment system unavailable.',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+      return;
+    }
+
+    if (this.extractionSystem.isExtracting(client.sessionId)) {
+      client.send(MessageTypes.NARRATE, {
+        text: 'Cannot change equipment while extracting!',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+      return;
+    }
+
+    try {
+      const result = await this.loadoutService.unequipItem(playerId, message.slot);
+
+      if (!result.ok) {
+        client.send(MessageTypes.NARRATE, {
+          text: result.error!,
+          type: 'system',
+          timestamp: Date.now(),
+        } satisfies NarrateMessage);
+        return;
+      }
+
+      await this.sendShardLoadoutUpdate(client, playerId);
+      client.send(MessageTypes.NARRATE, {
+        text: `Item unequipped from ${message.slot}.`,
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    } catch (err) {
+      this.log(`Unequip failed for ${playerId}: ${err}`);
+      client.send(MessageTypes.NARRATE, {
+        text: 'Failed to unequip item.',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    }
+  }
+
+  private async handleSwapItem(client: Client, message: SwapItemMessage): Promise<void> {
+    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+
+    if (!this.loadoutService) {
+      client.send(MessageTypes.NARRATE, {
+        text: 'Equipment system unavailable.',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+      return;
+    }
+
+    if (this.extractionSystem.isExtracting(client.sessionId)) {
+      client.send(MessageTypes.NARRATE, {
+        text: 'Cannot change equipment while extracting!',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+      return;
+    }
+
+    try {
+      const result = await this.loadoutService.swapItem(playerId, message.itemId, message.targetSlot);
+
+      if (!result.ok) {
+        client.send(MessageTypes.NARRATE, {
+          text: result.error!,
+          type: 'system',
+          timestamp: Date.now(),
+        } satisfies NarrateMessage);
+        return;
+      }
+
+      await this.sendShardLoadoutUpdate(client, playerId);
+      client.send(MessageTypes.NARRATE, {
+        text: `Item swapped into ${message.targetSlot}.`,
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    } catch (err) {
+      this.log(`Swap failed for ${playerId}: ${err}`);
+      client.send(MessageTypes.NARRATE, {
+        text: 'Failed to swap item.',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    }
+  }
+
+  /** Send loadout update to client after equipment change. */
+  private async sendShardLoadoutUpdate(client: Client, playerId: string): Promise<void> {
+    if (!this.loadoutService) return;
+    const loadoutView = await this.loadoutService.getLoadoutView(playerId);
+    client.send(MessageTypes.LOADOUT_UPDATE, {
+      slots: loadoutView.slots,
+    } satisfies LoadoutUpdateMessage);
+  }
+
+  /** Find an item in the player's shard inventory by instanceId or itemId. */
+  private findInInventory(
+    player: PlayerState,
+    itemId: string,
+  ): { item: { id: string; name: string; weight: number; description: string }; quantity: number } | null {
+    // Try direct itemId match
+    const entry = player.inventory.get(itemId);
+    if (entry) return entry;
+
+    // Try matching by instanceId pattern
+    for (const [, e] of player.inventory) {
+      if (e.item.id === itemId) return e;
+    }
+    return null;
+  }
+
+  /** Convert a shard inventory entry to StashItemInstance format. */
+  private toStashItemInstance(entry: { item: { id: string } }): import('@ellmud/shared').StashItemInstance {
+    return {
+      instanceId: `shard-${entry.item.id}-${Date.now()}`,
+      itemId: entry.item.id,
+      durability: null,
+      maxDurability: null,
+    };
   }
 
   // ─── Logging ─────────────────────────────────────────────────────────────

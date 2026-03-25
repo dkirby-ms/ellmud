@@ -7,12 +7,22 @@ import {
   type StashItem,
   type BiomeType,
   type ShardTier,
+  type EquipItemMessage,
+  type UnequipItemMessage,
+  type SwapItemMessage,
+  type LoadoutUpdateMessage,
+  type StashUpdateMessage,
+  type DisplayItem,
+  SLOT_ACCEPTS,
+  EQUIPMENT_SLOT_ORDER,
   MessageTypes,
 } from '@ellmud/shared';
 import { RefugeState } from '../state.js';
 import { authenticateClient } from '../auth/colyseus-auth.js';
 import { StashService, InMemoryStashRepository, getStashRepository, getItemDefs } from '../stash/index.js';
 import type { StashRepository } from '../stash/index.js';
+import { LoadoutService, getLoadoutRepository } from '../loadout/index.js';
+import type { LoadoutRepository } from '../loadout/index.js';
 import { getConfig } from '../config.js';
 import { AmbientSystem } from '../systems/AmbientSystem.js';
 
@@ -44,6 +54,7 @@ interface ShardListing {
  */
 export class RefugeRoom extends Room<RefugeRoomOptions> {
   private stashService!: StashService;
+  private loadoutService!: LoadoutService;
   private ambientSystem!: AmbientSystem;
   /** Maps sessionId → playerId for stash lookups. */
   private playerIds = new Map<string, string>();
@@ -59,6 +70,22 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
     );
   }
 
+  /** Inject loadout dependencies. */
+  initLoadout(loadoutRepo?: LoadoutRepository, stashRepo?: StashRepository, itemDefs?: Map<string, StashItem>): void {
+    if (loadoutRepo) {
+      this.loadoutService = new LoadoutService(
+        loadoutRepo,
+        stashRepo ?? getStashRepository(),
+        itemDefs ?? new Map(),
+      );
+    } else {
+      this.loadoutService = new LoadoutService(
+        stashRepo ?? getStashRepository(),
+        itemDefs ?? new Map(),
+      );
+    }
+  }
+
   onCreate(): void {
     this.setState(new RefugeState());
 
@@ -67,11 +94,29 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
       this.initStash(getStashRepository(), getItemDefs());
     }
 
+    // Initialize loadout with shared provider if not already injected
+    if (!this.loadoutService) {
+      this.initLoadout(getLoadoutRepository(), getStashRepository(), getItemDefs());
+    }
+
     // Initialize ambient world simulation
     this.ambientSystem = new AmbientSystem();
 
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
       void this.handleCommand(client, message);
+    });
+
+    // Equipment message handlers (server-authoritative)
+    this.onMessage(MessageTypes.EQUIP_ITEM, (client: Client, message: EquipItemMessage) => {
+      void this.handleEquipItem(client, message);
+    });
+
+    this.onMessage(MessageTypes.UNEQUIP_ITEM, (client: Client, message: UnequipItemMessage) => {
+      void this.handleUnequipItem(client, message);
+    });
+
+    this.onMessage(MessageTypes.SWAP_ITEM, (client: Client, message: SwapItemMessage) => {
+      void this.handleSwapItem(client, message);
     });
 
     // Ambient tick — drives NPC movement, weather, faction events
@@ -126,6 +171,16 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
       } satisfies NarrateMessage);
     } catch (err) {
       this.log(`Failed to load stash for ${playerId}: ${err}`);
+    }
+
+    // Send current loadout state
+    try {
+      const loadoutView = await this.loadoutService.getLoadoutView(playerId);
+      client.send(MessageTypes.LOADOUT_UPDATE, {
+        slots: loadoutView.slots,
+      } satisfies LoadoutUpdateMessage);
+    } catch (err) {
+      this.log(`Failed to load loadout for ${playerId}: ${err}`);
     }
   }
 
@@ -190,6 +245,11 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
 
         case 'store':
           await this.handleStoreCommand(client, message.args);
+          break;
+
+        case 'loadout':
+        case 'equipment':
+          await this.handleLoadoutCommand(client);
           break;
 
 
@@ -392,6 +452,153 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
       type: 'system',
       timestamp: Date.now(),
     } satisfies NarrateMessage);
+  }
+
+  // ─── Loadout Command ───────────────────────────────────────────────────
+
+  private async handleLoadoutCommand(client: Client): Promise<void> {
+    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+    try {
+      const summary = await this.loadoutService.getLoadoutSummary(playerId);
+      client.send(MessageTypes.NARRATE, {
+        text: summary,
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    } catch {
+      client.send(MessageTypes.NARRATE, {
+        text: 'Failed to access your loadout.',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    }
+  }
+
+  // ─── Equipment Message Handlers (Server-Authoritative) ─────────────────
+
+  private async handleEquipItem(client: Client, message: EquipItemMessage): Promise<void> {
+    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+
+    try {
+      const result = await this.loadoutService.equipItem(playerId, message.itemId, message.targetSlot);
+
+      if (!result.ok) {
+        client.send(MessageTypes.NARRATE, {
+          text: result.error!,
+          type: 'system',
+          timestamp: Date.now(),
+        } satisfies NarrateMessage);
+        return;
+      }
+
+      // Send updated loadout and stash state
+      await this.sendLoadoutAndStashUpdate(client, playerId);
+
+      client.send(MessageTypes.NARRATE, {
+        text: `Item equipped to ${message.targetSlot}.`,
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    } catch (err) {
+      this.log(`Equip failed for ${playerId}: ${err}`);
+      client.send(MessageTypes.NARRATE, {
+        text: 'Failed to equip item.',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    }
+  }
+
+  private async handleUnequipItem(client: Client, message: UnequipItemMessage): Promise<void> {
+    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+
+    try {
+      const result = await this.loadoutService.unequipItem(playerId, message.slot);
+
+      if (!result.ok) {
+        client.send(MessageTypes.NARRATE, {
+          text: result.error!,
+          type: 'system',
+          timestamp: Date.now(),
+        } satisfies NarrateMessage);
+        return;
+      }
+
+      await this.sendLoadoutAndStashUpdate(client, playerId);
+
+      client.send(MessageTypes.NARRATE, {
+        text: `Item unequipped from ${message.slot}.`,
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    } catch (err) {
+      this.log(`Unequip failed for ${playerId}: ${err}`);
+      client.send(MessageTypes.NARRATE, {
+        text: 'Failed to unequip item.',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    }
+  }
+
+  private async handleSwapItem(client: Client, message: SwapItemMessage): Promise<void> {
+    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+
+    try {
+      const result = await this.loadoutService.swapItem(playerId, message.itemId, message.targetSlot);
+
+      if (!result.ok) {
+        client.send(MessageTypes.NARRATE, {
+          text: result.error!,
+          type: 'system',
+          timestamp: Date.now(),
+        } satisfies NarrateMessage);
+        return;
+      }
+
+      await this.sendLoadoutAndStashUpdate(client, playerId);
+
+      client.send(MessageTypes.NARRATE, {
+        text: `Item swapped into ${message.targetSlot}.`,
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    } catch (err) {
+      this.log(`Swap failed for ${playerId}: ${err}`);
+      client.send(MessageTypes.NARRATE, {
+        text: 'Failed to swap item.',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    }
+  }
+
+  /** Send updated loadout + stash state to client after any equipment change. */
+  private async sendLoadoutAndStashUpdate(client: Client, playerId: string): Promise<void> {
+    const loadoutView = await this.loadoutService.getLoadoutView(playerId);
+    client.send(MessageTypes.LOADOUT_UPDATE, {
+      slots: loadoutView.slots,
+    } satisfies LoadoutUpdateMessage);
+
+    const stashView = await this.stashService.loadStash(playerId);
+    const stashItems: DisplayItem[] = stashView.entries.map((entry) => {
+      const allowedSlots = EQUIPMENT_SLOT_ORDER.filter(
+        (s) => SLOT_ACCEPTS[s].includes(entry.definition.type),
+      );
+      return {
+        instanceId: entry.instance.instanceId,
+        definitionId: entry.instance.itemId,
+        name: entry.definition.name,
+        type: entry.definition.type,
+        tier: entry.definition.rarity,
+        weight: entry.definition.weight,
+        description: entry.definition.description,
+        allowedSlots,
+      };
+    });
+    client.send(MessageTypes.STASH_UPDATE, {
+      items: stashItems,
+    } satisfies StashUpdateMessage);
   }
 
 
