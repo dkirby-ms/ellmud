@@ -15,6 +15,7 @@ import {
 import { useAppContext, type TerminalMessage } from "../store";
 import { connect, sendRawCommand } from "../services/connection";
 import { useReconnection } from "../hooks/useReconnection";
+import { useAutoScroll } from "../hooks/useAutoScroll";
 import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
 import { logout } from "../services/api";
 import ShardboardTab from "../components/ShardboardTab";
@@ -73,7 +74,7 @@ export default function Refuge() {
   const roomRef = useRef<Room | null>(null);
   const switchingRef = useRef(false);
   const handlersRef = useRef<MessageHandlers | null>(null);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const chatScrollRef = useAutoScroll(state.messages.length);
 
   const addMessage = useCallback(
     (text: string, type: TerminalMessage["type"]) => {
@@ -225,11 +226,6 @@ export default function Refuge() {
       }
     };
   }, [state.token, dispatch, addMessage]);
-
-  // Auto-scroll chat
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView?.({ behavior: "smooth" });
-  }, [state.messages.length]);
 
   // Send chat message as command
   const handleSendMessage = useCallback(
@@ -475,8 +471,8 @@ export default function Refuge() {
           </div>
 
           {/* Chat — real WebSocket messages */}
-          <div className="flex-1 flex flex-col">
-            <div className="flex-1 p-4 overflow-y-auto space-y-3">
+          <div className="flex-1 flex flex-col min-h-0">
+            <div ref={chatScrollRef} className="flex-1 p-4 overflow-y-auto space-y-3 narrative-scroll">
               {chatMessages.length === 0 && (
                 <p
                   className="text-text-disabled text-xs font-mono"
@@ -523,7 +519,6 @@ export default function Refuge() {
                   )}
                 </div>
               ))}
-              <div ref={chatEndRef} />
             </div>
 
             <form

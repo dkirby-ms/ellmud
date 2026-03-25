@@ -1445,3 +1445,22 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - **Pattern:** In Colyseus 0.17, `onAuth` return value lands on `client.auth`. Always read player identity from `client.auth.playerId` first, with `options['playerId']` as test fallback and `client.sessionId` as last resort.
 - **Gotcha:** `authenticateClient` returns `{ playerId: 'anonymous' }` when auth is uninitialized/optional. The resolution chain must skip the `'anonymous'` sentinel to avoid identity collisions in tests.
 - **Why:** Production clients send `{ token }` not `{ playerId }`. Reading `options['playerId']` always returns undefined in production, causing all persistence to break (nanoid sessionId used as FK → silent FK violations).
+
+## 2026-03-25 — Fix Missing `agility` on CombatStats Objects
+
+**Status:** Committed to dev (local)
+**Commit:** 7b05367
+
+**Problem:** 4 TypeScript build errors — `CombatStats` objects missing the required `agility` field after the interface was extended with `agility: number` (GDD §6.4 dodge mechanic).
+
+**Fix:**
+- `creature-wiring.test.ts` line 243: added `agility: 5` (matches DEFAULT_PLAYER_STATS)
+- `creatures.test.ts` lines 319, 357: added `agility: 5` to both player combatants
+- `drowned-revenant.ts` line 19: added `agility: 3` (low-tier creature, matches its defensive stat level)
+
+**Verification:** Build clean, all 1659 tests pass (68 files).
+
+## Learnings
+
+- **CombatStats agility defaults:** DEFAULT_PLAYER_STATS uses `agility: 5`. When adding test combatants, use 5 unless testing dodge mechanics specifically. Creature templates should scale agility with their tier (drowned revenant = 3).
+- **Single creature template pattern:** As of this date, drowned-revenant.ts is the only creature template. New templates must include all CombatStats fields including agility.

@@ -77,6 +77,26 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* Game-themed scrollbar */
+.narrative-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.narrative-scroll::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+.narrative-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-muted);
+  border-radius: 3px;
+}
+.narrative-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-gold);
+}
+/* Firefox */
+.narrative-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-muted) var(--bg-primary);
+}
+
 @layer base {
   * {
     @apply outline-interactive/50;
