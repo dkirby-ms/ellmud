@@ -903,36 +903,53 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   /**
    * Transfer a player's shard inventory into their persistent stash.
-   * Items are added until the stash weight limit is reached; excess is lost.
+   * Items that don't fit remain in the player's carried inventory.
    */
   private async transferToStash(
     client: Client, playerId: string, player: PlayerState,
   ): Promise<void> {
     if (player.inventory.size === 0) return;
 
-    const { stored, lost } = await transferInventoryToStash(
+    const result = await transferInventoryToStash(
       playerId, player.inventory, this.stashService!, this.itemDefs,
     );
 
-    // Clear shard inventory after transfer
-    player.inventory.clear();
+    // Remove only items that were successfully stored; keep retained items
+    if (result.retainedItems.length > 0) {
+      const retainedMap = new Map(
+        result.retainedItems.map((r) => [r.itemId, r.quantity]),
+      );
+      for (const [key, entry] of player.inventory) {
+        const retainedQty = retainedMap.get(key);
+        if (retainedQty != null) {
+          entry.quantity = retainedQty;
+        } else {
+          player.inventory.delete(key);
+        }
+      }
+    } else {
+      player.inventory.clear();
+    }
 
     // Narrate the transfer
-    if (stored > 0 && lost === 0) {
+    if (result.stored > 0 && result.retained === 0) {
       this.sendNarrate(client, {
-        text: `You secured ${stored} item${stored !== 1 ? 's' : ''} in your stash.`,
+        text: `You secured ${result.stored} item${result.stored !== 1 ? 's' : ''} in your stash.`,
         type: 'system',
         timestamp: Date.now(),
       });
-    } else if (stored > 0 && lost > 0) {
+    } else if (result.stored > 0 && result.retained > 0) {
       this.sendNarrate(client, {
-        text: `You secured ${stored} item${stored !== 1 ? 's' : ''} in your stash, but ${lost} item${lost !== 1 ? 's were' : ' was'} lost — your stash is full.`,
+        text: `You secured ${result.stored} item${result.stored !== 1 ? 's' : ''} in your stash, but ${result.retained} item${result.retained !== 1 ? 's' : ''} couldn't fit.`,
         type: 'system',
         timestamp: Date.now(),
       });
-    } else if (lost > 0) {
+    }
+
+    // Send per-item overflow narrations
+    for (const narration of result.narrations) {
       this.sendNarrate(client, {
-        text: `Your stash is full. ${lost} item${lost !== 1 ? 's were' : ' was'} lost in the rift.`,
+        text: narration,
         type: 'system',
         timestamp: Date.now(),
       });

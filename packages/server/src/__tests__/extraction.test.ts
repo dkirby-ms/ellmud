@@ -547,7 +547,7 @@ describe('Extraction Stash Transfer', () => {
     const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
 
     expect(result.stored).toBe(2);
-    expect(result.lost).toBe(0);
+    expect(result.retained).toBe(0);
 
     // Verify items are in the stash
     const stash = await repo.loadStash('p1');
@@ -556,7 +556,7 @@ describe('Extraction Stash Transfer', () => {
     expect(stash.some((e) => e.instance.itemId === 'shard-gem')).toBe(true);
   });
 
-  it('should respect stash weight limit — excess items are lost', async () => {
+  it('should respect stash weight limit — excess items are retained', async () => {
     // Set a very small stash capacity
     await repo.setCapacity('p1', 5);
 
@@ -568,9 +568,11 @@ describe('Extraction Stash Transfer', () => {
 
     const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
 
-    // light (2) fits, heavy (4) would bring total to 6 > 5 — lost
+    // light (2) fits, heavy (4) would bring total to 6 > 5 — retained
     expect(result.stored).toBe(1);
-    expect(result.lost).toBe(1);
+    expect(result.retained).toBe(1);
+    expect(result.retainedItems).toHaveLength(1);
+    expect(result.retainedItems[0]!.itemName).toBe('Heavy Item');
 
     const stash = await repo.loadStash('p1');
     expect(stash).toHaveLength(1);
@@ -583,7 +585,7 @@ describe('Extraction Stash Transfer', () => {
     const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
 
     expect(result.stored).toBe(0);
-    expect(result.lost).toBe(0);
+    expect(result.retained).toBe(0);
 
     const stash = await repo.loadStash('p1');
     expect(stash).toHaveLength(0);
@@ -599,7 +601,7 @@ describe('Extraction Stash Transfer', () => {
     const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
 
     expect(result.stored).toBe(3);
-    expect(result.lost).toBe(0);
+    expect(result.retained).toBe(0);
   });
 
   it('should register item definitions in itemDefs map', async () => {
@@ -616,7 +618,7 @@ describe('Extraction Stash Transfer', () => {
     expect(itemDefs.get('ancient-relic')!.type).toBe('material');
   });
 
-  it('should lose all items when stash is completely full', async () => {
+  it('should retain all items when stash is completely full', async () => {
     await repo.setCapacity('p1', 0);
 
     const player = new PlayerState('p1', 'entry');
@@ -625,6 +627,156 @@ describe('Extraction Stash Transfer', () => {
     const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
 
     expect(result.stored).toBe(0);
-    expect(result.lost).toBe(1);
+    expect(result.retained).toBe(1);
+    expect(result.retainedItems[0]!.itemName).toBe('Coin');
+    expect(result.narrations).toHaveLength(1);
+    expect(result.narrations[0]).toContain('stash is full');
+  });
+});
+
+// ─── Stash Overflow Integration — No Silent Item Loss (#183) ────────────────
+
+describe('Stash Overflow — No Silent Item Loss (#183)', () => {
+  let repo: InMemoryStashRepository;
+  let itemDefs: Map<string, StashItem>;
+  let stashService: StashService;
+
+  beforeEach(() => {
+    repo = new InMemoryStashRepository();
+    itemDefs = new Map();
+    stashService = new StashService(repo, itemDefs);
+  });
+
+  it('full stash: all items remain in carried inventory', async () => {
+    await repo.setCapacity('p1', 0);
+
+    const player = new PlayerState('p1', 'entry', 100);
+    const gem = makeItem('ruby', 'Ruby', 1);
+    player.addItem(gem);
+    player.addItem(gem);
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    // Nothing stored, both retained
+    expect(result.stored).toBe(0);
+    expect(result.retained).toBe(2);
+
+    // Items still in player's carried inventory (not cleared by transfer itself)
+    expect(player.inventory.size).toBe(1);
+    expect(player.inventory.get('ruby')!.quantity).toBe(2);
+
+    // Stash is empty
+    const stash = await repo.loadStash('p1');
+    expect(stash).toHaveLength(0);
+  });
+
+  it('partial transfer: stored items leave stash, overflow stays in inventory', async () => {
+    await repo.setCapacity('p1', 3);
+
+    const player = new PlayerState('p1', 'entry', 100);
+    const arrow = makeItem('arrow', 'Iron Arrow', 1);
+    player.addItem(arrow);
+    player.addItem(arrow);
+    player.addItem(arrow);
+    player.addItem(arrow);
+    player.addItem(arrow);
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    expect(result.stored).toBe(3);
+    expect(result.retained).toBe(2);
+    expect(result.retainedItems).toHaveLength(1);
+    expect(result.retainedItems[0]!.itemId).toBe('arrow');
+    expect(result.retainedItems[0]!.quantity).toBe(2);
+
+    // Player still has 5 in their inventory (transfer doesn't mutate it)
+    expect(player.inventory.get('arrow')!.quantity).toBe(5);
+
+    // Stash has exactly 3
+    const stash = await repo.loadStash('p1');
+    const totalInStash = stash.reduce((sum, e) => sum + e.quantity, 0);
+    expect(totalInStash).toBe(3);
+  });
+
+  it('narration messages include specific item names on overflow', async () => {
+    await repo.setCapacity('p1', 5);
+
+    const player = new PlayerState('p1', 'entry', 100);
+    const blade = makeItem('blade', 'Steel Blade', 4);
+    const potion = makeItem('potion', 'Health Potion', 2);
+    player.addItem(blade);
+    player.addItem(potion);
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    // blade (4) fits, potion (2) would bring to 6 > 5
+    expect(result.stored).toBe(1);
+    expect(result.retained).toBe(1);
+
+    // Narration mentions the specific overflow item
+    expect(result.narrations).toHaveLength(1);
+    expect(result.narrations[0]).toContain('Health Potion');
+    expect(result.narrations[0]).toContain('stash is full');
+    expect(result.narrations[0]).toContain('Carry it out manually or drop it');
+  });
+
+  it('narration for stacked overflow items includes quantity', async () => {
+    await repo.setCapacity('p1', 2);
+
+    const player = new PlayerState('p1', 'entry', 100);
+    const bone = makeItem('bone', 'Bone Shard', 1);
+    player.addItem(bone);
+    player.addItem(bone);
+    player.addItem(bone);
+    player.addItem(bone);
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    expect(result.stored).toBe(2);
+    expect(result.retained).toBe(2);
+    expect(result.narrations).toHaveLength(1);
+    expect(result.narrations[0]).toContain('Bone Shard (x2)');
+  });
+
+  it('total items (stored + retained) equals total inventory — no item loss', async () => {
+    await repo.setCapacity('p1', 7);
+
+    const player = new PlayerState('p1', 'entry', 100);
+    const sword = makeItem('sword', 'Rusty Sword', 3);
+    const gem = makeItem('gem', 'Shard Gem', 1);
+    const anvil = makeItem('anvil', 'Heavy Anvil', 10);
+    player.addItem(sword);
+    player.addItem(gem);
+    player.addItem(gem);
+    player.addItem(anvil);
+
+    const totalItems = Array.from(player.inventory.values())
+      .reduce((sum, e) => sum + e.quantity, 0);
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    // No items vanish: stored + retained = total
+    expect(result.stored + result.retained).toBe(totalItems);
+  });
+
+  it('multiple item types overflow independently with separate narrations', async () => {
+    await repo.setCapacity('p1', 3);
+
+    const player = new PlayerState('p1', 'entry', 100);
+    const light = makeItem('pebble', 'Pebble', 1);
+    const heavy = makeItem('rock', 'Heavy Rock', 5);
+    player.addItem(light);
+    player.addItem(light);
+    player.addItem(light);
+    player.addItem(heavy);
+
+    const result = await transferInventoryToStash('p1', player.inventory, stashService, itemDefs);
+
+    // 3 pebbles (3 weight) fit; rock (5) doesn't
+    expect(result.stored).toBe(3);
+    expect(result.retained).toBe(1);
+    expect(result.retainedItems.some((r) => r.itemId === 'rock')).toBe(true);
+    expect(result.narrations).toHaveLength(1);
+    expect(result.narrations[0]).toContain('Heavy Rock');
   });
 });

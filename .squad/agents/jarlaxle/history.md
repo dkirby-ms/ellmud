@@ -1412,3 +1412,11 @@ This aligns local dev with production behavior, making auth bugs surface earlier
 - Dodge chance is purely additive from defence stat (no separate AGI stat yet -- Phase 1 simplification).
 - PRNG is injected into CombatSystem at construction, keeping damage calculation deterministic and testable.
 - Backward compatibility: existing tests and code that dont pass options get identical behavior.
+
+### 2025-07-26: Stash Overflow Fix (Issue #183)
+- **Bug:** `stash-transfer.ts` `transferInventoryToStash()` counted overflow items as `lost` and the caller in `ShardRoom.ts` called `player.inventory.clear()`, silently destroying items that didn't fit in the stash.
+- **Fix:** Renamed `lost` → `retained` throughout. Transfer function now returns `retainedItems` (per-type details) and `narrations` (player-facing messages). ShardRoom caller only removes successfully stored items, keeping overflow items in the player's carried inventory.
+- **`TransferResult` interface expanded:** `{ stored, retained, retainedItems: RetainedItem[], narrations: string[] }`. New `RetainedItem` type exported from `extraction/index.ts`.
+- **Narration format:** "Your stash is full! The [item name] could not be transferred. Carry it out manually or drop it." Stacked overflow includes quantity: "(x3)".
+- **Tests:** 6 new integration tests in `extraction.test.ts` under "Stash Overflow — No Silent Item Loss (#183)". Updated 8 existing tests across `extraction.test.ts` and `wave4-stash-wiring.test.ts` to use `retained` instead of `lost`. All 1520 server tests pass.
+- **Key invariant enforced:** `stored + retained === totalInventoryItems` — no items ever vanish.

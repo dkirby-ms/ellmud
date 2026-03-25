@@ -12,4 +12,5 @@ export {
 export {
   transferInventoryToStash,
   type TransferResult,
+  type RetainedItem,
 } from './stash-transfer.js';
