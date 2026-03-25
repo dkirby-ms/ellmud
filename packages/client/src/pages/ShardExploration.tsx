@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router";
 import {
   Eye,
@@ -14,6 +14,7 @@ import CompassControl from "../components/CompassControl";
 import { useAppContext } from "../store.js";
 import { useShardConnection } from "../hooks/useShardConnection.js";
 import { useCountdown } from "../hooks/useCountdown.js";
+import { useAutoScroll } from "../hooks/useAutoScroll.js";
 import type { CombatAction } from "@ellmud/shared";
 
 export default function ShardExploration() {
@@ -33,7 +34,7 @@ export default function ShardExploration() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const narrativeRef = useRef<HTMLDivElement>(null);
+  const narrativeRef = useAutoScroll(state.messages);
 
   // Derive collapse timer from server state, with client-side countdown
   const collapseTime = useCountdown(state.collapseTimer ?? 0);
@@ -41,13 +42,6 @@ export default function ShardExploration() {
 
   // Derive room info from server state
   const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
-
-  // Auto-scroll narrative on new messages
-  useEffect(() => {
-    if (narrativeRef.current) {
-      narrativeRef.current.scrollTop = narrativeRef.current.scrollHeight;
-    }
-  }, [state.messages]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -248,7 +242,7 @@ export default function ShardExploration() {
           {/* Narrative text — render from real AppContext messages */}
           <div
             ref={narrativeRef}
-            className="flex-1 overflow-y-auto px-8 py-6 space-y-6"
+            className="flex-1 overflow-y-auto px-8 py-6 space-y-6 narrative-scroll"
           >
             {state.messages.map((msg) => (
               <div key={msg.id}>

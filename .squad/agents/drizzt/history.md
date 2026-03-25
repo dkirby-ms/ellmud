@@ -1461,3 +1461,21 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - Compass reads reactive state from `useAppContext()` — updates automatically on room change
 - Available exits styled with `--interactive` (teal), hover `--accent-gold`; unavailable at `opacity-30` + disabled
 - Compact `max-w-[9rem]` fits the 30% sidebar without overflow
+## 2026-03-25 — Fix Missing `agility` on CombatStats Objects
+
+**Status:** Committed to dev (local)
+**Commit:** 7b05367
+
+**Problem:** 4 TypeScript build errors — `CombatStats` objects missing the required `agility` field after the interface was extended with `agility: number` (GDD §6.4 dodge mechanic).
+
+**Fix:**
+- `creature-wiring.test.ts` line 243: added `agility: 5` (matches DEFAULT_PLAYER_STATS)
+- `creatures.test.ts` lines 319, 357: added `agility: 5` to both player combatants
+- `drowned-revenant.ts` line 19: added `agility: 3` (low-tier creature, matches its defensive stat level)
+
+**Verification:** Build clean, all 1659 tests pass (68 files).
+
+## Learnings
+
+- **CombatStats agility defaults:** DEFAULT_PLAYER_STATS uses `agility: 5`. When adding test combatants, use 5 unless testing dodge mechanics specifically. Creature templates should scale agility with their tier (drowned revenant = 3).
+- **Single creature template pattern:** As of this date, drowned-revenant.ts is the only creature template. New templates must include all CombatStats fields including agility.

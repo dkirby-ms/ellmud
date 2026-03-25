@@ -1462,3 +1462,11 @@ This aligns local dev with production behavior, making auth bugs surface earlier
 - Your `playerIds` map and `findClient()` pattern will work once the correct playerId flows through
 
 **Decision:** `.squad/decisions/decisions.md` (2026-03-25 entry)
+
+### 2025-07-26: Scrollable Narrative Pane (Issue #196, PR #204)
+- Created reusable `useAutoScroll` hook in `packages/client/src/hooks/useAutoScroll.ts`.
+- **Scroll behavior:** Auto-scrolls to bottom on dependency change. Listens for scroll events (passive) to detect manual scroll-up — disengages auto-scroll when user is >48px from bottom, re-engages when they scroll back within threshold.
+- Applied to both ShardExploration narrative pane and Refuge chat pane — replaced old naive `scrollTop = scrollHeight` and `scrollIntoView` sentinel patterns.
+- Added `.narrative-scroll` CSS class to `theme.css` for game-themed scrollbar: 6px width, `--border-muted` thumb, `--accent-gold` hover, Firefox `scrollbar-color` fallback.
+- Added `min-h-0` to Refuge chat flex container to fix overflow containment in nested flex layouts.
+- 4 unit tests for the hook. All 114 client tests pass, zero regressions.
