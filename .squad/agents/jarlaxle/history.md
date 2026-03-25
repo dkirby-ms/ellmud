@@ -1388,3 +1388,27 @@ This aligns local dev with production behavior, making auth bugs surface earlier
 **Action for Jarlaxle:** Monitor these fixes in PR reviews. If any auth-adjacent systems need changes after OAuth unblocking, they should be small (no auth logic should live outside the auth layer).
 
 **Decision File:** `.squad/decisions.md` — See "Entra External ID OAuth Scope" and "Diagnostic - Entra OAuth 6 Issues" entries (2026-03-24T22:19:00Z).
+
+
+### 2025-07-26: Phase 2 Bug Fixes -- Combat Movement Lock + Dodge Chance
+
+**Bug 1: Combat blocks movement not enforced (KNOWN_ISSUES #1)**
+- Added combat state check in handleCommand() (commands/index.ts) that blocks go when combatSystem.isInCombat(playerId) is true.
+- Pattern mirrors the existing extraction command lock -- check runs before handler dispatch.
+- flee, strike, dodge, look, inventory all remain available in combat.
+- 8 new tests in combat-movement-lock.test.ts.
+
+**Bug 2: Dodge damage reduction missing (GDD 6.4, KNOWN_ISSUES #7)**
+- GDD 6.4 specifies: final_damage = max(1, modified_dmg) * dodge/block_reduction -- dodge grants % chance to fully avoid.
+- Added DamageOptions to calculateDamage() with optional defenderDefence and dodgeRoll params.
+- Dodge chance formula: min(0.75, defence * 0.05) -- 5% per point of defence, capped at 75%.
+- Exported getDodgeChance(), DODGE_CHANCE_PER_DEFENCE, MAX_DODGE_CHANCE constants for balance tuning.
+- Added RollFn type and optional PRNG parameter to CombatSystem constructor. Default roll = 1 (always fail dodge) for backward compat.
+- CombatEvent gained dodged field. Narration shows dodges the blow on successful dodge.
+- 15 new tests in dodge-chance.test.ts.
+- All 1514 tests pass, zero regressions across 62 test files.
+
+**Key design decisions:**
+- Dodge chance is purely additive from defence stat (no separate AGI stat yet -- Phase 1 simplification).
+- PRNG is injected into CombatSystem at construction, keeping damage calculation deterministic and testable.
+- Backward compatibility: existing tests and code that dont pass options get identical behavior.

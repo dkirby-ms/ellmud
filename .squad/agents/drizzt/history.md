@@ -1363,3 +1363,40 @@ Combined effect: auth was completely invisible in local development. Broken auth
 **Next Phase:**
 - Monitor UAT feedback on Entra auth flow
 - Be ready to troubleshoot deployment-specific issues (env var passing, DNS, etc.)
+
+---
+
+## 2026-03-25 — Phase 2 Backlog: Rate Limiting + Azure Transport Tests
+
+**Status:** ✅ Complete — 14 new tests, all 1491 server tests passing
+
+### BUG 1: Auth Rate Limiting (KNOWN_ISSUES #6)
+**Problem:** `/auth/register` and `/auth/login` had no rate limiting — brute-force or spam attacks were unmitigated.
+**Fix:**
+- Installed `express-rate-limit` in `@ellmud/server`
+- Added `loginLimiter` (10 req/15min/IP) and `registerLimiter` (5 req/hour/IP) inside `createAuthRouter()`
+- Limiters created per-router-instance to avoid shared state across test suites
+- Exported `LOGIN_RATE_LIMIT` and `REGISTER_RATE_LIMIT` config constants for test assertions
+- Uses `standardHeaders: true` (RateLimit-* headers), `legacyHeaders: false`
+- Returns 429 with JSON `{ error: "Too many ... attempts" }` and `Retry-After` header
+
+**Test file:** `auth-rate-limit.test.ts` — 7 tests covering:
+- Under-limit requests pass through
+- Over-limit returns 429 with retry-after
+- Per-IP isolation (different IPs don't share counters)
+- Cross-endpoint independence (login limit doesn't affect register)
+
+### BUG 2: Azure LLM Transport Integration Tests (KNOWN_ISSUES #2)
+**Problem:** `createAzureTransport()` was exported but never tested. All narration tests used mock transports.
+**Fix:**
+- Created `azure-llm-transport.integration.test.ts` with two test suites:
+  1. **Always-run structure tests** (7 tests): verify transport shape, URL construction, header injection, request body serialization, error handling (401/403), and AbortSignal support — all using fetch interception, no live calls
+  2. **Live integration suite** (gated behind `AZURE_AI_TEST=true`): health-check call to real endpoint, invalid credential rejection against live service
+
+**Key decision:** Moved rate limiters from module-level singletons into `createAuthRouter()` to prevent shared state between test suites. Each Express app instance gets fresh rate limit counters.
+
+## Learnings
+
+- **express-rate-limit v7+ uses standardHeaders by default** — set `legacyHeaders: false` to avoid duplicate X-RateLimit-* headers alongside the new RateLimit-* standard headers.
+- **Module-level middleware singletons cause cross-test contamination** — rate limiters (or any stateful middleware) must be instantiated per-router when tests create multiple Express app instances. Factory-inside-factory pattern solves this cleanly.
+- **fetch interception for transport tests** — overriding `globalThis.fetch` in test scope lets you validate URL construction, headers, and request shape without hitting a real endpoint. Always restore in `finally` block.

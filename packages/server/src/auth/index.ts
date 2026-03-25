@@ -6,7 +6,7 @@ export {
   type PlayerRepository,
 } from './PlayerRepository.js';
 export { PgPlayerRepository } from './PgPlayerRepository.js';
-export { createAuthRouter } from './routes.js';
+export { createAuthRouter, LOGIN_RATE_LIMIT, REGISTER_RATE_LIMIT } from './routes.js';
 export { authenticateClient, initColyseusAuth, resetColyseusAuth } from './colyseus-auth.js';
 export { EntraAuthService, type EntraConfig } from './EntraAuthService.js';
 export { createEntraRouter } from './entra-routes.js';

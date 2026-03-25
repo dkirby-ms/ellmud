@@ -105,6 +105,16 @@ export function handleCommand(
     }
   }
 
+  // Combat movement lock: block 'go' while in combat (must use 'flee')
+  if (verb === 'go' && ctx.combatSystem?.isInCombat(ctx.player.sessionId)) {
+    return {
+      narrations: [{
+        text: "You're in combat! Use 'flee' to escape first.",
+        type: 'system',
+      }],
+    };
+  }
+
   const handler = handlers.get(verb);
   if (!handler) {
     return {
