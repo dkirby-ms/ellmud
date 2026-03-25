@@ -860,3 +860,29 @@ Drizzt wired `useDevAutoLogin` hook into `Login.tsx` to auto-authenticate dev us
 - 41 passing tests: save/load round-trip (8), upsert semantics (5), player isolation (4), delete (4), listPlayerIds (4), skill progression (4), edge cases (8), concurrency (3), full veteran profile (1)
 - 11 `.todo` tests documented for provider wiring (5) and ShardRoom lifecycle integration (6) — activate when implementation lands
 - Test file: `packages/server/src/__tests__/player-profile-repository.test.ts`
+
+## Learnings — FactionRepository + RunHistoryRepository Contract Tests (Issue #198)
+
+**Date:** 2025-07-25
+
+**FactionRepository Contract Tests (26 tests):**
+- File: `packages/server/src/__tests__/faction-repository.test.ts`
+- Self-contained interface + InMemory impl — no dependency on Jarlaxle's production code
+- Schema 004 enforces one faction per player (UNIQUE on player_id) — API returns array (0 or 1 items) for forward compatibility
+- `updateFaction()` is upsert: switching factions replaces old membership entirely
+- Three canonical factions from GDD §9.4: ironwright, veil, scarlet
+- Tests cover: basic get/update, faction switching, same-faction standing updates, player isolation, edge values (zero/max reputation, INT boundary), data integrity (copy semantics, parallel operations)
+
+**RunHistoryRepository Contract Tests (34 tests):**
+- File: `packages/server/src/__tests__/run-history-repository.test.ts`
+- Self-contained interface + InMemory impl — append-only history (not upsert)
+- Schema 005 fields: runId, shardTier (1-3), biome, durationSec, extracted, extractedItems (JSONB), xpGained, createdAt
+- `getPlayerHistory()` returns newest first (reverse chronological), respects optional limit param
+- `recordRun()` auto-assigns createdAt timestamp; same runId can appear multiple times (append-only)
+- Tests cover: round-trip, chronological order, limit parameter (0/partial/exceed/unlimited), player isolation, full field preservation, edge cases (zero duration, max XP, complex JSONB loot), data integrity (structuredClone for copy semantics, input mutation protection)
+- Used `tick()` helper (2ms delay) to ensure distinct createdAt timestamps between sequential records
+
+**Key Pattern Notes:**
+- `makeRun()` helper uses `'biome' in overrides` check (not nullish coalescing) to allow explicit `undefined` — important for optional fields
+- InMemory `recordRun()` must `structuredClone(run)` input to prevent external mutation of stored arrays (extractedItems)
+- Contract test pattern proven across 3 repositories now: PlayerProfile, Faction, RunHistory — when Jarlaxle lands PG implementations, swap local types for real imports and add PG `describe` block
