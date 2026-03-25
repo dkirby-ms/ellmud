@@ -1445,3 +1445,19 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - **Pattern:** In Colyseus 0.17, `onAuth` return value lands on `client.auth`. Always read player identity from `client.auth.playerId` first, with `options['playerId']` as test fallback and `client.sessionId` as last resort.
 - **Gotcha:** `authenticateClient` returns `{ playerId: 'anonymous' }` when auth is uninitialized/optional. The resolution chain must skip the `'anonymous'` sentinel to avoid identity collisions in tests.
 - **Why:** Production clients send `{ token }` not `{ playerId }`. Reading `options['playerId']` always returns undefined in production, causing all persistence to break (nanoid sessionId used as FK → silent FK violations).
+
+### 2026-03-26: Persistent Compass Navigation Control (#195)
+**Status:** ✅ Complete — PR #205
+
+**Task:** Replace per-room inline direction links with a persistent compass widget.
+
+**Changes:**
+1. **CompassControl component** (`packages/client/src/components/CompassControl.tsx`) — 3×3 compass rose grid + Up/Down buttons. Reads exits from `state.roomHeader`, dims unavailable directions, fires `onNavigate` callback.
+2. **ShardExploration.tsx** — Removed inline `Exits: [north] [east]` block from room narration. Added `<CompassControl>` to sidebar between Sound Cues and Quick Actions.
+3. **useShardConnection.ts** — Removed `Exits: north, east` header message from `onRoomHeader` handler.
+4. **8 new tests** (`compass-control.test.tsx`) — enabled/disabled states, click behavior, ordinal directions, up/down, empty state.
+
+**Key patterns:**
+- Compass reads reactive state from `useAppContext()` — updates automatically on room change
+- Available exits styled with `--interactive` (teal), hover `--accent-gold`; unavailable at `opacity-30` + disabled
+- Compact `max-w-[9rem]` fits the 30% sidebar without overflow
