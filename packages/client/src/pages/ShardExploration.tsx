@@ -41,7 +41,6 @@ export default function ShardExploration() {
 
   // Derive room info from server state
   const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
-  const exits = state.roomHeader?.exits ?? [];
 
   // Auto-scroll narrative on new messages
   useEffect(() => {
