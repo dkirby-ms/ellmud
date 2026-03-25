@@ -1479,3 +1479,51 @@ Combined effect: auth was completely invisible in local development. Broken auth
 
 - **CombatStats agility defaults:** DEFAULT_PLAYER_STATS uses `agility: 5`. When adding test combatants, use 5 unless testing dodge mechanics specifically. Creature templates should scale agility with their tier (drowned revenant = 3).
 - **Single creature template pattern:** As of this date, drowned-revenant.ts is the only creature template. New templates must include all CombatStats fields including agility.
+
+### MUD Terminal Aesthetic Restyle (2026-03-20)
+**Task:** Restyle narrative/text panes to evoke old-school MUD terminal feel
+**Status:** ✅ Complete
+
+**Changes:**
+1. **tailwind.css** — Added `.narrative-terminal` class (JetBrains Mono font, tight line-height 1.35, darker bg `#080910`, subtle CRT scanline `::after` overlay). Added `.narrative-scroll` scrollbar styles (were in dead `theme.css`, now active). Added full ANSI color system: 16 standard/bright colors (`.ansi-red`, `.ansi-bright-cyan`, etc.) plus semantic game classes (`.mud-damage`, `.mud-healing`, `.mud-system`, `.mud-npc`, `.mud-exits`, `.mud-legendary`, etc.).
+2. **ShardExploration.tsx** — Narrative pane: `space-y-6` → `space-y-1`, added `narrative-terminal` class, switched all narrative text from `font-serif` to inherited mono, replaced Tailwind color classes with ANSI/MUD semantic classes.
+3. **Refuge.tsx** — Chat pane: `space-y-3` → `space-y-1`, added `narrative-terminal` class, switched text to ANSI classes, command input uses `font-mono`.
+4. **ChatPanel.tsx** — Social chat: `space-y-3` → `space-y-1`, added `narrative-terminal` class, player/whisper/emote use ANSI semantic colors.
+5. **ux-batch2-combat-sidebar.test.tsx** — Updated Gap #10 assertions to match new ANSI class names (`mud-damage`, `mud-critical`, `mud-dodge`).
+
+**Key decisions:**
+- Used Tango palette (GNOME terminal default) for ANSI colors — readable, authentic, proven
+- Terminal font only on narrative panes; UI chrome (buttons, sidebar labels) stays on `font-sans`
+- CRT scanline effect at 4% opacity — present but doesn't impair readability
+- `theme.css` scrollbar styles were dead code (file not imported); moved to active `tailwind.css`
+- Pre-existing test failures (22/22 in combat-sidebar) confirmed unrelated to changes
+
+**Key file paths:**
+- `packages/client/src/styles/tailwind.css` — ANSI color system, terminal pane styles, scrollbar
+- `packages/client/src/pages/ShardExploration.tsx` — Shard narrative terminal
+- `packages/client/src/pages/Refuge.tsx` — Refuge chat terminal
+- `packages/client/src/components/ChatPanel.tsx` — Social chat terminal
+
+## 2026-03-25: Terminal Aesthetic Implementation (Completed)
+
+**Task:** Implement MUD terminal aesthetic restyle — monospace font, dense spacing, ANSI color system, CRT scanlines.
+
+**Work Completed:**
+- Applied JetBrains Mono monospace font to all narrative panes (`.narrative-terminal` wrapper)
+- Implemented ANSI 16-color system with `.ansi-*` classes (0–15 standard terminal colors)
+- Added `.mud-*` semantic color classes: damage, healing, dodge, system, npc, exits, rarity tiers (common, rare, epic, legendary)
+- Integrated Tango color palette (GNOME terminal default) for authenticity
+- Added subtle CRT scanline overlay (`#080910` background + `repeating-linear-gradient`)
+- Dense text layout: `space-y-1`, `line-height: 1.35`
+- **Scope:** Narrative panes only; UI chrome (buttons, sidebar, headers) remains `font-sans`
+
+**CSS Location:** `packages/client/src/styles/tailwind.css`
+
+**Build Verification:** All tests passing, build clean.
+
+**Next Steps:** Integrate terminal styling into narrative components (narration pane, message log, event feed). Test with diverse game text (combat, NPC dialogue, system messages).
+
+**Decision Record:** See `.squad/decisions.md` — 2026-03-25T23:16:00Z entry.
+
+**Orchestration Log:** `.squad/orchestration-log/2026-03-25T2316-drizzt.md`
+

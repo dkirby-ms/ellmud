@@ -4402,3 +4402,100 @@ Entra External ID is ONLY for user login authentication. We are NOT protecting s
 - All 7 environment variables must be set (client ID, secret, tenant ID, tenant subdomain, redirect URI, allow local auth, client URL)
 - Post-deploy verification: Check logs for "Entra OAuth: enabled" message
 - Test full flow: login → redirect to Entra → callback → session creation
+
+### 2026-03-25T23:16:00Z: MUD Terminal Aesthetic — ANSI Color System & Narrative Pane Styling
+**By:** drizzt (Engine Dev)
+**Directive from:** dkirby-ms
+**Date:** 2026-03-25
+**Status:** Implemented and verified
+
+**What:** All game narrative/text panes now use a terminal aesthetic:
+- **Typography:** JetBrains Mono monospace font (already loaded via Google Fonts), dense line spacing (`space-y-1`, `line-height: 1.35`)
+- **Visual Effects:** Darker background (`#080910`) with subtle CRT scanline overlay for authenticity
+- **Color Palette:** ANSI 16-color system (`.ansi-*` classes) + semantic `.mud-*` classes for game narrative (damage, healing, dodge, system, npc, exits, rarity tiers)
+- **Tango palette** (GNOME terminal default) chosen for authenticity and readability over pure ANSI
+- **Scope Boundary:** Only narrative scroll areas get terminal treatment; UI chrome (sidebar labels, buttons, tabs, headers) remains on `font-sans`
+
+**What stays unchanged:** UI chrome remains on `font-sans` for clarity and accessibility.
+
+**CSS location:** All ANSI/MUD classes in `packages/client/src/styles/tailwind.css`
+
+**Why:** User directive — game should evoke classic MUD terminal aesthetic, not modern web UI. Monospace font + ANSI colors + dense text create terminal feel.
+
+**Impact:** 
+- Components rendering game narrative text should use `.narrative-terminal` wrapper class
+- Color narrative text using `.mud-*` / `.ansi-*` classes instead of Tailwind color utilities
+- Integration pattern established for all future narrative components
+
+**Verification:** Build clean. Ready for narrative component integration.
+
+---
+
+### 2026-03-25T23:16:00Z: Stash ↔ Loadout Integration Plan — Comprehensive Design
+**By:** Elminster (Lead/Architect)
+**Date:** 2026-03-25
+**Status:** Design complete, implementation roadmap established
+**Requested by:** dkirby-ms
+
+**Executive Summary:**
+The stash and loadout screens are currently separate UI silos with no server integration. This plan unifies them into a single, coherent interface where players can **move items from persistent stash into temporary loadout**, **validate constraints**, and **extract with gear intact**. Implementation spans client (merged UI, drag-and-drop), server (new message types, loadout state tracking, shard key validation), and shared types (persistence schema, validation rules).
+
+**Scope:** ~3–5 workdays (large task as anticipated)  
+**Risk level:** Medium (touches auth/persistence, but existing patterns are solid)
+
+**Current State Analysis:**
+
+✅ **What Already Works:**
+- Stash Persistence: Weight-based capacity (200 units default), in-memory + PostgreSQL repos, constraint validation
+- Loadout Schema: Equipment slots, max weight (100 units), validation function, rarity tiers + durability multipliers
+- Extraction Pipeline: Multi-tick channel, shard inventory → stash transfer, overflow handling
+- Client UI Prototype: StashTab (10×12 grid, drag-drop, tier colors), LoadoutTab (6 equipment + 5 consumables + tools + key), InventoryOverlay
+
+⚠️ **What's Missing:**
+- Client-Server Integration: Hardcoded mock data, no STASH_UPDATE messages, no equip/unequip types, no validation feedback
+- Loadout Server Persistence: Not persisted server-side, no equipped tracking, no shard key consumption, no durability degradation wiring
+- Refuge Commands: `store` is placeholder, `take` is text-only, no equip/unequip commands
+- Edge Cases: Can't prevent equipping in shard, can't validate weapon/armour before entry, can't enforce shard key constraints
+
+**Proposed UI Layout:**
+Single merged screen with:
+- **Left:** Stash grid (10×12), capacity indicator (cells + weight)
+- **Right:** Equipment section (6 slots) + Consumables (5 max) + Tools + Shard Key
+- **Center:** Item inspector (weight, durability, rarity, Equip/Unequip buttons)
+- **Mechanics:** Drag items between stash and equipment; validation feedback in real-time; weight/capacity bars
+
+**Implementation Roadmap:**
+
+| Phase | Work | Effort | Dependencies |
+|-------|------|--------|--------------|
+| 1 | Server: Loadout persistence, types, validation rules | 1.5 days | None |
+| 2 | Client: Unified component, message types, live validation | 1.5 days | Phase 1 |
+| 3 | Server: Equip/unequip commands, Refuge integration | 0.5 days | Phases 1–2 |
+| 4 | Edge cases: Shard key consumption, durability, constraints | 0.5 days | Phases 1–3 |
+| 5 | Testing, docs, polish | 1 day | All phases |
+
+**Key Decisions:**
+- Single merged screen (stash + equipment visible simultaneously) improves UX vs separate tabs
+- Validation happens on equip attempt (server-authoritative); client shows realtime feedback
+- Drag-and-drop between stash and equipment; overflow on unequip stays in carried inventory
+- Shard key consumption checked at extraction gate (prevents bad loadout entry)
+- Durability degradation hooks into damage pipeline; tracked per-equipment
+
+**Why:**
+User request to improve item management workflow. Current implementation has all server infrastructure but missing client integration. Unified design reduces context switching and improves item discovery during build planning.
+
+**Impact:**
+- Stash and loadout become cohesive feature, not disconnected menus
+- Players can preview and prepare gear before extraction
+- Server can enforce equipment validity constraints
+- Foundation for future loadout management (saved presets, item swapping)
+
+**Deliverables:** 
+- Client component: Single `StashLoadoutScreen.tsx` with merged UI
+- Server messages: `EQUIP`, `UNEQUIP`, `STASH_UPDATE`, `LOADOUT_UPDATE`
+- Server endpoints: Equipment state endpoints, validation routes
+- Shared types: Extended `Loadout` schema with persistence, constraint metadata
+- Documentation: Integration guide for components, validation rules reference
+
+---
+

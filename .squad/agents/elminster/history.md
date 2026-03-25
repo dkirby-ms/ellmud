@@ -844,3 +844,77 @@ The critical player persistence bug identified in the 2026-03-25T15:23Z investig
 All future rooms must follow: `client.auth?.playerId` (excluding 'anonymous') → `options['playerId']` → `client.sessionId`. Decision documented in `.squad/decisions/decisions.md`.
 
 **Next:** This branch is ready to merge to main.
+
+### 2026-03-25: Stash ↔ Loadout Integration Scoping
+- **Task:** Scope a plan to combine stash and loadout screens into a unified UI where players can equip items from persistent stash into temporary loadout.
+- **Investigation:** Completed comprehensive audit of client UI (StashTab, LoadoutTab, InventoryOverlay), server stash system (StashService, StashRepository, RefugeRoom commands), extraction pipeline (ExtractionSystem, stash-transfer), and shared schemas (StashItem, Loadout, validation).
+- **Key findings:**
+  - Client UI exists as prototype with mock data; no server integration yet
+  - Server stash persistence is solid (weight-based, capacity-enforced, test-covered)
+  - Loadout structure defined in shared types but not persisted server-side
+  - Shard key consumption not implemented; durability degradation not wired
+  - RefugeRoom stash/take commands exist (text-only); store command is placeholder
+  - Message types `STASH_UPDATE` and `LOADOUT_UPDATE` defined but not actively sent
+  
+- **Architecture decisions made:**
+  - **Combined UI layout:** Left pane is stash (10×12 grid, drag-drop), right pane is loadout (equipment slots, consumables, tools, key). Drag items between panes to equip/unequip.
+  - **Loadout state machine:** Refuge (equip/unequip freely) → ShardEntry (validate, consume key) → Run (locked, can't change equipment) → Extraction (items return to stash) → Refuge.
+  - **Validation layers:** Client (drag zones, warnings) + Server (equip handler, shard entry gate).
+  - **Stash-loadout invariant:** Item cannot be in both simultaneously; atomic remove+add with rollback.
+  - **Shard key model (Phase 1):** Keys don't degrade; they move from loadout to stash on shard entry. Phase 2 will add durability → 0 for "consumed" semantics.
+  - **Phase 1 scope:** In-memory loadout repository, no cosmetic presets, no mid-run equipment swaps, no repair system (TBD).
+
+- **Plan deliverables:**
+  - Server: LoadoutService (equip, unequip, validate, clear), LoadoutRepository (in-memory), RefugeRoom handlers, ShardRoom entry validation
+  - Shared: LoadoutState type, validateLoadout() function, message types (EQUIP_ITEM, UNEQUIP_ITEM, LOADOUT_UPDATE)
+  - Client: CombinedStashLoadout component with drag-drop exchange, validation feedback, real-time stats
+  - Tests: Unit (LoadoutService, validation), integration (RefugeRoom→StashService round-trip), component (drag interactions, server sync)
+
+- **Risks identified:**
+  - State divergence (client ≠ server): Mitigated by strict server validation + rollback on error
+  - Stash-loadout double-spend: Mitigated by atomic operations
+  - Concurrency (two clients equip same item): Server-side race won by first; others get error
+  - Performance with 100+ items: Mitigated by pagination/virtual scroll if needed
+  - Shard key loss on entry: Mitigated by not deleting; mark durability 0 in Phase 2
+
+- **Work breakdown:** Drizzt (2 days, client), Jarlaxle (2.5 days, server/schemas), QA (1 day, integration), Elminster (distributed review).
+
+- **Open questions for dkirby-ms:**
+  1. Shard key durability model in Phase 1 (consume vs. mark 0)?
+  2. Cosmetic loadout presets (save/load gear combos)?
+  3. In-shard equipment swaps allowed or locked?
+  4. Repair system design (NPCs, crafting, consumables)?
+  5. Multi-hand weapon model (separate slots or 1-of-2 pool)?
+  6. Tool slot restrictions (0, 1, or many)?
+
+- **Key files:** `.squad/decisions/inbox/elminster-stash-loadout-plan.md` (full 32KB plan with code examples, edge cases, test strategy, timeline).
+
+- **Success criteria:** Players can equip/unequip via drag-drop, loadout validation prevents broken/incomplete entry, shard key consumed, multi-player sync works, full test coverage, no state divergence.
+
+## 2026-03-25: Stash ↔ Loadout Unification Design (Completed)
+
+**Task:** Design comprehensive plan for unifying stash and loadout screens, including current state analysis, proposed UI, and implementation roadmap.
+
+**Deliverables:**
+- **Current State Analysis:** 4 working components (stash persistence, loadout schema, extraction pipeline, prototype UI) + 4 critical gaps (no client-server integration, no server persistence, placeholder commands, edge cases)
+- **Proposed Unified UI:** Single merged screen with stash grid (left), equipment + consumables + tools (right), drag-and-drop exchange, real-time validation feedback
+- **Implementation Roadmap:** 5-phase plan (~3–5 workdays), phased delivery from server persistence through edge case handling
+- **Architecture Design:** 
+  - Client: Unified component with message types (EQUIP, UNEQUIP, STASH_UPDATE, LOADOUT_UPDATE)
+  - Server: Loadout state tracking, equipment validation, shard key consumption enforcement
+  - Shared: Extended Loadout schema with persistence, constraint metadata
+  - Integration: Drag-and-drop mechanics, weight/capacity indicators, real-time validation UI
+- **Risk Assessment:** Medium (touches auth/persistence, existing patterns solid)
+
+**Key Decisions:**
+- Single merged screen improves UX vs separate tabs
+- Server-authoritative validation with client real-time feedback
+- Shard key consumption checked at extraction gate
+- Durability degradation integrated into damage pipeline
+
+**Next Steps:** Break down implementation plan into task cards; assign to Drizzt for sprint execution.
+
+**Decision Record:** See `.squad/decisions.md` — 2026-03-25T23:16:00Z entry.
+
+**Orchestration Log:** `.squad/orchestration-log/2026-03-25T2316-elminster.md`
+
