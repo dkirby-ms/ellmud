@@ -87,8 +87,11 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   async onJoin(client: Client, options: Record<string, unknown>): Promise<void> {
     this.state.playerCount++;
 
-    // Resolve player ID: from auth context or fallback to sessionId
-    const playerId = (options['playerId'] as string) || client.sessionId;
+    // Resolve player ID: prefer onAuth result (client.auth), then join options, then sessionId fallback.
+    // The 'anonymous' sentinel from authenticateClient means no real identity was established.
+    const authData = client.auth as { playerId?: string } | undefined;
+    const authPlayerId = authData?.playerId && authData.playerId !== 'anonymous' ? authData.playerId : undefined;
+    const playerId = authPlayerId || (options['playerId'] as string) || client.sessionId;
     this.playerIds.set(client.sessionId, playerId);
 
 
