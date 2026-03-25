@@ -1439,3 +1439,9 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - Existing tests will continue to pass (they use the `options` path)
 
 **Decision:** `.squad/decisions/decisions.md` (2026-03-25 entry)
+
+### client.auth is the Canonical Source for Player Identity
+- **File:** `packages/server/src/rooms/ShardRoom.ts:251`, `packages/server/src/rooms/RefugeRoom.ts:90`
+- **Pattern:** In Colyseus 0.17, `onAuth` return value lands on `client.auth`. Always read player identity from `client.auth.playerId` first, with `options['playerId']` as test fallback and `client.sessionId` as last resort.
+- **Gotcha:** `authenticateClient` returns `{ playerId: 'anonymous' }` when auth is uninitialized/optional. The resolution chain must skip the `'anonymous'` sentinel to avoid identity collisions in tests.
+- **Why:** Production clients send `{ token }` not `{ playerId }`. Reading `options['playerId']` always returns undefined in production, causing all persistence to break (nanoid sessionId used as FK → silent FK violations).

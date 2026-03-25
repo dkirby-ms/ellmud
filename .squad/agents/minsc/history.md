@@ -886,3 +886,35 @@ Drizzt wired `useDevAutoLogin` hook into `Login.tsx` to auto-authenticate dev us
 - `makeRun()` helper uses `'biome' in overrides` check (not nullish coalescing) to allow explicit `undefined` — important for optional fields
 - InMemory `recordRun()` must `structuredClone(run)` input to prevent external mutation of stored arrays (extractedItems)
 - Contract test pattern proven across 3 repositories now: PlayerProfile, Faction, RunHistory — when Jarlaxle lands PG implementations, swap local types for real imports and add PG `describe` block
+
+---
+
+## Learnings
+
+### Player Identity Handoff Test (2025-07-25)
+
+**File:** `packages/server/src/__tests__/player-identity-handoff.test.ts` (11 tests)
+
+**Bug Context:** ShardRoom and RefugeRoom resolved playerId as `options['playerId'] || client.sessionId`, never reading `client.auth`. When a real client authenticates with a token, `options` only contains `{ token }` — not `{ playerId }`. The playerId returned by `onAuth` is stored on `client.auth` (server-side), not in `options`. So authenticated players were silently keyed by ephemeral sessionId.
+
+**Key Findings:**
+
+1. **`@colyseus/testing` connectTo() DOES call instance `onAuth`** — the Colyseus matchmaker path goes: SDK → HTTP POST → matchmaker (static onAuth check, returns undefined for instance-only) → WebSocket → `_onJoin` → instance `onAuth` called → `client.auth` set.
+
+2. **`client.auth` on the SDK side is always `undefined`** — the `.auth` property is set only on the server-side `Client` object. The SDK client returned by `connectTo()` doesn't expose it. Must inspect server-side room state (`.players`, `.playerIds` maps) to verify auth handoff.
+
+3. **The 'anonymous' sentinel needs filtering** — `authenticateClient()` returns `{ playerId: 'anonymous' }` for unauthenticated joins. Drizzt's fix correctly filters this: `authData?.playerId && authData.playerId !== 'anonymous'`. Without this, 'anonymous' would shadow `options['playerId']` and break the entire existing test infrastructure.
+
+4. **Invalid tokens throw even when auth is optional** — if a token IS provided, it must be valid. Only the "no token" case allows anonymous fallback. This is correct behavior (explicit auth attempt → must succeed).
+
+5. **Priority chain:** `client.auth.playerId` (non-anonymous) > `options['playerId']` > `client.sessionId`
+
+**Test Coverage:**
+- Auth token → UUID keying (ShardRoom + RefugeRoom)
+- Register → login → join → verify UUID pipeline
+- Backward compat: options.playerId still works
+- Fallback to sessionId when nothing else provided
+- Auth priority: client.auth wins over options.playerId
+- Multi-player isolation with auth
+- Invalid token rejection
+- Anonymous join (no token, auth optional)

@@ -810,3 +810,37 @@ The link between them is `players.id` = `player_skills.player_id` = `player_stas
 - `node_modules/@colyseus/core/build/Room.mjs:735` — Colyseus passes `client.auth` as 3rd arg
 - `packages/server/src/auth/PgPlayerRepository.ts` — correct auth persistence
 - `packages/server/src/player/PgPlayerProfileRepository.ts` — correct profile persistence (but receives wrong ID)
+
+---
+
+## 2026-03-25: Identity Handoff Bug Fixed
+
+**Status:** ✅ Resolved and test-covered  
+**Teams:** Drizzt (Engine Dev) + Minsc (Tester)  
+**Branch:** fix/player-identity-handoff
+
+The critical player persistence bug identified in the 2026-03-25T15:23Z investigation has been **fully resolved**:
+
+### Root Cause (Previously Identified)
+- ShardRoom and RefugeRoom read `options['playerId']` (always `undefined` in production)
+- Fallback to `client.sessionId` (9-char nanoid, not a UUID)
+- All player_skills FK writes failed silently; no persistence
+
+### Fix Implemented
+- Both rooms now read `client.auth.playerId → options['playerId'] → client.sessionId`
+- The `'anonymous'` sentinel is excluded from the chain
+- `playerIds` map now contains correct persistent UUIDs
+
+### Test Coverage
+- **11 new integration tests** exercise the real `onAuth → client.auth → onJoin` pipeline
+- Tests verify server-side state with UUID keying
+- 1659 total tests passing (1657 baseline + 11 new, 1 duplicate removed)
+- No regressions
+
+### Key Learning
+`client.auth` only exists on server-side `Client` objects, not SDK-side clients. Auth handoff tests must inspect server-side room state, not SDK properties.
+
+### Canonical Pattern Filed
+All future rooms must follow: `client.auth?.playerId` (excluding 'anonymous') → `options['playerId']` → `client.sessionId`. Decision documented in `.squad/decisions/decisions.md`.
+
+**Next:** This branch is ready to merge to main.
