@@ -139,9 +139,6 @@ export function useShardConnection(): UseShardConnectionResult {
         if (disposed) return;
         dispatch({ type: 'SET_ROOM_HEADER', header: msg });
         addMessage(`\n── ${msg.roomName} ──`, 'header');
-        if (msg.exits.length > 0) {
-          addMessage(`Exits: ${msg.exits.join(', ')}`, 'header');
-        }
       },
       onShardState: (msg: ShardStateMessage) => {
         if (disposed) return;

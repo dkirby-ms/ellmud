@@ -10,6 +10,7 @@ import InventoryOverlay from "../components/InventoryOverlay";
 import ExtractionOverlay from "../components/ExtractionOverlay";
 import ChatPanel from "../components/ChatPanel";
 import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
+import CompassControl from "../components/CompassControl";
 import { useAppContext } from "../store.js";
 import { useShardConnection } from "../hooks/useShardConnection.js";
 import { useCountdown } from "../hooks/useCountdown.js";
@@ -41,7 +42,6 @@ export default function ShardExploration() {
 
   // Derive room info from server state
   const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
-  const exits = state.roomHeader?.exits ?? [];
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -266,22 +266,6 @@ export default function ShardExploration() {
                     >
                       {msg.text}
                     </p>
-                    {exits.length > 0 && (
-                      <p className="text-interactive text-sm font-sans">
-                        Exits:{" "}
-                        {exits.map((exit, j) => (
-                          <span key={j}>
-                            <button
-                              onClick={() => handleExitClick(exit)}
-                              className="hover:text-accent-gold transition-colors underline"
-                            >
-                              [{exit}]
-                            </button>
-                            {j < exits.length - 1 && " "}
-                          </span>
-                        ))}
-                      </p>
-                    )}
                     <div className="h-px bg-accent-gold opacity-20 mt-4"></div>
                   </div>
                 )}
@@ -545,6 +529,9 @@ export default function ShardExploration() {
               )}
             </div>
           </div>
+
+          {/* Compass Navigation */}
+          <CompassControl onNavigate={handleExitClick} />
 
           {/* Quick Actions */}
           <div className="p-4">
