@@ -304,18 +304,18 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   /**
    * Handle reconnection timeout expiry — kill or move to safe room.
    */
-  private handleReconnectionTimeout(sessionId: string): void {
+  private handleReconnectionTimeout(playerId: string): void {
     const config = getConfig();
-    const playerState = this.players.get(sessionId);
+    const playerState = this.players.get(playerId);
     if (!playerState) return;
 
-    const combatant = this.combatSystem.getCombatant(sessionId);
+    const combatant = this.combatSystem.getCombatant(playerId);
 
     if (config.reconnectDeathBehavior === 'kill') {
       // Kill the player in place — their body and inventory become lootable
       if (combatant) {
         combatant.hp = 0;
-        this.log(`Player ${sessionId} killed in place after reconnection timeout`);
+        this.log(`Player ${playerId} killed in place after reconnection timeout`);
       }
       // Inventory handling would go here (drop as loot) — deferred for now
     } else {
@@ -328,8 +328,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         combatant.roomId = startRoomId;
       }
 
-      this.combatSystem.removeCombatant(sessionId);
-      this.log(`Player ${sessionId} moved to safe room after reconnection timeout`);
+      this.combatSystem.removeCombatant(playerId);
+      this.log(`Player ${playerId} moved to safe room after reconnection timeout`);
     }
   }
 
