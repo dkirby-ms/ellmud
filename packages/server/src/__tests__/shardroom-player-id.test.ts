@@ -7,10 +7,10 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ColyseusTestServer } from '@colyseus/testing';
-import { bootTestServer, wait, waitUntil } from './helpers/index.js';
+import { bootTestServer, wait } from './helpers/index.js';
 import { MessageCollector } from './helpers/message-collector.js';
 import { MessageTypes } from '@ellmud/shared';
-import type { NarrateMessage, ShardStateMessage } from '@ellmud/shared';
+
 
 let colyseus: ColyseusTestServer;
 
@@ -198,7 +198,7 @@ describe('ShardRoom combat keyed by playerId', () => {
 
   it('should use playerId when sending strike command', async () => {
     const room = await createShardRoom();
-    const { client, collector } = await connectWithPlayerId(room, 'striker-player-1');
+    const { client } = await connectWithPlayerId(room, 'striker-player-1');
     await wait(500);
 
     // Send a strike command — the combat system should register using playerId

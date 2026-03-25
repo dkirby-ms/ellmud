@@ -22,7 +22,7 @@
  * onAuth, and client.auth IS populated. This means these tests exercise the
  * real auth path, not a mock.
  */
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
 import { ShardRoom } from '../rooms/ShardRoom.js';
