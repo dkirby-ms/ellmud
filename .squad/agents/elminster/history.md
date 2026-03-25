@@ -632,3 +632,122 @@ When planning Phase 3 work:
 - **Bicep correct:** `@secure()` on `entraClientSecret` param. But `ENTRA_CLIENT_SECRET` is plain env var in container spec (should be secretRef long-term).
 - **Key files:** `packages/server/src/auth/EntraAuthService.ts`, `packages/server/src/auth/entra-routes.ts`, `packages/server/src/auth/AuthService.ts` (loginOAuth), `packages/client/src/pages/Login.tsx`, `packages/client/src/pages/AuthCallback.tsx`, `infra/modules/container-apps.bicep` (lines 48-65, 149-154).
 - **User preference:** dkirby-ms wants Entra as identity-only. No Entra roles, groups, or API protection. All authorization is ours.
+
+### 2026-03-25: PR #201 Review — PlayerProfileRepository (save/load cycle)
+- **Reviewer:** Elminster (Lead/Architect)
+- **PR:** #201 — Implements issue #199
+- **Status:** ✅ APPROVED
+
+**Review Checklist Results:**
+
+1. **Architecture Pattern** ✅
+   - Correctly implements Interface + InMemoryImpl + PgImpl (matches StashRepository)
+   - DATABASE_URL gating properly done (boot-time toggle)
+   - Provider initialized at server boot after stash provider
+   
+2. **ShardRoom Integration** ✅
+   - `onJoin`: Loads profile by playerId, graceful fallback to defaults for new players, correct error handling
+   - `onLeave`: Saves profile only during cleanup (consented leave or timeout), properly awaited
+   - New players get DEFAULT_PROFILE (skills: {stealth: 5, awareness: 5}, maxCarryWeight: 20)
+   
+3. **Pg Implementation** ✅
+   - Uses existing `player_skills` table (migration 003) correctly
+   - Parameterized queries (SQL injection safe)
+   - Transaction-wrapped saves with ON CONFLICT upsert semantics
+   - Proper client lifecycle management (no connection leaks)
+   - Skill-to-category mapping hardcoded (reasonable for MVP, acknowledged limitation)
+   
+4. **In-Memory Implementation** ✅
+   - Uses structuredClone for isolation (prevents external mutation)
+   - Test isolation guaranteed
+   - Behavioral equivalence with Pg impl via contract tests
+   
+5. **Edge Cases** ✅
+   - DB down during save: Caught, logged, cleanup continues
+   - Concurrent joins/leaves: Each player isolated, PG UPSERT handles concurrent saves
+   - Default values sensible for new players (matches PlayerState defaults)
+   - Optional tracking skill correctly handled (can be undefined)
+   - Disconnection logic correct: saves on consented leave only (allows reconnection to restore mid-combat state)
+   
+6. **Test Coverage** ✅
+   - 39+ contract tests (save/load round-trip, upsert, isolation, skill progression, edge cases)
+   - Parallel operations tested (50 concurrent saves)
+   - Provider wiring tests (singleton, DATABASE_URL gating, reset)
+   - 6 placeholder integration tests (Colyseus-specific, acceptable to defer)
+   - All 1600 existing tests passing, zero lint errors
+
+**Known Limitations (Acceptable for MVP):**
+- Equipment persistence not yet in DB schema (uses defaults until migration added)
+- maxCarryWeight persistence not yet in DB schema (uses defaults until migration added)
+- Skill-to-category mapping hardcoded (should externalize if categories evolve)
+
+**No blockers. Merge approved.**
+
+
+### 2026-03-25: PR #202 Review — FactionRepository & RunHistoryRepository (wire-up)
+- **Reviewer:** Elminster (Lead/Architect)
+- **PR:** #202 — Implements issue #198
+- **Status:** ✅ APPROVED
+
+**Review Checklist Results:**
+
+1. **Architecture Pattern** ✅
+   - Both repositories correctly implement Interface + InMemoryImpl + PgImpl (matches PlayerProfileRepository and StashRepository)
+   - DATABASE_URL gating properly done (boot-time toggle via USE_PG flag)
+   - Providers initialized at server boot after ProfileProvider
+   - No deviation from established pattern
+
+2. **FactionRepository** ✅
+   - **Interface:** `getPlayerFactions(playerId)` / `updateFaction(playerId, factionId, standing)`
+   - **Schema:** Uses migration 004 (faction_membership table) correctly
+   - **Pg Implementation:** ON CONFLICT (player_id) DO UPDATE enforces one-faction-per-player UNIQUE constraint
+   - **In-Memory:** Map-based storage with structuredClone isolation
+   - **Contract Tests:** 22 tests covering CRUD, upsert semantics, multi-player isolation, edge cases (INT boundary, zero/max standing)
+
+3. **RunHistoryRepository** ✅
+   - **Interface:** `recordRun(run)` / `getPlayerHistory(playerId, limit?)`
+   - **Schema:** Uses migration 005 (run_history table) correctly
+   - **Pg Implementation:** INSERT with JSON serialization of extractedItems, proper field mapping
+   - **Query:** SELECT ... ORDER BY created_at DESC LIMIT (reverse chronological)
+   - **In-Memory:** Array-based with reverse-chronological ordering, respects limit parameter
+   - **Contract Tests:** 26 tests covering CRUD, chronological ordering, limit behavior, isolation, copy semantics
+
+4. **ShardRoom Integration** ✅
+   - **Faction Loading on Join:** Fire-and-forget pattern, informational logging only, exception caught
+   - **Run History Recording on Extraction:** Called before player removal, sets extracted=true, records inventory
+   - **Run History Recording on Leave:** Called in onLeave() if player exists, sets extracted=false
+   - **Duration Calculation:** playerJoinTimes Map tracks join time, durationSec calculated to nearest second
+   - **No Interference:** PlayerProfileRepository untouched, new init methods are additive
+
+5. **Provider Initialization** ✅
+   - Both providers initialized at server boot in index.ts:
+     ```typescript
+     initFactionProvider(USE_PG);
+     initRunHistoryProvider(USE_PG);
+     ```
+   - Proper sequencing: after ProfileProvider, before ShardRoom creation
+   - Both log their persistence mode (PostgreSQL or in-memory)
+
+6. **Test Coverage** ✅
+   - **Total:** 48 contract tests (22 faction + 26 run-history)
+   - **Methodology:** Real module imports (not self-contained test doubles)
+   - **Coverage:** CRUD operations, upsert semantics, multi-player isolation, edge cases, copy semantics, input mutation protection
+   - **Results:** All 1648 server tests pass, zero regressions
+
+7. **Pre-Existing Issues** ✅
+   - CI build failure: TypeScript errors in creature files (missing `agility` in CombatStats)
+   - **Not caused by PR #202** — creature files not modified
+   - **Pre-existing** — unrelated to repository implementations
+   - No impact on merge decision
+
+**Architecture Scorecard:**
+| Criterion | Status |
+|-----------|--------|
+| Pattern adherence | ✅ Perfect |
+| Schema compliance | ✅ Correct (migrations 004, 005) |
+| Provider gating | ✅ DATABASE_URL aware |
+| ShardRoom wiring | ✅ Clean, non-invasive |
+| Test doubles | ✅ Real imports, comprehensive |
+| Regressions | ✅ None (1648 pass) |
+
+**Recommendation:** Merge. Closes issue #198.
