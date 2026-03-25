@@ -63,6 +63,10 @@ export interface Creature {
   attack: number;
   defence: number;
   armour: number;
+  /** Agility stat — scales dodge chance (GDD §6.4). Defaults to 0 for creatures. */
+  agility?: number;
+  /** Dodge skill rank — scales dodge chance (GDD §6.4). Defaults to 0 for creatures. */
+  dodgeSkillRank?: number;
   currentRoomId: string;
   behaviorState: BehaviorState;
   /** Ticks spent in current idle patrol position. */

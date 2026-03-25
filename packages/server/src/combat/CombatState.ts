@@ -14,6 +14,8 @@ export interface CombatStats {
   attack: number;
   defence: number;
   armour: number;
+  /** Agility stat — scales dodge chance (GDD §6.4). */
+  agility: number;
 }
 
 export const DEFAULT_PLAYER_STATS: CombatStats = {
@@ -21,6 +23,7 @@ export const DEFAULT_PLAYER_STATS: CombatStats = {
   attack: 10,
   defence: 5,
   armour: 2,
+  agility: 5,
 };
 
 // ─── Combatant ──────────────────────────────────────────────────────────────
@@ -33,6 +36,10 @@ export interface Combatant {
   attack: number;
   defence: number;
   armour: number;
+  /** Agility stat — scales dodge chance (GDD §6.4). */
+  agility: number;
+  /** Dodge skill rank — scales dodge chance (GDD §6.4). */
+  dodgeSkillRank: number;
   roomId: string;
   isPlayer: boolean;
   disconnected?: boolean;
@@ -44,6 +51,7 @@ export function createCombatant(
   roomId: string,
   isPlayer: boolean,
   stats: CombatStats = DEFAULT_PLAYER_STATS,
+  dodgeSkillRank = 0,
 ): Combatant {
   return {
     id,
@@ -53,6 +61,8 @@ export function createCombatant(
     attack: stats.attack,
     defence: stats.defence,
     armour: stats.armour,
+    agility: stats.agility,
+    dodgeSkillRank,
     roomId,
     isPlayer,
   };

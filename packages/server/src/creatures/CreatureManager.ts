@@ -212,6 +212,8 @@ export class CreatureManager {
       attack: creature.attack,
       defence: creature.defence,
       armour: creature.armour,
+      agility: creature.agility ?? 0,
+      dodgeSkillRank: creature.dodgeSkillRank ?? 0,
       roomId: creature.currentRoomId,
       isPlayer: false,
     };

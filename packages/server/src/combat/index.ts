@@ -19,7 +19,9 @@ export {
 export {
   calculateDamage,
   getDodgeChance,
-  DODGE_CHANCE_PER_DEFENCE,
+  DODGE_BASE_CHANCE,
+  DODGE_CHANCE_PER_AGI,
+  DODGE_CHANCE_PER_SKILL_RANK,
   MAX_DODGE_CHANCE,
   type DamageResult,
   type DamageOptions,

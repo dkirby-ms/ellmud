@@ -252,7 +252,8 @@ export class CombatSystem {
       const defenderAction = actions.get(targetId)?.action ?? 'dodge';
       const dodgeRoll = defenderAction === 'dodge' ? this.roll() : undefined;
       const dmg = calculateDamage(c.attack, target.armour, 'strike', defenderAction, {
-        defenderDefence: target.defence,
+        defenderAgility: target.agility,
+        defenderDodgeSkillRank: target.dodgeSkillRank,
         dodgeRoll,
       });
 
@@ -293,7 +294,7 @@ export class CombatSystem {
       const target = this.combatants.get(evt.targetId!)!;
       evt.newHp = target.hp;
       if (evt.dodged) {
-        evt.narration = `${evt.actorName} strikes at ${evt.targetName} but ${evt.targetName} dodges the blow!`;
+        evt.narration = `${evt.targetName} dodges!`;
       } else {
         const defeated = target.hp <= 0;
         evt.narration = defeated
