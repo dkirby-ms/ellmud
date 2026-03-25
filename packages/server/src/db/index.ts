@@ -12,31 +12,41 @@ import { fileURLToPath } from 'node:url';
 
 // ─── Connection Pool ─────────────────────────────────────────────────────────
 
-const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 10,
-});
+let pool: pg.Pool | null = null;
 
-pool.on('error', (err) => {
-  console.error('[db] Unexpected pool error:', err.message);
-});
+/** Lazily initialize the connection pool on first use. */
+export function getPool(): pg.Pool {
+  if (!pool) {
+    pool = new pg.Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 10,
+    });
+
+    pool.on('error', (err) => {
+      console.error('[db] Unexpected pool error:', err.message);
+    });
+  }
+  return pool;
+}
 
 /** Run a single parameterised query against the pool. */
 export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,
   values?: unknown[],
 ): Promise<pg.QueryResult<T>> {
-  return pool.query<T>(text, values);
+  return getPool().query<T>(text, values);
 }
 
 /** Acquire a client from the pool (for transactions). */
 export async function getClient(): Promise<pg.PoolClient> {
-  return pool.connect();
+  return getPool().connect();
 }
 
 /** Gracefully shut down the pool. */
 export async function close(): Promise<void> {
-  await pool.end();
+  if (pool) {
+    await pool.end();
+  }
 }
 
 // ─── Migration Runner ────────────────────────────────────────────────────────
@@ -51,8 +61,10 @@ const MIGRATIONS_DIR = join(
  * migrations in a `_migrations` meta-table.
  */
 export async function runMigrations(): Promise<void> {
+  const poolInstance = getPool();
+  
   // Ensure the meta-table exists.
-  await pool.query(`
+  await poolInstance.query(`
     CREATE TABLE IF NOT EXISTS _migrations (
       name       TEXT PRIMARY KEY,
       applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -64,7 +76,7 @@ export async function runMigrations(): Promise<void> {
     .sort();
 
   for (const file of files) {
-    const { rowCount } = await pool.query(
+    const { rowCount } = await poolInstance.query(
       `SELECT 1 FROM _migrations WHERE name = $1`,
       [file],
     );
@@ -72,7 +84,7 @@ export async function runMigrations(): Promise<void> {
     if (rowCount && rowCount > 0) continue;
 
     const sql = await readFile(join(MIGRATIONS_DIR, file), 'utf-8');
-    const client = await pool.connect();
+    const client = await poolInstance.connect();
     try {
       await client.query('BEGIN');
       await client.query(sql);
