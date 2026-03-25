@@ -29,6 +29,8 @@ import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence, testRedisConnection } from './cache/index.js';
 import { initStashProvider, isStashPg } from './stash/index.js';
 import { initProfileProvider } from './player/index.js';
+import { initFactionProvider } from './faction/index.js';
+import { initRunHistoryProvider } from './run-history/index.js';
 
 const config = getConfig();
 const PORT = config.port;
@@ -55,6 +57,14 @@ console.log(`[Ellmud] Stash persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`
 // ─── Player Profile Persistence ─────────────────────────────────────────────
 initProfileProvider(USE_PG);
 console.log(`[Ellmud] Profile persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Faction Persistence ────────────────────────────────────────────────────
+initFactionProvider(USE_PG);
+console.log(`[Ellmud] Faction persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Run History Persistence ────────────────────────────────────────────────
+initRunHistoryProvider(USE_PG);
+console.log(`[Ellmud] Run history persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Redis Bootstrap ─────────────────────────────────────────────────────────
 const { cache: narrationCache, isRedis: isCacheRedis } = await createNarrationCache(config);
