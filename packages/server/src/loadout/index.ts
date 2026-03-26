@@ -4,6 +4,7 @@
 
 export type { LoadoutData, LoadoutRepository } from './LoadoutRepository.js';
 export { InMemoryLoadoutRepository, createEmptyLoadoutData } from './LoadoutRepository.js';
+export { PgLoadoutRepository } from './PgLoadoutRepository.js';
 export { LoadoutService } from './LoadoutService.js';
 export type {
   EquipResult,

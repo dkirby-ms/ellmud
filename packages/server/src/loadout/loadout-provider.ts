@@ -9,6 +9,7 @@
 
 import type { LoadoutRepository } from './LoadoutRepository.js';
 import { InMemoryLoadoutRepository } from './LoadoutRepository.js';
+import { PgLoadoutRepository } from './PgLoadoutRepository.js';
 
 let _loadoutRepo: LoadoutRepository | null = null;
 
@@ -16,9 +17,8 @@ let _loadoutRepo: LoadoutRepository | null = null;
  * Initialize the loadout provider. Called once at server boot.
  * Must be called before any room creates a LoadoutService.
  */
-export function initLoadoutProvider(_usePg = false): void {
-  // Phase 1: always in-memory. Phase 2+: check _usePg for PgLoadoutRepository.
-  _loadoutRepo = new InMemoryLoadoutRepository();
+export function initLoadoutProvider(usePg = false): void {
+  _loadoutRepo = usePg ? new PgLoadoutRepository() : new InMemoryLoadoutRepository();
 }
 
 /** Get the shared loadout repository. Falls back to in-memory if not initialized. */

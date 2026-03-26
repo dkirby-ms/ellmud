@@ -409,7 +409,7 @@ describe('cross-migration consistency', () => {
     // content_definitions uses a composite TEXT PK (entity_type, id) because
     // content IDs are admin-defined slugs (e.g. 'rusty_blade', 'flooded_crypt'),
     // not auto-generated UUIDs.
-    const COMPOSITE_PK_TABLES = ['content_definitions'];
+    const COMPOSITE_PK_TABLES = ['content_definitions', 'player_loadout'];
 
     for (const file of allMigrationFiles()) {
       const sql = readMigration(file);

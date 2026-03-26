@@ -27,10 +27,11 @@ import { createAdminRouter, createDashboardRouter, createContentRouter, createDa
 import { getConfig } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence, testRedisConnection } from './cache/index.js';
-import { initStashProvider, isStashPg } from './stash/index.js';
+import { initStashProvider, isStashPg, loadItemDefsFromDb } from './stash/index.js';
 import { initProfileProvider } from './player/index.js';
 import { initFactionProvider } from './faction/index.js';
 import { initRunHistoryProvider } from './run-history/index.js';
+import { initLoadoutProvider } from './loadout/index.js';
 
 const config = getConfig();
 const PORT = config.port;
@@ -52,6 +53,10 @@ if (USE_PG) {
 
 // ─── Stash Persistence ──────────────────────────────────────────────────────
 initStashProvider(USE_PG);
+if (USE_PG) {
+  const count = await loadItemDefsFromDb();
+  console.log(`[Ellmud] Loaded ${count} item definitions from database.`);
+}
 console.log(`[Ellmud] Stash persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Player Profile Persistence ─────────────────────────────────────────────
@@ -65,6 +70,10 @@ console.log(`[Ellmud] Faction persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'
 // ─── Run History Persistence ────────────────────────────────────────────────
 initRunHistoryProvider(USE_PG);
 console.log(`[Ellmud] Run history persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Loadout Persistence ────────────────────────────────────────────────────
+initLoadoutProvider(USE_PG);
+console.log(`[Ellmud] Loadout persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Redis Bootstrap ─────────────────────────────────────────────────────────
 const { cache: narrationCache, isRedis: isCacheRedis } = await createNarrationCache(config);

@@ -161,7 +161,14 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
       stability: 1.0,
     } satisfies RoomHeaderMessage);
 
-    // Load stash on Refuge entry and send summary
+    // Send full stash + loadout state to client on join
+    try {
+      await this.sendLoadoutAndStashUpdate(client, playerId);
+    } catch (err) {
+      this.log(`Failed to send equipment state for ${playerId}: ${err}`);
+    }
+
+    // Send stash summary narration
     try {
       const summary = await this.stashService.getStashSummary(playerId);
       client.send(MessageTypes.NARRATE, {
@@ -170,17 +177,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
         timestamp: Date.now(),
       } satisfies NarrateMessage);
     } catch (err) {
-      this.log(`Failed to load stash for ${playerId}: ${err}`);
-    }
-
-    // Send current loadout state
-    try {
-      const loadoutView = await this.loadoutService.getLoadoutView(playerId);
-      client.send(MessageTypes.LOADOUT_UPDATE, {
-        slots: loadoutView.slots,
-      } satisfies LoadoutUpdateMessage);
-    } catch (err) {
-      this.log(`Failed to load loadout for ${playerId}: ${err}`);
+      this.log(`Failed to load stash summary for ${playerId}: ${err}`);
     }
   }
 

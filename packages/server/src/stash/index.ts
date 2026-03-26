@@ -13,4 +13,5 @@ export {
   getItemDefs,
   isStashPg,
   resetStashProvider,
+  loadItemDefsFromDb,
 } from './stash-provider.js';
