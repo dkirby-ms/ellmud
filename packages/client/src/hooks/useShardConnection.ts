@@ -24,6 +24,7 @@ import type {
   CombatAction,
   LoadoutUpdateMessage,
   StashUpdateMessage,
+  ZoneTransferMessage,
 } from '@ellmud/shared';
 import type { Room } from '@colyseus/sdk';
 import type { MessageHandlers } from '../services/connection.js';
@@ -142,7 +143,10 @@ export function useShardConnection(): UseShardConnectionResult {
       onRoomHeader: (msg: RoomHeaderMessage) => {
         if (disposed) return;
         dispatch({ type: 'SET_ROOM_HEADER', header: msg });
-        addMessage(`\n── ${msg.roomName} ──`, 'header');
+        const headerLabel = msg.zoneName
+          ? `\n── [${msg.zoneName}] ${msg.roomName} ──`
+          : `\n── ${msg.roomName} ──`;
+        addMessage(headerLabel, 'header');
       },
       onShardState: (msg: ShardStateMessage) => {
         if (disposed) return;
@@ -253,6 +257,45 @@ export function useShardConnection(): UseShardConnectionResult {
         if (!disposed) {
           dispatch({ type: 'SET_STASH_ITEMS', items: msg.items });
         }
+      },
+      onZoneTransfer: (msg: ZoneTransferMessage) => {
+        if (disposed || switchingRef.current) return;
+        switchingRef.current = true;
+
+        const currentRoom = roomRef.current;
+        if (!currentRoom || !state.token) {
+          switchingRef.current = false;
+          return;
+        }
+
+        addMessage(`Entering zone: ${msg.targetZoneSlug}...`, 'system');
+        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
+
+        // Switch to a shard room with the target zone slug as join options.
+        // The server matchmaker routes zoneSlug to the correct zone instance.
+        switchRoom(currentRoom, 'shard', state.token, handlers, {
+          zoneSlug: msg.targetZoneSlug,
+          targetRoomSlug: msg.targetRoomSlug,
+        } as import('@ellmud/shared').RoomSwitchOptions, state.activeCharacter?.id)
+          .then((newRoom) => {
+            if (!disposed) {
+              roomRef.current = newRoom;
+              dispatch({ type: 'SET_ROOM', room: newRoom });
+              newRoom.onMessage('extraction_state', handleExtraction);
+              addMessage(`Arrived in ${msg.targetZoneSlug}.`, 'system');
+            } else {
+              newRoom.leave();
+            }
+          })
+          .catch((err: Error) => {
+            if (!disposed) {
+              dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
+              addMessage(`Zone transfer failed: ${err.message}`, 'system');
+            }
+          })
+          .finally(() => {
+            switchingRef.current = false;
+          });
       },
       onLeave: (code: number) => {
         if (!disposed && !switchingRef.current) {

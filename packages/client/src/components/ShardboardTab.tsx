@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router";
-import { Clock, Users, Key } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Clock, Users, Key, MapPin } from "lucide-react";
 
 interface Shard {
   id: string;
@@ -11,6 +12,20 @@ interface Shard {
   timeRemaining: string;
   keyType: string;
   rumor: string;
+}
+
+/** Zone listing returned from the admin/zone API. */
+interface ZoneListing {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  tier: number;
+  category: 'hub' | 'dungeon' | 'wilderness' | 'social';
+  lifecycle: 'persistent' | 'scheduled' | 'event';
+  levelMin: number;
+  levelMax: number;
+  playerCount?: number;
 }
 
 const mockShards: Shard[] = [
@@ -64,10 +79,33 @@ const getTierColor = (tier: number) => {
 
 interface ShardboardTabProps {
   onEnterShard?: (shardId: string) => void;
+  onEnterZone?: (zoneSlug: string) => void;
 }
 
-export default function ShardboardTab({ onEnterShard }: ShardboardTabProps) {
+const getCategoryStyle = (category: ZoneListing['category']) => {
+  switch (category) {
+    case 'hub': return { color: 'text-interactive', bg: 'bg-interactive/10', label: 'Hub' };
+    case 'dungeon': return { color: 'text-danger', bg: 'bg-danger/10', label: 'Dungeon' };
+    case 'wilderness': return { color: 'text-success', bg: 'bg-success/10', label: 'Wilderness' };
+    case 'social': return { color: 'text-accent-gold', bg: 'bg-accent-gold/10', label: 'Social' };
+    default: return { color: 'text-text-secondary', bg: 'bg-bg-elevated', label: category };
+  }
+};
+
+export default function ShardboardTab({ onEnterShard, onEnterZone }: ShardboardTabProps) {
   const navigate = useNavigate();
+  const [zones, setZones] = useState<ZoneListing[]>([]);
+  const [zonesLoading, setZonesLoading] = useState(true);
+
+  // Fetch available zones from admin API
+  useEffect(() => {
+    const baseUrl = import.meta.env.VITE_API_URL ?? '';
+    fetch(`${baseUrl}/api/admin/zones`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: ZoneListing[]) => setZones(data))
+      .catch(() => setZones([]))
+      .finally(() => setZonesLoading(false));
+  }, []);
 
   const handleEnterShard = (shardId: string) => {
     if (onEnterShard) {
@@ -77,8 +115,99 @@ export default function ShardboardTab({ onEnterShard }: ShardboardTabProps) {
     }
   };
 
+  const handleEnterZone = (zoneSlug: string) => {
+    if (onEnterZone) {
+      onEnterZone(zoneSlug);
+    } else {
+      // TODO: Wire to server-side zone join via matchmaker
+      // For now, navigate to shard route with zoneSlug hint
+      navigate(`/shard?zone=${zoneSlug}`);
+    }
+  };
+
   return (
     <div className="p-8">
+      {/* ── Zones — Persistent Destinations ─────────────────────────────── */}
+      <h2
+        className="text-accent-gold mb-4 font-serif"
+        style={{ fontSize: "1.5rem" }}
+      >
+        Zones
+      </h2>
+      <p className="text-text-secondary text-sm mb-6 font-sans">
+        Persistent destinations — always available to explore.
+      </p>
+
+      {zonesLoading ? (
+        <p className="text-text-disabled text-sm font-sans mb-8">Loading zones...</p>
+      ) : zones.length > 0 ? (
+        <div className="grid gap-4 mb-10">
+          {zones.map((zone) => {
+            const cat = getCategoryStyle(zone.category);
+            return (
+              <div
+                key={zone.id}
+                className="bg-bg-panel border border-border-muted rounded-lg p-5 hover:border-accent-gold transition-colors"
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <h3
+                      className="text-accent-gold mb-1 font-serif"
+                      style={{ fontSize: "1.125rem" }}
+                    >
+                      {zone.name}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="px-2 py-0.5 rounded text-xs font-semibold font-sans"
+                        style={{
+                          backgroundColor: `color-mix(in srgb, ${getTierColor(zone.tier)} 20%, transparent)`,
+                          color: getTierColor(zone.tier),
+                        }}
+                      >
+                        Tier {zone.tier}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-sans ${cat.color} ${cat.bg}`}>
+                        {cat.label}
+                      </span>
+                      <span className="text-text-disabled text-xs font-sans">
+                        Lv {zone.levelMin}–{zone.levelMax}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleEnterZone(zone.slug)}
+                    className="bg-interactive hover:bg-interactive/90 text-bg-primary font-medium px-5 py-2 rounded transition-colors font-sans text-sm"
+                  >
+                    Enter Zone
+                  </button>
+                </div>
+                <p className="text-text-secondary text-sm font-serif mb-2" style={{ lineHeight: 1.6 }}>
+                  {zone.description}
+                </p>
+                <div className="flex items-center gap-4 text-text-disabled text-xs font-sans">
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    {zone.lifecycle}
+                  </span>
+                  {zone.playerCount != null && (
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3 h-3" />
+                      {zone.playerCount} players
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-text-disabled text-sm font-sans mb-10">
+          No zones available yet.
+        </p>
+      )}
+
+      {/* ── Shards — Procedural Expeditions ──────────────────────────────── */}
       <h2
         className="text-accent-gold mb-6 font-serif"
         style={{ fontSize: "1.5rem" }}

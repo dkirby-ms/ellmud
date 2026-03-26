@@ -47,6 +47,8 @@ export interface RoomHeaderMessage {
   stability: number; // 0–1, shard stability
   /** Zone name, present when the room is part of a hand-crafted zone. */
   zoneName?: string;
+  /** Room type (entry, extraction, boss, etc.), present for zone rooms. */
+  roomType?: string;
 }
 
 /** Server → Client: Zone transfer instruction (inter-zone exit). */

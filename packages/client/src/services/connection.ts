@@ -16,6 +16,7 @@ import {
   type RoomSwitchOptions,
   type LoadoutUpdateMessage,
   type StashUpdateMessage,
+  type ZoneTransferMessage,
   type EquipItemMessage,
   type UnequipItemMessage,
 } from '@ellmud/shared';
@@ -31,6 +32,7 @@ export interface MessageHandlers {
   onShardState: (msg: ShardStateMessage) => void;
   onCombatResult: (msg: CombatResultMessage) => void;
   onRoomSwitch: (msg: RoomSwitchMessage) => void;
+  onZoneTransfer?: (msg: ZoneTransferMessage) => void;
   onLoadoutUpdate?: (msg: LoadoutUpdateMessage) => void;
   onStashUpdate?: (msg: StashUpdateMessage) => void;
   onError: (code: number, message: string) => void;
@@ -72,6 +74,9 @@ export async function connect(
   }
   if (handlers.onStashUpdate) {
     room.onMessage(MessageTypes.STASH_UPDATE, handlers.onStashUpdate);
+  }
+  if (handlers.onZoneTransfer) {
+    room.onMessage(MessageTypes.ZONE_TRANSFER, handlers.onZoneTransfer);
   }
 
   room.onError((code, message) => handlers.onError(code, message ?? 'Unknown error'));
@@ -118,6 +123,9 @@ export async function switchRoom(
   }
   if (handlers.onStashUpdate) {
     newRoom.onMessage(MessageTypes.STASH_UPDATE, handlers.onStashUpdate);
+  }
+  if (handlers.onZoneTransfer) {
+    newRoom.onMessage(MessageTypes.ZONE_TRANSFER, handlers.onZoneTransfer);
   }
 
   newRoom.onError((code, message) => handlers.onError(code, message ?? 'Unknown error'));

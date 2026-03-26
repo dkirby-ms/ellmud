@@ -43,6 +43,8 @@ export default function ShardExploration() {
 
   // Derive room info from server state
   const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
+  const zoneName = state.roomHeader?.zoneName;
+  const roomType = state.roomHeader?.roomType;
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -218,6 +220,23 @@ export default function ShardExploration() {
               style={{ fontSize: "1.125rem" }}
             >
               {currentRoom}
+              {roomType && (
+                <span
+                  className={`ml-2 text-xs font-sans font-semibold px-1.5 py-0.5 rounded ${
+                    roomType === 'boss' ? 'text-danger bg-danger/10'
+                    : roomType === 'extraction' ? 'text-success bg-success/10'
+                    : roomType === 'entry' ? 'text-interactive bg-interactive/10'
+                    : 'text-text-disabled bg-bg-elevated'
+                  }`}
+                >
+                  {roomType.toUpperCase()}
+                </span>
+              )}
+              {zoneName && (
+                <span className="text-text-secondary font-sans text-xs ml-2 font-normal">
+                  — {zoneName}
+                </span>
+              )}
             </h2>
             <div className="flex items-center gap-2 flex-1">
               <span className="text-text-secondary text-xs font-sans">

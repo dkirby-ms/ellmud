@@ -1676,3 +1676,35 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 **Learnings:**
 - Zone routes are a separate router from content routes — zones use the ZoneRepository interface directly (getZoneRepository singleton), not the ContentStore abstraction. This is because zones have a different data model (zone → rooms → exits hierarchy) vs. content's flat entity model.
 - For update routes with the ZoneRepository, the repo throws Error with 'not found' in the message. Content routes use typed ContentStoreError codes. Zone routes catch Error and check message.includes('not found') for 404s.
+
+### 2025-07-25: Zone Context in Room Headers (room-header-zone)
+- Client-side only change — server already included `zoneName` in RoomHeaderMessage when `isZone && zoneData`.
+- Updated `useShardConnection.ts`: room header message in narrative now renders as `── [ZoneName] RoomName ──` when zoneName is present, plain `── RoomName ──` otherwise.
+- Updated `ShardExploration.tsx`: header bar shows zone name as a subtle suffix (`— ZoneName`) in secondary text next to the gold room name.
+- RefugeRoom left unchanged — its room name already embeds "The Refuge" (`The Refuge — Central Plaza`), so adding zoneName would be redundant.
+- Build clean across shared, server, client. No test changes needed (no new logic, purely display).
+
+**Learnings:**
+- RoomHeaderMessage.zoneName was already wired server-side (ShardRoom lines 938, 1042) but the client never consumed it. Always check both ends of a message contract.
+- RefugeRoom uses a hardcoded room header with zone baked into the name string — different pattern from ShardRoom's dynamic zone injection.
+
+### 2025-07-25: Client Zone Indicators + Zone Listings in Shardboard
+
+**Task:** Add zone-awareness UI: room type badges, zone transfer handler, and zone listings in Shardboard.
+**Status:** ✅ Complete (dev branch)
+
+**Deliverables:**
+- `packages/shared/src/index.ts` — Added `roomType?: string` to `RoomHeaderMessage` for zone room type badges
+- `packages/client/src/services/connection.ts` — Added `onZoneTransfer` to `MessageHandlers` interface, wired `ZONE_TRANSFER` message in both `connect()` and `switchRoom()`
+- `packages/client/src/hooks/useShardConnection.ts` — Implemented zone transfer handler that shows "Entering zone..." transition, disconnects current room, reconnects to target zone via `switchRoom()` with `zoneSlug`/`targetRoomSlug` options
+- `packages/client/src/pages/ShardExploration.tsx` — Added room type badge rendering (BOSS/EXTRACTION/ENTRY with color-coded styles) next to room name in header
+- `packages/client/src/components/ShardboardTab.tsx` — Added Zones section above Shardboard shard listings: fetches zones from `/api/admin/zones`, shows name/tier/category/level range/description/player count, "Enter Zone" button with `onEnterZone` prop
+
+**Verification:**
+- ✅ CompassControl already works with zone rooms (reads `state.roomHeader.exits`, no changes needed)
+- ✅ Build clean (shared + server + client)
+
+**Learnings:**
+- CompassControl is zone-agnostic by design — it reads exits from roomHeader state regardless of whether the room is in a shard or zone. No compass changes needed for zone support.
+- Zone transfer uses the same `switchRoom()` mechanism as shard room switches, passing `zoneSlug` and `targetRoomSlug` as join options so the server matchmaker can route to the correct zone instance.
+- ShardboardTab was entirely mock data for shards. Zones are the first real data fetched from the API in that component. The shard listings remain mock pending matchmaker integration.
