@@ -34,6 +34,8 @@ import { initFactionProvider } from './faction/index.js';
 import { initRunHistoryProvider } from './run-history/index.js';
 import { initLoadoutProvider } from './loadout/index.js';
 import { initShardSicknessProvider } from './systems/index.js';
+import { initCharacterProvider } from './character/index.js';
+import { createCharacterRouter } from './api/characters.js';
 
 const config = getConfig();
 const PORT = config.port;
@@ -80,6 +82,10 @@ console.log(`[Ellmud] Loadout persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'
 // ─── Shard-Sickness Persistence ─────────────────────────────────────────────
 initShardSicknessProvider(USE_PG);
 console.log(`[Ellmud] Shard-sickness persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Character Persistence ──────────────────────────────────────────────────
+initCharacterProvider(USE_PG);
+console.log(`[Ellmud] Character persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Redis Bootstrap ─────────────────────────────────────────────────────────
 const { cache: narrationCache, isRedis: isCacheRedis } = await createNarrationCache(config);
@@ -128,6 +134,10 @@ if (entraConfig.clientId && entraConfig.clientSecret && entraConfig.tenantId) {
 } else {
   console.log('[Ellmud] Entra OAuth: disabled (missing ENTRA_* env vars)');
 }
+
+// ─── Character API ───────────────────────────────────────────────────────────
+app.use(createCharacterRouter(authService, USE_PG));
+console.log('[Ellmud] Character API: enabled');
 
 // Mount health check endpoint — includes Redis + persistence status
 app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));

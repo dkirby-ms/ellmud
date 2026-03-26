@@ -128,6 +128,75 @@ export interface CombatResultMessage {
   combatEnded: boolean;
 }
 
+// ─── Character Types (GDD §7.1) ──────────────────────────────────────────────
+
+/** Summary of a character for list/select screens. */
+export interface CharacterSummary {
+  id: string;
+  name: string;
+  factionSlug: string;
+  factionName: string;
+  isActive: boolean;
+  createdAt: string;
+  lastPlayedAt: string | null;
+  topSkills: Array<{ name: string; level: number }>;
+  totalRuns: number;
+}
+
+/** Client → Server: Create a new character. */
+export interface CreateCharacterRequest {
+  name: string;
+  factionSlug: string;
+}
+
+/** Client → Server: Select an existing character. */
+export interface SelectCharacterRequest {
+  characterId: string;
+}
+
+// ─── Character Name Validation ───────────────────────────────────────────────
+
+const PROFANITY_BLOCKLIST = [
+  'anal', 'anus', 'arse', 'ass', 'bastard', 'bitch', 'bollocks', 'cock',
+  'crap', 'cunt', 'damn', 'dick', 'douche', 'fag', 'fuck', 'hell',
+  'homo', 'jerk', 'knob', 'minge', 'niga', 'nigga', 'nigger', 'penis',
+  'piss', 'prick', 'pube', 'pussy', 'queer', 'scum', 'shit', 'slag',
+  'slut', 'smeg', 'spunk', 'tit', 'turd', 'twat', 'vagina', 'wank',
+  'whore',
+];
+
+/**
+ * Validate a character name. Rules:
+ * - Alpha characters only (a-z, A-Z)
+ * - 2–24 characters long
+ * - First letter capitalized, rest lowercase
+ * - No profanity
+ */
+export function validateCharacterName(name: string): { valid: boolean; error?: string } {
+  if (!name || typeof name !== 'string') {
+    return { valid: false, error: 'Name is required' };
+  }
+  if (name.length < 2 || name.length > 24) {
+    return { valid: false, error: 'Name must be between 2 and 24 characters' };
+  }
+  if (!/^[A-Za-z]+$/.test(name)) {
+    return { valid: false, error: 'Name must contain only alphabetic characters' };
+  }
+  if (name[0] !== name[0].toUpperCase()) {
+    return { valid: false, error: 'Name must start with a capital letter' };
+  }
+  if (name.length > 1 && name.slice(1) !== name.slice(1).toLowerCase()) {
+    return { valid: false, error: 'Only the first letter should be capitalized' };
+  }
+  const lower = name.toLowerCase();
+  for (const word of PROFANITY_BLOCKLIST) {
+    if (lower.includes(word)) {
+      return { valid: false, error: 'Name contains inappropriate language' };
+    }
+  }
+  return { valid: true };
+}
+
 // ─── Message Type Keys ──────────────────────────────────────────────────────
 
 /**
@@ -140,6 +209,16 @@ export const MessageTypes = {
   EQUIP_ITEM: 'equip_item',
   UNEQUIP_ITEM: 'unequip_item',
   SWAP_ITEM: 'swap_item',
+
+  // Client ↔ Server: Character management
+  CHARACTER_CREATE: 'character_create',
+  CHARACTER_SELECT: 'character_select',
+  CHARACTER_DELETE: 'character_delete',
+  CHARACTER_LIST: 'character_list',
+  CHARACTER_LIST_RESPONSE: 'character_list_response',
+  CHARACTER_CREATED: 'character_created',
+  CHARACTER_DELETED: 'character_deleted',
+  CHARACTER_ERROR: 'character_error',
 
   // Server → Client
   NARRATE: 'narrate',
@@ -580,6 +659,32 @@ export interface SwapItemMessage {
 /** Server → Client: Full stash contents after any change. */
 export interface StashUpdateMessage {
   items: DisplayItem[];
+}
+
+// ─── Character System (Character Selection & Management) ─────────────────────
+
+/** Summary of a character for the selection screen. */
+export interface CharacterSummary {
+  id: string;
+  name: string;
+  factionSlug: string;
+  factionName: string;
+  isActive: boolean;
+  createdAt: string;
+  lastPlayedAt: string | null;
+  topSkills: Array<{ name: string; level: number }>;
+  totalRuns: number;
+}
+
+/** Client → Server: Create a new character. */
+export interface CreateCharacterRequest {
+  name: string;
+  factionSlug: string;
+}
+
+/** Client → Server: Select a character. */
+export interface SelectCharacterRequest {
+  characterId: string;
 }
 
 // ─── Slot Validation ─────────────────────────────────────────────────────────
