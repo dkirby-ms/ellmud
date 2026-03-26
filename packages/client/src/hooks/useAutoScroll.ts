@@ -21,7 +21,11 @@ export function useAutoScroll<T>(
     const distanceFromBottom =
       el.scrollHeight - el.scrollTop - el.clientHeight;
     if (distanceFromBottom > threshold) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    if (typeof el.scrollTo === "function") {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    } else {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [dependency, threshold]);
 
   return containerRef;
