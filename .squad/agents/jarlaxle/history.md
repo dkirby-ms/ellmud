@@ -1496,3 +1496,25 @@ This aligns local dev with production behavior, making auth bugs surface earlier
 - `npm audit --audit-level=high` successfully integrated into ci-cd.yml
 - All dependencies pass audit; gate is clean
 - Blocks high/critical vulnerabilities at PR stage before merge
+
+### 2026-03-26: Seed Player Stash — Direct DB Population
+- Created `packages/server/src/dev/seed-player-stash.ts` — standalone script that inserts Volo's 40 seed items into `item_definitions` and populates a player's `player_stash` with 42 entries (40 base + bonus stacks of Corroded Nails ×5 and Stale Rations ×3).
+- Script is idempotent: checks for existing item definitions by name, clears existing stash before re-inserting.
+- Run with: `DATABASE_URL=postgresql://ellmud:ellmud_dev@localhost:5434/ellmud npx tsx packages/server/src/dev/seed-player-stash.ts [username]`
+- Successfully populated stash for player "asdf" (2c34fc43-ed1a-442d-bff7-84126db08dd1). All tiers (scrap→anomalous), all types (weapon, armour, consumable, material, tool, key) represented.
+
+## Learnings
+
+**DB Schema vs App Types Mismatch:**
+`item_definitions` uses UUID primary keys, but `seed-items.ts` StashItem uses string slug IDs (e.g., 'rusty-shiv'). The PgStashRepository bridges this by storing instanceId as the row's UUID `id` column — the slug IDs only exist in the app layer. Direct DB scripts must generate UUIDs and let Postgres handle it via `gen_random_uuid()`.
+
+**Idempotent Item Insertion:**
+The `item_definitions` table has no unique constraint on `name`, so `ON CONFLICT DO NOTHING` doesn't work. Must check existence by name before inserting. Worth considering a unique constraint on `name` in a future migration.
+
+### Dev stash seeding hook in RefugeRoom
+- Wired `populateDevStash()` from `packages/server/src/dev/seed-items.ts` into `RefugeRoom.onJoin()`.
+- **Trigger:** Runs only when `NODE_ENV !== 'production'` AND the player's stash is empty (checked via `stashRepo.loadStash()`). Idempotent — existing stash data is never overwritten.
+- **Item defs registration:** Seed item definitions are registered into the shared `getItemDefs()` map so `StashService.loadStash()` can resolve them for `DisplayItem` conversion.
+- **Client notification:** After seeding, calls `sendLoadoutAndStashUpdate()` which sends both `LOADOUT_UPDATE` and `STASH_UPDATE` messages to the client, ensuring the equipment/loadout UI reflects the new items immediately.
+- **No test regressions:** 72 test files, 1741 tests passing. Clean build on both server and client packages.
+- **Key pattern:** The `sendLoadoutAndStashUpdate()` private method is the canonical way to push stash+loadout state to a client after any mutation — reuse it for any future stash-modifying operations.
