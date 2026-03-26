@@ -1361,6 +1361,14 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
     player.inventory.clear();
 
+    // Clear equipped loadout — gear is lost on death (both in-memory and repo)
+    player.equipment = undefined;
+    if (this.loadoutService) {
+      this.loadoutService.clearLoadout(playerId).catch((err) => {
+        this.log(`Failed to clear loadout on death for ${playerId}: ${err}`);
+      });
+    }
+
     // Trace: player death creates corpse trace (lootable)
     this.traceSystem.addTrace(roomId, 'corpse', {
       actorId: playerId,
@@ -1427,11 +1435,16 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       });
 
       // Schedule return to refuge after 3 seconds
-      this.clock.setTimeout(() => {
+      this.clock.setTimeout(async () => {
         if (!this.players.has(playerId)) {
           this.log(`Player ${playerId} already left during death delay — skipping cleanup`);
           return;
         }
+
+        // Persist cleared profile (equipment=undefined) before removing from state.
+        // Without this, onLeave skips savePlayerProfile because the player is
+        // already deleted, and the stale equipment survives in the profile repo.
+        await this.savePlayerProfile(playerId, this.players.get(playerId)!);
 
         client.send(MessageTypes.ROOM_SWITCH, {
           target: 'refuge',

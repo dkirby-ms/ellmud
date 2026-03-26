@@ -1518,3 +1518,10 @@ The `item_definitions` table has no unique constraint on `name`, so `ON CONFLICT
 - **Client notification:** After seeding, calls `sendLoadoutAndStashUpdate()` which sends both `LOADOUT_UPDATE` and `STASH_UPDATE` messages to the client, ensuring the equipment/loadout UI reflects the new items immediately.
 - **No test regressions:** 72 test files, 1741 tests passing. Clean build on both server and client packages.
 - **Key pattern:** The `sendLoadoutAndStashUpdate()` private method is the canonical way to push stash+loadout state to a client after any mutation — reuse it for any future stash-modifying operations.
+
+### 2025-07-26: Death Loadout Bug Fix
+- **Bug:** `handlePlayerDeath()` in ShardRoom dropped inventory but never cleared the loadout. Dead players kept equipped gear after returning to Refuge.
+- **Fix:** Added `clearLoadout(playerId)` method to `LoadoutService` (delegates to `loadoutRepo.clear()`). Called in `handlePlayerDeath()` alongside inventory clear.
+- **Pattern:** Death handler uses `void this.loadoutService.clearLoadout(playerId)` — fire-and-forget async, same pattern as `shardSicknessStore.incrementDeathCount()`.
+- **Filed decision:** `InMemoryLoadoutRepository` is a data-loss risk — equipped items vanish on server restart because stash removal is persisted (PG) but loadout placement is RAM-only. Filed `.squad/decisions/inbox/jarlaxle-loadout-persistence-gap.md`.
+- **No test regressions:** 72 test files, 1741 tests passing. Clean build.

@@ -121,6 +121,13 @@ export class LoadoutService {
     return this.loadoutRepo.load(playerId);
   }
 
+  // ─── Clear Loadout ─────────────────────────────────────────────────────
+
+  /** Wipe all equipped items for a player (e.g. on death). Items are lost. */
+  async clearLoadout(playerId: string): Promise<void> {
+    return this.loadoutRepo.clear(playerId);
+  }
+
   // ─── Equip ──────────────────────────────────────────────────────────────
 
   async equipItem(
