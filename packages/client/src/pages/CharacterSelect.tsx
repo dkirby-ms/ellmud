@@ -62,8 +62,10 @@ export default function CharacterSelect() {
     setSubmitting(true);
     setError(null);
     try {
-      const created = await createCharacter(token, { name, factionSlug: selectedFaction });
-      setCharacters((prev) => [...prev, created]);
+      await createCharacter(token, { name, factionSlug: selectedFaction });
+      // Reload full list to get complete character data (topSkills, factionName, etc.)
+      const chars = await fetchCharacters(token);
+      setCharacters(chars);
       setNewCharName("");
       setSelectedFaction("");
       setIsCreating(false);
@@ -157,7 +159,7 @@ export default function CharacterSelect() {
                 {char.factionName}
               </p>
 
-              {char.topSkills.length > 0 && (
+              {(char.topSkills?.length ?? 0) > 0 && (
                 <div className="flex gap-2 mb-2 flex-wrap">
                   {char.topSkills.map((skill) => (
                     <span
