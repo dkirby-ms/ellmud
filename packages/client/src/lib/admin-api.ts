@@ -31,7 +31,7 @@ export function clearAdminToken(): void {
   localStorage.removeItem(ADMIN_TOKEN_KEY);
 }
 
-async function adminFetch<T>(
+export async function adminFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {

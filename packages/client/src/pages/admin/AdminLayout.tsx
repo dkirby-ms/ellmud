@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import {
   LayoutDashboard, Sword, Package, Mountain, Zap, Trophy, TrendingUp, Building2,
   Home, FileText, Scale, ClipboardList, Hammer, Upload, ScrollText, Users,
-  Bell, Search, ArrowLeft, Radio, AlertTriangle, AlertCircle, FileEdit, Loader2, X,
+  Bell, Search, ArrowLeft, Radio, AlertTriangle, AlertCircle, FileEdit, Loader2, X, Map,
 } from "lucide-react";
 import {
   listEntities, fetchNotifications, setAdminToken, getAdminToken, clearAdminToken,
@@ -46,6 +46,7 @@ const navSections = [
       { path: "/admin/skills", icon: TrendingUp, label: "Skills" },
       { path: "/admin/factions", icon: Building2, label: "Factions" },
       { path: "/admin/rooms", icon: Home, label: "Rooms" },
+      { path: "/admin/zones", icon: Map, label: "Zones" },
       { path: "/admin/narrative", icon: FileText, label: "Narrative" },
       { path: "/admin/balance", icon: Scale, label: "Balance" },
       { path: "/admin/contracts", icon: ClipboardList, label: "Contracts" },

@@ -25,8 +25,13 @@ import { LoadoutService, getLoadoutRepository } from '../loadout/index.js';
 import type { LoadoutRepository } from '../loadout/index.js';
 import { getConfig } from '../config.js';
 import { AmbientSystem } from '../systems/AmbientSystem.js';
+import { getZoneRepository } from '../zones/index.js';
+import { convertZoneToRoomGraph } from '../zones/zone-adapter.js';
+import { adaptRoomGraph } from '../shard/graph-adapter.js';
+import type { RoomGraph, Room as GraphRoom, Direction } from '../shard/RoomGraph.js';
 
 const TICK_INTERVAL_MS = 1000;
+const VALID_DIRECTIONS: ReadonlySet<string> = new Set(['north', 'south', 'east', 'west', 'up', 'down']);
 
 interface RefugeRoomOptions {
   state: RefugeState;
@@ -62,6 +67,10 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   private playerIds = new Map<string, string>();
   /** Tracks pending shard-enter per session to prevent double-switch. */
   private pendingEnter = new Set<string>();
+  /** Room graph for the Refuge zone. */
+  private roomGraph!: RoomGraph;
+  /** Maps sessionId → current room slug within the Refuge. */
+  private currentRoomIds = new Map<string, string>();
 
   /**
    * Inject dependencies. Called before room lifecycle if provided.
@@ -90,7 +99,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
     }
   }
 
-  onCreate(): void {
+  async onCreate(): Promise<void> {
     this.setState(new RefugeState());
 
     // Initialize stash with shared provider if not already injected
@@ -105,6 +114,9 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
 
     // Initialize ambient world simulation
     this.ambientSystem = new AmbientSystem();
+
+    // Load refuge zone graph (DB → shared graph → local graph)
+    await this.loadRefugeGraph();
 
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
       void this.handleCommand(client, message);
@@ -147,6 +159,8 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
     const characterId = (options['characterId'] as string) || playerId;
     this.characterIds.set(client.sessionId, characterId);
 
+    // Place player in the entry room (hearth)
+    this.currentRoomIds.set(client.sessionId, this.roomGraph.startRoomId);
 
     this.log(`Player joined Refuge: ${client.sessionId} (character=${characterId}, ${this.state.playerCount} players)`);
 
@@ -163,11 +177,14 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
       timestamp: Date.now(),
     } satisfies NarrateMessage);
 
-    client.send(MessageTypes.ROOM_HEADER, {
-      roomName: 'The Refuge — Central Plaza',
-      exits: [],
-      stability: 1.0,
-    } satisfies RoomHeaderMessage);
+    // Room view for starting room (header + description + presence)
+    const startRoom = this.roomGraph.rooms.get(this.roomGraph.startRoomId);
+    if (startRoom) {
+      this.sendRoomView(client, startRoom);
+    }
+
+    // Announce arrival to others already in the hearth
+    this.announceToRoom(this.roomGraph.startRoomId, client.sessionId, 'An adventurer arrives.');
 
     // Send full stash + loadout state to client on join
     try {
@@ -191,8 +208,13 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
 
   onLeave(client: Client): void {
     this.state.playerCount--;
+    const departingRoom = this.currentRoomIds.get(client.sessionId);
+    if (departingRoom) {
+      this.announceToRoom(departingRoom, client.sessionId, 'An adventurer departs.');
+    }
     this.playerIds.delete(client.sessionId);
     this.characterIds.delete(client.sessionId);
+    this.currentRoomIds.delete(client.sessionId);
     this.pendingEnter.delete(client.sessionId);
     this.log(`Player left Refuge: ${client.sessionId} (${this.state.playerCount} players)`);
   }
@@ -227,30 +249,44 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
     try {
       switch (message.verb) {
         case 'look':
-          client.send(MessageTypes.NARRATE, {
-            text: this.ambientSystem.getJoinNarration(),
-            type: 'room',
-            timestamp: Date.now(),
-          } satisfies NarrateMessage);
+          this.handleLookCommand(client);
+          break;
+
+        case 'go':
+          this.handleGoCommand(client, message.args);
+          break;
+
+        case 'north':
+        case 'south':
+        case 'east':
+        case 'west':
+        case 'up':
+        case 'down':
+          this.handleGoCommand(client, [message.verb]);
           break;
 
         case 'shardboard':
+          if (!this.requireRoom(client, 'shardboard', 'the Shardboard')) break;
           await this.handleShardboardCommand(client);
           break;
 
         case 'enter':
+          if (!this.requireRoom(client, 'shardboard', 'the Shardboard')) break;
           await this.handleEnterCommand(client, message.args);
           break;
 
         case 'stash':
+          if (!this.requireRoom(client, 'stash-alcove', 'the Stash Alcove')) break;
           await this.handleStashCommand(client);
           break;
 
         case 'take':
+          if (!this.requireRoom(client, 'stash-alcove', 'the Stash Alcove')) break;
           await this.handleTakeCommand(client, message.args);
           break;
 
         case 'store':
+          if (!this.requireRoom(client, 'stash-alcove', 'the Stash Alcove')) break;
           await this.handleStoreCommand(client, message.args);
           break;
 
@@ -745,9 +781,236 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   }
 
 
+  // ─── Room Navigation ─────────────────────────────────────────────────────
+
+  private handleLookCommand(client: Client): void {
+    const roomId = this.currentRoomIds.get(client.sessionId) ?? this.roomGraph.startRoomId;
+    const room = this.roomGraph.rooms.get(roomId);
+    if (room) {
+      this.sendRoomView(client, room);
+    }
+  }
+
+  private handleGoCommand(client: Client, args: string[]): void {
+    const dirStr = args[0]?.toLowerCase();
+    if (!dirStr || !VALID_DIRECTIONS.has(dirStr)) {
+      client.send(MessageTypes.NARRATE, {
+        text: 'Go where? Specify a direction: north, south, east, west.',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+      return;
+    }
+
+    const direction = dirStr as Direction;
+    const currentRoomId = this.currentRoomIds.get(client.sessionId) ?? this.roomGraph.startRoomId;
+    const currentRoom = this.roomGraph.rooms.get(currentRoomId);
+    if (!currentRoom) return;
+
+    const targetId = currentRoom.exits.get(direction);
+    if (!targetId) {
+      client.send(MessageTypes.NARRATE, {
+        text: `You can't go ${direction} from here.`,
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+      return;
+    }
+
+    const targetRoom = this.roomGraph.rooms.get(targetId);
+    if (!targetRoom) return;
+
+    // Announce departure to current room
+    this.announceToRoom(currentRoomId, client.sessionId, `An adventurer heads ${direction}.`);
+
+    // Move player
+    this.currentRoomIds.set(client.sessionId, targetId);
+
+    // Send new room view
+    this.sendRoomView(client, targetRoom);
+
+    // Announce arrival to new room
+    this.announceToRoom(targetId, client.sessionId, 'An adventurer arrives.');
+  }
+
+  /** Returns false (and narrates hint) if the player is not in the required room. */
+  private requireRoom(client: Client, roomSlug: string, roomDisplayName: string): boolean {
+    const currentRoom = this.currentRoomIds.get(client.sessionId) ?? this.roomGraph.startRoomId;
+    if (currentRoom !== roomSlug) {
+      const room = this.roomGraph.rooms.get(roomSlug);
+      const exitHint = this.findDirectionTo(currentRoom, roomSlug);
+      const hint = exitHint ? ` Go ${exitHint} to get there.` : '';
+      client.send(MessageTypes.NARRATE, {
+        text: `You need to be at ${roomDisplayName} for that.${hint}`,
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+      return false;
+    }
+    return true;
+  }
+
+  /** Find the direction from one room to another (one hop only). */
+  private findDirectionTo(fromSlug: string, toSlug: string): string | null {
+    const from = this.roomGraph.rooms.get(fromSlug);
+    if (!from) return null;
+    for (const [dir, target] of from.exits) {
+      if (target === toSlug) return dir;
+    }
+    return null;
+  }
+
+  /** Send room header + description + player presence for a room. */
+  private sendRoomView(client: Client, room: GraphRoom): void {
+    const exits = [...room.exits.keys()];
+
+    client.send(MessageTypes.ROOM_HEADER, {
+      roomName: `The Refuge — ${room.name}`,
+      exits,
+      stability: 1.0,
+      zoneName: 'The Refuge',
+    } satisfies RoomHeaderMessage);
+
+    client.send(MessageTypes.NARRATE, {
+      text: room.description,
+      type: 'room',
+      timestamp: Date.now(),
+    } satisfies NarrateMessage);
+
+    // Player presence
+    const othersInRoom = [...this.currentRoomIds.entries()]
+      .filter(([sid, rid]) => rid === room.id && sid !== client.sessionId)
+      .length;
+
+    if (othersInRoom > 0) {
+      const plural = othersInRoom > 1;
+      client.send(MessageTypes.NARRATE, {
+        text: `${othersInRoom} other adventurer${plural ? 's' : ''} ${plural ? 'are' : 'is'} here.`,
+        type: 'awareness',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+    }
+  }
+
+  /** Broadcast a narration to everyone in a room except the excluded session. */
+  private announceToRoom(roomId: string, excludeSessionId: string, text: string): void {
+    for (const otherClient of this.clients) {
+      const otherRoom = this.currentRoomIds.get(otherClient.sessionId);
+      if (otherRoom === roomId && otherClient.sessionId !== excludeSessionId) {
+        otherClient.send(MessageTypes.NARRATE, {
+          text,
+          type: 'awareness',
+          timestamp: Date.now(),
+        } satisfies NarrateMessage);
+      }
+    }
+  }
+
+  // ─── Zone Loading ──────────────────────────────────────────────────────
+
+  private async loadRefugeGraph(): Promise<void> {
+    try {
+      const zoneData = await getZoneRepository().getZoneBySlug('the-refuge');
+      if (zoneData) {
+        const sharedGraph = convertZoneToRoomGraph(zoneData);
+        this.roomGraph = adaptRoomGraph(sharedGraph);
+        this.log('Refuge zone loaded from repository.');
+        return;
+      }
+    } catch (err) {
+      this.log(`Failed to load refuge zone from repository: ${err}`);
+    }
+    this.roomGraph = createFallbackRefugeGraph();
+    this.log('Refuge zone fallback graph loaded.');
+  }
+
+
   // ─── Logging ─────────────────────────────────────────────────────────────
 
   private log(message: string): void {
     console.log(`[RefugeRoom] ${message}`);
   }
+}
+
+// ─── Fallback Refuge Graph ────────────────────────────────────────────────
+// Used when the zone repository has no 'the-refuge' zone (dev/test without DB).
+
+function createFallbackRefugeGraph(): RoomGraph {
+  const rooms = new Map<string, GraphRoom>();
+
+  rooms.set('hearth', {
+    id: 'hearth',
+    name: 'The Hearth',
+    description: 'A broad stone chamber warmed by a perpetual fire. Scarred adventurers rest on makeshift benches. The air smells of ash and iron.',
+    type: 'entry',
+    exits: new Map<Direction, string>([
+      ['east', 'stash-alcove'],
+      ['north', 'training-grounds'],
+      ['west', 'shardboard'],
+      ['south', 'market'],
+    ]),
+    items: [],
+  });
+
+  rooms.set('stash-alcove', {
+    id: 'stash-alcove',
+    name: 'Stash Alcove',
+    description: 'A narrow alcove lined with locked chests and hanging satchels. Your belongings are here — what you\'ve kept from the shards.',
+    type: 'corridor',
+    exits: new Map<Direction, string>([['west', 'hearth']]),
+    items: [],
+  });
+
+  rooms.set('training-grounds', {
+    id: 'training-grounds',
+    name: 'Training Grounds',
+    description: 'A cleared space where weapons ring against practice dummies. Scratched tally marks cover the walls.',
+    type: 'corridor',
+    exits: new Map<Direction, string>([
+      ['south', 'hearth'],
+      ['east', 'war-room'],
+    ]),
+    items: [],
+  });
+
+  rooms.set('shardboard', {
+    id: 'shardboard',
+    name: 'The Shardboard',
+    description: 'A massive board of pinned notes, sketched maps, and shard coordinates. This is where expeditions begin.',
+    type: 'corridor',
+    exits: new Map<Direction, string>([['east', 'hearth']]),
+    items: [],
+  });
+
+  rooms.set('market', {
+    id: 'market',
+    name: 'The Market',
+    description: 'Makeshift stalls selling salvaged goods. A gruff quartermaster eyes your coin pouch.',
+    type: 'corridor',
+    exits: new Map<Direction, string>([
+      ['north', 'hearth'],
+      ['east', 'infirmary'],
+    ]),
+    items: [],
+  });
+
+  rooms.set('infirmary', {
+    id: 'infirmary',
+    name: 'The Infirmary',
+    description: 'Cots and bandages. A healer tends to the wounded. The smell of poultice lingers.',
+    type: 'corridor',
+    exits: new Map<Direction, string>([['west', 'market']]),
+    items: [],
+  });
+
+  rooms.set('war-room', {
+    id: 'war-room',
+    name: 'The War Room',
+    description: 'A locked chamber where faction leaders meet. Maps of known shards cover the walls.',
+    type: 'corridor',
+    exits: new Map<Direction, string>([['west', 'training-grounds']]),
+    items: [],
+  });
+
+  return { rooms, startRoomId: 'hearth' };
 }

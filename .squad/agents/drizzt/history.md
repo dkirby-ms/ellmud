@@ -1828,3 +1828,26 @@ When a game table already exists with relational structure and FK constraints (l
 - Zone data from ZoneRepository extends shared types (adds timestamps), fully assignable to shared `ZoneData`
 - The `adaptRoomGraph` pipeline resolves `LootContainer[]` → `Item[]` via item registry — zone repop must use the same resolution
 - `CommandResult` is the clean seam for command handlers to signal actions (zone transfer) without coupling to Colyseus `Client`
+
+### Refuge Zone Seed + RefugeRoom Navigation (2026-03-20)
+**Task:** Seed the Refuge as a navigable 7-room zone and update RefugeRoom with room navigation
+**Status:** ✅ Complete
+
+**Changes:**
+1. **031_seed_refuge_zone.sql** — Seeds 'the-refuge' zone with 7 rooms (hearth, stash-alcove, training-grounds, shardboard, market, infirmary, war-room) and 12 bidirectional exits in a hub-and-spoke layout centered on the hearth.
+2. **RefugeRoom.ts** — Major upgrade from flat hub to navigable zone:
+   - `onCreate` now async; loads zone from ZoneRepository → convertZoneToRoomGraph → adaptRoomGraph pipeline
+   - Fallback inline graph for dev/test when zone repo is empty (InMemoryZoneRepository)
+   - `go <direction>` command + bare direction shortcuts (north/south/east/west)
+   - Room gating: stash/take/store → stash-alcove only; shardboard/enter → shardboard only
+   - `sendRoomView` sends room header (with exits + zoneName) + description + player presence
+   - Arrival/departure announcements to other players in the same room
+   - `requireRoom` helper with directional hints
+3. **Tests updated** — refuge.test.ts, room-switching.test.ts, stash-wiring.test.ts all updated to navigate to correct rooms before testing gated commands
+
+**All 1951 server tests passing, zero regressions.**
+
+### Learnings
+- RefugeRoom commands must now be gated by room slug — stash at stash-alcove, shardboard at shardboard
+- The fallback graph pattern (inline RoomGraph when zone repo returns null) enables tests without DB seeding
+- Ambient narration can race with command responses in tests — use `.find()` instead of last-element indexing

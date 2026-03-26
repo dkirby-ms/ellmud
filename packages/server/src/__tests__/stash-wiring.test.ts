@@ -174,6 +174,10 @@ describe('RefugeRoom Stash Wiring', () => {
     const collector = new MessageCollector(client);
     await wait(500);
 
+    // Navigate to stash-alcove (east from hearth)
+    client.send(MessageTypes.COMMAND, makeCommand('go', 'east'));
+    await wait(300);
+
     const beforeCount = collector.narrate.length;
     client.send(MessageTypes.COMMAND, makeCommand('stash'));
     await wait(500);
@@ -197,6 +201,10 @@ describe('RefugeRoom Stash Wiring', () => {
     const client = await colyseus.connectTo(room, { playerId });
     const collector = new MessageCollector(client);
     await wait(500);
+
+    // Navigate to stash-alcove (east from hearth)
+    client.send(MessageTypes.COMMAND, makeCommand('go', 'east'));
+    await wait(300);
 
     client.send(MessageTypes.COMMAND, makeCommand('take', 'iron', 'ore'));
     await wait(500);
@@ -225,6 +233,10 @@ describe('RefugeRoom Stash Wiring', () => {
     const client1 = await colyseus.connectTo(room1, { playerId });
     new MessageCollector(client1);
     await wait(500);
+
+    // Navigate to stash-alcove (east from hearth)
+    client1.send(MessageTypes.COMMAND, makeCommand('go', 'east'));
+    await wait(300);
 
     client1.send(MessageTypes.COMMAND, makeCommand('take', 'iron'));
     await wait(500);

@@ -69,6 +69,10 @@ describe('Room Switching — Happy Path (Integration)', () => {
   it('shardboard → shows available shards with enter instructions', async () => {
     const { client, collector } = await connectTestClient(colyseus, 'refuge');
 
+    // Navigate to the shardboard room (west from hearth)
+    client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
+    await wait(300);
+
     const before = collector.narrate.length;
     client.send(MessageTypes.COMMAND, makeCommand('shardboard'));
     await wait(500);
@@ -86,6 +90,10 @@ describe('Room Switching — Happy Path (Integration)', () => {
   // ✅ PASS NOW — enter shard sends ROOM_SWITCH message
   it('enter shard → ROOM_SWITCH with target=shard, reason=enter_shard', async () => {
     const { client, collector } = await connectTestClient(colyseus, 'refuge');
+
+    // Navigate to the shardboard room first
+    client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
+    await wait(300);
 
     client.send(MessageTypes.COMMAND, makeCommand('enter', 'shard'));
     await wait(500);
@@ -152,6 +160,10 @@ describe('Room Switching — Happy Path (Integration)', () => {
     // Verify we're in the Refuge
     expect(refugeCollector.roomHeader.length).toBeGreaterThan(0);
     expect(refugeCollector.roomHeader[0]!.roomName).toContain('Refuge');
+
+    // Navigate to shardboard room
+    refugeClient.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
+    await wait(300);
 
     // Check the shardboard
     refugeClient.send(MessageTypes.COMMAND, makeCommand('shardboard'));
@@ -237,13 +249,17 @@ describe('Room Switching — Edge Cases (Integration)', () => {
   it('enter unknown target → rejection, no ROOM_SWITCH', async () => {
     const { client, collector } = await connectTestClient(colyseus, 'refuge');
 
+    // Navigate to shardboard room first
+    client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
+    await wait(300);
+
     client.send(MessageTypes.COMMAND, makeCommand('enter', 'tavern'));
     await wait(500);
 
     expect(collector.roomSwitch.length).toBe(0);
-    const err = collector.narrate[collector.narrate.length - 1]!;
-    expect(err.type).toBe('system');
-    expect(err.text).toContain('tavern');
+    const err = collector.narrate.find((m) => m.text.includes('tavern'));
+    expect(err).toBeDefined();
+    expect(err!.type).toBe('system');
 
     await client.leave();
   });
@@ -251,6 +267,10 @@ describe('Room Switching — Edge Cases (Integration)', () => {
   // ✅ PASS NOW — bare enter defaults to shard
   it('bare "enter" defaults to shard', async () => {
     const { client, collector } = await connectTestClient(colyseus, 'refuge');
+
+    // Navigate to shardboard room first
+    client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
+    await wait(300);
 
     client.send(MessageTypes.COMMAND, makeCommand('enter'));
     await wait(500);
@@ -320,6 +340,10 @@ describe('Room Switching — Edge Cases (Integration)', () => {
   // (Phase 2 may add debouncing — update this test then)
   it('rapid double "enter shard" → at least one ROOM_SWITCH delivered', async () => {
     const { client, collector } = await connectTestClient(colyseus, 'refuge');
+
+    // Navigate to shardboard room first
+    client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
+    await wait(300);
 
     // Fire two enters back-to-back (no wait in between)
     client.send(MessageTypes.COMMAND, makeCommand('enter', 'shard'));
@@ -593,6 +617,10 @@ describe('Room Switching — Message Protocol Contract', () => {
   it('ROOM_SWITCH message contains required fields: target, reason', async () => {
     const { client, collector } = await connectTestClient(colyseus, 'refuge');
 
+    // Navigate to shardboard room first
+    client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
+    await wait(300);
+
     client.send(MessageTypes.COMMAND, makeCommand('enter', 'shard'));
     await wait(500);
 
@@ -668,6 +696,10 @@ describe('Room Switching — Message Protocol Contract', () => {
   // ✅ PASS NOW — ROOM_SWITCH is accompanied by transition narration
   it('ROOM_SWITCH always preceded by transition narration', async () => {
     const { client, collector } = await connectTestClient(colyseus, 'refuge');
+
+    // Navigate to shardboard room first
+    client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
+    await wait(300);
 
     client.send(MessageTypes.COMMAND, makeCommand('enter', 'shard'));
     await wait(500);

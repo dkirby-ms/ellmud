@@ -60,12 +60,15 @@ describe('RefugeRoom Multi-Player', () => {
     expect(collector1.roomHeader.length).toBeGreaterThan(0);
     expect(collector2.roomHeader.length).toBeGreaterThan(0);
 
-    // Room header should be The Refuge
+    // Room header should be The Refuge — The Hearth
     expect(collector1.roomHeader[0]!.roomName).toContain('Refuge');
     expect(collector2.roomHeader[0]!.roomName).toContain('Refuge');
 
     // Refuge is always stable
     expect(collector1.roomHeader[0]!.stability).toBe(1.0);
+
+    // Hearth should have exits
+    expect(collector1.roomHeader[0]!.exits.length).toBeGreaterThan(0);
 
     await client1.leave();
     await client2.leave();
@@ -102,6 +105,10 @@ describe('RefugeRoom Multi-Player', () => {
     const collector = new MessageCollector(client);
     await wait(500);
 
+    // Navigate to the shardboard room (west from hearth)
+    client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
+    await wait(300);
+
     const initialCount = collector.narrate.length;
     client.send(MessageTypes.COMMAND, makeCommand('shardboard'));
     await wait(500);
@@ -121,6 +128,10 @@ describe('RefugeRoom Multi-Player', () => {
     const client = await colyseus.connectTo(room);
     const collector = new MessageCollector(client);
     await wait(500);
+
+    // Navigate to the shardboard room first
+    client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
+    await wait(300);
 
     client.send(MessageTypes.COMMAND, makeCommand('enter', 'shard'));
     await wait(500);
@@ -144,6 +155,10 @@ describe('RefugeRoom Multi-Player', () => {
     const collector = new MessageCollector(client);
     await wait(500);
 
+    // Navigate to the shardboard room first
+    client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
+    await wait(300);
+
     client.send(MessageTypes.COMMAND, makeCommand('enter'));
     await wait(500);
 
@@ -161,6 +176,10 @@ describe('RefugeRoom Multi-Player', () => {
     const collector = new MessageCollector(client);
     await wait(500);
 
+    // Navigate to the shardboard room first
+    client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
+    await wait(300);
+
     client.send(MessageTypes.COMMAND, makeCommand('enter', shard.roomId));
     await wait(500);
 
@@ -175,6 +194,10 @@ describe('RefugeRoom Multi-Player', () => {
     const client = await colyseus.connectTo(room);
     const collector = new MessageCollector(client);
     await wait(500);
+
+    // Navigate to the shardboard room first
+    client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
+    await wait(300);
 
     const initialCount = collector.narrate.length;
     client.send(MessageTypes.COMMAND, makeCommand('enter', 'tavern'));

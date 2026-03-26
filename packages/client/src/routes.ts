@@ -28,6 +28,8 @@ import RoomsList from "./pages/admin/RoomsList";
 import RoomsDetail from "./pages/admin/RoomsDetail";
 import LiveRooms from "./pages/admin/LiveRooms";
 import LiveRoomDetail from "./pages/admin/LiveRoomDetail";
+import ZonesList from "./pages/admin/ZonesList";
+import ZonesDetail from "./pages/admin/ZonesDetail";
 import NarrativeList from "./pages/admin/NarrativeList";
 import NarrativeDetail from "./pages/admin/NarrativeDetail";
 import Balance from "./pages/admin/Balance";
@@ -148,6 +150,14 @@ export const routes: RouteObject[] = [
           {
             path: "rooms/:id",
             Component: RoomsDetail,
+          },
+          {
+            path: "zones",
+            Component: ZonesList,
+          },
+          {
+            path: "zones/:slug",
+            Component: ZonesDetail,
           },
           {
             path: "live-rooms",
