@@ -16,7 +16,6 @@ import type {
   StashItem,
   StashItemInstance,
   EquipmentSlotType,
-  DisplayItem,
   EquipmentSlots,
 } from '@ellmud/shared';
 import {

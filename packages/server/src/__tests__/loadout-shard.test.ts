@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { StashItem, EquipmentSlotType } from '@ellmud/shared';
+import type { StashItem } from '@ellmud/shared';
 import { EQUIPMENT_SLOT_ORDER } from '@ellmud/shared';
 import { InMemoryStashRepository } from '../stash/StashRepository.js';
 import { InMemoryLoadoutRepository } from '../loadout/LoadoutRepository.js';

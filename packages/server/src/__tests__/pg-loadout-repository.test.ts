@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PgLoadoutRepository } from '../loadout/PgLoadoutRepository.js';
 import { createEmptyLoadoutData } from '../loadout/LoadoutRepository.js';
-import type { StashItemInstance, EquipmentSlotType } from '@ellmud/shared';
+import type { StashItemInstance } from '@ellmud/shared';
 import { EQUIPMENT_SLOT_ORDER } from '@ellmud/shared';
 
 import type { QueryResultRow } from 'pg';

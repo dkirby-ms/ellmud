@@ -14,14 +14,10 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { ColyseusTestServer } from '@colyseus/testing';
 import type {
-  StashItem,
   EquipmentSlotType,
   LoadoutUpdateMessage,
-  StashUpdateMessage,
 } from '@ellmud/shared';
-import { MessageTypes, EQUIPMENT_SLOT_ORDER } from '@ellmud/shared';
-import { InMemoryStashRepository } from '../stash/StashRepository.js';
-import { StashService } from '../stash/StashService.js';
+import { MessageTypes } from '@ellmud/shared';
 
 import {
   bootTestServer,
@@ -31,16 +27,6 @@ import {
 } from './helpers/index.js';
 
 import {
-  PLAYER_A,
-  RUSTY_SWORD,
-  IRON_SWORD,
-  IRON_HELM,
-  STEEL_BREASTPLATE,
-  CRYPT_KEY,
-  COPPER_RING,
-  allTestItemDefs,
-  makeInstanceFromDef,
-  populateStash,
   resetInstanceCounter,
 } from './helpers/loadout-fixtures.js';
 
@@ -123,7 +109,7 @@ describe('RefugeRoom — EQUIP_ITEM handler', () => {
 
     // Should receive system narration with error
     const errorMsgs = collector.narrateByType('system');
-    const hasError = errorMsgs.some(
+    errorMsgs.some(
       (m) => m.text.toLowerCase().includes('invalid') ||
              m.text.toLowerCase().includes('error') ||
              m.text.toLowerCase().includes('cannot'),
@@ -197,7 +183,7 @@ describe('ShardRoom — EQUIP_ITEM handler', () => {
 describe('Full Lifecycle — Refuge → Equip → Shard → Extract', () => {
   it('equip in Refuge, items carry into shard context', async () => {
     // 1. Connect to Refuge
-    const { client: refugeClient, collector: refugeCollector } =
+    const { client: refugeClient } =
       await connectTestClient(colyseus, 'refuge');
 
     // 2. Equip item from stash (via message)
@@ -210,7 +196,7 @@ describe('Full Lifecycle — Refuge → Equip → Shard → Extract', () => {
     await refugeClient.leave();
 
     // 3. Connect to Shard — loadout should carry over
-    const { client: shardClient, collector: shardCollector } =
+    const { client: shardClient } =
       await connectTestClient(colyseus, 'shard');
 
     // The shard should have the player's loadout state
@@ -251,9 +237,9 @@ describe('Full Lifecycle — Refuge → Equip → Shard → Extract', () => {
     const room = await colyseus.createRoom('refuge', {});
 
     const client1 = await colyseus.connectTo(room);
-    const collector1 = new MessageCollector(client1);
+    new MessageCollector(client1);
     const client2 = await colyseus.connectTo(room);
-    const collector2 = new MessageCollector(client2);
+    new MessageCollector(client2);
 
     await wait(500);
 
@@ -299,7 +285,7 @@ describe('Integration Edge Cases', () => {
   });
 
   it('rapid equip/unequip messages do not crash the server', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'refuge');
+    const { client } = await connectTestClient(colyseus, 'refuge');
 
     // Fire 20 rapid equip/unequip messages
     for (let i = 0; i < 10; i++) {
@@ -319,7 +305,7 @@ describe('Integration Edge Cases', () => {
   });
 
   it('equip message with missing fields is handled gracefully', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'refuge');
+    const { client } = await connectTestClient(colyseus, 'refuge');
 
     // Send malformed messages
     client.send(MessageTypes.EQUIP_ITEM, {});

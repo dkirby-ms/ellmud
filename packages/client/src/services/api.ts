@@ -112,8 +112,8 @@ export function selectCharacter(token: string, characterId: string): Promise<Cha
   });
 }
 
-export function deleteCharacter(token: string, characterId: string): Promise<void> {
-  return request<void>(`/api/characters/${characterId}`, {
+export async function deleteCharacter(token: string, characterId: string): Promise<void> {
+  await request<undefined>(`/api/characters/${characterId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   });

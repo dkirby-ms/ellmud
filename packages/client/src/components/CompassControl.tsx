@@ -50,7 +50,7 @@ export default function CompassControl({ onNavigate }: CompassControlProps) {
 
       {/* Compass rose — 3×3 grid for cardinal/ordinal directions */}
       <div className="grid grid-cols-3 gap-1 max-w-[9rem] mx-auto mb-2">
-        {ALL_DIRECTIONS.map((dir, i) => {
+        {ALL_DIRECTIONS.map((dir, _i) => {
           if (dir === '') {
             // Center cell — decorative compass dot
             return (

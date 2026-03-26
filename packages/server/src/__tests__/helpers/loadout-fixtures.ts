@@ -13,7 +13,6 @@ import type {
   StashItemInstance,
   EquipmentSlotType,
   ItemType,
-  GearTier,
 } from '@ellmud/shared';
 import { SLOT_ACCEPTS } from '@ellmud/shared';
 

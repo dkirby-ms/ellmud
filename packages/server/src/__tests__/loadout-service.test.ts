@@ -10,7 +10,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { EquipmentSlotType, StashItem } from '@ellmud/shared';
-import { SLOT_ACCEPTS, EQUIPMENT_SLOT_ORDER } from '@ellmud/shared';
+import { EQUIPMENT_SLOT_ORDER } from '@ellmud/shared';
 import { InMemoryStashRepository } from '../stash/StashRepository.js';
 import { InMemoryLoadoutRepository } from '../loadout/LoadoutRepository.js';
 import { LoadoutService } from '../loadout/LoadoutService.js';
@@ -287,7 +287,7 @@ describe('LoadoutService — Unequip Item', () => {
 
     // Fill stash to capacity: set capacity to 15, add breastplate (weight=15)
     await stashRepo.setCapacity(PLAYER_A, 15);
-    const filler = await populateStash(stashRepo, PLAYER_A, [{ item: STEEL_BREASTPLATE }]);
+    await populateStash(stashRepo, PLAYER_A, [{ item: STEEL_BREASTPLATE }]);
 
     // Try to unequip sword (weight 5) — would exceed capacity (15 + 5 = 20 > 15)
     const result = await loadoutService.unequipItem(PLAYER_A, 'weapon');

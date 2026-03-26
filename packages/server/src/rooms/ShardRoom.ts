@@ -15,10 +15,6 @@ import {
   type UnequipItemMessage,
   type SwapItemMessage,
   type LoadoutUpdateMessage,
-  type StashUpdateMessage,
-  type DisplayItem,
-  SLOT_ACCEPTS,
-  EQUIPMENT_SLOT_ORDER,
   SHARD_SICKNESS_DEFAULTS,
   MessageTypes,
 } from '@ellmud/shared';
