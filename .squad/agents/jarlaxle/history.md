@@ -1557,3 +1557,11 @@ Character listing, creation, selection, and deletion use REST endpoints (`/api/c
 
 **Faction slugs are from DB migration 004:**
 DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client CharacterSelect uses these. Content definitions use different names. Reconciliation is deferred per user directive that factions are placeholder.
+
+### Dedicated Narrative & Creature Definition Stores
+- Created migration 022 (`narrative_template_definitions` table) and 023 (`creature_definitions` table with data migration from content_definitions JSONB).
+- `PgNarrativeDefinitionsStore` maps 9 columns (slug, narrative_type, biome, template, tone, verbosity, tags) to flat ContentEntity.
+- `PgCreatureDefinitionsStore` maps 21 columns + loot_table JSONB to flat ContentEntity. Creature `type` field is the unique slug, `id` is the UUID PK.
+- init.ts already had narrative/creature branches (committed by Drizzt's parallel biome/modifier work). No conflict.
+- Pattern: each dedicated store follows PgItemDefinitionsStore — rowToEntity mapper, isPgError helper, ContentStoreError codes (DUPLICATE_ID, NOT_FOUND).
+- Build clean, all 1823 server tests pass (80 test files, 0 regressions).
