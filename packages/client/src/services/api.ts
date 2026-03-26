@@ -90,26 +90,32 @@ export async function validateToken(token: string): Promise<boolean> {
 
 import type { CharacterSummary, CreateCharacterRequest } from '@ellmud/shared';
 
-export function fetchCharacters(token: string): Promise<CharacterSummary[]> {
-  return request<CharacterSummary[]>('/api/characters', {
+export async function fetchCharacters(token: string): Promise<CharacterSummary[]> {
+  const res = await request<{ characters: CharacterSummary[] }>('/api/characters', {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` },
   });
+  return res.characters;
 }
 
-export function createCharacter(token: string, data: CreateCharacterRequest): Promise<CharacterSummary> {
-  return request<CharacterSummary>('/api/characters', {
+export async function createCharacter(token: string, data: CreateCharacterRequest): Promise<CharacterSummary> {
+  const res = await request<{ character: CharacterSummary }>('/api/characters', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(data),
   });
+  return res.character;
 }
 
-export function selectCharacter(token: string, characterId: string): Promise<CharacterSummary> {
-  return request<CharacterSummary>(`/api/characters/${characterId}/select`, {
+export async function selectCharacter(token: string, characterId: string): Promise<CharacterSummary> {
+  // Server returns { message } — refetch the character list to get the updated active character
+  await request<{ message: string }>(`/api/characters/${characterId}/select`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}` },
   });
+  // Return a minimal summary so the caller can proceed
+  const chars = await fetchCharacters(token);
+  return chars.find(c => c.id === characterId) ?? chars[0];
 }
 
 export async function deleteCharacter(token: string, characterId: string): Promise<void> {
