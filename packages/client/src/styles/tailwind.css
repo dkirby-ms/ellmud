@@ -80,6 +80,105 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ─── Game-themed scrollbar ─────────────────────────────────────────── */
+.narrative-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.narrative-scroll::-webkit-scrollbar-track {
+  background: #080910;
+}
+.narrative-scroll::-webkit-scrollbar-thumb {
+  background: #2A2B35;
+  border-radius: 0;
+}
+.narrative-scroll::-webkit-scrollbar-thumb:hover {
+  background: #4E9A06;
+}
+/* Firefox */
+.narrative-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #2A2B35 #080910;
+}
+
+/* ─── Terminal Narrative Pane ──────────────────────────────────────── */
+.narrative-terminal {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.35;
+  background: #080910;
+  color: #D3D7CF;
+  position: relative;
+}
+
+/* Subtle CRT scanline overlay */
+.narrative-terminal::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.04) 2px,
+    rgba(0, 0, 0, 0.04) 4px
+  );
+  z-index: 1;
+}
+
+/* ─── ANSI Terminal Colors ─────────────────────────────────────────── */
+
+/* Standard 8 colors */
+.ansi-black   { color: #555753; }
+.ansi-red     { color: #CC0000; }
+.ansi-green   { color: #4E9A06; }
+.ansi-yellow  { color: #C4A000; }
+.ansi-blue    { color: #3465A4; }
+.ansi-magenta { color: #75507B; }
+.ansi-cyan    { color: #06989A; }
+.ansi-white   { color: #D3D7CF; }
+
+/* Bright / high-intensity variants */
+.ansi-bright-black   { color: #555753; }
+.ansi-bright-red     { color: #EF2929; }
+.ansi-bright-green   { color: #8AE234; }
+.ansi-bright-yellow  { color: #FCE94F; }
+.ansi-bright-blue    { color: #729FCF; }
+.ansi-bright-magenta { color: #AD7FA8; }
+.ansi-bright-cyan    { color: #34E2E2; }
+.ansi-bright-white   { color: #EEEEEC; }
+
+/* Text modifiers */
+.ansi-bold    { font-weight: 700; }
+.ansi-dim     { opacity: 0.5; }
+.ansi-italic  { font-style: italic; }
+.ansi-underline { text-decoration: underline; }
+
+/* ─── Semantic Game Colors (ANSI-mapped) ───────────────────────────── */
+
+/* Item rarity tiers */
+.mud-common     { color: #D3D7CF; }              /* white/gray */
+.mud-uncommon   { color: #4E9A06; }              /* ANSI green */
+.mud-rare       { color: #34E2E2; }              /* bright cyan */
+.mud-epic       { color: #AD7FA8; }              /* bright magenta */
+.mud-legendary  { color: #FCE94F; font-weight: 700; } /* bright yellow + bold */
+
+/* Combat text */
+.mud-damage     { color: #CC0000; }              /* ANSI red */
+.mud-critical   { color: #EF2929; font-weight: 700; } /* bright red + bold */
+.mud-healing    { color: #8AE234; }              /* bright green */
+.mud-dodge      { color: #C4A000; font-style: italic; } /* yellow + italic */
+.mud-miss       { color: #C4A000; opacity: 0.7; } /* yellow + dim */
+
+/* Message types */
+.mud-system     { color: #555753; }              /* gray/dim */
+.mud-npc        { color: #06989A; }              /* ANSI cyan */
+.mud-player     { color: #EEEEEC; }              /* bright white */
+.mud-exits      { color: #C4A000; font-weight: 700; } /* yellow + bold */
+.mud-speech     { color: #34E2E2; }              /* bright cyan */
+.mud-sound      { color: #555753; font-style: italic; }
+.mud-room-desc  { color: #D3D7CF; }             /* standard white */
+
 @layer base {
   * {
     @apply outline-interactive/50;

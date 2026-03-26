@@ -22,6 +22,8 @@ import type {
   RoomSwitchMessage,
   ExtractionMessage,
   CombatAction,
+  LoadoutUpdateMessage,
+  StashUpdateMessage,
 } from '@ellmud/shared';
 import type { Room } from '@colyseus/sdk';
 import type { MessageHandlers } from '../services/connection.js';
@@ -50,6 +52,8 @@ export interface UseShardConnectionResult {
   extraction: ExtractionState;
   /** Reconnection state for overlay */
   reconnection: ReturnType<typeof useReconnection>;
+  /** Current room ref for direct message sending (e.g. equipment) */
+  roomRef: React.RefObject<Room | null>;
 }
 
 const INITIAL_EXTRACTION: ExtractionState = { status: null, progress: 0, narration: null };
@@ -240,6 +244,16 @@ export function useShardConnection(): UseShardConnectionResult {
           dispatch({ type: 'SET_ERROR', error: message });
         }
       },
+      onLoadoutUpdate: (msg: LoadoutUpdateMessage) => {
+        if (!disposed) {
+          dispatch({ type: 'SET_LOADOUT', slots: msg.slots });
+        }
+      },
+      onStashUpdate: (msg: StashUpdateMessage) => {
+        if (!disposed) {
+          dispatch({ type: 'SET_STASH_ITEMS', items: msg.items });
+        }
+      },
       onLeave: (code: number) => {
         if (!disposed && !switchingRef.current) {
           dispatch({ type: 'SET_CONNECTION_STATUS', status: 'disconnected' });
@@ -355,5 +369,6 @@ export function useShardConnection(): UseShardConnectionResult {
     sendChatMessage,
     extraction,
     reconnection,
+    roomRef,
   };
 }

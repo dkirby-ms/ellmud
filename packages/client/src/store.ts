@@ -5,7 +5,11 @@
 
 import { createContext, useContext } from 'react';
 import type { Room } from '@colyseus/sdk';
-import type { NarrationType, RoomHeaderMessage, ShardState, CombatAction, GearTier } from '@ellmud/shared';
+import type {
+  NarrationType, RoomHeaderMessage, ShardState, CombatAction, GearTier,
+  EquipmentSlots, DisplayItem,
+} from '@ellmud/shared';
+import { createEmptyEquipmentSlots } from '@ellmud/shared';
 
 // ─── Message types for terminal display ──────────────────────────────────────
 
@@ -79,6 +83,9 @@ export interface AppState {
   statusEffects: StatusEffect[];
   playerHp: number;
   playerMaxHp: number;
+  loadout: EquipmentSlots;
+  stashItems: DisplayItem[];
+  pendingEquipAction: boolean;
 }
 
 export const initialState: AppState = {
@@ -102,6 +109,9 @@ export const initialState: AppState = {
   statusEffects: [],
   playerHp: 100,
   playerMaxHp: 100,
+  loadout: createEmptyEquipmentSlots(),
+  stashItems: [],
+  pendingEquipAction: false,
 };
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
@@ -125,7 +135,10 @@ export type AppAction =
   | { type: 'SET_PENDING_COMBAT_ACTION'; action: CombatAction | null }
   | { type: 'SET_COLLAPSE_TIMER'; timer: number | null }
   | { type: 'SET_INVENTORY'; items: InventoryItem[] }
-  | { type: 'CLEAR_MESSAGES' };
+  | { type: 'CLEAR_MESSAGES' }
+  | { type: 'SET_LOADOUT'; slots: EquipmentSlots }
+  | { type: 'SET_STASH_ITEMS'; items: DisplayItem[] }
+  | { type: 'SET_PENDING_EQUIP'; pending: boolean };
 
 const MAX_MESSAGES = 500;
 
@@ -172,6 +185,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, inventory: action.items };
     case 'CLEAR_MESSAGES':
       return { ...state, messages: [] };
+    case 'SET_LOADOUT':
+      return { ...state, loadout: action.slots, pendingEquipAction: false };
+    case 'SET_STASH_ITEMS':
+      return { ...state, stashItems: action.items, pendingEquipAction: false };
+    case 'SET_PENDING_EQUIP':
+      return { ...state, pendingEquipAction: action.pending };
     default:
       return state;
   }

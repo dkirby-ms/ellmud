@@ -6,7 +6,7 @@ import {
   Sword,
   ArrowLeft,
 } from "lucide-react";
-import InventoryOverlay from "../components/InventoryOverlay";
+import CombinedStashLoadout from "../components/CombinedStashLoadout";
 import ExtractionOverlay from "../components/ExtractionOverlay";
 import ChatPanel from "../components/ChatPanel";
 import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
@@ -27,6 +27,7 @@ export default function ShardExploration() {
     sendChatMessage,
     extraction,
     reconnection,
+    roomRef,
   } = useShardConnection();
 
   const [command, setCommand] = useState("");
@@ -242,47 +243,43 @@ export default function ShardExploration() {
           {/* Narrative text — render from real AppContext messages */}
           <div
             ref={narrativeRef}
-            className="flex-1 overflow-y-auto px-8 py-6 space-y-6 narrative-scroll"
+            className="flex-1 overflow-y-auto px-6 py-4 space-y-1 narrative-scroll narrative-terminal"
           >
             {state.messages.map((msg) => (
               <div key={msg.id}>
                 {msg.type === "header" && (
                   <div>
                     <h3
-                      className="text-accent-gold mb-3 font-serif"
-                      style={{ fontSize: "1.25rem" }}
+                      className="ansi-bright-yellow ansi-bold mb-1"
+                      style={{ fontSize: "0.9375rem" }}
                     >
                       {msg.text}
                     </h3>
-                    <div className="h-px bg-accent-gold opacity-20 mt-4"></div>
+                    <div className="h-px bg-accent-gold opacity-20 mt-1"></div>
                   </div>
                 )}
 
                 {msg.type === "room" && (
                   <div>
-                    <p
-                      className="text-text-primary mb-3 max-w-[70ch] font-serif"
-                      style={{ lineHeight: 1.7, fontSize: "1rem" }}
-                    >
+                    <p className="mud-room-desc max-w-[80ch]">
                       {msg.text}
                     </p>
-                    <div className="h-px bg-accent-gold opacity-20 mt-4"></div>
+                    <div className="h-px bg-accent-gold opacity-10 mt-1"></div>
                   </div>
                 )}
 
                 {msg.type === "combat" && (
                   <p
                     data-combat-type={msg.combatSubtype ?? 'default'}
-                    className={`max-w-[70ch] font-serif ${
-                      msg.combatSubtype === 'hit_dealt' ? 'text-accent-gold'
-                      : msg.combatSubtype === 'hit_taken' ? 'text-danger'
-                      : msg.combatSubtype === 'dodge' ? 'text-text-secondary'
-                      : msg.combatSubtype === 'defeated' ? 'text-danger font-bold'
-                      : msg.combatSubtype === 'flee' ? 'text-warning'
-                      : msg.combatSubtype === 'combat_end' ? 'text-interactive italic'
-                      : 'text-text-primary'
+                    className={`max-w-[80ch] ${
+                      msg.combatSubtype === 'hit_dealt' ? 'mud-damage ansi-bold'
+                      : msg.combatSubtype === 'hit_taken' ? 'mud-critical'
+                      : msg.combatSubtype === 'dodge' ? 'mud-dodge'
+                      : msg.combatSubtype === 'defeated' ? 'ansi-bright-red ansi-bold'
+                      : msg.combatSubtype === 'flee' ? 'ansi-yellow ansi-italic'
+                      : msg.combatSubtype === 'combat_end' ? 'ansi-cyan ansi-italic'
+                      : 'ansi-white'
                     }`}
-                    style={{ lineHeight: 1.7, fontSize: "1rem" }}
                   >
                     {msg.text}
                   </p>
@@ -290,38 +287,31 @@ export default function ShardExploration() {
 
                 {msg.type === "trace" && (
                   <p
-                    className="text-text-secondary italic pl-6 max-w-[70ch] flex items-start gap-2 font-serif"
-                    style={{ lineHeight: 1.7, fontSize: "0.95rem" }}
+                    className="ansi-dim pl-4 max-w-[80ch] flex items-start gap-2"
                   >
-                    <Eye className="w-4 h-4 mt-1 flex-shrink-0" />
+                    <Eye className="w-3 h-3 mt-0.5 flex-shrink-0" />
                     <span>{msg.text}</span>
                   </p>
                 )}
 
                 {msg.type === "sound" && (
                   <p
-                    className="text-text-secondary italic pl-6 max-w-[70ch] flex items-start gap-2 font-serif"
-                    style={{ lineHeight: 1.7, fontSize: "0.95rem" }}
+                    className="mud-sound pl-4 max-w-[80ch] flex items-start gap-2"
                   >
-                    <Volume2 className="w-4 h-4 mt-1 flex-shrink-0" />
+                    <Volume2 className="w-3 h-3 mt-0.5 flex-shrink-0" />
                     <span>{msg.text}</span>
                   </p>
                 )}
 
                 {msg.type === "system" && (
-                  <p
-                    className="text-text-disabled text-sm font-mono"
-                  >
+                  <p className="mud-system">
                     {msg.text}
                   </p>
                 )}
 
                 {msg.type === "speech" && (
-                  <p
-                    className="text-text-primary max-w-[70ch] font-serif"
-                    style={{ lineHeight: 1.7, fontSize: "1rem" }}
-                  >
-                    "{msg.text}"
+                  <p className="mud-speech max-w-[80ch]">
+                    &ldquo;{msg.text}&rdquo;
                   </p>
                 )}
               </div>
@@ -629,11 +619,29 @@ export default function ShardExploration() {
         </form>
       </div>
 
-      {/* Inventory Overlay */}
-      <InventoryOverlay
-        isOpen={inventoryOpen}
-        onClose={() => setInventoryOpen(false)}
-      />
+      {/* Equipment Overlay */}
+      {inventoryOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setInventoryOpen(false)}
+          />
+          <div className="relative w-[65%] bg-bg-panel shadow-2xl flex flex-col">
+            <div className="sticky top-0 bg-bg-panel border-b border-border-muted px-4 py-2 flex items-center justify-between z-10">
+              <span className="mud-exits" style={{ fontSize: '0.9rem' }}>EQUIPMENT</span>
+              <button
+                onClick={() => setInventoryOpen(false)}
+                className="text-text-secondary hover:text-accent-gold transition-colors text-sm font-mono"
+              >
+                [X]
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <CombinedStashLoadout room={roomRef.current} inShard />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Extraction Overlay */}
       <ExtractionOverlay

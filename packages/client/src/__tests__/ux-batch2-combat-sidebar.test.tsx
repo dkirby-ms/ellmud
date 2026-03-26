@@ -129,7 +129,7 @@ describe('Gap #10: Combat text color-coding', () => {
     renderShardExploration({ messages: [msg] });
 
     const element = screen.getByText(/You strike the corrupted sentinel/);
-    expect(element.closest('[data-combat-type]') ?? element).toHaveClass('text-accent-gold');
+    expect(element.closest('[data-combat-type]') ?? element).toHaveClass('mud-damage');
   });
 
   it('hits taken render with danger text class (text-danger)', () => {
@@ -143,7 +143,7 @@ describe('Gap #10: Combat text color-coding', () => {
     renderShardExploration({ messages: [msg] });
 
     const element = screen.getByText(/The sentinel slashes you/);
-    expect(element.closest('[data-combat-type]') ?? element).toHaveClass('text-danger');
+    expect(element.closest('[data-combat-type]') ?? element).toHaveClass('mud-critical');
   });
 
   it('dodges render with secondary text class (text-text-secondary)', () => {
@@ -157,7 +157,7 @@ describe('Gap #10: Combat text color-coding', () => {
     renderShardExploration({ messages: [msg] });
 
     const element = screen.getByText(/You sidestep the attack/);
-    expect(element.closest('[data-combat-type]') ?? element).toHaveClass('text-text-secondary');
+    expect(element.closest('[data-combat-type]') ?? element).toHaveClass('mud-dodge');
   });
 
   it('mixed combat log preserves correct colors per line type', () => {
@@ -174,9 +174,9 @@ describe('Gap #10: Combat text color-coding', () => {
     const hitTaken = screen.getByText(/The goblin bites you/);
     const dodge = screen.getByText(/You dodge the tail sweep/);
 
-    expect(hitDealt.closest('[data-combat-type]') ?? hitDealt).toHaveClass('text-accent-gold');
-    expect(hitTaken.closest('[data-combat-type]') ?? hitTaken).toHaveClass('text-danger');
-    expect(dodge.closest('[data-combat-type]') ?? dodge).toHaveClass('text-text-secondary');
+    expect(hitDealt.closest('[data-combat-type]') ?? hitDealt).toHaveClass('mud-damage');
+    expect(hitTaken.closest('[data-combat-type]') ?? hitTaken).toHaveClass('mud-critical');
+    expect(dodge.closest('[data-combat-type]') ?? dodge).toHaveClass('mud-dodge');
   });
 });
 

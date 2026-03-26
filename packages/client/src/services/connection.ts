@@ -14,6 +14,10 @@ import {
   type CombatResultMessage,
   type RoomSwitchMessage,
   type RoomSwitchOptions,
+  type LoadoutUpdateMessage,
+  type StashUpdateMessage,
+  type EquipItemMessage,
+  type UnequipItemMessage,
 } from '@ellmud/shared';
 
 const WS_ENDPOINT = import.meta.env.VITE_WS_URL ??
@@ -27,6 +31,8 @@ export interface MessageHandlers {
   onShardState: (msg: ShardStateMessage) => void;
   onCombatResult: (msg: CombatResultMessage) => void;
   onRoomSwitch: (msg: RoomSwitchMessage) => void;
+  onLoadoutUpdate?: (msg: LoadoutUpdateMessage) => void;
+  onStashUpdate?: (msg: StashUpdateMessage) => void;
   onError: (code: number, message: string) => void;
   onLeave: (code: number) => void;
 }
@@ -58,6 +64,12 @@ export async function connect(
   room.onMessage(MessageTypes.SHARD_STATE, handlers.onShardState);
   room.onMessage(MessageTypes.COMBAT_RESULT, handlers.onCombatResult);
   room.onMessage(MessageTypes.ROOM_SWITCH, handlers.onRoomSwitch);
+  if (handlers.onLoadoutUpdate) {
+    room.onMessage(MessageTypes.LOADOUT_UPDATE, handlers.onLoadoutUpdate);
+  }
+  if (handlers.onStashUpdate) {
+    room.onMessage(MessageTypes.STASH_UPDATE, handlers.onStashUpdate);
+  }
 
   room.onError((code, message) => handlers.onError(code, message ?? 'Unknown error'));
   room.onLeave((code) => handlers.onLeave(code));
@@ -96,6 +108,12 @@ export async function switchRoom(
   newRoom.onMessage(MessageTypes.SHARD_STATE, handlers.onShardState);
   newRoom.onMessage(MessageTypes.COMBAT_RESULT, handlers.onCombatResult);
   newRoom.onMessage(MessageTypes.ROOM_SWITCH, handlers.onRoomSwitch);
+  if (handlers.onLoadoutUpdate) {
+    newRoom.onMessage(MessageTypes.LOADOUT_UPDATE, handlers.onLoadoutUpdate);
+  }
+  if (handlers.onStashUpdate) {
+    newRoom.onMessage(MessageTypes.STASH_UPDATE, handlers.onStashUpdate);
+  }
 
   newRoom.onError((code, message) => handlers.onError(code, message ?? 'Unknown error'));
   newRoom.onLeave((code) => handlers.onLeave(code));
@@ -106,6 +124,16 @@ export async function switchRoom(
 /** Send a player command to the server. */
 export function sendCommand(room: Room, verb: string, args: string[] = []): void {
   room.send(MessageTypes.COMMAND, { verb, args });
+}
+
+/** Send equip item request to server. */
+export function sendEquipItem(room: Room, msg: EquipItemMessage): void {
+  room.send(MessageTypes.EQUIP_ITEM, msg);
+}
+
+/** Send unequip item request to server. */
+export function sendUnequipItem(room: Room, msg: UnequipItemMessage): void {
+  room.send(MessageTypes.UNEQUIP_ITEM, msg);
 }
 
 /** Parse raw input into verb + args and send. */
