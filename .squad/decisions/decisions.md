@@ -1857,3 +1857,76 @@ Testing the stash, loadout, and equipment UI requires items covering every slot 
 - Loadout tests can import specific items or the full catalog
 - Dev workflows can call `populateDevStash()` to fill a stash instantly
 - No production code changes — additive only
+
+---
+
+## 2026-03-26: Loadout Needs DB Persistence
+
+**Filed by:** Jarlaxle (Systems Dev)  
+**Date:** 2025-07-26  
+**Priority:** High — data-loss risk on server restart  
+**Status:** In Progress (Drizzt assigned)  
+
+### Problem
+
+`InMemoryLoadoutRepository` stores equipped gear in RAM only. When a player equips an item:
+
+1. Item is **removed from stash** (PostgreSQL — `PgStashRepository.removeItem`)
+2. Item is **placed in loadout** (RAM — `InMemoryLoadoutRepository.setSlot`)
+
+If the server restarts between these states, the item is gone from the DB stash but also gone from memory. **The item vanishes permanently.**
+
+### Impact
+
+- Any equipped item is at risk of silent loss on every deploy, crash, or restart
+- Players lose gear with no explanation and no recovery path
+- The more valuable the loadout, the worse the impact
+
+### Proposed Fix
+
+1. Create `PgLoadoutRepository` implementing the existing `LoadoutRepository` interface
+2. Add a DB migration: `player_loadouts` table (player_id, slot, item_instance JSONB)
+3. Wire it into `initLoadout()` in ShardRoom + RefugeRoom via `getLoadoutRepository()`
+4. The interface (`load`, `save`, `setSlot`, `getSlot`, `clear`, `listPlayerIds`) is already clean — just needs a Pg backing
+
+### Related Context
+
+- `LoadoutRepository` interface: `packages/server/src/loadout/LoadoutRepository.ts`
+- `LoadoutService` constructor already accepts an explicit `LoadoutRepository` (3-arg form)
+- Stash already has `PgStashRepository` as a pattern to follow
+- Death handler now correctly calls `clearLoadout()` (fixed alongside this filing)
+
+---
+
+## 2026-03-26: Shard-Sickness Death Counts Must Persist Across Server Restarts
+
+**Filed by:** Copilot (Scribe)  
+**Date:** 2026-03-26  
+**Priority:** Low → Medium (part of PG persistence audit)  
+**Status:** Proposed (backlog)
+
+### Problem
+
+Shard-sickness tracks player death counts per shard location. These counts are currently stored in memory only. On server restart, all death counts reset to 0. This breaks game mechanics:
+
+1. **Mechanic breakdown:** Players should accumulate warnings/sickness effects as they die — restarting the server shouldn't erase their progress
+2. **User expectation:** Death counts are permanent character history, not session-temporary
+3. **Testing burden:** Tests can't rely on death count persistence; live data at risk
+
+### Proposed Fix
+
+1. Add shard-sickness column to `player_profile` table (or dedicated `player_shard_sickness` table)
+2. Create `PgShardSicknessRepository` implementing existing `ShardSicknessRepository` interface
+3. Wire into PlayerProfile initialization via provider pattern (like LoadoutRepository)
+4. Death count persists across all server restarts automatically
+
+### Related Context
+
+- Part of PG persistence audit (4 gaps: Loadout, Profile equipment, Token Store, **Shard Sickness**)
+- LoadoutRepository pattern is the template to follow for repository implementation
+- Current in-memory implementation: `packages/server/src/player/shard-sickness/`
+- Audit baseline: 2026-03-26 (Phase 1: Loadout critical fix; Phase 2: Profile equipment; Phase 3: Token Store; Phase 4: Shard Sickness)
+
+### Effort Estimate
+
+- Medium (database schema + repository + provider wiring + tests ~2-3hrs after Loadout pattern established)
