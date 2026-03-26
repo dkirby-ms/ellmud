@@ -18,6 +18,7 @@
 import { ContentStore, type ContentEntity, type IContentStore } from './ContentStore.js';
 import type { ContentEntityType } from './content-types.js';
 import { PgContentStore } from './PgContentStore.js';
+import { PgItemDefinitionsStore } from './PgItemDefinitionsStore.js';
 import { getAllItemDefinitions } from '../../items/registry.js';
 import { DROWNED_REVENANT } from '../../creatures/templates/drowned-revenant.js';
 import { CONTENT_ENTITY_TYPES } from './content-types.js';
@@ -32,7 +33,12 @@ export function initializeContentStores(usePg = false): Map<ContentEntityType, I
 function initializePgStores(): Map<ContentEntityType, IContentStore<ContentEntity>> {
   const stores = new Map<ContentEntityType, IContentStore<ContentEntity>>();
   for (const entityType of CONTENT_ENTITY_TYPES) {
-    stores.set(entityType, new PgContentStore<ContentEntity>(entityType));
+    if (entityType === 'items') {
+      // Items use the dedicated item_definitions table, not the generic content_definitions blob
+      stores.set('items', new PgItemDefinitionsStore());
+    } else {
+      stores.set(entityType, new PgContentStore<ContentEntity>(entityType));
+    }
   }
   return stores;
 }
