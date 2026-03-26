@@ -254,6 +254,22 @@ export {
   deserializeRoomGraph,
 } from './room-graph.js';
 
+// ─── Zone System (Hand-Crafted Authored Zones) ──────────────────────────────
+
+export type {
+  ZoneDefinition,
+  ZoneRoomDefinition,
+  ZoneExitDefinition,
+  ZoneData,
+} from './zone.js';
+
+export {
+  INTER_ZONE_PREFIX,
+  makeInterZoneId,
+  isInterZoneId,
+  parseInterZoneId,
+} from './zone.js';
+
 // ─── Sound System (GDD §12) ──────────────────────────────────────────────────
 
 /** Types of actions that generate noise. */

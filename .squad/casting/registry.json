@@ -39,6 +39,14 @@
       "created_at": "2026-03-19T01:49:55Z",
       "legacy_named": false,
       "status": "active"
+    },
+    "regis": {
+      "persistent_name": "Regis",
+      "universe": "Forgotten Realms",
+      "role": "Frontend Dev",
+      "created_at": "2026-03-27T19:20:00Z",
+      "legacy_named": false,
+      "status": "active"
     }
   }
 }

@@ -1635,3 +1635,30 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 - When a game entity already has a relational table with FK constraints (e.g., factions → faction_membership), always extend the relational table rather than maintaining a parallel JSONB copy. The relational structure is the source of truth.
 - Admin UI fields (description, milestones, events) should live alongside game state, not in a separate entity type. This keeps reads/writes atomic.
 - Faction names are GDD-canonical (Ironwright Compact, Veil Cartographers, Scarlet Ledger) — these names appear in game state (player_profile.faction_id → factions.id → factions.name), admin UI, and API responses. Never reference old paraphrased names.
+
+### Rooms Store + content_definitions Retirement
+- Created `PgRoomDefinitionsStore.ts` following same pattern as PgBiomeDefinitionsStore: rowToEntity mapping, JSONB columns for properties/hazards/lootContainers, full CRUD with ContentStoreError handling.
+- Migration 028 creates `room_definitions` table (UUID PK, slug UNIQUE, name, description, type, plus JSONB arrays for properties/hazards/loot_containers).
+- Migration 029 drops `content_definitions` — the legacy JSONB blob table that stored all entity types generically. All 9 entity types now have dedicated relational stores.
+- Deleted `PgContentStore.ts` — no longer imported anywhere. Removed from barrel export.
+- Updated `dashboard-routes.ts` to query through store interfaces uniformly instead of raw `content_definitions` SQL. Removed unused `dbQuery` import and `usePg` destructure.
+- Updated `deploy-routes.ts` with TODO comments where it previously queried `content_definitions` for deploy diff/counts — these need to aggregate across dedicated tables.
+- Drizzt's skills/loot-tables stores (migrations 026-027, `PgSkillDefinitionsStore`, `PgLootTableDefinitionsStore`) were already on disk and init.ts already wired all 9 types (his commit 245edd4). No merge conflict.
+- Build clean, 1891 tests passing across 81 test files.
+
+### 2025-07-25: Zone Database Migration + PgZoneRepository
+- Created migration `030_create_zones.sql` with three tables: `zones` (definition), `zone_rooms` (room graph nodes), `zone_exits` (directed edges with inter-zone support).
+- Schema supports: level ranges, tier, lifecycle (persistent/scheduled/event), category (hub/dungeon/wilderness/social), PvP toggle, repop interval, and max player limits.
+- Inter-zone exits use `target_zone_slug` + `target_room_slug` nullable columns — NULL means intra-zone exit.
+- JSONB columns for loot_containers, hazards, npcs (rooms) and condition (exits) — serialized with JSON.stringify on write, auto-parsed by pg driver on read.
+- Unique constraints: zone slug globally, room slug per zone, exit direction per room per zone.
+- Created `ZoneRepository.ts` interface with full CRUD for zones, rooms, and exits. Types defined locally (ZoneDefinition, ZoneRoomDefinition, ZoneExitDefinition, ZoneData) pending Drizzt's `@ellmud/shared` zone types.
+- Created `PgZoneRepository.ts` following PgBiomeDefinitionsStore/PgItemDefinitionsStore patterns: `query()` from `../db/index.js`, row-to-entity mappers with camelCase↔snake_case conversion, `fetchZoneBundle()` uses `Promise.all` for parallel room+exit fetch.
+- Created `InMemoryZoneRepository.ts` using Maps with `randomUUID()`, proper cascade on zone delete (removes rooms + exits), sorted results matching Pg ORDER BY.
+- Created `index.ts` barrel with provider pattern matching stash/player modules: `initZoneProvider(usePg)`, `getZoneRepository()`, `isZonePg()`, `resetZoneProvider()`.
+- Pre-existing `zone-adapter.ts` (from parallel work) has TS errors referencing not-yet-available `@ellmud/shared` exports (ZoneData, makeInterZoneId). My files compile clean.
+- Full build passes: shared + server + client all green.
+
+**Learnings:**
+- Zone types are temporarily local in ZoneRepository.ts. When Drizzt lands `@ellmud/shared` zone types, swap the local types for shared imports and delete the local definitions. The interface shapes should match.
+- The provider pattern (init/get/isX/reset) is the established singleton pattern for all repository modules — stash, player, and now zones all follow it identically.

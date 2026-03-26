@@ -16,6 +16,7 @@
 | Drizzt | Engine Dev | `.squad/agents/drizzt/charter.md` | 🔧 Engine |
 | Jarlaxle | Systems Dev | `.squad/agents/jarlaxle/charter.md` | 🔧 Systems |
 | Volo | Narrative Dev | `.squad/agents/volo/charter.md` | 🎭 Narrative |
+| Regis | Frontend Dev | `.squad/agents/regis/charter.md` | ⚛️ Frontend |
 | Minsc | Tester | `.squad/agents/minsc/charter.md` | 🧪 Tester |
 | Scribe | Session Logger | `.squad/agents/scribe/charter.md` | 📋 Logger |
 | Ralph | Work Monitor | — | 🔄 Monitor |

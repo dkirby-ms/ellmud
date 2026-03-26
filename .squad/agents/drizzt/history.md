@@ -1760,3 +1760,30 @@ The `factions` table (migration 004, relational with FK to faction_membership) a
 
 **Key Learning for Future Content Store Work:**
 When a game table already exists with relational structure and FK constraints (like factions → faction_membership), always extend the relational table rather than maintaining a parallel JSONB copy in a generic table. The relational structure is the source of truth; separate JSONB copies cause data drift.
+
+---
+
+## Zone Type System + Zone-to-RoomGraph Adapter (2026-03-26)
+
+**Task:** Create shared zone types and a zone-to-RoomGraph adapter for hand-crafted authored zones.
+**Status:** ✅ Complete
+
+**Changes:**
+1. **packages/shared/src/zone.ts** — New file. Defines `ZoneDefinition`, `ZoneRoomDefinition`, `ZoneExitDefinition`, `ZoneData` interfaces. Includes inter-zone exit helpers (`makeInterZoneId`, `isInterZoneId`, `parseInterZoneId`) with `zone:{slug}/{roomSlug}` convention. Types reuse existing `RoomType`, `Direction`, `RoomProperty`, `LootContainer`, `HazardPlaceholder` for compatibility. Added `biome: BiomeType` to `ZoneDefinition` so the adapter can produce valid `RoomGraph` output.
+
+2. **packages/shared/src/index.ts** — Re-exports all zone types and inter-zone helpers.
+
+3. **packages/server/src/zones/zone-adapter.ts** — New file. `convertZoneToRoomGraph()` converts database-shaped `ZoneData` into the shared `RoomGraph` format used by procedural shards. Uses DJB2 hash for deterministic seed from zone slug. Clamps tier to valid `ShardTier` range. Inter-zone exits encoded as `zone:{slug}/{roomSlug}` in room exit maps.
+
+4. **packages/server/src/__tests__/zone-adapter.test.ts** — 13 tests covering: 3-room bidirectional zone, entry/extraction/boss identification, inter-zone exits, single room, deterministic seed, biome/tier passthrough, tier clamping, property/loot/hazard preservation, ghost room handling, entry slug filtering.
+
+**Quality Gate:**
+- ✅ Build clean (npm run build)
+- ✅ 13/13 zone adapter tests passing
+- ✅ Zero regressions in server/shared packages (2 pre-existing client test failures unrelated)
+
+**Key Decisions:**
+- Inter-zone exits use `zone:{zoneSlug}/{roomSlug}` prefix in exit maps. Downstream code detects with `isInterZoneId()`.
+- `ZoneDefinition` includes `biome: BiomeType` so the adapter produces fully valid `RoomGraph` (biome is required by the shared interface).
+- Zone `tier` is `number` (flexible for authored content), clamped to `ShardTier` (1|2|3) in the adapter.
+- Zone types reuse shared room-graph types (LootContainer, HazardPlaceholder, RoomProperty) rather than defining parallel types, ensuring zones flow through the same shard infrastructure without adaptation.

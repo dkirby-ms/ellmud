@@ -916,6 +916,107 @@ All future rooms must follow: `client.auth?.playerId` (excluding 'anonymous') �
 
 **Decision Record:** See `.squad/decisions.md` — 2026-03-25T23:16:00Z entry.
 
+### 2026-03-27: Hand-Crafted Zones Architecture v2
+
+**Requested by:** dkirby-ms  
+**Context:** User rejected previous procedural zone proposal (`.squad/decisions/inbox/elminster-zone-system-proposal.md` recommended procedural sub-regions). User wants traditional MUD-style hand-crafted zones where builders define specific rooms and connections.
+
+**Requirement:** Support hand-crafted zone layouts — admin/builder defines specific rooms, descriptions, and exact topology (exits/connections). Both hand-crafted zones AND procedural shards must coexist.
+
+**Architecture Decision:**
+
+Zones are **persistent, authored room graphs** stored in PostgreSQL and served via a generalized `ShardRoom` implementation. The existing procedural shard system remains unchanged for dungeon-crawl instances.
+
+**Core Components:**
+
+1. **Data Model:**
+   - `zones` table: metadata (name, slug, description, level range, tier, lifecycle, category, max_players, pvp_enabled, entry_room_ids)
+   - `zone_rooms` table: room definitions within zones (slug, name, description, type, properties, loot_containers, hazards, npcs)
+   - `zone_exits` table: directed connections (from_room_slug, direction, to_room_slug, locked, hidden, condition)
+   - Full relational schema — no JSONB blobs for core topology
+   - Migration: `030_create_zones.sql` + `031_seed_refuge_zone.sql`
+
+2. **Server Architecture:**
+   - **Polymorphic ShardRoom:** `onCreate()` accepts optional `zoneSlug` parameter
+   - If `zoneSlug` provided: load via `ZoneRepository.getZoneBySlug()` → convert to `RoomGraph` via `convertZoneToRoomGraph()`
+   - If no `zoneSlug`: call `generateShardGraph()` (existing procedural path)
+   - Rest of ShardRoom logic unchanged — operates on `RoomGraph` regardless of source
+   - New files: `packages/server/src/zones/PgZoneRepository.ts`, `packages/server/src/zones/zone-adapter.ts`
+   - Modified: `packages/server/src/rooms/ShardRoom.ts` (add zone loading path)
+
+3. **Zone Repository Interface:**
+   - `getAllZones()` — for matchmaker listing
+   - `getZoneBySlug(slug)` — returns full `ZoneData` (metadata + rooms + exits)
+   - CRUD operations for admin: create/update/delete zones, rooms, exits
+   - Lives in `packages/server/src/zones/`
+
+4. **Refuge Migration:**
+   - Refuge becomes the first hand-crafted zone
+   - Zone data: `slug: 'the-refuge'`, `lifecycle: 'persistent'`, `category: 'hub'`, `pvp_enabled: false`
+   - Rooms: `refuge-main` (Hearth), `refuge-stash` (Stash Alcove), `refuge-training` (Training Grounds), `refuge-board` (Shardboard)
+   - RefugeRoom loads topology via `ZoneRepository.getZoneBySlug('the-refuge')`
+   - Ambient simulation (NPCs, events) runs on same tick model as before
+
+5. **Admin UI:**
+   - Zone list page (`ZonesList.tsx`) — table with actions (edit, clone, delete)
+   - Zone detail page (`ZonesDetail.tsx`) — 3 sections:
+     - Zone metadata form (name, slug, description, tier, lifecycle, category, max_players, pvp_enabled)
+     - Rooms section (nested list, modal editor for add/edit)
+     - Exits section (table, modal for add/edit connections)
+   - Backend routes: `/api/admin/zones/*` for CRUD (admin role required)
+   - Pattern: follows existing admin content pages (`NarrativeDetail.tsx`, `BiomesDetail.tsx`)
+
+6. **Client Integration:**
+   - Room header message enhanced with `zoneSlug?`, `zoneName?` fields (mutually exclusive with `shardSeed`, `shardBiome`)
+   - Client renders zone name when present, shard info when not
+   - Navigation unchanged — zones use same `RoomGraph` structure as shards
+   - Matchmaker UI lists zones separately from shards
+   - Collapse timer hidden for zones (only shown for shards)
+
+**Zone Lifecycle:**
+- `lifecycle: 'persistent'` zones are always available, no collapse timer
+- Multiple concurrent instances allowed if `max_players > 0` and capacity reached
+- Phase 1: stateless templates (loot/NPCs respawn on instance creation)
+- Phase 2: optional instance state persistence (items looted, NPCs killed)
+
+**Key Design Insights:**
+- Zones and shards are polymorphic — both use `RoomGraph` in-memory structure
+- No client protocol changes required — navigation messages identical
+- Coexistence achieved via `ShardRoom` refactor (one line: add `zoneSlug` option)
+- Refuge retroactively becomes a zone (validates the abstraction)
+- Admin UI follows established patterns (reduces implementation risk)
+
+**Open Questions for User:**
+1. Zone instance state persistence (stateless vs persistent)?
+2. Inter-zone connections (isolated vs connected)?
+3. Zone-specific mechanics (parity vs enhanced)?
+4. Zone builder permissions (admin-only vs builder role)?
+5. Refuge navigation (UI hub vs navigable zone)?
+
+**Recommendation for Q5 (Refuge):** Make Refuge a navigable zone with 5-7 rooms. Players move via text commands (`go north` to Stash). Aligns with MUD genre and validates zone system architecture.
+
+**Scope:** 5–7 developer days
+- Phase A (Days 1-2): Data layer — migrations, TypeScript types, repository, zone-adapter, unit tests
+- Phase B (Days 3-4): Server integration — ShardRoom refactor, RefugeRoom migration, integration tests
+- Phase C (Days 5-6): Admin UI — zone list/detail pages, backend routes, validation
+- Phase D (Day 7): Client polish — room header rendering, matchmaker UI, zone indicators
+
+**Implementation Todos:** 29 tasks across 8 categories (database, shared types, server core, admin backend, admin UI, client gameplay, documentation, testing)
+
+**No breaking changes:** Existing procedural shards continue to work. This is purely additive.
+
+**Key Files:**
+- Proposal: `.squad/decisions/inbox/elminster-handcrafted-zones-v2.md` (full 27KB architecture document)
+- Current codebase context:
+  - `packages/shared/src/room-graph.ts` — Room and RoomGraph types (reused for zones)
+  - `packages/server/src/shard/generator.ts` — procedural generation (unchanged)
+  - `packages/server/src/rooms/ShardRoom.ts` — will become polymorphic
+  - `packages/server/src/rooms/RefugeRoom.ts` — will load zone topology
+  - `packages/server/src/admin/content/PgNarrativeDefinitionsStore.ts` — admin CRUD pattern to follow
+  - `packages/client/src/pages/admin/NarrativeDetail.tsx` — admin UI pattern to follow
+
+**Lesson:** When a user rejects a procedural approach and asks for hand-crafted content, the architecture must pivot from generation algorithms to database persistence and builder tooling. The key insight here is making zones polymorphic with shards by converging on a shared `RoomGraph` structure — allows reuse of all navigation/combat/extraction logic without duplication.
+
 **Orchestration Log:** `.squad/orchestration-log/2026-03-25T2316-elminster.md`
 
 ### 2026-03-27: Character Creation & Management System Design
@@ -1004,3 +1105,114 @@ All future rooms must follow: `client.auth?.playerId` (excluding 'anonymous') �
 
 - **Next steps:** Review with team, confirm faction reconciliation strategy, start Phase 1 (biomes, modifiers, narrative).
 
+
+### 2026-03-27: Zone System Architecture Analysis & Proposal
+
+**Task:** Architecture proposal for a ZONE SYSTEM — grouping rooms into named zones like traditional MUDs.
+
+**Analysis performed:**
+
+1. **What zones mean in traditional MUDs:** Named persistent areas (e.g., "Dark Forest"), hand-authored room graphs, durable across game sessions, navigable landmarks, administrative boundaries.
+
+2. **How zones fit Ellmud's architecture:** Three options analyzed in detail.
+
+**Three Design Options Evaluated:**
+
+- **Option 1: Persistent Non-Instanced Zones (❌ Rejected)**
+  - Create persistent zone + room tables. Shards are instances within zones.
+  - ✅ Fully traditional MUD experience.
+  - ❌ **Breaks procedural identity.** Every run to the Flooded Crypt identical — no surprises. Contradicts GDD §10.
+  - ❌ **Breaks ephemeral guarantee.** Shards are supposed to collapse; persistent zones underneath conflict.
+  - ❌ **High admin burden:** 500-1000 hand-authored rooms across 5 biomes × 2-4 zones.
+  - ❌ **Large migration.** Rewrite procedural generator to spawn within persistent topologies.
+  - **Verdict:** Fundamentally conflicts with Ellmud's identity.
+
+- **Option 2: Biome-Scoped Named Regions Within Shards (✅ RECOMMENDED)**
+  - Zones are **procedurally generated sub-regions of individual shards**, unique per seed.
+  - Generator partitions each shard into 2–4 named zones at generation time.
+  - Zones persist for shard lifetime, collapse when shard collapses (ephemeral).
+  - Admin defines zone templates per biome (not per-shard).
+  - ✅ Preserves procedural identity. Zones vary per shard.
+  - ✅ Maintains ephemeral guarantee. Zones live with shards.
+  - ✅ Minimal schema. Only 1 new `zone_definitions` table + optional Room fields.
+  - ✅ Player clarity. Zone names orient players in large shards (40–60 rooms).
+  - ✅ Admin-friendly. Define zone templates, apply procedurally.
+  - ✅ LLM-ready. Zone themes feed into narration.
+  - ✅ Low cost. ~2–3 dev days.
+  - ⚠️ Zones non-persistent. Knowledge doesn't transfer across runs (acceptable for roguelike).
+  - **Trade-off acceptance:** Player knowledge is about shard *patterns*, not memorized maps — fits roguelike identity.
+
+- **Option 3: Zones as Biome Sub-Templates (Simple, Less Powerful)**
+  - Zones are purely **thematic room name groupings** within biome definitions.
+  - No runtime zone objects. Room names convey zones ("Antechamber", "Deep Crypt").
+  - ✅ Simplest. ~4–6 hours.
+  - ❌ Zones implicit, not first-class. No zone header in room messages.
+  - ❌ No zone metadata. No admin UI.
+  - ❌ Future scaling problem. No hooks for zone quests, modifiers, events.
+  - **Verdict:** Weak option. Less satisfying.
+
+**Recommendation: Option 2 — Biome-Scoped Named Regions Within Shards**
+
+**Rationale:**
+1. Respects core identity — proceduralism + ephemerality preserved.
+2. Delivers player value — zones orient players, make shards feel structured.
+3. Admin-friendly — zones are templates, not per-shard hand-craft.
+4. Future-proof — foundation for zone-level features (quests, modifiers, ambient events).
+5. Reasonable scope — 2–3 dev days. Fits Phase 2 post-MVP.
+6. No breaking changes — existing code paths work unchanged.
+
+**Implementation Scope:**
+
+| Component | Changes | Effort |
+|-----------|---------|--------|
+| `room-graph.ts` | Add Zone interface, optional zoneId/zoneName to Room | 30 min |
+| `generator.ts` | Add `partitionIntoZones()`, zone assignment, load zone definitions | **2.5 days** |
+| `ShardRoom.ts` | Store zones, include zone name in room header messages | 1 hour |
+| `PgZoneDefinitionsStore.ts` (new) | CRUD for zone_definitions | 2 hours |
+| Admin UI (new) | Zone list + edit pages | 3 hours |
+| DB migrations | Create `zone_definitions` table | 1 hour |
+| Tests | Unit + integration tests for partitioning | 4 hours |
+| **Total** | | **~2.5 dev days (18 hours)** |
+
+**Key data model changes:**
+
+```sql
+CREATE TABLE zone_definitions (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT,
+  biome_id TEXT NOT NULL REFERENCES biome_definitions(id),
+  tier SMALLINT,  -- NULL = all tiers
+  room_type_bias TEXT[],  -- e.g., '{"entry", "corridor"}'
+  min_rooms SMALLINT DEFAULT 3,
+  max_rooms SMALLINT DEFAULT 8,
+  loot_concentration NUMERIC(3, 2) DEFAULT 0.5,
+  theme_adjectives TEXT[],  -- for LLM narration
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now()
+);
+```
+
+**Player experience:** Zone names appear in room header messages. Players see "You've entered the Ossuary Heart" + room-specific description. Zone IDs help with future zone-level features.
+
+**Migration path:** Phase 1 (no changes). Phase 2: Add `zone_definitions` table, deploy biome zone templates, update generator, launch zone names in client messages. **No breaking changes.**
+
+**Open decisions for dkirby-ms:**
+1. Zone granularity per tier? (2 zones for Tier 1, 3-4 for Tier 2/3?)
+2. Zone name style? (Thematic like "Ossuary Heart" vs descriptive like "Boss Chamber"?)
+3. How many zone templates per biome to seed? (Recommendation: 2–3 initially)
+4. Zone-level features in future? (Loot concentration, creature types, modifiers?)
+5. Client display location? (Room header, sidebar, or both?)
+
+**Key files:** 
+- Decision: `.squad/decisions/inbox/elminster-zone-system-proposal.md` (full 16.8KB analysis)
+- Affects: `generator.ts`, `room-graph.ts`, `ShardRoom.ts`, `RefugeRoom.ts` (room header messages)
+- New: `PgZoneDefinitionsStore.ts`, admin UI for zones, `zone_definitions` migration
+
+**Architecture insight — Traditional MUD vs Ellmud zones:**
+- **Traditional MUD zones:** Persistent, hand-authored, reused across all players, deep knowledge maps.
+- **Ellmud zones:** Ephemeral (shard lifetime), procedurally generated (unique per seed), templated (biome-level), spatial orientation per run.
+- **Core difference:** Ellmud prioritizes **roguelike proceduralism** over **persistent world simulation**. Zones are landmarks, not persistent geography.
+
+**Status:** Awaiting dkirby-ms review and decision on the 5 open questions.

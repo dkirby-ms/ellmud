@@ -9,6 +9,7 @@ How to decide who handles what.
 | Game server, networking, WebSocket/SSH | Drizzt | Server core, tick system, command parser, shard worker isolation, persistence |
 | Combat, shard gen, creatures, progression | Jarlaxle | Combat system, room graphs, creature AI, skills, economy, traces, sound, PvP |
 | LLM integration, narrative, prompts | Volo | Prompt engineering, caching, template fallbacks, narration pipeline, cost control |
+| React UI, admin pages, client | Regis | Admin dashboard pages, player UI, CSS/styling, hooks, client state |
 | Code review, architecture | Elminster | Design review, system boundaries, scope decisions, technical direction |
 | Testing, QA, edge cases | Minsc | Test architecture, unit/integration tests, edge case coverage, fixtures |
 | Scope & priorities | Elminster | What to build next, trade-offs, milestone planning |
@@ -23,6 +24,7 @@ How to decide who handles what.
 | `squad:drizzt` | Server, networking, command parsing issues | Drizzt |
 | `squad:jarlaxle` | Game systems, combat, shard gen issues | Jarlaxle |
 | `squad:volo` | LLM, narrative, prompt issues | Volo |
+| `squad:regis` | React UI, admin pages, client-side issues | Regis |
 | `squad:minsc` | Test, quality, regression issues | Minsc |
 
 ### How Issue Assignment Works
