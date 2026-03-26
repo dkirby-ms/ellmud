@@ -40,6 +40,8 @@ export interface RoomHeaderEntry {
 export interface CommandResult {
   narrations: NarrationEntry[];
   roomHeader?: RoomHeaderEntry;
+  /** When set, the player should be transferred to another zone. */
+  zoneTransfer?: { targetZoneSlug: string; targetRoomSlug: string };
 }
 
 export interface CreatureRef {

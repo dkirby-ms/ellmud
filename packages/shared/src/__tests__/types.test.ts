@@ -49,9 +49,9 @@ describe('MessageTypes', () => {
     expect(MessageTypes.ROOM_SWITCH).toBe('room_switch');
   });
 
-  it('should have exactly 20 message types', () => {
+  it('should have exactly 21 message types', () => {
     const keys = Object.keys(MessageTypes);
-    expect(keys).toHaveLength(20);
+    expect(keys).toHaveLength(21);
   });
 
   it('should have unique values for all message types', () => {

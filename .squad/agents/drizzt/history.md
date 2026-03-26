@@ -1787,3 +1787,44 @@ When a game table already exists with relational structure and FK constraints (l
 - `ZoneDefinition` includes `biome: BiomeType` so the adapter produces fully valid `RoomGraph` (biome is required by the shared interface).
 - Zone `tier` is `number` (flexible for authored content), clamped to `ShardTier` (1|2|3) in the adapter.
 - Zone types reuse shared room-graph types (LootContainer, HazardPlaceholder, RoomProperty) rather than defining parallel types, ensuring zones flow through the same shard infrastructure without adaptation.
+
+## Phase B — ShardRoom Polymorphism + Repop System + Inter-Zone Exits
+
+**Completed:** All three tasks implemented and verified (build clean, 1951+80 tests passing).
+
+### Changes Made
+
+1. **ShardRoom Polymorphism (`shardroom-poly`):**
+   - `onCreate` → `async onCreate` (Colyseus supports it) to allow async zone loading
+   - Added third code path: when `options['zoneSlug']` is provided, loads zone from `ZoneRepository`, converts via `convertZoneToRoomGraph` → `adaptRoomGraph` (same pipeline as procedural)
+   - New private fields: `zoneSlug`, `zoneData`, `isZone`, `repopTimer`
+   - Zone max players override from `ZoneDefinition.maxPlayers`
+   - Hub/social zones skip combat, extraction, downing, and collapse timer ticking
+   - Room headers include `zoneName` when in zone context
+   - Metadata includes zone slug/name for matchmaker
+
+2. **Repop System (`repop-system`):**
+   - `startRepopTimer()` uses `zone.repopIntervalSeconds` (default 300s)
+   - `repopZone()` re-places looted items via `resolveZoneRoomItems()` (same item registry resolution as `graph-adapter.ts`)
+   - `respawnZoneCreatures()` on `CreatureManager` — tracks zone creature records, respawns killed ones
+   - `broadcastRepopNarration()` sends ambient message to all zone players
+   - Timer cleaned up in `onDispose`
+
+3. **Inter-Zone Exit Handling (`inter-zone-exits`):**
+   - `go` handler detects `isInterZoneId(targetRoomId)` after exit validation, before move
+   - Returns `zoneTransfer` field on `CommandResult` (new field added to interface)
+   - `ShardRoom.handleCommandMessage` checks `result.zoneTransfer`, sends `ZONE_TRANSFER` message to client
+   - Added `ZONE_TRANSFER` to `MessageTypes` and `ZoneTransferMessage` interface in shared package
+   - Updated shared test count (20 → 21 message types)
+
+4. **CreatureManager enhancements:**
+   - Added `CREATURE_TEMPLATES` registry (currently maps `drowned_revenant`)
+   - `spawnCreaturesFromZone(zoneData)` reads NPC definitions from zone rooms
+   - `respawnZoneCreatures(zoneData)` for repop — tracks zone creature records, replaces dead ones
+   - `ZoneCreatureRecord` tracks creature→room→template mapping for repop
+
+### Learnings
+- Colyseus `Room.onCreate` can be async (returns `Promise<void>`) — no lifecycle issues
+- Zone data from ZoneRepository extends shared types (adds timestamps), fully assignable to shared `ZoneData`
+- The `adaptRoomGraph` pipeline resolves `LootContainer[]` → `Item[]` via item registry — zone repop must use the same resolution
+- `CommandResult` is the clean seam for command handlers to signal actions (zone transfer) without coupling to Colyseus `Client`

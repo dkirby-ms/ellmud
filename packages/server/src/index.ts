@@ -24,7 +24,7 @@ import {
   type EntraConfig,
 } from './auth/index.js';
 import { createHealthRouter } from './health.js';
-import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter, createDeployRouter } from './admin/index.js';
+import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter, createDeployRouter, createZoneRouter } from './admin/index.js';
 import { getConfig } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence, testRedisConnection } from './cache/index.js';
@@ -162,6 +162,10 @@ app.use(createSimulateRouter({ stores: contentStores }));
 // Deploy API — content deployment simulation (staging, production)
 app.use('/admin/api/deploy', createDeployRouter());
 console.log('[Ellmud] Deploy API: enabled');
+
+// Zone management CRUD — admin-managed MUD zones (rooms, exits)
+app.use(createZoneRouter());
+console.log('[Ellmud] Zone management API: enabled');
 
 // Admin runtime API — room management, metrics, SSE. Receives contentStores for spawn.
 app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis, isStashPg: isStashPg(), contentStores }));

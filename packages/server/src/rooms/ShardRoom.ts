@@ -15,6 +15,7 @@ import {
   type UnequipItemMessage,
   type SwapItemMessage,
   type LoadoutUpdateMessage,
+  type ZoneTransferMessage,
   SHARD_SICKNESS_DEFAULTS,
   MessageTypes,
 } from '@ellmud/shared';
@@ -61,6 +62,11 @@ import type { RunHistoryRepository, RunRecord } from '../run-history/index.js';
 import { InMemoryRunHistoryRepository, getRunHistoryRepository } from '../run-history/index.js';
 import { LoadoutService, getLoadoutRepository } from '../loadout/index.js';
 import type { LoadoutRepository } from '../loadout/index.js';
+import { getZoneRepository } from '../zones/index.js';
+import type { ZoneData } from '../zones/index.js';
+import { convertZoneToRoomGraph } from '../zones/zone-adapter.js';
+import { getItemDefinition } from '../items/registry.js';
+import type { Item } from '../shard/RoomGraph.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -104,6 +110,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private runHistoryRepo: RunHistoryRepository = new InMemoryRunHistoryRepository();
   /** Tracks when each player joined the shard (for run duration calculation). */
   private playerJoinTimes = new Map<string, number>();
+
+  // ─── Zone-specific fields ──────────────────────────────────────────────────
+  private zoneSlug?: string;
+  private zoneData?: ZoneData;
+  private isZone = false;
+  private repopTimer?: ReturnType<typeof setInterval>;
 
   /**
    * Inject profile repository. Called before room lifecycle if provided.
@@ -151,7 +163,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
   }
 
-  onCreate(options: Record<string, unknown>): void {
+  async onCreate(options: Record<string, unknown>): Promise<void> {
     // Initialize server-internal state (never sent to clients)
     this.setState(new ShardState());
     this.state.shardId = this.roomId;
@@ -177,9 +189,34 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     this.state.collapseTimer = this.collapseTimerSeconds;
 
-    // Initialize room graph — use procedural generator by default, test graph as fallback
+    // Initialize room graph — zone-based, procedural, or test graph
     this.creatureManager = new CreatureManager();
-    if (options['useTestGraph'] === true) {
+
+    if (options['zoneSlug'] && typeof options['zoneSlug'] === 'string') {
+      // Zone-based room: load from repository
+      const zoneRepo = getZoneRepository();
+      const zoneData = await zoneRepo.getZoneBySlug(options['zoneSlug']);
+      if (!zoneData) throw new Error(`Zone '${options['zoneSlug']}' not found`);
+
+      const sharedGraph = convertZoneToRoomGraph(zoneData);
+      this.roomGraph = adaptRoomGraph(sharedGraph);
+      this.entryRoomIds = sharedGraph.entryRoomIds;
+      this.shardTier = sharedGraph.tier;
+      this.state.biome = sharedGraph.biome;
+
+      // Store zone metadata for repop and inter-zone features
+      this.zoneSlug = options['zoneSlug'];
+      this.zoneData = zoneData;
+      this.isZone = true;
+
+      // Zone-level max players override (0 = unlimited, keep tier default)
+      if (zoneData.zone.maxPlayers > 0) {
+        this.maxClients = zoneData.zone.maxPlayers;
+      }
+
+      // Spawn creatures from zone NPC definitions
+      this.creatureManager.spawnCreaturesFromZone(zoneData);
+    } else if (options['useTestGraph'] === true) {
       this.roomGraph = createTestRoomGraph();
       this.entryRoomIds = [this.roomGraph.startRoomId]; // Test graph has single entry
     } else {
@@ -268,7 +305,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     this.updateMetadata();
 
-    this.log(`ShardRoom created: ${this.roomId} (biome=${this.state.biome}, tier=${this.shardTier})`);
+    this.log(`ShardRoom created: ${this.roomId} (biome=${this.state.biome}, tier=${this.shardTier}${this.isZone ? `, zone=${this.zoneSlug}` : ''})`);
+
+    // Start repop timer for zone-based rooms
+    if (this.isZone) {
+      this.startRepopTimer();
+    }
 
     // Begin shard lifecycle
     this.transitionTo('seeding');
@@ -485,7 +527,77 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
   onDispose(): void {
+    if (this.repopTimer) {
+      clearInterval(this.repopTimer);
+    }
     this.log(`ShardRoom disposed: ${this.roomId}`);
+  }
+
+  // ─── Zone Repop System ──────────────────────────────────────────────────────
+
+  private startRepopTimer(): void {
+    if (!this.isZone || !this.zoneData) return;
+
+    const intervalMs = (this.zoneData.zone.repopIntervalSeconds || 300) * 1000;
+    this.repopTimer = setInterval(() => this.repopZone(), intervalMs);
+  }
+
+  private repopZone(): void {
+    if (!this.zoneData) return;
+
+    // Re-place loot in rooms that have been looted
+    for (const zoneRoom of this.zoneData.rooms) {
+      const room = this.roomGraph.rooms.get(zoneRoom.slug);
+      if (!room) continue;
+
+      // Resolve defined items from zone room loot containers
+      const definedItems = this.resolveZoneRoomItems(zoneRoom);
+      const currentItemIds = new Set(room.items.map(i => i.id));
+      for (const item of definedItems) {
+        if (!currentItemIds.has(item.id)) {
+          room.items.push(item);
+        }
+      }
+    }
+
+    // Respawn killed creatures
+    this.creatureManager.respawnZoneCreatures(this.zoneData);
+
+    // Narrate repop to players in affected rooms
+    this.broadcastRepopNarration();
+  }
+
+  /** Convert zone room loot containers into resolved Item objects. */
+  private resolveZoneRoomItems(zoneRoom: ZoneData['rooms'][number]): Item[] {
+    const items: Item[] = [];
+    for (const container of zoneRoom.lootContainers) {
+      for (const itemId of container.items) {
+        const def = getItemDefinition(itemId);
+        if (def) {
+          items.push({
+            id: def.id,
+            name: def.name,
+            weight: def.weight,
+            description: def.description,
+          });
+        }
+      }
+    }
+    return items;
+  }
+
+  /** Send a subtle repop narration to all players currently in the zone. */
+  private broadcastRepopNarration(): void {
+    for (const [pid, ps] of this.players) {
+      const client = this.findClient(pid);
+      if (client) {
+        this.sendNarrate(client, {
+          text: 'You notice something has changed in the room…',
+          type: 'ambient',
+          timestamp: Date.now(),
+        });
+      }
+    }
   }
 
   // ─── Tick System ─────────────────────────────────────────────────────────
@@ -493,8 +605,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private update(_deltaTime: number): void {
     this.state.tick++;
 
-    // Collapse timer countdown
-    if (this.lifecycle === 'active' || this.lifecycle === 'destabilising') {
+    // Hub/social zones skip collapse, combat, and extraction ticking
+    const isNonCombatZone = this.isZone && this.zoneData &&
+      (this.zoneData.zone.category === 'hub' || this.zoneData.zone.category === 'social');
+
+    // Collapse timer countdown (skip for persistent hub/social zones)
+    if (!isNonCombatZone && (this.lifecycle === 'active' || this.lifecycle === 'destabilising')) {
       this.state.collapseTimer = Math.max(0, this.state.collapseTimer - 1);
       this.state.stability = this.state.collapseTimer / this.collapseTimerSeconds;
 
@@ -507,10 +623,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
 
     // Creature AI tick — evaluate behavior trees, queue combat actions
-    this.tickCreatures();
+    if (!isNonCombatZone) {
+      this.tickCreatures();
+    }
 
-    // Resolve combat tick
-    if (this.combatSystem.hasActiveEncounters()) {
+    // Resolve combat tick (skip for hub/social zones)
+    if (!isNonCombatZone && this.combatSystem.hasActiveEncounters()) {
       const tickResult = this.combatSystem.resolveTick();
 
       // Killing blow: finish off downed (unstabilized) players in rooms with active combat.
@@ -550,11 +668,15 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       }
     }
 
-    // Resolve extraction ticks
-    this.tickExtractions();
+    // Resolve extraction ticks (skip for hub/social zones)
+    if (!isNonCombatZone) {
+      this.tickExtractions();
+    }
 
     // Tick downing system — bleed-out timers, stabilize channels
-    this.tickDowningSystem();
+    if (!isNonCombatZone) {
+      this.tickDowningSystem();
+    }
 
     // Decay traces
     this.traceSystem.tick(TICK_INTERVAL_MS);
@@ -656,6 +778,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       playerCount: this.state.playerCount,
       maxPlayers: this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig()),
       players: playerList,
+      ...(this.isZone ? { zoneSlug: this.zoneSlug, zoneName: this.zoneData?.zone.name } : {}),
     });
   }
 
@@ -714,6 +837,16 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     const wasExtracting = this.extractionSystem.isExtracting(playerId);
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
+
+    // Inter-zone exit: send transfer message to client instead of moving locally
+    if (result.zoneTransfer) {
+      this.deliverResult(client, result);
+      client.send(MessageTypes.ZONE_TRANSFER, {
+        targetZoneSlug: result.zoneTransfer.targetZoneSlug,
+        targetRoomSlug: result.zoneTransfer.targetRoomSlug,
+      } satisfies ZoneTransferMessage);
+      return;
+    }
 
     // Trace: movement creates footprints in the room LEFT
     const movedRoom = player.currentRoomId !== previousRoomId;
@@ -800,7 +933,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       });
     }
     if (result.roomHeader) {
-      this.sendRoomHeader(client, result.roomHeader);
+      const header: RoomHeaderMessage = {
+        ...result.roomHeader,
+        ...(this.isZone && this.zoneData ? { zoneName: this.zoneData.zone.name } : {}),
+      };
+      this.sendRoomHeader(client, header);
     }
   }
 
@@ -902,6 +1039,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
               roomName: targetRoom.name,
               exits: Array.from(targetRoom.exits.keys()),
               stability: this.state.stability,
+              ...(this.isZone && this.zoneData ? { zoneName: this.zoneData.zone.name } : {}),
             });
             this.sendTraceNarrations(client, flee.toRoomId);
           }

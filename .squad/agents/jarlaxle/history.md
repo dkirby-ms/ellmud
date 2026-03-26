@@ -1662,3 +1662,17 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 **Learnings:**
 - Zone types are temporarily local in ZoneRepository.ts. When Drizzt lands `@ellmud/shared` zone types, swap the local types for shared imports and delete the local definitions. The interface shapes should match.
 - The provider pattern (init/get/isX/reset) is the established singleton pattern for all repository modules — stash, player, and now zones all follow it identically.
+
+### 2025-07-25: Zone Admin CRUD Routes (Phase B)
+- Created `packages/server/src/admin/zones/zone-routes.ts` with `createZoneRouter()` — 10 RESTful endpoints for zone, room, and exit management.
+- Endpoints: GET list, GET bundle by slug, POST/PUT/DELETE zones, POST room, PUT/DELETE room, POST exit, DELETE exit.
+- Follows content-routes.ts pattern exactly: adminAuth middleware on all routes, logAuditEvent on mutations (entity types: 'zone', 'zone-room', 'zone-exit'), fire-and-forget `.catch(() => {})`.
+- Input validation: slug (URL-safe regex), name (required non-empty), tier (1-3), lifecycle (persistent/scheduled/event), category (hub/dungeon/wilderness/social), repopIntervalSeconds (>=0), room slug uniqueness within zone, exit direction (from ALL_DIRECTIONS), exit fromRoomSlug existence check.
+- Uses `getZoneRepository()` singleton — no deps injection needed (unlike content routes which take stores map).
+- Wired into admin barrel (`admin/index.ts`) and main server (`index.ts`) between deploy and admin runtime routers.
+- Created `admin/zones/index.ts` barrel export for consistency.
+- Build clean, all 82 test files pass (1904 tests), zero regressions.
+
+**Learnings:**
+- Zone routes are a separate router from content routes — zones use the ZoneRepository interface directly (getZoneRepository singleton), not the ContentStore abstraction. This is because zones have a different data model (zone → rooms → exits hierarchy) vs. content's flat entity model.
+- For update routes with the ZoneRepository, the repo throws Error with 'not found' in the message. Content routes use typed ContentStoreError codes. Zone routes catch Error and check message.includes('not found') for 404s.

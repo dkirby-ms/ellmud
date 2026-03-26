@@ -45,6 +45,14 @@ export interface RoomHeaderMessage {
   roomName: string;
   exits: string[];
   stability: number; // 0–1, shard stability
+  /** Zone name, present when the room is part of a hand-crafted zone. */
+  zoneName?: string;
+}
+
+/** Server → Client: Zone transfer instruction (inter-zone exit). */
+export interface ZoneTransferMessage {
+  targetZoneSlug: string;
+  targetRoomSlug: string;
 }
 
 /** Server → Client: Shard lifecycle state change notification. */
@@ -229,6 +237,7 @@ export const MessageTypes = {
   STASH_UPDATE: 'stash_update',
   LOADOUT_UPDATE: 'loadout_update',
   ROOM_SWITCH: 'room_switch',
+  ZONE_TRANSFER: 'zone_transfer',
 } as const;
 
 export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];

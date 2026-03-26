@@ -1053,3 +1053,16 @@ Faction data existed in two places: `factions` table (relational, canonical, wit
 - Estimated 3 migrations, ~50 additional tests
 
 **Next:** Integration tests for faction CRUD in admin workflow, Phase 3 backlog prioritization.
+
+### Zone System Integration Tests (server-integration-tests task)
+
+**File:** `packages/server/src/__tests__/zone-system.test.ts`
+**Tests:** 47 passing + 3 TODOs (ShardRoom zone integration blocked on Drizzt)
+**Coverage:**
+1. **InMemoryZoneRepository** (19 tests): CRUD for zones/rooms/exits, cascade delete, partial update, sorted listing, error cases
+2. **Zone Adapter Integration** (6 tests): Full repo→fetch→convert round-trip, hub zones, inter-zone exits with `zone:` prefix, items/hazards persistence, deterministic seeds
+3. **Repop Logic** (5 tests): Specification-based tests for item restoration after looting, no-duplication of existing items, full-loot recovery, interval from zone def, destroyed room handling
+4. **Inter-Zone ID Utilities** (16 tests): `isInterZoneId`, `parseInterZoneId`, `makeInterZoneId`, `INTER_ZONE_PREFIX` — edge cases including empty strings, missing slashes, hyphenated slugs
+5. **Zone-Based ShardRoom** (1 passing + 3 TODO): Zone loading pipeline test passes; ShardRoom integration tests are TODO until Drizzt lands `zoneSlug` option support
+
+**Key finding:** The `ZoneRoomDefinition` in `zones/ZoneRepository.ts` extends the shared type with `createdAt`/`updatedAt` — repop tests use the shared type (`SharedZoneRoomDefinition`) to avoid needing DB timestamps. Pre-existing build error in `ShardRoom.ts` (`startRepopTimer` not found) is Drizzt's in-progress work, not caused by these tests.
