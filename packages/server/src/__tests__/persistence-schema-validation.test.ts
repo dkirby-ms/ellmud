@@ -406,9 +406,9 @@ describe('cross-migration consistency', () => {
   });
 
   it('all tables use UUID primary keys', () => {
-    // content_definitions uses a composite TEXT PK (entity_type, id) because
-    // content IDs are admin-defined slugs (e.g. 'rusty_blade', 'flooded_crypt'),
-    // not auto-generated UUIDs.
+    // Some tables use composite TEXT PKs instead of auto-generated UUIDs.
+    // content_definitions was dropped in migration 029 but its CREATE TABLE
+    // still exists in migration 007 — keep it in the exclusion list.
     const COMPOSITE_PK_TABLES = ['content_definitions', 'player_loadout', 'auth_tokens'];
 
     for (const file of allMigrationFiles()) {

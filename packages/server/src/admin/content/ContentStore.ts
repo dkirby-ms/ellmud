@@ -14,7 +14,7 @@ export interface ContentEntity {
   [key: string]: unknown;
 }
 
-/** Store contract — implemented by InMemoryContentStore and PgContentStore. */
+/** Store contract — implemented by InMemoryContentStore and dedicated Pg*DefinitionsStore classes. */
 export interface IContentStore<T extends ContentEntity> {
   readonly entityType: string;
   getAll(): Promise<T[]>;
