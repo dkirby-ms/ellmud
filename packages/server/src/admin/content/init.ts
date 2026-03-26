@@ -1,8 +1,16 @@
 /**
  * Content store initialization — creates all 9 content stores.
  *
- * When usePg=true (DATABASE_URL set), returns PgContentStore instances backed
- * by the content_definitions table. Seed data is applied via migration 008.
+ * When usePg=true (DATABASE_URL set):
+ *   - Migrated types use dedicated relational stores:
+ *       items       → PgItemDefinitionsStore      (migration 002)
+ *       biomes      → PgBiomeDefinitionsStore      (migration 020)
+ *       modifiers   → PgModifierDefinitionsStore   (migration 021)
+ *       narrative   → PgNarrativeDefinitionsStore   (migration 022)
+ *       creatures   → PgCreatureDefinitionsStore   (migration 023)
+ *   - Remaining types still use PgContentStore (content_definitions JSONB):
+ *       factions, skills, loot-tables, rooms
+ *     These are pending migration to dedicated tables.
  *
  * When usePg=false (dev mode), returns in-memory ContentStore instances
  * pre-populated from existing game registries:
@@ -12,7 +20,7 @@
  *   - Modifiers: 5 shard modifiers
  *   - Factions: 3 known factions
  *
- * Skills, loot-tables, rooms, and narrative start empty in both backends.
+ * Skills, loot-tables, rooms, and narrative start empty in dev mode.
  */
 
 import { ContentStore, type ContentEntity, type IContentStore } from './ContentStore.js';
@@ -49,6 +57,8 @@ function initializePgStores(): Map<ContentEntityType, IContentStore<ContentEntit
     } else if (entityType === 'creatures') {
       stores.set('creatures', new PgCreatureDefinitionsStore());
     } else {
+      // Remaining types (factions, skills, loot-tables, rooms) still use
+      // the generic content_definitions JSONB store — pending migration.
       stores.set(entityType, new PgContentStore<ContentEntity>(entityType));
     }
   }
