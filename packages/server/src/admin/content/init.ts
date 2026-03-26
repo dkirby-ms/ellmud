@@ -8,8 +8,9 @@
  *       modifiers   → PgModifierDefinitionsStore   (migration 021)
  *       narrative   → PgNarrativeDefinitionsStore   (migration 022)
  *       creatures   → PgCreatureDefinitionsStore   (migration 023)
+ *       factions    → PgFactionDefinitionsStore    (migration 004+025)
  *   - Remaining types still use PgContentStore (content_definitions JSONB):
- *       factions, skills, loot-tables, rooms
+ *       skills, loot-tables, rooms
  *     These are pending migration to dedicated tables.
  *
  * When usePg=false (dev mode), returns in-memory ContentStore instances
@@ -31,6 +32,7 @@ import { PgBiomeDefinitionsStore } from './PgBiomeDefinitionsStore.js';
 import { PgModifierDefinitionsStore } from './PgModifierDefinitionsStore.js';
 import { PgNarrativeDefinitionsStore } from './PgNarrativeDefinitionsStore.js';
 import { PgCreatureDefinitionsStore } from './PgCreatureDefinitionsStore.js';
+import { PgFactionDefinitionsStore } from './PgFactionDefinitionsStore.js';
 import { getAllItemDefinitions } from '../../items/registry.js';
 import { DROWNED_REVENANT } from '../../creatures/templates/drowned-revenant.js';
 import { CONTENT_ENTITY_TYPES } from './content-types.js';
@@ -56,8 +58,10 @@ function initializePgStores(): Map<ContentEntityType, IContentStore<ContentEntit
       stores.set('narrative', new PgNarrativeDefinitionsStore());
     } else if (entityType === 'creatures') {
       stores.set('creatures', new PgCreatureDefinitionsStore());
+    } else if (entityType === 'factions') {
+      stores.set('factions', new PgFactionDefinitionsStore());
     } else {
-      // Remaining types (factions, skills, loot-tables, rooms) still use
+      // Remaining types (skills, loot-tables, rooms) still use
       // the generic content_definitions JSONB store — pending migration.
       stores.set(entityType, new PgContentStore<ContentEntity>(entityType));
     }
