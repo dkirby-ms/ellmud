@@ -284,20 +284,40 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
   async onJoin(client: Client, options: Record<string, unknown>): Promise<void> {
-    // Enforce tier-based max players
-    const maxPlayers = this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig());
-    if (this.state.playerCount >= maxPlayers) {
-      throw new Error(`Shard is full (${maxPlayers}/${maxPlayers} players).`);
-    }
-
-    this.state.playerCount++;
-    this.updateMetadata();
-
     // Resolve player ID: prefer onAuth result (client.auth), then join options, then sessionId fallback.
     // The 'anonymous' sentinel from authenticateClient means no real identity was established.
     const authData = client.auth as { playerId?: string } | undefined;
     const authPlayerId = authData?.playerId && authData.playerId !== 'anonymous' ? authData.playerId : undefined;
     const playerId = authPlayerId || (options['playerId'] as string) || client.sessionId;
+
+    // Guard against the same playerId joining twice (double-click / client race condition).
+    // If the player is already present, displace the old session rather than corrupting state.
+    if (this.players.has(playerId)) {
+      this.log(`Duplicate join detected: ${playerId} (new session=${client.sessionId}). Displacing old session.`);
+
+      // Remove old session→playerId mapping so its onLeave becomes a cleanup no-op
+      for (const [sid, pid] of this.playerIds) {
+        if (pid === playerId) {
+          this.playerIds.delete(sid);
+          const oldClient = this.clients.find((c) => c.sessionId === sid);
+          if (oldClient) {
+            try { oldClient.leave(4001); } catch { /* already disconnecting */ }
+          }
+          break;
+        }
+      }
+
+      // Player is already counted — don't increment again
+    } else {
+      // Enforce tier-based max players (only for genuinely new players)
+      const maxPlayers = this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig());
+      if (this.state.playerCount >= maxPlayers) {
+        throw new Error(`Shard is full (${maxPlayers}/${maxPlayers} players).`);
+      }
+      this.state.playerCount++;
+    }
+
+    this.updateMetadata();
     this.playerIds.set(client.sessionId, playerId);
 
     // Load persisted profile (skills, carry weight, equipment) or use defaults
@@ -338,7 +358,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     );
     this.players.set(playerId, playerState);
 
-    this.log(`Player joined: ${playerId} at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${maxPlayers} players)`);
+    this.log(`Player joined: ${playerId} at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig())} players)`);
 
     // Send initial system narration
     this.sendNarrate(client, {

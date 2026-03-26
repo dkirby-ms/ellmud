@@ -58,6 +58,8 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   private ambientSystem!: AmbientSystem;
   /** Maps sessionId → playerId for stash lookups. */
   private playerIds = new Map<string, string>();
+  /** Tracks pending shard-enter per session to prevent double-switch. */
+  private pendingEnter = new Set<string>();
 
   /**
    * Inject dependencies. Called before room lifecycle if provided.
@@ -184,6 +186,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   onLeave(client: Client): void {
     this.state.playerCount--;
     this.playerIds.delete(client.sessionId);
+    this.pendingEnter.delete(client.sessionId);
     this.log(`Player left Refuge: ${client.sessionId} (${this.state.playerCount} players)`);
   }
 
@@ -271,12 +274,24 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   // ─── Enter Command ──────────────────────────────────────────────────────
 
   private async handleEnterCommand(client: Client, args: string[]): Promise<void> {
+    // Guard: prevent duplicate enter-shard from the same session (double-click / rapid re-entry)
+    if (this.pendingEnter.has(client.sessionId)) {
+      client.send(MessageTypes.NARRATE, {
+        text: 'You are already stepping through a rift...',
+        type: 'system',
+        timestamp: Date.now(),
+      } satisfies NarrateMessage);
+      return;
+    }
+    this.pendingEnter.add(client.sessionId);
+
     const requestedId = args[0]?.trim();
     const listings = await this.getShardListings();
 
     if (requestedId && requestedId.toLowerCase() !== 'shard') {
       const shard = listings.find((entry) => entry.roomId === requestedId);
       if (!shard) {
+        this.pendingEnter.delete(client.sessionId);
         client.send(MessageTypes.NARRATE, {
           text: `No shard with id "${requestedId}" is listed. Check the shardboard for available rifts.`,
           type: 'system',
@@ -286,6 +301,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
       }
 
       if (!this.isShardJoinable(shard)) {
+        this.pendingEnter.delete(client.sessionId);
         client.send(MessageTypes.NARRATE, {
           text: this.describeShardRejection(shard),
           type: 'system',
@@ -307,6 +323,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
     }
 
     if (!shard) {
+      this.pendingEnter.delete(client.sessionId);
       client.send(MessageTypes.NARRATE, {
         text: 'No open rifts are available. Check the shardboard as new shards stabilize.',
         type: 'system',
