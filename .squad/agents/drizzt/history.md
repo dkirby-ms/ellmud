@@ -1573,3 +1573,20 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - Solution: Changed dependency to `state.messages` (one-liner fix)
 - Aligns with ShardExploration scroll pattern established in #196/#204
 - Build clean, 552 tests passing, zero regressions
+
+### PgLoadoutRepository — Full Postgres Persistence (2025-07-25)
+**Task:** Implement Postgres-backed loadout persistence to stop losing equipped items on restart
+**Status:** ✅ Complete
+
+**Changes:**
+1. **Migration 013** — `player_loadout` table with composite PK `(player_id, slot)`, references `players` and `item_definitions`, stores durability/maxDurability in JSONB metadata.
+2. **PgLoadoutRepository** — Full implementation of `LoadoutRepository` interface: `load`, `save` (transactional DELETE+INSERT), `setSlot` (UPSERT), `getSlot`, `clear`, `listPlayerIds`. Follows PgStashRepository patterns exactly.
+3. **loadout-provider.ts** — Wired `PgLoadoutRepository` behind the `usePg` flag; InMemory fallback preserved for tests.
+4. **server index.ts** — Added `initLoadoutProvider(USE_PG)` to boot sequence alongside other providers.
+5. **loadout/index.ts** — Exported `PgLoadoutRepository`.
+6. **Tests** — 11 new unit tests (mocked DB layer, matching pg-stash-repository.test.ts pattern). Also added `player_loadout` to `COMPOSITE_PK_TABLES` in schema validation test.
+7. **Build:** Clean. **Tests:** 1752 passed (73 files), 0 failures.
+
+**Learnings:**
+- `persistence-schema-validation.test.ts` has a `COMPOSITE_PK_TABLES` allowlist — any new table without a `UUID PRIMARY KEY` must be added there.
+- `StashItemInstance` stores `durability: number | null` and `maxDurability: number | null` (not optional). The PG layer must serialize both into JSONB metadata and reconstruct with `?? null` fallbacks.

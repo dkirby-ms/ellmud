@@ -4512,3 +4512,26 @@ User request to improve item management workflow. Current implementation has all
 **By:** dkirby-ms (via Copilot)
 **What:** Database is the source of truth. In-memory caches are fine for performance, but the system must be designed to scale without rework every time something is added. Don't build patterns that require manual wiring for each new feature — hydrate caches from DB automatically.
 **Why:** User request — captured for team memory. Eliminates manual cache updates for each new entity type or feature.
+
+---
+
+### 2026-03-26T12:39:38Z: PgLoadoutRepository — Loadout Persistence Pattern
+
+**Author:** drizzt (Engine Dev)  
+**Date:** 2026-03-26  
+**Status:** Implemented
+
+## Context
+Equipped items were stored only in-memory via `InMemoryLoadoutRepository`. Server restart destroyed any equipped gear — items removed from stash (PG) but never persisted in the loadout. Active item loss.
+
+## Decision
+- Created `player_loadout` table (migration 013) with composite PK `(player_id, slot)`.
+- Durability/maxDurability stored in JSONB `metadata` column (same pattern as `player_stash`).
+- `save()` uses transactional DELETE+INSERT (safest for full overwrites).
+- `setSlot()` uses INSERT...ON CONFLICT DO UPDATE (single-slot upsert).
+- Provider wired behind `USE_PG` flag — InMemory fallback intact for tests/no-DB mode.
+
+## Impact
+- All team members: loadout data now survives server restarts when `DATABASE_URL` is set.
+- Schema validation test's `COMPOSITE_PK_TABLES` list now includes `player_loadout`.
+- No changes to `LoadoutService` or room code — the interface was already designed for this swap.
