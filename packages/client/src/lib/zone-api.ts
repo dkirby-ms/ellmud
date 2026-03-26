@@ -81,7 +81,7 @@ export async function updateZone(id: string, data: Partial<ZoneDefinition>): Pro
 }
 
 export async function deleteZone(id: string): Promise<void> {
-  return adminFetch<void>(`/admin/api/zones/${id}`, {
+  await adminFetch(`/admin/api/zones/${id}`, {
     method: 'DELETE',
   });
 }
@@ -103,7 +103,7 @@ export async function updateRoom(roomId: string, data: Partial<ZoneRoomDefinitio
 }
 
 export async function deleteRoom(roomId: string): Promise<void> {
-  return adminFetch<void>(`/admin/api/zones/rooms/${roomId}`, {
+  await adminFetch(`/admin/api/zones/rooms/${roomId}`, {
     method: 'DELETE',
   });
 }
@@ -118,7 +118,7 @@ export async function createExit(zoneId: string, data: Partial<ZoneExitDefinitio
 }
 
 export async function deleteExit(exitId: string): Promise<void> {
-  return adminFetch<void>(`/admin/api/zones/exits/${exitId}`, {
+  await adminFetch(`/admin/api/zones/exits/${exitId}`, {
     method: 'DELETE',
   });
 }

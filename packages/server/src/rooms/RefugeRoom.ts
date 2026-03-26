@@ -837,7 +837,6 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   private requireRoom(client: Client, roomSlug: string, roomDisplayName: string): boolean {
     const currentRoom = this.currentRoomIds.get(client.sessionId) ?? this.roomGraph.startRoomId;
     if (currentRoom !== roomSlug) {
-      const room = this.roomGraph.rooms.get(roomSlug);
       const exitHint = this.findDirectionTo(currentRoom, roomSlug);
       const hint = exitHint ? ` Go ${exitHint} to get there.` : '';
       client.send(MessageTypes.NARRATE, {

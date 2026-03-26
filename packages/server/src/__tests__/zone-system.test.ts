@@ -15,7 +15,7 @@ import type {
   ZoneDefinition,
   ZoneRoomDefinition,
   ZoneExitDefinition,
-  ZoneData,
+
 } from '../zones/ZoneRepository.js';
 import {
   INTER_ZONE_PREFIX,
@@ -25,7 +25,7 @@ import {
 } from '@ellmud/shared';
 import type {
   RoomGraph,
-  Room,
+
   ZoneRoomDefinition as SharedZoneRoomDefinition,
 } from '@ellmud/shared';
 

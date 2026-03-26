@@ -173,7 +173,7 @@ export class CreatureManager {
    * Respawn killed zone creatures during a repop cycle.
    * Only respawns creatures that were killed since last repop.
    */
-  respawnZoneCreatures(zoneData: ZoneData): Creature[] {
+  respawnZoneCreatures(_zoneData: ZoneData): Creature[] {
     const respawned: Creature[] = [];
 
     for (const record of this.zoneCreatureRecords) {

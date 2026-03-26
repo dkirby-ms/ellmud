@@ -588,7 +588,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   /** Send a subtle repop narration to all players currently in the zone. */
   private broadcastRepopNarration(): void {
-    for (const [pid, ps] of this.players) {
+    for (const [pid, _ps] of this.players) {
       const client = this.findClient(pid);
       if (client) {
         this.sendNarrate(client, {
