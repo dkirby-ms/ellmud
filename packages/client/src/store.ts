@@ -7,7 +7,7 @@ import { createContext, useContext } from 'react';
 import type { Room } from '@colyseus/sdk';
 import type {
   NarrationType, RoomHeaderMessage, ShardState, CombatAction, GearTier,
-  EquipmentSlots, DisplayItem,
+  EquipmentSlots, DisplayItem, CharacterSummary,
 } from '@ellmud/shared';
 import { createEmptyEquipmentSlots } from '@ellmud/shared';
 
@@ -66,6 +66,7 @@ export interface AppState {
   authenticated: boolean;
   token: string | null;
   playerId: string | null;
+  activeCharacter: CharacterSummary | null;
   room: Room | null;
   messages: TerminalMessage[];
   roomHeader: RoomHeaderMessage | null;
@@ -92,6 +93,7 @@ export const initialState: AppState = {
   authenticated: false,
   token: null,
   playerId: null,
+  activeCharacter: null,
   room: null,
   messages: [],
   roomHeader: null,
@@ -138,7 +140,8 @@ export type AppAction =
   | { type: 'CLEAR_MESSAGES' }
   | { type: 'SET_LOADOUT'; slots: EquipmentSlots }
   | { type: 'SET_STASH_ITEMS'; items: DisplayItem[] }
-  | { type: 'SET_PENDING_EQUIP'; pending: boolean };
+  | { type: 'SET_PENDING_EQUIP'; pending: boolean }
+  | { type: 'SET_ACTIVE_CHARACTER'; character: CharacterSummary | null };
 
 const MAX_MESSAGES = 500;
 
@@ -191,6 +194,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, stashItems: action.items, pendingEquipAction: false };
     case 'SET_PENDING_EQUIP':
       return { ...state, pendingEquipAction: action.pending };
+    case 'SET_ACTIVE_CHARACTER':
+      return { ...state, activeCharacter: action.character };
     default:
       return state;
   }

@@ -54,9 +54,12 @@ export async function connect(
   token: string,
   roomName: string,
   handlers: MessageHandlers,
+  characterId?: string,
 ): Promise<Room> {
   const colyseus = getClient();
-  const room = await colyseus.joinOrCreate(roomName, { token });
+  const joinOptions: Record<string, unknown> = { token };
+  if (characterId) joinOptions.characterId = characterId;
+  const room = await colyseus.joinOrCreate(roomName, joinOptions);
 
   // Message-only subscriptions (dumb terminal protocol)
   room.onMessage(MessageTypes.NARRATE, handlers.onNarrate);
@@ -87,6 +90,7 @@ export async function switchRoom(
   token: string,
   handlers: MessageHandlers,
   options?: RoomSwitchOptions,
+  characterId?: string,
 ): Promise<Room> {
   // Leave the current room cleanly
   await currentRoom.leave();
@@ -94,7 +98,8 @@ export async function switchRoom(
   // Join or create the target room
   const colyseus = getClient();
   const roomId = typeof options?.roomId === 'string' ? options.roomId : undefined;
-  const joinOptions = options ? { ...options } : {};
+  const joinOptions: Record<string, unknown> = options ? { ...options } : {};
+  if (characterId) joinOptions.characterId = characterId;
   if (roomId) {
     delete (joinOptions as { roomId?: string }).roomId;
   }

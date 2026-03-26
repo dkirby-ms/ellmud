@@ -83,7 +83,7 @@ export function useShardConnection(): UseShardConnectionResult {
       if (!state.token || !handlersRef.current) return false;
       try {
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
-        const room = await connect(state.token, 'shard', handlersRef.current);
+        const room = await connect(state.token, 'shard', handlersRef.current, state.activeCharacter?.id);
         roomRef.current = room;
         if (extractionHandlerRef.current) {
           room.onMessage('extraction_state', extractionHandlerRef.current);
@@ -217,7 +217,7 @@ export function useShardConnection(): UseShardConnectionResult {
           }));
         }
 
-        switchRoom(currentRoom, msg.target, state.token, handlers, msg.options)
+        switchRoom(currentRoom, msg.target, state.token, handlers, msg.options, state.activeCharacter?.id)
           .then((newRoom) => {
             if (!disposed) {
               roomRef.current = newRoom;
@@ -307,7 +307,7 @@ export function useShardConnection(): UseShardConnectionResult {
 
     dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
 
-    connect(state.token, 'shard', handlers).then((room) => {
+    connect(state.token, 'shard', handlers, state.activeCharacter?.id).then((room) => {
       if (!disposed) {
         roomRef.current = room;
         dispatch({ type: 'SET_ROOM', room });

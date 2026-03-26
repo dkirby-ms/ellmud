@@ -18,7 +18,7 @@ export default function AuthCallback() {
     if (token && playerId) {
       // Authenticate with OAuth token
       dispatch({ type: "LOGIN_SUCCESS", token, playerId });
-      navigate("/refuge", { replace: true });
+      navigate("/characters", { replace: true });
     } else {
       // No token in URL — redirect to login
       navigate("/", { replace: true });

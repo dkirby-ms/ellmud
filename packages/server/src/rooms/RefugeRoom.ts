@@ -56,7 +56,9 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   private stashService!: StashService;
   private loadoutService!: LoadoutService;
   private ambientSystem!: AmbientSystem;
-  /** Maps sessionId → playerId for stash lookups. */
+  /** Maps sessionId → characterId for per-character stash/loadout lookups. */
+  private characterIds = new Map<string, string>();
+  /** Maps sessionId → playerId for auth-level operations. */
   private playerIds = new Map<string, string>();
   /** Tracks pending shard-enter per session to prevent double-switch. */
   private pendingEnter = new Set<string>();
@@ -141,8 +143,12 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
     const playerId = authPlayerId || (options['playerId'] as string) || client.sessionId;
     this.playerIds.set(client.sessionId, playerId);
 
+    // Character ID: passed from client after character selection. Falls back to playerId for backwards compat.
+    const characterId = (options['characterId'] as string) || playerId;
+    this.characterIds.set(client.sessionId, characterId);
 
-    this.log(`Player joined Refuge: ${client.sessionId} (${this.state.playerCount} players)`);
+
+    this.log(`Player joined Refuge: ${client.sessionId} (character=${characterId}, ${this.state.playerCount} players)`);
 
     client.send(MessageTypes.NARRATE, {
       text: 'You emerge into the Refuge. The air is warm, the walls are solid. You are safe — for now.',
@@ -165,27 +171,28 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
 
     // Send full stash + loadout state to client on join
     try {
-      await this.sendLoadoutAndStashUpdate(client, playerId);
+      await this.sendLoadoutAndStashUpdate(client, characterId);
     } catch (err) {
-      this.log(`Failed to send equipment state for ${playerId}: ${err}`);
+      this.log(`Failed to send equipment state for ${characterId}: ${err}`);
     }
 
     // Send stash summary narration
     try {
-      const summary = await this.stashService.getStashSummary(playerId);
+      const summary = await this.stashService.getStashSummary(characterId);
       client.send(MessageTypes.NARRATE, {
         text: summary,
         type: 'system',
         timestamp: Date.now(),
       } satisfies NarrateMessage);
     } catch (err) {
-      this.log(`Failed to load stash summary for ${playerId}: ${err}`);
+      this.log(`Failed to load stash summary for ${characterId}: ${err}`);
     }
   }
 
   onLeave(client: Client): void {
     this.state.playerCount--;
     this.playerIds.delete(client.sessionId);
+    this.characterIds.delete(client.sessionId);
     this.pendingEnter.delete(client.sessionId);
     this.log(`Player left Refuge: ${client.sessionId} (${this.state.playerCount} players)`);
   }
@@ -399,7 +406,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   // ─── Stash Commands ─────────────────────────────────────────────────────
 
   private async handleStashCommand(client: Client): Promise<void> {
-    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+    const playerId = this.characterIds.get(client.sessionId) ?? client.sessionId;
     try {
       const summary = await this.stashService.getStashSummary(playerId);
       client.send(MessageTypes.NARRATE, {
@@ -417,7 +424,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   }
 
   private async handleTakeCommand(client: Client, args: string[]): Promise<void> {
-    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+    const playerId = this.characterIds.get(client.sessionId) ?? client.sessionId;
 
     if (args.length === 0) {
       client.send(MessageTypes.NARRATE, {
@@ -471,7 +478,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   // ─── Loadout Command ───────────────────────────────────────────────────
 
   private async handleLoadoutCommand(client: Client): Promise<void> {
-    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+    const playerId = this.characterIds.get(client.sessionId) ?? client.sessionId;
     try {
       const summary = await this.loadoutService.getLoadoutSummary(playerId);
       client.send(MessageTypes.NARRATE, {
@@ -491,7 +498,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   // ─── Equipment Message Handlers (Server-Authoritative) ─────────────────
 
   private async handleEquipItem(client: Client, message: EquipItemMessage): Promise<void> {
-    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+    const playerId = this.characterIds.get(client.sessionId) ?? client.sessionId;
 
     try {
       const result = await this.loadoutService.equipItem(playerId, message.itemId, message.targetSlot);
@@ -524,7 +531,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   }
 
   private async handleUnequipItem(client: Client, message: UnequipItemMessage): Promise<void> {
-    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+    const playerId = this.characterIds.get(client.sessionId) ?? client.sessionId;
 
     try {
       const result = await this.loadoutService.unequipItem(playerId, message.slot);
@@ -556,7 +563,7 @@ export class RefugeRoom extends Room<RefugeRoomOptions> {
   }
 
   private async handleSwapItem(client: Client, message: SwapItemMessage): Promise<void> {
-    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+    const playerId = this.characterIds.get(client.sessionId) ?? client.sessionId;
 
     try {
       const result = await this.loadoutService.swapItem(playerId, message.itemId, message.targetSlot);

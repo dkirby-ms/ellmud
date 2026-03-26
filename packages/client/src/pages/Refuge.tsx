@@ -96,6 +96,7 @@ export default function Refuge() {
           state.token,
           "refuge",
           handlersRef.current,
+          state.activeCharacter?.id,
         );
         roomRef.current = room;
         dispatch({ type: "SET_ROOM", room });
@@ -209,7 +210,7 @@ export default function Refuge() {
     handlersRef.current = handlers;
     dispatch({ type: "SET_CONNECTION_STATUS", status: "connecting" });
 
-    connect(state.token, "refuge", handlers)
+    connect(state.token, "refuge", handlers, state.activeCharacter?.id)
       .then((room) => {
         if (!disposed) {
           roomRef.current = room;

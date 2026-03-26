@@ -85,3 +85,36 @@ export async function validateToken(token: string): Promise<boolean> {
     return true;
   }
 }
+
+// ─── Character API ────────────────────────────────────────────────────────────
+
+import type { CharacterSummary, CreateCharacterRequest } from '@ellmud/shared';
+
+export function fetchCharacters(token: string): Promise<CharacterSummary[]> {
+  return request<CharacterSummary[]>('/api/characters', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function createCharacter(token: string, data: CreateCharacterRequest): Promise<CharacterSummary> {
+  return request<CharacterSummary>('/api/characters', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
+  });
+}
+
+export function selectCharacter(token: string, characterId: string): Promise<CharacterSummary> {
+  return request<CharacterSummary>(`/api/characters/${characterId}/select`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function deleteCharacter(token: string, characterId: string): Promise<void> {
+  return request<void>(`/api/characters/${characterId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}

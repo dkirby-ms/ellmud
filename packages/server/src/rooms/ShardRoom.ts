@@ -89,7 +89,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private roomGraph!: RoomGraph;
   private entryRoomIds: string[] = []; // Multiple entry points for player distribution
   private players = new Map<string, PlayerState>();
-  /** Maps sessionId → playerId for persistent identity across reconnects. */
+  /** Maps sessionId → characterId for all gameplay operations. */
   private playerIds = new Map<string, string>();
   private combatSystem!: CombatSystem;
   private soundSystem!: SoundSystem;
@@ -288,7 +288,10 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // The 'anonymous' sentinel from authenticateClient means no real identity was established.
     const authData = client.auth as { playerId?: string } | undefined;
     const authPlayerId = authData?.playerId && authData.playerId !== 'anonymous' ? authData.playerId : undefined;
-    const playerId = authPlayerId || (options['playerId'] as string) || client.sessionId;
+    const rawPlayerId = authPlayerId || (options['playerId'] as string) || client.sessionId;
+
+    // Character ID: passed from client after character selection. Falls back to playerId for backwards compat.
+    const playerId = (options['characterId'] as string) || rawPlayerId;
 
     // Guard against the same playerId joining twice (double-click / client race condition).
     // If the player is already present, displace the old session rather than corrupting state.

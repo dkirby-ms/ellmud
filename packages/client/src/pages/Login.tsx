@@ -48,10 +48,10 @@ export default function Login() {
     flavorTexts[Math.floor(Math.random() * flavorTexts.length)]
   );
 
-  // Already authenticated — skip straight to refuge
+  // Already authenticated — skip straight to character select
   // NOTE: This must come AFTER all hooks to satisfy React's rules of hooks.
   if (state.authenticated) {
-    return <Navigate to="/refuge" replace />;
+    return <Navigate to="/characters" replace />;
   }
 
   const handleMicrosoftSignIn = () => {
@@ -74,7 +74,7 @@ export default function Login() {
       const authFn = isRegister ? register : login;
       const result = await authFn(username, password);
       dispatch({ type: "LOGIN_SUCCESS", token: result.token, playerId: result.playerId });
-      navigate("/refuge");
+      navigate("/characters");
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
