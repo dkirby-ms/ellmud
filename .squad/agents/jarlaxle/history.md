@@ -1484,3 +1484,9 @@ This aligns local dev with production behavior, making auth bugs surface earlier
 - **Pre-existing test fixture file** `loadout-fixtures.ts` was already in place (proactive tests written before implementation). All 95 proactive tests pass against the implementation.
 - Fixed shared types test that expected 8 message types (now 12 with EQUIP_ITEM, UNEQUIP_ITEM, SWAP_ITEM, LOADOUT_UPDATE).
 - Build clean, all server tests pass. Client test failures in ux-batch2 are pre-existing and unrelated.
+
+### CI Security Audit Gate
+- Added `npm audit --audit-level=high` step to `ci-cd.yml` in the `build-and-test` job, right after `npm ci`.
+- Only fails on HIGH or CRITICAL severity vulnerabilities — low/moderate pass through.
+- Current state: 0 vulnerabilities found. Gate is clean on merge.
+- Positioned before build/lint/test so supply-chain issues surface early.
