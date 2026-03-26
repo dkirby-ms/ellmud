@@ -51,7 +51,6 @@ export function createDeployRouter(): Router {
       );
 
       const lastDeploy = lastDeploysResult.rows[0] || null;
-      const lastDeployTime = lastDeploy?.completed_at || '1970-01-01T00:00:00Z';
 
       // TODO: content_definitions table is dropped (migration 029). Pending changes
       // tracking should query individual dedicated tables or use a unified changelog.
