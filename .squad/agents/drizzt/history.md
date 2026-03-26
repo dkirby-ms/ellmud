@@ -1647,3 +1647,35 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - `deleted_at IS NULL` in partial unique indexes enables soft-delete name reuse — a player can recreate a character with the same name after deletion.
 - The `item_definitions` table may or may not have seed data depending on admin content deploy state. Starter kit must gracefully handle empty tables.
 - REST routes for character CRUD live outside Colyseus rooms (accessed before room join). Auth middleware pattern: extract Bearer token → `authService.validateToken()` → playerId.
+- Dedicated PG store pattern: `PgXxxDefinitionsStore` implements `IContentStore<ContentEntity>`, maps relational columns to flat ContentEntity, uses `slug` (TEXT UNIQUE) + UUID `id` (auto-generated). Migration copies from `content_definitions` JSONB then deletes old rows.
+- When committing in a shared worktree, always `git add` only your files — other agents may have staged changes that would get swept into your commit.
+
+---
+
+## Session: Content Store Migration Phase 1 (2026-03-26T16:17:14Z)
+
+**Task:** Create dedicated relational stores for biomes and modifiers following PgItemDefinitionsStore pattern.
+**Status:** ✅ Complete
+
+**Commits:**
+- a938d5a — "feat: dedicated biome and modifier definition stores"
+
+**Deliverables:**
+- `PgBiomeDefinitionsStore.ts` — IContentStore impl, 140 lines, full CRUD
+- `PgModifierDefinitionsStore.ts` — IContentStore impl, 131 lines, full CRUD
+- Migration 020 — `biome_definitions` relational table, data migration from JSONB
+- Migration 021 — `modifier_definitions` relational table, data migration from JSONB
+- `init.ts` updated — routes biomes/modifiers to dedicated stores via entity_type discriminator
+
+**Technical Details:**
+- Both migrations follow established pattern: CREATE table with relational schema, INSERT migrated rows from content_definitions JSONB, DELETE old rows.
+- Stores map table columns to ContentEntity flat shape for admin console compatibility.
+- init.ts checks `entity_type` and routes each entity to its dedicated store (items, biomes, modifiers, or generic fallback).
+- Data integrity preserved; no duplicate rows after migration.
+
+**Cross-team context:** Jarlaxle completed narrative + creatures (migrations 022–023) in parallel. Session orchestration log created by Scribe. Full scope analysis from Elminster documented remaining 5 entity types (skills, loot tables, factions, rooms, plus special factions reconciliation).
+
+**Learnings:**
+- Relational schema design per entity type enables independent evolution.
+- Migration scripts clean up source JSONB after copy — prevents double-reads and keeps tables honest.
+- IContentStore interface is the contract; implementation details (column names, data shapes) hidden from admin console.

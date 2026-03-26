@@ -1565,3 +1565,33 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 - init.ts already had narrative/creature branches (committed by Drizzt's parallel biome/modifier work). No conflict.
 - Pattern: each dedicated store follows PgItemDefinitionsStore — rowToEntity mapper, isPgError helper, ContentStoreError codes (DUPLICATE_ID, NOT_FOUND).
 - Build clean, all 1823 server tests pass (80 test files, 0 regressions).
+
+---
+
+## Session: Content Store Migration Phase 1 (2026-03-26T16:17:14Z)
+
+**Task:** Create dedicated relational stores for narrative templates and creatures following PgItemDefinitionsStore pattern.
+**Status:** ✅ Complete
+
+**Commits:**
+- 10fde32 — "feat: dedicated narrative and creature definition stores"
+
+**Deliverables:**
+- `PgNarrativeDefinitionsStore.ts` — IContentStore impl, 138 lines, slug-based identity for template reuse
+- `PgCreatureDefinitionsStore.ts` — IContentStore impl, 209 lines, flattens 21 columns + loot_table JSONB
+- Migration 022 — `narrative_template_definitions` relational table (slug, narrative_type, biome, template, tone, verbosity, tags)
+- Migration 023 — `creature_definitions` relational table with data migration from content_definitions JSONB, loot_table stays as JSONB for complex drop logic
+- init.ts updates — narratives and creatures already had dedicated branches; no conflict with Drizzt's parallel biome/modifier work
+
+**Technical Details:**
+- Narrative: slug-based primary identity + UUID auto-generated id. Enables template lookup by slug for AI narration layer.
+- Creatures: complex entity with 21 relational columns covering base stats, scaling, abilities, plus loot_table JSONB. Migration flattens JSONB structure to columns where possible.
+- Both stores implement rowToEntity mapper, isPgError helper, standard ContentStoreError codes (DUPLICATE_ID, NOT_FOUND, NOT_AUTHORIZED).
+- Migrations preserve data integrity: copy from JSONB, validate, then delete old rows.
+
+**Cross-team context:** Drizzt completed biomes + modifiers (migrations 020–021) in parallel. Session orchestration logs created by Scribe for both agents. Full content store migration plan from Elminster now executing on track.
+
+**Learnings:**
+- High-complexity entities like creatures benefit from dedicated schema: enables AI integration through clean column interface, future query optimization, independent evolution.
+- Narrative templates use slug-based identity (TEXT UNIQUE) + UUID id. Slug is what AI/gameplay layers see; UUID is DB optimization.
+- JSONB columns can coexist with relational schema (e.g., loot_table in creatures). Useful for complex nested data that rarely needs direct DB queries.
