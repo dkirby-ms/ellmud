@@ -1490,3 +1490,9 @@ This aligns local dev with production behavior, making auth bugs surface earlier
 - Only fails on HIGH or CRITICAL severity vulnerabilities — low/moderate pass through.
 - Current state: 0 vulnerabilities found. Gate is clean on merge.
 - Positioned before build/lint/test so supply-chain issues surface early.
+
+### 2026-03-26: CI Security Audit Gate — Completed
+- Decision logged to `.squad/decisions/decisions.md` (2026-03-26T00:23:00Z entry)
+- `npm audit --audit-level=high` successfully integrated into ci-cd.yml
+- All dependencies pass audit; gate is clean
+- Blocks high/critical vulnerabilities at PR stage before merge

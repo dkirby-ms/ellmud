@@ -918,3 +918,45 @@ Drizzt wired `useDevAutoLogin` hook into `Login.tsx` to auto-authenticate dev us
 - Multi-player isolation with auth
 - Invalid token rejection
 - Anonymous join (no token, auth optional)
+
+### Stash/Loadout Equipment System Tests (2025-07-26)
+
+**Files Created:**
+- `packages/server/src/__tests__/helpers/loadout-fixtures.ts` — 14 test items, factory helpers
+- `packages/server/src/__tests__/loadout-service.test.ts` — 34 unit tests
+- `packages/server/src/__tests__/loadout-anti-exploit.test.ts` — 18 anti-exploit tests
+- `packages/server/src/__tests__/loadout-shard.test.ts` — 17 shard-context tests
+- `packages/server/src/__tests__/loadout-integration.test.ts` — 13 Colyseus integration tests
+
+**Total: 82 tests, all passing. Full suite (1741 tests) — zero regressions.**
+
+**Key Findings:**
+
+1. **LoadoutService constructor is overloaded** — 2-arg `(stashRepo, itemDefs)` creates internal InMemoryLoadoutRepository; 3-arg `(loadoutRepo, stashRepo, itemDefs)` accepts explicit repos. Tests use 3-arg form for isolation/inspection.
+
+2. **OperationLock serializes per-player** — concurrent ops on same player are serialized via a Map of Promises. Different players proceed in parallel. Tested race conditions with Promise.all confirming no duplication.
+
+3. **`unequipItem()` on empty slot is a no-op** — returns `{ok: true}`, NOT an error. This is intentional design.
+
+4. **`displaced` field in EquipResult** — when swapping items in an occupied slot, `result.displaced` contains the old StashItemInstance. The implementation uses `currentInSlot ?? undefined` pattern.
+
+5. **`unequipToInventory()` vs `unequipItem()`** — `unequipToInventory` is for shard context only: removes from loadout WITHOUT adding to stash. The caller puts it in shard inventory. `unequipItem` moves back to stash.
+
+6. **`validateShardEntry()` checks for 'key' type items** — weapons are NOT required. Only a key-type item in stash is validated.
+
+7. **Stash weight capacity blocks unequip** — if stash is full (weight limit), `unequipItem` is rejected with an error.
+
+8. **StashItemInstance uses `itemId`** — not `definitionId`. The `instanceId` is the unique per-instance identifier.
+
+9. **Import paths from `__tests__/`** — use `../stash/` and `../loadout/` (one level up from `__tests__` to `src/`).
+
+10. **SLOT_ACCEPTS matrix** — head/chest/legs/feet/hands→armour, weapon→weapon, offhand→weapon+tool, ring1/ring2→material, amulet→material. Tests verify every slot rejects wrong types.
+
+11. **Integration tests use `@colyseus/testing`** — same pattern as room tests. ShardRoom handlers respond with `loadout_update` and `stash_update` messages. 60s timeout for room lifecycle.
+
+**Test Categories:**
+- Equip/unequip/swap operations with slot restrictions
+- SLOT_ACCEPTS matrix exhaustive coverage (every slot × every type)
+- Anti-exploit: item count invariants, no dual existence, race conditions, cross-player isolation, malformed input
+- Shard context: validateShardEntry, equipFromInventory, unequipToInventory
+- Integration: RefugeRoom & ShardRoom EQUIP_ITEM/UNEQUIP_ITEM handlers, full lifecycle, rapid-fire messages, disconnect resilience

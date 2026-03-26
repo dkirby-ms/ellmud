@@ -1527,3 +1527,30 @@ Combined effect: auth was completely invisible in local development. Broken auth
 
 **Orchestration Log:** `.squad/orchestration-log/2026-03-25T2316-drizzt.md`
 
+
+### 2026-03-24: CombinedStashLoadout Component (Client UI)
+
+**Status:** ✅ Complete — shared + client builds clean, all non-pre-existing tests pass
+
+**Task:** Build unified equipment + stash panel replacing separate StashTab and LoadoutTab.
+
+**Changes:**
+1. **packages/shared/src/index.ts** — Added `EquipmentSlotType` (10 slots: head/chest/legs/feet/hands/weapon/offhand/ring1/ring2/amulet), `EQUIPMENT_SLOT_ORDER`, `EQUIPMENT_SLOT_LABELS`, `SLOT_ACCEPTS` restriction map, `DisplayItem` interface, `EquipmentSlots` record type, `createEmptyEquipmentSlots()`, `EquipItemMessage`, `UnequipItemMessage`, `LoadoutUpdateMessage`, `StashUpdateMessage`, and `validateSlotRestriction()`. Added `EQUIP_ITEM`, `UNEQUIP_ITEM`, `LOADOUT_UPDATE` to `MessageTypes`.
+2. **packages/client/src/store.ts** — Added `loadout`, `stashItems`, `pendingEquipAction` to AppState. Added `SET_LOADOUT`, `SET_STASH_ITEMS`, `SET_PENDING_EQUIP` actions. Both LOADOUT and STASH_ITEMS actions clear the pending flag.
+3. **packages/client/src/services/connection.ts** — Added optional `onLoadoutUpdate` and `onStashUpdate` to `MessageHandlers`. Added `sendEquipItem()` and `sendUnequipItem()` helpers. Wired handlers in both `connect()` and `switchRoom()`.
+4. **packages/client/src/components/CombinedStashLoadout.tsx** — New component. Layout: Loadout LEFT (10 named slots with icons, tier-colored item names, slot restriction labels), Stash RIGHT (scrollable list with tier colors, weight). Click-to-select + click-slot-to-equip flow. Double-click for auto-equip. Server-authoritative: sends EQUIP_ITEM/UNEQUIP_ITEM, shows pending spinner, updates only on server confirm. MUD terminal aesthetic: `narrative-terminal` background, `mud-*` / `ansi-*` CSS classes for all text, GearTier→MUD rarity class mapping.
+5. **packages/client/src/pages/Refuge.tsx** — Replaced separate "Stash" and "Loadout" tabs with unified "Equipment" tab. Wired `onLoadoutUpdate` and `onStashUpdate` message handlers. Passes `roomRef.current` to component.
+6. **packages/client/src/pages/ShardExploration.tsx** — Replaced `InventoryOverlay` with `CombinedStashLoadout` in a slide-out panel (`inShard` prop). Shows shard-found items section from `state.inventory`.
+7. **packages/client/src/hooks/useShardConnection.ts** — Exposed `roomRef` in return value. Added `onLoadoutUpdate`/`onStashUpdate` handlers. Imported new message types.
+
+**Design Decisions:**
+- GearTier→MUD class mapping: scrap→ansi-dim, common→mud-common, sturdy→mud-uncommon, refined→mud-rare, masterwork→mud-epic, anomalous→mud-legendary
+- SLOT_ACCEPTS uses existing ItemType; ring/amulet slots placeholder-mapped to 'material' until jewelry types are added
+- DisplayItem includes `allowedSlots[]` for server-driven slot compatibility; client fallback derives from SLOT_ACCEPTS
+- No optimistic updates — UI strictly waits for LOADOUT_UPDATE/STASH_UPDATE from server
+- Component is context-driven (reads from AppContext), not prop-driven, for consistency with existing pattern
+
+**Coordination with Jarlaxle:**
+- Server must send LOADOUT_UPDATE and STASH_UPDATE messages on any equipment change
+- DisplayItem format must match: `{ instanceId, definitionId, name, type, tier, weight, description, allowedSlots }`
+- Server handles swap logic when equipping to an occupied slot
