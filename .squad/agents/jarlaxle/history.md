@@ -1595,3 +1595,43 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 - High-complexity entities like creatures benefit from dedicated schema: enables AI integration through clean column interface, future query optimization, independent evolution.
 - Narrative templates use slug-based identity (TEXT UNIQUE) + UUID id. Slug is what AI/gameplay layers see; UUID is DB optimization.
 - JSONB columns can coexist with relational schema (e.g., loot_table in creatures). Useful for complex nested data that rarely needs direct DB queries.
+- Faction dual-table conflict resolved: `factions` (migration 004) is the canonical table; `content_definitions` faction rows were stale copies with divergent names. Migration 025 adds admin fields (description, milestones, events) to the canonical table and cleans up stale rows. PgFactionDefinitionsStore follows the same pattern as other dedicated stores.
+- When a game table already exists with FK constraints (e.g., faction_membership), always extend it rather than maintaining a parallel JSONB copy. The relational table is the source of truth.
+
+---
+
+## Session: Faction Admin Fields & Store Consolidation (2026-03-26T17:05:28Z)
+
+**Task:** Implement faction dual-table resolution via PgFactionDefinitionsStore and migration 025.
+**Status:** ✅ Complete (dev branch)
+
+**Commits:**
+- Background agent auto-commit to dev (faction store + migration 025 + init.ts wiring)
+
+**Deliverables:**
+- `PgFactionDefinitionsStore.ts` — IContentStore<ContentEntity> impl, reads/writes `factions` table directly, preserves FK integrity
+- Migration 025 — `025-faction-admin-fields.ts` adds description/milestones/events columns to `factions`, backfills description from philosophy, cleans stale content_definitions faction rows
+- init.ts updates — routes 'factions' entity type to PgFactionDefinitionsStore, comments document migration sequence
+
+**Technical Details:**
+- `factions` table (migration 004) is the single source of truth: UUID PKs, canonical GDD names, FK to faction_membership
+- `content_definitions` JSONB faction rows (stale): had divergent names (Ironhearth vs Ironwright, etc.), no FK relationships, out of sync
+- Solution: extend relational table with admin fields, delete stale JSONB rows, create dedicated store
+- Migration is idempotent: conditional column existence checks, single table scan + DELETE, <10ms runtime
+- Pattern: follows PgItemDefinitionsStore → PgBiomeDefinitionsStore → PgModifierDefinitionsStore → PgNarrativeDefinitionsStore → PgCreatureDefinitionsStore → PgFactionDefinitionsStore
+
+**Phase 2 Content Store Consolidation Progress:**
+- ✅ Migration 020–024: Biomes, modifiers, narrative, creatures dedicated stores (Drizzt, Jarlaxle parallel work Mar 26)
+- ✅ Migration 025: Faction admin fields + cleanup (Jarlaxle Mar 26)
+- Remaining on content_definitions: skills, loot-tables, rooms (Phase 3)
+
+**Quality Gate:**
+- ✅ Build clean (npm run build)
+- ✅ Tests green (npm run test, all 1823 server tests pass)
+- ✅ Linter clean (eslint)
+- ✅ Zero regressions
+
+**Learnings:**
+- When a game entity already has a relational table with FK constraints (e.g., factions → faction_membership), always extend the relational table rather than maintaining a parallel JSONB copy. The relational structure is the source of truth.
+- Admin UI fields (description, milestones, events) should live alongside game state, not in a separate entity type. This keeps reads/writes atomic.
+- Faction names are GDD-canonical (Ironwright Compact, Veil Cartographers, Scarlet Ledger) — these names appear in game state (player_profile.faction_id → factions.id → factions.name), admin UI, and API responses. Never reference old paraphrased names.

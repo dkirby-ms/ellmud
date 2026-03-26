@@ -1022,3 +1022,34 @@ Drizzt wired `useDevAutoLogin` hook into `Login.tsx` to auto-authenticate dev us
 
 **Next Phase:** Integration tests with combat loop, performance benchmarks, Phase 3 backlog prioritization.
 
+
+---
+
+## Phase 2 Content Store Consolidation — Faction Resolution (2026-03-26T17:05:28Z)
+
+**Cross-team context:** Jarlaxle completed Migration 025 for faction dual-table resolution, closing Phase 2 content store migration cycle.
+
+**What Happened:**
+Faction data existed in two places: `factions` table (relational, canonical, with FK constraints) and `content_definitions` JSONB rows (stale, out of sync). Migration 025 resolves this by:
+- Creating `PgFactionDefinitionsStore` to read/write the canonical `factions` table
+- Adding admin fields to `factions` (description, milestones, events)
+- Deleting stale faction rows from `content_definitions`
+
+**Test Coverage Update:**
+- Minsc's Phase 2 test suite (68 tests) covers Biomes, Modifiers, Narrative, Creatures
+- Faction store will follow the same CRUD + validation pattern
+- Migration 025 adds 3 nullable columns to existing table — no schema breaking changes
+- Existing player tests unaffected (player_profile.faction_id FK still valid)
+
+**Phase 2 Summary:**
+- ✅ 68 tests for dedicated content stores (Biomes, Modifiers, Narrative, Creatures)
+- ✅ Migrations 020–025 complete (5 dedicated stores + faction cleanup)
+- ✅ Server test suite: 1,891 tests, 100% pass rate
+- ✅ Build and linter clean, zero regressions
+
+**Remaining Content Store Work (Phase 3):**
+- skills, loot-tables, rooms still on generic PgContentStore
+- Follow same pattern: migrations, dedicated stores, new tests
+- Estimated 3 migrations, ~50 additional tests
+
+**Next:** Integration tests for faction CRUD in admin workflow, Phase 3 backlog prioritization.

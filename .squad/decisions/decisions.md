@@ -1930,3 +1930,66 @@ Shard-sickness tracks player death counts per shard location. These counts are c
 ### Effort Estimate
 
 - Medium (database schema + repository + provider wiring + tests ~2-3hrs after Loadout pattern established)
+
+---
+
+## 2026-03-26: Faction Dual-Table Resolution
+
+**Author:** Jarlaxle (Systems Dev)  
+**Date:** 2026-03-26  
+**Status:** Implemented (dev branch)
+
+### Context
+
+Two tables stored faction data with conflicting names and sources:
+- `factions` (migration 004): UUID PKs, canonical GDD names (Ironwright Compact, Veil Cartographers, Scarlet Ledger), FK to `faction_membership`, game state source of truth
+- `content_definitions` (stale): JSONB rows with entity_type='factions', different names (Ironhearth, Veilwalkers, Ashborn), no FK relationships, out of sync with game logic
+
+The admin UI was reading from `content_definitions` instead of `factions`, showing stale faction data. This created a dual-source-of-truth problem where the game and admin system disagreed on faction names and membership.
+
+### Decision
+
+Use the `factions` table as the single, exclusive source of truth for all faction data. Extend it with admin-UI fields (description, milestones, events) rather than maintaining a parallel JSONB copy in `content_definitions`. Create a dedicated `PgFactionDefinitionsStore` to manage faction admin data while preserving relational integrity.
+
+### Implementation
+
+1. **PgFactionDefinitionsStore** (new file: `packages/server/src/stores/PgFactionDefinitionsStore.ts`)
+   - Implements `IContentStore<ContentEntity>` interface
+   - Reads/writes `factions` table directly
+   - Preserves FK constraints with `faction_membership` table
+   - Follows established pattern: biomes, modifiers, narrative, creatures (all migrated same way Phase 2)
+
+2. **Migration 025: `025-faction-admin-fields.ts`**
+   - Adds columns to `factions`: `description` (TEXT), `milestones` (JSONB), `events` (JSONB)
+   - Backfills `description` from existing `philosophy` column (no data loss)
+   - Idempotent: conditional column existence checks before adding
+   - Cleanup: DELETE stale `content_definitions` rows where `entity_type='factions'`
+   - Performance: Single table scan + DELETE, no joins, <10ms runtime
+
+3. **Init.ts Wiring** (`packages/server/src/db/init.ts`)
+   - Routes 'factions' entity type to `PgFactionDefinitionsStore` instead of generic `PgContentStore`
+   - Added comments documenting migration sequence (001-003 base, 004 factions table, 005-024 content stores, 025 admin fields + cleanup)
+   - Admin UI CRUD now atomic with game state
+
+### Rationale
+
+- The `factions` table has relational constraints and is the actual source of game state — extending it preserves integrity
+- Deleting stale `content_definitions` faction rows eliminates the dual-source problem
+- Follows Phase 2 consolidation pattern: each dedicated content store (biomes, modifiers, narrative, creatures, now factions) reads/writes a single relational table
+- Only three entity types remain on generic `content_definitions`: skills, loot-tables, rooms (next phase)
+
+### Consequences
+
+- Admin UI faction CRUD now reads/writes the canonical `factions` table
+- All faction displays (game, admin, API) show the same authoritative data (Ironwright, Veil, Scarlet)
+- FK integrity enforced at database level
+- Stale JSONB faction entries removed from `content_definitions`
+- Migration cleanup reduces database size and query ambiguity
+
+### Quality Gate
+
+✅ Build clean (npm run build)  
+✅ Tests passing (npm run test)  
+✅ Linter clean (eslint)  
+✅ Zero regressions
+

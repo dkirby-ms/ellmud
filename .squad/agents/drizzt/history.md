@@ -1726,3 +1726,37 @@ Combined effect: auth was completely invisible in local development. Broken auth
 
 **Next Phase:** Run migration in staging, validate referential integrity, Phase 3 readiness assessment.
 
+
+---
+
+## Phase 2 Content Store Consolidation — Faction Dual-Table Resolution (2026-03-26T17:05:28Z)
+
+**Cross-team context:** Jarlaxle's parallel faction work closes the Phase 2 content store migration cycle.
+
+**What Happened:**
+The `factions` table (migration 004, relational with FK to faction_membership) and `content_definitions` JSONB faction rows (stale, divergent names) created a dual-source-of-truth conflict. Admin UI read from the wrong table, showing outdated faction data that didn't match game state.
+
+**Jarlaxle's Solution (Migration 025):**
+- Created `PgFactionDefinitionsStore.ts` to read/write the canonical `factions` table directly
+- Migration 025 adds admin fields (description, milestones, events) to `factions`
+- Backfills description from existing `philosophy` column
+- Deletes stale faction rows from `content_definitions` (cleanup)
+- Wired into init.ts to route 'factions' → PgFactionDefinitionsStore
+
+**Phase 2 Summary (Migrations 020–025):**
+- ✅ Migration 020–021 (Drizzt): Biomes + Modifiers dedicated stores
+- ✅ Migration 022–023 (Jarlaxle): Narrative + Creatures dedicated stores
+- ✅ Migration 024 (Drizzt): Cleanup sweep for migrated entity types
+- ✅ Migration 025 (Jarlaxle): Faction admin fields + cleanup
+
+**Remaining on content_definitions (Phase 3):**
+- skills, loot-tables, rooms (will follow same pattern)
+
+**Quality Gate:**
+- ✅ All 1823 server tests pass
+- ✅ Build clean
+- ✅ Linter clean
+- ✅ Zero regressions
+
+**Key Learning for Future Content Store Work:**
+When a game table already exists with relational structure and FK constraints (like factions → faction_membership), always extend the relational table rather than maintaining a parallel JSONB copy in a generic table. The relational structure is the source of truth; separate JSONB copies cause data drift.
