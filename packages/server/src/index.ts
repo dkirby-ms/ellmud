@@ -36,6 +36,7 @@ import { initLoadoutProvider } from './loadout/index.js';
 import { initShardSicknessProvider } from './systems/index.js';
 import { initCharacterProvider } from './character/index.js';
 import { createCharacterRouter } from './api/characters.js';
+import { initZoneProvider } from './zones/index.js';
 
 const config = getConfig();
 const PORT = config.port;
@@ -86,6 +87,10 @@ console.log(`[Ellmud] Shard-sickness persistence: ${USE_PG ? 'PostgreSQL' : 'in-
 // ─── Character Persistence ──────────────────────────────────────────────────
 initCharacterProvider(USE_PG);
 console.log(`[Ellmud] Character persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Zone Persistence ───────────────────────────────────────────────────────
+initZoneProvider(USE_PG);
+console.log(`[Ellmud] Zone persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Redis Bootstrap ─────────────────────────────────────────────────────────
 const { cache: narrationCache, isRedis: isCacheRedis } = await createNarrationCache(config);

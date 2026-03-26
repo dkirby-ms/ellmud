@@ -12,6 +12,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useAppContext, type TerminalMessage } from "../store";
+import CompassControl from "../components/CompassControl";
 import { connect, sendRawCommand } from "../services/connection";
 import { useReconnection } from "../hooks/useReconnection";
 import { useAutoScroll } from "../hooks/useAutoScroll";
@@ -266,6 +267,15 @@ export default function Refuge() {
     dispatch({ type: "LOGOUT" });
   }, [state.token, dispatch]);
 
+  const handleNavigate = useCallback(
+    (direction: string) => {
+      if (!roomRef.current) return;
+      addMessage(`> go ${direction}`, "system");
+      sendRawCommand(roomRef.current, `go ${direction}`);
+    },
+    [addMessage],
+  );
+
   // Derive display data from real state
   const locationName = state.roomHeader?.roomName ?? "The Refuge";
   const isConnected = state.connectionStatus === "connected";
@@ -366,6 +376,9 @@ export default function Refuge() {
               </button>
             ))}
           </div>
+
+          {/* Compass navigation */}
+          <CompassControl onNavigate={handleNavigate} />
 
           {/* Ambient Events — real server narrate messages */}
           <div className="flex-1 p-4 overflow-y-auto">
