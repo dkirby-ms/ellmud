@@ -1525,3 +1525,13 @@ The `item_definitions` table has no unique constraint on `name`, so `ON CONFLICT
 - **Pattern:** Death handler uses `void this.loadoutService.clearLoadout(playerId)` — fire-and-forget async, same pattern as `shardSicknessStore.incrementDeathCount()`.
 - **Filed decision:** `InMemoryLoadoutRepository` is a data-loss risk — equipped items vanish on server restart because stash removal is persisted (PG) but loadout placement is RAM-only. Filed `.squad/decisions/inbox/jarlaxle-loadout-persistence-gap.md`.
 - **No test regressions:** 72 test files, 1741 tests passing. Clean build.
+
+### 2025-07-27: PgTokenStore + PgShardSicknessStore — Persistence Gap Closure
+- **PgTokenStore**: PostgreSQL-backed session token store. Migration 015 creates `auth_tokens` table with TEXT PK (opaque token string), UUID player_id FK, TTL via `expires_at` column. UPSERT on set(), expired-token filter on get(), lazy cleanup() method.
+- **PgShardSicknessStore**: PostgreSQL-backed death tracking. Migration 016 creates `player_shard_sickness` table with UUID PK. UPSERT with `death_count + 1` on increment, `last_death_at` stored as BIGINT epoch millis.
+- **Provider pattern**: Created `shard-sickness-provider.ts` following the established loadout-provider pattern. `initShardSicknessProvider(usePg)` called at boot; `getShardSicknessStore()` used by ShardRoom.
+- **Token store wiring**: `index.ts` now selects `PgTokenStore` vs `InMemoryTokenStore` based on `USE_PG` flag, same pattern as PlayerRepository.
+- **ShardRoom updated**: Replaced hardcoded `new InMemoryShardSicknessStore()` with `getShardSicknessStore()` provider call.
+- **Schema validation test**: Added `auth_tokens` to the `COMPOSITE_PK_TABLES` exemption list — token PKs are opaque TEXT strings, not UUIDs.
+- **Tests**: 2 new test files (pg-token-store, pg-shard-sickness-store) using mocked db pattern. 76 test files, 1775 tests pass, zero regressions.
+- **Key files created**: `015_create_tokens.sql`, `016_create_shard_sickness.sql`, `PgTokenStore.ts`, `PgShardSicknessStore.ts`, `shard-sickness-provider.ts`, 2 test files.

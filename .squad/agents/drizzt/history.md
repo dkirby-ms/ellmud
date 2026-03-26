@@ -1590,3 +1590,17 @@ Combined effect: auth was completely invisible in local development. Broken auth
 **Learnings:**
 - `persistence-schema-validation.test.ts` has a `COMPOSITE_PK_TABLES` allowlist — any new table without a `UUID PRIMARY KEY` must be added there.
 - `StashItemInstance` stores `durability: number | null` and `maxDurability: number | null` (not optional). The PG layer must serialize both into JSONB metadata and reconstruct with `?? null` fallbacks.
+
+### Player Profile Persistence Fix (2025-07-25)
+**Task:** Fix PgPlayerProfileRepository to persist equipment and maxCarryWeight (not just skills).
+**Status:** ✅ Complete
+
+**Changes:**
+1. **Migration 014** (`014_create_player_profile.sql`) — New `player_profile` table with `max_carry_weight INT`, `equipment JSONB`, keyed by `player_id UUID`.
+2. **PgPlayerProfileRepository** — `load()` now queries both `player_skills` and `player_profile`. Falls back to defaults when profile row doesn't exist. `save()` UPSERTs into `player_profile` in the same transaction as skills.
+3. **Tests** (`pg-profile-repository.test.ts`) — 8 tests: null for unknown player, round-trip with equipment, default fallback, empty JSONB handling, transaction verification, upsert overwrite, rollback on error.
+4. **Build:** Clean. **Tests:** 1759 passed (74 files), 1 pre-existing failure (auth_tokens TEXT PK).
+
+**Learnings:**
+- `VisibleEquipment` is a simple optional-fields interface (`weapon?`, `armour?`, `tier?`). Store as JSONB, treat empty `{}` as undefined on load.
+- Profile data that isn't skill-based (maxCarryWeight, equipment) belongs in a dedicated table, not shoehorned into player_skills.

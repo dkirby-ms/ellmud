@@ -4535,3 +4535,47 @@ Equipped items were stored only in-memory via `InMemoryLoadoutRepository`. Serve
 - All team members: loadout data now survives server restarts when `DATABASE_URL` is set.
 - Schema validation test's `COMPOSITE_PK_TABLES` list now includes `player_loadout`.
 - No changes to `LoadoutService` or room code — the interface was already designed for this swap.
+
+---
+
+### 2026-03-26T13:07:32Z: player_profile table for non-skill profile data
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-03-26  
+**Status:** Implemented
+
+## Context
+PgPlayerProfileRepository only persisted skills; equipment and maxCarryWeight reverted on restart.
+
+## Decision
+Added `player_profile` table (migration 014) to persist `max_carry_weight` and `equipment` (JSONB) alongside the existing `player_skills` table. The PgPlayerProfileRepository now queries both tables on load and writes both in a single transaction on save.
+
+## Why
+Cramming non-skill data into `player_skills` would require awkward sentinel rows. A dedicated table keeps the schema clean and lets each concern evolve independently. JSONB for equipment accommodates future slot additions without schema migrations.
+
+## Impact
+- Any new persistent player fields that aren't skills should go in `player_profile` (add columns via new migration).
+- Equipment is stored as JSONB — empty `{}` means "no equipment" and maps to `undefined` in TypeScript.
+- The save transaction now writes to two tables; both must succeed or both roll back.
+
+---
+
+### 2026-03-26T13:07:32Z: PgTokenStore and PgShardSicknessStore
+
+**Author:** Jarlaxle (Systems Dev)  
+**Date:** 2026-03-26  
+**Status:** Implemented
+
+## Context
+Session tokens and shard-sickness death counts were stored in-memory only, lost on every server restart. This violated the user directive that "deaths always count."
+
+## Decision
+- `auth_tokens` table uses TEXT primary key (the opaque token string), not UUID — tokens are externally generated random strings, not domain entities.
+- `player_shard_sickness` uses DELETE on `resetDeathCount()` (removes the row entirely) rather than setting death_count=0 — simpler, avoids orphan zero-rows.
+- Shard-sickness uses the singleton provider pattern (like loadout-provider) rather than constructor injection — consistent with all other persistence layers.
+- Token cleanup is lazy (explicit `cleanup()` call) — no background timer yet. A future cron/interval can call it.
+
+## Impact
+- Both stores are DATABASE_URL-gated — no behavior change for in-memory dev setups.
+- ShardRoom now imports from `systems/index.js` barrel instead of directly from `ShardSickness.ts`.
+- `persistence-schema-validation.test.ts` exemption list updated for `auth_tokens` TEXT PK.
