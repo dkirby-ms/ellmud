@@ -35,7 +35,7 @@ import { SoundSystem } from '../sound/index.js';
 import { TraceSystem } from '../systems/index.js';
 import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
 import { DowningSystem, type DowningEvent } from '../systems/DowningSystem.js';
-import { InMemoryShardSicknessStore, type ShardSicknessStore } from '../systems/ShardSickness.js';
+import { type ShardSicknessStore, getShardSicknessStore } from '../systems/index.js';
 import {
   NOISE_VALUES,
   SOUND_DESCRIPTIONS,
@@ -219,7 +219,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Initialize downing system (GDD §6.4 — bleed-out timers, stabilization)
     this.downingSystem = new DowningSystem();
-    this.shardSicknessStore = new InMemoryShardSicknessStore();
+    this.shardSicknessStore = getShardSicknessStore();
 
     // Initialize extraction system (default 5-tick channel)
     this.extractionSystem = new ExtractionSystem();

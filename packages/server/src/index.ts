@@ -14,6 +14,7 @@ import { ShardRoom, RefugeRoom } from './rooms/index.js';
 import {
   AuthService,
   InMemoryTokenStore,
+  PgTokenStore,
   InMemoryPlayerRepository,
   PgPlayerRepository,
   createAuthRouter,
@@ -32,6 +33,7 @@ import { initProfileProvider } from './player/index.js';
 import { initFactionProvider } from './faction/index.js';
 import { initRunHistoryProvider } from './run-history/index.js';
 import { initLoadoutProvider } from './loadout/index.js';
+import { initShardSicknessProvider } from './systems/index.js';
 
 const config = getConfig();
 const PORT = config.port;
@@ -75,6 +77,10 @@ console.log(`[Ellmud] Run history persistence: ${USE_PG ? 'PostgreSQL' : 'in-mem
 initLoadoutProvider(USE_PG);
 console.log(`[Ellmud] Loadout persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
+// ─── Shard-Sickness Persistence ─────────────────────────────────────────────
+initShardSicknessProvider(USE_PG);
+console.log(`[Ellmud] Shard-sickness persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
 // ─── Redis Bootstrap ─────────────────────────────────────────────────────────
 const { cache: narrationCache, isRedis: isCacheRedis } = await createNarrationCache(config);
 const { presence, isRedis: isPresenceRedis } = await createPresence(config);
@@ -86,9 +92,10 @@ app.use(express.json());
 app.set('trust proxy', 1);
 
 // ─── Auth Setup ──────────────────────────────────────────────────────────────
-const tokenStore = new InMemoryTokenStore();
+const tokenStore = USE_PG ? new PgTokenStore() : new InMemoryTokenStore();
 const playerRepo = USE_PG ? new PgPlayerRepository() : new InMemoryPlayerRepository();
 const authService = new AuthService(tokenStore, playerRepo);
+console.log(`[Ellmud] Token persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // Mount local auth routes (only if ALLOW_LOCAL_AUTH is true)
 const ALLOW_LOCAL_AUTH = process.env.ALLOW_LOCAL_AUTH !== 'false';
