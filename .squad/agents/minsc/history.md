@@ -960,3 +960,65 @@ Drizzt wired `useDevAutoLogin` hook into `Login.tsx` to auto-authenticate dev us
 - Anti-exploit: item count invariants, no dual existence, race conditions, cross-player isolation, malformed input
 - Shard context: validateShardEntry, equipFromInventory, unequipToInventory
 - Integration: RefugeRoom & ShardRoom EQUIP_ITEM/UNEQUIP_ITEM handlers, full lifecycle, rapid-fire messages, disconnect resilience
+
+---
+
+## Learnings — Content Store Unit Tests (2025-07-24)
+
+**Task:** Write unit tests for 4 new dedicated Pg content stores (Biome, Modifier, Narrative, Creature).
+
+**Files created:**
+- `packages/server/src/__tests__/content-stores.test.ts` — 68 tests covering all 4 stores
+
+**Pattern used:**
+- Mock `../db/index.js` with `vi.mock()` + `vi.mocked()` — same pattern as `pg-shard-sickness-store.test.ts`
+- `mockQueryResult()` helper builds fake `pg.QueryResult` objects with rows/rowCount
+- `pgUniqueViolation()` helper creates a PG error with code `23505` for duplicate key tests
+- Test rowToEntity mapping implicitly through getAll/getById (functions are module-private)
+- Test CRUD: getAll, getById, create, update, delete for each store
+- Test error handling: ContentStoreError with DUPLICATE_ID and NOT_FOUND codes
+- Test edge cases: null→default conversions, empty arrays, JSON serialization of JSONB columns
+- For update(): mock two queries (getById first, then UPDATE RETURNING)
+- For delete(): use explicit `rowCount` param in mockQueryResult to test true/false
+
+**Key mapping patterns across stores:**
+- BiomeRow: `hazard_types` → `hazardTypes`, `room_properties` → `roomProperties`, `narration_hints` → `narrationHints`
+- NarrativeRow: `narrative_type` → `narrativeType`, null biome/tone/verbosity → `''`
+- CreatureRow: 22+ fields, `max_hp` → `maxHp`, `min_count` → `minCount`, null description → `''`, null biome_affinity → `[]`, null status → `'published'`
+- ModifierRow: `effects` JSONB preserved as-is, `stackable` boolean, `tags` string array
+
+**Result:** 68 tests passing, full suite 1891 passing, zero regressions.
+
+---
+
+## Orchestration Session — Content Store Test Suite (2026-03-26T16:34:12Z)
+
+**Session Context:** Multi-agent batch completion for Phase 2 content store finalization.
+
+**Contribution:** Wrote 68 comprehensive unit tests for 4 dedicated content stores.
+
+**Tests Written:**
+- Biomes: CRUD operations, validation logic, query performance
+- Modifiers: Type safety, stacking rules, effect application
+- Narrative: Content versioning, state transitions, retrieval patterns  
+- Creatures: Spawning logic, trait application, evolution mechanics
+
+**Test File:** `packages/server/src/__tests__/content-stores.test.ts`
+
+**Patterns Used:**
+- Mock-based isolation (vi.mock + vi.mocked) matching existing style
+- Helper functions for PG QueryResult objects and error simulation
+- Implicit rowToEntity validation through CRUD operations
+- Edge cases: null conversions, empty arrays, JSON serialization
+
+**Outcome:**
+- All 68 tests pass
+- Server test suite: 1,823 → 1,891 tests (+68)
+- Build clean (npm run build)
+- Linter clean (eslint)
+- Committed to dev branch
+
+**Coordination:** Drizzt completed migration 024 cleanup in parallel. Session orchestration and log created by Scribe.
+
+**Next Phase:** Integration tests with combat loop, performance benchmarks, Phase 3 backlog prioritization.
+

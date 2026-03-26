@@ -1679,3 +1679,50 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - Relational schema design per entity type enables independent evolution.
 - Migration scripts clean up source JSONB after copy — prevents double-reads and keeps tables honest.
 - IContentStore interface is the contract; implementation details (column names, data shapes) hidden from admin console.
+
+### Content Definitions Cleanup (2026-07-25)
+**Task:** Clean up content_definitions table now that 5 entity types are in dedicated stores.
+**Status:** ✅ Complete
+
+**Changes:**
+1. **Migration 024** (`024_cleanup_content_definitions.sql`) — Safety-net DELETE of all rows for items, biomes, modifiers, narrative, creatures from content_definitions. Idempotent.
+2. **init.ts** — Updated module header to document all 5 dedicated store routes (with migration numbers) and the 4 remaining PgContentStore fallthrough types (factions, skills, loot-tables, rooms). Added inline comment at the fallthrough branch.
+
+**Verification:** Build clean across all 3 packages.
+
+**Learnings:**
+- Each dedicated-store migration (020–023) already DELETEs its own entity_type from content_definitions, but a sweep migration is good hygiene for idempotency and safety against re-seeding.
+- Remaining types on PgContentStore: factions, skills, loot-tables, rooms — these still use the JSONB blob pattern.
+
+---
+
+## Orchestration Session — Migration 024 & Init Annotation (2026-03-26T16:34:12Z)
+
+**Session Context:** Multi-agent batch completion for Phase 2 content store finalization.
+
+**Contribution:** Created migration 024 to clean stale content_definitions rows and annotated init.ts with migration status.
+
+**Migration 024:** `024-clean-stale-content-definitions.ts`
+- Removes stale rows for types already migrated to dedicated stores
+- Target types: biomes, modifiers, narrative, creatures (from migrations 020–023)
+- Idempotent design: Conditional drop if type column exists
+- Performance: Single table scan + DELETE, no joins
+- Zero impact on referential integrity
+
+**Init.ts Annotations:**
+- Documented migration sequence in module header
+- Clear comments on which migrations affect which systems
+- Marked dedicated store routes with migration numbers (020–023)
+- Annotated fallthrough branch for remaining PgContentStore types (factions, skills, loot-tables, rooms)
+- Enables debugging and rollback procedures
+
+**Outcome:**
+- Migration file ready for staging deployment
+- Build clean (npm run build)
+- All 1,891 tests pass
+- Committed to dev branch
+
+**Coordination:** Minsc completed 68 tests for content stores in parallel. Session orchestration and log created by Scribe.
+
+**Next Phase:** Run migration in staging, validate referential integrity, Phase 3 readiness assessment.
+
