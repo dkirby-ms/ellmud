@@ -39,7 +39,7 @@ import { PgLootTableDefinitionsStore } from './PgLootTableDefinitionsStore.js';
 import { PgRoomDefinitionsStore } from './PgRoomDefinitionsStore.js';
 import { getAllItemDefinitions } from '../../items/registry.js';
 import { DROWNED_REVENANT } from '../../creatures/templates/drowned-revenant.js';
-import { CONTENT_ENTITY_TYPES } from './content-types.js';
+
 
 export function initializeContentStores(usePg = false): Map<ContentEntityType, IContentStore<ContentEntity>> {
   if (usePg) {
