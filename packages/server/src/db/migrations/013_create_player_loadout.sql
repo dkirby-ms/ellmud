@@ -2,7 +2,7 @@
 -- Player equipment loadout — which items are equipped in which slots.
 -- Items are removed from player_stash when equipped and returned when unequipped.
 
-CREATE TABLE player_loadout (
+CREATE TABLE IF NOT EXISTS player_loadout (
   player_id    UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
   slot         TEXT NOT NULL,  -- equipment slot name (e.g. 'weapon', 'offhand', 'head', 'chest', 'legs', 'feet')
   instance_id  TEXT NOT NULL,  -- unique item instance ID (matches StashItemInstance.instanceId)
@@ -13,4 +13,4 @@ CREATE TABLE player_loadout (
   PRIMARY KEY (player_id, slot)
 );
 
-CREATE INDEX idx_loadout_player ON player_loadout (player_id);
+CREATE INDEX IF NOT EXISTS idx_loadout_player ON player_loadout (player_id);
