@@ -19,6 +19,10 @@ import { ContentStore, type ContentEntity, type IContentStore } from './ContentS
 import type { ContentEntityType } from './content-types.js';
 import { PgContentStore } from './PgContentStore.js';
 import { PgItemDefinitionsStore } from './PgItemDefinitionsStore.js';
+import { PgBiomeDefinitionsStore } from './PgBiomeDefinitionsStore.js';
+import { PgModifierDefinitionsStore } from './PgModifierDefinitionsStore.js';
+import { PgNarrativeDefinitionsStore } from './PgNarrativeDefinitionsStore.js';
+import { PgCreatureDefinitionsStore } from './PgCreatureDefinitionsStore.js';
 import { getAllItemDefinitions } from '../../items/registry.js';
 import { DROWNED_REVENANT } from '../../creatures/templates/drowned-revenant.js';
 import { CONTENT_ENTITY_TYPES } from './content-types.js';
@@ -36,6 +40,14 @@ function initializePgStores(): Map<ContentEntityType, IContentStore<ContentEntit
     if (entityType === 'items') {
       // Items use the dedicated item_definitions table, not the generic content_definitions blob
       stores.set('items', new PgItemDefinitionsStore());
+    } else if (entityType === 'biomes') {
+      stores.set('biomes', new PgBiomeDefinitionsStore());
+    } else if (entityType === 'modifiers') {
+      stores.set('modifiers', new PgModifierDefinitionsStore());
+    } else if (entityType === 'narrative') {
+      stores.set('narrative', new PgNarrativeDefinitionsStore());
+    } else if (entityType === 'creatures') {
+      stores.set('creatures', new PgCreatureDefinitionsStore());
     } else {
       stores.set(entityType, new PgContentStore<ContentEntity>(entityType));
     }
