@@ -1,17 +1,19 @@
 /**
  * Content store initialization — creates all 9 content stores.
  *
- * When usePg=true (DATABASE_URL set):
- *   - Migrated types use dedicated relational stores:
- *       items       → PgItemDefinitionsStore      (migration 002)
- *       biomes      → PgBiomeDefinitionsStore      (migration 020)
- *       modifiers   → PgModifierDefinitionsStore   (migration 021)
- *       narrative   → PgNarrativeDefinitionsStore   (migration 022)
- *       creatures   → PgCreatureDefinitionsStore   (migration 023)
- *       factions    → PgFactionDefinitionsStore    (migration 004+025)
- *   - Remaining types still use PgContentStore (content_definitions JSONB):
- *       skills, loot-tables, rooms
- *     These are pending migration to dedicated tables.
+ * When usePg=true (DATABASE_URL set), every entity type routes to a
+ * dedicated relational store backed by its own table:
+ *   items       → PgItemDefinitionsStore         (migration 002)
+ *   biomes      → PgBiomeDefinitionsStore        (migration 020)
+ *   modifiers   → PgModifierDefinitionsStore     (migration 021)
+ *   narrative   → PgNarrativeDefinitionsStore    (migration 022)
+ *   creatures   → PgCreatureDefinitionsStore     (migration 023)
+ *   factions    → PgFactionDefinitionsStore      (migration 004+025)
+ *   skills      → PgSkillDefinitionsStore        (migration 026)
+ *   loot-tables → PgLootTableDefinitionsStore    (migration 027)
+ *   rooms       → PgRoomDefinitionsStore         (migration 028)
+ *
+ * The legacy content_definitions JSONB table is dropped in migration 029.
  *
  * When usePg=false (dev mode), returns in-memory ContentStore instances
  * pre-populated from existing game registries:
@@ -26,13 +28,15 @@
 
 import { ContentStore, type ContentEntity, type IContentStore } from './ContentStore.js';
 import type { ContentEntityType } from './content-types.js';
-import { PgContentStore } from './PgContentStore.js';
 import { PgItemDefinitionsStore } from './PgItemDefinitionsStore.js';
 import { PgBiomeDefinitionsStore } from './PgBiomeDefinitionsStore.js';
 import { PgModifierDefinitionsStore } from './PgModifierDefinitionsStore.js';
 import { PgNarrativeDefinitionsStore } from './PgNarrativeDefinitionsStore.js';
 import { PgCreatureDefinitionsStore } from './PgCreatureDefinitionsStore.js';
 import { PgFactionDefinitionsStore } from './PgFactionDefinitionsStore.js';
+import { PgSkillDefinitionsStore } from './PgSkillDefinitionsStore.js';
+import { PgLootTableDefinitionsStore } from './PgLootTableDefinitionsStore.js';
+import { PgRoomDefinitionsStore } from './PgRoomDefinitionsStore.js';
 import { getAllItemDefinitions } from '../../items/registry.js';
 import { DROWNED_REVENANT } from '../../creatures/templates/drowned-revenant.js';
 import { CONTENT_ENTITY_TYPES } from './content-types.js';
@@ -46,26 +50,15 @@ export function initializeContentStores(usePg = false): Map<ContentEntityType, I
 
 function initializePgStores(): Map<ContentEntityType, IContentStore<ContentEntity>> {
   const stores = new Map<ContentEntityType, IContentStore<ContentEntity>>();
-  for (const entityType of CONTENT_ENTITY_TYPES) {
-    if (entityType === 'items') {
-      // Items use the dedicated item_definitions table, not the generic content_definitions blob
-      stores.set('items', new PgItemDefinitionsStore());
-    } else if (entityType === 'biomes') {
-      stores.set('biomes', new PgBiomeDefinitionsStore());
-    } else if (entityType === 'modifiers') {
-      stores.set('modifiers', new PgModifierDefinitionsStore());
-    } else if (entityType === 'narrative') {
-      stores.set('narrative', new PgNarrativeDefinitionsStore());
-    } else if (entityType === 'creatures') {
-      stores.set('creatures', new PgCreatureDefinitionsStore());
-    } else if (entityType === 'factions') {
-      stores.set('factions', new PgFactionDefinitionsStore());
-    } else {
-      // Remaining types (skills, loot-tables, rooms) still use
-      // the generic content_definitions JSONB store — pending migration.
-      stores.set(entityType, new PgContentStore<ContentEntity>(entityType));
-    }
-  }
+  stores.set('items', new PgItemDefinitionsStore());
+  stores.set('biomes', new PgBiomeDefinitionsStore());
+  stores.set('modifiers', new PgModifierDefinitionsStore());
+  stores.set('narrative', new PgNarrativeDefinitionsStore());
+  stores.set('creatures', new PgCreatureDefinitionsStore());
+  stores.set('factions', new PgFactionDefinitionsStore());
+  stores.set('skills', new PgSkillDefinitionsStore());
+  stores.set('loot-tables', new PgLootTableDefinitionsStore());
+  stores.set('rooms', new PgRoomDefinitionsStore());
   return stores;
 }
 
