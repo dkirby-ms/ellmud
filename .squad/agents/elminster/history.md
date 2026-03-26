@@ -918,3 +918,89 @@ All future rooms must follow: `client.auth?.playerId` (excluding 'anonymous') �
 
 **Orchestration Log:** `.squad/orchestration-log/2026-03-25T2316-elminster.md`
 
+### 2026-03-27: Character Creation & Management System Design
+
+- **Task:** Design the character creation and management system — audit existing state, identify gaps, propose architecture.
+- **Audit findings:**
+  - Identity model is 1:1 (account = player). No "character" entity exists. All per-player tables FK to `players.id` directly.
+  - Auth flow is solid: register/login → token → join room with token → resolve playerId.
+  - `CharacterSelect.tsx` exists at `/characters` route with mock data (1 hardcoded character, 3 factions) but is never visited — Login and AuthCallback both navigate directly to `/refuge`, skipping character selection.
+  - **Critical faction mismatch:** Three different naming schemes — DB (`ironwright`, `veil`, `scarlet`), client (`ironwright`, `veilkeepers`, `ashenguard`), content_definitions (`ironhearth`, `veilwalkers`, `ashborn`). Must reconcile before faction selection can work.
+  - GDD confirms no classes/races. Everyone is a Shardwalker. Skills-based progression. Gear is primary power source. Character names exist but are anonymous in shards.
+  - 16 DB migrations, 8 per-player tables that would need FK re-keying if we separate characters from accounts.
+
+- **Architecture decisions:**
+  - **1:many account → character model**, with MVP = 1 slot. Schema supports multi-character from day one to avoid painful migration later.
+  - **Character = progression container** owning skills, stash, loadout, faction, run history. Account = auth credentials + settings.
+  - **REST endpoints for character CRUD** (not Colyseus messages). Client calls REST before joining any room. CharacterId passed as join option.
+  - **Creation fields:** Name + faction slug only. No class, race, stats, or appearance (per GDD's skills-based design).
+  - **New `characters` table** + FK re-key migration for all 8 per-player tables.
+  - **Auto-migration** for existing players: create one character per account with username as name.
+  - **Login redirect change:** `/` → `/characters` → `/refuge` (inserting character selection into the flow).
+
+- **Open questions for dkirby-ms:**
+  1. Faction slug reconciliation (which naming is canonical?)
+  2. Character deletion policy (soft-delete with grace period?)
+  3. Starting loadout for new characters (starter kit or bare?)
+  4. Existing player migration strategy (auto-name or prompt?)
+
+- **Deliverable:** `.squad/decisions/inbox/elminster-character-system-design.md` — full design proposal with DB schema, message protocol, client screens, migration path, MVP scope, and implementation sequence.
+- **Key files:** `CharacterSelect.tsx`, `004_create_factions.sql`, `001_create_players.sql`, `RefugeRoom.ts`, `ShardRoom.ts`, `connection.ts`, `Login.tsx`, `AuthCallback.tsx`
+
+
+### 2025-03-25: Content Store Refactor — Scoping
+
+- **Task:** Scope the removal of the generic `content_definitions` table by migrating all 9 entity types to dedicated tables + stores (following the successful `items` → `item_definitions` pattern).
+- **Audit findings:**
+  - **Items:** ✅ Already migrated to `item_definitions` table with `PgItemDefinitionsStore`. Admin UI shows all 40+ items from registry, not 18 stale seeded copies. Reference implementation.
+  - **Creatures:** 1 template (`drowned_revenant`), 1 seed row. No dedicated table. Admin UI expects more fields (description, behavior, status) than template provides. High priority.
+  - **Biomes:** 5 well-defined seed rows, 5 in-memory definitions. Simple flat schema (TEXT arrays). Medium priority, quick win.
+  - **Modifiers:** 5 well-defined seed rows, 5 in-memory definitions. Simple schema (JSONB effects, TEXT array tags). Medium priority, quick win.
+  - **Skills:** `player_skills` table exists (for progression), but no skill definitions table. 0 seed rows, 0 registry. Low priority, clean slate.
+  - **Loot Tables:** No table, 0 seed rows, 0 registry. Low priority, clean slate.
+  - **Factions:** **Two faction systems found!** Migration 004 created `factions` table (3 rows: Ironwright, Veil, Scarlet) for player membership. Migration 008 seeded `content_definitions` with 3 different factions (ironhearth, veilwalkers, ashborn) for admin content. Medium priority, requires reconciliation.
+  - **Rooms:** No table, 0 seed rows, 0 registry. Low priority, clean slate.
+  - **Narrative:** No table, 0 seed rows, 0 registry. Low priority, clean slate.
+
+- **Key architectural insights:**
+  - **Store pattern:** `PgItemDefinitionsStore` flattens relational columns + JSONB into flat ContentEntity on read, expands on write. Allows zero client/route changes.
+  - **JSONB strategy:** Use columns for queryable fields (name, type, tier), JSONB for nested/variable structures (loot tables, effects).
+  - **ID strategy:** UUID primary key + text slug for human-readable references. Existing `content_definitions.id` maps to `slug`.
+  - **In-memory mode:** Keep in-memory ContentStore for `usePg=false` mode alongside dedicated stores (dev velocity, testing).
+  - **Client-side API unchanged:** Admin UI continues to use generic `listEntities()` / `getEntity()` API. All stores implement `IContentStore<ContentEntity>`.
+
+- **Implementation phases:**
+  - **Phase 1 (Quick Wins):** Biomes, Modifiers, Narrative (14.5h) — simple schemas, establishes pattern
+  - **Phase 2 (High Impact):** Creatures (9h, HIGH priority), Factions (11h, table reconciliation required)
+  - **Phase 3 (Low Priority):** Skills, Loot Tables, Rooms (15.5h) — defer until admin usage proves necessary
+  - **Cleanup:** Drop `content_definitions` table, delete `PgContentStore.ts` (5h)
+  - **Total:** ~55 hours (7-8 developer days)
+
+- **Critical decisions:**
+  - **Faction reconciliation (Decision 6):** Merge both faction tables into single `faction_definitions` table. Migrate both sets (6 total factions), update `faction_membership` FK, drop old `factions` table. Chosen over keeping separate to avoid confusion and dual sources of truth.
+  - **UI schema mismatch risk:** Admin UI expects fields not in TypeScript interfaces (e.g., creature.description, creature.status). Mitigation: audit each UI detail page before creating schema, add missing fields as nullable columns.
+
+- **Success criteria:**
+  1. All 8 entity types migrated to dedicated tables
+  2. Admin UI CRUD works for all types (no client changes)
+  3. All seed data preserved
+  4. Query performance improved (indexed columns vs JSONB scan)
+  5. Dev mode (in-memory) still works
+  6. `content_definitions` table dropped
+  7. Code registries sync with DB
+
+- **Deliverables:**
+  - **Scoping plan:** `~/.copilot/session-state/5a9420c4-0061-4d0f-8cbb-1ca9bf942ad1/plan.md` — comprehensive 27KB document with entity-by-entity audit, proposed schemas, migration strategies, effort estimates, implementation order, risks, client compatibility analysis
+  - **Architectural decisions:** `.squad/decisions/inbox/elminster-content-store-refactor.md` — 8 key decisions with rationale, alternatives rejected, implementation checklist
+  
+- **Key files referenced:** 
+  - `content-types.ts` (TypeScript interfaces)
+  - `init.ts` (store initialization)
+  - `PgContentStore.ts` (generic store to be replaced)
+  - `PgItemDefinitionsStore.ts` (reference implementation)
+  - `007_create_content_definitions.sql`, `008_seed_content_definitions.sql` (existing migrations)
+  - Admin UI: 9 list pages + 9 detail pages (`packages/client/src/pages/admin/`)
+  - Registries: `items/registry.ts` (40+ items), `creatures/templates/drowned-revenant.ts` (1 template)
+
+- **Next steps:** Review with team, confirm faction reconciliation strategy, start Phase 1 (biomes, modifiers, narrative).
+

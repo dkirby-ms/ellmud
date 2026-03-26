@@ -1535,3 +1535,25 @@ The `item_definitions` table has no unique constraint on `name`, so `ON CONFLICT
 - **Schema validation test**: Added `auth_tokens` to the `COMPOSITE_PK_TABLES` exemption list — token PKs are opaque TEXT strings, not UUIDs.
 - **Tests**: 2 new test files (pg-token-store, pg-shard-sickness-store) using mocked db pattern. 76 test files, 1775 tests pass, zero regressions.
 - **Key files created**: `015_create_tokens.sql`, `016_create_shard_sickness.sql`, `PgTokenStore.ts`, `PgShardSicknessStore.ts`, `shard-sickness-provider.ts`, 2 test files.
+
+### 2026-03-27: Character System — Client + Room Integration
+- **CharacterSelect.tsx** fully rewritten: fetches from `GET /api/characters`, creates via `POST /api/characters`, selects via `PUT /api/characters/:id/select`, deletes via `DELETE /api/characters/:id`. Alpha-only name validation with auto-capitalize. Empty-state triggers creation form. Delete with confirmation.
+- **Login flow redirect**: Login.tsx and AuthCallback.tsx now navigate to `/characters` instead of `/refuge` after auth. Character selection → `/refuge`.
+- **Store**: Added `activeCharacter: CharacterSummary | null` to AppState with `SET_ACTIVE_CHARACTER` action.
+- **connection.ts**: `connect()` and `switchRoom()` accept optional `characterId` parameter. Passed through from `state.activeCharacter?.id` in Refuge.tsx and useShardConnection.ts.
+- **RefugeRoom**: Added `characterIds` map (sessionId → characterId). All gameplay operations (stash, loadout, equip/unequip/swap) use `characterIds` map instead of `playerIds`. Auth-level operations stay on `playerIds`.
+- **ShardRoom**: `onJoin` reads `characterId` from join options. Uses it as the gameplay identity for all repo calls (profile, faction, stash, sickness, run history). Falls back to playerId for backwards compat.
+- **Shared types**: Added `CharacterSummary`, `CreateCharacterRequest`, `SelectCharacterRequest` interfaces. Fixed message type count test (12→20 — Drizzt added 8 CHARACTER_ message types in parallel).
+- **API service**: Added `fetchCharacters`, `createCharacter`, `selectCharacter`, `deleteCharacter` functions.
+- Build clean, 80 server test files pass (1823 tests), shared tests pass (80 tests). Client ux-batch2 failures are pre-existing.
+
+## Learnings
+
+**Character ID as gameplay identity:**
+The `playerId` (from auth/tokens) is now distinct from `characterId` (gameplay identity). In RefugeRoom, there are two maps: `playerIds` for auth and `characterIds` for gameplay. In ShardRoom, the `playerIds` map was repurposed to hold characterIds (with backwards-compatible fallback). All repository calls (stash, loadout, profile, faction, shard sickness, run history) should use characterId.
+
+**REST for character CRUD, not Colyseus messages:**
+Character listing, creation, selection, and deletion use REST endpoints (`/api/characters`), not Colyseus message types. This is because character management happens before joining any room. The CHARACTER_ message types Drizzt added are available but unused by the client — the REST approach is simpler and already wired.
+
+**Faction slugs are from DB migration 004:**
+DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client CharacterSelect uses these. Content definitions use different names. Reconciliation is deferred per user directive that factions are placeholder.

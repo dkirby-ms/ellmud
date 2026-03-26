@@ -1604,3 +1604,46 @@ Combined effect: auth was completely invisible in local development. Broken auth
 **Learnings:**
 - `VisibleEquipment` is a simple optional-fields interface (`weapon?`, `armour?`, `tier?`). Store as JSONB, treat empty `{}` as undefined on load.
 - Profile data that isn't skill-based (maxCarryWeight, equipment) belongs in a dedicated table, not shoehorned into player_skills.
+
+## Learnings
+
+### 2026-07-24: Double-Join Fix (Presence Flickers Bug)
+**Task:** Fix bug where same playerId joins ShardRoom twice with different Colyseus sessions, causing "presence flickers" error.
+**Status:** ✅ Fixed — build clean, 1775 tests passing, zero regressions.
+
+**Root Cause:** Rapid duplicate "enter shard" commands → two ROOM_SWITCH messages → two `joinOrCreate` calls → same playerId, different sessionIds. Second `onJoin` overwrote `PlayerState` in `players` Map (keyed by playerId). When first session disconnected, `onLeave` deleted the player from the Map. Second session then found no `PlayerState` → "presence flickers."
+
+**Fixes (defense in depth):**
+1. **ShardRoom.onJoin** — Duplicate playerId detection. If `this.players.has(playerId)`, displace old session (remove from `playerIds`, force-leave old client). Skip `playerCount++` since player already counted.
+2. **RefugeRoom.handleEnterCommand** — `pendingEnter` Set tracks per-session enter state. Rejects duplicate enter commands while switch is in flight. Gate released on failure paths and onLeave.
+
+**Key patterns:**
+- `this.players` is keyed by playerId, `this.playerIds` maps sessionId→playerId. Both maps must stay consistent.
+- `onLeave` uses `this.playerIds.get(client.sessionId)` to resolve playerId; removing the mapping makes onLeave a no-op for displaced sessions.
+- Colyseus leave code 4000 = consented; 4001 = displaced by new session (custom).
+
+**Key files:**
+- `packages/server/src/rooms/ShardRoom.ts` — onJoin guard (lines ~286-320)
+- `packages/server/src/rooms/RefugeRoom.ts` — pendingEnter gate, onLeave cleanup
+- `packages/server/src/__tests__/shardroom-player-id.test.ts` — existing tests for playerId keying
+
+### Character System — Server Foundation (2026-03-27)
+**Task:** Build server-side character creation/management per Elminster's design + user decisions.
+**Status:** ✅ Complete — build clean, 1823 tests passing (44 new), zero regressions.
+
+**Changes:**
+1. **Shared types** — `CharacterSummary`, `CreateCharacterRequest`, `SelectCharacterRequest`, `validateCharacterName()` (alpha-only, 2-24 chars, first-cap, profanity filter). 8 new MessageTypes for character CRUD.
+2. **Migration 017** — `characters` table with UUID PK, player_id FK, soft-delete via `deleted_at`, partial unique indexes (name per player, one active per account).
+3. **Migration 018** — Added `character_id` column to all 8 per-player tables alongside existing `player_id`. Does NOT drop player_id yet — safer incremental approach.
+4. **Migration 019** — Auto-migrates existing players: creates character row per player, backfills `character_id` on all related tables.
+5. **CharacterRepository** — Interface + PgImpl + InMemoryImpl + Provider, following project's singleton pattern. DATABASE_URL gated.
+6. **REST API** — `GET/POST/DELETE /api/characters`, `PUT /api/characters/:id/select`. Auth via Bearer token (same as existing auth system).
+7. **Starter kit** — New characters get Rusty Blade + Tattered Leather + Waterlogged Potion from item_definitions. Graceful skip if items don't exist.
+8. **44 new tests** — name validation (16), InMemory repo (15), PgRepo mocked (9), starter kit (4).
+
+## Learnings
+
+- Character name uniqueness uses `lower(name)` in the partial unique index for case-insensitive matching without application-level checks.
+- `deleted_at IS NULL` in partial unique indexes enables soft-delete name reuse — a player can recreate a character with the same name after deletion.
+- The `item_definitions` table may or may not have seed data depending on admin content deploy state. Starter kit must gracefully handle empty tables.
+- REST routes for character CRUD live outside Colyseus rooms (accessed before room join). Auth middleware pattern: extract Bearer token → `authService.validateToken()` → playerId.

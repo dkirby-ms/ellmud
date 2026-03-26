@@ -4579,3 +4579,756 @@ Session tokens and shard-sickness death counts were stored in-memory only, lost 
 - Both stores are DATABASE_URL-gated — no behavior change for in-memory dev setups.
 - ShardRoom now imports from `systems/index.js` barrel instead of directly from `ShardSickness.ts`.
 - `persistence-schema-validation.test.ts` exemption list updated for `auth_tokens` TEXT PK.
+
+---
+
+## Additional Decisions (2026-03-26)
+
+### 2026-03-26T13:43Z: Character system design decisions
+
+**By:** dkirby-ms (via Copilot)
+
+**What:**
+1. **Factions are placeholder** — content theme is largely placeholder. Don't over-invest in faction reconciliation right now.
+2. **Multiple characters per account** — not gated to 1 slot in MVP. Support multi-char from launch. Additional character slots = future monetization hook for paying customers.
+3. **Soft-delete** for character deletion — confirmed.
+4. **Name rules:** No profanity. Alpha characters only. First letter capitalized. (No spaces, no numbers, no special chars.)
+5. **Starting gear** on new characters — confirmed. New characters get a starter kit.
+
+**Why:** User design decisions resolving Elminster's open questions on the character creation system.
+
+---
+
+### 2026-07-24: ShardRoom Double-Join Guard
+
+**Author:** Drizzt (Engine Dev)
+**Status:** Implemented
+
+## Context
+Same playerId could join a ShardRoom twice with different Colyseus sessions due to duplicate "enter shard" commands. The second join overwrote the first PlayerState; when the first session disconnected, the second session was orphaned ("presence flickers").
+
+## Decision
+- **ShardRoom.onJoin** displaces old sessions rather than rejecting duplicates. If `this.players.has(playerId)`, the old session's `playerIds` mapping is removed and the old client is force-left with code 4001. `playerCount` is NOT incremented again.
+- **RefugeRoom.handleEnterCommand** uses a `pendingEnter` Set per-session to reject duplicate enter commands while a shard switch is already in flight.
+- Leave code 4001 is now a custom code meaning "displaced by new session" (distinct from 4000 = consented leave).
+
+## Impact
+- Any code checking Colyseus leave codes should be aware that 4001 means session displacement, not player-initiated leave.
+- The `playerIds` Map (sessionId→playerId) and `players` Map (playerId→PlayerState) must always be kept consistent. Removing a sessionId from `playerIds` causes that session's `onLeave` to become a no-op.
+- Client-side `switchingRef` guard in `useShardConnection.ts` still exists as a tertiary defense; no client changes were needed.
+
+---
+
+### 2026-03-27: Character Creation & Management System Design
+
+**By:** Elminster (Lead)
+**Status:** Proposed — awaiting team review
+
+---
+
+## Current State
+
+### Identity Model (1:1 Account = Player)
+Today, `player_identities` (auth credentials) links 1:1 to `players` (id, username). There is no separate "character" entity. Every persistent table — `player_skills`, `player_stash`, `player_loadout`, `player_profile`, `player_stash_capacity`, `player_shard_sickness`, `faction_membership`, `run_history` — foreign-keys to `players.id` directly. One account = one player = one progression.
+
+### Auth Flow
+Client registers or logs in via `/auth/register` or `/auth/login` (or OAuth via Entra ID). Server returns `{ playerId, token }`. Client joins Colyseus rooms with `{ token }`. `onAuth()` validates the token; `onJoin()` resolves `playerId` and loads profile/stash.
+
+### Client Flow
+Login page → navigates directly to `/refuge`. The `/characters` route exists with `CharacterSelect.tsx`, but it's **never visited** — Login and AuthCallback both navigate to `/refuge`, skipping character selection entirely. The CharacterSelect component is UI scaffolding with hardcoded mock data (one character, three factions) and no server integration.
+
+### Faction Mismatch
+- **DB** (migration 004): `ironwright`, `veil`, `scarlet`
+- **Client** (CharacterSelect.tsx): `ironwright`, `veilkeepers`, `ashenguard`
+- **Content definitions** (migration 008): `ironhearth`, `veilwalkers`, `ashborn`
+- Three different naming schemes. Must reconcile before any faction selection can work.
+
+### GDD Design Intent
+Per GDD §7.1: "No fixed classes. Characters are defined by skills invested and gear brought." No races. Everyone is a "Shardwalker." Character names exist for player convenience but are anonymous in shards (you're identified by visible equipment). The GDD implies a single-character-per-account model with persistent stash/skills/reputation.
+
+---
+
+## Proposed Architecture
+
+### Design Principles
+
+1. **Quick creation** — This is an extraction RPG, not a tabletop RPG. Character creation takes 30 seconds: pick a name, pick a faction, enter the game.
+2. **Account → Character is 1:many (with MVP = 1 slot)** — The schema supports multiple characters per account from day one, but MVP ships with a single character slot. This avoids a painful migration later while keeping v1 simple.
+3. **Character = progression container** — A character owns skills, stash, loadout, faction, and run history. The account owns auth credentials and settings.
+4. **Faction is the only meaningful creation choice** — Per the GDD, skills and gear develop through play. Faction affinity is the one structural decision at creation.
+
+### Identity Model
+
+```
+player_identities (auth)
+  └─ 1:1 ─→ players (account)
+               └─ 1:N ─→ characters (progression)
+                            ├─ player_skills
+                            ├─ player_stash
+                            ├─ player_loadout
+                            ├─ player_profile
+                            ├─ player_stash_capacity
+                            ├─ player_shard_sickness
+                            ├─ faction_membership
+                            └─ run_history
+```
+
+The `players` table becomes the **account** table. A new `characters` table becomes the **progression container**. All existing per-player tables re-key from `players.id` to `characters.id`.
+
+### Character Data Model
+
+A character has:
+| Field | Type | Source | Notes |
+|-------|------|--------|-------|
+| `id` | UUID | Generated | Primary key |
+| `player_id` | UUID | FK → players | Account ownership |
+| `name` | TEXT | User input | Unique per account, 2-24 chars, alphanumeric + spaces |
+| `faction_slug` | TEXT | User selection | FK → factions.slug; one of the canonical factions |
+| `is_active` | BOOLEAN | System | Which character is "selected" (only one active per account) |
+| `created_at` | TIMESTAMPTZ | System | Creation timestamp |
+| `last_played_at` | TIMESTAMPTZ | System | Updated on shard exit |
+
+What a character does NOT have at creation (per GDD):
+- No class/archetype selection (skills-based system)
+- No race selection (everyone is human / Shardwalker)
+- No stat point allocation (gear carries stats)
+- No appearance customization (anonymous in shards; future feature)
+
+---
+
+## DB Schema Changes
+
+### New Table: `characters`
+
+```sql
+CREATE TABLE characters (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  player_id   UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  faction_slug TEXT NOT NULL REFERENCES factions(slug),
+  is_active   BOOLEAN NOT NULL DEFAULT false,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_played_at TIMESTAMPTZ,
+
+  CONSTRAINT uq_character_name_per_player UNIQUE (player_id, name),
+  CONSTRAINT chk_character_name_length CHECK (char_length(name) BETWEEN 2 AND 24)
+);
+
+CREATE INDEX idx_characters_player ON characters(player_id);
+
+-- Partial unique index: only one active character per account
+CREATE UNIQUE INDEX idx_one_active_character
+  ON characters(player_id) WHERE is_active = true;
+```
+
+### FK Migration: Re-key Existing Tables
+
+All tables currently keyed on `player_id` (players.id) must be re-keyed to `character_id` (characters.id):
+
+| Table | Current FK | New FK | Migration Strategy |
+|-------|-----------|--------|-------------------|
+| `player_skills` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+| `player_stash` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+| `player_loadout` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+| `player_profile` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+| `player_stash_capacity` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+| `player_shard_sickness` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+| `faction_membership` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+| `run_history` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+
+### Faction Slug Reconciliation
+
+Before character creation can reference factions, the three naming schemes must be unified. Proposal: Use the DB canonical slugs as source of truth and update client + content definitions to match.
+
+| Canonical Slug | DB Name | Proposed Display Name |
+|---------------|---------|----------------------|
+| `ironwright` | The Ironwright Compact | Ironwright Compact |
+| `veil` | The Veil Cartographers | Veil Cartographers |
+| `scarlet` | The Scarlet Ledger | Scarlet Ledger |
+
+The content_definitions factions (`ironhearth`, `veilwalkers`, `ashborn`) need a migration to align, or be treated as a separate content layer. **Open question for dkirby-ms.**
+
+---
+
+## Message Protocol
+
+### New Colyseus Message Types
+
+Add to `packages/shared/src/index.ts` `MessageTypes`:
+
+```typescript
+// Client → Server
+CHARACTER_CREATE:  'character_create'   // { name: string, factionSlug: string }
+CHARACTER_SELECT:  'character_select'   // { characterId: string }
+CHARACTER_DELETE:  'character_delete'   // { characterId: string }
+CHARACTER_LIST:    'character_list'     // {} (request)
+
+// Server → Client
+CHARACTER_LIST_RESPONSE: 'character_list_response'  // { characters: CharacterSummary[] }
+CHARACTER_CREATED:       'character_created'         // { character: CharacterSummary }
+CHARACTER_DELETED:       'character_deleted'         // { characterId: string }
+CHARACTER_ERROR:         'character_error'           // { code: string, message: string }
+```
+
+### Shared Types
+
+```typescript
+interface CharacterSummary {
+  id: string;
+  name: string;
+  factionSlug: string;
+  factionName: string;
+  isActive: boolean;
+  createdAt: string;
+  lastPlayedAt: string | null;
+  // Denormalized for display:
+  topSkills: Array<{ name: string; level: number }>;
+  totalRuns: number;
+}
+
+interface CreateCharacterRequest {
+  name: string;
+  factionSlug: string;
+}
+
+interface SelectCharacterRequest {
+  characterId: string;
+}
+```
+
+### Where Do These Messages Live?
+
+Character management messages are handled in the **RefugeRoom**, not a separate room. The Refuge is the hub where players manage characters, stash, and loadout before entering shards. Character selection happens before or upon joining the Refuge.
+
+**Alternative considered:** A dedicated "Lobby" room for character management. Rejected — adds complexity for minimal benefit. The Refuge already handles stash/loadout management and is the natural place for character operations.
+
+**However:** Character LIST and CREATE must work before joining a room (you need to select a character to join the Refuge). Two options:
+
+- **Option A (recommended):** REST endpoints for character CRUD (`/api/characters`). Client calls these before joining any Colyseus room. Character ID passed as join option alongside token.
+- **Option B:** A lightweight "Lobby" Colyseus room that handles character management, then hands off to Refuge.
+
+**Recommendation: Option A.** REST is simpler for CRUD operations. The join flow becomes: authenticate → list characters (REST) → select or create (REST) → join Refuge with `{ token, characterId }`.
+
+---
+
+## Client Screens
+
+### 1. Character Select Screen (`/characters`)
+
+Already scaffolded in `CharacterSelect.tsx`. Needs:
+
+- **Wire to REST API:** Fetch character list on mount via `GET /api/characters`
+- **Real character cards:** Replace mock data with server response
+- **Creation form:** POST to `POST /api/characters` with `{ name, factionSlug }`
+- **Selection:** Set active character, navigate to `/refuge`
+- **Empty state:** First-time players see creation form immediately (no character list)
+
+### 2. Login Flow Redirect
+
+Change navigation after login:
+- `Login.tsx`: Navigate to `/characters` instead of `/refuge`
+- `AuthCallback.tsx`: Navigate to `/characters` instead of `/refuge`
+- `CharacterSelect.tsx`: Navigate to `/refuge` after selection (already does this)
+
+### 3. Refuge Room Join
+
+`connection.ts` join call must include `characterId`:
+```typescript
+client.join('refuge', { token, characterId: activeCharacter.id })
+```
+
+ShardRoom join inherits characterId from the Refuge session.
+
+### 4. Character Management (Future)
+
+- Character deletion (with confirmation, cooldown/grace period)
+- Character rename (premium/rare consumable)
+- Additional character slots (future monetization hook or progression reward)
+
+---
+
+## Migration Path
+
+### For Existing Players With Data
+
+Migration 017 must:
+
+1. Create the `characters` table
+2. For each existing row in `players`, auto-create one character:
+   - `name` = `players.username` (or a generated name if username doesn't meet character name constraints)
+   - `faction_slug` = faction from `faction_membership` if exists, or `'ironwright'` as default
+   - `is_active` = true
+3. Add `character_id` column to all affected tables
+4. Populate `character_id` from the auto-created character for each player
+5. Drop old `player_id` FK, add new `character_id` FK
+6. Drop old `player_id` column (or keep as nullable for rollback safety)
+
+### Server Code Changes
+
+All repositories that currently take `playerId` must accept `characterId`:
+- `StashRepository` / `StashService`
+- `PlayerProfileRepository`
+- `LoadoutRepository` / `LoadoutService`
+- `FactionRepository`
+- `ShardSicknessStore`
+- `RunHistoryRepository`
+
+The `playerId` remains for auth-level operations (token management, account settings). `characterId` is used for all gameplay operations.
+
+### Room Join Flow Change
+
+```
+Before:  token → playerId → load profile/stash by playerId
+After:   token → playerId → characterId (from join options) → verify ownership → load profile/stash by characterId
+```
+
+---
+
+## MVP Scope
+
+### In v1 (Character Creation MVP)
+
+- [ ] `characters` table + migration (including FK re-key)
+- [ ] Faction slug reconciliation migration
+- [ ] REST endpoints: `GET /api/characters`, `POST /api/characters`, `PUT /api/characters/:id/select`
+- [ ] `CharacterRepository` (Pg + InMemory)
+- [ ] Wire `CharacterSelect.tsx` to real API
+- [ ] Change login redirect: `/` → `/characters` → `/refuge`
+- [ ] Pass `characterId` in room join options
+- [ ] Update all repositories to use `characterId`
+- [ ] Auto-migrate existing players to characters
+- [ ] Single character slot per account
+
+### Future (Post-MVP)
+
+- [ ] Multiple character slots (2-3 per account)
+- [ ] Character deletion with grace period
+- [ ] Character rename (consumable)
+- [ ] Appearance/title customization
+- [ ] Starting equipment based on faction
+- [ ] Faction-specific tutorial or intro narration
+- [ ] Character-specific leaderboard entries
+- [ ] Account-level settings vs character-level settings
+
+---
+
+## Open Questions
+
+1. **Faction reconciliation:** Three different faction naming schemes exist (DB, client, content_definitions). Which is canonical? Should we consolidate or keep them as separate layers?
+
+2. **Character slot limit:** MVP = 1 character. Should the schema enforce this (CHECK constraint) or leave it as application logic for easier expansion later? **Recommendation:** Application logic only.
+
+3. **Character deletion policy:** Allow deletion immediately? Require a cooldown (e.g., 24 hours)? Soft-delete (mark deleted, purge after 30 days)? **Recommendation:** Soft-delete with 7-day grace period for MVP.
+
+4. **Name validation rules:** Alphanumeric + spaces only? Allow Unicode? Profanity filter? Min/max length? **Recommendation:** 2-24 chars, alphanumeric + spaces + hyphens, server-side profanity check (Phase 2).
+
+5. **Starting state:** When a new character is created, what do they get?
+   - Default skills (stealth: 5, awareness: 5)?
+   - Starter items in stash (rusty blade, tattered leather)?
+   - Zero stash (earn everything from first run)?
+   **Recommendation:** Default skills + minimal starter kit (weapon + armour + 1 consumable). Makes the first shard run viable without being punishing.
+
+6. **Existing player migration:** Should auto-migrated characters use the player's `username` as character name, or prompt the user to name their character on first login post-migration?
+
+7. **Faction impact at creation:** Currently factions give reputation/rank. Should faction choice at creation grant any starting bonus (e.g., +1 to a faction-aligned skill, a faction-specific starter item)? **Recommendation:** No mechanical bonus at creation in MVP. Faction unlocks come from reputation earned in play.
+
+---
+
+## Implementation Sequence
+
+Recommended order of implementation:
+
+1. **Faction reconciliation** — Fix the naming mismatch first (small migration + client update)
+2. **`characters` table + repository** — Schema + Pg/InMemory implementations
+3. **REST endpoints** — CRUD for characters, behind auth middleware
+4. **FK re-key migration** — The big migration that moves all tables from player_id to character_id
+5. **Server room updates** — RefugeRoom + ShardRoom accept characterId in join
+6. **Repository updates** — All repos accept characterId instead of playerId
+7. **Client wiring** — CharacterSelect.tsx ↔ REST API, login redirect change
+8. **Existing player migration** — Auto-create characters for existing accounts
+9. **Testing** — Integration tests for the full flow: register → create character → join refuge → enter shard
+
+Steps 1-3 can proceed in parallel with steps 4-6 if two developers coordinate.
+
+---
+
+# Content Store Refactor — Architectural Decisions
+
+**Date:** 2025-03-25  
+**Author:** Elminster (Lead/Architect)  
+**Status:** Proposed  
+**Context:** Admin console content management migration from generic JSONB table to dedicated schemas
+
+---
+
+## Decision: Migrate from Generic content_definitions to Dedicated Tables
+
+### Context
+The admin console currently uses a single `content_definitions` table with an `entity_type` discriminator and JSONB `data` column to store 9 different content types (items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narrative). This worked for rapid prototyping but has led to:
+
+1. **Data staleness:** Items table had 18 seeded rows vs 40+ in code registry
+2. **Type safety loss:** JSONB blob bypasses schema validation
+3. **Query inefficiency:** No indexes on specific fields, all queries scan JSONB
+4. **Maintenance burden:** Harder to evolve schemas independently per entity type
+
+The `items` entity type was successfully migrated to a dedicated `item_definitions` table with `PgItemDefinitionsStore`, serving as a reference implementation.
+
+---
+
+## Decision 1: Follow the Item Store Pattern for All Entity Types
+
+**Chosen:** Implement dedicated table + store class for each of the remaining 8 entity types
+
+**Rationale:**
+- ✅ **Type safety:** Column-level constraints enforce schema at DB layer
+- ✅ **Performance:** Indexes on real columns (not JSONB keys)
+- ✅ **Maintainability:** Each schema evolves independently
+- ✅ **Proven pattern:** Items migration succeeded, admin UI unchanged
+- ✅ **Developer experience:** IDE autocomplete, compile-time checks
+
+**Rejected Alternatives:**
+1. **Keep content_definitions for all types**
+   - ❌ Doesn't solve staleness or type safety issues
+   - ❌ No performance improvement
+   
+2. **Use PostgreSQL table inheritance**
+   - ❌ Adds complexity, limited tooling support
+   - ❌ Harder to reason about FKs and constraints
+
+3. **NoSQL/document store**
+   - ❌ Out of scope, requires infrastructure change
+   - ❌ Loses relational benefits (FKs, JOINs)
+
+---
+
+## Decision 2: Store Class Responsibilities
+
+**Chosen:** Store classes implement `IContentStore<ContentEntity>` and handle flattening/expanding data
+
+**Pattern:**
+```typescript
+class PgXxxDefinitionsStore implements IContentStore<ContentEntity> {
+  // Flatten: DB row (relational + JSONB) → ContentEntity (flat object for admin UI)
+  rowToEntity(row): ContentEntity { ... }
+  
+  // Expand: ContentEntity → DB row (split into columns + JSONB)
+  entityToRow(entity): RowType { ... }
+  
+  // CRUD methods
+  getAll(), getById(), create(), update(), delete()
+}
+```
+
+**Rationale:**
+- ✅ **Zero client changes:** Admin UI continues to use generic `listEntities()` / `getEntity()` API
+- ✅ **Encapsulation:** Mapping logic lives in store, not routes
+- ✅ **Testable:** Each store can be unit tested independently
+- ✅ **Consistent interface:** All stores have same API surface
+
+**Alternatives Rejected:**
+1. **Move flattening to routes**
+   - ❌ Violates single responsibility principle
+   - ❌ Harder to test, duplicates logic across routes
+
+2. **Change client to expect relational shape**
+   - ❌ Requires UI refactor (out of scope)
+   - ❌ Couples client to server schema
+
+---
+
+## Decision 3: JSONB Usage Strategy
+
+**Chosen:** Use JSONB for nested/variable structures, columns for queryable fields
+
+**Guidelines:**
+- **Use columns when:**
+  - Field is queried/indexed (name, type, tier)
+  - Field has known fixed schema
+  - Field is used in JOINs or FKs
+  
+- **Use JSONB when:**
+  - Nested array/object structures (loot tables, stats)
+  - Variable schema (effects with arbitrary keys)
+  - Rare queries on nested data
+
+**Examples:**
+```sql
+-- Creatures: stats are columns (queryable), loot_table is JSONB (nested)
+CREATE TABLE creature_definitions (
+  name TEXT,
+  max_hp INT,
+  attack INT,
+  loot_table JSONB  -- [{ itemId, dropWeight, ... }]
+);
+
+-- Modifiers: effects vary per modifier, use JSONB
+CREATE TABLE modifier_definitions (
+  name TEXT,
+  effects JSONB  -- { visibility: -50, soundRange: 2 }
+);
+```
+
+**Rationale:**
+- ✅ **Best of both worlds:** Relational power + schema flexibility
+- ✅ **Performance:** Index columns that matter, skip JSONB overhead where possible
+- ✅ **Evolution:** Can promote JSONB keys to columns later if needed
+
+---
+
+## Decision 4: ID Strategy — UUID Primary Key + Text Slug
+
+**Chosen:** Use UUID as primary key, text slug for human-readable IDs
+
+**Pattern:**
+```sql
+CREATE TABLE xxx_definitions (
+  id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug TEXT NOT NULL UNIQUE,  -- 'flooded_crypt', 'drowned_revenant'
+  ...
+);
+```
+
+**Rationale:**
+- ✅ **UUID for DB:** Avoids ID collision, supports distributed systems, better for FKs
+- ✅ **Slug for humans:** URLs, config files, code references use readable IDs
+- ✅ **Migration friendly:** Existing `content_definitions.id` (text) maps to `slug`
+- ✅ **Future-proof:** UUID allows merging data from multiple sources
+
+**Alternatives Rejected:**
+1. **Text primary key (slug)**
+   - ❌ Harder to change (cascade updates)
+   - ❌ Less efficient for large tables
+   
+2. **Integer auto-increment**
+   - ❌ Distributed ID collision risk
+   - ❌ Reveals row count (minor security concern)
+
+---
+
+## Decision 5: Migration Phasing — Simple First, Complex Later
+
+**Chosen:** Implement in 3 phases based on complexity and priority
+
+**Phase 1 (Quick Wins):** Biomes, Modifiers, Narrative (14.5h)
+- Simple flat schemas, well-defined data
+- Establishes pattern for team
+
+**Phase 2 (High Impact):** Creatures, Factions (20h)
+- Most important for game content (creatures)
+- Requires table reconciliation (factions)
+
+**Phase 3 (Low Priority):** Skills, Loot Tables, Rooms (15.5h)
+- Empty or low-usage tables
+- Defer until admin proves necessary
+
+**Rationale:**
+- ✅ **De-risks:** Validates pattern early with simple cases
+- ✅ **Delivers value:** Creatures are highest priority for game design
+- ✅ **Defers complexity:** Don't build unused features (skills, rooms)
+- ✅ **Parallelizable:** Phase 1 entities can be done concurrently
+
+---
+
+## Decision 6: Faction Table Reconciliation (Option A)
+
+**Chosen:** Merge existing `factions` table and admin `content_definitions` factions into single `faction_definitions` table
+
+**Problem:**
+- Migration 004 created `factions` table (3 rows: Ironwright, Veil, Scarlet) for player membership
+- Migration 008 seeded `content_definitions` with 3 different factions (ironhearth, veilwalkers, ashborn)
+- Two systems, different schemas, potential confusion
+
+**Solution (Option A — Recommended):**
+1. Create `faction_definitions` with combined schema (description + milestones + philosophy + specialty)
+2. Migrate both sets (6 total factions)
+3. Update `faction_membership.faction_id` FK to point to `faction_definitions.id`
+4. Drop old `factions` table in later migration
+
+**Rationale:**
+- ✅ **Single source of truth:** One faction table for all systems
+- ✅ **Admin control:** All factions editable in admin console
+- ✅ **Schema evolution:** Can add fields (milestones, events) to canonical factions
+- ✅ **Less confusion:** Developers don't ask "which faction table?"
+
+**Alternatives Rejected:**
+1. **Option B: Keep separate tables**
+   - ❌ Confusing ("game factions" vs "admin factions")
+   - ❌ Harder to sync changes
+   - ❌ Two sources of truth
+
+---
+
+## Decision 7: Preserve In-Memory Mode for Development
+
+**Chosen:** Keep in-memory ContentStore for `usePg=false` mode alongside dedicated stores
+
+**Implementation:**
+```typescript
+// init.ts
+if (usePg) {
+  stores.set('creatures', new PgCreatureDefinitionsStore());
+} else {
+  stores.set('creatures', new ContentStore('creatures', creatureTemplates));
+}
+```
+
+**Rationale:**
+- ✅ **Dev velocity:** Local dev doesn't require PostgreSQL
+- ✅ **Testing:** Unit tests can use in-memory stores
+- ✅ **Backwards compat:** Existing dev workflows unchanged
+- ✅ **Low cost:** In-memory stores are simple, small
+
+**Alternatives Rejected:**
+1. **Require PostgreSQL for all dev**
+   - ❌ Slows onboarding (DB setup required)
+   - ❌ Harder to test (mocking complexity)
+
+---
+
+## Decision 8: Client-Side API Remains Unchanged
+
+**Chosen:** Admin UI continues to use generic `listEntities()` / `getEntity()` API
+
+**Why:**
+- All stores implement `IContentStore<ContentEntity>`
+- Routes call `store.getAll()` / `store.getById()`
+- Client receives same flat ContentEntity shape
+- No React component changes required
+
+**If we broke this decision:**
+- Would need to update 9 list pages + 9 detail pages (18 files)
+- Would need to update admin-api.ts
+- Would need to version API endpoints
+- **Out of scope** for this refactor
+
+---
+
+## Risks & Open Questions
+
+### Risk 1: UI Expects Fields Not in TypeScript Interfaces
+**Example:** `CreatureDetail.tsx` expects `description`, `behavior`, `status` fields not in `CreatureTemplate` interface
+
+**Mitigation:**
+- Audit each UI detail page before creating table schema
+- Add missing fields as nullable columns
+- Test create/edit in admin UI after migration
+
+### Risk 2: Data Loss During Migration
+**Mitigation:**
+- Test migrations on dev DB first
+- Keep `content_definitions` rows until new store verified
+- Don't drop `content_definitions` until all 8 types migrated
+
+### Risk 3: Faction Reconciliation Complexity
+**Open Question:** Do the 6 factions (3 old + 3 admin) have overlap? Same entities with different slugs?
+
+**TODO:** Before implementing faction migration:
+1. Dump both faction sets side-by-side
+2. Check for semantic duplicates (Ironwright ≈ ironhearth?)
+3. Decide merge strategy (keep both, merge, dedup)
+
+---
+
+## Success Metrics
+
+1. ✅ All 8 entity types migrated to dedicated tables
+2. ✅ Admin UI CRUD works for all types (no client changes)
+3. ✅ All seed data preserved
+4. ✅ Query performance improved (indexed columns vs JSONB scan)
+5. ✅ Dev mode (in-memory) still works
+6. ✅ `content_definitions` table dropped (cleanup complete)
+7. ✅ Code registries (items, creatures) sync with DB
+
+---
+
+## Implementation Checklist (per entity type)
+
+- [ ] Design dedicated table schema (audit UI expectations)
+- [ ] Write migration SQL (CREATE TABLE + INSERT FROM content_definitions)
+- [ ] Implement PgXxxDefinitionsStore class
+  - [ ] rowToEntity (flatten)
+  - [ ] entityToRow (expand)
+  - [ ] CRUD methods
+- [ ] Update init.ts (use new store when usePg=true)
+- [ ] Test admin UI (list, view, create, edit, delete)
+- [ ] Test in-memory mode (usePg=false)
+- [ ] Delete rows from content_definitions
+- [ ] Update this document (mark complete)
+
+---
+
+## References
+
+- **Reference implementation:** `packages/server/src/admin/content/PgItemDefinitionsStore.ts`
+- **Scoping document:** `~/.copilot/session-state/5a9420c4-0061-4d0f-8cbb-1ca9bf942ad1/plan.md`
+- **TypeScript interfaces:** `packages/server/src/admin/content/content-types.ts`
+- **Admin UI components:** `packages/client/src/pages/admin/*Detail.tsx`
+
+---
+
+**Next Action:** Review with team, confirm faction reconciliation strategy, start Phase 1 (biomes, modifiers, narrative)
+
+---
+
+### 2026-03-27: Character System — Server Foundation Decisions
+
+**By:** Drizzt (Engine Dev)
+**Date:** 2026-03-27
+**Status:** Implemented
+
+## Context
+Built the server-side character system per Elminster's design and user's decisions (multi-char, soft-delete, alpha-only names, starter kit).
+
+## Key Decisions
+
+### 1. Migration 018 adds character_id alongside player_id (no column drops)
+All 8 per-player tables now have both `player_id` and `character_id`. This is safer for incremental migration — existing code using `player_id` continues to work. Column drops and full re-key happen in a follow-up migration once all repositories are updated to use `character_id`.
+
+### 2. REST endpoints for character CRUD (not Colyseus messages)
+Character LIST/CREATE/SELECT/DELETE are REST endpoints at `/api/characters`, not Colyseus room messages. REST is simpler for CRUD and works before any room is joined. The client flow is: authenticate → list characters (REST) → select/create (REST) → join Refuge with `{ token, characterId }`.
+
+### 3. Starter kit uses item_definitions lookup by name
+New characters get Rusty Blade + Tattered Leather + Waterlogged Potion. The code queries `item_definitions` by name at creation time. If items don't exist (empty DB, no content deploy), the starter kit gracefully skips. No hardcoded UUIDs.
+
+### 4. Faction slug validation is hardcoded to canonical three
+The REST endpoint validates `factionSlug` against `['ironwright', 'veil', 'scarlet']` (the DB canonical slugs from migration 004). This is intentionally simple — factions are placeholder per user directive.
+
+### 5. Name uniqueness is case-insensitive per player
+The partial unique index uses `lower(name)` so "Drizzt" and "drizzt" are considered the same name for a given player. Soft-deleted characters don't count (filtered by `deleted_at IS NULL`).
+
+## Impact
+- **Client team (Jarlaxle/Minsc):** REST endpoints are ready. Wire `CharacterSelect.tsx` to `GET/POST /api/characters`. Change login redirect to `/characters`. Pass `characterId` in room join options.
+- **All repos:** `character_id` column now exists on all per-player tables. Repos should migrate from `player_id` to `character_id` incrementally.
+- **Room join flow:** Needs update to accept `characterId` in join options and verify ownership before loading profile/stash.
+
+---
+
+### 2026-03-27: Character System — Client + Room Integration Decisions
+
+**By:** Jarlaxle (Systems Dev)
+**Status:** Implemented
+
+## Context
+Elminster designed the character system. Drizzt is building server-side (migrations, CharacterRepository, REST endpoints). Jarlaxle owns client wiring and room join integration.
+
+## Decisions
+
+### 1. REST for character CRUD, not Colyseus messages
+Character list/create/select/delete use REST endpoints (`/api/characters`). Drizzt added CHARACTER_ message types to shared MessageTypes, but the client doesn't use them — REST is simpler for pre-room-join CRUD. The message types remain available if we ever need real-time character notifications.
+
+### 2. Dual identity maps in RefugeRoom
+RefugeRoom now has two maps: `playerIds` (sessionId → playerId, for auth) and `characterIds` (sessionId → characterId, for gameplay). All stash/loadout/equip operations use `characterIds`. This keeps auth and gameplay identity cleanly separated.
+
+### 3. ShardRoom uses characterId as playerId
+ShardRoom resolves `characterId` from join options and uses it as the `playerId` variable throughout. This is a pragmatic choice — renaming every `playerId` reference in the 1800-line ShardRoom would be massive churn with no functional benefit. The existing `playerIds` map now holds characterIds.
+
+### 4. Faction slugs from DB migration 004
+Client uses DB canonical slugs: `ironwright`, `veil`, `scarlet`. Per user directive, factions are placeholder — no reconciliation with content definitions needed yet.
+
+### 5. Backwards-compatible fallback
+If no `characterId` is provided in join options (e.g., old clients, tests), both rooms fall back to `playerId`. This means all existing tests pass without modification.
+
+## Impact
+- **Drizzt**: REST endpoints at `/api/characters` need to match the client's expected API shape (see `packages/client/src/services/api.ts`).
+- **All team**: `playerId` in ShardRoom and all its repos now means "characterId". When writing new repo code, use characterId semantics.
+- **Tests**: Server tests pass unchanged because characterId falls back to playerId when not provided.
