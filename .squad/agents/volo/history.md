@@ -474,3 +474,21 @@ Wait for #139 endpoint design approval before implementing client side.
 - Cross-referenced GDD.md where relevant for design context
 - Maintained existing tone and structure; extended with Phase 2/2.5-specific sections
 
+
+### Seed Item Catalog Created (packages/server/src/dev/seed-items.ts)
+- **40 items** covering all 10 equipment slots, all 6 rarity tiers, 3 shard keys, 4 consumables, and stash-only materials/junk
+- Uses `StashItem` / `StashItemInstance` interface (the stash-side schema), matching loadout-fixtures.ts patterns
+- Includes `populateDevStash()` helper that fills a player's stash via any StashRepository-compatible repo
+- Includes `getSeedItemsForSlot()` and `getSeedItemsByTier()` for targeted test scenarios
+- Heavy item (Waterlogged Crate, 40w) and stackable items (nails ×5, rations ×3) for capacity/overflow testing
+- Total catalog base weight: 188.5 (under default 200 cap; stacking pushes past for rejection flow testing)
+- **Slot acceptance alignment:** Items match SLOT_ACCEPTS — armour for head/chest/legs/feet/hands, weapon for weapon, weapon+tool for offhand, material for ring1/ring2/amulet
+- **Naming convention:** kebab-case IDs, evocative 2-3 word names, 1-2 sentence MUD-terse descriptions
+
+### 2026-03-26: Seed Item Catalog Completed
+- Delivered 40 seed items in `packages/server/src/dev/seed-items.ts`
+- Includes `populateDevStash()` helper for instant test population
+- All items respect `SLOT_ACCEPTS` slot restrictions
+- Schema uses `StashItem` interface for stash/loadout compatibility
+- No production registry merge — items imported separately where needed
+- Build clean, 552 tests passing, zero regressions

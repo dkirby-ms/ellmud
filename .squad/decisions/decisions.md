@@ -1617,3 +1617,243 @@ const playerId = authData?.playerId || (options['playerId'] as string) || client
 
 - **Drizzt:** Implement the fix + integration test
 - **All:** Any future room types must use `client.auth?.playerId`, not `options['playerId']`
+---
+
+## 2026-03-25T22:58Z: User directive — Old-school MUD visual aesthetic
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** Captured for design direction  
+
+**What:** The game should evoke the feeling of playing an old-school MUD. Use a console-like (monospace) font and ANSI-style coloring to convey visual info about items and events. Think terminal aesthetic — not modern web UI.
+
+**Why:** User request — core design direction for the client's visual identity
+
+---
+
+## 2026-03-25T23:13Z: User directives — Stash/Loadout UI & mechanics
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** Captured for mechanics constraints  
+
+**What:**
+1. **Layout:** Loadout on LEFT, Stash on RIGHT (not the reverse).
+2. **In-shard equipping:** Players CAN swap equipment while exploring shards, including equipping items found in the shard. Loadout is NOT locked on shard entry.
+3. **No durability/repair:** Keep repair and durability systems out of this work — that's Phase 3.
+4. **Slot restrictions:** Equipment slots MUST enforce item type restrictions — chest slot only takes chest gear, rings for finger slots, hats/helmets for head, weapons for weapon slot, etc. Typed slot validation is required.
+
+**Why:** User request — captured for team memory. These override Elminster's plan assumptions (which had stash on left, locked loadout during runs, and included durability checks).
+
+---
+
+## 2026-03-25T23:14Z: User directive — Shard entry requirements
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** Captured  
+
+**What:** Players should be allowed to enter a shard if they have the right key (or keys/other required items). Weapons are optional — do NOT require a weapon to enter a shard.
+
+**Why:** User request — overrides Elminster's plan which listed "weapon required" as a shard entry validation rule. Only shard key(s) and any shard-specific required items gate entry.
+
+---
+
+## 2026-03-25T23:15Z: User directive — Server-authoritative stash/loadout anti-exploit
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** Captured  
+
+**What:** The stash/loadout system MUST be server-authoritative and hardened against item duplication bugs and other potential exploits. The client is a dumb terminal — all item moves (stash↔loadout, equip, unequip, pick up shard loot) must be validated and executed server-side. No client-side inventory mutations.
+
+**Why:** User request — this is a PvPvE extraction game where item economy integrity is critical. Dupe bugs would be game-breaking.
+
+---
+
+## 2026-03-26: Compass Navigation Replaces Inline Exit Links
+
+**Date:** 2026-03-26  
+**By:** Drizzt (Engine Dev)  
+**Issue:** #195  
+**PR:** #205  
+**Status:** Implemented  
+
+### What
+
+Direction/exit navigation is now handled by a persistent `CompassControl` widget in the sidebar instead of inline `Exits: [north] [east]` links reprinted on every room entry.
+
+### Why
+
+Inline exit links cluttered the narrative pane — every room move reprinted them, pushing story text off-screen. A persistent widget keeps exits always visible without polluting the narrative flow.
+
+### Impact
+
+- **Client narration no longer includes exit links.** Any component rendering `msg.type === "room"` should NOT add its own exit UI — the compass handles it.
+- **`onRoomHeader` no longer emits an "Exits:" header message.** The room header dispatch updates `state.roomHeader.exits` which the compass reads reactively.
+- **Exit data flow is unchanged:** Server sends `RoomHeaderMessage.exits[]`, client stores in `state.roomHeader`, compass reads from context. No new protocol messages.
+- **The `exit-detection.ts` utility still exists** for potential future use (e.g., highlighting directions in LLM prose), but is no longer used for inline link rendering.
+
+---
+
+## 2026-03-20: Panel Layout Swap — ShardExploration
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-03-20  
+**Status:** Implemented  
+
+**What:** Swapped the two main panels in `ShardExploration.tsx` — the shardboard sidebar (30%) is now on the LEFT, and the narrative text panel (70%) is now on the RIGHT. Panel widths unchanged; only position swapped.
+
+**Why:** User preference — narrative text gets the right side, shardboard/status panel gets the left side.
+
+**Affects:** Any future work on `packages/client/src/pages/ShardExploration.tsx` layout or responsive breakpoints.
+
+---
+
+## 2026-03-26: Refuge Layout — Narrative Center, Tabs Right
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-03-26  
+**Status:** Implemented  
+
+**What:** The Refuge page layout has been reorganized:
+- **Center column (flex-1):** Narrative/chat scrolling text window + command input
+- **Right column (25%):** Players Nearby + tab content (shardboard, stash, loadout, etc.)
+- **Left column (25%):** Tab navigation + ambient events (unchanged)
+
+**Why:** Narrative feed needs the wider center area for better readability and proper scroll handling.
+
+**Impact:** Auto-scroll uses `state.messages` as dependency (matching ShardExploration pattern).
+
+---
+
+## 2026-03-24: Unified Equipment/Stash UI + Shared Types
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-03-24  
+**Status:** Implemented  
+**Scope:** Client UI + Shared message protocol
+
+### What
+
+Replaced separate StashTab and LoadoutTab with a unified CombinedStashLoadout component. Added equipment slot types, message protocol, and display types to @ellmud/shared.
+
+### Key Decisions
+
+1. **Equipment Slot System:** 10 named slots: `head`, `chest`, `legs`, `feet`, `hands`, `weapon`, `offhand`, `ring1`, `ring2`, `amulet`. Defined as `EquipmentSlotType` in shared. `SLOT_ACCEPTS` maps which `ItemType` each slot accepts (e.g., weapon→['weapon'], head→['armour']). Ring/amulet slots temporarily accept 'material' — needs a jewelry ItemType later.
+
+2. **Message Protocol:**
+   - Client → Server: `EQUIP_ITEM { itemId, targetSlot }`, `UNEQUIP_ITEM { slot }`
+   - Server → Client: `LOADOUT_UPDATE { slots }`, `STASH_UPDATE { items }`
+   - Added to `MessageTypes` const in shared
+
+3. **DisplayItem Contract:** Server sends pre-resolved `DisplayItem` objects (name, type, tier, weight, description, allowedSlots) so the client never needs to look up definitions. Jarlaxle's server-side LoadoutService must emit this format.
+
+4. **GearTier → MUD Rarity CSS Mapping:** scrap→ansi-dim, common→mud-common, sturdy→mud-uncommon, refined→mud-rare, masterwork→mud-epic, anomalous→mud-legendary
+
+5. **No Optimistic Updates:** Client sends equip/unequip requests and shows a pending state. UI only mutates when server confirms via LOADOUT_UPDATE/STASH_UPDATE.
+
+### Impact
+- **Jarlaxle:** Must implement LOADOUT_UPDATE and STASH_UPDATE message emission in LoadoutService/room handlers
+- **All UI work:** GearTier→MUD class mapping is now canonical — use `TIER_CLASS` from CombinedStashLoadout or factor into shared utility
+- **StashTab.tsx and LoadoutTab.tsx:** No longer imported by any page. Can be deleted or kept as reference.
+
+---
+
+## 2025-07-25: LoadoutService Architecture Decision
+
+**By:** Jarlaxle (Systems Dev)  
+**Date:** 2025-07-25  
+**Status:** Implemented  
+**Context:** Server-authoritative equipment system for loadout management
+
+### What
+
+LoadoutService uses a **per-player mutex lock** to prevent race conditions during equip/unequip/swap operations. All item moves are atomic: remove-from-source + add-to-destination in a single locked operation.
+
+### Key Decisions
+
+1. **Two-form constructor**: `LoadoutService(stashRepo, itemDefs)` for tests (internal in-memory loadout), `LoadoutService(loadoutRepo, stashRepo, itemDefs)` for rooms with explicit repos.
+
+2. **Slot restrictions use shared `SLOT_ACCEPTS`**: No item sub-type enforcement (e.g., helmet vs chestpiece — both are "armour" and fit any armour slot). Sub-type enforcement deferred to Phase 2 if needed.
+
+3. **Shard equipping via separate methods**: `equipFromInventory()` and `unequipToInventory()` for in-shard operations. Displaced items are NOT added to stash — they go back to shard inventory (caller responsibility).
+
+4. **Shard entry validation**: Requires at least one "key" type item in stash. Weapons are optional. No durability checks (Phase 3).
+
+5. **Empty slot unequip is a no-op success** (`ok: true`), not an error.
+
+### Impact
+
+- Rooms must register EQUIP_ITEM, UNEQUIP_ITEM, SWAP_ITEM message handlers
+- Client receives LOADOUT_UPDATE after every server-confirmed operation — no optimistic client state
+- ShardRoom blocks equipment changes during extraction
+
+---
+
+## 2025-07-26: Reusable `useAutoScroll` hook pattern for scrollable containers
+
+**By:** Jarlaxle (Systems Dev)  
+**Issue:** #196  
+**PR:** #204  
+**Date:** 2025-07-26  
+**Status:** Implemented  
+
+**What:** Created `packages/client/src/hooks/useAutoScroll.ts` — a generic hook for any scrollable container that needs auto-scroll-to-bottom with smart disengage/re-engage. Also established the `.narrative-scroll` CSS class in `theme.css` as the standard game-themed scrollbar.
+
+**Why:** Both ShardExploration and Refuge had ad-hoc scroll logic (naive `scrollTop` set, `scrollIntoView` sentinel div). The hook centralizes the pattern and handles the edge case of user-initiated scroll-up correctly.
+
+**Impact:** Any new scrollable pane (chat, logs, event feeds) should use `useAutoScroll(dependency)` instead of rolling custom scroll logic. Use the `narrative-scroll` CSS class on any container that needs a themed scrollbar. The threshold parameter (default 48px) controls how close to the bottom the user must scroll to re-engage auto-scroll.
+
+---
+
+## 2025-07-26: Stash/Loadout Test Coverage Strategy
+
+**Author:** Minsc (Tester)  
+**Date:** 2025-07-26  
+**Status:** Complete  
+
+### Context
+
+Jarlaxle implemented the LoadoutService (equip/unequip/swap between stash and equipment slots). Minsc was tasked with writing comprehensive test coverage before the system goes live.
+
+### Decisions
+
+1. **4-file test structure** — Split tests by concern rather than one mega-file:
+   - `loadout-service.test.ts` — Core unit tests (equip, unequip, swap, slot restrictions, getters)
+   - `loadout-anti-exploit.test.ts` — Duplication prevention, race conditions, cross-player isolation
+   - `loadout-shard.test.ts` — Shard-specific methods (validateShardEntry, equipFromInventory, unequipToInventory)
+   - `loadout-integration.test.ts` — Colyseus room handler tests via `@colyseus/testing`
+
+2. **Shared fixtures in helpers/** — Created `loadout-fixtures.ts` with 14 test items covering all equipment types (armour, weapon, tool, material, key, consumable). Factory functions (`makeInstance`, `populateStash`) keep tests DRY.
+
+3. **3-arg constructor for test isolation** — Tests use `new LoadoutService(loadoutRepo, stashRepo, itemDefs)` to inject explicit repositories, enabling direct inspection of repo state in assertions.
+
+4. **Anti-exploit tests verify invariants, not just API** — `countTotalItems()` helper counts items across stash + loadout to verify the total never changes during equip/swap operations. This catches duplication bugs that API-level tests might miss.
+
+5. **Race condition tests use Promise.all** — Concurrent equip operations on the same item verify that exactly one succeeds and the item count invariant holds.
+
+### Outcome
+
+82 tests, all passing. Full suite (1741 tests) — zero regressions.
+
+---
+
+## 2025-07-25: Seed Item Catalog Location & Schema
+
+**Author:** Volo (Narrative Dev)  
+**Date:** 2025-07-25  
+**Status:** Implemented  
+
+### What
+Created `packages/server/src/dev/seed-items.ts` — a catalog of 40 items for development and testing.
+
+### Why
+Testing the stash, loadout, and equipment UI requires items covering every slot type, rarity tier, and item category. The existing registry (`items/registry.ts`) uses `ItemDefinition` (the combat-side schema), while the stash/loadout system uses `StashItem` (the stash-side schema). Seed items use `StashItem` to match the loadout fixtures and `LoadoutService` expectations.
+
+### Decisions Made
+1. **File location:** `packages/server/src/dev/` — clearly dev-only, not mixed with production item data
+2. **Schema:** Uses `StashItem` interface, not `ItemDefinition` — matches stash/loadout system expectations
+3. **No registry merge:** These items are NOT added to the production `ITEM_REGISTRY`. They're imported separately where needed. When the two item schemas reconcile (per the TODO in stash.ts), seed items should be updated.
+4. **Slot acceptance compliance:** Items respect `SLOT_ACCEPTS` — e.g. rings/amulets are type `material` (current placeholder), offhand items are `weapon` or `tool`
+
+### Impact
+- Loadout tests can import specific items or the full catalog
+- Dev workflows can call `populateDevStash()` to fill a stash instantly
+- No production code changes — additive only

@@ -1554,3 +1554,22 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - Server must send LOADOUT_UPDATE and STASH_UPDATE messages on any equipment change
 - DisplayItem format must match: `{ instanceId, definitionId, name, type, tier, weight, description, allowedSlots }`
 - Server handles swap logic when equipping to an occupied slot
+
+### 2026-03-27: Fix Snap-to-Bottom in Refuge Chat (Bugfix)
+
+**Status:** ✅ Fixed — build clean
+
+**Bug:** Refuge chat text area stopped auto-scrolling to the bottom when new messages arrived.
+
+**Root Cause:** `useAutoScroll(state.messages.length)` in Refuge.tsx used array length as the effect dependency. The store reducer caps messages at 500 (`MAX_MESSAGES`): once the cap is hit, adding a new message trims the oldest, so `length` stays at 500 and the `useEffect` never re-fires. ShardExploration.tsx correctly used `useAutoScroll(state.messages)` (the array reference itself, which is always a new object after dispatch).
+
+**Fix:** Changed `useAutoScroll(state.messages.length)` → `useAutoScroll(state.messages)` in Refuge.tsx line 75.
+
+**Key file:** `packages/client/src/pages/Refuge.tsx`
+
+### 2026-03-26: Refuge Auto-Scroll Fix
+- Fixed snap-to-bottom regression in Refuge narrative panel
+- Root cause: `useAutoScroll` dependency watching `.length` instead of array reference
+- Solution: Changed dependency to `state.messages` (one-liner fix)
+- Aligns with ShardExploration scroll pattern established in #196/#204
+- Build clean, 552 tests passing, zero regressions
