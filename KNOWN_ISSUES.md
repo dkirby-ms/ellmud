@@ -4,6 +4,16 @@ Documented during Phase 1 testing. Items here are candidates for Phase 2 triage.
 
 ---
 
+## 🔴 High Priority
+
+### 0. Loadout not persisted to DB on death — equipped gear survives until restart
+**Systems:** Loadout, Profile, Death  
+**Description:** `LoadoutRepository` is in-memory only (Phase 1). When a player dies, `clearLoadout()` deletes from the in-memory Map, and `savePlayerProfile()` writes `equipment: undefined` to the in-memory `PlayerProfileRepository`. Neither write reaches a durable store. If the server restarts between a death and the next shard entry, the cleared state is lost — but since both repos reset on restart, the practical symptom is the opposite: if the server does *not* restart, the in-memory repos correctly reflect the clear. The real gap is Phase 2: when PostgreSQL-backed repos are introduced, `clearLoadout()` must issue a `DELETE`/`UPDATE` against the `loadouts` table, and `savePlayerProfile()` must null-out the `equipment` column in `player_profiles`, inside the same transaction as the death event. Without this, a crash between the in-memory clear and the DB write would resurrect equipped gear.  
+**Impact:** Data integrity risk when migrating to persistent storage in Phase 2.  
+**Recommendation:** When implementing `PgLoadoutRepository`, wrap the death-path calls (`clearLoadout` + `savePlayerProfile`) in a single DB transaction. Add an integration test that kills the process after `clearLoadout` and verifies gear is gone on restart.
+
+---
+
 ## 🟡 Medium Priority
 
 ### 1. No combat-blocks-movement enforcement
