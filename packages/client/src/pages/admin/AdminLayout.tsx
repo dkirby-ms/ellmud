@@ -6,7 +6,7 @@ import {
   Bell, Search, ArrowLeft, Radio, AlertTriangle, AlertCircle, FileEdit, Loader2, X,
 } from "lucide-react";
 import {
-  listEntities, fetchNotifications,
+  listEntities, fetchNotifications, setAdminToken, getAdminToken, clearAdminToken,
   type EntityType, type AdminNotification,
 } from "../../lib/admin-api";
 
@@ -67,6 +67,10 @@ export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const [authenticated, setAuthenticated] = useState(() => !!getAdminToken());
+  const [tokenInput, setTokenInput] = useState("");
+  const [authError, setAuthError] = useState("");
+
   const [searchQuery, setSearchQuery] = useState("");
   const [allEntities, setAllEntities] = useState<SearchableEntity[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -85,6 +89,7 @@ export default function AdminLayout() {
   const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!authenticated) return;
     let cancelled = false;
     async function loadEntities() {
       setSearchLoading(true);
@@ -99,9 +104,10 @@ export default function AdminLayout() {
     }
     loadEntities();
     return () => { cancelled = true; };
-  }, []);
+  }, [authenticated]);
 
   useEffect(() => {
+    if (!authenticated) return;
     let cancelled = false;
     async function loadNotifications() {
       setNotifLoading(true);
@@ -113,7 +119,7 @@ export default function AdminLayout() {
     }
     loadNotifications();
     return () => { cancelled = true; };
-  }, []);
+  }, [authenticated]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -160,6 +166,52 @@ export default function AdminLayout() {
       case "change": return <FileEdit className="w-4 h-4 text-[#3A7D7B]" />;
     }
   };
+
+  const handleAdminLogin = async () => {
+    if (!tokenInput.trim()) { setAuthError("Token is required"); return; }
+    setAdminToken(tokenInput.trim());
+    try {
+      await fetchNotifications();
+      setAuthenticated(true);
+      setAuthError("");
+    } catch {
+      clearAdminToken();
+      setAuthError("Invalid token — check your server's ADMIN_TOKEN env var");
+    }
+  };
+
+  if (!authenticated) {
+    return (
+      <div className="h-screen bg-[#0A0B0F] flex items-center justify-center">
+        <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-8 w-full max-w-sm">
+          <h1 className="text-[#C9A84C] text-xl mb-2" style={{ fontFamily: "var(--font-serif)" }}>
+            ⚙ Ellmud Admin
+          </h1>
+          <p className="text-[#8A8B95] text-sm mb-6">Enter admin token to continue.</p>
+          <form onSubmit={(e) => { e.preventDefault(); handleAdminLogin(); }}>
+            <input
+              type="password"
+              value={tokenInput}
+              onChange={(e) => { setTokenInput(e.target.value); setAuthError(""); }}
+              placeholder="Admin Token"
+              autoFocus
+              className="w-full px-3 py-2 bg-[#1A1B25] border border-[#2A2B35] rounded text-[#E8E0D0] placeholder-[#555] text-sm mb-3 focus:outline-none focus:border-[#C9A84C]"
+            />
+            {authError && <p className="text-[#8B2500] text-xs mb-3">{authError}</p>}
+            <button
+              type="submit"
+              className="w-full px-4 py-2 bg-[#C9A84C] text-[#0A0B0F] rounded text-sm font-medium hover:bg-[#D4B85C] transition-colors"
+            >
+              Authenticate
+            </button>
+          </form>
+          <Link to="/refuge" className="block text-center text-[#8A8B95] hover:text-[#C9A84C] text-xs mt-4 transition-colors">
+            ← Back to game
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen bg-[#0A0B0F] flex flex-col">

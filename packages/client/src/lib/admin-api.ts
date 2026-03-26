@@ -19,7 +19,7 @@ export class AdminAPIError extends Error {
   }
 }
 
-function getAdminToken(): string | null {
+export function getAdminToken(): string | null {
   return localStorage.getItem(ADMIN_TOKEN_KEY);
 }
 
