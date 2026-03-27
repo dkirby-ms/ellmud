@@ -5463,3 +5463,61 @@ The `character_explored_rooms` table already tracks per-character exploration wi
 **Files:**
 - `packages/server/src/__tests__/feature-gate-commands.test.ts`
 - `packages/server/src/__tests__/exploration-repository.test.ts`
+
+---
+
+## Phase C+D Decisions (2026-03-27T15:39Z)
+
+### Phase C — ROOM_SWITCH Target Naming
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-03-27  
+**Status:** Implemented
+
+**What:** Zone rooms now register with `zone:{slug}` naming. ROOM_SWITCH messages target zones with this new name (e.g., `zone:the-refuge` instead of `refuge`).
+
+**Why:** RefugeRoom to ShardRoom consolidation requires zone rooms to be named consistently with procedural shard conventions. Prefixing zones avoids conflicts and clarifies room types in logs.
+
+**Impact:**
+- **Client team (Regis):** ROOM_SWITCH handler recognizes `zone:*` targets. All connection code updated to use `zone:{slug}`.
+- **Testing (Minsc):** New routing tests verify zone registration and ROOM_SWITCH dispatch.
+- **Content (Jarlaxle):** Zone room types should use `feature_*` naming for feature-gated commands.
+
+**Files Modified:**
+- `packages/server/src/index.ts`
+- `packages/server/src/rooms/ShardRoom.ts`
+
+### Phase D — Exploration Visit Tracking
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-03-27  
+**Status:** Implemented
+
+**What:** Every room entry (join + movement) now records a visit via ExplorationRepository.
+
+**Why:** Exploration tracking is required for map rendering. Players must be able to see which rooms they've visited.
+
+**Implementation:**
+- `initExplorationProvider(USE_PG)` called at boot; exploration repo available via `getExplorationRepository()`
+- Room entry and movement events trigger `recordVisit()`
+- Tests verify visit recording for both procedural shards and zone rooms
+
+**Impact:**
+- All agents: Exploration data is now live in the database
+- Client: Can display map with visited rooms highlighted
+
+**Files Modified:**
+- `packages/server/src/index.ts`
+- `packages/server/src/rooms/ShardRoom.ts`
+
+### User Directive — AmbientSystem in All Zones
+
+**By:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-27T15:19Z  
+**What:** AmbientSystem should work in ANY zone, not just hub/social zones.  
+**Why:** User request — previous gating was too restrictive. All zones should have ambient narration, weather, and NPC systems.
+
+**Coordination Action:** ShardRoom.ts zone-mode gating updated; AmbientSystem now instantiates for all zone categories.
+
+**Test Update:** `shardroom-zone-mode.test.ts` updated to verify ambient in dungeon zones.
+

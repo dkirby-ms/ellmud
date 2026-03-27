@@ -28,3 +28,20 @@
 - **Map UI design produced:** Full design doc covers SVG rendering, BFS layout for procedural shards, minimap replacing compass in sidebar, full map as overlay, `useExplorationMap` hook, two new message types (`exploration_data`, `exploration_update`). Decision filed to `.squad/decisions/inbox/regis-map-ui-design.md`.
 - **ANSI/MUD styling classes:** `tailwind.css` defines `.ansi-*` (16 terminal colors), `.mud-*` semantic classes (damage, healing, dodge, speech, exits, etc.), and `.narrative-terminal` with CRT scanline overlay. Map styling should use these same color values.
 - **CompassControl.tsx:** 3×3 grid of cardinal/ordinal buttons + Up/Down. Reads exits from `state.roomHeader?.exits`. Will be superseded by MinimapWidget once map is built.
+- **Zone room naming convention (Phase C3):** Colyseus room names use `zone:<slug>` format (e.g. `"zone:the-refuge"`). Client routes (`/refuge`, `/shard/live`) are unchanged. ChatPanel context labels (`"shard"` | `"refuge"`) are UI concepts, not room names. Admin `isShard` check now covers both `"shard"` and `zone:` prefixed rooms. The `switchRoom` target for extraction completion is `"zone:the-refuge"`.
+
+## 2026-03-27T15:39Z — Phase C3 Complete
+
+**Completed:** Client room connection updates for zone naming  
+**Files Modified:** 5
+
+- `Refuge.tsx` — connect calls updated to `zone:the-refuge`
+- `useShardConnection.ts` — ROOM_SWITCH handler updated
+- `connection.test.ts` — test fixtures updated
+- `LiveRooms.tsx` — zone room styling
+- `LiveRoomDetail.tsx` — zone room display
+
+**Build:** ✅ Clean
+
+**Dependency:** Drizzt's Phase C (zone registration) — now satisfied.
+

@@ -1130,3 +1130,82 @@ Faction data existed in two places: `factions` table (relational, canonical, wit
 **Phase A Result:** Build clean. 2206 tests passing (98 files). Full suite ready for Phase B.
 
 **Team Status:** Jarlaxle (exploration repo ✅), Drizzt (feature-gate middleware ✅). All Phase A agents complete.
+
+## Phase B — ShardRoom Zone-Mode Tests (2026-03-27)
+
+**Status:** ✅ 21 tests passing — `shardroom-zone-mode.test.ts`
+
+**Delivered:**
+- B1: AmbientSystem gating — 6 tests (hub ✓, social ✓, dungeon ✗, shard ✗, ambient narration on join, no ambient in shard mode)
+- B2: Zone announcements — 4 tests (join announces to others, leave announces, shard mode NO announces, self-exclusion)
+- B4: PendingEnter guard — 3 tests (set exists, cleared on leave, starts empty)
+- B6: Reconnection grace — 3 tests (zone configured, shard default, hub grace period with non-consented disconnect)
+- Zone metadata — 3 tests (hub category, dungeon category, shard has no zone metadata)
+- AmbientSystem unit — 2 tests (join narration, tick events)
+
+**Test Architecture:**
+- Seeds InMemoryZoneRepository with hub, dungeon, and social zones in beforeAll
+- Uses `colyseus.createRoom('shard', { zoneSlug })` for zone mode, `{ useTestGraph: true }` for shard mode
+- Type coercion via `ShardRoomInternals` to access private fields (ambientSystem, pendingEnter, isZone, zoneData)
+- Uses `resetZoneProvider()` in beforeAll/afterAll for test isolation
+- `leave(false)` for non-consented disconnect (triggers reconnection path)
+
+## Learnings
+
+- Colyseus SDK `leave(consented?: boolean)` — `leave()` = consented (code 4000), `leave(false)` = non-consented (triggers reconnection path)
+- Zone seeding in tests: `resetZoneProvider()` → `getZoneRepository()` auto-creates InMemory → `createZone` + `createRoom` + `createExit` builds full ZoneData
+- ShardRoom B6 reconnection grace: zone mode uses 10s (hub/social) or 30s (dungeon), shard mode uses config default
+- ShardRoom B1 ambient gating: only `category === 'hub' || 'social'` → `new AmbientSystem()`, all others get `undefined`
+- `createFallbackRefugeGraph()` path for `the-refuge` slug when DB has no data leaves `zoneData` as `undefined`, so ambient system is NOT created on fallback
+- B3 (dual loadout+stash update) not fully testable yet — `sendLoadoutAndStashUpdate` is called in onJoin but method body not yet landed in ShardRoom
+
+## Phase C/D Test Coverage (Routing + Exploration Integration)
+
+**Files Created:**
+- `packages/server/src/__tests__/exploration-integration.test.ts` — 7 tests (all passing)
+- `packages/server/src/__tests__/room-routing.test.ts` — 9 tests (all passing)
+
+**Total: 16 tests, 16 passing**
+
+### Exploration Integration Tests (Phase D):
+- D1: Exploration recording on join — verifies entry room recorded when player joins zone ShardRoom
+- D2: Exploration recording on movement — verifies new room recorded when player moves via 'go' command
+- D3: Correct zone slug — zone rooms record zoneSlug, shard rooms record null (2 tests)
+- D4: Fire-and-forget resilience — injected throwing ExplorationRepository doesn't crash game loop
+- D5: Duplicate visits — upsert semantics verified both via integration and unit (2 tests)
+
+### Room Routing Tests (Phase C):
+- C1: ROOM_SWITCH target contracts — extraction_complete and player_death use 'zone:the-refuge', integration check for bare 'refuge' (3 tests)
+- C2: Zone rooms with zone: prefix — creates and connects to 'zone:the-refuge' and 'zone:flooded-crypt' rooms, validates naming convention (3 tests)
+- C3: Shard room name remains 'shard' — procedural shards keep 'shard' type, enter ROOM_SWITCH targets 'shard', zone+shard coexistence (3 tests)
+
+### Key Patterns Used:
+- `server.define('zone:the-refuge', ShardRoom)` for zone-prefixed room registration
+- `resetExplorationProvider()` + `getExplorationRepository()` for test isolation
+- Type coercion via `ShardRoomInternals` with `explorationRepo` field access
+- Contract-shape tests (RoomSwitchMessage assertions) for routing changes not yet integrated
+- Zone seeding with InMemoryZoneRepository following shardroom-zone-mode.test.ts pattern
+
+## Learnings
+
+- Phase D exploration wiring is already active — ShardRoom records visits on join and movement via `getExplorationRepository()`
+- Zone room registration with `zone:{slug}` prefix works with Colyseus `server.define()` — rooms coexist on same server
+- Extraction ROOM_SWITCH is hard to test in isolation (requires ExtractionSystem + extraction room type) — contract-shape tests are more reliable
+- `resetExplorationProvider()` resets the singleton to null; `getExplorationRepository()` auto-creates InMemory on next call
+
+## 2026-03-27T15:39Z — Phase C+D Testing Complete
+
+**Completed:** 16 new tests (C+D coverage)
+
+**Created:**
+- `exploration-integration.test.ts` — 7 tests for exploration tracking
+- `room-routing.test.ts` — 9 tests for ROOM_SWITCH and fallback routing
+
+**Build:** ✅ Clean | **Tests:** ✅ All 16 passing
+
+**Coverage:**
+- Zone room registration and targeting
+- Fallback graph verification
+- Exploration visit recording
+- Room entry/movement tracking
+

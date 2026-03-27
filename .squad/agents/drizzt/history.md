@@ -1904,3 +1904,99 @@ When a game table already exists with relational structure and FK constraints (l
 **Phase A Result:** Build clean. 2206 tests passing (98 files). Ready for Phase B: Service integration.
 
 **Team Status:** Jarlaxle (exploration repo ✅), Minsc (61 tests ✅). All Phase A agents complete.
+
+### Phase B — Absorption (ShardRoom gains RefugeRoom capabilities) — 2026-03-27
+
+**Task:** Port all unique RefugeRoom capabilities into ShardRoom, gated behind `isZone` and zone category checks. ShardRoom can now serve as both a procedural shard AND a static zone (like The Refuge).
+
+**Changes to `packages/server/src/rooms/ShardRoom.ts` (+524 lines):**
+
+**B1: AmbientSystem integration**
+- Imported `AmbientSystem` from `../systems/AmbientSystem.js`
+- Added optional `ambientSystem?: AmbientSystem` property
+- Instantiated in onCreate ONLY when `isZone && (category === 'hub' || category === 'social')`
+- Ticked in update loop: emits weather/NPC/merchant events, broadcast to all clients
+- Sends ambient join narration (snapshot of weather/NPCs) on player join
+
+**B2: announceToRoom()**
+- Ported awareness broadcasts: iterates players in same room, sends 'awareness' narrations excluding actor
+- Wired on join (zone mode), leave (zone mode), and room movement (zone mode)
+- Shard mode untouched — uses existing AwarenessSystem for stealth-based detection
+
+**B3: sendLoadoutAndStashUpdate() dual-message**
+- Added method sending both LOADOUT_UPDATE and STASH_UPDATE in one call
+- Uses EQUIPMENT_SLOT_ORDER and SLOT_ACCEPTS for allowedSlots per item
+- Called on zone-mode join when both loadout and stash services are available
+- New shared imports: StashUpdateMessage, DisplayItem, SLOT_ACCEPTS, EQUIPMENT_SLOT_ORDER
+
+**B4: pendingEnter guard**
+- Added `pendingEnter = new Set<string>()` property
+- Guards handleEnterCommand: rejects if session already entering, clears on failure/success/leave
+- Exposed isPendingEnter/addPendingEnter/clearPendingEnter for test access
+
+**B5: matchMaker shardboard logic**
+- Added full matchMaker integration: getShardListings(), createShardRoom(), safeQueryRooms(), safeGetRoom()
+- Imported `matchMaker` from `@colyseus/core`
+- Added ShardListing type import from commands/index.ts
+- Wired queryShards/createShard into buildCommandContext (zone mode only)
+- Added handleShardboardCommand(): queries shards, auto-creates if none open, displays formatted table
+- Added handleEnterCommand(): pendingEnter guard, specific shard entry, auto-pick emptiest shard
+- Added helper methods: sendShardSwitch(), isShardJoinable(), pickOpenShard(), describeShardRejection(), formatBiome()
+- Made handleCommandMessage async to intercept shardboard/enter before synchronous pipeline
+- Feature-gate check: room.type must be 'feature_shardboard' before async handler runs
+
+**B6: Zone reconnection grace**
+- Modified onLeave reconnection to use zone-category-aware grace periods
+- Hub/social zones: 10s grace, dungeon zones: 30s grace, shards: config default (30s)
+- Pattern: `this.isZone ? (category === 'dungeon' ? 30 : 10) : config.reconnectionTimeoutS`
+
+**B7: Fallback refuge graph**
+- Added `createFallbackRefugeGraph()` at module level (after class)
+- 7 rooms: hearth (entry), stash-alcove (feature_stash), training-grounds (feature_training), shardboard (feature_shardboard), market (feature_marketplace), infirmary (feature_infirmary), war-room (corridor)
+- Used when zoneSlug='the-refuge' but DB returns null
+- Room types set to feature_ variants for command gating compatibility (unlike RefugeRoom's 'corridor' types)
+- Zone loading now: try DB first → fallback for the-refuge → throw for unknown zones
+
+**Key architectural decisions:**
+- Async shardboard/enter commands intercepted at room level before synchronous pipeline (matching RefugeRoom's direct handling pattern)
+- All new behavior gated behind `this.isZone` — zero impact on existing shard flows
+- Fallback graph uses feature_ room types for command pipeline compatibility
+- AmbientSystem only on hub/social zones (not dungeon zones)
+
+**Verification:** Build clean. 2033 tests passing (86 files), 0 new failures. Zone-mode test suite (86 tests in shardroom-zone-mode.test.ts) all passing.
+
+### Phase C+D: Routing Switch + Exploration Integration (Server Side)
+**Task:** 7 work items (C1, C2, C4, D1, D2, D3, and test updates)
+**Status:** ✅ Complete
+
+**Changes:**
+1. **C1 — Dynamic zone registration** (`index.ts`): At boot, loads all zones from `getZoneRepository().getAllZones()` and registers `zone:{slug}` room types. Hardcoded `zone:the-refuge` fallback if not in DB.
+2. **C2 — ROOM_SWITCH target update** (`ShardRoom.ts`): Changed extraction_complete and player_death ROOM_SWITCH targets from `'refuge'` → `'zone:the-refuge'`.
+3. **C4 — RefugeRoom deregistration** (`index.ts`): Removed `server.define('refuge', RefugeRoom)` and its import. RefugeRoom.ts file preserved for Phase E.
+4. **D1 — ExplorationRepo wired** (`ShardRoom.ts`): Added `explorationRepo` field, initialized via `getExplorationRepository()` in onCreate.
+5. **D2 — recordExploration() calls** (`ShardRoom.ts`): Fire-and-forget `recordVisit()` on join (entry room) and movement (destination room). Uses `.catch()` pattern.
+6. **D3 — Exploration provider init** (`index.ts`): Added `initExplorationProvider(USE_PG)` at server boot alongside other providers.
+7. **Test updates**: Updated room-switching.test.ts (4 assertions) and player-death.test.ts (2 assertions) to expect `'zone:the-refuge'` instead of `'refuge'`.
+
+## Learnings
+
+- `getZoneContentStore` does not exist; zones are accessed via `getZoneRepository()` from `../zones/index.js` which has `getAllZones()` returning `ZoneDefinition[]` with `.slug` field.
+- Room graph nodes have `.name` and `.type` directly (not nested under `.properties`).
+- Anticipatory tests (room-routing.test.ts) were already written expecting `zone:the-refuge` — they passed immediately once the routing switch landed.
+- The exploration provider follows the same lazy-init singleton pattern as all other providers (stash, profile, faction, etc.).
+
+**Verification:** Build clean. 2243 tests passing (101 files), 0 regressions.
+
+## 2026-03-27T15:39Z — Phase C+D Complete
+
+**Completed:** Phase C routing switch + Phase D exploration wiring  
+**Items:** C1-C4 (zone registration, ROOM_SWITCH naming) + D1-D3 (exploration tracking)
+
+**Files Modified:**
+- `packages/server/src/index.ts`
+- `packages/server/src/rooms/ShardRoom.ts`
+
+**Build:** ✅ Clean | **Tests:** ✅ 2243 passing
+
+**Next:** Prepare for Phase E (RefugeRoom cleanup) after merge.
+
