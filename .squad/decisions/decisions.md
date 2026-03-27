@@ -2645,3 +2645,58 @@ Prepare for a future "explored rooms" feature: per-character map data that track
 
 User request — forward-looking design. The unified room system should lay groundwork for character-specific exploration tracking.
 
+
+---
+
+## 2026-03-27T12:25:42Z: Unified Room Architecture — Complete Plan
+**By:** Elminster (Lead / Architect), Coordinator (directive capture)
+**Status:** PROPOSED + Directive Confirmation
+**Scope:** Server architecture, client routing, DB schema
+
+### Context
+
+The codebase has two Colyseus room classes — `ShardRoom` and `RefugeRoom` — serving the same purpose with significant duplication. User directive: consolidate into one room class with composable systems.
+
+### Architectural Decisions
+
+**D1: Single Room Class** — ShardRoom absorbs RefugeRoom. No separate class types. Eliminates ~500 lines of duplicated code. Client room name changes from `'refuge'` to `'zone:the-refuge'`. Coordinated deploy required.
+
+**D2: Composable Systems via Zone Config** — Systems (combat, ambient, creatures, extraction) instantiate conditionally based on `zone.category`, `zone_rooms.type`, `zone.lifecycle`, `zone.pvp_enabled`. No class hierarchy, no code changes for new zones.
+
+**D3: Feature-Gated Command Pipeline** — Commands like `stash`, `shardboard`, `enter` are registered with required `FeatureRoomType`. Pipeline checks `ctx.room.type` before dispatching. Rejected commands narrate contextually.
+
+**D4: Zone Room Routing** — Zones registered as `server.define('zone:{slug}', ShardRoom)` with auto-provisioning at boot. Client joins via `joinOrCreate('zone:the-refuge', opts)`. Namespace prevents collision with shard room names.
+
+**D5: Exploration Tracking — Per-Character Room Visits** — New `character_explored_rooms` table (migration 032) tracking visits: `character_id`, `zone_slug`, `room_id`, `room_type`, `room_name`, `coord_x/y/z`, `first_visited`, `last_visited`, `visit_count`. Designed now for future map UI.
+
+**D6: Reconnection Grace Periods** — Hub/social zones get 10-second grace (vs RefugeRoom's none). Dungeon/wilderness zones get standard 30-second grace.
+
+### User Directives — Confirmed
+
+**Zone Naming:** `zone:the-refuge` is the canonical format for zone room names. Answers open question D4.
+
+**Room Items Are Universal:** All rooms can hold floor items. The `take` command is universal — any player/creature picks up items from any room. Only `feature_stash` rooms provide personal stash storage (`store`/`stash` commands). Items in normal rooms are shared resources.
+
+**Map UI Design:** Plan out character exploration map UI. Context is now mature (unified architecture + explored rooms schema). Design forward-looking while the team has full context.
+
+### Key Files & Impact
+
+- **Server:** `ShardRoom` consolidated, `RefugeRoom` deleted, command pipeline extended
+- **Client:** Room names → `zone:{slug}`, exploration view unified
+- **DB:** New `character_explored_rooms` table (migration 032)
+- **Shared:** `RoomType` union already extended with feature types
+
+### Risks & Mitigation
+
+- **Behavior regression:** Feature parity checklist ensures RefugeRoom features absorbed 1:1. Phase-gated rollout.
+- **Coordinated deploy:** Single PR with client + server changes.
+- **matchMaker access:** Pass as function reference in CommandContext, keep handlers testable.
+
+### Open Questions Resolved
+
+1. ✅ Room name format → `zone:the-refuge`
+2. ⏳ Exploration coordinates → Backfill with map UI
+3. ✅ `take` command → Universal (not feature-gated)
+4. ⏳ Shardboard logic → TBD (dedicated service or inline)
+5. ⏳ Ambient system scope → TBD (hub-only or broader)
+

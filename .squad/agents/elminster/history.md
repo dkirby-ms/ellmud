@@ -1244,3 +1244,16 @@ CREATE TABLE zone_definitions (
 
 - **Status:** User feedback integrated into master decisions.md. Both Volo's GDD refresh and Elminster's zone architecture plans are now approved at open-question level with user direction. Ready for Phase 2 implementation kickoff.
 
+
+### 2026-07-22: Unified Room Architecture Plan
+- **Decision:** Comprehensive architecture plan for unifying ShardRoom + RefugeRoom into a single Colyseus room class with composable systems. Decision file: `.squad/decisions/inbox/elminster-unified-room-arch.md`.
+- **Key insight — System composition over inheritance:** Zone config (`zone.category`, `zone_rooms.type` feature types) determines which systems are active. Combat, ambient, extraction, creatures — all conditionally instantiated. No class hierarchy.
+- **Key insight — Feature-gated command pipeline:** The shared command pipeline gains middleware that checks `ctx.room.type` against a required `FeatureRoomType`. Commands like `stash` only work in `feature_stash` rooms. This replaces RefugeRoom's manual `requireRoom()` pattern.
+- **Key insight — Colyseus routing:** Zones registered as `zone:{slug}` room names. Auto-provisioned at server boot for persistent zones. Client `switchRoom()` already accepts any room name string — minimal client changes.
+- **Key insight — Reconnection gap:** RefugeRoom has ZERO reconnection support. The unified class adds 10s grace for hub/social zones, 30s for dungeon zones. This is a net improvement.
+- **Key insight — Exploration tracking:** New `character_explored_rooms` table with upsert semantics (INSERT ON CONFLICT). Per-character, per-room, fire-and-forget recording on room entry. Follows established Interface + PgImpl + InMemoryImpl + Provider pattern.
+- **Migration strategy:** 5 phases (A: Foundation, B: Absorption, C: Routing, D: Exploration, E: Cleanup). A1 (exploration) fully parallelizable. C gated on ALL B items. Only 1 new DB migration (032).
+- **RefugeRoom analysis:** 1,015 lines. Key unique capabilities: AmbientSystem, shardboard/enter commands (matchMaker integration), stash commands (stash/take/store), room-gated commands, arrival/departure announcements, fallback refuge graph, pendingEnter guard.
+- **ShardRoom analysis:** 2,022 lines. Already has zone mode (isZone, zoneSlug, zoneData), shared command pipeline, reconnection, all combat systems. The `isNonCombatZone` check already gates combat/extraction/downing for hub/social zones.
+- **Key files:** ShardRoom.ts (2,022 lines), RefugeRoom.ts (1,015 lines, to be deleted), commands/index.ts (command pipeline), shared/room-graph.ts (feature room types), zones/zone-adapter.ts, shard/graph-adapter.ts.
+- **Open questions for dkirby-ms:** Room name format, exploration coordinates timing, take command disambiguation, shardboard service extraction, ambient system scope.
