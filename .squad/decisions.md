@@ -5940,3 +5940,101 @@ Created `exploration-messages.test.ts` with 18 tests across 8 categories (M1–M
 ### Pattern Note
 
 MessageCollector does NOT capture exploration messages. Tests wire up `client.onMessage(MessageTypes.EXPLORATION_DATA, ...)` directly. If exploration messages become common in other tests, consider extending MessageCollector.
+
+---
+
+## 2026-03-24: Player Log Format Convention
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-03-24  
+**Status:** Implemented  
+**Requested by:** dkirby-ms
+
+### What
+
+All server console log messages that pertain to a player must include both the player's character name and player ID in a standardized format:
+```
+"CharacterName" (playerId)
+```
+
+### Why
+
+1. **Character name:** Human-readable identifier that matches the player's in-game persona. Makes logs easier to read and correlate with player reports.
+2. **Player ID (UUID):** Persistent account identifier that survives character deletion, name changes, and database queries. Essential for technical debugging and player support.
+
+### Implementation
+
+**ShardRoom infrastructure:**
+- Added `characterRepo: CharacterRepository` and `characterNames: Map<string, string>` to map playerId → character name
+- Helper method: `playerTag(playerId: string): string` returns formatted string
+- Character names loaded during `onJoin()` via `characterRepo.getById(playerId)`
+- Graceful degradation: if character name unavailable, format degrades to `(playerId)`
+
+**Affected logs:**
+- Join/leave events
+- Disconnection and reconnection  
+- Command execution
+- Combat events (downed, killing blow)
+- Extraction events
+- Death and respawn
+- Profile/loadout operations
+- Error messages related to specific players
+
+**Example log:**
+```
+[ShardRoom:abc123] Player "Shadowblade" (uuid-1234-5678) joined at room_0 (session=sess789, 1/3 players)
+```
+
+### Files Modified
+
+- `packages/server/src/rooms/ShardRoom.ts` — Added character repository integration, `characterNames` map, `playerTag()` helper, updated 25+ log statements
+
+### Verification
+
+- ✅ Build: `npm run build`
+- ✅ Tests: 2226 tests passed (103 test files)
+- ✅ Lint: No new warnings
+
+---
+
+## 2026-03-27: Cascade Delete Exits on Room Deletion
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-03-27  
+**Status:** Implemented
+
+### What
+
+When a room is deleted from a zone, all exit records referencing that room (both incoming and outgoing) are automatically deleted to maintain referential integrity.
+
+### Why
+
+- Prevents orphaned exit records in the database
+- Maintains room graph integrity across deletions
+- Simplifies zone cleanup during testing and admin operations
+
+### Implementation
+
+Updated `PgZoneRepository.deleteRoom(roomSlug)` to execute cascade deletes before removing the room:
+
+```typescript
+// Delete all exits pointing FROM or TO this room
+await db.run('DELETE FROM exits WHERE from_room_slug = $1 OR to_room_slug = $1', [roomSlug]);
+// Then delete the room
+await db.run('DELETE FROM rooms WHERE slug = $1', [roomSlug]);
+```
+
+### Files Modified
+
+- `packages/server/src/zones/PgZoneRepository.ts` — Updated `deleteRoom()` method
+
+### Verification
+
+- ✅ Build: `npm run build`
+- ✅ Tests: 2226 tests passed (103 test files)
+- ✅ Lint: No new warnings
+
+### Impact
+
+- No API or client changes required
+- Database integrity maintained automatically on room deletion

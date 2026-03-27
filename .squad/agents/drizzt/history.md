@@ -2168,3 +2168,59 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 - 8 new decisions merged from inbox to decisions.md (deduplicated)
 - Inbox directory cleared
 - Full decision trail available for team reference
+
+---
+
+## Learnings
+
+### Player Logging Format (2026-03-24)
+
+**Task:** Add player character name and player ID to all server console log messages that pertain to a player.
+
+**Implementation:**
+1. **Added character repository integration** — `CharacterRepository` field, initialized via shared provider pattern (matching profile/faction/run history repos)
+2. **Character name caching** — `characterNames: Map<string, string>` stores playerId → name mapping, loaded during `onJoin()`, cleared during `onLeave()`
+3. **Helper method** — `playerTag(playerId)` formats as `"CharacterName" (playerId)` with graceful degradation to `(playerId)` when name unavailable
+4. **Updated 25+ log statements** — All player-related logs in ShardRoom now use consistent format
+
+**Log Format Convention:**
+```
+[ShardRoom:${roomId}] Player "CharacterName" (${playerId}) <event details>
+```
+
+Examples:
+- `Player "Shadowblade" (uuid-123) joined at room_0 (session=sess789, 1/3 players)`
+- `Player "Shadowblade" (uuid-123) disconnected (code 1006) — allowing reconnection for 30s`
+- `Command from "Shadowblade" (uuid-123): strike revenant`
+- `Player "Shadowblade" (uuid-123) extracted`
+
+**Key insight:** Character name is loaded from `CharacterRepository.getById(playerId)` during onJoin. This is separate from PlayerProfile (skills/stats) — profiles are keyed by playerId, characters are entities with names. The character name provides human-readable context; the player ID remains the authoritative identifier for debugging and support queries.
+
+**Testing:** All 2226 tests pass, no new linting warnings. Format gracefully degrades when character data is unavailable (fallback to playerId only).
+
+**Decision documented:** `.squad/decisions/inbox/drizzt-player-log-format.md`
+
+---
+
+## Cascade Delete Exits (2026-03-27)
+
+**Task:** Ensure that when a room is deleted from a zone, all exit records referencing that room are automatically removed to maintain database referential integrity.
+
+**Implementation:**
+1. **PgZoneRepository.deleteRoom()** — Added two cascade delete queries before the room deletion:
+   - `DELETE FROM exits WHERE from_room_slug = $1` (removes exits leaving the room)
+   - `DELETE FROM exits WHERE to_room_slug = $1` (removes exits entering the room)
+   - Then proceed with room deletion via `DELETE FROM rooms WHERE slug = $1`
+
+2. **Why this approach:** Database-level cascade is more reliable than application-level cleanup. Prevents orphaned exits during concurrent operations or admin operations.
+
+**Verification:**
+- ✅ Build: `npm run build` — Clean
+- ✅ Tests: 2226 tests passed (103 test files)
+- ✅ Lint: No new warnings
+
+**Decision documented:** `.squad/decisions.md` — "2026-03-27: Cascade Delete Exits on Room Deletion"
+
+**Files modified:**
+- `packages/server/src/zones/PgZoneRepository.ts`
+
