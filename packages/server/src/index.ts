@@ -189,14 +189,18 @@ initColyseusAuth(authService, AUTH_REQUIRED);
 // Colyseus monitor (admin dashboard) — serves Schema state for admin visibility
 app.use('/colyseus', monitor());
 
-// Serve client static files
-const publicPath = path.resolve(__dirnameInit, 'public');
+// Serve client static files (client build output lives in packages/client/dist)
+const publicPath = path.resolve(__dirnameInit, '../../client/dist');
 app.use(express.static(publicPath));
 
 // Catch-all: serve index.html for client-side routing (GET only — does not
-// interfere with Colyseus POST /matchmake/* routes)
+// interfere with Colyseus POST /matchmake/* routes).
+// In dev mode the client dist may not exist; skip gracefully.
+const indexHtml = path.join(publicPath, 'index.html');
 app.get('*', (_req, res) => {
-  res.sendFile(path.join(publicPath, 'index.html'));
+  res.sendFile(indexHtml, (err) => {
+    if (err) res.status(404).end();
+  });
 });
 
 // Create HTTP server from Express but don't listen yet — Colyseus's
