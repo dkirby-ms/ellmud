@@ -1851,3 +1851,16 @@ When a game table already exists with relational structure and FK constraints (l
 - RefugeRoom commands must now be gated by room slug — stash at stash-alcove, shardboard at shardboard
 - The fallback graph pattern (inline RoomGraph when zone repo returns null) enables tests without DB seeding
 - Ambient narration can race with command responses in tests — use `.find()` instead of last-element indexing
+- Feature room types use `feature_` prefix as discriminant — `isFeatureRoomType()` and `getFeatureKey()` live in shared room-graph.ts
+- Server-side `RoomGraph.ts` has a LOCAL duplicate of RoomType that must stay in sync with `@ellmud/shared`
+- Biome files (e.g., flooded-crypt.ts) use `Record<RoomType, ...>` — expanding RoomType requires adding placeholder entries to all biome files
+
+## 2026-03-27T11:55Z: Feature Room Types Decision Archived
+
+**What:** Feature Room Types implementation decision formally filed in `.squad/decisions/decisions.md`.
+
+**Deliverable:** `.squad/decisions/inbox/drizzt-feature-room-types.md` merged to decisions log. No further implementation required (feature room types already added to shared package).
+
+**Files Referenced:** packages/shared/src/room-graph.ts, packages/server/src/db/RoomGraph.ts, biome templates
+
+**Status:** Complete. Feature room type discriminant and type guards are canonical and referenced in Phase 1 zone unification work.

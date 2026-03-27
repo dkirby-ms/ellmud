@@ -2531,3 +2531,90 @@ RefugeRoom is **not** retired immediately. It adopts the shared command pipeline
 - Refuge (to be retired): `packages/client/src/pages/Refuge.tsx`
 - Zone seed: `packages/server/src/db/migrations/031_seed_refuge_zone.sql`
 
+
+---
+
+## 2026-03-27: Dual Exploration Modes as Co-Equal
+**Author:** Volo (Narrative Dev)  
+**Status:** Implemented
+
+### Summary
+
+Ellmud's game identity now canonically reflects **two co-equal exploration modes**:
+1. **Static zones** (the Refuge, future hand-crafted areas) — persistent, designed environments for hub features and endgame discovery
+2. **Procedurally generated shards** — temporary extraction instances for PvE/PvP encounters
+
+Neither mode is framed as "primary" or "the main" way players explore. They complement each other.
+
+### Rationale
+
+- The Refuge is a **living world**, not a "loading screen." Players prepare, manage stash, socialize, and access features there.
+- Procedural shards are where **extraction gameplay** happens — the high-tension, high-stakes runs.
+- Both are essential to the player fantasy: *you live in the Refuge and raid shards*.
+- Narrative docs now reflect this parity, enabling cohesive design across client UI, marketing, and future zones.
+
+### Canonical Framing
+
+**README.md (line 5):**
+> Explore persistent zones and procedurally generated shards. Scavenge gear, fight creatures, manage your stash in the Refuge, then dive into extraction runs before collapse. Everything you don't extract, you lose.
+
+**GDD.md (line 4 — Genre):**
+> PvPvE Extraction RPG · Real-Time MUD · Dual Exploration (Static + Procedural)
+
+**GDD.md (lines 22-26 — High-Level Vision):**
+> Players live in **the Refuge**, a persistent hub where they manage gear, prepare for runs, and socialize. From there, they explore **two complementary exploration modes:**
+> - **Static zones** (like the Refuge itself, and future hand-crafted endgame areas) — permanent, designed environments for feature access and discovery
+> - **Procedurally generated "shards"** — temporary instances of corrupted regions — where they face PvE threats, environmental hazards, and emergent PvP encounters
+
+### Design Implications
+
+1. **Client UI:** The game has a **Refuge layout** (feature-access hub) and a **Shard layout** (exploration + combat). Both are first-class screens, not hierarchy.
+2. **Content Pipeline:** Future zone designs can be hand-crafted (like Refuge or endgame dungeons) or procedurally generated (like exploration shards). Neither is the "default."
+3. **Marketing/Onboarding:** Pitch the game as "You live in the Refuge and raid shards" — dual identity from the start.
+4. **Roadmap:** Phase 3 roadmap item now reads "Content expansion (more biomes, creature types, **static zones**, procedural events)" — static zones are explicit growth goals.
+
+### Implementation Detail
+
+No code changes. This is a narrative/documentation alignment. GDD §2.2 already correctly documents both generation modes (hand-crafted zones ✅, procedural assembly ⚠️ partial). The updates lift this parity into the tagline and opening vision.
+
+### Team Sign-Off
+
+- **Volo (Narrative):** Framing implemented. Docs canonical.
+- **dkirby-ms (Director):** Approved. Extraction RPG identity maintained.
+
+---
+
+## 2026-03-27: User Directive — Dual Mode Framing
+**By:** dkirby-ms (via Copilot CLI)
+
+### What
+
+The game is not purely procedural roguelike. Static zones (like The Refuge) are a major exploration mode alongside procedural shards. README and GDD should reflect both modes equally — not frame procedural as the primary/only way players explore.
+
+### Why
+
+User request — captured for team memory.
+
+---
+
+## 2026-03-27: Feature Room Types Added to Shared Package
+**Author:** Drizzt (Engine Dev)  
+**Status:** Implemented
+
+### Context
+
+Zone unification Phase 1 required adding feature room types to the shared `RoomType` union so both server and client can reference them.
+
+### Decision
+
+- Added 7 feature room types to `RoomType`: `feature_stash`, `feature_shardboard`, `feature_marketplace`, `feature_crafting`, `feature_training`, `feature_contracts`, `feature_infirmary`
+- `feature_` prefix is the discriminant — `isFeatureRoomType()` type guard and `getFeatureKey()` extractor live in `@ellmud/shared`
+- `FeatureRoomType` utility type extracts the feature subset from the union
+- Server-side `RoomGraph.ts` local duplicate synced to match
+- Flooded Crypt biome templates extended with placeholder entries for all feature room types (names + descriptions)
+
+### Impact
+
+- **Jarlaxle:** New biomes must include entries for all feature room types in `ROOM_NAMES` / `ROOM_DESCRIPTIONS` Records
+- **All agents:** Import `isFeatureRoomType` / `getFeatureKey` from `@ellmud/shared` — don't roll your own prefix checks
+- **Future:** Phase 2 will wire these types into zone definitions and room rendering

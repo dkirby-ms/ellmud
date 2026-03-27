@@ -538,3 +538,35 @@ Wait for #139 endpoint design approval before implementing client side.
 
 - **Status:** Master decisions.md now includes volo-gdd-refresh.md as a canonical reference for GDD maintenance standards going forward.
 
+
+## 2026-03-20: Dual Exploration Modes Parity in README & GDD
+
+**What:** Updated README.md and GDD.md to reflect that static zones (the Refuge, future hand-crafted areas) and procedural shards are **co-equal** exploration modes, not frame procedural as the primary way players explore.
+
+**Changes made:**
+1. **README.md (line 5):** Rewrote tagline from "Dive into procedurally generated shards..." to "Explore persistent zones and procedurally generated shards. Scavenge gear, fight creatures, manage your stash in the Refuge, then dive into extraction runs before collapse." — now front-loads the Refuge as the player's home base and presents both modes.
+2. **README.md (line 151):** Changed "Procedural narrative expansion" to "Content expansion (more biomes, creature types, **static zones**, procedural events)" — explicitly includes static zone expansion as a Phase 3 goal.
+3. **GDD.md (line 4):** Changed genre from "Procedural Dungeon Crawler" to "Dual Exploration (Static + Procedural)" — broadens the descriptor to capture both modes equally.
+4. **GDD.md (lines 22-26):** Rewrote high-level vision to explicitly describe both modes: "Players live in **the Refuge**, a persistent hub where they manage gear, prepare for runs, and socialize. From there, they explore **two complementary exploration modes:** **Static zones** (like the Refuge itself, and future hand-crafted endgame areas) and **Procedurally generated shards** (temporary instances...)." — this is the authoritative narrative framing.
+5. **Verified (GDD.md):** Lines 69, 87-89 already correctly list "hand-crafted zones" and "procedural assembly" as two equal shard generation modes. Lines 538-540 correctly label them "Mode 1" and "Mode 2" without hierarchy. Line 1026 accurately reflects roadmap status (hand-crafted ✅, procedural ⚠️ partial).
+
+**Why:** User directive (dkirby-ms) — The game's identity should honor both exploration modes equally. The Refuge is not a "loading screen" or "menu"; it's a persistent zone where players live and prepare. Procedural shards are where extraction gameplay happens. Neither is "the main" mode — they complement each other and together define the player experience.
+
+**Tone maintained:** Kept extraction RPG identity strong (shard collapse, risk, narrated prose). Static zones are presented as feature-access hubs AND as endgame content to discover. Procedural shards remain the extraction-run heart of gameplay.
+
+**Cross-team impact:** This framing affects how the client UI, marketing, and future zone designs are conceptualized. The dual-mode identity is now canonical in the narrative docs.
+
+## 2026-03-27T11:55Z: Documentation Parity Update Completion & Decisions Filing
+
+**What:** Dual Exploration Modes parity decision formally filed and archived.
+
+**Deliverable:** `.squad/decisions/inbox/volo-zones-parity.md` created and merged to `.squad/decisions/decisions.md`. No further action required on documentation updates (changes already implemented on 2026-03-20).
+
+**Files Modified:** README.md, GDD.md (completed 2026-03-20, now archived in decisions)
+
+**Supporting Artifacts:**
+- `.squad/orchestration-log/2026-03-27T11-55-volo.md` — orchestration log
+- `.squad/log/2026-03-27T11-55-docs-zone-parity.md` — session log
+- `.squad/decisions/decisions.md` — updated with Volo decision + Drizzt feature-room-types + user directive
+
+**Status:** Complete. Both exploration modes (static zones + procedural shards) are now canonically presented as co-equal in all narrative documentation. Team alignment achieved.
