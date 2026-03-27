@@ -23,7 +23,7 @@ import { ShardState } from '../state.js';
 import { parseCommand } from '../commands/parser.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
-import { createTestRoomGraph, type RoomGraph } from '../shard/RoomGraph.js';
+import { createTestRoomGraph, type RoomGraph, type Direction } from '../shard/RoomGraph.js';
 import { generateShardGraph } from '../shard/generator.js';
 import { adaptRoomGraph } from '../shard/graph-adapter.js';
 import { handleLook } from '../commands/handlers/look.js';
@@ -193,29 +193,39 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     this.creatureManager = new CreatureManager();
 
     if (options['zoneSlug'] && typeof options['zoneSlug'] === 'string') {
-      // Zone-based room: load from repository
+      // Zone-based room: load from repository (with fallback for the-refuge)
       const zoneRepo = getZoneRepository();
       const zoneData = await zoneRepo.getZoneBySlug(options['zoneSlug']);
-      if (!zoneData) throw new Error(`Zone '${options['zoneSlug']}' not found`);
 
-      const sharedGraph = convertZoneToRoomGraph(zoneData);
-      this.roomGraph = adaptRoomGraph(sharedGraph);
-      this.entryRoomIds = sharedGraph.entryRoomIds;
-      this.shardTier = sharedGraph.tier;
-      this.state.biome = sharedGraph.biome;
+      if (zoneData) {
+        const sharedGraph = convertZoneToRoomGraph(zoneData);
+        this.roomGraph = adaptRoomGraph(sharedGraph);
+        this.entryRoomIds = sharedGraph.entryRoomIds;
+        this.shardTier = sharedGraph.tier;
+        this.state.biome = sharedGraph.biome;
+      } else if (options['zoneSlug'] === 'the-refuge') {
+        // B7: Fallback hardcoded graph when DB zone data is missing
+        this.roomGraph = createFallbackRefugeGraph();
+        this.entryRoomIds = [this.roomGraph.startRoomId];
+        this.log('Zone "the-refuge" not in DB — using fallback graph.');
+      } else {
+        throw new Error(`Zone '${options['zoneSlug']}' not found`);
+      }
 
       // Store zone metadata for repop and inter-zone features
       this.zoneSlug = options['zoneSlug'];
-      this.zoneData = zoneData;
+      this.zoneData = zoneData ?? undefined;
       this.isZone = true;
 
       // Zone-level max players override (0 = unlimited, keep tier default)
-      if (zoneData.zone.maxPlayers > 0) {
+      if (zoneData && zoneData.zone.maxPlayers > 0) {
         this.maxClients = zoneData.zone.maxPlayers;
       }
 
       // Spawn creatures from zone NPC definitions
-      this.creatureManager.spawnCreaturesFromZone(zoneData);
+      if (zoneData) {
+        this.creatureManager.spawnCreaturesFromZone(zoneData);
+      }
     } else if (options['useTestGraph'] === true) {
       this.roomGraph = createTestRoomGraph();
       this.entryRoomIds = [this.roomGraph.startRoomId]; // Test graph has single entry
@@ -312,9 +322,14 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.startRepopTimer();
     }
 
-    // Begin shard lifecycle
-    this.transitionTo('seeding');
-    this.seedShard();
+    // Begin lifecycle: zones stay 'open', shards follow seeding→active→collapse flow
+    if (this.isZone) {
+      this.transitionTo('open');
+      this.log('Zone initialized: persistent open state (no collapse)');
+    } else {
+      this.transitionTo('seeding');
+      this.seedShard();
+    }
   }
 
   async onAuth(_client: Client, options: Record<string, unknown>): Promise<unknown> {
@@ -384,10 +399,16 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Track join time for run duration calculation
     this.playerJoinTimes.set(playerId, Date.now());
 
-    // Distribute players across entry points for spatial separation
-    // Use player count to cycle through available entry rooms
-    const entryIndex = (this.state.playerCount - 1) % this.entryRoomIds.length;
-    const startRoom = this.entryRoomIds[entryIndex] || this.roomGraph.startRoomId;
+    // Determine entry room based on zone vs shard
+    let startRoom: string;
+    if (this.isZone) {
+      // Zones: always spawn at designated start room (e.g., hearth for refuge)
+      startRoom = this.roomGraph.startRoomId;
+    } else {
+      // Shards: distribute players across entry points for spatial separation
+      const entryIndex = (this.state.playerCount - 1) % this.entryRoomIds.length;
+      startRoom = this.entryRoomIds[entryIndex] || this.roomGraph.startRoomId;
+    }
 
     // Initialize player state at assigned entry room with persisted profile
     const playerState = new PlayerState(
@@ -496,12 +517,20 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   /**
    * Handle reconnection timeout expiry — kill or move to safe room.
+   * Zones are exempt from death behavior — simply clean up the player.
    */
   private handleReconnectionTimeout(playerId: string): void {
-    const config = getConfig();
     const playerState = this.players.get(playerId);
     if (!playerState) return;
 
+    // Zones don't apply death behavior on disconnect timeout
+    if (this.isZone) {
+      this.log(`Player ${playerId} disconnected from zone — no death penalty applied`);
+      return;
+    }
+
+    // Shards apply death behavior based on config
+    const config = getConfig();
     const combatant = this.combatSystem.getCombatant(playerId);
 
     if (config.reconnectDeathBehavior === 'kill') {
@@ -2019,4 +2048,87 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private log(message: string): void {
     console.log(`[ShardRoom:${this.roomId}] ${message}`);
   }
+}
+
+// ─── B7: Fallback Refuge Graph ──────────────────────────────────────────────
+// Used when ShardRoom loads in zone mode for 'the-refuge' but no DB data exists.
+
+function createFallbackRefugeGraph(): RoomGraph {
+  const rooms = new Map<string, import('../shard/RoomGraph.js').Room>();
+
+  rooms.set('hearth', {
+    id: 'hearth',
+    name: 'The Hearth',
+    description: 'A broad stone chamber warmed by a perpetual fire. Scarred adventurers rest on makeshift benches. The air smells of ash and iron.',
+    type: 'entry',
+    exits: new Map<Direction, string>([
+      ['east', 'stash-alcove'],
+      ['north', 'training-grounds'],
+      ['west', 'shardboard'],
+      ['south', 'market'],
+    ]),
+    items: [],
+  });
+
+  rooms.set('stash-alcove', {
+    id: 'stash-alcove',
+    name: 'Stash Alcove',
+    description: 'A narrow alcove lined with locked chests and hanging satchels. Your belongings are here — what you\'ve kept from the shards.',
+    type: 'feature_stash',
+    exits: new Map<Direction, string>([['west', 'hearth']]),
+    items: [],
+  });
+
+  rooms.set('training-grounds', {
+    id: 'training-grounds',
+    name: 'Training Grounds',
+    description: 'A cleared space where weapons ring against practice dummies. Scratched tally marks cover the walls.',
+    type: 'feature_training',
+    exits: new Map<Direction, string>([
+      ['south', 'hearth'],
+      ['east', 'war-room'],
+    ]),
+    items: [],
+  });
+
+  rooms.set('shardboard', {
+    id: 'shardboard',
+    name: 'The Shardboard',
+    description: 'A massive board of pinned notes, sketched maps, and shard coordinates. This is where expeditions begin.',
+    type: 'feature_shardboard',
+    exits: new Map<Direction, string>([['east', 'hearth']]),
+    items: [],
+  });
+
+  rooms.set('market', {
+    id: 'market',
+    name: 'The Market',
+    description: 'Makeshift stalls selling salvaged goods. A gruff quartermaster eyes your coin pouch.',
+    type: 'feature_marketplace',
+    exits: new Map<Direction, string>([
+      ['north', 'hearth'],
+      ['east', 'infirmary'],
+    ]),
+    items: [],
+  });
+
+  rooms.set('infirmary', {
+    id: 'infirmary',
+    name: 'The Infirmary',
+    description: 'Cots and bandages. A healer tends to the wounded. The smell of poultice lingers.',
+    type: 'feature_infirmary',
+    exits: new Map<Direction, string>([['west', 'market']]),
+    items: [],
+  });
+
+  rooms.set('war-room', {
+    id: 'war-room',
+    name: 'The War Room',
+    description: 'A locked chamber where faction leaders meet. Maps of known shards cover the walls.',
+    type: 'corridor',
+    exits: new Map<Direction, string>([['west', 'training-grounds']]),
+    items: [],
+  });
+
+  return { rooms, startRoomId: 'hearth' };
 }
