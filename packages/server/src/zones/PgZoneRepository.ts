@@ -298,6 +298,22 @@ export class PgZoneRepository implements ZoneRepository {
   }
 
   async deleteRoom(id: string): Promise<void> {
+    // Look up the room so we can clean up exits that reference it by slug.
+    const room = await query<{ zone_id: string; slug: string }>(
+      `SELECT zone_id, slug FROM zone_rooms WHERE id = $1`,
+      [id],
+    );
+
+    if (room.rows.length > 0) {
+      const { zone_id, slug } = room.rows[0];
+      await query(
+        `DELETE FROM zone_exits
+          WHERE zone_id = $1
+            AND (from_room_slug = $2 OR to_room_slug = $2)`,
+        [zone_id, slug],
+      );
+    }
+
     await query(`DELETE FROM zone_rooms WHERE id = $1`, [id]);
   }
 
