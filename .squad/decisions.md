@@ -5332,3 +5332,63 @@ If no `characterId` is provided in join options (e.g., old clients, tests), both
 - **Drizzt**: REST endpoints at `/api/characters` need to match the client's expected API shape (see `packages/client/src/services/api.ts`).
 - **All team**: `playerId` in ShardRoom and all its repos now means "characterId". When writing new repo code, use characterId semantics.
 - **Tests**: Server tests pass unchanged because characterId falls back to playerId when not provided.
+
+---
+
+### 2026-03-27: Exploration Map UI Design
+
+**By:** Regis (Frontend Dev)
+**Status:** Proposed
+**Artifact:** `session-state/.../files/map-ui-design.md` (full design doc)
+
+## Context
+
+We're unifying the game into a single room class. All exploration — Refuge hub, dungeons, zones, procedural shards — uses the same ShardExploration page. Players need a visual map of explored rooms to complement the text-primary narrative.
+
+The `character_explored_rooms` table already tracks per-character exploration with coordinates (`coord_x`, `coord_y`, `coord_z`), room types, and visit counts.
+
+## Key Decisions
+
+### 1. SVG Rendering (not Canvas, not ASCII art)
+**Choice:** Render the map as React SVG elements.
+**Why:** SVG integrates with our CSS theme variables, supports React event handlers natively, is accessible (`<title>`, `aria-*`), and performs well at our scale (dozens to hundreds of rooms). Canvas would lose CSS integration; ASCII art has poor zoom/pan and interaction.
+
+### 2. Minimap Replaces Compass
+**Choice:** The sidebar minimap replaces `CompassControl.tsx`. Exits are implicit from the map layout.
+**Why:** A visible map showing connected rooms makes a separate compass redundant. Players click rooms to navigate. The map IS the compass. Keep `CompassControl` as fallback during rollout.
+
+### 3. Full Map as Overlay (not Tab)
+**Choice:** Full map opens as a `z-50` overlay (like inventory), toggled with `M` key.
+**Why:** Follows the existing overlay pattern (equipment drawer, extraction overlay). A tab would split the narrative panel and interrupt reading flow.
+
+### 4. True Fog of War
+**Choice:** Unexplored rooms are NOT rendered. Adjacent rooms (connected to visited rooms) appear as dim ghost outlines.
+**Why:** Preserves MUD exploration mystery. Players discover the map by walking it. Ghost outlines at fog edges hint that exits lead somewhere without revealing what's there.
+
+### 5. Map State in Local Hook (not Global AppState)
+**Choice:** `useExplorationMap` hook manages map data locally, not in the global reducer.
+**Why:** Map data is large (hundreds of rooms), computed (positions from coords/BFS), and only consumed by map components. Adding it to `AppState` would bloat every reducer cycle.
+
+### 6. Two New Message Types
+**Choice:** `exploration_data` (bulk on join) and `exploration_update` (incremental on room entry).
+**Why:** Follows the "dumb terminal" architecture — explicit message types, no schema sync. Bulk load on join, then single-room updates as the player moves. Lightweight and efficient.
+
+### 7. BFS Layout for Procedural Shards
+**Choice:** Client computes room positions via BFS walk from entry room when rooms lack coordinates.
+**Why:** Procedural shards have no predefined coordinates. BFS from entry produces a clean grid layout matching the player's mental model. O(n) computation, cached per instance.
+
+### 8. Zone Maps Persist, Shard Maps are Ephemeral
+**Choice:** Zone exploration maps are cached in-session across zone transfers. Shard maps are discarded on extraction/death.
+**Why:** Zones are persistent worlds — the player returns to them. Shards are generated fresh each run. Server resends full `exploration_data` on join regardless, so cache is an optimization not a requirement.
+
+## Impact
+
+- **New files:** `components/map/` directory (8 components), `hooks/useExplorationMap.ts`, `styles/map.css`
+- **Modified files:** `ShardExploration.tsx` (add map overlay + minimap), sidebar layout
+- **Server changes needed:** Two new message types (`exploration_data`, `exploration_update`) from engine team
+- **Deprecated:** `CompassControl.tsx` eventually replaced by `MinimapWidget.tsx`
+
+## Needs From Other Agents
+
+- **Engine (Drizzt):** Implement `exploration_data` and `exploration_update` message sending on room join and room entry events. Wire to `character_explored_rooms` table.
+- **Content/Design:** Ensure static zone rooms have `coord_x`, `coord_y`, `coord_z` populated in the zone editor.
