@@ -12,6 +12,7 @@ import type {
   ZoneRoomDefinition,
   ZoneExitDefinition,
   ZoneData,
+  OrphanedExitInfo,
 } from './ZoneRepository.js';
 
 export class InMemoryZoneRepository implements ZoneRepository {
@@ -135,6 +136,59 @@ export class InMemoryZoneRepository implements ZoneRepository {
 
   async deleteExit(id: string): Promise<void> {
     this.exits.delete(id);
+  }
+
+  // ── Orphaned-exit cleanup ────────────────────────────────────────────────
+
+  async findOrphanedExits(): Promise<OrphanedExitInfo[]> {
+    const orphans: OrphanedExitInfo[] = [];
+    const allRooms = [...this.rooms.values()];
+    const allZones = [...this.zones.values()];
+
+    for (const exit of this.exits.values()) {
+      const zoneRoomSlugs = new Set(
+        allRooms.filter((r) => r.zoneId === exit.zoneId).map((r) => r.slug),
+      );
+
+      // 1) from_room_slug doesn't exist
+      if (!zoneRoomSlugs.has(exit.fromRoomSlug)) {
+        orphans.push({ exit, reason: 'from_room_slug not found in zone' });
+        continue;
+      }
+
+      if (!exit.targetZoneSlug) {
+        // 2) intra-zone: to_room_slug doesn't exist
+        if (!zoneRoomSlugs.has(exit.toRoomSlug)) {
+          orphans.push({ exit, reason: 'to_room_slug not found in zone (intra-zone)' });
+        }
+      } else {
+        // 3) cross-zone: target zone doesn't exist
+        const targetZone = allZones.find((z) => z.slug === exit.targetZoneSlug);
+        if (!targetZone) {
+          orphans.push({ exit, reason: 'target zone does not exist' });
+          continue;
+        }
+        // 4) cross-zone: target room doesn't exist in target zone
+        if (exit.targetRoomSlug) {
+          const targetRoomSlugs = new Set(
+            allRooms.filter((r) => r.zoneId === targetZone.id).map((r) => r.slug),
+          );
+          if (!targetRoomSlugs.has(exit.targetRoomSlug)) {
+            orphans.push({ exit, reason: 'target room not found in target zone' });
+          }
+        }
+      }
+    }
+
+    return orphans;
+  }
+
+  async removeOrphanedExits(): Promise<OrphanedExitInfo[]> {
+    const orphans = await this.findOrphanedExits();
+    for (const { exit } of orphans) {
+      this.exits.delete(exit.id);
+    }
+    return orphans;
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────

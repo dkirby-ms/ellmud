@@ -2299,3 +2299,40 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 - **RoomGraph exits are `Map<Direction, string>`, but ExploredRoomData expects `Record<string, string>`.** Always convert with `Object.fromEntries()` or manual iteration when building exploration payloads from the room graph.
 
 - **Exploration repository uses fire-and-forget persistence.** The `recordVisit` call is awaited with `.catch()` to avoid blocking the hot path. If DB writes fail, the map still renders — only persistence is lost.
+
+## Learnings
+
+### Orphaned-Exit Cleanup (content management)
+- Added `findOrphanedExits()` and `removeOrphanedExits()` to `ZoneRepository` interface, implemented on both `PgZoneRepository` (SQL) and `InMemoryZoneRepository`.
+- Key files: `packages/server/src/zones/ZoneRepository.ts`, `PgZoneRepository.ts`, `InMemoryZoneRepository.ts`, `packages/server/src/admin/zones/zone-routes.ts`.
+- Admin API: `GET /admin/api/zones/cleanup/orphaned-exits` (dry-run), `POST /admin/api/zones/cleanup/orphaned-exits` (delete).
+- Routes registered *before* `/:slug` to avoid param collision.
+- Four orphan categories: missing from_room_slug, missing to_room_slug (intra-zone), missing target zone (cross-zone), missing target room in target zone (cross-zone).
+- Exit schema uses `target_zone_slug` (not `target_zone_id`) — the slug is the FK reference to zones.
+- Tests: `packages/server/src/__tests__/orphaned-exits.test.ts` — 9 tests covering all categories.
+
+---
+
+## Orphaned-Exit Cleanup API (2026-03-27)
+
+**Task:** Add content management API to detect and remove stale exits from zone_exits table where from_room, to_room, or target zone references are broken.
+
+**Outcome:** ✅ SUCCESS — `findOrphanedExits()` and `removeOrphanedExits()` added to ZoneRepository interface with full implementations on both PgZoneRepository (SQL) and InMemoryZoneRepository. Admin API endpoints exposed at `/admin/api/zones/cleanup/orphaned-exits` (GET for dry-run, POST for delete). 9 new tests covering all orphan categories. Build clean, 2039 tests pass (all tests active, 0 failures), lint clean.
+
+**Orchestration:** .squad/orchestration-log/2026-03-27T2254-drizzt.md
+
+**Files Modified:**
+- `packages/server/src/zones/ZoneRepository.ts`
+- `packages/server/src/zones/PgZoneRepository.ts`
+- `packages/server/src/zones/InMemoryZoneRepository.ts`
+- `packages/server/src/admin/zones/zone-routes.ts`
+
+**New Test File:**
+- `packages/server/src/__tests__/orphaned-exits.test.ts` — 9 tests
+
+**Decision Documented:** `.squad/decisions.md` — "2026-03-27: Orphaned-Exit Cleanup API"
+
+## Cross-Team Notes
+
+- **Lyra (Admin UI):** This API is ready for a "Clean Orphaned Exits" button in zone management UI
+- **Regis (Frontend):** MUD prompt component is live and ready for mana field addition when you add MP/mana to the game schema

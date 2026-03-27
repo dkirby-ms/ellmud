@@ -135,6 +135,41 @@ export function createZoneRouter(): Router {
     }
   });
 
+  // ─── GET /admin/api/zones/cleanup/orphaned-exits — Dry-run scan ─────────
+  router.get(`${basePath}/cleanup/orphaned-exits`, adminAuth, async (_req: Request, res: Response) => {
+    try {
+      const repo = getZoneRepository();
+      const orphans = await repo.findOrphanedExits();
+      res.json({ count: orphans.length, orphanedExits: orphans });
+    } catch (err) {
+      console.error('[Admin] Failed to scan orphaned exits:', err);
+      res.status(500).json({ error: 'Failed to scan orphaned exits' });
+    }
+  });
+
+  // ─── POST /admin/api/zones/cleanup/orphaned-exits — Delete orphans ─────
+  router.post(`${basePath}/cleanup/orphaned-exits`, adminAuth, async (_req: Request, res: Response) => {
+    try {
+      const repo = getZoneRepository();
+      const removed = await repo.removeOrphanedExits();
+
+      if (removed.length > 0) {
+        await logAuditEvent({
+          action: 'delete',
+          entityType: 'zone-exit-cleanup',
+          entityId: 'orphaned-exits',
+          actor: 'admin',
+          details: { removedCount: removed.length, removedIds: removed.map((o) => o.exit.id) },
+        }).catch(() => {});
+      }
+
+      res.json({ removed: removed.length, orphanedExits: removed });
+    } catch (err) {
+      console.error('[Admin] Failed to remove orphaned exits:', err);
+      res.status(500).json({ error: 'Failed to remove orphaned exits' });
+    }
+  });
+
   // ─── GET /admin/api/zones/:slug — Get zone bundle ─────────────────────
   router.get(`${basePath}/:slug`, adminAuth, async (req: Request, res: Response) => {
     try {

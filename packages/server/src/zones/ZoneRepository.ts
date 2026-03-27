@@ -36,6 +36,12 @@ export interface ZoneData {
   exits: ZoneExitDefinition[];
 }
 
+/** An exit flagged as orphaned, with a human-readable reason. */
+export interface OrphanedExitInfo {
+  exit: ZoneExitDefinition;
+  reason: string;
+}
+
 // ─── Repository interface ────────────────────────────────────────────────────
 
 export interface ZoneRepository {
@@ -71,4 +77,10 @@ export interface ZoneRepository {
 
   /** Delete an exit by ID. */
   deleteExit(id: string): Promise<void>;
+
+  /** Find exits that reference non-existent rooms or zones (dry run). */
+  findOrphanedExits(): Promise<OrphanedExitInfo[]>;
+
+  /** Delete all orphaned exits and return what was removed. */
+  removeOrphanedExits(): Promise<OrphanedExitInfo[]>;
 }

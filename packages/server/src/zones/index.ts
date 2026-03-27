@@ -46,6 +46,7 @@ export type {
   ZoneRoomDefinition,
   ZoneExitDefinition,
   ZoneData,
+  OrphanedExitInfo,
 } from './ZoneRepository.js';
 export { PgZoneRepository } from './PgZoneRepository.js';
 export { InMemoryZoneRepository } from './InMemoryZoneRepository.js';

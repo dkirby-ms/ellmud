@@ -6038,3 +6038,54 @@ await db.run('DELETE FROM rooms WHERE slug = $1', [roomSlug]);
 
 - No API or client changes required
 - Database integrity maintained automatically on room deletion
+
+### 2026-03-27: Orphaned-Exit Cleanup API
+
+**Author:** Drizzt  
+**Date:** 2026-03-27  
+**Status:** Implemented
+
+**Context**
+
+Exits in `zone_exits` can reference rooms or zones that no longer exist (from manual edits, bulk deletes, or stale seed data). We need a content management tool to find and remove these dead ends.
+
+**Decision**
+
+- `findOrphanedExits()` and `removeOrphanedExits()` added to the `ZoneRepository` interface so they're available to any consumer, not just the admin API.
+- Admin API exposes a GET (dry-run preview) and POST (actual delete) at `/admin/api/zones/cleanup/orphaned-exits`.
+- Cleanup routes are registered before the `/:slug` wildcard to prevent Express from swallowing "cleanup" as a slug parameter.
+- Deletions are audit-logged with all removed exit IDs.
+
+**Affected**
+
+- **Lyra / Admin UI**: Can wire a "Clean Orphaned Exits" button against these endpoints.
+- **Vex / Content**: Knows that exits pointing at removed rooms/zones will be detected and removable.
+
+### 2026-03-27T22:44: User directive — Content promotion deferred
+
+**By:** dkirby-ms (via Copilot)  
+**What:** Content promotion system (draft→staging→production lifecycle for game content) is deferred as a future TODO. For now, all content created in the admin tools is considered live content immediately. The existing deploy-routes are effectively dead code — do not invest in fixing them. Code promotion (CI/CD) remains separate and handled by infrastructure.  
+**Why:** User scope decision — keep focus on gameplay features, not content management workflows
+
+### 2026-03-28: MUD Prompt / Status Line
+
+**Author:** Regis  
+**Date:** 2026-03-28  
+**Status:** Implemented
+
+**Decision**
+
+Added a classic MUD-style prompt/status line (`MudPrompt` component) pinned to the bottom of the narrative text scroll area in `ShardExploration`. It shows HP (color-coded), combat stance, active status effects, current room name, and a blinking `>` cursor.
+
+**Details**
+
+- Component: `packages/client/src/components/MudPrompt.tsx`
+- CSS: `.mud-prompt-*` classes in `packages/client/src/styles/tailwind.css`
+- Uses `position: sticky; bottom: 0; z-index: 2` inside the `.narrative-scroll` container
+- Reads all data from AppContext (no new message types needed)
+- Currently shows HP and stance. MP/mana can be added when the server schema includes it.
+
+**Impact**
+
+- **Drizzt:** If mana/MP is added to the game schema and synced to the client, the MudPrompt is ready to display it (just add a field)
+- **Minsc:** Sidebar status-effect tests now use `within()` scoping since MudPrompt also renders effect names

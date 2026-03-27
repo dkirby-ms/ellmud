@@ -169,3 +169,32 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 2. Added 'death' case to handleExtraction switch statement to properly handle server-sent death state
 3. Made "Return to Refuge" button functional by having it call `navigate('/refuge')` instead of a no-op comment
 4. All disconnects (code >= 4000 and < 4000) now trigger reconnection attempt — no false death screen
+
+- **MudPrompt component at `packages/client/src/components/MudPrompt.tsx`:** Classic MUD status line pinned to bottom of narrative scroll. Reads `playerHp`, `playerMaxHp`, `inCombat`, `pendingCombatAction`, `statusEffects`, and `roomHeader.roomName` from AppContext. HP color-coded via CSS classes: green (>60%), yellow (30-60%), red (<30%). Blinking `>` cursor via CSS animation. Uses `position: sticky; bottom: 0` inside the scroll container.
+- **MUD prompt CSS classes in `tailwind.css`:** `.mud-prompt`, `.mud-prompt-bracket`, `.mud-prompt-label`, `.mud-prompt-sep`, `.mud-prompt-hp-*`, `.mud-prompt-ready`, `.mud-prompt-combat`, `.mud-prompt-effect`, `.mud-prompt-room`, `.mud-prompt-cursor`. z-index: 2 to sit above CRT scanline overlay.
+- **Test scoping pattern:** When a component renders the same text in multiple places (sidebar + MudPrompt), use `within(screen.getByTestId('container'))` to scope assertions. Applied to `ux-batch2-combat-sidebar.test.tsx` status effect tests.
+
+---
+
+## MUD Prompt / Status Line Component (2026-03-27)
+
+**Task:** Build a classic MUD-style status line pinned to bottom of narrative scroll, showing HP (color-coded), combat stance, active status effects, current room name, and blinking `>` cursor.
+
+**Outcome:** ✅ SUCCESS — `MudPrompt` component created and integrated into ShardExploration. Sticky positioned inside narrative-scroll container using Tailwind classes. Reads all data from AppContext (no new message types needed). Pre-designed for mana/MP field addition when server schema includes it. Test scope fix in sidebar effect tests prevents false positives. Build clean, all client tests passing.
+
+**Orchestration:** .squad/orchestration-log/2026-03-27T2254-regis.md
+
+**Files Created:**
+- `packages/client/src/components/MudPrompt.tsx`
+
+**Files Modified:**
+- `packages/client/src/styles/tailwind.css`
+- `packages/client/src/components/ShardExploration.tsx`
+- `packages/client/src/__tests__/sidebar.test.ts` (scoping fix)
+
+**Decision Documented:** `.squad/decisions.md` — "2026-03-28: MUD Prompt / Status Line"
+
+## Cross-Team Notes
+
+- **Drizzt (Engine):** If you add mana/MP to the game schema and sync to client, MudPrompt is ready to display it (just add the field to AppContext)
+- **Minsc (Content/Testing):** Your sidebar effect tests now use `within()` scoping to account for effect names appearing in both sidebar and prompt

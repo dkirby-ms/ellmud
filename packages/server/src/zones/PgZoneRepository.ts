@@ -16,6 +16,7 @@ import type {
   ZoneRoomDefinition,
   ZoneExitDefinition,
   ZoneData,
+  OrphanedExitInfo,
 } from './ZoneRepository.js';
 
 // ─── Row types (snake_case from Postgres) ────────────────────────────────────
@@ -345,6 +346,79 @@ export class PgZoneRepository implements ZoneRepository {
 
   async deleteExit(id: string): Promise<void> {
     await query(`DELETE FROM zone_exits WHERE id = $1`, [id]);
+  }
+
+  // ── Orphaned-exit cleanup ────────────────────────────────────────────────
+
+  /**
+   * Single query that finds all orphaned exits across every zone.
+   *
+   * An exit is orphaned when:
+   *  1. from_room_slug doesn't exist in its own zone
+   *  2. Intra-zone: to_room_slug doesn't exist in its own zone
+   *  3. Cross-zone: target zone slug doesn't exist
+   *  4. Cross-zone: target room slug doesn't exist in the target zone
+   */
+  private static readonly FIND_ORPHANED_SQL = `
+    SELECT DISTINCT e.*, reason FROM (
+      -- 1) from_room_slug references a room that doesn't exist
+      SELECT e.*, 'from_room_slug not found in zone' AS reason
+        FROM zone_exits e
+        LEFT JOIN zone_rooms r ON r.zone_id = e.zone_id AND r.slug = e.from_room_slug
+       WHERE r.id IS NULL
+
+      UNION ALL
+
+      -- 2) intra-zone: to_room_slug references a room that doesn't exist
+      SELECT e.*, 'to_room_slug not found in zone (intra-zone)' AS reason
+        FROM zone_exits e
+        LEFT JOIN zone_rooms r ON r.zone_id = e.zone_id AND r.slug = e.to_room_slug
+       WHERE e.target_zone_slug IS NULL
+         AND r.id IS NULL
+
+      UNION ALL
+
+      -- 3) cross-zone: target zone doesn't exist
+      SELECT e.*, 'target zone does not exist' AS reason
+        FROM zone_exits e
+       WHERE e.target_zone_slug IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM zones z WHERE z.slug = e.target_zone_slug)
+
+      UNION ALL
+
+      -- 4) cross-zone: target room doesn't exist in target zone
+      SELECT e.*, 'target room not found in target zone' AS reason
+        FROM zone_exits e
+        JOIN zones tz ON tz.slug = e.target_zone_slug
+       WHERE e.target_zone_slug IS NOT NULL
+         AND e.target_room_slug IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM zone_rooms r WHERE r.zone_id = tz.id AND r.slug = e.target_room_slug
+         )
+    ) e
+    ORDER BY e.zone_id, e.from_room_slug, e.direction
+  `;
+
+  async findOrphanedExits(): Promise<OrphanedExitInfo[]> {
+    const result = await query<ZoneExitRow & { reason: string }>(
+      PgZoneRepository.FIND_ORPHANED_SQL,
+    );
+    return result.rows.map((row) => ({
+      exit: exitRowToEntity(row),
+      reason: row.reason,
+    }));
+  }
+
+  async removeOrphanedExits(): Promise<OrphanedExitInfo[]> {
+    const orphans = await this.findOrphanedExits();
+    if (orphans.length === 0) return [];
+
+    const ids = orphans.map((o) => o.exit.id);
+    await query(
+      `DELETE FROM zone_exits WHERE id = ANY($1::uuid[])`,
+      [ids],
+    );
+    return orphans;
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
