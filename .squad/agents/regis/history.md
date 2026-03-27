@@ -101,3 +101,48 @@
 3. Refuge uses ShardExploration UI (Regis)
 4. Stability bar and collapse timer UI removed (Regis)
 5. Stability bar/collapse timer deprecation (user directive via Drizzt)
+
+## Learnings
+
+- **BFS layout engine lives at `packages/client/src/map/computeLayout.ts`:** Pure function, no React imports. Takes a `Map<string, { exits: Map<string, string> }>` and an entry room ID, returns `Map<string, RoomPosition>` with `(x, y, z)` coords. Used by both player minimap and admin zone designer.
+- **Direction offsets:** north → (0,−1), south → (0,+1), east → (+1,0), west → (−1,0). Up/down change z-layer only, same (x,y). This matches screen convention (y increases downward).
+- **Collision resolution uses spiral search:** When a BFS target cell is occupied, `findNearestUnoccupied()` spirals outward by Manhattan distance to find the closest free cell. Guarantees no two rooms share an (x,y) position.
+- **Disconnected subgraphs get offset placement:** After BFS exhausts the entry component, unplaced rooms are BFS'd from a position offset 3 cells to the right of the current bounding box.
+- **Test file at `packages/client/src/map/__tests__/computeLayout.test.ts`:** 14 tests cover single room, corridor, hub-spoke, 2×2 grid, 3×3 grid, cycles, up/down, collisions, disconnected graphs, unknown exits, and cell uniqueness.
+- **useExplorationMap hook at `packages/client/src/hooks/useExplorationMap.ts`:** Listens for `EXPLORATION_DATA` (bulk) and `EXPLORATION_UPDATE` (single) messages from the Colyseus room. Returns `MapState` with visited rooms, ghost rooms (unvisited adjacent), computed positions, and current room ID. Rebuilds layout via `computeLayout()` on every update.
+- **SVG map components at `packages/client/src/components/map/`:** Four files: `MapRenderer.tsx` (SVG container with viewBox computation, renders edges/ghosts/rooms in correct z-order), `RoomNode.tsx` (circle per room, colored by type, glow on current), `ExitEdge.tsx` (line between connected rooms), `GhostRoom.tsx` (dashed outline for unvisited adjacent rooms). Shared constants in `constants.ts` (`CELL_SIZE=60`, room type color map).
+- **ExploredRoomData exits are `Record<string, string>`:** Not `Map`. The shared type uses a plain object for JSON serialization. The hook converts to `Map(Object.entries(...))` when feeding into `computeLayout`.
+- **Colyseus SDK has no `removeMessageHandler`:** Cleanup happens implicitly on `room.leave()`. The useEffect cleanup comment documents this.
+- **ZoneDesigner component (interactive):** `packages/client/src/pages/admin/ZoneDesigner.tsx` — full CRUD SVG canvas for zone rooms and exits. Toolbar: Add Room (modal form), Connect (click-to-connect mode with bidirectional helper), Portal (inter-zone exit creation via zone/room dropdowns). Side panel for room editing (name, type, description) and exit details/delete. Validation overlay: disconnected rooms (⚠ yellow), no entry room warning, missing reverse exits (dashed ghost lines). Props: `zoneId`, `onZoneChanged` callback for parent refetch. Uses `zone-api.ts` functions directly. ~800 lines.
+- **Zone-api types use `string` not shared enums:** `ZoneRoomDefinition.type` is `string` (not `RoomType`), `ZoneExitDefinition.direction` is `string` (not `Direction`). Keep this in mind when consuming zone-api types — use string-based checks, not shared type imports.
+- **Admin tab pattern in ZonesDetail:** `Tab` union type + `activeTab` state + `tabs[]` array rendered as bottom-bordered buttons. Content switched via `{activeTab === "x" && (...)}` conditionals. Adding a tab = extend union, add array entry, add content block.
+- **MinimapWidget + FullMapOverlay built:** Standalone components at `packages/client/src/components/map/`. MinimapWidget wraps `MapRenderer compact={true}` in a 200×200 container with expand button. FullMapOverlay is a z-50 fixed overlay with backdrop blur, Escape key close, matching InventoryOverlay/ExtractionOverlay patterns. CSS in `map.css`. `useMapToggle` hook at `packages/client/src/hooks/useMapToggle.ts` handles M-key binding (skips when typing in inputs). Now wired into ShardExploration (see below).
+- **Map integration into ShardExploration:** `useExplorationMap(roomRef.current)` and `useMapToggle()` added to component body. MinimapWidget sits below CompassControl in the sidebar. FullMapOverlay renders before ExtractionOverlay in DOM order so extraction/reconnection overlays stack above the map. Test mock for `ux-batch2-combat-sidebar.test.tsx` updated to include `roomRef`, `useExplorationMap`, and `useMapToggle` mocks.
+- **Designer connect mode pattern:** When a room is selected, clicking "Connect" enters connect mode (dashed border on source, crosshair cursor on targets). Clicking a target room opens a side panel with inferred direction (from relative grid position) and a bidirectional checkbox (default: checked). Direction inference uses `inferDirection()` — compares dx/dy of layout positions, majority axis wins (east/west for horizontal, north/south for vertical). Bidirectional creates both A→B and B→A (reverse direction from OPPOSITE map) in two sequential API calls.
+- **Designer validation is visual-only:** Three warning types computed in `useMemo` from rooms/exits: no entry room, disconnected rooms (no exits touching them), one-way exits (A→B exists but B→A doesn't). Disconnected rooms get yellow ⚠ stroke + badge. One-way exits get amber stroke + dashed ghost line showing the missing reverse. Warning bar at bottom of designer with AlertTriangle icon. None of these block saves.
+- **Portal exits use `toRoomSlug: fromRoomSlug`:** For inter-zone exits, the `toRoomSlug` field is set to the same room as `fromRoomSlug` since the real destination is in `targetZoneSlug`/`targetRoomSlug`. The portal dialog fetches all zones via `listZones()`, then loads the target zone's rooms via `getZone(slug)` for the room dropdown.
+- **Designer manages its own selection state:** No longer delegates to parent via `selectedRoomSlug`/`selectedExitId` props. Internal `selectedRoom`/`selectedExit` state drives the side panel and mode logic. `onRoomSelect`/`onExitSelect` callbacks are still available for external notification but optional.
+
+---
+
+## Team Sync — 2026-03-27T19:11:50Z (Exploration Phase Complete)
+
+### Phase Completion
+All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
+
+### Drizzt Integration
+- Exploration message protocol (EXPLORATION_DATA / EXPLORATION_UPDATE) fully wired into ShardRoom
+- authPlayerIds fix ensures DB writes use auth UUID, not characterId
+- Exploration recording fires at join, go, flee with fire-and-forget pattern
+- Shard mode sends empty prior visits (ephemeral), zone mode loads from DB
+- No exploration messages impact room stability
+
+### Minsc Testing
+- 18 exploration message tests in `exploration-messages.test.ts`
+- Coverage: M1–M8 categories including bulk/single payloads, zone vs shard modes, duplicate upserts
+- Pattern established for future message tests (MessageCollector doesn't capture exploration yet)
+
+### Decision Archive
+- 8 new decisions merged from inbox to decisions.md (deduplicated)
+- Inbox directory cleared
+- Full decision trail available for team reference

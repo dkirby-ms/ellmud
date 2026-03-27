@@ -2117,3 +2117,54 @@ Zone engine now has a single, unified room abstraction (ShardRoom) replacing the
 3. Refuge uses ShardExploration UI (Regis)
 4. Stability bar and collapse timer UI removed (Regis)
 5. Stability bar/collapse timer deprecation (user directive via Regis)
+
+---
+
+## Session: Add Exploration Message Types
+
+**Date:** $(date +%Y-%m-%d)
+**Task:** Add `EXPLORATION_DATA` and `EXPLORATION_UPDATE` to `@ellmud/shared` message protocol.
+
+### What was done
+- Added two new Server → Client message type keys to `MessageTypes` const in `packages/shared/src/index.ts`:
+  - `EXPLORATION_DATA = 'exploration_data'` — bulk room history sent on join
+  - `EXPLORATION_UPDATE = 'exploration_update'` — single room update on entry
+- Added three new interfaces:
+  - `ExploredRoomData` — wire-format for a visited room (roomId, zoneSlug, visitedAt, roomName, roomType, exits)
+  - `ExplorationDataMessage` — bulk payload with `rooms[]` and `currentRoomId`
+  - `ExplorationUpdateMessage` — single room payload
+- All types exported from barrel `index.ts` — no separate file needed since they're small.
+- Full build (tsc + vite) passes. Lint clean (only pre-existing warning in items.ts).
+
+### Learnings
+- `MessageTypes` is a `const` object (not a TS enum) at `packages/shared/src/index.ts:216`.
+- All shared types live in `packages/shared/src/index.ts` (731+ lines); no separate messages file exists.
+- Convention: message interfaces use `typeof MessageTypes.X` for their `type` field discriminant.
+- `ExploredRoom` in the server's `ExplorationRepository.ts` is a persistence-layer type (has `characterId`, `visitCount`, dates as `Date`). The new `ExploredRoomData` is the wire-format equivalent (ISO string timestamps, `exits` map, no character ID).
+- **Exploration wiring pattern:** `recordExploration()` resolves `authPlayerIds` for DB persistence (same pattern as `savePlayerProfile`/`recordRunHistory`). `sendExplorationUpdate()` and `sendExplorationData()` are fire-and-forget with try/catch — exploration should never crash the room.
+- **Three room transition sites** that need exploration recording: (1) onJoin initial room, (2) command-driven movement (`go`), (3) flee from combat. All three now record visits + send EXPLORATION_UPDATE.
+- **Bulk exploration data on join:** For zones, loads prior visits via `getExploredRoomsInZone`. Procedural shards get an empty array (ephemeral). Current room is always included even if the async record hasn't persisted yet.
+- **Flee handler gap:** The flee handler (combat tick processing) was missing exploration recording — now fixed alongside this wiring task.
+
+---
+
+## Team Sync — 2026-03-27T19:11:50Z (Exploration Phase Complete)
+
+### Phase Completion
+All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
+
+### Regis Integration
+- Player-facing map rendering complete via `useExplorationMap` hook + SVG components (MapRenderer, RoomNode, ExitEdge, GhostRoom)
+- Admin zone designer built with full CRUD (rooms, exits, inter-zone portals) + validation overlay
+- MinimapWidget + FullMapOverlay wired into ShardExploration for in-game visibility
+- Map UI tested via existing test suite (no new tests, existing tests mocked)
+
+### Minsc Testing
+- 18 exploration message tests in `exploration-messages.test.ts`
+- Coverage: M1–M8 categories including bulk/single payloads, zone vs shard modes, duplicate upserts
+- Pattern established for future message tests (MessageCollector doesn't capture exploration yet)
+
+### Decision Archive
+- 8 new decisions merged from inbox to decisions.md (deduplicated)
+- Inbox directory cleared
+- Full decision trail available for team reference

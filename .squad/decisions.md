@@ -5719,3 +5719,224 @@ When multi-character support is fully implemented:
 - **Jarlaxle (Systems Dev):** Character creation flow can use this pattern — store auth player UUID separately from game state character ID.
 - **Volo (Narrative Dev):** Exploration tracking (character_explored_rooms) is fully functional for narrative context.
 - **Minsc (QA):** All 2239 tests pass. No new test coverage needed (existing tests validate the fix).
+
+---
+
+## 2026-03-28: BFS Layout Engine Design
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-03-28  
+**Status:** Implemented
+
+### Context
+
+The map UI (player minimap + admin zone designer) needs spatial coordinates for room graphs. Rooms have directional exits (north/south/east/west/up/down) but no inherent positions.
+
+### Decision
+
+Created a pure BFS layout engine at `packages/client/src/map/computeLayout.ts` with these design choices:
+
+1. **Direction-aware placement:** Cardinal directions map to 2D offsets (north = y−1, south = y+1, east = x+1, west = x−1). Up/down only change z-layer, keeping the same (x,y) — z is a badge for UI, not a spatial dimension.
+
+2. **Spiral collision resolution:** When two exits converge on the same cell, a Manhattan-distance spiral finds the nearest free cell. This guarantees no overlapping rooms.
+
+3. **Disconnected subgraph handling:** After BFS from the entry room, any unplaced rooms get a fresh BFS offset 3 cells to the right of the current bounding box.
+
+4. **Framework-agnostic:** No React, no side effects. Returns a plain `Map<string, RoomPosition>`. Usable by both the SVG minimap renderer and the admin zone designer canvas.
+
+### Impact
+
+- Player map and admin zone designer can share this layout function
+- The `LayoutRoom` input type is intentionally minimal (`{ exits: Map<string, string> }`) so it works with both server-shaped room graphs and simplified client data
+- 14 unit tests covering all edge cases (grids, cycles, up/down, collisions, disconnected graphs)
+
+---
+
+## 2026-03-28: Exploration Map Message Protocol
+
+**Author:** Drizzt (Engine Dev)
+**Date:** 2025-07-15 (Finalized 2026-03-28)
+**Status:** Implemented
+
+### Context
+
+The client needs to render a map of rooms the player has visited. The server already persists exploration data via `ExplorationRepository`, but there was no wire protocol to send this data to the client.
+
+### Decision
+
+Added two new message types to `@ellmud/shared`:
+
+- **`EXPLORATION_DATA`** (`exploration_data`) — Bulk payload of all previously visited rooms, sent once on join. Contains `rooms: ExploredRoomData[]` and `currentRoomId`.
+- **`EXPLORATION_UPDATE`** (`exploration_update`) — Single room update, sent each time the player enters a room. Contains `room: ExploredRoomData`.
+
+#### Wire format (`ExploredRoomData`)
+
+```typescript
+{
+  roomId: string;
+  zoneSlug: string | null;
+  visitedAt: string;       // ISO timestamp
+  roomName: string;
+  roomType: string;
+  exits: Record<string, string>;  // direction → targetRoomId
+}
+```
+
+### Rationale
+
+- **Separation from persistence type:** `ExploredRoom` (server-side) carries `characterId`, `visitCount`, `Date` objects. The wire type `ExploredRoomData` is leaner — only what the client needs for map rendering.
+- **Bulk + incremental pattern:** Matches the existing `STASH_UPDATE` / `LOADOUT_UPDATE` pattern — full state on join, deltas on change.
+- **`exits` map on the wire:** The client needs the room graph topology to lay out the map via BFS. Sending exits avoids a second round-trip.
+
+### Implementation Notes
+
+- **Exploration recording uses authPlayerIds:** Both `recordVisit()` calls and `getExploredRoomsInZone()` queries resolve through `this.authPlayerIds.get(playerId) || playerId` before hitting the repository. This matches the pattern established by `savePlayerProfile()` and `recordRunHistory()`.
+- **Message sending:** `EXPLORATION_DATA` (bulk) sent once on join — loads prior zone visits + ensures current room is included. `EXPLORATION_UPDATE` (single room) sent on every room entry: go command, flee, initial join.
+- **Error handling:** Both messages are fire-and-forget with try/catch — exploration never crashes the room.
+- **Shard vs Zone behavior:** Procedural shards send empty prior visits (ephemeral); zones load from DB.
+
+### Impact
+
+- Server handlers wire exploration message sending at 3 room-transition sites (join, go, flee)
+- Client-side consumption via `useExplorationMap` hook that consumes Colyseus messages
+- No breaking changes to existing messages
+
+### Related Files
+
+- `packages/shared/src/index.ts` — EXPLORATION_DATA, EXPLORATION_UPDATE message types
+- `packages/server/src/rooms/ShardRoom.ts` — message wiring + authPlayerIds mapping
+- `packages/server/src/exploration/PgExplorationRepository.ts` — ON CONFLICT syntax fix
+
+---
+
+## 2026-03-27: Player Map Components — useExplorationMap + SVG Rendering
+
+**By:** Regis (Frontend Dev)  
+**Date:** 2026-03-27  
+**Status:** Implemented
+
+### What
+
+- `useExplorationMap` hook listens for `EXPLORATION_DATA` and `EXPLORATION_UPDATE` Colyseus messages, maintains a `MapState` of visited rooms, ghost rooms (unvisited adjacent), BFS-computed positions, and current room ID.
+- SVG map components in `packages/client/src/components/map/`: `MapRenderer` (container with dynamic viewBox), `RoomNode` (colored by room type, glow on current), `ExitEdge` (muted lines between rooms), `GhostRoom` (dashed outlines at opacity 0.3).
+- Shared `constants.ts` defines `CELL_SIZE = 60`, room type color map, and node sizes for compact/full modes.
+- `compact` prop on MapRenderer/RoomNode/GhostRoom toggles between minimap (small nodes, no labels) and full overlay (labels, larger nodes).
+
+### Why
+
+- Delivers the player-facing map rendering layer. The hook + components are ready to be consumed by a MinimapWidget (sidebar) and a FullMapOverlay.
+- Ghost rooms give players directional awareness of unvisited paths without revealing the full graph.
+
+### Conventions Established
+
+- Room type → color mapping is centralized in `constants.ts`, not scattered across components.
+- `ExploredRoomData.exits` is `Record<string, string>` (JSON-friendly); the hook converts to `Map` for `computeLayout`.
+- Colyseus message cleanup relies on `room.leave()` since SDK doesn't expose `removeMessageHandler`.
+
+---
+
+## 2026-03-27: Map Components Integration into ShardExploration
+
+**By:** Regis (Frontend)  
+**Date:** 2026-03-27  
+**Status:** Complete
+
+### Decision
+
+MinimapWidget and FullMapOverlay are now rendered in ShardExploration alongside existing UI. CompassControl is kept for now — minimap sits below it in the sidebar.
+
+### Details
+
+- `useExplorationMap(roomRef.current)` consumes the Colyseus room ref directly. Re-renders from `useShardConnection` state changes ensure the hook picks up new room instances on connect/reconnect.
+- `useMapToggle()` provides M-key toggle state.
+- FullMapOverlay renders **before** ExtractionOverlay and ReconnectionOverlay in DOM order, so critical game overlays always stack above the map (all are z-50).
+- Test file `ux-batch2-combat-sidebar.test.tsx` updated with mocks for `useExplorationMap` and `useMapToggle`, plus `roomRef: { current: null }` added to the `useShardConnection` mock.
+
+### Files Modified
+
+- `packages/client/src/pages/ShardExploration.tsx` — imports + hooks + MinimapWidget in sidebar + FullMapOverlay at overlay level
+- `packages/client/src/__tests__/ux-batch2-combat-sidebar.test.tsx` — mock updates
+
+### Verification
+
+- Build: ✅ Clean
+- Lint: ✅ Clean
+- Tests: ✅ 103 files, 2271 passed
+
+---
+
+## 2026-03-28: Zone Designer — Read-Only SVG Canvas
+
+**Author:** Regis  
+**Date:** 2026-03-27  
+**Status:** Implemented
+
+### Context
+
+The admin zone editor needed a visual representation of zone room graphs. The BFS layout engine (`computeLayout.ts`) already existed.
+
+### Decision
+
+- Created `ZoneDesigner.tsx` as a read-only SVG visualization component in the admin pages directory.
+- Added it as a 4th "Designer" tab in `ZonesDetail.tsx` alongside General/Rooms/Exits.
+- Wrote `zoneToLayoutInput()` helper to convert zone-api arrays (`rooms[]`, `exits[]`) into the `Map<string, LayoutRoom>` format that `computeLayout()` expects. Inter-zone exits are excluded from the layout graph since their targets aren't in the local room set.
+- Room colors follow the MUD admin color palette (green=entry, blue=extraction, red=boss, teal=junction, gray=corridor, purple=feature).
+- Inter-zone exits are shown as ⊕ portal icons with tooltip showing target zone/room.
+- Clicking a room switches to the Rooms tab; clicking an exit switches to the Exits tab.
+- The component is explicitly read-only — drag-to-add interactions deferred to a future task.
+
+### Impact
+
+- **Regis:** Owns this component going forward. Future work: drag-and-drop room placement, editable edges.
+- **Team:** No server or shared changes needed — this is purely client-side admin UI.
+
+---
+
+## 2026-03-28: ZoneDesigner — Full CRUD + Validation
+
+**By:** Regis (Frontend Dev)  
+**Date:** 2026-03-28  
+**Status:** Implemented
+
+### What
+
+- ZoneDesigner now supports Room CRUD (add via modal, edit via side panel, delete with confirm), Exit CRUD (connect mode with click-to-connect, bidirectional helper, direction auto-inference from layout position), and inter-zone Portal creation (zone/room cascading dropdowns).
+- Validation overlay highlights: disconnected rooms (yellow ⚠), missing entry room (warning banner), one-way exits (dashed amber ghost lines for missing reverse).
+- Designer manages its own selection state. ZonesDetail passes `zoneId` + `onZoneChanged` callback for refetch after mutations.
+- Props interface changed: `zoneId: string | null` and `onZoneChanged?: () => void` added. `selectedRoomSlug`/`selectedExitId` props removed (designer handles its own state).
+
+### Why
+
+- Admin workflow required switching between Designer and Rooms/Exits tabs to make changes. Now all CRUD happens visually in the designer canvas, reducing context-switching.
+- Validation overlay catches common mistakes (disconnected rooms, missing entry, one-way exits) before deploy.
+
+### Impact
+
+- ZonesDetail designer tab integration simplified (no more tab-switching callbacks).
+- zone-api.ts functions (`listZones`, `getZone`, `createRoom`, `updateRoom`, `deleteRoom`, `createExit`, `deleteExit`) now imported by ZoneDesigner directly.
+
+---
+
+## 2026-03-27: Exploration Message Test Patterns
+
+**Author:** Minsc (Tester)
+**Date:** 2026-03-27  
+**Status:** Implemented
+
+### Context
+
+Phase D wired exploration (EXPLORATION_DATA, EXPLORATION_UPDATE) into ShardRoom. Tests needed for client-facing messages, not just repo recording (which exploration-integration.test.ts already covers).
+
+### Decision
+
+Created `exploration-messages.test.ts` with 18 tests across 8 categories (M1–M8) covering:
+- EXPLORATION_DATA bulk payload on join (shape, currentRoomId, rooms array)
+- EXPLORATION_UPDATE single-room payload on movement (roomId, roomName, exits, roomType)
+- recordVisit called correctly on join and movement
+- Zone mode (zoneSlug present) vs shard mode (zoneSlug null)
+- Flee exploration recording
+- Duplicate visit upsert (no crashes, no duplicate records)
+
+### Pattern Note
+
+MessageCollector does NOT capture exploration messages. Tests wire up `client.onMessage(MessageTypes.EXPLORATION_DATA, ...)` directly. If exploration messages become common in other tests, consider extending MessageCollector.

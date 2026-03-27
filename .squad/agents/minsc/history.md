@@ -1257,3 +1257,34 @@ Unified room architecture is now complete. The zone engine operates on a single,
 - Zone-mode ShardRoom sends shard_state messages (old RefugeRoom did not)
 - `take` command in zone rooms operates on room floor items, NOT on stash items — stash is managed via structured STASH_UPDATE messages
 - `connectTestClient()` roomType parameter should be `string` (not union literal) when multiple room modes share same type name
+
+## Learnings — Exploration Messages Tests (Phase D)
+
+- **Exploration message capture pattern:** MessageCollector doesn't handle EXPLORATION_DATA/EXPLORATION_UPDATE. Capture via `client.onMessage(MessageTypes.EXPLORATION_DATA, ...)` alongside the collector.
+- **Zone vs Shard mode testing:** Zone mode uses `{ zoneSlug: 'slug' }`, shard mode uses `{ useTestGraph: true, collapseTimer: 120 }`. Zone data includes zoneSlug string; shard data has null zoneSlug.
+- **Shard mode movement:** Use EXPLORATION_DATA from join to discover exits from starting room (exits are procedurally generated), then `go <direction>` to test movement.
+- **Flee testing at integration level:** Combat flee is resolved in the tick loop via `combatSystem.resolveTick()` → `deliverCombatResults()`. Testing flee exploration at integration level requires a creature to be present — not guaranteed in test graphs, so test defensively.
+- **Test file:** `packages/server/src/__tests__/exploration-messages.test.ts` — 18 tests covering M1-M8 (join data, movement updates, recordVisit, zone/shard modes, flee, duplicates).
+
+---
+
+## Team Sync — 2026-03-27T19:11:50Z (Exploration Phase Complete)
+
+### Phase Completion
+All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
+
+### Regis Integration
+- Player-facing map rendering complete via `useExplorationMap` hook + SVG components (MapRenderer, RoomNode, ExitEdge, GhostRoom)
+- Admin zone designer built with full CRUD (rooms, exits, inter-zone portals) + validation overlay
+- MinimapWidget + FullMapOverlay wired into ShardExploration for in-game visibility
+
+### Drizzt Integration
+- Exploration message protocol (EXPLORATION_DATA / EXPLORATION_UPDATE) fully wired into ShardRoom
+- authPlayerIds fix ensures DB writes use auth UUID, not characterId
+- Exploration recording fires at join, go, flee with fire-and-forget pattern
+- Shard mode sends empty prior visits (ephemeral), zone mode loads from DB
+
+### Decision Archive
+- 8 new decisions merged from inbox to decisions.md (deduplicated)
+- Inbox directory cleared
+- Full decision trail available for team reference
