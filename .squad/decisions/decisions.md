@@ -2618,3 +2618,30 @@ Zone unification Phase 1 required adding feature room types to the shared `RoomT
 - **Jarlaxle:** New biomes must include entries for all feature room types in `ROOM_NAMES` / `ROOM_DESCRIPTIONS` Records
 - **All agents:** Import `isFeatureRoomType` / `getFeatureKey` from `@ellmud/shared` — don't roll your own prefix checks
 - **Future:** Phase 2 will wire these types into zone definitions and room rendering
+
+---
+
+## 2026-03-27: User Directive — Unified Room Class
+**By:** dkirby-ms (via Copilot)
+
+### What
+
+Unify `ShardRoom` and `RefugeRoom` into a single room class. All rooms are just "rooms" — zone rooms (statically defined in DB) and generated rooms (procedurally created for shards). No separate Colyseus room types. Extend `ShardRoom` to handle everything, migrate `RefugeRoom` functionality into it, then delete `RefugeRoom`.
+
+### Why
+
+User request — the two-room-class split creates unnecessary complexity and divergent UX. Systems (combat, stash, ambient) should be composable and enabled per-zone/room config, not per-class.
+
+---
+
+## 2026-03-27: User Directive — Explored Rooms / Character Map
+**By:** dkirby-ms (via Copilot)
+
+### What
+
+Prepare for a future "explored rooms" feature: per-character map data that tracks which rooms a player has visited, enabling a visual map of explored areas. This should be designed into the data model now even if the UI comes later.
+
+### Why
+
+User request — forward-looking design. The unified room system should lay groundwork for character-specific exploration tracking.
+
