@@ -252,10 +252,10 @@ export class PgZoneRepository implements ZoneRepository {
         room.name,
         room.description,
         room.type,
-        room.properties,
-        JSON.stringify(room.lootContainers),
-        JSON.stringify(room.hazards),
-        JSON.stringify(room.npcs),
+        room.properties ?? JSON.stringify([]),
+        JSON.stringify(room.lootContainers ?? []),
+        JSON.stringify(room.hazards ?? []),
+        JSON.stringify(room.npcs ?? []),
       ],
     );
     return roomRowToEntity(result.rows[0]);

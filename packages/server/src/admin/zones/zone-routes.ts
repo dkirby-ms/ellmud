@@ -271,10 +271,17 @@ export function createZoneRouter(): Router {
       }
 
       const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = data;
-      const created = await repo.createRoom({
+      const roomData = {
+        properties: [],
+        lootContainers: [],
+        hazards: [],
+        npcs: [],
         ...rest,
         zoneId: req.params.id,
-      } as Parameters<typeof repo.createRoom>[0]);
+      };
+      const created = await repo.createRoom(
+        roomData as unknown as Parameters<typeof repo.createRoom>[0],
+      );
 
       await logAuditEvent({
         action: 'create',
