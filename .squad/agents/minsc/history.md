@@ -1192,6 +1192,28 @@ Faction data existed in two places: `factions` table (relational, canonical, wit
 - Zone room registration with `zone:{slug}` prefix works with Colyseus `server.define()` — rooms coexist on same server
 - Extraction ROOM_SWITCH is hard to test in isolation (requires ExtractionSystem + extraction room type) — contract-shape tests are more reliable
 - `resetExplorationProvider()` resets the singleton to null; `getExplorationRepository()` auto-creates InMemory on next call
+- Zone-mode ShardRoom room header uses individual room names (e.g., "The Hearth"), not zone name ("Refuge")
+- Zone-mode ShardRoom sends STASH_UPDATE + LOADOUT_UPDATE structured messages on join (not NARRATE text like old RefugeRoom)
+- Zone-mode ShardRoom sends shard_state messages (old RefugeRoom did not)
+- `take` command in zone rooms operates on room floor items, NOT on stash items — stash is managed via structured STASH_UPDATE messages
+- `connectTestClient()` roomType parameter should be `string` (not union literal) when multiple room modes share same type name
+
+---
+
+## 2026-03-27T16:04Z — Phase E4 Complete + Unified Room Architecture Achieved
+
+**Status:** ✅ COMPLETE — All test migrations done, 2243 tests passing
+
+**Parallel Agents:** drizzt-phase-e (Engine Dev) + minsc-phase-e (Tester)
+
+**E4 Phase Summary:** Migrated 12 test files from RefugeRoom to zone-mode ShardRoom
+- **Files updated:** test-client.ts, refuge.test.ts, auth.test.ts, stash-wiring.test.ts, commands.test.ts, rooms.test.ts, edge-cases.test.ts, player-identity-handoff.test.ts, loadout-integration.test.ts, message-protocol.test.ts, room-switching.test.ts, plus comment-only updates across 6 additional files
+- **Test count:** 2243 tests across 101 files
+- **Regressions:** 0
+- **RefugeRoom imports:** 0 (fully eliminated)
+
+**What This Means:**
+Unified room architecture is now complete. The zone engine operates on a single, canonical room abstraction (ShardRoom), eliminating the complexity and maintenance burden of the dual-room system. All game logic, state management, and test coverage now flow through ShardRoom.
 
 ## 2026-03-27T15:39Z — Phase C+D Testing Complete
 
@@ -1209,3 +1231,29 @@ Faction data existed in two places: `factions` table (relational, canonical, wit
 - Exploration visit recording
 - Room entry/movement tracking
 
+
+## Phase E4 — Migrate ALL Test Files from RefugeRoom to Zone ShardRoom (2026-03-27)
+
+**Status:** ✅ Complete — 101 test files passing, 2243 tests green
+
+**Migration Summary:**
+- **test-client.ts** (shared helper): Removed RefugeRoom import/define; roomType param widened to `string`
+- **refuge.test.ts**: 9 tests rewritten → `createRoom('shard', { zoneSlug: 'the-refuge' })`
+- **auth.test.ts**: Removed RefugeRoom import/define; zone join test uses zoneSlug
+- **stash-wiring.test.ts**: 5 tests rewritten — STASH_UPDATE structured messages replace NARRATE text
+- **commands.test.ts**: Removed RefugeRoom import/define
+- **rooms.test.ts**: RefugeRoom describe block → zone ShardRoom tests
+- **edge-cases.test.ts**: RefugeRoom edge cases → zone ShardRoom edge cases
+- **player-identity-handoff.test.ts**: RefugeRoom identity tests → zone ShardRoom identity tests
+- **loadout-integration.test.ts**: All 'refuge' room references → zone ShardRoom
+- **message-protocol.test.ts**: Zone join test updated (zone ShardRoom sends shard_state)
+- **room-switching.test.ts**: All 8 'refuge' room references → zone ShardRoom with zoneSlug
+- **Comment-only updates**: shardroom-zone-mode, loadout-shard, shardroom-player-id, phase2-qa, wave4-stash-wiring, stash.test.ts
+
+## Learnings
+
+- Zone-mode ShardRoom room header uses individual room names (e.g., "The Hearth"), not zone name ("Refuge")
+- Zone-mode ShardRoom sends STASH_UPDATE + LOADOUT_UPDATE structured messages on join (not NARRATE text like old RefugeRoom)
+- Zone-mode ShardRoom sends shard_state messages (old RefugeRoom did not)
+- `take` command in zone rooms operates on room floor items, NOT on stash items — stash is managed via structured STASH_UPDATE messages
+- `connectTestClient()` roomType parameter should be `string` (not union literal) when multiple room modes share same type name

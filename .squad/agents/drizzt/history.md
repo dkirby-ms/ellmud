@@ -2000,3 +2000,48 @@ When a game table already exists with relational structure and FK constraints (l
 
 **Next:** Prepare for Phase E (RefugeRoom cleanup) after merge.
 
+
+### Phase E — Core Cleanup (E1-E3) — 2026-03-27
+
+**Task:** Delete RefugeRoom dead code after ShardRoom fully absorbed all its capabilities.
+
+**E1: Deleted RefugeRoom.ts**
+- Removed `packages/server/src/rooms/RefugeRoom.ts` entirely.
+
+**E2: Removed RefugeState from state.ts**
+- Deleted `RefugeState` class and its `defineTypes` call from `packages/server/src/state.ts`.
+- `ShardState` and all imports remain intact (Schema/defineTypes still needed by ShardState).
+
+**E3: Updated exports and references**
+- `packages/server/src/rooms/index.ts` — Removed `RefugeRoom` re-export.
+- `packages/server/src/rooms/ShardRoom.ts` — Cleaned two comments referencing RefugeRoom (lines ~2135, ~2191).
+- `packages/server/src/systems/AmbientSystem.ts` — Updated comment from "Called from RefugeRoom's" to "Called from ShardRoom's" (line ~164).
+- `packages/server/src/index.ts` — Verified clean; RefugeRoom import was already removed in Phase C4.
+
+**Build verification:** 0 non-test compilation errors. 6 test-file errors remain (all in `__tests__/`) — Minsc is handling those in parallel.
+
+## Learnings
+
+- After deleting a module, always grep non-test source for both the class name AND the state class (RefugeRoom + RefugeState) to catch stale references.
+- Comment-only cleanups are worth doing during dead-code removal — stale references in comments create confusion during future code archaeology.
+
+---
+
+## 2026-03-27T16:04Z — Phase E Complete + Unified Room Architecture Achieved
+
+**Status:** ✅ COMPLETE — Non-test code compiles clean
+
+**Parallel Agents:** drizzt-phase-e (Engine Dev) + minsc-phase-e (Tester)
+
+**Outcome:** Unified Room Architecture milestone achieved. ShardRoom is the single canonical room implementation.
+
+**Key Results:**
+- Non-test code: 0 compilation errors
+- Test suite: 2243 tests passing (101 files)
+- RefugeRoom: Fully eliminated from codebase
+- RefugeState: Removed from state model
+- Exports/imports: All cleaned, no stale references
+- Comments: Updated to remove RefugeRoom references
+
+**What This Means:**
+Zone engine now has a single, unified room abstraction (ShardRoom) replacing the previous dual-room system (RefugeRoom + ShardRoom). This simplifies code paths, reduces maintenance burden, and provides a solid foundation for future zone expansion.
