@@ -5521,3 +5521,201 @@ The `character_explored_rooms` table already tracks per-character exploration wi
 
 **Test Update:** `shardroom-zone-mode.test.ts` updated to verify ambient in dungeon zones.
 
+
+### 2026-03-27T16:32Z: User directive - Stability bar and collapse timer deprecated
+**By:** dkirby-ms (via Copilot)
+**What:** Stability bar and collapse timer UI are deprecated. Not needed now that zones are static. Remove from ShardExploration.
+**Why:** User request — zones are persistent, no collapse risk. Removal simplifies UI and reduces unnecessary server-side state tracking.
+
+### 2026-03-27T17:27Z: Stability bar and collapse timer removed from ShardExploration UI
+**By:** Regis (Frontend Dev)
+**Date:** 2026-03-27
+**Status:** Implemented
+
+**What**
+Removed all UI rendering and related client-side computed state (`stability`, `collapseTime`, `collapseTimerMax`, `getCollapseColor`, `formatTime`) from `ShardExploration.tsx`. The `useCountdown` import was also removed since it was only used for the collapse timer.
+
+**Rationale**
+- User directive: these features not needed for any context (zones are persistent, shards have different exit strategy now)
+- Zones are stable environments; collapse timer is a shard mechanic
+- Simplifies exploration UI, reduces complexity
+
+**Preserved**
+Server-side message handling and state in `useShardConnection.ts` (`collapseTimer`, `collapseTimerMax`, `shardState`, `stability` on `roomHeader`). The server still sends these values; they're just not rendered. Server-side cleanup can happen separately.
+
+**Impact**
+- `ShardExploration.tsx` is simpler — sidebar no longer has the Collapse Timer section, room header no longer has the Shard Stability bar.
+- If these features are ever re-introduced, the hook state is still there; only UI needs to be rebuilt.
+
+### 2026-03-27T17:28Z: Refuge uses ShardExploration UI (unified exploration)
+**By:** Regis (Frontend Dev)
+**Date:** 2026-03-27
+**Status:** Implemented
+
+**What**
+The server-side refuge is now a zone-mode ShardRoom (`zone:the-refuge`). The client now routes `/refuge` to `ShardExploration` (same component as shard exploration) instead of the old tab-based `Refuge.tsx` hub.
+
+**Implementation Details**
+- `/refuge` route now renders `ShardExploration` component
+- `useShardConnection` accepts optional `roomName` parameter (default: `'shard'`)
+- When navigating to `/refuge`, it connects to `zone:the-refuge`
+- `ShardExploration` derives zone mode from `useLocation().pathname === '/refuge'`
+- In zone mode:
+  - "Back to Refuge" button is hidden (you're already there)
+  - Shard Stability bar and Collapse Timer are hidden (zones don't collapse)
+  - Chat context is `"refuge"` instead of `"shard"`
+  - Equipment overlay passes `inShard={false}`
+
+**Rationale**
+- Unifies exploration experience across zones and shards
+- Reuses mature ShardExploration UI instead of maintaining separate tab-based hub
+- Server-side refuge as zone simplifies architecture (one room type for persistent spaces)
+
+**Impact**
+- All team members: `/refuge` is now the MUD exploration UI, not the old tab hub
+- Server team: No server changes needed (refuge already implemented as zone ShardRoom)
+- Stash/loadout/shardboard: Accessible via text commands in zone rooms (already wired in Phase B)
+- `Refuge.tsx` is preserved but no longer routed — available for future cleanup
+
+### 2026-03-27T17:35Z: Client Room Switch and Navigation Pattern
+**By:** Regis (Frontend Dev)
+**Date:** 2026-03-27
+**Status:** Implemented
+
+**What**
+When the server sends a `ROOM_SWITCH` message (especially to refuge):
+1. The `onRoomSwitch` handler in `useShardConnection.ts` should **navigate** after successful room switch
+2. Client UI buttons (like "Return to Refuge" in ExtractionOverlay) should **not** call `navigate()` directly
+3. Server-driven room switches always include navigation coordination - client buttons are informational only
+
+**Rationale**
+- **Problem:** Client-side `navigate()` calls race with server ROOM_SWITCH messages, causing:
+  - URL and Colyseus room to become desynchronized
+  - `isZone` derived state to be incorrect (stays false even when connected to `zone:the-refuge`)
+  - Zone-specific UI adjustments to not trigger
+- **Solution:** Single source of truth for navigation is the `onRoomSwitch` handler. It:
+  - Switches the Colyseus connection via `switchRoom()`
+  - Calls `navigate()` after successful switch when target is refuge
+  - Prevents race conditions with server messages
+
+**Double-connect Guard**
+The connection useEffect checks if `roomRef.current.name === roomName` before connecting. After navigating to `/refuge`, the component re-renders with `roomName='zone:the-refuge'`, but the room is already connected, so the guard prevents double-connect.
+
+**Implementation**
+```typescript
+// useShardConnection.ts - onRoomSwitch handler
+if (switchingToRefuge) {
+  // ... clear state ...
+}
+
+switchRoom(currentRoom, msg.target, state.token, handlers, msg.options, state.activeCharacter?.id)
+  .then((newRoom) => {
+    // ... set room ...
+    
+    // Navigate after successful room switch to refuge
+    if (switchingToRefuge) {
+      navigate('/refuge');
+    }
+  });
+```
+
+**Impact**
+- **Backend team:** No changes needed. ROOM_SWITCH messages work as designed.
+- **Frontend team:** Follow this pattern for any future room switch UI (e.g., zone portals, emergency exits).
+- **Testing:** Room switch integration tests should verify both Colyseus connection AND URL navigation.
+
+### 2026-03-20: Database Constraint and FK Error Fixes
+**By:** Drizzt (Engine Dev)
+**Date:** 2026-03-20
+**Status:** Implemented
+
+**What**
+Fixed two critical database errors in the persistence layer:
+1. **PostgreSQL ON CONFLICT syntax incompatibility** — Changed `PgExplorationRepository` from constraint-based to expression-based conflict detection
+2. **Foreign key violations** — Separated game state player ID (characterId) from database player ID (auth UUID)
+
+**Error Context**
+
+### Error 1: Constraint Reference Error
+```
+constraint "uq_character_zone_room" for table "character_explored_rooms" does not exist
+```
+
+Migration 032 creates a UNIQUE INDEX, not a table constraint. PostgreSQL's `ON CONFLICT ON CONSTRAINT` syntax requires a named table constraint created with `ALTER TABLE ADD CONSTRAINT`. Using `ON CONFLICT (columns)` works with both constraints and indexes.
+
+### Error 2: Foreign Key Violations
+```
+insert or update on table "player_skills" violates foreign key constraint "player_skills_player_id_fkey"
+insert or update on table "run_history" violates foreign key constraint "run_history_player_id_fkey"
+```
+
+ShardRoom.ts mixed two concepts:
+- **characterId** — client-provided string for game state keying (player maps, combat, inventory)
+- **authPlayerId** — `players.id` UUID from JWT token, required for DB persistence
+
+Tables have BOTH `player_id` (UUID FK to `players.id`) AND `character_id` (UUID FK to `characters.id`) due to multi-character migration (017/018/019). Current persistence operations still require the auth player UUID.
+
+**Implementation**
+
+### Fix 1: PgExplorationRepository.ts
+Changed ON CONFLICT syntax from constraint-based to expression-based:
+```typescript
+// Before:
+ON CONFLICT ON CONSTRAINT uq_character_zone_room
+
+// After:
+ON CONFLICT (character_id, COALESCE(zone_slug, '__shard__'), room_id)
+```
+
+### Fix 2: ShardRoom.ts
+1. Added `authPlayerIds` map (characterId → auth playerId UUID)
+2. Track mapping in `onJoin`: `this.authPlayerIds.set(playerId, rawPlayerId)`
+3. Use auth player ID for all DB operations:
+   - `profileRepo.load/save(rawPlayerId)` — skills, equipment, carry weight
+   - `factionRepo.getPlayerFactions(rawPlayerId)` — faction membership
+   - `runHistoryRepo.recordRun({ playerId: authPlayerId, ... })` — shard run history
+4. Clean up mapping in `onLeave`: `this.authPlayerIds.delete(playerId)`
+
+**Rationale**
+
+### Why Not Use characterId for DB Operations?
+The `characterId` is a client-provided string (or fallback to session ID). It's not guaranteed to be a valid UUID in the `players` table. The auth system provides the canonical player UUID via JWT token validation.
+
+### Why Not Migrate to character_id Now?
+The schema is mid-transition. Tables have both `player_id` (legacy) and `character_id` (future). The character system is not fully implemented (no character creation flow, no character selection UI). Forcing migration now would break existing persistence.
+
+### Why Expression-Based ON CONFLICT?
+More flexible than constraint-based syntax — works with both unique indexes and table constraints. Migration runner uses `CREATE UNIQUE INDEX` (not `ALTER TABLE`), so expression-based syntax is required.
+
+**Consequences**
+
+### Positive
+- ✅ All FK constraints satisfied — no more insertion errors
+- ✅ Exploration tracking works correctly (unique index conflict resolution)
+- ✅ Zero test regressions (2239 passing)
+- ✅ Backward compatible — existing players continue working
+
+### Neutral
+- Game state still uses characterId as the primary key (no functional change)
+- DB operations now do an extra map lookup (`authPlayerIds.get()`)
+
+**Future Work**
+When multi-character support is fully implemented:
+1. Migrate all repositories to use `character_id` instead of `player_id`
+2. Update ShardRoom to use character UUID directly (no string fallback)
+3. Add character selection UI (client) and API (server)
+4. Drop `player_id` columns from character-scoped tables (or make them nullable)
+
+**Related Files**
+- `packages/server/src/exploration/PgExplorationRepository.ts` — ON CONFLICT fix
+- `packages/server/src/rooms/ShardRoom.ts` — authPlayerIds mapping
+- `packages/server/src/db/migrations/032_create_explored_rooms.sql` — unique index definition
+- `packages/server/src/db/migrations/017_create_characters.sql` — characters table
+- `packages/server/src/db/migrations/018_rekey_tables_to_character.sql` — character_id columns
+
+**Team Impact**
+
+- **All Teams:** DB persistence layer is now stable. No more FK violations on player_skills or run_history.
+- **Jarlaxle (Systems Dev):** Character creation flow can use this pattern — store auth player UUID separately from game state character ID.
+- **Volo (Narrative Dev):** Exploration tracking (character_explored_rooms) is fully functional for narrative context.
+- **Minsc (QA):** All 2239 tests pass. No new test coverage needed (existing tests validate the fix).

@@ -45,3 +45,59 @@
 
 **Dependency:** Drizzt's Phase C (zone registration) — now satisfied.
 
+- **useShardConnection accepts roomName param:** The hook now takes an optional `roomName` string (default `'shard'`). ShardExploration derives the room name from `useLocation().pathname` — `/refuge` maps to `zone:the-refuge`, everything else defaults to `shard`. This means ShardExploration is reusable for any zone-mode room.
+- **Zone mode hides shard-specific UI:** When `isZone` is true, the "Back to Refuge" button, Shard Stability bar, and Collapse Timer sidebar section are hidden. ChatPanel context switches to `"refuge"`. CombinedStashLoadout gets `inShard={false}`.
+
+## 2026-03-27T16:20Z — Refuge Unified Exploration UI
+
+**Completed:** Route `/refuge` to ShardExploration instead of old tab-based Refuge hub  
+**Files Modified:** 3
+
+- `routes.ts` — `/refuge` now renders `ShardExploration` instead of `Refuge`
+- `useShardConnection.ts` — accepts `roomName` param; both `connect()` calls and reconnection use it dynamically
+- `ShardExploration.tsx` — derives zone mode from route path; hides shard-only UI (back button, stability bar, collapse timer); adjusts chat context and connection messages
+
+**Build:** ✅ Clean  
+**Tests:** ✅ 115 passed (10 files)
+
+**Note:** `Refuge.tsx` is NOT deleted — just no longer routed. Can be cleaned up later.
+
+- **Stability bar & collapse timer fully removed from UI:** The `Shard Stability` progress bar (room header), `COLLAPSE TIMER` sidebar section, `useCountdown` import, `collapseTime`/`collapseTimerMax` variables, `formatTime` helper, `getCollapseColor` function, and `stability` variable are all removed from `ShardExploration.tsx`. Server-side state (`collapseTimer`, `collapseTimerMax`, `shardState`, `stability`) is still sent and stored in `useShardConnection` — only the UI consumption was removed. The `useCountdown` hook file itself is preserved since it may be useful elsewhere.
+
+## 2026-03-27T17:35Z — Death Refuge Navigation Fix
+
+**Completed:** Fixed "Return to Refuge" button after death to properly switch rooms and update URL  
+**Files Modified:** 3
+
+- `ExtractionOverlay.tsx` — Added `onReturnToRefuge` callback prop to both success and death overlay buttons
+- `useShardConnection.ts` — `onRoomSwitch` handler now calls `navigate('/refuge')` after successful room switch to refuge; added double-connect guard to prevent re-connecting when already on correct room
+- `ShardExploration.tsx` — Passed empty callback to ExtractionOverlay (server auto-sends ROOM_SWITCH after 3s)
+
+**Build:** ✅ Clean  
+**Tests:** ✅ 111 passed (10 files)
+
+**Root Cause:** Two issues: (1) ExtractionOverlay buttons bypassed server-driven room switch by calling `navigate()` directly, racing with server ROOM_SWITCH message. (2) Server ROOM_SWITCH handler switched Colyseus connection but never updated URL, leaving UI in wrong state (`isZone` stayed false even after connecting to `zone:the-refuge`).
+
+**Solution:** Overlay buttons now call optional callback (no-op for death - server handles it). ROOM_SWITCH handler navigates to `/refuge` after successful switch. Double-connect guard prevents useEffect from re-connecting when already on correct room after navigation.
+
+
+---
+
+## Team Sync: 2026-03-27T17:40:16Z
+
+**Drizzt (Engine Dev) completed DB stability fixes simultaneously:**
+- Fixed PostgreSQL ON CONFLICT syntax in PgExplorationRepository (expression-based conflict detection)
+- Separated authPlayerIds from characterIds in ShardRoom to resolve FK violations
+- All 2239 server tests passing
+
+**Cross-team impact on Regis work:**
+- Exploration state from `useShardConnection` now saves reliably (Drizzt's PgExplorationRepository fix)
+- No race conditions on character_explored_rooms inserts
+- DB layer stable for future feature work
+
+**Decisions logged to .squad/decisions.md:**
+1. Database Constraint and FK Error Fixes (Drizzt)
+2. Client Room Switch and Navigation Pattern (Regis)
+3. Refuge uses ShardExploration UI (Regis)
+4. Stability bar and collapse timer UI removed (Regis)
+5. Stability bar/collapse timer deprecation (user directive via Drizzt)

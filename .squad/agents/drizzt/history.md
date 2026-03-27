@@ -2045,3 +2045,75 @@ When a game table already exists with relational structure and FK constraints (l
 
 **What This Means:**
 Zone engine now has a single, unified room abstraction (ShardRoom) replacing the previous dual-room system (RefugeRoom + ShardRoom). This simplifies code paths, reduces maintenance burden, and provides a solid foundation for future zone expansion.
+
+### Database Constraint and FK Error Fixes (2026-03-20)
+**Task:** Fix PostgreSQL constraint and foreign key violations
+**Status:** ✅ Complete
+
+**Errors Fixed:**
+1. **Constraint error:** `constraint "uq_character_zone_room" for table "character_explored_rooms" does not exist`
+   - Root cause: `ON CONFLICT ON CONSTRAINT` requires a table constraint, but the migration creates a UNIQUE INDEX
+   - Fix: Changed `PgExplorationRepository.ts` line 22 from `ON CONFLICT ON CONSTRAINT uq_character_zone_room` to `ON CONFLICT (character_id, COALESCE(zone_slug, '__shard__'), room_id)` — uses expression-based conflict detection
+
+2. **FK violations:** `player_skills` and `run_history` foreign key errors on `player_id`
+   - Root cause: ShardRoom.ts mixed characterId (client-provided string for game state) with playerId (players.id UUID for DB)
+   - Fix: Added `authPlayerIds` mapping (characterId → auth playerId UUID) and use it for all DB operations:
+     - `profileRepo.load/save` — use rawPlayerId/authPlayerId
+     - `factionRepo.getPlayerFactions` — use rawPlayerId
+     - `runHistoryRepo.recordRun` — use authPlayerId
+
+**Key Insight:** Database tables have BOTH `player_id` (UUID FK to `players.id`) AND `character_id` (UUID FK to `characters.id`). The architecture is transitioning to multi-character support (migrations 017, 018, 019). Game state uses characterId for player maps/lookups, but persistence layer still requires the auth playerId UUID.
+
+**Files Changed:**
+- `packages/server/src/exploration/PgExplorationRepository.ts` — ON CONFLICT syntax fix
+- `packages/server/src/rooms/ShardRoom.ts` — Added authPlayerIds map, fixed onJoin/onLeave/savePlayerProfile/recordRunHistory
+
+**Verification:** All 2239 tests pass, build clean (zero TypeScript errors).
+
+---
+
+## Learnings
+
+### PostgreSQL ON CONFLICT Syntax
+- `ON CONFLICT ON CONSTRAINT name` requires a **table constraint** created with `CONSTRAINT name UNIQUE (cols)`
+- `ON CONFLICT (cols)` works with both constraints AND unique indexes — more flexible
+- Migration 032 uses `CREATE UNIQUE INDEX` (not `ALTER TABLE ADD CONSTRAINT`), so expression-based syntax is required
+
+### Player ID vs Character ID Architecture
+- `playerId` in ShardRoom context refers to the game state key (characterId from client, or fallback to auth player ID)
+- `rawPlayerId` / `authPlayerId` refers to the `players.id` UUID (from JWT token or session)
+- DB persistence operations MUST use the auth player ID UUID (FK constraint target)
+- The codebase is mid-migration: tables have both `player_id` (legacy) and `character_id` (future multi-character support)
+- Key file paths:
+  - Player/character schema: `packages/server/src/db/migrations/001_create_players.sql`, `017_create_characters.sql`, `018_rekey_tables_to_character.sql`
+  - Auth flow: `packages/server/src/auth/colyseus-auth.ts` (JWT validation → playerId)
+  - Profile persistence: `packages/server/src/player/PgPlayerProfileRepository.ts` (reads/writes player_skills, player_profile)
+  - Run history: `packages/server/src/run-history/PgRunHistoryRepository.ts` (records shard runs with player_id FK)
+
+### ESM Import Convention
+- All imports must use `.js` extension (even when importing `.ts` files) — ESM requirement with `"module": "Node16"`
+- Enforced by eslint rule `import/extensions`
+
+
+---
+
+## Team Sync: 2026-03-27T17:40:16Z
+
+**Regis (Frontend Dev) completed death navigation fixes simultaneously:**
+- Fixed "Return to Refuge" button to coordinate with server ROOM_SWITCH messages
+- Added onReturnToRefuge callback pattern for server-driven room switches
+- Navigation now happens in onRoomSwitch handler (single source of truth)
+- Double-connect guard prevents re-connection after navigation
+- All 111 client tests passing
+
+**Cross-team impact on Drizzt work:**
+- Client room switches now properly coordinate with server (no more race conditions)
+- Colyseus room state and URL stay synchronized
+- Death → Refuge flow now works end-to-end
+
+**Decisions logged to .squad/decisions.md:**
+1. Database Constraint and FK Error Fixes (Drizzt)
+2. Client Room Switch and Navigation Pattern (Regis)
+3. Refuge uses ShardExploration UI (Regis)
+4. Stability bar and collapse timer UI removed (Regis)
+5. Stability bar/collapse timer deprecation (user directive via Regis)
