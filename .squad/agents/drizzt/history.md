@@ -2274,3 +2274,28 @@ Extraction complete and player death sent `target: 'refuge'` in ROOM_SWITCH mess
 **Session:** .squad/sessions/2026-03-27-refuge-routing-fix.md  
 **Orchestration:** .squad/orchestration-log/2026-03-27T2122-drizzt.md  
 **Decision:** .squad/decisions/decisions.md — "2026-07-17: Derive zoneSlug from Colyseus Room Name"
+
+---
+
+## Exploration Message Wiring Verification (2025-07-17)
+
+**Task:** Implement EXPLORATION_DATA (on join) and EXPLORATION_UPDATE (on movement/flee) message sending in ShardRoom.ts, plus activate the .todo() tests.
+
+**Outcome:** ✅ SUCCESS — ShardRoom.ts already contained the full exploration wiring from commit f836325 (zone spawn routing). The implementation sends:
+- `EXPLORATION_DATA` with current room on `onJoin`
+- `EXPLORATION_UPDATE` on successful movement (go command)
+- `EXPLORATION_UPDATE` on flee (combat tick handler)
+- `recordVisit` persistence to ExplorationRepository for all three paths
+
+Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
+
+**Verification:**
+- ✅ Build: `npm run build` — Clean
+- ✅ Tests: 2022 + 17 newly activated = 2039 passing, 0 failures
+- ✅ Lint: 0 errors, only pre-existing warnings
+
+## Learnings
+
+- **RoomGraph exits are `Map<Direction, string>`, but ExploredRoomData expects `Record<string, string>`.** Always convert with `Object.fromEntries()` or manual iteration when building exploration payloads from the room graph.
+
+- **Exploration repository uses fire-and-forget persistence.** The `recordVisit` call is awaited with `.catch()` to avoid blocking the hot path. If DB writes fail, the map still renders — only persistence is lost.
