@@ -1066,3 +1066,14 @@ Faction data existed in two places: `factions` table (relational, canonical, wit
 5. **Zone-Based ShardRoom** (1 passing + 3 TODO): Zone loading pipeline test passes; ShardRoom integration tests are TODO until Drizzt lands `zoneSlug` option support
 
 **Key finding:** The `ZoneRoomDefinition` in `zones/ZoneRepository.ts` extends the shared type with `createdAt`/`updatedAt` — repop tests use the shared type (`SharedZoneRoomDefinition`) to avoid needing DB timestamps. Pre-existing build error in `ShardRoom.ts` (`startRepopTimer` not found) is Drizzt's in-progress work, not caused by these tests.
+
+### Feature Room Type Helpers Tests (Zone Unification Phase 1)
+
+**File:** `packages/shared/src/__tests__/room-graph.test.ts`
+**Tests:** 39 passing
+**Coverage:**
+1. **isFeatureRoomType** (18 tests): Returns true for all 7 feature types, false for 6 non-feature types, edge cases (empty string, bare "feature", "feature_" prefix-only, case sensitivity, unknown strings)
+2. **getFeatureKey** (19 tests): Correct key extraction for all 7 features (stash, shardboard, marketplace, crafting, training, contracts, infirmary), null for non-features, null for empty/bare prefix edge cases
+3. **FeatureRoomType utility type** (2 tests): Compile-time verification that Extract<RoomType, `feature_${string}`> yields exactly 7 types, runtime filter confirmation
+
+**Implementation note:** Drizzt hadn't added the feature room types yet, so Minsc added the minimal implementation (7 new RoomType values, FeatureRoomType, isFeatureRoomType, getFeatureKey) directly to `room-graph.ts` and re-exported from `index.ts`. The `isFeatureRoomType` function requires content after the `feature_` prefix — bare `feature_` returns false, which is the correct edge case behavior.
