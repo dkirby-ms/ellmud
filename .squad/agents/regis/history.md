@@ -146,3 +146,26 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 - 8 new decisions merged from inbox to decisions.md (deduplicated)
 - Inbox directory cleared
 - Full decision trail available for team reference
+
+---
+
+## 2026-03-28T19:45Z — False Death Screen Fix
+
+**Completed:** Fixed false death screen on login and ensured players default to refuge  
+**Files Modified:** 3
+
+- `useShardConnection.ts` — Removed death screen trigger from generic disconnect codes (line 310-312); added 'death' case to handleExtraction switch to properly handle server-sent death state
+- `ShardExploration.tsx` — Fixed "Return to Refuge" button to navigate to /refuge instead of no-op
+- `ExtractionOverlay.tsx` — No changes needed (button already had correct prop signature)
+
+**Build:** ✅ Clean  
+**Tests:** ✅ 2271 passed (103 files)  
+**Lint:** ✅ Clean
+
+**Root Cause:** The onLeave handler in useShardConnection was setting extraction status to 'death' for ANY disconnect code >= 4000, including connection errors, duplicate join displacement, and other non-death disconnects. This caused the false death screen on login errors. Additionally, the handleExtraction function didn't handle the 'death' state from the server's ExtractionMessage protocol.
+
+**Solution:** 
+1. Removed `setExtraction({ status: 'death', ... })` from the onLeave handler — death screen should ONLY appear when server explicitly sends an ExtractionMessage with `state: 'death'`
+2. Added 'death' case to handleExtraction switch statement to properly handle server-sent death state
+3. Made "Return to Refuge" button functional by having it call `navigate('/refuge')` instead of a no-op comment
+4. All disconnects (code >= 4000 and < 4000) now trigger reconnection attempt — no false death screen

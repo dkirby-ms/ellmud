@@ -2224,3 +2224,53 @@ Examples:
 **Files modified:**
 - `packages/server/src/zones/PgZoneRepository.ts`
 
+
+---
+
+## Fix Refuge Routing Bugs (2026-07-17)
+
+**Task:** Players joining the game were placed into procedurally generated shards (flooded_crypt) instead of the refuge zone. Two bugs identified and fixed.
+
+**Bug 1 — zoneSlug never reaches ShardRoom.onCreate():**
+The client calls `colyseus.joinOrCreate("zone:the-refuge", { token, characterId })` but never includes `zoneSlug` in the options. The server's `onCreate()` checks `options['zoneSlug']` which was never set, falling through to procedural shard generation.
+
+**Fix:** Added roomName-based zoneSlug derivation at the top of `onCreate()`. If the Colyseus room name starts with `zone:` and no explicit `zoneSlug` option is provided, we parse it from the room name. This is server-authoritative — any client joining a `zone:*` room automatically gets zone behavior.
+
+```typescript
+const roomNameStr = this.roomName;
+if (roomNameStr.startsWith('zone:') && !options['zoneSlug']) {
+  options['zoneSlug'] = roomNameStr.substring(5);
+}
+```
+
+**Bug 2 — ROOM_SWITCH targets used wrong room name:**
+Extraction complete and player death sent `target: 'refuge'` in ROOM_SWITCH messages, but the actual Colyseus room name is `'zone:the-refuge'`. The client couldn't match the target to reconnect properly.
+
+**Fix:** Changed both ROOM_SWITCH sends from `target: 'refuge'` to `target: 'zone:the-refuge'`.
+
+**Files modified:**
+- `packages/server/src/rooms/ShardRoom.ts` — Both fixes
+- `packages/server/src/__tests__/room-switching.test.ts` — Updated 3 assertions
+- `packages/server/src/__tests__/player-death.test.ts` — Updated 1 assertion
+- `packages/shared/src/__tests__/types.test.ts` — Updated 1 type test
+
+**Verification:**
+- ✅ Build: `npm run build` — Clean
+- ✅ Tests: 2362 tests passed (89 server + 6 shared test files, 0 failures)
+- ✅ Lint: 0 errors (8 pre-existing warnings, unchanged)
+
+## Learnings
+
+- **Colyseus room names are the source of truth for routing.** When a client calls `joinOrCreate("zone:the-refuge", opts)`, Colyseus sets `this.roomName` to `"zone:the-refuge"`. The options bag is for extra parameters, not for duplicating what the room name already encodes. Server-side derivation from `roomName` is more robust than relying on clients to pass `zoneSlug`.
+
+- **ROOM_SWITCH targets must match Colyseus define() names exactly.** The client uses the `target` field to call `joinOrCreate(target, ...)`. If the server sends `target: 'refuge'` but the room is defined as `'zone:the-refuge'`, the client can't find the room. Always use the full `zone:{slug}` name.
+
+---
+
+## Refuge Spawn Routing Fix (2026-03-27)
+
+**Outcome:** ✅ SUCCESS — Both bugs fixed. zoneSlug now auto-derived in `ShardRoom.onCreate()` for zone: rooms. ROOM_SWITCH targets updated to use exact Colyseus room names. Build clean, 2362 tests pass, lint clean.
+
+**Session:** .squad/sessions/2026-03-27-refuge-routing-fix.md  
+**Orchestration:** .squad/orchestration-log/2026-03-27T2122-drizzt.md  
+**Decision:** .squad/decisions/decisions.md — "2026-07-17: Derive zoneSlug from Colyseus Room Name"

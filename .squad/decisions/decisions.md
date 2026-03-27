@@ -2700,3 +2700,32 @@ The codebase has two Colyseus room classes — `ShardRoom` and `RefugeRoom` — 
 4. ⏳ Shardboard logic → TBD (dedicated service or inline)
 5. ⏳ Ambient system scope → TBD (hub-only or broader)
 
+
+---
+
+## 2026-07-17: Derive zoneSlug from Colyseus Room Name (Server-Authoritative)
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-07-17  
+**Status:** Implemented
+
+### What
+
+`ShardRoom.onCreate()` now derives `zoneSlug` from `this.roomName` when the room name starts with `zone:` and no explicit `zoneSlug` option is provided. ROOM_SWITCH targets for extraction and death now use `'zone:the-refuge'` instead of bare `'refuge'`.
+
+### Why
+
+- Clients call `joinOrCreate("zone:the-refuge", { token })` but never pass `zoneSlug` in options — the room name IS the zone identifier.
+- The old `target: 'refuge'` didn't match the Colyseus room definition `'zone:the-refuge'`, breaking client room switching.
+- Server-side derivation is more robust: any client joining a `zone:*` room gets zone behavior automatically, no client changes needed.
+
+### Convention
+
+- **ROOM_SWITCH `target` must always be the exact Colyseus room name** (e.g., `'zone:the-refuge'`, `'shard'`), never an abbreviated form.
+- **Zone slug derivation is server-authoritative.** Clients should NOT need to duplicate the zone slug in join options.
+
+### Impact
+
+- Server: `ShardRoom.ts` — 3 code changes
+- Tests: 5 assertion updates across 3 test files
+- Client: No changes required (this was the point)
