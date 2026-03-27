@@ -1216,3 +1216,31 @@ CREATE TABLE zone_definitions (
 - **Core difference:** Ellmud prioritizes **roguelike proceduralism** over **persistent world simulation**. Zones are landmarks, not persistent geography.
 
 **Status:** Awaiting dkirby-ms review and decision on the 5 open questions.
+
+### 2026-03-27: Unified Zone UX Architecture Plan
+- **Action:** Produced comprehensive architecture plan for unifying Refuge and Shard exploration experiences. Plan at session workspace `plan.md`. Decision filed at `.squad/decisions/inbox/elminster-unified-zone-ux.md`.
+- **Problem:** Two completely different UX patterns for the same activity — Refuge uses tab-based menu UI while Shards use narrative room exploration. Duplicate server command handling (~300 lines), jarring player context switches, double work for every new feature.
+- **Core concept — Feature Rooms:** New `feature_`-prefixed `RoomType` values (`feature_stash`, `feature_shardboard`, `feature_marketplace`, etc.) that signal the client to show a feature panel when the player enters that room. Feature rooms are normal rooms in the graph — the type is the only discriminant. `RoomHeaderMessage.roomType` (already exists) carries the signal.
+- **Server decision:** RefugeRoom adopts ShardRoom's modular `parseCommand()` → `handleCommand()` pipeline. Feature-specific commands become handlers in `commands/handlers/`, gated by `ctx.room.type` checks. `requireRoom()` deleted. `CommandContext` extended with optional service references.
+- **Client decision:** `ShardExploration.tsx` becomes universal exploration view. Feature panels are lazy-loaded React components keyed by feature type. `Refuge.tsx` deleted after migration. New route: `/zone/:zoneSlug`.
+- **RefugeRoom preservation:** Not retired immediately. Keeps ambient tick simulation and shard creation. Evaluation of retirement deferred to Phase 5 after client unification is validated.
+- **5-phase rollout:** Types (1-2d) → Server unification (3-4d) → Client unification (3-4d) → Feature UIs (2-3d each) → Cleanup (1-2d). Parallel routes during transition, no big bang.
+- **Key insight:** The existing `RoomHeaderMessage.roomType` field and ShardRoom's `isZone` mode mean minimal new protocol needed. The infrastructure is already 80% there.
+- **Open questions for dkirby-ms:** Feature panel placement (sidebar vs main column), feature room type naming convention, ambient events rendering, RefugeRoom retirement timing.
+- **Key files:** Session workspace `plan.md`, `.squad/decisions/inbox/elminster-unified-zone-ux.md`
+
+### 2026-03-27T01:25Z: User directives on unified zone UX decisions
+- **Feedback received from dkirby-ms:**
+  1. ✅ Ambient events → render as inline narrative prose (not dedicated sidebar)
+  2. ✅ Players Nearby → always show in all zones (special effects deferred)
+  3. ✅ RefugeRoom retirement → yes, plan to retire, but defer validation to Phase 3
+  4. ✅ Feature room type naming → `feature_` convention accepted
+  5. ✅ Feature panel placement → right sidebar, replacing status/inventory section
+  6. ✅ Feature room descriptions → narrative prose + stats summary line (e.g., "STASH: 12 items · 45/100 weight")
+
+- **Integration point:** These user directives directly answer all open questions from elminster-unified-zone-ux.md. Feature panel placement (Q1) resolved to right sidebar. Feature room naming (Q2) confirmed `feature_` pattern.
+
+- **Next action:** Hand-crafted zones proposal (elminster-handcrafted-zones-v2.md) also needs dkirby-ms approval on 4 key decisions before implementation can proceed.
+
+- **Status:** User feedback integrated into master decisions.md. Both Volo's GDD refresh and Elminster's zone architecture plans are now approved at open-question level with user direction. Ready for Phase 2 implementation kickoff.
+

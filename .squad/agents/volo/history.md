@@ -492,3 +492,49 @@ Wait for #139 endpoint design approval before implementing client side.
 - Schema uses `StashItem` interface for stash/loadout compatibility
 - No production registry merge — items imported separately where needed
 - Build clean, 552 tests passing, zero regressions
+
+### 2026-03-20: GDD Comprehensive Refresh (Requested by dkirby-ms)
+- **Task:** Audit and rewrite GDD.md to match live codebase (852 lines → 1,091 lines, +239 lines, +28%)
+- **Critical Finding:** GDD described procedural/in-memory architecture, but codebase has evolved to **database-driven** with PostgreSQL, zone system, and admin dashboard
+- **Major Corrections:**
+  1. **Refuge "living world"**: GDD claimed tick-driven ambient simulation (NPC wandering, weather, merchants) — NONE of this exists. Corrected to: static zone with 7 DB-defined rooms (hearth, stash-alcove, training-grounds, shardboard, market, infirmary, war-room)
+  2. **Content sourcing**: Changed from "procedurally generated" to "database-driven" (31 migrations, 9 content types in dedicated tables)
+  3. **Zone system**: Added new §10.1 documenting zones/zone_rooms/zone_exits tables, hand-crafted vs procedural modes
+  4. **Character system**: Added new §7.4 documenting multi-character support (1:N from players)
+  5. **Client architecture**: Changed from "web-terminal client" to "React 18 + Vite with TailwindCSS, shadcn/ui, compass navigation"
+  6. **Admin dashboard**: Added new §13.5 documenting full content management system (9 content CRUD views, zone management, SSE updates)
+  7. **Database schema**: Added new §13.4 documenting 31-migration PostgreSQL schema with all player persistence, content, zone, and audit tables
+- **Implementation Status Markers**: Added 25+ "(Implemented)" / "(Planned)" / "(Partial Implementation)" markers throughout document
+- **Roadmap Updates (§17)**: Updated Phase 1 checkboxes — 13 items from ❌ to ✅ (auth, stash, combat, extraction, React client, admin dashboard, zone system, character system, etc.)
+- **Stale Items Found & Fixed**: 24 critical inaccuracies identified and corrected
+- **Key Architectural Patterns Documented:**
+  - Repository Provider pattern: Interface + PgImpl + InMemoryImpl + Provider singleton gated by DATABASE_URL
+  - Zone system: zones, zone_rooms, zone_exits tables with inter-zone travel support
+  - Command system split: ShardRoom (modular Map registry) vs RefugeRoom (monolithic switch)
+  - Feature-room pattern: Specific gameplay systems accessed in dedicated rooms (stash in stash-alcove, shardboard in shardboard room)
+- **Database Tables Documented:** player_identities, players, characters, player_skills, player_stash, player_loadout, player_stash_capacity, player_profile, faction_membership, run_history, player_shard_sickness, auth_tokens, item_definitions, biome_definitions, creature_definitions, modifier_definitions, narrative_template_definitions, skill_definitions, loot_table_definitions, room_definitions, factions, zones, zone_rooms, zone_exits, audit_log, deploy_history
+- **File paths verified:** packages/server/src/db/migrations/ (31 files), packages/server/src/content/, packages/server/src/zones/, packages/server/src/rooms/ShardRoom.ts, packages/server/src/rooms/RefugeRoom.ts, packages/server/src/commands/, packages/client/src/
+- **Principle:** "Describe what EXISTS, not aspirations" — moved all aspirational content to clearly marked "Future" or "Planned" sections
+
+
+### 2026-03-27T01:25Z: GDD Audit Completion & Decisions Filing
+- **Task:** Full GDD.md audit and refresh to align documentation with actual implementation status
+- **Deliverable:** Comprehensive decision document filed at `.squad/decisions/inbox/volo-gdd-refresh.md`
+- **Standards established:**
+  1. **Implementation Status Markers** — All major sections must include "(Implemented)", "(Planned)", or "(Partial Implementation)" markers
+  2. **Describe Reality, Not Aspiration** — Aspirational content explicitly marked as "Future" or "Planned"
+  3. **Database-First Documentation** — When documenting systems, list DB schema (tables, columns) before mechanics
+  4. **Roadmap Checkpoint Updates** — Phase checkboxes kept current, not stale
+
+- **Key correction:** Refuge zone documentation was aspirational ("living world" with tick-driven ambient simulation, NPC wandering, weather, merchants). Corrected to reflect actual implementation: static zone with 7 rooms, navigable via room-based commands, no ambient simulation.
+
+- **Scope of changes:**
+  - +239 lines of new/corrected content
+  - 25+ stale sections brought current
+  - Implementation status markers applied throughout
+  - New sections: database schema documentation, zone system, character system, admin dashboard features
+
+- **Impact:** GDD is now authoritative and reliable for all team members and squad agents. Eliminates confusion between aspirational design and implemented reality.
+
+- **Status:** Master decisions.md now includes volo-gdd-refresh.md as a canonical reference for GDD maintenance standards going forward.
+
