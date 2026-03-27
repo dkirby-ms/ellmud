@@ -40,6 +40,12 @@ describe('Command Parser', () => {
       ['w', 'go', ['west']],
       ['u', 'go', ['up']],
       ['d', 'go', ['down']],
+      ['north', 'go', ['north']],
+      ['south', 'go', ['south']],
+      ['east', 'go', ['east']],
+      ['west', 'go', ['west']],
+      ['up', 'go', ['up']],
+      ['down', 'go', ['down']],
     ];
 
     for (const [input, expectedVerb, expectedArgs] of cases) {
