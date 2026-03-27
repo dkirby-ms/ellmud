@@ -1864,3 +1864,43 @@ When a game table already exists with relational structure and FK constraints (l
 **Files Referenced:** packages/shared/src/room-graph.ts, packages/server/src/db/RoomGraph.ts, biome templates
 
 **Status:** Complete. Feature room type discriminant and type guards are canonical and referenced in Phase 1 zone unification work.
+
+## 2025-07-24: Phase A2+A3+A4 — Command Handlers, CommandContext Extension, Feature-Gating
+
+**What:** Created new command handlers for shardboard, stash, and loadout; extended CommandContext with service fields; added feature-gate middleware to handleCommand().
+
+**Deliverables:**
+- `packages/server/src/commands/handlers/shardboard.ts` — handleShardboard(), handleEnter()
+- `packages/server/src/commands/handlers/stash-command.ts` — handleStashView(), handleStore()
+- `packages/server/src/commands/handlers/loadout-command.ts` — handleLoadoutView()
+- `packages/server/src/commands/index.ts` — Extended CommandContext, ShardListing type, featureHandlers map, gate middleware
+
+**Design Decisions:**
+- Handlers kept synchronous (matching existing CommandHandler type) with placeholder narrations — async service calls wired at room level
+- Feature-gate check runs BEFORE extraction lock and combat lock in handleCommand()
+- `take` is NOT feature-gated (universal command, stays in standard handlers registry)
+- `loadout` gated to feature_stash rooms (co-located with stash access per task spec)
+- ShardListing defined as lightweight interface in commands/index.ts (not importing from RefugeRoom)
+
+**Build:** Full TypeScript build passes, zero regressions.
+
+### Learnings
+- CommandHandler type is synchronous — async service integration happens at room level (RefugeRoom), not in command handlers
+- Feature-gate middleware uses a separate Map from the standard handlers registry, checked first in handleCommand()
+- StashService and LoadoutService both have getXxxSummary(playerId) async methods for narration text
+
+## Phase A Complete (2026-03-27T13:04)
+
+**Status:** ✅ Feature-Gate Middleware + Command Handlers — DONE
+
+**Delivered:**
+- 3 command handler files (shardboard, stash, loadout) with synchronous returns + placeholder narrations
+- Feature-gate middleware in `handleCommand()`: checks `featureHandlers` map before extraction/combat locks
+- CommandContext extension: room + roomType properties
+- Full test coverage: 39 feature-gate tests (all passing)
+
+**Key Outcome:** Commands now restricted by room type. Middleware returns `"You can't do that here."` for wrong-room-type. Async service wiring deferred to Phase B (room level).
+
+**Phase A Result:** Build clean. 2206 tests passing (98 files). Ready for Phase B: Service integration.
+
+**Team Status:** Jarlaxle (exploration repo ✅), Minsc (61 tests ✅). All Phase A agents complete.

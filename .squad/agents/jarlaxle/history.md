@@ -1708,3 +1708,27 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 - CompassControl is zone-agnostic by design — it reads exits from roomHeader state regardless of whether the room is in a shard or zone. No compass changes needed for zone support.
 - Zone transfer uses the same `switchRoom()` mechanism as shard room switches, passing `zoneSlug` and `targetRoomSlug` as join options so the server matchmaker can route to the correct zone instance.
 - ShardboardTab was entirely mock data for shards. Zones are the first real data fetched from the API in that component. The shard listings remain mock pending matchmaker integration.
+
+### Exploration Repository (Phase A1)
+- Created migration `032_create_explored_rooms.sql` — `character_explored_rooms` table with UUID PK, UNIQUE on `(character_id, COALESCE(zone_slug, '__shard__'), room_id)`, indexes on character_id and (character_id, zone_slug).
+- **No coordinate columns** — user decision: zone designers don't specify coords, client computes positions via BFS from room graph. Table stores only: character_id, zone_slug, room_id, room_type, room_name, shard_tier, biome, first_visited, last_visited, visit_count.
+- `ExplorationRepository` interface + `InMemoryExplorationRepository` in `ExplorationRepository.ts`. Types: `ExplorationVisit`, `ExploredRoom`, `ExplorationStats`.
+- `PgExplorationRepository` uses `query()` from `db/index.js` (lazy pool). `recordVisit` uses `INSERT ... ON CONFLICT DO UPDATE SET last_visited = NOW(), visit_count = visit_count + 1`.
+- `exploration-provider.ts` follows stash-provider pattern: `initExplorationProvider(usePg)`, `getExplorationRepository()`, `resetExplorationProvider()`.
+- Barrel export from `exploration/index.ts`.
+- Build verified — all three packages compile clean.
+
+## Phase A Complete (2026-03-27T13:04)
+
+**Status:** ✅ Exploration Repository + DB Migration — DONE
+
+**Delivered:**
+- Exploration repository stack (5 files): Interface + InMemory + Pg implementations + DI provider
+- Migration 032: `character_explored_rooms` table (no coordinate columns per user directive)
+- Full test coverage: 22 exploration-specific tests (all passing)
+
+**Key Outcome:** Room coordinates now computed client-side via BFS from connection graph. DB stores only visit metadata. Zone authoring simplified — no more coord_x/coord_y/coord_z required.
+
+**Phase A Result:** Build clean. 2206 tests passing (98 files). Ready for Phase B: Narrative + service wiring.
+
+**Team Status:** Drizzt (feature-gate middleware ✅), Minsc (61 tests ✅). All Phase A agents complete.
