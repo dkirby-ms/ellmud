@@ -249,6 +249,7 @@ export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
 export type {
   Direction,
   RoomType,
+  FeatureRoomType,
   RoomProperty,
   HazardPlaceholder,
   LootContainer,
@@ -263,6 +264,8 @@ export {
   OPPOSITE_DIRECTION,
   serializeRoomGraph,
   deserializeRoomGraph,
+  isFeatureRoomType,
+  getFeatureKey,
 } from './room-graph.js';
 
 // ─── Zone System (Hand-Crafted Authored Zones) ──────────────────────────────
