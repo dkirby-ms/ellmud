@@ -222,7 +222,8 @@ describe('Gap #11: Status effects in sidebar', () => {
       ],
     } as Partial<AppState>);
 
-    const bleedingEl = screen.getByText('Bleeding');
+    const sidebar = screen.getByTestId('status-effects');
+    const bleedingEl = within(sidebar).getByText('Bleeding');
     expect(bleedingEl).toBeInTheDocument();
     expect(bleedingEl.closest('[data-effect]') ?? bleedingEl).toHaveClass('text-danger');
   });
@@ -235,7 +236,8 @@ describe('Gap #11: Status effects in sidebar', () => {
       ],
     } as Partial<AppState>);
 
-    expect(screen.getByText('Shard-sick')).toBeInTheDocument();
+    const sidebar = screen.getByTestId('status-effects');
+    expect(within(sidebar).getByText('Shard-sick')).toBeInTheDocument();
   });
 
   it('no status effects section when no effects active', () => {

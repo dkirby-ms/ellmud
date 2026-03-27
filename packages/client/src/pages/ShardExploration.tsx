@@ -14,6 +14,7 @@ import CompassControl from "../components/CompassControl";
 import { MinimapWidget } from "../components/map/MinimapWidget.js";
 import { FullMapOverlay } from "../components/map/FullMapOverlay.js";
 import "../components/map/map.css";
+import MudPrompt from "../components/MudPrompt.js";
 import { useAppContext } from "../store.js";
 import { useShardConnection } from "../hooks/useShardConnection.js";
 import { useAutoScroll } from "../hooks/useAutoScroll.js";
@@ -310,6 +311,9 @@ export default function ShardExploration() {
                 )}
               </div>
             ))}
+
+            {/* MUD-style status prompt — sticky at bottom of scroll */}
+            <MudPrompt />
           </div>
         </div>
 
