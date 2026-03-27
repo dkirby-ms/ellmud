@@ -16,6 +16,9 @@ import {
   type SwapItemMessage,
   type LoadoutUpdateMessage,
   type ZoneTransferMessage,
+  type ExploredRoomData,
+  type ExplorationDataMessage,
+  type ExplorationUpdateMessage,
   SHARD_SICKNESS_DEFAULTS,
   MessageTypes,
 } from '@ellmud/shared';
@@ -67,6 +70,10 @@ import type { ZoneData } from '../zones/index.js';
 import { convertZoneToRoomGraph } from '../zones/zone-adapter.js';
 import { getItemDefinition } from '../items/registry.js';
 import type { Item } from '../shard/RoomGraph.js';
+import type { ExplorationRepository } from '../exploration/index.js';
+import { getExplorationRepository } from '../exploration/index.js';
+import type { CharacterRepository } from '../character/index.js';
+import { InMemoryCharacterRepository, getCharacterRepository } from '../character/index.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -108,8 +115,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private profileRepo: PlayerProfileRepository = new InMemoryPlayerProfileRepository();
   private factionRepo: FactionRepository = new InMemoryFactionRepository();
   private runHistoryRepo: RunHistoryRepository = new InMemoryRunHistoryRepository();
+  private characterRepo: CharacterRepository = new InMemoryCharacterRepository();
+  private explorationRepo: ExplorationRepository = getExplorationRepository();
   /** Tracks when each player joined the shard (for run duration calculation). */
   private playerJoinTimes = new Map<string, number>();
+  /** Maps playerId → character name for log formatting. */
+  private characterNames = new Map<string, string>();
 
   // ─── Zone-specific fields ──────────────────────────────────────────────────
   private zoneSlug?: string;
@@ -133,6 +144,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   /** Inject run history repository for testing. */
   initRunHistory(repo?: RunHistoryRepository): void {
     this.runHistoryRepo = repo ?? new InMemoryRunHistoryRepository();
+  }
+
+  /** Inject character repository for testing. */
+  initCharacter(repo?: CharacterRepository): void {
+    this.characterRepo = repo ?? new InMemoryCharacterRepository();
   }
 
   /**
@@ -188,6 +204,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
 
     this.state.collapseTimer = this.collapseTimerSeconds;
+
+    // Derive zoneSlug from room name if not explicitly provided
+    const roomNameStr = this.roomName;
+    if (roomNameStr.startsWith('zone:') && !options['zoneSlug']) {
+      options['zoneSlug'] = roomNameStr.substring(5);
+    }
 
     // Initialize room graph — zone-based, procedural, or test graph
     this.creatureManager = new CreatureManager();
@@ -292,6 +314,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.runHistoryRepo = getRunHistoryRepository();
     }
 
+    // Initialize character repo with shared provider
+    if (this.characterRepo instanceof InMemoryCharacterRepository) {
+      this.characterRepo = getCharacterRepository();
+    }
+
     // Register message handlers
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
       this.handleCommandMessage(client, message);
@@ -349,7 +376,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Guard against the same playerId joining twice (double-click / client race condition).
     // If the player is already present, displace the old session rather than corrupting state.
     if (this.players.has(playerId)) {
-      this.log(`Duplicate join detected: ${playerId} (new session=${client.sessionId}). Displacing old session.`);
+      this.log(`Duplicate join detected: ${this.playerTag(playerId)} (new session=${client.sessionId}). Displacing old session.`);
 
       // Remove old session→playerId mapping so its onLeave becomes a cleanup no-op
       for (const [sid, pid] of this.playerIds) {
@@ -382,7 +409,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       const saved = await this.profileRepo.load(playerId);
       profile = saved ?? { ...DEFAULT_PROFILE };
     } catch (err) {
-      this.log(`Failed to load profile for ${playerId}: ${err}`);
+      this.log(`Failed to load profile for ${this.playerTag(playerId)}: ${err}`);
       profile = { ...DEFAULT_PROFILE };
     }
 
@@ -390,10 +417,20 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     try {
       const factions = await this.factionRepo.getPlayerFactions(playerId);
       if (factions.length > 0) {
-        this.log(`Player ${playerId} faction: ${factions[0].faction_id}`);
+        this.log(`Player ${this.playerTag(playerId)} faction: ${factions[0].faction_id}`);
       }
     } catch (err) {
-      this.log(`Failed to load factions for ${playerId}: ${err}`);
+      this.log(`Failed to load factions for ${this.playerTag(playerId)}: ${err}`);
+    }
+
+    // Load character name for log formatting
+    try {
+      const character = await this.characterRepo.getById(playerId);
+      if (character?.name) {
+        this.characterNames.set(playerId, character.name);
+      }
+    } catch (err) {
+      this.log(`Failed to load character for ${this.playerTag(playerId)}: ${err}`);
     }
 
     // Track join time for run duration calculation
@@ -420,7 +457,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     );
     this.players.set(playerId, playerState);
 
-    this.log(`Player joined: ${playerId} at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig())} players)`);
+    this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig())} players)`);
 
     // Send initial system narration
     this.sendNarrate(client, {
@@ -433,6 +470,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     const lookResult = handleLook(this.buildCommandContext(playerState, []));
     this.deliverResult(client, lookResult);
     this.sendTraceNarrations(client, startRoom);
+
+    // Send exploration data so client map can render the starting room
+    this.sendExplorationData(client, playerId, startRoom);
 
     this.sendShardState(client, {
       state: this.lifecycle,
@@ -459,13 +499,13 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         this.combatSystem.markDisconnected(playerId);
       }
 
-      this.log(`Player disconnected (code ${code}): ${playerId} — allowing reconnection for ${config.reconnectionTimeoutS}s`);
+      this.log(`Player ${this.playerTag(playerId)} disconnected (code ${code}) — allowing reconnection for ${config.reconnectionTimeoutS}s`);
 
       try {
         await this.allowReconnection(client, config.reconnectionTimeoutS);
         
         // Client reconnected successfully
-        this.log(`Player reconnected: ${playerId}`);
+        this.log(`Player ${this.playerTag(playerId)} reconnected`);
         
         // Clear disconnected flags
         if (playerState) {
@@ -491,7 +531,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         return; // Player reconnected — keep them in the game
       } catch {
         // Reconnection timeout expired
-        this.log(`Reconnection timeout: ${playerId} — applying death behavior`);
+        this.log(`Reconnection timeout: ${this.playerTag(playerId)} — applying death behavior`);
         this.handleReconnectionTimeout(playerId);
       }
     }
@@ -509,10 +549,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.state.playerCount = Math.max(0, this.state.playerCount - 1);
       this.players.delete(playerId);
       this.combatSystem.removeCombatant(playerId);
+      this.characterNames.delete(playerId);
       this.updateMetadata();
     }
     this.playerIds.delete(client.sessionId);
-    this.log(`Player left: ${playerId} (${this.state.playerCount} players)`);
+    this.log(`Player ${this.playerTag(playerId)} left (${this.state.playerCount} players)`);
   }
 
   /**
@@ -525,7 +566,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Zones don't apply death behavior on disconnect timeout
     if (this.isZone) {
-      this.log(`Player ${playerId} disconnected from zone — no death penalty applied`);
+      this.log(`Player ${this.playerTag(playerId)} disconnected from zone — no death penalty applied`);
       return;
     }
 
@@ -537,7 +578,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       // Kill the player in place — their body and inventory become lootable
       if (combatant) {
         combatant.hp = 0;
-        this.log(`Player ${playerId} killed in place after reconnection timeout`);
+        this.log(`Player ${this.playerTag(playerId)} killed in place after reconnection timeout`);
       }
       // Inventory handling would go here (drop as loot) — deferred for now
     } else {
@@ -551,7 +592,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       }
 
       this.combatSystem.removeCombatant(playerId);
-      this.log(`Player ${playerId} moved to safe room after reconnection timeout`);
+      this.log(`Player ${this.playerTag(playerId)} moved to safe room after reconnection timeout`);
     }
   }
 
@@ -850,7 +891,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       return;
     }
 
-    this.log(`Command from ${playerId}: ${verb} ${args.join(' ')}`);
+    this.log(`Command from ${this.playerTag(playerId)}: ${verb} ${args.join(' ')}`);
 
     // Block commands from downed players (they're incapacitated)
     if (this.downingSystem.isPlayerDowned(playerId)) {
@@ -890,6 +931,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.runAwarenessChecks(playerId, player.currentRoomId, 'arrival');
       // Awareness: notify observers in source room about departing player
       this.runAwarenessChecks(playerId, previousRoomId, 'departure');
+
+      // Exploration: send map update for the new room
+      this.sendExplorationUpdate(client, playerId, player.currentRoomId);
     }
 
     // Social commands (say, emote) broadcast to all players in the same room
@@ -1071,6 +1115,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
               ...(this.isZone && this.zoneData ? { zoneName: this.zoneData.zone.name } : {}),
             });
             this.sendTraceNarrations(client, flee.toRoomId);
+
+            // Exploration: send map update for the flee destination
+            this.sendExplorationUpdate(client, flee.combatantId, flee.toRoomId);
           }
         }
       }
@@ -1219,7 +1266,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     this.state.playerCount = Math.max(0, this.state.playerCount - 1);
     this.updateMetadata();
 
-    this.log(`Player extracted: ${playerId}`);
+    this.log(`Player ${this.playerTag(playerId)} extracted`);
 
     // Send extraction completion message
     client.send(MessageTypes.EXTRACTION_STATE, {
@@ -1231,7 +1278,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Tell client to switch back to refuge
     client.send(MessageTypes.ROOM_SWITCH, {
-      target: 'refuge',
+      target: 'zone:the-refuge',
       reason: 'extraction_complete',
     } satisfies RoomSwitchMessage);
   }
@@ -1435,7 +1482,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
       // Enter downed state instead of dying immediately
       this.downingSystem.downPlayer(playerId, event.actorName, roomId, event.killerIds);
-      this.log(`Player downed: ${playerId} in ${roomId}`);
+      this.log(`Player ${this.playerTag(playerId)} downed in ${roomId}`);
 
       // Notify the downed player
       const client = this.findClient(playerId);
@@ -1505,7 +1552,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
       const killEvent = this.downingSystem.killingBlow(downed.playerId);
       if (killEvent) {
-        this.log(`Killing blow on downed player: ${downed.playerId} in ${downed.roomId}`);
+        this.log(`Killing blow on downed player: ${this.playerTag(downed.playerId)} in ${downed.roomId}`);
 
         const client = this.findClient(downed.playerId);
         if (client) {
@@ -1551,7 +1598,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     player.equipment = undefined;
     if (this.loadoutService) {
       this.loadoutService.clearLoadout(playerId).catch((err) => {
-        this.log(`Failed to clear loadout on death for ${playerId}: ${err}`);
+        this.log(`Failed to clear loadout on death for ${this.playerTag(playerId)}: ${err}`);
       });
     }
 
@@ -1562,9 +1609,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     });
 
     // Apply shard-sickness death penalty (increment death count, record time)
-    void this.shardSicknessStore.incrementDeathCount(playerId).then((_newCount: number) => {
+    void this.shardSicknessStore.incrementDeathCount(playerId).then((newCount: number) => {
       void this.shardSicknessStore.setLastDeathTime(playerId, Date.now());
-      this.log(`Shard-sickness: ${"${playerId}"} death count now ${"${newCount}"}`);
+      this.log(`Shard-sickness: ${this.playerTag(playerId)} death count now ${newCount}`);
     });
 
     // Apply shard-sickness debuff to player state (on any death)
@@ -1623,7 +1670,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       // Schedule return to refuge after 3 seconds
       this.clock.setTimeout(async () => {
         if (!this.players.has(playerId)) {
-          this.log(`Player ${playerId} already left during death delay — skipping cleanup`);
+          this.log(`Player ${this.playerTag(playerId)} already left during death delay — skipping cleanup`);
           return;
         }
 
@@ -1633,7 +1680,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         await this.savePlayerProfile(playerId, this.players.get(playerId)!);
 
         client.send(MessageTypes.ROOM_SWITCH, {
-          target: 'refuge',
+          target: 'zone:the-refuge',
           reason: 'player_death',
         } satisfies RoomSwitchMessage);
 
@@ -1641,7 +1688,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         this.players.delete(playerId);
         this.state.playerCount = Math.max(0, this.state.playerCount - 1);
         this.updateMetadata();
-        this.log(`Player died and returned to refuge: ${playerId}`);
+        this.log(`Player ${this.playerTag(playerId)} died and returned to refuge`);
       }, 3000);
     }
 
@@ -1763,6 +1810,75 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     client.send(MessageTypes.SHARD_STATE, message);
   }
 
+  // ─── Exploration Messages ─────────────────────────────────────────────────
+
+  /** Convert a RoomGraph room to the ExploredRoomData shape the client expects. */
+  private buildExploredRoomData(roomId: string): ExploredRoomData | null {
+    const room = this.roomGraph.rooms.get(roomId);
+    if (!room) return null;
+
+    const exits: Record<string, string> = {};
+    for (const [dir, targetId] of room.exits) {
+      exits[dir] = targetId;
+    }
+
+    return {
+      roomId: room.id,
+      roomName: room.name,
+      roomType: room.type ?? 'corridor',
+      zoneSlug: this.zoneSlug ?? null,
+      visitedAt: new Date().toISOString(),
+      exits,
+    };
+  }
+
+  /** Send bulk exploration data to a client (on join). */
+  private sendExplorationData(client: Client, playerId: string, currentRoomId: string): void {
+    const roomData = this.buildExploredRoomData(currentRoomId);
+    if (!roomData) return;
+
+    const message: ExplorationDataMessage = {
+      type: MessageTypes.EXPLORATION_DATA,
+      rooms: [roomData],
+      currentRoomId,
+    };
+    client.send(MessageTypes.EXPLORATION_DATA, message);
+    this.log(`Exploration data sent to ${this.playerTag(playerId)} (${currentRoomId})`);
+
+    // Persist visit
+    this.recordExplorationVisit(playerId, currentRoomId, roomData);
+  }
+
+  /** Send incremental exploration update to a client (on room entry). */
+  private sendExplorationUpdate(client: Client, playerId: string, roomId: string): void {
+    const roomData = this.buildExploredRoomData(roomId);
+    if (!roomData) return;
+
+    const message: ExplorationUpdateMessage = {
+      type: MessageTypes.EXPLORATION_UPDATE,
+      room: roomData,
+    };
+    client.send(MessageTypes.EXPLORATION_UPDATE, message);
+
+    // Persist visit
+    this.recordExplorationVisit(playerId, roomId, roomData);
+  }
+
+  /** Fire-and-forget persistence of a room visit. */
+  private recordExplorationVisit(playerId: string, roomId: string, roomData: ExploredRoomData): void {
+    this.explorationRepo.recordVisit({
+      characterId: playerId,
+      zoneSlug: this.zoneSlug ?? null,
+      roomId,
+      roomType: roomData.roomType,
+      roomName: roomData.roomName,
+      shardTier: this.shardTier,
+      biome: this.state.biome,
+    }).catch((err) => {
+      this.log(`Failed to record exploration visit for ${this.playerTag(playerId)}: ${err}`);
+    });
+  }
+
   // ─── Profile Persistence ─────────────────────────────────────────────────
 
   /** Extract persistable profile from player state and save it. */
@@ -1775,7 +1891,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       };
       await this.profileRepo.save(playerId, profile);
     } catch (err) {
-      this.log(`Failed to save profile for ${playerId}: ${err}`);
+      this.log(`Failed to save profile for ${this.playerTag(playerId)}: ${err}`);
     }
   }
 
@@ -1812,7 +1928,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       await this.runHistoryRepo.recordRun(run);
       this.playerJoinTimes.delete(playerId);
     } catch (err) {
-      this.log(`Failed to record run history for ${playerId}: ${err}`);
+      this.log(`Failed to record run history for ${this.playerTag(playerId)}: ${err}`);
     }
   }
 
@@ -1901,7 +2017,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         timestamp: Date.now(),
       } satisfies NarrateMessage);
     } catch (err) {
-      this.log(`Equip failed for ${playerId}: ${err}`);
+      this.log(`Equip failed for ${this.playerTag(playerId)}: ${err}`);
       client.send(MessageTypes.NARRATE, {
         text: 'Failed to equip item.',
         type: 'system',
@@ -1950,7 +2066,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         timestamp: Date.now(),
       } satisfies NarrateMessage);
     } catch (err) {
-      this.log(`Unequip failed for ${playerId}: ${err}`);
+      this.log(`Unequip failed for ${this.playerTag(playerId)}: ${err}`);
       client.send(MessageTypes.NARRATE, {
         text: 'Failed to unequip item.',
         type: 'system',
@@ -1999,7 +2115,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         timestamp: Date.now(),
       } satisfies NarrateMessage);
     } catch (err) {
-      this.log(`Swap failed for ${playerId}: ${err}`);
+      this.log(`Swap failed for ${this.playerTag(playerId)}: ${err}`);
       client.send(MessageTypes.NARRATE, {
         text: 'Failed to swap item.',
         type: 'system',
@@ -2044,6 +2160,15 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
   // ─── Logging ─────────────────────────────────────────────────────────────
+
+  /**
+   * Format a player identifier for logs: "CharacterName" (playerId).
+   * Falls back to just playerId if character name is not available.
+   */
+  private playerTag(playerId: string): string {
+    const name = this.characterNames.get(playerId);
+    return name ? `"${name}" (${playerId})` : `(${playerId})`;
+  }
 
   private log(message: string): void {
     console.log(`[ShardRoom:${this.roomId}] ${message}`);

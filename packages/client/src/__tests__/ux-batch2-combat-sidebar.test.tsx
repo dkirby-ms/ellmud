@@ -64,6 +64,24 @@ vi.mock('../hooks/useShardConnection.js', () => ({
       cancel: vi.fn(),
       returnToRefuge: vi.fn(),
     },
+    roomRef: { current: null },
+  }),
+}));
+
+vi.mock('../hooks/useExplorationMap.js', () => ({
+  useExplorationMap: () => ({
+    visitedRooms: new Map(),
+    ghostRooms: new Map(),
+    positions: new Map(),
+    currentRoomId: null,
+  }),
+}));
+
+vi.mock('../hooks/useMapToggle.js', () => ({
+  useMapToggle: () => ({
+    isMapOpen: false,
+    toggleMap: vi.fn(),
+    closeMap: vi.fn(),
   }),
 }));
 
@@ -270,69 +288,9 @@ describe('Gap #12: HP bar dynamic states', () => {
   });
 });
 
-// ─── Gap #13: Stability bar width ────────────────────────────────────────────
-// UX Review Batch 2 — anticipatory test (gap #13)
-// gaps-brief §3A: stability bar should span full narrative header width
-
-describe('Gap #13: Stability bar spans full header width', () => {
-  it('stability bar is not constrained to 128px (w-32)', () => {
-    // UX Review Batch 2 — anticipatory test (gap #13)
-    renderShardExploration({
-      roomHeader: { roomName: 'Dark Crypt', exits: ['north'], stability: 0.6 },
-    });
-
-    const stabilityLabel = screen.getByText('Shard Stability');
-    const barContainer = stabilityLabel.closest('div')?.querySelector('[class*="rounded-full"]');
-    expect(barContainer).toBeDefined();
-    // Must NOT have w-32 (128px constraint) — should use w-full or flex-1
-    expect(barContainer).not.toHaveClass('w-32');
-    expect(barContainer?.className).toMatch(/w-full|flex-1|flex-grow/);
-  });
-});
-
-// ─── Gap #14-15: Collapse warning & pulse ────────────────────────────────────
-// UX Review Batch 2 — anticipatory test (gap #14, #15)
-// gaps-brief §4D: "COLLAPSE IMMINENT" at <25% stability, pulse in red phase
-
-describe('Gap #14-15: Collapse warning label and pulse', () => {
-  it('"COLLAPSE IMMINENT" label appears when stability < 25%', () => {
-    // UX Review Batch 2 — anticipatory test (gap #14)
-    renderShardExploration({
-      roomHeader: { roomName: 'Shattered Hall', exits: [], stability: 0.2 },
-      shardState: 'destabilising',
-      collapseTimer: 30,
-      collapseTimerMax: 120,
-    });
-
-    expect(screen.getByText(/COLLAPSE IMMINENT/i)).toBeInTheDocument();
-  });
-
-  it('collapse warning has pulse animation class in red phase', () => {
-    // UX Review Batch 2 — anticipatory test (gap #15)
-    renderShardExploration({
-      roomHeader: { roomName: 'Shattered Hall', exits: [], stability: 0.15 },
-      shardState: 'destabilising',
-      collapseTimer: 15,
-      collapseTimerMax: 120,
-    });
-
-    const warning = screen.getByText(/COLLAPSE IMMINENT/i);
-    expect(warning).toHaveClass('animate-pulse');
-    expect(warning).toHaveClass('text-danger');
-  });
-
-  it('no warning label when stability >= 25%', () => {
-    // UX Review Batch 2 — anticipatory test (gap #14)
-    renderShardExploration({
-      roomHeader: { roomName: 'Safe Room', exits: ['south'], stability: 0.5 },
-      shardState: 'active',
-      collapseTimer: 300,
-      collapseTimerMax: 600,
-    });
-
-    expect(screen.queryByText(/COLLAPSE IMMINENT/i)).not.toBeInTheDocument();
-  });
-});
+// ─── Gap #13-15: Stability bar & collapse warning (DEPRECATED) ───────────────
+// Stability bar and collapse timer UI removed per user directive (2026-03-27).
+// These shard-specific UI elements are no longer rendered.
 
 // ─── Gap #16: Sound cue direction highlighting ───────────────────────────────
 // UX Review Batch 2 — anticipatory test (gap #16)

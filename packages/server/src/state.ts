@@ -30,15 +30,3 @@ defineTypes(ShardState, {
   playerCount: 'number',
 });
 
-/**
- * Internal server-only state for the Refuge hub.
- */
-export class RefugeState extends Schema {
-  tick: number = 0;
-  playerCount: number = 0;
-}
-
-defineTypes(RefugeState, {
-  tick: 'number',
-  playerCount: 'number',
-});

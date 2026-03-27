@@ -785,7 +785,7 @@ describe('Phase 2 QA — Trace Decay', () => {
 // 7. REFUGE AMBIENT TEST
 // ═══════════════════════════════════════════════════════════════════════════
 describe('Phase 2 QA — Refuge Ambient Events', () => {
-  // Refuge ambient system is currently a placeholder (RefugeRoom.update increments tick only).
+  // Zone-mode ShardRoom handles ambient events via AmbientSystem.
   // These tests document the expected behavior for when ambient events are implemented.
 
   it.todo('observe 5+ distinct ambient events within 5 minutes (time-accelerated)');

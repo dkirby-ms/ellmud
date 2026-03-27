@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
 import {
   Eye,
   Volume2,
@@ -11,15 +11,25 @@ import ExtractionOverlay from "../components/ExtractionOverlay";
 import ChatPanel from "../components/ChatPanel";
 import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
 import CompassControl from "../components/CompassControl";
+import { MinimapWidget } from "../components/map/MinimapWidget.js";
+import { FullMapOverlay } from "../components/map/FullMapOverlay.js";
+import "../components/map/map.css";
 import { useAppContext } from "../store.js";
 import { useShardConnection } from "../hooks/useShardConnection.js";
-import { useCountdown } from "../hooks/useCountdown.js";
 import { useAutoScroll } from "../hooks/useAutoScroll.js";
+import { useExplorationMap } from "../hooks/useExplorationMap.js";
+import { useMapToggle } from "../hooks/useMapToggle.js";
 import type { CombatAction } from "@ellmud/shared";
 
 export default function ShardExploration() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { state } = useAppContext();
+
+  // Derive zone mode from route path
+  const isZone = location.pathname === "/refuge";
+  const roomName = isZone ? "zone:the-refuge" : "shard";
+
   const {
     handleCommand: sendCommand,
     handleExitClick,
@@ -28,7 +38,10 @@ export default function ShardExploration() {
     extraction,
     reconnection,
     roomRef,
-  } = useShardConnection();
+  } = useShardConnection(roomName);
+
+  const mapState = useExplorationMap(roomRef.current);
+  const { isMapOpen, toggleMap, closeMap } = useMapToggle();
 
   const [command, setCommand] = useState("");
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
@@ -37,28 +50,10 @@ export default function ShardExploration() {
   const [chatOpen, setChatOpen] = useState(false);
   const narrativeRef = useAutoScroll(state.messages);
 
-  // Derive collapse timer from server state, with client-side countdown
-  const collapseTime = useCountdown(state.collapseTimer ?? 0);
-  const collapseTimerMax = state.collapseTimerMax ?? 900;
-
   // Derive room info from server state
   const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
   const zoneName = state.roomHeader?.zoneName;
   const roomType = state.roomHeader?.roomType;
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const getCollapseColor = () => {
-    if (collapseTimerMax <= 0) return "var(--color-text-primary)";
-    const percentage = (collapseTime / collapseTimerMax) * 100;
-    if (percentage > 50) return "var(--color-text-primary)";
-    if (percentage > 25) return "var(--color-warning)";
-    return "var(--color-danger)";
-  };
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -149,9 +144,6 @@ export default function ShardExploration() {
     ? { label: 'Wounded', color: 'text-warning', barColor: 'bg-warning', pulse: false }
     : { label: 'Critical', color: 'text-danger', barColor: 'bg-danger', pulse: true };
 
-  // ─── Stability ─────────────────────────────────────────────────────────
-  const stability = state.roomHeader?.stability ?? 1;
-
   // ─── Sound Cue Direction Highlighting ──────────────────────────────────
   const highlightDirections = (text: string) => {
     const directionRegex = /\b(north|south|east|west|above|below)\b/gi;
@@ -185,12 +177,14 @@ export default function ShardExploration() {
       {/* Top bar */}
       <div className="bg-bg-panel border-b border-border-muted px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate("/refuge")}
-            className="text-text-secondary hover:text-accent-gold transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
+          {!isZone && (
+            <button
+              onClick={() => navigate("/refuge")}
+              className="text-text-secondary hover:text-accent-gold transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
           <span className="text-text-secondary text-sm font-sans">
             {state.playerId ?? "Unknown"}
           </span>
@@ -238,25 +232,6 @@ export default function ShardExploration() {
                 </span>
               )}
             </h2>
-            <div className="flex items-center gap-2 flex-1">
-              <span className="text-text-secondary text-xs font-sans">
-                Shard Stability
-              </span>
-              <div className="flex-1 h-1.5 bg-bg-elevated rounded-full overflow-hidden">
-                <div
-                  className="h-full transition-all"
-                  style={{
-                    width: `${stability * 100}%`,
-                    backgroundColor: stability > 0.5 ? 'var(--color-text-primary)' : stability > 0.25 ? 'var(--color-warning)' : 'var(--color-danger)',
-                  }}
-                ></div>
-              </div>
-              {stability < 0.25 && (
-                <span className="text-danger animate-pulse text-xs font-bold font-sans whitespace-nowrap">
-                  COLLAPSE IMMINENT
-                </span>
-              )}
-            </div>
           </div>
 
           {/* Narrative text — render from real AppContext messages */}
@@ -488,31 +463,6 @@ export default function ShardExploration() {
             </div>
           )}
 
-          {/* Collapse Timer */}
-          <div className="p-4 border-b border-border-muted">
-            <h3
-              className="text-text-secondary text-xs mb-2 font-sans"
-            >
-              COLLAPSE TIMER
-            </h3>
-            <div
-              className="text-3xl font-bold font-mono"
-              style={{ color: getCollapseColor() }}
-            >
-              {state.collapseTimer != null ? formatTime(collapseTime) : "--:--"}
-            </div>
-            {state.shardState === "destabilising" && (
-              <p className="text-danger text-xs mt-2 font-sans">
-                Destabilising
-              </p>
-            )}
-            {state.shardState && (
-              <p className="text-text-disabled text-xs mt-1 font-mono">
-                Shard: {state.shardState}
-              </p>
-            )}
-          </div>
-
           {/* Sound Cues */}
           <div className="p-4 border-b border-border-muted">
             <h3
@@ -541,6 +491,17 @@ export default function ShardExploration() {
 
           {/* Compass Navigation */}
           <CompassControl onNavigate={handleExitClick} />
+
+          {/* Minimap */}
+          <div className="px-4 py-2 flex justify-center">
+            <MinimapWidget
+              visitedRooms={mapState.visitedRooms}
+              ghostRooms={mapState.ghostRooms}
+              positions={mapState.positions}
+              currentRoomId={mapState.currentRoomId}
+              onToggleFullMap={toggleMap}
+            />
+          </div>
 
           {/* Quick Actions */}
           <div className="p-4">
@@ -628,7 +589,7 @@ export default function ShardExploration() {
             placeholder={
               state.connectionStatus === "connected"
                 ? "Type a command..."
-                : "Connecting to shard..."
+                : isZone ? "Connecting to the Refuge..." : "Connecting to shard..."
             }
             disabled={state.connectionStatus !== "connected"}
             className="flex-1 bg-transparent text-text-primary placeholder:text-text-disabled focus:outline-none disabled:opacity-50 font-mono"
@@ -656,23 +617,37 @@ export default function ShardExploration() {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <CombinedStashLoadout room={roomRef.current} inShard />
+              <CombinedStashLoadout room={roomRef.current} inShard={!isZone} />
             </div>
           </div>
         </div>
       )}
 
+      {/* Full Map Overlay */}
+      <FullMapOverlay
+        visitedRooms={mapState.visitedRooms}
+        ghostRooms={mapState.ghostRooms}
+        positions={mapState.positions}
+        currentRoomId={mapState.currentRoomId}
+        isOpen={isMapOpen}
+        onClose={closeMap}
+      />
+
       {/* Extraction Overlay */}
       <ExtractionOverlay
         state={extraction.status}
         progress={extraction.progress}
+        onReturnToRefuge={() => {
+          // Navigate directly to refuge and let useShardConnection handle the reconnection
+          navigate('/refuge');
+        }}
       />
 
       {/* Chat Panel */}
       <ChatPanel
         isOpen={chatOpen}
         onClose={() => setChatOpen(false)}
-        context="shard"
+        context={isZone ? "refuge" : "shard"}
         onSendMessage={sendChatMessage}
       />
 

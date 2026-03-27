@@ -2,7 +2,6 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
 import CharacterSelect from "./pages/CharacterSelect";
-import Refuge from "./pages/Refuge";
 import ShardExploration from "./pages/ShardExploration";
 import Leaderboard from "./pages/Leaderboard";
 import Settings from "./pages/Settings";
@@ -59,7 +58,7 @@ export const routes: RouteObject[] = [
       },
       {
         path: "/refuge",
-        Component: Refuge,
+        Component: ShardExploration,
       },
       {
         path: "/shard/:shardId",

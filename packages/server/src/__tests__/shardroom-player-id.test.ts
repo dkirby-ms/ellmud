@@ -294,7 +294,7 @@ describe('ShardRoom auth integration', () => {
     // Primary assertion: player state is keyed by the auth-provided playerId
     expect(serverRoom.players.has('auth-mapped-player')).toBe(true);
 
-    // If the room maintains a sessionId → playerId map (like RefugeRoom),
+    // If the room maintains a sessionId → playerId map (like zone-mode ShardRoom),
     // verify the mapping exists
     if (serverRoom.playerIds) {
       expect(serverRoom.playerIds.get(client.sessionId)).toBe('auth-mapped-player');

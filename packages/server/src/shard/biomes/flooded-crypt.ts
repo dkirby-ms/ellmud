@@ -50,6 +50,14 @@ export const ROOM_NAMES: Record<RoomType, readonly string[]> = {
     'Stagnant Niche',
     'Bone-Strewn Recess',
   ],
+  // Feature rooms — placeholders; biome-specific names TBD when feature rooms enter generation
+  feature_stash: ['Secure Alcove'],
+  feature_shardboard: ['Etched Vestibule'],
+  feature_marketplace: ['Sunken Bazaar'],
+  feature_crafting: ['Flooded Workshop'],
+  feature_training: ['Drowned Sparring Hall'],
+  feature_contracts: ['Waterlogged Notice Board'],
+  feature_infirmary: ['Damp Infirmary'],
 };
 
 // ─── Room Description Templates ─────────────────────────────────────────────
@@ -82,6 +90,14 @@ export const ROOM_DESCRIPTIONS: Record<RoomType, readonly string[]> = {
     'A collapsed wall blocks further progress. Among the rubble, you spot the glint of something half-buried.',
     'A small alcove, barely large enough to stand in. The walls are carved with worn symbols.',
   ],
+  // Feature rooms — placeholders; biome-specific descriptions TBD when feature rooms enter generation
+  feature_stash: ['A recessed alcove sealed by a heavy iron grate. The air smells of rust and damp cloth.'],
+  feature_shardboard: ['Faded etchings cover a smooth stone slab set into the wall. Notices have been pinned with bone splints.'],
+  feature_marketplace: ['A vaulted chamber where merchants once gathered. Waterlogged stalls line the perimeter.'],
+  feature_crafting: ['Workbenches and scattered tools suggest this was once a place of making. The forge is cold.'],
+  feature_training: ['A wide, low-ceilinged room with weapon racks and scarred practice dummies.'],
+  feature_contracts: ['A sodden board mounted on the wall bears curled parchment — bounties and tasks, half-legible.'],
+  feature_infirmary: ['Stone cots line the walls. A faint herbal scent lingers beneath the ever-present damp.'],
 };
 
 // ─── Loot Table Placeholder ─────────────────────────────────────────────────

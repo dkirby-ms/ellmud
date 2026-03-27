@@ -2,7 +2,7 @@
  * Stash persistence tests — Issue #11.
  *
  * Covers: StashRepository CRUD, StashService business logic (weight limits,
- * capacity, item resolution, take/store), RefugeRoom stash integration.
+ * capacity, item resolution, take/store), zone-mode ShardRoom stash integration.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';

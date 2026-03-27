@@ -10,7 +10,7 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { monitor } from '@colyseus/monitor';
 import express from 'express';
 import http from 'http';
-import { ShardRoom, RefugeRoom } from './rooms/index.js';
+import { ShardRoom } from './rooms/index.js';
 import {
   AuthService,
   InMemoryTokenStore,
@@ -36,7 +36,8 @@ import { initLoadoutProvider } from './loadout/index.js';
 import { initShardSicknessProvider } from './systems/index.js';
 import { initCharacterProvider } from './character/index.js';
 import { createCharacterRouter } from './api/characters.js';
-import { initZoneProvider } from './zones/index.js';
+import { initZoneProvider, getZoneRepository } from './zones/index.js';
+import { initExplorationProvider } from './exploration/index.js';
 
 const config = getConfig();
 const PORT = config.port;
@@ -91,6 +92,10 @@ console.log(`[Ellmud] Character persistence: ${USE_PG ? 'PostgreSQL' : 'in-memor
 // ─── Zone Persistence ───────────────────────────────────────────────────────
 initZoneProvider(USE_PG);
 console.log(`[Ellmud] Zone persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Exploration Persistence ────────────────────────────────────────────────
+initExplorationProvider(USE_PG);
+console.log(`[Ellmud] Exploration persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Redis Bootstrap ─────────────────────────────────────────────────────────
 const { cache: narrationCache, isRedis: isCacheRedis } = await createNarrationCache(config);
@@ -239,7 +244,27 @@ const server = new Server({
 
 // Register room types
 server.define('shard', ShardRoom);
-server.define('refuge', RefugeRoom);
+
+// Dynamic zone registration — register each zone from the zone repository
+const registeredZoneSlugs = new Set<string>();
+try {
+  const zoneRepo = getZoneRepository();
+  const zones = await zoneRepo.getAllZones();
+  for (const zone of zones) {
+    const roomName = `zone:${zone.slug}`;
+    server.define(roomName, ShardRoom);
+    registeredZoneSlugs.add(zone.slug);
+    console.log(`[Ellmud] Registered zone: ${roomName}`);
+  }
+} catch (err) {
+  console.error('[Ellmud] Failed to load zones for registration:', err instanceof Error ? err.message : String(err));
+}
+
+// Ensure the-refuge is always registered (fallback if not in DB)
+if (!registeredZoneSlugs.has('the-refuge')) {
+  server.define('zone:the-refuge', ShardRoom);
+  console.log('[Ellmud] Registered zone: zone:the-refuge (fallback)');
+}
 
 await server.listen(PORT);
 

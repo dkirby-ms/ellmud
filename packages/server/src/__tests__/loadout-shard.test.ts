@@ -48,7 +48,7 @@ beforeEach(() => {
 // ═══════════════════════════════════════════════════════════════════════════
 // SHARD ENTRY VALIDATION
 // These test the expected behavior for shard entry gating.
-// The actual validation may live in RefugeRoom or a separate validator.
+// The actual validation may live in zone-mode ShardRoom or a separate validator.
 // We test the preconditions the loadout system must support.
 // ═══════════════════════════════════════════════════════════════════════════
 

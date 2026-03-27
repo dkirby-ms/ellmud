@@ -5,7 +5,7 @@
  *   register → get token → connect with { token } → room reads client.auth.playerId
  *
  * THE BUG THIS CATCHES:
- * Before the fix, both ShardRoom and RefugeRoom resolved playerId as:
+ * Before the fix, both ShardRoom modes (shard and zone) resolved playerId as:
  *   const playerId = (options['playerId'] as string) || client.sessionId;
  * When a client connects with a valid auth token, `options` contains { token: '...' }
  * but NOT { playerId: '...' }. The playerId lives on client.auth (set by onAuth),
@@ -26,7 +26,6 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
 import { ShardRoom } from '../rooms/ShardRoom.js';
-import { RefugeRoom } from '../rooms/RefugeRoom.js';
 import { AuthService } from '../auth/AuthService.js';
 import { InMemoryTokenStore } from '../auth/TokenStore.js';
 import { InMemoryPlayerRepository } from '../auth/PlayerRepository.js';
@@ -50,7 +49,6 @@ beforeAll(async () => {
 
   const server = new Server();
   server.define('shard', ShardRoom);
-  server.define('refuge', RefugeRoom);
   await server.listen(0);
   const addr = (
     server as unknown as { transport: { server: { address(): { port: number } } } }
@@ -129,17 +127,17 @@ describe('onAuth → onJoin identity handoff (ShardRoom)', () => {
   });
 });
 
-describe('onAuth → onJoin identity handoff (RefugeRoom)', () => {
-  it('should use the authenticated playerId in RefugeRoom too', async () => {
+describe('onAuth → onJoin identity handoff (zone ShardRoom)', () => {
+  it('should use the authenticated playerId in zone ShardRoom too', async () => {
     const { playerId, token } = await registerPlayer('RefugeHero');
 
-    const room = await colyseus.createRoom('refuge', {});
+    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room, { token });
     await wait(500);
 
     const playerIdMap = getPlayerIdMap(room);
 
-    // RefugeRoom uses the same resolution logic — playerId must come from auth
+    // Zone ShardRoom uses the same resolution logic — playerId must come from auth
     expect(playerIdMap.get(client.sessionId)).toBe(playerId);
 
     await client.leave();
@@ -293,11 +291,11 @@ describe('full auth pipeline integration', () => {
     await client.leave();
   });
 
-  it('register → login → join refuge → stash loads with correct playerId', async () => {
+  it('register → login → join zone ShardRoom → stash loads with correct playerId', async () => {
     const reg = await authService.register('RefugePipe', 'securePass1');
     const login = await authService.login('RefugePipe', 'securePass1');
 
-    const room = await colyseus.createRoom('refuge', {});
+    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room, { token: login.token });
     const collector = new MessageCollector(client);
     await wait(500);
@@ -307,7 +305,7 @@ describe('full auth pipeline integration', () => {
     // playerId from auth should be used for stash loading
     expect(playerIdMap.get(client.sessionId)).toBe(reg.playerId);
 
-    // Refuge join messages should arrive
+    // Zone join messages should arrive
     expect(collector.narrate.length).toBeGreaterThan(0);
 
     await client.leave();

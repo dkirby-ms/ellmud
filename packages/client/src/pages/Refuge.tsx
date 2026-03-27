@@ -95,7 +95,7 @@ export default function Refuge() {
         dispatch({ type: "SET_CONNECTION_STATUS", status: "connecting" });
         const room = await connect(
           state.token,
-          "refuge",
+          "zone:the-refuge",
           handlersRef.current,
           state.activeCharacter?.id,
         );
@@ -211,7 +211,7 @@ export default function Refuge() {
     handlersRef.current = handlers;
     dispatch({ type: "SET_CONNECTION_STATUS", status: "connecting" });
 
-    connect(state.token, "refuge", handlers, state.activeCharacter?.id)
+    connect(state.token, "zone:the-refuge", handlers, state.activeCharacter?.id)
       .then((room) => {
         if (!disposed) {
           roomRef.current = room;

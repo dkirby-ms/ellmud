@@ -2,12 +2,12 @@
  * Wave 4 — Stash Persistence Wiring (#11) anticipatory tests.
  *
  * Tests the integration between extraction completion, stash persistence,
- * and the RefugeRoom stash-load-on-entry flow. Covers:
+ * and the zone-mode ShardRoom stash-load-on-entry flow. Covers:
  *   - Extraction → stash transfer pipeline
  *   - Weight enforcement during extraction deposits
  *   - Capacity upgrades through the full pipeline
  *   - Server restart durability (StashService recreation)
- *   - RefugeRoom stash-load-on-join wiring
+ *   - Zone ShardRoom stash-load-on-join wiring
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -461,7 +461,7 @@ describe('Stash Load on Refuge Entry (Issue #11)', () => {
     expect(summary).toContain('100');
   });
 
-  it('full extraction→stash→refuge-load pipeline works end to end', async () => {
+  it('full extraction→stash→zone-load pipeline works end to end', async () => {
     // Simulate a shard run: player picks up items
     const player = new PlayerState(PLAYER_ID, 'entry');
     player.addItem({ id: 'rusty_blade', name: 'Rusty Blade', weight: 5, description: 'Sword' });

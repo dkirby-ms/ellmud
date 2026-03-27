@@ -7,8 +7,9 @@ import {
   createExit, deleteExit,
   type ZoneDefinition, type ZoneRoomDefinition, type ZoneExitDefinition,
 } from "../../lib/zone-api";
+import ZoneDesigner from "./ZoneDesigner.js";
 
-type Tab = "general" | "rooms" | "exits";
+type Tab = "general" | "rooms" | "exits" | "designer";
 
 const BIOME_OPTIONS = [
   "flooded_crypt", "shattered_bastion", "fungal_deep", "ashen_reach", "void_rift",
@@ -236,6 +237,7 @@ export default function ZonesDetail() {
     { id: "general" as Tab, label: "General" },
     { id: "rooms" as Tab, label: `Rooms (${rooms.length})` },
     { id: "exits" as Tab, label: `Exits (${exits.length})` },
+    { id: "designer" as Tab, label: "Designer" },
   ];
 
   if (loading) {
@@ -897,9 +899,22 @@ export default function ZonesDetail() {
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Right Column — Preview */}
+            {/* ─── Designer Tab ─────────────────────────────────────────────── */}
+            {activeTab === "designer" && (
+              <div className="space-y-6">
+                <ZoneDesigner
+                  zone={formData as ZoneDefinition}
+                  rooms={rooms}
+                  exits={exits}
+                  zoneId={zoneId}
+                  onZoneChanged={() => {
+                    if (slug && !isNew) loadZone(slug);
+                  }}
+                />
+              </div>
+            )}
+          </div>
           <div className="space-y-6">
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h3 className="text-[#C9A84C] text-sm mb-4" style={{ fontFamily: "var(--font-sans)" }}>

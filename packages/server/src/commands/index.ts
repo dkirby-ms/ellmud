@@ -23,6 +23,11 @@ import { handleWhisper } from './handlers/whisper.js';
 import { handleEmote } from './handlers/emote.js';
 import { handleStabilize } from './handlers/stabilize.js';
 import type { DowningSystem } from '../systems/DowningSystem.js';
+import type { StashService } from '../stash/StashService.js';
+import type { LoadoutService } from '../loadout/LoadoutService.js';
+import { handleShardboard, handleEnter } from './handlers/shardboard.js';
+import { handleStashView, handleStore } from './handlers/stash-command.js';
+import { handleLoadoutView } from './handlers/loadout-command.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -67,9 +72,41 @@ export interface CommandContext {
   creaturesInRoom?: CreatureRef[];
   /** Downing system reference (available in ShardRoom context). */
   downingSystem?: DowningSystem;
+  /** Stash service for personal storage (available in feature_stash rooms). */
+  stashService?: StashService;
+  /** Loadout service for equipment management (available in feature_stash rooms). */
+  loadoutService?: LoadoutService;
+  /** Query available shards (available in feature_shardboard rooms). */
+  queryShards?: () => Promise<ShardListing[]>;
+  /** Create/join a shard (available in feature_shardboard rooms). */
+  createShard?: (opts?: { tier?: number }) => Promise<ShardListing | null>;
+  /** Current zone display name (e.g. "The Refuge"). */
+  zoneName?: string;
+  /** Current zone slug identifier (e.g. "refuge"). */
+  zoneSlug?: string;
 }
 
 export type CommandHandler = (ctx: CommandContext) => CommandResult;
+
+/** Shard listing summary for shardboard display. */
+export interface ShardListing {
+  roomId: string;
+  biome: string;
+  tier: number;
+  lifecycle: string;
+  playerCount: number;
+  maxPlayers: number;
+  locked: boolean;
+}
+
+// ─── Feature-Gated Handlers ────────────────────────────────────────────────
+
+const featureHandlers = new Map<string, { handler: CommandHandler; requiredRoomType: string }>();
+featureHandlers.set('shardboard', { handler: handleShardboard, requiredRoomType: 'feature_shardboard' });
+featureHandlers.set('enter', { handler: handleEnter, requiredRoomType: 'feature_shardboard' });
+featureHandlers.set('stash', { handler: handleStashView, requiredRoomType: 'feature_stash' });
+featureHandlers.set('store', { handler: handleStore, requiredRoomType: 'feature_stash' });
+featureHandlers.set('loadout', { handler: handleLoadoutView, requiredRoomType: 'feature_stash' });
 
 // ─── Registry ───────────────────────────────────────────────────────────────
 
@@ -95,6 +132,17 @@ export function handleCommand(
   verb: string,
   ctx: CommandContext,
 ): CommandResult {
+  // Feature-gate: check if the command requires a specific room type
+  const featureCmd = featureHandlers.get(verb);
+  if (featureCmd) {
+    if (ctx.room.type !== featureCmd.requiredRoomType) {
+      return {
+        narrations: [{ text: `You can't do that here.`, type: 'system' as NarrationType }],
+      };
+    }
+    return featureCmd.handler(ctx);
+  }
+
   // Extraction command lock: block movement/combat while channeling
   if (ctx.extractionSystem) {
     const lockMessage = ExtractionSystem.checkCommandLock(

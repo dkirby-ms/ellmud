@@ -12,7 +12,6 @@ import express from 'express';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
 import { ShardRoom } from '../rooms/ShardRoom.js';
-import { RefugeRoom } from '../rooms/RefugeRoom.js';
 import { MessageTypes } from '@ellmud/shared';
 import type { NarrateMessage } from '@ellmud/shared';
 
@@ -414,7 +413,6 @@ describe('Room join with auth', () => {
 
     const server = new Server();
     server.define('shard', ShardRoom);
-    server.define('refuge', RefugeRoom);
     await server.listen(0);
     const addr = (server as unknown as { transport: { server: { address(): { port: number } } } }).transport.server.address();
     (server as unknown as { port: number }).port = addr.port;
@@ -459,8 +457,8 @@ describe('Room join with auth', () => {
     await client.leave();
   });
 
-  it('should allow anonymous join to refuge (auth optional)', async () => {
-    const room = await colyseus.createRoom('refuge', {});
+  it('should allow anonymous join to zone ShardRoom (auth optional)', async () => {
+    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room);
 
     const messages: NarrateMessage[] = [];

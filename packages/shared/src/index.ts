@@ -240,9 +240,36 @@ export const MessageTypes = {
   LOADOUT_UPDATE: 'loadout_update',
   ROOM_SWITCH: 'room_switch',
   ZONE_TRANSFER: 'zone_transfer',
+  EXPLORATION_DATA: 'exploration_data',
+  EXPLORATION_UPDATE: 'exploration_update',
 } as const;
 
 export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
+
+// ─── Exploration Map Messages ────────────────────────────────────────────────
+
+/** A room the player has visited, for client-side map rendering. */
+export interface ExploredRoomData {
+  roomId: string;
+  zoneSlug: string | null;
+  visitedAt: string;
+  roomName: string;
+  roomType: string;
+  exits: Record<string, string>;
+}
+
+/** Server → Client: Bulk exploration data sent on join. */
+export interface ExplorationDataMessage {
+  type: typeof MessageTypes.EXPLORATION_DATA;
+  rooms: ExploredRoomData[];
+  currentRoomId: string;
+}
+
+/** Server → Client: Single room update sent on room entry. */
+export interface ExplorationUpdateMessage {
+  type: typeof MessageTypes.EXPLORATION_UPDATE;
+  room: ExploredRoomData;
+}
 
 // ─── Room Graph (GDD §10.1) ─────────────────────────────────────────────────
 
