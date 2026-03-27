@@ -149,13 +149,28 @@ export function sendUnequipItem(room: Room, msg: UnequipItemMessage): void {
   room.send(MessageTypes.UNEQUIP_ITEM, msg);
 }
 
+/** Direction aliases — single letters and bare direction words expand to "go <dir>". */
+const DIRECTION_ALIASES: Record<string, [string, string]> = {
+  n: ['go', 'north'], s: ['go', 'south'], e: ['go', 'east'],
+  w: ['go', 'west'],  u: ['go', 'up'],    d: ['go', 'down'],
+  north: ['go', 'north'], south: ['go', 'south'], east: ['go', 'east'],
+  west: ['go', 'west'],   up: ['go', 'up'],       down: ['go', 'down'],
+};
+
 /** Parse raw input into verb + args and send. */
 export function sendRawCommand(room: Room, input: string): void {
   const trimmed = input.trim();
   if (!trimmed) return;
   const parts = trimmed.split(/\s+/);
-  const verb = parts[0];
-  const args = parts.slice(1);
+  let verb = parts[0]!.toLowerCase();
+  let args = parts.slice(1);
+
+  const alias = DIRECTION_ALIASES[verb];
+  if (alias) {
+    verb = alias[0];
+    args = [alias[1]];
+  }
+
   sendCommand(room, verb, args);
 }
 
