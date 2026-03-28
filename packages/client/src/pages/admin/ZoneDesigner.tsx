@@ -1088,6 +1088,38 @@ export default function ZoneDesigner({
                 const y = pos.y * CELL_H;
                 const portalExits = interZoneExits.filter((e) => e.fromRoomSlug === slug);
 
+                // Vertical (up/down) exits from this room
+                const upExits = exits.filter(
+                  (e) => e.fromRoomSlug === slug && e.direction === "up",
+                );
+                const downExits = exits.filter(
+                  (e) => e.fromRoomSlug === slug && e.direction === "down",
+                );
+                const upTooltip = upExits.length > 0
+                  ? "Up → " + upExits.map((e) => {
+                      const tgt = e.targetZoneSlug
+                        ? `${e.targetZoneSlug}/${e.targetRoomSlug}`
+                        : e.toRoomSlug;
+                      const tRoom = roomMap.get(e.toRoomSlug);
+                      const tPos = positions.get(e.toRoomSlug);
+                      const name = tRoom ? tRoom.name : tgt;
+                      const fl = tPos != null ? ` (F${tPos.z})` : "";
+                      return `${name}${fl}`;
+                    }).join(", ")
+                  : "";
+                const downTooltip = downExits.length > 0
+                  ? "Down → " + downExits.map((e) => {
+                      const tgt = e.targetZoneSlug
+                        ? `${e.targetZoneSlug}/${e.targetRoomSlug}`
+                        : e.toRoomSlug;
+                      const tRoom = roomMap.get(e.toRoomSlug);
+                      const tPos = positions.get(e.toRoomSlug);
+                      const name = tRoom ? tRoom.name : tgt;
+                      const fl = tPos != null ? ` (F${tPos.z})` : "";
+                      return `${name}${fl}`;
+                    }).join(", ")
+                  : "";
+
                 return (
                   <g
                     key={slug}
@@ -1139,6 +1171,42 @@ export default function ZoneDesigner({
                       >
                         ⚠
                       </text>
+                    )}
+
+                    {/* Vertical exit (up/down) badges */}
+                    {upExits.length > 0 && (
+                      <g>
+                        <circle
+                          cx={x + NODE_W - 2} cy={y + 2}
+                          r={8} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
+                        />
+                        <text
+                          x={x + NODE_W - 2} y={y + 2}
+                          textAnchor="middle" dominantBaseline="central"
+                          fill={INTER_FLOOR_COLOR} fontSize="9" fontWeight="bold"
+                          fontFamily="var(--font-sans)"
+                        >
+                          ▲
+                        </text>
+                        <title>{upTooltip}</title>
+                      </g>
+                    )}
+                    {downExits.length > 0 && (
+                      <g>
+                        <circle
+                          cx={x + NODE_W - 2} cy={y + NODE_H - 2}
+                          r={8} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
+                        />
+                        <text
+                          x={x + NODE_W - 2} y={y + NODE_H - 2}
+                          textAnchor="middle" dominantBaseline="central"
+                          fill={INTER_FLOOR_COLOR} fontSize="9" fontWeight="bold"
+                          fontFamily="var(--font-sans)"
+                        >
+                          ▼
+                        </text>
+                        <title>{downTooltip}</title>
+                      </g>
                     )}
 
                     {/* Inter-zone portal indicators */}
@@ -1495,6 +1563,7 @@ export default function ZoneDesigner({
           { label: "Feature", color: "#7B4FA0" },
           { label: "⟐ Portal", color: PORTAL_COLOR },
           { label: "↑↓ Inter-floor", color: INTER_FLOOR_COLOR },
+          { label: "▲▼ Vertical exit", color: INTER_FLOOR_COLOR },
           { label: "⚠ Disconnected", color: "#B8860B" },
           { label: "⚡ Orphan", color: "#EF4444" },
         ].map((item) => (
