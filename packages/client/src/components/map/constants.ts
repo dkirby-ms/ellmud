@@ -33,3 +33,11 @@ export const EDGE_STROKE_WIDTH = 1.5;
 
 /** Ghost room opacity. */
 export const GHOST_OPACITY = 0.3;
+
+/** Inter-floor exit styling. */
+export const INTER_FLOOR_STROKE = '#a78bfa';
+export const INTER_FLOOR_STROKE_WIDTH = 1.5;
+export const INTER_FLOOR_DASH = '4 3';
+
+/** Ghost (off-floor) room opacity — dimmer than normal ghosts. */
+export const GHOST_FLOOR_OPACITY = 0.3;

@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap } from "lucide-react";
 import { computeLayout } from "../../map/computeLayout.js";
 import type { LayoutRoom } from "../../map/computeLayout.js";
+import { FloorSelector } from "../../components/map/FloorSelector.js";
+import { computeFloorBounds } from "../../components/map/useFloorFilter.js";
 import {
   createRoom, updateRoom, deleteRoom,
   createExit, updateExit, deleteExit, listZones, getZone,
@@ -49,6 +51,7 @@ const ROOM_TYPE_COLORS: Record<string, { fill: string; stroke: string }> = {
 const FEATURE_COLOR = { fill: "#2A1A3A", stroke: "#7B4FA0" };
 const DEFAULT_COLOR = { fill: "#1C1D27", stroke: "#4A4B55" };
 const PORTAL_COLOR = "#06b6d4"; // cyan/teal for cross-zone exits
+const INTER_FLOOR_COLOR = "#a78bfa"; // purple for inter-floor exits
 
 function roomColor(type: string): { fill: string; stroke: string } {
   if (type.startsWith("feature_")) return FEATURE_COLOR;
@@ -196,6 +199,9 @@ export default function ZoneDesigner({
   const [showOrphans, setShowOrphans] = useState(false);
   const [orphansBusy, setOrphansBusy] = useState(false);
 
+  // Floor switching
+  const [currentFloor, setCurrentFloor] = useState(0);
+
   // Exit edit form
   const [exitEditForm, setExitEditForm] = useState({
     direction: "",
@@ -273,6 +279,56 @@ export default function ZoneDesigner({
 
     return { positions: pos, roomMap: rMap, interZoneExits: inter, intraZoneExits: intra };
   }, [rooms, exits]);
+
+  // ─── Floor bounds ───────────────────────────────────────
+  const floorBounds = useMemo(() => computeFloorBounds(positions), [positions]);
+
+  // ─── Floor-filtered views ───────────────────────────────
+  const { floorPositions, floorIntraExits, floorInterFloorExits, ghostFloorRoomSlugs } = useMemo(() => {
+    if (!floorBounds.isMultiFloor) {
+      return {
+        floorPositions: positions,
+        floorIntraExits: intraZoneExits,
+        floorInterFloorExits: [] as ZoneExitDefinition[],
+        ghostFloorRoomSlugs: new Set<string>(),
+      };
+    }
+
+    // Rooms on the current floor
+    const fp = new Map<string, { x: number; y: number; z: number }>();
+    for (const [slug, pos] of positions) {
+      if (pos.z === currentFloor) fp.set(slug, pos);
+    }
+
+    // Classify intra-zone exits
+    const onFloor: ZoneExitDefinition[] = [];
+    const crossFloor: ZoneExitDefinition[] = [];
+    const ghosts = new Set<string>();
+
+    for (const exit of intraZoneExits) {
+      const fromPos = positions.get(exit.fromRoomSlug);
+      const toPos = positions.get(exit.toRoomSlug);
+      if (!fromPos || !toPos) continue;
+
+      const fromOn = fromPos.z === currentFloor;
+      const toOn = toPos.z === currentFloor;
+
+      if (fromOn && toOn) {
+        onFloor.push(exit);
+      } else if (fromOn || toOn) {
+        crossFloor.push(exit);
+        if (!fromOn) ghosts.add(exit.fromRoomSlug);
+        if (!toOn) ghosts.add(exit.toRoomSlug);
+      }
+    }
+
+    return {
+      floorPositions: fp,
+      floorIntraExits: onFloor,
+      floorInterFloorExits: crossFloor,
+      ghostFloorRoomSlugs: ghosts,
+    };
+  }, [positions, intraZoneExits, currentFloor, floorBounds.isMultiFloor]);
 
   // ─── Validation ─────────────────────────────────────────
   const validationWarnings = useMemo(() => {
@@ -355,6 +411,11 @@ export default function ZoneDesigner({
       setConnectDirection(dir);
       setConnectBidirectional(true);
       return;
+    }
+    // Auto-switch floor when clicking a room on a different floor
+    if (floorBounds.isMultiFloor) {
+      const pos = positions.get(slug);
+      if (pos && pos.z !== currentFloor) setCurrentFloor(pos.z);
     }
     setSelectedRoom(slug);
     setSelectedExit(null);
@@ -645,10 +706,15 @@ export default function ZoneDesigner({
     );
   }
 
-  // Compute viewBox
+  // Compute viewBox from visible rooms (current floor + ghost rooms for inter-floor exits)
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  if (positions.size > 0) {
-    for (const pos of positions.values()) {
+  const viewBoxPositions = new Map(floorPositions);
+  for (const ghostSlug of ghostFloorRoomSlugs) {
+    const pos = positions.get(ghostSlug);
+    if (pos) viewBoxPositions.set(ghostSlug, pos);
+  }
+  if (viewBoxPositions.size > 0) {
+    for (const pos of viewBoxPositions.values()) {
       const left = pos.x * CELL_W;
       const top = pos.y * CELL_H;
       if (left < minX) minX = left;
@@ -733,6 +799,17 @@ export default function ZoneDesigner({
           )}
         </button>
 
+        {floorBounds.isMultiFloor && (
+          <FloorSelector
+            currentFloor={currentFloor}
+            minFloor={floorBounds.minFloor}
+            maxFloor={floorBounds.maxFloor}
+            onFloorChange={setCurrentFloor}
+            roomCounts={floorBounds.roomCounts}
+            keyboardEnabled={true}
+          />
+        )}
+
         <div className="flex-1" />
 
         {mode === "connect" && (
@@ -786,10 +863,13 @@ export default function ZoneDesigner({
                 <marker id="arrowhead-orphan" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
                   <polygon points="0 0, 8 3, 0 6" fill="#EF4444" />
                 </marker>
+                <marker id="arrowhead-interfloor" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                  <polygon points="0 0, 8 3, 0 6" fill={INTER_FLOOR_COLOR} />
+                </marker>
               </defs>
 
               {/* ── Missing reverse exit ghost lines ─────────── */}
-              {intraZoneExits.filter((e) => missingReverseIds.has(e.id)).map((exit) => {
+              {floorIntraExits.filter((e) => missingReverseIds.has(e.id)).map((exit) => {
                 const fromPos = positions.get(exit.toRoomSlug);
                 const toPos = positions.get(exit.fromRoomSlug);
                 if (!fromPos || !toPos) return null;
@@ -809,8 +889,8 @@ export default function ZoneDesigner({
                 );
               })}
 
-              {/* ── Exit edges ─────────────────────────────────── */}
-              {intraZoneExits.map((exit) => {
+              {/* ── Exit edges (current floor) ─────────────────── */}
+              {floorIntraExits.map((exit) => {
                 const fromPos = positions.get(exit.fromRoomSlug);
                 const toPos = positions.get(exit.toRoomSlug);
                 if (!fromPos || !toPos) return null;
@@ -867,8 +947,91 @@ export default function ZoneDesigner({
                 );
               })}
 
+              {/* ── Inter-floor exit edges (dashed purple) ──────── */}
+              {floorInterFloorExits.map((exit) => {
+                const fromPos = positions.get(exit.fromRoomSlug);
+                const toPos = positions.get(exit.toRoomSlug);
+                if (!fromPos || !toPos) return null;
+
+                const from = roomCenter(fromPos.x, fromPos.y);
+                const to = roomCenter(toPos.x, toPos.y);
+                const { x1, y1, x2, y2 } = clipToRect(from.cx, from.cy, to.cx, to.cy);
+                const { lx, ly } = edgeLabelPos(x1, y1, x2, y2);
+                const isSelected = selectedExit === exit.id;
+                const goesUp = toPos.z > fromPos.z;
+
+                return (
+                  <g
+                    key={`ifl-${exit.id}`}
+                    onClick={(e) => { e.stopPropagation(); handleExitClick(exit.id); }}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <line
+                      x1={x1} y1={y1} x2={x2} y2={y2}
+                      stroke={isSelected ? "#C9A84C" : INTER_FLOOR_COLOR}
+                      strokeWidth={isSelected ? 2.5 : 1.5}
+                      strokeDasharray="4 3"
+                      markerEnd={isSelected ? "url(#arrowhead-selected)" : "url(#arrowhead-interfloor)"}
+                    />
+                    <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={12} />
+                    <text
+                      x={lx} y={ly}
+                      textAnchor="middle" dominantBaseline="central"
+                      fill={isSelected ? "#C9A84C" : INTER_FLOOR_COLOR}
+                      fontSize="10" fontFamily="var(--font-sans)"
+                    >
+                      {exit.direction} {goesUp ? "↑" : "↓"}
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* ── Ghost rooms from other floors (inter-floor endpoints) ── */}
+              {Array.from(ghostFloorRoomSlugs).map((slug) => {
+                const pos = positions.get(slug);
+                const room = roomMap.get(slug);
+                if (!pos || !room) return null;
+                const color = roomColor(room.type);
+                const x = pos.x * CELL_W;
+                const y = pos.y * CELL_H;
+
+                return (
+                  <g
+                    key={`ghost-floor-${slug}`}
+                    opacity={0.3}
+                    onClick={(e) => { e.stopPropagation(); handleRoomClick(slug); }}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <rect
+                      x={x} y={y} width={NODE_W} height={NODE_H} rx={6} ry={6}
+                      fill={color.fill}
+                      stroke={INTER_FLOOR_COLOR}
+                      strokeWidth={1}
+                      strokeDasharray="4 2"
+                    />
+                    <text
+                      x={x + NODE_W / 2} y={y + NODE_H / 2 - 7}
+                      textAnchor="middle" dominantBaseline="central"
+                      fill="#E8E0D0" fontSize="12" fontFamily="var(--font-serif)"
+                    >
+                      {room.name.length > 16 ? room.name.slice(0, 15) + "…" : room.name}
+                    </text>
+                    <text
+                      x={x + NODE_W / 2} y={y + NODE_H / 2 + 9}
+                      textAnchor="middle" dominantBaseline="central"
+                      fill="#6A6B75" fontSize="9" fontFamily="var(--font-mono)"
+                    >
+                      z{pos.z > 0 ? "+" : ""}{pos.z}
+                    </text>
+                  </g>
+                );
+              })}
+
               {/* ── Portal (inter-zone) exit edges ─────────────── */}
-              {interZoneExits.map((exit) => {
+              {interZoneExits.filter((exit) => {
+                const fromPos = positions.get(exit.fromRoomSlug);
+                return fromPos && fromPos.z === currentFloor;
+              }).map((exit) => {
                 const fromPos = positions.get(exit.fromRoomSlug);
                 if (!fromPos) return null;
                 const from = roomCenter(fromPos.x, fromPos.y);
@@ -912,8 +1075,8 @@ export default function ZoneDesigner({
                 );
               })}
 
-              {/* ── Room nodes ──────────────────────────────────── */}
-              {Array.from(positions.entries()).map(([slug, pos]) => {
+              {/* ── Room nodes (current floor) ──────────────────── */}
+              {Array.from(floorPositions.entries()).map(([slug, pos]) => {
                 const room = roomMap.get(slug);
                 if (!room) return null;
                 const color = roomColor(room.type);
@@ -1331,6 +1494,7 @@ export default function ZoneDesigner({
           { label: "Corridor", color: "#4A4B55" },
           { label: "Feature", color: "#7B4FA0" },
           { label: "⟐ Portal", color: PORTAL_COLOR },
+          { label: "↑↓ Inter-floor", color: INTER_FLOOR_COLOR },
           { label: "⚠ Disconnected", color: "#B8860B" },
           { label: "⚡ Orphan", color: "#EF4444" },
         ].map((item) => (

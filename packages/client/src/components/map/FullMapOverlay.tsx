@@ -1,7 +1,9 @@
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type { ExploredRoomData } from '@ellmud/shared';
 import type { RoomPosition } from '../../map/computeLayout.js';
 import { MapRenderer } from './MapRenderer.js';
+import { FloorSelector } from './FloorSelector.js';
+import { useFloorBounds } from './useFloorFilter.js';
 import './map.css';
 
 export interface FullMapOverlayProps {
@@ -21,7 +23,20 @@ export function FullMapOverlay({
   isOpen,
   onClose,
 }: FullMapOverlayProps) {
-  // Close on Escape key
+  const floorBounds = useFloorBounds(positions);
+
+  // Floor state — default to current room's z
+  const [currentFloor, setCurrentFloor] = useState(0);
+
+  // Reset floor to current room when overlay opens
+  useEffect(() => {
+    if (isOpen && currentRoomId) {
+      const pos = positions.get(currentRoomId);
+      if (pos) setCurrentFloor(pos.z);
+    }
+  }, [isOpen, currentRoomId, positions]);
+
+  // Close on Escape key (but don't conflict with [ ] floor keys)
   useEffect(() => {
     if (!isOpen) return;
 
@@ -47,14 +62,26 @@ export function FullMapOverlay({
       <div className="map-panel">
         <div className="map-panel-header">
           <h2>Exploration Map</h2>
-          <button
-            className="map-close-btn"
-            onClick={onClose}
-            title="Close (Esc)"
-            aria-label="Close map"
-          >
-            ✕
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {floorBounds.isMultiFloor && (
+              <FloorSelector
+                currentFloor={currentFloor}
+                minFloor={floorBounds.minFloor}
+                maxFloor={floorBounds.maxFloor}
+                onFloorChange={setCurrentFloor}
+                roomCounts={floorBounds.roomCounts}
+                keyboardEnabled={true}
+              />
+            )}
+            <button
+              className="map-close-btn"
+              onClick={onClose}
+              title="Close (Esc)"
+              aria-label="Close map"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <div className="map-panel-body">
@@ -64,10 +91,14 @@ export function FullMapOverlay({
             positions={positions}
             currentRoomId={currentRoomId}
             compact={false}
+            initialFloor={currentFloor}
+            hideFloorSelector={true}
           />
         </div>
 
-        <div className="map-hint">Press M or Esc to close</div>
+        <div className="map-hint">
+          Press M or Esc to close{floorBounds.isMultiFloor ? ' · [ ] to switch floors' : ''}
+        </div>
       </div>
     </div>
   );

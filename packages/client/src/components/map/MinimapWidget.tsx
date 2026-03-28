@@ -1,6 +1,7 @@
 import type { ExploredRoomData } from '@ellmud/shared';
 import type { RoomPosition } from '../../map/computeLayout.js';
 import { MapRenderer } from './MapRenderer.js';
+import { useFloorBounds } from './useFloorFilter.js';
 import './map.css';
 
 export interface MinimapWidgetProps {
@@ -19,6 +20,7 @@ export function MinimapWidget({
   onToggleFullMap,
 }: MinimapWidgetProps) {
   const hasRooms = visitedRooms.size > 0;
+  const floorBounds = useFloorBounds(positions);
 
   return (
     <div className="minimap-widget">
@@ -40,6 +42,7 @@ export function MinimapWidget({
           positions={positions}
           currentRoomId={currentRoomId}
           compact={true}
+          hideFloorSelector={!floorBounds.isMultiFloor}
         />
       ) : (
         <div className="minimap-placeholder">Explore to reveal map</div>
