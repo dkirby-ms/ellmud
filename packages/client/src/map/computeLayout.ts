@@ -520,5 +520,95 @@ export function computeLayout(
     bfs(roomId, offsetX, 0, 0);
   }
 
+  // ── Phase 4: Diagonal optimization ─────────────────────────────────────────
+  // BFS order can cause a room to be placed by an earlier neighbor, creating
+  // a diagonal line for a later neighbor's cardinal exit. This pass detects
+  // diagonal cardinal exits and relocates rooms to eliminate them.
+  optimizeDiagonals();
+
   return result;
+
+  // ── Diagonal optimization helpers ──────────────────────────────────────────
+
+  /**
+   * Count how many of a room's cardinal exits are visually diagonal
+   * (the line between the two rooms changes both x and y) when
+   * the room is at the given position.
+   */
+  function countVisualDiagonals(
+    roomId: string,
+    atPos: { x: number; y: number; z: number },
+  ): number {
+    const room = rooms.get(roomId);
+    if (!room) return 0;
+
+    let count = 0;
+    for (const [direction, neighborId] of room.exits) {
+      const offset = DIRECTION_OFFSETS[direction];
+      if (!offset || offset.dz !== 0) continue;
+
+      const neighborPos = result.get(neighborId);
+      if (!neighborPos || neighborPos.z !== atPos.z) continue;
+
+      // Diagonal: both x and y differ between the two rooms
+      if (atPos.x !== neighborPos.x && atPos.y !== neighborPos.y) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Iteratively relocate rooms to eliminate diagonal cardinal exits.
+   * For each diagonal, tries moving the target to the source's ideal
+   * position. Accepts moves that don't increase the target's own
+   * diagonal count (the source always gains one fix, so net improves).
+   */
+  function optimizeDiagonals(): void {
+    for (const [z, occupied] of occupiedByZ) {
+      let improved = true;
+      let iterations = 0;
+
+      while (improved && iterations < 100) {
+        improved = false;
+        iterations++;
+
+        for (const [roomId, pos] of result) {
+          if (pos.z !== z) continue;
+          const room = rooms.get(roomId);
+          if (!room) continue;
+
+          for (const [direction, targetId] of room.exits) {
+            const offset = DIRECTION_OFFSETS[direction];
+            if (!offset || offset.dz !== 0) continue;
+
+            const targetPos = result.get(targetId);
+            if (!targetPos || targetPos.z !== z) continue;
+
+            // Skip if not visually diagonal
+            if (pos.x === targetPos.x || pos.y === targetPos.y) continue;
+
+            // Try to move the target to the ideal position
+            const idealX = pos.x + offset.dx;
+            const idealY = pos.y + offset.dy;
+            const idealKey = cellKey(idealX, idealY);
+
+            if (occupied.has(idealKey)) continue;
+
+            // Accept if target's diagonal count doesn't increase
+            const diagsBefore = countVisualDiagonals(targetId, targetPos);
+            const newPos = { x: idealX, y: idealY, z };
+            const diagsAfter = countVisualDiagonals(targetId, newPos);
+
+            if (diagsAfter <= diagsBefore) {
+              occupied.delete(cellKey(targetPos.x, targetPos.y));
+              occupied.add(idealKey);
+              result.set(targetId, newPos);
+              improved = true;
+            }
+          }
+        }
+      }
+    }
+  }
 }

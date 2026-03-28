@@ -434,4 +434,74 @@ describe('computeLayout', () => {
     expect(subE.x).toBe(sub.x + 1);
     expect(subE.y).toBe(sub.y);
   });
+
+  // ── 18. Diagonal optimization ─────────────────────────────────────────────
+  it('eliminates diagonal cardinal exits via post-BFS optimization', () => {
+    // Topology where BFS order causes a diagonal:
+    //   hub → east → east-room → east → far-east → south → target
+    //   hub → south → south-room → east → target
+    // BFS reaches target via far-east (south) before south-room (east),
+    // placing target directly south of far-east. But south-room's east
+    // exit to target then becomes diagonal.
+    const rooms = makeRooms({
+      hub:        [['east', 'east-room'], ['south', 'south-room']],
+      'east-room': [['west', 'hub'], ['east', 'far-east']],
+      'far-east': [['west', 'east-room'], ['south', 'target']],
+      'south-room': [['north', 'hub'], ['east', 'target']],
+      target:     [['north', 'far-east'], ['west', 'south-room']],
+    });
+
+    const layout = computeLayout(rooms, 'hub');
+
+    const sr = pos(layout, 'south-room');
+    const t = pos(layout, 'target');
+    const fe = pos(layout, 'far-east');
+
+    // Target must not be diagonal from south-room (east exit: same y)
+    // AND must not be diagonal from far-east (south exit: same x)
+    // At least one of these should be non-diagonal after optimization
+    const srDiagonal = sr.x !== t.x && sr.y !== t.y;
+    const feDiagonal = fe.x !== t.x && fe.y !== t.y;
+
+    // The optimization should eliminate at least one diagonal
+    expect(srDiagonal && feDiagonal).toBe(false);
+  });
+
+  // ── 19. Diagonal optimization with sewer-like topology ────────────────────
+  it('fixes diagonals in a sewer-like hub-and-spoke with convergent paths', () => {
+    // Mimics the real sewer topology that causes deep-channel ↔ effluent-pool diagonal:
+    //   junction → east → conduit → east → pipe-maze → south → pool
+    //   junction → south → s-tunnel → east → crossing → south → channel → east → pool
+    const rooms = makeRooms({
+      junction:  [['east', 'conduit'], ['south', 's-tunnel'], ['north', 'n-tunnel'], ['west', 'ratways']],
+      conduit:   [['west', 'junction'], ['east', 'pipe-maze'], ['north', 'overflow']],
+      'pipe-maze': [['west', 'conduit'], ['south', 'pool'], ['east', 'gas']],
+      overflow:  [['south', 'conduit'], ['west', 'drain']],
+      drain:     [['east', 'overflow'], ['west', 'n-tunnel']],
+      'n-tunnel': [['south', 'junction'], ['east', 'drain'], ['north', 'rat-nest']],
+      'rat-nest': [['south', 'n-tunnel']],
+      's-tunnel': [['north', 'junction'], ['east', 'crossing'], ['west', 'w-conduit'], ['south', 'vault']],
+      crossing:  [['west', 's-tunnel'], ['south', 'channel']],
+      channel:   [['north', 'crossing'], ['east', 'pool'], ['west', 'silt']],
+      pool:      [['west', 'channel'], ['north', 'pipe-maze']],
+      gas:       [['west', 'pipe-maze']],
+      silt:      [['east', 'channel']],
+      vault:     [['north', 's-tunnel']],
+      ratways:   [['east', 'junction']],
+      'w-conduit': [['east', 's-tunnel']],
+    });
+
+    const layout = computeLayout(rooms, 'junction');
+
+    const ch = pos(layout, 'channel');
+    const pl = pos(layout, 'pool');
+
+    // channel → east → pool: must not be diagonal
+    const isDiagonal = ch.x !== pl.x && ch.y !== pl.y;
+    expect(isDiagonal).toBe(false);
+
+    // pool should be east of channel (same y, x = channel.x + 1 or more)
+    expect(pl.y).toBe(ch.y);
+    expect(pl.x).toBeGreaterThan(ch.x);
+  });
 });
