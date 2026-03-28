@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap } from "lucide-react";
 import { computeLayout } from "../../map/computeLayout.js";
 import type { LayoutRoom } from "../../map/computeLayout.js";
@@ -217,6 +217,10 @@ export default function ZoneDesigner({
     hidden: false,
   });
   const [exitEditTargetRooms, setExitEditTargetRooms] = useState<ZoneRoomDefinition[]>([]);
+
+  // Context menu
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; roomSlug: string } | null>(null);
+  const designerRef = useRef<HTMLDivElement>(null);
 
   // Sync edit form when selection changes
   useEffect(() => {
@@ -450,12 +454,77 @@ export default function ZoneDesigner({
   }
 
   function handleCanvasClick() {
+    setContextMenu(null);
     if (mode === "select") {
       setSelectedRoom(null);
       setSelectedExit(null);
       setConnectTarget(null);
     }
   }
+
+  function handleRoomContextMenu(e: React.MouseEvent, slug: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    const bounds = designerRef.current?.getBoundingClientRect();
+    setContextMenu({
+      x: e.clientX - (bounds?.left ?? 0),
+      y: e.clientY - (bounds?.top ?? 0),
+      roomSlug: slug,
+    });
+  }
+
+  async function handleAddRoomInDirection(fromSlug: string, direction: string) {
+    if (!zoneId) return;
+    const timestamp = Date.now();
+    const newSlug = `new-room-${timestamp}`;
+    try {
+      setBusy(true);
+      setError(null);
+      await createRoom(zoneId, {
+        slug: newSlug,
+        name: "New Room",
+        description: "",
+        type: "corridor",
+        properties: [],
+        lootContainers: [],
+        hazards: [],
+        npcs: [],
+      } as Partial<ZoneRoomDefinition>);
+      // Forward exit
+      await createExit(zoneId, {
+        fromRoomSlug: fromSlug,
+        direction,
+        toRoomSlug: newSlug,
+        locked: false,
+        hidden: false,
+      } as Partial<ZoneExitDefinition>);
+      // Reverse exit
+      if (OPPOSITE[direction]) {
+        await createExit(zoneId, {
+          fromRoomSlug: newSlug,
+          direction: OPPOSITE[direction],
+          toRoomSlug: fromSlug,
+          locked: false,
+          hidden: false,
+        } as Partial<ZoneExitDefinition>);
+      }
+      onZoneChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add room");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Close context menu on Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setContextMenu(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [contextMenu]);
 
   // ─── Room CRUD ──────────────────────────────────────────
   function openAddRoom() {
@@ -752,7 +821,7 @@ export default function ZoneDesigner({
   const vbH = maxY - minY + PADDING * 2;
 
   return (
-    <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg">
+    <div ref={designerRef} className="bg-[#12131A] border border-[#2A2B35] rounded-lg" style={{ position: "relative" }}>
       {/* ─── Error banner ─────────────────────────────────── */}
       {error && (
         <div className="px-4 py-2 bg-[#8B2500]/30 border-b border-[#8B2500] flex items-center justify-between">
@@ -1144,6 +1213,7 @@ export default function ZoneDesigner({
                   <g
                     key={slug}
                     onClick={(e) => { e.stopPropagation(); handleRoomClick(slug); }}
+                    onContextMenu={(e) => handleRoomContextMenu(e, slug)}
                     style={{
                       cursor: mode === "connect" && selectedRoom && slug !== selectedRoom
                         ? "crosshair"
@@ -1711,6 +1781,175 @@ export default function ZoneDesigner({
           </div>
         )}
       </div>
+
+      {/* ─── Context menu overlay ──────────────────────────── */}
+      {contextMenu && (() => {
+        const cmRoom = rooms.find((r) => r.slug === contextMenu.roomSlug);
+        const usedDirs = new Set(
+          exits
+            .filter((e) => e.fromRoomSlug === contextMenu.roomSlug && !e.targetZoneSlug)
+            .map((e) => e.direction),
+        );
+        const directions: Array<{ dir: string; label: string; arrow: string }> = [
+          { dir: "north", label: "Add Room North", arrow: "↑" },
+          { dir: "south", label: "Add Room South", arrow: "↓" },
+          { dir: "east",  label: "Add Room East",  arrow: "→" },
+          { dir: "west",  label: "Add Room West",  arrow: "←" },
+          { dir: "up",    label: "Add Room Up",    arrow: "▲" },
+          { dir: "down",  label: "Add Room Down",  arrow: "▼" },
+        ];
+        return (
+          <div
+            style={{
+              position: "absolute",
+              top: contextMenu.y,
+              left: contextMenu.x,
+              zIndex: 100,
+              background: "#1C1D27",
+              border: "1px solid #2A2B35",
+              borderRadius: 6,
+              padding: "4px 0",
+              minWidth: 180,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+              fontFamily: "var(--font-sans)",
+              fontSize: 12,
+              color: "#E0E0E0",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {directions.map(({ dir, label, arrow }) => {
+              const disabled = usedDirs.has(dir);
+              return (
+                <button
+                  key={dir}
+                  disabled={disabled || busy}
+                  onClick={() => {
+                    setContextMenu(null);
+                    void handleAddRoomInDirection(contextMenu.roomSlug, dir);
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    width: "100%",
+                    padding: "6px 12px",
+                    background: "transparent",
+                    border: "none",
+                    color: disabled ? "#4A4B55" : "#E0E0E0",
+                    cursor: disabled ? "default" : "pointer",
+                    fontFamily: "var(--font-sans)",
+                    fontSize: 12,
+                    textAlign: "left",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = "#2A2B35";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                  }}
+                >
+                  <span style={{ width: 14, textAlign: "center" }}>{arrow}</span>
+                  {label}
+                </button>
+              );
+            })}
+
+            {/* Divider */}
+            <div style={{ height: 1, background: "#2A2B35", margin: "4px 0" }} />
+
+            <button
+              onClick={() => {
+                setContextMenu(null);
+                handleRoomClick(contextMenu.roomSlug);
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: "100%",
+                padding: "6px 12px",
+                background: "transparent",
+                border: "none",
+                color: "#E0E0E0",
+                cursor: "pointer",
+                fontFamily: "var(--font-sans)",
+                fontSize: 12,
+                textAlign: "left",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#2A2B35"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+            >
+              <span style={{ width: 14, textAlign: "center" }}>✎</span>
+              Edit Room
+            </button>
+
+            <button
+              onClick={() => {
+                setContextMenu(null);
+                setSelectedRoom(contextMenu.roomSlug);
+                setSelectedExit(null);
+                setConnectTarget(null);
+                setMode("connect");
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: "100%",
+                padding: "6px 12px",
+                background: "transparent",
+                border: "none",
+                color: "#E0E0E0",
+                cursor: "pointer",
+                fontFamily: "var(--font-sans)",
+                fontSize: 12,
+                textAlign: "left",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#2A2B35"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+            >
+              <span style={{ width: 14, textAlign: "center" }}>⟗</span>
+              Connect Exit…
+            </button>
+
+            {/* Divider */}
+            <div style={{ height: 1, background: "#2A2B35", margin: "4px 0" }} />
+
+            <button
+              disabled={busy}
+              onClick={() => {
+                setContextMenu(null);
+                if (!cmRoom || !confirm(`Delete room "${cmRoom.name}"?`)) return;
+                setBusy(true);
+                setError(null);
+                deleteRoom(cmRoom.id)
+                  .then(() => { setSelectedRoom(null); onZoneChanged?.(); })
+                  .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed to delete room"))
+                  .finally(() => setBusy(false));
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: "100%",
+                padding: "6px 12px",
+                background: "transparent",
+                border: "none",
+                color: "#8B2500",
+                cursor: "pointer",
+                fontFamily: "var(--font-sans)",
+                fontSize: 12,
+                textAlign: "left",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#2A2B35"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+            >
+              <span style={{ width: 14, textAlign: "center" }}>🗑</span>
+              Delete Room
+            </button>
+          </div>
+        );
+      })()}
 
       {/* ─── Validation warnings ──────────────────────────── */}
       {validationWarnings.length > 0 && (
