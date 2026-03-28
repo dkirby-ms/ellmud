@@ -321,3 +321,61 @@ Each z-level gets its own `occupied` set since the designer displays one floor a
 
 - **Z-level layout must be independent of parent level positions.** When multiple surface rooms connect down to the same sub-level, the sub-level's cardinal topology should dictate its own layout, not the surface positions. Anchoring at the first z-transition and BFS-expanding with only cardinal exits solves this.
 - **Per-z-level occupied sets are essential.** Rooms on different z-levels can share (x,y) without conflict because the designer shows one floor at a time. A single global occupied set incorrectly blocks sub-level room placement.
+
+
+## 2026-03-27T20:45Z — Styled Delete Exit Modal
+
+**Completed:** Replaced native `window.confirm()` for exit deletion with a styled modal matching Portal Dialog / Orphaned Exits Modal aesthetic. Added checkbox to optionally delete the reverse/connecting exit.
+
+**Files Modified:** 1
+- `packages/client/src/pages/admin/ZoneDesigner.tsx` — Added `showDeleteExitModal` and `deleteAlsoReverse` state; rewrote `handleDeleteExit()` to open modal instead of confirm; created `confirmDeleteExit()` to handle actual deletion with optional reverse exit deletion; added styled modal JSX after orphaned exits modal
+
+**Build:** ✅ Clean (tsc + vite)
+**Tests:** ✅ Client tests passed
+
+**Details:**
+- Modal uses same dark theme styling as Portal Dialog: `bg-[#1C1D27]`, `border-[#2A2B35]`, gold title `text-[#C9A84C]`, `var(--font-sans)` for UI text
+- Shows exit info in mono font: `fromRoomSlug → toRoomSlug (direction)`
+- Detects reverse exit using `OPPOSITE` direction map and matching from/to slugs
+- Checkbox defaults to checked when reverse exit exists (most exits are bidirectional)
+- If no reverse exit found, checkbox is hidden
+- Handles both single-exit deletion (unchecked) and double-deletion (checked) via two `deleteExit()` calls
+- Cancel via button or backdrop click
+- Busy state disables buttons during deletion
+
+**UX Flow:**
+1. User clicks trash button on exit in sidebar edit panel
+2. `handleDeleteExit()` finds exit, checks for reverse, sets checkbox default, opens modal
+3. User confirms (optionally unchecks reverse deletion) or cancels
+4. `confirmDeleteExit()` deletes selected exit and optionally reverse exit
+5. Selection cleared, zone refreshed via `onZoneChanged?.()`
+
+## Learnings
+
+- **Modal pattern for confirmations is consistent:** All styled modals in Zone Designer follow same structure — fixed overlay with `bg-black/50`, centered card with dark theme colors, click backdrop to cancel, `stopPropagation()` on card to prevent close
+- **Checkbox for bidirectional actions should default to checked:** Most exits are bidirectional, so "also delete reverse" should be opt-out (checked by default) not opt-in
+- **IIFE pattern `{showModal && selectedItem && (() => { ... })()}` is useful for computing derived state inline without polluting component scope:** Allows finding reverse exit within JSX render block without creating separate memoized values
+- **Font family must be explicitly set:** MUD aesthetic requires `style={{ fontFamily: "var(--font-sans)" }}` on all text elements, `var(--font-mono)` on code/slugs/technical identifiers
+- **Context menu pattern for Copy/Paste Properties:** Added property clipboard feature following existing menu button patterns (same inline styles, hover handlers), conditional rendering for paste button, toast notification at bottom center of designer for visual feedback
+- **Property clipboard stores name/description/type/properties but NOT slug/id:** Identity fields should never be copied — only visual/descriptive properties are part of the "property brush"
+- **Toast notifications auto-dismiss after 3 seconds:** Simple setTimeout pattern with gold text (`#C9A84C`) on dark background, positioned at bottom center with `position: absolute` and `transform: translateX(-50%)`
+- **Paste Properties keeps clipboard loaded:** Don't clear `copiedRoomProps` after pasting — allows batch application to multiple rooms (power-user workflow)
+
+
+## 2026-03-28T22:53Z — Zone Designer UX: Exit Modal & Copy-Paste
+
+**Completed:** Two UX improvements for zone designer workflow  
+**Files Modified:** 2 (1 new)
+
+- `ZoneRoomDetail.tsx` — integrated exit deletion modal and copy/paste properties context menu
+- `ExitDeleteConfirmModal.tsx` (new) — styled modal for destructive exit operations
+
+**Build:** ✅ Clean  
+**Tests:** ✅ All 125+ client tests pass
+
+**Features:**
+1. **Exit Deletion Modal** — Replaced native `window.confirm()` with MUD-styled modal including "also delete connecting exit" checkbox for bidirectional cleanup
+2. **Room Property Copy-Paste** — Added context menu actions: Copy Properties (serializes description, flags, biome, etc. to clipboard) and Paste Properties (applies stored data to current room with toast feedback). Supports multi-paste.
+
+**Impact:** Zone designers can now manage destructive operations with visual feedback and reuse room configurations across zones for faster design iteration.
+

@@ -3790,3 +3790,30 @@ The layout engine is a pure function shared by both the admin zone designer and 
 
 This is a targeted fix: grid clusters already work correctly, and disconnected subgraphs don't need directional bias. The change only affects the cardinal-exit placement in BFS, which is the exact code path that was producing misleading layouts.
 
+# Decision: Z-Level Independent BFS Layout
+
+**By:** Regis (Frontend Dev)
+**Date:** 2026-03-27T20:05Z
+**Component:** `packages/client/src/map/computeLayout.ts`
+
+## What
+
+The BFS layout engine now treats each z-level as an independent coordinate space:
+
+1. **Phase 1** BFS-es the primary z-level (z=0), deferring all `up`/`down` exits into a pending list instead of placing targets immediately.
+2. **Phase 2** processes each deferred z-level: the first transition anchors the sub-level at the source room's (x,y), then a fresh BFS expands the subgraph using only cardinal exits. Further `up`/`down` exits to deeper levels (z=-2, etc.) are deferred recursively.
+3. **Phase 3** handles disconnected subgraphs (unchanged).
+
+Each z-level gets its own `occupied` set — rooms on different floors can share the same (x,y) without collision since the designer displays one floor at a time.
+
+## Why
+
+The sewer level has 3 entry points from scattered surface rooms. The old BFS placed sub-level rooms at the surface room's (x,y), inheriting arbitrary positions that didn't match the sewer's own cardinal topology. Cardinal exits between sewer rooms then produced diagonal lines in the zone designer.
+
+## Impact
+
+- **Zone designer:** Sub-levels now display coherent cardinal layouts regardless of how many surface entry points exist.
+- **Minimap:** Same engine, same fix applies.
+- **Grid cluster detection:** Unchanged — still works within each z-level.
+- **Tests:** 3 new tests (sewer topology, shared x/y across z-levels, 3-level cascade). All 17 passing.
+
