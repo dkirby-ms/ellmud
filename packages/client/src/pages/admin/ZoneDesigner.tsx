@@ -516,14 +516,21 @@ export default function ZoneDesigner({
     }
   }
 
-  // Close context menu on Escape
+  // Close context menu on Escape or click outside
   useEffect(() => {
     if (!contextMenu) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setContextMenu(null);
     }
+    function onClick() {
+      setContextMenu(null);
+    }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onClick);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onClick);
+    };
   }, [contextMenu]);
 
   // ─── Room CRUD ──────────────────────────────────────────
@@ -1800,6 +1807,7 @@ export default function ZoneDesigner({
         ];
         return (
           <div
+            onMouseDown={(e) => e.stopPropagation()}
             style={{
               position: "absolute",
               top: contextMenu.y,
