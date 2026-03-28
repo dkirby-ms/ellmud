@@ -212,6 +212,12 @@ export default function ZoneDesigner({
   const MIN_ZOOM = 0.25;
   const MAX_ZOOM = 3.0;
 
+  // Pan
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+
   // Exit edit form
   const [exitEditForm, setExitEditForm] = useState({
     direction: "",
@@ -227,6 +233,7 @@ export default function ZoneDesigner({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; roomSlug: string } | null>(null);
   const designerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
 
   // Sync edit form when selection changes
   useEffect(() => {
@@ -275,11 +282,54 @@ export default function ZoneDesigner({
         } else if (e.key === "0") {
           e.preventDefault();
           setZoom(1.0);
+          setPanX(0);
+          setPanY(0);
         }
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // Reset pan when floor changes
+  useEffect(() => {
+    setPanX(0);
+    setPanY(0);
+  }, [currentFloor]);
+
+  // Pan mouse handlers on SVG
+  const handlePanMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    // Only start pan on SVG background, not on room/exit elements
+    if (e.target !== e.currentTarget) return;
+    // Only left button
+    if (e.button !== 0) return;
+    e.preventDefault(); // Prevent text selection during drag
+    setIsPanning(true);
+    panStartRef.current = { x: e.clientX, y: e.clientY, panX, panY };
+  }, [panX, panY]);
+
+  const handlePanMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (!isPanning || !panStartRef.current || !svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    // We need zoomedW/zoomedH for coordinate conversion, but those are computed
+    // in the render section. Parse from the current viewBox attribute.
+    const vb = svgRef.current.getAttribute("viewBox");
+    if (!vb) return;
+    const parts = vb.split(/\s+/).map(Number);
+    const vbWidth = parts[2];
+    const vbHeight = parts[3];
+    const scaleX = vbWidth / rect.width;
+    const scaleY = vbHeight / rect.height;
+    // Pan opposite to mouse direction
+    const dx = (e.clientX - panStartRef.current.x) * scaleX;
+    const dy = (e.clientY - panStartRef.current.y) * scaleY;
+    setPanX(panStartRef.current.panX - dx);
+    setPanY(panStartRef.current.panY - dy);
+  }, [isPanning]);
+
+  const handlePanMouseUp = useCallback(() => {
+    setIsPanning(false);
+    panStartRef.current = null;
   }, []);
 
   // Sync exit edit form when exit selection changes
@@ -864,8 +914,15 @@ export default function ZoneDesigner({
   const zoomedX = vbX + (vbW - zoomedW) / 2;
   const zoomedY = vbY + (vbH - zoomedH) / 2;
 
+  // Apply pan offset
+  const finalX = zoomedX + panX;
+  const finalY = zoomedY + panY;
+
+  // Cursor style based on mode
+  const canvasCursor = mode === "connect" ? "crosshair" : isPanning ? "grabbing" : "grab";
+
   return (
-    <div ref={designerRef} className="bg-[#12131A] border border-[#2A2B35] rounded-lg" style={{ position: "relative" }}>
+    <div ref={designerRef} className="bg-[#12131A] border border-[#2A2B35] rounded-lg h-full flex flex-col" style={{ position: "relative" }}>
       {/* ─── Error banner ─────────────────────────────────── */}
       {error && (
         <div className="px-4 py-2 bg-[#8B2500]/30 border-b border-[#8B2500] flex items-center justify-between">
@@ -972,15 +1029,27 @@ export default function ZoneDesigner({
             <ZoomIn className="w-3 h-3" />
           </button>
           <button
-            onClick={() => setZoom(1.0)}
-            disabled={zoom === 1.0}
+            onClick={() => { setZoom(1.0); setPanX(0); setPanY(0); }}
+            disabled={zoom === 1.0 && panX === 0 && panY === 0}
             className="px-2 py-1.5 border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:border-[#3A3B45] rounded text-xs disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             style={{ fontFamily: "var(--font-sans)" }}
-            title="Reset zoom (0)"
+            title="Reset zoom & pan (0)"
           >
             <Maximize2 className="w-3 h-3" />
           </button>
         </div>
+
+        {/* Pan indicator */}
+        {(panX !== 0 || panY !== 0) && (
+          <button
+            onClick={() => { setPanX(0); setPanY(0); }}
+            className="px-2 py-1 text-[#8A8B95] hover:text-[#E8E0D0] text-xs transition-colors"
+            style={{ fontFamily: "var(--font-sans)" }}
+            title="Reset pan"
+          >
+            📍 Panned
+          </button>
+        )}
 
         {mode === "connect" && (
           <span className="text-[#C9A84C] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
@@ -999,11 +1068,12 @@ export default function ZoneDesigner({
       </div>
 
       {/* ─── Main area (canvas + side panel) ──────────────── */}
-      <div className="flex">
+      <div className="flex flex-1 min-h-0">
         {/* SVG Canvas */}
         <div
           ref={canvasRef}
           className="flex-1 p-4 overflow-auto"
+          style={{ cursor: canvasCursor }}
           onClick={(e) => { if (e.target === e.currentTarget) handleCanvasClick(); }}
         >
           {rooms.length === 0 ? (
@@ -1014,9 +1084,14 @@ export default function ZoneDesigner({
             </div>
           ) : (
             <svg
-              viewBox={`${zoomedX} ${zoomedY} ${zoomedW} ${zoomedH}`}
-              style={{ width: "100%", minHeight: "350px" }}
+              ref={svgRef}
+              viewBox={`${finalX} ${finalY} ${zoomedW} ${zoomedH}`}
+              style={{ width: "100%", minHeight: "350px", cursor: canvasCursor }}
               xmlns="http://www.w3.org/2000/svg"
+              onMouseDown={handlePanMouseDown}
+              onMouseMove={handlePanMouseMove}
+              onMouseUp={handlePanMouseUp}
+              onMouseLeave={handlePanMouseUp}
             >
               <defs>
                 <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
