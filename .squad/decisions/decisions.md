@@ -3741,3 +3741,52 @@ Pan is implemented as a viewBox offset (`panX`/`panY` added to the zoom-adjusted
 - Mouse-to-SVG coordinate conversion is straightforward (one scale factor from `getBoundingClientRect`)
 - Room click handlers, exit rendering, and context menus are unaffected since they work in SVG coordinate space
 - If we later add zoom-to-cursor, the shared viewBox approach makes that simpler
+# Decision: Direction-Biased Room Layout in Zone Designer
+
+**Date:** 2026-03-27  
+**Decider:** Regis (Frontend Dev)  
+**Status:** Implemented
+
+## Problem
+
+The zone designer was placing rooms in visually misleading positions. When a room's ideal position (determined by exit direction) was occupied, the layout engine used a direction-unaware spiral search to find the nearest free cell. This caused rooms with cardinal exits (east, west, north, south) to be placed at incorrect angles — for example, an "east" exit might place the target room north-east, south, or even west of the source, depending on which cell was free first.
+
+**Example:** "blighted-courtyard" with an east exit might appear diagonal from its neighbor even though the exit is cardinal.
+
+## Solution
+
+Replaced the plain spiral search with a direction-biased algorithm for cardinal exits:
+
+1. **Added `findNearestDirectional()`** — searches in concentric rings by Manhattan distance (same as before) but within each ring, uses a dot product score to prefer cells aligned with the exit direction.
+
+   - For an "east" exit (dx=1, dy=0), cells further east get higher scores.
+   - For a "north" exit (dx=0, dy=-1), cells further north get higher scores.
+
+2. **Updated BFS** — the main layout loop now calls `findNearestDirectional(idealX, idealY, offset.dx, offset.dy, occupied)` instead of `findNearestUnoccupied(idealX, idealY, occupied)` when placing cardinal-direction neighbors (~line 387 in `computeLayout.ts`).
+
+3. **Kept `findNearestUnoccupied()`** — still used for disconnected subgraph placement. No breaking changes to that code path.
+
+## Impact
+
+- **Zone designer UI:** Rooms now appear in visually correct positions relative to their exits. Cardinal exits produce straight lines, not diagonals.
+- **Grid clusters:** Already placed as coherent blocks; this fix improves the linear/tree-shaped approach areas connecting to grids.
+- **Tests:** All 14 existing `computeLayout.test.ts` tests still pass. No test expectations needed updating because the old tests didn't rely on the specific non-directional spiral behavior.
+
+## Files Modified
+
+- `packages/client/src/map/computeLayout.ts`
+  - Added `findNearestDirectional()` function (37 lines)
+  - Updated cardinal exit placement to use direction-biased search (1-line change in BFS loop)
+
+## Build/Test Results
+
+- **Build:** ✅ Clean (`npm run build`)
+- **Tests:** ✅ 14/14 passed (`packages/client/src/map/__tests__/computeLayout.test.ts`)
+- **Full client suite:** ✅ 125/125 passed
+
+## Rationale
+
+The layout engine is a pure function shared by both the admin zone designer and the player minimap. Visual accuracy is critical for zone design — designers need to see rooms where they logically belong. The direction-biased search maintains the "nearest free cell" property (minimal displacement) while respecting the semantic meaning of exit directions.
+
+This is a targeted fix: grid clusters already work correctly, and disconnected subgraphs don't need directional bias. The change only affects the cardinal-exit placement in BFS, which is the exact code path that was producing misleading layouts.
+
