@@ -2729,3 +2729,990 @@ The codebase has two Colyseus room classes — `ShardRoom` and `RefugeRoom` — 
 - Server: `ShardRoom.ts` — 3 code changes
 - Tests: 5 assertion updates across 3 test files
 - Client: No changes required (this was the point)
+### 2026-03-28T00:14:27Z: User directive — Stamina system scoping
+**By:** dkirby-ms (via Copilot)
+**What:** Add stamina as a placeholder in the status panel now (always 0/0). Scope a full stamina system as a future TODO.
+**Why:** User request — captured for team memory
+
+### 2026-03-28T00:14:27Z: User directive — Equipment silhouette style
+**By:** dkirby-ms (via Copilot)
+**What:** Use an abstract slot diagram (not pixel-art body outline) for the equipment silhouette.
+**Why:** User request — captured for team memory
+
+### 2026-03-28T00:14:27Z: User directive — Shared ItemTooltip
+**By:** dkirby-ms (via Copilot)
+**What:** ItemTooltip component should be shared/reusable between EquipmentSilhouette and CombinedStashLoadout.
+**Why:** User request — captured for team memory
+# Decision: Exploration Messages Are Fire-and-Forget
+
+**Date:** 2025-07-17  
+**Author:** Drizzt (Engine Dev)  
+**Status:** Implemented
+
+## Context
+
+ShardRoom sends exploration data to clients for the in-game map. Three paths trigger exploration messages:
+1. `onJoin` → `EXPLORATION_DATA` (bulk payload with starting room)
+2. Movement command → `EXPLORATION_UPDATE` (incremental room)
+3. Flee (combat tick) → `EXPLORATION_UPDATE` (incremental room)
+
+## Decision
+
+Exploration persistence (`recordVisit`) is fire-and-forget — errors are logged but never block gameplay. The client map renders from messages alone; the repository is for cross-session persistence only.
+
+Exits are serialized as `Record<string, string>` (direction → targetRoomId) in the `ExploredRoomData` payload, converted from the `Map<Direction, string>` used in the room graph.
+
+## Impact
+
+- **Client team:** The `ExploredRoomData` shape matches what `useExplorationMap.ts` expects. No client changes needed.
+- **Persistence team:** If `recordVisit` throws, the player's map still works for the current session. Only cross-session recall is affected.
+# Decision: PLAYER_STATE Message Pipeline
+
+**Date:** 2026-03-27  
+**Agent:** Drizzt (Engine Developer)  
+**Status:** Implemented  
+
+## Context
+
+The client status panel and MUD prompt displayed HP, stamina, and status effects, but all values were hardcoded on the client side. The server never sent player state updates, so combat damage was invisible to the player until they checked their combatant state.
+
+## Decision
+
+Implemented a full message-only pipeline for player state updates:
+
+1. **Message Type:** Added `PLAYER_STATE` to `MessageTypes` enum in shared package
+2. **Message Shape:** `PlayerStateMessage` with `hp`, `maxHp`, `stamina`, `maxStamina`, `statusEffects[]`
+3. **Server Sends:**
+   - On join: Initial state with default HP (100/100)
+   - After combat tick: Updates to players who took damage
+4. **Client Receives:** Updates store fields (`playerHp`, `playerMaxHp`, `playerStamina`, `playerMaxStamina`, `statusEffects`)
+
+## Key Constraints
+
+- **Stamina is a placeholder:** Always 0/0. User explicitly wants to scope full stamina system later.
+- **Status effects array is empty:** Ready for future system but not implemented yet.
+- **HP source:** Pulled from `Combatant` objects in `CombatSystem`, which are created lazily when combat begins.
+- **Optimization:** Only send PLAYER_STATE to players who took damage, not all players on every tick.
+
+## Why This Matters
+
+- **Team-wide pattern:** This establishes the canonical approach for real-time player state updates (message-only, no Schema sync).
+- **Future stamina system:** The pipeline is ready — just populate the stamina fields when the system is implemented.
+- **Status effects:** The structure is in place for status effect tracking (buffs, debuffs, DoTs).
+
+## Files Modified
+
+- `packages/shared/src/index.ts`
+- `packages/server/src/rooms/ShardRoom.ts`
+- `packages/client/src/store.ts`
+- `packages/client/src/hooks/useShardConnection.ts`
+- `packages/client/src/services/connection.ts`
+- `packages/server/src/__tests__/helpers/message-collector.ts`
+
+## Testing
+
+- 3 new tests in `player-state-message.test.ts`:
+  - PLAYER_STATE sent on join
+  - PLAYER_STATE sent after combat damage
+  - Message shape validation
+- All tests pass, build clean
+
+## Related Systems
+
+- **Combat System:** CombatSystem tracks Combatant HP, which is the source for PLAYER_STATE messages
+- **Client Store:** playerHp/maxHp already existed (hardcoded), now updated via message
+- **Future Work:** Stamina system, status effects system
+# Zone Design: The Warrens
+
+**Author:** Laeral (Content Designer)
+**Date:** 2025-07-24
+**Status:** Draft — ready for Bruenor to implement
+
+---
+
+## Overview
+
+| Field | Value |
+|---|---|
+| **Zone slug** | `the-warrens` |
+| **Name** | The Warrens |
+| **Biome** | ruins / urban decay |
+| **Category** | `dungeon` (extraction zone) |
+| **Lifecycle** | `persistent` |
+| **Tier** | 1–2 |
+| **PvP** | `false` |
+| **Max players** | 3 |
+
+**Theme:** A desolate, sparsely inhabited ruined city landscape. Winding streets choked with the detritus of some ancient civilisation — shattered masonry, corroded metal, dust that hasn't settled in centuries. The streets look deserted but the sounds of life and death echo across the cracked pavement. Something lives here. Something hunts here.
+
+**Tone keywords (for LLM narration):** dread, desolation, urban decay, echo, dust, silence-then-noise, ancient loss
+
+---
+
+## 1. ROOMS (11 rooms)
+
+### Room Map (ASCII)
+
+```
+                                    [Overwatch Tower]
+                                           │
+                                          (up)
+                                           │
+[Shattered Gate] ──east──▸ [Rubble Boulevard] ──east──▸ [Hollow Market] ──north──▸ [Broken Sanctuary]
+       │                                                       │                          │
+  (to Refuge/                                                south                  east (LOCKED)
+   Hearth)                                                     │                          │
+                                                      [Whispering Alley] ──────── [Collapsed Tenement]
+                                                               │                   (dead end, east)
+                                                             south
+                                                               │
+                                                   [Dustfall Extraction] ──east──▸ [Sunken Square]
+                                                                                        │
+                                                                                   down (HIDDEN)
+                                                                                        │
+                                                                                   [The Ratways]
+                                                                                        │
+                                                                                      south
+                                                                                        │
+                                                                                  [The Charnel Pit]
+```
+
+**Critical paths:**
+- **Main loop:** Gate → Boulevard → Market → (north) Sanctuary → (locked east) Sunken Square
+- **South loop:** Market → (south) Alley → (south) Extraction → (east) Sunken Square
+- **Hidden descent:** Sunken Square → (hidden down) Ratways → (south) Charnel Pit (boss)
+- **Dead ends:** Overwatch Tower (up from Boulevard), Collapsed Tenement (east from Alley)
+
+---
+
+### Room Definitions
+
+#### 1. Shattered Gate
+| Field | Value |
+|---|---|
+| **slug** | `shattered-gate` |
+| **name** | Shattered Gate |
+| **type** | `entry` |
+| **properties** | `["heavy_door", "open_sky"]` |
+
+**Description:**
+A colossal archway, split down its centre by some ancient cataclysm, frames the entrance to a ruined city. Rubble spills outward like the city is trying to disgorge its own bones. Wind funnels through the gap, carrying the faint tang of rust and something older — something burnt.
+
+**NPCs:** None (safe entry room)
+**Loot:** None
+**Hazards:** None
+
+---
+
+#### 2. Rubble-Choked Boulevard
+| Field | Value |
+|---|---|
+| **slug** | `rubble-boulevard` |
+| **name** | Rubble-Choked Boulevard |
+| **type** | `corridor` |
+| **properties** | `["open_sky", "rubble"]` |
+
+**Description:**
+A once-grand boulevard stretches east, its paving stones heaved upward by roots that died centuries ago. Collapsed facades lean drunkenly against one another, forming accidental tunnels of broken stone. Glass crunches underfoot no matter how carefully you step.
+
+**NPCs:** Gutterspawn ×2–3
+**Loot:** 1× crate (`bent-rebar` or `gutterspawn-fang`)
+**Hazards:** `unstable_rubble` — loud movement may trigger minor rockfall (1–3 damage)
+
+---
+
+#### 3. Overwatch Tower
+| Field | Value |
+|---|---|
+| **slug** | `overwatch-tower` |
+| **name** | Overwatch Tower |
+| **type** | `dead_end` |
+| **properties** | `["elevated", "open_sky"]` |
+
+**Description:**
+A spiralling stair of crumbling stone leads up through the shell of a watchtower. Half the upper floor has sheered away, offering a vertiginous view over the rooftops of the dead city. Wind howls through the gap. Someone has scratched tally marks into the wall — hundreds of them — in neat, obsessive rows.
+
+**NPCs:** None (eerily empty — tension room)
+**Loot:** 1× corpse (`charred-street-map` 20% / `tarnished-medallion` 80%)
+**Hazards:** `unstable_floor` — lingering too long risks collapse (environmental warning after 3 ticks)
+
+---
+
+#### 4. The Hollow Market
+| Field | Value |
+|---|---|
+| **slug** | `hollow-market` |
+| **name** | The Hollow Market |
+| **type** | `junction` |
+| **properties** | `["open_sky", "large_space"]` |
+
+**Description:**
+A sunken plaza opens up where three streets converge, littered with the skeletal frames of market stalls. Faded awnings hang in tatters. A dry fountain at the centre holds a statue with no face — whether eroded or deliberately defaced, it's impossible to tell. Echoes carry strangely here; sounds from every adjacent street pool in this space.
+
+**NPCs:** Rubble Scavenger ×1–2
+**Loot:** 2× crate (`bent-rebar` 50%, `scavenger-shiv` 20%, `tarnished-medallion` 30%)
+**Hazards:** None (but sound propagation is amplified — actions here are audible from adjacent rooms)
+
+---
+
+#### 5. Broken Sanctuary
+| Field | Value |
+|---|---|
+| **slug** | `broken-sanctuary` |
+| **name** | Broken Sanctuary |
+| **type** | `chamber` |
+| **properties** | `["heavy_door", "enclosed"]` |
+
+**Description:**
+Stone columns, cracked but standing, hold up what remains of a vaulted ceiling. This was a place of worship or governance — the distinction has been erased by time. An altar of dark stone dominates the far wall, its surface scarred by claw marks. The air smells of old incense and fresh blood.
+
+**NPCs:** Hollow Stalker ×1
+**Loot:** 1× altar (`rubble-crusted-vest` 40%, `tarnished-medallion` 40%, `sanctuary-key` 20%)
+**Hazards:** None
+
+---
+
+#### 6. Whispering Alley
+| Field | Value |
+|---|---|
+| **slug** | `whispering-alley` |
+| **name** | Whispering Alley |
+| **type** | `corridor` |
+| **properties** | `["narrow", "enclosed"]` |
+
+**Description:**
+The buildings press close here, their upper storeys nearly touching overhead. Every sound — your breath, your footfall, the distant crack of settling stone — bounces between the walls until it sounds like a crowd of invisible speakers. Debris forms knee-high barricades at irregular intervals. Something has been dragging things through here.
+
+**NPCs:** Gutterspawn ×2–4
+**Loot:** 1× corpse (`gutterspawn-fang` 60%, `scavenger-shiv` 25%, `sanctuary-key` 15%)
+**Hazards:** None
+
+---
+
+#### 7. Collapsed Tenement
+| Field | Value |
+|---|---|
+| **slug** | `collapsed-tenement` |
+| **name** | Collapsed Tenement |
+| **type** | `dead_end` |
+| **properties** | `["enclosed", "rubble"]` |
+
+**Description:**
+What was once a three-storey dwelling has pancaked into a single compressed layer of shattered timber, bent pipes, and pulverised plaster. A narrow gap leads into a pocket of relative stability — a room-sized void where the floors above wedged against each other instead of falling. It smells like a den. It smells occupied.
+
+**NPCs:** Rubble Scavenger ×2–3
+**Loot:** 1× chest (`scavenger-shiv` 30%, `rubble-crusted-vest` 30%, `tarnished-medallion` 40%)
+**Hazards:** `unstable_rubble` — combat here risks minor cave-in (1–3 damage per tick to all combatants, 30% chance per combat tick)
+
+---
+
+#### 8. Dustfall Extraction
+| Field | Value |
+|---|---|
+| **slug** | `dustfall-extraction` |
+| **name** | Dustfall Extraction |
+| **type** | `extraction` |
+| **properties** | `["open_sky", "large_space"]` |
+
+**Description:**
+A wide intersection where the ruins fall back, leaving an unexpected expanse of open sky. Dust drifts down endlessly from the crumbling buildings above, catching light like grey snow. A half-collapsed pedestrian bridge arches overhead — beneath it, the ground has been swept clean in a perfect circle. This is where the shard thins. This is where you leave.
+
+**NPCs:** Rubble Scavenger ×0–1 (light patrol)
+**Loot:** None (extraction point — keep it clean)
+**Hazards:** None (but extraction ritual generates noise, drawing creatures from adjacent rooms)
+
+---
+
+#### 9. The Sunken Square
+| Field | Value |
+|---|---|
+| **slug** | `sunken-square` |
+| **name** | The Sunken Square |
+| **type** | `junction` |
+| **properties** | `["water", "enclosed"]` |
+
+**Description:**
+The street dips sharply here, as if the earth itself sagged under the weight of ruin. Stagnant water collects in the depression, ankle-deep and dark. The walls of surrounding buildings rise like the sides of a well. Scratch marks line the stone at water level — long, parallel gouges, ascending from somewhere below.
+
+**NPCs:** Hollow Stalker ×1
+**Loot:** 1× crate (submerged — `tarnished-medallion` 50%, `bent-rebar` 30%, `rubble-crusted-vest` 20%)
+**Hazards:** `standing_water` — movement speed reduced, agility checks at -1 in combat
+
+---
+
+#### 10. The Ratways
+| Field | Value |
+|---|---|
+| **slug** | `the-ratways` |
+| **name** | The Ratways |
+| **type** | `corridor` |
+| **properties** | `["enclosed", "narrow", "water"]` |
+
+**Description:**
+A drainage tunnel, barely tall enough to stand in, runs beneath the square. The ceiling drips steadily. Gutterspawn nests line the walls — tangles of cloth, bone, and wire — most of them empty. Most. The tunnel slopes downward into darkness, and from below comes a sound like stone grinding against stone.
+
+**NPCs:** Gutterspawn ×3–4
+**Loot:** 1× nest-pile (`gutterspawn-fang` ×2 70%, `tarnished-medallion` 30%)
+**Hazards:** `low_ceiling` — no overhead attacks; `water` — sound propagates further
+
+---
+
+#### 11. The Charnel Pit
+| Field | Value |
+|---|---|
+| **slug** | `charnel-pit` |
+| **name** | The Charnel Pit |
+| **type** | `boss` |
+| **properties** | `["cavern", "enclosed"]` |
+
+**Description:**
+The tunnel opens into a vast pit — the foundations of a collapsed building, ripped open like a wound. Bones and rubble are fused into the walls. At the centre, something enormous shifts in the debris, rebar-spiked and concrete-skinned, as if the building itself refused to die and instead became something worse. The air vibrates with each of its slow, grinding breaths.
+
+**NPCs:** The Collapsed One ×1 (boss)
+**Loot:** 1× boss chest (spawns on kill — `charred-street-map` 30%, `scavenger-shiv` 20%, `rubble-crusted-vest` 25%, `tarnished-medallion` 25%)
+**Hazards:** `seismic_tremor` — boss ability: 30% chance per 3 ticks to shake the room (2–5 damage to all players, interrupts channelling)
+
+---
+
+## 2. EXIT MAP
+
+All exits are bidirectional unless noted.
+
+| From Room | Direction | To Room | Flags |
+|---|---|---|---|
+| `shattered-gate` | east | `rubble-boulevard` | — |
+| `shattered-gate` | west | **Refuge / Hearth** | `cross_zone: true`, `target_zone_slug: refuge`, `target_room_slug: hearth` |
+| `rubble-boulevard` | west | `shattered-gate` | — |
+| `rubble-boulevard` | east | `hollow-market` | — |
+| `rubble-boulevard` | up | `overwatch-tower` | — |
+| `overwatch-tower` | down | `rubble-boulevard` | — |
+| `hollow-market` | west | `rubble-boulevard` | — |
+| `hollow-market` | north | `broken-sanctuary` | — |
+| `hollow-market` | south | `whispering-alley` | — |
+| `broken-sanctuary` | south | `hollow-market` | — |
+| `broken-sanctuary` | east | `sunken-square` | `locked: true` (requires `sanctuary-key`) |
+| `sunken-square` | west | `broken-sanctuary` | `locked: true` (requires `sanctuary-key`) |
+| `whispering-alley` | north | `hollow-market` | — |
+| `whispering-alley` | east | `collapsed-tenement` | — |
+| `whispering-alley` | south | `dustfall-extraction` | — |
+| `collapsed-tenement` | west | `whispering-alley` | — |
+| `dustfall-extraction` | north | `whispering-alley` | — |
+| `dustfall-extraction` | east | `sunken-square` | — |
+| `sunken-square` | west | `dustfall-extraction` | — |
+| `sunken-square` | down | `the-ratways` | `hidden: true` (discovered via search/perception check) |
+| `the-ratways` | up | `sunken-square` | — |
+| `the-ratways` | south | `charnel-pit` | — |
+| `charnel-pit` | north | `the-ratways` | — |
+
+**Key doors:** Broken Sanctuary ↔ Sunken Square requires the `sanctuary-key` (found on Hollow Stalkers or in Whispering Alley corpse loot).
+
+**Hidden exit:** Sunken Square → down → The Ratways. The scratch marks in the room description are the hint. Discoverable via `search` command or high Awareness skill.
+
+---
+
+## 3. CREATURES
+
+### 3a. Gutterspawn
+
+| Field | Value |
+|---|---|
+| **type (slug)** | `gutterspawn` |
+| **name** | Gutterspawn |
+| **tier** | 1 |
+| **behavior** | `skulker` (hit-and-flee) |
+
+**Description:** Bloated, rat-like things the size of a large dog, with too many legs and mouths full of needle teeth. They nest in packs in the drainage tunnels and alleyways, emerging to feed on anything that stops moving. Individually pathetic. In numbers, lethal.
+
+**Stats:**
+
+| Stat | Value |
+|---|---|
+| maxHp | 15 |
+| attack | 5 |
+| defence | 1 |
+| armour | 0 |
+| agility | 7 |
+
+**Spawn Rules:**
+
+| Field | Value |
+|---|---|
+| minCount | 2 |
+| maxCount | 4 |
+| preferredRoomTypes | `["corridor", "dead_end"]` |
+| forbiddenRoomTypes | `["entry", "extraction", "boss"]` |
+| idleTicksMin | 3 |
+| idleTicksMax | 6 |
+| fleeThreshold | 0.3 |
+
+**Loot Table:**
+
+| itemId | name | weight | description | dropWeight |
+|---|---|---|---|---|
+| `gutterspawn-fang` | Gutterspawn Fang | 0.2 | A yellowed, hollow fang, still wet with venom. | 80 |
+| `bent-rebar` | Bent Rebar | 3 | A corroded length of rebar. Barely a weapon. | 15 |
+| *(nothing)* | — | — | — | 5 |
+
+---
+
+### 3b. Rubble Scavenger
+
+| Field | Value |
+|---|---|
+| **type (slug)** | `rubble-scavenger` |
+| **name** | Rubble Scavenger |
+| **tier** | 1 |
+| **behavior** | `berserker` (strike-heavy) |
+
+**Description:** Gaunt, hunched humanoids wrapped in rags and scavenged armour. Whether they were once people or something that learned to walk like people is unclear. They fashion crude weapons from debris and fight with desperate, cornered-animal fury. Their eyes are empty but their hands never stop grasping.
+
+**Stats:**
+
+| Stat | Value |
+|---|---|
+| maxHp | 35 |
+| attack | 8 |
+| defence | 3 |
+| armour | 2 |
+| agility | 4 |
+
+**Spawn Rules:**
+
+| Field | Value |
+|---|---|
+| minCount | 1 |
+| maxCount | 3 |
+| preferredRoomTypes | `["junction", "dead_end", "chamber"]` |
+| forbiddenRoomTypes | `["entry", "boss"]` |
+| idleTicksMin | 4 |
+| idleTicksMax | 8 |
+| fleeThreshold | 0.15 |
+
+**Loot Table:**
+
+| itemId | name | weight | description | dropWeight |
+|---|---|---|---|---|
+| `bent-rebar` | Bent Rebar | 3 | A corroded length of rebar. Barely a weapon. | 50 |
+| `tarnished-medallion` | Tarnished Medallion | 0.5 | An ornate disc of dull metal, engraved with a sigil no one remembers. | 25 |
+| `scavenger-shiv` | Scavenger's Shiv | 2 | A blade of broken glass bound with wire. Crude but sharp. | 15 |
+| *(nothing)* | — | — | — | 10 |
+
+---
+
+### 3c. Hollow Stalker
+
+| Field | Value |
+|---|---|
+| **type (slug)** | `hollow-stalker` |
+| **name** | Hollow Stalker |
+| **tier** | 1–2 |
+| **behavior** | `skulker` (ambush, hit-and-disengage) |
+
+**Description:** Tall, emaciated figures that move in absolute silence until the moment they strike. Their skin is grey and taut, their features erased as if sanded smooth. They cling to walls and ceilings in collapsed structures, dropping on prey from above. When they kill, they drag the corpse away and are not seen eating — but the corpse is always found empty.
+
+**Stats:**
+
+| Stat | Value |
+|---|---|
+| maxHp | 60 |
+| attack | 13 |
+| defence | 5 |
+| armour | 4 |
+| agility | 6 |
+
+**Spawn Rules:**
+
+| Field | Value |
+|---|---|
+| minCount | 1 |
+| maxCount | 2 |
+| preferredRoomTypes | `["chamber", "junction"]` |
+| forbiddenRoomTypes | `["entry", "extraction", "corridor"]` |
+| idleTicksMin | 5 |
+| idleTicksMax | 12 |
+| fleeThreshold | 0.15 |
+
+**Loot Table:**
+
+| itemId | name | weight | description | dropWeight |
+|---|---|---|---|---|
+| `tarnished-medallion` | Tarnished Medallion | 0.5 | An ornate disc of dull metal. They collect these — no one knows why. | 40 |
+| `sanctuary-key` | Sanctuary Key | 0.3 | A heavy iron key, corroded but intact. Its teeth are shaped like no modern lock. | 15 |
+| `scavenger-shiv` | Scavenger's Shiv | 2 | Taken from a scavenger that won't be needing it. | 20 |
+| *(nothing)* | — | — | — | 25 |
+
+---
+
+### 3d. The Collapsed One (Boss)
+
+| Field | Value |
+|---|---|
+| **type (slug)** | `the-collapsed-one` |
+| **name** | The Collapsed One |
+| **tier** | 2 |
+| **behavior** | `guardian` (slow, devastating, holds ground) |
+
+**Description:** It was a building once — or it was something that was trapped when the building fell. Now the distinction is academic. Rebar juts from its hunched back like broken ribs. Its skin is powdered concrete and its fists are foundation stones. It moves with terrible, grinding slowness, but when it swings, walls crack. It does not speak. It does not flee. It does not stop.
+
+**Stats:**
+
+| Stat | Value |
+|---|---|
+| maxHp | 150 |
+| attack | 18 |
+| defence | 8 |
+| armour | 10 |
+| agility | 1 |
+
+**Spawn Rules:**
+
+| Field | Value |
+|---|---|
+| minCount | 1 |
+| maxCount | 1 |
+| preferredRoomTypes | `["boss"]` |
+| forbiddenRoomTypes | `["entry", "extraction", "corridor", "junction", "dead_end", "chamber"]` |
+| idleTicksMin | 8 |
+| idleTicksMax | 15 |
+| fleeThreshold | 0 |
+
+**Loot Table:**
+
+| itemId | name | weight | description | dropWeight |
+|---|---|---|---|---|
+| `rubble-crusted-vest` | Rubble-Crusted Vest | 5 | Masonry fragments fused to leather. Heavy, but it stops a blade. | 30 |
+| `scavenger-shiv` | Scavenger's Shiv | 2 | Lodged in its chest. Previous challenger's contribution. | 25 |
+| `charred-street-map` | Charred Street Map | 0.5 | Scorched but legible. Shows routes through the Warrens. | 20 |
+| `tarnished-medallion` | Tarnished Medallion | 0.5 | Embedded in its concrete hide. Pried loose. | 25 |
+
+---
+
+## 4. ITEMS
+
+### 4a. Bent Rebar (Scrap Weapon)
+
+| Field | Value |
+|---|---|
+| **itemId** | `bent-rebar` |
+| **name** | Bent Rebar |
+| **type** | `weapon` |
+| **tier** | `scrap` |
+| **weight** | 3 |
+| **allowedSlots** | `["weapon"]` |
+| **durability** | 20 |
+
+**Description:** A corroded length of rebar, wrenched from a collapsed wall. One end is bent into a rough hook. It's heavy, slow, and ugly — but it's better than bare hands, and you'll find a hundred of them in these ruins.
+
+**Stats (JSONB):**
+```json
+{ "damage": 4, "speed": 0.8 }
+```
+
+---
+
+### 4b. Scavenger's Shiv (Common Weapon)
+
+| Field | Value |
+|---|---|
+| **itemId** | `scavenger-shiv` |
+| **name** | Scavenger's Shiv |
+| **type** | `weapon` |
+| **tier** | `common` |
+| **weight** | 2 |
+| **allowedSlots** | `["weapon"]` |
+| **durability** | 30 |
+
+**Description:** A shard of plate glass, its base wrapped in copper wire for a grip. The edge is wickedly sharp but fragile. The scavengers of the Warrens fashion these by the dozen — they break often, so they make many.
+
+**Stats (JSONB):**
+```json
+{ "damage": 7, "speed": 1.2 }
+```
+
+---
+
+### 4c. Rubble-Crusted Vest (Common Armour)
+
+| Field | Value |
+|---|---|
+| **itemId** | `rubble-crusted-vest` |
+| **name** | Rubble-Crusted Vest |
+| **type** | `armour` |
+| **tier** | `common` |
+| **weight** | 5 |
+| **allowedSlots** | `["chest"]` |
+| **durability** | 40 |
+
+**Description:** A padded leather vest with chunks of masonry and tile lashed to its surface. Improvised but effective — the Warrens teach you to armour yourself with whatever the ruins provide. Weighs more than proper plate but costs nothing but sweat.
+
+**Stats (JSONB):**
+```json
+{ "armour": 3 }
+```
+
+---
+
+### 4d. Tarnished Medallion (Common Material)
+
+| Field | Value |
+|---|---|
+| **itemId** | `tarnished-medallion` |
+| **name** | Tarnished Medallion |
+| **type** | `material` |
+| **tier** | `common` |
+| **weight** | 0.5 |
+| **allowedSlots** | `[]` |
+| **durability** | — |
+
+**Description:** An ornate disc of tarnished metal, stamped with a sigil that might once have been a face or a sun or a wheel. The civilisation that minted these is dust, but the metal still has value. Merchants in the Refuge pay decent coin for pre-collapse artefacts.
+
+**Stats (JSONB):**
+```json
+{ "vendor_value": 15 }
+```
+
+---
+
+### 4e. Gutterspawn Fang (Scrap Material)
+
+| Field | Value |
+|---|---|
+| **itemId** | `gutterspawn-fang` |
+| **name** | Gutterspawn Fang |
+| **type** | `material` |
+| **tier** | `scrap` |
+| **weight** | 0.2 |
+| **allowedSlots** | `[]` |
+| **durability** | — |
+
+**Description:** A hollow, yellowed fang pulled from a gutterspawn's maw. The interior canal still glistens with venom. Alchemists and crafters use these for poison extraction or as improvised needles. Not worth much individually, but you'll have pockets full of them.
+
+**Stats (JSONB):**
+```json
+{ "vendor_value": 3 }
+```
+
+---
+
+### 4f. Sanctuary Key (Common Key)
+
+| Field | Value |
+|---|---|
+| **itemId** | `sanctuary-key` |
+| **name** | Sanctuary Key |
+| **type** | `key` |
+| **tier** | `common` |
+| **weight** | 0.3 |
+| **allowedSlots** | `[]` |
+| **durability** | — |
+
+**Description:** A heavy iron key, its shaft thick with verdigris but its teeth still sharp. It fits the reinforced door between the Broken Sanctuary and the Sunken Square — a shortcut through the ruins that someone once locked for a reason.
+
+**Stats (JSONB):**
+```json
+{ "unlocks": "broken-sanctuary-east" }
+```
+
+---
+
+### 4g. Charred Street Map (Sturdy Tool — Rare)
+
+| Field | Value |
+|---|---|
+| **itemId** | `charred-street-map` |
+| **name** | Charred Street Map |
+| **type** | `tool` |
+| **tier** | `sturdy` |
+| **weight** | 0.5 |
+| **allowedSlots** | `[]` |
+| **durability** | — |
+| **soulbound** | `false` |
+
+**Description:** A fragment of vellum, edges blackened by fire, showing a street grid that matches the ruins around you. Landmarks are annotated in a precise, alien script. When consulted, it reveals the layout of rooms you haven't yet visited — including passages others might miss. The rare find that makes a run profitable even before you swing a blade.
+
+**Stats (JSONB):**
+```json
+{ "effect": "reveal_zone_map", "uses": 1, "vendor_value": 40 }
+```
+
+---
+
+## 5. ENCOUNTER FLOW & PACING
+
+### Intended Player Experience
+
+1. **Shattered Gate** — Safe arrival. Read the scene, orient yourself. The silence is the first threat.
+2. **Rubble Boulevard** — First gutterspawn encounter. Easy, but teaches pack combat. Crate as tutorial loot.
+3. **Overwatch Tower** (optional) — Risk/reward dead end. Good loot (rare map chance) but floor collapse hazard. Environmental storytelling via tally marks.
+4. **Hollow Market** — Central junction. First rubble scavenger encounter. Three exits create decision paralysis — north toward the locked sanctuary path, or south into the alleys?
+5. **Broken Sanctuary** (north path) — Hollow stalker ambush. Dangerous solo. The locked east door is visible but requires the key, creating a reason to explore further or return later.
+6. **Whispering Alley** (south path) — Gutterspawn gauntlet. Narrow corridors amplify sound. The corpse loot can include the sanctuary key (alternate source).
+7. **Collapsed Tenement** (dead end) — Scavenger den. Hazardous combat space (cave-in risk). Good loot chest as reward for the dead-end exploration.
+8. **Dustfall Extraction** — The way out. Light patrols. The extraction ritual generates noise — creatures from Whispering Alley and Sunken Square may respond.
+9. **Sunken Square** — Second hollow stalker. The hidden exit rewards searching. Standing water adds tactical complexity.
+10. **The Ratways** (hidden) — Gutterspawn nest. Tense, claustrophobic. Signals the boss ahead via sound design (grinding stone).
+11. **The Charnel Pit** (boss) — The Collapsed One. The zone's climax. High risk, strong loot. Seismic tremor mechanic prevents passive play.
+
+### Difficulty Curve
+- **Rooms 1-3:** Tier 1 introductory. Gutterspawn are cannon fodder.
+- **Rooms 4-7:** Tier 1 standard. Rubble scavengers and gutterspawn packs. First hollow stalker is a difficulty spike.
+- **Rooms 8-9:** Tier 1-2 transition. Second hollow stalker. Environmental hazards layer onto combat.
+- **Rooms 10-11:** Tier 2. Gutterspawn swarm + boss. The Collapsed One requires kiting (low agility) or a party.
+
+### Sound Propagation Notes
+- The Hollow Market's `large_space` property means combat there echoes into Boulevard, Sanctuary, and Alley.
+- The Ratways' `water` property carries sound down to the Charnel Pit — the boss may be alert when you arrive.
+- Whispering Alley's `narrow` property creates echo — creatures here respond quickly to noise.
+- Extraction ritual at Dustfall Extraction is audible in Whispering Alley and Sunken Square.
+
+---
+
+## 6. LORE HOOKS
+
+- **The Tally Marks (Overwatch Tower):** Who was counting? What were they counting? Days? Kills? Arrivals? Future content can answer this with a journal item or NPC.
+- **The Faceless Statue (Hollow Market):** Deliberate defacement suggests the civilisation fell to internal conflict, not external invasion. Connects to broader Ellmud lore about pre-collapse factions.
+- **The Medallions:** The Hollow Stalkers collect tarnished medallions. They don't use them. They don't trade them. Future quest: figure out why. Possible connection to the Collapsed One or to a deeper zone beneath the Warrens.
+- **The Collapsed One:** Is it a creature that merged with debris, or a building that became animate? The answer matters for future zone design — if structures can come alive in shards, that changes everything.
+- **The Locked Sanctuary:** What was being kept out? Or kept in? The scratch marks in the Sunken Square descend — something was climbing up from below.
+
+---
+
+*End of design document. Ready for implementation.*
+# Equipment Silhouette + Shared ItemTooltip Component
+
+**Date:** 2026-03-28  
+**Agent:** Regis (Frontend Developer)  
+**Status:** ✅ Implemented  
+
+## Context
+
+Built a visual equipment slot diagram for the ShardExploration sidebar, allowing players to see their equipped gear at a glance without opening the full inventory modal. Created a reusable ItemTooltip component that can be shared across multiple UI elements.
+
+## Decision
+
+### 1. Abstract Slot Diagram (Not Body Outline)
+
+Chose a **compact grid layout** showing equipment slots arranged logically:
+```
+       [Head]
+  [Weapon] [Chest] [Offhand]
+       [Hands]
+       [Legs]
+       [Feet]
+  [Ring1] [Amulet] [Ring2]
+```
+
+**Rationale:**
+- More space-efficient than pixel-art body silhouette
+- Clearer slot identification with labels
+- Easier to scan visually in sidebar
+- Matches MUD text-first aesthetic
+
+### 2. Reusable ItemTooltip Component
+
+Created standalone `ItemTooltip.tsx` that can be used by:
+- EquipmentSilhouette (current)
+- CombinedStashLoadout (future enhancement)
+- Any future item display context
+
+**Features:**
+- Viewport-aware positioning (prevents overflow)
+- Tier-colored border and glow effect
+- Shows: name, type, slot, weight, description, tier badge
+- Ready for stats display when server provides them
+
+### 3. Tier Color Standardization
+
+Both components use identical tier color mapping:
+- scrap: `#808080` (gray)
+- common: `#d4d4d4` (white)
+- sturdy: `#4ade80` (green)
+- refined: `#60a5fa` (blue)
+- masterwork: `#c084fc` (purple)
+- anomalous: `#fbbf24` (gold)
+
+These match the existing tier colors throughout the client codebase.
+
+### 4. Sidebar Placement
+
+Positioned between **status effects** and **quick inventory** in the right sidebar.
+
+**Rationale:**
+- Status effects → Equipment → Inventory forms a logical flow
+- Player condition → What they're wearing → What they're carrying
+- Equipment is semi-static (changes less frequently than inventory)
+
+### 5. Stats Placeholder
+
+ItemTooltip shows `?` for weapon/armour stats since `DisplayItem` doesn't include computed stats.
+
+**Future Enhancement Needed:**
+- Server must add computed stats (damage/speed/armour) to `DisplayItem` message
+- Or create separate stat lookup endpoint
+- Tooltip code already structured to display stats when available
+
+## Implementation Files
+
+**Created:**
+- `packages/client/src/components/ItemTooltip.tsx`
+- `packages/client/src/components/EquipmentSilhouette.tsx`
+
+**Modified:**
+- `packages/client/src/pages/ShardExploration.tsx` — Sidebar integration
+- `packages/client/src/styles/theme.css` — Equipment + tooltip CSS
+
+## Technical Details
+
+### Layout Grid Definition
+```typescript
+const LAYOUT_GRID: (EquipmentSlotType | null)[][] = [
+  [null, 'head', null],
+  ['weapon', 'chest', 'offhand'],
+  [null, 'hands', null],
+  [null, 'legs', null],
+  [null, 'feet', null],
+  ['ring1', 'amulet', 'ring2'],
+];
+```
+
+### Tooltip Positioning Algorithm
+1. Default: mouse + 12px offset (down-right)
+2. If overflow right edge → mouse - width - 12px (left)
+3. If overflow bottom edge → mouse - height - 12px (up)
+4. Clamp to viewport with 8px minimum margin
+
+### CSS Classes
+- `.equipment-grid`, `.equipment-row`, `.equipment-cell`
+- `.equipment-slot-label` (empty slots)
+- `.equipment-item-name` (equipped items)
+- `.item-tooltip` with fade-in animation
+
+## MUD Aesthetic Compliance
+
+✅ Dark backgrounds with subtle borders  
+✅ Monospace fonts for equipment names  
+✅ Tier-colored glows on equipped items  
+✅ Dotted borders for empty slots  
+✅ Compact design for sidebar space constraints  
+✅ Text-primary with ANSI color heritage  
+
+## Testing Considerations
+
+**Manual Testing:**
+- [ ] Tooltip appears on equipment hover
+- [ ] Tooltip repositions to avoid viewport overflow
+- [ ] Tier colors match across components
+- [ ] Empty slots show dotted borders
+- [ ] Item name truncation works correctly
+
+**Future Automated Tests:**
+- Component renders with empty loadout
+- Component renders with full loadout
+- Tooltip shows correct item details
+- Tier colors applied correctly
+
+## Cross-Team Dependencies
+
+**Drizzt (Engine):**
+- Future: Add computed stats to `DisplayItem` for tooltip display
+- Current: LOADOUT_UPDATE message already flows correctly
+
+**Minsc (Content/Testing):**
+- Can write tests for equipment silhouette rendering
+- Tooltip positioning logic may need viewport mock
+
+## Decision Rationale
+
+This implementation prioritizes:
+1. **Space efficiency** — Sidebar real estate is limited
+2. **Reusability** — ItemTooltip can be used elsewhere
+3. **MUD aesthetic** — Matches existing UI patterns
+4. **Extensibility** — Ready for stats when server provides them
+5. **Accessibility** — Semantic HTML, hover states
+
+The abstract slot diagram scales better than a body outline and provides clearer information density for the MUD-style text interface.
+### Zone Exit Update API + Designer Enhancements
+**By:** Regis (Frontend Dev)
+**Date:** 2026-03-28
+
+**What**
+Added `PUT /admin/api/zones/exits/:id` endpoint and `updateExit` method to `ZoneRepository` interface (both Pg and InMemory implementations). Client-side: `updateExit`, `getOrphanedExits`, `removeOrphanedExits` wrappers in `zone-api.ts`.
+
+Portal exits now render with cyan/teal (#06b6d4) color and ⟐ glyph in the SVG canvas. Orphaned exits get dashed red stroke highlighting plus a toolbar scan/cleanup workflow. Exit selection opens a full edit panel (direction, to-room, locked, hidden, portal fields).
+
+**Why**
+Exits were select-and-delete only — no way to edit properties after creation. Portal exits were visually identical to intra-zone exits. Orphaned exit cleanup API existed server-side but had no UI to invoke it.
+
+**Impact**
+- `ZoneRepository` interface gained `updateExit` — any custom implementations need to add it
+- No DB migration needed — `zone_exits` table already has all columns
+- Portal color changed from purple (#7B4FA0) to cyan (#06b6d4) to distinguish from feature rooms
+# Status Panel Wireup — Styling Pattern Decision
+
+**By:** Regis (Frontend Dev)
+**Date:** 2026-03-28
+
+## What
+
+Status bars (HP, stamina) and status effect pills use dedicated CSS classes in `theme.css` rather than Tailwind utility-only approach. CSS variables `--hp-healthy`, `--hp-wounded`, `--hp-critical`, `--stamina` added to `:root`.
+
+## Why
+
+- Keeps bar colors consistent with game theme and easy to adjust in one place
+- Dynamic bar width is the only inline style (per project constraint)
+- Status effect classification uses name-based keyword matching since `StatusEffect` has no `type` field — if the server adds an effect type field later, the classifier should be updated
+
+## Impact
+
+- **Drizzt:** When stamina system is implemented server-side, the stamina bar is already wired — just send non-zero values in `PLAYER_STATE` and the UI will reflect it automatically
+- **Content/Testing:** Status effect keyword lists live in `ShardExploration.tsx` (`DEBUFF_KEYWORDS`, `BUFF_KEYWORDS`). New effect names should be added to the appropriate list for correct coloring.
+# Decision: Z-Level Floor Switching Architecture
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2025-07-23  
+**Status:** Implemented
+
+## Context
+
+The layout engine already computes z-levels from up/down exits. The map rendered all rooms regardless of z, making multi-floor zones cluttered and hard to read.
+
+## Decision
+
+### Floor filtering is client-side, stateful, per-component
+
+- `MapRenderer` owns its own `currentFloor` state (defaults to current room's z)
+- `FullMapOverlay` manages floor state separately so it can be reset when opened
+- `ZoneDesigner` has its own floor state in the admin canvas
+- `FloorSelector` is a stateless controlled component — consumers own the state
+
+### Inter-floor exits are visible as ghost connections
+
+When viewing floor N, if an exit connects floor N to floor M, both the edge and the off-floor endpoint are shown:
+- Edge: dashed purple (#a78bfa) with ↑/↓ indicator
+- Off-floor room: 30% opacity ghost node, clickable to switch floors
+
+### Single-floor zones unchanged
+
+`FloorSelector` returns `null` when `minFloor === maxFloor`. No new UI elements appear for the common single-floor case.
+
+### Color constants
+
+New constants in `packages/client/src/components/map/constants.ts`:
+- `INTER_FLOOR_STROKE` = `#a78bfa`
+- `INTER_FLOOR_DASH` = `'4 3'`
+- `GHOST_FLOOR_OPACITY` = 0.3
+
+### Keyboard shortcuts
+
+`[` = floor down, `]` = floor up. Only active when not in an input field.
+
+## Files Changed
+
+- `packages/client/src/components/map/constants.ts` — new color constants
+- `packages/client/src/components/map/FloorSelector.tsx` — **new** shared component
+- `packages/client/src/components/map/useFloorFilter.ts` — **new** floor bounds + edge filtering utils
+- `packages/client/src/components/map/ExitEdge.tsx` — inter-floor styling prop
+- `packages/client/src/components/map/MapRenderer.tsx` — floor state, filtering, ghost layers
+- `packages/client/src/components/map/FullMapOverlay.tsx` — floor selector in header
+- `packages/client/src/components/map/MinimapWidget.tsx` — conditional floor selector
+- `packages/client/src/pages/admin/ZoneDesigner.tsx` — floor state, filtered rendering, inter-floor ghost rooms
