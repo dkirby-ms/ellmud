@@ -295,8 +295,8 @@ FROM zones z, (VALUES
   -- ── Sewer internal network ────────────────────────────────────────
   ('the-ratways', 'east', 'sewer-main-junction', '', '', false, false),
   ('sewer-main-junction', 'west', 'the-ratways', '', '', false, false),
-  ('the-ratways', 'south', 'charnel-pit', '', '', false, false),
-  ('charnel-pit', 'north', 'the-ratways', '', '', false, false),
+  ('the-ratways', 'west', 'charnel-pit', '', '', false, false),
+  ('charnel-pit', 'east', 'the-ratways', '', '', false, false),
   ('sewer-main-junction', 'north', 'sewer-north-tunnel', '', '', false, false),
   ('sewer-north-tunnel', 'south', 'sewer-main-junction', '', '', false, false),
   ('sewer-main-junction', 'south', 'sewer-south-tunnel', '', '', false, false),
@@ -311,12 +311,13 @@ FROM zones z, (VALUES
   ('sewer-bone-shelf', 'west', 'sewer-rat-nest', '', '', false, false),
   ('sewer-drain-grate', 'east', 'sewer-overflow-chamber', '', '', false, false),
   ('sewer-overflow-chamber', 'west', 'sewer-drain-grate', '', '', false, false),
-  ('sewer-overflow-chamber', 'south', 'sewer-east-conduit', '', '', false, false),
-  ('sewer-east-conduit', 'north', 'sewer-overflow-chamber', '', '', false, false),
+  -- overflow-chamber is a dead-end off drain-grate (removed south→east-conduit
+  -- to avoid spatial conflict: overflow can't be both east-of-drain-grate AND
+  -- north-of-east-conduit on an integer grid)
   ('sewer-east-conduit', 'east', 'sewer-pipe-maze', '', '', false, false),
   ('sewer-pipe-maze', 'west', 'sewer-east-conduit', '', '', false, false),
-  ('sewer-pipe-maze', 'south', 'sewer-effluent-pool', '', '', false, false),
-  ('sewer-effluent-pool', 'north', 'sewer-pipe-maze', '', '', false, false),
+  -- effluent-pool reached only via deep-channel→east (removed pipe-maze→south
+  -- shortcut: convergence conflict with deep-channel positioning)
   ('sewer-pipe-maze', 'east', 'sewer-gas-pocket', '', '', false, false),
   ('sewer-gas-pocket', 'west', 'sewer-pipe-maze', '', '', false, false),
   ('sewer-south-tunnel', 'south', 'sewer-flooded-vault', '', '', false, false),
@@ -325,22 +326,20 @@ FROM zones z, (VALUES
   ('sewer-west-conduit', 'east', 'sewer-south-tunnel', '', '', false, false),
   ('sewer-south-tunnel', 'east', 'sewer-blackwater-crossing', '', '', false, false),
   ('sewer-blackwater-crossing', 'west', 'sewer-south-tunnel', '', '', false, false),
-  ('sewer-flooded-vault', 'east', 'sewer-collapsed-drain', '', '', false, false),
-  ('sewer-collapsed-drain', 'west', 'sewer-flooded-vault', '', '', false, false),
+  ('sewer-flooded-vault', 'south', 'sewer-collapsed-drain', '', '', false, false),
+  ('sewer-collapsed-drain', 'north', 'sewer-flooded-vault', '', '', false, false),
   ('sewer-blackwater-crossing', 'south', 'sewer-deep-channel', '', '', false, false),
   ('sewer-deep-channel', 'north', 'sewer-blackwater-crossing', '', '', false, false),
   ('sewer-deep-channel', 'east', 'sewer-effluent-pool', '', '', false, false),
   ('sewer-effluent-pool', 'west', 'sewer-deep-channel', '', '', false, false),
-  ('sewer-deep-channel', 'west', 'sewer-silt-chamber', '', '', false, false),
-  ('sewer-silt-chamber', 'east', 'sewer-deep-channel', '', '', false, false),
+  ('sewer-deep-channel', 'south', 'sewer-silt-chamber', '', '', false, false),
+  ('sewer-silt-chamber', 'north', 'sewer-deep-channel', '', '', false, false),
   ('sewer-west-conduit', 'west', 'sewer-cistern', '', '', false, false),
   ('sewer-cistern', 'east', 'sewer-west-conduit', '', '', false, false),
-  ('sewer-west-conduit', 'north', 'sewer-lurker-den', '', '', false, false),
-  ('sewer-lurker-den', 'south', 'sewer-west-conduit', '', '', false, false),
-  ('sewer-cistern', 'north', 'sewer-fungal-grotto', '', '', false, false),
-  ('sewer-fungal-grotto', 'south', 'sewer-cistern', '', '', false, false),
-  ('sewer-fungal-grotto', 'east', 'sewer-lurker-den', '', '', false, false),
-  ('sewer-lurker-den', 'west', 'sewer-fungal-grotto', '', '', false, false)
+  ('sewer-west-conduit', 'south', 'sewer-lurker-den', '', '', false, false),
+  ('sewer-lurker-den', 'north', 'sewer-west-conduit', '', '', false, false),
+  ('sewer-cistern', 'south', 'sewer-fungal-grotto', '', '', false, false),
+  ('sewer-fungal-grotto', 'north', 'sewer-cistern', '', '', false, false)
 ) AS v(from_slug, direction, to_slug, target_zone, target_room, is_locked, is_hidden)
 WHERE z.slug = 'warrens'
 ON CONFLICT (zone_id, from_room_slug, direction) DO NOTHING;
