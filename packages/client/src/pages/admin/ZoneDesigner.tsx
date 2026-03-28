@@ -1825,6 +1825,21 @@ export default function ZoneDesigner({
             }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Room name header */}
+            <div style={{
+              padding: "4px 12px 4px",
+              color: "#C9A84C",
+              fontFamily: "var(--font-serif)",
+              fontSize: 13,
+              fontWeight: 600,
+              borderBottom: "1px solid #2A2B35",
+              marginBottom: 4,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}>
+              {cmRoom?.name || contextMenu.roomSlug}
+            </div>
             {directions.map(({ dir, label, arrow }) => {
               const disabled = usedDirs.has(dir);
               return (
