@@ -3,6 +3,17 @@
 -- surface-to-sewer vertical shafts, and the underground sewer network.
 -- Designed by Laeral (Content Designer), built by Bruenor (Content Builder).
 -- Idempotent: uses INSERT ... ON CONFLICT DO NOTHING so re-running is safe.
+--
+-- Topology revision notes (v2):
+--   1. cistern-access connected to slum-r7c2 (was orphaned on surface).
+--   2. sunken-square connected to slum-r1c1 west (additional surface link).
+--   3. Approach loop broken into tree branches off the main spine
+--      (merchants-row→gutter-run). burned-chapel/scavengers-den branch east
+--      of merchants-row; blighted-courtyard/condemned-arch/ironmongers-ruin
+--      branch east of gutter-run.
+--   4. sluice-gate moved to slum-r5c1 west (mid-grid sewer access).
+--   5. dustfall-extraction moved to dead-end off slum-r6c7 east (destination,
+--      not waypoint).
 
 -- Fix exits whose topology changed in the expansion.
 -- In 033, rubble-boulevard east went directly to hollow-market;
@@ -23,7 +34,10 @@ SELECT z.id, v.from_slug, v.direction, v.to_slug,
 FROM zones z, (VALUES
   -- ── Cross-zone exit ──────────────────────────────────────────────────
   ('shattered-gate', 'west', 'shattered-gate', 'the-refuge', 'hearth', false, false),
+
   -- ── Approach area (surface) ─────────────────────────────────────────
+  -- Main spine: shattered-gate → rubble-boulevard → collapsed-overpass
+  --             → hollow-market → merchants-row → gutter-run → grid
   ('shattered-gate', 'east', 'rubble-boulevard', '', '', false, false),
   ('rubble-boulevard', 'west', 'shattered-gate', '', '', false, false),
   ('rubble-boulevard', 'east', 'collapsed-overpass', '', '', false, false),
@@ -40,26 +54,27 @@ FROM zones z, (VALUES
   ('merchants-row', 'west', 'hollow-market', '', '', false, false),
   ('whispering-alley', 'east', 'collapsed-tenement', '', '', false, false),
   ('collapsed-tenement', 'west', 'whispering-alley', '', '', false, false),
-  ('whispering-alley', 'south', 'dustfall-extraction', '', '', false, false),
-  ('dustfall-extraction', 'north', 'whispering-alley', '', '', false, false),
   ('broken-sanctuary', 'east', 'sunken-square', '', '', true, false),
   ('sunken-square', 'west', 'broken-sanctuary', '', '', true, false),
+  -- Branch: merchants-row east → burned-chapel → scavengers-den
   ('merchants-row', 'east', 'burned-chapel', '', '', false, false),
   ('burned-chapel', 'west', 'merchants-row', '', '', false, false),
+  ('burned-chapel', 'south', 'scavengers-den', '', '', false, false),
+  ('scavengers-den', 'north', 'burned-chapel', '', '', false, false),
+  -- Spine continued
   ('merchants-row', 'south', 'gutter-run', '', '', false, false),
   ('gutter-run', 'north', 'merchants-row', '', '', false, false),
-  ('burned-chapel', 'east', 'scavengers-den', '', '', false, false),
-  ('scavengers-den', 'west', 'burned-chapel', '', '', false, false),
-  ('scavengers-den', 'south', 'condemned-arch', '', '', false, false),
-  ('condemned-arch', 'north', 'scavengers-den', '', '', false, false),
+  -- Branch: gutter-run east → blighted-courtyard → condemned-arch → ironmongers-ruin
+  ('gutter-run', 'east', 'blighted-courtyard', '', '', false, false),
+  ('blighted-courtyard', 'west', 'gutter-run', '', '', false, false),
+  ('blighted-courtyard', 'south', 'condemned-arch', '', '', false, false),
+  ('condemned-arch', 'north', 'blighted-courtyard', '', '', false, false),
   ('condemned-arch', 'east', 'ironmongers-ruin', '', '', false, false),
   ('ironmongers-ruin', 'west', 'condemned-arch', '', '', false, false),
-  ('ironmongers-ruin', 'south', 'blighted-courtyard', '', '', false, false),
-  ('blighted-courtyard', 'north', 'ironmongers-ruin', '', '', false, false),
-  ('blighted-courtyard', 'west', 'gutter-run', '', '', false, false),
-  ('gutter-run', 'east', 'blighted-courtyard', '', '', false, false),
+  -- Grid entry
   ('gutter-run', 'south', 'slum-r1c1', '', '', false, false),
   ('slum-r1c1', 'north', 'gutter-run', '', '', false, false),
+
   -- ── 7x7 Slum Grid — east/west ─────────────────────────────────────
   ('slum-r1c1', 'east', 'slum-r1c2', '', '', false, false),
   ('slum-r1c2', 'west', 'slum-r1c1', '', '', false, false),
@@ -145,6 +160,7 @@ FROM zones z, (VALUES
   ('slum-r7c6', 'west', 'slum-r7c5', '', '', false, false),
   ('slum-r7c6', 'east', 'slum-r7c7', '', '', false, false),
   ('slum-r7c7', 'west', 'slum-r7c6', '', '', false, false),
+
   -- ── 7x7 Slum Grid — north/south ──────────────────────────────────
   ('slum-r1c1', 'south', 'slum-r2c1', '', '', false, false),
   ('slum-r2c1', 'north', 'slum-r1c1', '', '', false, false),
@@ -230,33 +246,50 @@ FROM zones z, (VALUES
   ('slum-r7c6', 'north', 'slum-r6c6', '', '', false, false),
   ('slum-r6c7', 'south', 'slum-r7c7', '', '', false, false),
   ('slum-r7c7', 'north', 'slum-r6c7', '', '', false, false),
+
   -- ── Grid edge → extra surface rooms ──────────────────────────────
-  ('slum-r1c7', 'east', 'gallows-square', '', '', false, false),
-  ('gallows-square', 'west', 'slum-r1c7', '', '', false, false),
-  ('slum-r7c1', 'south', 'dyers-vats', '', '', false, false),
-  ('dyers-vats', 'north', 'slum-r7c1', '', '', false, false),
-  ('slum-r7c4', 'south', 'ashfall-gardens', '', '', false, false),
-  ('ashfall-gardens', 'north', 'slum-r7c4', '', '', false, false),
-  ('slum-r7c7', 'south', 'tannery-ruins', '', '', false, false),
-  ('tannery-ruins', 'north', 'slum-r7c7', '', '', false, false),
-  ('slum-r4c7', 'east', 'rubble-maze', '', '', false, false),
-  ('rubble-maze', 'west', 'slum-r4c7', '', '', false, false),
-  ('slum-r4c1', 'west', 'plague-ward', '', '', false, false),
-  ('plague-ward', 'east', 'slum-r4c1', '', '', false, false),
+  -- NW corner: sunken-square (sewer shaft access via the-ratways)
+  ('slum-r1c1', 'west', 'sunken-square', '', '', false, false),
+  ('sunken-square', 'east', 'slum-r1c1', '', '', false, false),
+  -- N edge: gutter-bridge (dead-end lookout)
   ('slum-r1c4', 'north', 'gutter-bridge', '', '', false, false),
   ('gutter-bridge', 'south', 'slum-r1c4', '', '', false, false),
-  ('gutter-bridge', 'north', 'dustfall-extraction', '', '', false, false),
-  ('dustfall-extraction', 'south', 'gutter-bridge', '', '', false, false),
+  -- NE corner: gallows-square → tilted-tower
+  ('slum-r1c7', 'east', 'gallows-square', '', '', false, false),
+  ('gallows-square', 'west', 'slum-r1c7', '', '', false, false),
   ('gallows-square', 'east', 'tilted-tower', '', '', false, false),
   ('tilted-tower', 'west', 'gallows-square', '', '', false, false),
-  ('ashfall-gardens', 'east', 'sluice-gate', '', '', false, false),
-  ('sluice-gate', 'west', 'ashfall-gardens', '', '', false, false),
-  ('tannery-ruins', 'east', 'blind-alley', '', '', false, false),
-  ('blind-alley', 'west', 'tannery-ruins', '', '', false, false),
+  -- W edge mid: plague-ward
+  ('slum-r4c1', 'west', 'plague-ward', '', '', false, false),
+  ('plague-ward', 'east', 'slum-r4c1', '', '', false, false),
+  -- E edge mid: rubble-maze → watchmens-post
+  ('slum-r4c7', 'east', 'rubble-maze', '', '', false, false),
+  ('rubble-maze', 'west', 'slum-r4c7', '', '', false, false),
   ('rubble-maze', 'east', 'watchmens-post', '', '', false, false),
   ('watchmens-post', 'west', 'rubble-maze', '', '', false, false),
+  -- W edge mid-low: sluice-gate (sewer access via sewer-main-junction)
+  ('slum-r5c1', 'west', 'sluice-gate', '', '', false, false),
+  ('sluice-gate', 'east', 'slum-r5c1', '', '', false, false),
+  -- E edge low: dustfall-extraction (zone extraction destination)
+  ('slum-r6c7', 'east', 'dustfall-extraction', '', '', false, false),
+  ('dustfall-extraction', 'west', 'slum-r6c7', '', '', false, false),
+  -- SW corner: dyers-vats → beggar-kings-throne
+  ('slum-r7c1', 'south', 'dyers-vats', '', '', false, false),
+  ('dyers-vats', 'north', 'slum-r7c1', '', '', false, false),
   ('dyers-vats', 'west', 'beggar-kings-throne', '', '', false, false),
   ('beggar-kings-throne', 'east', 'dyers-vats', '', '', false, false),
+  -- S edge: cistern-access (sewer access via sewer-cistern)
+  ('slum-r7c2', 'south', 'cistern-access', '', '', false, false),
+  ('cistern-access', 'north', 'slum-r7c2', '', '', false, false),
+  -- S edge mid: ashfall-gardens (dead-end exploration)
+  ('slum-r7c4', 'south', 'ashfall-gardens', '', '', false, false),
+  ('ashfall-gardens', 'north', 'slum-r7c4', '', '', false, false),
+  -- SE corner: tannery-ruins → blind-alley
+  ('slum-r7c7', 'south', 'tannery-ruins', '', '', false, false),
+  ('tannery-ruins', 'north', 'slum-r7c7', '', '', false, false),
+  ('tannery-ruins', 'east', 'blind-alley', '', '', false, false),
+  ('blind-alley', 'west', 'tannery-ruins', '', '', false, false),
+
   -- ── Surface → sewer vertical shafts ──────────────────────────────
   ('sunken-square', 'down', 'the-ratways', '', '', false, true),
   ('the-ratways', 'up', 'sunken-square', '', '', false, false),
@@ -264,6 +297,7 @@ FROM zones z, (VALUES
   ('sewer-main-junction', 'up', 'sluice-gate', '', '', false, false),
   ('cistern-access', 'down', 'sewer-cistern', '', '', false, false),
   ('sewer-cistern', 'up', 'cistern-access', '', '', false, false),
+
   -- ── Sewer internal network ────────────────────────────────────────
   ('the-ratways', 'east', 'sewer-main-junction', '', '', false, false),
   ('sewer-main-junction', 'west', 'the-ratways', '', '', false, false),
