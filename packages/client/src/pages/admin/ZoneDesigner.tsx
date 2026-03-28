@@ -1316,8 +1316,9 @@ export default function ZoneDesigner({
                       const targetZ = upExits.map((e) => positions.get(e.toRoomSlug)?.z).find((z) => z != null);
                       return (
                         <g
-                          onClick={(e) => { e.stopPropagation(); if (targetZ != null) setCurrentFloor(targetZ); }}
-                          style={{ cursor: targetZ != null ? "pointer" : "default" }}
+                          onClick={(e) => { e.stopPropagation(); handleExitClick(upExits[0].id); }}
+                          onDoubleClick={(e) => { e.stopPropagation(); if (targetZ != null) setCurrentFloor(targetZ); }}
+                          style={{ cursor: "pointer" }}
                         >
                           <circle
                             cx={x + NODE_W - 2} cy={y + 2}
@@ -1331,7 +1332,7 @@ export default function ZoneDesigner({
                           >
                             ▲
                           </text>
-                          <title>{upTooltip} (click to go to floor)</title>
+                          <title>{upTooltip} (click to select · double-click to navigate)</title>
                         </g>
                       );
                     })()}
@@ -1339,8 +1340,9 @@ export default function ZoneDesigner({
                       const targetZ = downExits.map((e) => positions.get(e.toRoomSlug)?.z).find((z) => z != null);
                       return (
                         <g
-                          onClick={(e) => { e.stopPropagation(); if (targetZ != null) setCurrentFloor(targetZ); }}
-                          style={{ cursor: targetZ != null ? "pointer" : "default" }}
+                          onClick={(e) => { e.stopPropagation(); handleExitClick(downExits[0].id); }}
+                          onDoubleClick={(e) => { e.stopPropagation(); if (targetZ != null) setCurrentFloor(targetZ); }}
+                          style={{ cursor: "pointer" }}
                         >
                           <circle
                             cx={x + NODE_W - 2} cy={y + NODE_H - 2}
@@ -1354,7 +1356,7 @@ export default function ZoneDesigner({
                           >
                             ▼
                           </text>
-                          <title>{downTooltip} (click to go to floor)</title>
+                          <title>{downTooltip} (click to select · double-click to navigate)</title>
                         </g>
                       );
                     })()}
