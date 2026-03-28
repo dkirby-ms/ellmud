@@ -14,6 +14,7 @@ How to decide who handles what.
 | Content creation in game data | Bruenor | Creating zones/rooms/exits/items/NPCs via admin API and DB |
 | Code review, architecture | Elminster | Design review, system boundaries, scope decisions, technical direction |
 | Testing, QA, edge cases | Minsc | Test architecture, unit/integration tests, edge case coverage, fixtures |
+| Public docs, Discord, changelogs, community | Danilo | README, patch notes, Discord announcements, player guides, release comms |
 | Scope & priorities | Elminster | What to build next, trade-offs, milestone planning |
 | Session logging | Scribe | Automatic — never needs routing |
 

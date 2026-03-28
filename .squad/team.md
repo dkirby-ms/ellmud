@@ -20,6 +20,7 @@
 | Minsc | Tester | `.squad/agents/minsc/charter.md` | 🧪 Tester |
 | Laeral | Content Designer | `.squad/agents/laeral/charter.md` | 🎨 Designer |
 | Bruenor | Content Builder | `.squad/agents/bruenor/charter.md` | 🔨 Builder |
+| Danilo | Community Relations | `.squad/agents/danilo/charter.md` | 📝 DevRel |
 | Scribe | Session Logger | `.squad/agents/scribe/charter.md` | 📋 Logger |
 | Ralph | Work Monitor | — | 🔄 Monitor |
 
