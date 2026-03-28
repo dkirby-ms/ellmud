@@ -15,16 +15,10 @@
 --   5. dustfall-extraction moved to dead-end off slum-r6c7 east (destination,
 --      not waypoint).
 
--- Fix exits whose topology changed in the expansion.
--- In 033, rubble-boulevard east went directly to hollow-market;
--- now collapsed-overpass sits between them.
+-- Wipe all existing Warrens exits so this migration is the single source of truth.
+-- Previous migrations (033) created exits that are now obsolete after the expansion.
 DELETE FROM zone_exits
-WHERE zone_id = (SELECT id FROM zones WHERE slug = 'warrens')
-  AND from_room_slug = 'rubble-boulevard' AND direction = 'east';
-
-DELETE FROM zone_exits
-WHERE zone_id = (SELECT id FROM zones WHERE slug = 'warrens')
-  AND from_room_slug = 'hollow-market' AND direction = 'west';
+WHERE zone_id = (SELECT id FROM zones WHERE slug = 'warrens');
 
 -- Insert all exits for the expanded Warrens zone.
 INSERT INTO zone_exits (zone_id, from_room_slug, direction, to_room_slug, target_zone_slug, target_room_slug, locked, hidden)
