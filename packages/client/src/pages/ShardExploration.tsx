@@ -62,7 +62,7 @@ export default function ShardExploration() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const narrativeRef = useAutoScroll(state.messages);
+  const { containerRef: narrativeRef, bottomRef } = useAutoScroll(state.messages);
 
   // Derive room info from server state
   const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
@@ -221,7 +221,7 @@ export default function ShardExploration() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Narrative Panel (70%) */}
-        <div className="w-[70%] flex flex-col bg-bg-primary">
+        <div className="w-[70%] flex flex-col min-h-0 bg-bg-primary">
           {/* Room header */}
           <div className="bg-bg-panel border-b border-border-muted px-6 py-3 flex items-center justify-between">
             <h2
@@ -325,6 +325,7 @@ export default function ShardExploration() {
                 )}
               </div>
             ))}
+            <div ref={bottomRef} aria-hidden="true" />
           </div>
 
           {/* MUD-style status prompt — positioned below scroll container */}

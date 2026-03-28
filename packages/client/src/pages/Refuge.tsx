@@ -73,7 +73,7 @@ export default function Refuge() {
   const roomRef = useRef<Room | null>(null);
   const switchingRef = useRef(false);
   const handlersRef = useRef<MessageHandlers | null>(null);
-  const chatScrollRef = useAutoScroll(state.messages);
+  const { containerRef: chatScrollRef, bottomRef: chatBottomRef } = useAutoScroll(state.messages);
 
   const addMessage = useCallback(
     (text: string, type: TerminalMessage["type"]) => {
@@ -520,6 +520,7 @@ export default function Refuge() {
                   )}
                 </div>
               ))}
+              <div ref={chatBottomRef} aria-hidden="true" />
             </div>
 
             <form

@@ -95,6 +95,7 @@
 .narrative-scroll {
   scrollbar-width: thin;
   scrollbar-color: var(--border-muted) var(--bg-primary);
+  overflow-anchor: auto;
 }
 
 @layer base {
