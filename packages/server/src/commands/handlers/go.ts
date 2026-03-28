@@ -60,7 +60,6 @@ export function handleGo(ctx: CommandContext): CommandResult {
   const lines: string[] = [
     `You move ${direction}.`,
     '',
-    `**${targetRoom.name}**`,
     targetRoom.description,
     `Exits: ${exitList}`,
   ];

@@ -203,8 +203,9 @@ describe('Command Handlers', () => {
     it('should describe the current room', () => {
       const result = handleCommand('look', buildCtx());
       expect(result.narrations.length).toBeGreaterThan(0);
-      expect(result.narrations[0]!.text).toContain('Shard Entry');
       expect(result.narrations[0]!.type).toBe('room');
+      expect(result.roomHeader).toBeDefined();
+      expect(result.roomHeader!.roomName).toBe('Shard Entry');
     });
 
     it('should list exits', () => {
@@ -229,7 +230,8 @@ describe('Command Handlers', () => {
       const result = handleCommand('go', buildCtx(['north']));
       expect(player.currentRoomId).toBe('corridor');
       expect(result.narrations[0]!.text).toContain('You move north');
-      expect(result.narrations[0]!.text).toContain('Flooded Corridor');
+      expect(result.roomHeader).toBeDefined();
+      expect(result.roomHeader!.roomName).toBe('Flooded Corridor');
     });
 
     it('should reject invalid direction', () => {
@@ -382,7 +384,7 @@ describe('ShardRoom Commands (Integration)', () => {
     expect(narrations.length).toBeGreaterThanOrEqual(2);
     const roomNarration = narrations.find((n) => n.type === 'room');
     expect(roomNarration).toBeDefined();
-    expect(roomNarration!.text).toContain('Shard Entry');
+    expect(roomNarration!.text).toContain('Exits:');
 
     // Should have room header
     expect(headers.length).toBeGreaterThanOrEqual(1);
@@ -407,7 +409,7 @@ describe('ShardRoom Commands (Integration)', () => {
     expect(narrations.length).toBeGreaterThan(beforeCount);
     const lookNarration = narrations.slice(beforeCount).find((n) => n.type === 'room');
     expect(lookNarration).toBeDefined();
-    expect(lookNarration!.text).toContain('Shard Entry');
+    expect(lookNarration!.text).toContain('Exits:');
 
     await client.leave();
   });
@@ -431,7 +433,7 @@ describe('ShardRoom Commands (Integration)', () => {
 
     const moveNarrations = narrations.slice(beforeNarr);
     expect(moveNarrations.length).toBeGreaterThan(0);
-    expect(moveNarrations[0]!.text).toContain('Flooded Corridor');
+    expect(moveNarrations[0]!.text).toContain('You move north');
 
     const newHeaders = headers.slice(beforeHead);
     expect(newHeaders.length).toBeGreaterThan(0);
@@ -456,7 +458,7 @@ describe('ShardRoom Commands (Integration)', () => {
 
     const moveNarrations = narrations.slice(beforeCount);
     expect(moveNarrations.length).toBeGreaterThan(0);
-    expect(moveNarrations[0]!.text).toContain('Flooded Corridor');
+    expect(moveNarrations[0]!.text).toContain('You move north');
 
     await client.leave();
   });

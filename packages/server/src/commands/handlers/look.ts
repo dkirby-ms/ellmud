@@ -10,7 +10,6 @@ export function handleLook(ctx: CommandContext): CommandResult {
   const exitList = Array.from(room.exits.keys()).join(', ') || 'none';
 
   const lines: string[] = [
-    `**${room.name}**`,
     room.description,
     `Exits: ${exitList}`,
   ];

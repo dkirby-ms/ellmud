@@ -15,6 +15,7 @@ import {
   type UnequipItemMessage,
   type SwapItemMessage,
   type LoadoutUpdateMessage,
+  type PlayerStateMessage,
   type ZoneTransferMessage,
   type ExploredRoomData,
   type ExplorationDataMessage,
@@ -478,6 +479,16 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       state: this.lifecycle,
       collapseTimer: this.state.collapseTimer,
     });
+
+    // Send initial player state (HP, stamina, status effects)
+    // Combatant doesn't exist yet, so we use default stats
+    client.send(MessageTypes.PLAYER_STATE, {
+      hp: 100, // DEFAULT_PLAYER_STATS.maxHp
+      maxHp: 100,
+      stamina: 0,
+      maxStamina: 0,
+      statusEffects: [],
+    } satisfies PlayerStateMessage);
   }
 
   async onLeave(client: Client, code?: number): Promise<void> {
@@ -998,19 +1009,20 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
   private deliverResult(client: Client, result: import('../commands/index.js').CommandResult): void {
-    for (const narration of result.narrations) {
-      this.sendNarrate(client, {
-        text: narration.text,
-        type: narration.type,
-        timestamp: Date.now(),
-      });
-    }
+    // Send room header before narrations so the yellow header appears first
     if (result.roomHeader) {
       const header: RoomHeaderMessage = {
         ...result.roomHeader,
         ...(this.isZone && this.zoneData ? { zoneName: this.zoneData.zone.name } : {}),
       };
       this.sendRoomHeader(client, header);
+    }
+    for (const narration of result.narrations) {
+      this.sendNarrate(client, {
+        text: narration.text,
+        type: narration.type,
+        timestamp: Date.now(),
+      });
     }
   }
 
@@ -1074,6 +1086,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   // ─── Combat Result Delivery ──────────────────────────────────────────────
 
   private deliverCombatResults(tickResult: TickResult): void {
+    // Track which players need HP updates
+    const playersNeedingUpdate = new Set<string>();
+
     // Send combat event narrations to all clients in relevant rooms
     for (const event of tickResult.events) {
       this.broadcast(MessageTypes.NARRATE, {
@@ -1086,6 +1101,19 @@ export class ShardRoom extends Room<ShardRoomOptions> {
           targetId: event.targetId,
         },
       } satisfies NarrateMessage);
+
+      // Track players who took damage
+      if (event.type === 'strike' && event.targetId && this.players.has(event.targetId)) {
+        playersNeedingUpdate.add(event.targetId);
+      }
+    }
+
+    // Send player state updates to all players whose HP changed
+    for (const playerId of playersNeedingUpdate) {
+      const client = this.findClient(playerId);
+      if (client) {
+        this.sendPlayerState(client, playerId);
+      }
     }
 
     // Handle flee movement — update player positions and send room descriptions
@@ -2131,6 +2159,20 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     client.send(MessageTypes.LOADOUT_UPDATE, {
       slots: loadoutView.slots,
     } satisfies LoadoutUpdateMessage);
+  }
+
+  /** Send player state update to client (HP, stamina, status effects). */
+  private sendPlayerState(client: Client, playerId: string): void {
+    const combatant = this.combatSystem.getCombatant(playerId);
+    if (!combatant) return;
+
+    client.send(MessageTypes.PLAYER_STATE, {
+      hp: combatant.hp,
+      maxHp: combatant.maxHp,
+      stamina: 0, // Placeholder — stamina system not implemented yet
+      maxStamina: 0,
+      statusEffects: [], // TODO: Implement status effects tracking
+    } satisfies PlayerStateMessage);
   }
 
   /** Find an item in the player's shard inventory by instanceId or itemId. */
