@@ -1420,3 +1420,315 @@ This aligns local dev with production behavior, making auth bugs surface earlier
 - **Narration format:** "Your stash is full! The [item name] could not be transferred. Carry it out manually or drop it." Stacked overflow includes quantity: "(x3)".
 - **Tests:** 6 new integration tests in `extraction.test.ts` under "Stash Overflow — No Silent Item Loss (#183)". Updated 8 existing tests across `extraction.test.ts` and `wave4-stash-wiring.test.ts` to use `retained` instead of `lost`. All 1520 server tests pass.
 - **Key invariant enforced:** `stored + retained === totalInventoryItems` — no items ever vanish.
+
+### 2025-07-28: ShardRoom sessionId → playerId Fix (Issue #197, PR #200)
+- **Bug:** ShardRoom.onJoin() keyed all PlayerState to `client.sessionId` (ephemeral WebSocket ID). On reconnect, new sessionId orphaned stash, combat, extraction, and traces.
+- **Fix:** Added `playerIds` map (`sessionId → playerId`), mirroring RefugeRoom's established pattern. Resolve `playerId` from `options['playerId']` with `client.sessionId` fallback.
+- **Scope:** Updated all downstream references — `players` map key, combat registration, stash transfer, extraction keying, downing system, trace actor IDs, awareness checks, sound propagation, whisper/broadcast delivery, and metadata. Updated `findClient()` to reverse-lookup sessionId from playerId.
+- **Test:** Pre-staged `shardroom-player-id.test.ts` (11 tests) validates identity keying, reconnection, stash, combat, multi-player, and auth integration. Fixed reconnection test to keep a second client alive preventing room auto-disposal. All 1566 server tests pass, zero regressions.
+- **Pattern:** Both RefugeRoom and ShardRoom now use the same identity resolution: `options['playerId'] || client.sessionId`. The `playerIds` map provides `sessionId → playerId` lookup; `findClient()` does the reverse.
+
+## Orchestration Log: 2026-03-25T12:16Z
+
+**Outcome (Jarlaxle):** Fixed ShardRoom sessionId → playerId keying across all player state (players map, combat, extraction, downing, traces, awareness, sound, messaging). Scope: Combat registration, stash transfer, extraction tracking, trace actor IDs, awareness lookups, sound propagation, and client delivery. Test: `shardroom-player-id.test.ts` (11 cases, 6 scenarios). Result: 1566 tests pass, zero regressions. PR #200 staged.
+
+### 2025-07-25: PlayerProfileRepository Save/Load Cycle (Issue #199)
+- Created `packages/server/src/player/` module: Interface + InMemory + Pg implementations + provider pattern.
+- **PlayerProfile type:** `{ skills: PlayerSkills, maxCarryWeight: number, equipment?: VisibleEquipment }`. Mirrors the mutable fields of `PlayerState` that should survive sessions.
+- **Interface:** `load(playerId): Promise<PlayerProfile | null>`, `save(playerId, profile): Promise<void>`. PlayerId is a separate parameter (not embedded in the profile), matching the established `StashRepository` pattern.
+- **PgPlayerProfileRepository** reads/writes `player_skills` table (migration 003). Maps `stealth→subterfuge`, `awareness→awareness`, `tracking→awareness` categories. Uses `ON CONFLICT` upsert.
+- **InMemoryPlayerProfileRepository** uses `structuredClone` for deep-copy isolation between save/load calls.
+- **Provider pattern** (`player-profile-provider.ts`): `initProfileProvider(usePg)` at boot, `getProfileRepository()` for singleton access. Follows `stash-provider.ts` exactly.
+- **ShardRoom wiring:** `onJoin` loads profile (with error fallback to defaults), `onLeave` saves before cleanup. `initProfile()` injection for test overrides. `onCreate` auto-initializes from shared provider.
+- **Server boot** (`index.ts`): `initProfileProvider(USE_PG)` added after stash provider.
+- **Tests:** Rewrote anticipatory test file from Minsc's placeholders to use real imports. 34 contract tests + 5 provider wiring tests. All 1600+ tests pass.
+- **Key design decision:** `onJoin` became async to support profile loading. This is safe — Colyseus supports async lifecycle methods, and RefugeRoom already uses async `onJoin`.
+- **Lesson:** Anticipatory test files from other team members may use different interface shapes. When implementing, replace local test doubles with real imports rather than adapting implementation to match placeholders.
+
+## Cross-Agent Notice: Player Identity Handoff Bug Found (Elminster)
+
+**Date:** 2026-03-25T15:23Z  
+**Scope:** Auth system investigation  
+
+**Finding:** Despite correct auth implementation, persistence is broken due to identity loss in onJoin:
+- Auth sets `client.auth.playerId` correctly
+- onJoin reads from `options['playerId']` (undefined in production)
+- Fallback to `sessionId` (not a UUID) causes FK violations
+- Your identity keying work was sound; the bug is upstream in the handoff
+
+**Context for your work:**
+- Root cause: ShardRoom.ts:252 and RefugeRoom.ts:91
+- Fix: Read `client.auth?.playerId` instead of options
+- Your `playerIds` map and `findClient()` pattern will work once the correct playerId flows through
+
+**Decision:** `.squad/decisions/decisions.md` (2026-03-25 entry)
+
+### 2025-07-26: Scrollable Narrative Pane (Issue #196, PR #204)
+- Created reusable `useAutoScroll` hook in `packages/client/src/hooks/useAutoScroll.ts`.
+- **Scroll behavior:** Auto-scrolls to bottom on dependency change. Listens for scroll events (passive) to detect manual scroll-up — disengages auto-scroll when user is >48px from bottom, re-engages when they scroll back within threshold.
+- Applied to both ShardExploration narrative pane and Refuge chat pane — replaced old naive `scrollTop = scrollHeight` and `scrollIntoView` sentinel patterns.
+- Added `.narrative-scroll` CSS class to `theme.css` for game-themed scrollbar: 6px width, `--border-muted` thumb, `--accent-gold` hover, Firefox `scrollbar-color` fallback.
+- Added `min-h-0` to Refuge chat flex container to fix overflow containment in nested flex layouts.
+- 4 unit tests for the hook. All 114 client tests pass, zero regressions.
+
+### 2025-07-25: LoadoutService — Server-Authoritative Equipment System
+- Created 4 files in `packages/server/src/loadout/`: LoadoutRepository, LoadoutService, loadout-provider, index barrel.
+- **LoadoutRepository**: Interface + InMemoryLoadoutRepository, maps player → slot-keyed equipment. `load()`, `save()`, `setSlot()`, `getSlot()`, `clear()`.
+- **LoadoutService**: Server-authoritative equip/unequip/swap with per-player mutex lock preventing race conditions. Two constructor forms: `(stashRepo, itemDefs)` for tests, `(loadoutRepo, stashRepo, itemDefs)` for rooms.
+- **Atomic operations**: Remove-from-source + add-to-destination in single locked operation. Displaced items returned to stash on swap. Item count invariant enforced — no duplication, no vanishing.
+- **Slot restrictions**: Uses `SLOT_ACCEPTS` from shared types. Weapon→weapon, armour→head/chest/legs/feet/hands, tool→offhand, material→ring/amulet slots.
+- **Shard operations**: `equipFromInventory()` for equipping items found mid-shard. `unequipToInventory()` for removing to shard inventory (not stash). `validateShardEntry()` checks for required keys, weapons optional.
+- **Shared types already existed**: EquipmentSlotType, SLOT_ACCEPTS, DisplayItem, EquipmentSlots, createEmptyEquipmentSlots, EquipItemMessage, UnequipItemMessage, LoadoutUpdateMessage — added SWAP_ITEM message type and validateSlotRestriction().
+- **Room integration**: EQUIP_ITEM, UNEQUIP_ITEM, SWAP_ITEM message handlers in both RefugeRoom and ShardRoom. ShardRoom blocks equipment changes during extraction. ShardRoom supports equipping from shard inventory (tries stash first, falls back to inventory).
+- **Anti-exploit**: Per-player mutex, item existence verification, cross-player isolation, malformed input rejection. 95 tests cover all equip/unequip/swap operations, slot restrictions, race conditions, item count invariants.
+- **Pre-existing test fixture file** `loadout-fixtures.ts` was already in place (proactive tests written before implementation). All 95 proactive tests pass against the implementation.
+- Fixed shared types test that expected 8 message types (now 12 with EQUIP_ITEM, UNEQUIP_ITEM, SWAP_ITEM, LOADOUT_UPDATE).
+- Build clean, all server tests pass. Client test failures in ux-batch2 are pre-existing and unrelated.
+
+### CI Security Audit Gate
+- Added `npm audit --audit-level=high` step to `ci-cd.yml` in the `build-and-test` job, right after `npm ci`.
+- Only fails on HIGH or CRITICAL severity vulnerabilities — low/moderate pass through.
+- Current state: 0 vulnerabilities found. Gate is clean on merge.
+- Positioned before build/lint/test so supply-chain issues surface early.
+
+### 2026-03-26: CI Security Audit Gate — Completed
+- Decision logged to `.squad/decisions/decisions.md` (2026-03-26T00:23:00Z entry)
+- `npm audit --audit-level=high` successfully integrated into ci-cd.yml
+- All dependencies pass audit; gate is clean
+- Blocks high/critical vulnerabilities at PR stage before merge
+
+### 2026-03-26: Seed Player Stash — Direct DB Population
+- Created `packages/server/src/dev/seed-player-stash.ts` — standalone script that inserts Volo's 40 seed items into `item_definitions` and populates a player's `player_stash` with 42 entries (40 base + bonus stacks of Corroded Nails ×5 and Stale Rations ×3).
+- Script is idempotent: checks for existing item definitions by name, clears existing stash before re-inserting.
+- Run with: `DATABASE_URL=postgresql://ellmud:ellmud_dev@localhost:5434/ellmud npx tsx packages/server/src/dev/seed-player-stash.ts [username]`
+- Successfully populated stash for player "asdf" (2c34fc43-ed1a-442d-bff7-84126db08dd1). All tiers (scrap→anomalous), all types (weapon, armour, consumable, material, tool, key) represented.
+
+## Learnings
+
+**DB Schema vs App Types Mismatch:**
+`item_definitions` uses UUID primary keys, but `seed-items.ts` StashItem uses string slug IDs (e.g., 'rusty-shiv'). The PgStashRepository bridges this by storing instanceId as the row's UUID `id` column — the slug IDs only exist in the app layer. Direct DB scripts must generate UUIDs and let Postgres handle it via `gen_random_uuid()`.
+
+**Idempotent Item Insertion:**
+The `item_definitions` table has no unique constraint on `name`, so `ON CONFLICT DO NOTHING` doesn't work. Must check existence by name before inserting. Worth considering a unique constraint on `name` in a future migration.
+
+### Dev stash seeding hook in RefugeRoom
+- Wired `populateDevStash()` from `packages/server/src/dev/seed-items.ts` into `RefugeRoom.onJoin()`.
+- **Trigger:** Runs only when `NODE_ENV !== 'production'` AND the player's stash is empty (checked via `stashRepo.loadStash()`). Idempotent — existing stash data is never overwritten.
+- **Item defs registration:** Seed item definitions are registered into the shared `getItemDefs()` map so `StashService.loadStash()` can resolve them for `DisplayItem` conversion.
+- **Client notification:** After seeding, calls `sendLoadoutAndStashUpdate()` which sends both `LOADOUT_UPDATE` and `STASH_UPDATE` messages to the client, ensuring the equipment/loadout UI reflects the new items immediately.
+- **No test regressions:** 72 test files, 1741 tests passing. Clean build on both server and client packages.
+- **Key pattern:** The `sendLoadoutAndStashUpdate()` private method is the canonical way to push stash+loadout state to a client after any mutation — reuse it for any future stash-modifying operations.
+
+### 2025-07-26: Death Loadout Bug Fix
+- **Bug:** `handlePlayerDeath()` in ShardRoom dropped inventory but never cleared the loadout. Dead players kept equipped gear after returning to Refuge.
+- **Fix:** Added `clearLoadout(playerId)` method to `LoadoutService` (delegates to `loadoutRepo.clear()`). Called in `handlePlayerDeath()` alongside inventory clear.
+- **Pattern:** Death handler uses `void this.loadoutService.clearLoadout(playerId)` — fire-and-forget async, same pattern as `shardSicknessStore.incrementDeathCount()`.
+- **Filed decision:** `InMemoryLoadoutRepository` is a data-loss risk — equipped items vanish on server restart because stash removal is persisted (PG) but loadout placement is RAM-only. Filed `.squad/decisions/inbox/jarlaxle-loadout-persistence-gap.md`.
+- **No test regressions:** 72 test files, 1741 tests passing. Clean build.
+
+### 2025-07-27: PgTokenStore + PgShardSicknessStore — Persistence Gap Closure
+- **PgTokenStore**: PostgreSQL-backed session token store. Migration 015 creates `auth_tokens` table with TEXT PK (opaque token string), UUID player_id FK, TTL via `expires_at` column. UPSERT on set(), expired-token filter on get(), lazy cleanup() method.
+- **PgShardSicknessStore**: PostgreSQL-backed death tracking. Migration 016 creates `player_shard_sickness` table with UUID PK. UPSERT with `death_count + 1` on increment, `last_death_at` stored as BIGINT epoch millis.
+- **Provider pattern**: Created `shard-sickness-provider.ts` following the established loadout-provider pattern. `initShardSicknessProvider(usePg)` called at boot; `getShardSicknessStore()` used by ShardRoom.
+- **Token store wiring**: `index.ts` now selects `PgTokenStore` vs `InMemoryTokenStore` based on `USE_PG` flag, same pattern as PlayerRepository.
+- **ShardRoom updated**: Replaced hardcoded `new InMemoryShardSicknessStore()` with `getShardSicknessStore()` provider call.
+- **Schema validation test**: Added `auth_tokens` to the `COMPOSITE_PK_TABLES` exemption list — token PKs are opaque TEXT strings, not UUIDs.
+- **Tests**: 2 new test files (pg-token-store, pg-shard-sickness-store) using mocked db pattern. 76 test files, 1775 tests pass, zero regressions.
+- **Key files created**: `015_create_tokens.sql`, `016_create_shard_sickness.sql`, `PgTokenStore.ts`, `PgShardSicknessStore.ts`, `shard-sickness-provider.ts`, 2 test files.
+
+### 2026-03-27: Character System — Client + Room Integration
+- **CharacterSelect.tsx** fully rewritten: fetches from `GET /api/characters`, creates via `POST /api/characters`, selects via `PUT /api/characters/:id/select`, deletes via `DELETE /api/characters/:id`. Alpha-only name validation with auto-capitalize. Empty-state triggers creation form. Delete with confirmation.
+- **Login flow redirect**: Login.tsx and AuthCallback.tsx now navigate to `/characters` instead of `/refuge` after auth. Character selection → `/refuge`.
+- **Store**: Added `activeCharacter: CharacterSummary | null` to AppState with `SET_ACTIVE_CHARACTER` action.
+- **connection.ts**: `connect()` and `switchRoom()` accept optional `characterId` parameter. Passed through from `state.activeCharacter?.id` in Refuge.tsx and useShardConnection.ts.
+- **RefugeRoom**: Added `characterIds` map (sessionId → characterId). All gameplay operations (stash, loadout, equip/unequip/swap) use `characterIds` map instead of `playerIds`. Auth-level operations stay on `playerIds`.
+- **ShardRoom**: `onJoin` reads `characterId` from join options. Uses it as the gameplay identity for all repo calls (profile, faction, stash, sickness, run history). Falls back to playerId for backwards compat.
+- **Shared types**: Added `CharacterSummary`, `CreateCharacterRequest`, `SelectCharacterRequest` interfaces. Fixed message type count test (12→20 — Drizzt added 8 CHARACTER_ message types in parallel).
+- **API service**: Added `fetchCharacters`, `createCharacter`, `selectCharacter`, `deleteCharacter` functions.
+- Build clean, 80 server test files pass (1823 tests), shared tests pass (80 tests). Client ux-batch2 failures are pre-existing.
+
+## Learnings
+
+**Character ID as gameplay identity:**
+The `playerId` (from auth/tokens) is now distinct from `characterId` (gameplay identity). In RefugeRoom, there are two maps: `playerIds` for auth and `characterIds` for gameplay. In ShardRoom, the `playerIds` map was repurposed to hold characterIds (with backwards-compatible fallback). All repository calls (stash, loadout, profile, faction, shard sickness, run history) should use characterId.
+
+**REST for character CRUD, not Colyseus messages:**
+Character listing, creation, selection, and deletion use REST endpoints (`/api/characters`), not Colyseus message types. This is because character management happens before joining any room. The CHARACTER_ message types Drizzt added are available but unused by the client — the REST approach is simpler and already wired.
+
+**Faction slugs are from DB migration 004:**
+DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client CharacterSelect uses these. Content definitions use different names. Reconciliation is deferred per user directive that factions are placeholder.
+
+### Dedicated Narrative & Creature Definition Stores
+- Created migration 022 (`narrative_template_definitions` table) and 023 (`creature_definitions` table with data migration from content_definitions JSONB).
+- `PgNarrativeDefinitionsStore` maps 9 columns (slug, narrative_type, biome, template, tone, verbosity, tags) to flat ContentEntity.
+- `PgCreatureDefinitionsStore` maps 21 columns + loot_table JSONB to flat ContentEntity. Creature `type` field is the unique slug, `id` is the UUID PK.
+- init.ts already had narrative/creature branches (committed by Drizzt's parallel biome/modifier work). No conflict.
+- Pattern: each dedicated store follows PgItemDefinitionsStore — rowToEntity mapper, isPgError helper, ContentStoreError codes (DUPLICATE_ID, NOT_FOUND).
+- Build clean, all 1823 server tests pass (80 test files, 0 regressions).
+
+---
+
+## Session: Content Store Migration Phase 1 (2026-03-26T16:17:14Z)
+
+**Task:** Create dedicated relational stores for narrative templates and creatures following PgItemDefinitionsStore pattern.
+**Status:** ✅ Complete
+
+**Commits:**
+- 10fde32 — "feat: dedicated narrative and creature definition stores"
+
+**Deliverables:**
+- `PgNarrativeDefinitionsStore.ts` — IContentStore impl, 138 lines, slug-based identity for template reuse
+- `PgCreatureDefinitionsStore.ts` — IContentStore impl, 209 lines, flattens 21 columns + loot_table JSONB
+- Migration 022 — `narrative_template_definitions` relational table (slug, narrative_type, biome, template, tone, verbosity, tags)
+- Migration 023 — `creature_definitions` relational table with data migration from content_definitions JSONB, loot_table stays as JSONB for complex drop logic
+- init.ts updates — narratives and creatures already had dedicated branches; no conflict with Drizzt's parallel biome/modifier work
+
+**Technical Details:**
+- Narrative: slug-based primary identity + UUID auto-generated id. Enables template lookup by slug for AI narration layer.
+- Creatures: complex entity with 21 relational columns covering base stats, scaling, abilities, plus loot_table JSONB. Migration flattens JSONB structure to columns where possible.
+- Both stores implement rowToEntity mapper, isPgError helper, standard ContentStoreError codes (DUPLICATE_ID, NOT_FOUND, NOT_AUTHORIZED).
+- Migrations preserve data integrity: copy from JSONB, validate, then delete old rows.
+
+**Cross-team context:** Drizzt completed biomes + modifiers (migrations 020–021) in parallel. Session orchestration logs created by Scribe for both agents. Full content store migration plan from Elminster now executing on track.
+
+**Learnings:**
+- High-complexity entities like creatures benefit from dedicated schema: enables AI integration through clean column interface, future query optimization, independent evolution.
+- Narrative templates use slug-based identity (TEXT UNIQUE) + UUID id. Slug is what AI/gameplay layers see; UUID is DB optimization.
+- JSONB columns can coexist with relational schema (e.g., loot_table in creatures). Useful for complex nested data that rarely needs direct DB queries.
+- Faction dual-table conflict resolved: `factions` (migration 004) is the canonical table; `content_definitions` faction rows were stale copies with divergent names. Migration 025 adds admin fields (description, milestones, events) to the canonical table and cleans up stale rows. PgFactionDefinitionsStore follows the same pattern as other dedicated stores.
+- When a game table already exists with FK constraints (e.g., faction_membership), always extend it rather than maintaining a parallel JSONB copy. The relational table is the source of truth.
+
+---
+
+## Session: Faction Admin Fields & Store Consolidation (2026-03-26T17:05:28Z)
+
+**Task:** Implement faction dual-table resolution via PgFactionDefinitionsStore and migration 025.
+**Status:** ✅ Complete (dev branch)
+
+**Commits:**
+- Background agent auto-commit to dev (faction store + migration 025 + init.ts wiring)
+
+**Deliverables:**
+- `PgFactionDefinitionsStore.ts` — IContentStore<ContentEntity> impl, reads/writes `factions` table directly, preserves FK integrity
+- Migration 025 — `025-faction-admin-fields.ts` adds description/milestones/events columns to `factions`, backfills description from philosophy, cleans stale content_definitions faction rows
+- init.ts updates — routes 'factions' entity type to PgFactionDefinitionsStore, comments document migration sequence
+
+**Technical Details:**
+- `factions` table (migration 004) is the single source of truth: UUID PKs, canonical GDD names, FK to faction_membership
+- `content_definitions` JSONB faction rows (stale): had divergent names (Ironhearth vs Ironwright, etc.), no FK relationships, out of sync
+- Solution: extend relational table with admin fields, delete stale JSONB rows, create dedicated store
+- Migration is idempotent: conditional column existence checks, single table scan + DELETE, <10ms runtime
+- Pattern: follows PgItemDefinitionsStore → PgBiomeDefinitionsStore → PgModifierDefinitionsStore → PgNarrativeDefinitionsStore → PgCreatureDefinitionsStore → PgFactionDefinitionsStore
+
+**Phase 2 Content Store Consolidation Progress:**
+- ✅ Migration 020–024: Biomes, modifiers, narrative, creatures dedicated stores (Drizzt, Jarlaxle parallel work Mar 26)
+- ✅ Migration 025: Faction admin fields + cleanup (Jarlaxle Mar 26)
+- Remaining on content_definitions: skills, loot-tables, rooms (Phase 3)
+
+**Quality Gate:**
+- ✅ Build clean (npm run build)
+- ✅ Tests green (npm run test, all 1823 server tests pass)
+- ✅ Linter clean (eslint)
+- ✅ Zero regressions
+
+**Learnings:**
+- When a game entity already has a relational table with FK constraints (e.g., factions → faction_membership), always extend the relational table rather than maintaining a parallel JSONB copy. The relational structure is the source of truth.
+- Admin UI fields (description, milestones, events) should live alongside game state, not in a separate entity type. This keeps reads/writes atomic.
+- Faction names are GDD-canonical (Ironwright Compact, Veil Cartographers, Scarlet Ledger) — these names appear in game state (player_profile.faction_id → factions.id → factions.name), admin UI, and API responses. Never reference old paraphrased names.
+
+### Rooms Store + content_definitions Retirement
+- Created `PgRoomDefinitionsStore.ts` following same pattern as PgBiomeDefinitionsStore: rowToEntity mapping, JSONB columns for properties/hazards/lootContainers, full CRUD with ContentStoreError handling.
+- Migration 028 creates `room_definitions` table (UUID PK, slug UNIQUE, name, description, type, plus JSONB arrays for properties/hazards/loot_containers).
+- Migration 029 drops `content_definitions` — the legacy JSONB blob table that stored all entity types generically. All 9 entity types now have dedicated relational stores.
+- Deleted `PgContentStore.ts` — no longer imported anywhere. Removed from barrel export.
+- Updated `dashboard-routes.ts` to query through store interfaces uniformly instead of raw `content_definitions` SQL. Removed unused `dbQuery` import and `usePg` destructure.
+- Updated `deploy-routes.ts` with TODO comments where it previously queried `content_definitions` for deploy diff/counts — these need to aggregate across dedicated tables.
+- Drizzt's skills/loot-tables stores (migrations 026-027, `PgSkillDefinitionsStore`, `PgLootTableDefinitionsStore`) were already on disk and init.ts already wired all 9 types (his commit 245edd4). No merge conflict.
+- Build clean, 1891 tests passing across 81 test files.
+
+### 2025-07-25: Zone Database Migration + PgZoneRepository
+- Created migration `030_create_zones.sql` with three tables: `zones` (definition), `zone_rooms` (room graph nodes), `zone_exits` (directed edges with inter-zone support).
+- Schema supports: level ranges, tier, lifecycle (persistent/scheduled/event), category (hub/dungeon/wilderness/social), PvP toggle, repop interval, and max player limits.
+- Inter-zone exits use `target_zone_slug` + `target_room_slug` nullable columns — NULL means intra-zone exit.
+- JSONB columns for loot_containers, hazards, npcs (rooms) and condition (exits) — serialized with JSON.stringify on write, auto-parsed by pg driver on read.
+- Unique constraints: zone slug globally, room slug per zone, exit direction per room per zone.
+- Created `ZoneRepository.ts` interface with full CRUD for zones, rooms, and exits. Types defined locally (ZoneDefinition, ZoneRoomDefinition, ZoneExitDefinition, ZoneData) pending Drizzt's `@ellmud/shared` zone types.
+- Created `PgZoneRepository.ts` following PgBiomeDefinitionsStore/PgItemDefinitionsStore patterns: `query()` from `../db/index.js`, row-to-entity mappers with camelCase↔snake_case conversion, `fetchZoneBundle()` uses `Promise.all` for parallel room+exit fetch.
+- Created `InMemoryZoneRepository.ts` using Maps with `randomUUID()`, proper cascade on zone delete (removes rooms + exits), sorted results matching Pg ORDER BY.
+- Created `index.ts` barrel with provider pattern matching stash/player modules: `initZoneProvider(usePg)`, `getZoneRepository()`, `isZonePg()`, `resetZoneProvider()`.
+- Pre-existing `zone-adapter.ts` (from parallel work) has TS errors referencing not-yet-available `@ellmud/shared` exports (ZoneData, makeInterZoneId). My files compile clean.
+- Full build passes: shared + server + client all green.
+
+**Learnings:**
+- Zone types are temporarily local in ZoneRepository.ts. When Drizzt lands `@ellmud/shared` zone types, swap the local types for shared imports and delete the local definitions. The interface shapes should match.
+- The provider pattern (init/get/isX/reset) is the established singleton pattern for all repository modules — stash, player, and now zones all follow it identically.
+
+### 2025-07-25: Zone Admin CRUD Routes (Phase B)
+- Created `packages/server/src/admin/zones/zone-routes.ts` with `createZoneRouter()` — 10 RESTful endpoints for zone, room, and exit management.
+- Endpoints: GET list, GET bundle by slug, POST/PUT/DELETE zones, POST room, PUT/DELETE room, POST exit, DELETE exit.
+- Follows content-routes.ts pattern exactly: adminAuth middleware on all routes, logAuditEvent on mutations (entity types: 'zone', 'zone-room', 'zone-exit'), fire-and-forget `.catch(() => {})`.
+- Input validation: slug (URL-safe regex), name (required non-empty), tier (1-3), lifecycle (persistent/scheduled/event), category (hub/dungeon/wilderness/social), repopIntervalSeconds (>=0), room slug uniqueness within zone, exit direction (from ALL_DIRECTIONS), exit fromRoomSlug existence check.
+- Uses `getZoneRepository()` singleton — no deps injection needed (unlike content routes which take stores map).
+- Wired into admin barrel (`admin/index.ts`) and main server (`index.ts`) between deploy and admin runtime routers.
+- Created `admin/zones/index.ts` barrel export for consistency.
+- Build clean, all 82 test files pass (1904 tests), zero regressions.
+
+**Learnings:**
+- Zone routes are a separate router from content routes — zones use the ZoneRepository interface directly (getZoneRepository singleton), not the ContentStore abstraction. This is because zones have a different data model (zone → rooms → exits hierarchy) vs. content's flat entity model.
+- For update routes with the ZoneRepository, the repo throws Error with 'not found' in the message. Content routes use typed ContentStoreError codes. Zone routes catch Error and check message.includes('not found') for 404s.
+
+### 2025-07-25: Zone Context in Room Headers (room-header-zone)
+- Client-side only change — server already included `zoneName` in RoomHeaderMessage when `isZone && zoneData`.
+- Updated `useShardConnection.ts`: room header message in narrative now renders as `── [ZoneName] RoomName ──` when zoneName is present, plain `── RoomName ──` otherwise.
+- Updated `ShardExploration.tsx`: header bar shows zone name as a subtle suffix (`— ZoneName`) in secondary text next to the gold room name.
+- RefugeRoom left unchanged — its room name already embeds "The Refuge" (`The Refuge — Central Plaza`), so adding zoneName would be redundant.
+- Build clean across shared, server, client. No test changes needed (no new logic, purely display).
+
+**Learnings:**
+- RoomHeaderMessage.zoneName was already wired server-side (ShardRoom lines 938, 1042) but the client never consumed it. Always check both ends of a message contract.
+- RefugeRoom uses a hardcoded room header with zone baked into the name string — different pattern from ShardRoom's dynamic zone injection.
+
+### 2025-07-25: Client Zone Indicators + Zone Listings in Shardboard
+
+**Task:** Add zone-awareness UI: room type badges, zone transfer handler, and zone listings in Shardboard.
+**Status:** ✅ Complete (dev branch)
+
+**Deliverables:**
+- `packages/shared/src/index.ts` — Added `roomType?: string` to `RoomHeaderMessage` for zone room type badges
+- `packages/client/src/services/connection.ts` — Added `onZoneTransfer` to `MessageHandlers` interface, wired `ZONE_TRANSFER` message in both `connect()` and `switchRoom()`
+- `packages/client/src/hooks/useShardConnection.ts` — Implemented zone transfer handler that shows "Entering zone..." transition, disconnects current room, reconnects to target zone via `switchRoom()` with `zoneSlug`/`targetRoomSlug` options
+- `packages/client/src/pages/ShardExploration.tsx` — Added room type badge rendering (BOSS/EXTRACTION/ENTRY with color-coded styles) next to room name in header
+- `packages/client/src/components/ShardboardTab.tsx` — Added Zones section above Shardboard shard listings: fetches zones from `/api/admin/zones`, shows name/tier/category/level range/description/player count, "Enter Zone" button with `onEnterZone` prop
+
+**Verification:**
+- ✅ CompassControl already works with zone rooms (reads `state.roomHeader.exits`, no changes needed)
+- ✅ Build clean (shared + server + client)
+
+**Learnings:**
+- CompassControl is zone-agnostic by design — it reads exits from roomHeader state regardless of whether the room is in a shard or zone. No compass changes needed for zone support.
+- Zone transfer uses the same `switchRoom()` mechanism as shard room switches, passing `zoneSlug` and `targetRoomSlug` as join options so the server matchmaker can route to the correct zone instance.
+- ShardboardTab was entirely mock data for shards. Zones are the first real data fetched from the API in that component. The shard listings remain mock pending matchmaker integration.
+
+### Exploration Repository (Phase A1)
+- Created migration `032_create_explored_rooms.sql` — `character_explored_rooms` table with UUID PK, UNIQUE on `(character_id, COALESCE(zone_slug, '__shard__'), room_id)`, indexes on character_id and (character_id, zone_slug).
+- **No coordinate columns** — user decision: zone designers don't specify coords, client computes positions via BFS from room graph. Table stores only: character_id, zone_slug, room_id, room_type, room_name, shard_tier, biome, first_visited, last_visited, visit_count.
+- `ExplorationRepository` interface + `InMemoryExplorationRepository` in `ExplorationRepository.ts`. Types: `ExplorationVisit`, `ExploredRoom`, `ExplorationStats`.
+- `PgExplorationRepository` uses `query()` from `db/index.js` (lazy pool). `recordVisit` uses `INSERT ... ON CONFLICT DO UPDATE SET last_visited = NOW(), visit_count = visit_count + 1`.
+- `exploration-provider.ts` follows stash-provider pattern: `initExplorationProvider(usePg)`, `getExplorationRepository()`, `resetExplorationProvider()`.
+- Barrel export from `exploration/index.ts`.
+- Build verified — all three packages compile clean.
+
+## Phase A Complete (2026-03-27T13:04)
+
+**Status:** ✅ Exploration Repository + DB Migration — DONE
+
+**Delivered:**
+- Exploration repository stack (5 files): Interface + InMemory + Pg implementations + DI provider
+- Migration 032: `character_explored_rooms` table (no coordinate columns per user directive)
+- Full test coverage: 22 exploration-specific tests (all passing)
+
+**Key Outcome:** Room coordinates now computed client-side via BFS from connection graph. DB stores only visit metadata. Zone authoring simplified — no more coord_x/coord_y/coord_z required.
+
+**Phase A Result:** Build clean. 2206 tests passing (98 files). Ready for Phase B: Narrative + service wiring.
+
+**Team Status:** Drizzt (feature-gate middleware ✅), Minsc (61 tests ✅). All Phase A agents complete.

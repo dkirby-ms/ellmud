@@ -233,6 +233,92 @@ export const CRYPT_KEY_FRAGMENT: ItemDefinition = {
   soulbound: false,
 };
 
+// ─── Warrens Items ──────────────────────────────────────────────────────────
+
+export const BENT_REBAR: ItemDefinition = {
+  id: 'bent_rebar',
+  name: 'Bent Rebar',
+  type: 'weapon',
+  tier: 'scrap',
+  baseStats: { damage: 4, speed: 0.8 },
+  baseDurability: 20,
+  weight: 3,
+  description: 'A corroded length of rebar, wrenched from a collapsed wall. One end is bent into a rough hook. Heavy, slow, and ugly — but better than bare hands.',
+  soulbound: false,
+};
+
+export const SCAVENGER_SHIV: ItemDefinition = {
+  id: 'scavenger_shiv',
+  name: "Scavenger's Shiv",
+  type: 'weapon',
+  tier: 'common',
+  baseStats: { damage: 7, speed: 1.2 },
+  baseDurability: 30,
+  weight: 2,
+  description: 'A shard of plate glass, its base wrapped in copper wire for a grip. The edge is wickedly sharp but fragile.',
+  soulbound: false,
+};
+
+export const RUBBLE_CRUSTED_VEST: ItemDefinition = {
+  id: 'rubble_crusted_vest',
+  name: 'Rubble-Crusted Vest',
+  type: 'armour',
+  tier: 'common',
+  baseStats: { armour: 3, weight: 5 },
+  baseDurability: 40,
+  weight: 5,
+  description: 'A padded leather vest with chunks of masonry and tile lashed to its surface. Improvised but effective.',
+  soulbound: false,
+};
+
+export const TARNISHED_MEDALLION: ItemDefinition = {
+  id: 'tarnished_medallion',
+  name: 'Tarnished Medallion',
+  type: 'material',
+  tier: 'common',
+  baseStats: {},
+  baseDurability: null,
+  weight: 0.5,
+  description: 'An ornate disc of tarnished metal, stamped with a sigil that might once have been a face or a sun or a wheel.',
+  soulbound: false,
+};
+
+export const GUTTERSPAWN_FANG: ItemDefinition = {
+  id: 'gutterspawn_fang',
+  name: 'Gutterspawn Fang',
+  type: 'material',
+  tier: 'scrap',
+  baseStats: {},
+  baseDurability: null,
+  weight: 0.2,
+  description: 'A hollow, yellowed fang pulled from a gutterspawn maw. The interior canal still glistens with venom.',
+  soulbound: false,
+};
+
+export const SANCTUARY_KEY: ItemDefinition = {
+  id: 'sanctuary_key',
+  name: 'Sanctuary Key',
+  type: 'key',
+  tier: 'common',
+  baseStats: {},
+  baseDurability: null,
+  weight: 0.3,
+  description: 'A heavy iron key, its shaft thick with verdigris but its teeth still sharp. Fits the reinforced door between the Broken Sanctuary and the Sunken Square.',
+  soulbound: false,
+};
+
+export const CHARRED_STREET_MAP: ItemDefinition = {
+  id: 'charred_street_map',
+  name: 'Charred Street Map',
+  type: 'material',
+  tier: 'sturdy',
+  baseStats: {},
+  baseDurability: null,
+  weight: 0.5,
+  description: 'A fragment of vellum, edges blackened by fire, showing a street grid that matches the ruins around you. Landmarks are annotated in a precise, alien script.',
+  soulbound: false,
+};
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 const ALL_ITEMS: ItemDefinition[] = [
@@ -254,6 +340,14 @@ const ALL_ITEMS: ItemDefinition[] = [
   TARNISHED_AMULET,
   DROWNED_OFFERING,
   CRYPT_KEY_FRAGMENT,
+  // Warrens items
+  BENT_REBAR,
+  SCAVENGER_SHIV,
+  RUBBLE_CRUSTED_VEST,
+  TARNISHED_MEDALLION,
+  GUTTERSPAWN_FANG,
+  SANCTUARY_KEY,
+  CHARRED_STREET_MAP,
 ];
 
 /** Lookup map: item ID → definition. */

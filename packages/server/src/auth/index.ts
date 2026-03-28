@@ -1,5 +1,6 @@
 export { AuthService, AuthError } from './AuthService.js';
 export { InMemoryTokenStore, type TokenStore, type TokenData } from './TokenStore.js';
+export { PgTokenStore } from './PgTokenStore.js';
 export {
   InMemoryPlayerRepository,
   DuplicateUsernameError,

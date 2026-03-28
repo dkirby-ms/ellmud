@@ -3,21 +3,37 @@
  *
  * Responsibilities:
  * - Spawn creatures during shard seeding (deterministic placement)
+ * - Spawn zone-defined NPCs from ZoneData
  * - Tick all creature behaviors each game tick
  * - Provide room queries for look/combat
  * - Handle creature death and loot generation
  */
 
-import type { RoomGraph, Room } from '@ellmud/shared';
+import type { RoomGraph, Room, ZoneData } from '@ellmud/shared';
 import type { PRNG } from '../shard/prng.js';
 import type { Creature, CreatureTemplate, CreatureAction } from './types.js';
 import { updateCreature, type CreatureWorldState } from './behavior.js';
 import { generateLoot, type LootItem } from './loot.js';
 import type { Combatant } from '../combat/CombatState.js';
+import { DROWNED_REVENANT } from './templates/drowned-revenant.js';
+
+/** Registry mapping creature IDs to templates. */
+const CREATURE_TEMPLATES = new Map<string, CreatureTemplate>([
+  ['drowned_revenant', DROWNED_REVENANT],
+]);
+
+/** Tracks a zone-spawned creature for repop. */
+interface ZoneCreatureRecord {
+  creatureId: string;
+  roomSlug: string;
+  templateId: string;
+}
 
 export class CreatureManager {
   private creatures = new Map<string, Creature>();
   private nextCreatureId = 0;
+  /** Zone creature records for repop tracking. */
+  private zoneCreatureRecords: ZoneCreatureRecord[] = [];
 
   // ─── Spawning ──────────────────────────────────────────────────────────────
 
@@ -123,6 +139,90 @@ export class CreatureManager {
     return creature;
   }
 
+  // ─── Zone-based Spawning ────────────────────────────────────────────────────
+
+  /**
+   * Spawn creatures defined by zone room NPC data.
+   * Each zone room may have npcs: [{ creatureId, spawnCount, behavior }].
+   */
+  spawnCreaturesFromZone(zoneData: ZoneData): Creature[] {
+    const spawned: Creature[] = [];
+
+    for (const zoneRoom of zoneData.rooms) {
+      for (const npc of zoneRoom.npcs) {
+        const template = CREATURE_TEMPLATES.get(npc.creatureId);
+        if (!template) continue;
+
+        for (let i = 0; i < npc.spawnCount; i++) {
+          const creature = this.createZoneCreature(template, zoneRoom.slug);
+          this.creatures.set(creature.id, creature);
+          this.zoneCreatureRecords.push({
+            creatureId: creature.id,
+            roomSlug: zoneRoom.slug,
+            templateId: npc.creatureId,
+          });
+          spawned.push(creature);
+        }
+      }
+    }
+
+    return spawned;
+  }
+
+  /**
+   * Respawn killed zone creatures during a repop cycle.
+   * Only respawns creatures that were killed since last repop.
+   */
+  respawnZoneCreatures(_zoneData: ZoneData): Creature[] {
+    const respawned: Creature[] = [];
+
+    for (const record of this.zoneCreatureRecords) {
+      const existing = this.creatures.get(record.creatureId);
+      if (existing && existing.isAlive) continue;
+
+      const template = CREATURE_TEMPLATES.get(record.templateId);
+      if (!template) continue;
+
+      // Remove the dead creature entry
+      if (existing) this.creatures.delete(record.creatureId);
+
+      // Create a fresh creature in the same room
+      const creature = this.createZoneCreature(template, record.roomSlug);
+      this.creatures.set(creature.id, creature);
+
+      // Update the record to point to the new creature
+      record.creatureId = creature.id;
+      respawned.push(creature);
+    }
+
+    return respawned;
+  }
+
+  private createZoneCreature(template: CreatureTemplate, roomId: string): Creature {
+    const id = `creature-${this.nextCreatureId++}`;
+    const idleTarget = Math.floor(
+      (template.idleTicksMin + template.idleTicksMax) / 2,
+    );
+
+    return {
+      id,
+      type: template.type,
+      name: template.name,
+      hp: template.stats.maxHp,
+      maxHp: template.stats.maxHp,
+      attack: template.stats.attack,
+      defence: template.stats.defence,
+      armour: template.stats.armour,
+      currentRoomId: roomId,
+      behaviorState: 'idle',
+      idleTicks: 0,
+      idleTicksTarget: idleTarget,
+      alertTargetRoomId: null,
+      lootTable: [...template.lootTable],
+      isAlive: true,
+    };
+  }
+
   // ─── Tick Update ───────────────────────────────────────────────────────────
 
   /**
@@ -212,6 +312,8 @@ export class CreatureManager {
       attack: creature.attack,
       defence: creature.defence,
       armour: creature.armour,
+      agility: creature.agility ?? 0,
+      dodgeSkillRank: creature.dodgeSkillRank ?? 0,
       roomId: creature.currentRoomId,
       isPlayer: false,
     };

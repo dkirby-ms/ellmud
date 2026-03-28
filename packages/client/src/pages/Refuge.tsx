@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, Link } from "react-router";
 import {
-  Package,
   Shield,
   Hammer,
   ShoppingCart,
@@ -13,26 +12,28 @@ import {
   Wrench,
 } from "lucide-react";
 import { useAppContext, type TerminalMessage } from "../store";
+import CompassControl from "../components/CompassControl";
 import { connect, sendRawCommand } from "../services/connection";
 import { useReconnection } from "../hooks/useReconnection";
+import { useAutoScroll } from "../hooks/useAutoScroll";
 import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
 import { logout } from "../services/api";
 import ShardboardTab from "../components/ShardboardTab";
-import StashTab from "../components/StashTab";
-import LoadoutTab from "../components/LoadoutTab";
+import CombinedStashLoadout from "../components/CombinedStashLoadout";
 import type {
   NarrateMessage,
   RoomHeaderMessage,
   ShardStateMessage,
   CombatResultMessage,
   RoomSwitchMessage,
+  LoadoutUpdateMessage,
+  StashUpdateMessage,
 } from "@ellmud/shared";
 import type { Room } from "@colyseus/sdk";
 import type { MessageHandlers } from "../services/connection";
 
 type TabType =
-  | "stash"
-  | "loadout"
+  | "equipment"
   | "crafting"
   | "marketplace"
   | "factions"
@@ -40,8 +41,7 @@ type TabType =
   | "shardboard";
 
 const tabs: { id: TabType; icon: React.ReactNode; label: string }[] = [
-  { id: "stash", icon: <Package className="w-5 h-5" />, label: "Stash" },
-  { id: "loadout", icon: <Shield className="w-5 h-5" />, label: "Loadout" },
+  { id: "equipment", icon: <Shield className="w-5 h-5" />, label: "Equipment" },
   { id: "crafting", icon: <Hammer className="w-5 h-5" />, label: "Crafting" },
   {
     id: "marketplace",
@@ -73,7 +73,7 @@ export default function Refuge() {
   const roomRef = useRef<Room | null>(null);
   const switchingRef = useRef(false);
   const handlersRef = useRef<MessageHandlers | null>(null);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const chatScrollRef = useAutoScroll(state.messages);
 
   const addMessage = useCallback(
     (text: string, type: TerminalMessage["type"]) => {
@@ -95,8 +95,9 @@ export default function Refuge() {
         dispatch({ type: "SET_CONNECTION_STATUS", status: "connecting" });
         const room = await connect(
           state.token,
-          "refuge",
+          "zone:the-refuge",
           handlersRef.current,
+          state.activeCharacter?.id,
         );
         roomRef.current = room;
         dispatch({ type: "SET_ROOM", room });
@@ -171,6 +172,16 @@ export default function Refuge() {
 
         switchingRef.current = false;
       },
+      onLoadoutUpdate: (msg: LoadoutUpdateMessage) => {
+        if (!disposed) {
+          dispatch({ type: "SET_LOADOUT", slots: msg.slots });
+        }
+      },
+      onStashUpdate: (msg: StashUpdateMessage) => {
+        if (!disposed) {
+          dispatch({ type: "SET_STASH_ITEMS", items: msg.items });
+        }
+      },
       onError: (code: number, message: string) => {
         if (!disposed) {
           addMessage(`[Error ${code}: ${message}]`, "system");
@@ -200,7 +211,7 @@ export default function Refuge() {
     handlersRef.current = handlers;
     dispatch({ type: "SET_CONNECTION_STATUS", status: "connecting" });
 
-    connect(state.token, "refuge", handlers)
+    connect(state.token, "zone:the-refuge", handlers, state.activeCharacter?.id)
       .then((room) => {
         if (!disposed) {
           roomRef.current = room;
@@ -225,11 +236,6 @@ export default function Refuge() {
       }
     };
   }, [state.token, dispatch, addMessage]);
-
-  // Auto-scroll chat
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView?.({ behavior: "smooth" });
-  }, [state.messages.length]);
 
   // Send chat message as command
   const handleSendMessage = useCallback(
@@ -260,6 +266,15 @@ export default function Refuge() {
     roomRef.current = null;
     dispatch({ type: "LOGOUT" });
   }, [state.token, dispatch]);
+
+  const handleNavigate = useCallback(
+    (direction: string) => {
+      if (!roomRef.current) return;
+      addMessage(`> go ${direction}`, "system");
+      sendRawCommand(roomRef.current, `go ${direction}`);
+    },
+    [addMessage],
+  );
 
   // Derive display data from real state
   const locationName = state.roomHeader?.roomName ?? "The Refuge";
@@ -362,6 +377,9 @@ export default function Refuge() {
             ))}
           </div>
 
+          {/* Compass navigation */}
+          <CompassControl onNavigate={handleNavigate} />
+
           {/* Ambient Events — real server narrate messages */}
           <div className="flex-1 p-4 overflow-y-auto">
             <h3
@@ -369,20 +387,16 @@ export default function Refuge() {
             >
               Ambient Events
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-1 narrative-terminal rounded" style={{ padding: '0.5rem' }}>
               {ambientEvents.length === 0 ? (
-                <p
-                  className="text-text-disabled text-xs italic font-serif"
-                  style={{ lineHeight: 1.6 }}
-                >
+                <p className="mud-sound">
                   The Refuge hums with quiet activity...
                 </p>
               ) : (
                 ambientEvents.map((event) => (
                   <p
                     key={event.id}
-                    className="text-text-disabled text-xs italic font-serif"
-                    style={{ lineHeight: 1.6 }}
+                    className="mud-sound"
                   >
                     {event.text}
                   </p>
@@ -397,8 +411,9 @@ export default function Refuge() {
           {activeTab === "shardboard" && (
             <ShardboardTab onEnterShard={handleEnterShard} />
           )}
-          {activeTab === "stash" && <StashTab />}
-          {activeTab === "loadout" && <LoadoutTab />}
+          {activeTab === "equipment" && (
+            <CombinedStashLoadout room={roomRef.current} />
+          )}
           {activeTab === "crafting" && (
             <div className="p-8">
               <h2
@@ -475,12 +490,10 @@ export default function Refuge() {
           </div>
 
           {/* Chat — real WebSocket messages */}
-          <div className="flex-1 flex flex-col">
-            <div className="flex-1 p-4 overflow-y-auto space-y-3">
+          <div className="flex-1 flex flex-col min-h-0">
+            <div ref={chatScrollRef} className="flex-1 p-4 overflow-y-auto space-y-1 narrative-scroll narrative-terminal">
               {chatMessages.length === 0 && (
-                <p
-                  className="text-text-disabled text-xs font-mono"
-                >
+                <p className="mud-system">
                   {isConnected
                     ? "Connected. Type a command below."
                     : "Connecting to the Refuge..."}
@@ -489,41 +502,24 @@ export default function Refuge() {
               {chatMessages.map((msg) => (
                 <div key={msg.id}>
                   {msg.type === "system" || msg.type === "header" ? (
-                    <p
-                      className="text-text-disabled text-xs font-mono"
-                    >
+                    <p className="mud-system">
                       {msg.text}
                     </p>
                   ) : msg.type === "speech" ? (
-                    <div>
-                      <p
-                        className="text-text-secondary text-xs mb-1 font-sans"
-                      >
-                        Speech
-                      </p>
-                      <p
-                        className="text-text-primary text-sm font-serif"
-                      >
-                        &ldquo;{msg.text}&rdquo;
-                      </p>
-                    </div>
+                    <p className="mud-speech">
+                      &ldquo;{msg.text}&rdquo;
+                    </p>
                   ) : msg.type === "combat" ? (
-                    <p
-                      className="text-danger text-xs font-mono"
-                    >
+                    <p className="mud-damage">
                       ⚔ {msg.text}
                     </p>
                   ) : (
-                    <p
-                      className="text-text-primary text-sm font-serif"
-                      style={{ lineHeight: 1.6 }}
-                    >
+                    <p className="mud-room-desc">
                       {msg.text}
                     </p>
                   )}
                 </div>
               ))}
-              <div ref={chatEndRef} />
             </div>
 
             <form
@@ -539,7 +535,7 @@ export default function Refuge() {
                     isConnected ? "Type a command..." : "Connecting..."
                   }
                   disabled={!isConnected}
-                  className="flex-1 bg-bg-elevated border border-border-muted rounded px-3 py-2 text-text-primary text-sm focus:border-interactive focus:outline-none transition-colors placeholder:text-text-disabled disabled:opacity-50 font-sans"
+                  className="flex-1 bg-bg-elevated border border-border-muted rounded px-3 py-2 text-text-primary text-sm focus:border-interactive focus:outline-none transition-colors placeholder:text-text-disabled disabled:opacity-50 font-mono"
                 />
                 <button
                   type="submit"

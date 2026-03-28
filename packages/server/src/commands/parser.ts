@@ -7,8 +7,14 @@
 
 import type { CommandMessage } from '@ellmud/shared';
 
-/** Direction alias map — single letters to full go commands. */
+/** Direction alias map — bare directions and single letters to full go commands. */
 const DIRECTION_ALIASES: Record<string, string[]> = {
+  north: ['go', 'north'],
+  south: ['go', 'south'],
+  east: ['go', 'east'],
+  west: ['go', 'west'],
+  up: ['go', 'up'],
+  down: ['go', 'down'],
   n: ['go', 'north'],
   s: ['go', 'south'],
   e: ['go', 'east'],

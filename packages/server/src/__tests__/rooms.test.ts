@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
 import { ShardRoom } from '../rooms/ShardRoom.js';
-import { RefugeRoom } from '../rooms/RefugeRoom.js';
 import { MessageTypes } from '@ellmud/shared';
 import type { NarrateMessage, ShardStateMessage, RoomHeaderMessage } from '@ellmud/shared';
 
@@ -12,7 +11,6 @@ describe('ShardRoom', () => {
   beforeAll(async () => {
     const server = new Server();
     server.define('shard', ShardRoom);
-    server.define('refuge', RefugeRoom);
     await server.listen(0);
     const addr = (server as unknown as { transport: { server: { address(): { port: number } } } }).transport.server.address();
     (server as unknown as { port: number }).port = addr.port;
@@ -124,12 +122,12 @@ describe('ShardRoom', () => {
   });
 });
 
-describe('RefugeRoom', () => {
+describe('Zone ShardRoom (the-refuge)', () => {
   let colyseus: ColyseusTestServer;
 
   beforeAll(async () => {
     const server = new Server();
-    server.define('refuge', RefugeRoom);
+    server.define('shard', ShardRoom);
     await server.listen(0);
     const addr = (server as unknown as { transport: { server: { address(): { port: number } } } }).transport.server.address();
     (server as unknown as { port: number }).port = addr.port;
@@ -141,7 +139,7 @@ describe('RefugeRoom', () => {
   });
 
   it('should send welcome narration on join', async () => {
-    const room = await colyseus.createRoom('refuge', {});
+    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room);
 
     const messages: NarrateMessage[] = [];
@@ -158,7 +156,7 @@ describe('RefugeRoom', () => {
   });
 
   it('should handle commands', async () => {
-    const room = await colyseus.createRoom('refuge', {});
+    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room);
 
     const messages: NarrateMessage[] = [];

@@ -632,3 +632,628 @@ When planning Phase 3 work:
 - **Bicep correct:** `@secure()` on `entraClientSecret` param. But `ENTRA_CLIENT_SECRET` is plain env var in container spec (should be secretRef long-term).
 - **Key files:** `packages/server/src/auth/EntraAuthService.ts`, `packages/server/src/auth/entra-routes.ts`, `packages/server/src/auth/AuthService.ts` (loginOAuth), `packages/client/src/pages/Login.tsx`, `packages/client/src/pages/AuthCallback.tsx`, `infra/modules/container-apps.bicep` (lines 48-65, 149-154).
 - **User preference:** dkirby-ms wants Entra as identity-only. No Entra roles, groups, or API protection. All authorization is ours.
+
+### 2026-03-25: PR #201 Review — PlayerProfileRepository (save/load cycle)
+- **Reviewer:** Elminster (Lead/Architect)
+- **PR:** #201 — Implements issue #199
+- **Status:** ✅ APPROVED
+
+**Review Checklist Results:**
+
+1. **Architecture Pattern** ✅
+   - Correctly implements Interface + InMemoryImpl + PgImpl (matches StashRepository)
+   - DATABASE_URL gating properly done (boot-time toggle)
+   - Provider initialized at server boot after stash provider
+   
+2. **ShardRoom Integration** ✅
+   - `onJoin`: Loads profile by playerId, graceful fallback to defaults for new players, correct error handling
+   - `onLeave`: Saves profile only during cleanup (consented leave or timeout), properly awaited
+   - New players get DEFAULT_PROFILE (skills: {stealth: 5, awareness: 5}, maxCarryWeight: 20)
+   
+3. **Pg Implementation** ✅
+   - Uses existing `player_skills` table (migration 003) correctly
+   - Parameterized queries (SQL injection safe)
+   - Transaction-wrapped saves with ON CONFLICT upsert semantics
+   - Proper client lifecycle management (no connection leaks)
+   - Skill-to-category mapping hardcoded (reasonable for MVP, acknowledged limitation)
+   
+4. **In-Memory Implementation** ✅
+   - Uses structuredClone for isolation (prevents external mutation)
+   - Test isolation guaranteed
+   - Behavioral equivalence with Pg impl via contract tests
+   
+5. **Edge Cases** ✅
+   - DB down during save: Caught, logged, cleanup continues
+   - Concurrent joins/leaves: Each player isolated, PG UPSERT handles concurrent saves
+   - Default values sensible for new players (matches PlayerState defaults)
+   - Optional tracking skill correctly handled (can be undefined)
+   - Disconnection logic correct: saves on consented leave only (allows reconnection to restore mid-combat state)
+   
+6. **Test Coverage** ✅
+   - 39+ contract tests (save/load round-trip, upsert, isolation, skill progression, edge cases)
+   - Parallel operations tested (50 concurrent saves)
+   - Provider wiring tests (singleton, DATABASE_URL gating, reset)
+   - 6 placeholder integration tests (Colyseus-specific, acceptable to defer)
+   - All 1600 existing tests passing, zero lint errors
+
+**Known Limitations (Acceptable for MVP):**
+- Equipment persistence not yet in DB schema (uses defaults until migration added)
+- maxCarryWeight persistence not yet in DB schema (uses defaults until migration added)
+- Skill-to-category mapping hardcoded (should externalize if categories evolve)
+
+**No blockers. Merge approved.**
+
+
+### 2026-03-25: PR #202 Review — FactionRepository & RunHistoryRepository (wire-up)
+- **Reviewer:** Elminster (Lead/Architect)
+- **PR:** #202 — Implements issue #198
+- **Status:** ✅ APPROVED
+
+**Review Checklist Results:**
+
+1. **Architecture Pattern** ✅
+   - Both repositories correctly implement Interface + InMemoryImpl + PgImpl (matches PlayerProfileRepository and StashRepository)
+   - DATABASE_URL gating properly done (boot-time toggle via USE_PG flag)
+   - Providers initialized at server boot after ProfileProvider
+   - No deviation from established pattern
+
+2. **FactionRepository** ✅
+   - **Interface:** `getPlayerFactions(playerId)` / `updateFaction(playerId, factionId, standing)`
+   - **Schema:** Uses migration 004 (faction_membership table) correctly
+   - **Pg Implementation:** ON CONFLICT (player_id) DO UPDATE enforces one-faction-per-player UNIQUE constraint
+   - **In-Memory:** Map-based storage with structuredClone isolation
+   - **Contract Tests:** 22 tests covering CRUD, upsert semantics, multi-player isolation, edge cases (INT boundary, zero/max standing)
+
+3. **RunHistoryRepository** ✅
+   - **Interface:** `recordRun(run)` / `getPlayerHistory(playerId, limit?)`
+   - **Schema:** Uses migration 005 (run_history table) correctly
+   - **Pg Implementation:** INSERT with JSON serialization of extractedItems, proper field mapping
+   - **Query:** SELECT ... ORDER BY created_at DESC LIMIT (reverse chronological)
+   - **In-Memory:** Array-based with reverse-chronological ordering, respects limit parameter
+   - **Contract Tests:** 26 tests covering CRUD, chronological ordering, limit behavior, isolation, copy semantics
+
+4. **ShardRoom Integration** ✅
+   - **Faction Loading on Join:** Fire-and-forget pattern, informational logging only, exception caught
+   - **Run History Recording on Extraction:** Called before player removal, sets extracted=true, records inventory
+   - **Run History Recording on Leave:** Called in onLeave() if player exists, sets extracted=false
+   - **Duration Calculation:** playerJoinTimes Map tracks join time, durationSec calculated to nearest second
+   - **No Interference:** PlayerProfileRepository untouched, new init methods are additive
+
+5. **Provider Initialization** ✅
+   - Both providers initialized at server boot in index.ts:
+     ```typescript
+     initFactionProvider(USE_PG);
+     initRunHistoryProvider(USE_PG);
+     ```
+   - Proper sequencing: after ProfileProvider, before ShardRoom creation
+   - Both log their persistence mode (PostgreSQL or in-memory)
+
+6. **Test Coverage** ✅
+   - **Total:** 48 contract tests (22 faction + 26 run-history)
+   - **Methodology:** Real module imports (not self-contained test doubles)
+   - **Coverage:** CRUD operations, upsert semantics, multi-player isolation, edge cases, copy semantics, input mutation protection
+   - **Results:** All 1648 server tests pass, zero regressions
+
+7. **Pre-Existing Issues** ✅
+   - CI build failure: TypeScript errors in creature files (missing `agility` in CombatStats)
+   - **Not caused by PR #202** — creature files not modified
+   - **Pre-existing** — unrelated to repository implementations
+   - No impact on merge decision
+
+**Architecture Scorecard:**
+| Criterion | Status |
+|-----------|--------|
+| Pattern adherence | ✅ Perfect |
+| Schema compliance | ✅ Correct (migrations 004, 005) |
+| Provider gating | ✅ DATABASE_URL aware |
+| ShardRoom wiring | ✅ Clean, non-invasive |
+| Test doubles | ✅ Real imports, comprehensive |
+| Regressions | ✅ None (1648 pass) |
+
+**Recommendation:** Merge. Closes issue #198.
+
+
+### 2026-03-25: Player Persistence Lifecycle Investigation
+- **Requested by:** dkirby-ms
+- **Status:** Root cause identified — critical identity handoff bug
+
+**Root Cause: `client.auth.playerId` never read by rooms**
+
+The `onAuth()` → `onJoin()` handoff in Colyseus 0.17 works like this:
+1. `onAuth(client, options)` returns `{ playerId, username }`
+2. Colyseus assigns this to `client.auth`
+3. `onJoin(client, joinOptions, client.auth)` is called
+
+But both `ShardRoom.onJoin` and `RefugeRoom.onJoin` read `options['playerId']` — which is the client's raw join options (`{ token }`), NOT the auth return value. `options['playerId']` is always `undefined` in production. The code falls back to `client.sessionId`, a 9-character nanoid that is:
+- Not a UUID (Postgres `player_id` columns are UUID type)
+- Not in the `players` table (FK violations on every game table)
+- Transient (changes every connection)
+
+**Impact Chain:**
+1. Auth (register/login) correctly creates `players` + `player_identities` rows with real UUIDs ✅
+2. Token store maps token → `{ playerId: <real-uuid>, username }` ✅
+3. `onAuth` validates token and returns `{ playerId: <real-uuid>, username }` ✅
+4. `onJoin` ignores `client.auth` and uses `client.sessionId` (nanoid) ❌
+5. All game persistence (profile, stash, factions, run-history) keyed to nanoid ❌
+6. Pg saves fail silently (nanoid isn't a valid UUID for FK-constrained columns) ❌
+7. InMemory stores accept it but data is unlinked and transient ❌
+
+**Why user sees "placeholders":**
+- The `players`/`player_identities` rows ARE real (created during registration)
+- But they look bare — no associated skills, stash, factions, or run history
+- Game tables (`player_skills`, `player_stash`, `faction_membership`, `run_history`) are empty
+- All game writes silently fail because `client.sessionId` (nanoid) violates UUID type + FK constraints
+
+**Fix:** Both ShardRoom and RefugeRoom must read `client.auth?.playerId`:
+```typescript
+const authData = client.auth as { playerId?: string; username?: string } | undefined;
+const playerId = authData?.playerId || (options['playerId'] as string) || client.sessionId;
+```
+
+**Tests pass because** `@colyseus/testing`'s `connectTo()` passes options directly to `onJoin` — the test helper bypasses `onAuth` and merges `{ playerId }` into `options`. Production auth flow does NOT do this.
+
+**Two separate systems confirmed:**
+| System | Tables | Written By | Written When |
+|--------|--------|-----------|-------------|
+| Auth/Identity | `players`, `player_identities` | `PgPlayerRepository` | Registration |
+| Player Profile | `player_skills` | `PgPlayerProfileRepository` | Shard onLeave |
+| Stash | `player_stash`, `player_stash_capacity` | `PgStashRepository` | Extraction, stash commands |
+| Factions | `faction_membership` | `PgFactionRepository` | Faction events |
+| Run History | `run_history` | `PgRunHistoryRepository` | Shard onLeave/extraction |
+
+The link between them is `players.id` = `player_skills.player_id` = `player_stash.player_id` etc. This link is never established because rooms use the wrong ID.
+
+**Key files:**
+- `packages/server/src/rooms/ShardRoom.ts:252` — the bug (reads `options['playerId']`)
+- `packages/server/src/rooms/RefugeRoom.ts:91` — same bug
+- `packages/server/src/auth/colyseus-auth.ts` — auth returns correct data
+- `node_modules/@colyseus/core/build/Room.mjs:735` — Colyseus passes `client.auth` as 3rd arg
+- `packages/server/src/auth/PgPlayerRepository.ts` — correct auth persistence
+- `packages/server/src/player/PgPlayerProfileRepository.ts` — correct profile persistence (but receives wrong ID)
+
+---
+
+## 2026-03-25: Identity Handoff Bug Fixed
+
+**Status:** ✅ Resolved and test-covered  
+**Teams:** Drizzt (Engine Dev) + Minsc (Tester)  
+**Branch:** fix/player-identity-handoff
+
+The critical player persistence bug identified in the 2026-03-25T15:23Z investigation has been **fully resolved**:
+
+### Root Cause (Previously Identified)
+- ShardRoom and RefugeRoom read `options['playerId']` (always `undefined` in production)
+- Fallback to `client.sessionId` (9-char nanoid, not a UUID)
+- All player_skills FK writes failed silently; no persistence
+
+### Fix Implemented
+- Both rooms now read `client.auth.playerId → options['playerId'] → client.sessionId`
+- The `'anonymous'` sentinel is excluded from the chain
+- `playerIds` map now contains correct persistent UUIDs
+
+### Test Coverage
+- **11 new integration tests** exercise the real `onAuth → client.auth → onJoin` pipeline
+- Tests verify server-side state with UUID keying
+- 1659 total tests passing (1657 baseline + 11 new, 1 duplicate removed)
+- No regressions
+
+### Key Learning
+`client.auth` only exists on server-side `Client` objects, not SDK-side clients. Auth handoff tests must inspect server-side room state, not SDK properties.
+
+### Canonical Pattern Filed
+All future rooms must follow: `client.auth?.playerId` (excluding 'anonymous') → `options['playerId']` → `client.sessionId`. Decision documented in `.squad/decisions/decisions.md`.
+
+**Next:** This branch is ready to merge to main.
+
+### 2026-03-25: Stash ↔ Loadout Integration Scoping
+- **Task:** Scope a plan to combine stash and loadout screens into a unified UI where players can equip items from persistent stash into temporary loadout.
+- **Investigation:** Completed comprehensive audit of client UI (StashTab, LoadoutTab, InventoryOverlay), server stash system (StashService, StashRepository, RefugeRoom commands), extraction pipeline (ExtractionSystem, stash-transfer), and shared schemas (StashItem, Loadout, validation).
+- **Key findings:**
+  - Client UI exists as prototype with mock data; no server integration yet
+  - Server stash persistence is solid (weight-based, capacity-enforced, test-covered)
+  - Loadout structure defined in shared types but not persisted server-side
+  - Shard key consumption not implemented; durability degradation not wired
+  - RefugeRoom stash/take commands exist (text-only); store command is placeholder
+  - Message types `STASH_UPDATE` and `LOADOUT_UPDATE` defined but not actively sent
+  
+- **Architecture decisions made:**
+  - **Combined UI layout:** Left pane is stash (10×12 grid, drag-drop), right pane is loadout (equipment slots, consumables, tools, key). Drag items between panes to equip/unequip.
+  - **Loadout state machine:** Refuge (equip/unequip freely) → ShardEntry (validate, consume key) → Run (locked, can't change equipment) → Extraction (items return to stash) → Refuge.
+  - **Validation layers:** Client (drag zones, warnings) + Server (equip handler, shard entry gate).
+  - **Stash-loadout invariant:** Item cannot be in both simultaneously; atomic remove+add with rollback.
+  - **Shard key model (Phase 1):** Keys don't degrade; they move from loadout to stash on shard entry. Phase 2 will add durability → 0 for "consumed" semantics.
+  - **Phase 1 scope:** In-memory loadout repository, no cosmetic presets, no mid-run equipment swaps, no repair system (TBD).
+
+- **Plan deliverables:**
+  - Server: LoadoutService (equip, unequip, validate, clear), LoadoutRepository (in-memory), RefugeRoom handlers, ShardRoom entry validation
+  - Shared: LoadoutState type, validateLoadout() function, message types (EQUIP_ITEM, UNEQUIP_ITEM, LOADOUT_UPDATE)
+  - Client: CombinedStashLoadout component with drag-drop exchange, validation feedback, real-time stats
+  - Tests: Unit (LoadoutService, validation), integration (RefugeRoom→StashService round-trip), component (drag interactions, server sync)
+
+- **Risks identified:**
+  - State divergence (client ≠ server): Mitigated by strict server validation + rollback on error
+  - Stash-loadout double-spend: Mitigated by atomic operations
+  - Concurrency (two clients equip same item): Server-side race won by first; others get error
+  - Performance with 100+ items: Mitigated by pagination/virtual scroll if needed
+  - Shard key loss on entry: Mitigated by not deleting; mark durability 0 in Phase 2
+
+- **Work breakdown:** Drizzt (2 days, client), Jarlaxle (2.5 days, server/schemas), QA (1 day, integration), Elminster (distributed review).
+
+- **Open questions for dkirby-ms:**
+  1. Shard key durability model in Phase 1 (consume vs. mark 0)?
+  2. Cosmetic loadout presets (save/load gear combos)?
+  3. In-shard equipment swaps allowed or locked?
+  4. Repair system design (NPCs, crafting, consumables)?
+  5. Multi-hand weapon model (separate slots or 1-of-2 pool)?
+  6. Tool slot restrictions (0, 1, or many)?
+
+- **Key files:** `.squad/decisions/inbox/elminster-stash-loadout-plan.md` (full 32KB plan with code examples, edge cases, test strategy, timeline).
+
+- **Success criteria:** Players can equip/unequip via drag-drop, loadout validation prevents broken/incomplete entry, shard key consumed, multi-player sync works, full test coverage, no state divergence.
+
+## 2026-03-25: Stash ↔ Loadout Unification Design (Completed)
+
+**Task:** Design comprehensive plan for unifying stash and loadout screens, including current state analysis, proposed UI, and implementation roadmap.
+
+**Deliverables:**
+- **Current State Analysis:** 4 working components (stash persistence, loadout schema, extraction pipeline, prototype UI) + 4 critical gaps (no client-server integration, no server persistence, placeholder commands, edge cases)
+- **Proposed Unified UI:** Single merged screen with stash grid (left), equipment + consumables + tools (right), drag-and-drop exchange, real-time validation feedback
+- **Implementation Roadmap:** 5-phase plan (~3–5 workdays), phased delivery from server persistence through edge case handling
+- **Architecture Design:** 
+  - Client: Unified component with message types (EQUIP, UNEQUIP, STASH_UPDATE, LOADOUT_UPDATE)
+  - Server: Loadout state tracking, equipment validation, shard key consumption enforcement
+  - Shared: Extended Loadout schema with persistence, constraint metadata
+  - Integration: Drag-and-drop mechanics, weight/capacity indicators, real-time validation UI
+- **Risk Assessment:** Medium (touches auth/persistence, existing patterns solid)
+
+**Key Decisions:**
+- Single merged screen improves UX vs separate tabs
+- Server-authoritative validation with client real-time feedback
+- Shard key consumption checked at extraction gate
+- Durability degradation integrated into damage pipeline
+
+**Next Steps:** Break down implementation plan into task cards; assign to Drizzt for sprint execution.
+
+**Decision Record:** See `.squad/decisions.md` — 2026-03-25T23:16:00Z entry.
+
+### 2026-03-27: Hand-Crafted Zones Architecture v2
+
+**Requested by:** dkirby-ms  
+**Context:** User rejected previous procedural zone proposal (`.squad/decisions/inbox/elminster-zone-system-proposal.md` recommended procedural sub-regions). User wants traditional MUD-style hand-crafted zones where builders define specific rooms and connections.
+
+**Requirement:** Support hand-crafted zone layouts — admin/builder defines specific rooms, descriptions, and exact topology (exits/connections). Both hand-crafted zones AND procedural shards must coexist.
+
+**Architecture Decision:**
+
+Zones are **persistent, authored room graphs** stored in PostgreSQL and served via a generalized `ShardRoom` implementation. The existing procedural shard system remains unchanged for dungeon-crawl instances.
+
+**Core Components:**
+
+1. **Data Model:**
+   - `zones` table: metadata (name, slug, description, level range, tier, lifecycle, category, max_players, pvp_enabled, entry_room_ids)
+   - `zone_rooms` table: room definitions within zones (slug, name, description, type, properties, loot_containers, hazards, npcs)
+   - `zone_exits` table: directed connections (from_room_slug, direction, to_room_slug, locked, hidden, condition)
+   - Full relational schema — no JSONB blobs for core topology
+   - Migration: `030_create_zones.sql` + `031_seed_refuge_zone.sql`
+
+2. **Server Architecture:**
+   - **Polymorphic ShardRoom:** `onCreate()` accepts optional `zoneSlug` parameter
+   - If `zoneSlug` provided: load via `ZoneRepository.getZoneBySlug()` → convert to `RoomGraph` via `convertZoneToRoomGraph()`
+   - If no `zoneSlug`: call `generateShardGraph()` (existing procedural path)
+   - Rest of ShardRoom logic unchanged — operates on `RoomGraph` regardless of source
+   - New files: `packages/server/src/zones/PgZoneRepository.ts`, `packages/server/src/zones/zone-adapter.ts`
+   - Modified: `packages/server/src/rooms/ShardRoom.ts` (add zone loading path)
+
+3. **Zone Repository Interface:**
+   - `getAllZones()` — for matchmaker listing
+   - `getZoneBySlug(slug)` — returns full `ZoneData` (metadata + rooms + exits)
+   - CRUD operations for admin: create/update/delete zones, rooms, exits
+   - Lives in `packages/server/src/zones/`
+
+4. **Refuge Migration:**
+   - Refuge becomes the first hand-crafted zone
+   - Zone data: `slug: 'the-refuge'`, `lifecycle: 'persistent'`, `category: 'hub'`, `pvp_enabled: false`
+   - Rooms: `refuge-main` (Hearth), `refuge-stash` (Stash Alcove), `refuge-training` (Training Grounds), `refuge-board` (Shardboard)
+   - RefugeRoom loads topology via `ZoneRepository.getZoneBySlug('the-refuge')`
+   - Ambient simulation (NPCs, events) runs on same tick model as before
+
+5. **Admin UI:**
+   - Zone list page (`ZonesList.tsx`) — table with actions (edit, clone, delete)
+   - Zone detail page (`ZonesDetail.tsx`) — 3 sections:
+     - Zone metadata form (name, slug, description, tier, lifecycle, category, max_players, pvp_enabled)
+     - Rooms section (nested list, modal editor for add/edit)
+     - Exits section (table, modal for add/edit connections)
+   - Backend routes: `/api/admin/zones/*` for CRUD (admin role required)
+   - Pattern: follows existing admin content pages (`NarrativeDetail.tsx`, `BiomesDetail.tsx`)
+
+6. **Client Integration:**
+   - Room header message enhanced with `zoneSlug?`, `zoneName?` fields (mutually exclusive with `shardSeed`, `shardBiome`)
+   - Client renders zone name when present, shard info when not
+   - Navigation unchanged — zones use same `RoomGraph` structure as shards
+   - Matchmaker UI lists zones separately from shards
+   - Collapse timer hidden for zones (only shown for shards)
+
+**Zone Lifecycle:**
+- `lifecycle: 'persistent'` zones are always available, no collapse timer
+- Multiple concurrent instances allowed if `max_players > 0` and capacity reached
+- Phase 1: stateless templates (loot/NPCs respawn on instance creation)
+- Phase 2: optional instance state persistence (items looted, NPCs killed)
+
+**Key Design Insights:**
+- Zones and shards are polymorphic — both use `RoomGraph` in-memory structure
+- No client protocol changes required — navigation messages identical
+- Coexistence achieved via `ShardRoom` refactor (one line: add `zoneSlug` option)
+- Refuge retroactively becomes a zone (validates the abstraction)
+- Admin UI follows established patterns (reduces implementation risk)
+
+**Open Questions for User:**
+1. Zone instance state persistence (stateless vs persistent)?
+2. Inter-zone connections (isolated vs connected)?
+3. Zone-specific mechanics (parity vs enhanced)?
+4. Zone builder permissions (admin-only vs builder role)?
+5. Refuge navigation (UI hub vs navigable zone)?
+
+**Recommendation for Q5 (Refuge):** Make Refuge a navigable zone with 5-7 rooms. Players move via text commands (`go north` to Stash). Aligns with MUD genre and validates zone system architecture.
+
+**Scope:** 5–7 developer days
+- Phase A (Days 1-2): Data layer — migrations, TypeScript types, repository, zone-adapter, unit tests
+- Phase B (Days 3-4): Server integration — ShardRoom refactor, RefugeRoom migration, integration tests
+- Phase C (Days 5-6): Admin UI — zone list/detail pages, backend routes, validation
+- Phase D (Day 7): Client polish — room header rendering, matchmaker UI, zone indicators
+
+**Implementation Todos:** 29 tasks across 8 categories (database, shared types, server core, admin backend, admin UI, client gameplay, documentation, testing)
+
+**No breaking changes:** Existing procedural shards continue to work. This is purely additive.
+
+**Key Files:**
+- Proposal: `.squad/decisions/inbox/elminster-handcrafted-zones-v2.md` (full 27KB architecture document)
+- Current codebase context:
+  - `packages/shared/src/room-graph.ts` — Room and RoomGraph types (reused for zones)
+  - `packages/server/src/shard/generator.ts` — procedural generation (unchanged)
+  - `packages/server/src/rooms/ShardRoom.ts` — will become polymorphic
+  - `packages/server/src/rooms/RefugeRoom.ts` — will load zone topology
+  - `packages/server/src/admin/content/PgNarrativeDefinitionsStore.ts` — admin CRUD pattern to follow
+  - `packages/client/src/pages/admin/NarrativeDetail.tsx` — admin UI pattern to follow
+
+**Lesson:** When a user rejects a procedural approach and asks for hand-crafted content, the architecture must pivot from generation algorithms to database persistence and builder tooling. The key insight here is making zones polymorphic with shards by converging on a shared `RoomGraph` structure — allows reuse of all navigation/combat/extraction logic without duplication.
+
+**Orchestration Log:** `.squad/orchestration-log/2026-03-25T2316-elminster.md`
+
+### 2026-03-27: Character Creation & Management System Design
+
+- **Task:** Design the character creation and management system — audit existing state, identify gaps, propose architecture.
+- **Audit findings:**
+  - Identity model is 1:1 (account = player). No "character" entity exists. All per-player tables FK to `players.id` directly.
+  - Auth flow is solid: register/login → token → join room with token → resolve playerId.
+  - `CharacterSelect.tsx` exists at `/characters` route with mock data (1 hardcoded character, 3 factions) but is never visited — Login and AuthCallback both navigate directly to `/refuge`, skipping character selection.
+  - **Critical faction mismatch:** Three different naming schemes — DB (`ironwright`, `veil`, `scarlet`), client (`ironwright`, `veilkeepers`, `ashenguard`), content_definitions (`ironhearth`, `veilwalkers`, `ashborn`). Must reconcile before faction selection can work.
+  - GDD confirms no classes/races. Everyone is a Shardwalker. Skills-based progression. Gear is primary power source. Character names exist but are anonymous in shards.
+  - 16 DB migrations, 8 per-player tables that would need FK re-keying if we separate characters from accounts.
+
+- **Architecture decisions:**
+  - **1:many account → character model**, with MVP = 1 slot. Schema supports multi-character from day one to avoid painful migration later.
+  - **Character = progression container** owning skills, stash, loadout, faction, run history. Account = auth credentials + settings.
+  - **REST endpoints for character CRUD** (not Colyseus messages). Client calls REST before joining any room. CharacterId passed as join option.
+  - **Creation fields:** Name + faction slug only. No class, race, stats, or appearance (per GDD's skills-based design).
+  - **New `characters` table** + FK re-key migration for all 8 per-player tables.
+  - **Auto-migration** for existing players: create one character per account with username as name.
+  - **Login redirect change:** `/` → `/characters` → `/refuge` (inserting character selection into the flow).
+
+- **Open questions for dkirby-ms:**
+  1. Faction slug reconciliation (which naming is canonical?)
+  2. Character deletion policy (soft-delete with grace period?)
+  3. Starting loadout for new characters (starter kit or bare?)
+  4. Existing player migration strategy (auto-name or prompt?)
+
+- **Deliverable:** `.squad/decisions/inbox/elminster-character-system-design.md` — full design proposal with DB schema, message protocol, client screens, migration path, MVP scope, and implementation sequence.
+- **Key files:** `CharacterSelect.tsx`, `004_create_factions.sql`, `001_create_players.sql`, `RefugeRoom.ts`, `ShardRoom.ts`, `connection.ts`, `Login.tsx`, `AuthCallback.tsx`
+
+
+### 2025-03-25: Content Store Refactor — Scoping
+
+- **Task:** Scope the removal of the generic `content_definitions` table by migrating all 9 entity types to dedicated tables + stores (following the successful `items` → `item_definitions` pattern).
+- **Audit findings:**
+  - **Items:** ✅ Already migrated to `item_definitions` table with `PgItemDefinitionsStore`. Admin UI shows all 40+ items from registry, not 18 stale seeded copies. Reference implementation.
+  - **Creatures:** 1 template (`drowned_revenant`), 1 seed row. No dedicated table. Admin UI expects more fields (description, behavior, status) than template provides. High priority.
+  - **Biomes:** 5 well-defined seed rows, 5 in-memory definitions. Simple flat schema (TEXT arrays). Medium priority, quick win.
+  - **Modifiers:** 5 well-defined seed rows, 5 in-memory definitions. Simple schema (JSONB effects, TEXT array tags). Medium priority, quick win.
+  - **Skills:** `player_skills` table exists (for progression), but no skill definitions table. 0 seed rows, 0 registry. Low priority, clean slate.
+  - **Loot Tables:** No table, 0 seed rows, 0 registry. Low priority, clean slate.
+  - **Factions:** **Two faction systems found!** Migration 004 created `factions` table (3 rows: Ironwright, Veil, Scarlet) for player membership. Migration 008 seeded `content_definitions` with 3 different factions (ironhearth, veilwalkers, ashborn) for admin content. Medium priority, requires reconciliation.
+  - **Rooms:** No table, 0 seed rows, 0 registry. Low priority, clean slate.
+  - **Narrative:** No table, 0 seed rows, 0 registry. Low priority, clean slate.
+
+- **Key architectural insights:**
+  - **Store pattern:** `PgItemDefinitionsStore` flattens relational columns + JSONB into flat ContentEntity on read, expands on write. Allows zero client/route changes.
+  - **JSONB strategy:** Use columns for queryable fields (name, type, tier), JSONB for nested/variable structures (loot tables, effects).
+  - **ID strategy:** UUID primary key + text slug for human-readable references. Existing `content_definitions.id` maps to `slug`.
+  - **In-memory mode:** Keep in-memory ContentStore for `usePg=false` mode alongside dedicated stores (dev velocity, testing).
+  - **Client-side API unchanged:** Admin UI continues to use generic `listEntities()` / `getEntity()` API. All stores implement `IContentStore<ContentEntity>`.
+
+- **Implementation phases:**
+  - **Phase 1 (Quick Wins):** Biomes, Modifiers, Narrative (14.5h) — simple schemas, establishes pattern
+  - **Phase 2 (High Impact):** Creatures (9h, HIGH priority), Factions (11h, table reconciliation required)
+  - **Phase 3 (Low Priority):** Skills, Loot Tables, Rooms (15.5h) — defer until admin usage proves necessary
+  - **Cleanup:** Drop `content_definitions` table, delete `PgContentStore.ts` (5h)
+  - **Total:** ~55 hours (7-8 developer days)
+
+- **Critical decisions:**
+  - **Faction reconciliation (Decision 6):** Merge both faction tables into single `faction_definitions` table. Migrate both sets (6 total factions), update `faction_membership` FK, drop old `factions` table. Chosen over keeping separate to avoid confusion and dual sources of truth.
+  - **UI schema mismatch risk:** Admin UI expects fields not in TypeScript interfaces (e.g., creature.description, creature.status). Mitigation: audit each UI detail page before creating schema, add missing fields as nullable columns.
+
+- **Success criteria:**
+  1. All 8 entity types migrated to dedicated tables
+  2. Admin UI CRUD works for all types (no client changes)
+  3. All seed data preserved
+  4. Query performance improved (indexed columns vs JSONB scan)
+  5. Dev mode (in-memory) still works
+  6. `content_definitions` table dropped
+  7. Code registries sync with DB
+
+- **Deliverables:**
+  - **Scoping plan:** `~/.copilot/session-state/5a9420c4-0061-4d0f-8cbb-1ca9bf942ad1/plan.md` — comprehensive 27KB document with entity-by-entity audit, proposed schemas, migration strategies, effort estimates, implementation order, risks, client compatibility analysis
+  - **Architectural decisions:** `.squad/decisions/inbox/elminster-content-store-refactor.md` — 8 key decisions with rationale, alternatives rejected, implementation checklist
+  
+- **Key files referenced:** 
+  - `content-types.ts` (TypeScript interfaces)
+  - `init.ts` (store initialization)
+  - `PgContentStore.ts` (generic store to be replaced)
+  - `PgItemDefinitionsStore.ts` (reference implementation)
+  - `007_create_content_definitions.sql`, `008_seed_content_definitions.sql` (existing migrations)
+  - Admin UI: 9 list pages + 9 detail pages (`packages/client/src/pages/admin/`)
+  - Registries: `items/registry.ts` (40+ items), `creatures/templates/drowned-revenant.ts` (1 template)
+
+- **Next steps:** Review with team, confirm faction reconciliation strategy, start Phase 1 (biomes, modifiers, narrative).
+
+
+### 2026-03-27: Zone System Architecture Analysis & Proposal
+
+**Task:** Architecture proposal for a ZONE SYSTEM — grouping rooms into named zones like traditional MUDs.
+
+**Analysis performed:**
+
+1. **What zones mean in traditional MUDs:** Named persistent areas (e.g., "Dark Forest"), hand-authored room graphs, durable across game sessions, navigable landmarks, administrative boundaries.
+
+2. **How zones fit Ellmud's architecture:** Three options analyzed in detail.
+
+**Three Design Options Evaluated:**
+
+- **Option 1: Persistent Non-Instanced Zones (❌ Rejected)**
+  - Create persistent zone + room tables. Shards are instances within zones.
+  - ✅ Fully traditional MUD experience.
+  - ❌ **Breaks procedural identity.** Every run to the Flooded Crypt identical — no surprises. Contradicts GDD §10.
+  - ❌ **Breaks ephemeral guarantee.** Shards are supposed to collapse; persistent zones underneath conflict.
+  - ❌ **High admin burden:** 500-1000 hand-authored rooms across 5 biomes × 2-4 zones.
+  - ❌ **Large migration.** Rewrite procedural generator to spawn within persistent topologies.
+  - **Verdict:** Fundamentally conflicts with Ellmud's identity.
+
+- **Option 2: Biome-Scoped Named Regions Within Shards (✅ RECOMMENDED)**
+  - Zones are **procedurally generated sub-regions of individual shards**, unique per seed.
+  - Generator partitions each shard into 2–4 named zones at generation time.
+  - Zones persist for shard lifetime, collapse when shard collapses (ephemeral).
+  - Admin defines zone templates per biome (not per-shard).
+  - ✅ Preserves procedural identity. Zones vary per shard.
+  - ✅ Maintains ephemeral guarantee. Zones live with shards.
+  - ✅ Minimal schema. Only 1 new `zone_definitions` table + optional Room fields.
+  - ✅ Player clarity. Zone names orient players in large shards (40–60 rooms).
+  - ✅ Admin-friendly. Define zone templates, apply procedurally.
+  - ✅ LLM-ready. Zone themes feed into narration.
+  - ✅ Low cost. ~2–3 dev days.
+  - ⚠️ Zones non-persistent. Knowledge doesn't transfer across runs (acceptable for roguelike).
+  - **Trade-off acceptance:** Player knowledge is about shard *patterns*, not memorized maps — fits roguelike identity.
+
+- **Option 3: Zones as Biome Sub-Templates (Simple, Less Powerful)**
+  - Zones are purely **thematic room name groupings** within biome definitions.
+  - No runtime zone objects. Room names convey zones ("Antechamber", "Deep Crypt").
+  - ✅ Simplest. ~4–6 hours.
+  - ❌ Zones implicit, not first-class. No zone header in room messages.
+  - ❌ No zone metadata. No admin UI.
+  - ❌ Future scaling problem. No hooks for zone quests, modifiers, events.
+  - **Verdict:** Weak option. Less satisfying.
+
+**Recommendation: Option 2 — Biome-Scoped Named Regions Within Shards**
+
+**Rationale:**
+1. Respects core identity — proceduralism + ephemerality preserved.
+2. Delivers player value — zones orient players, make shards feel structured.
+3. Admin-friendly — zones are templates, not per-shard hand-craft.
+4. Future-proof — foundation for zone-level features (quests, modifiers, ambient events).
+5. Reasonable scope — 2–3 dev days. Fits Phase 2 post-MVP.
+6. No breaking changes — existing code paths work unchanged.
+
+**Implementation Scope:**
+
+| Component | Changes | Effort |
+|-----------|---------|--------|
+| `room-graph.ts` | Add Zone interface, optional zoneId/zoneName to Room | 30 min |
+| `generator.ts` | Add `partitionIntoZones()`, zone assignment, load zone definitions | **2.5 days** |
+| `ShardRoom.ts` | Store zones, include zone name in room header messages | 1 hour |
+| `PgZoneDefinitionsStore.ts` (new) | CRUD for zone_definitions | 2 hours |
+| Admin UI (new) | Zone list + edit pages | 3 hours |
+| DB migrations | Create `zone_definitions` table | 1 hour |
+| Tests | Unit + integration tests for partitioning | 4 hours |
+| **Total** | | **~2.5 dev days (18 hours)** |
+
+**Key data model changes:**
+
+```sql
+CREATE TABLE zone_definitions (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT,
+  biome_id TEXT NOT NULL REFERENCES biome_definitions(id),
+  tier SMALLINT,  -- NULL = all tiers
+  room_type_bias TEXT[],  -- e.g., '{"entry", "corridor"}'
+  min_rooms SMALLINT DEFAULT 3,
+  max_rooms SMALLINT DEFAULT 8,
+  loot_concentration NUMERIC(3, 2) DEFAULT 0.5,
+  theme_adjectives TEXT[],  -- for LLM narration
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now()
+);
+```
+
+**Player experience:** Zone names appear in room header messages. Players see "You've entered the Ossuary Heart" + room-specific description. Zone IDs help with future zone-level features.
+
+**Migration path:** Phase 1 (no changes). Phase 2: Add `zone_definitions` table, deploy biome zone templates, update generator, launch zone names in client messages. **No breaking changes.**
+
+**Open decisions for dkirby-ms:**
+1. Zone granularity per tier? (2 zones for Tier 1, 3-4 for Tier 2/3?)
+2. Zone name style? (Thematic like "Ossuary Heart" vs descriptive like "Boss Chamber"?)
+3. How many zone templates per biome to seed? (Recommendation: 2–3 initially)
+4. Zone-level features in future? (Loot concentration, creature types, modifiers?)
+5. Client display location? (Room header, sidebar, or both?)
+
+**Key files:** 
+- Decision: `.squad/decisions/inbox/elminster-zone-system-proposal.md` (full 16.8KB analysis)
+- Affects: `generator.ts`, `room-graph.ts`, `ShardRoom.ts`, `RefugeRoom.ts` (room header messages)
+- New: `PgZoneDefinitionsStore.ts`, admin UI for zones, `zone_definitions` migration
+
+**Architecture insight — Traditional MUD vs Ellmud zones:**
+- **Traditional MUD zones:** Persistent, hand-authored, reused across all players, deep knowledge maps.
+- **Ellmud zones:** Ephemeral (shard lifetime), procedurally generated (unique per seed), templated (biome-level), spatial orientation per run.
+- **Core difference:** Ellmud prioritizes **roguelike proceduralism** over **persistent world simulation**. Zones are landmarks, not persistent geography.
+
+**Status:** Awaiting dkirby-ms review and decision on the 5 open questions.
+
+### 2026-03-27: Unified Zone UX Architecture Plan
+- **Action:** Produced comprehensive architecture plan for unifying Refuge and Shard exploration experiences. Plan at session workspace `plan.md`. Decision filed at `.squad/decisions/inbox/elminster-unified-zone-ux.md`.
+- **Problem:** Two completely different UX patterns for the same activity — Refuge uses tab-based menu UI while Shards use narrative room exploration. Duplicate server command handling (~300 lines), jarring player context switches, double work for every new feature.
+- **Core concept — Feature Rooms:** New `feature_`-prefixed `RoomType` values (`feature_stash`, `feature_shardboard`, `feature_marketplace`, etc.) that signal the client to show a feature panel when the player enters that room. Feature rooms are normal rooms in the graph — the type is the only discriminant. `RoomHeaderMessage.roomType` (already exists) carries the signal.
+- **Server decision:** RefugeRoom adopts ShardRoom's modular `parseCommand()` → `handleCommand()` pipeline. Feature-specific commands become handlers in `commands/handlers/`, gated by `ctx.room.type` checks. `requireRoom()` deleted. `CommandContext` extended with optional service references.
+- **Client decision:** `ShardExploration.tsx` becomes universal exploration view. Feature panels are lazy-loaded React components keyed by feature type. `Refuge.tsx` deleted after migration. New route: `/zone/:zoneSlug`.
+- **RefugeRoom preservation:** Not retired immediately. Keeps ambient tick simulation and shard creation. Evaluation of retirement deferred to Phase 5 after client unification is validated.
+- **5-phase rollout:** Types (1-2d) → Server unification (3-4d) → Client unification (3-4d) → Feature UIs (2-3d each) → Cleanup (1-2d). Parallel routes during transition, no big bang.
+- **Key insight:** The existing `RoomHeaderMessage.roomType` field and ShardRoom's `isZone` mode mean minimal new protocol needed. The infrastructure is already 80% there.
+- **Open questions for dkirby-ms:** Feature panel placement (sidebar vs main column), feature room type naming convention, ambient events rendering, RefugeRoom retirement timing.
+- **Key files:** Session workspace `plan.md`, `.squad/decisions/inbox/elminster-unified-zone-ux.md`
+
+### 2026-03-27T01:25Z: User directives on unified zone UX decisions
+- **Feedback received from dkirby-ms:**
+  1. ✅ Ambient events → render as inline narrative prose (not dedicated sidebar)
+  2. ✅ Players Nearby → always show in all zones (special effects deferred)
+  3. ✅ RefugeRoom retirement → yes, plan to retire, but defer validation to Phase 3
+  4. ✅ Feature room type naming → `feature_` convention accepted
+  5. ✅ Feature panel placement → right sidebar, replacing status/inventory section
+  6. ✅ Feature room descriptions → narrative prose + stats summary line (e.g., "STASH: 12 items · 45/100 weight")
+
+- **Integration point:** These user directives directly answer all open questions from elminster-unified-zone-ux.md. Feature panel placement (Q1) resolved to right sidebar. Feature room naming (Q2) confirmed `feature_` pattern.
+
+- **Next action:** Hand-crafted zones proposal (elminster-handcrafted-zones-v2.md) also needs dkirby-ms approval on 4 key decisions before implementation can proceed.
+
+- **Status:** User feedback integrated into master decisions.md. Both Volo's GDD refresh and Elminster's zone architecture plans are now approved at open-question level with user direction. Ready for Phase 2 implementation kickoff.
+
+
+### 2026-07-22: Unified Room Architecture Plan
+- **Decision:** Comprehensive architecture plan for unifying ShardRoom + RefugeRoom into a single Colyseus room class with composable systems. Decision file: `.squad/decisions/inbox/elminster-unified-room-arch.md`.
+- **Key insight — System composition over inheritance:** Zone config (`zone.category`, `zone_rooms.type` feature types) determines which systems are active. Combat, ambient, extraction, creatures — all conditionally instantiated. No class hierarchy.
+- **Key insight — Feature-gated command pipeline:** The shared command pipeline gains middleware that checks `ctx.room.type` against a required `FeatureRoomType`. Commands like `stash` only work in `feature_stash` rooms. This replaces RefugeRoom's manual `requireRoom()` pattern.
+- **Key insight — Colyseus routing:** Zones registered as `zone:{slug}` room names. Auto-provisioned at server boot for persistent zones. Client `switchRoom()` already accepts any room name string — minimal client changes.
+- **Key insight — Reconnection gap:** RefugeRoom has ZERO reconnection support. The unified class adds 10s grace for hub/social zones, 30s for dungeon zones. This is a net improvement.
+- **Key insight — Exploration tracking:** New `character_explored_rooms` table with upsert semantics (INSERT ON CONFLICT). Per-character, per-room, fire-and-forget recording on room entry. Follows established Interface + PgImpl + InMemoryImpl + Provider pattern.
+- **Migration strategy:** 5 phases (A: Foundation, B: Absorption, C: Routing, D: Exploration, E: Cleanup). A1 (exploration) fully parallelizable. C gated on ALL B items. Only 1 new DB migration (032).
+- **RefugeRoom analysis:** 1,015 lines. Key unique capabilities: AmbientSystem, shardboard/enter commands (matchMaker integration), stash commands (stash/take/store), room-gated commands, arrival/departure announcements, fallback refuge graph, pendingEnter guard.
+- **ShardRoom analysis:** 2,022 lines. Already has zone mode (isZone, zoneSlug, zoneData), shared command pipeline, reconnection, all combat systems. The `isNonCombatZone` check already gates combat/extraction/downing for hub/social zones.
+- **Key files:** ShardRoom.ts (2,022 lines), RefugeRoom.ts (1,015 lines, to be deleted), commands/index.ts (command pipeline), shared/room-graph.ts (feature room types), zones/zone-adapter.ts, shard/graph-adapter.ts.
+- **Open questions for dkirby-ms:** Room name format, exploration coordinates timing, take command disambiguation, shardboard service extraction, ambient system scope.

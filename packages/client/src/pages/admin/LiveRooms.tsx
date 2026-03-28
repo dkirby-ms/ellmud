@@ -35,7 +35,7 @@ export default function LiveRooms() {
 
   const roomTypeColor = (name: string) => {
     if (name === "shard") return "#C9A84C";
-    if (name === "refuge") return "#2D6B4F";
+    if (name.startsWith("zone:")) return "#2D6B4F";
     return "#4A4B55";
   };
 

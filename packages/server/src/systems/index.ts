@@ -31,3 +31,9 @@ export {
   type ShardSicknessStore,
   type CombatStatModifiers,
 } from './ShardSickness.js';
+export { PgShardSicknessStore } from './PgShardSicknessStore.js';
+export {
+  initShardSicknessProvider,
+  getShardSicknessStore,
+  resetShardSicknessProvider,
+} from './shard-sickness-provider.js';

@@ -172,7 +172,8 @@ export default function LiveRoomDetail() {
 
   if (!room) return null;
 
-  const isShard = room.name === "shard";
+  const isZone = room.name.startsWith("zone:");
+  const isShard = room.name === "shard" || isZone;
 
   return (
     <div className="h-full flex flex-col">
@@ -190,7 +191,7 @@ export default function LiveRoomDetail() {
               className="text-[#C9A84C] text-xl"
               style={{ fontFamily: "var(--font-serif)" }}
             >
-              {room.name === "shard" ? "Shard" : "Refuge"} — {room.roomId.slice(0, 12)}…
+              {isZone ? "Zone" : room.name === "shard" ? "Shard" : room.name} — {room.roomId.slice(0, 12)}…
             </h1>
             <span
               className="text-[#8A8B95] text-xs"

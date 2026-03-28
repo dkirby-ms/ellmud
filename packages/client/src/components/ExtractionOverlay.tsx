@@ -4,11 +4,13 @@ interface ExtractionOverlayProps {
   state: "in-progress" | "success" | "death" | null;
   progress: number;
   onClose?: () => void;
+  onReturnToRefuge?: () => void;
 }
 
 export default function ExtractionOverlay({
   state,
   progress,
+  onReturnToRefuge,
 }: ExtractionOverlayProps) {
   const navigate = useNavigate();
 
@@ -142,7 +144,7 @@ export default function ExtractionOverlay({
               </div>
 
               <button
-                onClick={() => navigate("/refuge")}
+                onClick={() => onReturnToRefuge?.() ?? navigate("/refuge")}
                 className="w-full bg-accent-gold hover:bg-accent-gold/90 text-bg-primary font-medium py-3 rounded transition-colors font-sans"
               >
                 Return to Refuge
@@ -206,7 +208,7 @@ export default function ExtractionOverlay({
               </div>
 
               <button
-                onClick={() => navigate("/refuge")}
+                onClick={() => onReturnToRefuge?.() ?? navigate("/refuge")}
                 className="w-full border border-text-secondary hover:bg-bg-elevated text-text-secondary hover:text-text-primary py-3 rounded transition-colors font-sans"
               >
                 Return to Refuge

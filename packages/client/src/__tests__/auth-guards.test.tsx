@@ -10,7 +10,7 @@
  * routes inside ProtectedRoute (or equivalent auth guard).
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { useReducer } from 'react';
@@ -37,6 +37,23 @@ vi.mock('../services/connection.js', () => ({
   sendCommand: vi.fn(),
   sendRawCommand: vi.fn(),
   resetClient: vi.fn(),
+}));
+
+// Mock admin-api to prevent network calls from AdminLayout/Dashboard
+vi.mock('../lib/admin-api.js', () => ({
+  getAdminToken: vi.fn(() => localStorage.getItem('admin_token')),
+  setAdminToken: vi.fn(),
+  clearAdminToken: vi.fn(),
+  adminFetch: vi.fn().mockResolvedValue({}),
+  listEntities: vi.fn().mockResolvedValue([]),
+  fetchNotifications: vi.fn().mockResolvedValue([]),
+  fetchDashboardMetrics: vi.fn().mockResolvedValue({
+    serverUptime: 0,
+    onlinePlayers: 0,
+    totalPlayers: 0,
+    activeShards: 0,
+    dbStatus: 'connected',
+  }),
 }));
 
 /**
@@ -119,7 +136,13 @@ describe('Admin Route Auth Guards', () => {
       playerId: 'player-1',
     };
 
+    afterEach(() => {
+      localStorage.removeItem('admin_token');
+    });
+
     it('renders admin dashboard at /admin when authenticated', async () => {
+      // Admin layout has its own token gate via localStorage
+      localStorage.setItem('admin_token', 'test-admin-token');
       renderWithRouter('/admin', authedState);
       await waitFor(() => {
         // Use heading role to distinguish from sidebar nav link "Dashboard"
@@ -128,6 +151,7 @@ describe('Admin Route Auth Guards', () => {
     });
 
     it('does not show login form at /admin when authenticated', async () => {
+      localStorage.setItem('admin_token', 'test-admin-token');
       renderWithRouter('/admin', authedState);
       await waitFor(() => {
         expect(screen.queryByLabelText('Username')).not.toBeInTheDocument();

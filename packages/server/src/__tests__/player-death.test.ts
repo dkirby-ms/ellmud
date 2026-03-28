@@ -194,7 +194,7 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
     if (combatant) {
       const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
       expect(deathSwitches.length).toBeGreaterThanOrEqual(1);
-      expect(deathSwitches[0]!.target).toBe('refuge');
+      expect(deathSwitches[0]!.target).toBe('zone:the-refuge');
     }
 
     await client.leave();
@@ -378,7 +378,7 @@ describe('Player Death E2E: down → stabilize → extract', () => {
 
     const refugeSwitches = healerRoomSwitch.filter(m => m.reason === 'extraction_complete');
     expect(refugeSwitches.length).toBeGreaterThanOrEqual(1);
-    expect(refugeSwitches[0]!.target).toBe('refuge');
+    expect(refugeSwitches[0]!.target).toBe('zone:the-refuge');
 
     await victim.leave();
   }, 30_000);

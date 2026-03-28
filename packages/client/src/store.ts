@@ -5,7 +5,11 @@
 
 import { createContext, useContext } from 'react';
 import type { Room } from '@colyseus/sdk';
-import type { NarrationType, RoomHeaderMessage, ShardState, CombatAction, GearTier } from '@ellmud/shared';
+import type {
+  NarrationType, RoomHeaderMessage, ShardState, CombatAction, GearTier,
+  EquipmentSlots, DisplayItem, CharacterSummary,
+} from '@ellmud/shared';
+import { createEmptyEquipmentSlots } from '@ellmud/shared';
 
 // ─── Message types for terminal display ──────────────────────────────────────
 
@@ -62,6 +66,7 @@ export interface AppState {
   authenticated: boolean;
   token: string | null;
   playerId: string | null;
+  activeCharacter: CharacterSummary | null;
   room: Room | null;
   messages: TerminalMessage[];
   roomHeader: RoomHeaderMessage | null;
@@ -79,12 +84,18 @@ export interface AppState {
   statusEffects: StatusEffect[];
   playerHp: number;
   playerMaxHp: number;
+  playerStamina: number;
+  playerMaxStamina: number;
+  loadout: EquipmentSlots;
+  stashItems: DisplayItem[];
+  pendingEquipAction: boolean;
 }
 
 export const initialState: AppState = {
   authenticated: false,
   token: null,
   playerId: null,
+  activeCharacter: null,
   room: null,
   messages: [],
   roomHeader: null,
@@ -102,6 +113,11 @@ export const initialState: AppState = {
   statusEffects: [],
   playerHp: 100,
   playerMaxHp: 100,
+  playerStamina: 0,
+  playerMaxStamina: 0,
+  loadout: createEmptyEquipmentSlots(),
+  stashItems: [],
+  pendingEquipAction: false,
 };
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
@@ -125,7 +141,12 @@ export type AppAction =
   | { type: 'SET_PENDING_COMBAT_ACTION'; action: CombatAction | null }
   | { type: 'SET_COLLAPSE_TIMER'; timer: number | null }
   | { type: 'SET_INVENTORY'; items: InventoryItem[] }
-  | { type: 'CLEAR_MESSAGES' };
+  | { type: 'CLEAR_MESSAGES' }
+  | { type: 'SET_LOADOUT'; slots: EquipmentSlots }
+  | { type: 'SET_STASH_ITEMS'; items: DisplayItem[] }
+  | { type: 'SET_PENDING_EQUIP'; pending: boolean }
+  | { type: 'SET_ACTIVE_CHARACTER'; character: CharacterSummary | null }
+  | { type: 'SET_PLAYER_STATE'; hp: number; maxHp: number; stamina: number; maxStamina: number; statusEffects: StatusEffect[] };
 
 const MAX_MESSAGES = 500;
 
@@ -172,6 +193,23 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, inventory: action.items };
     case 'CLEAR_MESSAGES':
       return { ...state, messages: [] };
+    case 'SET_LOADOUT':
+      return { ...state, loadout: action.slots, pendingEquipAction: false };
+    case 'SET_STASH_ITEMS':
+      return { ...state, stashItems: action.items, pendingEquipAction: false };
+    case 'SET_PENDING_EQUIP':
+      return { ...state, pendingEquipAction: action.pending };
+    case 'SET_ACTIVE_CHARACTER':
+      return { ...state, activeCharacter: action.character };
+    case 'SET_PLAYER_STATE':
+      return {
+        ...state,
+        playerHp: action.hp,
+        playerMaxHp: action.maxHp,
+        playerStamina: action.stamina,
+        playerMaxStamina: action.maxStamina,
+        statusEffects: action.statusEffects,
+      };
     default:
       return state;
   }

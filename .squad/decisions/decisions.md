@@ -1536,3 +1536,1196 @@ Rate limiter instances are created **inside** `createAuthRouter()`, not at modul
 - Production: single router instance, single set of limiters — no change in behavior
 - Tests: each `createTestApp()` call gets isolated rate limit state
 - If someone needs to share limiter state across multiple routers (e.g., cluster-wide limiting), they'll need to pass a custom `store` option — but that's a future concern
+
+---
+
+## 2026-03-25T12:16: Player identity keying pattern (sessionId → playerId)
+
+**By:** Jarlaxle (Systems Dev)  
+**Issue:** #197  
+**PR:** #200  
+**Date:** 2026-03-25  
+**Status:** Implemented
+
+### What
+
+All room types (RefugeRoom, ShardRoom) must key player state to the persistent `playerId` from auth context, never to `client.sessionId`. Both rooms now use the same identity resolution pattern:
+
+```typescript
+const playerId = (options['playerId'] as string) || client.sessionId;
+this.playerIds.set(client.sessionId, playerId);
+```
+
+The `playerIds` map (`sessionId → playerId`) provides forward lookup. `findClient()` does reverse lookup (`playerId → sessionId → Client`).
+
+### Why
+
+`client.sessionId` is ephemeral — a new one is assigned on every WebSocket connection. Using it as the player identity key causes all player-facing data (stash, combat state, extraction progress, traces) to become orphaned on reconnect.
+
+### Impact
+
+- Any future room types must follow this pattern — never key game state by `client.sessionId`.
+- Combat system, extraction system, downing system, trace system, and awareness system all receive `playerId`, not `sessionId`.
+- `findClient()` accepts `playerId` and reverse-lookups through the `playerIds` map. Direct `this.clients.find(c => c.sessionId === sid)` should only be used inside `findClient()` itself.
+- Phase 2 consideration: `options['playerId']` is client-supplied and not validated against `client.auth.playerId`. This is fine for Phase 1 simple auth but should be hardened when OAuth lands.
+
+## 2026-03-25: Fix Player Identity Handoff in Room onJoin
+
+**By:** Elminster (Lead/Architect)  
+**Date:** 2026-03-25  
+**Status:** Bug identified, fix required  
+**Severity:** 🔴 Critical — all player persistence is non-functional
+
+### Problem
+
+`ShardRoom.onJoin()` and `RefugeRoom.onJoin()` read `options['playerId']` to resolve the player's identity. In Colyseus 0.17, the return value of `onAuth()` is passed as `client.auth`, NOT merged into `options`. The client sends `{ token }` — there is no `playerId` in options.
+
+The code falls back to `client.sessionId`, a 9-character nanoid that:
+1. Is not a UUID (all game tables use `player_id UUID`)
+2. Does not exist in the `players` table (FK violations)
+3. Changes every connection (no persistence across sessions)
+
+### Impact
+
+- ALL game persistence is broken: profiles, stash, factions, run history
+- Postgres saves fail silently (type error or FK violation)
+- InMemory stores accept the wrong key but data is transient and unlinked
+- Tests pass because `@colyseus/testing` bypasses `onAuth` and passes options directly
+
+### Required Fix
+
+Both rooms must read from `client.auth`:
+
+```typescript
+// ShardRoom.ts line 252 and RefugeRoom.ts line 91
+const authData = client.auth as { playerId?: string; username?: string } | undefined;
+const playerId = authData?.playerId || (options['playerId'] as string) || client.sessionId;
+```
+
+### Files Affected
+
+- `packages/server/src/rooms/ShardRoom.ts:252`
+- `packages/server/src/rooms/RefugeRoom.ts:91`
+
+### Testing
+
+- Existing tests will continue to pass (they use `options['playerId']` path)
+- NEW integration test needed: verify `client.auth` path works with real auth flow
+- Manual verification: register → login → join shard → leave → check `player_skills` table has rows with the correct `players.id` UUID
+
+### Team Impact
+
+- **Drizzt:** Implement the fix + integration test
+- **All:** Any future room types must use `client.auth?.playerId`, not `options['playerId']`
+---
+
+## 2026-03-25T22:58Z: User directive — Old-school MUD visual aesthetic
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** Captured for design direction  
+
+**What:** The game should evoke the feeling of playing an old-school MUD. Use a console-like (monospace) font and ANSI-style coloring to convey visual info about items and events. Think terminal aesthetic — not modern web UI.
+
+**Why:** User request — core design direction for the client's visual identity
+
+---
+
+## 2026-03-25T23:13Z: User directives — Stash/Loadout UI & mechanics
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** Captured for mechanics constraints  
+
+**What:**
+1. **Layout:** Loadout on LEFT, Stash on RIGHT (not the reverse).
+2. **In-shard equipping:** Players CAN swap equipment while exploring shards, including equipping items found in the shard. Loadout is NOT locked on shard entry.
+3. **No durability/repair:** Keep repair and durability systems out of this work — that's Phase 3.
+4. **Slot restrictions:** Equipment slots MUST enforce item type restrictions — chest slot only takes chest gear, rings for finger slots, hats/helmets for head, weapons for weapon slot, etc. Typed slot validation is required.
+
+**Why:** User request — captured for team memory. These override Elminster's plan assumptions (which had stash on left, locked loadout during runs, and included durability checks).
+
+---
+
+## 2026-03-25T23:14Z: User directive — Shard entry requirements
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** Captured  
+
+**What:** Players should be allowed to enter a shard if they have the right key (or keys/other required items). Weapons are optional — do NOT require a weapon to enter a shard.
+
+**Why:** User request — overrides Elminster's plan which listed "weapon required" as a shard entry validation rule. Only shard key(s) and any shard-specific required items gate entry.
+
+---
+
+## 2026-03-25T23:15Z: User directive — Server-authoritative stash/loadout anti-exploit
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** Captured  
+
+**What:** The stash/loadout system MUST be server-authoritative and hardened against item duplication bugs and other potential exploits. The client is a dumb terminal — all item moves (stash↔loadout, equip, unequip, pick up shard loot) must be validated and executed server-side. No client-side inventory mutations.
+
+**Why:** User request — this is a PvPvE extraction game where item economy integrity is critical. Dupe bugs would be game-breaking.
+
+---
+
+## 2026-03-26: Compass Navigation Replaces Inline Exit Links
+
+**Date:** 2026-03-26  
+**By:** Drizzt (Engine Dev)  
+**Issue:** #195  
+**PR:** #205  
+**Status:** Implemented  
+
+### What
+
+Direction/exit navigation is now handled by a persistent `CompassControl` widget in the sidebar instead of inline `Exits: [north] [east]` links reprinted on every room entry.
+
+### Why
+
+Inline exit links cluttered the narrative pane — every room move reprinted them, pushing story text off-screen. A persistent widget keeps exits always visible without polluting the narrative flow.
+
+### Impact
+
+- **Client narration no longer includes exit links.** Any component rendering `msg.type === "room"` should NOT add its own exit UI — the compass handles it.
+- **`onRoomHeader` no longer emits an "Exits:" header message.** The room header dispatch updates `state.roomHeader.exits` which the compass reads reactively.
+- **Exit data flow is unchanged:** Server sends `RoomHeaderMessage.exits[]`, client stores in `state.roomHeader`, compass reads from context. No new protocol messages.
+- **The `exit-detection.ts` utility still exists** for potential future use (e.g., highlighting directions in LLM prose), but is no longer used for inline link rendering.
+
+---
+
+## 2026-03-20: Panel Layout Swap — ShardExploration
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-03-20  
+**Status:** Implemented  
+
+**What:** Swapped the two main panels in `ShardExploration.tsx` — the shardboard sidebar (30%) is now on the LEFT, and the narrative text panel (70%) is now on the RIGHT. Panel widths unchanged; only position swapped.
+
+**Why:** User preference — narrative text gets the right side, shardboard/status panel gets the left side.
+
+**Affects:** Any future work on `packages/client/src/pages/ShardExploration.tsx` layout or responsive breakpoints.
+
+---
+
+## 2026-03-26: Refuge Layout — Narrative Center, Tabs Right
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-03-26  
+**Status:** Implemented  
+
+**What:** The Refuge page layout has been reorganized:
+- **Center column (flex-1):** Narrative/chat scrolling text window + command input
+- **Right column (25%):** Players Nearby + tab content (shardboard, stash, loadout, etc.)
+- **Left column (25%):** Tab navigation + ambient events (unchanged)
+
+**Why:** Narrative feed needs the wider center area for better readability and proper scroll handling.
+
+**Impact:** Auto-scroll uses `state.messages` as dependency (matching ShardExploration pattern).
+
+---
+
+## 2026-03-24: Unified Equipment/Stash UI + Shared Types
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-03-24  
+**Status:** Implemented  
+**Scope:** Client UI + Shared message protocol
+
+### What
+
+Replaced separate StashTab and LoadoutTab with a unified CombinedStashLoadout component. Added equipment slot types, message protocol, and display types to @ellmud/shared.
+
+### Key Decisions
+
+1. **Equipment Slot System:** 10 named slots: `head`, `chest`, `legs`, `feet`, `hands`, `weapon`, `offhand`, `ring1`, `ring2`, `amulet`. Defined as `EquipmentSlotType` in shared. `SLOT_ACCEPTS` maps which `ItemType` each slot accepts (e.g., weapon→['weapon'], head→['armour']). Ring/amulet slots temporarily accept 'material' — needs a jewelry ItemType later.
+
+2. **Message Protocol:**
+   - Client → Server: `EQUIP_ITEM { itemId, targetSlot }`, `UNEQUIP_ITEM { slot }`
+   - Server → Client: `LOADOUT_UPDATE { slots }`, `STASH_UPDATE { items }`
+   - Added to `MessageTypes` const in shared
+
+3. **DisplayItem Contract:** Server sends pre-resolved `DisplayItem` objects (name, type, tier, weight, description, allowedSlots) so the client never needs to look up definitions. Jarlaxle's server-side LoadoutService must emit this format.
+
+4. **GearTier → MUD Rarity CSS Mapping:** scrap→ansi-dim, common→mud-common, sturdy→mud-uncommon, refined→mud-rare, masterwork→mud-epic, anomalous→mud-legendary
+
+5. **No Optimistic Updates:** Client sends equip/unequip requests and shows a pending state. UI only mutates when server confirms via LOADOUT_UPDATE/STASH_UPDATE.
+
+### Impact
+- **Jarlaxle:** Must implement LOADOUT_UPDATE and STASH_UPDATE message emission in LoadoutService/room handlers
+- **All UI work:** GearTier→MUD class mapping is now canonical — use `TIER_CLASS` from CombinedStashLoadout or factor into shared utility
+- **StashTab.tsx and LoadoutTab.tsx:** No longer imported by any page. Can be deleted or kept as reference.
+
+---
+
+## 2025-07-25: LoadoutService Architecture Decision
+
+**By:** Jarlaxle (Systems Dev)  
+**Date:** 2025-07-25  
+**Status:** Implemented  
+**Context:** Server-authoritative equipment system for loadout management
+
+### What
+
+LoadoutService uses a **per-player mutex lock** to prevent race conditions during equip/unequip/swap operations. All item moves are atomic: remove-from-source + add-to-destination in a single locked operation.
+
+### Key Decisions
+
+1. **Two-form constructor**: `LoadoutService(stashRepo, itemDefs)` for tests (internal in-memory loadout), `LoadoutService(loadoutRepo, stashRepo, itemDefs)` for rooms with explicit repos.
+
+2. **Slot restrictions use shared `SLOT_ACCEPTS`**: No item sub-type enforcement (e.g., helmet vs chestpiece — both are "armour" and fit any armour slot). Sub-type enforcement deferred to Phase 2 if needed.
+
+3. **Shard equipping via separate methods**: `equipFromInventory()` and `unequipToInventory()` for in-shard operations. Displaced items are NOT added to stash — they go back to shard inventory (caller responsibility).
+
+4. **Shard entry validation**: Requires at least one "key" type item in stash. Weapons are optional. No durability checks (Phase 3).
+
+5. **Empty slot unequip is a no-op success** (`ok: true`), not an error.
+
+### Impact
+
+- Rooms must register EQUIP_ITEM, UNEQUIP_ITEM, SWAP_ITEM message handlers
+- Client receives LOADOUT_UPDATE after every server-confirmed operation — no optimistic client state
+- ShardRoom blocks equipment changes during extraction
+
+---
+
+## 2025-07-26: Reusable `useAutoScroll` hook pattern for scrollable containers
+
+**By:** Jarlaxle (Systems Dev)  
+**Issue:** #196  
+**PR:** #204  
+**Date:** 2025-07-26  
+**Status:** Implemented  
+
+**What:** Created `packages/client/src/hooks/useAutoScroll.ts` — a generic hook for any scrollable container that needs auto-scroll-to-bottom with smart disengage/re-engage. Also established the `.narrative-scroll` CSS class in `theme.css` as the standard game-themed scrollbar.
+
+**Why:** Both ShardExploration and Refuge had ad-hoc scroll logic (naive `scrollTop` set, `scrollIntoView` sentinel div). The hook centralizes the pattern and handles the edge case of user-initiated scroll-up correctly.
+
+**Impact:** Any new scrollable pane (chat, logs, event feeds) should use `useAutoScroll(dependency)` instead of rolling custom scroll logic. Use the `narrative-scroll` CSS class on any container that needs a themed scrollbar. The threshold parameter (default 48px) controls how close to the bottom the user must scroll to re-engage auto-scroll.
+
+---
+
+## 2025-07-26: Stash/Loadout Test Coverage Strategy
+
+**Author:** Minsc (Tester)  
+**Date:** 2025-07-26  
+**Status:** Complete  
+
+### Context
+
+Jarlaxle implemented the LoadoutService (equip/unequip/swap between stash and equipment slots). Minsc was tasked with writing comprehensive test coverage before the system goes live.
+
+### Decisions
+
+1. **4-file test structure** — Split tests by concern rather than one mega-file:
+   - `loadout-service.test.ts` — Core unit tests (equip, unequip, swap, slot restrictions, getters)
+   - `loadout-anti-exploit.test.ts` — Duplication prevention, race conditions, cross-player isolation
+   - `loadout-shard.test.ts` — Shard-specific methods (validateShardEntry, equipFromInventory, unequipToInventory)
+   - `loadout-integration.test.ts` — Colyseus room handler tests via `@colyseus/testing`
+
+2. **Shared fixtures in helpers/** — Created `loadout-fixtures.ts` with 14 test items covering all equipment types (armour, weapon, tool, material, key, consumable). Factory functions (`makeInstance`, `populateStash`) keep tests DRY.
+
+3. **3-arg constructor for test isolation** — Tests use `new LoadoutService(loadoutRepo, stashRepo, itemDefs)` to inject explicit repositories, enabling direct inspection of repo state in assertions.
+
+4. **Anti-exploit tests verify invariants, not just API** — `countTotalItems()` helper counts items across stash + loadout to verify the total never changes during equip/swap operations. This catches duplication bugs that API-level tests might miss.
+
+5. **Race condition tests use Promise.all** — Concurrent equip operations on the same item verify that exactly one succeeds and the item count invariant holds.
+
+### Outcome
+
+82 tests, all passing. Full suite (1741 tests) — zero regressions.
+
+---
+
+## 2025-07-25: Seed Item Catalog Location & Schema
+
+**Author:** Volo (Narrative Dev)  
+**Date:** 2025-07-25  
+**Status:** Implemented  
+
+### What
+Created `packages/server/src/dev/seed-items.ts` — a catalog of 40 items for development and testing.
+
+### Why
+Testing the stash, loadout, and equipment UI requires items covering every slot type, rarity tier, and item category. The existing registry (`items/registry.ts`) uses `ItemDefinition` (the combat-side schema), while the stash/loadout system uses `StashItem` (the stash-side schema). Seed items use `StashItem` to match the loadout fixtures and `LoadoutService` expectations.
+
+### Decisions Made
+1. **File location:** `packages/server/src/dev/` — clearly dev-only, not mixed with production item data
+2. **Schema:** Uses `StashItem` interface, not `ItemDefinition` — matches stash/loadout system expectations
+3. **No registry merge:** These items are NOT added to the production `ITEM_REGISTRY`. They're imported separately where needed. When the two item schemas reconcile (per the TODO in stash.ts), seed items should be updated.
+4. **Slot acceptance compliance:** Items respect `SLOT_ACCEPTS` — e.g. rings/amulets are type `material` (current placeholder), offhand items are `weapon` or `tool`
+
+### Impact
+- Loadout tests can import specific items or the full catalog
+- Dev workflows can call `populateDevStash()` to fill a stash instantly
+- No production code changes — additive only
+
+---
+
+## 2026-03-26: Loadout Needs DB Persistence
+
+**Filed by:** Jarlaxle (Systems Dev)  
+**Date:** 2025-07-26  
+**Priority:** High — data-loss risk on server restart  
+**Status:** In Progress (Drizzt assigned)  
+
+### Problem
+
+`InMemoryLoadoutRepository` stores equipped gear in RAM only. When a player equips an item:
+
+1. Item is **removed from stash** (PostgreSQL — `PgStashRepository.removeItem`)
+2. Item is **placed in loadout** (RAM — `InMemoryLoadoutRepository.setSlot`)
+
+If the server restarts between these states, the item is gone from the DB stash but also gone from memory. **The item vanishes permanently.**
+
+### Impact
+
+- Any equipped item is at risk of silent loss on every deploy, crash, or restart
+- Players lose gear with no explanation and no recovery path
+- The more valuable the loadout, the worse the impact
+
+### Proposed Fix
+
+1. Create `PgLoadoutRepository` implementing the existing `LoadoutRepository` interface
+2. Add a DB migration: `player_loadouts` table (player_id, slot, item_instance JSONB)
+3. Wire it into `initLoadout()` in ShardRoom + RefugeRoom via `getLoadoutRepository()`
+4. The interface (`load`, `save`, `setSlot`, `getSlot`, `clear`, `listPlayerIds`) is already clean — just needs a Pg backing
+
+### Related Context
+
+- `LoadoutRepository` interface: `packages/server/src/loadout/LoadoutRepository.ts`
+- `LoadoutService` constructor already accepts an explicit `LoadoutRepository` (3-arg form)
+- Stash already has `PgStashRepository` as a pattern to follow
+- Death handler now correctly calls `clearLoadout()` (fixed alongside this filing)
+
+---
+
+## 2026-03-26: Shard-Sickness Death Counts Must Persist Across Server Restarts
+
+**Filed by:** Copilot (Scribe)  
+**Date:** 2026-03-26  
+**Priority:** Low → Medium (part of PG persistence audit)  
+**Status:** Proposed (backlog)
+
+### Problem
+
+Shard-sickness tracks player death counts per shard location. These counts are currently stored in memory only. On server restart, all death counts reset to 0. This breaks game mechanics:
+
+1. **Mechanic breakdown:** Players should accumulate warnings/sickness effects as they die — restarting the server shouldn't erase their progress
+2. **User expectation:** Death counts are permanent character history, not session-temporary
+3. **Testing burden:** Tests can't rely on death count persistence; live data at risk
+
+### Proposed Fix
+
+1. Add shard-sickness column to `player_profile` table (or dedicated `player_shard_sickness` table)
+2. Create `PgShardSicknessRepository` implementing existing `ShardSicknessRepository` interface
+3. Wire into PlayerProfile initialization via provider pattern (like LoadoutRepository)
+4. Death count persists across all server restarts automatically
+
+### Related Context
+
+- Part of PG persistence audit (4 gaps: Loadout, Profile equipment, Token Store, **Shard Sickness**)
+- LoadoutRepository pattern is the template to follow for repository implementation
+- Current in-memory implementation: `packages/server/src/player/shard-sickness/`
+- Audit baseline: 2026-03-26 (Phase 1: Loadout critical fix; Phase 2: Profile equipment; Phase 3: Token Store; Phase 4: Shard Sickness)
+
+### Effort Estimate
+
+- Medium (database schema + repository + provider wiring + tests ~2-3hrs after Loadout pattern established)
+
+---
+
+## 2026-03-26: Faction Dual-Table Resolution
+
+**Author:** Jarlaxle (Systems Dev)  
+**Date:** 2026-03-26  
+**Status:** Implemented (dev branch)
+
+### Context
+
+Two tables stored faction data with conflicting names and sources:
+- `factions` (migration 004): UUID PKs, canonical GDD names (Ironwright Compact, Veil Cartographers, Scarlet Ledger), FK to `faction_membership`, game state source of truth
+- `content_definitions` (stale): JSONB rows with entity_type='factions', different names (Ironhearth, Veilwalkers, Ashborn), no FK relationships, out of sync with game logic
+
+The admin UI was reading from `content_definitions` instead of `factions`, showing stale faction data. This created a dual-source-of-truth problem where the game and admin system disagreed on faction names and membership.
+
+### Decision
+
+Use the `factions` table as the single, exclusive source of truth for all faction data. Extend it with admin-UI fields (description, milestones, events) rather than maintaining a parallel JSONB copy in `content_definitions`. Create a dedicated `PgFactionDefinitionsStore` to manage faction admin data while preserving relational integrity.
+
+### Implementation
+
+1. **PgFactionDefinitionsStore** (new file: `packages/server/src/stores/PgFactionDefinitionsStore.ts`)
+   - Implements `IContentStore<ContentEntity>` interface
+   - Reads/writes `factions` table directly
+   - Preserves FK constraints with `faction_membership` table
+   - Follows established pattern: biomes, modifiers, narrative, creatures (all migrated same way Phase 2)
+
+2. **Migration 025: `025-faction-admin-fields.ts`**
+   - Adds columns to `factions`: `description` (TEXT), `milestones` (JSONB), `events` (JSONB)
+   - Backfills `description` from existing `philosophy` column (no data loss)
+   - Idempotent: conditional column existence checks before adding
+   - Cleanup: DELETE stale `content_definitions` rows where `entity_type='factions'`
+   - Performance: Single table scan + DELETE, no joins, <10ms runtime
+
+3. **Init.ts Wiring** (`packages/server/src/db/init.ts`)
+   - Routes 'factions' entity type to `PgFactionDefinitionsStore` instead of generic `PgContentStore`
+   - Added comments documenting migration sequence (001-003 base, 004 factions table, 005-024 content stores, 025 admin fields + cleanup)
+   - Admin UI CRUD now atomic with game state
+
+### Rationale
+
+- The `factions` table has relational constraints and is the actual source of game state — extending it preserves integrity
+- Deleting stale `content_definitions` faction rows eliminates the dual-source problem
+- Follows Phase 2 consolidation pattern: each dedicated content store (biomes, modifiers, narrative, creatures, now factions) reads/writes a single relational table
+- Only three entity types remain on generic `content_definitions`: skills, loot-tables, rooms (next phase)
+
+### Consequences
+
+- Admin UI faction CRUD now reads/writes the canonical `factions` table
+- All faction displays (game, admin, API) show the same authoritative data (Ironwright, Veil, Scarlet)
+- FK integrity enforced at database level
+- Stale JSONB faction entries removed from `content_definitions`
+- Migration cleanup reduces database size and query ambiguity
+
+### Quality Gate
+
+✅ Build clean (npm run build)  
+✅ Tests passing (npm run test)  
+✅ Linter clean (eslint)  
+✅ Zero regressions
+
+
+---
+
+## 2026-03-20: RefugeRoom Room-Gated Commands
+**By:** Drizzt (Engine Dev)
+
+### What
+
+RefugeRoom commands are now gated by which room the player is in:
+- **stash / take / store** → only in `stash-alcove`
+- **shardboard / enter** → only in `shardboard`
+- **loadout / equipment** → available everywhere
+- **look / go / directions** → available everywhere
+
+Players start in `hearth` and must navigate (`go west`, `go east`, etc.) to reach feature rooms.
+
+### Why
+
+The Refuge is no longer a flat hub — it's a navigable 7-room zone. Gating commands to specific rooms creates spatial meaning and encourages exploration.
+
+### Impact
+
+- All tests that send stash or shardboard commands from the Refuge must first navigate to the correct room
+- The `requireRoom` helper sends a directional hint when gating rejects a command
+- Ambient narration can race with command responses — tests should use `.find()` not last-element indexing
+
+---
+
+## 2026-03-26: Zone Transfer Protocol
+**By:** Drizzt (Engine Dev)
+
+### Context
+
+Inter-zone exits (e.g., stepping from Refuge into a dungeon zone) need a server→client handshake. The server can't just move the player — the client needs to disconnect from one ShardRoom and reconnect to another.
+
+### Decision
+
+- The `go` command handler detects inter-zone exits via `isInterZoneId()` and returns a `zoneTransfer` field on `CommandResult` (no direct Client coupling in handlers).
+- `ShardRoom.handleCommandMessage` reads `result.zoneTransfer` and sends a `ZONE_TRANSFER` message (type: `zone_transfer`) to the client with `{ targetZoneSlug, targetRoomSlug }`.
+- The client is responsible for disconnecting and reconnecting to the target zone room, passing `targetRoomSlug` as a join option so the zone ShardRoom can place the player in the correct entry room.
+- The player is NOT removed from the current room by the server — the client-initiated `onLeave` handles cleanup.
+
+### Implications
+
+- Client must handle the `ZONE_TRANSFER` message type (new wire message).
+- Hub/social zones skip combat, extraction, downing, and collapse — they run as persistent rooms.
+- Zone rooms include `zoneName` in room headers for UI display.
+
+---
+
+## 2026-03-26: Inter-Zone Exit Convention
+**By:** Drizzt (Engine Dev)
+
+### What
+
+Inter-zone exits (exits that connect one zone to another) are represented in `RoomGraph` exit maps using a prefixed room ID format:
+
+```
+zone:{zoneSlug}/{roomSlug}
+```
+
+Example: `zone:the-refuge/market-square`
+
+Helper functions exported from `@ellmud/shared`:
+- `makeInterZoneId(zoneSlug, roomSlug)` — builds the prefixed ID
+- `isInterZoneId(roomId)` — checks the prefix
+- `parseInterZoneId(roomId)` — extracts zone slug and room slug
+
+### Why
+
+- Zone exits must flow through the same `Room.exits` Map<Direction, string> as intra-zone exits
+- Downstream code (ShardRoom navigation, command handlers) needs a simple, reliable way to detect when a player is moving between zones vs. within a zone
+- The `zone:` prefix is detectable with a string check — no schema changes to Room or RoomGraph needed
+- Parsing is O(1) and doesn't require a lookup table
+
+### Impact
+
+- **ShardRoom / navigation handlers:** Must check `isInterZoneId()` before resolving room references. Inter-zone movement will require zone switching logic (not yet implemented).
+- **Serialization:** The `serializeRoomGraph()` / `deserializeRoomGraph()` functions handle these IDs transparently since they're just strings.
+- **Future zone loading:** The zone slug in the ID tells the server which zone to load/join when the player crosses boundaries.
+
+---
+
+## 2026-03-26: Content Store Migration Audit — Complete
+**By:** Elminster (Lead/Architect)
+
+### Executive Summary
+
+Full codebase audit confirms **successful migration from generic `content_definitions` JSONB table to 9 dedicated relational stores**. All code paths are correct. No blocking issues. The `content_definitions` table was safely dropped in migration 029 and is not queried by any live code.
+
+**Recommendation:** ✅ Proceed with Phase 1 deployment. Content storage architecture is production-ready.
+
+### Key Findings
+
+✅ **All 9 Dedicated Stores Implemented:**
+- PgBiomeDefinitionsStore
+- PgCreatureDefinitionsStore
+- PgItemDefinitionsStore
+- PgModifierDefinitionsStore
+- PgNarrativeDefinitionsStore
+- PgFactionDefinitionsStore
+- PgSkillDefinitionsStore
+- PgLootTableDefinitionsStore
+- PgRoomDefinitionsStore
+
+✅ **Admin Routes Verified:**
+- Routes: `GET/POST/PUT/DELETE /admin/api/content/{entity}`
+- Uses: `IContentStore` interface via `initializeContentStores()`
+- Zero references to `content_definitions` table
+
+✅ **Build & Tests:**
+- Build succeeds with zero TS errors
+- All 51 tests pass
+- Schema validation test correct
+
+⚠️ **Minor Findings (Not Blocking):**
+- Three TODOs in deploy-routes.ts for pending change tracking (intentionally stubbed for Phase 1)
+- Severity: LOW — can be implemented in Phase 2
+
+### Architectural Pattern
+
+The migration follows **Repository Pattern** architecture:
+```
+Admin Routes (CRUD)
+    ↓
+IContentStore Interface (contract)
+    ↓
+Factory: initializeContentStores()
+    ├─ PG: Creates 9 Pg*DefinitionsStore (live)
+    └─ In-Memory: Creates 9 ContentStore (dev)
+        ↓
+        Dedicated Relational Tables
+```
+
+---
+
+## 2026-03-26T19:11:17Z: Zone system design decisions
+**By:** dkirby-ms (via Copilot)
+
+### What
+
+1. Zone state is persistent with periodic "repop" — items and mobs respawn on a timer, like classic MUDs
+2. Zones can link to each other via inter-zone exits (cross-zone navigation)
+3. Zone mechanics work similarly to shards (combat, loot, hazards — parity)
+4. Zone building is admin-only for now
+5. The Refuge becomes a navigable zone (first zone)
+
+### Why
+
+User request — foundational design decisions for the hand-crafted zone system
+
+---
+
+## 2026-03-26: content_definitions Table Fully Retired
+**By:** Jarlaxle (Systems Dev)
+
+### Context
+
+The `content_definitions` table was the original generic JSONB store for all admin-editable game content. Over migrations 002–028, all 9 entity types were given dedicated relational tables with properly typed columns.
+
+### Decision
+
+Migration 029 drops `content_definitions` entirely. The `PgContentStore` class (generic JSONB store) is deleted. All routing in `init.ts` now goes to dedicated `Pg*DefinitionsStore` classes.
+
+### Consequences
+
+- **deploy-routes.ts** has TODO comments where it used to query `content_definitions` for deploy diffs and entity counts. These need refactoring to aggregate across the 9 dedicated tables.
+- **dashboard-routes.ts** now queries through store interfaces uniformly — no direct SQL to `content_definitions`.
+- Any future entity types should get their own dedicated table + PgStore from the start. The generic JSONB pattern is dead.
+- The `ContentStore` (in-memory) class still exists for dev mode — it's unrelated to the dropped table.
+
+---
+
+## 2026-03-26: Zone Repository Local Types (Temporary)
+**By:** Jarlaxle (Systems Dev)
+
+### What
+
+Zone type definitions (ZoneDefinition, ZoneRoomDefinition, ZoneExitDefinition, ZoneData) are defined locally in `packages/server/src/zones/ZoneRepository.ts` rather than imported from `@ellmud/shared`.
+
+### Why
+
+Drizzt is creating `packages/shared/src/zone.ts` in parallel. The shared types weren't available at implementation time. Local types let the server module compile and build independently.
+
+### Action Required
+
+When shared zone types land:
+1. Delete the local type definitions from `ZoneRepository.ts`
+2. Import types from `@ellmud/shared` instead
+3. Verify the shapes match (they should — coordinated on the schema)
+4. The pre-existing `zone-adapter.ts` errors will also resolve
+
+### Impact
+
+- `PgZoneRepository.ts`, `InMemoryZoneRepository.ts`, and `index.ts` all import types from `./ZoneRepository.js` — they'll automatically pick up the shared types once re-exports change.
+- No runtime behavior changes needed, only import paths.
+
+---
+
+## 2026-03-27: Exported `adminFetch` from admin-api.ts
+**By:** Regis (Frontend Dev)
+
+### What
+
+Added `export` to `adminFetch<T>()` in `packages/client/src/lib/admin-api.ts` so that `zone-api.ts` (and future non-content-entity API modules) can reuse the auth/error-handling wrapper.
+
+### Why
+
+Zones use `/admin/api/zones/*` — not the generic `/admin/api/content/{type}` route — so the existing `listEntities`/`getEntity` helpers don't apply. Rather than duplicating the fetch+auth logic, exporting the base `adminFetch` lets specialized API modules compose on top of it.
+
+### Impact
+
+- Any code that previously relied on `adminFetch` being module-private is unaffected (it was only called internally).
+- Future entity types with custom API paths can follow the `zone-api.ts` pattern.
+
+---
+
+## 2026-03-27: ZONE SYSTEM — Architecture Proposal
+**By:** Elminster (Lead/Architect)
+
+### Executive Summary
+
+**Recommended Option 2 — Biome-Scoped Named Regions Within Shards**
+
+Zones are procedurally generated sub-regions of individual shards. The generator partitions a shard's rooms into 2–4 coherent zones at generation time, applies zone names, and includes zone IDs in room metadata.
+
+**Key outcomes:**
+- Players get named, memorable sub-regions (zone names in room headers)
+- Admin can define zone templates per biome (not per-shard — procedural)
+- Zones are procedurally scoped sub-regions of shards, not persistent areas
+- No breaking changes to current architecture
+- Minimal DB schema additions (`zone_definitions` table)
+- Scope: **2–3 developer days**
+
+### Three Options Evaluated
+
+**Option 1: Persistent Non-Instanced Zones — REJECTED**
+- ❌ Breaks procedural identity (every run identical)
+- ❌ Contradicts ephemeral shards design
+- ❌ Requires hand-authoring 500–1000 rooms
+- ❌ Large migration from procedural generator
+
+**Option 2: Biome-Scoped Named Regions Within Shards — RECOMMENDED** ✅
+- ✅ Preserves procedural identity (zones vary per shard)
+- ✅ Maintains ephemeral guarantee (zones live/die with shards)
+- ✅ Minimal schema (1 new table + optional Room fields)
+- ✅ Admin-friendly (zone templates per biome, not per-shard)
+- ✅ Player clarity (zone names orient in 40–60 room shards)
+- ✅ LLM-ready (zone adjectives feed into narration)
+- ✅ Low cost (~2–3 dev days, no breaking changes)
+- ⚠️ Zones non-persistent (can't map across runs)
+
+**Option 3: Zones as Biome Sub-Templates — WEAKER**
+- ✅ Simplest (~4–6 hours)
+- ❌ Zones implicit, not first-class
+- ❌ No zone metadata or admin UI
+- ❌ Limited expressiveness
+
+### Data Model (Option 2)
+
+```sql
+CREATE TABLE zone_definitions (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT,
+  biome_id TEXT NOT NULL REFERENCES biome_definitions(id),
+  tier SMALLINT,
+  room_type_bias TEXT[],
+  min_rooms SMALLINT DEFAULT 3,
+  max_rooms SMALLINT DEFAULT 8,
+  loot_concentration NUMERIC(3, 2) DEFAULT 0.5,
+  theme_adjectives TEXT[],
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now()
+);
+```
+
+Room table gets optional `zoneId?` and `zoneName?` fields.
+
+### Implementation Scope
+
+| File | Changes | Effort |
+|------|---------|--------|
+| `packages/shared/src/room-graph.ts` | Add `Zone` interface, add `zoneId?` to `Room` | 30 min |
+| `packages/server/src/shard/generator.ts` | Add `partitionIntoZones()`, load zone definitions | **2.5 days** |
+| `packages/server/src/rooms/ShardRoom.ts` | Store zones in state, include zone name in headers | 1 hour |
+| `PgZoneDefinitionsStore.ts` | CRUD for zone_definitions | 2 hours |
+| `packages/client/src/pages/admin/Zones.tsx` | Zone list + edit forms | 3 hours |
+| Database migrations | Create `zone_definitions` table | 1 hour |
+| Tests | Unit + integration tests | 4 hours |
+| **Total** | | **~2.5 dev days (18 hours)** |
+
+### Open Decisions for dkirby-ms
+
+1. **Zone granularity:** Should Tier 1 shards (15–25 rooms) have 2 zones, Tier 2 (25–40) have 3–4 zones?
+2. **Zone theme expressiveness:** Should zone names be thematic ("Ossuary Heart") or descriptive ("Boss Chamber")?
+3. **Admin template depth:** How many zone templates per biome should we seed? (Recommendation: 2–3 per biome initially)
+4. **Zone-level features (future):** Do you want zone-specific loot concentration, creature types, or modifiers?
+5. **Client display:** Should zone name appear in room header, sidebar, or both?
+
+### Conclusion
+
+**Recommended next step:** Get dkirby-ms sign-off on the 5 open decisions, then assign to Drizzt for implementation in Phase 2.
+
+---
+
+## 2026-03-27: HAND-CRAFTED ZONES — Architecture Proposal v2
+**By:** Elminster (Lead/Architect)
+
+### Executive Summary
+
+This proposal defines **hand-crafted zones** — traditional MUD-style authored areas with specific room layouts and connections — as a parallel system to the existing procedural shard generation.
+
+**Core decision:** Zones are **persistent, authored room graphs** stored in the database and served via a generalized `ShardRoom` class. Players navigate fixed topologies defined by builders. The existing procedural shard system remains unchanged for dungeon-crawl instances.
+
+**Key outcomes:**
+- Zones are stored in PostgreSQL (`zones`, `zone_rooms`, `zone_exits` tables)
+- Admin UI provides a zone builder with room editor and connection manager
+- `ShardRoom` becomes polymorphic — loads from either procedural generator OR zone database
+- Client navigation is unchanged — room headers and exits work identically
+- Refuge retroactively becomes the first zone (migration to zone data model)
+- Scope: **5–7 developer days** (data model, server refactor, admin UI, client indicators)
+
+### What This Enables
+
+- **Persistent authored dungeons** — Builders design dungeons once, players experience them repeatedly with story continuity
+- **Coexistence with procedural shards** — Some instances are hand-crafted (Refuge, story dungeons), others procedurally generated (roguelike runs)
+- **Traditional MUD gameplay** — Room-based navigation, topology persistence, persistent NPCs
+- **Admin builder tools** — Zone editor with room layout visualization
+
+### Implementation Approach
+
+**Data Model:**
+- `zones` table: Zone metadata (id, slug, name, description, level_min/max, tier, entry_room_ids, lifecycle, category, max_players, pvp_enabled)
+- `zone_rooms` table: Individual room definitions (id, zone_id, name, description, type, properties, hazards, loot_containers)
+- `zone_exits` table: Room connections (id, zone_room_id, direction, target_room_id, [optional] inter_zone_target)
+
+**Server Architecture:**
+- `ShardRoom` refactored to load RoomGraph from either:
+  - Procedural: `generator.ts` (existing path, no changes)
+  - Authored: `ZoneRepository.getZoneGraph(zoneId)` (new path)
+- Polymorphic behavior: Same navigation handlers, same combat/loot systems, same client messaging
+- Zone lifecycle: Persistent rooms with periodic "repop" (items/mobs respawn on timer)
+
+**Admin UI:**
+- New "Zones" section in admin dashboard
+- Zone list → Zone editor (room grid layout + room property forms)
+- Room editor: visual topology with drag-to-connect, exit directions, properties
+- Test: Spawn a zone instance, see live results
+
+**Client:**
+- No changes to navigation UX — exits work the same
+- Optional visual indicator: "You're in [Zone Name]" in room headers (already proposed)
+- Future: zone-specific UI chrome (decorations, ambient sounds)
+
+### Phased Rollout
+
+**Phase 2a (Foundation):**
+1. Create `zones`, `zone_rooms`, `zone_exits` tables
+2. Create `ZoneRepository` interface and implementations (Pg + InMemory)
+3. Refactor `ShardRoom.onCreate()` to handle both procedural and authored paths
+4. Migrate Refuge to zone data model (first zone)
+
+**Phase 2b (Admin UI):**
+5. Build zone editor UI (list, create, edit, delete)
+6. Build room editor UI (topology visualization, property forms)
+7. Deploy zone data for Refuge + 1–2 example authored dungeons
+
+**Phase 3 (Polish):**
+8. Zone-level ambient events (NPCs, weather)
+9. Performance tuning (zone graph caching, batched lookups)
+10. Persistence testing at scale
+
+### Key Decisions
+
+1. **Polymorphic ShardRoom or separate ZoneRoom class?**
+   - Recommendation: Polymorphic ShardRoom (easier client integration, one navigation code path)
+
+2. **Repop timer:** How often should items and mobs respawn in hand-crafted zones?
+   - Recommendation: Configurable per zone (default: 15 minutes, tunable via admin UI)
+
+3. **Inter-zone exits:** Can a hand-crafted zone link to another hand-crafted zone or a shard?
+   - Recommendation: Yes, using the `zone:{zoneSlug}/{roomSlug}` convention (already decided in "Zone Transfer Protocol")
+
+4. **Admin permissions:** Can only super-admins edit zones, or should there be a "zone builder" role?
+   - Recommendation: Super-admins only for Phase 2; role-based access can come later
+
+5. **Refuge retroactive migration:** Can Refuge be migrated to zone data model without breaking live play?
+   - Recommendation: Yes — Refuge data is small (7 rooms, no complex state), migration is a one-time fixture reset
+
+### Scope & Timeline
+
+| Component | Effort | Owner |
+|-----------|--------|-------|
+| Database schema + migrations | 2 hours | Jarlaxle |
+| ZoneRepository interface + implementations | 1.5 days | Drizzt |
+| ShardRoom refactor (polymorphic load) | 1 day | Drizzt |
+| Refuge migration to zones | 4 hours | Drizzt |
+| Admin zone editor UI | 1.5 days | Regis |
+| Admin room editor UI + topology viz | 2 days | Regis |
+| Integration testing + polish | 1 day | Minsc |
+| **Total** | **~5–7 developer days** | |
+
+### Open Questions for dkirby-ms
+
+1. Should hand-crafted zones have quest systems tied to specific zones/rooms?
+2. Should ambient events (NPC patrols, weather) be zone-specific or room-specific?
+3. Do you want the Refuge ambient simulation (tick-driven ticks, NPC narration) to evolve or stay as-is?
+4. Should future content (story dungeons, towns) be authored zones or continue with procedural generation?
+
+### Recommendation
+
+**Approve and queue for Phase 2b** (after procedural generation stabilizes in Phase 2a). This unlocks traditional MUD gameplay while preserving the roguelike procedural identity for shards.
+
+---
+
+## 2026-03-27T01:09:05Z: Zone unification design decisions
+**By:** dkirby-ms (via Copilot)
+
+### What
+
+- **Ambient events in unified view:** Render as inline narrative prose (not a dedicated sidebar section)
+- **Players Nearby:** Always show in all zones, unless hidden by a special effect (defer special effect implementation)
+- **RefugeRoom retirement:** Yes, plan to retire it, but defer until after Phase 3 is validated
+- **Feature room type naming:** `feature_stash` convention accepted (no objection raised)
+
+### Why
+
+User answers to Elminster's open questions from the unified zone UX architecture plan
+
+---
+
+## 2026-03-27T01:10:30Z: Feature panel and description decisions
+**By:** dkirby-ms (via Copilot)
+
+### What
+
+- **Feature panel placement:** Renders in the right sidebar, replacing the status/inventory section while the player is in that feature room. Reverts when they leave.
+- **Feature room descriptions:** Narrative prose + a brief stats summary line (e.g., "STASH: 12 items · 45/100 weight")
+
+### Why
+
+User clarification on Elminster's open questions 1 and 2 (from "Unified Zone UX via Feature Rooms" decision)
+
+---
+
+## 2026-03-27: GDD Documentation Standards
+**By:** Volo (Narrative Dev)
+
+### What
+
+Established clear standards for maintaining the GDD.md going forward:
+
+1. **Implementation Status Markers:** All sections must include "(Implemented)", "(Planned)", or "(Partial Implementation)" markers
+2. **Describe Reality, Not Aspiration:** Design vision is valuable, but aspirational features must be explicitly marked as "Future" or "Planned"
+3. **Database-First Documentation:** When documenting systems, start with database schema (tables, columns) before describing mechanics
+4. **Roadmap Checkpoint Updates:** Phase checkboxes should be updated as features are completed, not left stale
+
+### Why
+
+The GDD was significantly out of sync with the codebase, causing confusion about what's actually implemented. The most critical example: the Refuge "living world" section described tick-driven ambient simulation (NPC wandering, weather, merchants) that **does not exist** in the codebase. The Refuge is a static zone with 7 rooms.
+
+### Impact
+
+- **For developers:** Clear understanding of what exists vs what needs building
+- **For designers:** Clear separation of implemented foundation vs planned features
+- **For squad agents:** Can confidently reference GDD knowing it reflects reality
+- **For users (future):** Accurate documentation of game systems
+
+### Standards Going Forward
+
+When updating the GDD:
+1. Add status markers to every major section heading
+2. Use consistent marker format: *(Implemented)*, *(Planned)*, *(Partial Implementation)*
+3. When describing a system with DB tables, list the tables first
+4. Update Phase roadmap checkboxes when features are completed
+5. Move aspirational content to clearly marked subsections (e.g., "Future: Ambient World Simulation")
+
+---
+
+## 2026-03-27: Unified Zone UX via Feature Rooms
+**Author:** Elminster (Lead / Architect)  
+**Status:** PROPOSED
+
+### Context
+
+The Refuge and Shard experiences use two entirely different UX and code patterns. Refuge is a tab-based menu UI (`Refuge.tsx`) backed by a bespoke switch statement in `RefugeRoom.ts`. Shards use a narrative exploration view (`ShardExploration.tsx`) backed by a modular command pipeline (`parseCommand` → `handleCommand`). This split means duplicate infrastructure, jarring context switches for players, and double the work for every new feature.
+
+dkirby-ms wants **one exploration pattern everywhere** — players navigate rooms with compass/commands in all zones, and access features (stash, marketplace, shardboard) by entering special rooms, not clicking tabs.
+
+### Decision
+
+#### 1. Feature Room Types
+
+Extend `RoomType` with `feature_`-prefixed types (`feature_stash`, `feature_shardboard`, `feature_marketplace`, etc.). Feature rooms are normal rooms in the graph — the type is the only discriminant. The `RoomHeaderMessage.roomType` field (already exists) signals the client to show the corresponding feature panel.
+
+#### 2. Server: Shared Command Pipeline
+
+RefugeRoom adopts the existing `parseCommand()` → `handleCommand()` pipeline from ShardRoom. Feature-specific commands (`stash`, `store`, `shardboard`, `enter`) become modular handlers in `packages/server/src/commands/handlers/`, gated by `ctx.room.type` checks. The `requireRoom()` pattern is deleted. `CommandContext` is extended with optional service references (`stashService`, `loadoutService`, `characterId`).
+
+#### 3. Client: One Exploration View
+
+`ShardExploration.tsx` becomes the universal exploration view. Feature panels are lazy-loaded React components registered by feature key, rendered when `roomType` starts with `feature_`. Shard-specific UI (stability bar, collapse timer) is conditionally hidden in non-shard zones. `Refuge.tsx` is deleted after migration.
+
+#### 4. Phased Rollout
+
+- Phase 1: Shared types (additive, no behavior change)
+- Phase 2: Server command pipeline unification
+- Phase 3: Client view unification with feature panel system
+- Phase 4: Build out individual feature panel UIs
+- Phase 5: Cleanup, delete Refuge.tsx, evaluate RefugeRoom retirement
+
+#### 5. RefugeRoom Preservation (For Now)
+
+RefugeRoom is **not** retired immediately. It adopts the shared command pipeline but retains its unique responsibilities (ambient tick simulation, shard creation). Whether it can be collapsed into a zone-mode ShardRoom is evaluated after Phase 3.
+
+### Consequences
+
+- **Positive:** One UX pattern for all zones. Half the code for new features. Room-based gating is server-authoritative and modular. Future zones (dungeons, wilderness) get feature rooms for free.
+- **Negative:** Moderate implementation effort (~10–14 dev days across all phases). Feature panel UX placement needs design input. RefugeRoom ambient system may need special handling if we retire the class.
+- **Risk:** Ambient simulation fidelity during consolidation. Mitigated by keeping RefugeRoom alive through Phase 5.
+
+### Open Questions
+
+1. Feature panel placement: sidebar vs main narrative column? → **ANSWERED: Right sidebar, replacing status/inventory section**
+2. Feature room type naming convention: `feature_` vs alternatives? → **ANSWERED: `feature_` convention accepted**
+3. When to evaluate RefugeRoom retirement (Phase 5)? → **ANSWERED: After Phase 3 validation, plan to retire**
+
+### Key Files
+
+- Unified types: `packages/shared/src/room-graph.ts`
+- Command system: `packages/server/src/commands/`
+- RefugeRoom: `packages/server/src/rooms/RefugeRoom.ts`
+- ShardExploration: `packages/client/src/pages/ShardExploration.tsx`
+- Refuge (to be retired): `packages/client/src/pages/Refuge.tsx`
+- Zone seed: `packages/server/src/db/migrations/031_seed_refuge_zone.sql`
+
+
+---
+
+## 2026-03-27: Dual Exploration Modes as Co-Equal
+**Author:** Volo (Narrative Dev)  
+**Status:** Implemented
+
+### Summary
+
+Ellmud's game identity now canonically reflects **two co-equal exploration modes**:
+1. **Static zones** (the Refuge, future hand-crafted areas) — persistent, designed environments for hub features and endgame discovery
+2. **Procedurally generated shards** — temporary extraction instances for PvE/PvP encounters
+
+Neither mode is framed as "primary" or "the main" way players explore. They complement each other.
+
+### Rationale
+
+- The Refuge is a **living world**, not a "loading screen." Players prepare, manage stash, socialize, and access features there.
+- Procedural shards are where **extraction gameplay** happens — the high-tension, high-stakes runs.
+- Both are essential to the player fantasy: *you live in the Refuge and raid shards*.
+- Narrative docs now reflect this parity, enabling cohesive design across client UI, marketing, and future zones.
+
+### Canonical Framing
+
+**README.md (line 5):**
+> Explore persistent zones and procedurally generated shards. Scavenge gear, fight creatures, manage your stash in the Refuge, then dive into extraction runs before collapse. Everything you don't extract, you lose.
+
+**GDD.md (line 4 — Genre):**
+> PvPvE Extraction RPG · Real-Time MUD · Dual Exploration (Static + Procedural)
+
+**GDD.md (lines 22-26 — High-Level Vision):**
+> Players live in **the Refuge**, a persistent hub where they manage gear, prepare for runs, and socialize. From there, they explore **two complementary exploration modes:**
+> - **Static zones** (like the Refuge itself, and future hand-crafted endgame areas) — permanent, designed environments for feature access and discovery
+> - **Procedurally generated "shards"** — temporary instances of corrupted regions — where they face PvE threats, environmental hazards, and emergent PvP encounters
+
+### Design Implications
+
+1. **Client UI:** The game has a **Refuge layout** (feature-access hub) and a **Shard layout** (exploration + combat). Both are first-class screens, not hierarchy.
+2. **Content Pipeline:** Future zone designs can be hand-crafted (like Refuge or endgame dungeons) or procedurally generated (like exploration shards). Neither is the "default."
+3. **Marketing/Onboarding:** Pitch the game as "You live in the Refuge and raid shards" — dual identity from the start.
+4. **Roadmap:** Phase 3 roadmap item now reads "Content expansion (more biomes, creature types, **static zones**, procedural events)" — static zones are explicit growth goals.
+
+### Implementation Detail
+
+No code changes. This is a narrative/documentation alignment. GDD §2.2 already correctly documents both generation modes (hand-crafted zones ✅, procedural assembly ⚠️ partial). The updates lift this parity into the tagline and opening vision.
+
+### Team Sign-Off
+
+- **Volo (Narrative):** Framing implemented. Docs canonical.
+- **dkirby-ms (Director):** Approved. Extraction RPG identity maintained.
+
+---
+
+## 2026-03-27: User Directive — Dual Mode Framing
+**By:** dkirby-ms (via Copilot CLI)
+
+### What
+
+The game is not purely procedural roguelike. Static zones (like The Refuge) are a major exploration mode alongside procedural shards. README and GDD should reflect both modes equally — not frame procedural as the primary/only way players explore.
+
+### Why
+
+User request — captured for team memory.
+
+---
+
+## 2026-03-27: Feature Room Types Added to Shared Package
+**Author:** Drizzt (Engine Dev)  
+**Status:** Implemented
+
+### Context
+
+Zone unification Phase 1 required adding feature room types to the shared `RoomType` union so both server and client can reference them.
+
+### Decision
+
+- Added 7 feature room types to `RoomType`: `feature_stash`, `feature_shardboard`, `feature_marketplace`, `feature_crafting`, `feature_training`, `feature_contracts`, `feature_infirmary`
+- `feature_` prefix is the discriminant — `isFeatureRoomType()` type guard and `getFeatureKey()` extractor live in `@ellmud/shared`
+- `FeatureRoomType` utility type extracts the feature subset from the union
+- Server-side `RoomGraph.ts` local duplicate synced to match
+- Flooded Crypt biome templates extended with placeholder entries for all feature room types (names + descriptions)
+
+### Impact
+
+- **Jarlaxle:** New biomes must include entries for all feature room types in `ROOM_NAMES` / `ROOM_DESCRIPTIONS` Records
+- **All agents:** Import `isFeatureRoomType` / `getFeatureKey` from `@ellmud/shared` — don't roll your own prefix checks
+- **Future:** Phase 2 will wire these types into zone definitions and room rendering
+
+---
+
+## 2026-03-27: User Directive — Unified Room Class
+**By:** dkirby-ms (via Copilot)
+
+### What
+
+Unify `ShardRoom` and `RefugeRoom` into a single room class. All rooms are just "rooms" — zone rooms (statically defined in DB) and generated rooms (procedurally created for shards). No separate Colyseus room types. Extend `ShardRoom` to handle everything, migrate `RefugeRoom` functionality into it, then delete `RefugeRoom`.
+
+### Why
+
+User request — the two-room-class split creates unnecessary complexity and divergent UX. Systems (combat, stash, ambient) should be composable and enabled per-zone/room config, not per-class.
+
+---
+
+## 2026-03-27: User Directive — Explored Rooms / Character Map
+**By:** dkirby-ms (via Copilot)
+
+### What
+
+Prepare for a future "explored rooms" feature: per-character map data that tracks which rooms a player has visited, enabling a visual map of explored areas. This should be designed into the data model now even if the UI comes later.
+
+### Why
+
+User request — forward-looking design. The unified room system should lay groundwork for character-specific exploration tracking.
+
+
+---
+
+## 2026-03-27T12:25:42Z: Unified Room Architecture — Complete Plan
+**By:** Elminster (Lead / Architect), Coordinator (directive capture)
+**Status:** PROPOSED + Directive Confirmation
+**Scope:** Server architecture, client routing, DB schema
+
+### Context
+
+The codebase has two Colyseus room classes — `ShardRoom` and `RefugeRoom` — serving the same purpose with significant duplication. User directive: consolidate into one room class with composable systems.
+
+### Architectural Decisions
+
+**D1: Single Room Class** — ShardRoom absorbs RefugeRoom. No separate class types. Eliminates ~500 lines of duplicated code. Client room name changes from `'refuge'` to `'zone:the-refuge'`. Coordinated deploy required.
+
+**D2: Composable Systems via Zone Config** — Systems (combat, ambient, creatures, extraction) instantiate conditionally based on `zone.category`, `zone_rooms.type`, `zone.lifecycle`, `zone.pvp_enabled`. No class hierarchy, no code changes for new zones.
+
+**D3: Feature-Gated Command Pipeline** — Commands like `stash`, `shardboard`, `enter` are registered with required `FeatureRoomType`. Pipeline checks `ctx.room.type` before dispatching. Rejected commands narrate contextually.
+
+**D4: Zone Room Routing** — Zones registered as `server.define('zone:{slug}', ShardRoom)` with auto-provisioning at boot. Client joins via `joinOrCreate('zone:the-refuge', opts)`. Namespace prevents collision with shard room names.
+
+**D5: Exploration Tracking — Per-Character Room Visits** — New `character_explored_rooms` table (migration 032) tracking visits: `character_id`, `zone_slug`, `room_id`, `room_type`, `room_name`, `coord_x/y/z`, `first_visited`, `last_visited`, `visit_count`. Designed now for future map UI.
+
+**D6: Reconnection Grace Periods** — Hub/social zones get 10-second grace (vs RefugeRoom's none). Dungeon/wilderness zones get standard 30-second grace.
+
+### User Directives — Confirmed
+
+**Zone Naming:** `zone:the-refuge` is the canonical format for zone room names. Answers open question D4.
+
+**Room Items Are Universal:** All rooms can hold floor items. The `take` command is universal — any player/creature picks up items from any room. Only `feature_stash` rooms provide personal stash storage (`store`/`stash` commands). Items in normal rooms are shared resources.
+
+**Map UI Design:** Plan out character exploration map UI. Context is now mature (unified architecture + explored rooms schema). Design forward-looking while the team has full context.
+
+### Key Files & Impact
+
+- **Server:** `ShardRoom` consolidated, `RefugeRoom` deleted, command pipeline extended
+- **Client:** Room names → `zone:{slug}`, exploration view unified
+- **DB:** New `character_explored_rooms` table (migration 032)
+- **Shared:** `RoomType` union already extended with feature types
+
+### Risks & Mitigation
+
+- **Behavior regression:** Feature parity checklist ensures RefugeRoom features absorbed 1:1. Phase-gated rollout.
+- **Coordinated deploy:** Single PR with client + server changes.
+- **matchMaker access:** Pass as function reference in CommandContext, keep handlers testable.
+
+### Open Questions Resolved
+
+1. ✅ Room name format → `zone:the-refuge`
+2. ⏳ Exploration coordinates → Backfill with map UI
+3. ✅ `take` command → Universal (not feature-gated)
+4. ⏳ Shardboard logic → TBD (dedicated service or inline)
+5. ⏳ Ambient system scope → TBD (hub-only or broader)
+
+
+---
+
+## 2026-07-17: Derive zoneSlug from Colyseus Room Name (Server-Authoritative)
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-07-17  
+**Status:** Implemented
+
+### What
+
+`ShardRoom.onCreate()` now derives `zoneSlug` from `this.roomName` when the room name starts with `zone:` and no explicit `zoneSlug` option is provided. ROOM_SWITCH targets for extraction and death now use `'zone:the-refuge'` instead of bare `'refuge'`.
+
+### Why
+
+- Clients call `joinOrCreate("zone:the-refuge", { token })` but never pass `zoneSlug` in options — the room name IS the zone identifier.
+- The old `target: 'refuge'` didn't match the Colyseus room definition `'zone:the-refuge'`, breaking client room switching.
+- Server-side derivation is more robust: any client joining a `zone:*` room gets zone behavior automatically, no client changes needed.
+
+### Convention
+
+- **ROOM_SWITCH `target` must always be the exact Colyseus room name** (e.g., `'zone:the-refuge'`, `'shard'`), never an abbreviated form.
+- **Zone slug derivation is server-authoritative.** Clients should NOT need to duplicate the zone slug in join options.
+
+### Impact
+
+- Server: `ShardRoom.ts` — 3 code changes
+- Tests: 5 assertion updates across 3 test files
+- Client: No changes required (this was the point)

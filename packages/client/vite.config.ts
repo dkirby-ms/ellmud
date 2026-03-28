@@ -13,6 +13,8 @@ export default defineConfig({
       '/auth/logout': { target: 'http://localhost:2567' },
       '/auth/me': { target: 'http://localhost:2567' },
       '/auth/entra': { target: 'http://localhost:2567' },
+      '/api': { target: 'http://localhost:2567' },
+      '/admin/api': { target: 'http://localhost:2567' },
       '/colyseus': {
         target: 'http://localhost:2567',
         ws: true,

@@ -4402,3 +4402,1690 @@ Entra External ID is ONLY for user login authentication. We are NOT protecting s
 - All 7 environment variables must be set (client ID, secret, tenant ID, tenant subdomain, redirect URI, allow local auth, client URL)
 - Post-deploy verification: Check logs for "Entra OAuth: enabled" message
 - Test full flow: login → redirect to Entra → callback → session creation
+
+### 2026-03-25T23:16:00Z: MUD Terminal Aesthetic — ANSI Color System & Narrative Pane Styling
+**By:** drizzt (Engine Dev)
+**Directive from:** dkirby-ms
+**Date:** 2026-03-25
+**Status:** Implemented and verified
+
+**What:** All game narrative/text panes now use a terminal aesthetic:
+- **Typography:** JetBrains Mono monospace font (already loaded via Google Fonts), dense line spacing (`space-y-1`, `line-height: 1.35`)
+- **Visual Effects:** Darker background (`#080910`) with subtle CRT scanline overlay for authenticity
+- **Color Palette:** ANSI 16-color system (`.ansi-*` classes) + semantic `.mud-*` classes for game narrative (damage, healing, dodge, system, npc, exits, rarity tiers)
+- **Tango palette** (GNOME terminal default) chosen for authenticity and readability over pure ANSI
+- **Scope Boundary:** Only narrative scroll areas get terminal treatment; UI chrome (sidebar labels, buttons, tabs, headers) remains on `font-sans`
+
+**What stays unchanged:** UI chrome remains on `font-sans` for clarity and accessibility.
+
+**CSS location:** All ANSI/MUD classes in `packages/client/src/styles/tailwind.css`
+
+**Why:** User directive — game should evoke classic MUD terminal aesthetic, not modern web UI. Monospace font + ANSI colors + dense text create terminal feel.
+
+**Impact:** 
+- Components rendering game narrative text should use `.narrative-terminal` wrapper class
+- Color narrative text using `.mud-*` / `.ansi-*` classes instead of Tailwind color utilities
+- Integration pattern established for all future narrative components
+
+**Verification:** Build clean. Ready for narrative component integration.
+
+---
+
+### 2026-03-25T23:16:00Z: Stash ↔ Loadout Integration Plan — Comprehensive Design
+**By:** Elminster (Lead/Architect)
+**Date:** 2026-03-25
+**Status:** Design complete, implementation roadmap established
+**Requested by:** dkirby-ms
+
+**Executive Summary:**
+The stash and loadout screens are currently separate UI silos with no server integration. This plan unifies them into a single, coherent interface where players can **move items from persistent stash into temporary loadout**, **validate constraints**, and **extract with gear intact**. Implementation spans client (merged UI, drag-and-drop), server (new message types, loadout state tracking, shard key validation), and shared types (persistence schema, validation rules).
+
+**Scope:** ~3–5 workdays (large task as anticipated)  
+**Risk level:** Medium (touches auth/persistence, but existing patterns are solid)
+
+**Current State Analysis:**
+
+✅ **What Already Works:**
+- Stash Persistence: Weight-based capacity (200 units default), in-memory + PostgreSQL repos, constraint validation
+- Loadout Schema: Equipment slots, max weight (100 units), validation function, rarity tiers + durability multipliers
+- Extraction Pipeline: Multi-tick channel, shard inventory → stash transfer, overflow handling
+- Client UI Prototype: StashTab (10×12 grid, drag-drop, tier colors), LoadoutTab (6 equipment + 5 consumables + tools + key), InventoryOverlay
+
+⚠️ **What's Missing:**
+- Client-Server Integration: Hardcoded mock data, no STASH_UPDATE messages, no equip/unequip types, no validation feedback
+- Loadout Server Persistence: Not persisted server-side, no equipped tracking, no shard key consumption, no durability degradation wiring
+- Refuge Commands: `store` is placeholder, `take` is text-only, no equip/unequip commands
+- Edge Cases: Can't prevent equipping in shard, can't validate weapon/armour before entry, can't enforce shard key constraints
+
+**Proposed UI Layout:**
+Single merged screen with:
+- **Left:** Stash grid (10×12), capacity indicator (cells + weight)
+- **Right:** Equipment section (6 slots) + Consumables (5 max) + Tools + Shard Key
+- **Center:** Item inspector (weight, durability, rarity, Equip/Unequip buttons)
+- **Mechanics:** Drag items between stash and equipment; validation feedback in real-time; weight/capacity bars
+
+**Implementation Roadmap:**
+
+| Phase | Work | Effort | Dependencies |
+|-------|------|--------|--------------|
+| 1 | Server: Loadout persistence, types, validation rules | 1.5 days | None |
+| 2 | Client: Unified component, message types, live validation | 1.5 days | Phase 1 |
+| 3 | Server: Equip/unequip commands, Refuge integration | 0.5 days | Phases 1–2 |
+| 4 | Edge cases: Shard key consumption, durability, constraints | 0.5 days | Phases 1–3 |
+| 5 | Testing, docs, polish | 1 day | All phases |
+
+**Key Decisions:**
+- Single merged screen (stash + equipment visible simultaneously) improves UX vs separate tabs
+- Validation happens on equip attempt (server-authoritative); client shows realtime feedback
+- Drag-and-drop between stash and equipment; overflow on unequip stays in carried inventory
+- Shard key consumption checked at extraction gate (prevents bad loadout entry)
+- Durability degradation hooks into damage pipeline; tracked per-equipment
+
+**Why:**
+User request to improve item management workflow. Current implementation has all server infrastructure but missing client integration. Unified design reduces context switching and improves item discovery during build planning.
+
+**Impact:**
+- Stash and loadout become cohesive feature, not disconnected menus
+- Players can preview and prepare gear before extraction
+- Server can enforce equipment validity constraints
+- Foundation for future loadout management (saved presets, item swapping)
+
+**Deliverables:** 
+- Client component: Single `StashLoadoutScreen.tsx` with merged UI
+- Server messages: `EQUIP`, `UNEQUIP`, `STASH_UPDATE`, `LOADOUT_UPDATE`
+- Server endpoints: Equipment state endpoints, validation routes
+- Shared types: Extended `Loadout` schema with persistence, constraint metadata
+- Documentation: Integration guide for components, validation rules reference
+
+---
+
+
+### 2026-03-26T00:23:00Z: Security - npm audit gate in CI/CD pipeline
+**By:** Jarlaxle (Systems Dev)
+**What:** Added `npm audit --audit-level=high` as a build gate in `ci-cd.yml`. Runs in the `build-and-test` job immediately after `npm ci`. Fails the pipeline on HIGH or CRITICAL severity vulnerabilities only — low and moderate are allowed through.
+**Why:** Supply-chain security: catches known-vulnerable dependencies before they reach UAT/prod. Positioned early in the pipeline (before build/lint/test) so it fails fast. Threshold set to high to avoid noisy false-positive blocks from low-severity advisories.
+**Impact:** Any PR or push to uat/prod with a high/critical npm advisory will be blocked. If a transitive dependency introduces a high-severity vuln, the team will need to either upgrade, replace, or use `npm audit fix` before merging. Current state: 0 vulnerabilities. Gate is clean.
+
+---
+
+### 2026-03-26T10:40Z: User directive - Database as source of truth
+**By:** dkirby-ms (via Copilot)
+**What:** Database is the source of truth. In-memory caches are fine for performance, but the system must be designed to scale without rework every time something is added. Don't build patterns that require manual wiring for each new feature — hydrate caches from DB automatically.
+**Why:** User request — captured for team memory. Eliminates manual cache updates for each new entity type or feature.
+
+---
+
+### 2026-03-26T12:39:38Z: PgLoadoutRepository — Loadout Persistence Pattern
+
+**Author:** drizzt (Engine Dev)  
+**Date:** 2026-03-26  
+**Status:** Implemented
+
+## Context
+Equipped items were stored only in-memory via `InMemoryLoadoutRepository`. Server restart destroyed any equipped gear — items removed from stash (PG) but never persisted in the loadout. Active item loss.
+
+## Decision
+- Created `player_loadout` table (migration 013) with composite PK `(player_id, slot)`.
+- Durability/maxDurability stored in JSONB `metadata` column (same pattern as `player_stash`).
+- `save()` uses transactional DELETE+INSERT (safest for full overwrites).
+- `setSlot()` uses INSERT...ON CONFLICT DO UPDATE (single-slot upsert).
+- Provider wired behind `USE_PG` flag — InMemory fallback intact for tests/no-DB mode.
+
+## Impact
+- All team members: loadout data now survives server restarts when `DATABASE_URL` is set.
+- Schema validation test's `COMPOSITE_PK_TABLES` list now includes `player_loadout`.
+- No changes to `LoadoutService` or room code — the interface was already designed for this swap.
+
+---
+
+### 2026-03-26T13:07:32Z: player_profile table for non-skill profile data
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-03-26  
+**Status:** Implemented
+
+## Context
+PgPlayerProfileRepository only persisted skills; equipment and maxCarryWeight reverted on restart.
+
+## Decision
+Added `player_profile` table (migration 014) to persist `max_carry_weight` and `equipment` (JSONB) alongside the existing `player_skills` table. The PgPlayerProfileRepository now queries both tables on load and writes both in a single transaction on save.
+
+## Why
+Cramming non-skill data into `player_skills` would require awkward sentinel rows. A dedicated table keeps the schema clean and lets each concern evolve independently. JSONB for equipment accommodates future slot additions without schema migrations.
+
+## Impact
+- Any new persistent player fields that aren't skills should go in `player_profile` (add columns via new migration).
+- Equipment is stored as JSONB — empty `{}` means "no equipment" and maps to `undefined` in TypeScript.
+- The save transaction now writes to two tables; both must succeed or both roll back.
+
+---
+
+### 2026-03-26T13:07:32Z: PgTokenStore and PgShardSicknessStore
+
+**Author:** Jarlaxle (Systems Dev)  
+**Date:** 2026-03-26  
+**Status:** Implemented
+
+## Context
+Session tokens and shard-sickness death counts were stored in-memory only, lost on every server restart. This violated the user directive that "deaths always count."
+
+## Decision
+- `auth_tokens` table uses TEXT primary key (the opaque token string), not UUID — tokens are externally generated random strings, not domain entities.
+- `player_shard_sickness` uses DELETE on `resetDeathCount()` (removes the row entirely) rather than setting death_count=0 — simpler, avoids orphan zero-rows.
+- Shard-sickness uses the singleton provider pattern (like loadout-provider) rather than constructor injection — consistent with all other persistence layers.
+- Token cleanup is lazy (explicit `cleanup()` call) — no background timer yet. A future cron/interval can call it.
+
+## Impact
+- Both stores are DATABASE_URL-gated — no behavior change for in-memory dev setups.
+- ShardRoom now imports from `systems/index.js` barrel instead of directly from `ShardSickness.ts`.
+- `persistence-schema-validation.test.ts` exemption list updated for `auth_tokens` TEXT PK.
+
+---
+
+## Additional Decisions (2026-03-26)
+
+### 2026-03-26T13:43Z: Character system design decisions
+
+**By:** dkirby-ms (via Copilot)
+
+**What:**
+1. **Factions are placeholder** — content theme is largely placeholder. Don't over-invest in faction reconciliation right now.
+2. **Multiple characters per account** — not gated to 1 slot in MVP. Support multi-char from launch. Additional character slots = future monetization hook for paying customers.
+3. **Soft-delete** for character deletion — confirmed.
+4. **Name rules:** No profanity. Alpha characters only. First letter capitalized. (No spaces, no numbers, no special chars.)
+5. **Starting gear** on new characters — confirmed. New characters get a starter kit.
+
+**Why:** User design decisions resolving Elminster's open questions on the character creation system.
+
+---
+
+### 2026-07-24: ShardRoom Double-Join Guard
+
+**Author:** Drizzt (Engine Dev)
+**Status:** Implemented
+
+## Context
+Same playerId could join a ShardRoom twice with different Colyseus sessions due to duplicate "enter shard" commands. The second join overwrote the first PlayerState; when the first session disconnected, the second session was orphaned ("presence flickers").
+
+## Decision
+- **ShardRoom.onJoin** displaces old sessions rather than rejecting duplicates. If `this.players.has(playerId)`, the old session's `playerIds` mapping is removed and the old client is force-left with code 4001. `playerCount` is NOT incremented again.
+- **RefugeRoom.handleEnterCommand** uses a `pendingEnter` Set per-session to reject duplicate enter commands while a shard switch is already in flight.
+- Leave code 4001 is now a custom code meaning "displaced by new session" (distinct from 4000 = consented leave).
+
+## Impact
+- Any code checking Colyseus leave codes should be aware that 4001 means session displacement, not player-initiated leave.
+- The `playerIds` Map (sessionId→playerId) and `players` Map (playerId→PlayerState) must always be kept consistent. Removing a sessionId from `playerIds` causes that session's `onLeave` to become a no-op.
+- Client-side `switchingRef` guard in `useShardConnection.ts` still exists as a tertiary defense; no client changes were needed.
+
+---
+
+### 2026-03-27: Character Creation & Management System Design
+
+**By:** Elminster (Lead)
+**Status:** Proposed — awaiting team review
+
+---
+
+## Current State
+
+### Identity Model (1:1 Account = Player)
+Today, `player_identities` (auth credentials) links 1:1 to `players` (id, username). There is no separate "character" entity. Every persistent table — `player_skills`, `player_stash`, `player_loadout`, `player_profile`, `player_stash_capacity`, `player_shard_sickness`, `faction_membership`, `run_history` — foreign-keys to `players.id` directly. One account = one player = one progression.
+
+### Auth Flow
+Client registers or logs in via `/auth/register` or `/auth/login` (or OAuth via Entra ID). Server returns `{ playerId, token }`. Client joins Colyseus rooms with `{ token }`. `onAuth()` validates the token; `onJoin()` resolves `playerId` and loads profile/stash.
+
+### Client Flow
+Login page → navigates directly to `/refuge`. The `/characters` route exists with `CharacterSelect.tsx`, but it's **never visited** — Login and AuthCallback both navigate to `/refuge`, skipping character selection entirely. The CharacterSelect component is UI scaffolding with hardcoded mock data (one character, three factions) and no server integration.
+
+### Faction Mismatch
+- **DB** (migration 004): `ironwright`, `veil`, `scarlet`
+- **Client** (CharacterSelect.tsx): `ironwright`, `veilkeepers`, `ashenguard`
+- **Content definitions** (migration 008): `ironhearth`, `veilwalkers`, `ashborn`
+- Three different naming schemes. Must reconcile before any faction selection can work.
+
+### GDD Design Intent
+Per GDD §7.1: "No fixed classes. Characters are defined by skills invested and gear brought." No races. Everyone is a "Shardwalker." Character names exist for player convenience but are anonymous in shards (you're identified by visible equipment). The GDD implies a single-character-per-account model with persistent stash/skills/reputation.
+
+---
+
+## Proposed Architecture
+
+### Design Principles
+
+1. **Quick creation** — This is an extraction RPG, not a tabletop RPG. Character creation takes 30 seconds: pick a name, pick a faction, enter the game.
+2. **Account → Character is 1:many (with MVP = 1 slot)** — The schema supports multiple characters per account from day one, but MVP ships with a single character slot. This avoids a painful migration later while keeping v1 simple.
+3. **Character = progression container** — A character owns skills, stash, loadout, faction, and run history. The account owns auth credentials and settings.
+4. **Faction is the only meaningful creation choice** — Per the GDD, skills and gear develop through play. Faction affinity is the one structural decision at creation.
+
+### Identity Model
+
+```
+player_identities (auth)
+  └─ 1:1 ─→ players (account)
+               └─ 1:N ─→ characters (progression)
+                            ├─ player_skills
+                            ├─ player_stash
+                            ├─ player_loadout
+                            ├─ player_profile
+                            ├─ player_stash_capacity
+                            ├─ player_shard_sickness
+                            ├─ faction_membership
+                            └─ run_history
+```
+
+The `players` table becomes the **account** table. A new `characters` table becomes the **progression container**. All existing per-player tables re-key from `players.id` to `characters.id`.
+
+### Character Data Model
+
+A character has:
+| Field | Type | Source | Notes |
+|-------|------|--------|-------|
+| `id` | UUID | Generated | Primary key |
+| `player_id` | UUID | FK → players | Account ownership |
+| `name` | TEXT | User input | Unique per account, 2-24 chars, alphanumeric + spaces |
+| `faction_slug` | TEXT | User selection | FK → factions.slug; one of the canonical factions |
+| `is_active` | BOOLEAN | System | Which character is "selected" (only one active per account) |
+| `created_at` | TIMESTAMPTZ | System | Creation timestamp |
+| `last_played_at` | TIMESTAMPTZ | System | Updated on shard exit |
+
+What a character does NOT have at creation (per GDD):
+- No class/archetype selection (skills-based system)
+- No race selection (everyone is human / Shardwalker)
+- No stat point allocation (gear carries stats)
+- No appearance customization (anonymous in shards; future feature)
+
+---
+
+## DB Schema Changes
+
+### New Table: `characters`
+
+```sql
+CREATE TABLE characters (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  player_id   UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  faction_slug TEXT NOT NULL REFERENCES factions(slug),
+  is_active   BOOLEAN NOT NULL DEFAULT false,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_played_at TIMESTAMPTZ,
+
+  CONSTRAINT uq_character_name_per_player UNIQUE (player_id, name),
+  CONSTRAINT chk_character_name_length CHECK (char_length(name) BETWEEN 2 AND 24)
+);
+
+CREATE INDEX idx_characters_player ON characters(player_id);
+
+-- Partial unique index: only one active character per account
+CREATE UNIQUE INDEX idx_one_active_character
+  ON characters(player_id) WHERE is_active = true;
+```
+
+### FK Migration: Re-key Existing Tables
+
+All tables currently keyed on `player_id` (players.id) must be re-keyed to `character_id` (characters.id):
+
+| Table | Current FK | New FK | Migration Strategy |
+|-------|-----------|--------|-------------------|
+| `player_skills` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+| `player_stash` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+| `player_loadout` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+| `player_profile` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+| `player_stash_capacity` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+| `player_shard_sickness` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+| `faction_membership` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+| `run_history` | `player_id → players` | `character_id → characters` | Rename column, add FK |
+
+### Faction Slug Reconciliation
+
+Before character creation can reference factions, the three naming schemes must be unified. Proposal: Use the DB canonical slugs as source of truth and update client + content definitions to match.
+
+| Canonical Slug | DB Name | Proposed Display Name |
+|---------------|---------|----------------------|
+| `ironwright` | The Ironwright Compact | Ironwright Compact |
+| `veil` | The Veil Cartographers | Veil Cartographers |
+| `scarlet` | The Scarlet Ledger | Scarlet Ledger |
+
+The content_definitions factions (`ironhearth`, `veilwalkers`, `ashborn`) need a migration to align, or be treated as a separate content layer. **Open question for dkirby-ms.**
+
+---
+
+## Message Protocol
+
+### New Colyseus Message Types
+
+Add to `packages/shared/src/index.ts` `MessageTypes`:
+
+```typescript
+// Client → Server
+CHARACTER_CREATE:  'character_create'   // { name: string, factionSlug: string }
+CHARACTER_SELECT:  'character_select'   // { characterId: string }
+CHARACTER_DELETE:  'character_delete'   // { characterId: string }
+CHARACTER_LIST:    'character_list'     // {} (request)
+
+// Server → Client
+CHARACTER_LIST_RESPONSE: 'character_list_response'  // { characters: CharacterSummary[] }
+CHARACTER_CREATED:       'character_created'         // { character: CharacterSummary }
+CHARACTER_DELETED:       'character_deleted'         // { characterId: string }
+CHARACTER_ERROR:         'character_error'           // { code: string, message: string }
+```
+
+### Shared Types
+
+```typescript
+interface CharacterSummary {
+  id: string;
+  name: string;
+  factionSlug: string;
+  factionName: string;
+  isActive: boolean;
+  createdAt: string;
+  lastPlayedAt: string | null;
+  // Denormalized for display:
+  topSkills: Array<{ name: string; level: number }>;
+  totalRuns: number;
+}
+
+interface CreateCharacterRequest {
+  name: string;
+  factionSlug: string;
+}
+
+interface SelectCharacterRequest {
+  characterId: string;
+}
+```
+
+### Where Do These Messages Live?
+
+Character management messages are handled in the **RefugeRoom**, not a separate room. The Refuge is the hub where players manage characters, stash, and loadout before entering shards. Character selection happens before or upon joining the Refuge.
+
+**Alternative considered:** A dedicated "Lobby" room for character management. Rejected — adds complexity for minimal benefit. The Refuge already handles stash/loadout management and is the natural place for character operations.
+
+**However:** Character LIST and CREATE must work before joining a room (you need to select a character to join the Refuge). Two options:
+
+- **Option A (recommended):** REST endpoints for character CRUD (`/api/characters`). Client calls these before joining any Colyseus room. Character ID passed as join option alongside token.
+- **Option B:** A lightweight "Lobby" Colyseus room that handles character management, then hands off to Refuge.
+
+**Recommendation: Option A.** REST is simpler for CRUD operations. The join flow becomes: authenticate → list characters (REST) → select or create (REST) → join Refuge with `{ token, characterId }`.
+
+---
+
+## Client Screens
+
+### 1. Character Select Screen (`/characters`)
+
+Already scaffolded in `CharacterSelect.tsx`. Needs:
+
+- **Wire to REST API:** Fetch character list on mount via `GET /api/characters`
+- **Real character cards:** Replace mock data with server response
+- **Creation form:** POST to `POST /api/characters` with `{ name, factionSlug }`
+- **Selection:** Set active character, navigate to `/refuge`
+- **Empty state:** First-time players see creation form immediately (no character list)
+
+### 2. Login Flow Redirect
+
+Change navigation after login:
+- `Login.tsx`: Navigate to `/characters` instead of `/refuge`
+- `AuthCallback.tsx`: Navigate to `/characters` instead of `/refuge`
+- `CharacterSelect.tsx`: Navigate to `/refuge` after selection (already does this)
+
+### 3. Refuge Room Join
+
+`connection.ts` join call must include `characterId`:
+```typescript
+client.join('refuge', { token, characterId: activeCharacter.id })
+```
+
+ShardRoom join inherits characterId from the Refuge session.
+
+### 4. Character Management (Future)
+
+- Character deletion (with confirmation, cooldown/grace period)
+- Character rename (premium/rare consumable)
+- Additional character slots (future monetization hook or progression reward)
+
+---
+
+## Migration Path
+
+### For Existing Players With Data
+
+Migration 017 must:
+
+1. Create the `characters` table
+2. For each existing row in `players`, auto-create one character:
+   - `name` = `players.username` (or a generated name if username doesn't meet character name constraints)
+   - `faction_slug` = faction from `faction_membership` if exists, or `'ironwright'` as default
+   - `is_active` = true
+3. Add `character_id` column to all affected tables
+4. Populate `character_id` from the auto-created character for each player
+5. Drop old `player_id` FK, add new `character_id` FK
+6. Drop old `player_id` column (or keep as nullable for rollback safety)
+
+### Server Code Changes
+
+All repositories that currently take `playerId` must accept `characterId`:
+- `StashRepository` / `StashService`
+- `PlayerProfileRepository`
+- `LoadoutRepository` / `LoadoutService`
+- `FactionRepository`
+- `ShardSicknessStore`
+- `RunHistoryRepository`
+
+The `playerId` remains for auth-level operations (token management, account settings). `characterId` is used for all gameplay operations.
+
+### Room Join Flow Change
+
+```
+Before:  token → playerId → load profile/stash by playerId
+After:   token → playerId → characterId (from join options) → verify ownership → load profile/stash by characterId
+```
+
+---
+
+## MVP Scope
+
+### In v1 (Character Creation MVP)
+
+- [ ] `characters` table + migration (including FK re-key)
+- [ ] Faction slug reconciliation migration
+- [ ] REST endpoints: `GET /api/characters`, `POST /api/characters`, `PUT /api/characters/:id/select`
+- [ ] `CharacterRepository` (Pg + InMemory)
+- [ ] Wire `CharacterSelect.tsx` to real API
+- [ ] Change login redirect: `/` → `/characters` → `/refuge`
+- [ ] Pass `characterId` in room join options
+- [ ] Update all repositories to use `characterId`
+- [ ] Auto-migrate existing players to characters
+- [ ] Single character slot per account
+
+### Future (Post-MVP)
+
+- [ ] Multiple character slots (2-3 per account)
+- [ ] Character deletion with grace period
+- [ ] Character rename (consumable)
+- [ ] Appearance/title customization
+- [ ] Starting equipment based on faction
+- [ ] Faction-specific tutorial or intro narration
+- [ ] Character-specific leaderboard entries
+- [ ] Account-level settings vs character-level settings
+
+---
+
+## Open Questions
+
+1. **Faction reconciliation:** Three different faction naming schemes exist (DB, client, content_definitions). Which is canonical? Should we consolidate or keep them as separate layers?
+
+2. **Character slot limit:** MVP = 1 character. Should the schema enforce this (CHECK constraint) or leave it as application logic for easier expansion later? **Recommendation:** Application logic only.
+
+3. **Character deletion policy:** Allow deletion immediately? Require a cooldown (e.g., 24 hours)? Soft-delete (mark deleted, purge after 30 days)? **Recommendation:** Soft-delete with 7-day grace period for MVP.
+
+4. **Name validation rules:** Alphanumeric + spaces only? Allow Unicode? Profanity filter? Min/max length? **Recommendation:** 2-24 chars, alphanumeric + spaces + hyphens, server-side profanity check (Phase 2).
+
+5. **Starting state:** When a new character is created, what do they get?
+   - Default skills (stealth: 5, awareness: 5)?
+   - Starter items in stash (rusty blade, tattered leather)?
+   - Zero stash (earn everything from first run)?
+   **Recommendation:** Default skills + minimal starter kit (weapon + armour + 1 consumable). Makes the first shard run viable without being punishing.
+
+6. **Existing player migration:** Should auto-migrated characters use the player's `username` as character name, or prompt the user to name their character on first login post-migration?
+
+7. **Faction impact at creation:** Currently factions give reputation/rank. Should faction choice at creation grant any starting bonus (e.g., +1 to a faction-aligned skill, a faction-specific starter item)? **Recommendation:** No mechanical bonus at creation in MVP. Faction unlocks come from reputation earned in play.
+
+---
+
+## Implementation Sequence
+
+Recommended order of implementation:
+
+1. **Faction reconciliation** — Fix the naming mismatch first (small migration + client update)
+2. **`characters` table + repository** — Schema + Pg/InMemory implementations
+3. **REST endpoints** — CRUD for characters, behind auth middleware
+4. **FK re-key migration** — The big migration that moves all tables from player_id to character_id
+5. **Server room updates** — RefugeRoom + ShardRoom accept characterId in join
+6. **Repository updates** — All repos accept characterId instead of playerId
+7. **Client wiring** — CharacterSelect.tsx ↔ REST API, login redirect change
+8. **Existing player migration** — Auto-create characters for existing accounts
+9. **Testing** — Integration tests for the full flow: register → create character → join refuge → enter shard
+
+Steps 1-3 can proceed in parallel with steps 4-6 if two developers coordinate.
+
+---
+
+# Content Store Refactor — Architectural Decisions
+
+**Date:** 2025-03-25  
+**Author:** Elminster (Lead/Architect)  
+**Status:** Proposed  
+**Context:** Admin console content management migration from generic JSONB table to dedicated schemas
+
+---
+
+## Decision: Migrate from Generic content_definitions to Dedicated Tables
+
+### Context
+The admin console currently uses a single `content_definitions` table with an `entity_type` discriminator and JSONB `data` column to store 9 different content types (items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narrative). This worked for rapid prototyping but has led to:
+
+1. **Data staleness:** Items table had 18 seeded rows vs 40+ in code registry
+2. **Type safety loss:** JSONB blob bypasses schema validation
+3. **Query inefficiency:** No indexes on specific fields, all queries scan JSONB
+4. **Maintenance burden:** Harder to evolve schemas independently per entity type
+
+The `items` entity type was successfully migrated to a dedicated `item_definitions` table with `PgItemDefinitionsStore`, serving as a reference implementation.
+
+---
+
+## Decision 1: Follow the Item Store Pattern for All Entity Types
+
+**Chosen:** Implement dedicated table + store class for each of the remaining 8 entity types
+
+**Rationale:**
+- ✅ **Type safety:** Column-level constraints enforce schema at DB layer
+- ✅ **Performance:** Indexes on real columns (not JSONB keys)
+- ✅ **Maintainability:** Each schema evolves independently
+- ✅ **Proven pattern:** Items migration succeeded, admin UI unchanged
+- ✅ **Developer experience:** IDE autocomplete, compile-time checks
+
+**Rejected Alternatives:**
+1. **Keep content_definitions for all types**
+   - ❌ Doesn't solve staleness or type safety issues
+   - ❌ No performance improvement
+   
+2. **Use PostgreSQL table inheritance**
+   - ❌ Adds complexity, limited tooling support
+   - ❌ Harder to reason about FKs and constraints
+
+3. **NoSQL/document store**
+   - ❌ Out of scope, requires infrastructure change
+   - ❌ Loses relational benefits (FKs, JOINs)
+
+---
+
+## Decision 2: Store Class Responsibilities
+
+**Chosen:** Store classes implement `IContentStore<ContentEntity>` and handle flattening/expanding data
+
+**Pattern:**
+```typescript
+class PgXxxDefinitionsStore implements IContentStore<ContentEntity> {
+  // Flatten: DB row (relational + JSONB) → ContentEntity (flat object for admin UI)
+  rowToEntity(row): ContentEntity { ... }
+  
+  // Expand: ContentEntity → DB row (split into columns + JSONB)
+  entityToRow(entity): RowType { ... }
+  
+  // CRUD methods
+  getAll(), getById(), create(), update(), delete()
+}
+```
+
+**Rationale:**
+- ✅ **Zero client changes:** Admin UI continues to use generic `listEntities()` / `getEntity()` API
+- ✅ **Encapsulation:** Mapping logic lives in store, not routes
+- ✅ **Testable:** Each store can be unit tested independently
+- ✅ **Consistent interface:** All stores have same API surface
+
+**Alternatives Rejected:**
+1. **Move flattening to routes**
+   - ❌ Violates single responsibility principle
+   - ❌ Harder to test, duplicates logic across routes
+
+2. **Change client to expect relational shape**
+   - ❌ Requires UI refactor (out of scope)
+   - ❌ Couples client to server schema
+
+---
+
+## Decision 3: JSONB Usage Strategy
+
+**Chosen:** Use JSONB for nested/variable structures, columns for queryable fields
+
+**Guidelines:**
+- **Use columns when:**
+  - Field is queried/indexed (name, type, tier)
+  - Field has known fixed schema
+  - Field is used in JOINs or FKs
+  
+- **Use JSONB when:**
+  - Nested array/object structures (loot tables, stats)
+  - Variable schema (effects with arbitrary keys)
+  - Rare queries on nested data
+
+**Examples:**
+```sql
+-- Creatures: stats are columns (queryable), loot_table is JSONB (nested)
+CREATE TABLE creature_definitions (
+  name TEXT,
+  max_hp INT,
+  attack INT,
+  loot_table JSONB  -- [{ itemId, dropWeight, ... }]
+);
+
+-- Modifiers: effects vary per modifier, use JSONB
+CREATE TABLE modifier_definitions (
+  name TEXT,
+  effects JSONB  -- { visibility: -50, soundRange: 2 }
+);
+```
+
+**Rationale:**
+- ✅ **Best of both worlds:** Relational power + schema flexibility
+- ✅ **Performance:** Index columns that matter, skip JSONB overhead where possible
+- ✅ **Evolution:** Can promote JSONB keys to columns later if needed
+
+---
+
+## Decision 4: ID Strategy — UUID Primary Key + Text Slug
+
+**Chosen:** Use UUID as primary key, text slug for human-readable IDs
+
+**Pattern:**
+```sql
+CREATE TABLE xxx_definitions (
+  id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug TEXT NOT NULL UNIQUE,  -- 'flooded_crypt', 'drowned_revenant'
+  ...
+);
+```
+
+**Rationale:**
+- ✅ **UUID for DB:** Avoids ID collision, supports distributed systems, better for FKs
+- ✅ **Slug for humans:** URLs, config files, code references use readable IDs
+- ✅ **Migration friendly:** Existing `content_definitions.id` (text) maps to `slug`
+- ✅ **Future-proof:** UUID allows merging data from multiple sources
+
+**Alternatives Rejected:**
+1. **Text primary key (slug)**
+   - ❌ Harder to change (cascade updates)
+   - ❌ Less efficient for large tables
+   
+2. **Integer auto-increment**
+   - ❌ Distributed ID collision risk
+   - ❌ Reveals row count (minor security concern)
+
+---
+
+## Decision 5: Migration Phasing — Simple First, Complex Later
+
+**Chosen:** Implement in 3 phases based on complexity and priority
+
+**Phase 1 (Quick Wins):** Biomes, Modifiers, Narrative (14.5h)
+- Simple flat schemas, well-defined data
+- Establishes pattern for team
+
+**Phase 2 (High Impact):** Creatures, Factions (20h)
+- Most important for game content (creatures)
+- Requires table reconciliation (factions)
+
+**Phase 3 (Low Priority):** Skills, Loot Tables, Rooms (15.5h)
+- Empty or low-usage tables
+- Defer until admin proves necessary
+
+**Rationale:**
+- ✅ **De-risks:** Validates pattern early with simple cases
+- ✅ **Delivers value:** Creatures are highest priority for game design
+- ✅ **Defers complexity:** Don't build unused features (skills, rooms)
+- ✅ **Parallelizable:** Phase 1 entities can be done concurrently
+
+---
+
+## Decision 6: Faction Table Reconciliation (Option A)
+
+**Chosen:** Merge existing `factions` table and admin `content_definitions` factions into single `faction_definitions` table
+
+**Problem:**
+- Migration 004 created `factions` table (3 rows: Ironwright, Veil, Scarlet) for player membership
+- Migration 008 seeded `content_definitions` with 3 different factions (ironhearth, veilwalkers, ashborn)
+- Two systems, different schemas, potential confusion
+
+**Solution (Option A — Recommended):**
+1. Create `faction_definitions` with combined schema (description + milestones + philosophy + specialty)
+2. Migrate both sets (6 total factions)
+3. Update `faction_membership.faction_id` FK to point to `faction_definitions.id`
+4. Drop old `factions` table in later migration
+
+**Rationale:**
+- ✅ **Single source of truth:** One faction table for all systems
+- ✅ **Admin control:** All factions editable in admin console
+- ✅ **Schema evolution:** Can add fields (milestones, events) to canonical factions
+- ✅ **Less confusion:** Developers don't ask "which faction table?"
+
+**Alternatives Rejected:**
+1. **Option B: Keep separate tables**
+   - ❌ Confusing ("game factions" vs "admin factions")
+   - ❌ Harder to sync changes
+   - ❌ Two sources of truth
+
+---
+
+## Decision 7: Preserve In-Memory Mode for Development
+
+**Chosen:** Keep in-memory ContentStore for `usePg=false` mode alongside dedicated stores
+
+**Implementation:**
+```typescript
+// init.ts
+if (usePg) {
+  stores.set('creatures', new PgCreatureDefinitionsStore());
+} else {
+  stores.set('creatures', new ContentStore('creatures', creatureTemplates));
+}
+```
+
+**Rationale:**
+- ✅ **Dev velocity:** Local dev doesn't require PostgreSQL
+- ✅ **Testing:** Unit tests can use in-memory stores
+- ✅ **Backwards compat:** Existing dev workflows unchanged
+- ✅ **Low cost:** In-memory stores are simple, small
+
+**Alternatives Rejected:**
+1. **Require PostgreSQL for all dev**
+   - ❌ Slows onboarding (DB setup required)
+   - ❌ Harder to test (mocking complexity)
+
+---
+
+## Decision 8: Client-Side API Remains Unchanged
+
+**Chosen:** Admin UI continues to use generic `listEntities()` / `getEntity()` API
+
+**Why:**
+- All stores implement `IContentStore<ContentEntity>`
+- Routes call `store.getAll()` / `store.getById()`
+- Client receives same flat ContentEntity shape
+- No React component changes required
+
+**If we broke this decision:**
+- Would need to update 9 list pages + 9 detail pages (18 files)
+- Would need to update admin-api.ts
+- Would need to version API endpoints
+- **Out of scope** for this refactor
+
+---
+
+## Risks & Open Questions
+
+### Risk 1: UI Expects Fields Not in TypeScript Interfaces
+**Example:** `CreatureDetail.tsx` expects `description`, `behavior`, `status` fields not in `CreatureTemplate` interface
+
+**Mitigation:**
+- Audit each UI detail page before creating table schema
+- Add missing fields as nullable columns
+- Test create/edit in admin UI after migration
+
+### Risk 2: Data Loss During Migration
+**Mitigation:**
+- Test migrations on dev DB first
+- Keep `content_definitions` rows until new store verified
+- Don't drop `content_definitions` until all 8 types migrated
+
+### Risk 3: Faction Reconciliation Complexity
+**Open Question:** Do the 6 factions (3 old + 3 admin) have overlap? Same entities with different slugs?
+
+**TODO:** Before implementing faction migration:
+1. Dump both faction sets side-by-side
+2. Check for semantic duplicates (Ironwright ≈ ironhearth?)
+3. Decide merge strategy (keep both, merge, dedup)
+
+---
+
+## Success Metrics
+
+1. ✅ All 8 entity types migrated to dedicated tables
+2. ✅ Admin UI CRUD works for all types (no client changes)
+3. ✅ All seed data preserved
+4. ✅ Query performance improved (indexed columns vs JSONB scan)
+5. ✅ Dev mode (in-memory) still works
+6. ✅ `content_definitions` table dropped (cleanup complete)
+7. ✅ Code registries (items, creatures) sync with DB
+
+---
+
+## Implementation Checklist (per entity type)
+
+- [ ] Design dedicated table schema (audit UI expectations)
+- [ ] Write migration SQL (CREATE TABLE + INSERT FROM content_definitions)
+- [ ] Implement PgXxxDefinitionsStore class
+  - [ ] rowToEntity (flatten)
+  - [ ] entityToRow (expand)
+  - [ ] CRUD methods
+- [ ] Update init.ts (use new store when usePg=true)
+- [ ] Test admin UI (list, view, create, edit, delete)
+- [ ] Test in-memory mode (usePg=false)
+- [ ] Delete rows from content_definitions
+- [ ] Update this document (mark complete)
+
+---
+
+## References
+
+- **Reference implementation:** `packages/server/src/admin/content/PgItemDefinitionsStore.ts`
+- **Scoping document:** `~/.copilot/session-state/5a9420c4-0061-4d0f-8cbb-1ca9bf942ad1/plan.md`
+- **TypeScript interfaces:** `packages/server/src/admin/content/content-types.ts`
+- **Admin UI components:** `packages/client/src/pages/admin/*Detail.tsx`
+
+---
+
+**Next Action:** Review with team, confirm faction reconciliation strategy, start Phase 1 (biomes, modifiers, narrative)
+
+---
+
+### 2026-03-27: Character System — Server Foundation Decisions
+
+**By:** Drizzt (Engine Dev)
+**Date:** 2026-03-27
+**Status:** Implemented
+
+## Context
+Built the server-side character system per Elminster's design and user's decisions (multi-char, soft-delete, alpha-only names, starter kit).
+
+## Key Decisions
+
+### 1. Migration 018 adds character_id alongside player_id (no column drops)
+All 8 per-player tables now have both `player_id` and `character_id`. This is safer for incremental migration — existing code using `player_id` continues to work. Column drops and full re-key happen in a follow-up migration once all repositories are updated to use `character_id`.
+
+### 2. REST endpoints for character CRUD (not Colyseus messages)
+Character LIST/CREATE/SELECT/DELETE are REST endpoints at `/api/characters`, not Colyseus room messages. REST is simpler for CRUD and works before any room is joined. The client flow is: authenticate → list characters (REST) → select/create (REST) → join Refuge with `{ token, characterId }`.
+
+### 3. Starter kit uses item_definitions lookup by name
+New characters get Rusty Blade + Tattered Leather + Waterlogged Potion. The code queries `item_definitions` by name at creation time. If items don't exist (empty DB, no content deploy), the starter kit gracefully skips. No hardcoded UUIDs.
+
+### 4. Faction slug validation is hardcoded to canonical three
+The REST endpoint validates `factionSlug` against `['ironwright', 'veil', 'scarlet']` (the DB canonical slugs from migration 004). This is intentionally simple — factions are placeholder per user directive.
+
+### 5. Name uniqueness is case-insensitive per player
+The partial unique index uses `lower(name)` so "Drizzt" and "drizzt" are considered the same name for a given player. Soft-deleted characters don't count (filtered by `deleted_at IS NULL`).
+
+## Impact
+- **Client team (Jarlaxle/Minsc):** REST endpoints are ready. Wire `CharacterSelect.tsx` to `GET/POST /api/characters`. Change login redirect to `/characters`. Pass `characterId` in room join options.
+- **All repos:** `character_id` column now exists on all per-player tables. Repos should migrate from `player_id` to `character_id` incrementally.
+- **Room join flow:** Needs update to accept `characterId` in join options and verify ownership before loading profile/stash.
+
+---
+
+### 2026-03-27: Character System — Client + Room Integration Decisions
+
+**By:** Jarlaxle (Systems Dev)
+**Status:** Implemented
+
+## Context
+Elminster designed the character system. Drizzt is building server-side (migrations, CharacterRepository, REST endpoints). Jarlaxle owns client wiring and room join integration.
+
+## Decisions
+
+### 1. REST for character CRUD, not Colyseus messages
+Character list/create/select/delete use REST endpoints (`/api/characters`). Drizzt added CHARACTER_ message types to shared MessageTypes, but the client doesn't use them — REST is simpler for pre-room-join CRUD. The message types remain available if we ever need real-time character notifications.
+
+### 2. Dual identity maps in RefugeRoom
+RefugeRoom now has two maps: `playerIds` (sessionId → playerId, for auth) and `characterIds` (sessionId → characterId, for gameplay). All stash/loadout/equip operations use `characterIds`. This keeps auth and gameplay identity cleanly separated.
+
+### 3. ShardRoom uses characterId as playerId
+ShardRoom resolves `characterId` from join options and uses it as the `playerId` variable throughout. This is a pragmatic choice — renaming every `playerId` reference in the 1800-line ShardRoom would be massive churn with no functional benefit. The existing `playerIds` map now holds characterIds.
+
+### 4. Faction slugs from DB migration 004
+Client uses DB canonical slugs: `ironwright`, `veil`, `scarlet`. Per user directive, factions are placeholder — no reconciliation with content definitions needed yet.
+
+### 5. Backwards-compatible fallback
+If no `characterId` is provided in join options (e.g., old clients, tests), both rooms fall back to `playerId`. This means all existing tests pass without modification.
+
+## Impact
+- **Drizzt**: REST endpoints at `/api/characters` need to match the client's expected API shape (see `packages/client/src/services/api.ts`).
+- **All team**: `playerId` in ShardRoom and all its repos now means "characterId". When writing new repo code, use characterId semantics.
+- **Tests**: Server tests pass unchanged because characterId falls back to playerId when not provided.
+
+---
+
+### 2026-03-27: Exploration Map UI Design
+
+**By:** Regis (Frontend Dev)
+**Status:** Proposed
+**Artifact:** `session-state/.../files/map-ui-design.md` (full design doc)
+
+## Context
+
+We're unifying the game into a single room class. All exploration — Refuge hub, dungeons, zones, procedural shards — uses the same ShardExploration page. Players need a visual map of explored rooms to complement the text-primary narrative.
+
+The `character_explored_rooms` table already tracks per-character exploration with coordinates (`coord_x`, `coord_y`, `coord_z`), room types, and visit counts.
+
+## Key Decisions
+
+### 1. SVG Rendering (not Canvas, not ASCII art)
+**Choice:** Render the map as React SVG elements.
+**Why:** SVG integrates with our CSS theme variables, supports React event handlers natively, is accessible (`<title>`, `aria-*`), and performs well at our scale (dozens to hundreds of rooms). Canvas would lose CSS integration; ASCII art has poor zoom/pan and interaction.
+
+### 2. Minimap Replaces Compass
+**Choice:** The sidebar minimap replaces `CompassControl.tsx`. Exits are implicit from the map layout.
+**Why:** A visible map showing connected rooms makes a separate compass redundant. Players click rooms to navigate. The map IS the compass. Keep `CompassControl` as fallback during rollout.
+
+### 3. Full Map as Overlay (not Tab)
+**Choice:** Full map opens as a `z-50` overlay (like inventory), toggled with `M` key.
+**Why:** Follows the existing overlay pattern (equipment drawer, extraction overlay). A tab would split the narrative panel and interrupt reading flow.
+
+### 4. True Fog of War
+**Choice:** Unexplored rooms are NOT rendered. Adjacent rooms (connected to visited rooms) appear as dim ghost outlines.
+**Why:** Preserves MUD exploration mystery. Players discover the map by walking it. Ghost outlines at fog edges hint that exits lead somewhere without revealing what's there.
+
+### 5. Map State in Local Hook (not Global AppState)
+**Choice:** `useExplorationMap` hook manages map data locally, not in the global reducer.
+**Why:** Map data is large (hundreds of rooms), computed (positions from coords/BFS), and only consumed by map components. Adding it to `AppState` would bloat every reducer cycle.
+
+### 6. Two New Message Types
+**Choice:** `exploration_data` (bulk on join) and `exploration_update` (incremental on room entry).
+**Why:** Follows the "dumb terminal" architecture — explicit message types, no schema sync. Bulk load on join, then single-room updates as the player moves. Lightweight and efficient.
+
+### 7. BFS Layout for Procedural Shards
+**Choice:** Client computes room positions via BFS walk from entry room when rooms lack coordinates.
+**Why:** Procedural shards have no predefined coordinates. BFS from entry produces a clean grid layout matching the player's mental model. O(n) computation, cached per instance.
+
+### 8. Zone Maps Persist, Shard Maps are Ephemeral
+**Choice:** Zone exploration maps are cached in-session across zone transfers. Shard maps are discarded on extraction/death.
+**Why:** Zones are persistent worlds — the player returns to them. Shards are generated fresh each run. Server resends full `exploration_data` on join regardless, so cache is an optimization not a requirement.
+
+## Impact
+
+- **New files:** `components/map/` directory (8 components), `hooks/useExplorationMap.ts`, `styles/map.css`
+- **Modified files:** `ShardExploration.tsx` (add map overlay + minimap), sidebar layout
+- **Server changes needed:** Two new message types (`exploration_data`, `exploration_update`) from engine team
+- **Deprecated:** `CompassControl.tsx` eventually replaced by `MinimapWidget.tsx`
+
+## Needs From Other Agents
+
+- **Engine (Drizzt):** Implement `exploration_data` and `exploration_update` message sending on room join and room entry events. Wire to `character_explored_rooms` table.
+- **Content/Design:** Ensure static zone rooms have `coord_x`, `coord_y`, `coord_z` populated in the zone editor.
+
+## New Decisions (Phase A)
+
+### 2026-03-27T12:55: User directive — dynamic room coordinates
+**By:** dkirby-ms (via Copilot)
+**What:** Zone designers should NOT have to specify coordinates for rooms. All room coordinates must be dynamically computed from the room connection graph (BFS layout). This applies to both procedural shards and static zones — one universal algorithm.
+**Why:** User request — simplifies zone authoring and eliminates the coord_x/coord_y/coord_z columns from both zone definitions and character_explored_rooms. Resolves the deferred "rooms without coordinates" open question from map UI design.
+
+**Implications:**
+- Remove coord_x, coord_y, coord_z from character_explored_rooms schema
+- Remove coordinate fields from zone room definitions
+- BFS layout algorithm is the ONLY layout strategy (not a fallback)
+- Client computes all visual positions from connection graph at render time
+- Zone content authoring only requires: room id, name, type, exits
+
+### 2026-03-27: Decision — Exploration Repository (No Coordinates)
+
+**Author:** Jarlaxle  
+**Status:** Implemented
+
+**What:** Created `character_explored_rooms` table and full repository stack (Interface + InMemory + Pg + Provider) in `packages/server/src/exploration/`.
+
+**Key Decision:** No coordinate columns in the DB. Room positions are computed client-side via BFS from the room connection graph. The table stores room identity and visit metadata only.
+
+**Impact on Other Agents:**
+- **Drizzt (Engine):** When wiring `exploration_data` / `exploration_update` messages, call `getExplorationRepository().recordVisit(...)` on room entry. The `ExplorationVisit` type is the input contract.
+- **Volo (Narrative):** No impact — exploration data is structural, not narrative.
+- **Client team:** Map rendering must compute coordinates from the room graph via BFS. No coords come from the server.
+
+**Files:**
+- `packages/server/src/db/migrations/032_create_explored_rooms.sql`
+- `packages/server/src/exploration/ExplorationRepository.ts`
+- `packages/server/src/exploration/PgExplorationRepository.ts`
+- `packages/server/src/exploration/exploration-provider.ts`
+- `packages/server/src/exploration/index.ts`
+
+### 2026-03-27: Decision — Feature-Gate Middleware in handleCommand()
+
+**Author:** Drizzt (Engine Dev)
+**Status:** Implemented
+
+**Context:** New commands (`shardboard`, `enter`, `stash`, `store`, `loadout`) need to be restricted to specific room types. Rather than checking room type inside each handler, a centralized feature-gate middleware was added to `handleCommand()`.
+
+**Decision:**
+- A `featureHandlers` map in `commands/index.ts` maps verbs to `{ handler, requiredRoomType }`.
+- The feature-gate check runs **before** extraction lock and combat lock in `handleCommand()`.
+- If the player's room type doesn't match, a generic `"You can't do that here."` system narration is returned.
+- `take` remains universal (not feature-gated) — any player can pick up items from any room.
+- Handlers are synchronous with placeholder narrations; async service calls (stashService, loadoutService, queryShards, createShard) are wired at the room level.
+
+**Impact:**
+- **Jarlaxle (World Builder):** Room type assignments in zone graphs now control which commands are available. A room typed `feature_stash` enables stash/store/loadout; `feature_shardboard` enables shardboard/enter.
+- **Elara (Narrative):** Feature-gated rejection text is `"You can't do that here."` — can be made more atmospheric later.
+- **All:** Adding new feature-gated commands follows the same pattern: add to `featureHandlers` map with the required room type.
+
+### 2026-03-27: Decision — Phase A Test Strategy (Flexible Feature-Gate Assertions)
+
+**Author:** Minsc  
+**Status:** Active
+
+**What:** Feature-gate command tests use flexible assertion patterns rather than exact string matching.
+
+**Why:** The shardboard/stash/store/loadout/enter handlers are being built in parallel by Drizzt and Jarlaxle. Tests check for rejection via multiple acceptable phrases ("can't", "cannot", "not available", "nothing happens") so they pass regardless of whether the handler is registered yet or uses a dedicated gate middleware.
+
+**Impact on Other Agents:**
+- **Drizzt/Jarlaxle:** When implementing feature-gated handlers, the rejection message for wrong-room-type should include one of: "can't", "cannot", or "not available". The tests will pass as-is.
+- **If you add explicit feature-gate middleware** to `handleCommand()`, the tests already cover it — no need to update test files.
+
+**Files:**
+- `packages/server/src/__tests__/feature-gate-commands.test.ts`
+- `packages/server/src/__tests__/exploration-repository.test.ts`
+
+---
+
+## Phase C+D Decisions (2026-03-27T15:39Z)
+
+### Phase C — ROOM_SWITCH Target Naming
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-03-27  
+**Status:** Implemented
+
+**What:** Zone rooms now register with `zone:{slug}` naming. ROOM_SWITCH messages target zones with this new name (e.g., `zone:the-refuge` instead of `refuge`).
+
+**Why:** RefugeRoom to ShardRoom consolidation requires zone rooms to be named consistently with procedural shard conventions. Prefixing zones avoids conflicts and clarifies room types in logs.
+
+**Impact:**
+- **Client team (Regis):** ROOM_SWITCH handler recognizes `zone:*` targets. All connection code updated to use `zone:{slug}`.
+- **Testing (Minsc):** New routing tests verify zone registration and ROOM_SWITCH dispatch.
+- **Content (Jarlaxle):** Zone room types should use `feature_*` naming for feature-gated commands.
+
+**Files Modified:**
+- `packages/server/src/index.ts`
+- `packages/server/src/rooms/ShardRoom.ts`
+
+### Phase D — Exploration Visit Tracking
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-03-27  
+**Status:** Implemented
+
+**What:** Every room entry (join + movement) now records a visit via ExplorationRepository.
+
+**Why:** Exploration tracking is required for map rendering. Players must be able to see which rooms they've visited.
+
+**Implementation:**
+- `initExplorationProvider(USE_PG)` called at boot; exploration repo available via `getExplorationRepository()`
+- Room entry and movement events trigger `recordVisit()`
+- Tests verify visit recording for both procedural shards and zone rooms
+
+**Impact:**
+- All agents: Exploration data is now live in the database
+- Client: Can display map with visited rooms highlighted
+
+**Files Modified:**
+- `packages/server/src/index.ts`
+- `packages/server/src/rooms/ShardRoom.ts`
+
+### User Directive — AmbientSystem in All Zones
+
+**By:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-27T15:19Z  
+**What:** AmbientSystem should work in ANY zone, not just hub/social zones.  
+**Why:** User request — previous gating was too restrictive. All zones should have ambient narration, weather, and NPC systems.
+
+**Coordination Action:** ShardRoom.ts zone-mode gating updated; AmbientSystem now instantiates for all zone categories.
+
+**Test Update:** `shardroom-zone-mode.test.ts` updated to verify ambient in dungeon zones.
+
+
+### 2026-03-27T16:32Z: User directive - Stability bar and collapse timer deprecated
+**By:** dkirby-ms (via Copilot)
+**What:** Stability bar and collapse timer UI are deprecated. Not needed now that zones are static. Remove from ShardExploration.
+**Why:** User request — zones are persistent, no collapse risk. Removal simplifies UI and reduces unnecessary server-side state tracking.
+
+### 2026-03-27T17:27Z: Stability bar and collapse timer removed from ShardExploration UI
+**By:** Regis (Frontend Dev)
+**Date:** 2026-03-27
+**Status:** Implemented
+
+**What**
+Removed all UI rendering and related client-side computed state (`stability`, `collapseTime`, `collapseTimerMax`, `getCollapseColor`, `formatTime`) from `ShardExploration.tsx`. The `useCountdown` import was also removed since it was only used for the collapse timer.
+
+**Rationale**
+- User directive: these features not needed for any context (zones are persistent, shards have different exit strategy now)
+- Zones are stable environments; collapse timer is a shard mechanic
+- Simplifies exploration UI, reduces complexity
+
+**Preserved**
+Server-side message handling and state in `useShardConnection.ts` (`collapseTimer`, `collapseTimerMax`, `shardState`, `stability` on `roomHeader`). The server still sends these values; they're just not rendered. Server-side cleanup can happen separately.
+
+**Impact**
+- `ShardExploration.tsx` is simpler — sidebar no longer has the Collapse Timer section, room header no longer has the Shard Stability bar.
+- If these features are ever re-introduced, the hook state is still there; only UI needs to be rebuilt.
+
+### 2026-03-27T17:28Z: Refuge uses ShardExploration UI (unified exploration)
+**By:** Regis (Frontend Dev)
+**Date:** 2026-03-27
+**Status:** Implemented
+
+**What**
+The server-side refuge is now a zone-mode ShardRoom (`zone:the-refuge`). The client now routes `/refuge` to `ShardExploration` (same component as shard exploration) instead of the old tab-based `Refuge.tsx` hub.
+
+**Implementation Details**
+- `/refuge` route now renders `ShardExploration` component
+- `useShardConnection` accepts optional `roomName` parameter (default: `'shard'`)
+- When navigating to `/refuge`, it connects to `zone:the-refuge`
+- `ShardExploration` derives zone mode from `useLocation().pathname === '/refuge'`
+- In zone mode:
+  - "Back to Refuge" button is hidden (you're already there)
+  - Shard Stability bar and Collapse Timer are hidden (zones don't collapse)
+  - Chat context is `"refuge"` instead of `"shard"`
+  - Equipment overlay passes `inShard={false}`
+
+**Rationale**
+- Unifies exploration experience across zones and shards
+- Reuses mature ShardExploration UI instead of maintaining separate tab-based hub
+- Server-side refuge as zone simplifies architecture (one room type for persistent spaces)
+
+**Impact**
+- All team members: `/refuge` is now the MUD exploration UI, not the old tab hub
+- Server team: No server changes needed (refuge already implemented as zone ShardRoom)
+- Stash/loadout/shardboard: Accessible via text commands in zone rooms (already wired in Phase B)
+- `Refuge.tsx` is preserved but no longer routed — available for future cleanup
+
+### 2026-03-27T17:35Z: Client Room Switch and Navigation Pattern
+**By:** Regis (Frontend Dev)
+**Date:** 2026-03-27
+**Status:** Implemented
+
+**What**
+When the server sends a `ROOM_SWITCH` message (especially to refuge):
+1. The `onRoomSwitch` handler in `useShardConnection.ts` should **navigate** after successful room switch
+2. Client UI buttons (like "Return to Refuge" in ExtractionOverlay) should **not** call `navigate()` directly
+3. Server-driven room switches always include navigation coordination - client buttons are informational only
+
+**Rationale**
+- **Problem:** Client-side `navigate()` calls race with server ROOM_SWITCH messages, causing:
+  - URL and Colyseus room to become desynchronized
+  - `isZone` derived state to be incorrect (stays false even when connected to `zone:the-refuge`)
+  - Zone-specific UI adjustments to not trigger
+- **Solution:** Single source of truth for navigation is the `onRoomSwitch` handler. It:
+  - Switches the Colyseus connection via `switchRoom()`
+  - Calls `navigate()` after successful switch when target is refuge
+  - Prevents race conditions with server messages
+
+**Double-connect Guard**
+The connection useEffect checks if `roomRef.current.name === roomName` before connecting. After navigating to `/refuge`, the component re-renders with `roomName='zone:the-refuge'`, but the room is already connected, so the guard prevents double-connect.
+
+**Implementation**
+```typescript
+// useShardConnection.ts - onRoomSwitch handler
+if (switchingToRefuge) {
+  // ... clear state ...
+}
+
+switchRoom(currentRoom, msg.target, state.token, handlers, msg.options, state.activeCharacter?.id)
+  .then((newRoom) => {
+    // ... set room ...
+    
+    // Navigate after successful room switch to refuge
+    if (switchingToRefuge) {
+      navigate('/refuge');
+    }
+  });
+```
+
+**Impact**
+- **Backend team:** No changes needed. ROOM_SWITCH messages work as designed.
+- **Frontend team:** Follow this pattern for any future room switch UI (e.g., zone portals, emergency exits).
+- **Testing:** Room switch integration tests should verify both Colyseus connection AND URL navigation.
+
+### 2026-03-20: Database Constraint and FK Error Fixes
+**By:** Drizzt (Engine Dev)
+**Date:** 2026-03-20
+**Status:** Implemented
+
+**What**
+Fixed two critical database errors in the persistence layer:
+1. **PostgreSQL ON CONFLICT syntax incompatibility** — Changed `PgExplorationRepository` from constraint-based to expression-based conflict detection
+2. **Foreign key violations** — Separated game state player ID (characterId) from database player ID (auth UUID)
+
+**Error Context**
+
+### Error 1: Constraint Reference Error
+```
+constraint "uq_character_zone_room" for table "character_explored_rooms" does not exist
+```
+
+Migration 032 creates a UNIQUE INDEX, not a table constraint. PostgreSQL's `ON CONFLICT ON CONSTRAINT` syntax requires a named table constraint created with `ALTER TABLE ADD CONSTRAINT`. Using `ON CONFLICT (columns)` works with both constraints and indexes.
+
+### Error 2: Foreign Key Violations
+```
+insert or update on table "player_skills" violates foreign key constraint "player_skills_player_id_fkey"
+insert or update on table "run_history" violates foreign key constraint "run_history_player_id_fkey"
+```
+
+ShardRoom.ts mixed two concepts:
+- **characterId** — client-provided string for game state keying (player maps, combat, inventory)
+- **authPlayerId** — `players.id` UUID from JWT token, required for DB persistence
+
+Tables have BOTH `player_id` (UUID FK to `players.id`) AND `character_id` (UUID FK to `characters.id`) due to multi-character migration (017/018/019). Current persistence operations still require the auth player UUID.
+
+**Implementation**
+
+### Fix 1: PgExplorationRepository.ts
+Changed ON CONFLICT syntax from constraint-based to expression-based:
+```typescript
+// Before:
+ON CONFLICT ON CONSTRAINT uq_character_zone_room
+
+// After:
+ON CONFLICT (character_id, COALESCE(zone_slug, '__shard__'), room_id)
+```
+
+### Fix 2: ShardRoom.ts
+1. Added `authPlayerIds` map (characterId → auth playerId UUID)
+2. Track mapping in `onJoin`: `this.authPlayerIds.set(playerId, rawPlayerId)`
+3. Use auth player ID for all DB operations:
+   - `profileRepo.load/save(rawPlayerId)` — skills, equipment, carry weight
+   - `factionRepo.getPlayerFactions(rawPlayerId)` — faction membership
+   - `runHistoryRepo.recordRun({ playerId: authPlayerId, ... })` — shard run history
+4. Clean up mapping in `onLeave`: `this.authPlayerIds.delete(playerId)`
+
+**Rationale**
+
+### Why Not Use characterId for DB Operations?
+The `characterId` is a client-provided string (or fallback to session ID). It's not guaranteed to be a valid UUID in the `players` table. The auth system provides the canonical player UUID via JWT token validation.
+
+### Why Not Migrate to character_id Now?
+The schema is mid-transition. Tables have both `player_id` (legacy) and `character_id` (future). The character system is not fully implemented (no character creation flow, no character selection UI). Forcing migration now would break existing persistence.
+
+### Why Expression-Based ON CONFLICT?
+More flexible than constraint-based syntax — works with both unique indexes and table constraints. Migration runner uses `CREATE UNIQUE INDEX` (not `ALTER TABLE`), so expression-based syntax is required.
+
+**Consequences**
+
+### Positive
+- ✅ All FK constraints satisfied — no more insertion errors
+- ✅ Exploration tracking works correctly (unique index conflict resolution)
+- ✅ Zero test regressions (2239 passing)
+- ✅ Backward compatible — existing players continue working
+
+### Neutral
+- Game state still uses characterId as the primary key (no functional change)
+- DB operations now do an extra map lookup (`authPlayerIds.get()`)
+
+**Future Work**
+When multi-character support is fully implemented:
+1. Migrate all repositories to use `character_id` instead of `player_id`
+2. Update ShardRoom to use character UUID directly (no string fallback)
+3. Add character selection UI (client) and API (server)
+4. Drop `player_id` columns from character-scoped tables (or make them nullable)
+
+**Related Files**
+- `packages/server/src/exploration/PgExplorationRepository.ts` — ON CONFLICT fix
+- `packages/server/src/rooms/ShardRoom.ts` — authPlayerIds mapping
+- `packages/server/src/db/migrations/032_create_explored_rooms.sql` — unique index definition
+- `packages/server/src/db/migrations/017_create_characters.sql` — characters table
+- `packages/server/src/db/migrations/018_rekey_tables_to_character.sql` — character_id columns
+
+**Team Impact**
+
+- **All Teams:** DB persistence layer is now stable. No more FK violations on player_skills or run_history.
+- **Jarlaxle (Systems Dev):** Character creation flow can use this pattern — store auth player UUID separately from game state character ID.
+- **Volo (Narrative Dev):** Exploration tracking (character_explored_rooms) is fully functional for narrative context.
+- **Minsc (QA):** All 2239 tests pass. No new test coverage needed (existing tests validate the fix).
+
+---
+
+## 2026-03-28: BFS Layout Engine Design
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-03-28  
+**Status:** Implemented
+
+### Context
+
+The map UI (player minimap + admin zone designer) needs spatial coordinates for room graphs. Rooms have directional exits (north/south/east/west/up/down) but no inherent positions.
+
+### Decision
+
+Created a pure BFS layout engine at `packages/client/src/map/computeLayout.ts` with these design choices:
+
+1. **Direction-aware placement:** Cardinal directions map to 2D offsets (north = y−1, south = y+1, east = x+1, west = x−1). Up/down only change z-layer, keeping the same (x,y) — z is a badge for UI, not a spatial dimension.
+
+2. **Spiral collision resolution:** When two exits converge on the same cell, a Manhattan-distance spiral finds the nearest free cell. This guarantees no overlapping rooms.
+
+3. **Disconnected subgraph handling:** After BFS from the entry room, any unplaced rooms get a fresh BFS offset 3 cells to the right of the current bounding box.
+
+4. **Framework-agnostic:** No React, no side effects. Returns a plain `Map<string, RoomPosition>`. Usable by both the SVG minimap renderer and the admin zone designer canvas.
+
+### Impact
+
+- Player map and admin zone designer can share this layout function
+- The `LayoutRoom` input type is intentionally minimal (`{ exits: Map<string, string> }`) so it works with both server-shaped room graphs and simplified client data
+- 14 unit tests covering all edge cases (grids, cycles, up/down, collisions, disconnected graphs)
+
+---
+
+## 2026-03-28: Exploration Map Message Protocol
+
+**Author:** Drizzt (Engine Dev)
+**Date:** 2025-07-15 (Finalized 2026-03-28)
+**Status:** Implemented
+
+### Context
+
+The client needs to render a map of rooms the player has visited. The server already persists exploration data via `ExplorationRepository`, but there was no wire protocol to send this data to the client.
+
+### Decision
+
+Added two new message types to `@ellmud/shared`:
+
+- **`EXPLORATION_DATA`** (`exploration_data`) — Bulk payload of all previously visited rooms, sent once on join. Contains `rooms: ExploredRoomData[]` and `currentRoomId`.
+- **`EXPLORATION_UPDATE`** (`exploration_update`) — Single room update, sent each time the player enters a room. Contains `room: ExploredRoomData`.
+
+#### Wire format (`ExploredRoomData`)
+
+```typescript
+{
+  roomId: string;
+  zoneSlug: string | null;
+  visitedAt: string;       // ISO timestamp
+  roomName: string;
+  roomType: string;
+  exits: Record<string, string>;  // direction → targetRoomId
+}
+```
+
+### Rationale
+
+- **Separation from persistence type:** `ExploredRoom` (server-side) carries `characterId`, `visitCount`, `Date` objects. The wire type `ExploredRoomData` is leaner — only what the client needs for map rendering.
+- **Bulk + incremental pattern:** Matches the existing `STASH_UPDATE` / `LOADOUT_UPDATE` pattern — full state on join, deltas on change.
+- **`exits` map on the wire:** The client needs the room graph topology to lay out the map via BFS. Sending exits avoids a second round-trip.
+
+### Implementation Notes
+
+- **Exploration recording uses authPlayerIds:** Both `recordVisit()` calls and `getExploredRoomsInZone()` queries resolve through `this.authPlayerIds.get(playerId) || playerId` before hitting the repository. This matches the pattern established by `savePlayerProfile()` and `recordRunHistory()`.
+- **Message sending:** `EXPLORATION_DATA` (bulk) sent once on join — loads prior zone visits + ensures current room is included. `EXPLORATION_UPDATE` (single room) sent on every room entry: go command, flee, initial join.
+- **Error handling:** Both messages are fire-and-forget with try/catch — exploration never crashes the room.
+- **Shard vs Zone behavior:** Procedural shards send empty prior visits (ephemeral); zones load from DB.
+
+### Impact
+
+- Server handlers wire exploration message sending at 3 room-transition sites (join, go, flee)
+- Client-side consumption via `useExplorationMap` hook that consumes Colyseus messages
+- No breaking changes to existing messages
+
+### Related Files
+
+- `packages/shared/src/index.ts` — EXPLORATION_DATA, EXPLORATION_UPDATE message types
+- `packages/server/src/rooms/ShardRoom.ts` — message wiring + authPlayerIds mapping
+- `packages/server/src/exploration/PgExplorationRepository.ts` — ON CONFLICT syntax fix
+
+---
+
+## 2026-03-27: Player Map Components — useExplorationMap + SVG Rendering
+
+**By:** Regis (Frontend Dev)  
+**Date:** 2026-03-27  
+**Status:** Implemented
+
+### What
+
+- `useExplorationMap` hook listens for `EXPLORATION_DATA` and `EXPLORATION_UPDATE` Colyseus messages, maintains a `MapState` of visited rooms, ghost rooms (unvisited adjacent), BFS-computed positions, and current room ID.
+- SVG map components in `packages/client/src/components/map/`: `MapRenderer` (container with dynamic viewBox), `RoomNode` (colored by room type, glow on current), `ExitEdge` (muted lines between rooms), `GhostRoom` (dashed outlines at opacity 0.3).
+- Shared `constants.ts` defines `CELL_SIZE = 60`, room type color map, and node sizes for compact/full modes.
+- `compact` prop on MapRenderer/RoomNode/GhostRoom toggles between minimap (small nodes, no labels) and full overlay (labels, larger nodes).
+
+### Why
+
+- Delivers the player-facing map rendering layer. The hook + components are ready to be consumed by a MinimapWidget (sidebar) and a FullMapOverlay.
+- Ghost rooms give players directional awareness of unvisited paths without revealing the full graph.
+
+### Conventions Established
+
+- Room type → color mapping is centralized in `constants.ts`, not scattered across components.
+- `ExploredRoomData.exits` is `Record<string, string>` (JSON-friendly); the hook converts to `Map` for `computeLayout`.
+- Colyseus message cleanup relies on `room.leave()` since SDK doesn't expose `removeMessageHandler`.
+
+---
+
+## 2026-03-27: Map Components Integration into ShardExploration
+
+**By:** Regis (Frontend)  
+**Date:** 2026-03-27  
+**Status:** Complete
+
+### Decision
+
+MinimapWidget and FullMapOverlay are now rendered in ShardExploration alongside existing UI. CompassControl is kept for now — minimap sits below it in the sidebar.
+
+### Details
+
+- `useExplorationMap(roomRef.current)` consumes the Colyseus room ref directly. Re-renders from `useShardConnection` state changes ensure the hook picks up new room instances on connect/reconnect.
+- `useMapToggle()` provides M-key toggle state.
+- FullMapOverlay renders **before** ExtractionOverlay and ReconnectionOverlay in DOM order, so critical game overlays always stack above the map (all are z-50).
+- Test file `ux-batch2-combat-sidebar.test.tsx` updated with mocks for `useExplorationMap` and `useMapToggle`, plus `roomRef: { current: null }` added to the `useShardConnection` mock.
+
+### Files Modified
+
+- `packages/client/src/pages/ShardExploration.tsx` — imports + hooks + MinimapWidget in sidebar + FullMapOverlay at overlay level
+- `packages/client/src/__tests__/ux-batch2-combat-sidebar.test.tsx` — mock updates
+
+### Verification
+
+- Build: ✅ Clean
+- Lint: ✅ Clean
+- Tests: ✅ 103 files, 2271 passed
+
+---
+
+## 2026-03-28: Zone Designer — Read-Only SVG Canvas
+
+**Author:** Regis  
+**Date:** 2026-03-27  
+**Status:** Implemented
+
+### Context
+
+The admin zone editor needed a visual representation of zone room graphs. The BFS layout engine (`computeLayout.ts`) already existed.
+
+### Decision
+
+- Created `ZoneDesigner.tsx` as a read-only SVG visualization component in the admin pages directory.
+- Added it as a 4th "Designer" tab in `ZonesDetail.tsx` alongside General/Rooms/Exits.
+- Wrote `zoneToLayoutInput()` helper to convert zone-api arrays (`rooms[]`, `exits[]`) into the `Map<string, LayoutRoom>` format that `computeLayout()` expects. Inter-zone exits are excluded from the layout graph since their targets aren't in the local room set.
+- Room colors follow the MUD admin color palette (green=entry, blue=extraction, red=boss, teal=junction, gray=corridor, purple=feature).
+- Inter-zone exits are shown as ⊕ portal icons with tooltip showing target zone/room.
+- Clicking a room switches to the Rooms tab; clicking an exit switches to the Exits tab.
+- The component is explicitly read-only — drag-to-add interactions deferred to a future task.
+
+### Impact
+
+- **Regis:** Owns this component going forward. Future work: drag-and-drop room placement, editable edges.
+- **Team:** No server or shared changes needed — this is purely client-side admin UI.
+
+---
+
+## 2026-03-28: ZoneDesigner — Full CRUD + Validation
+
+**By:** Regis (Frontend Dev)  
+**Date:** 2026-03-28  
+**Status:** Implemented
+
+### What
+
+- ZoneDesigner now supports Room CRUD (add via modal, edit via side panel, delete with confirm), Exit CRUD (connect mode with click-to-connect, bidirectional helper, direction auto-inference from layout position), and inter-zone Portal creation (zone/room cascading dropdowns).
+- Validation overlay highlights: disconnected rooms (yellow ⚠), missing entry room (warning banner), one-way exits (dashed amber ghost lines for missing reverse).
+- Designer manages its own selection state. ZonesDetail passes `zoneId` + `onZoneChanged` callback for refetch after mutations.
+- Props interface changed: `zoneId: string | null` and `onZoneChanged?: () => void` added. `selectedRoomSlug`/`selectedExitId` props removed (designer handles its own state).
+
+### Why
+
+- Admin workflow required switching between Designer and Rooms/Exits tabs to make changes. Now all CRUD happens visually in the designer canvas, reducing context-switching.
+- Validation overlay catches common mistakes (disconnected rooms, missing entry, one-way exits) before deploy.
+
+### Impact
+
+- ZonesDetail designer tab integration simplified (no more tab-switching callbacks).
+- zone-api.ts functions (`listZones`, `getZone`, `createRoom`, `updateRoom`, `deleteRoom`, `createExit`, `deleteExit`) now imported by ZoneDesigner directly.
+
+---
+
+## 2026-03-27: Exploration Message Test Patterns
+
+**Author:** Minsc (Tester)
+**Date:** 2026-03-27  
+**Status:** Implemented
+
+### Context
+
+Phase D wired exploration (EXPLORATION_DATA, EXPLORATION_UPDATE) into ShardRoom. Tests needed for client-facing messages, not just repo recording (which exploration-integration.test.ts already covers).
+
+### Decision
+
+Created `exploration-messages.test.ts` with 18 tests across 8 categories (M1–M8) covering:
+- EXPLORATION_DATA bulk payload on join (shape, currentRoomId, rooms array)
+- EXPLORATION_UPDATE single-room payload on movement (roomId, roomName, exits, roomType)
+- recordVisit called correctly on join and movement
+- Zone mode (zoneSlug present) vs shard mode (zoneSlug null)
+- Flee exploration recording
+- Duplicate visit upsert (no crashes, no duplicate records)
+
+### Pattern Note
+
+MessageCollector does NOT capture exploration messages. Tests wire up `client.onMessage(MessageTypes.EXPLORATION_DATA, ...)` directly. If exploration messages become common in other tests, consider extending MessageCollector.
+
+---
+
+## 2026-03-24: Player Log Format Convention
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-03-24  
+**Status:** Implemented  
+**Requested by:** dkirby-ms
+
+### What
+
+All server console log messages that pertain to a player must include both the player's character name and player ID in a standardized format:
+```
+"CharacterName" (playerId)
+```
+
+### Why
+
+1. **Character name:** Human-readable identifier that matches the player's in-game persona. Makes logs easier to read and correlate with player reports.
+2. **Player ID (UUID):** Persistent account identifier that survives character deletion, name changes, and database queries. Essential for technical debugging and player support.
+
+### Implementation
+
+**ShardRoom infrastructure:**
+- Added `characterRepo: CharacterRepository` and `characterNames: Map<string, string>` to map playerId → character name
+- Helper method: `playerTag(playerId: string): string` returns formatted string
+- Character names loaded during `onJoin()` via `characterRepo.getById(playerId)`
+- Graceful degradation: if character name unavailable, format degrades to `(playerId)`
+
+**Affected logs:**
+- Join/leave events
+- Disconnection and reconnection  
+- Command execution
+- Combat events (downed, killing blow)
+- Extraction events
+- Death and respawn
+- Profile/loadout operations
+- Error messages related to specific players
+
+**Example log:**
+```
+[ShardRoom:abc123] Player "Shadowblade" (uuid-1234-5678) joined at room_0 (session=sess789, 1/3 players)
+```
+
+### Files Modified
+
+- `packages/server/src/rooms/ShardRoom.ts` — Added character repository integration, `characterNames` map, `playerTag()` helper, updated 25+ log statements
+
+### Verification
+
+- ✅ Build: `npm run build`
+- ✅ Tests: 2226 tests passed (103 test files)
+- ✅ Lint: No new warnings
+
+---
+
+## 2026-03-27: Cascade Delete Exits on Room Deletion
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-03-27  
+**Status:** Implemented
+
+### What
+
+When a room is deleted from a zone, all exit records referencing that room (both incoming and outgoing) are automatically deleted to maintain referential integrity.
+
+### Why
+
+- Prevents orphaned exit records in the database
+- Maintains room graph integrity across deletions
+- Simplifies zone cleanup during testing and admin operations
+
+### Implementation
+
+Updated `PgZoneRepository.deleteRoom(roomSlug)` to execute cascade deletes before removing the room:
+
+```typescript
+// Delete all exits pointing FROM or TO this room
+await db.run('DELETE FROM exits WHERE from_room_slug = $1 OR to_room_slug = $1', [roomSlug]);
+// Then delete the room
+await db.run('DELETE FROM rooms WHERE slug = $1', [roomSlug]);
+```
+
+### Files Modified
+
+- `packages/server/src/zones/PgZoneRepository.ts` — Updated `deleteRoom()` method
+
+### Verification
+
+- ✅ Build: `npm run build`
+- ✅ Tests: 2226 tests passed (103 test files)
+- ✅ Lint: No new warnings
+
+### Impact
+
+- No API or client changes required
+- Database integrity maintained automatically on room deletion
+
+### 2026-03-27: Orphaned-Exit Cleanup API
+
+**Author:** Drizzt  
+**Date:** 2026-03-27  
+**Status:** Implemented
+
+**Context**
+
+Exits in `zone_exits` can reference rooms or zones that no longer exist (from manual edits, bulk deletes, or stale seed data). We need a content management tool to find and remove these dead ends.
+
+**Decision**
+
+- `findOrphanedExits()` and `removeOrphanedExits()` added to the `ZoneRepository` interface so they're available to any consumer, not just the admin API.
+- Admin API exposes a GET (dry-run preview) and POST (actual delete) at `/admin/api/zones/cleanup/orphaned-exits`.
+- Cleanup routes are registered before the `/:slug` wildcard to prevent Express from swallowing "cleanup" as a slug parameter.
+- Deletions are audit-logged with all removed exit IDs.
+
+**Affected**
+
+- **Lyra / Admin UI**: Can wire a "Clean Orphaned Exits" button against these endpoints.
+- **Vex / Content**: Knows that exits pointing at removed rooms/zones will be detected and removable.
+
+### 2026-03-27T22:44: User directive — Content promotion deferred
+
+**By:** dkirby-ms (via Copilot)  
+**What:** Content promotion system (draft→staging→production lifecycle for game content) is deferred as a future TODO. For now, all content created in the admin tools is considered live content immediately. The existing deploy-routes are effectively dead code — do not invest in fixing them. Code promotion (CI/CD) remains separate and handled by infrastructure.  
+**Why:** User scope decision — keep focus on gameplay features, not content management workflows
+
+### 2026-03-28: MUD Prompt / Status Line
+
+**Author:** Regis  
+**Date:** 2026-03-28  
+**Status:** Implemented
+
+**Decision**
+
+Added a classic MUD-style prompt/status line (`MudPrompt` component) pinned to the bottom of the narrative text scroll area in `ShardExploration`. It shows HP (color-coded), combat stance, active status effects, current room name, and a blinking `>` cursor.
+
+**Details**
+
+- Component: `packages/client/src/components/MudPrompt.tsx`
+- CSS: `.mud-prompt-*` classes in `packages/client/src/styles/tailwind.css`
+- Uses `position: sticky; bottom: 0; z-index: 2` inside the `.narrative-scroll` container
+- Reads all data from AppContext (no new message types needed)
+- Currently shows HP and stance. MP/mana can be added when the server schema includes it.
+
+**Impact**
+
+- **Drizzt:** If mana/MP is added to the game schema and synced to the client, the MudPrompt is ready to display it (just add a field)
+- **Minsc:** Sidebar status-effect tests now use `within()` scoping since MudPrompt also renders effect names

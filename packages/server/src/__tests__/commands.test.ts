@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
 import { ShardRoom } from '../rooms/ShardRoom.js';
-import { RefugeRoom } from '../rooms/RefugeRoom.js';
 import { MessageTypes } from '@ellmud/shared';
 import type { NarrateMessage, RoomHeaderMessage } from '@ellmud/shared';
 
@@ -40,6 +39,12 @@ describe('Command Parser', () => {
       ['w', 'go', ['west']],
       ['u', 'go', ['up']],
       ['d', 'go', ['down']],
+      ['north', 'go', ['north']],
+      ['south', 'go', ['south']],
+      ['east', 'go', ['east']],
+      ['west', 'go', ['west']],
+      ['up', 'go', ['up']],
+      ['down', 'go', ['down']],
     ];
 
     for (const [input, expectedVerb, expectedArgs] of cases) {
@@ -198,8 +203,9 @@ describe('Command Handlers', () => {
     it('should describe the current room', () => {
       const result = handleCommand('look', buildCtx());
       expect(result.narrations.length).toBeGreaterThan(0);
-      expect(result.narrations[0]!.text).toContain('Shard Entry');
       expect(result.narrations[0]!.type).toBe('room');
+      expect(result.roomHeader).toBeDefined();
+      expect(result.roomHeader!.roomName).toBe('Shard Entry');
     });
 
     it('should list exits', () => {
@@ -224,7 +230,8 @@ describe('Command Handlers', () => {
       const result = handleCommand('go', buildCtx(['north']));
       expect(player.currentRoomId).toBe('corridor');
       expect(result.narrations[0]!.text).toContain('You move north');
-      expect(result.narrations[0]!.text).toContain('Flooded Corridor');
+      expect(result.roomHeader).toBeDefined();
+      expect(result.roomHeader!.roomName).toBe('Flooded Corridor');
     });
 
     it('should reject invalid direction', () => {
@@ -352,7 +359,6 @@ describe('ShardRoom Commands (Integration)', () => {
   beforeAll(async () => {
     const server = new Server();
     server.define('shard', ShardRoom);
-    server.define('refuge', RefugeRoom);
     await server.listen(0);
     const addr = (server as unknown as { transport: { server: { address(): { port: number } } } }).transport.server.address();
     (server as unknown as { port: number }).port = addr.port;
@@ -378,7 +384,7 @@ describe('ShardRoom Commands (Integration)', () => {
     expect(narrations.length).toBeGreaterThanOrEqual(2);
     const roomNarration = narrations.find((n) => n.type === 'room');
     expect(roomNarration).toBeDefined();
-    expect(roomNarration!.text).toContain('Shard Entry');
+    expect(roomNarration!.text).toContain('Exits:');
 
     // Should have room header
     expect(headers.length).toBeGreaterThanOrEqual(1);
@@ -403,7 +409,7 @@ describe('ShardRoom Commands (Integration)', () => {
     expect(narrations.length).toBeGreaterThan(beforeCount);
     const lookNarration = narrations.slice(beforeCount).find((n) => n.type === 'room');
     expect(lookNarration).toBeDefined();
-    expect(lookNarration!.text).toContain('Shard Entry');
+    expect(lookNarration!.text).toContain('Exits:');
 
     await client.leave();
   });
@@ -427,7 +433,7 @@ describe('ShardRoom Commands (Integration)', () => {
 
     const moveNarrations = narrations.slice(beforeNarr);
     expect(moveNarrations.length).toBeGreaterThan(0);
-    expect(moveNarrations[0]!.text).toContain('Flooded Corridor');
+    expect(moveNarrations[0]!.text).toContain('You move north');
 
     const newHeaders = headers.slice(beforeHead);
     expect(newHeaders.length).toBeGreaterThan(0);
@@ -452,7 +458,7 @@ describe('ShardRoom Commands (Integration)', () => {
 
     const moveNarrations = narrations.slice(beforeCount);
     expect(moveNarrations.length).toBeGreaterThan(0);
-    expect(moveNarrations[0]!.text).toContain('Flooded Corridor');
+    expect(moveNarrations[0]!.text).toContain('You move north');
 
     await client.leave();
   });

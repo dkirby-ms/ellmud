@@ -1,23 +1,37 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router";
+import { useState, useCallback } from "react";
+import { useNavigate, useLocation } from "react-router";
 import {
   Eye,
   Volume2,
   Sword,
   ArrowLeft,
 } from "lucide-react";
-import InventoryOverlay from "../components/InventoryOverlay";
+import CombinedStashLoadout from "../components/CombinedStashLoadout";
 import ExtractionOverlay from "../components/ExtractionOverlay";
 import ChatPanel from "../components/ChatPanel";
 import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
+import CompassControl from "../components/CompassControl";
+import { MinimapWidget } from "../components/map/MinimapWidget.js";
+import { FullMapOverlay } from "../components/map/FullMapOverlay.js";
+import { EquipmentSilhouette } from "../components/EquipmentSilhouette.js";
+import "../components/map/map.css";
+import MudPrompt from "../components/MudPrompt.js";
 import { useAppContext } from "../store.js";
 import { useShardConnection } from "../hooks/useShardConnection.js";
-import { useCountdown } from "../hooks/useCountdown.js";
+import { useAutoScroll } from "../hooks/useAutoScroll.js";
+import { useExplorationMap } from "../hooks/useExplorationMap.js";
+import { useMapToggle } from "../hooks/useMapToggle.js";
 import type { CombatAction } from "@ellmud/shared";
 
 export default function ShardExploration() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { state } = useAppContext();
+
+  // Derive zone mode from route path
+  const isZone = location.pathname === "/refuge";
+  const roomName = isZone ? "zone:the-refuge" : "shard";
+
   const {
     handleCommand: sendCommand,
     handleExitClick,
@@ -25,43 +39,23 @@ export default function ShardExploration() {
     sendChatMessage,
     extraction,
     reconnection,
-  } = useShardConnection();
+    roomRef,
+  } = useShardConnection(roomName);
+
+  const mapState = useExplorationMap(roomRef.current);
+  const { isMapOpen, toggleMap, closeMap } = useMapToggle();
 
   const [command, setCommand] = useState("");
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const narrativeRef = useRef<HTMLDivElement>(null);
-
-  // Derive collapse timer from server state, with client-side countdown
-  const collapseTime = useCountdown(state.collapseTimer ?? 0);
-  const collapseTimerMax = state.collapseTimerMax ?? 900;
+  const narrativeRef = useAutoScroll(state.messages);
 
   // Derive room info from server state
   const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
-  const exits = state.roomHeader?.exits ?? [];
-
-  // Auto-scroll narrative on new messages
-  useEffect(() => {
-    if (narrativeRef.current) {
-      narrativeRef.current.scrollTop = narrativeRef.current.scrollHeight;
-    }
-  }, [state.messages]);
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const getCollapseColor = () => {
-    if (collapseTimerMax <= 0) return "var(--color-text-primary)";
-    const percentage = (collapseTime / collapseTimerMax) * 100;
-    if (percentage > 50) return "var(--color-text-primary)";
-    if (percentage > 25) return "var(--color-warning)";
-    return "var(--color-danger)";
-  };
+  const zoneName = state.roomHeader?.zoneName;
+  const roomType = state.roomHeader?.roomType;
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -152,9 +146,6 @@ export default function ShardExploration() {
     ? { label: 'Wounded', color: 'text-warning', barColor: 'bg-warning', pulse: false }
     : { label: 'Critical', color: 'text-danger', barColor: 'bg-danger', pulse: true };
 
-  // ─── Stability ─────────────────────────────────────────────────────────
-  const stability = state.roomHeader?.stability ?? 1;
-
   // ─── Sound Cue Direction Highlighting ──────────────────────────────────
   const highlightDirections = (text: string) => {
     const directionRegex = /\b(north|south|east|west|above|below)\b/gi;
@@ -188,12 +179,14 @@ export default function ShardExploration() {
       {/* Top bar */}
       <div className="bg-bg-panel border-b border-border-muted px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate("/refuge")}
-            className="text-text-secondary hover:text-accent-gold transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
+          {!isZone && (
+            <button
+              onClick={() => navigate("/refuge")}
+              className="text-text-secondary hover:text-accent-gold transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
           <span className="text-text-secondary text-sm font-sans">
             {state.playerId ?? "Unknown"}
           </span>
@@ -223,88 +216,66 @@ export default function ShardExploration() {
               style={{ fontSize: "1.125rem" }}
             >
               {currentRoom}
-            </h2>
-            <div className="flex items-center gap-2 flex-1">
-              <span className="text-text-secondary text-xs font-sans">
-                Shard Stability
-              </span>
-              <div className="flex-1 h-1.5 bg-bg-elevated rounded-full overflow-hidden">
-                <div
-                  className="h-full transition-all"
-                  style={{
-                    width: `${stability * 100}%`,
-                    backgroundColor: stability > 0.5 ? 'var(--color-text-primary)' : stability > 0.25 ? 'var(--color-warning)' : 'var(--color-danger)',
-                  }}
-                ></div>
-              </div>
-              {stability < 0.25 && (
-                <span className="text-danger animate-pulse text-xs font-bold font-sans whitespace-nowrap">
-                  COLLAPSE IMMINENT
+              {roomType && (
+                <span
+                  className={`ml-2 text-xs font-sans font-semibold px-1.5 py-0.5 rounded ${
+                    roomType === 'boss' ? 'text-danger bg-danger/10'
+                    : roomType === 'extraction' ? 'text-success bg-success/10'
+                    : roomType === 'entry' ? 'text-interactive bg-interactive/10'
+                    : 'text-text-disabled bg-bg-elevated'
+                  }`}
+                >
+                  {roomType.toUpperCase()}
                 </span>
               )}
-            </div>
+              {zoneName && (
+                <span className="text-text-secondary font-sans text-xs ml-2 font-normal">
+                  — {zoneName}
+                </span>
+              )}
+            </h2>
           </div>
 
           {/* Narrative text — render from real AppContext messages */}
           <div
             ref={narrativeRef}
-            className="flex-1 overflow-y-auto px-8 py-6 space-y-6"
+            className="flex-1 overflow-y-auto px-6 py-4 space-y-1 narrative-scroll narrative-terminal"
           >
             {state.messages.map((msg) => (
               <div key={msg.id}>
                 {msg.type === "header" && (
                   <div>
                     <h3
-                      className="text-accent-gold mb-3 font-serif"
-                      style={{ fontSize: "1.25rem" }}
+                      className="ansi-bright-yellow ansi-bold mb-1"
+                      style={{ fontSize: "0.9375rem" }}
                     >
                       {msg.text}
                     </h3>
-                    <div className="h-px bg-accent-gold opacity-20 mt-4"></div>
+                    <div className="h-px bg-accent-gold opacity-20 mt-1"></div>
                   </div>
                 )}
 
                 {msg.type === "room" && (
                   <div>
-                    <p
-                      className="text-text-primary mb-3 max-w-[70ch] font-serif"
-                      style={{ lineHeight: 1.7, fontSize: "1rem" }}
-                    >
+                    <p className="mud-room-desc max-w-[80ch]">
                       {msg.text}
                     </p>
-                    {exits.length > 0 && (
-                      <p className="text-interactive text-sm font-sans">
-                        Exits:{" "}
-                        {exits.map((exit, j) => (
-                          <span key={j}>
-                            <button
-                              onClick={() => handleExitClick(exit)}
-                              className="hover:text-accent-gold transition-colors underline"
-                            >
-                              [{exit}]
-                            </button>
-                            {j < exits.length - 1 && " "}
-                          </span>
-                        ))}
-                      </p>
-                    )}
-                    <div className="h-px bg-accent-gold opacity-20 mt-4"></div>
+                    <div className="h-px bg-accent-gold opacity-10 mt-1"></div>
                   </div>
                 )}
 
                 {msg.type === "combat" && (
                   <p
                     data-combat-type={msg.combatSubtype ?? 'default'}
-                    className={`max-w-[70ch] font-serif ${
-                      msg.combatSubtype === 'hit_dealt' ? 'text-accent-gold'
-                      : msg.combatSubtype === 'hit_taken' ? 'text-danger'
-                      : msg.combatSubtype === 'dodge' ? 'text-text-secondary'
-                      : msg.combatSubtype === 'defeated' ? 'text-danger font-bold'
-                      : msg.combatSubtype === 'flee' ? 'text-warning'
-                      : msg.combatSubtype === 'combat_end' ? 'text-interactive italic'
-                      : 'text-text-primary'
+                    className={`max-w-[80ch] ${
+                      msg.combatSubtype === 'hit_dealt' ? 'mud-damage ansi-bold'
+                      : msg.combatSubtype === 'hit_taken' ? 'mud-critical'
+                      : msg.combatSubtype === 'dodge' ? 'mud-dodge'
+                      : msg.combatSubtype === 'defeated' ? 'ansi-bright-red ansi-bold'
+                      : msg.combatSubtype === 'flee' ? 'ansi-yellow ansi-italic'
+                      : msg.combatSubtype === 'combat_end' ? 'ansi-cyan ansi-italic'
+                      : 'ansi-white'
                     }`}
-                    style={{ lineHeight: 1.7, fontSize: "1rem" }}
                   >
                     {msg.text}
                   </p>
@@ -312,43 +283,39 @@ export default function ShardExploration() {
 
                 {msg.type === "trace" && (
                   <p
-                    className="text-text-secondary italic pl-6 max-w-[70ch] flex items-start gap-2 font-serif"
-                    style={{ lineHeight: 1.7, fontSize: "0.95rem" }}
+                    className="ansi-dim pl-4 max-w-[80ch] flex items-start gap-2"
                   >
-                    <Eye className="w-4 h-4 mt-1 flex-shrink-0" />
+                    <Eye className="w-3 h-3 mt-0.5 flex-shrink-0" />
                     <span>{msg.text}</span>
                   </p>
                 )}
 
                 {msg.type === "sound" && (
                   <p
-                    className="text-text-secondary italic pl-6 max-w-[70ch] flex items-start gap-2 font-serif"
-                    style={{ lineHeight: 1.7, fontSize: "0.95rem" }}
+                    className="mud-sound pl-4 max-w-[80ch] flex items-start gap-2"
                   >
-                    <Volume2 className="w-4 h-4 mt-1 flex-shrink-0" />
+                    <Volume2 className="w-3 h-3 mt-0.5 flex-shrink-0" />
                     <span>{msg.text}</span>
                   </p>
                 )}
 
                 {msg.type === "system" && (
-                  <p
-                    className="text-text-disabled text-sm font-mono"
-                  >
+                  <p className="mud-system">
                     {msg.text}
                   </p>
                 )}
 
                 {msg.type === "speech" && (
-                  <p
-                    className="text-text-primary max-w-[70ch] font-serif"
-                    style={{ lineHeight: 1.7, fontSize: "1rem" }}
-                  >
-                    "{msg.text}"
+                  <p className="mud-speech max-w-[80ch]">
+                    &ldquo;{msg.text}&rdquo;
                   </p>
                 )}
               </div>
             ))}
           </div>
+
+          {/* MUD-style status prompt — positioned below scroll container */}
+          <MudPrompt />
         </div>
 
         {/* Sidebar (30%) */}
@@ -418,6 +385,11 @@ export default function ShardExploration() {
               </div>
             </div>
           )}
+
+          {/* Equipment Silhouette */}
+          <div className="p-4 border-b border-border-muted">
+            <EquipmentSilhouette loadout={state.loadout} />
+          </div>
 
           {/* Quick Inventory */}
           <div className="p-4 border-b border-border-muted">
@@ -501,31 +473,6 @@ export default function ShardExploration() {
             </div>
           )}
 
-          {/* Collapse Timer */}
-          <div className="p-4 border-b border-border-muted">
-            <h3
-              className="text-text-secondary text-xs mb-2 font-sans"
-            >
-              COLLAPSE TIMER
-            </h3>
-            <div
-              className="text-3xl font-bold font-mono"
-              style={{ color: getCollapseColor() }}
-            >
-              {state.collapseTimer != null ? formatTime(collapseTime) : "--:--"}
-            </div>
-            {state.shardState === "destabilising" && (
-              <p className="text-danger text-xs mt-2 font-sans">
-                Destabilising
-              </p>
-            )}
-            {state.shardState && (
-              <p className="text-text-disabled text-xs mt-1 font-mono">
-                Shard: {state.shardState}
-              </p>
-            )}
-          </div>
-
           {/* Sound Cues */}
           <div className="p-4 border-b border-border-muted">
             <h3
@@ -550,6 +497,20 @@ export default function ShardExploration() {
                 </p>
               )}
             </div>
+          </div>
+
+          {/* Compass Navigation */}
+          <CompassControl onNavigate={handleExitClick} />
+
+          {/* Minimap */}
+          <div className="px-4 py-2 flex justify-center">
+            <MinimapWidget
+              visitedRooms={mapState.visitedRooms}
+              ghostRooms={mapState.ghostRooms}
+              positions={mapState.positions}
+              currentRoomId={mapState.currentRoomId}
+              onToggleFullMap={toggleMap}
+            />
           </div>
 
           {/* Quick Actions */}
@@ -638,7 +599,7 @@ export default function ShardExploration() {
             placeholder={
               state.connectionStatus === "connected"
                 ? "Type a command..."
-                : "Connecting to shard..."
+                : isZone ? "Connecting to the Refuge..." : "Connecting to shard..."
             }
             disabled={state.connectionStatus !== "connected"}
             className="flex-1 bg-transparent text-text-primary placeholder:text-text-disabled focus:outline-none disabled:opacity-50 font-mono"
@@ -648,23 +609,55 @@ export default function ShardExploration() {
         </form>
       </div>
 
-      {/* Inventory Overlay */}
-      <InventoryOverlay
-        isOpen={inventoryOpen}
-        onClose={() => setInventoryOpen(false)}
+      {/* Equipment Overlay */}
+      {inventoryOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setInventoryOpen(false)}
+          />
+          <div className="relative w-[65%] bg-bg-panel shadow-2xl flex flex-col">
+            <div className="sticky top-0 bg-bg-panel border-b border-border-muted px-4 py-2 flex items-center justify-between z-10">
+              <span className="mud-exits" style={{ fontSize: '0.9rem' }}>EQUIPMENT</span>
+              <button
+                onClick={() => setInventoryOpen(false)}
+                className="text-text-secondary hover:text-accent-gold transition-colors text-sm font-mono"
+              >
+                [X]
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <CombinedStashLoadout room={roomRef.current} inShard={!isZone} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Map Overlay */}
+      <FullMapOverlay
+        visitedRooms={mapState.visitedRooms}
+        ghostRooms={mapState.ghostRooms}
+        positions={mapState.positions}
+        currentRoomId={mapState.currentRoomId}
+        isOpen={isMapOpen}
+        onClose={closeMap}
       />
 
       {/* Extraction Overlay */}
       <ExtractionOverlay
         state={extraction.status}
         progress={extraction.progress}
+        onReturnToRefuge={() => {
+          // Navigate directly to refuge and let useShardConnection handle the reconnection
+          navigate('/refuge');
+        }}
       />
 
       {/* Chat Panel */}
       <ChatPanel
         isOpen={chatOpen}
         onClose={() => setChatOpen(false)}
-        context="shard"
+        context={isZone ? "refuge" : "shard"}
         onSendMessage={sendChatMessage}
       />
 

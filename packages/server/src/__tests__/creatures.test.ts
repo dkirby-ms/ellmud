@@ -321,6 +321,7 @@ describe('Creature Combat Integration', () => {
       attack: 10,
       defence: 5,
       armour: 2,
+      agility: 5,
     });
     combat.registerCombatant(player);
 
@@ -359,6 +360,7 @@ describe('Creature Combat Integration', () => {
       attack: 15,
       defence: 5,
       armour: 2,
+      agility: 5,
     });
     combat.registerCombatant(player);
     combat.initiateCombat(player.id, combatant.id);

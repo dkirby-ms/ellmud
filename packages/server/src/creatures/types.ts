@@ -9,7 +9,12 @@ import type { CombatStats } from '../combat/CombatState.js';
 
 // ─── Creature Types ──────────────────────────────────────────────────────────
 
-export type CreatureType = 'drowned_revenant';
+export type CreatureType =
+  | 'drowned_revenant'
+  | 'gutterspawn'
+  | 'rubble_scavenger'
+  | 'hollow_stalker'
+  | 'the_collapsed_one';
 
 // ─── Behavior States (GDD §6.6) ─────────────────────────────────────────────
 
@@ -63,6 +68,10 @@ export interface Creature {
   attack: number;
   defence: number;
   armour: number;
+  /** Agility stat — scales dodge chance (GDD §6.4). Defaults to 0 for creatures. */
+  agility?: number;
+  /** Dodge skill rank — scales dodge chance (GDD §6.4). Defaults to 0 for creatures. */
+  dodgeSkillRank?: number;
   currentRoomId: string;
   behaviorState: BehaviorState;
   /** Ticks spent in current idle patrol position. */

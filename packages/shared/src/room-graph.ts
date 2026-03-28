@@ -30,7 +30,30 @@ export type RoomType =
   | 'boss'
   | 'corridor'
   | 'junction'
-  | 'dead_end';
+  | 'dead_end'
+  | 'feature_stash'
+  | 'feature_shardboard'
+  | 'feature_marketplace'
+  | 'feature_crafting'
+  | 'feature_training'
+  | 'feature_contracts'
+  | 'feature_infirmary';
+
+/** Union of all feature room types (those prefixed with `feature_`). */
+export type FeatureRoomType = Extract<RoomType, `feature_${string}`>;
+
+const FEATURE_PREFIX = 'feature_';
+
+/** Returns true if the given type string is a feature room type. */
+export function isFeatureRoomType(type: string): type is FeatureRoomType {
+  return type.startsWith(FEATURE_PREFIX) && type.length > FEATURE_PREFIX.length;
+}
+
+/** Returns the key portion after `feature_`, or null for non-feature types. */
+export function getFeatureKey(type: string): string | null {
+  if (!isFeatureRoomType(type)) return null;
+  return type.slice(FEATURE_PREFIX.length);
+}
 
 // ─── Hazard Placeholder ──────────────────────────────────────────────────────
 

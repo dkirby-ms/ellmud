@@ -2,7 +2,7 @@
 
 **PvPvE Extraction RPG — Real-Time MUD**
 
-Dive into procedurally generated shards, scavenge gear, fight creatures, and extract before collapse. Everything you don't extract, you lose.
+Explore persistent zones and procedurally generated shards. Scavenge gear, fight creatures, manage your stash in the Refuge, then dive into extraction runs before collapse. Everything you don't extract, you lose.
 
 ## Quick Start
 
@@ -148,7 +148,7 @@ packages/
 - 🔄 SSH/Raw TCP client adapter (legacy MUD client support)
 - 🔄 Advanced creature AI (behavior trees, multi-phase encounters)
 - 🔄 PvP system (arenas, contracts, faction warfare)
-- 🔄 Procedural narrative expansion (more biomes, creature types, events)
+- 🔄 Content expansion (more biomes, creature types, static zones, procedural events)
 - 🔄 Performance optimization (creature AI off-thread, narrative batching)
 
 ## Environment Variables

@@ -1,0 +1,946 @@
+diff --git a/packages/server/src/rooms/ShardRoom.ts b/packages/server/src/rooms/ShardRoom.ts
+index 7fcb470..e4ea7f1 100644
+--- a/packages/server/src/rooms/ShardRoom.ts
++++ b/packages/server/src/rooms/ShardRoom.ts
+@@ -1,4 +1,4 @@
+-import { Room, Client } from '@colyseus/core';
++import { Room, Client, matchMaker } from '@colyseus/core';
+ import {
+   type CommandMessage,
+   type NarrateMessage,
+@@ -15,7 +15,12 @@ import {
+   type UnequipItemMessage,
+   type SwapItemMessage,
+   type LoadoutUpdateMessage,
++  type StashUpdateMessage,
++  type DisplayItem,
+   type ZoneTransferMessage,
++  type ExploredRoomData,
++  SLOT_ACCEPTS,
++  EQUIPMENT_SLOT_ORDER,
+   SHARD_SICKNESS_DEFAULTS,
+   MessageTypes,
+ } from '@ellmud/shared';
+@@ -66,7 +71,11 @@ import { getZoneRepository } from '../zones/index.js';
+ import type { ZoneData } from '../zones/index.js';
+ import { convertZoneToRoomGraph } from '../zones/zone-adapter.js';
+ import { getItemDefinition } from '../items/registry.js';
+-import type { Item } from '../shard/RoomGraph.js';
++import type { Item, Direction } from '../shard/RoomGraph.js';
++import { AmbientSystem } from '../systems/AmbientSystem.js';
++import type { ShardListing } from '../commands/index.js';
++import { getExplorationRepository } from '../exploration/index.js';
++import type { ExplorationRepository } from '../exploration/index.js';
+ 
+ const TICK_INTERVAL_MS = 1000;
+ 
+@@ -93,6 +102,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+   private players = new Map<string, PlayerState>();
+   /** Maps sessionId → characterId for all gameplay operations. */
+   private playerIds = new Map<string, string>();
++  /** Maps characterId → authPlayerId (players.id UUID) for DB persistence. */
++  private authPlayerIds = new Map<string, string>();
+   private combatSystem!: CombatSystem;
+   private soundSystem!: SoundSystem;
+   private traceSystem!: TraceSystem;
+@@ -116,6 +127,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+   private zoneData?: ZoneData;
+   private isZone = false;
+   private repopTimer?: ReturnType<typeof setInterval>;
++  /** Ambient world simulation — weather, NPCs, merchants (hub/social zones only). */
++  private ambientSystem?: AmbientSystem;
++  /** Tracks pending shard-enter per session to prevent double-switch. */
++  private pendingEnter = new Set<string>();
++  private explorationRepo!: ExplorationRepository;
+ 
+   /**
+    * Inject profile repository. Called before room lifecycle if provided.
+@@ -193,29 +209,42 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+     this.creatureManager = new CreatureManager();
+ 
+     if (options['zoneSlug'] && typeof options['zoneSlug'] === 'string') {
+-      // Zone-based room: load from repository
++      // Zone-based room: load from repository (with fallback for the-refuge)
+       const zoneRepo = getZoneRepository();
+       const zoneData = await zoneRepo.getZoneBySlug(options['zoneSlug']);
+-      if (!zoneData) throw new Error(`Zone '${options['zoneSlug']}' not found`);
+ 
+-      const sharedGraph = convertZoneToRoomGraph(zoneData);
+-      this.roomGraph = adaptRoomGraph(sharedGraph);
+-      this.entryRoomIds = sharedGraph.entryRoomIds;
+-      this.shardTier = sharedGraph.tier;
+-      this.state.biome = sharedGraph.biome;
++      if (zoneData) {
++        const sharedGraph = convertZoneToRoomGraph(zoneData);
++        this.roomGraph = adaptRoomGraph(sharedGraph);
++        this.entryRoomIds = sharedGraph.entryRoomIds;
++        this.shardTier = sharedGraph.tier;
++        this.state.biome = sharedGraph.biome;
++      } else if (options['zoneSlug'] === 'the-refuge') {
++        // B7: Fallback hardcoded graph when DB zone data is missing
++        this.roomGraph = createFallbackRefugeGraph();
++        this.entryRoomIds = [this.roomGraph.startRoomId];
++        this.log('Zone "the-refuge" not in DB — using fallback graph.');
++      } else {
++        throw new Error(`Zone '${options['zoneSlug']}' not found`);
++      }
+ 
+       // Store zone metadata for repop and inter-zone features
+       this.zoneSlug = options['zoneSlug'];
+-      this.zoneData = zoneData;
++      this.zoneData = zoneData ?? undefined;
+       this.isZone = true;
+ 
+       // Zone-level max players override (0 = unlimited, keep tier default)
+-      if (zoneData.zone.maxPlayers > 0) {
++      if (zoneData && zoneData.zone.maxPlayers > 0) {
+         this.maxClients = zoneData.zone.maxPlayers;
+       }
+ 
+       // Spawn creatures from zone NPC definitions
+-      this.creatureManager.spawnCreaturesFromZone(zoneData);
++      if (zoneData) {
++        this.creatureManager.spawnCreaturesFromZone(zoneData);
++      }
++
++      // B1: Initialize ambient system for all zones
++      this.ambientSystem = new AmbientSystem();
+     } else if (options['useTestGraph'] === true) {
+       this.roomGraph = createTestRoomGraph();
+       this.entryRoomIds = [this.roomGraph.startRoomId]; // Test graph has single entry
+@@ -282,9 +311,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+       this.runHistoryRepo = getRunHistoryRepository();
+     }
+ 
++    // Initialize exploration repo
++    this.explorationRepo = getExplorationRepository();
++
+     // Register message handlers
+     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
+-      this.handleCommandMessage(client, message);
++      void this.handleCommandMessage(client, message);
+     });
+ 
+     // Equipment message handlers (server-authoritative — players can equip mid-shard)
+@@ -312,9 +344,14 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+       this.startRepopTimer();
+     }
+ 
+-    // Begin shard lifecycle
+-    this.transitionTo('seeding');
+-    this.seedShard();
++    // Begin lifecycle: zones stay 'open', shards follow seeding→active→collapse flow
++    if (this.isZone) {
++      this.transitionTo('open');
++      this.log('Zone initialized: persistent open state (no collapse)');
++    } else {
++      this.transitionTo('seeding');
++      this.seedShard();
++    }
+   }
+ 
+   async onAuth(_client: Client, options: Record<string, unknown>): Promise<unknown> {
+@@ -329,7 +366,10 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+     const rawPlayerId = authPlayerId || (options['playerId'] as string) || client.sessionId;
+ 
+     // Character ID: passed from client after character selection. Falls back to playerId for backwards compat.
+-    const playerId = (options['characterId'] as string) || rawPlayerId;
++    const characterId = (options['characterId'] as string) || rawPlayerId;
++    
++    // For game state operations, use characterId; for DB persistence, use rawPlayerId (auth UUID)
++    const playerId = characterId;
+ 
+     // Guard against the same playerId joining twice (double-click / client race condition).
+     // If the player is already present, displace the old session rather than corrupting state.
+@@ -360,11 +400,15 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+ 
+     this.updateMetadata();
+     this.playerIds.set(client.sessionId, playerId);
++    
++    // Track characterId → authPlayerId mapping for DB operations
++    this.authPlayerIds.set(playerId, rawPlayerId);
+ 
+     // Load persisted profile (skills, carry weight, equipment) or use defaults
++    // DB operations require the auth player ID (players.id UUID)
+     let profile: PlayerProfile;
+     try {
+-      const saved = await this.profileRepo.load(playerId);
++      const saved = await this.profileRepo.load(rawPlayerId);
+       profile = saved ?? { ...DEFAULT_PROFILE };
+     } catch (err) {
+       this.log(`Failed to load profile for ${playerId}: ${err}`);
+@@ -373,7 +417,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+ 
+     // Load faction membership (fire-and-forget — faction data is informational)
+     try {
+-      const factions = await this.factionRepo.getPlayerFactions(playerId);
++      const factions = await this.factionRepo.getPlayerFactions(rawPlayerId);
+       if (factions.length > 0) {
+         this.log(`Player ${playerId} faction: ${factions[0].faction_id}`);
+       }
+@@ -384,10 +428,16 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+     // Track join time for run duration calculation
+     this.playerJoinTimes.set(playerId, Date.now());
+ 
+-    // Distribute players across entry points for spatial separation
+-    // Use player count to cycle through available entry rooms
+-    const entryIndex = (this.state.playerCount - 1) % this.entryRoomIds.length;
+-    const startRoom = this.entryRoomIds[entryIndex] || this.roomGraph.startRoomId;
++    // Determine entry room based on zone vs shard
++    let startRoom: string;
++    if (this.isZone) {
++      // Zones: always spawn at designated start room (e.g., hearth for refuge)
++      startRoom = this.roomGraph.startRoomId;
++    } else {
++      // Shards: distribute players across entry points for spatial separation
++      const entryIndex = (this.state.playerCount - 1) % this.entryRoomIds.length;
++      startRoom = this.entryRoomIds[entryIndex] || this.roomGraph.startRoomId;
++    }
+ 
+     // Initialize player state at assigned entry room with persisted profile
+     const playerState = new PlayerState(
+@@ -413,10 +463,41 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+     this.deliverResult(client, lookResult);
+     this.sendTraceNarrations(client, startRoom);
+ 
++    // Record entry room exploration
++    this.recordExploration(playerId, startRoom);
++
++    // Send bulk exploration data (previously visited rooms + current room)
++    this.sendExplorationData(client, playerId, startRoom).catch(err =>
++      this.log(`Failed to send exploration data for ${playerId}: ${err}`),
++    );
++
+     this.sendShardState(client, {
+       state: this.lifecycle,
+       collapseTimer: this.state.collapseTimer,
+     });
++
++    // B1: Send ambient world snapshot on join (hub/social zones)
++    if (this.ambientSystem) {
++      this.sendNarrate(client, {
++        text: this.ambientSystem.getJoinNarration(),
++        type: 'ambient',
++        timestamp: Date.now(),
++      });
++    }
++
++    // B2: Announce arrival to others in the same room (zone mode only)
++    if (this.isZone) {
++      this.announceToRoom(startRoom, playerId, 'An adventurer arrives.');
++    }
++
++    // B3: Send full loadout + stash state to client on join (zone mode)
++    if (this.isZone && this.loadoutService && this.stashService) {
++      try {
++        await this.sendLoadoutAndStashUpdate(client, playerId);
++      } catch (err) {
++        this.log(`Failed to send equipment state for ${playerId}: ${err}`);
++      }
++    }
+   }
+ 
+   async onLeave(client: Client, code?: number): Promise<void> {
+@@ -438,10 +519,15 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+         this.combatSystem.markDisconnected(playerId);
+       }
+ 
+-      this.log(`Player disconnected (code ${code}): ${playerId} — allowing reconnection for ${config.reconnectionTimeoutS}s`);
++      // B6: Zone-based reconnection grace — hub/social 10s, dungeon 30s, shards use config default
++      const graceSeconds = this.isZone
++        ? (this.zoneData?.zone?.category === 'dungeon' ? 30 : 10)
++        : config.reconnectionTimeoutS;
++
++      this.log(`Player disconnected (code ${code}): ${playerId} — allowing reconnection for ${graceSeconds}s`);
+ 
+       try {
+-        await this.allowReconnection(client, config.reconnectionTimeoutS);
++        await this.allowReconnection(client, graceSeconds);
+         
+         // Client reconnected successfully
+         this.log(`Player reconnected: ${playerId}`);
+@@ -487,21 +573,36 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+ 
+       this.state.playerCount = Math.max(0, this.state.playerCount - 1);
+       this.players.delete(playerId);
++      this.authPlayerIds.delete(playerId);
+       this.combatSystem.removeCombatant(playerId);
+       this.updateMetadata();
+     }
+     this.playerIds.delete(client.sessionId);
++    // B4: Clear pending-enter guard on leave
++    this.pendingEnter.delete(client.sessionId);
++    // B2: Announce departure in zone mode
++    if (this.isZone && playerState) {
++      this.announceToRoom(playerState.currentRoomId, playerId, 'An adventurer departs.');
++    }
+     this.log(`Player left: ${playerId} (${this.state.playerCount} players)`);
+   }
+ 
+   /**
+    * Handle reconnection timeout expiry — kill or move to safe room.
++   * Zones are exempt from death behavior — simply clean up the player.
+    */
+   private handleReconnectionTimeout(playerId: string): void {
+-    const config = getConfig();
+     const playerState = this.players.get(playerId);
+     if (!playerState) return;
+ 
++    // Zones don't apply death behavior on disconnect timeout
++    if (this.isZone) {
++      this.log(`Player ${playerId} disconnected from zone — no death penalty applied`);
++      return;
++    }
++
++    // Shards apply death behavior based on config
++    const config = getConfig();
+     const combatant = this.combatSystem.getCombatant(playerId);
+ 
+     if (config.reconnectDeathBehavior === 'kill') {
+@@ -678,6 +779,18 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+       this.tickDowningSystem();
+     }
+ 
++    // B1: Ambient system tick — environmental narrations (hub/social zones)
++    if (this.ambientSystem) {
++      const events = this.ambientSystem.tick();
++      for (const event of events) {
++        this.broadcast(MessageTypes.NARRATE, {
++          text: event.narrative,
++          type: 'ambient',
++          timestamp: Date.now(),
++        } satisfies NarrateMessage);
++      }
++    }
++
+     // Decay traces
+     this.traceSystem.tick(TICK_INTERVAL_MS);
+   }
+@@ -784,7 +897,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+ 
+   // ─── Command Handling ────────────────────────────────────────────────────
+ 
+-  private handleCommandMessage(client: Client, message: CommandMessage): void {
++  private async handleCommandMessage(client: Client, message: CommandMessage): Promise<void> {
+     const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+     const player = this.players.get(playerId);
+     if (!player) {
+@@ -833,6 +946,23 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+       return;
+     }
+ 
++    // B5: Async zone commands — shardboard/enter need async matchMaker calls
++    if (this.isZone && (verb === 'shardboard' || verb === 'enter')) {
++      const room = this.roomGraph.rooms.get(player.currentRoomId);
++      if (room?.type !== 'feature_shardboard') {
++        this.sendNarrate(client, { text: `You can't do that here.`, type: 'system', timestamp: Date.now() });
++        return;
++      }
++      if (verb === 'shardboard') {
++        await this.handleShardboardCommand(client);
++        return;
++      }
++      if (verb === 'enter') {
++        await this.handleEnterCommand(client, args);
++        return;
++      }
++    }
++
+     const previousRoomId = player.currentRoomId;
+     const wasExtracting = this.extractionSystem.isExtracting(playerId);
+     const ctx = this.buildCommandContext(player, args);
+@@ -861,6 +991,16 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+       this.runAwarenessChecks(playerId, player.currentRoomId, 'arrival');
+       // Awareness: notify observers in source room about departing player
+       this.runAwarenessChecks(playerId, previousRoomId, 'departure');
++
++      // B2: Zone-mode arrival/departure announcements
++      if (this.isZone) {
++        this.announceToRoom(previousRoomId, playerId, 'An adventurer heads away.');
++        this.announceToRoom(player.currentRoomId, playerId, 'An adventurer arrives.');
++      }
++
++      // D2: Record exploration visit on movement
++      this.recordExploration(playerId, player.currentRoomId);
++      this.sendExplorationUpdate(client, player.currentRoomId);
+     }
+ 
+     // Social commands (say, emote) broadcast to all players in the same room
+@@ -921,6 +1061,16 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+       extractionSystem: this.extractionSystem,
+       downingSystem: this.downingSystem,
+       creaturesInRoom,
++      // B5: Stash & loadout services (available in zone mode)
++      ...(this.isZone && this.stashService ? { stashService: this.stashService } : {}),
++      ...(this.isZone && this.loadoutService ? { loadoutService: this.loadoutService } : {}),
++      // B5: Shardboard context — matchMaker integration (zone mode only)
++      ...(this.isZone ? {
++        queryShards: () => this.getShardListings(),
++        createShard: (opts?: { tier?: number }) => this.createShardRoom(opts),
++      } : {}),
++      // Zone context
++      ...(this.isZone ? { zoneName: this.zoneData?.zone?.name, zoneSlug: this.zoneSlug } : {}),
+     };
+   }
+ 
+@@ -941,6 +1091,84 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+     }
+   }
+ 
++  /** Fire-and-forget exploration visit recording. Uses authPlayerIds for DB persistence. */
++  private recordExploration(playerId: string, roomId: string): void {
++    const authId = this.authPlayerIds.get(playerId) || playerId;
++    const currentRoom = this.roomGraph.rooms.get(roomId);
++    this.explorationRepo.recordVisit({
++      characterId: authId,
++      zoneSlug: this.zoneSlug ?? null,
++      roomId,
++      roomType: currentRoom?.type ?? 'unknown',
++      roomName: currentRoom?.name ?? roomId,
++      shardTier: this.shardTier,
++      biome: this.state.biome ?? null,
++    }).catch(err => console.error(`[Ellmud] Failed to record exploration for ${playerId}:`, err));
++  }
++
++  /** Build an ExploredRoomData payload from a room in the graph. */
++  private buildExploredRoomData(roomId: string): ExploredRoomData {
++    const room = this.roomGraph.rooms.get(roomId);
++    return {
++      roomId,
++      zoneSlug: this.zoneSlug ?? null,
++      visitedAt: new Date().toISOString(),
++      roomName: room?.name ?? roomId,
++      roomType: room?.type ?? 'corridor',
++      exits: Object.fromEntries(room?.exits?.entries() ?? []),
++    };
++  }
++
++  /** Send a single-room exploration update to a client after entering a room. */
++  private sendExplorationUpdate(client: Client, roomId: string): void {
++    try {
++      client.send(MessageTypes.EXPLORATION_UPDATE, {
++        type: MessageTypes.EXPLORATION_UPDATE,
++        room: this.buildExploredRoomData(roomId),
++      });
++    } catch (err) {
++      console.error(`[Ellmud] Failed to send exploration update:`, err);
++    }
++  }
++
++  /** Send bulk exploration data to a client on join (previously visited rooms + current room). */
++  private async sendExplorationData(client: Client, playerId: string, currentRoomId: string): Promise<void> {
++    try {
++      const authId = this.authPlayerIds.get(playerId) || playerId;
++
++      // Load previously visited rooms for this zone (or empty for ephemeral shards)
++      let visitedRooms: ExploredRoomData[] = [];
++      if (this.zoneSlug) {
++        const explored = await this.explorationRepo.getExploredRoomsInZone(authId, this.zoneSlug);
++        visitedRooms = explored.map(visited => {
++          const room = this.roomGraph.rooms.get(visited.roomId);
++          return {
++            roomId: visited.roomId,
++            zoneSlug: visited.zoneSlug,
++            visitedAt: visited.lastVisited.toISOString(),
++            roomName: room?.name ?? visited.roomName,
++            roomType: room?.type ?? visited.roomType,
++            exits: Object.fromEntries(room?.exits?.entries() ?? []),
++          };
++        });
++      }
++
++      // Ensure the current room is always included (record may not be persisted yet)
++      const hasCurrentRoom = visitedRooms.some(r => r.roomId === currentRoomId);
++      if (!hasCurrentRoom) {
++        visitedRooms.push(this.buildExploredRoomData(currentRoomId));
++      }
++
++      client.send(MessageTypes.EXPLORATION_DATA, {
++        type: MessageTypes.EXPLORATION_DATA,
++        rooms: visitedRooms,
++        currentRoomId,
++      });
++    } catch (err) {
++      console.error(`[Ellmud] Failed to send exploration data for ${playerId}:`, err);
++    }
++  }
++
+   /**
+    * Broadcast narrations to all players in a specific room.
+    * Used for proximity-based social commands (say, emote).
+@@ -963,6 +1191,22 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+     }
+   }
+ 
++  /** B2: Broadcast a narration to everyone in a room except the excluded player. Zone-mode only. */
++  private announceToRoom(roomId: string, excludePlayerId: string, text: string): void {
++    for (const [pid, ps] of this.players) {
++      if (ps.currentRoomId === roomId && pid !== excludePlayerId) {
++        const targetClient = this.findClient(pid);
++        if (targetClient) {
++          this.sendNarrate(targetClient, {
++            text,
++            type: 'awareness',
++            timestamp: Date.now(),
++          });
++        }
++      }
++    }
++  }
++
+   /**
+    * Deliver a whisper message to a specific target.
+    * Sender gets confirmation, target gets the actual message.
+@@ -1027,7 +1271,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+ 
+         player.currentRoomId = flee.toRoomId;
+         const client = this.findClient(flee.combatantId);
++
++        // Record exploration + send update for flee destination
++        this.recordExploration(flee.combatantId, flee.toRoomId);
++
+         if (client) {
++          this.sendExplorationUpdate(client, flee.toRoomId);
+           const targetRoom = this.roomGraph.rooms.get(flee.toRoomId);
+           if (targetRoom) {
+             this.sendNarrate(client, {
+@@ -1202,7 +1451,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+ 
+     // Tell client to switch back to refuge
+     client.send(MessageTypes.ROOM_SWITCH, {
+-      target: 'refuge',
++      target: 'zone:the-refuge',
+       reason: 'extraction_complete',
+     } satisfies RoomSwitchMessage);
+   }
+@@ -1604,7 +1853,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+         await this.savePlayerProfile(playerId, this.players.get(playerId)!);
+ 
+         client.send(MessageTypes.ROOM_SWITCH, {
+-          target: 'refuge',
++          target: 'zone:the-refuge',
+           reason: 'player_death',
+         } satisfies RoomSwitchMessage);
+ 
+@@ -1739,12 +1988,14 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+   /** Extract persistable profile from player state and save it. */
+   private async savePlayerProfile(playerId: string, playerState: PlayerState): Promise<void> {
+     try {
++      // Use auth player ID (players.id UUID) for DB operations
++      const authPlayerId = this.authPlayerIds.get(playerId) || playerId;
+       const profile: PlayerProfile = {
+         skills: { ...playerState.skills },
+         maxCarryWeight: playerState.maxCarryWeight,
+         equipment: playerState.equipment,
+       };
+-      await this.profileRepo.save(playerId, profile);
++      await this.profileRepo.save(authPlayerId, profile);
+     } catch (err) {
+       this.log(`Failed to save profile for ${playerId}: ${err}`);
+     }
+@@ -1759,6 +2010,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+     extracted: boolean,
+   ): Promise<void> {
+     try {
++      // Use auth player ID (players.id UUID) for DB operations
++      const authPlayerId = this.authPlayerIds.get(playerId) || playerId;
+       const joinTime = this.playerJoinTimes.get(playerId);
+       const durationSec = joinTime
+         ? Math.floor((Date.now() - joinTime) / 1000)
+@@ -1766,7 +2019,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+ 
+       const run: RunRecord = {
+         runId: this.roomId,
+-        playerId,
++        playerId: authPlayerId,
+         shardTier: this.shardTier,
+         biome: (this.state.biome as BiomeType) || null,
+         durationSec,
+@@ -1988,6 +2241,36 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+     } satisfies LoadoutUpdateMessage);
+   }
+ 
++  /** B3: Send updated loadout + stash state to client (dual-message pattern). */
++  private async sendLoadoutAndStashUpdate(client: Client, playerId: string): Promise<void> {
++    if (!this.loadoutService || !this.stashService) return;
++
++    const loadoutView = await this.loadoutService.getLoadoutView(playerId);
++    client.send(MessageTypes.LOADOUT_UPDATE, {
++      slots: loadoutView.slots,
++    } satisfies LoadoutUpdateMessage);
++
++    const stashView = await this.stashService.loadStash(playerId);
++    const stashItems: DisplayItem[] = stashView.entries.map((entry) => {
++      const allowedSlots = EQUIPMENT_SLOT_ORDER.filter(
++        (s) => SLOT_ACCEPTS[s].includes(entry.definition.type),
++      );
++      return {
++        instanceId: entry.instance.instanceId,
++        definitionId: entry.instance.itemId,
++        name: entry.definition.name,
++        type: entry.definition.type,
++        tier: entry.definition.rarity,
++        weight: entry.definition.weight,
++        description: entry.definition.description,
++        allowedSlots,
++      };
++    });
++    client.send(MessageTypes.STASH_UPDATE, {
++      items: stashItems,
++    } satisfies StashUpdateMessage);
++  }
++
+   /** Find an item in the player's shard inventory by instanceId or itemId. */
+   private findInInventory(
+     player: PlayerState,
+@@ -2014,9 +2297,350 @@ export class ShardRoom extends Room<ShardRoomOptions> {
+     };
+   }
+ 
++  // ─── B5: Shardboard & MatchMaker Integration ─────────────────────────────
++
++  /** Query all currently running shard rooms via matchMaker. */
++  private async getShardListings(): Promise<ShardListing[]> {
++    const rooms = await this.safeQueryRooms();
++    const maxPlayers = getConfig().maxPlayersPerShard;
++
++    return rooms
++      .filter((room) => room.name === 'shard')
++      .map((room) => {
++        const localRoom = this.safeGetRoom(room.roomId);
++        const state = localRoom?.state as {
++          biome?: string;
++          tier?: number;
++          lifecycle?: string;
++          playerCount?: number;
++        } | undefined;
++        const metadata = (room.metadata ?? {}) as Record<string, unknown>;
++
++        const biome = (state?.biome ?? metadata['biome'] ?? 'flooded_crypt') as string;
++        const tier = (state?.tier ?? metadata['tier'] ?? 1) as number;
++        const lifecycle = (state?.lifecycle ?? metadata['lifecycle'] ?? 'unknown') as string;
++        const playerCount = typeof state?.playerCount === 'number'
++          ? state.playerCount
++          : (room.clients ?? (metadata['playerCount'] as number | undefined) ?? 0);
++        const maxPlayersForRoom = (metadata['maxPlayers'] as number | undefined) ?? room.maxClients ?? maxPlayers;
++
++        return {
++          roomId: room.roomId,
++          biome,
++          tier,
++          lifecycle,
++          playerCount,
++          maxPlayers: maxPlayersForRoom,
++          locked: room.locked ?? false,
++        };
++      });
++  }
++
++  /** Create a new shard room via matchMaker. */
++  private async createShardRoom(_opts?: { tier?: number }): Promise<ShardListing | null> {
++    const biome: BiomeType = 'flooded_crypt';
++    const tier: ShardTier = (_opts?.tier ?? 1) as ShardTier;
++    try {
++      const roomCache = await matchMaker.createRoom('shard', {
++        biome,
++        tier,
++        seed: Date.now(),
++        openDelayMs: 0,
++      });
++
++      const localRoom = this.safeGetRoom(roomCache.roomId);
++      const state = localRoom?.state as {
++        biome?: string;
++        tier?: number;
++        lifecycle?: string;
++        playerCount?: number;
++      } | undefined;
++
++      return {
++        roomId: roomCache.roomId,
++        biome: (state?.biome ?? biome) as string,
++        tier: (state?.tier ?? tier) as number,
++        lifecycle: state?.lifecycle ?? 'open',
++        playerCount: state?.playerCount ?? 0,
++        maxPlayers: roomCache.maxClients ?? getConfig().maxPlayersPerShard,
++        locked: roomCache.locked ?? false,
++      };
++    } catch (err) {
++      this.log(`Failed to create shard: ${err}`);
++      return null;
++    }
++  }
++
++  private async safeQueryRooms(): Promise<Awaited<ReturnType<typeof matchMaker.query>>> {
++    try {
++      return await matchMaker.query({});
++    } catch {
++      return [];
++    }
++  }
++
++  private safeGetRoom(roomId: string): Room | undefined {
++    try {
++      return matchMaker.getLocalRoomById(roomId) ?? undefined;
++    } catch {
++      return undefined;
++    }
++  }
++
++  // ─── B5: Shardboard & Enter Command Handlers (async, zone-mode only) ──────
++
++  /** Display available shards on the shardboard. Auto-creates one if none open. */
++  private async handleShardboardCommand(client: Client): Promise<void> {
++    let listings = await this.getShardListings();
++    const hasOpenShard = listings.some((entry) => this.isShardJoinable(entry));
++
++    if (!hasOpenShard) {
++      const created = await this.createShardRoom();
++      if (created) {
++        listings = [...listings.filter((entry) => entry.roomId !== created.roomId), created];
++      }
++    }
++
++    if (listings.length === 0) {
++      this.sendNarrate(client, {
++        text: 'The shardboard is empty. The veil is quiet... for now.',
++        type: 'system',
++        timestamp: Date.now(),
++      });
++      return;
++    }
++
++    const lines = listings.map((entry) => {
++      const biome = this.formatBiome(entry.biome);
++      const status = entry.locked
++        ? 'locked'
++        : entry.playerCount >= entry.maxPlayers
++          ? 'full'
++          : entry.lifecycle;
++      return `  • ${entry.roomId} — ${biome} | Tier ${entry.tier} | ${entry.playerCount}/${entry.maxPlayers} players | ${status}`;
++    });
++
++    const hasJoinable = listings.some((entry) => this.isShardJoinable(entry));
++    const suffix = hasJoinable
++      ? 'Type `enter <shard-id>` to step through a rift.'
++      : 'No rifts are open yet. Wait for a shard to stabilize, then enter.';
++
++    this.sendNarrate(client, {
++      text: `The Shardboard lists available rifts:\n\n${lines.join('\n')}\n\n${suffix}`,
++      type: 'system',
++      timestamp: Date.now(),
++    });
++  }
++
++  /** Handle the `enter` command — step through a rift into a shard. */
++  private async handleEnterCommand(client: Client, args: string[]): Promise<void> {
++    // B4: Guard against duplicate enter-shard from the same session
++    if (this.pendingEnter.has(client.sessionId)) {
++      this.sendNarrate(client, {
++        text: 'You are already stepping through a rift...',
++        type: 'system',
++        timestamp: Date.now(),
++      });
++      return;
++    }
++    this.pendingEnter.add(client.sessionId);
++
++    const requestedId = args[0]?.trim();
++    const listings = await this.getShardListings();
++
++    if (requestedId && requestedId.toLowerCase() !== 'shard') {
++      const shard = listings.find((entry) => entry.roomId === requestedId);
++      if (!shard) {
++        this.pendingEnter.delete(client.sessionId);
++        this.sendNarrate(client, {
++          text: `No shard with id "${requestedId}" is listed. Check the shardboard for available rifts.`,
++          type: 'system',
++          timestamp: Date.now(),
++        });
++        return;
++      }
++
++      if (!this.isShardJoinable(shard)) {
++        this.pendingEnter.delete(client.sessionId);
++        this.sendNarrate(client, {
++          text: this.describeShardRejection(shard),
++          type: 'system',
++          timestamp: Date.now(),
++        });
++        return;
++      }
++
++      this.sendShardSwitch(client, shard);
++      return;
++    }
++
++    // No specific shard requested — pick the emptiest open one, or create new
++    let shard = this.pickOpenShard(listings);
++    if (!shard) {
++      const created = await this.createShardRoom();
++      if (created && this.isShardJoinable(created)) {
++        shard = created;
++      }
++    }
++
++    if (!shard) {
++      this.pendingEnter.delete(client.sessionId);
++      this.sendNarrate(client, {
++        text: 'No open rifts are available. Check the shardboard as new shards stabilize.',
++        type: 'system',
++        timestamp: Date.now(),
++      });
++      return;
++    }
++
++    this.sendShardSwitch(client, shard);
++  }
++
++  private sendShardSwitch(client: Client, shard: ShardListing): void {
++    this.sendNarrate(client, {
++      text: 'You step toward the rift. Reality bends around you as you are pulled into the shard...',
++      type: 'system',
++      timestamp: Date.now(),
++    });
++
++    client.send(MessageTypes.ROOM_SWITCH, {
++      target: 'shard',
++      reason: 'enter_shard',
++      options: {
++        roomId: shard.roomId,
++        biome: shard.biome as BiomeType,
++        tier: shard.tier as ShardTier,
++      },
++    } satisfies RoomSwitchMessage);
++  }
++
++  private isShardJoinable(entry: ShardListing): boolean {
++    return entry.lifecycle === 'open'
++      && !entry.locked
++      && entry.playerCount < entry.maxPlayers;
++  }
++
++  private pickOpenShard(listings: ShardListing[]): ShardListing | null {
++    const open = listings
++      .filter((entry) => this.isShardJoinable(entry))
++      .sort((a, b) => a.playerCount - b.playerCount);
++    return open[0] ?? null;
++  }
++
++  private describeShardRejection(entry: ShardListing): string {
++    if (entry.locked) return `Shard "${entry.roomId}" is locked.`;
++    if (entry.lifecycle !== 'open') return `Shard "${entry.roomId}" is ${entry.lifecycle}. Wait for it to open.`;
++    if (entry.playerCount >= entry.maxPlayers) return `Shard "${entry.roomId}" is full.`;
++    return `Shard "${entry.roomId}" is not available.`;
++  }
++
++  private formatBiome(biome: string): string {
++    return biome.split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
++  }
++
++  // ─── B4: Pending Enter Guard ────────────────────────────────────────────────
++
++  /** Check and set pending-enter guard for a session. Returns false if already pending. */
++  isPendingEnter(sessionId: string): boolean {
++    return this.pendingEnter.has(sessionId);
++  }
++
++  /** Mark a session as pending shard entry. */
++  addPendingEnter(sessionId: string): void {
++    this.pendingEnter.add(sessionId);
++  }
++
++  /** Clear pending shard entry for a session. */
++  clearPendingEnter(sessionId: string): void {
++    this.pendingEnter.delete(sessionId);
++  }
++
+   // ─── Logging ─────────────────────────────────────────────────────────────
+ 
+   private log(message: string): void {
+     console.log(`[ShardRoom:${this.roomId}] ${message}`);
+   }
+ }
++
++// ─── B7: Fallback Refuge Graph ──────────────────────────────────────────────
++// Used when ShardRoom loads in zone mode for 'the-refuge' but no DB data exists.
++
++function createFallbackRefugeGraph(): RoomGraph {
++  const rooms = new Map<string, import('../shard/RoomGraph.js').Room>();
++
++  rooms.set('hearth', {
++    id: 'hearth',
++    name: 'The Hearth',
++    description: 'A broad stone chamber warmed by a perpetual fire. Scarred adventurers rest on makeshift benches. The air smells of ash and iron.',
++    type: 'entry',
++    exits: new Map<Direction, string>([
++      ['east', 'stash-alcove'],
++      ['north', 'training-grounds'],
++      ['west', 'shardboard'],
++      ['south', 'market'],
++    ]),
++    items: [],
++  });
++
++  rooms.set('stash-alcove', {
++    id: 'stash-alcove',
++    name: 'Stash Alcove',
++    description: 'A narrow alcove lined with locked chests and hanging satchels. Your belongings are here — what you\'ve kept from the shards.',
++    type: 'feature_stash',
++    exits: new Map<Direction, string>([['west', 'hearth']]),
++    items: [],
++  });
++
++  rooms.set('training-grounds', {
++    id: 'training-grounds',
++    name: 'Training Grounds',
++    description: 'A cleared space where weapons ring against practice dummies. Scratched tally marks cover the walls.',
++    type: 'feature_training',
++    exits: new Map<Direction, string>([
++      ['south', 'hearth'],
++      ['east', 'war-room'],
++    ]),
++    items: [],
++  });
++
++  rooms.set('shardboard', {
++    id: 'shardboard',
++    name: 'The Shardboard',
++    description: 'A massive board of pinned notes, sketched maps, and shard coordinates. This is where expeditions begin.',
++    type: 'feature_shardboard',
++    exits: new Map<Direction, string>([['east', 'hearth']]),
++    items: [],
++  });
++
++  rooms.set('market', {
++    id: 'market',
++    name: 'The Market',
++    description: 'Makeshift stalls selling salvaged goods. A gruff quartermaster eyes your coin pouch.',
++    type: 'feature_marketplace',
++    exits: new Map<Direction, string>([
++      ['north', 'hearth'],
++      ['east', 'infirmary'],
++    ]),
++    items: [],
++  });
++
++  rooms.set('infirmary', {
++    id: 'infirmary',
++    name: 'The Infirmary',
++    description: 'Cots and bandages. A healer tends to the wounded. The smell of poultice lingers.',
++    type: 'feature_infirmary',
++    exits: new Map<Direction, string>([['west', 'market']]),
++    items: [],
++  });
++
++  rooms.set('war-room', {
++    id: 'war-room',
++    name: 'The War Room',
++    description: 'A locked chamber where faction leaders meet. Maps of known shards cover the walls.',
++    type: 'corridor',
++    exits: new Map<Direction, string>([['west', 'training-grounds']]),
++    items: [],
++  });
++
++  return { rooms, startRoomId: 'hearth' };
++}

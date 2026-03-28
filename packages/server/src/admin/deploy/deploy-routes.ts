@@ -33,14 +33,6 @@ interface PendingChange {
   modifiedAt: string;
 }
 
-interface ContentRow {
-  id: string;
-  entity_type: string;
-  data: { name?: string };
-  created_at: string;
-  updated_at: string;
-}
-
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 export function createDeployRouter(): Router {
@@ -59,27 +51,11 @@ export function createDeployRouter(): Router {
       );
 
       const lastDeploy = lastDeploysResult.rows[0] || null;
-      const lastDeployTime = lastDeploy?.completed_at || '1970-01-01T00:00:00Z';
 
-      // Find all content modified since last deploy
-      const changesResult = await query<ContentRow>(
-        `SELECT id, entity_type, data, created_at, updated_at
-         FROM content_definitions
-         WHERE updated_at > $1
-         ORDER BY updated_at DESC`,
-        [lastDeployTime],
-      );
-
-      const pendingChanges: PendingChange[] = changesResult.rows.map((row) => {
-        const isNew = new Date(row.created_at) > new Date(lastDeployTime);
-        return {
-          entityType: row.entity_type,
-          entityId: row.id,
-          name: row.data.name || row.id,
-          action: isNew ? 'created' : 'modified',
-          modifiedAt: row.updated_at,
-        };
-      });
+      // TODO: content_definitions table is dropped (migration 029). Pending changes
+      // tracking should query individual dedicated tables or use a unified changelog.
+      // For now, return empty pending changes.
+      const pendingChanges: PendingChange[] = [];
 
       res.json({
         pendingChanges,
@@ -103,23 +79,10 @@ export function createDeployRouter(): Router {
     try {
       const deployedBy = req.body.deployedBy || 'admin';
 
-      // Count current entities
-      const countResult = await query<{ count: string }>(
-        `SELECT COUNT(*) as count FROM content_definitions`,
-      );
-      const entityCount = parseInt(countResult.rows[0]?.count || '0', 10);
-
-      // Get entity counts by type for summary
-      const summaryResult = await query<{ entity_type: string; count: string }>(
-        `SELECT entity_type, COUNT(*) as count
-         FROM content_definitions
-         GROUP BY entity_type`,
-      );
-      
+      // TODO: content_definitions table is dropped (migration 029).
+      // Entity counts should aggregate across dedicated tables.
+      const entityCount = 0;
       const changesSummary: Record<string, number> = {};
-      for (const row of summaryResult.rows) {
-        changesSummary[row.entity_type] = parseInt(row.count, 10);
-      }
 
       const id = randomUUID();
       const result = await query<DeployHistoryRow>(
@@ -147,23 +110,10 @@ export function createDeployRouter(): Router {
         return;
       }
 
-      // Count current entities
-      const countResult = await query<{ count: string }>(
-        `SELECT COUNT(*) as count FROM content_definitions`,
-      );
-      const entityCount = parseInt(countResult.rows[0]?.count || '0', 10);
-
-      // Get entity counts by type for summary
-      const summaryResult = await query<{ entity_type: string; count: string }>(
-        `SELECT entity_type, COUNT(*) as count
-         FROM content_definitions
-         GROUP BY entity_type`,
-      );
-      
+      // TODO: content_definitions table is dropped (migration 029).
+      // Entity counts should aggregate across dedicated tables.
+      const entityCount = 0;
       const changesSummary: Record<string, number> = {};
-      for (const row of summaryResult.rows) {
-        changesSummary[row.entity_type] = parseInt(row.count, 10);
-      }
 
       const id = randomUUID();
       const result = await query<DeployHistoryRow>(

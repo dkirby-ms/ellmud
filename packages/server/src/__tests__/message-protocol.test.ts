@@ -77,13 +77,12 @@ describe('Message Protocol — Server → Client', () => {
     await client.leave();
   });
 
-  it('should deliver narrate + room_header on refuge join (no shard_state)', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'refuge');
+  it('should deliver narrate + room_header on zone join', async () => {
+    const { client, collector } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
 
     expect(collector.narrate.length).toBeGreaterThan(0);
     expect(collector.roomHeader.length).toBeGreaterThan(0);
-    // Refuge does NOT send shard_state
-    expect(collector.shardState.length).toBe(0);
+    // Zone-mode ShardRoom sends the same message types as shard mode
 
     await client.leave();
   });

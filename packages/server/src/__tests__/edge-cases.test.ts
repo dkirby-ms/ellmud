@@ -127,9 +127,9 @@ describe('Edge Cases — ShardRoom', () => {
   });
 });
 
-describe('Edge Cases — RefugeRoom', () => {
+describe('Edge Cases — Zone ShardRoom (the-refuge)', () => {
   it('should handle player disconnect while others remain', async () => {
-    const room = await colyseus.createRoom('refuge', {});
+    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
 
     const client1 = await colyseus.connectTo(room);
     new MessageCollector(client1);
@@ -152,7 +152,7 @@ describe('Edge Cases — RefugeRoom', () => {
   });
 
   it('should handle rapid join/leave cycles', async () => {
-    const room = await colyseus.createRoom('refuge', {});
+    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
 
     // Keep an anchor client connected so the room doesn't auto-dispose
     const anchor = await colyseus.connectTo(room);

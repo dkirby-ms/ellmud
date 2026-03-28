@@ -21,6 +21,7 @@ export const DROWNED_REVENANT: CreatureTemplate = {
     attack: 10,
     defence: 3,
     armour: 3,
+    agility: 3,
   },
   lootTable: [
     {

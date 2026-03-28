@@ -2,7 +2,6 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
 import CharacterSelect from "./pages/CharacterSelect";
-import Refuge from "./pages/Refuge";
 import ShardExploration from "./pages/ShardExploration";
 import Leaderboard from "./pages/Leaderboard";
 import Settings from "./pages/Settings";
@@ -28,6 +27,8 @@ import RoomsList from "./pages/admin/RoomsList";
 import RoomsDetail from "./pages/admin/RoomsDetail";
 import LiveRooms from "./pages/admin/LiveRooms";
 import LiveRoomDetail from "./pages/admin/LiveRoomDetail";
+import ZonesList from "./pages/admin/ZonesList";
+import ZonesDetail from "./pages/admin/ZonesDetail";
 import NarrativeList from "./pages/admin/NarrativeList";
 import NarrativeDetail from "./pages/admin/NarrativeDetail";
 import Balance from "./pages/admin/Balance";
@@ -57,7 +58,7 @@ export const routes: RouteObject[] = [
       },
       {
         path: "/refuge",
-        Component: Refuge,
+        Component: ShardExploration,
       },
       {
         path: "/shard/:shardId",
@@ -148,6 +149,14 @@ export const routes: RouteObject[] = [
           {
             path: "rooms/:id",
             Component: RoomsDetail,
+          },
+          {
+            path: "zones",
+            Component: ZonesList,
+          },
+          {
+            path: "zones/:slug",
+            Component: ZonesDetail,
           },
           {
             path: "live-rooms",

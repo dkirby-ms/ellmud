@@ -10,10 +10,11 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { monitor } from '@colyseus/monitor';
 import express from 'express';
 import http from 'http';
-import { ShardRoom, RefugeRoom } from './rooms/index.js';
+import { ShardRoom } from './rooms/index.js';
 import {
   AuthService,
   InMemoryTokenStore,
+  PgTokenStore,
   InMemoryPlayerRepository,
   PgPlayerRepository,
   createAuthRouter,
@@ -23,11 +24,20 @@ import {
   type EntraConfig,
 } from './auth/index.js';
 import { createHealthRouter } from './health.js';
-import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter, createDeployRouter } from './admin/index.js';
+import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter, createDeployRouter, createZoneRouter } from './admin/index.js';
 import { getConfig } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence, testRedisConnection } from './cache/index.js';
-import { initStashProvider, isStashPg } from './stash/index.js';
+import { initStashProvider, isStashPg, loadItemDefsFromDb } from './stash/index.js';
+import { initProfileProvider } from './player/index.js';
+import { initFactionProvider } from './faction/index.js';
+import { initRunHistoryProvider } from './run-history/index.js';
+import { initLoadoutProvider } from './loadout/index.js';
+import { initShardSicknessProvider } from './systems/index.js';
+import { initCharacterProvider } from './character/index.js';
+import { createCharacterRouter } from './api/characters.js';
+import { initZoneProvider, getZoneRepository } from './zones/index.js';
+import { initExplorationProvider } from './exploration/index.js';
 
 const config = getConfig();
 const PORT = config.port;
@@ -49,7 +59,43 @@ if (USE_PG) {
 
 // ─── Stash Persistence ──────────────────────────────────────────────────────
 initStashProvider(USE_PG);
+if (USE_PG) {
+  const count = await loadItemDefsFromDb();
+  console.log(`[Ellmud] Loaded ${count} item definitions from database.`);
+}
 console.log(`[Ellmud] Stash persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Player Profile Persistence ─────────────────────────────────────────────
+initProfileProvider(USE_PG);
+console.log(`[Ellmud] Profile persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Faction Persistence ────────────────────────────────────────────────────
+initFactionProvider(USE_PG);
+console.log(`[Ellmud] Faction persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Run History Persistence ────────────────────────────────────────────────
+initRunHistoryProvider(USE_PG);
+console.log(`[Ellmud] Run history persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Loadout Persistence ────────────────────────────────────────────────────
+initLoadoutProvider(USE_PG);
+console.log(`[Ellmud] Loadout persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Shard-Sickness Persistence ─────────────────────────────────────────────
+initShardSicknessProvider(USE_PG);
+console.log(`[Ellmud] Shard-sickness persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Character Persistence ──────────────────────────────────────────────────
+initCharacterProvider(USE_PG);
+console.log(`[Ellmud] Character persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Zone Persistence ───────────────────────────────────────────────────────
+initZoneProvider(USE_PG);
+console.log(`[Ellmud] Zone persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Exploration Persistence ────────────────────────────────────────────────
+initExplorationProvider(USE_PG);
+console.log(`[Ellmud] Exploration persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Redis Bootstrap ─────────────────────────────────────────────────────────
 const { cache: narrationCache, isRedis: isCacheRedis } = await createNarrationCache(config);
@@ -62,9 +108,10 @@ app.use(express.json());
 app.set('trust proxy', 1);
 
 // ─── Auth Setup ──────────────────────────────────────────────────────────────
-const tokenStore = new InMemoryTokenStore();
+const tokenStore = USE_PG ? new PgTokenStore() : new InMemoryTokenStore();
 const playerRepo = USE_PG ? new PgPlayerRepository() : new InMemoryPlayerRepository();
 const authService = new AuthService(tokenStore, playerRepo);
+console.log(`[Ellmud] Token persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // Mount local auth routes (only if ALLOW_LOCAL_AUTH is true)
 const ALLOW_LOCAL_AUTH = process.env.ALLOW_LOCAL_AUTH !== 'false';
@@ -98,6 +145,10 @@ if (entraConfig.clientId && entraConfig.clientSecret && entraConfig.tenantId) {
   console.log('[Ellmud] Entra OAuth: disabled (missing ENTRA_* env vars)');
 }
 
+// ─── Character API ───────────────────────────────────────────────────────────
+app.use(createCharacterRouter(authService, USE_PG));
+console.log('[Ellmud] Character API: enabled');
+
 // Mount health check endpoint — includes Redis + persistence status
 app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));
 
@@ -122,6 +173,10 @@ app.use(createSimulateRouter({ stores: contentStores }));
 app.use('/admin/api/deploy', createDeployRouter());
 console.log('[Ellmud] Deploy API: enabled');
 
+// Zone management CRUD — admin-managed MUD zones (rooms, exits)
+app.use(createZoneRouter());
+console.log('[Ellmud] Zone management API: enabled');
+
 // Admin runtime API — room management, metrics, SSE. Receives contentStores for spawn.
 app.use(createAdminRouter({ cache: narrationCache, isCacheRedis, isPresenceRedis, isStashPg: isStashPg(), contentStores }));
 
@@ -139,14 +194,18 @@ initColyseusAuth(authService, AUTH_REQUIRED);
 // Colyseus monitor (admin dashboard) — serves Schema state for admin visibility
 app.use('/colyseus', monitor());
 
-// Serve client static files
-const publicPath = path.resolve(__dirnameInit, 'public');
+// Serve client static files (client build output lives in packages/client/dist)
+const publicPath = path.resolve(__dirnameInit, '../../client/dist');
 app.use(express.static(publicPath));
 
 // Catch-all: serve index.html for client-side routing (GET only — does not
-// interfere with Colyseus POST /matchmake/* routes)
+// interfere with Colyseus POST /matchmake/* routes).
+// In dev mode the client dist may not exist; skip gracefully.
+const indexHtml = path.join(publicPath, 'index.html');
 app.get('*', (_req, res) => {
-  res.sendFile(path.join(publicPath, 'index.html'));
+  res.sendFile(indexHtml, (err) => {
+    if (err) res.status(404).end();
+  });
 });
 
 // Create HTTP server from Express but don't listen yet — Colyseus's
@@ -185,7 +244,27 @@ const server = new Server({
 
 // Register room types
 server.define('shard', ShardRoom);
-server.define('refuge', RefugeRoom);
+
+// Dynamic zone registration — register each zone from the zone repository
+const registeredZoneSlugs = new Set<string>();
+try {
+  const zoneRepo = getZoneRepository();
+  const zones = await zoneRepo.getAllZones();
+  for (const zone of zones) {
+    const roomName = `zone:${zone.slug}`;
+    server.define(roomName, ShardRoom);
+    registeredZoneSlugs.add(zone.slug);
+    console.log(`[Ellmud] Registered zone: ${roomName}`);
+  }
+} catch (err) {
+  console.error('[Ellmud] Failed to load zones for registration:', err instanceof Error ? err.message : String(err));
+}
+
+// Ensure the-refuge is always registered (fallback if not in DB)
+if (!registeredZoneSlugs.has('the-refuge')) {
+  server.define('zone:the-refuge', ShardRoom);
+  console.log('[Ellmud] Registered zone: zone:the-refuge (fallback)');
+}
 
 await server.listen(PORT);
 

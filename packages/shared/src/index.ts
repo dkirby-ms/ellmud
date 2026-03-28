@@ -45,6 +45,16 @@ export interface RoomHeaderMessage {
   roomName: string;
   exits: string[];
   stability: number; // 0–1, shard stability
+  /** Zone name, present when the room is part of a hand-crafted zone. */
+  zoneName?: string;
+  /** Room type (entry, extraction, boss, etc.), present for zone rooms. */
+  roomType?: string;
+}
+
+/** Server → Client: Zone transfer instruction (inter-zone exit). */
+export interface ZoneTransferMessage {
+  targetZoneSlug: string;
+  targetRoomSlug: string;
 }
 
 /** Server → Client: Shard lifecycle state change notification. */
@@ -128,6 +138,84 @@ export interface CombatResultMessage {
   combatEnded: boolean;
 }
 
+/** Server → Client: Player state update (HP, stamina, status effects). */
+export interface PlayerStateMessage {
+  hp: number;
+  maxHp: number;
+  stamina: number;
+  maxStamina: number;
+  statusEffects: Array<{ id: string; name: string; remainingTicks: number }>;
+}
+
+// ─── Character Types (GDD §7.1) ──────────────────────────────────────────────
+
+/** Summary of a character for list/select screens. */
+export interface CharacterSummary {
+  id: string;
+  name: string;
+  factionSlug: string;
+  factionName: string;
+  isActive: boolean;
+  createdAt: string;
+  lastPlayedAt: string | null;
+  topSkills: Array<{ name: string; level: number }>;
+  totalRuns: number;
+}
+
+/** Client → Server: Create a new character. */
+export interface CreateCharacterRequest {
+  name: string;
+  factionSlug: string;
+}
+
+/** Client → Server: Select an existing character. */
+export interface SelectCharacterRequest {
+  characterId: string;
+}
+
+// ─── Character Name Validation ───────────────────────────────────────────────
+
+const PROFANITY_BLOCKLIST = [
+  'anal', 'anus', 'arse', 'ass', 'bastard', 'bitch', 'bollocks', 'cock',
+  'crap', 'cunt', 'damn', 'dick', 'douche', 'fag', 'fuck', 'hell',
+  'homo', 'jerk', 'knob', 'minge', 'niga', 'nigga', 'nigger', 'penis',
+  'piss', 'prick', 'pube', 'pussy', 'queer', 'scum', 'shit', 'slag',
+  'slut', 'smeg', 'spunk', 'tit', 'turd', 'twat', 'vagina', 'wank',
+  'whore',
+];
+
+/**
+ * Validate a character name. Rules:
+ * - Alpha characters only (a-z, A-Z)
+ * - 2–24 characters long
+ * - First letter capitalized, rest lowercase
+ * - No profanity
+ */
+export function validateCharacterName(name: string): { valid: boolean; error?: string } {
+  if (!name || typeof name !== 'string') {
+    return { valid: false, error: 'Name is required' };
+  }
+  if (name.length < 2 || name.length > 24) {
+    return { valid: false, error: 'Name must be between 2 and 24 characters' };
+  }
+  if (!/^[A-Za-z]+$/.test(name)) {
+    return { valid: false, error: 'Name must contain only alphabetic characters' };
+  }
+  if (name[0] !== name[0].toUpperCase()) {
+    return { valid: false, error: 'Name must start with a capital letter' };
+  }
+  if (name.length > 1 && name.slice(1) !== name.slice(1).toLowerCase()) {
+    return { valid: false, error: 'Only the first letter should be capitalized' };
+  }
+  const lower = name.toLowerCase();
+  for (const word of PROFANITY_BLOCKLIST) {
+    if (lower.includes(word)) {
+      return { valid: false, error: 'Name contains inappropriate language' };
+    }
+  }
+  return { valid: true };
+}
+
 // ─── Message Type Keys ──────────────────────────────────────────────────────
 
 /**
@@ -137,24 +225,68 @@ export interface CombatResultMessage {
 export const MessageTypes = {
   // Client → Server
   COMMAND: 'cmd',
+  EQUIP_ITEM: 'equip_item',
+  UNEQUIP_ITEM: 'unequip_item',
+  SWAP_ITEM: 'swap_item',
+
+  // Client ↔ Server: Character management
+  CHARACTER_CREATE: 'character_create',
+  CHARACTER_SELECT: 'character_select',
+  CHARACTER_DELETE: 'character_delete',
+  CHARACTER_LIST: 'character_list',
+  CHARACTER_LIST_RESPONSE: 'character_list_response',
+  CHARACTER_CREATED: 'character_created',
+  CHARACTER_DELETED: 'character_deleted',
+  CHARACTER_ERROR: 'character_error',
 
   // Server → Client
   NARRATE: 'narrate',
   ROOM_HEADER: 'room_header',
   SHARD_STATE: 'shard_state',
   COMBAT_RESULT: 'combat_result',
+  PLAYER_STATE: 'player_state',
   EXTRACTION_STATE: 'extraction_state',
   STASH_UPDATE: 'stash_update',
+  LOADOUT_UPDATE: 'loadout_update',
   ROOM_SWITCH: 'room_switch',
+  ZONE_TRANSFER: 'zone_transfer',
+  EXPLORATION_DATA: 'exploration_data',
+  EXPLORATION_UPDATE: 'exploration_update',
 } as const;
 
 export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
+
+// ─── Exploration Map Messages ────────────────────────────────────────────────
+
+/** A room the player has visited, for client-side map rendering. */
+export interface ExploredRoomData {
+  roomId: string;
+  zoneSlug: string | null;
+  visitedAt: string;
+  roomName: string;
+  roomType: string;
+  exits: Record<string, string>;
+}
+
+/** Server → Client: Bulk exploration data sent on join. */
+export interface ExplorationDataMessage {
+  type: typeof MessageTypes.EXPLORATION_DATA;
+  rooms: ExploredRoomData[];
+  currentRoomId: string;
+}
+
+/** Server → Client: Single room update sent on room entry. */
+export interface ExplorationUpdateMessage {
+  type: typeof MessageTypes.EXPLORATION_UPDATE;
+  room: ExploredRoomData;
+}
 
 // ─── Room Graph (GDD §10.1) ─────────────────────────────────────────────────
 
 export type {
   Direction,
   RoomType,
+  FeatureRoomType,
   RoomProperty,
   HazardPlaceholder,
   LootContainer,
@@ -169,7 +301,25 @@ export {
   OPPOSITE_DIRECTION,
   serializeRoomGraph,
   deserializeRoomGraph,
+  isFeatureRoomType,
+  getFeatureKey,
 } from './room-graph.js';
+
+// ─── Zone System (Hand-Crafted Authored Zones) ──────────────────────────────
+
+export type {
+  ZoneDefinition,
+  ZoneRoomDefinition,
+  ZoneExitDefinition,
+  ZoneData,
+} from './zone.js';
+
+export {
+  INTER_ZONE_PREFIX,
+  makeInterZoneId,
+  isInterZoneId,
+  parseInterZoneId,
+} from './zone.js';
 
 // ─── Sound System (GDD §12) ──────────────────────────────────────────────────
 
@@ -470,4 +620,149 @@ export interface PvPKillEvent {
   victimName: string;
   roomId: string;
   timestamp: number;
+}
+
+// ─── Equipment Slot System (GDD §7.3) ───────────────────────────────────────
+
+// Import ItemType for local use (re-exported above as type from items.ts)
+import type { ItemType as _ItemType } from './items.js';
+
+/** Named equipment slots on the character. */
+export type EquipmentSlotType =
+  | 'head'
+  | 'chest'
+  | 'legs'
+  | 'feet'
+  | 'hands'
+  | 'weapon'
+  | 'offhand'
+  | 'ring1'
+  | 'ring2'
+  | 'amulet';
+
+/** All slot IDs, ordered for consistent rendering. */
+export const EQUIPMENT_SLOT_ORDER: readonly EquipmentSlotType[] = [
+  'weapon', 'offhand',
+  'head', 'chest', 'legs', 'feet', 'hands',
+  'ring1', 'ring2', 'amulet',
+] as const;
+
+/** Human-readable labels for equipment slots. */
+export const EQUIPMENT_SLOT_LABELS: Record<EquipmentSlotType, string> = {
+  head: 'Head',
+  chest: 'Chest',
+  legs: 'Legs',
+  feet: 'Feet',
+  hands: 'Hands',
+  weapon: 'Weapon',
+  offhand: 'Offhand',
+  ring1: 'Ring 1',
+  ring2: 'Ring 2',
+  amulet: 'Amulet',
+};
+
+/** Which item types each slot accepts. */
+export const SLOT_ACCEPTS: Record<EquipmentSlotType, readonly _ItemType[]> = {
+  head: ['armour'],
+  chest: ['armour'],
+  legs: ['armour'],
+  feet: ['armour'],
+  hands: ['armour'],
+  weapon: ['weapon'],
+  offhand: ['weapon', 'tool'],
+  ring1: ['material'],    // placeholder — ring type TBD
+  ring2: ['material'],    // placeholder — ring type TBD
+  amulet: ['material'],   // placeholder — amulet type TBD
+};
+
+/** Pre-resolved item data for UI display (server sends this). */
+export interface DisplayItem {
+  instanceId: string;
+  definitionId: string;
+  name: string;
+  type: _ItemType;
+  tier: GearTier;
+  weight: number;
+  description: string;
+  /** Which slots this item can be equipped to. */
+  allowedSlots: EquipmentSlotType[];
+}
+
+/** Full equipment state keyed by slot. */
+export type EquipmentSlots = Record<EquipmentSlotType, DisplayItem | null>;
+
+/** Creates an empty equipment slots object. */
+export function createEmptyEquipmentSlots(): EquipmentSlots {
+  return {
+    head: null, chest: null, legs: null, feet: null, hands: null,
+    weapon: null, offhand: null, ring1: null, ring2: null, amulet: null,
+  };
+}
+
+// ─── Equipment Messages ──────────────────────────────────────────────────────
+
+/** Client → Server: Equip an item from stash to a slot. */
+export interface EquipItemMessage {
+  itemId: string;
+  targetSlot: EquipmentSlotType;
+}
+
+/** Client → Server: Unequip an item from a slot (returns to stash). */
+export interface UnequipItemMessage {
+  slot: EquipmentSlotType;
+}
+
+/** Server → Client: Full loadout state after any equipment change. */
+export interface LoadoutUpdateMessage {
+  slots: EquipmentSlots;
+}
+
+/** Client → Server: Swap an item from stash into an occupied slot. */
+export interface SwapItemMessage {
+  itemId: string;
+  targetSlot: EquipmentSlotType;
+}
+
+/** Server → Client: Full stash contents after any change. */
+export interface StashUpdateMessage {
+  items: DisplayItem[];
+}
+
+// ─── Character System (Character Selection & Management) ─────────────────────
+
+/** Summary of a character for the selection screen. */
+export interface CharacterSummary {
+  id: string;
+  name: string;
+  factionSlug: string;
+  factionName: string;
+  isActive: boolean;
+  createdAt: string;
+  lastPlayedAt: string | null;
+  topSkills: Array<{ name: string; level: number }>;
+  totalRuns: number;
+}
+
+/** Client → Server: Create a new character. */
+export interface CreateCharacterRequest {
+  name: string;
+  factionSlug: string;
+}
+
+/** Client → Server: Select a character. */
+export interface SelectCharacterRequest {
+  characterId: string;
+}
+
+// ─── Slot Validation ─────────────────────────────────────────────────────────
+
+/**
+ * Check if an item type is valid for a given equipment slot.
+ * Server-authoritative — used by LoadoutService and can be shared with client.
+ */
+export function validateSlotRestriction(
+  slot: EquipmentSlotType,
+  itemType: _ItemType,
+): boolean {
+  return SLOT_ACCEPTS[slot].includes(itemType);
 }

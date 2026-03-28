@@ -16,8 +16,6 @@ import { matchMaker } from '@colyseus/core';
 import type { ContentEntityType } from './content-types.js';
 import { CONTENT_ENTITY_TYPES } from './content-types.js';
 import type { IContentStore, ContentEntity } from './ContentStore.js';
-import { query as dbQuery } from '../../db/index.js';
-
 export interface DashboardRouterDeps {
   stores: Map<ContentEntityType, IContentStore<ContentEntity>>;
   usePg: boolean;
@@ -25,7 +23,7 @@ export interface DashboardRouterDeps {
 
 export function createDashboardApiRouter(deps: DashboardRouterDeps): Router {
   const router = Router();
-  const { stores, usePg } = deps;
+  const { stores } = deps;
 
   // ─── GET /admin/api/dashboard/metrics — aggregate counts ─────────────────
   router.get('/admin/api/dashboard/metrics', adminAuth, async (_req: Request, res: Response) => {
@@ -34,34 +32,13 @@ export function createDashboardApiRouter(deps: DashboardRouterDeps): Router {
       const entityCounts: Record<string, number> = {};
       let totalItems = 0;
 
-      if (usePg) {
-        try {
-          const result = await dbQuery<{ entity_type: string; count: string }>(
-            `SELECT entity_type, COUNT(*)::text as count FROM content_definitions GROUP BY entity_type`,
-          );
-          for (const row of result.rows) {
-            entityCounts[row.entity_type] = parseInt(row.count, 10);
-            totalItems += entityCounts[row.entity_type];
-          }
-        } catch {
-          // DB unavailable — fall through to store-based counts
-          for (const entityType of CONTENT_ENTITY_TYPES) {
-            const store = stores.get(entityType);
-            if (store) {
-              const all = await store.getAll();
-              entityCounts[entityType] = all.length;
-              totalItems += all.length;
-            }
-          }
-        }
-      } else {
-        for (const entityType of CONTENT_ENTITY_TYPES) {
-          const store = stores.get(entityType);
-          if (store) {
-            const all = await store.getAll();
-            entityCounts[entityType] = all.length;
-            totalItems += all.length;
-          }
+      // All entity types now use dedicated stores — query through stores uniformly.
+      for (const entityType of CONTENT_ENTITY_TYPES) {
+        const store = stores.get(entityType);
+        if (store) {
+          const all = await store.getAll();
+          entityCounts[entityType] = all.length;
+          totalItems += all.length;
         }
       }
 
@@ -92,37 +69,7 @@ export function createDashboardApiRouter(deps: DashboardRouterDeps): Router {
   // ─── GET /admin/api/dashboard/recent-changes — last 10 modified items ────
   router.get('/admin/api/dashboard/recent-changes', adminAuth, async (_req: Request, res: Response) => {
     try {
-      if (usePg) {
-        try {
-          const result = await dbQuery<{
-            id: string;
-            entity_type: string;
-            data: Record<string, unknown>;
-            created_at: Date;
-            updated_at: Date;
-          }>(
-            `SELECT id, entity_type, data, created_at, updated_at
-             FROM content_definitions
-             ORDER BY updated_at DESC
-             LIMIT 10`,
-          );
-
-          const changes = result.rows.map((row) => ({
-            id: row.id,
-            entityType: row.entity_type,
-            name: (row.data as Record<string, unknown>)['name'] as string || row.id,
-            updatedAt: row.updated_at.toISOString(),
-            createdAt: row.created_at.toISOString(),
-          }));
-
-          res.json({ changes });
-          return;
-        } catch {
-          // DB unavailable — fall through to in-memory
-        }
-      }
-
-      // In-memory fallback: collect all entities, sort by any timestamp we can find
+      // Collect from all dedicated stores — content_definitions is retired.
       const allEntities: Array<{
         id: string;
         entityType: string;
@@ -146,7 +93,6 @@ export function createDashboardApiRouter(deps: DashboardRouterDeps): Router {
         }
       }
 
-      // In-memory stores don't have timestamps, so just return the most recent batch
       const changes = allEntities.slice(0, 10);
       res.json({ changes });
     } catch (err) {

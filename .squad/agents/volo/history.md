@@ -474,3 +474,99 @@ Wait for #139 endpoint design approval before implementing client side.
 - Cross-referenced GDD.md where relevant for design context
 - Maintained existing tone and structure; extended with Phase 2/2.5-specific sections
 
+
+### Seed Item Catalog Created (packages/server/src/dev/seed-items.ts)
+- **40 items** covering all 10 equipment slots, all 6 rarity tiers, 3 shard keys, 4 consumables, and stash-only materials/junk
+- Uses `StashItem` / `StashItemInstance` interface (the stash-side schema), matching loadout-fixtures.ts patterns
+- Includes `populateDevStash()` helper that fills a player's stash via any StashRepository-compatible repo
+- Includes `getSeedItemsForSlot()` and `getSeedItemsByTier()` for targeted test scenarios
+- Heavy item (Waterlogged Crate, 40w) and stackable items (nails ×5, rations ×3) for capacity/overflow testing
+- Total catalog base weight: 188.5 (under default 200 cap; stacking pushes past for rejection flow testing)
+- **Slot acceptance alignment:** Items match SLOT_ACCEPTS — armour for head/chest/legs/feet/hands, weapon for weapon, weapon+tool for offhand, material for ring1/ring2/amulet
+- **Naming convention:** kebab-case IDs, evocative 2-3 word names, 1-2 sentence MUD-terse descriptions
+
+### 2026-03-26: Seed Item Catalog Completed
+- Delivered 40 seed items in `packages/server/src/dev/seed-items.ts`
+- Includes `populateDevStash()` helper for instant test population
+- All items respect `SLOT_ACCEPTS` slot restrictions
+- Schema uses `StashItem` interface for stash/loadout compatibility
+- No production registry merge — items imported separately where needed
+- Build clean, 552 tests passing, zero regressions
+
+### 2026-03-20: GDD Comprehensive Refresh (Requested by dkirby-ms)
+- **Task:** Audit and rewrite GDD.md to match live codebase (852 lines → 1,091 lines, +239 lines, +28%)
+- **Critical Finding:** GDD described procedural/in-memory architecture, but codebase has evolved to **database-driven** with PostgreSQL, zone system, and admin dashboard
+- **Major Corrections:**
+  1. **Refuge "living world"**: GDD claimed tick-driven ambient simulation (NPC wandering, weather, merchants) — NONE of this exists. Corrected to: static zone with 7 DB-defined rooms (hearth, stash-alcove, training-grounds, shardboard, market, infirmary, war-room)
+  2. **Content sourcing**: Changed from "procedurally generated" to "database-driven" (31 migrations, 9 content types in dedicated tables)
+  3. **Zone system**: Added new §10.1 documenting zones/zone_rooms/zone_exits tables, hand-crafted vs procedural modes
+  4. **Character system**: Added new §7.4 documenting multi-character support (1:N from players)
+  5. **Client architecture**: Changed from "web-terminal client" to "React 18 + Vite with TailwindCSS, shadcn/ui, compass navigation"
+  6. **Admin dashboard**: Added new §13.5 documenting full content management system (9 content CRUD views, zone management, SSE updates)
+  7. **Database schema**: Added new §13.4 documenting 31-migration PostgreSQL schema with all player persistence, content, zone, and audit tables
+- **Implementation Status Markers**: Added 25+ "(Implemented)" / "(Planned)" / "(Partial Implementation)" markers throughout document
+- **Roadmap Updates (§17)**: Updated Phase 1 checkboxes — 13 items from ❌ to ✅ (auth, stash, combat, extraction, React client, admin dashboard, zone system, character system, etc.)
+- **Stale Items Found & Fixed**: 24 critical inaccuracies identified and corrected
+- **Key Architectural Patterns Documented:**
+  - Repository Provider pattern: Interface + PgImpl + InMemoryImpl + Provider singleton gated by DATABASE_URL
+  - Zone system: zones, zone_rooms, zone_exits tables with inter-zone travel support
+  - Command system split: ShardRoom (modular Map registry) vs RefugeRoom (monolithic switch)
+  - Feature-room pattern: Specific gameplay systems accessed in dedicated rooms (stash in stash-alcove, shardboard in shardboard room)
+- **Database Tables Documented:** player_identities, players, characters, player_skills, player_stash, player_loadout, player_stash_capacity, player_profile, faction_membership, run_history, player_shard_sickness, auth_tokens, item_definitions, biome_definitions, creature_definitions, modifier_definitions, narrative_template_definitions, skill_definitions, loot_table_definitions, room_definitions, factions, zones, zone_rooms, zone_exits, audit_log, deploy_history
+- **File paths verified:** packages/server/src/db/migrations/ (31 files), packages/server/src/content/, packages/server/src/zones/, packages/server/src/rooms/ShardRoom.ts, packages/server/src/rooms/RefugeRoom.ts, packages/server/src/commands/, packages/client/src/
+- **Principle:** "Describe what EXISTS, not aspirations" — moved all aspirational content to clearly marked "Future" or "Planned" sections
+
+
+### 2026-03-27T01:25Z: GDD Audit Completion & Decisions Filing
+- **Task:** Full GDD.md audit and refresh to align documentation with actual implementation status
+- **Deliverable:** Comprehensive decision document filed at `.squad/decisions/inbox/volo-gdd-refresh.md`
+- **Standards established:**
+  1. **Implementation Status Markers** — All major sections must include "(Implemented)", "(Planned)", or "(Partial Implementation)" markers
+  2. **Describe Reality, Not Aspiration** — Aspirational content explicitly marked as "Future" or "Planned"
+  3. **Database-First Documentation** — When documenting systems, list DB schema (tables, columns) before mechanics
+  4. **Roadmap Checkpoint Updates** — Phase checkboxes kept current, not stale
+
+- **Key correction:** Refuge zone documentation was aspirational ("living world" with tick-driven ambient simulation, NPC wandering, weather, merchants). Corrected to reflect actual implementation: static zone with 7 rooms, navigable via room-based commands, no ambient simulation.
+
+- **Scope of changes:**
+  - +239 lines of new/corrected content
+  - 25+ stale sections brought current
+  - Implementation status markers applied throughout
+  - New sections: database schema documentation, zone system, character system, admin dashboard features
+
+- **Impact:** GDD is now authoritative and reliable for all team members and squad agents. Eliminates confusion between aspirational design and implemented reality.
+
+- **Status:** Master decisions.md now includes volo-gdd-refresh.md as a canonical reference for GDD maintenance standards going forward.
+
+
+## 2026-03-20: Dual Exploration Modes Parity in README & GDD
+
+**What:** Updated README.md and GDD.md to reflect that static zones (the Refuge, future hand-crafted areas) and procedural shards are **co-equal** exploration modes, not frame procedural as the primary way players explore.
+
+**Changes made:**
+1. **README.md (line 5):** Rewrote tagline from "Dive into procedurally generated shards..." to "Explore persistent zones and procedurally generated shards. Scavenge gear, fight creatures, manage your stash in the Refuge, then dive into extraction runs before collapse." — now front-loads the Refuge as the player's home base and presents both modes.
+2. **README.md (line 151):** Changed "Procedural narrative expansion" to "Content expansion (more biomes, creature types, **static zones**, procedural events)" — explicitly includes static zone expansion as a Phase 3 goal.
+3. **GDD.md (line 4):** Changed genre from "Procedural Dungeon Crawler" to "Dual Exploration (Static + Procedural)" — broadens the descriptor to capture both modes equally.
+4. **GDD.md (lines 22-26):** Rewrote high-level vision to explicitly describe both modes: "Players live in **the Refuge**, a persistent hub where they manage gear, prepare for runs, and socialize. From there, they explore **two complementary exploration modes:** **Static zones** (like the Refuge itself, and future hand-crafted endgame areas) and **Procedurally generated shards** (temporary instances...)." — this is the authoritative narrative framing.
+5. **Verified (GDD.md):** Lines 69, 87-89 already correctly list "hand-crafted zones" and "procedural assembly" as two equal shard generation modes. Lines 538-540 correctly label them "Mode 1" and "Mode 2" without hierarchy. Line 1026 accurately reflects roadmap status (hand-crafted ✅, procedural ⚠️ partial).
+
+**Why:** User directive (dkirby-ms) — The game's identity should honor both exploration modes equally. The Refuge is not a "loading screen" or "menu"; it's a persistent zone where players live and prepare. Procedural shards are where extraction gameplay happens. Neither is "the main" mode — they complement each other and together define the player experience.
+
+**Tone maintained:** Kept extraction RPG identity strong (shard collapse, risk, narrated prose). Static zones are presented as feature-access hubs AND as endgame content to discover. Procedural shards remain the extraction-run heart of gameplay.
+
+**Cross-team impact:** This framing affects how the client UI, marketing, and future zone designs are conceptualized. The dual-mode identity is now canonical in the narrative docs.
+
+## 2026-03-27T11:55Z: Documentation Parity Update Completion & Decisions Filing
+
+**What:** Dual Exploration Modes parity decision formally filed and archived.
+
+**Deliverable:** `.squad/decisions/inbox/volo-zones-parity.md` created and merged to `.squad/decisions/decisions.md`. No further action required on documentation updates (changes already implemented on 2026-03-20).
+
+**Files Modified:** README.md, GDD.md (completed 2026-03-20, now archived in decisions)
+
+**Supporting Artifacts:**
+- `.squad/orchestration-log/2026-03-27T11-55-volo.md` — orchestration log
+- `.squad/log/2026-03-27T11-55-docs-zone-parity.md` — session log
+- `.squad/decisions/decisions.md` — updated with Volo decision + Drizzt feature-room-types + user directive
+
+**Status:** Complete. Both exploration modes (static zones + procedural shards) are now canonically presented as co-equal in all narrative documentation. Team alignment achieved.

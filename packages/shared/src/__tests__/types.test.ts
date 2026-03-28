@@ -49,9 +49,9 @@ describe('MessageTypes', () => {
     expect(MessageTypes.ROOM_SWITCH).toBe('room_switch');
   });
 
-  it('should have exactly 8 message types', () => {
+  it('should have exactly 24 message types', () => {
     const keys = Object.keys(MessageTypes);
-    expect(keys).toHaveLength(8);
+    expect(keys).toHaveLength(24);
   });
 
   it('should have unique values for all message types', () => {
@@ -121,7 +121,7 @@ describe('Message Type Shapes', () => {
     expect(msg.options).toBeUndefined();
 
     const msgWithOptions: RoomSwitchMessage = {
-      target: 'refuge',
+      target: 'zone:the-refuge',
       reason: 'extraction_complete',
       options: { biome: 'flooded_crypt', roomId: 'room-123' },
     };

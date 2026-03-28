@@ -14,6 +14,11 @@ import {
   type CombatResultMessage,
   type RoomSwitchMessage,
   type RoomSwitchOptions,
+  type LoadoutUpdateMessage,
+  type StashUpdateMessage,
+  type ZoneTransferMessage,
+  type EquipItemMessage,
+  type UnequipItemMessage,
 } from '@ellmud/shared';
 
 const WS_ENDPOINT = import.meta.env.VITE_WS_URL ??
@@ -27,6 +32,10 @@ export interface MessageHandlers {
   onShardState: (msg: ShardStateMessage) => void;
   onCombatResult: (msg: CombatResultMessage) => void;
   onRoomSwitch: (msg: RoomSwitchMessage) => void;
+  onZoneTransfer?: (msg: ZoneTransferMessage) => void;
+  onLoadoutUpdate?: (msg: LoadoutUpdateMessage) => void;
+  onStashUpdate?: (msg: StashUpdateMessage) => void;
+  onPlayerState?: (msg: import('@ellmud/shared').PlayerStateMessage) => void;
   onError: (code: number, message: string) => void;
   onLeave: (code: number) => void;
 }
@@ -48,9 +57,12 @@ export async function connect(
   token: string,
   roomName: string,
   handlers: MessageHandlers,
+  characterId?: string,
 ): Promise<Room> {
   const colyseus = getClient();
-  const room = await colyseus.joinOrCreate(roomName, { token });
+  const joinOptions: Record<string, unknown> = { token };
+  if (characterId) joinOptions.characterId = characterId;
+  const room = await colyseus.joinOrCreate(roomName, joinOptions);
 
   // Message-only subscriptions (dumb terminal protocol)
   room.onMessage(MessageTypes.NARRATE, handlers.onNarrate);
@@ -58,6 +70,18 @@ export async function connect(
   room.onMessage(MessageTypes.SHARD_STATE, handlers.onShardState);
   room.onMessage(MessageTypes.COMBAT_RESULT, handlers.onCombatResult);
   room.onMessage(MessageTypes.ROOM_SWITCH, handlers.onRoomSwitch);
+  if (handlers.onLoadoutUpdate) {
+    room.onMessage(MessageTypes.LOADOUT_UPDATE, handlers.onLoadoutUpdate);
+  }
+  if (handlers.onStashUpdate) {
+    room.onMessage(MessageTypes.STASH_UPDATE, handlers.onStashUpdate);
+  }
+  if (handlers.onPlayerState) {
+    room.onMessage(MessageTypes.PLAYER_STATE, handlers.onPlayerState);
+  }
+  if (handlers.onZoneTransfer) {
+    room.onMessage(MessageTypes.ZONE_TRANSFER, handlers.onZoneTransfer);
+  }
 
   room.onError((code, message) => handlers.onError(code, message ?? 'Unknown error'));
   room.onLeave((code) => handlers.onLeave(code));
@@ -75,6 +99,7 @@ export async function switchRoom(
   token: string,
   handlers: MessageHandlers,
   options?: RoomSwitchOptions,
+  characterId?: string,
 ): Promise<Room> {
   // Leave the current room cleanly
   await currentRoom.leave();
@@ -82,7 +107,8 @@ export async function switchRoom(
   // Join or create the target room
   const colyseus = getClient();
   const roomId = typeof options?.roomId === 'string' ? options.roomId : undefined;
-  const joinOptions = options ? { ...options } : {};
+  const joinOptions: Record<string, unknown> = options ? { ...options } : {};
+  if (characterId) joinOptions.characterId = characterId;
   if (roomId) {
     delete (joinOptions as { roomId?: string }).roomId;
   }
@@ -96,6 +122,18 @@ export async function switchRoom(
   newRoom.onMessage(MessageTypes.SHARD_STATE, handlers.onShardState);
   newRoom.onMessage(MessageTypes.COMBAT_RESULT, handlers.onCombatResult);
   newRoom.onMessage(MessageTypes.ROOM_SWITCH, handlers.onRoomSwitch);
+  if (handlers.onLoadoutUpdate) {
+    newRoom.onMessage(MessageTypes.LOADOUT_UPDATE, handlers.onLoadoutUpdate);
+  }
+  if (handlers.onStashUpdate) {
+    newRoom.onMessage(MessageTypes.STASH_UPDATE, handlers.onStashUpdate);
+  }
+  if (handlers.onPlayerState) {
+    newRoom.onMessage(MessageTypes.PLAYER_STATE, handlers.onPlayerState);
+  }
+  if (handlers.onZoneTransfer) {
+    newRoom.onMessage(MessageTypes.ZONE_TRANSFER, handlers.onZoneTransfer);
+  }
 
   newRoom.onError((code, message) => handlers.onError(code, message ?? 'Unknown error'));
   newRoom.onLeave((code) => handlers.onLeave(code));
@@ -108,13 +146,38 @@ export function sendCommand(room: Room, verb: string, args: string[] = []): void
   room.send(MessageTypes.COMMAND, { verb, args });
 }
 
+/** Send equip item request to server. */
+export function sendEquipItem(room: Room, msg: EquipItemMessage): void {
+  room.send(MessageTypes.EQUIP_ITEM, msg);
+}
+
+/** Send unequip item request to server. */
+export function sendUnequipItem(room: Room, msg: UnequipItemMessage): void {
+  room.send(MessageTypes.UNEQUIP_ITEM, msg);
+}
+
+/** Direction aliases — single letters and bare direction words expand to "go <dir>". */
+const DIRECTION_ALIASES: Record<string, [string, string]> = {
+  n: ['go', 'north'], s: ['go', 'south'], e: ['go', 'east'],
+  w: ['go', 'west'],  u: ['go', 'up'],    d: ['go', 'down'],
+  north: ['go', 'north'], south: ['go', 'south'], east: ['go', 'east'],
+  west: ['go', 'west'],   up: ['go', 'up'],       down: ['go', 'down'],
+};
+
 /** Parse raw input into verb + args and send. */
 export function sendRawCommand(room: Room, input: string): void {
   const trimmed = input.trim();
   if (!trimmed) return;
   const parts = trimmed.split(/\s+/);
-  const verb = parts[0];
-  const args = parts.slice(1);
+  let verb = parts[0]!.toLowerCase();
+  let args = parts.slice(1);
+
+  const alias = DIRECTION_ALIASES[verb];
+  if (alias) {
+    verb = alias[0];
+    args = [alias[1]];
+  }
+
   sendCommand(room, verb, args);
 }
 

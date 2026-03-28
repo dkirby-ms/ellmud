@@ -22,6 +22,10 @@ import type {
   RoomSwitchMessage,
   ExtractionMessage,
   CombatAction,
+  LoadoutUpdateMessage,
+  StashUpdateMessage,
+  PlayerStateMessage,
+  ZoneTransferMessage,
 } from '@ellmud/shared';
 import type { Room } from '@colyseus/sdk';
 import type { MessageHandlers } from '../services/connection.js';
@@ -50,11 +54,13 @@ export interface UseShardConnectionResult {
   extraction: ExtractionState;
   /** Reconnection state for overlay */
   reconnection: ReturnType<typeof useReconnection>;
+  /** Current room ref for direct message sending (e.g. equipment) */
+  roomRef: React.RefObject<Room | null>;
 }
 
 const INITIAL_EXTRACTION: ExtractionState = { status: null, progress: 0, narration: null };
 
-export function useShardConnection(): UseShardConnectionResult {
+export function useShardConnection(roomName: string = 'shard'): UseShardConnectionResult {
   const { state, dispatch } = useAppContext();
   const navigate = useNavigate();
   const roomRef = useRef<Room | null>(null);
@@ -79,13 +85,13 @@ export function useShardConnection(): UseShardConnectionResult {
       if (!state.token || !handlersRef.current) return false;
       try {
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
-        const room = await connect(state.token, 'shard', handlersRef.current);
+        const room = await connect(state.token, roomName, handlersRef.current, state.activeCharacter?.id);
         roomRef.current = room;
         if (extractionHandlerRef.current) {
           room.onMessage('extraction_state', extractionHandlerRef.current);
         }
         dispatch({ type: 'SET_ROOM', room });
-        addMessage('Reconnected to the shard.', 'system');
+        addMessage(roomName.startsWith('zone:') ? 'Reconnected to the Refuge.' : 'Reconnected to the shard.', 'system');
         return true;
       } catch {
         return false;
@@ -138,10 +144,10 @@ export function useShardConnection(): UseShardConnectionResult {
       onRoomHeader: (msg: RoomHeaderMessage) => {
         if (disposed) return;
         dispatch({ type: 'SET_ROOM_HEADER', header: msg });
-        addMessage(`\n── ${msg.roomName} ──`, 'header');
-        if (msg.exits.length > 0) {
-          addMessage(`Exits: ${msg.exits.join(', ')}`, 'header');
-        }
+        const headerLabel = msg.zoneName
+          ? `\n── [${msg.zoneName}] ${msg.roomName} ──`
+          : `\n── ${msg.roomName} ──`;
+        addMessage(headerLabel, 'header');
       },
       onShardState: (msg: ShardStateMessage) => {
         if (disposed) return;
@@ -205,7 +211,8 @@ export function useShardConnection(): UseShardConnectionResult {
         addMessage('The world shifts around you...', 'system');
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
 
-        if (msg.target === 'refuge') {
+        const switchingToRefuge = msg.target === 'zone:the-refuge';
+        if (switchingToRefuge) {
           dispatch({ type: 'CLEAR_MESSAGES' });
           dispatch({ type: 'SET_SHARD_STATE', state: null as unknown as import('@ellmud/shared').ShardState });
           dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
@@ -216,13 +223,18 @@ export function useShardConnection(): UseShardConnectionResult {
           }));
         }
 
-        switchRoom(currentRoom, msg.target, state.token, handlers, msg.options)
+        switchRoom(currentRoom, msg.target, state.token, handlers, msg.options, state.activeCharacter?.id)
           .then((newRoom) => {
             if (!disposed) {
               roomRef.current = newRoom;
               dispatch({ type: 'SET_ROOM', room: newRoom });
               newRoom.onMessage('extraction_state', handleExtraction);
-              addMessage(`Connected to ${msg.target === 'refuge' ? 'the Refuge' : 'shard'}.`, 'system');
+              addMessage(`Connected to ${switchingToRefuge ? 'the Refuge' : 'shard'}.`, 'system');
+              
+              // Navigate after successful room switch to refuge
+              if (switchingToRefuge) {
+                navigate('/refuge');
+              }
             } else {
               newRoom.leave();
             }
@@ -243,17 +255,82 @@ export function useShardConnection(): UseShardConnectionResult {
           dispatch({ type: 'SET_ERROR', error: message });
         }
       },
+      onLoadoutUpdate: (msg: LoadoutUpdateMessage) => {
+        if (!disposed) {
+          dispatch({ type: 'SET_LOADOUT', slots: msg.slots });
+        }
+      },
+      onStashUpdate: (msg: StashUpdateMessage) => {
+        if (!disposed) {
+          dispatch({ type: 'SET_STASH_ITEMS', items: msg.items });
+        }
+      },
+      onPlayerState: (msg: PlayerStateMessage) => {
+        if (!disposed) {
+          dispatch({
+            type: 'SET_PLAYER_STATE',
+            hp: msg.hp,
+            maxHp: msg.maxHp,
+            stamina: msg.stamina,
+            maxStamina: msg.maxStamina,
+            statusEffects: msg.statusEffects.map(e => ({
+              id: e.id,
+              name: e.name,
+              duration: e.remainingTicks,
+            })),
+          });
+        }
+      },
+      onZoneTransfer: (msg: ZoneTransferMessage) => {
+        if (disposed || switchingRef.current) return;
+        switchingRef.current = true;
+
+        const currentRoom = roomRef.current;
+        if (!currentRoom || !state.token) {
+          switchingRef.current = false;
+          return;
+        }
+
+        addMessage(`Entering zone: ${msg.targetZoneSlug}...`, 'system');
+        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
+
+        // Switch to a shard room with the target zone slug as join options.
+        // The server matchmaker routes zoneSlug to the correct zone instance.
+        switchRoom(currentRoom, 'shard', state.token, handlers, {
+          zoneSlug: msg.targetZoneSlug,
+          targetRoomSlug: msg.targetRoomSlug,
+        } as import('@ellmud/shared').RoomSwitchOptions, state.activeCharacter?.id)
+          .then((newRoom) => {
+            if (!disposed) {
+              roomRef.current = newRoom;
+              dispatch({ type: 'SET_ROOM', room: newRoom });
+              newRoom.onMessage('extraction_state', handleExtraction);
+              addMessage(`Arrived in ${msg.targetZoneSlug}.`, 'system');
+            } else {
+              newRoom.leave();
+            }
+          })
+          .catch((err: Error) => {
+            if (!disposed) {
+              dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
+              addMessage(`Zone transfer failed: ${err.message}`, 'system');
+            }
+          })
+          .finally(() => {
+            switchingRef.current = false;
+          });
+      },
       onLeave: (code: number) => {
         if (!disposed && !switchingRef.current) {
           dispatch({ type: 'SET_CONNECTION_STATUS', status: 'disconnected' });
           roomRef.current = null;
+          // Don't show death screen on generic disconnect — only when server sends explicit death extraction state
           if (code >= 4000) {
             addMessage(`Disconnected (code ${code}). You may need to log in again.`, 'system');
-            setExtraction({ status: 'death', progress: 0, narration: null });
           } else {
             addMessage('Connection lost. Attempting to reconnect...', 'system');
-            reconnectionRef.current.reportDisconnect();
           }
+          reconnectionRef.current.reportDisconnect();
         }
       },
     };
@@ -281,10 +358,16 @@ export function useShardConnection(): UseShardConnectionResult {
           addMessage(msg.narration, 'system');
           if (!switchingRef.current) {
             handlers.onRoomSwitch({
-              target: 'refuge',
+              target: 'zone:the-refuge',
               reason: 'extraction_complete',
             });
           }
+          break;
+        case 'death':
+          setExtraction({ status: 'death', progress: 0, narration: msg.narration });
+          addMessage(msg.narration, 'system');
+          // After death, server will send ROOM_SWITCH to refuge after a delay
+          // onRoomSwitch handler will navigate to /refuge
           break;
         case 'interrupted':
           setExtraction(INITIAL_EXTRACTION);
@@ -296,11 +379,20 @@ export function useShardConnection(): UseShardConnectionResult {
 
     dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
 
-    connect(state.token, 'shard', handlers).then((room) => {
+    // Prevent double-connect if already connected to the correct room
+    const currentRoom = roomRef.current;
+    if (currentRoom && currentRoom.name === roomName) {
+      dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
+      return () => {
+        disposed = true;
+      };
+    }
+
+    connect(state.token, roomName, handlers, state.activeCharacter?.id).then((room) => {
       if (!disposed) {
         roomRef.current = room;
         dispatch({ type: 'SET_ROOM', room });
-        addMessage('Connected to the shard.', 'system');
+        addMessage(roomName.startsWith('zone:') ? 'Connected to the Refuge.' : 'Connected to the shard.', 'system');
         reconnectionRef.current.reportConnected();
         room.onMessage('extraction_state', handleExtraction);
       } else {
@@ -318,7 +410,7 @@ export function useShardConnection(): UseShardConnectionResult {
       roomRef.current?.leave();
       roomRef.current = null;
     };
-  }, [state.token, dispatch, addMessage]);
+  }, [state.token, roomName, dispatch, addMessage]);
 
   const handleCommand = useCallback((input: string) => {
     const room = roomRef.current;
@@ -358,5 +450,6 @@ export function useShardConnection(): UseShardConnectionResult {
     sendChatMessage,
     extraction,
     reconnection,
+    roomRef,
   };
 }

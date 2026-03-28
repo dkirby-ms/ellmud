@@ -94,7 +94,7 @@ describe('Connection — runtime behavior', () => {
       onLeave: vi.fn(),
     };
 
-    const room = await connect('test-token', 'refuge', handlers);
+    const room = await connect('test-token', 'zone:the-refuge', handlers);
 
     // 5 message subscriptions
     expect(mockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.NARRATE, handlers.onNarrate);

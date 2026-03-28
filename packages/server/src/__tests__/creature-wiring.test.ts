@@ -240,7 +240,7 @@ describe('Creature Loot Drops', () => {
     combatSystem.registerCombatant(creatureManager.toCombatant(creature));
     combatSystem.registerCombatant(
       createCombatant('player-1', 'player-1', roomId, true, {
-        maxHp: 100, attack: 200, defence: 5, armour: 2,
+        maxHp: 100, attack: 200, defence: 5, armour: 2, agility: 5,
       }),
     );
     combatSystem.initiateCombat('player-1', creature.id);

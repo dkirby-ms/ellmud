@@ -159,44 +159,32 @@ export default function ChatPanel({
         )}
 
         {/* Chat Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="flex-1 overflow-y-auto p-4 space-y-1 narrative-scroll narrative-terminal">
           {messages.map((msg) => (
             <div key={msg.id}>
               {msg.type === "system" && (
-                <p className="text-text-disabled text-xs font-mono">
+                <p className="mud-system">
                   {msg.message}
                 </p>
               )}
 
               {msg.type === "player" && (
                 <div>
-                  <p
-                    className="text-text-secondary text-xs mb-1 font-sans"
-                  >
-                    {msg.speaker}
-                  </p>
-                  <p className="text-text-primary text-sm font-serif">
-                    "{msg.message}"
-                  </p>
+                  <span className="ansi-cyan">{msg.speaker}</span>
+                  <span className="mud-speech"> &ldquo;{msg.message}&rdquo;</span>
                 </div>
               )}
 
               {msg.type === "emote" && (
-                <p className="text-text-secondary text-sm italic font-serif">
+                <p className="ansi-dim ansi-italic">
                   {msg.message}
                 </p>
               )}
 
               {msg.type === "whisper" && (
                 <div>
-                  <p
-                    className="text-interactive text-xs mb-1 font-sans"
-                  >
-                    [whisper] {msg.speaker}
-                  </p>
-                  <p className="text-text-primary text-sm font-serif">
-                    "{msg.message}"
-                  </p>
+                  <span className="ansi-magenta">[whisper] {msg.speaker}</span>
+                  <span className="mud-speech"> &ldquo;{msg.message}&rdquo;</span>
                 </div>
               )}
             </div>
