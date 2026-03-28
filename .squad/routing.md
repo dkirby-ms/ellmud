@@ -10,6 +10,8 @@ How to decide who handles what.
 | Combat, shard gen, creatures, progression | Jarlaxle | Combat system, room graphs, creature AI, skills, economy, traces, sound, PvP |
 | LLM integration, narrative, prompts | Volo | Prompt engineering, caching, template fallbacks, narration pipeline, cost control |
 | React UI, admin pages, client | Regis | Admin dashboard pages, player UI, CSS/styling, hooks, client state |
+| Zone/creature/item design, theming, lore | Laeral | Zone themes, creature concepts, item design, encounter planning, worldbuilding |
+| Content creation in game data | Bruenor | Creating zones/rooms/exits/items/NPCs via admin API and DB |
 | Code review, architecture | Elminster | Design review, system boundaries, scope decisions, technical direction |
 | Testing, QA, edge cases | Minsc | Test architecture, unit/integration tests, edge case coverage, fixtures |
 | Scope & priorities | Elminster | What to build next, trade-offs, milestone planning |

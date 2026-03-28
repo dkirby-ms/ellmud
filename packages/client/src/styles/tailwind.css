@@ -181,8 +181,6 @@
 
 /* ─── MUD Prompt / Status Line ─────────────────────────────────────── */
 .mud-prompt {
-  position: sticky;
-  bottom: 0;
   z-index: 2;  /* above CRT scanline overlay */
   font-family: var(--font-mono);
   font-size: 0.8125rem;

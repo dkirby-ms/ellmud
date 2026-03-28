@@ -84,6 +84,8 @@ export interface AppState {
   statusEffects: StatusEffect[];
   playerHp: number;
   playerMaxHp: number;
+  playerStamina: number;
+  playerMaxStamina: number;
   loadout: EquipmentSlots;
   stashItems: DisplayItem[];
   pendingEquipAction: boolean;
@@ -111,6 +113,8 @@ export const initialState: AppState = {
   statusEffects: [],
   playerHp: 100,
   playerMaxHp: 100,
+  playerStamina: 0,
+  playerMaxStamina: 0,
   loadout: createEmptyEquipmentSlots(),
   stashItems: [],
   pendingEquipAction: false,
@@ -141,7 +145,8 @@ export type AppAction =
   | { type: 'SET_LOADOUT'; slots: EquipmentSlots }
   | { type: 'SET_STASH_ITEMS'; items: DisplayItem[] }
   | { type: 'SET_PENDING_EQUIP'; pending: boolean }
-  | { type: 'SET_ACTIVE_CHARACTER'; character: CharacterSummary | null };
+  | { type: 'SET_ACTIVE_CHARACTER'; character: CharacterSummary | null }
+  | { type: 'SET_PLAYER_STATE'; hp: number; maxHp: number; stamina: number; maxStamina: number; statusEffects: StatusEffect[] };
 
 const MAX_MESSAGES = 500;
 
@@ -196,6 +201,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, pendingEquipAction: action.pending };
     case 'SET_ACTIVE_CHARACTER':
       return { ...state, activeCharacter: action.character };
+    case 'SET_PLAYER_STATE':
+      return {
+        ...state,
+        playerHp: action.hp,
+        playerMaxHp: action.maxHp,
+        playerStamina: action.stamina,
+        playerMaxStamina: action.maxStamina,
+        statusEffects: action.statusEffects,
+      };
     default:
       return state;
   }

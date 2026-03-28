@@ -3,7 +3,7 @@
  * Wires up listeners for every known MessageType so tests don't need boilerplate.
  */
 import { MessageTypes } from '@ellmud/shared';
-import type { NarrateMessage, RoomHeaderMessage, ShardStateMessage, RoomSwitchMessage, ExtractionMessage } from '@ellmud/shared';
+import type { NarrateMessage, RoomHeaderMessage, ShardStateMessage, RoomSwitchMessage, ExtractionMessage, PlayerStateMessage } from '@ellmud/shared';
 
 export interface CollectedMessage {
   type: string;
@@ -18,6 +18,7 @@ export class MessageCollector {
   readonly shardState: ShardStateMessage[] = [];
   readonly roomSwitch: RoomSwitchMessage[] = [];
   readonly extractionState: ExtractionMessage[] = [];
+  readonly playerState: PlayerStateMessage[] = [];
 
   constructor(client: { onMessage: (type: string, cb: (data: unknown) => void) => void }) {
     client.onMessage(MessageTypes.NARRATE, (data) => {
@@ -49,6 +50,12 @@ export class MessageCollector {
       this.extractionState.push(msg);
       this.all.push({ type: MessageTypes.EXTRACTION_STATE, data: msg, receivedAt: Date.now() });
     });
+
+    client.onMessage(MessageTypes.PLAYER_STATE, (data) => {
+      const msg = data as PlayerStateMessage;
+      this.playerState.push(msg);
+      this.all.push({ type: MessageTypes.PLAYER_STATE, data: msg, receivedAt: Date.now() });
+    });
   }
 
   /** Get all narrate messages of a specific narration type. */
@@ -75,5 +82,6 @@ export class MessageCollector {
     this.shardState.length = 0;
     this.roomSwitch.length = 0;
     this.extractionState.length = 0;
+    this.playerState.length = 0;
   }
 }

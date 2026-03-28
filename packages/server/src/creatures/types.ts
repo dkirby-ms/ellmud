@@ -9,7 +9,12 @@ import type { CombatStats } from '../combat/CombatState.js';
 
 // ─── Creature Types ──────────────────────────────────────────────────────────
 
-export type CreatureType = 'drowned_revenant';
+export type CreatureType =
+  | 'drowned_revenant'
+  | 'gutterspawn'
+  | 'rubble_scavenger'
+  | 'hollow_stalker'
+  | 'the_collapsed_one';
 
 // ─── Behavior States (GDD §6.6) ─────────────────────────────────────────────
 

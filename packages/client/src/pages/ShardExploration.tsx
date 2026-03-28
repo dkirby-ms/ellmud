@@ -13,6 +13,7 @@ import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
 import CompassControl from "../components/CompassControl";
 import { MinimapWidget } from "../components/map/MinimapWidget.js";
 import { FullMapOverlay } from "../components/map/FullMapOverlay.js";
+import { EquipmentSilhouette } from "../components/EquipmentSilhouette.js";
 import "../components/map/map.css";
 import MudPrompt from "../components/MudPrompt.js";
 import { useAppContext } from "../store.js";
@@ -311,10 +312,10 @@ export default function ShardExploration() {
                 )}
               </div>
             ))}
-
-            {/* MUD-style status prompt — sticky at bottom of scroll */}
-            <MudPrompt />
           </div>
+
+          {/* MUD-style status prompt — positioned below scroll container */}
+          <MudPrompt />
         </div>
 
         {/* Sidebar (30%) */}
@@ -384,6 +385,11 @@ export default function ShardExploration() {
               </div>
             </div>
           )}
+
+          {/* Equipment Silhouette */}
+          <div className="p-4 border-b border-border-muted">
+            <EquipmentSilhouette loadout={state.loadout} />
+          </div>
 
           {/* Quick Inventory */}
           <div className="p-4 border-b border-border-muted">

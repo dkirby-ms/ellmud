@@ -153,3 +153,72 @@
     line-height: 1.5;
   }
 }
+
+/* ═══ Equipment Silhouette ═══ */
+
+.equipment-silhouette {
+  /* Container styling handled by parent */
+}
+
+.equipment-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.equipment-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.25rem;
+}
+
+.equipment-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.3rem;
+  border-radius: 2px;
+  transition: all 0.2s ease;
+  min-height: 2rem;
+}
+
+.equipment-cell:hover {
+  background: rgba(28, 29, 39, 0.9) !important;
+}
+
+.equipment-cell-spacer {
+  /* Empty cell for layout spacing */
+}
+
+.equipment-slot-label {
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+
+.equipment-item-name {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* ═══ Item Tooltip ═══ */
+
+.item-tooltip {
+  font-family: var(--font-mono);
+  animation: tooltip-fade-in 0.15s ease-out;
+}
+
+@keyframes tooltip-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -35,6 +35,7 @@ export interface MessageHandlers {
   onZoneTransfer?: (msg: ZoneTransferMessage) => void;
   onLoadoutUpdate?: (msg: LoadoutUpdateMessage) => void;
   onStashUpdate?: (msg: StashUpdateMessage) => void;
+  onPlayerState?: (msg: import('@ellmud/shared').PlayerStateMessage) => void;
   onError: (code: number, message: string) => void;
   onLeave: (code: number) => void;
 }
@@ -74,6 +75,9 @@ export async function connect(
   }
   if (handlers.onStashUpdate) {
     room.onMessage(MessageTypes.STASH_UPDATE, handlers.onStashUpdate);
+  }
+  if (handlers.onPlayerState) {
+    room.onMessage(MessageTypes.PLAYER_STATE, handlers.onPlayerState);
   }
   if (handlers.onZoneTransfer) {
     room.onMessage(MessageTypes.ZONE_TRANSFER, handlers.onZoneTransfer);
@@ -123,6 +127,9 @@ export async function switchRoom(
   }
   if (handlers.onStashUpdate) {
     newRoom.onMessage(MessageTypes.STASH_UPDATE, handlers.onStashUpdate);
+  }
+  if (handlers.onPlayerState) {
+    newRoom.onMessage(MessageTypes.PLAYER_STATE, handlers.onPlayerState);
   }
   if (handlers.onZoneTransfer) {
     newRoom.onMessage(MessageTypes.ZONE_TRANSFER, handlers.onZoneTransfer);

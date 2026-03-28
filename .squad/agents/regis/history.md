@@ -173,6 +173,54 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 - **MudPrompt component at `packages/client/src/components/MudPrompt.tsx`:** Classic MUD status line pinned to bottom of narrative scroll. Reads `playerHp`, `playerMaxHp`, `inCombat`, `pendingCombatAction`, `statusEffects`, and `roomHeader.roomName` from AppContext. HP color-coded via CSS classes: green (>60%), yellow (30-60%), red (<30%). Blinking `>` cursor via CSS animation. Uses `position: sticky; bottom: 0` inside the scroll container.
 - **MUD prompt CSS classes in `tailwind.css`:** `.mud-prompt`, `.mud-prompt-bracket`, `.mud-prompt-label`, `.mud-prompt-sep`, `.mud-prompt-hp-*`, `.mud-prompt-ready`, `.mud-prompt-combat`, `.mud-prompt-effect`, `.mud-prompt-room`, `.mud-prompt-cursor`. z-index: 2 to sit above CRT scanline overlay.
 - **Test scoping pattern:** When a component renders the same text in multiple places (sidebar + MudPrompt), use `within(screen.getByTestId('container'))` to scope assertions. Applied to `ux-batch2-combat-sidebar.test.tsx` status effect tests.
+- **ItemTooltip component at `packages/client/src/components/ItemTooltip.tsx`:** Reusable mouseover tooltip for displaying item details. Shows item name (tier-colored), type, slot, weight, description, and tier badge. Viewport overflow prevention with automatic repositioning. MUD aesthetic: dark background (`rgba(10, 11, 15, 0.98)`), tier-colored border, tier-appropriate glow shadow. Currently shows placeholder `?` for weapon/armour stats since `DisplayItem` doesn't include computed stats - this can be enhanced when server sends stats data.
+- **EquipmentSilhouette component at `packages/client/src/components/EquipmentSilhouette.tsx`:** Abstract slot diagram showing player's equipped items. Compact 3-column grid layout: head/chest/hands/legs/feet centered, weapon/offhand flanking chest, ring1/amulet/ring2 at bottom. Equipped items show abbreviated name with tier-colored border and glow. Empty slots show dotted border with dim label. Mouseover displays ItemTooltip. Reads from `state.loadout` (EquipmentSlots). Integrated into ShardExploration sidebar between status effects and quick inventory.
+- **Equipment silhouette CSS in `theme.css`:** `.equipment-grid` flexbox column layout, `.equipment-row` 3-column grid, `.equipment-cell` with transition and hover state, `.equipment-slot-label` for empty slots, `.equipment-item-name` for equipped items. `.item-tooltip` fade-in animation (0.15s). All styling matches MUD aesthetic with monospace fonts and theme color variables.
+- **Tier color system standardized:** Both ItemTooltip and EquipmentSilhouette use the same tier color mapping (scrap: gray `#808080`, common: white `#d4d4d4`, sturdy: green `#4ade80`, refined: blue `#60a5fa`, masterwork: purple `#c084fc`, anomalous: gold `#fbbf24`). These match the existing tier colors used throughout the client.
+
+---
+
+## 2026-03-28T21:05Z — Equipment Silhouette + Shared ItemTooltip (Phase 3)
+
+**Completed:** Built equipment slot diagram with reusable item tooltips  
+**Files Created:**
+- `packages/client/src/components/ItemTooltip.tsx` — Reusable tooltip component
+- `packages/client/src/components/EquipmentSilhouette.tsx` — Abstract slot diagram
+
+**Files Modified:**
+- `packages/client/src/pages/ShardExploration.tsx` — Added EquipmentSilhouette to sidebar
+- `packages/client/src/styles/theme.css` — Added equipment and tooltip CSS
+
+**Build:** ✅ Clean (1.89s)
+
+**Features:**
+1. **ItemTooltip** — Viewport-aware positioning, tier-colored borders/glow, shows name/type/slot/weight/description. Ready for stats when DisplayItem includes them.
+2. **EquipmentSilhouette** — 3-column grid layout with logical slot arrangement. Equipped items glow with tier color, empty slots show dotted borders. Hover shows full tooltip.
+3. **Sidebar Integration** — Lives between status effects and quick inventory in right sidebar. Compact design fits 30% width constraint.
+
+**Design Notes:**
+- Layout uses `LAYOUT_GRID` constant defining 6 rows × 3 columns with null spacers
+- Slot labels: head/chest/hands/legs/feet centered, weapon/offhand flanking, rings/amulet bottom row
+- Item names truncated at 12 chars with ellipsis for space efficiency
+- Tooltip shows `?` for weapon/armour stats since `DisplayItem` type doesn't include computed stats (future enhancement when server protocol adds them)
+
+**MUD Aesthetic Maintained:**
+- Dark backgrounds, tier-colored borders, monospace fonts
+- Glow effects via `box-shadow` with tier color + `60` alpha
+- Tooltip fade-in animation (0.15s ease-out)
+- All colors from established tier palette
+
+**Next Steps for Future Enhancement:**
+- Add weapon/armour stats to `DisplayItem` type (requires server-side change)
+- Consider reusing ItemTooltip in CombinedStashLoadout for consistency
+- Add ARIA labels to equipment cells for accessibility
+
+---
+
+## Cross-Team Notes
+
+- **Drizzt (Engine):** If you add computed stats (damage/speed/armour) to the `DisplayItem` message, ItemTooltip is ready to display them. Currently shows `?` as placeholder.
+- **Minsc (Content/Testing):** Equipment silhouette tests should verify tooltip appears on mouseover and displays correct tier colors/borders.
 
 ---
 

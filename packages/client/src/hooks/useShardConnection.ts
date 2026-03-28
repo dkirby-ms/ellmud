@@ -24,6 +24,7 @@ import type {
   CombatAction,
   LoadoutUpdateMessage,
   StashUpdateMessage,
+  PlayerStateMessage,
   ZoneTransferMessage,
 } from '@ellmud/shared';
 import type { Room } from '@colyseus/sdk';
@@ -262,6 +263,22 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
       onStashUpdate: (msg: StashUpdateMessage) => {
         if (!disposed) {
           dispatch({ type: 'SET_STASH_ITEMS', items: msg.items });
+        }
+      },
+      onPlayerState: (msg: PlayerStateMessage) => {
+        if (!disposed) {
+          dispatch({
+            type: 'SET_PLAYER_STATE',
+            hp: msg.hp,
+            maxHp: msg.maxHp,
+            stamina: msg.stamina,
+            maxStamina: msg.maxStamina,
+            statusEffects: msg.statusEffects.map(e => ({
+              id: e.id,
+              name: e.name,
+              duration: e.remainingTicks,
+            })),
+          });
         }
       },
       onZoneTransfer: (msg: ZoneTransferMessage) => {

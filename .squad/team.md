@@ -18,6 +18,8 @@
 | Volo | Narrative Dev | `.squad/agents/volo/charter.md` | 🎭 Narrative |
 | Regis | Frontend Dev | `.squad/agents/regis/charter.md` | ⚛️ Frontend |
 | Minsc | Tester | `.squad/agents/minsc/charter.md` | 🧪 Tester |
+| Laeral | Content Designer | `.squad/agents/laeral/charter.md` | 🎨 Designer |
+| Bruenor | Content Builder | `.squad/agents/bruenor/charter.md` | 🔨 Builder |
 | Scribe | Session Logger | `.squad/agents/scribe/charter.md` | 📋 Logger |
 | Ralph | Work Monitor | — | 🔄 Monitor |
 

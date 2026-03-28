@@ -2336,3 +2336,72 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 
 - **Lyra (Admin UI):** This API is ready for a "Clean Orphaned Exits" button in zone management UI
 - **Regis (Frontend):** MUD prompt component is live and ready for mana field addition when you add MP/mana to the game schema
+
+---
+
+## PLAYER_STATE Message Pipeline (2026-03-27)
+
+**Task:** Implement full PLAYER_STATE message pipeline so status panel and MUD prompt display real HP/stamina data from server instead of hardcoded client values.
+
+**Outcome:** ✅ SUCCESS — Full pipeline implemented from shared types → server sending → client handling.
+
+**Changes:**
+
+1. **Shared Package** (`packages/shared/src/index.ts`):
+   - Added `PLAYER_STATE: 'player_state'` to `MessageTypes` constant
+   - Added `PlayerStateMessage` interface with `hp`, `maxHp`, `stamina`, `maxStamina`, `statusEffects[]`
+   - Stamina fields are placeholders (always 0) — full stamina system scoped for later
+
+2. **Server** (`packages/server/src/rooms/ShardRoom.ts`):
+   - Added `sendPlayerState(client, playerId)` method following `sendShardLoadoutUpdate` pattern
+   - Sends PLAYER_STATE on join with default HP (100/100)
+   - Sends PLAYER_STATE after combat ticks when player HP changes
+   - Uses `CombatSystem.getCombatant()` to get current HP from combat state
+
+3. **Client** (`packages/client/src/*`):
+   - Added `playerStamina`, `playerMaxStamina` fields to `AppState` interface
+   - Added `SET_PLAYER_STATE` action type to `AppAction` union
+   - Added reducer case to update all player state fields from message
+   - Added `PlayerStateMessage` import and handler in `useShardConnection.ts`
+   - Wired `onPlayerState` handler to connection service in `connection.ts`
+
+4. **Tests** (`packages/server/src/__tests__/player-state-message.test.ts`):
+   - Added `playerState` array to `MessageCollector` helper
+   - Created 3 new tests: on-join message, combat damage updates, message shape validation
+   - All tests passing
+
+**Test Results:**
+- ✅ 3 new PLAYER_STATE tests pass
+- ✅ 2,039 total server tests (6 pre-existing failures unrelated to this work)
+- ✅ Build clean (shared, server, client all compile)
+
+**Key Design Decisions:**
+- Stamina is a placeholder (always 0/0) — user explicitly wants to scope full stamina system later
+- Status effects array structure ready but empty (no status effect system yet)
+- HP is sourced from `Combatant` state, which is created lazily when combat begins
+- On join, default HP (100/100) is sent before combatant exists
+- After combat ticks, PLAYER_STATE sent only to players who took damage (optimization)
+
+**Files Modified:**
+- `packages/shared/src/index.ts`
+- `packages/server/src/rooms/ShardRoom.ts`
+- `packages/client/src/store.ts`
+- `packages/client/src/hooks/useShardConnection.ts`
+- `packages/client/src/services/connection.ts`
+- `packages/server/src/__tests__/helpers/message-collector.ts`
+
+**New Test File:**
+- `packages/server/src/__tests__/player-state-message.test.ts`
+
+**Pattern Followed:** Matched existing message-only protocol patterns (LOADOUT_UPDATE, STASH_UPDATE) — no Schema sync, all state arrives via typed messages with `client.send()`.
+
+
+## Learnings
+
+### Message-Only Protocol Pattern (PLAYER_STATE implementation)
+- **Message type constants live in shared package** (`@ellmud/shared/src/index.ts`). Server and client import from same source to avoid drift.
+- **ShardRoom helper pattern:** Private methods like `sendPlayerState(client, playerId)` encapsulate message sending logic. Called from lifecycle events (onJoin) and combat tick processing.
+- **Client handler wiring:** Three layers: (1) `MessageHandlers` interface in `connection.ts`, (2) handler implementation in `useShardConnection.ts` that dispatches to store, (3) `onMessage()` subscription in both `connect()` and `switchRoom()` functions.
+- **MessageCollector test helper:** Always update when adding new message types — add to interface imports, add array property, add `onMessage` listener, add to `clear()` method.
+- **Combat HP tracking:** `Combatant` objects (created lazily) are the source of truth for HP during combat. Use `CombatSystem.getCombatant(playerId)` to access current HP.
+- **Optimization in deliverCombatResults:** Track which players need updates in a `Set<string>`, then send PLAYER_STATE only to those who took damage. Avoids broadcasting to all players on every tick.

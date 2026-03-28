@@ -47,6 +47,22 @@
       "created_at": "2026-03-27T19:20:00Z",
       "legacy_named": false,
       "status": "active"
+    },
+    "laeral": {
+      "persistent_name": "Laeral",
+      "universe": "Forgotten Realms",
+      "role": "Content Designer",
+      "created_at": "2026-03-28T00:18:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "bruenor": {
+      "persistent_name": "Bruenor",
+      "universe": "Forgotten Realms",
+      "role": "Content Builder",
+      "created_at": "2026-03-28T00:18:00Z",
+      "legacy_named": false,
+      "status": "active"
     }
   }
 }

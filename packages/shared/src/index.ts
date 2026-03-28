@@ -138,6 +138,15 @@ export interface CombatResultMessage {
   combatEnded: boolean;
 }
 
+/** Server → Client: Player state update (HP, stamina, status effects). */
+export interface PlayerStateMessage {
+  hp: number;
+  maxHp: number;
+  stamina: number;
+  maxStamina: number;
+  statusEffects: Array<{ id: string; name: string; remainingTicks: number }>;
+}
+
 // ─── Character Types (GDD §7.1) ──────────────────────────────────────────────
 
 /** Summary of a character for list/select screens. */
@@ -235,6 +244,7 @@ export const MessageTypes = {
   ROOM_HEADER: 'room_header',
   SHARD_STATE: 'shard_state',
   COMBAT_RESULT: 'combat_result',
+  PLAYER_STATE: 'player_state',
   EXTRACTION_STATE: 'extraction_state',
   STASH_UPDATE: 'stash_update',
   LOADOUT_UPDATE: 'loadout_update',
