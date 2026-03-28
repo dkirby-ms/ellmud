@@ -883,13 +883,9 @@ export default function ZoneDesigner({
     );
   }
 
-  // Compute viewBox from visible rooms (current floor + ghost rooms for inter-floor exits)
+  // Compute viewBox from visible rooms on the current floor only
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const viewBoxPositions = new Map(floorPositions);
-  for (const ghostSlug of ghostFloorRoomSlugs) {
-    const pos = positions.get(ghostSlug);
-    if (pos) viewBoxPositions.set(ghostSlug, pos);
-  }
   if (viewBoxPositions.size > 0) {
     for (const pos of viewBoxPositions.values()) {
       const left = pos.x * CELL_W;
@@ -1193,85 +1189,9 @@ export default function ZoneDesigner({
                 );
               })}
 
-              {/* ── Inter-floor exit edges (dashed purple) ──────── */}
-              {floorInterFloorExits.map((exit) => {
-                const fromPos = positions.get(exit.fromRoomSlug);
-                const toPos = positions.get(exit.toRoomSlug);
-                if (!fromPos || !toPos) return null;
+              {/* Inter-floor exits are indicated by ▲▼ icons on rooms; no cross-z lines drawn */}
 
-                const from = roomCenter(fromPos.x, fromPos.y);
-                const to = roomCenter(toPos.x, toPos.y);
-                const { x1, y1, x2, y2 } = clipToRect(from.cx, from.cy, to.cx, to.cy);
-                const { lx, ly } = edgeLabelPos(x1, y1, x2, y2);
-                const isSelected = selectedExit === exit.id;
-                const goesUp = toPos.z > fromPos.z;
-
-                return (
-                  <g
-                    key={`ifl-${exit.id}`}
-                    onClick={(e) => { e.stopPropagation(); handleExitClick(exit.id); }}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <line
-                      x1={x1} y1={y1} x2={x2} y2={y2}
-                      stroke={isSelected ? "#C9A84C" : INTER_FLOOR_COLOR}
-                      strokeWidth={isSelected ? 2.5 : 1.5}
-                      strokeDasharray="4 3"
-                      markerEnd={isSelected ? "url(#arrowhead-selected)" : "url(#arrowhead-interfloor)"}
-                    />
-                    <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={12} />
-                    <text
-                      x={lx} y={ly}
-                      textAnchor="middle" dominantBaseline="central"
-                      fill={isSelected ? "#C9A84C" : INTER_FLOOR_COLOR}
-                      fontSize="10" fontFamily="var(--font-sans)"
-                    >
-                      {exit.direction} {goesUp ? "↑" : "↓"}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* ── Ghost rooms from other floors (inter-floor endpoints) ── */}
-              {Array.from(ghostFloorRoomSlugs).map((slug) => {
-                const pos = positions.get(slug);
-                const room = roomMap.get(slug);
-                if (!pos || !room) return null;
-                const color = roomColor(room.type);
-                const x = pos.x * CELL_W;
-                const y = pos.y * CELL_H;
-
-                return (
-                  <g
-                    key={`ghost-floor-${slug}`}
-                    opacity={0.3}
-                    onClick={(e) => { e.stopPropagation(); handleRoomClick(slug); }}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <rect
-                      x={x} y={y} width={NODE_W} height={NODE_H} rx={6} ry={6}
-                      fill={color.fill}
-                      stroke={INTER_FLOOR_COLOR}
-                      strokeWidth={1}
-                      strokeDasharray="4 2"
-                    />
-                    <text
-                      x={x + NODE_W / 2} y={y + NODE_H / 2 - 7}
-                      textAnchor="middle" dominantBaseline="central"
-                      fill="#E8E0D0" fontSize="12" fontFamily="var(--font-serif)"
-                    >
-                      {room.name.length > 16 ? room.name.slice(0, 15) + "…" : room.name}
-                    </text>
-                    <text
-                      x={x + NODE_W / 2} y={y + NODE_H / 2 + 9}
-                      textAnchor="middle" dominantBaseline="central"
-                      fill="#6A6B75" fontSize="9" fontFamily="var(--font-mono)"
-                    >
-                      z{pos.z > 0 ? "+" : ""}{pos.z}
-                    </text>
-                  </g>
-                );
-              })}
+              {/* Ghost rooms hidden — navigate via ▲▼ icons on rooms */}
 
               {/* ── Portal (inter-zone) exit edges ─────────────── */}
               {interZoneExits.filter((exit) => {
@@ -2153,7 +2073,6 @@ export default function ZoneDesigner({
           { label: "Corridor", color: "#4A4B55" },
           { label: "Feature", color: "#7B4FA0" },
           { label: "⟐ Portal", color: PORTAL_COLOR },
-          { label: "↑↓ Inter-floor", color: INTER_FLOOR_COLOR },
           { label: "▲▼ Vertical exit", color: INTER_FLOOR_COLOR },
           { label: "⚠ Disconnected", color: "#B8860B" },
           { label: "⚡ Orphan", color: "#EF4444" },
