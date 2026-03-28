@@ -3716,3 +3716,28 @@ New constants in `packages/client/src/components/map/constants.ts`:
 - `packages/client/src/components/map/FullMapOverlay.tsx` — floor selector in header
 - `packages/client/src/components/map/MinimapWidget.tsx` — conditional floor selector
 - `packages/client/src/pages/admin/ZoneDesigner.tsx` — floor state, filtered rendering, inter-floor ghost rooms
+
+---
+
+## 2026-03-28T17:33:19Z: Pan uses SVG viewBox offset, not CSS transform
+
+**Author:** Regis (Frontend)  
+**Date:** 2026-03-28  
+**Status:** Implemented
+
+**Context**
+
+The Zone Designer needed pan support alongside the existing zoom (which uses viewBox scaling). Two approaches were possible:
+1. CSS transform on the SVG or a wrapper div
+2. Offset the SVG viewBox coordinates
+
+**Decision**
+
+Pan is implemented as a viewBox offset (`panX`/`panY` added to the zoom-adjusted origin). This keeps pan and zoom in the same coordinate space — no layering of CSS transforms on top of viewBox manipulations, which avoids coordinate conversion bugs when both are active.
+
+**Consequences**
+
+- Pan and zoom compose naturally since both modify the same viewBox
+- Mouse-to-SVG coordinate conversion is straightforward (one scale factor from `getBoundingClientRect`)
+- Room click handlers, exit rendering, and context menus are unaffected since they work in SVG coordinate space
+- If we later add zoom-to-cursor, the shared viewBox approach makes that simpler
