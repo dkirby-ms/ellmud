@@ -504,4 +504,52 @@ describe('computeLayout', () => {
     expect(pl.y).toBe(ch.y);
     expect(pl.x).toBeGreaterThan(ch.x);
   });
+
+  // ── 20. Force-directed relaxation improves adjacency ─────────────────────
+  it('force-relaxation pulls connected rooms adjacent in convergent topology', () => {
+    // Topology with two paths from junction to pool that converge:
+    //   junction→east→conduit→east→pipe→south→pool
+    //   junction→south→s-tunnel→east→crossing→south→channel→east→pool
+    const rooms = makeRooms({
+      junction:  [['east', 'conduit'], ['south', 's-tunnel'], ['north', 'n-tunnel'], ['west', 'ratways']],
+      conduit:   [['west', 'junction'], ['east', 'pipe'], ['north', 'overflow']],
+      pipe:      [['west', 'conduit'], ['south', 'pool'], ['east', 'gas']],
+      overflow:  [['south', 'conduit'], ['west', 'drain']],
+      drain:     [['east', 'overflow'], ['west', 'n-tunnel']],
+      'n-tunnel': [['south', 'junction'], ['east', 'drain'], ['north', 'rat-nest']],
+      'rat-nest': [['south', 'n-tunnel']],
+      's-tunnel': [['north', 'junction'], ['east', 'crossing'], ['west', 'w-conduit'], ['south', 'vault']],
+      crossing:  [['west', 's-tunnel'], ['south', 'channel']],
+      channel:   [['north', 'crossing'], ['east', 'pool'], ['west', 'silt']],
+      pool:      [['west', 'channel'], ['north', 'pipe']],
+      gas:       [['west', 'pipe']],
+      silt:      [['east', 'channel']],
+      vault:     [['north', 's-tunnel']],
+      ratways:   [['east', 'junction']],
+      'w-conduit': [['east', 's-tunnel']],
+    });
+
+    const layout = computeLayout(rooms, 'junction');
+
+    // Count non-adjacent cardinal exits (distance > 1)
+    let nonAdjacent = 0;
+    let diagonals = 0;
+    const CARDINALS = ['north', 'south', 'east', 'west'];
+    for (const [id, room] of rooms) {
+      const p = layout.get(id)!;
+      for (const [dir, targetId] of room.exits) {
+        if (!CARDINALS.includes(dir)) continue;
+        const tp = layout.get(targetId)!;
+        const dist = Math.abs(tp.x - p.x) + Math.abs(tp.y - p.y);
+        if (dist > 1) nonAdjacent++;
+        if (p.x !== tp.x && p.y !== tp.y) diagonals++;
+      }
+    }
+
+    // After relaxation, most exits should be adjacent
+    // Allow at most 4 non-adjacent exits (convergent topology constraint)
+    expect(nonAdjacent).toBeLessThanOrEqual(4);
+    // No diagonals
+    expect(diagonals).toBe(0);
+  });
 });

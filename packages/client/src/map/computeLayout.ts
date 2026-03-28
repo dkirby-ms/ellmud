@@ -522,90 +522,258 @@ export function computeLayout(
 
   // ── Phase 4: Diagonal optimization ─────────────────────────────────────────
   // BFS order can cause a room to be placed by an earlier neighbor, creating
-  // a diagonal line for a later neighbor's cardinal exit. This pass detects
-  // diagonal cardinal exits and relocates rooms to eliminate them.
-  optimizeDiagonals();
+  // ── Phase 4: Force-directed relaxation ───────────────────────────────────
+  // BFS placement is greedy — collisions push rooms to non-ideal positions,
+  // creating gaps that later rooms fill. This phase pulls connected rooms
+  // toward each other iteratively, like springs, until all directly-connected
+  // rooms are adjacent (distance 1) or as close as possible.
+  forceDirectedRelax();
 
   return result;
 
-  // ── Diagonal optimization helpers ──────────────────────────────────────────
+  // ── Force-directed relaxation ──────────────────────────────────────────────
 
   /**
-   * Count how many of a room's cardinal exits are visually diagonal
-   * (the line between the two rooms changes both x and y) when
-   * the room is at the given position.
+   * Score the layout quality for a z-level: sum of (distance - 1) for each
+   * cardinal exit where distance > 1, plus a penalty for each diagonal,
+   * plus a penalty for rooms sitting on exit line segments (occlusions).
    */
-  function countVisualDiagonals(
-    roomId: string,
-    atPos: { x: number; y: number; z: number },
-  ): number {
-    const room = rooms.get(roomId);
-    if (!room) return 0;
+  function layoutScore(z: number): number {
+    let score = 0;
 
-    let count = 0;
-    for (const [direction, neighborId] of room.exits) {
-      const offset = DIRECTION_OFFSETS[direction];
-      if (!offset || offset.dz !== 0) continue;
+    // Collect z-level room positions for occlusion checks
+    const zPositions: { id: string; x: number; y: number }[] = [];
+    for (const [id, pos] of result) {
+      if (pos.z === z) zPositions.push({ id, x: pos.x, y: pos.y });
+    }
 
-      const neighborPos = result.get(neighborId);
-      if (!neighborPos || neighborPos.z !== atPos.z) continue;
-
-      // Diagonal: both x and y differ between the two rooms
-      if (atPos.x !== neighborPos.x && atPos.y !== neighborPos.y) {
-        count++;
+    for (const [roomId, pos] of result) {
+      if (pos.z !== z) continue;
+      const room = rooms.get(roomId);
+      if (!room) continue;
+      for (const [dir, targetId] of room.exits) {
+        const offset = DIRECTION_OFFSETS[dir];
+        if (!offset || offset.dz !== 0) continue;
+        const tp = result.get(targetId);
+        if (!tp || tp.z !== z) continue;
+        const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
+        if (dist > 1) score += dist - 1;
+        // Diagonal penalty (high — directionally wrong exits are very visible)
+        if (pos.x !== tp.x && pos.y !== tp.y) score += 5;
+        // Line-through-room occlusion penalty
+        if (dist >= 2 && (pos.x === tp.x || pos.y === tp.y)) {
+          for (const other of zPositions) {
+            if (other.id === roomId || other.id === targetId) continue;
+            if (pos.x === tp.x && other.x === pos.x) {
+              const minY = Math.min(pos.y, tp.y);
+              const maxY = Math.max(pos.y, tp.y);
+              if (other.y > minY && other.y < maxY) score += 3;
+            } else if (pos.y === tp.y && other.y === pos.y) {
+              const minX = Math.min(pos.x, tp.x);
+              const maxX = Math.max(pos.x, tp.x);
+              if (other.x > minX && other.x < maxX) score += 3;
+            }
+          }
+        }
       }
     }
-    return count;
+    return score;
   }
 
   /**
-   * Iteratively relocate rooms to eliminate diagonal cardinal exits.
-   * For each diagonal, tries moving the target to the source's ideal
-   * position. Accepts moves that don't increase the target's own
-   * diagonal count (the source always gains one fix, so net improves).
+   * For a given room, compute the ideal position as the average of where
+   * each neighbor "wants" it to be (neighbor.pos + exit offset toward room).
    */
-  function optimizeDiagonals(): void {
+  function idealPosition(
+    roomId: string,
+    z: number,
+  ): { x: number; y: number } | null {
+    const room = rooms.get(roomId);
+    if (!room) return null;
+
+    let sumX = 0;
+    let sumY = 0;
+    let count = 0;
+
+    for (const [dir, neighborId] of room.exits) {
+      const offset = DIRECTION_OFFSETS[dir];
+      if (!offset || offset.dz !== 0) continue;
+      const neighborPos = result.get(neighborId);
+      if (!neighborPos || neighborPos.z !== z) continue;
+
+      // Where does this neighbor want us? Opposite of our exit direction
+      sumX += neighborPos.x - offset.dx;
+      sumY += neighborPos.y - offset.dy;
+      count++;
+    }
+
+    if (count === 0) return null;
+    return { x: Math.round(sumX / count), y: Math.round(sumY / count) };
+  }
+
+  /**
+   * Iterative force-directed relaxation. Each iteration:
+   * 1. For each room, compute where its neighbors "want" it
+   * 2. Try moving the room to that ideal position (or nearby)
+   * 3. Accept if the global score improves (no increase in total stretch)
+   */
+  function forceDirectedRelax(): void {
     for (const [z, occupied] of occupiedByZ) {
-      let improved = true;
-      let iterations = 0;
+      const zRoomIds: string[] = [];
+      for (const [id, pos] of result) {
+        if (pos.z === z) zRoomIds.push(id);
+      }
 
-      while (improved && iterations < 100) {
-        improved = false;
-        iterations++;
+      let currentScore = layoutScore(z);
+      if (currentScore === 0) continue; // Already perfect
 
-        for (const [roomId, pos] of result) {
-          if (pos.z !== z) continue;
-          const room = rooms.get(roomId);
-          if (!room) continue;
+      for (let iter = 0; iter < 200 && currentScore > 0; iter++) {
+        let improved = false;
 
-          for (const [direction, targetId] of room.exits) {
-            const offset = DIRECTION_OFFSETS[direction];
-            if (!offset || offset.dz !== 0) continue;
+        for (const roomId of zRoomIds) {
+          const pos = result.get(roomId)!;
+          const ideal = idealPosition(roomId, z);
+          if (!ideal) continue;
 
-            const targetPos = result.get(targetId);
-            if (!targetPos || targetPos.z !== z) continue;
+          // Skip if already at ideal
+          if (ideal.x === pos.x && ideal.y === pos.y) continue;
 
-            // Skip if not visually diagonal
-            if (pos.x === targetPos.x || pos.y === targetPos.y) continue;
-
-            // Try to move the target to the ideal position
-            const idealX = pos.x + offset.dx;
-            const idealY = pos.y + offset.dy;
-            const idealKey = cellKey(idealX, idealY);
-
-            if (occupied.has(idealKey)) continue;
-
-            // Accept if target's diagonal count doesn't increase
-            const diagsBefore = countVisualDiagonals(targetId, targetPos);
-            const newPos = { x: idealX, y: idealY, z };
-            const diagsAfter = countVisualDiagonals(targetId, newPos);
-
-            if (diagsAfter <= diagsBefore) {
-              occupied.delete(cellKey(targetPos.x, targetPos.y));
-              occupied.add(idealKey);
-              result.set(targetId, newPos);
-              improved = true;
+          // Try the ideal position and nearby cells (within radius 2)
+          const candidates: { x: number; y: number }[] = [];
+          for (let r = 0; r <= 2; r++) {
+            for (let ddx = -r; ddx <= r; ddx++) {
+              const absRem = r - Math.abs(ddx);
+              const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
+              for (const ddy of dyOpts) {
+                candidates.push({ x: ideal.x + ddx, y: ideal.y + ddy });
+              }
             }
+          }
+
+          let bestPos: { x: number; y: number } | null = null;
+          let bestScore = currentScore;
+
+          for (const cand of candidates) {
+            if (cand.x === pos.x && cand.y === pos.y) continue;
+            const key = cellKey(cand.x, cand.y);
+            if (occupied.has(key)) continue;
+
+            // Tentatively move room
+            const oldKey = cellKey(pos.x, pos.y);
+            occupied.delete(oldKey);
+            occupied.add(key);
+            result.set(roomId, { x: cand.x, y: cand.y, z });
+
+            const newScore = layoutScore(z);
+            if (newScore < bestScore) {
+              bestScore = newScore;
+              bestPos = cand;
+            }
+
+            // Undo
+            occupied.delete(key);
+            occupied.add(oldKey);
+            result.set(roomId, pos);
+          }
+
+          if (bestPos) {
+            // Commit the move
+            occupied.delete(cellKey(pos.x, pos.y));
+            occupied.add(cellKey(bestPos.x, bestPos.y));
+            const newPos = { x: bestPos.x, y: bestPos.y, z };
+            result.set(roomId, newPos);
+            currentScore = bestScore;
+            improved = true;
+          }
+        }
+
+        if (!improved) break;
+      }
+
+      // Phase 2: Try room swaps — explores multi-room rearrangements that
+      // single-room moves can't find (e.g., two rooms blocking each other)
+      if (currentScore > 0) {
+        for (let swapIter = 0; swapIter < 50 && currentScore > 0; swapIter++) {
+          let swapped = false;
+
+          for (let i = 0; i < zRoomIds.length && currentScore > 0; i++) {
+            for (let j = i + 1; j < zRoomIds.length; j++) {
+              const a = zRoomIds[i], b = zRoomIds[j];
+              const posA = result.get(a)!;
+              const posB = result.get(b)!;
+
+              // Tentatively swap
+              result.set(a, { x: posB.x, y: posB.y, z });
+              result.set(b, { x: posA.x, y: posA.y, z });
+
+              const newScore = layoutScore(z);
+              if (newScore < currentScore) {
+                // Accept (occupied set doesn't change — both cells stay occupied)
+                currentScore = newScore;
+                swapped = true;
+              } else {
+                // Undo
+                result.set(a, posA);
+                result.set(b, posB);
+              }
+            }
+          }
+
+          if (!swapped) break;
+
+          // After a swap, re-run single-room moves to exploit freed opportunities
+          for (let moveIter = 0; moveIter < 50 && currentScore > 0; moveIter++) {
+            let moved = false;
+            for (const roomId of zRoomIds) {
+              const pos = result.get(roomId)!;
+              const ideal = idealPosition(roomId, z);
+              if (!ideal) continue;
+              if (ideal.x === pos.x && ideal.y === pos.y) continue;
+
+              const candidates: { x: number; y: number }[] = [];
+              for (let r = 0; r <= 2; r++) {
+                for (let ddx = -r; ddx <= r; ddx++) {
+                  const absRem = r - Math.abs(ddx);
+                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
+                  for (const ddy of dyOpts) {
+                    candidates.push({ x: ideal.x + ddx, y: ideal.y + ddy });
+                  }
+                }
+              }
+
+              let bestPos: { x: number; y: number } | null = null;
+              let bestScore = currentScore;
+
+              for (const cand of candidates) {
+                if (cand.x === pos.x && cand.y === pos.y) continue;
+                const key = cellKey(cand.x, cand.y);
+                if (occupied.has(key)) continue;
+
+                const oldKey = cellKey(pos.x, pos.y);
+                occupied.delete(oldKey);
+                occupied.add(key);
+                result.set(roomId, { x: cand.x, y: cand.y, z });
+
+                const newScore = layoutScore(z);
+                if (newScore < bestScore) {
+                  bestScore = newScore;
+                  bestPos = cand;
+                }
+
+                occupied.delete(key);
+                occupied.add(oldKey);
+                result.set(roomId, pos);
+              }
+
+              if (bestPos) {
+                occupied.delete(cellKey(pos.x, pos.y));
+                occupied.add(cellKey(bestPos.x, bestPos.y));
+                result.set(roomId, { x: bestPos.x, y: bestPos.y, z });
+                currentScore = bestScore;
+                moved = true;
+              }
+            }
+            if (!moved) break;
           }
         }
       }
