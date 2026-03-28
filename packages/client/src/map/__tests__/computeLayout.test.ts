@@ -213,7 +213,7 @@ describe('computeLayout', () => {
   });
 
   // ── 11. All positions are unique (x,y) per z-layer ──────────────────────
-  it('never places two rooms at the same (x,y) cell', () => {
+  it('never places two rooms at the same (x,y) cell on the same z-level', () => {
     // Create a complex graph that stresses collision resolution
     const rooms = makeRooms({
       center: [['north', 'n'], ['south', 's'], ['east', 'e'], ['west', 'w']],
@@ -230,11 +230,11 @@ describe('computeLayout', () => {
     });
     const layout = computeLayout(rooms, 'center');
 
-    // Collect all (x,y) pairs and assert uniqueness
+    // Collect all (x,y,z) triples and assert uniqueness per z-level
     const cells = new Set<string>();
     for (const [, p] of layout) {
-      const key = `${p.x},${p.y}`;
-      expect(cells.has(key), `duplicate cell at (${p.x}, ${p.y})`).toBe(false);
+      const key = `${p.x},${p.y},${p.z}`;
+      expect(cells.has(key), `duplicate cell at (${p.x}, ${p.y}, z=${p.z})`).toBe(false);
       cells.add(key);
     }
   });
@@ -309,5 +309,129 @@ describe('computeLayout', () => {
 
     expect(layout.size).toBe(2);
     expect(layout.has('ghost')).toBe(false);
+  });
+
+  // ── 15. Sewer topology: sub-level cardinal layout is independent ────────
+  it('lays out sub-level rooms using their own cardinal topology, not surface positions', () => {
+    // Surface: three entry points scattered across the grid
+    //   sluice-gate (hub) → east → sunken-square → east → cistern-access
+    //
+    // Each surface room has a "down" exit to the sewer level.
+    // Sewer level has its OWN cardinal connections:
+    //   sewer-main-junction → west → the-ratways
+    //   sewer-main-junction → east → sewer-east-conduit
+    //   sewer-east-conduit → east → sewer-cistern
+    //
+    // Without z-level isolation, the sewer rooms inherit scattered surface
+    // positions, producing diagonal lines. With isolation, the sewer
+    // respects its own cardinal exits.
+    const rooms = makeRooms({
+      'sluice-gate': [['east', 'sunken-square'], ['down', 'sewer-main-junction']],
+      'sunken-square': [['west', 'sluice-gate'], ['east', 'cistern-access'], ['down', 'the-ratways']],
+      'cistern-access': [['west', 'sunken-square'], ['down', 'sewer-cistern']],
+
+      'sewer-main-junction': [['up', 'sluice-gate'], ['west', 'the-ratways'], ['east', 'sewer-east-conduit'], ['north', 'sewer-north-tunnel'], ['south', 'sewer-south-tunnel']],
+      'the-ratways': [['up', 'sunken-square'], ['east', 'sewer-main-junction']],
+      'sewer-east-conduit': [['west', 'sewer-main-junction'], ['east', 'sewer-cistern']],
+      'sewer-cistern': [['up', 'cistern-access'], ['west', 'sewer-east-conduit']],
+      'sewer-north-tunnel': [['south', 'sewer-main-junction']],
+      'sewer-south-tunnel': [['north', 'sewer-main-junction']],
+    });
+    const layout = computeLayout(rooms, 'sluice-gate');
+
+    expect(layout.size).toBe(9);
+
+    // All surface rooms are at z=0
+    expect(pos(layout, 'sluice-gate').z).toBe(0);
+    expect(pos(layout, 'sunken-square').z).toBe(0);
+    expect(pos(layout, 'cistern-access').z).toBe(0);
+
+    // All sewer rooms are at z=-1
+    expect(pos(layout, 'sewer-main-junction').z).toBe(-1);
+    expect(pos(layout, 'the-ratways').z).toBe(-1);
+    expect(pos(layout, 'sewer-east-conduit').z).toBe(-1);
+    expect(pos(layout, 'sewer-cistern').z).toBe(-1);
+    expect(pos(layout, 'sewer-north-tunnel').z).toBe(-1);
+    expect(pos(layout, 'sewer-south-tunnel').z).toBe(-1);
+
+    // Sewer cardinal topology: ratways is directly west of junction,
+    // east-conduit is directly east, etc.
+    const junc = pos(layout, 'sewer-main-junction');
+    const ratways = pos(layout, 'the-ratways');
+    const eastCon = pos(layout, 'sewer-east-conduit');
+    const cistern = pos(layout, 'sewer-cistern');
+    const northT = pos(layout, 'sewer-north-tunnel');
+    const southT = pos(layout, 'sewer-south-tunnel');
+
+    // the-ratways is directly west of junction (same y, x = junc.x - 1)
+    expect(ratways.x).toBe(junc.x - 1);
+    expect(ratways.y).toBe(junc.y);
+
+    // sewer-east-conduit is directly east of junction
+    expect(eastCon.x).toBe(junc.x + 1);
+    expect(eastCon.y).toBe(junc.y);
+
+    // sewer-cistern is directly east of east-conduit
+    expect(cistern.x).toBe(eastCon.x + 1);
+    expect(cistern.y).toBe(eastCon.y);
+
+    // sewer-north-tunnel is directly north of junction
+    expect(northT.x).toBe(junc.x);
+    expect(northT.y).toBe(junc.y - 1);
+
+    // sewer-south-tunnel is directly south of junction
+    expect(southT.x).toBe(junc.x);
+    expect(southT.y).toBe(junc.y + 1);
+  });
+
+  // ── 16. Rooms on different z-levels can share (x,y) ────────────────────
+  it('allows rooms on different z-levels to share the same (x,y)', () => {
+    const rooms = makeRooms({
+      surface: [['down', 'basement']],
+      basement: [['up', 'surface']],
+    });
+    const layout = computeLayout(rooms, 'surface');
+
+    const s = pos(layout, 'surface');
+    const b = pos(layout, 'basement');
+
+    // Both at (0,0) but different z
+    expect(s).toEqual({ x: 0, y: 0, z: 0 });
+    expect(b.x).toBe(0);
+    expect(b.y).toBe(0);
+    expect(b.z).toBe(-1);
+  });
+
+  // ── 17. Multi-level z-transitions (z=0 → z=-1 → z=-2) ─────────────────
+  it('handles cascading z-transitions across three levels', () => {
+    const rooms = makeRooms({
+      'surface': [['east', 'surface-e'], ['down', 'basement']],
+      'surface-e': [['west', 'surface']],
+      'basement': [['up', 'surface'], ['east', 'basement-e'], ['down', 'sub-basement']],
+      'basement-e': [['west', 'basement']],
+      'sub-basement': [['up', 'basement'], ['east', 'sub-e']],
+      'sub-e': [['west', 'sub-basement']],
+    });
+    const layout = computeLayout(rooms, 'surface');
+
+    expect(layout.size).toBe(6);
+
+    expect(pos(layout, 'surface').z).toBe(0);
+    expect(pos(layout, 'surface-e').z).toBe(0);
+    expect(pos(layout, 'basement').z).toBe(-1);
+    expect(pos(layout, 'basement-e').z).toBe(-1);
+    expect(pos(layout, 'sub-basement').z).toBe(-2);
+    expect(pos(layout, 'sub-e').z).toBe(-2);
+
+    // Each level's cardinal layout is coherent
+    const base = pos(layout, 'basement');
+    const baseE = pos(layout, 'basement-e');
+    expect(baseE.x).toBe(base.x + 1);
+    expect(baseE.y).toBe(base.y);
+
+    const sub = pos(layout, 'sub-basement');
+    const subE = pos(layout, 'sub-e');
+    expect(subE.x).toBe(sub.x + 1);
+    expect(subE.y).toBe(sub.y);
   });
 });

@@ -296,3 +296,28 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 - **Direction-biased search still respects Manhattan distance priority:** Cells at radius 1 are tried before radius 2, radius 2 before radius 3, etc. Within each ring, the highest-scoring (most aligned) candidate wins. This minimizes displacement while respecting semantics.
 - **`findNearestUnoccupied()` preserved for disconnected subgraphs:** Disconnected components placed to the right of the main graph don't need directional bias (no meaningful "from" direction), so they still use the plain spiral search.
 
+
+## 2026-03-27T20:05Z — Z-Level Independent Layout
+
+**Completed:** Fixed computeLayout.ts to lay out each z-level independently, preventing surface room positions from distorting sub-level topology (diagonal sewer lines).
+
+**Files Modified:** 2
+- `packages/client/src/map/computeLayout.ts` — Rewrote BFS to defer up/down exits; added Phase 2 that anchors each z-level at its entry point and BFS-expands using only cardinal exits; per-z-level `occupied` sets so different floors can share (x,y)
+- `packages/client/src/map/__tests__/computeLayout.test.ts` — Updated uniqueness test to be per-z-level; added sewer topology test (#15), shared (x,y) across z test (#16), cascading 3-level test (#17)
+
+**Build:** ✅ Clean (tsc + vite)
+**Tests:** ✅ 17 passed (0 failures)
+
+**Root Cause:** The old BFS placed up/down targets immediately at the source room's (x,y), then continued BFS from there — so sewer rooms inherited scattered surface positions. Cardinal exits between sewer rooms then produced diagonal lines.
+
+**Solution:** Three-phase layout:
+1. BFS primary z-level (z=0), deferring all up/down exits into a `pendingZTransitions` list
+2. Process each deferred z-level: anchor first transition at source's (x,y) on new z, then BFS using only cardinal exits to lay out the subgraph coherently. Further up/down exits from sub-levels are deferred recursively.
+3. Handle disconnected subgraphs (unchanged)
+
+Each z-level gets its own `occupied` set since the designer displays one floor at a time — no visual overlap.
+
+## Learnings
+
+- **Z-level layout must be independent of parent level positions.** When multiple surface rooms connect down to the same sub-level, the sub-level's cardinal topology should dictate its own layout, not the surface positions. Anchoring at the first z-transition and BFS-expanding with only cardinal exits solves this.
+- **Per-z-level occupied sets are essential.** Rooms on different z-levels can share (x,y) without conflict because the designer shows one floor at a time. A single global occupied set incorrectly blocks sub-level room placement.

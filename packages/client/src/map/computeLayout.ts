@@ -243,6 +243,15 @@ function detectGridClusters(
  * Compute spatial (x, y, z) coordinates for each room in a room graph
  * using direction-aware BFS with grid-block awareness.
  *
+ * Z-levels are laid out independently: up/down exits are deferred during
+ * BFS and each target z-level is anchored at its entry point, then
+ * expanded using only cardinal exits. This prevents surface room
+ * positions from distorting sub-level topology.
+ *
+ * Each z-level has its own occupied-cell set, so rooms on different
+ * floors can share (x, y) without conflict (the designer shows one
+ * floor at a time).
+ *
  * @param rooms      Map of roomId → { exits: Map<direction, targetRoomId> }
  * @param entryRoomId  The room to start BFS from (placed at 0,0,0)
  * @returns Map of roomId → RoomPosition
@@ -252,7 +261,26 @@ export function computeLayout(
   entryRoomId: string,
 ): Map<string, RoomPosition> {
   const result = new Map<string, RoomPosition>();
-  const occupied = new Set<string>(); // tracks used (x,y) cells
+
+  // Per z-level occupied sets — rooms on different z-levels can share (x,y)
+  const occupiedByZ = new Map<number, Set<string>>();
+
+  function getOccupied(z: number): Set<string> {
+    let set = occupiedByZ.get(z);
+    if (!set) {
+      set = new Set<string>();
+      occupiedByZ.set(z, set);
+    }
+    return set;
+  }
+
+  // Deferred z-transitions: collected during BFS, processed after.
+  interface ZTransition {
+    sourceId: string;
+    targetId: string;
+    targetZ: number;
+  }
+  const pendingZTransitions: ZTransition[] = [];
 
   // Pre-detect grid clusters before BFS
   const gridClusters = detectGridClusters(rooms);
@@ -289,6 +317,7 @@ export function computeLayout(
     const members = clusterMembers.get(clusterId);
     if (!members) return;
 
+    const occupied = getOccupied(anchorZ);
     const anchorInfo = gridClusters.get(anchorRoomId)!;
 
     // Compute ideal positions for all members relative to anchor
@@ -353,8 +382,8 @@ export function computeLayout(
 
   /**
    * BFS from a given room, placing it at (startX, startY, startZ).
-   * When encountering a grid-cluster room for the first time, the
-   * entire cluster is placed as a block.
+   * Only processes cardinal directions; up/down exits are deferred to
+   * pendingZTransitions for independent z-level layout.
    */
   function bfs(
     startId: string,
@@ -364,6 +393,7 @@ export function computeLayout(
   ): void {
     if (result.has(startId)) return;
 
+    const occupied = getOccupied(startZ);
     const queue: string[] = [];
 
     // Check if start room is part of an unplaced grid cluster
@@ -378,8 +408,11 @@ export function computeLayout(
         queue,
       );
     } else {
-      result.set(startId, { x: startX, y: startY, z: startZ });
-      occupied.add(cellKey(startX, startY));
+      // Resolve collision at anchor position (can happen when multiple
+      // z-transitions target the same z-level at overlapping coordinates)
+      const start = findNearestUnoccupied(startX, startY, occupied);
+      result.set(startId, { x: start.x, y: start.y, z: startZ });
+      occupied.add(cellKey(start.x, start.y));
       queue.push(startId);
     }
 
@@ -393,12 +426,21 @@ export function computeLayout(
       if (!currentPos) continue;
 
       for (const [direction, targetId] of current.exits) {
-        // Skip if target is already placed or doesn't exist in the graph
         if (result.has(targetId)) continue;
         if (!rooms.has(targetId)) continue;
 
         const offset = DIRECTION_OFFSETS[direction];
         if (!offset) continue;
+
+        // Defer up/down exits for independent z-level layout
+        if (offset.dz !== 0) {
+          pendingZTransitions.push({
+            sourceId: currentId,
+            targetId,
+            targetZ: currentPos.z + offset.dz,
+          });
+          continue;
+        }
 
         // Check if target is part of an unplaced grid cluster
         const targetGrid = gridClusters.get(targetId);
@@ -410,54 +452,71 @@ export function computeLayout(
             targetId,
             idealX,
             idealY,
-            currentPos.z + offset.dz,
+            startZ,
             queue,
           );
           continue;
         }
 
-        let targetX: number;
-        let targetY: number;
-        const targetZ = currentPos.z + offset.dz;
+        // Cardinal direction: compute ideal position, resolve collisions
+        const idealX = currentPos.x + offset.dx;
+        const idealY = currentPos.y + offset.dy;
+        const nearest = findNearestDirectional(
+          idealX,
+          idealY,
+          offset.dx,
+          offset.dy,
+          occupied,
+        );
 
-        if (offset.dz !== 0) {
-          // up/down: same (x,y), different z-layer
-          targetX = currentPos.x;
-          targetY = currentPos.y;
-        } else {
-          // Cardinal direction: compute ideal position, resolve collisions with directional bias
-          const idealX = currentPos.x + offset.dx;
-          const idealY = currentPos.y + offset.dy;
-          const nearest = findNearestDirectional(idealX, idealY, offset.dx, offset.dy, occupied);
-          targetX = nearest.x;
-          targetY = nearest.y;
-        }
-
-        result.set(targetId, { x: targetX, y: targetY, z: targetZ });
-        occupied.add(cellKey(targetX, targetY));
+        result.set(targetId, { x: nearest.x, y: nearest.y, z: startZ });
+        occupied.add(cellKey(nearest.x, nearest.y));
         queue.push(targetId);
       }
     }
   }
 
-  // Phase 1: BFS from entry room
+  // ── Phase 1: BFS the primary z-level (z=0) ────────────────────────────────
   if (rooms.has(entryRoomId)) {
     bfs(entryRoomId, 0, 0, 0);
   }
 
-  // Phase 2: Handle disconnected subgraphs
-  // Find the bounding box of placed rooms to offset disconnected components
+  // ── Phase 2: Lay out each deferred z-level independently ───────────────────
+  // Process in rounds — a sub-level BFS may discover further up/down exits
+  // to even deeper levels (z=-2, etc.), which are deferred and handled in
+  // the next iteration of this loop.
+  const processedTransitions = new Set<string>();
+
+  while (pendingZTransitions.length > 0) {
+    const batch = [...pendingZTransitions];
+    pendingZTransitions.length = 0;
+
+    for (const t of batch) {
+      const key = `${t.sourceId}->${t.targetId}`;
+      if (processedTransitions.has(key)) continue;
+      processedTransitions.add(key);
+
+      // Target may already be placed by BFS from an earlier anchor
+      if (result.has(t.targetId)) continue;
+
+      const sourcePos = result.get(t.sourceId);
+      if (!sourcePos) continue;
+
+      // Anchor the sub-level room at the source's (x,y) on the new z
+      bfs(t.targetId, sourcePos.x, sourcePos.y, t.targetZ);
+    }
+  }
+
+  // ── Phase 3: Handle disconnected subgraphs ─────────────────────────────────
   for (const roomId of rooms.keys()) {
     if (result.has(roomId)) continue;
 
-    // Compute bounding box of all placed rooms to find a clear offset
     let maxX = 0;
-    for (const pos of result.values()) {
-      if (pos.x > maxX) maxX = pos.x;
+    for (const p of result.values()) {
+      if (p.x > maxX) maxX = p.x;
     }
 
-    // Place disconnected component to the right of everything so far
-    const offsetX = maxX + 3; // gap of 2 cells between components
+    const offsetX = maxX + 3;
     bfs(roomId, offsetX, 0, 0);
   }
 
