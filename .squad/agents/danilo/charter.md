@@ -31,6 +31,7 @@
 - Use `discord-discord_send` for channel messages
 - Use `discord-discord_create_forum_post` for longer updates
 - Use `discord-discord_read_messages` to check channel context before posting
+- **Webhook:** `DISCORD_WEBHOOK_URL` is set in `.env` (gitignored). Use `discord-discord_send_webhook_message` for posting updates. Never hardcode the webhook URL — read it from the environment.
 
 ## Boundaries
 
