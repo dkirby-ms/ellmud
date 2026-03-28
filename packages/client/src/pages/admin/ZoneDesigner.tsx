@@ -1,11 +1,13 @@
-import { useState, useMemo, useEffect } from "react";
-import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap } from "lucide-react";
 import { computeLayout } from "../../map/computeLayout.js";
 import type { LayoutRoom } from "../../map/computeLayout.js";
 import {
   createRoom, updateRoom, deleteRoom,
-  createExit, deleteExit, listZones, getZone,
+  createExit, updateExit, deleteExit, listZones, getZone,
+  getOrphanedExits, removeOrphanedExits,
   type ZoneDefinition, type ZoneRoomDefinition, type ZoneExitDefinition,
+  type OrphanedExitInfo,
 } from "../../lib/zone-api.js";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -46,6 +48,7 @@ const ROOM_TYPE_COLORS: Record<string, { fill: string; stroke: string }> = {
 
 const FEATURE_COLOR = { fill: "#2A1A3A", stroke: "#7B4FA0" };
 const DEFAULT_COLOR = { fill: "#1C1D27", stroke: "#4A4B55" };
+const PORTAL_COLOR = "#06b6d4"; // cyan/teal for cross-zone exits
 
 function roomColor(type: string): { fill: string; stroke: string } {
   if (type.startsWith("feature_")) return FEATURE_COLOR;
@@ -187,6 +190,23 @@ export default function ZoneDesigner({
   const [portalTargetRoom, setPortalTargetRoom] = useState("");
   const [portalDirection, setPortalDirection] = useState("north");
 
+  // Orphaned exits
+  const [orphanedExits, setOrphanedExits] = useState<OrphanedExitInfo[]>([]);
+  const [orphanCount, setOrphanCount] = useState(0);
+  const [showOrphans, setShowOrphans] = useState(false);
+  const [orphansBusy, setOrphansBusy] = useState(false);
+
+  // Exit edit form
+  const [exitEditForm, setExitEditForm] = useState({
+    direction: "",
+    toRoomSlug: "",
+    targetZoneSlug: "",
+    targetRoomSlug: "",
+    locked: false,
+    hidden: false,
+  });
+  const [exitEditTargetRooms, setExitEditTargetRooms] = useState<ZoneRoomDefinition[]>([]);
+
   // Sync edit form when selection changes
   useEffect(() => {
     if (selectedRoom) {
@@ -201,6 +221,31 @@ export default function ZoneDesigner({
       }
     }
   }, [selectedRoom, rooms]);
+
+  // Sync exit edit form when exit selection changes
+  useEffect(() => {
+    if (selectedExit) {
+      const exit = exits.find((e) => e.id === selectedExit);
+      if (exit) {
+        setExitEditForm({
+          direction: exit.direction,
+          toRoomSlug: exit.toRoomSlug,
+          targetZoneSlug: exit.targetZoneSlug ?? "",
+          targetRoomSlug: exit.targetRoomSlug ?? "",
+          locked: exit.locked,
+          hidden: exit.hidden,
+        });
+        // Load target zone rooms for cross-zone exits
+        if (exit.targetZoneSlug) {
+          getZone(exit.targetZoneSlug)
+            .then((data) => setExitEditTargetRooms(data.rooms))
+            .catch(() => setExitEditTargetRooms([]));
+        } else {
+          setExitEditTargetRooms([]);
+        }
+      }
+    }
+  }, [selectedExit, exits]);
 
   // ─── Layout computation ─────────────────────────────────
   const { positions, roomMap, interZoneExits, intraZoneExits } = useMemo(() => {
@@ -285,6 +330,20 @@ export default function ZoneDesigner({
     }
     return ids;
   }, [exits]);
+
+  // Detect true orphan exit IDs (toRoomSlug doesn't exist in zone rooms) for SVG highlighting
+  const orphanExitIds = useMemo(() => {
+    const ids = new Set<string>();
+    const roomSlugs = new Set(rooms.map((r) => r.slug));
+    for (const e of exits) {
+      if (!roomSlugs.has(e.fromRoomSlug)) {
+        ids.add(e.id);
+      } else if (!e.targetZoneSlug && !roomSlugs.has(e.toRoomSlug)) {
+        ids.add(e.id);
+      }
+    }
+    return ids;
+  }, [rooms, exits]);
 
   // ─── Click handlers ─────────────────────────────────────
   function handleRoomClick(slug: string) {
@@ -432,6 +491,92 @@ export default function ZoneDesigner({
     }
   }
 
+  async function handleUpdateExit() {
+    if (!selectedExit) return;
+    try {
+      setBusy(true);
+      setError(null);
+      const data: Record<string, unknown> = {
+        direction: exitEditForm.direction,
+        toRoomSlug: exitEditForm.toRoomSlug,
+        locked: exitEditForm.locked,
+        hidden: exitEditForm.hidden,
+      };
+      if (exitEditForm.targetZoneSlug) {
+        data.targetZoneSlug = exitEditForm.targetZoneSlug;
+        data.targetRoomSlug = exitEditForm.targetRoomSlug;
+      } else {
+        data.targetZoneSlug = null;
+        data.targetRoomSlug = null;
+      }
+      await updateExit(selectedExit, data as Partial<ZoneExitDefinition>);
+      onZoneChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update exit");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ─── Orphan management ─────────────────────────────────
+  const handleScanOrphans = useCallback(async () => {
+    try {
+      setOrphansBusy(true);
+      setError(null);
+      const result = await getOrphanedExits();
+      setOrphanedExits(result.orphanedExits);
+      setOrphanCount(result.count);
+      setShowOrphans(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to scan orphaned exits");
+    } finally {
+      setOrphansBusy(false);
+    }
+  }, []);
+
+  async function handleRemoveAllOrphans() {
+    if (!confirm(`Remove all ${orphanCount} orphaned exits?`)) return;
+    try {
+      setOrphansBusy(true);
+      setError(null);
+      await removeOrphanedExits();
+      setOrphanedExits([]);
+      setOrphanCount(0);
+      setShowOrphans(false);
+      onZoneChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove orphaned exits");
+    } finally {
+      setOrphansBusy(false);
+    }
+  }
+
+  async function handleRemoveOrphan(exitId: string) {
+    try {
+      setOrphansBusy(true);
+      setError(null);
+      await deleteExit(exitId);
+      setOrphanedExits((prev) => prev.filter((o) => o.exit.id !== exitId));
+      setOrphanCount((c) => Math.max(0, c - 1));
+      onZoneChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete orphan");
+    } finally {
+      setOrphansBusy(false);
+    }
+  }
+
+  async function handleExitEditZoneChange(zoneSlug: string) {
+    setExitEditForm((f) => ({ ...f, targetZoneSlug: zoneSlug, targetRoomSlug: "" }));
+    if (!zoneSlug) { setExitEditTargetRooms([]); return; }
+    try {
+      const data = await getZone(zoneSlug);
+      setExitEditTargetRooms(data.rooms);
+    } catch {
+      setExitEditTargetRooms([]);
+    }
+  }
+
   // ─── Portal CRUD ────────────────────────────────────────
   async function openPortalDialog() {
     if (!selectedRoom) return;
@@ -573,6 +718,21 @@ export default function ZoneDesigner({
           Portal
         </button>
 
+        <button
+          onClick={() => void handleScanOrphans()}
+          disabled={orphansBusy}
+          className="px-3 py-1.5 border border-[#8B2500] text-[#8B2500] hover:bg-[#8B2500]/20 rounded text-xs flex items-center gap-1.5 disabled:opacity-40 transition-colors relative"
+          style={{ fontFamily: "var(--font-sans)" }}
+        >
+          <Zap className="w-3 h-3" />
+          Orphaned Exits
+          {orphanCount > 0 && (
+            <span className="ml-1 px-1.5 py-0.5 bg-[#8B2500] text-[#E8E0D0] rounded-full text-[10px] leading-none font-bold">
+              {orphanCount}
+            </span>
+          )}
+        </button>
+
         <div className="flex-1" />
 
         {mode === "connect" && (
@@ -620,6 +780,12 @@ export default function ZoneDesigner({
                 <marker id="arrowhead-warning" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
                   <polygon points="0 0, 8 3, 0 6" fill="#B8860B" />
                 </marker>
+                <marker id="arrowhead-portal" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                  <polygon points="0 0, 8 3, 0 6" fill={PORTAL_COLOR} />
+                </marker>
+                <marker id="arrowhead-orphan" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                  <polygon points="0 0, 8 3, 0 6" fill="#EF4444" />
+                </marker>
               </defs>
 
               {/* ── Missing reverse exit ghost lines ─────────── */}
@@ -655,6 +821,16 @@ export default function ZoneDesigner({
                 const { lx, ly } = edgeLabelPos(x1, y1, x2, y2);
                 const isSelected = selectedExit === exit.id;
                 const isMissingReverse = missingReverseIds.has(exit.id);
+                const isOrphan = orphanExitIds.has(exit.id);
+
+                const strokeColor = isSelected ? "#C9A84C"
+                  : isOrphan ? "#EF4444"
+                  : isMissingReverse ? "#B8860B"
+                  : "#4A4B55";
+                const markerEnd = isSelected ? "url(#arrowhead-selected)"
+                  : isOrphan ? "url(#arrowhead-orphan)"
+                  : isMissingReverse ? "url(#arrowhead-warning)"
+                  : "url(#arrowhead)";
 
                 return (
                   <g
@@ -664,21 +840,16 @@ export default function ZoneDesigner({
                   >
                     <line
                       x1={x1} y1={y1} x2={x2} y2={y2}
-                      stroke={isSelected ? "#C9A84C" : isMissingReverse ? "#B8860B" : "#4A4B55"}
+                      stroke={strokeColor}
                       strokeWidth={isSelected ? 2.5 : 1.5}
-                      markerEnd={
-                        isSelected
-                          ? "url(#arrowhead-selected)"
-                          : isMissingReverse
-                            ? "url(#arrowhead-warning)"
-                            : "url(#arrowhead)"
-                      }
+                      strokeDasharray={isOrphan ? "6 3" : undefined}
+                      markerEnd={markerEnd}
                     />
                     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={12} />
                     <text
                       x={lx} y={ly}
                       textAnchor="middle" dominantBaseline="central"
-                      fill={isSelected ? "#C9A84C" : isMissingReverse ? "#B8860B" : "#6A6B75"}
+                      fill={isSelected ? "#C9A84C" : isOrphan ? "#EF4444" : isMissingReverse ? "#B8860B" : "#6A6B75"}
                       fontSize="10" fontFamily="var(--font-sans)"
                     >
                       {exit.direction}
@@ -692,6 +863,51 @@ export default function ZoneDesigner({
                         {exit.locked ? "🔒" : ""}{exit.hidden ? "👁" : ""}
                       </text>
                     )}
+                  </g>
+                );
+              })}
+
+              {/* ── Portal (inter-zone) exit edges ─────────────── */}
+              {interZoneExits.map((exit) => {
+                const fromPos = positions.get(exit.fromRoomSlug);
+                if (!fromPos) return null;
+                const from = roomCenter(fromPos.x, fromPos.y);
+                // Portal exits don't connect to a room in the SVG — draw a stub line outward
+                const angle = exit.direction === "east" ? 0
+                  : exit.direction === "west" ? Math.PI
+                  : exit.direction === "south" ? Math.PI / 2
+                  : exit.direction === "north" ? -Math.PI / 2
+                  : exit.direction === "up" ? -Math.PI / 4
+                  : Math.PI / 4; // down
+                const stubLen = 40;
+                const sx = from.cx + Math.cos(angle) * (NODE_W / 2 + 4);
+                const sy = from.cy + Math.sin(angle) * (NODE_H / 2 + 4);
+                const ex = sx + Math.cos(angle) * stubLen;
+                const ey = sy + Math.sin(angle) * stubLen;
+                const isSelected = selectedExit === exit.id;
+
+                return (
+                  <g
+                    key={exit.id}
+                    onClick={(e) => { e.stopPropagation(); handleExitClick(exit.id); }}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <line
+                      x1={sx} y1={sy} x2={ex} y2={ey}
+                      stroke={isSelected ? "#C9A84C" : PORTAL_COLOR}
+                      strokeWidth={isSelected ? 2.5 : 2}
+                      strokeDasharray="4 2"
+                      markerEnd={isSelected ? "url(#arrowhead-selected)" : "url(#arrowhead-portal)"}
+                    />
+                    <line x1={sx} y1={sy} x2={ex} y2={ey} stroke="transparent" strokeWidth={12} />
+                    <text
+                      x={ex + Math.cos(angle) * 6} y={ey + Math.sin(angle) * 6}
+                      textAnchor="middle" dominantBaseline="central"
+                      fill={isSelected ? "#C9A84C" : PORTAL_COLOR}
+                      fontSize="9" fontFamily="var(--font-sans)"
+                    >
+                      ⟐ {exit.direction} → {exit.targetZoneSlug}
+                    </text>
                   </g>
                 );
               })}
@@ -764,17 +980,20 @@ export default function ZoneDesigner({
 
                     {/* Inter-zone portal indicators */}
                     {portalExits.map((pe, i) => (
-                      <g key={pe.id}>
+                      <g key={pe.id}
+                        onClick={(e) => { e.stopPropagation(); handleExitClick(pe.id); }}
+                        style={{ cursor: "pointer" }}
+                      >
                         <circle
                           cx={x + NODE_W + 14} cy={y + 14 + i * 22} r={9}
-                          fill="#1A2A3A" stroke="#7B4FA0" strokeWidth={1.5}
+                          fill="#0e3a3d" stroke={PORTAL_COLOR} strokeWidth={1.5}
                         />
                         <text
                           x={x + NODE_W + 14} y={y + 14 + i * 22}
                           textAnchor="middle" dominantBaseline="central"
-                          fill="#7B4FA0" fontSize="12" fontFamily="var(--font-sans)"
+                          fill={PORTAL_COLOR} fontSize="12" fontFamily="var(--font-sans)"
                         >
-                          ⊕
+                          ⟐
                         </text>
                         <title>
                           {pe.direction} → {pe.targetZoneSlug}/{pe.targetRoomSlug}
@@ -929,48 +1148,156 @@ export default function ZoneDesigner({
               </div>
             )}
 
-            {/* Selected exit details */}
+            {/* Selected exit edit panel */}
             {selectedExitData && (
               <div className="space-y-3">
                 <h4
                   className="text-[#C9A84C] text-xs uppercase tracking-wider"
                   style={{ fontFamily: "var(--font-sans)" }}
                 >
-                  Exit Details
+                  Edit Exit
                 </h4>
-                <div className="text-xs space-y-1" style={{ fontFamily: "var(--font-sans)" }}>
-                  <div className="text-[#8A8B95]">
-                    From: <span className="text-[#E8E0D0]" style={{ fontFamily: "var(--font-mono)" }}>
-                      {selectedExitData.fromRoomSlug}
-                    </span>
-                  </div>
-                  <div className="text-[#8A8B95]">
-                    Direction: <span className="text-[#C9A84C]">{selectedExitData.direction}</span>
-                  </div>
-                  <div className="text-[#8A8B95]">
-                    To: <span className="text-[#E8E0D0]" style={{ fontFamily: "var(--font-mono)" }}>
-                      {selectedExitData.toRoomSlug}
-                    </span>
-                  </div>
-                  {selectedExitData.targetZoneSlug && (
-                    <div className="text-[#8A8B95]">
-                      Portal: <span className="text-[#7B4FA0]" style={{ fontFamily: "var(--font-mono)" }}>
-                        {selectedExitData.targetZoneSlug}/{selectedExitData.targetRoomSlug}
-                      </span>
-                    </div>
-                  )}
-                  {selectedExitData.locked && <div className="text-[#B8860B]">🔒 Locked</div>}
-                  {selectedExitData.hidden && <div className="text-[#8A8B95]">👁 Hidden</div>}
+                {/* From room (read-only) */}
+                <div>
+                  <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
+                    From
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedExitData.fromRoomSlug}
+                    disabled
+                    className="w-full bg-[#0A0B0F] border border-[#2A2B35] rounded px-2 py-1.5 text-[#6A6B75] text-xs"
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  />
                 </div>
-                <button
-                  onClick={() => void handleDeleteExit()}
-                  disabled={busy}
-                  className="w-full px-2 py-1.5 border border-[#8B2500] text-[#8B2500] hover:bg-[#8B2500]/20 rounded text-xs flex items-center justify-center gap-1 disabled:opacity-40"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
-                  <Trash2 className="w-3 h-3" />
-                  Delete Exit
-                </button>
+                {/* Direction */}
+                <div>
+                  <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
+                    Direction
+                  </label>
+                  <select
+                    value={exitEditForm.direction}
+                    onChange={(e) => setExitEditForm((f) => ({ ...f, direction: e.target.value }))}
+                    className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1.5 text-[#E8E0D0] text-xs focus:border-[#C9A84C] focus:outline-none"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    {DIRECTION_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                {/* To room */}
+                <div>
+                  <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
+                    To Room
+                  </label>
+                  {exitEditForm.targetZoneSlug ? (
+                    <input
+                      type="text"
+                      value={exitEditForm.toRoomSlug}
+                      onChange={(e) => setExitEditForm((f) => ({ ...f, toRoomSlug: e.target.value }))}
+                      className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1.5 text-[#E8E0D0] text-xs focus:border-[#C9A84C] focus:outline-none"
+                      style={{ fontFamily: "var(--font-mono)" }}
+                    />
+                  ) : (
+                    <select
+                      value={exitEditForm.toRoomSlug}
+                      onChange={(e) => setExitEditForm((f) => ({ ...f, toRoomSlug: e.target.value }))}
+                      className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1.5 text-[#E8E0D0] text-xs focus:border-[#C9A84C] focus:outline-none"
+                      style={{ fontFamily: "var(--font-sans)" }}
+                    >
+                      <option value="">Select room…</option>
+                      {rooms.map((r) => (
+                        <option key={r.slug} value={r.slug}>{r.name} ({r.slug})</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                {/* Portal target zone (optional) */}
+                {selectedExitData.targetZoneSlug && (
+                  <>
+                    <div>
+                      <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
+                        <span style={{ color: PORTAL_COLOR }}>⟐</span> Target Zone
+                      </label>
+                      <input
+                        type="text"
+                        value={exitEditForm.targetZoneSlug}
+                        onChange={(e) => void handleExitEditZoneChange(e.target.value)}
+                        className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1.5 text-xs focus:border-[#C9A84C] focus:outline-none"
+                        style={{ fontFamily: "var(--font-mono)", color: PORTAL_COLOR }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
+                        <span style={{ color: PORTAL_COLOR }}>⟐</span> Target Room
+                      </label>
+                      {exitEditTargetRooms.length > 0 ? (
+                        <select
+                          value={exitEditForm.targetRoomSlug}
+                          onChange={(e) => setExitEditForm((f) => ({ ...f, targetRoomSlug: e.target.value }))}
+                          className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1.5 text-xs focus:border-[#C9A84C] focus:outline-none"
+                          style={{ fontFamily: "var(--font-sans)", color: PORTAL_COLOR }}
+                        >
+                          <option value="">Select room…</option>
+                          {exitEditTargetRooms.map((r) => (
+                            <option key={r.slug} value={r.slug}>{r.name} ({r.slug})</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={exitEditForm.targetRoomSlug}
+                          onChange={(e) => setExitEditForm((f) => ({ ...f, targetRoomSlug: e.target.value }))}
+                          className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1.5 text-xs focus:border-[#C9A84C] focus:outline-none"
+                          style={{ fontFamily: "var(--font-mono)", color: PORTAL_COLOR }}
+                        />
+                      )}
+                    </div>
+                  </>
+                )}
+                {/* Locked toggle */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={exitEditForm.locked}
+                    onChange={(e) => setExitEditForm((f) => ({ ...f, locked: e.target.checked }))}
+                    className="accent-[#C9A84C]"
+                  />
+                  <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
+                    🔒 Locked
+                  </span>
+                </label>
+                {/* Hidden toggle */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={exitEditForm.hidden}
+                    onChange={(e) => setExitEditForm((f) => ({ ...f, hidden: e.target.checked }))}
+                    className="accent-[#C9A84C]"
+                  />
+                  <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
+                    👁 Hidden
+                  </span>
+                </label>
+                {/* Save / Delete */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => void handleUpdateExit()}
+                    disabled={busy}
+                    className="flex-1 px-2 py-1.5 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded text-xs flex items-center justify-center gap-1 disabled:opacity-40"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    <Save className="w-3 h-3" />
+                    Save
+                  </button>
+                  <button
+                    onClick={() => void handleDeleteExit()}
+                    disabled={busy}
+                    className="px-2 py-1.5 border border-[#8B2500] text-[#8B2500] hover:bg-[#8B2500]/20 rounded text-xs flex items-center gap-1 disabled:opacity-40"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1003,8 +1330,9 @@ export default function ZoneDesigner({
           { label: "Junction", color: "#3A7D7B" },
           { label: "Corridor", color: "#4A4B55" },
           { label: "Feature", color: "#7B4FA0" },
-          { label: "Portal ⊕", color: "#7B4FA0" },
+          { label: "⟐ Portal", color: PORTAL_COLOR },
           { label: "⚠ Disconnected", color: "#B8860B" },
+          { label: "⚡ Orphan", color: "#EF4444" },
         ].map((item) => (
           <span key={item.label} className="flex items-center gap-1.5">
             <span
@@ -1194,6 +1522,71 @@ export default function ZoneDesigner({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Orphaned Exits Modal ───────────────────────────── */}
+      {showOrphans && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setShowOrphans(false)}
+        >
+          <div
+            className="bg-[#1C1D27] border border-[#2A2B35] rounded-lg p-6 w-[480px] max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[#C9A84C] text-sm" style={{ fontFamily: "var(--font-sans)" }}>
+                Orphaned Exits ({orphanCount})
+              </h3>
+              <button onClick={() => setShowOrphans(false)} className="text-[#8A8B95] hover:text-[#E8E0D0]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {orphanedExits.length === 0 ? (
+              <p className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
+                No orphaned exits found. All exits are valid.
+              </p>
+            ) : (
+              <>
+                <div className="flex-1 overflow-auto space-y-2 mb-4">
+                  {orphanedExits.map((o) => (
+                    <div
+                      key={o.exit.id}
+                      className="bg-[#12131A] border border-[#2A2B35] rounded p-3 flex items-start justify-between gap-2"
+                    >
+                      <div className="text-xs space-y-1" style={{ fontFamily: "var(--font-sans)" }}>
+                        <div className="text-[#E8E0D0]" style={{ fontFamily: "var(--font-mono)" }}>
+                          {o.exit.fromRoomSlug} → {o.exit.direction} → {o.exit.toRoomSlug}
+                          {o.exit.targetZoneSlug && (
+                            <span style={{ color: PORTAL_COLOR }}> ⟐ {o.exit.targetZoneSlug}</span>
+                          )}
+                        </div>
+                        <div className="text-[#EF4444]">{o.reason}</div>
+                      </div>
+                      <button
+                        onClick={() => void handleRemoveOrphan(o.exit.id)}
+                        disabled={orphansBusy}
+                        className="text-[#8B2500] hover:text-[#EF4444] flex-shrink-0 disabled:opacity-40"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => void handleRemoveAllOrphans()}
+                  disabled={orphansBusy}
+                  className="w-full px-3 py-2 bg-[#8B2500] hover:bg-[#A03000] text-[#E8E0D0] rounded text-xs flex items-center justify-center gap-1.5 disabled:opacity-40"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Remove All Orphans
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

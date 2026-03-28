@@ -134,6 +134,24 @@ export class InMemoryZoneRepository implements ZoneRepository {
     return exit;
   }
 
+  async updateExit(
+    id: string,
+    partial: Partial<Omit<ZoneExitDefinition, 'id' | 'zoneId' | 'createdAt'>>,
+  ): Promise<ZoneExitDefinition> {
+    const existing = this.exits.get(id);
+    if (!existing) throw new Error(`Zone exit with id '${id}' not found`);
+
+    const updated: ZoneExitDefinition = {
+      ...existing,
+      ...partial,
+      id,
+      zoneId: existing.zoneId,
+      createdAt: existing.createdAt,
+    };
+    this.exits.set(id, updated);
+    return updated;
+  }
+
   async deleteExit(id: string): Promise<void> {
     this.exits.delete(id);
   }

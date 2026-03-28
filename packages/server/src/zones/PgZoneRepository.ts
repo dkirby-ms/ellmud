@@ -344,6 +344,43 @@ export class PgZoneRepository implements ZoneRepository {
     return exitRowToEntity(result.rows[0]);
   }
 
+  async updateExit(
+    id: string,
+    partial: Partial<Omit<ZoneExitDefinition, 'id' | 'zoneId' | 'createdAt'>>,
+  ): Promise<ZoneExitDefinition> {
+    const existing = await query<ZoneExitRow>(
+      `SELECT * FROM zone_exits WHERE id = $1`,
+      [id],
+    );
+    if (existing.rows.length === 0) {
+      throw new Error(`Zone exit with id '${id}' not found`);
+    }
+
+    const current = exitRowToEntity(existing.rows[0]);
+    const merged = { ...current, ...partial };
+
+    const result = await query<ZoneExitRow>(
+      `UPDATE zone_exits SET
+        from_room_slug = $1, direction = $2, to_room_slug = $3,
+        target_zone_slug = $4, target_room_slug = $5,
+        locked = $6, hidden = $7, condition = $8
+      WHERE id = $9
+      RETURNING *`,
+      [
+        merged.fromRoomSlug,
+        merged.direction,
+        merged.toRoomSlug,
+        merged.targetZoneSlug ?? null,
+        merged.targetRoomSlug ?? null,
+        merged.locked,
+        merged.hidden,
+        merged.condition ? JSON.stringify(merged.condition) : null,
+        id,
+      ],
+    );
+    return exitRowToEntity(result.rows[0]);
+  }
+
   async deleteExit(id: string): Promise<void> {
     await query(`DELETE FROM zone_exits WHERE id = $1`, [id]);
   }

@@ -117,8 +117,32 @@ export async function createExit(zoneId: string, data: Partial<ZoneExitDefinitio
   });
 }
 
+export async function updateExit(exitId: string, data: Partial<ZoneExitDefinition>): Promise<ZoneExitDefinition> {
+  return adminFetch<ZoneExitDefinition>(`/admin/api/zones/exits/${exitId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function deleteExit(exitId: string): Promise<void> {
   await adminFetch(`/admin/api/zones/exits/${exitId}`, {
     method: 'DELETE',
+  });
+}
+
+// ─── Orphaned Exit Cleanup ───────────────────────────────────────────────────
+
+export interface OrphanedExitInfo {
+  exit: ZoneExitDefinition;
+  reason: string;
+}
+
+export async function getOrphanedExits(): Promise<{ count: number; orphanedExits: OrphanedExitInfo[] }> {
+  return adminFetch<{ count: number; orphanedExits: OrphanedExitInfo[] }>('/admin/api/zones/cleanup/orphaned-exits');
+}
+
+export async function removeOrphanedExits(): Promise<{ removed: number; orphanedExits: OrphanedExitInfo[] }> {
+  return adminFetch<{ removed: number; orphanedExits: OrphanedExitInfo[] }>('/admin/api/zones/cleanup/orphaned-exits', {
+    method: 'POST',
   });
 }
