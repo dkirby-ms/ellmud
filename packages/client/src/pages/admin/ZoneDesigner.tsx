@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap } from "lucide-react";
+import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { computeLayout } from "../../map/computeLayout.js";
 import type { LayoutRoom } from "../../map/computeLayout.js";
 import { FloorSelector } from "../../components/map/FloorSelector.js";
@@ -207,6 +207,11 @@ export default function ZoneDesigner({
   // Floor switching
   const [currentFloor, setCurrentFloor] = useState(0);
 
+  // Zoom
+  const [zoom, setZoom] = useState(1.0);
+  const MIN_ZOOM = 0.25;
+  const MAX_ZOOM = 3.0;
+
   // Exit edit form
   const [exitEditForm, setExitEditForm] = useState({
     direction: "",
@@ -238,13 +243,25 @@ export default function ZoneDesigner({
     }
   }, [selectedRoom, rooms]);
 
-  // Escape key clears selection
+  // Escape key clears selection, +/- for zoom
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setSelectedRoom(null);
         setSelectedExit(null);
         setConnectTarget(null);
+      }
+      if (designerRef.current && designerRef.current.contains(document.activeElement)) {
+        if (e.key === "+" || e.key === "=") {
+          e.preventDefault();
+          setZoom((z) => Math.min(MAX_ZOOM, z + 0.1));
+        } else if (e.key === "-") {
+          e.preventDefault();
+          setZoom((z) => Math.max(MIN_ZOOM, z - 0.1));
+        } else if (e.key === "0") {
+          e.preventDefault();
+          setZoom(1.0);
+        }
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -827,6 +844,12 @@ export default function ZoneDesigner({
   const vbW = maxX - minX + PADDING * 2;
   const vbH = maxY - minY + PADDING * 2;
 
+  // Apply zoom to viewBox
+  const zoomedW = vbW / zoom;
+  const zoomedH = vbH / zoom;
+  const zoomedX = vbX + (vbW - zoomedW) / 2;
+  const zoomedY = vbY + (vbH - zoomedH) / 2;
+
   return (
     <div ref={designerRef} className="bg-[#12131A] border border-[#2A2B35] rounded-lg" style={{ position: "relative" }}>
       {/* ─── Error banner ─────────────────────────────────── */}
@@ -908,6 +931,43 @@ export default function ZoneDesigner({
 
         <div className="flex-1" />
 
+        {/* Zoom controls */}
+        <div className="flex items-center gap-1 border-l border-[#2A2B35] pl-2">
+          <button
+            onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 0.1))}
+            disabled={zoom <= MIN_ZOOM}
+            className="px-2 py-1.5 border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:border-[#3A3B45] rounded text-xs disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            style={{ fontFamily: "var(--font-sans)" }}
+            title="Zoom out (-)"
+          >
+            <ZoomOut className="w-3 h-3" />
+          </button>
+          <span
+            className="px-2 text-[#8A8B95] text-xs tabular-nums min-w-[3rem] text-center"
+            style={{ fontFamily: "var(--font-sans)" }}
+          >
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 0.1))}
+            disabled={zoom >= MAX_ZOOM}
+            className="px-2 py-1.5 border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:border-[#3A3B45] rounded text-xs disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            style={{ fontFamily: "var(--font-sans)" }}
+            title="Zoom in (+)"
+          >
+            <ZoomIn className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => setZoom(1.0)}
+            disabled={zoom === 1.0}
+            className="px-2 py-1.5 border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:border-[#3A3B45] rounded text-xs disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            style={{ fontFamily: "var(--font-sans)" }}
+            title="Reset zoom (0)"
+          >
+            <Maximize2 className="w-3 h-3" />
+          </button>
+        </div>
+
         {mode === "connect" && (
           <span className="text-[#C9A84C] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
             Click a target room to connect
@@ -930,6 +990,11 @@ export default function ZoneDesigner({
         <div
           className="flex-1 p-4 overflow-auto"
           onClick={(e) => { if (e.target === e.currentTarget) handleCanvasClick(); }}
+          onWheel={(e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -0.1 : 0.1;
+            setZoom((z) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z + delta)));
+          }}
         >
           {rooms.length === 0 ? (
             <div className="flex items-center justify-center h-48">
@@ -939,8 +1004,8 @@ export default function ZoneDesigner({
             </div>
           ) : (
             <svg
-              viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
-              style={{ width: "100%", minHeight: "350px", maxHeight: "600px" }}
+              viewBox={`${zoomedX} ${zoomedY} ${zoomedW} ${zoomedH}`}
+              style={{ width: "100%", minHeight: "350px" }}
               xmlns="http://www.w3.org/2000/svg"
             >
               <defs>
