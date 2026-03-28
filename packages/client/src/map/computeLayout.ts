@@ -64,6 +64,7 @@ function cellKey(x: number, y: number): string {
 /**
  * Spiral outward from (cx, cy) to find the nearest unoccupied cell.
  * Searches in concentric rings of increasing Manhattan distance.
+ * Used for disconnected subgraph placement.
  */
 function findNearestUnoccupied(
   cx: number,
@@ -88,6 +89,49 @@ function findNearestUnoccupied(
       if (!occupied.has(key)) return { x: cx + dx, y: cy + dy };
     }
   }
+}
+
+/**
+ * Find the nearest unoccupied cell with directional bias.
+ * Searches outward in rings (Manhattan distance) but within each ring,
+ * picks the candidate most aligned with the exit direction using dot product.
+ * Prevents rooms from being placed perpendicular or opposite to their exit direction.
+ */
+function findNearestDirectional(
+  idealX: number,
+  idealY: number,
+  dirDx: number,
+  dirDy: number,
+  occupied: Set<string>,
+): { x: number; y: number } {
+  if (!occupied.has(cellKey(idealX, idealY))) return { x: idealX, y: idealY };
+
+  for (let radius = 1; radius < 200; radius++) {
+    let best: { x: number; y: number } | null = null;
+    let bestScore = -Infinity;
+
+    for (let ddx = -radius; ddx <= radius; ddx++) {
+      const absRemainder = radius - Math.abs(ddx);
+      const dyOptions = absRemainder === 0 ? [0] : [-absRemainder, absRemainder];
+
+      for (const ddy of dyOptions) {
+        const cx = idealX + ddx;
+        const cy = idealY + ddy;
+        if (occupied.has(cellKey(cx, cy))) continue;
+
+        // Dot product with direction vector — prefer cells aligned with exit direction
+        const score = ddx * dirDx + ddy * dirDy;
+        if (score > bestScore) {
+          bestScore = score;
+          best = { x: cx, y: cy };
+        }
+      }
+    }
+
+    if (best) return best;
+  }
+
+  return { x: idealX, y: idealY };
 }
 
 // ─── Grid Detection ──────────────────────────────────────────────────────────
@@ -381,10 +425,10 @@ export function computeLayout(
           targetX = currentPos.x;
           targetY = currentPos.y;
         } else {
-          // Cardinal direction: compute ideal position, resolve collisions
+          // Cardinal direction: compute ideal position, resolve collisions with directional bias
           const idealX = currentPos.x + offset.dx;
           const idealY = currentPos.y + offset.dy;
-          const nearest = findNearestUnoccupied(idealX, idealY, occupied);
+          const nearest = findNearestDirectional(idealX, idealY, offset.dx, offset.dy, occupied);
           targetX = nearest.x;
           targetY = nearest.y;
         }

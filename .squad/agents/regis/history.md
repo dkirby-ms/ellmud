@@ -275,3 +275,24 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 - **MapRenderer internal floor state:** MapRenderer owns `currentFloor` state internally, defaults to current room's z-level. FullMapOverlay manages its own floor state with keyboard shortcuts and header-mounted selector. MinimapWidget shows floor selector only on multi-floor maps.
 - **Zone Designer zoom implemented via viewBox adjustment:** Added zoom state (0.25-3.0 range) with +/- buttons, percentage display, mouse wheel support, and keyboard shortcuts (+/=/- keys, 0 to reset). Zoom works by dividing viewBox dimensions by zoom factor and recentering. Removed maxHeight constraint on SVG to allow better zoom experience. UI matches designer dark theme (#12131A bg, #2A2B35 borders, #8A8B95 muted text). Mouse wheel uses preventDefault() to avoid page scroll conflicts.
 - **Zone Designer pan support via SVG viewBox offset:** Added panX/panY state that offsets the viewBox from its zoom-centered position. Pan activates on mousedown on the SVG background (not room/exit elements) using `e.target === e.currentTarget` guard. Mouse deltas convert from screen pixels to SVG coordinates via `getBoundingClientRect()` and viewBox width/height ratio. Pan direction is inverted (drag right → view moves left). Uses `useRef` for start position to avoid stale closures. Pan resets on floor change, zoom reset (0 key), and Maximize2 button. Cursor changes: `grab` default → `grabbing` while panning → `crosshair` in connect mode. "📍 Panned" toolbar indicator appears when panned, clickable to reset.
+
+## 2026-03-27T19:51Z — Direction-Biased Layout Engine
+
+**Completed:** Fixed zone designer room placement to respect exit directions  
+**Files Modified:** 1
+
+- `packages/client/src/map/computeLayout.ts` — Added `findNearestDirectional()` function and updated BFS to use directional search for cardinal exits
+
+**Build:** ✅ Clean  
+**Tests:** ✅ 14/14 computeLayout tests passed, 125/125 client tests passed
+
+**Root Cause:** When a room's ideal position was occupied (usually by grid cluster rooms), the `findNearestUnoccupied()` spiral search picked the first free cell by Manhattan distance without considering exit direction. This caused cardinal exits (east/west/north/south) to place rooms at visually wrong angles.
+
+**Solution:** Added `findNearestDirectional()` that searches in rings (same Manhattan distance) but uses dot product scoring to prefer cells aligned with the exit direction. BFS now uses this for cardinal exit placement. Kept `findNearestUnoccupied()` for disconnected subgraph placement.
+
+**Impact:** Zone designer now shows rooms in correct positions relative to their exits. Cardinal exits produce straight lines, not diagonals. Grid clusters unaffected (already placed as coherent blocks).
+
+- **Layout algorithm uses dot product for directional bias:** The `findNearestDirectional()` function scores candidate cells within each ring using `score = ddx * dirDx + ddy * dirDy` where `(ddx, ddy)` is the offset from ideal position and `(dirDx, dirDy)` is the exit direction vector. Higher scores mean better alignment with the exit direction.
+- **Direction-biased search still respects Manhattan distance priority:** Cells at radius 1 are tried before radius 2, radius 2 before radius 3, etc. Within each ring, the highest-scoring (most aligned) candidate wins. This minimizes displacement while respecting semantics.
+- **`findNearestUnoccupied()` preserved for disconnected subgraphs:** Disconnected components placed to the right of the main graph don't need directional bias (no meaningful "from" direction), so they still use the plain spiral search.
+
