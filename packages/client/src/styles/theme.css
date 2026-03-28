@@ -222,3 +222,109 @@
     transform: translateY(0);
   }
 }
+
+/* ═══ Responsive Equipment Silhouette ═══ */
+
+.equipment-silhouette {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.equipment-row {
+  min-width: 0;
+}
+
+.equipment-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) {
+  .equipment-cell {
+    padding: 0.25rem 0.15rem;
+    min-height: 1.5rem;
+  }
+
+  .equipment-slot-label {
+    font-size: 0.55rem;
+  }
+
+  .equipment-item-name {
+    font-size: 0.6rem;
+  }
+}
+
+/* ═══ Status Bars ═══ */
+
+:root {
+  --stamina: #3b82f6;
+  --hp-healthy: #22c55e;
+  --hp-wounded: #ca8a04;
+  --hp-critical: #dc2626;
+}
+
+.status-bar {
+  height: 0.5rem;
+  background: var(--bg-elevated);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.status-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+.status-bar-hp-healthy {
+  background: var(--hp-healthy);
+}
+
+.status-bar-hp-wounded {
+  background: var(--hp-wounded);
+}
+
+.status-bar-hp-critical {
+  background: var(--hp-critical);
+  animation: bar-pulse 1.5s ease-in-out infinite;
+}
+
+.status-bar-stamina {
+  background: var(--stamina);
+}
+
+@keyframes bar-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.status-numeric-hp-healthy { color: var(--hp-healthy); }
+.status-numeric-hp-wounded { color: var(--hp-wounded); }
+.status-numeric-hp-critical { color: var(--hp-critical); }
+.status-numeric-stamina { color: var(--stamina); }
+
+/* ═══ Status Effect Pills ═══ */
+
+.status-pill {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid;
+}
+
+.status-pill-buff {
+  border-color: rgba(45, 107, 79, 0.4);
+  background: rgba(45, 107, 79, 0.1);
+}
+
+.status-pill-debuff {
+  border-color: rgba(139, 37, 0, 0.4);
+  background: rgba(139, 37, 0, 0.1);
+}
+
+.status-pill-neutral {
+  border-color: var(--border-muted);
+  background: transparent;
+}

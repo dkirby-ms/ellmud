@@ -246,3 +246,22 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 
 - **Drizzt (Engine):** If you add mana/MP to the game schema and sync to client, MudPrompt is ready to display it (just add the field to AppContext)
 - **Minsc (Content/Testing):** Your sidebar effect tests now use `within()` scoping to account for effect names appearing in both sidebar and prompt
+
+## 2026-03-28 — Status Panel Wireup & Polish Pass
+
+**Completed:** Wired sidebar status panel to live PLAYER_STATE data; polish pass on EquipmentSilhouette
+**Files Modified:** 3
+
+- `ShardExploration.tsx` — HP bar with numeric display (85/100) + color-coded labels, stamina bar (blue), status effect pills with buff/debuff/neutral classification, ARIA progressbar roles
+- `theme.css` — Status bar styles (`.status-bar`, `.status-bar-fill`, HP color classes, stamina bar), status pill styles (`.status-pill-buff/debuff/neutral`), responsive equipment silhouette (`@media max-width: 900px`), new CSS variables (`--stamina`, `--hp-healthy/wounded/critical`)
+- `EquipmentSilhouette.tsx` — Added `aria-label` to all equipment slot cells (e.g. "Weapon: Iron Sword, sturdy tier" or "Weapon: empty"), responsive overflow handling
+
+**Build:** ✅ Clean
+**Tests:** ✅ 20 passed (ux-batch2-combat-sidebar)
+
+**Learnings:**
+- **HP bar threshold adjusted from 25% to 30%:** Task spec said green >60%, yellow 30-60%, red <30%. Original code used 25% boundary. Updated to match spec.
+- **Status effect classification uses keyword matching:** No `type` field on StatusEffect — classify by name keywords (debuffs: bleeding, poisoned, burning, etc.; buffs: haste, strength, shield, etc.; default: neutral). Easy to extend the keyword lists.
+- **Preserve Tailwind color classes alongside CSS pill classes:** Tests check for `text-danger` class on debuff effects. Solution: use `status-pill-debuff` for border/background and `text-danger` for text color. No conflict since pill class doesn't set `color`.
+- **Status bar uses CSS classes in theme.css, not Tailwind:** `.status-bar` + `.status-bar-fill` + `.status-bar-hp-healthy` etc. Dynamic width% is the only inline style. All colors via CSS variables.
+- **Equipment silhouette responsive via @media:** At ≤900px viewport width (sidebar ~270px), cell padding, slot labels, and item names scale down. `min-width: 0` + `overflow: hidden` on grid prevents overflow.
