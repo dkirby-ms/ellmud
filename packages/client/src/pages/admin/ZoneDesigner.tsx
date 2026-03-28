@@ -30,7 +30,11 @@ type DesignerMode = "select" | "connect";
 
 const ROOM_TYPE_OPTIONS = [
   "entry", "corridor", "junction", "dead_end", "extraction", "boss",
+  "feature_stash", "feature_shardboard", "feature_marketplace",
+  "feature_crafting", "feature_training", "feature_contracts", "feature_infirmary",
 ];
+
+const ROOM_PROPERTY_OPTIONS = ["heavy_door", "cavern", "water"] as const;
 const DIRECTION_OPTIONS = ["north", "south", "east", "west", "up", "down"];
 
 const OPPOSITE: Record<string, string> = {
@@ -178,6 +182,7 @@ export default function ZoneDesigner({
   // Room edit (side panel)
   const [editForm, setEditForm] = useState({
     name: "", slug: "", description: "", type: "corridor",
+    properties: [] as string[],
   });
 
   // Connect mode
@@ -223,10 +228,24 @@ export default function ZoneDesigner({
           slug: room.slug,
           description: room.description,
           type: room.type,
+          properties: Array.isArray(room.properties) ? [...room.properties] : [],
         });
       }
     }
   }, [selectedRoom, rooms]);
+
+  // Escape key clears selection
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setSelectedRoom(null);
+        setSelectedExit(null);
+        setConnectTarget(null);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Sync exit edit form when exit selection changes
   useEffect(() => {
@@ -474,6 +493,7 @@ export default function ZoneDesigner({
         name: editForm.name,
         description: editForm.description,
         type: editForm.type,
+        properties: editForm.properties,
       });
       onZoneChanged?.();
     } catch (err) {
@@ -1134,7 +1154,7 @@ export default function ZoneDesigner({
                       x={x} y={y} width={NODE_W} height={NODE_H} rx={6} ry={6}
                       fill={color.fill}
                       stroke={
-                        isSelected ? "#C9A84C"
+                        isSelected ? "#22D3EE"
                           : isConnectSource ? "#3A7D7B"
                           : isDisconnected ? "#B8860B"
                           : color.stroke
@@ -1173,41 +1193,94 @@ export default function ZoneDesigner({
                       </text>
                     )}
 
-                    {/* Vertical exit (up/down) badges */}
-                    {upExits.length > 0 && (
-                      <g>
-                        <circle
-                          cx={x + NODE_W - 2} cy={y + 2}
-                          r={8} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
-                        />
-                        <text
-                          x={x + NODE_W - 2} y={y + 2}
-                          textAnchor="middle" dominantBaseline="central"
-                          fill={INTER_FLOOR_COLOR} fontSize="9" fontWeight="bold"
-                          fontFamily="var(--font-sans)"
-                        >
-                          ▲
-                        </text>
-                        <title>{upTooltip}</title>
-                      </g>
+                    {/* Content badges (NPC, Loot, Hazard) along bottom edge */}
+                    {(() => {
+                      const badges: Array<{ icon: string; color: string; bg: string; label: string }> = [];
+                      if (room.npcs?.length > 0)
+                        badges.push({ icon: "👤", color: "#D97706", bg: "#2A1E0A", label: `${room.npcs.length} NPC${room.npcs.length > 1 ? "s" : ""}` });
+                      if (room.lootContainers?.length > 0)
+                        badges.push({ icon: "📦", color: "#CA8A04", bg: "#2A200A", label: `${room.lootContainers.length} Loot` });
+                      if (room.hazards?.length > 0)
+                        badges.push({ icon: "⚠", color: "#DC2626", bg: "#2A0A0A", label: `${room.hazards.length} Hazard${room.hazards.length > 1 ? "s" : ""}` });
+                      if (badges.length === 0) return null;
+                      const totalW = badges.length * 18 + (badges.length - 1) * 4;
+                      const startX = x + NODE_W / 2 - totalW / 2;
+                      return badges.map((b, i) => (
+                        <g key={b.icon}>
+                          <circle
+                            cx={startX + i * 22 + 9} cy={y + NODE_H - 2}
+                            r={8} fill={b.bg} stroke={b.color} strokeWidth={1}
+                          />
+                          <text
+                            x={startX + i * 22 + 9} y={y + NODE_H - 2}
+                            textAnchor="middle" dominantBaseline="central"
+                            fill={b.color} fontSize="8" fontFamily="var(--font-sans)"
+                          >
+                            {b.icon}
+                          </text>
+                          <title>{b.label}</title>
+                        </g>
+                      ));
+                    })()}
+
+                    {/* Property tags below room node */}
+                    {room.properties?.length > 0 && (
+                      <text
+                        x={x + NODE_W / 2} y={y + NODE_H + 12}
+                        textAnchor="middle" dominantBaseline="central"
+                        fill="#6A6B75" fontSize="8" fontFamily="var(--font-mono)"
+                      >
+                        {room.properties.join(" · ")}
+                      </text>
                     )}
-                    {downExits.length > 0 && (
-                      <g>
-                        <circle
-                          cx={x + NODE_W - 2} cy={y + NODE_H - 2}
-                          r={8} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
-                        />
-                        <text
-                          x={x + NODE_W - 2} y={y + NODE_H - 2}
-                          textAnchor="middle" dominantBaseline="central"
-                          fill={INTER_FLOOR_COLOR} fontSize="9" fontWeight="bold"
-                          fontFamily="var(--font-sans)"
+
+                    {/* Vertical exit (up/down) badges — click to navigate floor */}
+                    {upExits.length > 0 && (() => {
+                      const targetZ = upExits.map((e) => positions.get(e.toRoomSlug)?.z).find((z) => z != null);
+                      return (
+                        <g
+                          onClick={(e) => { e.stopPropagation(); if (targetZ != null) setCurrentFloor(targetZ); }}
+                          style={{ cursor: targetZ != null ? "pointer" : "default" }}
                         >
-                          ▼
-                        </text>
-                        <title>{downTooltip}</title>
-                      </g>
-                    )}
+                          <circle
+                            cx={x + NODE_W - 2} cy={y + 2}
+                            r={8} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
+                          />
+                          <text
+                            x={x + NODE_W - 2} y={y + 2}
+                            textAnchor="middle" dominantBaseline="central"
+                            fill={INTER_FLOOR_COLOR} fontSize="9" fontWeight="bold"
+                            fontFamily="var(--font-sans)"
+                          >
+                            ▲
+                          </text>
+                          <title>{upTooltip} (click to go to floor)</title>
+                        </g>
+                      );
+                    })()}
+                    {downExits.length > 0 && (() => {
+                      const targetZ = downExits.map((e) => positions.get(e.toRoomSlug)?.z).find((z) => z != null);
+                      return (
+                        <g
+                          onClick={(e) => { e.stopPropagation(); if (targetZ != null) setCurrentFloor(targetZ); }}
+                          style={{ cursor: targetZ != null ? "pointer" : "default" }}
+                        >
+                          <circle
+                            cx={x + NODE_W - 2} cy={y + NODE_H - 2}
+                            r={8} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
+                          />
+                          <text
+                            x={x + NODE_W - 2} y={y + NODE_H - 2}
+                            textAnchor="middle" dominantBaseline="central"
+                            fill={INTER_FLOOR_COLOR} fontSize="9" fontWeight="bold"
+                            fontFamily="var(--font-sans)"
+                          >
+                            ▼
+                          </text>
+                          <title>{downTooltip} (click to go to floor)</title>
+                        </g>
+                      );
+                    })()}
 
                     {/* Inter-zone portal indicators */}
                     {portalExits.map((pe, i) => (
@@ -1338,7 +1411,11 @@ export default function ZoneDesigner({
                     value={editForm.type}
                     onChange={(e) => setEditForm((f) => ({ ...f, type: e.target.value }))}
                     className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1.5 text-[#E8E0D0] text-xs focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-sans)" }}
+                    style={{
+                      fontFamily: "var(--font-sans)",
+                      borderLeftColor: roomColor(editForm.type).stroke,
+                      borderLeftWidth: 3,
+                    }}
                   >
                     {ROOM_TYPE_OPTIONS.map((t) => (
                       <option key={t} value={t}>{t.replace(/_/g, " ")}</option>
@@ -1352,10 +1429,110 @@ export default function ZoneDesigner({
                   <textarea
                     value={editForm.description}
                     onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
-                    rows={3}
-                    className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1.5 text-[#E8E0D0] text-xs focus:border-[#C9A84C] focus:outline-none resize-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                    rows={8}
+                    className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-2 py-2 text-[#D3D7CF] text-sm leading-relaxed focus:border-[#C9A84C] focus:outline-none resize-y"
+                    style={{ fontFamily: "var(--font-mono)", fontSize: "0.875rem", lineHeight: "1.35" }}
+                    placeholder="Room description as the player will see it…"
                   />
+                </div>
+                {/* Properties checkboxes */}
+                <div>
+                  <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
+                    Properties
+                  </label>
+                  <div className="space-y-1">
+                    {ROOM_PROPERTY_OPTIONS.map((prop) => (
+                      <label key={prop} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editForm.properties.includes(prop)}
+                          onChange={(e) => {
+                            setEditForm((f) => ({
+                              ...f,
+                              properties: e.target.checked
+                                ? [...f.properties, prop]
+                                : f.properties.filter((p) => p !== prop),
+                            }));
+                          }}
+                          className="accent-[#C9A84C]"
+                        />
+                        <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+                          {prop}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {/* Content summary (read-only) */}
+                {(selectedRoomData.npcs?.length > 0 || selectedRoomData.lootContainers?.length > 0 || selectedRoomData.hazards?.length > 0) && (
+                  <div>
+                    <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
+                      Content
+                    </label>
+                    <div className="bg-[#0A0B0F] border border-[#2A2B35] rounded px-2 py-1.5 space-y-0.5">
+                      {selectedRoomData.npcs?.length > 0 && (
+                        <div className="text-xs flex items-center gap-1.5" style={{ fontFamily: "var(--font-sans)" }}>
+                          <span style={{ color: "#D97706" }}>👤</span>
+                          <span className="text-[#E8E0D0]">{selectedRoomData.npcs.length} NPC{selectedRoomData.npcs.length > 1 ? "s" : ""}</span>
+                        </div>
+                      )}
+                      {selectedRoomData.lootContainers?.length > 0 && (
+                        <div className="text-xs flex items-center gap-1.5" style={{ fontFamily: "var(--font-sans)" }}>
+                          <span style={{ color: "#CA8A04" }}>📦</span>
+                          <span className="text-[#E8E0D0]">{selectedRoomData.lootContainers.length} Loot Container{selectedRoomData.lootContainers.length > 1 ? "s" : ""}</span>
+                        </div>
+                      )}
+                      {selectedRoomData.hazards?.length > 0 && (
+                        <div className="text-xs flex items-center gap-1.5" style={{ fontFamily: "var(--font-sans)" }}>
+                          <span style={{ color: "#DC2626" }}>⚠</span>
+                          <span className="text-[#E8E0D0]">{selectedRoomData.hazards.length} Hazard{selectedRoomData.hazards.length > 1 ? "s" : ""}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {/* In-game preview */}
+                <div>
+                  <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
+                    Player Preview
+                  </label>
+                  <div
+                    className="bg-[#0A0B0F] border border-[#2A2B35] rounded p-3"
+                    style={{ fontFamily: "var(--font-mono)", fontSize: "0.875rem", lineHeight: "1.35" }}
+                  >
+                    <h2
+                      className="mb-1"
+                      style={{
+                        fontFamily: "var(--font-serif)",
+                        fontSize: "1.125rem",
+                        color: "#C9A84C",
+                      }}
+                    >
+                      {editForm.name || "Untitled Room"}
+                      {editForm.type && editForm.type !== "corridor" && editForm.type !== "dead_end" && (
+                        <span
+                          className="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded"
+                          style={{
+                            fontFamily: "var(--font-sans)",
+                            color: editForm.type === "boss" ? "#DC2626"
+                              : editForm.type === "extraction" ? "#22C55E"
+                              : editForm.type === "entry" ? "#60A5FA"
+                              : "#8A8B95",
+                            background: editForm.type === "boss" ? "rgba(220,38,38,0.1)"
+                              : editForm.type === "extraction" ? "rgba(34,197,94,0.1)"
+                              : editForm.type === "entry" ? "rgba(96,165,250,0.1)"
+                              : "rgba(138,139,149,0.1)",
+                          }}
+                        >
+                          {editForm.type.replace(/_/g, " ").toUpperCase()}
+                        </span>
+                      )}
+                    </h2>
+                    <p style={{ color: "#D3D7CF", maxWidth: "80ch" }}>
+                      {editForm.description || <span style={{ color: "#4A4B55", fontStyle: "italic" }}>No description yet.</span>}
+                    </p>
+                    <div style={{ height: 1, background: "#C9A84C", opacity: 0.1, marginTop: "0.5rem" }} />
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -1566,6 +1743,9 @@ export default function ZoneDesigner({
           { label: "▲▼ Vertical exit", color: INTER_FLOOR_COLOR },
           { label: "⚠ Disconnected", color: "#B8860B" },
           { label: "⚡ Orphan", color: "#EF4444" },
+          { label: "👤 NPCs", color: "#D97706" },
+          { label: "📦 Loot", color: "#CA8A04" },
+          { label: "⚠ Hazards", color: "#DC2626" },
         ].map((item) => (
           <span key={item.label} className="flex items-center gap-1.5">
             <span
