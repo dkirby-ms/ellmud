@@ -226,6 +226,7 @@ export default function ZoneDesigner({
   // Context menu
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; roomSlug: string } | null>(null);
   const designerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   // Sync edit form when selection changes
   useEffect(() => {
@@ -242,6 +243,19 @@ export default function ZoneDesigner({
       }
     }
   }, [selectedRoom, rooms]);
+
+  // Wheel zoom — native listener to allow preventDefault on non-passive event
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setZoom((z) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z + delta)));
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   // Escape key clears selection, +/- for zoom
   useEffect(() => {
@@ -988,13 +1002,9 @@ export default function ZoneDesigner({
       <div className="flex">
         {/* SVG Canvas */}
         <div
+          ref={canvasRef}
           className="flex-1 p-4 overflow-auto"
           onClick={(e) => { if (e.target === e.currentTarget) handleCanvasClick(); }}
-          onWheel={(e) => {
-            e.preventDefault();
-            const delta = e.deltaY > 0 ? -0.1 : 0.1;
-            setZoom((z) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z + delta)));
-          }}
         >
           {rooms.length === 0 ? (
             <div className="flex items-center justify-center h-48">
