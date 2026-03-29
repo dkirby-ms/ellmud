@@ -64,10 +64,10 @@ function roomColor(type: string): { fill: string; stroke: string } {
 
 // ─── Layout constants ────────────────────────────────────────────────────────
 
-const CELL_W = 180;
-const CELL_H = 120;
-const NODE_W = 140;
-const NODE_H = 60;
+const CELL_W = 160;
+const CELL_H = 160;
+const NODE_W = 100;
+const NODE_H = 100;
 const PADDING = 60;
 
 // ─── Helper: convert zone data → computeLayout input ─────────────────────────
@@ -167,6 +167,10 @@ export default function ZoneDesigner({
 }: ZoneDesignerProps) {
   // ─── State ──────────────────────────────────────────────
   const [mode, setMode] = useState<DesignerMode>("select");
+  const [showLabels, setShowLabels] = useState(false);
+  const [hoveredRoom, setHoveredRoom] = useState<string | null>(null);
+  const [hoverPosition, setHoverPosition] = useState<{ x: number; y: number } | null>(null);
+  const [hoverTimer, setHoverTimer] = useState<NodeJS.Timeout | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [selectedExit, setSelectedExit] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -204,6 +208,10 @@ export default function ZoneDesigner({
   const [showOrphans, setShowOrphans] = useState(false);
   const [orphansBusy, setOrphansBusy] = useState(false);
 
+  // Delete exit modal
+  const [showDeleteExitModal, setShowDeleteExitModal] = useState(false);
+  const [deleteAlsoReverse, setDeleteAlsoReverse] = useState(true);
+
   // Floor switching
   const [currentFloor, setCurrentFloor] = useState(0);
 
@@ -234,6 +242,17 @@ export default function ZoneDesigner({
   const designerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+
+  // Property clipboard
+  const [copiedRoomProps, setCopiedRoomProps] = useState<{
+    name: string;
+    description: string;
+    type: string;
+    properties: string[];
+  } | null>(null);
+
+  // Copy notification toast
+  const [copyNotification, setCopyNotification] = useState<string | null>(null);
 
   // Sync edit form when selection changes
   useEffect(() => {
@@ -712,15 +731,46 @@ export default function ZoneDesigner({
     }
   }
 
-  async function handleDeleteExit() {
+  function handleDeleteExit() {
     if (!selectedExit) return;
     const exit = exits.find((e) => e.id === selectedExit);
-    if (!exit || !confirm(`Delete exit ${exit.fromRoomSlug} → ${exit.toRoomSlug} (${exit.direction})?`)) return;
+    if (!exit) return;
+    // Check if there's a reverse exit
+    const reverseExit = exits.find((e) =>
+      e.fromRoomSlug === exit.toRoomSlug &&
+      e.toRoomSlug === exit.fromRoomSlug &&
+      e.direction === OPPOSITE[exit.direction]
+    );
+    // Default to checked if reverse exit exists (most exits are bidirectional)
+    setDeleteAlsoReverse(!!reverseExit);
+    setShowDeleteExitModal(true);
+  }
+
+  async function confirmDeleteExit(alsoDeleteReverse: boolean) {
+    if (!selectedExit) return;
+    const exit = exits.find((e) => e.id === selectedExit);
+    if (!exit) return;
     try {
       setBusy(true);
       setError(null);
+      
+      // Delete the selected exit
       await deleteExit(selectedExit);
+      
+      // If requested, also delete the reverse exit
+      if (alsoDeleteReverse) {
+        const reverseExit = exits.find((e) =>
+          e.fromRoomSlug === exit.toRoomSlug &&
+          e.toRoomSlug === exit.fromRoomSlug &&
+          e.direction === OPPOSITE[exit.direction]
+        );
+        if (reverseExit?.id) {
+          await deleteExit(reverseExit.id);
+        }
+      }
+      
       setSelectedExit(null);
+      setShowDeleteExitModal(false);
       onZoneChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete exit");
@@ -968,6 +1018,19 @@ export default function ZoneDesigner({
         >
           <Globe className="w-3 h-3" />
           Portal
+        </button>
+
+        <button
+          onClick={() => setShowLabels(!showLabels)}
+          className={`px-3 py-1.5 rounded text-xs flex items-center gap-1.5 transition-colors ${
+            showLabels
+              ? "bg-[#C9A84C] text-[#0A0B0F]"
+              : "border border-[#4A4B55] text-[#8A8B95] hover:bg-[#1C1D27]"
+          }`}
+          style={{ fontFamily: "var(--font-sans)" }}
+          title="Toggle room name labels on map"
+        >
+          Labels {showLabels ? "On" : "Off"}
         </button>
 
         <button
@@ -1291,6 +1354,23 @@ export default function ZoneDesigner({
                     key={slug}
                     onClick={(e) => { e.stopPropagation(); handleRoomClick(slug); }}
                     onContextMenu={(e) => handleRoomContextMenu(e, slug)}
+                    onMouseEnter={(e) => {
+                      if (hoverTimer) clearTimeout(hoverTimer);
+                      const timer = setTimeout(() => {
+                        setHoveredRoom(slug);
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setHoverPosition({ x: rect.left + rect.width / 2, y: rect.top });
+                      }, 150);
+                      setHoverTimer(timer);
+                    }}
+                    onMouseLeave={() => {
+                      if (hoverTimer) {
+                        clearTimeout(hoverTimer);
+                        setHoverTimer(null);
+                      }
+                      setHoveredRoom(null);
+                      setHoverPosition(null);
+                    }}
                     style={{
                       cursor: mode === "connect" && selectedRoom && slug !== selectedRoom
                         ? "crosshair"
@@ -1309,15 +1389,18 @@ export default function ZoneDesigner({
                       strokeWidth={isSelected || isConnectSource ? 3 : isDisconnected ? 2 : 1.5}
                       strokeDasharray={isConnectSource ? "4 2" : undefined}
                     />
+                    {showLabels && (
+                      <text
+                        x={x + NODE_W / 2} y={y + NODE_H / 2 - 7}
+                        textAnchor="middle" dominantBaseline="central"
+                        fill="#E8E0D0" fontSize="11"
+                        style={{ fontFamily: "var(--font-sans)" }}
+                      >
+                        {room.name.length > 12 ? room.name.slice(0, 11) + "…" : room.name}
+                      </text>
+                    )}
                     <text
-                      x={x + NODE_W / 2} y={y + NODE_H / 2 - 7}
-                      textAnchor="middle" dominantBaseline="central"
-                      fill="#E8E0D0" fontSize="12" fontFamily="var(--font-serif)"
-                    >
-                      {room.name.length > 16 ? room.name.slice(0, 15) + "…" : room.name}
-                    </text>
-                    <text
-                      x={x + NODE_W / 2} y={y + NODE_H / 2 + 9}
+                      x={x + NODE_W / 2} y={y + NODE_H / 2 + (showLabels ? 7 : 0)}
                       textAnchor="middle" dominantBaseline="central"
                       fill="#6A6B75" fontSize="9" fontFamily="var(--font-mono)"
                     >
@@ -1325,7 +1408,7 @@ export default function ZoneDesigner({
                     </text>
                     {pos.z !== 0 && (
                       <text
-                        x={x + NODE_W - 8} y={y + 12}
+                        x={x + NODE_W - 6} y={y + 10}
                         textAnchor="end" fill="#8A8B95" fontSize="9" fontFamily="var(--font-sans)"
                       >
                         z{pos.z > 0 ? "+" : ""}{pos.z}
@@ -1333,7 +1416,7 @@ export default function ZoneDesigner({
                     )}
                     {isDisconnected && (
                       <text
-                        x={x + 10} y={y + 12}
+                        x={x + 8} y={y + 10}
                         fill="#B8860B" fontSize="12" fontFamily="var(--font-sans)"
                       >
                         ⚠
@@ -1355,11 +1438,11 @@ export default function ZoneDesigner({
                       return badges.map((b, i) => (
                         <g key={b.icon}>
                           <circle
-                            cx={startX + i * 22 + 9} cy={y + NODE_H - 2}
+                            cx={startX + i * 22 + 9} cy={y + NODE_H - 10}
                             r={8} fill={b.bg} stroke={b.color} strokeWidth={1}
                           />
                           <text
-                            x={startX + i * 22 + 9} y={y + NODE_H - 2}
+                            x={startX + i * 22 + 9} y={y + NODE_H - 10}
                             textAnchor="middle" dominantBaseline="central"
                             fill={b.color} fontSize="8" fontFamily="var(--font-sans)"
                           >
@@ -1391,11 +1474,11 @@ export default function ZoneDesigner({
                           style={{ cursor: "pointer" }}
                         >
                           <circle
-                            cx={x + NODE_W - 2} cy={y + 2}
+                            cx={x + NODE_W - 10} cy={y + 10}
                             r={8} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
                           />
                           <text
-                            x={x + NODE_W - 2} y={y + 2}
+                            x={x + NODE_W - 10} y={y + 10}
                             textAnchor="middle" dominantBaseline="central"
                             fill={INTER_FLOOR_COLOR} fontSize="9" fontWeight="bold"
                             fontFamily="var(--font-sans)"
@@ -1415,11 +1498,11 @@ export default function ZoneDesigner({
                           style={{ cursor: "pointer" }}
                         >
                           <circle
-                            cx={x + NODE_W - 2} cy={y + NODE_H - 2}
+                            cx={x + NODE_W - 10} cy={y + NODE_H - 10}
                             r={8} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
                           />
                           <text
-                            x={x + NODE_W - 2} y={y + NODE_H - 2}
+                            x={x + NODE_W - 10} y={y + NODE_H - 10}
                             textAnchor="middle" dominantBaseline="central"
                             fill={INTER_FLOOR_COLOR} fontSize="9" fontWeight="bold"
                             fontFamily="var(--font-sans)"
@@ -1458,11 +1541,67 @@ export default function ZoneDesigner({
               })}
             </svg>
           )}
+
+          {/* ─── Hover tooltip ─────────────────────────────── */}
+          {hoveredRoom && hoverPosition && !showLabels && (() => {
+            const room = roomMap.get(hoveredRoom);
+            if (!room) return null;
+            return (
+              <div
+                style={{
+                  position: "absolute",
+                  left: hoverPosition.x,
+                  top: hoverPosition.y - 10,
+                  transform: "translate(-50%, -100%)",
+                  pointerEvents: "none",
+                  zIndex: 1000,
+                  maxWidth: "300px",
+                }}
+              >
+                <div
+                  className="bg-[#1C1D27] border border-[#2A2B35] rounded-lg p-3 shadow-lg"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  <div className="text-[#C9A84C] font-semibold text-sm mb-1">
+                    {room.name}
+                  </div>
+                  <div className="text-[#6A6B75] text-xs mb-2" style={{ fontFamily: "var(--font-mono)" }}>
+                    {room.slug} · {room.type}
+                  </div>
+                  {room.description && (
+                    <div className="text-[#8A8B95] text-xs mb-2">
+                      {room.description.length > 100
+                        ? room.description.slice(0, 97) + "..."
+                        : room.description}
+                    </div>
+                  )}
+                  {room.properties && room.properties.length > 0 && (
+                    <div className="text-[#6A6B75] text-xs mb-2">
+                      Properties: {room.properties.join(", ")}
+                    </div>
+                  )}
+                  {(room.npcs?.length || room.lootContainers?.length || room.hazards?.length) && (
+                    <div className="text-[#8A8B95] text-xs space-y-0.5">
+                      {room.npcs?.length > 0 && (
+                        <div>👤 {room.npcs.length} NPC{room.npcs.length > 1 ? "s" : ""}</div>
+                      )}
+                      {room.lootContainers?.length > 0 && (
+                        <div>📦 {room.lootContainers.length} Loot container{room.lootContainers.length > 1 ? "s" : ""}</div>
+                      )}
+                      {room.hazards?.length > 0 && (
+                        <div>⚠ {room.hazards.length} Hazard{room.hazards.length > 1 ? "s" : ""}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* ─── Side panel ─────────────────────────────────── */}
         {(selectedRoomData || selectedExitData || connectTarget) && (
-          <div className="w-64 border-l border-[#2A2B35] p-4 space-y-3 flex-shrink-0">
+          <div className="w-80 border-l border-[#2A2B35] p-4 space-y-3 flex-shrink-0">
             {/* Connect confirmation */}
             {connectTarget && selectedRoom && (
               <div className="space-y-3">
@@ -1537,7 +1676,7 @@ export default function ZoneDesigner({
                     value={editForm.name}
                     onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
                     className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1.5 text-[#E8E0D0] text-xs focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   />
                 </div>
                 <div>
@@ -1652,7 +1791,6 @@ export default function ZoneDesigner({
                     <h2
                       className="mb-1"
                       style={{
-                        fontFamily: "var(--font-serif)",
                         fontSize: "1.125rem",
                         color: "#C9A84C",
                       }}
@@ -1901,7 +2039,6 @@ export default function ZoneDesigner({
             <div style={{
               padding: "4px 12px 4px",
               color: "#C9A84C",
-              fontFamily: "var(--font-serif)",
               fontSize: 13,
               fontWeight: 600,
               borderBottom: "1px solid #2A2B35",
@@ -1980,6 +2117,97 @@ export default function ZoneDesigner({
 
             <button
               onClick={() => {
+                const room = cmRoom;
+                if (room) {
+                  setCopiedRoomProps({
+                    name: room.name,
+                    description: room.description,
+                    type: room.type,
+                    properties: Array.isArray(room.properties) ? [...room.properties] : [],
+                  });
+                  setCopyNotification(`📋 Copied properties from ${room.name}`);
+                  setTimeout(() => setCopyNotification(null), 3000);
+                }
+                setContextMenu(null);
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: "100%",
+                padding: "6px 12px",
+                background: "transparent",
+                border: "none",
+                color: "#E0E0E0",
+                cursor: "pointer",
+                fontFamily: "var(--font-sans)",
+                fontSize: 12,
+                textAlign: "left",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#2A2B35"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+            >
+              <span style={{ width: 14, textAlign: "center" }}>📋</span>
+              Copy Properties
+            </button>
+
+            {copiedRoomProps && (
+              <button
+                disabled={busy}
+                onClick={() => {
+                  const targetRoom = cmRoom;
+                  if (!targetRoom || !copiedRoomProps) return;
+                  setContextMenu(null);
+                  setBusy(true);
+                  setError(null);
+                  updateRoom(targetRoom.id, {
+                    name: copiedRoomProps.name,
+                    description: copiedRoomProps.description,
+                    type: copiedRoomProps.type,
+                    properties: copiedRoomProps.properties,
+                  })
+                    .then(() => { onZoneChanged?.(); })
+                    .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed to paste properties"))
+                    .finally(() => setBusy(false));
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  width: "100%",
+                  padding: "6px 12px",
+                  background: "transparent",
+                  border: "none",
+                  color: busy ? "#4A4B55" : "#E0E0E0",
+                  cursor: busy ? "default" : "pointer",
+                  fontFamily: "var(--font-sans)",
+                  fontSize: 12,
+                  textAlign: "left",
+                }}
+                onMouseEnter={(e) => {
+                  if (!busy) (e.currentTarget as HTMLButtonElement).style.background = "#2A2B35";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                }}
+              >
+                <span style={{ width: 14, textAlign: "center" }}>📌</span>
+                <span>
+                  Paste Properties from{" "}
+                  <span style={{ color: "#8A8B95" }}>
+                    {copiedRoomProps.name.length > 20
+                      ? copiedRoomProps.name.slice(0, 20) + "..."
+                      : copiedRoomProps.name}
+                  </span>
+                </span>
+              </button>
+            )}
+
+            {/* Divider */}
+            <div style={{ height: 1, background: "#2A2B35", margin: "4px 0" }} />
+
+            <button
+              onClick={() => {
                 setContextMenu(null);
                 setSelectedRoom(contextMenu.roomSlug);
                 setSelectedExit(null);
@@ -2045,6 +2273,29 @@ export default function ZoneDesigner({
           </div>
         );
       })()}
+
+      {/* ─── Copy notification toast ──────────────────────────── */}
+      {copyNotification && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 20,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 100,
+            background: "#1C1D27",
+            border: "1px solid #C9A84C",
+            borderRadius: 6,
+            padding: "8px 16px",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+            fontFamily: "var(--font-sans)",
+            fontSize: 12,
+            color: "#C9A84C",
+          }}
+        >
+          {copyNotification}
+        </div>
+      )}
 
       {/* ─── Validation warnings ──────────────────────────── */}
       {validationWarnings.length > 0 && (
@@ -2132,7 +2383,7 @@ export default function ZoneDesigner({
                   onChange={(e) => setRoomForm((f) => ({ ...f, name: e.target.value }))}
                   placeholder="e.g., Entrance Hall"
                   className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] text-sm focus:border-[#C9A84C] focus:outline-none"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 />
               </div>
               <div>
@@ -2160,7 +2411,7 @@ export default function ZoneDesigner({
                   placeholder="Describe this room..."
                   rows={2}
                   className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] text-sm focus:border-[#C9A84C] focus:outline-none resize-none"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">
@@ -2336,6 +2587,86 @@ export default function ZoneDesigner({
           </div>
         </div>
       )}
+
+      {/* ─── Delete Exit Modal ──────────────────────────────── */}
+      {showDeleteExitModal && selectedExit && (() => {
+        const exit = exits.find((e) => e.id === selectedExit);
+        if (!exit) return null;
+        
+        const reverseExit = exits.find((e) =>
+          e.fromRoomSlug === exit.toRoomSlug &&
+          e.toRoomSlug === exit.fromRoomSlug &&
+          e.direction === OPPOSITE[exit.direction]
+        );
+
+        return (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            onClick={() => setShowDeleteExitModal(false)}
+          >
+            <div
+              className="bg-[#1C1D27] border border-[#2A2B35] rounded-lg p-6 w-96"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-[#C9A84C] text-sm mb-4" style={{ fontFamily: "var(--font-sans)" }}>
+                Delete Exit
+              </h3>
+              
+              <div className="space-y-3 mb-4">
+                <p className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
+                  Are you sure you want to delete this exit?
+                </p>
+                
+                <div className="bg-[#12131A] border border-[#2A2B35] rounded p-3">
+                  <div className="text-[#E8E0D0] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+                    {exit.fromRoomSlug} → {exit.toRoomSlug} ({exit.direction})
+                  </div>
+                </div>
+
+                {reverseExit && (
+                  <div className="pt-2">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={deleteAlsoReverse}
+                        onChange={(e) => setDeleteAlsoReverse(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 accent-[#C9A84C]"
+                      />
+                      <div className="flex-1">
+                        <div className="text-[#E8E0D0] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
+                          Also delete connecting exit
+                        </div>
+                        <div className="text-[#8A8B95] text-xs mt-1" style={{ fontFamily: "var(--font-mono)" }}>
+                          {reverseExit.fromRoomSlug} → {reverseExit.toRoomSlug} ({reverseExit.direction})
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setShowDeleteExitModal(false)}
+                  disabled={busy}
+                  className="px-3 py-1.5 border border-[#2A2B35] text-[#8A8B95] rounded text-sm hover:bg-[#12131A] disabled:opacity-40"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => void confirmDeleteExit(deleteAlsoReverse)}
+                  disabled={busy}
+                  className="px-3 py-1.5 bg-[#8B2500] hover:bg-[#A03000] text-[#E8E0D0] rounded text-sm disabled:opacity-40"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
