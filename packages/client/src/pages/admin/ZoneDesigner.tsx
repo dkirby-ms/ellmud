@@ -64,10 +64,10 @@ function roomColor(type: string): { fill: string; stroke: string } {
 
 // ─── Layout constants ────────────────────────────────────────────────────────
 
-const CELL_W = 160;
-const CELL_H = 160;
-const NODE_W = 100;
-const NODE_H = 100;
+const CELL_W = 100;
+const CELL_H = 100;
+const NODE_W = 50;
+const NODE_H = 50;
 const PADDING = 60;
 
 // ─── Helper: convert zone data → computeLayout input ─────────────────────────
@@ -1383,33 +1383,33 @@ export default function ZoneDesigner({
                     />
                     {showLabels && (
                       <text
-                        x={x + NODE_W / 2} y={y + NODE_H / 2 - 7}
+                        x={x + NODE_W / 2} y={y + NODE_H / 2 - 4}
                         textAnchor="middle" dominantBaseline="central"
-                        fill="#E8E0D0" fontSize="11"
+                        fill="#E8E0D0" fontSize="6"
                         style={{ fontFamily: "var(--font-sans)" }}
                       >
-                        {room.name.length > 12 ? room.name.slice(0, 11) + "…" : room.name}
+                        {room.name.length > 10 ? room.name.slice(0, 9) + "…" : room.name}
                       </text>
                     )}
                     <text
-                      x={x + NODE_W / 2} y={y + NODE_H / 2 + (showLabels ? 7 : 0)}
+                      x={x + NODE_W / 2} y={y + NODE_H / 2 + (showLabels ? 4 : 0)}
                       textAnchor="middle" dominantBaseline="central"
-                      fill="#6A6B75" fontSize="9" fontFamily="var(--font-mono)"
+                      fill="#6A6B75" fontSize="6" fontFamily="var(--font-mono)"
                     >
                       {slug}
                     </text>
                     {pos.z !== 0 && (
                       <text
-                        x={x + NODE_W - 6} y={y + 10}
-                        textAnchor="end" fill="#8A8B95" fontSize="9" fontFamily="var(--font-sans)"
+                        x={x + NODE_W - 3} y={y + 7}
+                        textAnchor="end" fill="#8A8B95" fontSize="6" fontFamily="var(--font-sans)"
                       >
                         z{pos.z > 0 ? "+" : ""}{pos.z}
                       </text>
                     )}
                     {isDisconnected && (
                       <text
-                        x={x + 8} y={y + 10}
-                        fill="#B8860B" fontSize="12" fontFamily="var(--font-sans)"
+                        x={x + 4} y={y + 7}
+                        fill="#B8860B" fontSize="8" fontFamily="var(--font-sans)"
                       >
                         ⚠
                       </text>
@@ -1425,18 +1425,18 @@ export default function ZoneDesigner({
                       if (room.hazards?.length > 0)
                         badges.push({ icon: "⚠", color: "#DC2626", bg: "#2A0A0A", label: `${room.hazards.length} Hazard${room.hazards.length > 1 ? "s" : ""}` });
                       if (badges.length === 0) return null;
-                      const totalW = badges.length * 18 + (badges.length - 1) * 4;
+                      const totalW = badges.length * 12 + (badges.length - 1) * 2;
                       const startX = x + NODE_W / 2 - totalW / 2;
                       return badges.map((b, i) => (
                         <g key={b.icon}>
                           <circle
-                            cx={startX + i * 22 + 9} cy={y + NODE_H - 10}
-                            r={8} fill={b.bg} stroke={b.color} strokeWidth={1}
+                            cx={startX + i * 14 + 6} cy={y + NODE_H - 5}
+                            r={5} fill={b.bg} stroke={b.color} strokeWidth={1}
                           />
                           <text
-                            x={startX + i * 22 + 9} y={y + NODE_H - 10}
+                            x={startX + i * 14 + 6} y={y + NODE_H - 5}
                             textAnchor="middle" dominantBaseline="central"
-                            fill={b.color} fontSize="8" fontFamily="var(--font-sans)"
+                            fill={b.color} fontSize="5" fontFamily="var(--font-sans)"
                           >
                             {b.icon}
                           </text>
@@ -1448,9 +1448,9 @@ export default function ZoneDesigner({
                     {/* Property tags below room node */}
                     {room.properties?.length > 0 && (
                       <text
-                        x={x + NODE_W / 2} y={y + NODE_H + 12}
+                        x={x + NODE_W / 2} y={y + NODE_H + 6}
                         textAnchor="middle" dominantBaseline="central"
-                        fill="#6A6B75" fontSize="8" fontFamily="var(--font-mono)"
+                        fill="#6A6B75" fontSize="5" fontFamily="var(--font-mono)"
                       >
                         {room.properties.join(" · ")}
                       </text>
@@ -1466,13 +1466,13 @@ export default function ZoneDesigner({
                           style={{ cursor: "pointer" }}
                         >
                           <circle
-                            cx={x + NODE_W - 10} cy={y + 10}
-                            r={8} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
+                            cx={x + NODE_W - 5} cy={y + 5}
+                            r={5} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
                           />
                           <text
-                            x={x + NODE_W - 10} y={y + 10}
+                            x={x + NODE_W - 5} y={y + 5}
                             textAnchor="middle" dominantBaseline="central"
-                            fill={INTER_FLOOR_COLOR} fontSize="9" fontWeight="bold"
+                            fill={INTER_FLOOR_COLOR} fontSize="6" fontWeight="bold"
                             fontFamily="var(--font-sans)"
                           >
                             ▲
@@ -1490,13 +1490,13 @@ export default function ZoneDesigner({
                           style={{ cursor: "pointer" }}
                         >
                           <circle
-                            cx={x + NODE_W - 10} cy={y + NODE_H - 10}
-                            r={8} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
+                            cx={x + NODE_W - 5} cy={y + NODE_H - 5}
+                            r={5} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
                           />
                           <text
-                            x={x + NODE_W - 10} y={y + NODE_H - 10}
+                            x={x + NODE_W - 5} y={y + NODE_H - 5}
                             textAnchor="middle" dominantBaseline="central"
-                            fill={INTER_FLOOR_COLOR} fontSize="9" fontWeight="bold"
+                            fill={INTER_FLOOR_COLOR} fontSize="6" fontWeight="bold"
                             fontFamily="var(--font-sans)"
                           >
                             ▼
@@ -1513,13 +1513,13 @@ export default function ZoneDesigner({
                         style={{ cursor: "pointer" }}
                       >
                         <circle
-                          cx={x + NODE_W + 14} cy={y + 14 + i * 22} r={9}
-                          fill="#0e3a3d" stroke={PORTAL_COLOR} strokeWidth={1.5}
+                          cx={x + NODE_W + 8} cy={y + 8 + i * 14} r={6}
+                          fill="#0e3a3d" stroke={PORTAL_COLOR} strokeWidth={1}
                         />
                         <text
-                          x={x + NODE_W + 14} y={y + 14 + i * 22}
+                          x={x + NODE_W + 8} y={y + 8 + i * 14}
                           textAnchor="middle" dominantBaseline="central"
-                          fill={PORTAL_COLOR} fontSize="12" fontFamily="var(--font-sans)"
+                          fill={PORTAL_COLOR} fontSize="8" fontFamily="var(--font-sans)"
                         >
                           ⟐
                         </text>
