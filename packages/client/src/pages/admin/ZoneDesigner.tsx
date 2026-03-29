@@ -1348,9 +1348,9 @@ export default function ZoneDesigner({
                     onContextMenu={(e) => handleRoomContextMenu(e, slug)}
                     onMouseEnter={(e) => {
                       if (hoverTimer) clearTimeout(hoverTimer);
+                      const rect = (e.currentTarget as Element).getBoundingClientRect();
                       const timer = setTimeout(() => {
                         setHoveredRoom(slug);
-                        const rect = e.currentTarget.getBoundingClientRect();
                         setHoverPosition({ x: rect.left + rect.width / 2, y: rect.top });
                       }, 150);
                       setHoverTimer(timer);
