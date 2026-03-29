@@ -738,8 +738,9 @@ describe('computeLayout', () => {
     expect(diagonals).toBeLessThanOrEqual(2);
 
     // No occlusions — rooms must not sit on exit line segments of other rooms.
-    // In dense zones (80+ rooms), some occlusions may be unavoidable without
-    // creating diagonals, but the reported problem rooms must be clear.
+    // Grid expansion (Phase 7) resolves most occlusions by inserting extra
+    // columns/rows. Some remain in long vertical corridors where rooms form
+    // a continuous chain on the same column.
     const CARDINALS_OCC = ['north', 'south', 'east', 'west'];
     const occlusionIssues: string[] = [];
 
@@ -789,23 +790,26 @@ describe('computeLayout', () => {
       for (const oi of occlusionIssues) console.log(`  ${oi}`);
     }
 
-    // Verify specific rooms from previous bug reports don't occlude their
-    // originally-reported lines. NOTE: The direction-reversal fix moved
-    // harbourmasters-office to its correct north position (y=1), which
-    // unavoidably places it on the cobblestone/bazaar row. This is acceptable
-    // because direction correctness takes priority over occlusion avoidance.
-    const bugReportOcclusions = occlusionIssues.filter(oi =>
-      // barnacled-quay on bazaar↔money-changers (still should be clear)
-      (oi.includes('barnacled-quay') && oi.includes('bazaar-row-3') && !oi.includes('money-changers-row')) ||
-      // money-changers-row occluding barnacled-quay↔pier-1 is allowed because
-      // pier-1 must be south and the column is packed
-      false
+    // Total occlusion bound — grid expansion reduced from 54 to ≤16
+    expect(occlusionIssues.length).toBeLessThanOrEqual(16);
+
+    // harbourmasters-office must NOT occlude any exit lines — this was the
+    // original reported bug (drawing over exits near barnacled-quay)
+    const harbOcclusions = occlusionIssues.filter(oi =>
+      oi.startsWith('harbourmasters-office')
     );
-    if (bugReportOcclusions.length > 0) {
-      console.log('\n=== BUG REPORT REGRESSIONS ===');
-      for (const br of bugReportOcclusions) console.log(`  ${br}`);
-    }
-    expect(bugReportOcclusions.length).toBe(0);
+    expect(harbOcclusions).toEqual([]);
+
+    // barnacled-quay must not occlude exit lines either
+    const bqOcclusions = occlusionIssues.filter(oi =>
+      oi.startsWith('barnacled-quay')
+    );
+    expect(bqOcclusions).toEqual([]);
+
+    // harbourmasters-office must be ABOVE barnacled-quay (north = lower y)
+    const harbPos = pos(layout, 'harbourmasters-office');
+    const bqPos = pos(layout, 'barnacled-quay');
+    expect(harbPos.y).toBeLessThan(bqPos.y);
 
     // Direction reversal check — no room should be placed opposite to its exit
     const DIR_OFFSETS: Record<string, { dx: number; dy: number }> = {
