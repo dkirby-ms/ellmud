@@ -38,7 +38,7 @@ import { initCharacterProvider } from './character/index.js';
 import { createCharacterRouter } from './api/characters.js';
 import { initZoneProvider, getZoneRepository } from './zones/index.js';
 import { initExplorationProvider } from './exploration/index.js';
-import { initContentRegistry, getContentRegistry } from './content/index.js';
+import { initContentRegistry } from './content/index.js';
 
 const config = getConfig();
 const PORT = config.port;
