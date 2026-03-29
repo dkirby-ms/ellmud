@@ -1,24 +1,59 @@
--- Migration 033: Seed The Warrens — expanded 100+ room extraction zone.
--- Consolidates the original seed + three expansion phases into one migration.
--- Designed by Laeral (Content Designer), built by Bruenor (Content Builder).
--- Idempotent: deletes existing warrens data and re-seeds.
-
--- Designed by Laeral (Content Designer), built by Bruenor (Content Builder).
--- Idempotent: uses INSERT ... ON CONFLICT DO NOTHING so re-running is safe.
+-- 003_seed_zones.sql — Seed zone data (Refuge + Warrens).
 
 -- ============================================================================
--- 1. Delete existing room & exit data for a clean replacement
+-- The Refuge — persistent hub zone
 -- ============================================================================
-DELETE FROM zone_exits WHERE zone_id = (SELECT id FROM zones WHERE slug = 'warrens');
-DELETE FROM zone_rooms WHERE zone_id = (SELECT id FROM zones WHERE slug = 'warrens');
+
+INSERT INTO zones (id, slug, name, description, level_min, level_max, tier, biome, entry_room_slugs, lifecycle, category, max_players, pvp_enabled, repop_interval_seconds)
+VALUES (gen_random_uuid(), 'the-refuge', 'The Refuge',
+  'A battered sanctuary carved from the ruins of a collapsed shard. The last safe haven for those who dare the rifts.',
+  1, 100, 1, 'flooded_crypt', '{hearth}', 'persistent', 'hub', 0, false, 0);
+
+-- Refuge rooms
+INSERT INTO zone_rooms (id, zone_id, slug, name, description, type, properties, loot_containers, hazards, npcs)
+SELECT gen_random_uuid(), z.id, v.slug, v.name, v.description, v.type,
+       v.properties::text[], v.loot_containers::jsonb, v.hazards::jsonb, v.npcs::jsonb
+FROM zones z, (VALUES
+  ('hearth',           'The Hearth',         'A broad stone chamber warmed by a perpetual fire. Scarred adventurers rest on makeshift benches. The air smells of ash and iron.', 'entry',    '{}', '[]', '[]', '[]'),
+  ('stash-alcove',     'Stash Alcove',       'A narrow alcove lined with locked chests and hanging satchels. Your belongings are here — what you''ve kept from the shards.',    'corridor', '{}', '[]', '[]', '[]'),
+  ('training-grounds', 'Training Grounds',   'A cleared space where weapons ring against practice dummies. Scratched tally marks cover the walls.',                              'corridor', '{}', '[]', '[]', '[]'),
+  ('shardboard',       'The Shardboard',     'A massive board of pinned notes, sketched maps, and shard coordinates. This is where expeditions begin.',                          'corridor', '{}', '[]', '[]', '[]'),
+  ('market',           'The Market',         'Makeshift stalls selling salvaged goods. A gruff quartermaster eyes your coin pouch.',                                              'corridor', '{}', '[]', '[]', '[]'),
+  ('infirmary',        'The Infirmary',      'Cots and bandages. A healer tends to the wounded. The smell of poultice lingers.',                                                  'corridor', '{}', '[]', '[]', '[]'),
+  ('war-room',         'The War Room',       'A locked chamber where faction leaders meet. Maps of known shards cover the walls.',                                                'corridor', '{}', '[]', '[]', '[]')
+) AS v(slug, name, description, type, properties, loot_containers, hazards, npcs)
+WHERE z.slug = 'the-refuge';
+
+-- Refuge exits
+INSERT INTO zone_exits (id, zone_id, from_room_slug, direction, to_room_slug, target_zone_slug, target_room_slug, locked, hidden)
+SELECT gen_random_uuid(), z.id, v.from_slug, v.direction, v.to_slug,
+       NULLIF(v.target_zone, ''), NULLIF(v.target_room, ''),
+       v.is_locked, v.is_hidden
+FROM zones z, (VALUES
+  ('hearth',           'east',  'stash-alcove',     '', '', false, false),
+  ('stash-alcove',     'west',  'hearth',           '', '', false, false),
+  ('hearth',           'north', 'training-grounds', '', '', false, false),
+  ('training-grounds', 'south', 'hearth',           '', '', false, false),
+  ('hearth',           'west',  'shardboard',       '', '', false, false),
+  ('shardboard',       'east',  'hearth',           '', '', false, false),
+  ('hearth',           'south', 'market',           '', '', false, false),
+  ('market',           'north', 'hearth',           '', '', false, false),
+  ('market',           'east',  'infirmary',        '', '', false, false),
+  ('infirmary',        'west',  'market',           '', '', false, false),
+  ('training-grounds', 'east',  'war-room',         '', '', false, false),
+  ('war-room',         'west',  'training-grounds', '', '', false, false)
+) AS v(from_slug, direction, to_slug, target_zone, target_room, is_locked, is_hidden)
+WHERE z.slug = 'the-refuge';
+
 
 -- ============================================================================
--- 2. Update zone metadata
+-- The Warrens — expanded 100+ room extraction zone
 -- ============================================================================
-UPDATE zones SET
-  description = 'A vast, decaying ruined city stretching far beyond its shattered gate. Winding streets of crumbling tenements give way to a dense slum quarter where desperate creatures claw out survival among the refuse. Beneath the surface, flooded sewers hide worse things still. The sounds of skittering claws and collapsing masonry echo endlessly across the cracked pavement.',
-  max_players = 6
-WHERE slug = 'warrens';
+
+INSERT INTO zones (id, slug, name, description, level_min, level_max, tier, biome, entry_room_slugs, lifecycle, category, max_players, pvp_enabled, repop_interval_seconds)
+VALUES (gen_random_uuid(), 'warrens', 'The Warrens',
+  'A vast, decaying ruined city stretching far beyond its shattered gate. Winding streets of crumbling tenements give way to a dense slum quarter where desperate creatures claw out survival among the refuse. Beneath the surface, flooded sewers hide worse things still. The sounds of skittering claws and collapsing masonry echo endlessly across the cracked pavement.',
+  1, 100, 1, 'flooded_crypt', '{shattered-gate}', 'persistent', 'dungeon', 6, false, 300);
 
 -- ============================================================================
 -- 3. Approach Area (~15 rooms) + Slums Grid Rows 1-3 (21 rooms)

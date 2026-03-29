@@ -2438,3 +2438,18 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 - **Verification:** All 2051 tests passing, clean build, no regressions
 - **Handoff:** Jarlaxle (Systems Dev) for ContentRegistry wiring and admin endpoints
 - **Orchestration log:** `.squad/orchestration-log/2026-03-29T13-45-00Z-drizzt.md`
+
+### 2026-03-30: Migration Consolidation — 36 → 3 Files
+
+- **Task:** Consolidate 36 incremental migrations into 3 clean files for pre-release DB reset
+- **Deliverables:**
+  - `001_schema.sql`: All 27 tables, constraints, indexes in dependency order (no forward refs)
+  - `002_seed_content.sql`: 3 factions, 30 item_definitions, 7 creature_definitions
+  - `003_seed_zones.sql`: The Refuge (7 rooms, 12 exits) + The Warrens (~100 rooms, 279 exits)
+- **Test updates:** Updated `persistence-schema-validation.test.ts` — filename assertions, describe labels, FK regex to handle TEXT references, COMPOSITE_PK_TABLES for item_definitions
+- **Verification:** DB reset + migrations complete cleanly, server starts, all 59 schema tests pass
+
+## Learnings
+- **Test regex sensitivity:** The schema validation tests use exact type keywords (`INT` vs `INTEGER`) in regexes. Use `INT` for columns that have inline CHECK constraints to match existing test patterns.
+- **extractForeignKeys only matched UUID:** Had to extend regex to `(?:UUID|TEXT)` since item_definitions.id and player_loadout.item_id are TEXT PKs/FKs.
+- **Warrens zone was never inserted:** Migration 033 assumed a pre-existing warrens zone row but none existed. The consolidation creates it properly with a fresh INSERT.

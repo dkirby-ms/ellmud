@@ -60,19 +60,21 @@ export async function loadItemDefsFromDb(): Promise<number> {
     name: string;
     type: string;
     tier: string | null;
-    stats: { weight?: number; baseDurability?: number | null };
+    base_stats: Record<string, unknown> | null;
+    weight: number;
+    base_durability: number | null;
     description: string | null;
-  }>(`SELECT id, name, type, tier, stats, description FROM item_definitions`);
+  }>(`SELECT id, name, type, tier, base_stats, weight, base_durability, description FROM item_definitions`);
 
   for (const row of result.rows) {
     defs.set(row.id, {
       id: row.id,
       name: row.name,
       type: row.type as StashItemType,
-      weight: row.stats?.weight ?? 1,
+      weight: row.weight ?? 1,
       rarity: (row.tier ?? 'common') as GearTier,
       description: row.description ?? '',
-      baseDurability: row.stats?.baseDurability ?? null,
+      baseDurability: row.base_durability ?? null,
     });
   }
   return result.rows.length;

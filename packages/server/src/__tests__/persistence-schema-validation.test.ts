@@ -61,7 +61,7 @@ function extractIndexes(sql: string): string[] {
 
 /** Extract REFERENCES clauses from SQL. */
 function extractForeignKeys(sql: string): Array<{ column: string; refTable: string; refColumn: string }> {
-  const regex = /(\w+)\s+UUID\s+NOT NULL\s+REFERENCES\s+(\w+)\((\w+)\)/gi;
+  const regex = /(\w+)\s+(?:UUID|TEXT)\s+NOT NULL\s+REFERENCES\s+(\w+)\((\w+)\)/gi;
   const fks: Array<{ column: string; refTable: string; refColumn: string }> = [];
   let match;
   while ((match = regex.exec(sql)) !== null) {
@@ -76,13 +76,11 @@ describe('Migration files', () => {
   const files = allMigrationFiles();
 
   it('all migration files exist with expected naming', () => {
-    expect(files).toContain('001_create_players.sql');
-    expect(files).toContain('002_create_items.sql');
-    expect(files).toContain('003_create_skills.sql');
-    expect(files).toContain('004_create_factions.sql');
-    expect(files).toContain('005_create_run_history.sql');
+    expect(files).toContain('001_schema.sql');
+    expect(files).toContain('002_seed_content.sql');
+    expect(files).toContain('003_seed_zones.sql');
     // Additional migrations may be added by other team members
-    expect(files.length).toBeGreaterThanOrEqual(5);
+    expect(files.length).toBeGreaterThanOrEqual(3);
   });
 
   it('migration files are numbered sequentially', () => {
@@ -109,8 +107,8 @@ describe('Migration files', () => {
 
 // ─── 001: Players Schema ────────────────────────────────────────────────────
 
-describe('001_create_players.sql', () => {
-  const sql = readMigration('001_create_players.sql');
+describe('001_schema.sql — Players', () => {
+  const sql = readMigration('001_schema.sql');
 
   it('creates player_identities table', () => {
     expect(extractCreateTables(sql)).toContain('player_identities');
@@ -168,10 +166,10 @@ describe('001_create_players.sql', () => {
   });
 });
 
-// ─── 002: Items & Stash Schema ──────────────────────────────────────────────
+// ─── 001: Items & Stash Schema ──────────────────────────────────────────────
 
-describe('002_create_items.sql', () => {
-  const sql = readMigration('002_create_items.sql');
+describe('001_schema.sql — Items & Stash', () => {
+  const sql = readMigration('001_schema.sql');
 
   it('creates item_definitions table', () => {
     expect(extractCreateTables(sql)).toContain('item_definitions');
@@ -221,8 +219,8 @@ describe('002_create_items.sql', () => {
     const indexes = extractIndexes(sql);
     expect(indexes).toContain('idx_stash_player');
     expect(indexes).toContain('idx_stash_item');
-    expect(indexes).toContain('idx_items_type');
-    expect(indexes).toContain('idx_items_tier');
+    expect(indexes).toContain('idx_item_definitions_type');
+    expect(indexes).toContain('idx_item_definitions_tier');
   });
 
   it('player_stash has durability column (nullable for non-degradable)', () => {
@@ -234,10 +232,10 @@ describe('002_create_items.sql', () => {
   });
 });
 
-// ─── 003: Skills Schema ─────────────────────────────────────────────────────
+// ─── 001: Skills Schema ─────────────────────────────────────────────────────
 
-describe('003_create_skills.sql', () => {
-  const sql = readMigration('003_create_skills.sql');
+describe('001_schema.sql — Skills', () => {
+  const sql = readMigration('001_schema.sql');
 
   it('creates player_skills table', () => {
     expect(extractCreateTables(sql)).toContain('player_skills');
@@ -265,10 +263,10 @@ describe('003_create_skills.sql', () => {
   });
 });
 
-// ─── 004: Factions Schema ───────────────────────────────────────────────────
+// ─── 001: Factions Schema ───────────────────────────────────────────────────
 
-describe('004_create_factions.sql', () => {
-  const sql = readMigration('004_create_factions.sql');
+describe('001_schema.sql — Factions', () => {
+  const sql = readMigration('001_schema.sql');
 
   it('creates factions table', () => {
     expect(extractCreateTables(sql)).toContain('factions');
@@ -279,9 +277,10 @@ describe('004_create_factions.sql', () => {
   });
 
   it('seeds three canonical factions', () => {
-    expect(sql).toContain('Ironwright Compact');
-    expect(sql).toContain('Veil Cartographers');
-    expect(sql).toContain('Scarlet Ledger');
+    const seedSql = readMigration('002_seed_content.sql');
+    expect(seedSql).toContain('Ironwright Compact');
+    expect(seedSql).toContain('Veil Cartographers');
+    expect(seedSql).toContain('Scarlet Ledger');
   });
 
   it('factions has unique name constraint', () => {
@@ -309,10 +308,10 @@ describe('004_create_factions.sql', () => {
   });
 });
 
-// ─── 005: Run History Schema ────────────────────────────────────────────────
+// ─── 001: Run History Schema ────────────────────────────────────────────────
 
-describe('005_create_run_history.sql', () => {
-  const sql = readMigration('005_create_run_history.sql');
+describe('001_schema.sql — Run History', () => {
+  const sql = readMigration('001_schema.sql');
 
   it('creates run_history table', () => {
     expect(extractCreateTables(sql)).toContain('run_history');
@@ -409,7 +408,7 @@ describe('cross-migration consistency', () => {
     // Some tables use composite TEXT PKs instead of auto-generated UUIDs.
     // content_definitions was dropped in migration 029 but its CREATE TABLE
     // still exists in migration 007 — keep it in the exclusion list.
-    const COMPOSITE_PK_TABLES = ['content_definitions', 'player_loadout', 'auth_tokens'];
+    const COMPOSITE_PK_TABLES = ['item_definitions', 'player_loadout', 'auth_tokens'];
 
     for (const file of allMigrationFiles()) {
       const sql = readMigration(file);
@@ -424,10 +423,10 @@ describe('cross-migration consistency', () => {
 
   it('data tables have at least one timestamp column (created_at or updated_at)', () => {
     // Config/override tables (e.g., stash_capacity) may legitimately lack timestamps.
-    // We check the core data migrations (001-005) which hold player-generated data.
+    // We check the schema migration (001) which holds all table definitions.
     const coreMigrations = allMigrationFiles().filter(f => {
       const num = parseInt(f.split('_')[0]!, 10);
-      return num >= 1 && num <= 5;
+      return num === 1;
     });
     for (const file of coreMigrations) {
       const sql = readMigration(file);
