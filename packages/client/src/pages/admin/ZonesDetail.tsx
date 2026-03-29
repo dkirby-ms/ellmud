@@ -308,9 +308,8 @@ export default function ZonesDetail() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="grid grid-cols-3 gap-6 p-8">
-          {/* Left Column */}
-          <div className="col-span-2">
+        <div className="p-8">
+          <div>
             {/* ─── General Tab ──────────────────────────────────────────────── */}
             {activeTab === "general" && (
               <div className="space-y-6">
@@ -915,44 +914,7 @@ export default function ZonesDetail() {
               </div>
             )}
           </div>
-          <div className="space-y-6">
-            <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
-              <h3 className="text-[#C9A84C] text-sm mb-4" style={{ fontFamily: "var(--font-sans)" }}>
-                Preview
-              </h3>
-              <div
-                className="bg-[#1C1D27] rounded p-4 text-sm space-y-2"
-                style={{ fontFamily: "var(--font-serif)", color: "#E8E0D0" }}
-              >
-                <div className="text-[#C9A84C] text-lg mb-2">
-                  {formData.name || "Untitled Zone"}
-                </div>
-                <p className="text-[#8A8B95] text-xs">
-                  {formData.description || "No description"}
-                </p>
-                <div className="border-t border-[#2A2B35] my-2"></div>
-                <div className="text-xs space-y-1">
-                  <div>Slug: <span className="text-[#8A8B95]" style={{ fontFamily: "var(--font-mono)" }}>{formData.slug || "—"}</span></div>
-                  <div>Tier: {formData.tier || 1}</div>
-                  <div>Biome: <span className="capitalize">{(formData.biome || "—").replace(/_/g, " ")}</span></div>
-                  <div>Levels: {formData.levelMin || 1}–{formData.levelMax || 5}</div>
-                  <div>Category: <span className="capitalize">{formData.category || "—"}</span></div>
-                  <div>Lifecycle: <span className="capitalize">{formData.lifecycle || "—"}</span></div>
-                  <div>PvP: {formData.pvpEnabled ? "Yes" : "No"}</div>
-                  <div>Rooms: {rooms.length}</div>
-                  <div>Exits: {exits.length}</div>
-                </div>
-              </div>
-            </div>
 
-            {!error && formData.name && formData.slug && (
-              <div className="bg-[#2D6B4F] border border-[#256B4A] rounded-lg p-4">
-                <p className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-sans)" }}>
-                  ✓ Zone ready to save
-                </p>
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </div>
