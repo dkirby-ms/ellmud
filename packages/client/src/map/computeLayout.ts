@@ -520,14 +520,21 @@ export function computeLayout(
     bfs(roomId, offsetX, 0, 0);
   }
 
-  // ── Phase 4: Diagonal optimization ─────────────────────────────────────────
-  // BFS order can cause a room to be placed by an earlier neighbor, creating
   // ── Phase 4: Force-directed relaxation ───────────────────────────────────
   // BFS placement is greedy — collisions push rooms to non-ideal positions,
   // creating gaps that later rooms fill. This phase pulls connected rooms
   // toward each other iteratively, like springs, until all directly-connected
   // rooms are adjacent (distance 1) or as close as possible.
   forceDirectedRelax();
+
+  // ── Phase 5: Diagonal cascade fix ──────────────────────────────────────
+  // The force-directed pass moves single rooms toward an averaged ideal,
+  // but cross-quarter connections create diagonals that single-room moves
+  // can't resolve (moving one room fixes one exit but breaks another).
+  // This phase specifically targets remaining diagonal exits with multi-room
+  // cascade moves: shift a room to fix a diagonal, then cascade-fix any
+  // new diagonals created by that move.
+  fixDiagonalCascade();
 
   return result;
 
@@ -558,8 +565,24 @@ export function computeLayout(
         if (!tp || tp.z !== z) continue;
         const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
         if (dist > 1) score += dist - 1;
-        // Diagonal penalty (high — directionally wrong exits are very visible)
-        if (pos.x !== tp.x && pos.y !== tp.y) score += 5;
+        // Diagonal penalty — heavily penalize directionally wrong exits.
+        // Must be large enough that the relaxation will accept longer but
+        // axis-aligned connections over short diagonal ones.
+        if (pos.x !== tp.x && pos.y !== tp.y) score += 20;
+        // Direction mismatch penalty — if the exit says "east" but the
+        // target is actually west (or north but target is south, etc.),
+        // the rooms are spatially reversed. Penalize to prevent swaps
+        // that reverse room order.
+        const dx = tp.x - pos.x;
+        const dy = tp.y - pos.y;
+        if (
+          (offset.dx > 0 && dx < 0) ||
+          (offset.dx < 0 && dx > 0) ||
+          (offset.dy > 0 && dy < 0) ||
+          (offset.dy < 0 && dy > 0)
+        ) {
+          score += 15;
+        }
         // Line-through-room occlusion penalty
         if (dist >= 2 && (pos.x === tp.x || pos.y === tp.y)) {
           for (const other of zPositions) {
@@ -638,14 +661,47 @@ export function computeLayout(
           // Skip if already at ideal
           if (ideal.x === pos.x && ideal.y === pos.y) continue;
 
-          // Try the ideal position and nearby cells (within radius 2)
+          // Try the ideal position and nearby cells (within radius 4)
+          const candidateSet = new Set<string>();
           const candidates: { x: number; y: number }[] = [];
-          for (let r = 0; r <= 2; r++) {
+          const addCandidate = (x: number, y: number) => {
+            const k = cellKey(x, y);
+            if (!candidateSet.has(k)) {
+              candidateSet.add(k);
+              candidates.push({ x, y });
+            }
+          };
+
+          // Candidates near the average ideal position
+          for (let r = 0; r <= 4; r++) {
             for (let ddx = -r; ddx <= r; ddx++) {
               const absRem = r - Math.abs(ddx);
               const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
               for (const ddy of dyOpts) {
-                candidates.push({ x: ideal.x + ddx, y: ideal.y + ddy });
+                addCandidate(ideal.x + ddx, ideal.y + ddy);
+              }
+            }
+          }
+
+          // Candidates near each neighbor's "wants" position (where each
+          // individual neighbor wants this room, not the average)
+          const room = rooms.get(roomId);
+          if (room) {
+            for (const [dir, neighborId] of room.exits) {
+              const offset = DIRECTION_OFFSETS[dir];
+              if (!offset || offset.dz !== 0) continue;
+              const neighborPos = result.get(neighborId);
+              if (!neighborPos || neighborPos.z !== z) continue;
+              const wantX = neighborPos.x - offset.dx;
+              const wantY = neighborPos.y - offset.dy;
+              for (let r = 0; r <= 2; r++) {
+                for (let ddx = -r; ddx <= r; ddx++) {
+                  const absRem = r - Math.abs(ddx);
+                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
+                  for (const ddy of dyOpts) {
+                    addCandidate(wantX + ddx, wantY + ddy);
+                  }
+                }
               }
             }
           }
@@ -730,13 +786,40 @@ export function computeLayout(
               if (!ideal) continue;
               if (ideal.x === pos.x && ideal.y === pos.y) continue;
 
+              const candidateSet2 = new Set<string>();
               const candidates: { x: number; y: number }[] = [];
-              for (let r = 0; r <= 2; r++) {
+              const addCand = (x: number, y: number) => {
+                const k = cellKey(x, y);
+                if (!candidateSet2.has(k)) {
+                  candidateSet2.add(k);
+                  candidates.push({ x, y });
+                }
+              };
+              for (let r = 0; r <= 4; r++) {
                 for (let ddx = -r; ddx <= r; ddx++) {
                   const absRem = r - Math.abs(ddx);
                   const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
                   for (const ddy of dyOpts) {
-                    candidates.push({ x: ideal.x + ddx, y: ideal.y + ddy });
+                    addCand(ideal.x + ddx, ideal.y + ddy);
+                  }
+                }
+              }
+              const roomDef = rooms.get(roomId);
+              if (roomDef) {
+                for (const [dir2, nId] of roomDef.exits) {
+                  const off = DIRECTION_OFFSETS[dir2];
+                  if (!off || off.dz !== 0) continue;
+                  const np = result.get(nId);
+                  if (!np || np.z !== z) continue;
+                  const wx = np.x - off.dx, wy = np.y - off.dy;
+                  for (let r = 0; r <= 2; r++) {
+                    for (let ddx = -r; ddx <= r; ddx++) {
+                      const absRem = r - Math.abs(ddx);
+                      const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
+                      for (const ddy of dyOpts) {
+                        addCand(wx + ddx, wy + ddy);
+                      }
+                    }
                   }
                 }
               }
@@ -776,6 +859,438 @@ export function computeLayout(
             if (!moved) break;
           }
         }
+      }
+    }
+  }
+
+  // ── Diagonal cascade fix ────────────────────────────────────────────────
+
+  /**
+   * Targeted multi-room fix for remaining diagonal exits.
+   *
+   * Strategy 1: Single-room moves — try moving one endpoint to align.
+   * Strategy 2: Pair moves — move BOTH endpoints simultaneously to a
+   *   common axis, splitting the difference.
+   * Strategy 3: Chain shifts — when a room is part of a linear chain,
+   *   shift the entire chain along the perpendicular axis.
+   */
+  function fixDiagonalCascade(): void {
+    for (const [z, occupied] of occupiedByZ) {
+      // Build reverse lookup: position → roomId
+      function posToRoom(): Map<string, string> {
+        const m = new Map<string, string>();
+        for (const [id, p] of result) {
+          if (p.z === z) m.set(cellKey(p.x, p.y), id);
+        }
+        return m;
+      }
+
+      for (let pass = 0; pass < 60; pass++) {
+        const diags: Array<{
+          roomId: string;
+          targetId: string;
+          dir: string;
+        }> = [];
+
+        for (const [roomId, pos] of result) {
+          if (pos.z !== z) continue;
+          const room = rooms.get(roomId);
+          if (!room) continue;
+          for (const [dir, targetId] of room.exits) {
+            const offset = DIRECTION_OFFSETS[dir];
+            if (!offset || offset.dz !== 0) continue;
+            const tp = result.get(targetId);
+            if (!tp || tp.z !== z) continue;
+            if (pos.x !== tp.x && pos.y !== tp.y) {
+              diags.push({ roomId, targetId, dir });
+            }
+          }
+        }
+
+        if (diags.length === 0) break;
+
+        let currentScore = layoutScore(z);
+        let improved = false;
+
+        for (const { roomId, targetId, dir } of diags) {
+          if (improved) break;
+          const posA = result.get(roomId)!;
+          const posB = result.get(targetId)!;
+          const offset = DIRECTION_OFFSETS[dir]!;
+          const isVertical = offset.dy !== 0;
+
+          // ── Strategy 1: Single endpoint moves + cascade ──
+          const singleMoves: Array<{
+            mover: string;
+            newX: number;
+            newY: number;
+          }> = [];
+
+          if (isVertical) {
+            singleMoves.push({ mover: roomId, newX: posB.x, newY: posA.y });
+            singleMoves.push({ mover: targetId, newX: posA.x, newY: posB.y });
+          } else {
+            singleMoves.push({ mover: roomId, newX: posA.x, newY: posB.y });
+            singleMoves.push({ mover: targetId, newX: posB.x, newY: posA.y });
+          }
+
+          for (const sm of singleMoves) {
+            if (improved) break;
+            const moverPos = result.get(sm.mover)!;
+            if (moverPos.x === sm.newX && moverPos.y === sm.newY) continue;
+
+            const targetKey = cellKey(sm.newX, sm.newY);
+
+            if (!occupied.has(targetKey)) {
+              const oldKey = cellKey(moverPos.x, moverPos.y);
+              occupied.delete(oldKey);
+              occupied.add(targetKey);
+              result.set(sm.mover, { x: sm.newX, y: sm.newY, z });
+
+              if (layoutScore(z) < currentScore) {
+                improved = true;
+                break;
+              }
+
+              occupied.delete(targetKey);
+              occupied.add(oldKey);
+              result.set(sm.mover, moverPos);
+            } else {
+              // Try swap with occupant
+              const pMap = posToRoom();
+              const occupantId = pMap.get(targetKey);
+              if (!occupantId || occupantId === roomId || occupantId === targetId)
+                continue;
+              const occupantPos = result.get(occupantId)!;
+              const moverOldKey = cellKey(moverPos.x, moverPos.y);
+
+              // Swap
+              result.set(sm.mover, { x: sm.newX, y: sm.newY, z });
+              result.set(occupantId, { x: moverPos.x, y: moverPos.y, z });
+              if (layoutScore(z) < currentScore) {
+                improved = true;
+                break;
+              }
+              result.set(sm.mover, moverPos);
+              result.set(occupantId, occupantPos);
+
+              // Displace occupant to nearby cell
+              const occupantKey = cellKey(occupantPos.x, occupantPos.y);
+              for (let r = 1; r <= 5 && !improved; r++) {
+                for (let ddx = -r; ddx <= r && !improved; ddx++) {
+                  const absRem = r - Math.abs(ddx);
+                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
+                  for (const ddy of dyOpts) {
+                    const nx = occupantPos.x + ddx;
+                    const ny = occupantPos.y + ddy;
+                    const nk = cellKey(nx, ny);
+                    if (occupied.has(nk)) continue;
+
+                    occupied.delete(moverOldKey);
+                    occupied.delete(occupantKey);
+                    occupied.add(targetKey);
+                    occupied.add(nk);
+                    result.set(sm.mover, { x: sm.newX, y: sm.newY, z });
+                    result.set(occupantId, { x: nx, y: ny, z });
+
+                    if (layoutScore(z) < currentScore) {
+                      improved = true;
+                      break;
+                    }
+
+                    occupied.delete(targetKey);
+                    occupied.delete(nk);
+                    occupied.add(moverOldKey);
+                    occupied.add(occupantKey);
+                    result.set(sm.mover, moverPos);
+                    result.set(occupantId, occupantPos);
+                  }
+                }
+              }
+            }
+          }
+          if (improved) continue;
+
+          // ── Strategy 2: Move both endpoints to a shared axis ──
+          // For vertical (N/S): pick a target x and move both A and B there
+          // For horizontal (E/W): pick a target y and move both A and B there
+          const axisTargets: number[] = [];
+          if (isVertical) {
+            axisTargets.push(posA.x, posB.x, Math.round((posA.x + posB.x) / 2));
+          } else {
+            axisTargets.push(posA.y, posB.y, Math.round((posA.y + posB.y) / 2));
+          }
+
+          for (const axisVal of axisTargets) {
+            if (improved) break;
+
+            let newAx: number, newAy: number, newBx: number, newBy: number;
+            if (isVertical) {
+              newAx = axisVal; newAy = posA.y;
+              newBx = axisVal; newBy = posB.y;
+            } else {
+              newAx = posA.x; newAy = axisVal;
+              newBx = posB.x; newBy = axisVal;
+            }
+
+            // Skip if no change
+            if (newAx === posA.x && newAy === posA.y &&
+                newBx === posB.x && newBy === posB.y) continue;
+
+            const keyA = cellKey(newAx, newAy);
+            const keyB = cellKey(newBx, newBy);
+            const oldKeyA = cellKey(posA.x, posA.y);
+            const oldKeyB = cellKey(posB.x, posB.y);
+
+            // Check if target cells are free (or are the rooms themselves)
+            const aFree = keyA === oldKeyA || keyA === oldKeyB || !occupied.has(keyA);
+            const bFree = keyB === oldKeyA || keyB === oldKeyB || !occupied.has(keyB);
+
+            if (aFree && bFree && keyA !== keyB) {
+              occupied.delete(oldKeyA);
+              occupied.delete(oldKeyB);
+              occupied.add(keyA);
+              occupied.add(keyB);
+              result.set(roomId, { x: newAx, y: newAy, z });
+              result.set(targetId, { x: newBx, y: newBy, z });
+
+              if (layoutScore(z) < currentScore) {
+                improved = true;
+                break;
+              }
+
+              occupied.delete(keyA);
+              occupied.delete(keyB);
+              occupied.add(oldKeyA);
+              occupied.add(oldKeyB);
+              result.set(roomId, posA);
+              result.set(targetId, posB);
+            }
+          }
+          if (improved) continue;
+
+          // ── Strategy 3: Push cascade ──
+          // For each diagonal endpoint, try "pushing" it (and any rooms in
+          // the way) along the misaligned axis. Try the exact shift needed
+          // to align the diagonal, plus smaller intermediate shifts.
+          for (const startId of [roomId, targetId]) {
+            if (improved) break;
+
+            // Compute the exact shift needed to fix this diagonal
+            const sPos = result.get(startId)!;
+            const otherId = startId === roomId ? targetId : roomId;
+            const oPos = result.get(otherId)!;
+            const neededShift = isVertical
+              ? oPos.x - sPos.x
+              : oPos.y - sPos.y;
+
+            // Try exact fix shift + standard small shifts, deduped
+            const shifts = new Set<number>();
+            if (neededShift !== 0) shifts.add(neededShift);
+            for (const s of [-1, 1, -2, 2]) shifts.add(s);
+
+            for (const shift of shifts) {
+              if (improved) break;
+
+              // Collect the push chain: starting from startId, push in
+              // the shift direction. For each room, check if any of its
+              // adjacent neighbors (distance ≤ 1) would become diagonal
+              // after the push; if so, include them in the push too.
+              const pushSet = new Set<string>();
+              const pushQueue = [startId];
+              pushSet.add(startId);
+              let tooLarge = false;
+
+              while (pushQueue.length > 0) {
+                const pid = pushQueue.shift()!;
+                const pPos = result.get(pid)!;
+                const pNewX = isVertical ? pPos.x + shift : pPos.x;
+                const pNewY = isVertical ? pPos.y : pPos.y + shift;
+                const pNewKey = cellKey(pNewX, pNewY);
+
+                // If new position is occupied by a non-push room, add it
+                if (occupied.has(pNewKey)) {
+                  const pmap = posToRoom();
+                  const occ = pmap.get(pNewKey);
+                  if (occ && !pushSet.has(occ)) {
+                    pushSet.add(occ);
+                    pushQueue.push(occ);
+                  }
+                }
+
+                // Include adjacent rooms that would be negatively impacted
+                // by the shift: rooms that become diagonal, direction-reversed,
+                // or significantly displaced from a currently adjacent neighbor.
+                const pRoom = rooms.get(pid);
+                if (pRoom) {
+                  for (const [pDir, pTarget] of pRoom.exits) {
+                    if (pushSet.has(pTarget)) continue;
+                    const pOff = DIRECTION_OFFSETS[pDir];
+                    if (!pOff || pOff.dz !== 0) continue;
+                    const ptPos = result.get(pTarget);
+                    if (!ptPos || ptPos.z !== z) continue;
+                    const wasAdj =
+                      Math.abs(pPos.x - ptPos.x) +
+                        Math.abs(pPos.y - ptPos.y) ===
+                      1;
+                    if (!wasAdj) continue;
+
+                    // After the push, would this neighbor be in the wrong direction
+                    // or become diagonal?
+                    const newDx = ptPos.x - pNewX;
+                    const newDy = ptPos.y - pNewY;
+                    const wouldDiag = pNewX !== ptPos.x && pNewY !== ptPos.y;
+                    const wouldReverse =
+                      (pOff.dx > 0 && newDx < 0) ||
+                      (pOff.dx < 0 && newDx > 0) ||
+                      (pOff.dy > 0 && newDy < 0) ||
+                      (pOff.dy < 0 && newDy > 0);
+                    const wouldBeDistant =
+                      Math.abs(newDx) + Math.abs(newDy) > 2;
+
+                    if (wouldDiag || wouldReverse || wouldBeDistant) {
+                      pushSet.add(pTarget);
+                      pushQueue.push(pTarget);
+                    }
+                  }
+                }
+
+                if (pushSet.size > 40) {
+                  tooLarge = true;
+                  break;
+                }
+              }
+
+              if (tooLarge) continue;
+              if (pushSet.size < 2) continue; // trivial
+
+              // Compute new positions
+              const moves = new Map<
+                string,
+                { oldX: number; oldY: number; newX: number; newY: number }
+              >();
+              let canMove = true;
+              for (const pid of pushSet) {
+                const pp = result.get(pid)!;
+                const nx = isVertical ? pp.x + shift : pp.x;
+                const ny = isVertical ? pp.y : pp.y + shift;
+                const nk = cellKey(nx, ny);
+                if (occupied.has(nk)) {
+                  const pm = posToRoom();
+                  const atCell = pm.get(nk);
+                  if (!atCell || !pushSet.has(atCell)) {
+                    canMove = false;
+                    break;
+                  }
+                }
+                moves.set(pid, { oldX: pp.x, oldY: pp.y, newX: nx, newY: ny });
+              }
+
+              if (!canMove) continue;
+
+              // Apply
+              for (const [, m] of moves) {
+                occupied.delete(cellKey(m.oldX, m.oldY));
+              }
+              for (const [cid, m] of moves) {
+                occupied.add(cellKey(m.newX, m.newY));
+                result.set(cid, { x: m.newX, y: m.newY, z });
+              }
+
+              if (layoutScore(z) < currentScore) {
+                improved = true;
+                break;
+              }
+
+              // Undo
+              for (const [, m] of moves) {
+                occupied.delete(cellKey(m.newX, m.newY));
+              }
+              for (const [cid, m] of moves) {
+                occupied.add(cellKey(m.oldX, m.oldY));
+                result.set(cid, { x: m.oldX, y: m.oldY, z });
+              }
+            }
+          }
+        }
+
+        if (!improved) break;
+      }
+
+      // After cascade fixes, run one more pass of single-room relaxation
+      // to clean up any remaining non-optimal placements
+      let score = layoutScore(z);
+      const zRooms: string[] = [];
+      for (const [id, p] of result) {
+        if (p.z === z) zRooms.push(id);
+      }
+      for (let iter = 0; iter < 100 && score > 0; iter++) {
+        let moved = false;
+        for (const rid of zRooms) {
+          const rp = result.get(rid)!;
+          const ideal = idealPosition(rid, z);
+          if (!ideal) continue;
+          if (ideal.x === rp.x && ideal.y === rp.y) continue;
+
+          let bestPos: { x: number; y: number } | null = null;
+          let bestScore = score;
+
+          const room = rooms.get(rid);
+          const targets = new Set<string>();
+          const addTarget = (x: number, y: number) => {
+            const k = cellKey(x, y);
+            if (!targets.has(k)) targets.add(k);
+          };
+          for (let r = 0; r <= 3; r++) {
+            for (let ddx = -r; ddx <= r; ddx++) {
+              const absRem = r - Math.abs(ddx);
+              const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
+              for (const ddy of dyOpts) {
+                addTarget(ideal.x + ddx, ideal.y + ddy);
+              }
+            }
+          }
+          if (room) {
+            for (const [d, nid] of room.exits) {
+              const off = DIRECTION_OFFSETS[d];
+              if (!off || off.dz !== 0) continue;
+              const np = result.get(nid);
+              if (!np || np.z !== z) continue;
+              addTarget(np.x - off.dx, np.y - off.dy);
+            }
+          }
+
+          for (const tk of targets) {
+            const [txs, tys] = tk.split(",");
+            const tx = parseInt(txs), ty = parseInt(tys);
+            if (tx === rp.x && ty === rp.y) continue;
+            if (occupied.has(tk)) continue;
+
+            const oldKey = cellKey(rp.x, rp.y);
+            occupied.delete(oldKey);
+            occupied.add(tk);
+            result.set(rid, { x: tx, y: ty, z });
+
+            const ns = layoutScore(z);
+            if (ns < bestScore) {
+              bestScore = ns;
+              bestPos = { x: tx, y: ty };
+            }
+
+            occupied.delete(tk);
+            occupied.add(oldKey);
+            result.set(rid, rp);
+          }
+
+          if (bestPos) {
+            occupied.delete(cellKey(rp.x, rp.y));
+            occupied.add(cellKey(bestPos.x, bestPos.y));
+            result.set(rid, { x: bestPos.x, y: bestPos.y, z });
+            score = bestScore;
+            moved = true;
+          }
+        }
+        if (!moved) break;
       }
     }
   }
