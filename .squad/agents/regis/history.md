@@ -538,3 +538,58 @@ Both tasks delivered and merged into team orchestration log.
 - `.squad/orchestration-log/2026-03-29T17-34-regis-exit-pairs.md`
 
 **Team Roster Status:** Regis — 2 successful feature deliveries this cycle
+
+## 2026-03-27 — Zone Designer Exit Pair Rendering
+
+**Completed:** Updated ZoneDesigner SVG map to render exit pairs instead of individual exits  
+**Files Modified:** 1 (`packages/client/src/pages/admin/ZoneDesigner.tsx`)
+
+**Build:** ✅ Clean
+
+### What changed:
+- **SVG rendering:** Exits between rooms are now grouped into pairs via `ExitPair` interface + `exitPairs` useMemo. Bidirectional pairs render as a single plain line (no arrowhead). One-way exits render with an amber arrowhead (`#F59E0B`) to visually flag them as unusual.
+- **Side panel:** When clicking a pair line, the panel shows both directions with independent locked/hidden toggles. One-way exits show an "Add Reverse" button. Bidirectional pairs show a delete button on the reverse direction card to break the pair. Portal/inter-floor exits still use the original single-exit panel as fallback.
+- **Connect mode:** The bidirectional checkbox is now visually highlighted with a border+background treatment and labeled "↔ Bidirectional" for prominence.
+- **Legend:** Updated to show "Bidirectional" (no arrow) and "One-Way" (amber arrow) styles. Removed "Missing Reverse" entry since one-way exits are now first-class visuals.
+
+### Key implementation details:
+- `ExitPair` groups exits by matching `fromRoom/toRoom` + `OPPOSITE[direction]`. Each pair has a `forward` (the first exit found) and optional `reverse`.
+- `selectedPair` is derived via useMemo from `selectedExit` + `exitPairs`. When non-null, the pair panel takes precedence over the old single-exit panel.
+- `reverseExitEditForm` state tracks locked/hidden for the reverse direction independently.
+- `handleSavePair()` updates both exits in sequence. `handleAddReverse()` creates the reverse exit. `handleDeleteReverseOnly()` deletes just the reverse.
+- Unused code cleaned up: `missingReverseIds` useMemo, `arrowhead`/`arrowhead-warning`/`arrowhead-interfloor` SVG markers.
+
+## 2026-03-29 — Layout Algorithm: Eliminate Diagonal Exits
+
+**Completed:** Fixed diagonal exit lines in Zone Designer for complex zones like Siltgate  
+**Files Modified:** 2 (`packages/client/src/map/computeLayout.ts`, `packages/client/src/map/__tests__/computeLayout.test.ts`)
+
+**Build:** ✅ Clean — all 2262 tests pass
+
+### Problem:
+Siltgate (136 rooms, 286 exits, 7 quarters across 3 z-levels) produced 12 diagonal exit lines in the Zone Designer. Cross-quarter connections created topological cycles that the BFS placement couldn't resolve on a 2D grid.
+
+### Root Cause:
+The layout algorithm's scoring function under-penalized diagonals (only 5 points vs 1 per non-adjacent cell). The force-directed relaxation phase couldn't fix diagonals introduced by cross-quarter cycles because moving one room often created problems for its neighbors.
+
+### Solution (3 changes to `computeLayout.ts`):
+
+1. **Scoring penalties:** Increased diagonal penalty 5→20. Added direction mismatch penalty (15) for exits where the spatial relationship contradicts the exit direction (e.g., "east" exit but target is west).
+
+2. **Neighbor-aware candidate generation:** During relaxation, also consider positions where specific neighbors "want" a room (not just the average ideal position).
+
+3. **Phase 5 — `fixDiagonalCascade()`:** New post-relaxation phase with 3 strategies:
+   - **Strategy 1:** Move single endpoint to shared axis with occupant displacement
+   - **Strategy 2:** Move both endpoints of a diagonal to a shared intermediate axis
+   - **Strategy 3:** Push cascade — shift entire chains of rooms along the misaligned axis. The push set includes all adjacent neighbors that would become diagonal, direction-reversed, or too distant (>2 manhattan) after the shift. Supports both ±1 and exact-offset shifts. 40-room cascade limit.
+
+### Results:
+- Siltgate diagonals: 12 → 0
+- All 20 pre-existing layout tests continue to pass
+- Added test #21: full Siltgate topology asserting zero diagonals (runs in ~430ms)
+
+### Key Learnings:
+- Exit data was 100% consistent — the problem was purely algorithmic
+- Direction mismatch penalty prevents the swap phase from reversing room order
+- Push cascades must include ALL neighbors impacted by a shift (not just diagonal-creating ones) — direction reversals and distance blowups also need propagation
+- The 40-room cascade limit is sufficient for Siltgate; larger zones may need tuning
