@@ -379,3 +379,11 @@ Each z-level gets its own `occupied` set since the designer displays one floor a
 
 **Impact:** Zone designers can now manage destructive operations with visual feedback and reuse room configurations across zones for faster design iteration.
 
+
+## 2026-03-29T00:38-00:39Z — Admin Cleanup Session
+
+**Tasks Completed:**
+1. Removed zone preview and save-ready panels from ZonesDetail.tsx — layout now full-width
+2. Removed serif font declarations from 25 admin component files (~120 changes)
+
+**Build & Tests:** ✅ All passing

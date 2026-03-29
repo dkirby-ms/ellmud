@@ -3817,3 +3817,17 @@ The sewer level has 3 entry points from scattered surface rooms. The old BFS pla
 - **Grid cluster detection:** Unchanged — still works within each z-level.
 - **Tests:** 3 new tests (sewer topology, shared x/y across z-levels, 3-level cascade). All 17 passing.
 
+
+---
+
+## 2026-03-28: Remove zone preview and save-ready panels from ZonesDetail
+
+**By:** Regis (Frontend Dev)  
+**Date:** 2026-03-28  
+**Status:** Implemented
+
+**What:** Removed the right-side "Preview" panel and "✓ Zone ready to save" indicator from the zones detail page (`ZonesDetail.tsx`). The page layout changed from a 3-column grid (2/3 form + 1/3 sidebar) to full-width single column.
+
+**Why:** The Zone Designer tab now provides a richer, interactive view of the zone — the static preview panel was redundant. The save-ready indicator added no value beyond what the Save button already communicates.
+
+**Impact:** No state, handlers, or imports became unused — the removed panels only referenced existing `formData`, `rooms`, `exits`, and `error` state that are still used by the form tabs.
