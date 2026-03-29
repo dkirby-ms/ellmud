@@ -3831,3 +3831,53 @@ The sewer level has 3 entry points from scattered surface rooms. The old BFS pla
 **Why:** The Zone Designer tab now provides a richer, interactive view of the zone — the static preview panel was redundant. The save-ready indicator added no value beyond what the Save button already communicates.
 
 **Impact:** No state, handlers, or imports became unused — the removed panels only referenced existing `formData`, `rooms`, `exits`, and `error` state that are still used by the form tabs.
+
+---
+
+## 2026-03-29: Zone Designer UX Improvements
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-03-29  
+**Status:** Implemented
+
+## Context
+
+Zone Designer had three UX pain points:
+1. Narrow side panel (256px) cramped room editing forms
+2. Wide rectangle room nodes (140×60) felt unbalanced and wasted vertical space
+3. Room names truncated at 16 chars created information loss on the map
+
+## Decision
+
+Made three coordinated improvements:
+
+1. **Wider Details Panel** — Increased from w-64 to w-80 (256px → 320px) for better form layout
+2. **Square Room Nodes** — Changed to 100×100 squares with proportional cell spacing (160×160), repositioned all badges and indicators
+3. **Toggleable Labels + Hover Tooltips** — Default shows only slug on map, hover displays rich tooltip with full details; toggle "Labels On" restores old behavior with both name and slug visible
+
+## Rationale
+
+- Square nodes provide better visual balance and work well with centered text
+- Hover tooltips allow full information access without cluttering the map
+- Toggle gives power users the option to always show names if preferred
+- Wider panel eliminates form field cramping without significantly reducing map area
+
+## Implementation Notes
+
+- HTML div tooltips (not SVG) for better styling and no clipping issues
+- 150ms hover delay prevents flickering on quick mouse movements
+- Badge positions all recalculated for square node geometry
+- Cell spacing maintains 60px gutters to prevent node overlap
+- Toggle button follows existing toolbar button patterns
+
+## Impact
+
+**Affected:**
+- **Vex / Content Designers:** Will benefit from cleaner map display and easier editing
+- **Other Admin Tools:** May want to adopt similar hover tooltip patterns for information-dense UIs
+
+**Future Considerations:**
+- Room node size could be made configurable if different zones need different zoom levels
+- Tooltip could be extended with additional room metadata (exits, connections, etc.)
+
+**Commit:** 0a899fd — feat(designer): square rooms, wider panel, hover tooltips with toggle
