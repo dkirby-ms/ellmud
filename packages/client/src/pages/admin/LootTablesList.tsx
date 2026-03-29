@@ -55,7 +55,7 @@ export default function LootTablesList() {
       <div className="flex items-center justify-between mb-6">
         <h1
           className="text-[#C9A84C] text-2xl"
-          style={{ fontFamily: "var(--font-serif)" }}
+         
         >
           Loot Tables
         </h1>
@@ -137,7 +137,7 @@ export default function LootTablesList() {
                   <Link
                     to={`/admin/loot-tables/${table.id}`}
                     className="text-[#E8E0D0] hover:text-[#C9A84C] transition-colors"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   >
                     {table.name}
                   </Link>

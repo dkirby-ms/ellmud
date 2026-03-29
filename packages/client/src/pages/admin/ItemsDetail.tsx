@@ -180,7 +180,7 @@ export default function ItemsDetail() {
           </Link>
           <h1
             className="text-[#C9A84C] text-xl"
-            style={{ fontFamily: "var(--font-serif)" }}
+           
           >
             {isNew ? "New Item" : formData.name}
           </h1>
@@ -232,7 +232,7 @@ export default function ItemsDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Identity
               </h2>
@@ -265,7 +265,7 @@ export default function ItemsDetail() {
                     value={formData.name}
                     onChange={(e) => updateField("name", e.target.value)}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   />
                 </div>
                 <div>
@@ -280,7 +280,7 @@ export default function ItemsDetail() {
                     onChange={(e) => updateField("description", e.target.value)}
                     rows={3}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   />
                 </div>
               </div>
@@ -290,7 +290,7 @@ export default function ItemsDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Classification
               </h2>
@@ -368,7 +368,7 @@ export default function ItemsDetail() {
               <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                 <h2
                   className="text-[#C9A84C] text-lg mb-4"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 >
                   Weapon Stats
                 </h2>
@@ -411,7 +411,7 @@ export default function ItemsDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Physical Properties
               </h2>
@@ -465,7 +465,6 @@ export default function ItemsDetail() {
                 <div
                   className="text-lg mb-2"
                   style={{
-                    fontFamily: "var(--font-serif)",
                     color: tierColors[formData.tier],
                   }}
                 >

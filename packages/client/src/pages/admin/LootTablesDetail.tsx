@@ -175,7 +175,7 @@ export default function LootTablesDetail() {
           </Link>
           <h1
             className="text-[#C9A84C] text-xl"
-            style={{ fontFamily: "var(--font-serif)" }}
+           
           >
             {isNew ? "New Loot Table" : formData.name}
           </h1>
@@ -209,7 +209,7 @@ export default function LootTablesDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Basic Information
               </h2>
@@ -242,7 +242,7 @@ export default function LootTablesDetail() {
                     value={formData.name}
                     onChange={(e) => updateField("name", e.target.value)}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   />
                 </div>
                 <div>
@@ -257,7 +257,7 @@ export default function LootTablesDetail() {
                     onChange={(e) => updateField("description", e.target.value)}
                     rows={2}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   />
                 </div>
               </div>
@@ -267,7 +267,7 @@ export default function LootTablesDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Drop Settings
               </h2>
@@ -311,7 +311,7 @@ export default function LootTablesDetail() {
                 <div className="flex items-center gap-3">
                   <h2
                     className="text-[#C9A84C] text-lg"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   >
                     Loot Pool
                   </h2>

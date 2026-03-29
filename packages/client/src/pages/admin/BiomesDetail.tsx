@@ -144,7 +144,7 @@ export default function BiomesDetail() {
           </Link>
           <h1
             className="text-[#C9A84C] text-xl"
-            style={{ fontFamily: "var(--font-serif)" }}
+           
           >
             {isNew ? "New Biome" : formData.name || "Untitled Biome"}
           </h1>
@@ -206,7 +206,7 @@ export default function BiomesDetail() {
                 <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                   <h2
                     className="text-[#C9A84C] text-lg mb-4"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   >
                     Basic Information
                   </h2>
@@ -224,7 +224,7 @@ export default function BiomesDetail() {
                         onChange={(e) => updateField("name", e.target.value)}
                         placeholder="e.g., Flooded Crypt"
                         className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                        style={{ fontFamily: "var(--font-serif)" }}
+                       
                       />
                     </div>
                     <div>
@@ -240,7 +240,7 @@ export default function BiomesDetail() {
                         placeholder="Describe the biome's atmosphere and characteristics..."
                         rows={3}
                         className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                        style={{ fontFamily: "var(--font-serif)" }}
+                       
                       />
                     </div>
                     <div>
@@ -305,7 +305,7 @@ export default function BiomesDetail() {
               <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                 <h2
                   className="text-[#C9A84C] text-lg mb-4"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 >
                   Room Properties
                 </h2>
@@ -390,7 +390,7 @@ export default function BiomesDetail() {
               <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                 <h2
                   className="text-[#C9A84C] text-lg mb-4"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 >
                   Room Description Templates
                 </h2>
@@ -407,7 +407,7 @@ export default function BiomesDetail() {
               <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                 <h2
                   className="text-[#C9A84C] text-lg mb-4"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 >
                   Biome Loot Table
                 </h2>
@@ -424,7 +424,7 @@ export default function BiomesDetail() {
               <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                 <h2
                   className="text-[#C9A84C] text-lg mb-4"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 >
                   Hazard Types
                 </h2>
@@ -479,7 +479,7 @@ export default function BiomesDetail() {
               </h3>
               <div
                 className="bg-[#1C1D27] rounded p-4 text-sm space-y-2"
-                style={{ fontFamily: "var(--font-serif)", color: "#E8E0D0" }}
+                style={{ color: "#E8E0D0" }}
               >
                 <div className="text-[#C9A84C] text-lg mb-2">
                   {formData.name || "Untitled Biome"}

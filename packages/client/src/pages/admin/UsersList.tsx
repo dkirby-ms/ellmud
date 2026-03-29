@@ -86,7 +86,7 @@ function UserFormModal({ user, onSave, onCancel, saving, error }: UserFormProps)
       >
         <h2
           className="text-[#C9A84C] text-xl mb-4"
-          style={{ fontFamily: 'var(--font-serif)' }}
+         
         >
           {isEdit ? 'Edit User' : 'Add User'}
         </h2>
@@ -217,7 +217,7 @@ function DeleteConfirmModal({ user, onConfirm, onCancel, deleting }: DeleteConfi
       >
         <h2
           className="text-[#C9A84C] text-xl mb-2"
-          style={{ fontFamily: 'var(--font-serif)' }}
+         
         >
           Delete User
         </h2>
@@ -336,7 +336,7 @@ export default function UsersList() {
       <div className="flex items-center justify-between mb-6">
         <h1
           className="text-[#C9A84C] text-2xl"
-          style={{ fontFamily: 'var(--font-serif)' }}
+         
         >
           Users
         </h1>

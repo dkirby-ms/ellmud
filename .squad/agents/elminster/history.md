@@ -1257,3 +1257,31 @@ CREATE TABLE zone_definitions (
 - **ShardRoom analysis:** 2,022 lines. Already has zone mode (isZone, zoneSlug, zoneData), shared command pipeline, reconnection, all combat systems. The `isNonCombatZone` check already gates combat/extraction/downing for hub/social zones.
 - **Key files:** ShardRoom.ts (2,022 lines), RefugeRoom.ts (1,015 lines, to be deleted), commands/index.ts (command pipeline), shared/room-graph.ts (feature room types), zones/zone-adapter.ts, shard/graph-adapter.ts.
 - **Open questions for dkirby-ms:** Room name format, exploration coordinates timing, take command disambiguation, shardboard service extraction, ambient system scope.
+
+### 2026-03-26: NPC and Item Room Management — Deep Systems Analysis
+
+- **Commissioned by:** dkirby-ms (Zone Designer feature planning)
+- **Task:** Analyze current state of NPC and loot management, identify gaps, propose a plan for two new admin features (NPC Management per Room, Item/Loot Management per Room).
+- **Key Finding — Foundational Support Already Exists:** The `ZoneRoomDefinition` interface already exposes `npcs[]` and `lootContainers[]` fields (client-side). Database stores both as JSONB in `zone_rooms` table (migration 030). Runtime spawning logic already implemented in `CreatureManager.spawnCreaturesFromZone()` and `ShardRoom` loot initialization. The gap is **admin UI only**, not architecture.
+- **NPC Data Model:** Stored as `{creatureId: string, spawnCount: number}` array in `zone_rooms.npcs` JSONB. At runtime, `CreatureManager` iterates rooms and spawns N instances of the template. Creatures tracked for repop (respawning after death). Creature templates defined in code (`/creatures/templates/*.ts`, registered in `CREATURE_TEMPLATES` map). Currently only `drowned_revenant` is registered; `gutterspawn`, `slum_rat`, `rubble_scavenger` are in-use but not explicitly registered.
+- **Loot Data Model:** Stored as `{id: string, type: string, items: string[]}` array in `zone_rooms.loot_containers` JSONB. Items are slugs (e.g., "bent_rebar") resolved to `item_definitions` table at runtime. Container types include "crate", "corpse", "sack", "altar". Items are searchable by players via `search` command.
+- **Hazards (out of scope but documented):** Stored as `{type: string, severity: number}` array in `zone_rooms.hazards` JSONB. Intensity 0.0–1.0. Types include "unstable_rubble", "standing_water".
+- **Admin API Status:** Zone CRUD routes exist (`POST /zones/{zoneId}/rooms`, `PUT /zones/rooms/{roomId}`, etc.) via `packages/server/src/admin/zones/zone-routes.ts`. Validation only checks slug and name; no validation on `npcs` or `lootContainers`. No endpoints to list creature templates or item definitions.
+- **Design Decisions Made:**
+  1. **No new DB tables:** Store `npcs` and `lootContainers` inline as JSONB (matches existing `hazards` pattern). Room-level data authoritatively owned by room definition.
+  2. **Creature templates read-only:** Expose via API as metadata (`GET /admin/api/creatures`) but no CRUD. Templates are global, code-defined, seeded via migrations.
+  3. **Item definitions read-only:** Expose via API as metadata (`GET /admin/api/items`) but no CRUD. Items are global definitions.
+  4. **Phase 1 keeps NPC structure minimal:** `{creatureId, spawnCount}` only. Aggression, patrol routes, carried items are per-template, not per-spawn. Phase 2 can extend structure with behavior overrides if needed.
+  5. **Loot containers always spawn in Phase 1:** No `spawnRate` or `hidden` fields yet. Phase 2 can add if search/detection mechanics mature.
+- **Implementation Plan (2 weeks, ~13.5 days):**
+  - **Server (6d):** (1) Register missing creature templates in `CREATURE_TEMPLATES` (~1d). (2) Implement `GET /admin/api/creatures` endpoint (~1d). (3) Implement `GET /admin/api/items` endpoint (~1d). (4) Enhance room validation to check `npcs` and `lootContainers` (~1d). (5–6) Unit + integration tests (~2d). Parallelization: endpoints 2–3 independent.
+  - **Client (7.5d):** (1) Add `listCreatures()` and `listItems()` to `zone-api.ts` (~0.5d). (2–3) Build NPC and loot UI panels (~4d, parallelizable). (4–5) Integrate into room editor (~2d). (6) E2E tests (~1d). Parallelization: UI components 2–3 independent; server and client fully parallel after API spec.
+- **Work Breakdown Table:** Provided in decision file with dependencies and effort estimates. Server and client work can parallelize once initial API specs agreed. NPC UI and loot UI components can be built in parallel.
+- **Risks & Mitigations:**
+  1. **Missing creature templates:** Audit `/creatures/templates/` and seed migrations; register all in-use types during task 1. Add test to verify coverage.
+  2. **Item definition gaps:** Items referenced in seed may not exist in `item_definitions`. Add optional validation; seed migration may need follow-up.
+  3. **Complex NPC behaviors:** Zone designers may want per-NPC aggression/patrol/items. Phase 1 keeps simple; Phase 2 can extend structure with behavior overrides.
+  4. **Loot spawn rates:** Some zones may want conditional spawning (50% chance). Phase 1: always spawn. Phase 2: add `spawnRate` field.
+- **Future Enhancements (Phase 2+):** NPC behavior overrides, loot spawn rates, hidden items flag, creature type creation UI, item type creation UI, loot table editor integration, multi-zone NPC wandering.
+- **Success Criteria:** API endpoints return correct metadata; room validation rejects invalid NPC/loot; admin UI provides add/remove/configure workflows; creatures and loot spawn correctly at runtime; unit, integration, and E2E tests all pass.
+- **Deliverable:** Decision document `.squad/decisions/inbox/elminster-npc-item-plan.md` (22.5 KB) with detailed architecture, data model, implementation plan, work breakdown, risks, and success criteria. Ready for dkirby-ms review and implementation handoff.

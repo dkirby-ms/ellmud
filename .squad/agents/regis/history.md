@@ -387,3 +387,52 @@ Each z-level gets its own `occupied` set since the designer displays one floor a
 2. Removed serif font declarations from 25 admin component files (~120 changes)
 
 **Build & Tests:** ✅ All passing
+
+
+## 2026-03-29T02:15Z — Zone Designer UX Improvements
+
+**Completed:** Three UX improvements to ZoneDesigner.tsx for better space utilization and cleaner map display
+
+**Files Modified:** 1
+- `packages/client/src/pages/admin/ZoneDesigner.tsx` — Adjusted room node dimensions, panel width, text display, and added hover tooltips
+
+**Changes:**
+
+1. **Wider Room Details Panel** — Side panel increased from w-64 (256px) to w-80 (320px) providing more breathing room for room names, descriptions, and editing forms
+
+2. **Square Room Nodes** — Changed from wide rectangles (140×60) to balanced squares (100×100):
+   - Updated NODE_W/NODE_H constants from 140×60 to 100×100
+   - Adjusted CELL_W/CELL_H from 180×120 to 160×160 for proper spacing
+   - Repositioned all badges and indicators:
+     - Z-level indicator moved to x+NODE_W-6, y+10 (top-right, inset slightly)
+     - Disconnection warning at x+8, y+10 (top-left)
+     - Content badges moved to y+NODE_H-10 (bottom edge with padding)
+     - Vertical exit badges (up/down) repositioned to x+NODE_W-10 with y+10 (up) and y+NODE_H-10 (down)
+   - Text layout centered in square node (slug vertically centered when labels off)
+
+3. **Simplified Map Text + Hover Tooltip** — Toggleable label system with rich hover details:
+   - Added "Labels On/Off" toggle button in toolbar (matches existing button styling)
+   - Default OFF: Only slug shown on map (centered in node), hover for full details
+   - When ON: Shows both room name (truncated at 12 chars) and slug (old behavior)
+   - Hover tooltip (150ms delay) displays:
+     - Room name (full, gold accent #C9A84C)
+     - Slug and type in mono font
+     - Description (first 100 chars if long)
+     - Properties if any
+     - Content summary (NPC/loot/hazard counts with icons)
+   - Tooltip implemented as absolutely positioned HTML div (not SVG) for better styling and no clipping
+   - Dark theme styling: bg-[#1C1D27], border-[#2A2B35]
+   - Only shows when labels are OFF (no redundant tooltip when names already visible)
+
+**Build:** ✅ Clean (tsc + vite)
+
+## Learnings
+
+- **Square nodes provide better visual balance:** 100×100 squares feel more balanced than wide rectangles and work better with centered text. The reduced horizontal size (140→100) is offset by increased vertical space (60→100), keeping total area similar while improving proportion.
+- **Cell spacing should exceed node size:** CELL_W/CELL_H must be larger than NODE_W/NODE_H to prevent overlapping. 160×160 cells for 100×100 nodes maintains 60px gutters (same as before: 180-140=40, 120-60=60; now 160-100=60 uniform).
+- **Badge positioning needs careful adjustment for square nodes:** All badge positions (z-level, warnings, content, exits) must be recalculated when node dimensions change. Top-corner badges should be inset (not touching edge) for better visibility; bottom badges need padding from edge to avoid clipping.
+- **HTML tooltips are superior to SVG titles:** Using absolutely positioned divs for tooltips allows proper styling, multi-line content, and rich formatting without SVG limitations. Positioning with `transform: translate(-50%, -100%)` centers tooltip above hover point.
+- **Hover delay prevents tooltip flicker:** 150ms timeout before showing tooltip avoids flashing when mouse quickly moves across multiple rooms. Timer must be cleared on mouseLeave to prevent stale tooltips.
+- **Toggle pattern for optional UI elements:** Boolean state + toolbar toggle button following existing button styling patterns. Active state uses gold background (bg-[#C9A84C]), inactive uses border-only (border-[#4A4B55]).
+- **Conditional rendering based on toggle state:** When labels ON, show both name and slug in node with vertical offset. When OFF, show only centered slug and enable hover tooltip. Tooltip visibility also gated by showLabels to avoid redundancy.
+

@@ -102,7 +102,7 @@ export default function RoomsDetail() {
           </Link>
           <h1
             className="text-[#C9A84C] text-xl"
-            style={{ fontFamily: "var(--font-serif)" }}
+           
           >
             {isNew ? "New Room Template" : formData.name}
           </h1>
@@ -141,7 +141,7 @@ export default function RoomsDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Basic Information
               </h2>
@@ -158,7 +158,7 @@ export default function RoomsDetail() {
                     value={formData.name}
                     onChange={(e) => updateField("name", e.target.value)}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   />
                 </div>
                 <div>
@@ -172,7 +172,7 @@ export default function RoomsDetail() {
                     value={formData.type}
                     onChange={(e) => updateField("type", e.target.value)}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   >
                     <option value="">Select type...</option>
                     <option value="entry">Entry</option>
@@ -195,7 +195,7 @@ export default function RoomsDetail() {
                     onChange={(e) => updateField("description", e.target.value)}
                     rows={4}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   />
                 </div>
               </div>
@@ -204,7 +204,7 @@ export default function RoomsDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Room Properties
               </h2>
@@ -246,7 +246,7 @@ export default function RoomsDetail() {
               >
                 <div
                   className="text-lg"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 >
                   {formData.name}
                 </div>
@@ -263,7 +263,7 @@ export default function RoomsDetail() {
                 <div className="border-t border-[#2A2B35] my-2"></div>
                 <div
                   className="text-xs text-[#8A8B95]"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 >
                   {formData.description}
                 </div>

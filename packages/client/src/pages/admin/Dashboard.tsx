@@ -154,7 +154,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between mb-6">
         <h1
           className="text-[#C9A84C] text-2xl"
-          style={{ fontFamily: "var(--font-serif)" }}
+         
         >
           Dashboard
         </h1>
@@ -219,7 +219,7 @@ export default function Dashboard() {
           <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
             <h2
               className="text-[#C9A84C] text-lg mb-4"
-              style={{ fontFamily: "var(--font-serif)" }}
+             
             >
               Recent Changes
             </h2>
@@ -272,7 +272,7 @@ export default function Dashboard() {
           <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
             <h2
               className="text-[#C9A84C] text-lg mb-4"
-              style={{ fontFamily: "var(--font-serif)" }}
+             
             >
               Content Coverage
             </h2>
@@ -325,7 +325,7 @@ export default function Dashboard() {
         <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
           <h2
             className="text-[#C9A84C] text-lg mb-4"
-            style={{ fontFamily: "var(--font-serif)" }}
+           
           >
             Validation Warnings
           </h2>

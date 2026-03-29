@@ -78,7 +78,7 @@ export default function NarrativeList() {
           <Book className="w-7 h-7 text-[#C9A84C]" />
           <h1
             className="text-[#C9A84C] text-2xl"
-            style={{ fontFamily: "var(--font-serif)" }}
+           
           >
             Narrative Content
           </h1>
@@ -177,7 +177,7 @@ export default function NarrativeList() {
                   <Link
                     to={`/admin/narrative/${entry.id}`}
                     className="text-[#E8E0D0] hover:text-[#C9A84C] transition-colors"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   >
                     {entry.name}
                   </Link>

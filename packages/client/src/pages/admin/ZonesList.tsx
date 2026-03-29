@@ -68,7 +68,7 @@ export default function ZonesList() {
       <div className="flex items-center justify-between mb-6">
         <h1
           className="text-[#C9A84C] text-2xl"
-          style={{ fontFamily: "var(--font-serif)" }}
+         
         >
           Zones
         </h1>
@@ -158,7 +158,7 @@ export default function ZonesList() {
                     <Link
                       to={`/admin/zones/${zone.slug}`}
                       className="text-[#E8E0D0] hover:text-[#C9A84C] transition-colors"
-                      style={{ fontFamily: "var(--font-serif)" }}
+                     
                     >
                       {zone.name}
                     </Link>

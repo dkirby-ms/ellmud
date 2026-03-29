@@ -242,7 +242,7 @@ export default function CreatureDetail() {
           </Link>
           <h1
             className="text-[#C9A84C] text-xl"
-            style={{ fontFamily: "var(--font-serif)" }}
+           
           >
             {isNew ? "New Creature" : formData.name}
           </h1>
@@ -287,7 +287,7 @@ export default function CreatureDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Identity
               </h2>
@@ -320,7 +320,7 @@ export default function CreatureDetail() {
                     value={formData.name}
                     onChange={(e) => updateField("name", e.target.value)}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   />
                 </div>
                 <div>
@@ -335,7 +335,7 @@ export default function CreatureDetail() {
                     onChange={(e) => updateField("description", e.target.value)}
                     rows={4}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   />
                 </div>
                 <div>
@@ -364,7 +364,7 @@ export default function CreatureDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Combat Stats
               </h2>
@@ -450,7 +450,7 @@ export default function CreatureDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Loot Table
               </h2>
@@ -464,7 +464,7 @@ export default function CreatureDetail() {
                           updateLootEntry(index, "itemId", e.target.value)
                         }
                         className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none text-sm"
-                        style={{ fontFamily: "var(--font-serif)" }}
+                       
                       >
                         <option>{entry.itemName}</option>
                       </select>

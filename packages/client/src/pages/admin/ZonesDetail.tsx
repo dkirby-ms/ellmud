@@ -258,7 +258,7 @@ export default function ZonesDetail() {
           <Link to="/admin/zones" className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <h1 className="text-[#C9A84C] text-xl" style={{ fontFamily: "var(--font-serif)" }}>
+          <h1 className="text-[#C9A84C] text-xl">
             {isNew ? "New Zone" : formData.name || "Untitled Zone"}
           </h1>
           {error && (
@@ -314,7 +314,7 @@ export default function ZonesDetail() {
             {activeTab === "general" && (
               <div className="space-y-6">
                 <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
-                  <h2 className="text-[#C9A84C] text-lg mb-4" style={{ fontFamily: "var(--font-serif)" }}>
+                  <h2 className="text-[#C9A84C] text-lg mb-4">
                     Basic Information
                   </h2>
                   <div className="space-y-4">
@@ -342,7 +342,7 @@ export default function ZonesDetail() {
                           onChange={(e) => updateField("name", e.target.value)}
                           placeholder="e.g., The Flooded Crypt"
                           className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                          style={{ fontFamily: "var(--font-serif)" }}
+                         
                         />
                       </div>
                     </div>
@@ -356,7 +356,7 @@ export default function ZonesDetail() {
                         placeholder="Describe the zone..."
                         rows={3}
                         className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                        style={{ fontFamily: "var(--font-serif)" }}
+                       
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-4">
@@ -534,7 +534,7 @@ export default function ZonesDetail() {
               <div className="space-y-6">
                 <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-[#C9A84C] text-lg" style={{ fontFamily: "var(--font-serif)" }}>
+                    <h2 className="text-[#C9A84C] text-lg">
                       Rooms
                     </h2>
                     {!isNew && (
@@ -576,7 +576,7 @@ export default function ZonesDetail() {
                                 <span className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-mono)" }}>{room.slug}</span>
                               </td>
                               <td className="p-3">
-                                <span className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-serif)" }}>{room.name}</span>
+                                <span className="text-[#E8E0D0] text-sm">{room.name}</span>
                               </td>
                               <td className="p-3">
                                 <span className="text-[#8A8B95] text-sm capitalize" style={{ fontFamily: "var(--font-sans)" }}>{room.type.replace(/_/g, " ")}</span>
@@ -630,7 +630,7 @@ export default function ZonesDetail() {
                               onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })}
                               placeholder="e.g., Entrance Hall"
                               className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] text-sm focus:border-[#C9A84C] focus:outline-none"
-                              style={{ fontFamily: "var(--font-serif)" }}
+                             
                             />
                           </div>
                         </div>
@@ -642,7 +642,7 @@ export default function ZonesDetail() {
                             placeholder="Describe this room..."
                             rows={2}
                             className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] text-sm focus:border-[#C9A84C] focus:outline-none resize-none"
-                            style={{ fontFamily: "var(--font-serif)" }}
+                           
                           />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -704,7 +704,7 @@ export default function ZonesDetail() {
               <div className="space-y-6">
                 <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-[#C9A84C] text-lg" style={{ fontFamily: "var(--font-serif)" }}>
+                    <h2 className="text-[#C9A84C] text-lg">
                       Exits
                     </h2>
                     {!isNew && rooms.length > 0 && (
