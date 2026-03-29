@@ -1285,3 +1285,26 @@ CREATE TABLE zone_definitions (
 - **Future Enhancements (Phase 2+):** NPC behavior overrides, loot spawn rates, hidden items flag, creature type creation UI, item type creation UI, loot table editor integration, multi-zone NPC wandering.
 - **Success Criteria:** API endpoints return correct metadata; room validation rejects invalid NPC/loot; admin UI provides add/remove/configure workflows; creatures and loot spawn correctly at runtime; unit, integration, and E2E tests all pass.
 - **Deliverable:** Decision document `.squad/decisions/inbox/elminster-npc-item-plan.md` (22.5 KB) with detailed architecture, data model, implementation plan, work breakdown, risks, and success criteria. Ready for dkirby-ms review and implementation handoff.
+
+### 2026-03-29: DB-Driven Content Definitions Architecture
+- **Decision:** Proposed architecture to move all creature and item content definitions from hardcoded TypeScript to PostgreSQL. Decision file: `.squad/decisions/inbox/elminster-db-content-architecture.md`
+- **Problem identified:** Five concrete failures in the current code-based approach: (1) phantom creature/item references in zone seeds (`slum_rat`, `sewer_lurker`, `rat_tail`, `corroded_pipe` exist nowhere in code), (2) registry drift (5 creature template files, only 1 registered), (3) data duplication in loot tables (LootEntry embeds item name/weight/description), (4) no admin authoring capability, (5) dead DB tables (`creature_definitions` exists since migration 023 but code never reads it).
+- **Key design decisions:**
+  - TEXT primary keys for both tables (matching existing JSONB slug references in zone data)
+  - JSONB for `base_stats` (item stat shapes differ by type) and `loot_table` (creature drop tables)
+  - Load-all-at-startup strategy (real-time game, can't query DB per-tick; dataset is small)
+  - `ContentRegistry` singleton replaces both `CREATURE_TEMPLATES` Map and `ITEM_REGISTRY` Map
+  - Loot table normalization: creature loot entries store only `{itemId, dropWeight}`, join with item_definitions at load time
+  - Soft deletes via `status` column (draft/published/deprecated)
+  - No SQL FKs on JSONB references — integrity enforced at application level (startup validation + admin API validation)
+- **Migration strategy:** Three phases — (1) seed DB from existing TypeScript (non-breaking), (2) wire ContentRegistry behind feature flag, (3) remove code registries after UAT validation.
+- **Risks flagged:** Stale cache in multi-server, missing phantom content needs design before seeding, type safety regression from DB-loaded JSON (mitigate with Zod), admin UI scope creep.
+- **Affected files:** `CreatureManager.ts`, `registry.ts`, `admin/routes.ts`, `graph-adapter.ts`, `ShardRoom.ts`, all creature template files, zone seed migrations.
+- **Open questions:** Loot table junction table vs JSONB, multi-server cache invalidation, content versioning.
+
+### 2026-03-29: DB-Driven Content Architecture — APPROVED & HANDED OFF
+
+- **Status:** Architecture proposal approved by dkirby-ms with defaults (JSONB loot, single-server, no versioning)
+- **Next phase:** Handed off to Drizzt (Engine Dev) for SQL migrations (034–036) and data seeding
+- **Handoff:** Jarlaxle (Systems Dev) to follow with ContentRegistry wiring and admin CRUD endpoints
+- **Orchestration log:** `.squad/orchestration-log/2026-03-29T13-45-00Z-elminster.md`

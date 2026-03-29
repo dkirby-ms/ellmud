@@ -6089,3 +6089,56 @@ Added a classic MUD-style prompt/status line (`MudPrompt` component) pinned to t
 
 - **Drizzt:** If mana/MP is added to the game schema and synced to the client, the MudPrompt is ready to display it (just add a field)
 - **Minsc:** Sidebar status-effect tests now use `within()` scoping since MudPrompt also renders effect names
+
+### 2026-03-29T12:47:16Z: User directive — DB-driven content definitions
+
+**By:** dkirby-ms (via Copilot)  
+**What:** Content definitions (creature templates, item definitions) must NOT be stored as hardcoded TypeScript. The database should be the source of truth for all content definitions. The current code-based CREATURE_TEMPLATES Map and ITEM_REGISTRY Map approach is rejected.  
+**Why:** User request — captured for team memory
+
+### 2026-03-29: ALTER TABLE for item_definitions rebuild (not DROP+CREATE)
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-03-29  
+**Status:** Implemented
+
+**Context**
+
+Migration 002 creates `item_definitions` with UUID PK. The content-to-DB architecture requires TEXT slug PKs. The persistence-schema-validation test enforces globally unique CREATE TABLE names across all migration files.
+
+**Decision**
+
+Used ALTER TABLE + TRUNCATE + column type conversion instead of DROP TABLE + CREATE TABLE. This avoids a duplicate `item_definitions` name in the cross-migration uniqueness check. Also converted `player_stash.item_id` from UUID to TEXT to maintain the foreign key relationship.
+
+**Consequences**
+
+- The original CREATE TABLE in 002 no longer matches the runtime schema (the columns have been renamed/added/altered by 034). This is normal for migration-based schemas.
+- Tests in 002's describe block still pass because they check the SQL text of migration 002, not the live schema.
+- Future migrations referencing `item_definitions.id` must use TEXT, not UUID.
+
+### 2026-03-29: ContentRegistry Fallback Pattern
+
+**By:** Jarlaxle (Systems Dev)  
+**Date:** 2026-03-29  
+**Context:** DB-driven content definitions (creatures, items)
+
+**What**
+
+When ContentRegistry is not initialized (no DATABASE_URL), all content lookups fall through to hardcoded TypeScript constants. This is a deliberate dual-path pattern:
+
+- `resolveCreatureTemplate()` in CreatureManager checks registry first, then `FALLBACK_TEMPLATES`
+- `getItemDefinition()` / `getAllItemDefinitions()` in items/registry check `registry.isInitialized()` first, then `ITEM_REGISTRY`
+- Admin GET endpoints check registry availability before falling back to code imports
+
+**Why**
+
+- Existing test suite uses in-memory mocks, never touches DB — zero test changes needed
+- Local dev without PostgreSQL still works out of the box
+- Production with DB gets live-reloadable content from admin CRUD
+- Clean migration path: once all content is in DB, remove fallback constants in Phase 3
+
+**Impact**
+
+- Any new content system that reads creatures/items should go through `getContentRegistry()` + fallback pattern
+- Admin CRUD endpoints call `registry.reload()` after every write — do not cache content outside the registry
+- The `FALLBACK_TEMPLATES` and `ITEM_REGISTRY` constants remain but are dead code when DB is active

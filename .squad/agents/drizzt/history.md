@@ -2405,3 +2405,36 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 - **MessageCollector test helper:** Always update when adding new message types — add to interface imports, add array property, add `onMessage` listener, add to `clear()` method.
 - **Combat HP tracking:** `Combatant` objects (created lazily) are the source of truth for HP during combat. Use `CombatSystem.getCombatant(playerId)` to access current HP.
 - **Optimization in deliverCombatResults:** Track which players need updates in a `Set<string>`, then send PLAYER_STATE only to those who took damage. Avoids broadcasting to all players on every tick.
+
+### Content-to-DB Migrations (2026-03-29)
+**Task:** Create migration SQL files to move content definitions from hardcoded TypeScript to database tables.
+**Status:** ✅ Complete
+
+**Changes:**
+1. **034_rebuild_item_definitions.sql** — Converts `item_definitions` from UUID PK to TEXT slug PK. Renames `stats` → `base_stats`. Adds `base_durability`, `weight`, `stackable`, `max_stack`, `status`, `updated_at`. Also converts `player_stash.item_id` from UUID to TEXT to maintain FK. Uses ALTER TABLE (not CREATE TABLE) to avoid cross-migration duplicate-name test failure.
+2. **035_amend_creature_definitions.sql** — Adds `slug TEXT UNIQUE NOT NULL` (backfilled from `type`), `updated_at TIMESTAMPTZ`, enforces `status NOT NULL` on `creature_definitions`.
+3. **036_seed_content_from_templates.sql** — Seeds all 32 items (25 from registry + 5 new materials + 2 keys) and 7 creatures (5 from templates + slum_rat + sewer_lurker). Loot tables normalized to `{itemId, dropWeight}` only. Idempotent with `ON CONFLICT DO NOTHING`.
+
+**Key decisions:**
+- Used ALTER TABLE approach for item_definitions rebuild to avoid triggering the `no duplicate table names` cross-migration test. The test regex extracts CREATE TABLE names across all migration files.
+- Consumables and materials marked `stackable: true` with appropriate max_stack values.
+- New items (rat_tail, corroded_pipe, sewer_moss, waterlogged_bone, revenant_essence) designed to fit Warrens/Crypt flavor.
+
+**Verification:** All 91 test files pass (2051 tests), zero regressions.
+
+## Learnings
+- **Cross-migration tests are strict:** The persistence-schema-validation test extracts CREATE TABLE, CREATE INDEX, and CONSTRAINT names across ALL migration files and asserts global uniqueness. When rebuilding an existing table, use ALTER TABLE instead of DROP + CREATE TABLE.
+- **UUID-to-TEXT PK migration pattern:** TRUNCATE CASCADE → ALTER COLUMN TYPE TEXT → drop/re-add FKs. Must also convert referencing columns in dependent tables.
+- **Loot table normalization:** Creature loot tables should only contain `{itemId, dropWeight}`. Item metadata (name, weight, description) lives in item_definitions — don't duplicate it in loot arrays.
+
+### 2026-03-29: DB-Driven Content Migrations — DELIVERED
+
+- **Task:** Create 3 SQL migrations (034, 035, 036) for DB-driven content architecture, seed 32 items + 7 creatures
+- **Deliverables:**
+  - Migration 034: `item_definitions` table (TEXT pk, JSONB base_stats, tier, durability, weight, stackable)
+  - Migration 035: `creature_definitions` amendments (TEXT pk, JSONB loot_table, behavior_base)
+  - Migration 036: Seed data (32 items across all tiers, 7 creatures with loot tables)
+- **Key decision:** ALTER TABLE pattern for item_definitions (not DROP+CREATE) to avoid cross-migration uniqueness violation
+- **Verification:** All 2051 tests passing, clean build, no regressions
+- **Handoff:** Jarlaxle (Systems Dev) for ContentRegistry wiring and admin endpoints
+- **Orchestration log:** `.squad/orchestration-log/2026-03-29T13-45-00Z-drizzt.md`

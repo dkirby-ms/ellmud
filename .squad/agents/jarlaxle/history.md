@@ -1732,3 +1732,39 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 **Phase A Result:** Build clean. 2206 tests passing (98 files). Ready for Phase B: Narrative + service wiring.
 
 **Team Status:** Drizzt (feature-gate middleware ✅), Minsc (61 tests ✅). All Phase A agents complete.
+
+### 2026-03-27: ContentRegistry — DB-Driven Content Definitions
+
+**Task:** Move creature/item definitions from hardcoded TypeScript to database-backed ContentRegistry.
+
+**Files Created:**
+- `packages/server/src/content/ContentRegistry.ts` — Memory-resident cache class. Loads all published creature_definitions and item_definitions from PostgreSQL at startup. Hydrates loot tables by joining item data. Validates cross-references.
+- `packages/server/src/content/index.ts` — Singleton provider: `initContentRegistry(pool)`, `getContentRegistry()`, `resetContentRegistry()`. Follows stash-provider pattern.
+
+**Files Modified:**
+- `packages/server/src/creatures/CreatureManager.ts` — Replaced `CREATURE_TEMPLATES` Map with `resolveCreatureTemplate()` that checks ContentRegistry first, falls back to hardcoded `FALLBACK_TEMPLATES`. `getAllCreatureTemplates()` delegates to registry when available.
+- `packages/server/src/items/registry.ts` — `getItemDefinition()` and `getAllItemDefinitions()` now delegate to ContentRegistry when initialized, falling back to code-defined items.
+- `packages/server/src/admin/routes.ts` — GET creature-templates/items endpoints use registry when available. Added 4 CRUD endpoints: POST/PUT for creature-definitions, POST/PUT for item-definitions. All writes trigger `registry.reload()`.
+- `packages/server/src/index.ts` — ContentRegistry initialization after migrations, before Redis bootstrap.
+
+**Key Design Decisions:**
+- Graceful fallback: when ContentRegistry is not initialized (no DB), all lookups fall through to hardcoded constants. Existing tests never touch DB, so zero test changes needed.
+- Loot table hydration: DB stores `[{itemId, dropWeight}]`. At load time, ContentRegistry joins item_definitions to produce full `LootEntry` objects with name, weight, description.
+- Slug-based lookup: creatures keyed by `slug` column (falls back to `type` for pre-migration compat).
+- Admin CRUD writes trigger `registry.reload()` for immediate cache invalidation.
+- 319+ tests verified passing across creature, item, combat, admin, content-store, and stash test suites. Zero regressions.
+
+### 2026-03-29: ContentRegistry Wiring & Admin CRUD — DELIVERED
+
+- **Task:** Build ContentRegistry singleton, rewire CreatureManager + item registry, add 4 admin CRUD endpoints
+- **Deliverables:**
+  - ContentRegistry class (load-all-at-startup pattern, fallback to hardcoded constants for backward compat)
+  - CreatureManager.resolveCreatureTemplate() rewired to check registry first
+  - Item lookup (getItemDefinition, getAllItemDefinitions) integrated with fallback pattern
+  - Admin endpoints: GET /items, POST /items, GET /creatures, POST /creatures
+  - Server startup wiring: load registry on boot if DATABASE_URL set
+  - Fallback pattern: tests + local dev without DB continue working
+- **Key decision:** Fallback pattern for registry — when DB unavailable, use hardcoded FALLBACK_TEMPLATES and ITEM_REGISTRY (zero test changes needed)
+- **Verification:** Clean build, all 2051 tests passing, admin endpoints callable
+- **Handoff:** Feature complete and ready for QA
+- **Orchestration log:** `.squad/orchestration-log/2026-03-29T13-45-00Z-jarlaxle.md`
