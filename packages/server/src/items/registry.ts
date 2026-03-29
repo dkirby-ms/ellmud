@@ -1,11 +1,13 @@
 /**
  * Item registry — all known item definitions for the game.
  *
- * Phase 1: statically defined. Future phases load from DB.
+ * Phase 1: statically defined. When ContentRegistry is initialized (DB mode),
+ * lookups delegate to it. Otherwise, falls back to the hardcoded registry.
  * Base stats are pre-rarity — computeEffectiveStats() applies tier multipliers.
  */
 
 import type { ItemDefinition } from '@ellmud/shared';
+import { getContentRegistry } from '../content/index.js';
 
 // ─── Weapons ────────────────────────────────────────────────────────────────
 
@@ -356,10 +358,18 @@ export const ITEM_REGISTRY = new Map<string, ItemDefinition>(
 );
 
 export function getItemDefinition(id: string): ItemDefinition | undefined {
+  const registry = getContentRegistry();
+  if (registry?.isInitialized()) {
+    return registry.getItem(id);
+  }
   return ITEM_REGISTRY.get(id);
 }
 
 export function getAllItemDefinitions(): ItemDefinition[] {
+  const registry = getContentRegistry();
+  if (registry?.isInitialized()) {
+    return registry.getAllItems();
+  }
   return ALL_ITEMS;
 }
 

@@ -134,9 +134,16 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
   // ─── GET /admin/api/creature-templates — List all creature templates ─────
   router.get('/admin/api/creature-templates', adminAuth, async (_req: Request, res: Response) => {
     try {
-      const { getAllCreatureTemplates } = await import('../creatures/CreatureManager.js');
-      const templates = getAllCreatureTemplates();
-      res.json({ templates, count: templates.length });
+      const { getContentRegistry } = await import('../content/index.js');
+      const registry = getContentRegistry();
+      if (registry?.isInitialized()) {
+        const templates = registry.getAllCreatures();
+        res.json({ templates, count: templates.length });
+      } else {
+        const { getAllCreatureTemplates } = await import('../creatures/CreatureManager.js');
+        const templates = getAllCreatureTemplates();
+        res.json({ templates, count: templates.length });
+      }
     } catch (err) {
       console.error('[Admin] Failed to list creature templates:', err);
       res.status(500).json({ error: 'Failed to list creature templates' });
@@ -146,12 +153,212 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
   // ─── GET /admin/api/items — List all item definitions ────────────────────
   router.get('/admin/api/items', adminAuth, async (_req: Request, res: Response) => {
     try {
-      const { getAllItemDefinitions } = await import('../items/registry.js');
-      const items = getAllItemDefinitions();
-      res.json({ items, count: items.length });
+      const { getContentRegistry } = await import('../content/index.js');
+      const registry = getContentRegistry();
+      if (registry?.isInitialized()) {
+        const items = registry.getAllItems();
+        res.json({ items, count: items.length });
+      } else {
+        const { getAllItemDefinitions } = await import('../items/registry.js');
+        const items = getAllItemDefinitions();
+        res.json({ items, count: items.length });
+      }
     } catch (err) {
       console.error('[Admin] Failed to list items:', err);
       res.status(500).json({ error: 'Failed to list items' });
+    }
+  });
+
+  // ─── POST /admin/api/creature-definitions — Create a creature definition ─
+  router.post('/admin/api/creature-definitions', adminAuth, async (req: Request, res: Response) => {
+    try {
+      const { getPool } = await import('../db/index.js');
+      const body = req.body as Record<string, unknown>;
+      const result = await getPool().query(
+        `INSERT INTO creature_definitions
+           (type, name, slug, max_hp, attack, defence, armour, agility,
+            min_count, max_count, preferred_rooms, forbidden_rooms,
+            idle_ticks_min, idle_ticks_max, flee_threshold, loot_table, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+         RETURNING *`,
+        [
+          body.type, body.name, body.slug ?? body.type,
+          body.max_hp ?? 100, body.attack ?? 10, body.defence ?? 5,
+          body.armour ?? 0, body.agility ?? 0,
+          body.min_count ?? 1, body.max_count ?? 3,
+          body.preferred_rooms ?? [], body.forbidden_rooms ?? [],
+          body.idle_ticks_min ?? 3, body.idle_ticks_max ?? 5,
+          body.flee_threshold ?? 0.25,
+          JSON.stringify(body.loot_table ?? []),
+          body.status ?? 'published',
+        ],
+      );
+
+      // Refresh the content registry cache
+      const { getContentRegistry } = await import('../content/index.js');
+      const registry = getContentRegistry();
+      if (registry?.isInitialized()) await registry.reload();
+
+      res.status(201).json(result.rows[0]);
+    } catch (err) {
+      console.error('[Admin] Failed to create creature definition:', err);
+      res.status(500).json({ error: 'Failed to create creature definition' });
+    }
+  });
+
+  // ─── PUT /admin/api/creature-definitions/:slug — Update a creature ───────
+  router.put('/admin/api/creature-definitions/:slug', adminAuth, async (req: Request, res: Response) => {
+    try {
+      const { getPool } = await import('../db/index.js');
+      const { slug } = req.params;
+      const body = req.body as Record<string, unknown>;
+
+      // Build SET clause from provided fields
+      const fields: string[] = [];
+      const values: unknown[] = [];
+      let idx = 1;
+
+      const allowed = [
+        'type', 'name', 'max_hp', 'attack', 'defence', 'armour', 'agility',
+        'min_count', 'max_count', 'preferred_rooms', 'forbidden_rooms',
+        'idle_ticks_min', 'idle_ticks_max', 'flee_threshold', 'status',
+      ];
+
+      for (const key of allowed) {
+        if (key in body) {
+          fields.push(`${key} = $${idx++}`);
+          values.push(body[key]);
+        }
+      }
+
+      // loot_table needs JSON serialization
+      if ('loot_table' in body) {
+        fields.push(`loot_table = $${idx++}`);
+        values.push(JSON.stringify(body.loot_table));
+      }
+
+      if (fields.length === 0) {
+        res.status(400).json({ error: 'No fields to update' });
+        return;
+      }
+
+      fields.push(`updated_at = now()`);
+      values.push(slug);
+
+      const result = await getPool().query(
+        `UPDATE creature_definitions SET ${fields.join(', ')}
+         WHERE slug = $${idx} OR type = $${idx}
+         RETURNING *`,
+        values,
+      );
+
+      if (result.rowCount === 0) {
+        res.status(404).json({ error: `Creature "${slug}" not found` });
+        return;
+      }
+
+      const { getContentRegistry } = await import('../content/index.js');
+      const registry = getContentRegistry();
+      if (registry?.isInitialized()) await registry.reload();
+
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error('[Admin] Failed to update creature definition:', err);
+      res.status(500).json({ error: 'Failed to update creature definition' });
+    }
+  });
+
+  // ─── POST /admin/api/item-definitions — Create an item definition ────────
+  router.post('/admin/api/item-definitions', adminAuth, async (req: Request, res: Response) => {
+    try {
+      const { getPool } = await import('../db/index.js');
+      const body = req.body as Record<string, unknown>;
+      const result = await getPool().query(
+        `INSERT INTO item_definitions
+           (id, name, type, tier, base_stats, base_durability, weight,
+            description, soulbound, stackable, max_stack, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         RETURNING *`,
+        [
+          body.id, body.name, body.type, body.tier ?? 'common',
+          JSON.stringify(body.base_stats ?? {}),
+          body.base_durability ?? null,
+          body.weight ?? 1,
+          body.description ?? '',
+          body.soulbound ?? false,
+          body.stackable ?? false,
+          body.max_stack ?? 1,
+          body.status ?? 'published',
+        ],
+      );
+
+      const { getContentRegistry } = await import('../content/index.js');
+      const registry = getContentRegistry();
+      if (registry?.isInitialized()) await registry.reload();
+
+      res.status(201).json(result.rows[0]);
+    } catch (err) {
+      console.error('[Admin] Failed to create item definition:', err);
+      res.status(500).json({ error: 'Failed to create item definition' });
+    }
+  });
+
+  // ─── PUT /admin/api/item-definitions/:id — Update an item ────────────────
+  router.put('/admin/api/item-definitions/:id', adminAuth, async (req: Request, res: Response) => {
+    try {
+      const { getPool } = await import('../db/index.js');
+      const { id } = req.params;
+      const body = req.body as Record<string, unknown>;
+
+      const fields: string[] = [];
+      const values: unknown[] = [];
+      let idx = 1;
+
+      const allowed = [
+        'name', 'type', 'tier', 'base_durability', 'weight',
+        'description', 'soulbound', 'stackable', 'max_stack', 'status',
+      ];
+
+      for (const key of allowed) {
+        if (key in body) {
+          fields.push(`${key} = $${idx++}`);
+          values.push(body[key]);
+        }
+      }
+
+      if ('base_stats' in body) {
+        fields.push(`base_stats = $${idx++}`);
+        values.push(JSON.stringify(body.base_stats));
+      }
+
+      if (fields.length === 0) {
+        res.status(400).json({ error: 'No fields to update' });
+        return;
+      }
+
+      fields.push(`updated_at = now()`);
+      values.push(id);
+
+      const result = await getPool().query(
+        `UPDATE item_definitions SET ${fields.join(', ')}
+         WHERE id = $${idx}
+         RETURNING *`,
+        values,
+      );
+
+      if (result.rowCount === 0) {
+        res.status(404).json({ error: `Item "${id}" not found` });
+        return;
+      }
+
+      const { getContentRegistry } = await import('../content/index.js');
+      const registry = getContentRegistry();
+      if (registry?.isInitialized()) await registry.reload();
+
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error('[Admin] Failed to update item definition:', err);
+      res.status(500).json({ error: 'Failed to update item definition' });
     }
   });
 
