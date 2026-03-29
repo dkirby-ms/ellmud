@@ -1388,6 +1388,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private buildCreatureWorldState(): CreatureWorldState {
     const playersInRoom = new Map<string, string[]>();
     for (const [sid, ps] of this.players) {
+      // Peaceful players are invisible to creature AI
+      if (ps.peaceful) continue;
       const list = playersInRoom.get(ps.currentRoomId);
       if (list) {
         list.push(sid);
@@ -1412,6 +1414,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     switch (action.type) {
       case 'combat_strike': {
+        // Skip combat initiation against peaceful players (dev mode safety guard)
+        if (action.targetCombatantId) {
+          const targetPlayer = this.players.get(action.targetCombatantId);
+          if (targetPlayer?.peaceful) break;
+        }
         // Register creature as combatant if needed
         if (!this.combatSystem.getCombatant(creature.id)) {
           this.combatSystem.registerCombatant(this.creatureManager.toCombatant(creature));

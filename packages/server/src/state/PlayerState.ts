@@ -37,6 +37,8 @@ export class PlayerState {
   readonly inventory: Map<string, InventoryEntry> = new Map();
   maxCarryWeight: number;
   disconnected: boolean = false;
+  /** Dev mode: when true, hostile creatures ignore this player. */
+  peaceful: boolean = false;
   skills: PlayerSkills;
   equipment: VisibleEquipment | undefined;
   shardSickness: ShardSicknessDebuff | null = null;

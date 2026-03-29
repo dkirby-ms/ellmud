@@ -1768,3 +1768,16 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 - **Verification:** Clean build, all 2051 tests passing, admin endpoints callable
 - **Handoff:** Feature complete and ready for QA
 - **Orchestration log:** `.squad/orchestration-log/2026-03-29T13-45-00Z-jarlaxle.md`
+
+### 2025-07-25: Peaceful Dev Mode — Per-Player Creature Aggro Bypass
+
+- **Task:** Add a dev mode flag so developers can explore shards without hostile mobs attacking.
+- **Flag:** `PlayerState.peaceful: boolean` — per-player, per-session. Defaults to false.
+- **Activation:** `/peaceful` chat command toggles the flag. Gated by `ServerConfig.devModeEnabled` (env var `DEV_MODE_ENABLED`, defaults to false). Command rejected on production servers.
+- **Mechanism:** Two integration points in `ShardRoom`:
+  1. `buildCreatureWorldState()` — peaceful players excluded from `playersInRoom` map. Creatures literally don't "see" them for aggro purposes.
+  2. `processCreatureAction()` — safety guard skips combat initiation against peaceful targets (belt and suspenders).
+- **Behavior:** Creatures remain visible to peaceful players (look/explore works). Peaceful players can still initiate combat themselves via `/attack`. Only creature-initiated aggro is suppressed.
+- **Config pattern:** Follows existing `config.ts` conventions — `envBool('DEV_MODE_ENABLED', false)` with `resetConfig()` for test isolation.
+- **Files changed:** `PlayerState.ts`, `config.ts`, `ShardRoom.ts`, `commands/index.ts`, `commands/parser.ts`, new `commands/handlers/peaceful.ts`, new `__tests__/peaceful-mode.test.ts`.
+- **Tests:** 12 new tests covering behavior tree filtering, flag toggling, command gating, world state integration. All 2276+ tests passing, zero regressions.

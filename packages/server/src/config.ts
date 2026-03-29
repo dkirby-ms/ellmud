@@ -40,6 +40,9 @@ export interface ServerConfig {
 
   /** Behavior when reconnection timeout expires: 'kill' or 'safe-room'. */
   reconnectDeathBehavior: 'kill' | 'safe-room';
+
+  /** Enable /peaceful command for dev exploration (per-player creature aggro bypass). */
+  devModeEnabled: boolean;
 }
 
 /**
@@ -108,6 +111,7 @@ export function loadConfig(): ServerConfig {
     authRequired: envBool('AUTH_REQUIRED', true),
     reconnectionTimeoutS: envInt('RECONNECTION_TIMEOUT_S', 30),
     reconnectDeathBehavior: (envStr('RECONNECT_DEATH_BEHAVIOR', 'kill') === 'safe-room' ? 'safe-room' : 'kill') as 'kill' | 'safe-room',
+    devModeEnabled: envBool('DEV_MODE_ENABLED', false),
   };
 }
 
