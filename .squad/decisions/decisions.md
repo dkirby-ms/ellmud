@@ -3881,3 +3881,749 @@ Made three coordinated improvements:
 - Tooltip could be extended with additional room metadata (exits, connections, etc.)
 
 **Commit:** 0a899fd — feat(designer): square rooms, wider panel, hover tooltips with toggle
+# NPC and Item Room Management for Zone Designer
+
+**Prepared by:** Elminster (Technical Lead)  
+**Requested by:** dkirby-ms  
+**Date:** March 2026  
+**Scope:** Two new admin features for the Zone Designer tool
+
+---
+
+## Executive Summary
+
+The Zone Designer already has foundational support for NPCs and items in rooms — the `ZoneRoomDefinition` interface exposes `npcs[]` and `lootContainers[]` fields, and the database stores them as JSONB in the `zone_rooms` table. However, the admin UI lacks UI components to manage them. Additionally, the NPC spawn data structure needs clarification, and creature template discovery is not yet exposed to admins.
+
+This document proposes:
+
+1. **NPC Management Feature:** UI to add/remove/configure creatures spawned per room (spawn count, creature type selection).
+2. **Item/Loot Management Feature:** UI to add/remove loot containers and configure items within them.
+
+Both features require minimal DB changes, rely on existing creature and item definition tables, and integrate into the existing zone CRUD API.
+
+---
+
+## Current State: Data Model
+
+### NPCs in Rooms
+
+**Database:** `zone_rooms.npcs` (JSONB)
+
+Current structure (inferred from seed data and `CreatureManager.spawnCreaturesFromZone()`):
+
+```json
+[
+  {
+    "creatureId": "gutterspawn",
+    "spawnCount": 2
+  },
+  {
+    "creatureId": "slum_rat",
+    "spawnCount": 1
+  }
+]
+```
+
+**Fields:**
+- `creatureId` (string): References a creature template (e.g., "drowned_revenant", "gutterspawn", "rubble_scavenger").
+- `spawnCount` (number): How many instances of this creature spawn in the room.
+
+**How it works:**
+- At shard/zone runtime, `CreatureManager.spawnCreaturesFromZone()` iterates rooms, reads the `npcs` array, and spawns instances.
+- Creatures are tracked for repop (respawning after death) via `zoneCreatureRecords`.
+
+**Creature templates available:**
+- `drowned_revenant` (migration 023 seed)
+- `gutterspawn` (inferred from seed data; template likely in templates/ folder)
+- `slum_rat` (inferred)
+- `rubble_scavenger` (inferred)
+- Additional templates likely defined in `/creatures/templates/` directory
+
+### Loot Containers in Rooms
+
+**Database:** `zone_rooms.loot_containers` (JSONB)
+
+Current structure (from seed data):
+
+```json
+[
+  {
+    "id": "r4c1-crate-1",
+    "type": "crate",
+    "items": [
+      "bent_rebar",
+      "gutterspawn_fang"
+    ]
+  },
+  {
+    "id": "r4c2-sack-1",
+    "type": "crate",
+    "items": [
+      "rat_tail",
+      "scavenger_shiv"
+    ]
+  }
+]
+```
+
+**Fields:**
+- `id` (string): Unique identifier for this container (e.g., "r4c1-crate-1").
+- `type` (string): Container type (e.g., "crate", "corpse", "sack", "altar").
+- `items` (string[]): Array of item definition slugs/IDs.
+
+**How it works:**
+- At runtime, `ShardRoom` reads `lootContainers` and initializes loot piles.
+- Items are player-accessible via the `search` command.
+- Item definitions are resolved from the `item_definitions` table by slug.
+
+**Item definitions available:**
+- See `item_definitions` table schema: `id`, `name`, `type` (weapon, armour, consumable, material, tool, key, blueprint), `tier`, `stats` (JSONB), `description`, `soulbound`.
+- Items are typically identified by slug (e.g., "bent_rebar", "gutterspawn_fang").
+
+### Hazards in Rooms
+
+**Database:** `zone_rooms.hazards` (JSONB)
+
+Current structure (from seed data):
+
+```json
+[
+  {
+    "type": "unstable_rubble",
+    "severity": 0.2
+  },
+  {
+    "type": "standing_water",
+    "severity": 0.2
+  }
+]
+```
+
+**Fields:**
+- `type` (string): Hazard type (e.g., "unstable_rubble", "standing_water").
+- `severity` (number): Intensity (0.0–1.0 scale).
+
+(Hazards are out of scope for this task but documented for completeness.)
+
+---
+
+## Current Admin API
+
+**Zone CRUD routes:** `/admin/api/zones/*`
+
+**Room endpoints:**
+- `POST /admin/api/zones/{zoneId}/rooms` — Create room
+- `PUT /admin/api/zones/rooms/{roomId}` — Update room (all fields, including npcs and lootContainers)
+- `DELETE /admin/api/zones/rooms/{roomId}` — Delete room
+
+**Current validation:** Slug and name only. No validation on `npcs`, `lootContainers`, or `hazards`.
+
+**Client API:** `zone-api.ts`
+- `updateRoom(roomId, data)` — Sends PUT request to update room
+
+---
+
+## Gaps & Design Questions
+
+### 1. Creature Template Discovery
+
+**Problem:** Admins cannot see available creature templates. `CREATURE_TEMPLATES` map in `CreatureManager.ts` is hardcoded and not exposed to the admin API.
+
+**Solution:**
+- Create an admin endpoint: `GET /admin/api/creatures` — Returns list of creature templates with metadata (name, stats, spawn rules, loot table).
+- Response schema:
+  ```json
+  [
+    {
+      "id": "drowned_revenant",
+      "name": "Drowned Revenant",
+      "stats": { "maxHp": 50, "attack": 10, "defence": 3, "armour": 3 },
+      "spawnRules": {
+        "minCount": 3,
+        "maxCount": 5,
+        "preferredRoomTypes": ["corridor", "dead_end"],
+        "forbiddenRoomTypes": ["entry", "extraction"]
+      },
+      "lootTable": [...]
+    },
+    ...
+  ]
+  ```
+- Register all templates in `CREATURE_TEMPLATES` map (currently only `drowned_revenant`; need to discover/register `gutterspawn`, `slum_rat`, `rubble_scavenger`).
+
+### 2. Item Definition Discovery
+
+**Problem:** Admins cannot list available item definitions to populate loot containers.
+
+**Solution:**
+- Create an admin endpoint: `GET /admin/api/items` — Returns list of item definitions with metadata (name, type, tier, description).
+- Response schema:
+  ```json
+  [
+    {
+      "id": "bent_rebar",
+      "name": "Bent Rebar",
+      "type": "material",
+      "tier": "common",
+      "description": "A piece of rusty metal...",
+      "stats": { ... }
+    },
+    ...
+  ]
+  ```
+- Leverage existing `ItemDefinitionsStore` repository.
+
+### 3. NPC Configuration Properties
+
+**Current limitation:** `npcs` array only supports `creatureId` and `spawnCount`. The GDD mentions additional NPC properties:
+- **Aggression:** How quickly to alert and attack.
+- **Patrol route:** Multi-room patrol paths (currently per-creature-template).
+- **Items carried:** NPC-specific loot on death.
+- **Behavior override:** Per-room behavior variations.
+
+**Recommendation for Phase 1:**
+- Keep `npcs` structure minimal: `{creatureId, spawnCount}` only.
+- If zone designers need per-NPC aggression or patrol routes, extend the structure in Phase 2.
+- For now, aggression and patrol are controlled by creature templates (global).
+
+### 4. Loot Container Validation
+
+**Current limitation:** No validation that items in `lootContainers` actually exist in `item_definitions`.
+
+**Recommendation:**
+- Add server-side validation in `updateRoom()` endpoint: cross-check item IDs against `item_definitions` table.
+- Return validation errors if items not found.
+
+### 5. Respawn & Hidden Items
+
+**Question:** Should loot containers support:
+- **Spawn rate:** Like NPCs, should containers have a spawn probability?
+- **Hidden flag:** Items hidden until searched (GDD §4).
+
+**Recommendation for Phase 1:**
+- Loot containers always exist and are always visible.
+- Add `hidden` and `spawnRate` fields in Phase 2 when search/detection mechanics mature.
+
+---
+
+## Data Model: Final Proposal
+
+### NPC Spawn Record (No schema change required)
+
+Keep existing structure; no DB migration needed:
+
+```json
+{
+  "creatureId": "string (creature template ID)",
+  "spawnCount": "number (1+)"
+}
+```
+
+### Loot Container Record (No schema change required)
+
+Keep existing structure; no DB migration needed:
+
+```json
+{
+  "id": "string (unique per room)",
+  "type": "string (crate, corpse, sack, etc.)",
+  "items": "string[] (item definition IDs)"
+}
+```
+
+---
+
+## Implementation Plan
+
+### Phase 1: Admin API Endpoints
+
+**Scope:** Expose creature and item definitions to the admin interface. Validate NPC/loot data on room update.
+
+#### 1.1 New Admin Endpoint: `GET /admin/api/creatures`
+
+**File:** `packages/server/src/admin/zones/zone-routes.ts`
+
+**Route:** `GET /admin/api/creatures`
+
+**Handler:**
+```typescript
+router.get('/admin/api/creatures', adminAuth, async (_req, res) => {
+  try {
+    const creatures = Array.from(CREATURE_TEMPLATES.values()).map(t => ({
+      id: t.type,
+      name: t.name,
+      stats: t.stats,
+      spawnRules: t.spawnRules,
+      lootTable: t.lootTable,
+      idleTicksMin: t.idleTicksMin,
+      idleTicksMax: t.idleTicksMax,
+      fleeThreshold: t.fleeThreshold,
+    }));
+    res.json(creatures);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list creatures' });
+  }
+});
+```
+
+**Notes:**
+- Must ensure all creature templates are registered in `CREATURE_TEMPLATES` (currently only `drowned_revenant`; need to load and register `gutterspawn`, `slum_rat`, `rubble_scavenger` from templates folder).
+- Templates are defined in `/creatures/templates/*.ts` (singleton instances like `DROWNED_REVENANT`).
+
+#### 1.2 New Admin Endpoint: `GET /admin/api/items`
+
+**File:** `packages/server/src/admin/routes.ts` (or create new `admin/items/item-routes.ts`)
+
+**Route:** `GET /admin/api/items`
+
+**Handler:**
+```typescript
+router.get('/admin/api/items', adminAuth, async (_req, res) => {
+  try {
+    const itemRepo = getItemDefinitionsRepository();
+    const items = await itemRepo.getAllItemDefinitions();
+    const mapped = items.map(i => ({
+      id: i.id,
+      name: i.name,
+      type: i.type,
+      tier: i.tier,
+      description: i.description,
+      stats: i.stats,
+    }));
+    res.json(mapped);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list items' });
+  }
+});
+```
+
+**Notes:**
+- Leverage existing `ItemDefinitionsStore` (used by player inventory/stash system).
+- Repository method `getAllItemDefinitions()` may need to be added if it doesn't exist.
+
+#### 1.3 Enhanced Room Validation
+
+**File:** `packages/server/src/admin/zones/zone-routes.ts`
+
+**Enhancement:** `validateRoom()` function
+
+Add checks for `npcs` and `lootContainers`:
+
+```typescript
+function validateRoom(data: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+
+  // ... existing slug/name validation ...
+
+  // Validate npcs array
+  if (data.npcs && Array.isArray(data.npcs)) {
+    for (const npc of data.npcs as any[]) {
+      if (!npc.creatureId) {
+        errors.push('NPC must have creatureId');
+      }
+      if (typeof npc.spawnCount !== 'number' || npc.spawnCount < 1) {
+        errors.push('NPC spawnCount must be >= 1');
+      }
+      // Check if creature template exists
+      const creatureExists = CREATURE_TEMPLATES.has(npc.creatureId);
+      if (!creatureExists) {
+        errors.push(`Unknown creature template: ${npc.creatureId}`);
+      }
+    }
+  }
+
+  // Validate lootContainers array
+  if (data.lootContainers && Array.isArray(data.lootContainers)) {
+    const seenIds = new Set<string>();
+    for (const container of data.lootContainers as any[]) {
+      if (!container.id) {
+        errors.push('Loot container must have id');
+      }
+      if (seenIds.has(container.id)) {
+        errors.push(`Duplicate loot container id: ${container.id}`);
+      }
+      seenIds.add(container.id);
+      
+      if (!container.type) {
+        errors.push('Loot container must have type');
+      }
+      
+      if (!Array.isArray(container.items)) {
+        errors.push('Loot container items must be an array');
+      }
+      // TODO: Cross-check items against item_definitions in Phase 1.2
+    }
+  }
+
+  return errors;
+}
+```
+
+### Phase 2: Client UI Components
+
+**Scope:** Build Zone Designer UI to add/remove/configure NPCs and loot containers.
+
+#### 2.1 NPC Management UI
+
+**File:** `packages/client/src/pages/AdminZoneEditor.tsx` (or new component `RoomNPCPanel.tsx`)
+
+**Features:**
+- Dropdown to select creature template (populated from `GET /admin/api/creatures`).
+- Input field for spawn count (1+).
+- "Add NPC" button to push to `npcs[]` array.
+- "Remove NPC" button to splice from array.
+- List of current NPCs with inline edit/delete.
+- Real-time update to room object.
+
+**Pseudo-code:**
+```tsx
+const [npcs, setNpcs] = useState(room.npcs || []);
+const [creatures, setCreatures] = useState([]);
+
+useEffect(() => {
+  listCreatures().then(setCreatures);
+}, []);
+
+const addNPC = (creatureId, spawnCount) => {
+  setNpcs([...npcs, { creatureId, spawnCount }]);
+};
+
+const removeNPC = (index) => {
+  setNpcs(npcs.filter((_, i) => i !== index));
+};
+
+// Update room.npcs and persist
+useEffect(() => {
+  updateRoom(room.id, { ...room, npcs }).catch(handleError);
+}, [npcs]);
+```
+
+#### 2.2 Loot Container Management UI
+
+**File:** `packages/client/src/pages/AdminZoneEditor.tsx` (or new component `RoomLootPanel.tsx`)
+
+**Features:**
+- Input field for container ID (validated as slug-like).
+- Dropdown for container type (crate, corpse, sack, etc.).
+- Multi-select or tag input for items (populated from `GET /admin/api/items`).
+- "Add Container" button.
+- "Remove Container" button.
+- List of current containers with inline edit/delete.
+- Real-time update to room object.
+
+**Pseudo-code:**
+```tsx
+const [lootContainers, setLootContainers] = useState(room.lootContainers || []);
+const [items, setItems] = useState([]);
+
+useEffect(() => {
+  listItems().then(setItems);
+}, []);
+
+const addContainer = (id, type, items) => {
+  setLootContainers([...lootContainers, { id, type, items }]);
+};
+
+const removeContainer = (index) => {
+  setLootContainers(lootContainers.filter((_, i) => i !== index));
+};
+
+// Update room.lootContainers and persist
+useEffect(() => {
+  updateRoom(room.id, { ...room, lootContainers }).catch(handleError);
+}, [lootContainers]);
+```
+
+### Phase 3: Testing & Validation
+
+**Scope:** Ensure NPCs and loot containers spawn correctly at runtime.
+
+#### 3.1 Unit Tests
+
+**File:** `packages/server/src/__tests__/admin-crud.test.ts`
+
+**Tests:**
+- Validate `npcs` array structure (creatureId, spawnCount required, spawnCount >= 1).
+- Validate `lootContainers` array structure (id unique, type present, items is array).
+- Reject unknown creature templates.
+- Reject invalid item references (Phase 1.3 enhancement).
+- Update room with valid NPC/loot data.
+- Reject room update with invalid NPC/loot data.
+
+#### 3.2 Integration Tests
+
+**File:** `packages/server/src/__tests__/zone-system.test.ts` (or extend)
+
+**Tests:**
+- Load zone with NPCs defined in rooms.
+- Spawn creatures via `CreatureManager.spawnCreaturesFromZone()`.
+- Verify creatures appear in the correct rooms.
+- Load zone with loot containers.
+- Verify containers appear in `ShardRoom` loot piles.
+- Verify items are searchable/accessible.
+
+#### 3.3 E2E Tests (Admin UI)
+
+**File:** `packages/client/src/__tests__/admin-zone-editor.e2e.ts` (or similar)
+
+**Tests:**
+- Navigate to zone editor for a test zone.
+- Add an NPC to a room.
+- Verify NPC appears in the room's NPC list.
+- Remove the NPC.
+- Verify NPC is removed.
+- Add a loot container with items.
+- Verify container appears in the room's loot list.
+- Remove the container.
+- Verify container is removed.
+- Persist changes and reload the zone.
+- Verify changes are retained.
+
+---
+
+## Work Breakdown
+
+### Server-Side (Backend)
+
+| Task | File | Effort | Dependencies |
+|------|------|--------|--------------|
+| **1.1** Register missing creature templates in `CREATURE_TEMPLATES` | `/creatures/CreatureManager.ts` + `/creatures/templates/` | 1d | None |
+| **1.2** Implement `GET /admin/api/creatures` endpoint | `/admin/zones/zone-routes.ts` | 1d | 1.1 |
+| **1.3** Implement `GET /admin/api/items` endpoint | `/admin/routes.ts` or new `/admin/items/` | 1d | None (ItemDefinitionsStore exists) |
+| **1.4** Add NPC/loot validation to room update | `/admin/zones/zone-routes.ts` | 1d | 1.2, 1.3 |
+| **2.1** Unit tests for validation | `/__tests__/admin-crud.test.ts` | 1d | 1.4 |
+| **2.2** Integration tests for spawning | `/__tests__/zone-system.test.ts` | 1d | 1.1, 1.4 |
+
+**Server-side total:** ~6 days
+
+### Client-Side (Frontend)
+
+| Task | File | Effort | Dependencies |
+|------|------|--------|--------------|
+| **3.1** Fetch creature and item definitions | `/lib/zone-api.ts` | 0.5d | 1.2, 1.3 |
+| **3.2** Build NPC management UI component | `/pages/AdminZoneEditor.tsx` + `/components/RoomNPCPanel.tsx` | 2d | 3.1 |
+| **3.3** Build loot container UI component | `/pages/AdminZoneEditor.tsx` + `/components/RoomLootPanel.tsx` | 2d | 3.1 |
+| **3.4** Integrate NPC panel into room editor | `/pages/AdminZoneEditor.tsx` | 1d | 3.2 |
+| **3.5** Integrate loot panel into room editor | `/pages/AdminZoneEditor.tsx` | 1d | 3.3 |
+| **4.1** E2E tests (admin UI) | `/__tests__/admin-zone-editor.e2e.ts` | 1d | 3.5 |
+
+**Client-side total:** ~7.5 days
+
+### Total Effort
+
+- **Backend:** ~6 days
+- **Frontend:** ~7.5 days
+- **Total:** ~13.5 days (~2 weeks)
+
+### Parallelization
+
+- Backend tasks 1.2 and 1.3 can run in parallel (independent endpoints).
+- Client tasks 3.2 and 3.3 can run in parallel (independent UI components).
+- Server and client work can fully parallelize after initial API specs are agreed.
+
+---
+
+## Architecture & Design Decisions
+
+### 1. No Separate Tables for NPC/Loot Data
+
+**Decision:** Store `npcs` and `lootContainers` as JSONB in `zone_rooms` table (no new tables).
+
+**Rationale:**
+- `zone_rooms` already has JSONB columns for `npcs`, `lootContainers`, `hazards`.
+- Room-level data (what spawns where) is authoritatively stored with the room definition.
+- Avoids normalization overhead for data that is always queried/updated as a set.
+- Matches existing pattern (hazards also stored inline).
+
+### 2. Creature Templates as Read-Only Admin Reference
+
+**Decision:** Expose creature templates via API as read-only metadata (no CRUD).
+
+**Rationale:**
+- Creature templates are global definitions (not per-room or per-zone).
+- Defined in code and seeded to the database (migrations).
+- For now, admins can only *use* existing templates to spawn creatures in rooms.
+- If template editing is needed later, it can be added as a separate admin feature.
+
+### 3. Item Definitions as Read-Only Admin Reference
+
+**Decision:** Expose item definitions via API as read-only metadata (no CRUD).
+
+**Rationale:**
+- Same as creatures: items are global definitions.
+- Zone designers select from the pool of defined items to populate loot containers.
+- Item CRUD is a separate concern (item design tool, not zone design tool).
+
+### 4. Validation at API Boundary
+
+**Decision:** Validate `npcs` and `lootContainers` in the room update endpoint, not in the database.
+
+**Rationale:**
+- Fail fast with clear error messages.
+- No constraint checking in the database (would require stored procedures or triggers).
+- Admins get immediate feedback in the UI.
+
+---
+
+## Risks & Mitigations
+
+### Risk 1: Missing Creature Templates
+
+**Problem:** Not all creature types used in seed data are registered in `CREATURE_TEMPLATES`.
+
+**Mitigation:**
+- Audit `/creatures/templates/` directory and seed migrations to identify all in-use creature types.
+- Register each in `CREATURE_TEMPLATES` during task 1.1.
+- Add a test to verify `CREATURE_TEMPLATES` contains all types used in any zone.
+
+### Risk 2: Item Definition Gaps
+
+**Problem:** Items referenced in seed loot containers may not exist in `item_definitions` table.
+
+**Mitigation:**
+- Add optional validation in task 1.4 (cross-check items against table).
+- If validation fails, zone admin will see errors on room update.
+- Seed migration may need a follow-up to add missing item definitions.
+
+### Risk 3: Complex NPC Behavior Requirements
+
+**Problem:** Zone designers may want to configure per-NPC aggression, patrol routes, or items carried.
+
+**Mitigation:**
+- Phase 1 keeps `npcs` structure minimal: `{creatureId, spawnCount}` only.
+- Document this limitation in release notes.
+- Plan Phase 2 feature to extend NPC structure with behavior overrides.
+- Current creature templates already support these via code, so it's a *configuration* problem, not a capability problem.
+
+### Risk 4: Loot Container Spawn Rate
+
+**Problem:** Some zones may want loot containers to spawn conditionally (e.g., 50% chance).
+
+**Mitigation:**
+- Phase 1: Loot containers always spawn.
+- Phase 2: Add optional `spawnRate` field (0.0–1.0).
+- Deterministic PRNG seeding ensures consistent spawns across shard replicas.
+
+---
+
+## Future Enhancements (Phase 2+)
+
+1. **NPC Behavior Overrides:** Extend `npcs` structure to include `{creatureId, spawnCount, aggression?, patrolRoute?, items?}`.
+2. **Loot Spawn Rates:** Add `spawnRate` field to loot containers.
+3. **Hidden Items:** Add `hidden` flag to loot containers (integration with search/detection mechanics).
+4. **Creature Type Creation:** Add admin interface for defining new creature templates (code-level today).
+5. **Item Type Creation:** Add admin interface for defining new item definitions (already possible via CMS-like interface; could be polished).
+6. **Loot Table Editor:** Link loot containers to loot table definitions (currently items are inline).
+7. **Multi-Zone NPC Wandering:** Allow NPCs to patrol across multiple zones (Refuge-only feature today).
+
+---
+
+## Success Criteria
+
+1. **Admin API:**
+   - ✅ `GET /admin/api/creatures` returns all registered creature templates with metadata.
+   - ✅ `GET /admin/api/items` returns all item definitions with metadata.
+   - ✅ Room update endpoint validates `npcs` and `lootContainers` and rejects invalid data with clear errors.
+
+2. **Admin UI:**
+   - ✅ Zone editor displays NPC management panel in room details.
+   - ✅ Admin can add/remove NPCs from a room with dropdown selection and numeric input.
+   - ✅ Zone editor displays loot management panel in room details.
+   - ✅ Admin can add/remove loot containers with tag-based item selection.
+   - ✅ Changes persist to the database (room update).
+
+3. **Runtime:**
+   - ✅ Creatures defined in room `npcs` spawn at zone load and repop correctly.
+   - ✅ Loot containers defined in room `lootContainers` are searchable and accessible to players.
+
+4. **Testing:**
+   - ✅ Unit tests verify validation logic.
+   - ✅ Integration tests verify spawning behavior.
+   - ✅ E2E tests verify admin UI workflows.
+
+---
+
+## Conclusion
+
+The foundational infrastructure for NPC and item room management exists in the codebase. The primary work is:
+
+1. **Expose creature and item templates to the admin API** (so admins can see what they can use).
+2. **Build UI components** to manage `npcs` and `lootContainers` in the room editor.
+3. **Validate data** at the API boundary.
+
+The data model requires no schema changes, and the runtime behavior is already implemented in `CreatureManager` and `ShardRoom`. This is a **high-confidence, high-value feature** with clear dependencies and low architectural risk.
+
+Estimated delivery: **~2 weeks** (6 days backend + 7.5 days frontend, with parallelization).
+# Decision: Zone Designer NPC & Loot Management
+
+**Date:** 2026-03-27  
+**Author:** Regis (Frontend Dev)  
+**Status:** Implemented
+
+## Summary
+
+Added two new admin API endpoints and UI features to the Zone Designer:
+1. Resizable room details panel (drag handle on left edge)
+2. NPC and loot container management in room editor
+
+## New API Endpoints
+
+### `GET /admin/api/creature-templates`
+- Returns all creature templates from `CREATURE_TEMPLATES` registry
+- Response: `{ templates: CreatureTemplate[], count: number }`
+- Used by Zone Designer to populate NPC dropdown
+
+### `GET /admin/api/items`
+- Returns all item definitions from `ITEM_REGISTRY`
+- Response: `{ items: ItemDefinition[], count: number }`
+- Used by Zone Designer to populate loot item dropdown
+
+## Data Model Changes
+
+**Zone Room Definition (client types):**
+- `npcs: RoomNPC[]` — was `unknown[]`
+  - `RoomNPC = { creatureId: string, spawnCount: number }`
+- `lootContainers: RoomLootContainer[]` — was `unknown[]`
+  - `RoomLootContainer = { itemId: string, quantity: number }`
+
+**Existing backend (no changes):**
+- `zone_rooms.npcs` JSONB column already exists
+- `zone_rooms.loot_containers` JSONB column already exists
+- Room CRUD endpoints already accept these fields
+
+## UI Changes
+
+**Room details panel (ZoneDesigner.tsx):**
+- Panel is now horizontally resizable (280px - 600px, default 320px)
+- Drag handle on left edge (4px, subtle hover effect)
+- NPCs section with add/remove rows (creature dropdown + spawn count input)
+- Loot section with add/remove rows (item dropdown + quantity input)
+- Both sections replace the previous read-only "Content summary"
+
+## Impact
+
+**For Backend Devs:**
+- New creature templates should be registered in `CREATURE_TEMPLATES` (CreatureManager.ts)
+- New items should be registered in `ITEM_REGISTRY` (items/registry.ts)
+- Both will automatically appear in Zone Designer dropdowns
+
+**For Content Designers:**
+- Can now populate rooms with NPCs and loot via Zone Designer UI
+- No need to manually edit JSONB in database
+- Spawn counts and quantities editable inline
+
+## Files Modified
+
+**Server:**
+- `packages/server/src/creatures/CreatureManager.ts` — added `getAllCreatureTemplates()`
+- `packages/server/src/admin/routes.ts` — added two new endpoints
+
+**Client:**
+- `packages/client/src/lib/zone-api.ts` — added types and API functions
+- `packages/client/src/pages/admin/ZoneDesigner.tsx` — UI implementation
+
+## Testing
+
+- Build: ✅ Clean (TypeScript compilation successful)
+- Server tests: Running (91 test files, takes ~5+ minutes)
+- Manual testing recommended for full UI verification

@@ -436,3 +436,49 @@ Each z-level gets its own `occupied` set since the designer displays one floor a
 - **Toggle pattern for optional UI elements:** Boolean state + toolbar toggle button following existing button styling patterns. Active state uses gold background (bg-[#C9A84C]), inactive uses border-only (border-[#4A4B55]).
 - **Conditional rendering based on toggle state:** When labels ON, show both name and slug in node with vertical offset. When OFF, show only centered slug and enable hover tooltip. Tooltip visibility also gated by showLabels to avoid redundancy.
 
+
+## 2026-03-27T16:30Z — Zone Designer: Resizable Panel & NPC/Loot Management
+
+**Completed:** Two new features for the Zone Designer admin tool  
+**Files Modified:** 4
+
+### Feature 1: Resizable Room Details Panel
+- Added drag handle on left edge of side panel (4px wide, subtle hover effect)
+- Panel width state (default 320px, min 280px, max 600px)
+- Mouse drag handlers track resize via useEffect
+- Replaced fixed `w-80` class with inline `style={{ width: panelWidth }}`
+- Drag handle styled with `bg-[#2A2B35]` and `hover:bg-[#C9A84C]` transition
+
+### Feature 2: NPC and Item/Loot Management
+**Server changes:**
+- Added `getAllCreatureTemplates()` export to `CreatureManager.ts`
+- Added `GET /admin/api/creature-templates` endpoint (returns template list)
+- Added `GET /admin/api/items` endpoint (returns all item definitions via `getAllItemDefinitions()`)
+
+**Client API changes:**
+- Added `RoomNPC` and `RoomLootContainer` interfaces to `zone-api.ts`
+- Typed `ZoneRoomDefinition.npcs` as `RoomNPC[]` (was `unknown[]`)
+- Typed `ZoneRoomDefinition.lootContainers` as `RoomLootContainer[]` (was `unknown[]`)
+- Added `listCreatures()` and `listItems()` API functions
+- Added `CreatureTemplate` and `ItemDefinition` interfaces
+
+**Client UI changes:**
+- Replaced read-only "Content summary" section with editable NPC and Loot sections
+- NPC section: dropdown (creature template), number input (spawn count), delete button
+- Loot section: dropdown (item), number input (quantity), delete button
+- Each section has "Add NPC" / "Add Item" button
+- Fetches creature templates and items on mount via useEffect
+- Changes saved via existing `updateRoom()` flow (includes npcs and lootContainers fields)
+- Updated `editForm` state to include npcs and lootContainers
+- Updated sync effect to populate npcs/loot from selected room
+- Updated roomForm state for proper typing (RoomNPC[] and RoomLootContainer[])
+
+**Build:** ✅ Clean (TypeScript compilation successful)
+
+### Learnings
+- **CREATURE_TEMPLATES was not exported:** Had to add `getAllCreatureTemplates()` helper function in CreatureManager.ts to expose templates for admin UI
+- **Items endpoint pattern:** Followed same pattern as creatures endpoint — import function dynamically in route handler to avoid circular dependencies
+- **Zone room panel structure:** Properties section comes before the new NPC/Loot sections, which come before the in-game preview
+- **Drag resize pattern:** Track mouse position on mousedown, use document-level mousemove/mouseup listeners in useEffect, cleanup on unmount or resize end
+- **Admin UI styling:** Matches existing dark theme (bg-[#1C1D27], borders border-[#2A2B35], gold accent #C9A84C), sans-serif only, compact spacing
+- **ZoneDesigner is large:** 2600+ lines, required careful old_str matches for edits to avoid conflicts
