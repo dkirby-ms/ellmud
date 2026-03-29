@@ -1640,10 +1640,27 @@ export default function ZoneDesigner({
                   {(room.npcs?.length || room.lootContainers?.length || room.hazards?.length) && (
                     <div className="text-[#8A8B95] text-xs space-y-0.5">
                       {room.npcs?.length > 0 && (
-                        <div>👤 {room.npcs.length} NPC{room.npcs.length > 1 ? "s" : ""}</div>
+                        <div>
+                          <span className="text-[#D97706]">👤 NPCs:</span>
+                          {room.npcs.map((npc: RoomNPC, i: number) => {
+                            const tpl = creatures.find((c) => c.type === npc.creatureId);
+                            return (
+                              <div key={i} className="ml-3 text-[#A0A0AA]">
+                                {tpl?.name ?? npc.creatureId} ×{npc.spawnCount}
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
                       {room.lootContainers?.length > 0 && (
-                        <div>📦 {room.lootContainers.length} Loot container{room.lootContainers.length > 1 ? "s" : ""}</div>
+                        <div>
+                          <span className="text-[#CA8A04]">📦 Loot:</span>
+                          {room.lootContainers.map((lc: RoomLootContainer, i: number) => (
+                            <div key={i} className="ml-3 text-[#A0A0AA]">
+                              {lc.id} ({lc.type}) — {lc.items?.length ?? 0} item{(lc.items?.length ?? 0) !== 1 ? "s" : ""}
+                            </div>
+                          ))}
+                        </div>
                       )}
                       {room.hazards?.length > 0 && (
                         <div>⚠ {room.hazards.length} Hazard{room.hazards.length > 1 ? "s" : ""}</div>
@@ -1840,6 +1857,9 @@ export default function ZoneDesigner({
                           {creatures.map((c) => (
                             <option key={c.type} value={c.type}>{c.name}</option>
                           ))}
+                          {npc.creatureId && !creatures.some((c) => c.type === npc.creatureId) && (
+                            <option value={npc.creatureId}>{npc.creatureId} (unregistered)</option>
+                          )}
                         </select>
                         <input
                           type="number"
@@ -1883,47 +1903,97 @@ export default function ZoneDesigner({
                   </label>
                   <div className="space-y-2">
                     {editForm.lootContainers.map((loot, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <select
-                          value={loot.itemId}
-                          onChange={(e) => {
-                            const newLoot = [...editForm.lootContainers];
-                            newLoot[idx] = { ...loot, itemId: e.target.value };
-                            setEditForm((f) => ({ ...f, lootContainers: newLoot }));
-                          }}
-                          className="flex-1 bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1 text-[#E8E0D0] text-xs focus:border-[#C9A84C] focus:outline-none"
-                          style={{ fontFamily: "var(--font-sans)" }}
-                        >
-                          <option value="">Select item…</option>
-                          {items.map((item) => (
-                            <option key={item.id} value={item.id}>{item.name}</option>
+                      <div key={idx} className="border border-[#2A2B35] rounded p-2 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={loot.id}
+                            onChange={(e) => {
+                              const newLoot = [...editForm.lootContainers];
+                              newLoot[idx] = { ...loot, id: e.target.value };
+                              setEditForm((f) => ({ ...f, lootContainers: newLoot }));
+                            }}
+                            placeholder="Container ID"
+                            className="flex-1 bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1 text-[#E8E0D0] text-xs focus:border-[#C9A84C] focus:outline-none"
+                            style={{ fontFamily: "var(--font-mono)" }}
+                          />
+                          <select
+                            value={loot.type}
+                            onChange={(e) => {
+                              const newLoot = [...editForm.lootContainers];
+                              newLoot[idx] = { ...loot, type: e.target.value };
+                              setEditForm((f) => ({ ...f, lootContainers: newLoot }));
+                            }}
+                            className="w-20 bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1 text-[#E8E0D0] text-xs focus:border-[#C9A84C] focus:outline-none"
+                            style={{ fontFamily: "var(--font-sans)" }}
+                          >
+                            <option value="crate">crate</option>
+                            <option value="chest">chest</option>
+                            <option value="altar">altar</option>
+                            <option value="corpse">corpse</option>
+                            <option value="barrel">barrel</option>
+                          </select>
+                          <button
+                            onClick={() => {
+                              setEditForm((f) => ({ ...f, lootContainers: f.lootContainers.filter((_, i) => i !== idx) }));
+                            }}
+                            className="p-1 text-[#8B2500] hover:bg-[#8B2500]/20 rounded"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <div className="ml-2 space-y-1">
+                          {(loot.items ?? []).map((itemId, itemIdx) => (
+                            <div key={itemIdx} className="flex items-center gap-1">
+                              <select
+                                value={itemId}
+                                onChange={(e) => {
+                                  const newLoot = [...editForm.lootContainers];
+                                  const newItems = [...(newLoot[idx].items ?? [])];
+                                  newItems[itemIdx] = e.target.value;
+                                  newLoot[idx] = { ...loot, items: newItems };
+                                  setEditForm((f) => ({ ...f, lootContainers: newLoot }));
+                                }}
+                                className="flex-1 bg-[#12131A] border border-[#2A2B35] rounded px-1 py-0.5 text-[#A0A0AA] text-xs focus:border-[#C9A84C] focus:outline-none"
+                                style={{ fontFamily: "var(--font-sans)" }}
+                              >
+                                <option value="">Select item…</option>
+                                {items.map((it) => (
+                                  <option key={it.id} value={it.id}>{it.name}</option>
+                                ))}
+                                {itemId && !items.some((it) => it.id === itemId) && (
+                                  <option value={itemId}>{itemId} (unregistered)</option>
+                                )}
+                              </select>
+                              <button
+                                onClick={() => {
+                                  const newLoot = [...editForm.lootContainers];
+                                  const newItems = (newLoot[idx].items ?? []).filter((_, i) => i !== itemIdx);
+                                  newLoot[idx] = { ...loot, items: newItems };
+                                  setEditForm((f) => ({ ...f, lootContainers: newLoot }));
+                                }}
+                                className="p-0.5 text-[#8B2500] hover:bg-[#8B2500]/20 rounded"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
                           ))}
-                        </select>
-                        <input
-                          type="number"
-                          min="1"
-                          value={loot.quantity}
-                          onChange={(e) => {
-                            const newLoot = [...editForm.lootContainers];
-                            newLoot[idx] = { ...loot, quantity: parseInt(e.target.value) || 1 };
-                            setEditForm((f) => ({ ...f, lootContainers: newLoot }));
-                          }}
-                          className="w-16 bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1 text-[#E8E0D0] text-xs focus:border-[#C9A84C] focus:outline-none"
-                          style={{ fontFamily: "var(--font-mono)" }}
-                        />
-                        <button
-                          onClick={() => {
-                            setEditForm((f) => ({ ...f, lootContainers: f.lootContainers.filter((_, i) => i !== idx) }));
-                          }}
-                          className="p-1 text-[#8B2500] hover:bg-[#8B2500]/20 rounded"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+                          <button
+                            onClick={() => {
+                              const newLoot = [...editForm.lootContainers];
+                              newLoot[idx] = { ...loot, items: [...(loot.items ?? []), ""] };
+                              setEditForm((f) => ({ ...f, lootContainers: newLoot }));
+                            }}
+                            className="text-[#6A6B75] hover:text-[#C9A84C] text-xs flex items-center gap-0.5"
+                            style={{ fontFamily: "var(--font-sans)" }}
+                          >
+                            <Plus className="w-2.5 h-2.5" /> item
+                          </button>
+                        </div>
                       </div>
                     ))}
                     <button
                       onClick={() => {
-                        setEditForm((f) => ({ ...f, lootContainers: [...f.lootContainers, { itemId: "", quantity: 1 }] }));
+                        setEditForm((f) => ({ ...f, lootContainers: [...f.lootContainers, { id: "", type: "crate", items: [] }] }));
                       }}
                       className="w-full px-2 py-1 border border-[#2A2B35] text-[#8A8B95] hover:bg-[#12131A] rounded text-xs flex items-center justify-center gap-1"
                       style={{ fontFamily: "var(--font-sans)" }}

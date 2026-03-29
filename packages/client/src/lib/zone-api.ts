@@ -30,8 +30,9 @@ export interface RoomNPC {
 }
 
 export interface RoomLootContainer {
-  itemId: string;
-  quantity: number;
+  id: string;
+  type: string;
+  items: string[];
 }
 
 export interface ZoneRoomDefinition {
