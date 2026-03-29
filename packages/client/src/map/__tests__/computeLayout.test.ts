@@ -732,5 +732,129 @@ describe('computeLayout', () => {
 
     // Zero diagonals — all exits should be axis-aligned
     expect(diagonals).toBe(0);
+
+    // No occlusions — rooms must not sit on exit line segments of other rooms.
+    // In dense zones (80+ rooms), some occlusions may be unavoidable without
+    // creating diagonals, but the reported problem rooms must be clear.
+    const CARDINALS_OCC = ['north', 'south', 'east', 'west'];
+    const occlusionIssues: string[] = [];
+
+    for (const [id, room] of rooms) {
+      const p = layout.get(id);
+      if (!p) continue;
+      for (const [dir, targetId] of room.exits) {
+        if (!CARDINALS_OCC.includes(dir)) continue;
+        const tp = layout.get(targetId);
+        if (!tp || tp.z !== p.z) continue;
+        const dist = Math.abs(tp.x - p.x) + Math.abs(tp.y - p.y);
+        if (dist < 2) continue;
+
+        // Check for rooms sitting on this segment
+        if (p.x === tp.x) {
+          const minY = Math.min(p.y, tp.y);
+          const maxY = Math.max(p.y, tp.y);
+          for (const [otherId] of rooms) {
+            if (otherId === id || otherId === targetId) continue;
+            const op = layout.get(otherId);
+            if (!op || op.z !== p.z) continue;
+            if (op.x === p.x && op.y > minY && op.y < maxY) {
+              occlusionIssues.push(
+                `${otherId} at (${op.x},${op.y}) occludes ${id}↔${targetId} (${p.x},${p.y})→(${tp.x},${tp.y})`
+              );
+            }
+          }
+        } else if (p.y === tp.y) {
+          const minX = Math.min(p.x, tp.x);
+          const maxX = Math.max(p.x, tp.x);
+          for (const [otherId] of rooms) {
+            if (otherId === id || otherId === targetId) continue;
+            const op = layout.get(otherId);
+            if (!op || op.z !== p.z) continue;
+            if (op.y === p.y && op.x > minX && op.x < maxX) {
+              occlusionIssues.push(
+                `${otherId} at (${op.x},${op.y}) occludes ${id}↔${targetId} (${p.x},${p.y})→(${tp.x},${tp.y})`
+              );
+            }
+          }
+        }
+      }
+    }
+
+    if (occlusionIssues.length > 0) {
+      console.log(`\n=== ${occlusionIssues.length} occlusions ===`);
+      for (const oi of occlusionIssues) console.log(`  ${oi}`);
+    }
+
+    // Verify the 3 specific rooms from the bug report don't occlude their
+    // originally-reported lines
+    const bugReportOcclusions = occlusionIssues.filter(oi =>
+      // harbourmasters-office on bazaar↔money-changers or cobblestone↔cobblestone
+      (oi.includes('harbourmasters-office') && (oi.includes('bazaar-row-3') || oi.includes('cobblestone-street'))) ||
+      // barnacled-quay on bazaar↔money-changers
+      (oi.includes('barnacled-quay') && oi.includes('bazaar-row-3')) ||
+      (oi.includes('barnacled-quay') && oi.includes('money-changers-row'))
+    );
+    if (bugReportOcclusions.length > 0) {
+      console.log('\n=== BUG REPORT REGRESSIONS ===');
+      for (const br of bugReportOcclusions) console.log(`  ${br}`);
+    }
+    expect(bugReportOcclusions.length).toBe(0);
+  });
+
+  // ── Rooms must not overlap exit line segments ──────────────────────────
+  it('does not place rooms on exit line segments between other rooms', () => {
+    // T-junction with a side room that could land on the main corridor
+    //   A ──east── B ──east── C
+    //                  │
+    //                south
+    //                  │
+    //                  D ──east── E
+    //
+    // E has no exit back to the A-B-C corridor; if placed at B's column
+    // between A and C, it would occlude the A↔C line segment.
+    const rooms = makeRooms({
+      a: [['east', 'b']],
+      b: [['west', 'a'], ['east', 'c'], ['south', 'd']],
+      c: [['west', 'b']],
+      d: [['north', 'b'], ['east', 'e']],
+      e: [['west', 'd']],
+    });
+    const layout = computeLayout(rooms, 'a');
+
+    const CARDINALS = ['north', 'south', 'east', 'west'];
+    let occlusions = 0;
+
+    for (const [id, room] of rooms) {
+      const p = layout.get(id);
+      if (!p) continue;
+      for (const [dir, targetId] of room.exits) {
+        if (!CARDINALS.includes(dir)) continue;
+        const tp = layout.get(targetId);
+        if (!tp || tp.z !== p.z) continue;
+        const dist = Math.abs(tp.x - p.x) + Math.abs(tp.y - p.y);
+        if (dist < 2) continue;
+        if (p.x === tp.x) {
+          const minY = Math.min(p.y, tp.y);
+          const maxY = Math.max(p.y, tp.y);
+          for (const [otherId] of rooms) {
+            if (otherId === id || otherId === targetId) continue;
+            const op = layout.get(otherId);
+            if (!op || op.z !== p.z) continue;
+            if (op.x === p.x && op.y > minY && op.y < maxY) occlusions++;
+          }
+        } else if (p.y === tp.y) {
+          const minX = Math.min(p.x, tp.x);
+          const maxX = Math.max(p.x, tp.x);
+          for (const [otherId] of rooms) {
+            if (otherId === id || otherId === targetId) continue;
+            const op = layout.get(otherId);
+            if (!op || op.z !== p.z) continue;
+            if (op.y === p.y && op.x > minX && op.x < maxX) occlusions++;
+          }
+        }
+      }
+    }
+
+    expect(occlusions).toBe(0);
   });
 });

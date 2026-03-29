@@ -96,6 +96,11 @@ function findNearestUnoccupied(
  * Searches outward in rings (Manhattan distance) but within each ring,
  * picks the candidate most aligned with the exit direction using dot product.
  * Prevents rooms from being placed perpendicular or opposite to their exit direction.
+ *
+ * When `exitLineCells` is provided, cells on exit line segments between
+ * already-placed rooms are treated as soft-blocked: candidates NOT on
+ * exit lines are preferred, but if no alternative exists within a ring,
+ * exit-line candidates are still accepted (with a score penalty).
  */
 function findNearestDirectional(
   idealX: number,
@@ -103,12 +108,20 @@ function findNearestDirectional(
   dirDx: number,
   dirDy: number,
   occupied: Set<string>,
+  exitLineCells?: Set<string>,
 ): { x: number; y: number } {
-  if (!occupied.has(cellKey(idealX, idealY))) return { x: idealX, y: idealY };
+  if (!occupied.has(cellKey(idealX, idealY))) {
+    if (!exitLineCells || !exitLineCells.has(cellKey(idealX, idealY))) {
+      return { x: idealX, y: idealY };
+    }
+  }
 
   for (let radius = 1; radius < 200; radius++) {
     let best: { x: number; y: number } | null = null;
     let bestScore = -Infinity;
+    // Fallback: best candidate that IS on an exit line (still better than nothing)
+    let bestOnLine: { x: number; y: number } | null = null;
+    let bestOnLineScore = -Infinity;
 
     for (let ddx = -radius; ddx <= radius; ddx++) {
       const absRemainder = radius - Math.abs(ddx);
@@ -119,16 +132,26 @@ function findNearestDirectional(
         const cy = idealY + ddy;
         if (occupied.has(cellKey(cx, cy))) continue;
 
-        // Dot product with direction vector — prefer cells aligned with exit direction
         const score = ddx * dirDx + ddy * dirDy;
-        if (score > bestScore) {
-          bestScore = score;
-          best = { x: cx, y: cy };
+        const onLine = exitLineCells?.has(cellKey(cx, cy));
+
+        if (onLine) {
+          if (score > bestOnLineScore) {
+            bestOnLineScore = score;
+            bestOnLine = { x: cx, y: cy };
+          }
+        } else {
+          if (score > bestScore) {
+            bestScore = score;
+            best = { x: cx, y: cy };
+          }
         }
       }
     }
 
+    // Prefer off-line candidates; fall back to on-line if necessary
     if (best) return best;
+    if (bestOnLine) return bestOnLine;
   }
 
   return { x: idealX, y: idealY };
@@ -396,6 +419,42 @@ export function computeLayout(
     const occupied = getOccupied(startZ);
     const queue: string[] = [];
 
+    // Track cells that lie on exit line segments between already-placed rooms.
+    // Updated incrementally as rooms are placed during BFS.
+    const exitLineCells = new Set<string>();
+
+    /** Add exit line cells for a newly placed room's connections to already-placed neighbors. */
+    function updateExitLines(roomId: string): void {
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const rp = result.get(roomId);
+      if (!rp) return;
+
+      for (const [dir, neighborId] of room.exits) {
+        const off = DIRECTION_OFFSETS[dir];
+        if (!off || off.dz !== 0) continue;
+        const np = result.get(neighborId);
+        if (!np || np.z !== startZ) continue;
+
+        // Only mark intermediate cells on straight-line (axis-aligned) segments
+        if (rp.x === np.x) {
+          const minY = Math.min(rp.y, np.y);
+          const maxY = Math.max(rp.y, np.y);
+          for (let y = minY + 1; y < maxY; y++) {
+            const k = cellKey(rp.x, y);
+            if (!occupied.has(k)) exitLineCells.add(k);
+          }
+        } else if (rp.y === np.y) {
+          const minX = Math.min(rp.x, np.x);
+          const maxX = Math.max(rp.x, np.x);
+          for (let x = minX + 1; x < maxX; x++) {
+            const k = cellKey(x, rp.y);
+            if (!occupied.has(k)) exitLineCells.add(k);
+          }
+        }
+      }
+    }
+
     // Check if start room is part of an unplaced grid cluster
     const startGrid = gridClusters.get(startId);
     if (startGrid && !placedClusters.has(startGrid.clusterId)) {
@@ -407,6 +466,8 @@ export function computeLayout(
         startZ,
         queue,
       );
+      // Update exit lines for all placed cluster members
+      for (const qid of queue) updateExitLines(qid);
     } else {
       // Resolve collision at anchor position (can happen when multiple
       // z-transitions target the same z-level at overlapping coordinates)
@@ -414,6 +475,7 @@ export function computeLayout(
       result.set(startId, { x: start.x, y: start.y, z: startZ });
       occupied.add(cellKey(start.x, start.y));
       queue.push(startId);
+      updateExitLines(startId);
     }
 
     while (queue.length > 0) {
@@ -455,10 +517,16 @@ export function computeLayout(
             startZ,
             queue,
           );
+          // Update exit lines for newly placed cluster members
+          const members = clusterMembers.get(targetGrid.clusterId);
+          if (members) {
+            for (const m of members) updateExitLines(m.id);
+          }
           continue;
         }
 
-        // Cardinal direction: compute ideal position, resolve collisions
+        // Cardinal direction: compute ideal position, resolve collisions,
+        // avoid placing on exit line segments of already-placed rooms
         const idealX = currentPos.x + offset.dx;
         const idealY = currentPos.y + offset.dy;
         const nearest = findNearestDirectional(
@@ -467,11 +535,15 @@ export function computeLayout(
           offset.dx,
           offset.dy,
           occupied,
+          exitLineCells,
         );
 
         result.set(targetId, { x: nearest.x, y: nearest.y, z: startZ });
         occupied.add(cellKey(nearest.x, nearest.y));
+        // Remove from exit line cells since it's now occupied
+        exitLineCells.delete(cellKey(nearest.x, nearest.y));
         queue.push(targetId);
+        updateExitLines(targetId);
       }
     }
   }
@@ -536,6 +608,14 @@ export function computeLayout(
   // new diagonals created by that move.
   fixDiagonalCascade();
 
+  // ── Phase 6: Occlusion fix ────────────────────────────────────────────
+  // After all placement/relaxation phases, rooms may still sit on the
+  // straight-line segment between two other connected rooms, visually
+  // overlapping exit lines. This phase detects such occlusions and moves
+  // the offending room to an adjacent free cell that doesn't create new
+  // overlaps or diagonals.
+  fixOcclusions();
+
   return result;
 
   // ── Force-directed relaxation ──────────────────────────────────────────────
@@ -583,7 +663,10 @@ export function computeLayout(
         ) {
           score += 15;
         }
-        // Line-through-room occlusion penalty
+        // Line-through-room occlusion penalty — rooms sitting on an exit
+        // line segment between two other connected rooms are visually
+        // confusing. Kept moderate so force-relaxation and diagonal cascade
+        // can converge; the dedicated fixOcclusions phase handles residuals.
         if (dist >= 2 && (pos.x === tp.x || pos.y === tp.y)) {
           for (const other of zPositions) {
             if (other.id === roomId || other.id === targetId) continue;
@@ -1291,6 +1374,356 @@ export function computeLayout(
           }
         }
         if (!moved) break;
+      }
+    }
+  }
+
+  // ── Occlusion fix ──────────────────────────────────────────────────────────
+
+  /**
+   * Scoring function for occlusion resolution. Identical to layoutScore but
+   * with a much heavier occlusion penalty (15 vs 3). Used only by Phase 6
+   * so that earlier phases keep their stable optimization trajectory.
+   */
+  function occlusionAwareScore(z: number): number {
+    let score = 0;
+
+    const zPositions: { id: string; x: number; y: number }[] = [];
+    for (const [id, pos] of result) {
+      if (pos.z === z) zPositions.push({ id, x: pos.x, y: pos.y });
+    }
+
+    for (const [roomId, pos] of result) {
+      if (pos.z !== z) continue;
+      const room = rooms.get(roomId);
+      if (!room) continue;
+      for (const [dir, targetId] of room.exits) {
+        const offset = DIRECTION_OFFSETS[dir];
+        if (!offset || offset.dz !== 0) continue;
+        const tp = result.get(targetId);
+        if (!tp || tp.z !== z) continue;
+        const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
+        if (dist > 1) score += dist - 1;
+        if (pos.x !== tp.x && pos.y !== tp.y) score += 20;
+        const dx = tp.x - pos.x;
+        const dy = tp.y - pos.y;
+        if (
+          (offset.dx > 0 && dx < 0) ||
+          (offset.dx < 0 && dx > 0) ||
+          (offset.dy > 0 && dy < 0) ||
+          (offset.dy < 0 && dy > 0)
+        ) {
+          score += 15;
+        }
+        // Heavy occlusion penalty — the whole point of this phase
+        if (dist >= 2 && (pos.x === tp.x || pos.y === tp.y)) {
+          for (const other of zPositions) {
+            if (other.id === roomId || other.id === targetId) continue;
+            if (pos.x === tp.x && other.x === pos.x) {
+              const minY = Math.min(pos.y, tp.y);
+              const maxY = Math.max(pos.y, tp.y);
+              if (other.y > minY && other.y < maxY) score += 15;
+            } else if (pos.y === tp.y && other.y === pos.y) {
+              const minX = Math.min(pos.x, tp.x);
+              const maxX = Math.max(pos.x, tp.x);
+              if (other.x > minX && other.x < maxX) score += 15;
+            }
+          }
+        }
+      }
+    }
+    return score;
+  }
+
+  /**
+   * Detect rooms sitting on straight-line exit segments between two other
+   * connected rooms (same row or column, between endpoints). For each
+   * offending room, try moving it to a nearby cell that:
+   *   - Is unoccupied
+   *   - Doesn't create new occlusions
+   *   - Doesn't create diagonal exits for the moved room's connections
+   *   - Preserves direction constraints as much as possible
+   */
+  function fixOcclusions(): void {
+    /** Check if moving room `rid` to (nx, ny) creates a diagonal. */
+    function wouldCreateDiag(
+      rid: string,
+      nx: number,
+      ny: number,
+      z: number,
+    ): boolean {
+      const room = rooms.get(rid);
+      if (!room) return false;
+      for (const [dir, nid] of room.exits) {
+        const off = DIRECTION_OFFSETS[dir];
+        if (!off || off.dz !== 0) continue;
+        const np = result.get(nid);
+        if (!np || np.z !== z) continue;
+        if (nx !== np.x && ny !== np.y) return true;
+      }
+      return false;
+    }
+
+    /** Count occlusions for a z-level. */
+    function countOcclusions(z: number): number {
+      let count = 0;
+      const zPos = new Map<string, { x: number; y: number }>();
+      for (const [id, p] of result) {
+        if (p.z === z) zPos.set(id, { x: p.x, y: p.y });
+      }
+      for (const [roomId, pos] of zPos) {
+        const room = rooms.get(roomId);
+        if (!room) continue;
+        for (const [dir, targetId] of room.exits) {
+          const off = DIRECTION_OFFSETS[dir];
+          if (!off || off.dz !== 0) continue;
+          const tp = zPos.get(targetId);
+          if (!tp) continue;
+          const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
+          if (dist < 2) continue;
+          if (pos.x === tp.x) {
+            const minY = Math.min(pos.y, tp.y), maxY = Math.max(pos.y, tp.y);
+            for (const [oid, op] of zPos) {
+              if (oid === roomId || oid === targetId) continue;
+              if (op.x === pos.x && op.y > minY && op.y < maxY) count++;
+            }
+          } else if (pos.y === tp.y) {
+            const minX = Math.min(pos.x, tp.x), maxX = Math.max(pos.x, tp.x);
+            for (const [oid, op] of zPos) {
+              if (oid === roomId || oid === targetId) continue;
+              if (op.y === pos.y && op.x > minX && op.x < maxX) count++;
+            }
+          }
+        }
+      }
+      return count;
+    }
+
+    for (const [z, occupied] of occupiedByZ) {
+      const zRoomIds: string[] = [];
+      for (const [id, p] of result) {
+        if (p.z === z) zRoomIds.push(id);
+      }
+
+      let currentScore = occlusionAwareScore(z);
+      if (currentScore === 0) continue;
+
+      // ── Strategy A: Single-room moves with occlusion-aware scoring ──
+      for (let iter = 0; iter < 200 && currentScore > 0; iter++) {
+        let improved = false;
+
+        for (const roomId of zRoomIds) {
+          const pos = result.get(roomId)!;
+          const ideal = idealPosition(roomId, z);
+          if (!ideal) continue;
+
+          const candidateSet = new Set<string>();
+          const candidates: { x: number; y: number }[] = [];
+          const addCandidate = (x: number, y: number) => {
+            const k = cellKey(x, y);
+            if (!candidateSet.has(k)) {
+              candidateSet.add(k);
+              candidates.push({ x, y });
+            }
+          };
+
+          for (let r = 0; r <= 4; r++) {
+            for (let ddx = -r; ddx <= r; ddx++) {
+              const absRem = r - Math.abs(ddx);
+              const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
+              for (const ddy of dyOpts) addCandidate(ideal.x + ddx, ideal.y + ddy);
+            }
+          }
+          const roomDef = rooms.get(roomId);
+          if (roomDef) {
+            for (const [dir, nid] of roomDef.exits) {
+              const off = DIRECTION_OFFSETS[dir];
+              if (!off || off.dz !== 0) continue;
+              const np = result.get(nid);
+              if (!np || np.z !== z) continue;
+              const wantX = np.x - off.dx, wantY = np.y - off.dy;
+              for (let r = 0; r <= 2; r++) {
+                for (let ddx = -r; ddx <= r; ddx++) {
+                  const absRem = r - Math.abs(ddx);
+                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
+                  for (const ddy of dyOpts) addCandidate(wantX + ddx, wantY + ddy);
+                }
+              }
+            }
+          }
+
+          let bestPos: { x: number; y: number } | null = null;
+          let bestScore = currentScore;
+
+          for (const cand of candidates) {
+            if (cand.x === pos.x && cand.y === pos.y) continue;
+            const key = cellKey(cand.x, cand.y);
+            if (occupied.has(key)) continue;
+            // Hard constraint: no new diagonals
+            if (wouldCreateDiag(roomId, cand.x, cand.y, z)) continue;
+
+            const oldKey = cellKey(pos.x, pos.y);
+            occupied.delete(oldKey);
+            occupied.add(key);
+            result.set(roomId, { x: cand.x, y: cand.y, z });
+
+            const newScore = occlusionAwareScore(z);
+            if (newScore < bestScore) {
+              bestScore = newScore;
+              bestPos = cand;
+            }
+
+            occupied.delete(key);
+            occupied.add(oldKey);
+            result.set(roomId, pos);
+          }
+
+          if (bestPos) {
+            occupied.delete(cellKey(pos.x, pos.y));
+            occupied.add(cellKey(bestPos.x, bestPos.y));
+            result.set(roomId, { x: bestPos.x, y: bestPos.y, z });
+            currentScore = bestScore;
+            improved = true;
+          }
+        }
+
+        if (!improved) break;
+      }
+
+      // ── Strategy B: Pairwise swaps ──
+      if (currentScore > 0) {
+        for (let swapIter = 0; swapIter < 50 && currentScore > 0; swapIter++) {
+          let swapped = false;
+          for (let i = 0; i < zRoomIds.length && currentScore > 0; i++) {
+            for (let j = i + 1; j < zRoomIds.length; j++) {
+              const a = zRoomIds[i], b = zRoomIds[j];
+              const posA = result.get(a)!;
+              const posB = result.get(b)!;
+
+              // Quick diagonal pre-check: would the swap create diagonals?
+              if (wouldCreateDiag(a, posB.x, posB.y, z)) continue;
+              if (wouldCreateDiag(b, posA.x, posA.y, z)) continue;
+
+              result.set(a, { x: posB.x, y: posB.y, z });
+              result.set(b, { x: posA.x, y: posA.y, z });
+
+              const ns = occlusionAwareScore(z);
+              if (ns < currentScore) {
+                currentScore = ns;
+                swapped = true;
+              } else {
+                result.set(a, posA);
+                result.set(b, posB);
+              }
+            }
+          }
+          if (!swapped) break;
+        }
+      }
+
+      // ── Strategy C: Segment compaction ──
+      // For each exit pair that spans 2+ cells on an axis, try to move one
+      // endpoint adjacent to the other (reducing the segment to length 1).
+      if (countOcclusions(z) > 0) {
+        const seen = new Set<string>();
+        for (const roomId of zRoomIds) {
+          const room = rooms.get(roomId);
+          if (!room) continue;
+          const p = result.get(roomId)!;
+          for (const [dir, targetId] of room.exits) {
+            const off = DIRECTION_OFFSETS[dir];
+            if (!off || off.dz !== 0) continue;
+            const tp = result.get(targetId);
+            if (!tp || tp.z !== z) continue;
+            const dist = Math.abs(tp.x - p.x) + Math.abs(tp.y - p.y);
+            if (dist < 2) continue;
+            if (p.x !== tp.x && p.y !== tp.y) continue; // not axis-aligned
+
+            const pairKey = [roomId, targetId].sort().join("|");
+            if (seen.has(pairKey)) continue;
+            seen.add(pairKey);
+
+            // Check if any room sits on this segment
+            let hasOcclusion = false;
+            if (p.x === tp.x) {
+              const minY = Math.min(p.y, tp.y), maxY = Math.max(p.y, tp.y);
+              for (const oid of zRoomIds) {
+                if (oid === roomId || oid === targetId) continue;
+                const op = result.get(oid)!;
+                if (op.x === p.x && op.y > minY && op.y < maxY) {
+                  hasOcclusion = true;
+                  break;
+                }
+              }
+            } else {
+              const minX = Math.min(p.x, tp.x), maxX = Math.max(p.x, tp.x);
+              for (const oid of zRoomIds) {
+                if (oid === roomId || oid === targetId) continue;
+                const op = result.get(oid)!;
+                if (op.y === p.y && op.x > minX && op.x < maxX) {
+                  hasOcclusion = true;
+                  break;
+                }
+              }
+            }
+            if (!hasOcclusion) continue;
+
+            // Try moving each endpoint adjacent to the other
+            for (const mover of [roomId, targetId]) {
+              const anchor = mover === roomId ? targetId : roomId;
+              const mPos = result.get(mover)!;
+              const aPos = result.get(anchor)!;
+
+              // Ideal: one cell away from anchor in the exit direction
+              const adjX = aPos.x + (mPos.x > aPos.x ? 1 : mPos.x < aPos.x ? -1 : 0);
+              const adjY = aPos.y + (mPos.y > aPos.y ? 1 : mPos.y < aPos.y ? -1 : 0);
+
+              // Try the adjacent cell and nearby alternatives
+              const compactCands: { x: number; y: number }[] = [{ x: adjX, y: adjY }];
+              for (let r = 1; r <= 2; r++) {
+                for (let ddx = -r; ddx <= r; ddx++) {
+                  const absRem = r - Math.abs(ddx);
+                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
+                  for (const ddy of dyOpts) {
+                    compactCands.push({ x: adjX + ddx, y: adjY + ddy });
+                  }
+                }
+              }
+
+              const beforeScore = occlusionAwareScore(z);
+              let bestPos: { x: number; y: number } | null = null;
+              let bestScore = beforeScore;
+
+              for (const cand of compactCands) {
+                if (cand.x === mPos.x && cand.y === mPos.y) continue;
+                const ck = cellKey(cand.x, cand.y);
+                if (occupied.has(ck)) continue;
+                if (wouldCreateDiag(mover, cand.x, cand.y, z)) continue;
+
+                const oldKey = cellKey(mPos.x, mPos.y);
+                occupied.delete(oldKey);
+                occupied.add(ck);
+                result.set(mover, { x: cand.x, y: cand.y, z });
+
+                const ns = occlusionAwareScore(z);
+                if (ns < bestScore) {
+                  bestScore = ns;
+                  bestPos = cand;
+                }
+
+                occupied.delete(ck);
+                occupied.add(oldKey);
+                result.set(mover, mPos);
+              }
+
+              if (bestPos) {
+                occupied.delete(cellKey(mPos.x, mPos.y));
+                occupied.add(cellKey(bestPos.x, bestPos.y));
+                result.set(mover, { x: bestPos.x, y: bestPos.y, z });
+              }
+            }
+          }
+        }
       }
     }
   }
