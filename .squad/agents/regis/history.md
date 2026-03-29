@@ -482,3 +482,59 @@ Each z-level gets its own `occupied` set since the designer displays one floor a
 - **Drag resize pattern:** Track mouse position on mousedown, use document-level mousemove/mouseup listeners in useEffect, cleanup on unmount or resize end
 - **Admin UI styling:** Matches existing dark theme (bg-[#1C1D27], borders border-[#2A2B35], gold accent #C9A84C), sans-serif only, compact spacing
 - **ZoneDesigner is large:** 2600+ lines, required careful old_str matches for edits to avoid conflicts
+
+## 2026-03-28 — Zone Designer Legend Panel
+
+**Completed:** Added collapsible legend panel to Zone Designer map view
+**Files Modified:** 1
+
+- `ZoneDesigner.tsx` — Added `HelpCircle` icon import, `showLegend` state, floating legend panel
+
+**Visual elements documented in legend:**
+- **Room types (7):** entry (green), extraction (blue), boss (red), junction (teal), corridor (charcoal), dead_end (charcoal), feature_* (purple) — all using `ROOM_TYPE_COLORS`, `FEATURE_COLOR`, `DEFAULT_COLOR` constants
+- **Selection states:** Selected (cyan #22D3EE, 3px stroke), Disconnected (gold #B8860B, 2px stroke)
+- **Exit lines (6):** Normal (#4A4B55 solid), Selected (#C9A84C solid), Missing Reverse (#B8860B dashed 4 4), Orphaned (#EF4444 dashed 6 3), Cross-Zone Portal (#06b6d4 dashed 4 2), Inter-Floor (#a78bfa solid)
+- **Exit modifiers:** 🔒 Locked, 👁 Hidden — shown as emoji labels on exit midpoints
+- **Room badges:** 👤 NPCs (amber), 📦 Loot (gold), ⚠ Hazards (red) — r=5 circles at room bottom
+- **Room indicators:** ▲/▼ Floor Up/Down (purple circles), ⟐ Portal (cyan circles), ⚠ Disconnected Warning (gold)
+
+**Implementation:** Floating panel in bottom-left corner of map canvas. Collapsed by default (small "Legend" button with HelpCircle icon). Expands to a compact panel with semi-transparent bg (#1C1D27/95) and backdrop blur. Uses the same SVG elements (rect, line, circle, polygon) and exact hex colors as the actual map to show-not-tell. Organized into sections: Room Types, Selection, Exits, Exit Modifiers, Room Badges, Indicators.
+
+**Build:** ✅ Clean
+
+- **Exit Pairs view in ZonesDetail.tsx:** Refactored the Exits tab from a flat one-exit-per-row table to a grouped exit-pair view. Bidirectional exits (A→B north + B→A south) are shown as a single row with ↔ icon and "north / south" directions. One-way exits show → with a "+ reverse" action button. Each row is expandable (chevron toggle) to reveal individual exit details (direction, locked/hidden status, per-exit delete). Inter-zone exits are tagged with a pill badge. The "Add Exit" form now has a "Create pair (bidirectional)" checkbox (default on) that creates both directions at once.
+
+**Key implementation details:**
+  - `OPPOSITE` map reused from ZoneDesigner: `{north: "south", east: "west", up: "down", ...}`
+  - `ExitPair` type: `{ key, forward, reverse | null, isInterZone }`
+  - `groupExitsIntoPairs()` helper: iterates exits, finds matching reverse by slug+opposite direction, builds stable keys
+  - `expandedPairs` state: `Set<string>` toggled per pair key
+  - `handleAddReverse(exit)`: creates opposite-direction exit via `createExit` API
+  - `handleDeletePair(pair)`: deletes both forward and reverse exits
+  - New lucide icons imported: `ChevronDown`, `ChevronRight`, `ArrowRight`, `ArrowRightLeft`
+  - React `Fragment` imported for pair+expanded row groups
+
+**Build:** ✅ Clean
+
+---
+
+## 2026-03-29T17:34Z: Orchestration Checkpoint — Legend + Exit Pairs Delivery
+
+**Status:** COMPLETE
+
+Both tasks delivered and merged into team orchestration log.
+
+**Deliverables Verified:**
+1. Zone Designer Legend Panel — live in ZoneDesigner.tsx, all visual elements documented
+2. Exit Pairs Refactor — live in ZonesDetail.tsx Exits tab, bidirectional grouping + reverse action working
+
+**Team Impact:**
+- Zone Designer now has discoverable legend panel for content team onboarding
+- Exit workflow aligns with bidirectional connection mental model used in map view
+- Both features support Laeral's Siltgate expansion work (136-room city with repeated streets)
+
+**Orchestration Logs Created:**
+- `.squad/orchestration-log/2026-03-29T17-34-regis-legend.md`
+- `.squad/orchestration-log/2026-03-29T17-34-regis-exit-pairs.md`
+
+**Team Roster Status:** Regis — 2 successful feature deliveries this cycle

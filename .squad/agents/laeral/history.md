@@ -43,3 +43,36 @@
 - Design document saved to `.squad/decisions/inbox/laeral-city-zone-design.md` for Bruenor to implement.
 - **Room properties expanded:** Added `safe` (no combat), `crowded` (high NPC density), `slippery` (dexterity checks), `well_lit` (high visibility), `stench` (olfactory hazard), `hazardous` (environmental damage) to existing vocabulary.
 - **Key design principle:** "A living city — not a dungeon." Every quarter tells a story through architecture, population, and atmosphere. Social class is visible and tangible.
+
+### 2025-03-29: Room Duplication Pattern for City Zones
+- Revised the Siltgate from 98 rooms to 136 rooms by embracing room name duplication for generic connective tissue (streets, alleys, tunnels, passages).
+- **Core principle:** Generic streets repeat display names; landmarks keep unique names. A city should feel grid-like and repetitive — the landmarks stand out because the streets around them are similar.
+- **Slug convention:** Repeated rooms use `{name}-{n}` slugs (e.g. `narrow-alley-1`, `sewer-tunnel-3`) for DB uniqueness. Display names repeat freely.
+- **Description variation:** Each duplicated room gets a unique description with different sensory details, even though the name is identical. This prevents copy-paste feel while maintaining grid sameness.
+- **Property variation:** Rooms with the same name may have different properties (one "Narrow Alley" has `stench`, another `rubble`, another `water`), creating mechanical variety within visual sameness.
+- **Repetition count per quarter:** Beggar's Span has 18 repeated rooms out of 28 total. Drowned Veins has 15/22. Ashgate Wastes has 11/20. This gradient matches atmosphere: slums and sewers feel maze-like; noble quarter stays curated.
+- **Design contrast with dungeons:** The Warrens has 100+ unique room names (dungeon = every room is a setpiece). The Siltgate uses repetition (city = setpieces are shops and landmarks). Different zone types demand different naming strategies.
+
+---
+
+## 2026-03-29T17:34Z: Orchestration Checkpoint — Siltgate Room Duplication Delivery
+
+**Status:** COMPLETE
+
+Siltgate revision finalized and merged into team decisions archive.
+
+**Deliverable Verified:**
+- Siltgate expanded to 136 rooms with room duplication pattern fully implemented
+- Room naming convention documented and approved
+- Design philosophy (city vs. dungeon room design) captured for team reference
+
+**Team Alignment:**
+- User directive (dkirby-ms, 2026-03-29T17:17) confirmed: room duplication is desirable for urban grid layouts
+- Regis's Zone Designer and Exit Pairs features now supporting this content design pattern
+- Ready for Bruenor to implement rooms in database
+
+**Decision Documents Created:**
+- `.squad/decisions/decisions.md` — 4 new entries merged (legend, exit pairs, user directive, room duplication pattern)
+- `.squad/orchestration-log/2026-03-29T17-34-laeral-siltgate-revision.md`
+
+**Team Roster Status:** Laeral — 1 major content revision with philosophy update this cycle

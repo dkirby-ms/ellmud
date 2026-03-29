@@ -4651,3 +4651,97 @@ Added two new admin API endpoints and UI features to the Zone Designer:
 - Bug fix: stash-provider.ts `stats` → `base_stats` column reference
 - Tests passing: 2051 server + 158 shared tests ✓
 - Commit: 95a6f97
+
+---
+
+## 2026-03-29: Zone Designer Legend Panel
+
+**By:** Regis (Frontend Dev)  
+**Date:** 2026-03-28
+
+### Decision
+
+Added a collapsible floating legend panel to the Zone Designer map view. The legend is positioned in the bottom-left corner of the canvas, collapsed by default (showing only a small "Legend" button), and expands to show all visual element meanings.
+
+### Rationale
+
+- Designers need to understand what the various colors, line styles, badges, and indicators mean without guessing
+- The legend uses the exact same SVG elements and hex colors as the map itself (show-don't-tell approach)
+- Collapsed by default to avoid cluttering the map view — toggled via a compact button
+- Semi-transparent background with backdrop blur so it doesn't fully obscure the map when expanded
+
+### Impact
+
+- No new dependencies or API changes
+- All visual element styling references the same constants (`ROOM_TYPE_COLORS`, `FEATURE_COLOR`, `PORTAL_COLOR`, etc.)
+- If room type colors or exit styles change in the future, the legend will need to be updated in tandem
+
+---
+
+## 2026-03-29: Exit Pairs View in ZonesDetail.tsx
+
+**By:** Regis (Frontend Dev)
+
+### Decision
+
+The Exits tab now groups bidirectional exits into pairs. One-way exits are shown distinctly with a "+ reverse" action. Expanded rows reveal per-direction details. The "Add Exit" form defaults to creating bidirectional pairs.
+
+### Rationale
+
+- Reduces visual clutter — 10 bidirectional connections show as 10 rows instead of 20
+- Matches the mental model zone designers already have (rooms are *connected*, not just exited)
+- Consistent with ZoneDesigner's `connectBidirectional` pattern
+
+---
+
+## 2026-03-29T17:17: User Directive — Room Duplication in City Zones
+
+**By:** dkirby-ms (via Copilot)
+
+### Decision
+
+It's totally okay for rooms to be duplicated, especially streets or grid areas that will have many rooms with similar descriptions/names. Repeated room names/descriptions are expected and desirable for urban grid layouts.
+
+### Rationale
+
+User request — captured for team memory. This affects zone design philosophy: cities should feel large and repetitive like real streets, not every room needs a unique name.
+
+---
+
+## 2026-03-29: Room Duplication Pattern for City Zones
+
+**By:** Laeral (Content Designer)  
+**Status:** Approved — aligns with user directive (2026-03-29T17:17)
+
+### Decision
+
+City zones should use **repeated display names** for generic connective rooms (streets, alleys, tunnels, passages). Only landmarks, shops, taverns, quest locations, and boss rooms get unique names.
+
+**Slug Convention:** Repeated rooms use `{name-slug}-{n}` pattern for DB primary key uniqueness:
+- `narrow-alley-1`, `narrow-alley-2`, `narrow-alley-3`, …
+- `sewer-tunnel-1`, `sewer-tunnel-2`, …
+- `cobblestone-street-1`, `cobblestone-street-2`, …
+
+**Display Name:** The `name` column in `zone_rooms` repeats freely. Players see "Narrow Alley" multiple times — this is intentional.
+
+**Description Variation:** Each room with a shared name MUST have a unique description with different sensory details. Same name ≠ same text.
+
+**Property Variation:** Rooms with shared names MAY differ in properties (e.g. one "Narrow Alley" has `stench`, another has `water`). This creates mechanical variety.
+
+### When to repeat vs. keep unique
+
+| Repeat | Keep Unique |
+|--------|-------------|
+| Streets, alleys, passages | Named gates and entries |
+| Sewer tunnels, junctions | Boss rooms, quest rooms |
+| Rubble fields, ruins | Shops, taverns, inns |
+| Tenement blocks, warehouse rows | Plazas, squares with features |
+| Generic corridors | NPC locations, chapels |
+
+### Rationale
+
+A city with 100+ unique room names feels like a theme park. A city with repeated street names feels like a real place. The repetition makes the city feel large and grid-like, and makes landmark rooms memorable by contrast.
+
+**Impact on dungeon zones:** This pattern is specific to **city/urban zones**. Dungeon zones like The Warrens should continue using unique room names — every room in a dungeon is a designed encounter space.
+
+**Applies to:** The Siltgate (implemented), and any future city zones.
