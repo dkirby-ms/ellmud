@@ -5,7 +5,7 @@
  * console shows ALL items (40+) instead of the 18 stale copies that were
  * seeded into `content_definitions`.
  *
- * Maps between the relational schema (columns + stats JSONB) and the flat
+ * Maps between the relational schema (columns + base_stats JSONB) and the flat
  * ContentEntity shape the admin routes and UI expect.
  */
 
@@ -17,7 +17,9 @@ interface ItemRow {
   name: string;
   type: string;
   tier: string | null;
-  stats: Record<string, unknown>;
+  base_stats: Record<string, unknown> | null;
+  weight: number;
+  base_durability: number | null;
   description: string | null;
   soulbound: boolean;
   created_at: Date;
@@ -25,15 +27,14 @@ interface ItemRow {
 
 /** Convert a DB row into the flat object the admin UI expects. */
 function rowToEntity(row: ItemRow): ContentEntity {
-  const { weight, baseDurability, ...baseStats } = row.stats as Record<string, unknown>;
   return {
     id: row.id,
     name: row.name,
     type: row.type,
     tier: row.tier ?? 'common',
-    weight: weight ?? 0,
-    baseDurability: baseDurability ?? null,
-    baseStats,
+    weight: row.weight ?? 0,
+    baseDurability: row.base_durability ?? null,
+    baseStats: row.base_stats ?? {},
     description: row.description ?? '',
     soulbound: row.soulbound,
   };
@@ -44,7 +45,7 @@ export class PgItemDefinitionsStore implements IContentStore<ContentEntity> {
 
   async getAll(): Promise<ContentEntity[]> {
     const result = await query<ItemRow>(
-      `SELECT id, name, type, tier, stats, description, soulbound, created_at
+      `SELECT id, name, type, tier, base_stats, weight, base_durability, description, soulbound, created_at
        FROM item_definitions
        ORDER BY name`,
     );
@@ -53,7 +54,7 @@ export class PgItemDefinitionsStore implements IContentStore<ContentEntity> {
 
   async getById(id: string): Promise<ContentEntity | undefined> {
     const result = await query<ItemRow>(
-      `SELECT id, name, type, tier, stats, description, soulbound, created_at
+      `SELECT id, name, type, tier, base_stats, weight, base_durability, description, soulbound, created_at
        FROM item_definitions
        WHERE id = $1`,
       [id],
@@ -66,22 +67,18 @@ export class PgItemDefinitionsStore implements IContentStore<ContentEntity> {
     const { name, type, tier, weight, baseDurability, baseStats, description, soulbound } =
       entity as Record<string, unknown>;
 
-    const stats = {
-      ...(baseStats && typeof baseStats === 'object' ? baseStats : {}),
-      ...(weight != null ? { weight } : {}),
-      ...(baseDurability != null ? { baseDurability } : {}),
-    };
-
     try {
       const result = await query<ItemRow>(
-        `INSERT INTO item_definitions (name, type, tier, stats, description, soulbound)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, name, type, tier, stats, description, soulbound, created_at`,
+        `INSERT INTO item_definitions (name, type, tier, base_stats, weight, base_durability, description, soulbound)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id, name, type, tier, base_stats, weight, base_durability, description, soulbound, created_at`,
         [
           name as string,
           type as string,
           (tier as string) ?? null,
-          JSON.stringify(stats),
+          JSON.stringify(baseStats && typeof baseStats === 'object' ? baseStats : {}),
+          weight ?? 1,
+          baseDurability ?? null,
           (description as string) ?? null,
           soulbound === true,
         ],
@@ -105,22 +102,19 @@ export class PgItemDefinitionsStore implements IContentStore<ContentEntity> {
     }
 
     const merged = { ...existing, ...partial, id } as Record<string, unknown>;
-    const stats = {
-      ...(merged.baseStats && typeof merged.baseStats === 'object' ? merged.baseStats : {}),
-      ...(merged.weight != null ? { weight: merged.weight } : {}),
-      ...(merged.baseDurability != null ? { baseDurability: merged.baseDurability } : {}),
-    };
 
     const result = await query<ItemRow>(
       `UPDATE item_definitions
-       SET name = $1, type = $2, tier = $3, stats = $4, description = $5, soulbound = $6
-       WHERE id = $7
-       RETURNING id, name, type, tier, stats, description, soulbound, created_at`,
+       SET name = $1, type = $2, tier = $3, base_stats = $4, weight = $5, base_durability = $6, description = $7, soulbound = $8
+       WHERE id = $9
+       RETURNING id, name, type, tier, base_stats, weight, base_durability, description, soulbound, created_at`,
       [
         merged.name as string,
         merged.type as string,
         (merged.tier as string) ?? null,
-        JSON.stringify(stats),
+        JSON.stringify(merged.baseStats && typeof merged.baseStats === 'object' ? merged.baseStats : {}),
+        merged.weight ?? 1,
+        merged.baseDurability ?? null,
         (merged.description as string) ?? null,
         merged.soulbound === true,
         id,
