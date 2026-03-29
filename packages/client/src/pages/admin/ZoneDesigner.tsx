@@ -1231,17 +1231,9 @@ export default function ZoneDesigner({
                       markerEnd={markerEnd}
                     />
                     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={12} />
-                    <text
-                      x={lx} y={ly}
-                      textAnchor="middle" dominantBaseline="central"
-                      fill={isSelected ? "#C9A84C" : isOrphan ? "#EF4444" : isMissingReverse ? "#B8860B" : "#6A6B75"}
-                      fontSize="10" fontFamily="var(--font-sans)"
-                    >
-                      {exit.direction}
-                    </text>
                     {(exit.locked || exit.hidden) && (
                       <text
-                        x={lx} y={ly + 12}
+                        x={lx} y={ly}
                         textAnchor="middle" dominantBaseline="central"
                         fill="#B8860B" fontSize="9" fontFamily="var(--font-sans)"
                       >
