@@ -8,8 +8,9 @@ import {
   createRoom, updateRoom, deleteRoom,
   createExit, updateExit, deleteExit, listZones, getZone,
   getOrphanedExits, removeOrphanedExits,
+  listCreatures, listItems,
   type ZoneDefinition, type ZoneRoomDefinition, type ZoneExitDefinition,
-  type OrphanedExitInfo,
+  type OrphanedExitInfo, type RoomNPC, type RoomLootContainer,
 } from "../../lib/zone-api.js";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -180,13 +181,18 @@ export default function ZoneDesigner({
   const [showRoomForm, setShowRoomForm] = useState(false);
   const [roomForm, setRoomForm] = useState({
     slug: "", name: "", description: "", type: "corridor",
-    properties: [] as string[], lootContainers: [] as unknown[], hazards: [] as unknown[], npcs: [] as unknown[],
+    properties: [] as string[], 
+    lootContainers: [] as RoomLootContainer[], 
+    hazards: [] as unknown[], 
+    npcs: [] as RoomNPC[],
   });
 
   // Room edit (side panel)
   const [editForm, setEditForm] = useState({
     name: "", slug: "", description: "", type: "corridor",
     properties: [] as string[],
+    npcs: [] as RoomNPC[],
+    lootContainers: [] as RoomLootContainer[],
   });
 
   // Connect mode
@@ -254,6 +260,15 @@ export default function ZoneDesigner({
   // Copy notification toast
   const [copyNotification, setCopyNotification] = useState<string | null>(null);
 
+  // Resizable panel
+  const [panelWidth, setPanelWidth] = useState(320);
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartRef = useRef<{ x: number; width: number } | null>(null);
+
+  // Creature and item lists for NPC/loot management
+  const [creatures, setCreatures] = useState<Array<{ type: string; name: string }>>([]);
+  const [items, setItems] = useState<Array<{ id: string; name: string }>>([]);
+
   // Sync edit form when selection changes
   useEffect(() => {
     if (selectedRoom) {
@@ -265,10 +280,28 @@ export default function ZoneDesigner({
           description: room.description,
           type: room.type,
           properties: Array.isArray(room.properties) ? [...room.properties] : [],
+          npcs: Array.isArray(room.npcs) ? [...room.npcs] : [],
+          lootContainers: Array.isArray(room.lootContainers) ? [...room.lootContainers] : [],
         });
       }
     }
   }, [selectedRoom, rooms]);
+
+  // Fetch creature templates and items on mount
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [creaturesData, itemsData] = await Promise.all([
+          listCreatures(),
+          listItems(),
+        ]);
+        setCreatures(creaturesData);
+        setItems(itemsData);
+      } catch (err) {
+        console.error('[ZoneDesigner] Failed to fetch creatures/items:', err);
+      }
+    })();
+  }, []);
 
   // Wheel zoom — native listener to allow preventDefault on non-passive event
   useEffect(() => {
@@ -616,6 +649,36 @@ export default function ZoneDesigner({
     }
   }
 
+  // ─── Panel resize handlers ────────────────────────────────
+  function handleResizeStart(e: React.MouseEvent) {
+    e.preventDefault();
+    setIsResizing(true);
+    resizeStartRef.current = { x: e.clientX, width: panelWidth };
+  }
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    function handleResizeMove(e: MouseEvent) {
+      if (!resizeStartRef.current) return;
+      const deltaX = resizeStartRef.current.x - e.clientX;
+      const newWidth = Math.max(280, Math.min(600, resizeStartRef.current.width + deltaX));
+      setPanelWidth(newWidth);
+    }
+
+    function handleResizeEnd() {
+      setIsResizing(false);
+      resizeStartRef.current = null;
+    }
+
+    document.addEventListener('mousemove', handleResizeMove);
+    document.addEventListener('mouseup', handleResizeEnd);
+    return () => {
+      document.removeEventListener('mousemove', handleResizeMove);
+      document.removeEventListener('mouseup', handleResizeEnd);
+    };
+  }, [isResizing]);
+
   // Close context menu on Escape or click outside
   useEffect(() => {
     if (!contextMenu) return;
@@ -670,6 +733,8 @@ export default function ZoneDesigner({
         description: editForm.description,
         type: editForm.type,
         properties: editForm.properties,
+        npcs: editForm.npcs,
+        lootContainers: editForm.lootContainers,
       });
       onZoneChanged?.();
     } catch (err) {
@@ -1593,7 +1658,16 @@ export default function ZoneDesigner({
 
         {/* ─── Side panel ─────────────────────────────────── */}
         {(selectedRoomData || selectedExitData || connectTarget) && (
-          <div className="w-80 border-l border-[#2A2B35] p-4 space-y-3 flex-shrink-0">
+          <div 
+            className="border-l border-[#2A2B35] p-4 space-y-3 flex-shrink-0 relative"
+            style={{ width: panelWidth }}
+          >
+            {/* Drag handle */}
+            <div
+              onMouseDown={handleResizeStart}
+              className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-[#C9A84C] transition-colors bg-[#2A2B35]"
+              style={{ zIndex: 10 }}
+            />
             {/* Connect confirmation */}
             {connectTarget && selectedRoom && (
               <div className="space-y-3">
@@ -1743,34 +1817,123 @@ export default function ZoneDesigner({
                     ))}
                   </div>
                 </div>
-                {/* Content summary (read-only) */}
-                {(selectedRoomData.npcs?.length > 0 || selectedRoomData.lootContainers?.length > 0 || selectedRoomData.hazards?.length > 0) && (
-                  <div>
-                    <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
-                      Content
-                    </label>
-                    <div className="bg-[#0A0B0F] border border-[#2A2B35] rounded px-2 py-1.5 space-y-0.5">
-                      {selectedRoomData.npcs?.length > 0 && (
-                        <div className="text-xs flex items-center gap-1.5" style={{ fontFamily: "var(--font-sans)" }}>
-                          <span style={{ color: "#D97706" }}>👤</span>
-                          <span className="text-[#E8E0D0]">{selectedRoomData.npcs.length} NPC{selectedRoomData.npcs.length > 1 ? "s" : ""}</span>
-                        </div>
-                      )}
-                      {selectedRoomData.lootContainers?.length > 0 && (
-                        <div className="text-xs flex items-center gap-1.5" style={{ fontFamily: "var(--font-sans)" }}>
-                          <span style={{ color: "#CA8A04" }}>📦</span>
-                          <span className="text-[#E8E0D0]">{selectedRoomData.lootContainers.length} Loot Container{selectedRoomData.lootContainers.length > 1 ? "s" : ""}</span>
-                        </div>
-                      )}
-                      {selectedRoomData.hazards?.length > 0 && (
-                        <div className="text-xs flex items-center gap-1.5" style={{ fontFamily: "var(--font-sans)" }}>
-                          <span style={{ color: "#DC2626" }}>⚠</span>
-                          <span className="text-[#E8E0D0]">{selectedRoomData.hazards.length} Hazard{selectedRoomData.hazards.length > 1 ? "s" : ""}</span>
-                        </div>
-                      )}
-                    </div>
+
+                {/* NPCs section */}
+                <div>
+                  <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
+                    NPCs
+                  </label>
+                  <div className="space-y-2">
+                    {editForm.npcs.map((npc, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <select
+                          value={npc.creatureId}
+                          onChange={(e) => {
+                            const newNpcs = [...editForm.npcs];
+                            newNpcs[idx] = { ...npc, creatureId: e.target.value };
+                            setEditForm((f) => ({ ...f, npcs: newNpcs }));
+                          }}
+                          className="flex-1 bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1 text-[#E8E0D0] text-xs focus:border-[#C9A84C] focus:outline-none"
+                          style={{ fontFamily: "var(--font-sans)" }}
+                        >
+                          <option value="">Select creature…</option>
+                          {creatures.map((c) => (
+                            <option key={c.type} value={c.type}>{c.name}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min="1"
+                          value={npc.spawnCount}
+                          onChange={(e) => {
+                            const newNpcs = [...editForm.npcs];
+                            newNpcs[idx] = { ...npc, spawnCount: parseInt(e.target.value) || 1 };
+                            setEditForm((f) => ({ ...f, npcs: newNpcs }));
+                          }}
+                          className="w-16 bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1 text-[#E8E0D0] text-xs focus:border-[#C9A84C] focus:outline-none"
+                          style={{ fontFamily: "var(--font-mono)" }}
+                        />
+                        <button
+                          onClick={() => {
+                            setEditForm((f) => ({ ...f, npcs: f.npcs.filter((_, i) => i !== idx) }));
+                          }}
+                          className="p-1 text-[#8B2500] hover:bg-[#8B2500]/20 rounded"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => {
+                        setEditForm((f) => ({ ...f, npcs: [...f.npcs, { creatureId: "", spawnCount: 1 }] }));
+                      }}
+                      className="w-full px-2 py-1 border border-[#2A2B35] text-[#8A8B95] hover:bg-[#12131A] rounded text-xs flex items-center justify-center gap-1"
+                      style={{ fontFamily: "var(--font-sans)" }}
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add NPC
+                    </button>
                   </div>
-                )}
+                </div>
+
+                {/* Loot section */}
+                <div>
+                  <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
+                    Loot Containers
+                  </label>
+                  <div className="space-y-2">
+                    {editForm.lootContainers.map((loot, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <select
+                          value={loot.itemId}
+                          onChange={(e) => {
+                            const newLoot = [...editForm.lootContainers];
+                            newLoot[idx] = { ...loot, itemId: e.target.value };
+                            setEditForm((f) => ({ ...f, lootContainers: newLoot }));
+                          }}
+                          className="flex-1 bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1 text-[#E8E0D0] text-xs focus:border-[#C9A84C] focus:outline-none"
+                          style={{ fontFamily: "var(--font-sans)" }}
+                        >
+                          <option value="">Select item…</option>
+                          {items.map((item) => (
+                            <option key={item.id} value={item.id}>{item.name}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min="1"
+                          value={loot.quantity}
+                          onChange={(e) => {
+                            const newLoot = [...editForm.lootContainers];
+                            newLoot[idx] = { ...loot, quantity: parseInt(e.target.value) || 1 };
+                            setEditForm((f) => ({ ...f, lootContainers: newLoot }));
+                          }}
+                          className="w-16 bg-[#12131A] border border-[#2A2B35] rounded px-2 py-1 text-[#E8E0D0] text-xs focus:border-[#C9A84C] focus:outline-none"
+                          style={{ fontFamily: "var(--font-mono)" }}
+                        />
+                        <button
+                          onClick={() => {
+                            setEditForm((f) => ({ ...f, lootContainers: f.lootContainers.filter((_, i) => i !== idx) }));
+                          }}
+                          className="p-1 text-[#8B2500] hover:bg-[#8B2500]/20 rounded"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => {
+                        setEditForm((f) => ({ ...f, lootContainers: [...f.lootContainers, { itemId: "", quantity: 1 }] }));
+                      }}
+                      className="w-full px-2 py-1 border border-[#2A2B35] text-[#8A8B95] hover:bg-[#12131A] rounded text-xs flex items-center justify-center gap-1"
+                      style={{ fontFamily: "var(--font-sans)" }}
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add Item
+                    </button>
+                  </div>
+                </div>
+
                 {/* In-game preview */}
                 <div>
                   <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>

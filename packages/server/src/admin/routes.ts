@@ -131,6 +131,30 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
     }
   });
 
+  // ─── GET /admin/api/creature-templates — List all creature templates ─────
+  router.get('/admin/api/creature-templates', adminAuth, async (_req: Request, res: Response) => {
+    try {
+      const { getAllCreatureTemplates } = await import('../creatures/CreatureManager.js');
+      const templates = getAllCreatureTemplates();
+      res.json({ templates, count: templates.length });
+    } catch (err) {
+      console.error('[Admin] Failed to list creature templates:', err);
+      res.status(500).json({ error: 'Failed to list creature templates' });
+    }
+  });
+
+  // ─── GET /admin/api/items — List all item definitions ────────────────────
+  router.get('/admin/api/items', adminAuth, async (_req: Request, res: Response) => {
+    try {
+      const { getAllItemDefinitions } = await import('../items/registry.js');
+      const items = getAllItemDefinitions();
+      res.json({ items, count: items.length });
+    } catch (err) {
+      console.error('[Admin] Failed to list items:', err);
+      res.status(500).json({ error: 'Failed to list items' });
+    }
+  });
+
   // ─── GET /admin/api/players — List all connected players ─────────────────
   router.get('/admin/api/players', adminAuth, async (_req: Request, res: Response) => {
     try {

@@ -24,6 +24,16 @@ export interface ZoneDefinition {
   repopIntervalSeconds: number;
 }
 
+export interface RoomNPC {
+  creatureId: string;
+  spawnCount: number;
+}
+
+export interface RoomLootContainer {
+  itemId: string;
+  quantity: number;
+}
+
 export interface ZoneRoomDefinition {
   id: string;
   zoneId: string;
@@ -32,9 +42,9 @@ export interface ZoneRoomDefinition {
   description: string;
   type: string;
   properties: string[];
-  lootContainers: unknown[];
+  lootContainers: RoomLootContainer[];
   hazards: unknown[];
-  npcs: unknown[];
+  npcs: RoomNPC[];
 }
 
 export interface ZoneExitDefinition {
@@ -145,4 +155,28 @@ export async function removeOrphanedExits(): Promise<{ removed: number; orphaned
   return adminFetch<{ removed: number; orphanedExits: OrphanedExitInfo[] }>('/admin/api/zones/cleanup/orphaned-exits', {
     method: 'POST',
   });
+}
+
+// ─── Creature & Item Registry ────────────────────────────────────────────────
+
+export interface CreatureTemplate {
+  type: string;
+  name: string;
+}
+
+export interface ItemDefinition {
+  id: string;
+  name: string;
+  type: string;
+  tier: string;
+}
+
+export async function listCreatures(): Promise<CreatureTemplate[]> {
+  const data = await adminFetch<{ templates: CreatureTemplate[]; count: number }>('/admin/api/creature-templates');
+  return data.templates || [];
+}
+
+export async function listItems(): Promise<ItemDefinition[]> {
+  const data = await adminFetch<{ items: ItemDefinition[]; count: number }>('/admin/api/items');
+  return data.items || [];
 }

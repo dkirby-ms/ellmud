@@ -22,6 +22,11 @@ const CREATURE_TEMPLATES = new Map<string, CreatureTemplate>([
   ['drowned_revenant', DROWNED_REVENANT],
 ]);
 
+/** Get all creature templates (for admin UI). */
+export function getAllCreatureTemplates(): CreatureTemplate[] {
+  return Array.from(CREATURE_TEMPLATES.values());
+}
+
 /** Tracks a zone-spawned creature for repop. */
 interface ZoneCreatureRecord {
   creatureId: string;
