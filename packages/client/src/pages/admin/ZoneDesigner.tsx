@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, ZoomIn, ZoomOut, Maximize2, HelpCircle } from "lucide-react";
 import { computeLayout } from "../../map/computeLayout.js";
 import type { LayoutRoom } from "../../map/computeLayout.js";
 import { FloorSelector } from "../../components/map/FloorSelector.js";
@@ -259,6 +259,9 @@ export default function ZoneDesigner({
 
   // Copy notification toast
   const [copyNotification, setCopyNotification] = useState<string | null>(null);
+
+  // Legend panel
+  const [showLegend, setShowLegend] = useState(false);
 
   // Resizable panel
   const [panelWidth, setPanelWidth] = useState(320);
@@ -1196,7 +1199,7 @@ export default function ZoneDesigner({
         {/* SVG Canvas */}
         <div
           ref={canvasRef}
-          className="flex-1 p-4 overflow-auto"
+          className="flex-1 p-4 overflow-hidden relative"
           style={{ cursor: canvasCursor }}
           onClick={(e) => { if (e.target === e.currentTarget) handleCanvasClick(); }}
         >
@@ -1597,6 +1600,179 @@ export default function ZoneDesigner({
                 );
               })}
             </svg>
+          )}
+
+          {/* ─── Legend panel ──────────────────────────────── */}
+          {rooms.length > 0 && (
+            <div
+              style={{
+                position: "absolute",
+                bottom: 16,
+                left: 16,
+                zIndex: 50,
+                fontFamily: "var(--font-sans)",
+              }}
+            >
+              {!showLegend ? (
+                <button
+                  onClick={() => setShowLegend(true)}
+                  className="flex items-center gap-1 bg-[#1C1D27]/90 border border-[#2A2B35] rounded px-2 py-1 text-[#8A8B95] text-xs hover:text-[#E8E0D0] hover:border-[#4A4B55] transition-colors"
+                  title="Show legend"
+                >
+                  <HelpCircle size={12} />
+                  <span>Legend</span>
+                </button>
+              ) : (
+                <div
+                  className="bg-[#1C1D27]/95 border border-[#2A2B35] rounded-lg shadow-lg"
+                  style={{ maxWidth: 260, backdropFilter: "blur(4px)" }}
+                >
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-[#2A2B35]">
+                    <span className="text-[#C9A84C] text-xs font-semibold uppercase tracking-wider">Legend</span>
+                    <button
+                      onClick={() => setShowLegend(false)}
+                      className="text-[#8A8B95] hover:text-[#E8E0D0] transition-colors"
+                      title="Hide legend"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                  <div className="p-3 space-y-3 text-xs">
+                    {/* Room types */}
+                    <div>
+                      <div className="text-[#8A8B95] uppercase tracking-wider mb-1.5" style={{ fontSize: 9 }}>Room Types</div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                        {([
+                          ["entry", "Entry"],
+                          ["extraction", "Extraction"],
+                          ["boss", "Boss"],
+                          ["junction", "Junction"],
+                          ["corridor", "Corridor"],
+                          ["dead_end", "Dead End"],
+                          ["feature_", "Feature"],
+                        ] as const).map(([type, label]) => {
+                          const c = type === "feature_" ? FEATURE_COLOR : (ROOM_TYPE_COLORS[type] ?? DEFAULT_COLOR);
+                          return (
+                            <div key={type} className="flex items-center gap-1.5">
+                              <svg width="14" height="14" viewBox="0 0 14 14">
+                                <rect x="1" y="1" width="12" height="12" rx="2" fill={c.fill} stroke={c.stroke} strokeWidth="1.5" />
+                              </svg>
+                              <span className="text-[#E8E0D0]">{label}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Selection states */}
+                    <div>
+                      <div className="text-[#8A8B95] uppercase tracking-wider mb-1.5" style={{ fontSize: 9 }}>Selection</div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <svg width="14" height="14" viewBox="0 0 14 14">
+                            <rect x="1" y="1" width="12" height="12" rx="2" fill={DEFAULT_COLOR.fill} stroke="#22D3EE" strokeWidth="2.5" />
+                          </svg>
+                          <span className="text-[#E8E0D0]">Selected</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <svg width="14" height="14" viewBox="0 0 14 14">
+                            <rect x="1" y="1" width="12" height="12" rx="2" fill={DEFAULT_COLOR.fill} stroke="#B8860B" strokeWidth="2" />
+                          </svg>
+                          <span className="text-[#E8E0D0]">Disconnected</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Exits */}
+                    <div>
+                      <div className="text-[#8A8B95] uppercase tracking-wider mb-1.5" style={{ fontSize: 9 }}>Exits</div>
+                      <div className="space-y-1">
+                        {([
+                          { color: "#4A4B55", dash: undefined, width: 1.5, label: "Normal" },
+                          { color: "#C9A84C", dash: undefined, width: 2, label: "Selected" },
+                          { color: "#B8860B", dash: "4 4", width: 1.5, label: "Missing Reverse" },
+                          { color: "#EF4444", dash: "6 3", width: 1.5, label: "Orphaned" },
+                          { color: PORTAL_COLOR, dash: "4 2", width: 2, label: "Cross-Zone Portal" },
+                          { color: INTER_FLOOR_COLOR, dash: undefined, width: 1.5, label: "Inter-Floor" },
+                        ] as const).map((e) => (
+                          <div key={e.label} className="flex items-center gap-1.5">
+                            <svg width="24" height="10" viewBox="0 0 24 10">
+                              <line
+                                x1="2" y1="5" x2="19" y2="5"
+                                stroke={e.color} strokeWidth={e.width}
+                                strokeDasharray={e.dash}
+                              />
+                              <polygon points="19 2, 23 5, 19 8" fill={e.color} />
+                            </svg>
+                            <span className="text-[#E8E0D0]">{e.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Exit modifiers */}
+                    <div>
+                      <div className="text-[#8A8B95] uppercase tracking-wider mb-1.5" style={{ fontSize: 9 }}>Exit Modifiers</div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <span style={{ fontSize: 11 }}>🔒</span>
+                          <span className="text-[#E8E0D0]">Locked</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span style={{ fontSize: 11 }}>👁</span>
+                          <span className="text-[#E8E0D0]">Hidden</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Room badges */}
+                    <div>
+                      <div className="text-[#8A8B95] uppercase tracking-wider mb-1.5" style={{ fontSize: 9 }}>Room Badges</div>
+                      <div className="space-y-1">
+                        {([
+                          { icon: "👤", color: "#D97706", bg: "#2A1E0A", label: "NPCs" },
+                          { icon: "📦", color: "#CA8A04", bg: "#2A200A", label: "Loot" },
+                          { icon: "⚠", color: "#DC2626", bg: "#2A0A0A", label: "Hazards" },
+                        ] as const).map((b) => (
+                          <div key={b.label} className="flex items-center gap-1.5">
+                            <svg width="14" height="14" viewBox="0 0 14 14">
+                              <circle cx="7" cy="7" r="5" fill={b.bg} stroke={b.color} strokeWidth="1" />
+                              <text x="7" y="7" textAnchor="middle" dominantBaseline="central" fill={b.color} fontSize="6">{b.icon}</text>
+                            </svg>
+                            <span className="text-[#E8E0D0]">{b.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Room indicators */}
+                    <div>
+                      <div className="text-[#8A8B95] uppercase tracking-wider mb-1.5" style={{ fontSize: 9 }}>Indicators</div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <svg width="14" height="14" viewBox="0 0 14 14">
+                            <circle cx="7" cy="7" r="5" fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth="1" />
+                            <text x="7" y="7" textAnchor="middle" dominantBaseline="central" fill={INTER_FLOOR_COLOR} fontSize="7" fontWeight="bold">▲</text>
+                          </svg>
+                          <span className="text-[#E8E0D0]">Floor Up/Down</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <svg width="14" height="14" viewBox="0 0 14 14">
+                            <circle cx="7" cy="7" r="6" fill="#0e3a3d" stroke={PORTAL_COLOR} strokeWidth="1" />
+                            <text x="7" y="7" textAnchor="middle" dominantBaseline="central" fill={PORTAL_COLOR} fontSize="8">⟐</text>
+                          </svg>
+                          <span className="text-[#E8E0D0]">Portal</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[#B8860B]" style={{ fontSize: 11 }}>⚠</span>
+                          <span className="text-[#E8E0D0]">Disconnected Warning</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* ─── Hover tooltip ─────────────────────────────── */}
