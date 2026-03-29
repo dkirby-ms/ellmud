@@ -135,3 +135,30 @@ Initial setup complete. Scribe orchestration workflow established: create orches
 **Decision Status:** No new decisions captured. All architectural choices follow Elminster's scoping analysis and established PgItemDefinitionsStore pattern.
 
 **Next Steps:** Phase 2 ready for prioritization. Skills + loot tables (Phase 1) estimated ~15 hours. Rooms + factions reconciliation (Phase 2) estimated ~35 hours.
+
+---
+
+## Session: Drizzt Migration Consolidation Orchestration (2026-03-29T14:40:00Z)
+
+### Tasks Completed
+
+1. ✅ **Orchestration Log Created**
+   - `.squad/orchestration-log/2026-03-29T14-40-00Z-drizzt.md`
+   - Migration consolidation: 36 files → 3 clean files (001_schema.sql, 002_seed_content.sql, 003_seed_zones.sql)
+   - All 36 old files deleted; fresh DB verified
+   - Tests: 2051 server + 158 shared PASSING
+   - Commit: 95a6f97
+
+2. ✅ **Session Log Created**
+   - `.squad/log/2026-03-29T14-40-00Z-migration-consolidation.md`
+   - Technical summary: schema consolidation, bug fix (stash-provider.ts stats→base_stats), developer impact
+
+3. ✅ **Decision Merged**
+   - Inbox file `.squad/decisions/inbox/drizzt-migration-consolidation.md` merged to decisions.md
+   - File deleted; no duplicates
+
+4. ✅ **Agent History Updated**
+   - Drizzt: Added team update entry with log references and test status
+   - Scribe: This entry
+
+**Decision Impact:** Pre-release migration strategy established. Future migrations start at 004_*.sql. All devs must run schema reset before next server start.

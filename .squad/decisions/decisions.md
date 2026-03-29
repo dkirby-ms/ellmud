@@ -4627,3 +4627,27 @@ Added two new admin API endpoints and UI features to the Zone Designer:
 - Build: ✅ Clean (TypeScript compilation successful)
 - Server tests: Running (91 test files, takes ~5+ minutes)
 - Manual testing recommended for full UI verification
+
+---
+
+## 2026-03-30: Migration consolidation — 36 files → 3 clean files
+
+**By:** Drizzt (Engine Dev)  
+**Requested by:** dkirby-ms
+
+**Decision:** Consolidate 36 incremental migration files into 3 clean migrations for pre-release clean slate.
+
+**Migrations Created:**
+- `001_schema.sql` — all tables, constraints, indexes
+- `002_seed_content.sql` — factions, items, creatures  
+- `003_seed_zones.sql` — Refuge + Warrens zones
+
+**Why:** Pre-release project with zero production databases. Clean slate makes onboarding easier and removes accumulated ALTER/DROP/recreate noise from 36 incremental migrations.
+
+**Impact:**
+- Every dev must run `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` and restart the server
+- All 36 old migration files deleted
+- Future migrations start at `004_*.sql`
+- Bug fix: stash-provider.ts `stats` → `base_stats` column reference
+- Tests passing: 2051 server + 158 shared tests ✓
+- Commit: 95a6f97

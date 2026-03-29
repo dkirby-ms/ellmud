@@ -2453,3 +2453,14 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 - **Test regex sensitivity:** The schema validation tests use exact type keywords (`INT` vs `INTEGER`) in regexes. Use `INT` for columns that have inline CHECK constraints to match existing test patterns.
 - **extractForeignKeys only matched UUID:** Had to extend regex to `(?:UUID|TEXT)` since item_definitions.id and player_loadout.item_id are TEXT PKs/FKs.
 - **Warrens zone was never inserted:** Migration 033 assumed a pre-existing warrens zone row but none existed. The consolidation creates it properly with a fresh INSERT.
+
+---
+
+## Team Update (2026-03-29T14:40:00Z)
+
+**Documented:** Drizzt's migration consolidation work
+- Orchestration log created: `.squad/orchestration-log/2026-03-29T14-40-00Z-drizzt.md`
+- Session log created: `.squad/log/2026-03-29T14-40-00Z-migration-consolidation.md`
+- Decision merged into `.squad/decisions/decisions.md` (inbox file deleted)
+- Commit 95a6f97 logged
+- Tests: 2051 server + 158 shared tests PASSING ✓
