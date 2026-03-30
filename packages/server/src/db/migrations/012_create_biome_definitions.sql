@@ -2,18 +2,7 @@
 -- Dedicated biome_definitions table, migrating data out of the JSONB blob
 -- in content_definitions.
 
-CREATE TABLE IF NOT EXISTS biome_definitions (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  slug            TEXT NOT NULL UNIQUE,
-  name            TEXT NOT NULL,
-  description     TEXT NOT NULL DEFAULT '',
-  tier            INT NOT NULL DEFAULT 1,
-  features        TEXT[] NOT NULL DEFAULT '{}',
-  hazard_types    TEXT[] NOT NULL DEFAULT '{}',
-  room_properties TEXT[] NOT NULL DEFAULT '{}',
-  narration_hints TEXT[] NOT NULL DEFAULT '{}',
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- Table now consolidated into 001_schema.sql.
 
 -- Migrate existing biome rows from content_definitions
 INSERT INTO biome_definitions (slug, name, description, tier, features, hazard_types, room_properties, narration_hints)

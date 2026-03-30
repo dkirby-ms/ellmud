@@ -2,16 +2,7 @@
 -- Dedicated modifier_definitions table, migrating data out of the JSONB blob
 -- in content_definitions.
 
-CREATE TABLE IF NOT EXISTS modifier_definitions (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  slug        TEXT NOT NULL UNIQUE,
-  name        TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
-  effects     JSONB NOT NULL DEFAULT '{}',
-  stackable   BOOLEAN NOT NULL DEFAULT false,
-  tags        TEXT[] NOT NULL DEFAULT '{}',
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- Table now consolidated into 001_schema.sql.
 
 -- Migrate existing modifier rows from content_definitions
 INSERT INTO modifier_definitions (slug, name, description, effects, stackable, tags)
