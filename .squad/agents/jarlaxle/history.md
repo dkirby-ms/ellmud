@@ -1824,3 +1824,64 @@ Peaceful flag properly persists across zone transitions. Dev team can now use `/
 - `buildCtx` test helper in creature-wiring.test.ts must mirror ShardRoom.buildCommandContext — any new field added to CommandContext in ShardRoom must be added to the test helper too, or tests will pass while production behavior diverges.
 - Creature movement in `CreatureManager.updateAll()` mutates `creature.currentRoomId` before returning actions. Any post-processing of movement actions (like narrations) needs the original room preserved on the action itself.
 - `broadcastToRoom` accepts a `CommandResult` with narrations — use `type: 'ambient'` for world flavor text like creature movement.
+
+### 2025-03-30: Passive Creatures — Aggressive Flag for Wildlife
+
+**Task:** Fix city wildlife (pigeons, dogs) attacking players in Siltgate zone.
+
+**Root Cause:** In `behavior.ts` line 62, ALL creatures unconditionally transitioned to hostile when players were present. There was no concept of passive/non-aggressive creatures.
+
+**Solution:** Added `aggressive: boolean` flag to creature system (defaults to true for backward compatibility).
+
+**Changes Made:**
+1. **Types** (`packages/server/src/creatures/types.ts`):
+   - Added `aggressive: boolean` to `Creature` interface
+   - Added `aggressive: boolean` to `CreatureTemplate` interface
+   - Extended `CreatureType` union to include `'city_dog' | 'pigeon_flock' | string` for dynamic types
+
+2. **Behavior Logic** (`packages/server/src/creatures/behavior.ts`):
+   - Early-exit in `transitionState()`: if `!creature.aggressive`, always return 'idle'
+   - Passive creatures never enter hostile or alert states
+   - They still patrol normally via patrol_move actions
+
+3. **CreatureManager** (`packages/server/src/creatures/CreatureManager.ts`):
+   - Updated `createCreature()`, `createZoneCreature()`, `spawnSingleCreature()` to read `aggressive` from template and pass to instance
+
+4. **ContentRegistry** (`packages/server/src/content/ContentRegistry.ts`):
+   - Added `aggressive: boolean` to `CreatureRow` interface
+   - Updated `loadCreatures()` query to SELECT aggressive column
+   - Set `aggressive: row.aggressive ?? true` when building templates (default true for fallback)
+
+5. **Migration** (`packages/server/src/db/migrations/008_passive_creatures.sql`):
+   - `ALTER TABLE creature_definitions ADD COLUMN aggressive BOOLEAN NOT NULL DEFAULT true`
+   - `UPDATE creature_definitions SET aggressive = false WHERE type IN ('pigeon_flock', 'city_dog')`
+
+6. **Templates** — Updated all hardcoded creature templates to include `aggressive: true`:
+   - `drowned-revenant.ts`
+   - `gutterspawn.ts`
+   - `hollow-stalker.ts`
+   - `rubble-scavenger.ts`
+   - `the-collapsed-one.ts`
+
+7. **Tests** (`packages/server/src/__tests__/creatures.test.ts`):
+   - Added 4 new tests in "passive creatures" describe block:
+     - Passive creatures never go hostile with players present
+     - Passive creatures ignore noise and never alert
+     - Passive creatures can still patrol normally
+     - Aggressive creatures still attack players (regression check)
+   - Updated test helpers to include `aggressive: true` default
+
+**Test Results:** 68 creature tests passing (45 in creatures.test.ts + 23 in creature-wiring.test.ts). Zero regressions. TypeScript compilation clean.
+
+**Design Decisions:**
+- Backward compatibility: default to `aggressive: true` in both DB schema (DEFAULT clause) and code (fallback `?? true`)
+- Non-aggressive creatures ONLY skip combat states — they still patrol, obey movement rules, and can be attacked
+- The aggressive check happens at the top of `transitionState()` before any other logic — clean early exit
+- Existing procedurally-generated creatures (non-zone) remain aggressive by default since templates have `aggressive: true`
+
+**Key File Paths:**
+- Behavior state machine: `packages/server/src/creatures/behavior.ts`
+- Creature spawning: `packages/server/src/creatures/CreatureManager.ts`
+- DB loader: `packages/server/src/content/ContentRegistry.ts`
+- Migration: `packages/server/src/db/migrations/008_passive_creatures.sql`
+- Tests: `packages/server/src/__tests__/creatures.test.ts`, `packages/server/src/__tests__/peaceful-mode.test.ts`
