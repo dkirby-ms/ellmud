@@ -119,6 +119,7 @@ export class CreatureManager {
       alertTargetRoomId: null,
       lootTable: [...template.lootTable],
       isAlive: true,
+      aggressive: template.aggressive,
     };
   }
 
@@ -148,6 +149,7 @@ export class CreatureManager {
       alertTargetRoomId: null,
       lootTable: [...template.lootTable],
       isAlive: true,
+      aggressive: template.aggressive,
     };
 
     this.creatures.set(creature.id, creature);
@@ -235,6 +237,7 @@ export class CreatureManager {
       alertTargetRoomId: null,
       lootTable: [...template.lootTable],
       isAlive: true,
+      aggressive: template.aggressive,
     };
   }
 

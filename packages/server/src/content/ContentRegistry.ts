@@ -30,6 +30,7 @@ interface CreatureRow {
   flee_threshold: number;
   loot_table: Array<{ itemId: string; dropWeight: number }>;
   status: string;
+  aggressive: boolean;
 }
 
 interface ItemRow {
@@ -147,7 +148,8 @@ export class ContentRegistry {
     const result = await this.pool!.query<CreatureRow>(
       `SELECT id, slug, type, name, max_hp, attack, defence, armour, agility,
               min_count, max_count, preferred_rooms, forbidden_rooms,
-              idle_ticks_min, idle_ticks_max, flee_threshold, loot_table, status
+              idle_ticks_min, idle_ticks_max, flee_threshold, loot_table, status,
+              aggressive
        FROM creature_definitions
        WHERE status = 'published'`,
     );
@@ -188,6 +190,7 @@ export class ContentRegistry {
         idleTicksMin: row.idle_ticks_min,
         idleTicksMax: row.idle_ticks_max,
         fleeThreshold: row.flee_threshold,
+        aggressive: row.aggressive ?? true,
       });
     }
     this.creatures = next;

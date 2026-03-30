@@ -55,4 +55,5 @@ export const RUBBLE_SCAVENGER: CreatureTemplate = {
   idleTicksMin: 4,
   idleTicksMax: 8,
   fleeThreshold: 0.15,
+  aggressive: true,
 };

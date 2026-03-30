@@ -24,9 +24,9 @@ export interface CreatureWorldState {
 /**
  * Determine the next behavior state based on current state and world.
  * Transitions are strict and deterministic:
- *   idle   → alert   (noise in adjacent room)
- *   idle   → hostile (player in same room)
- *   alert  → hostile (player in same room)
+ *   idle   → alert   (noise in adjacent room) [only if aggressive]
+ *   idle   → hostile (player in same room) [only if aggressive]
+ *   alert  → hostile (player in same room) [only if aggressive]
  *   alert  → idle    (reached alert target, no player found)
  *   hostile → fleeing (HP below threshold)
  *   fleeing stays fleeing (no recovery in Phase 1)
@@ -39,6 +39,11 @@ function transitionState(
 ): BehaviorState {
   const playersHere = world.playersInRoom.get(creature.currentRoomId) ?? [];
   const adjacentRooms = world.roomExits.get(creature.currentRoomId) ?? [];
+
+  // Passive creatures never enter hostile or alert states
+  if (!creature.aggressive) {
+    return 'idle';
+  }
 
   // Fleeing is terminal in Phase 1 — once fleeing, always fleeing
   if (creature.behaviorState === 'fleeing') {

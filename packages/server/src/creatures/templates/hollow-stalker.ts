@@ -55,4 +55,5 @@ export const HOLLOW_STALKER: CreatureTemplate = {
   idleTicksMin: 5,
   idleTicksMax: 12,
   fleeThreshold: 0.15,
+  aggressive: true,
 };

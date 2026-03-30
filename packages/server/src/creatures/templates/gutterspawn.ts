@@ -47,4 +47,5 @@ export const GUTTERSPAWN: CreatureTemplate = {
   idleTicksMin: 3,
   idleTicksMax: 6,
   fleeThreshold: 0.3,
+  aggressive: true,
 };

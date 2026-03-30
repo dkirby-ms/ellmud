@@ -48,4 +48,5 @@ export const DROWNED_REVENANT: CreatureTemplate = {
   idleTicksMin: 3,
   idleTicksMax: 5,
   fleeThreshold: 0.25,
+  aggressive: true,
 };

@@ -62,4 +62,5 @@ export const THE_COLLAPSED_ONE: CreatureTemplate = {
   idleTicksMin: 8,
   idleTicksMax: 15,
   fleeThreshold: 0,
+  aggressive: true,
 };
