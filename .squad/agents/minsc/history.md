@@ -1288,3 +1288,22 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 - 8 new decisions merged from inbox to decisions.md (deduplicated)
 - Inbox directory cleared
 - Full decision trail available for team reference
+
+## Learnings — Siltgate Topology Test Data Update (2025-07-24)
+
+### What happened
+- Updated Siltgate test data in `computeLayout.test.ts` to reflect Laeral's 5 topology fixes
+- Added 2 new rooms: `rubble-passage-1`, `gutter-sewer`
+- Removed 10 exits (5 broken pairs) and added 8 exits (4 corrected pairs)
+- Zone grew from 136 → 138 rooms, exits from 282 → 280
+- Diagonal threshold tightened from ≤10 to ≤6 (actual: 2 diagonals)
+- Direction violations remain at 0 (hard constraint preserved)
+- Occlusion threshold unchanged at ≤16
+
+### Test results
+- `computeLayout.test.ts`: 24/24 passed (Siltgate: 2 diagonals, 0 direction violations)
+- `validateZoneTopology.test.ts`: 9/9 passed (Drizzt's validator detects the OLD topology's 10 conflicts correctly)
+- Full client suite: 144/144 passed across 12 test files
+
+### Key insight
+- The topology fixes dramatically reduced diagonals (from ~8-10 to 2). The remaining 2 are `collapsed-building-1 ↔ rubble-street-1`, which is the new bridge room area — acceptable given the dense Ashgate topology.

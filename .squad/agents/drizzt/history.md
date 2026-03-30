@@ -2608,3 +2608,43 @@ Key insight: Topological conflicts are fundamentally about cycle offset sums. An
 - Grid clusters (≥9 rooms with perpendicular path convergence) are detected pre-BFS and placed as rigid blocks, avoiding BFS-order displacement.
 - Direction violation repair (Phase 5b) uses three escalating strategies: single-room moves, pairwise swaps with occupants, and group shifts. Each strategy checks `moveWouldIncreaseMismatches()` as a hard guard to prevent regression.
 - The cycle offset sum test (for every fundamental cycle, sum DIRECTION_OFFSETS — must return to (0,0)) is the key insight for a pre-layout validation utility.
+
+---
+
+## Zone Topology Validator (2025-07-25)
+
+**Task:** Implement `validateZoneTopology()` — a pure graph analysis utility that detects topological conflicts and position collisions BEFORE the layout engine runs, giving zone designers instant feedback.
+
+**Status:** ✅ Complete — Implementation + 9 passing tests
+
+### What I Built
+
+- **`packages/client/src/map/validateZoneTopology.ts`** — BFS-based validator that assigns ideal grid positions using direction offsets (cardinal: 1 cell, up/down: 0 displacement) and detects:
+  - **Topological conflicts:** Same room reachable via 2+ paths with different ideal (x,y) positions. Sorted by severity (Manhattan delta).
+  - **Position collisions:** Two different rooms wanting the same 3D grid cell (x,y,z). Z-aware to avoid false positives from up/down pairs on different floors.
+  - Returns a human-readable summary string for designer tooling.
+
+- **`packages/client/src/map/__tests__/validateZoneTopology.test.ts`** — 9 tests covering:
+  - Simple tree (no cycles) → valid
+  - Rectangular cycle (offsets sum to 0) → valid
+  - Mismatched rectangle → conflict detected
+  - Cross-neighborhood shortcut → large delta conflict
+  - Position collision detection
+  - Up/down zero-displacement semantics (conflict and valid cases)
+  - Siltgate zone (136 rooms) → 10 conflicts (max delta 17), 26 collisions
+  - Single room → valid
+  - Up/down same-column → valid (no false collision)
+
+### Siltgate Analysis
+
+The validator found 10 topological conflicts in Siltgate, grouped into 5 conflict pairs:
+1. **Sewer tunnels 4/junction-2** (delta 17) — sewer ring connecting through surface at vastly different positions
+2. **dock-street-5/narrow-alley-3** (delta 9) — the known cross-neighborhood shortcut
+3. **narrow-alley-6/gutter-drain** (delta 8) — vertical shortcut via sewer-junction-1
+4. **rubble-street-1/2** (delta 5) — scorched-plaza cycle with unequal path lengths
+5. **iron-balcony-2/garden-terrace** (delta 3) — promenade/garden loop mismatch
+
+### Learnings
+- Conflict pairs are symmetric: if room A conflicts reaching B, then B also conflicts reaching A via the reverse cycle. Each pair appears as 2 entries in the conflict list.
+- Z-level tracking is essential for collision detection — without it, every up/down pair creates a false-positive collision since they share (x,y) by design.
+- No barrel file exists for `packages/client/src/map/` — modules are imported directly by file path.

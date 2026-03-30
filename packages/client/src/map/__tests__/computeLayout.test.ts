@@ -553,7 +553,7 @@ describe('computeLayout', () => {
     expect(diagonals).toBeLessThanOrEqual(2);
   });
 
-  // ── 21. Siltgate zone (136 rooms, 282 intra-zone exits) ─────────────────
+  // ── 21. Siltgate zone (138 rooms, 280 intra-zone exits) ─────────────────
   it('handles the Siltgate city zone without diagonals', () => {
     const rooms = makeRooms({
       'apothecary': [['north', 'narrow-alley-1']],
@@ -581,9 +581,9 @@ describe('computeLayout', () => {
       'cobblestone-street-1': [['east', 'cobblestone-street-2'], ['north', 'silver-arcade-2'], ['south', 'glassblowers-workshop']],
       'cobblestone-street-2': [['east', 'cobblestone-street-3'], ['south', 'narrow-alley-2'], ['west', 'cobblestone-street-1']],
       'cobblestone-street-3': [['east', 'merchant-inn'], ['north', 'silver-arcade-4'], ['south', 'pawn-shop'], ['west', 'cobblestone-street-2']],
-      'collapsed-building-1': [['north', 'rubble-street-1']],
+      'collapsed-building-1': [['north', 'rubble-street-1'], ['south', 'rubble-passage-1']],
       'collapsed-building-2': [['south', 'rubble-street-3']],
-      'collapsed-building-3': [['west', 'carrion-field']],
+      'collapsed-building-3': [['east', 'rubble-passage-1'], ['west', 'carrion-field']],
       'collapsed-sewer': [['west', 'drain-grate-2']],
       'courtyard-fountain': [['east', 'library-entrance'], ['north', 'noble-residence-1'], ['south', 'promenade-walk-1'], ['west', 'servants-passage']],
       'crumbling-wall-1': [['east', 'bone-pit'], ['north', 'scorched-plaza'], ['south', 'crumbling-wall-2']],
@@ -592,7 +592,7 @@ describe('computeLayout', () => {
       'dock-street-2': [['east', 'warehouse-1'], ['north', 'dock-street-1'], ['south', 'dock-street-3']],
       'dock-street-3': [['north', 'dock-street-2'], ['south', 'dock-street-4'], ['west', 'chandlers-shop']],
       'dock-street-4': [['east', 'warehouse-2'], ['north', 'dock-street-3'], ['south', 'dock-street-5']],
-      'dock-street-5': [['east', 'narrow-alley-3'], ['north', 'dock-street-4'], ['south', 'tide-gate'], ['west', 'warehouse-3']],
+      'dock-street-5': [['north', 'dock-street-4'], ['south', 'tide-gate'], ['west', 'warehouse-3']],
       'dockside-tavern': [['south', 'fish-market']],
       'drain-grate-1': [['south', 'sewer-junction-2']],
       'drain-grate-2': [['east', 'collapsed-sewer'], ['north', 'sewer-junction-3']],
@@ -606,14 +606,15 @@ describe('computeLayout', () => {
       'flophouse': [['west', 'rat-run-1']],
       'fountain-plaza': [['east', 'silver-arcade-1'], ['north', 'news-board'], ['south', 'market-square'], ['up', 'estate-gate']],
       'fungal-cavern': [['north', 'sewer-tunnel-7']],
-      'garden-terrace': [['east', 'observatory'], ['north', 'noble-residence-2'], ['south', 'promenade-walk-3'], ['west', 'iron-balcony-2']],
+      'garden-terrace': [['east', 'observatory'], ['north', 'noble-residence-2'], ['south', 'promenade-walk-3']],
       'glassblowers-workshop': [['north', 'cobblestone-street-1']],
       'guild-hall': [['down', 'undercity-gate'], ['east', 'cloth-merchants-hall'], ['north', 'jewelers-lane'], ['south', 'silver-arcade-3']],
-      'gutter-drain': [['down', 'sewer-junction-1'], ['north', 'narrow-alley-6'], ['south', 'beggar-kings-court']],
+      'gutter-drain': [['down', 'gutter-sewer'], ['north', 'narrow-alley-6'], ['south', 'beggar-kings-court']],
+      'gutter-sewer': [['up', 'gutter-drain']],
       'harbourmasters-office': [['south', 'barnacled-quay']],
       'highwind-bridge': [['north', 'belvedere'], ['south', 'promenade-walk-4']],
       'iron-balcony-1': [['east', 'iron-balcony-2'], ['north', 'promenade-walk-2']],
-      'iron-balcony-2': [['east', 'garden-terrace'], ['west', 'iron-balcony-1']],
+      'iron-balcony-2': [['north', 'promenade-walk-3'], ['west', 'iron-balcony-1']],
       'jewelers-lane': [['south', 'guild-hall']],
       'lean-to-camp': [['west', 'narrow-alley-4']],
       'library-entrance': [['west', 'courtyard-fountain']],
@@ -623,7 +624,7 @@ describe('computeLayout', () => {
       'mud-flat': [['north', 'narrow-alley-7'], ['south', 'broken-bridge']],
       'narrow-alley-1': [['north', 'silver-arcade-1'], ['south', 'apothecary']],
       'narrow-alley-2': [['north', 'cobblestone-street-2'], ['south', 'wine-merchants-cellar']],
-      'narrow-alley-3': [['north', 'beggars-lane-1'], ['south', 'narrow-alley-4'], ['west', 'dock-street-5']],
+      'narrow-alley-3': [['north', 'beggars-lane-1'], ['south', 'narrow-alley-4']],
       'narrow-alley-4': [['east', 'lean-to-camp'], ['north', 'narrow-alley-3'], ['south', 'narrow-alley-5']],
       'narrow-alley-5': [['east', 'narrow-alley-6'], ['north', 'narrow-alley-4']],
       'narrow-alley-6': [['east', 'narrow-alley-7'], ['south', 'gutter-drain'], ['west', 'narrow-alley-5']],
@@ -642,13 +643,14 @@ describe('computeLayout', () => {
       'plague-house': [['north', 'crumbling-wall-2']],
       'promenade-walk-1': [['east', 'promenade-walk-2'], ['north', 'courtyard-fountain'], ['south', 'estate-gate']],
       'promenade-walk-2': [['east', 'promenade-walk-3'], ['south', 'iron-balcony-1'], ['west', 'promenade-walk-1']],
-      'promenade-walk-3': [['east', 'promenade-walk-4'], ['north', 'garden-terrace'], ['west', 'promenade-walk-2']],
+      'promenade-walk-3': [['east', 'promenade-walk-4'], ['north', 'garden-terrace'], ['south', 'iron-balcony-2'], ['west', 'promenade-walk-2']],
       'promenade-walk-4': [['north', 'highwind-bridge'], ['west', 'promenade-walk-3']],
       'rat-run-1': [['east', 'flophouse'], ['north', 'beggars-lane-2'], ['south', 'rat-run-2']],
       'rat-run-2': [['east', 'thieves-den'], ['north', 'rat-run-1']],
       'rope-walk': [['east', 'tar-pit'], ['north', 'sailmakers-loft'], ['south', 'pier-2'], ['west', 'barnacled-quay']],
+      'rubble-passage-1': [['north', 'collapsed-building-1'], ['west', 'collapsed-building-3']],
       'rubble-street-1': [['east', 'rubble-street-2'], ['south', 'collapsed-building-1'], ['west', 'beggars-lane-3']],
-      'rubble-street-2': [['east', 'rubble-street-3'], ['south', 'scorched-plaza'], ['west', 'rubble-street-1']],
+      'rubble-street-2': [['east', 'rubble-street-3'], ['west', 'rubble-street-1']],
       'rubble-street-3': [['east', 'rubble-street-4'], ['north', 'collapsed-building-2'], ['west', 'rubble-street-2']],
       'rubble-street-4': [['east', 'rubble-street-5'], ['south', 'dust-bowl'], ['west', 'rubble-street-3']],
       'rubble-street-5': [['east', 'ashgate'], ['south', 'wrecked-barricade'], ['west', 'rubble-street-4']],
@@ -656,18 +658,18 @@ describe('computeLayout', () => {
       'ruined-tenement-2': [['west', 'beggar-kings-court']],
       'sailmakers-loft': [['south', 'rope-walk']],
       'scavengers-market': [['east', 'blast-crater'], ['north', 'carrion-field'], ['south', 'ash-garden']],
-      'scorched-plaza': [['east', 'carrion-field'], ['north', 'rubble-street-2'], ['south', 'crumbling-wall-1'], ['west', 'tar-pit']],
+      'scorched-plaza': [['east', 'carrion-field'], ['south', 'crumbling-wall-1'], ['west', 'tar-pit']],
       'scribe-corner': [['west', 'tavern-row']],
       'serpent-den': [['west', 'sewer-tunnel-3']],
       'servants-passage': [['east', 'courtyard-fountain']],
       'sewer-cistern-1': [['north', 'sewer-tunnel-5']],
-      'sewer-junction-1': [['east', 'sewer-tunnel-1'], ['north', 'undercity-gate'], ['south', 'sewer-tunnel-3'], ['up', 'gutter-drain'], ['west', 'sewer-tunnel-7']],
-      'sewer-junction-2': [['east', 'sewer-tunnel-4'], ['north', 'drain-grate-1'], ['south', 'bone-canal'], ['west', 'sewer-tunnel-2']],
+      'sewer-junction-1': [['east', 'sewer-tunnel-1'], ['north', 'undercity-gate'], ['south', 'sewer-tunnel-3'], ['west', 'sewer-tunnel-7']],
+      'sewer-junction-2': [['north', 'drain-grate-1'], ['south', 'bone-canal'], ['west', 'sewer-tunnel-2']],
       'sewer-junction-3': [['east', 'sewer-tunnel-6'], ['south', 'drain-grate-2'], ['up', 'tide-gate'], ['west', 'sewer-tunnel-5']],
       'sewer-tunnel-1': [['east', 'sewer-tunnel-2'], ['west', 'sewer-junction-1']],
       'sewer-tunnel-2': [['east', 'sewer-junction-2'], ['west', 'sewer-tunnel-1']],
       'sewer-tunnel-3': [['east', 'serpent-den'], ['north', 'sewer-junction-1'], ['south', 'silt-pool']],
-      'sewer-tunnel-4': [['east', 'sewer-tunnel-5'], ['west', 'sewer-junction-2']],
+      'sewer-tunnel-4': [['east', 'sewer-tunnel-5']],
       'sewer-tunnel-5': [['east', 'sewer-junction-3'], ['south', 'sewer-cistern-1'], ['west', 'sewer-tunnel-4']],
       'sewer-tunnel-6': [['east', 'sewer-vault'], ['south', 'effluent-outflow'], ['west', 'sewer-junction-3']],
       'sewer-tunnel-7': [['east', 'sewer-junction-1'], ['south', 'fungal-cavern'], ['west', 'sewer-tunnel-8']],
@@ -734,7 +736,7 @@ describe('computeLayout', () => {
     // constraints prevent the optimizer from eliminating every diagonal.
     // Direction correctness is the hard constraint; a moderate number of
     // diagonals is acceptable as long as no exit draws in the wrong direction.
-    expect(diagonals).toBeLessThanOrEqual(10);
+    expect(diagonals).toBeLessThanOrEqual(6);
 
     // No occlusions — rooms must not sit on exit line segments of other rooms.
     // Grid expansion (Phase 7) resolves most occlusions by inserting extra

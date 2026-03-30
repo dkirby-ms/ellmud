@@ -65,3 +65,16 @@
 - Skill: `.squad/skills/zone-topology/SKILL.md`
 - Orchestration log: `.squad/orchestration-log/2026-03-30T19-15-laeral.md`
 - Decisions merged: decisions.md now contains user directive, Drizzt's constraints, and Laeral's topology analysis
+
+### Siltgate Topology Fixes (2025-07-24)
+- **Migration:** `005_siltgate_topology_fixes.sql`
+- **Source:** Laeral's bridge-room-designs (`.squad/decisions/inbox/laeral-bridge-room-designs.md`)
+- **Changes applied:**
+  - 2 new rooms: `rubble-passage-1` (corridor, Ashgate bridge) and `gutter-sewer` (dead_end, slum sewer access)
+  - 10 exits deleted: 5 bidirectional pairs that caused topological conflicts (Δ=3 to Δ=17)
+  - 8 exits inserted: 4 bidirectional pairs — bridge connections via new rooms + promenade reroute
+  - `collapsed-building-1` type changed from `dead_end` to `corridor` (now has north+south exits)
+  - `sewer-junction-2` and `sewer-tunnel-4` descriptions updated with collapsed-passage narrative text
+- **Zone total:** 138 rooms, 284 exits (was 136 rooms, 286 exits)
+- **Pattern notes:** Matched 004_seed_siltgate.sql exactly — cross-join VALUES, NULLIF for target columns, subquery for zone_id in DELETEs, text[] casts for properties
+- **Transaction:** Full BEGIN/COMMIT wrap for atomicity

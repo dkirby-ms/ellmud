@@ -93,3 +93,12 @@ Siltgate revision finalized and merged into team decisions archive.
 - Created **zone-topology skill** at `.squad/skills/zone-topology/SKILL.md` — covers the grid constraint, conflict patterns (shortcuts, rings, L-loops, vertical shortcuts), design guidelines (junction density, shortcut savings limits, bridge room budgeting), cycle validation formula, and a pre-handoff checklist.
 - Proposal document: `.squad/decisions/inbox/laeral-siltgate-topology-fixes.md`
 - **File paths:** Zone data at `packages/server/src/db/migrations/004_seed_siltgate.sql`, layout engine at `packages/client/src/map/computeLayout.ts`, layout tests at `packages/client/src/map/__tests__/computeLayout.test.ts`
+
+### 2025-07-24: Siltgate Bridge Room Designs — Topology Fix Implementation
+- Designed concrete fixes for all 6 topological conflicts. Zone grows from 136 to 138 rooms with 0 BFS conflicts.
+- **Key design decision — removal over bridging:** For Δ≥5 conflicts, removing the shortcut is almost always better than adding bridge rooms. The Siltgate grid is too dense (35 cell collisions) to fit bridge room chains. Only 2 new rooms were needed; the rest were pure exit surgery.
+- **Bridge room sweet spot:** Bridge rooms work for Δ≤3. For Δ=3 (Estates L-loop), re-routing through an existing room (promenade-walk-3) eliminated the conflict with zero new rooms. For Δ=5 (Ashgate dual-approach), a single bridge room reconnected two sub-areas through nearby dead-ends.
+- **Sewer ring lesson:** Ring topologies where two surface access points feed a single underground loop are almost always impossible on a 2D grid. The surface distance between access points never matches the underground tunnel length. Solution: break the ring into two dead-end branches. Use narrative (cave-in, sealed gate) to justify the break and create a quest hook for future reconnection.
+- **Vertical shortcut lesson:** When room A connects down to sewer, sewer connects up to room B, and A and B are far apart on the surface, the ENTIRE chain from A through the underground gets pulled to B's grid position by BFS. Fix: sever the underground connection and replace with a standalone dead-end sewer access. This repositions the entire surface chain correctly.
+- **Grid density metric:** At 35 collisions in 136 rooms, every candidate bridge path was blocked by existing rooms. Future zones should target <20% collision rate before attempting bridge room insertion.
+- Design document: `.squad/decisions/inbox/laeral-bridge-room-designs.md`
