@@ -581,7 +581,7 @@ describe('computeLayout', () => {
       'cobblestone-street-1': [['east', 'cobblestone-street-2'], ['north', 'silver-arcade-2'], ['south', 'glassblowers-workshop']],
       'cobblestone-street-2': [['east', 'cobblestone-street-3'], ['south', 'narrow-alley-2'], ['west', 'cobblestone-street-1']],
       'cobblestone-street-3': [['east', 'merchant-inn'], ['north', 'silver-arcade-4'], ['south', 'pawn-shop'], ['west', 'cobblestone-street-2']],
-      'collapsed-building-1': [['north', 'rubble-street-1'], ['south', 'rubble-passage-1']],
+      'collapsed-building-1': [['north', 'rubble-street-3'], ['south', 'rubble-passage-1']],
       'collapsed-building-2': [['south', 'rubble-street-3']],
       'collapsed-building-3': [['east', 'rubble-passage-1'], ['west', 'carrion-field']],
       'collapsed-sewer': [['west', 'drain-grate-2']],
@@ -649,9 +649,9 @@ describe('computeLayout', () => {
       'rat-run-2': [['east', 'thieves-den'], ['north', 'rat-run-1']],
       'rope-walk': [['east', 'tar-pit'], ['north', 'sailmakers-loft'], ['south', 'pier-2'], ['west', 'barnacled-quay']],
       'rubble-passage-1': [['north', 'collapsed-building-1'], ['west', 'collapsed-building-3']],
-      'rubble-street-1': [['east', 'rubble-street-2'], ['south', 'collapsed-building-1'], ['west', 'beggars-lane-3']],
+      'rubble-street-1': [['east', 'rubble-street-2'], ['west', 'beggars-lane-3']],
       'rubble-street-2': [['east', 'rubble-street-3'], ['west', 'rubble-street-1']],
-      'rubble-street-3': [['east', 'rubble-street-4'], ['north', 'collapsed-building-2'], ['west', 'rubble-street-2']],
+      'rubble-street-3': [['east', 'rubble-street-4'], ['north', 'collapsed-building-2'], ['south', 'collapsed-building-1'], ['west', 'rubble-street-2']],
       'rubble-street-4': [['east', 'rubble-street-5'], ['south', 'dust-bowl'], ['west', 'rubble-street-3']],
       'rubble-street-5': [['east', 'ashgate'], ['south', 'wrecked-barricade'], ['west', 'rubble-street-4']],
       'ruined-tenement-1': [['north', 'pawn-alley']],
@@ -736,7 +736,7 @@ describe('computeLayout', () => {
     // constraints prevent the optimizer from eliminating every diagonal.
     // Direction correctness is the hard constraint; a moderate number of
     // diagonals is acceptable as long as no exit draws in the wrong direction.
-    expect(diagonals).toBeLessThanOrEqual(6);
+    expect(diagonals).toBeLessThanOrEqual(0);
 
     // No occlusions — rooms must not sit on exit line segments of other rooms.
     // Grid expansion (Phase 7) resolves most occlusions by inserting extra
