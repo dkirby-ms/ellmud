@@ -840,6 +840,162 @@ describe('computeLayout', () => {
     expect(dirViolations).toEqual([]);
   });
 
+  // ── 7. Warrens zone (109 rooms, fixed topology) ───────────────────────
+  it('handles the-warrens zone (109 rooms)', () => {
+    const rooms = makeRooms({
+      'ashfall-gardens': [['north', 'slum-r7c4']],
+      'beggar-kings-throne': [['east', 'dyers-vats']],
+      'blighted-courtyard': [['south', 'condemned-arch'], ['west', 'gutter-run']],
+      'blind-alley': [['west', 'tannery-ruins']],
+      'broken-sanctuary': [['south', 'hollow-market']],
+      'burned-chapel': [['south', 'scavengers-den'], ['west', 'merchants-row']],
+      'charnel-pit': [['east', 'the-ratways']],
+      'cistern-access': [['down', 'sewer-cistern'], ['north', 'slum-r7c2']],
+      'collapsed-overpass': [['east', 'hollow-market'], ['west', 'rubble-boulevard']],
+      'collapsed-tenement': [['west', 'whispering-alley']],
+      'condemned-arch': [['east', 'ironmongers-ruin'], ['north', 'blighted-courtyard']],
+      'dustfall-extraction': [['west', 'slum-r6c7']],
+      'dyers-vats': [['north', 'slum-r7c1'], ['west', 'beggar-kings-throne']],
+      'gallows-square': [['east', 'tilted-tower'], ['west', 'slum-r1c7']],
+      'gutter-bridge': [['south', 'slum-r1c4']],
+      'gutter-run': [['east', 'blighted-courtyard'], ['north', 'merchants-row'], ['south', 'slum-r1c1']],
+      'hollow-market': [['east', 'merchants-row'], ['north', 'broken-sanctuary'], ['south', 'whispering-alley'], ['west', 'collapsed-overpass']],
+      'ironmongers-ruin': [['west', 'condemned-arch']],
+      'merchants-row': [['east', 'burned-chapel'], ['south', 'gutter-run'], ['west', 'hollow-market']],
+      'overwatch-tower': [['down', 'rubble-boulevard']],
+      'plague-ward': [['east', 'slum-r4c1']],
+      'rubble-boulevard': [['east', 'collapsed-overpass'], ['up', 'overwatch-tower'], ['west', 'shattered-gate']],
+      'rubble-maze': [['east', 'watchmens-post'], ['west', 'slum-r4c7']],
+      'scavengers-den': [['north', 'burned-chapel']],
+      'sewer-blackwater-crossing': [['south', 'sewer-deep-channel'], ['west', 'sewer-south-tunnel']],
+      'sewer-blind-turn': [['east', 'sewer-cracked-conduit'], ['south', 'sewer-narrow-drain']],
+      'sewer-bone-shelf': [['west', 'sewer-rat-nest']],
+      'sewer-cistern': [['south', 'sewer-fungal-grotto'], ['up', 'cistern-access'], ['west', 'sewer-stagnant-pool']],
+      'sewer-collapsed-drain': [['north', 'sewer-flooded-vault']],
+      'sewer-cracked-conduit': [['north', 'sewer-drip-tunnel'], ['west', 'sewer-blind-turn']],
+      'sewer-deep-channel': [['east', 'sewer-effluent-pool'], ['north', 'sewer-blackwater-crossing'], ['south', 'sewer-silt-chamber']],
+      'sewer-drain-grate': [['east', 'sewer-overflow-chamber'], ['west', 'sewer-north-tunnel']],
+      'sewer-drip-tunnel': [['north', 'the-ratways'], ['south', 'sewer-cracked-conduit']],
+      'sewer-east-conduit': [['east', 'sewer-pipe-maze'], ['west', 'sewer-main-junction']],
+      'sewer-effluent-pool': [['west', 'sewer-deep-channel']],
+      'sewer-flooded-vault': [['north', 'sewer-south-tunnel'], ['south', 'sewer-collapsed-drain']],
+      'sewer-fungal-grotto': [['north', 'sewer-cistern']],
+      'sewer-gas-pocket': [['west', 'sewer-pipe-maze']],
+      'sewer-lurker-den': [['north', 'sewer-west-conduit']],
+      'sewer-main-junction': [['east', 'sewer-east-conduit'], ['north', 'sewer-north-tunnel'], ['south', 'sewer-south-tunnel'], ['up', 'sluice-gate']],
+      'sewer-narrow-drain': [['east', 'sewer-north-tunnel'], ['north', 'sewer-blind-turn']],
+      'sewer-north-tunnel': [['east', 'sewer-drain-grate'], ['north', 'sewer-rat-nest'], ['south', 'sewer-main-junction'], ['west', 'sewer-narrow-drain']],
+      'sewer-overflow-chamber': [['west', 'sewer-drain-grate']],
+      'sewer-pipe-maze': [['east', 'sewer-gas-pocket'], ['west', 'sewer-east-conduit']],
+      'sewer-rat-nest': [['east', 'sewer-bone-shelf'], ['south', 'sewer-north-tunnel']],
+      'sewer-rubble-choke': [['east', 'sewer-south-tunnel'], ['south', 'sewer-west-conduit']],
+      'sewer-silt-chamber': [['north', 'sewer-deep-channel']],
+      'sewer-slime-channel': [['east', 'sewer-stagnant-pool'], ['north', 'sewer-trickle-passage']],
+      'sewer-south-tunnel': [['east', 'sewer-blackwater-crossing'], ['north', 'sewer-main-junction'], ['south', 'sewer-flooded-vault'], ['west', 'sewer-rubble-choke']],
+      'sewer-stagnant-pool': [['east', 'sewer-cistern'], ['west', 'sewer-slime-channel']],
+      'sewer-trickle-passage': [['south', 'sewer-slime-channel'], ['west', 'sewer-west-conduit']],
+      'sewer-west-conduit': [['east', 'sewer-trickle-passage'], ['north', 'sewer-rubble-choke'], ['south', 'sewer-lurker-den']],
+      'shattered-gate': [['east', 'rubble-boulevard']],
+      'sluice-gate': [['down', 'sewer-main-junction'], ['east', 'slum-r5c1']],
+      'slum-r1c1': [['east', 'slum-r1c2'], ['north', 'gutter-run'], ['south', 'slum-r2c1'], ['west', 'sunken-square']],
+      'slum-r1c2': [['east', 'slum-r1c3'], ['south', 'slum-r2c2'], ['west', 'slum-r1c1']],
+      'slum-r1c3': [['east', 'slum-r1c4'], ['south', 'slum-r2c3'], ['west', 'slum-r1c2']],
+      'slum-r1c4': [['east', 'slum-r1c5'], ['north', 'gutter-bridge'], ['south', 'slum-r2c4'], ['west', 'slum-r1c3']],
+      'slum-r1c5': [['east', 'slum-r1c6'], ['south', 'slum-r2c5'], ['west', 'slum-r1c4']],
+      'slum-r1c6': [['east', 'slum-r1c7'], ['south', 'slum-r2c6'], ['west', 'slum-r1c5']],
+      'slum-r1c7': [['east', 'gallows-square'], ['south', 'slum-r2c7'], ['west', 'slum-r1c6']],
+      'slum-r2c1': [['east', 'slum-r2c2'], ['north', 'slum-r1c1'], ['south', 'slum-r3c1']],
+      'slum-r2c2': [['east', 'slum-r2c3'], ['north', 'slum-r1c2'], ['south', 'slum-r3c2'], ['west', 'slum-r2c1']],
+      'slum-r2c3': [['east', 'slum-r2c4'], ['north', 'slum-r1c3'], ['south', 'slum-r3c3'], ['west', 'slum-r2c2']],
+      'slum-r2c4': [['east', 'slum-r2c5'], ['north', 'slum-r1c4'], ['south', 'slum-r3c4'], ['west', 'slum-r2c3']],
+      'slum-r2c5': [['east', 'slum-r2c6'], ['north', 'slum-r1c5'], ['south', 'slum-r3c5'], ['west', 'slum-r2c4']],
+      'slum-r2c6': [['east', 'slum-r2c7'], ['north', 'slum-r1c6'], ['south', 'slum-r3c6'], ['west', 'slum-r2c5']],
+      'slum-r2c7': [['north', 'slum-r1c7'], ['south', 'slum-r3c7'], ['west', 'slum-r2c6']],
+      'slum-r3c1': [['east', 'slum-r3c2'], ['north', 'slum-r2c1'], ['south', 'slum-r4c1']],
+      'slum-r3c2': [['east', 'slum-r3c3'], ['north', 'slum-r2c2'], ['south', 'slum-r4c2'], ['west', 'slum-r3c1']],
+      'slum-r3c3': [['east', 'slum-r3c4'], ['north', 'slum-r2c3'], ['south', 'slum-r4c3'], ['west', 'slum-r3c2']],
+      'slum-r3c4': [['east', 'slum-r3c5'], ['north', 'slum-r2c4'], ['south', 'slum-r4c4'], ['west', 'slum-r3c3']],
+      'slum-r3c5': [['east', 'slum-r3c6'], ['north', 'slum-r2c5'], ['south', 'slum-r4c5'], ['west', 'slum-r3c4']],
+      'slum-r3c6': [['east', 'slum-r3c7'], ['north', 'slum-r2c6'], ['south', 'slum-r4c6'], ['west', 'slum-r3c5']],
+      'slum-r3c7': [['north', 'slum-r2c7'], ['south', 'slum-r4c7'], ['west', 'slum-r3c6']],
+      'slum-r4c1': [['east', 'slum-r4c2'], ['north', 'slum-r3c1'], ['south', 'slum-r5c1'], ['west', 'plague-ward']],
+      'slum-r4c2': [['east', 'slum-r4c3'], ['north', 'slum-r3c2'], ['south', 'slum-r5c2'], ['west', 'slum-r4c1']],
+      'slum-r4c3': [['east', 'slum-r4c4'], ['north', 'slum-r3c3'], ['south', 'slum-r5c3'], ['west', 'slum-r4c2']],
+      'slum-r4c4': [['east', 'slum-r4c5'], ['north', 'slum-r3c4'], ['south', 'slum-r5c4'], ['west', 'slum-r4c3']],
+      'slum-r4c5': [['east', 'slum-r4c6'], ['north', 'slum-r3c5'], ['south', 'slum-r5c5'], ['west', 'slum-r4c4']],
+      'slum-r4c6': [['east', 'slum-r4c7'], ['north', 'slum-r3c6'], ['south', 'slum-r5c6'], ['west', 'slum-r4c5']],
+      'slum-r4c7': [['east', 'rubble-maze'], ['north', 'slum-r3c7'], ['south', 'slum-r5c7'], ['west', 'slum-r4c6']],
+      'slum-r5c1': [['east', 'slum-r5c2'], ['north', 'slum-r4c1'], ['south', 'slum-r6c1'], ['west', 'sluice-gate']],
+      'slum-r5c2': [['east', 'slum-r5c3'], ['north', 'slum-r4c2'], ['south', 'slum-r6c2'], ['west', 'slum-r5c1']],
+      'slum-r5c3': [['east', 'slum-r5c4'], ['north', 'slum-r4c3'], ['south', 'slum-r6c3'], ['west', 'slum-r5c2']],
+      'slum-r5c4': [['east', 'slum-r5c5'], ['north', 'slum-r4c4'], ['south', 'slum-r6c4'], ['west', 'slum-r5c3']],
+      'slum-r5c5': [['east', 'slum-r5c6'], ['north', 'slum-r4c5'], ['south', 'slum-r6c5'], ['west', 'slum-r5c4']],
+      'slum-r5c6': [['east', 'slum-r5c7'], ['north', 'slum-r4c6'], ['south', 'slum-r6c6'], ['west', 'slum-r5c5']],
+      'slum-r5c7': [['north', 'slum-r4c7'], ['south', 'slum-r6c7'], ['west', 'slum-r5c6']],
+      'slum-r6c1': [['east', 'slum-r6c2'], ['north', 'slum-r5c1'], ['south', 'slum-r7c1']],
+      'slum-r6c2': [['east', 'slum-r6c3'], ['north', 'slum-r5c2'], ['south', 'slum-r7c2'], ['west', 'slum-r6c1']],
+      'slum-r6c3': [['east', 'slum-r6c4'], ['north', 'slum-r5c3'], ['south', 'slum-r7c3'], ['west', 'slum-r6c2']],
+      'slum-r6c4': [['east', 'slum-r6c5'], ['north', 'slum-r5c4'], ['south', 'slum-r7c4'], ['west', 'slum-r6c3']],
+      'slum-r6c5': [['east', 'slum-r6c6'], ['north', 'slum-r5c5'], ['south', 'slum-r7c5'], ['west', 'slum-r6c4']],
+      'slum-r6c6': [['east', 'slum-r6c7'], ['north', 'slum-r5c6'], ['south', 'slum-r7c6'], ['west', 'slum-r6c5']],
+      'slum-r6c7': [['east', 'dustfall-extraction'], ['north', 'slum-r5c7'], ['south', 'slum-r7c7'], ['west', 'slum-r6c6']],
+      'slum-r7c1': [['east', 'slum-r7c2'], ['north', 'slum-r6c1'], ['south', 'dyers-vats']],
+      'slum-r7c2': [['east', 'slum-r7c3'], ['north', 'slum-r6c2'], ['south', 'cistern-access'], ['west', 'slum-r7c1']],
+      'slum-r7c3': [['east', 'slum-r7c4'], ['north', 'slum-r6c3'], ['west', 'slum-r7c2']],
+      'slum-r7c4': [['east', 'slum-r7c5'], ['north', 'slum-r6c4'], ['south', 'ashfall-gardens'], ['west', 'slum-r7c3']],
+      'slum-r7c5': [['east', 'slum-r7c6'], ['north', 'slum-r6c5'], ['west', 'slum-r7c4']],
+      'slum-r7c6': [['east', 'slum-r7c7'], ['north', 'slum-r6c6'], ['west', 'slum-r7c5']],
+      'slum-r7c7': [['north', 'slum-r6c7'], ['south', 'tannery-ruins'], ['west', 'slum-r7c6']],
+      'sunken-square': [['down', 'the-ratways'], ['east', 'slum-r1c1']],
+      'tannery-ruins': [['east', 'blind-alley'], ['north', 'slum-r7c7']],
+      'the-ratways': [['south', 'sewer-drip-tunnel'], ['up', 'sunken-square'], ['west', 'charnel-pit']],
+      'tilted-tower': [['west', 'gallows-square']],
+      'watchmens-post': [['west', 'rubble-maze']],
+      'whispering-alley': [['east', 'collapsed-tenement'], ['north', 'hollow-market']],
+    });
+
+    const layout = computeLayout(rooms, 'shattered-gate');
+
+    // All 109 rooms placed
+    expect(layout.size).toBe(109);
+
+    // Direction violation check — same pattern as Siltgate
+    const DIR_OFFSETS_W: Record<string, { dx: number; dy: number }> = {
+      north: { dx: 0, dy: -1 },
+      south: { dx: 0, dy: 1 },
+      east: { dx: 1, dy: 0 },
+      west: { dx: -1, dy: 0 },
+    };
+    const dirViolations: string[] = [];
+    for (const [id, room] of rooms) {
+      const p = layout.get(id);
+      if (!p) continue;
+      for (const [dir, targetId] of room.exits) {
+        const off = DIR_OFFSETS_W[dir];
+        if (!off) continue;
+        const tp = layout.get(targetId);
+        if (!tp || tp.z !== p.z) continue;
+        const dx = tp.x - p.x;
+        const dy = tp.y - p.y;
+        if (
+          (off.dx > 0 && dx <= 0) ||
+          (off.dx < 0 && dx >= 0) ||
+          (off.dy > 0 && dy <= 0) ||
+          (off.dy < 0 && dy >= 0)
+        ) {
+          dirViolations.push(
+            `${id} → ${dir} → ${targetId}: expected (${off.dx},${off.dy}), got (${dx},${dy})`,
+          );
+        }
+      }
+    }
+    if (dirViolations.length > 0) {
+      console.log('\n=== WARRENS DIRECTION VIOLATIONS ===');
+      for (const v of dirViolations) console.log(`  ${v}`);
+    }
+    expect(dirViolations.length).toBeLessThanOrEqual(0);
+  });
+
   // ── Rooms must not overlap exit line segments ──────────────────────────
   it('does not place rooms on exit line segments between other rooms', () => {
     // T-junction with a side room that could land on the main corridor
