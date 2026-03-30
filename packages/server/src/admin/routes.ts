@@ -636,12 +636,6 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
     });
   });
 
-  // ─── GET /admin — Serve dashboard HTML ──────────────────────────────────
-  router.get('/admin', (_req: Request, res: Response) => {
-    // Serve inline — no file dependency needed
-    res.redirect('/admin/');
-  });
-
   return router;
 }
 
