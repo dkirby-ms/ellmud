@@ -45,6 +45,12 @@ const PORT = config.port;
 const AUTH_REQUIRED = config.authRequired;
 let USE_PG = !!process.env.DATABASE_URL;
 
+// Log Redis connection info for diagnostics (mask password)
+if (config.redis.enabled || config.redis.cacheEnabled || config.redis.driverEnabled) {
+  const masked = config.redis.connectionString.replace(/:([^@]+)@/, ':***@');
+  console.log(`[Ellmud] Redis connection: ${masked}`);
+}
+
 // Validate DATABASE_URL format if present
 if (USE_PG) {
   try {
