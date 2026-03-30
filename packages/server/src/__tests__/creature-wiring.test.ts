@@ -313,7 +313,7 @@ describe('Look Command with Creatures', () => {
 
     const result = handleLook(ctx);
     expect(result.narrations[0]!.text).toContain('Drowned Revenant');
-    expect(result.narrations[0]!.text).toContain('lurks here');
+    expect(result.narrations[0]!.text).toContain('Creatures:');
   });
 
   it('does not show dead creatures', () => {
@@ -339,7 +339,7 @@ describe('Look Command with Creatures', () => {
     const ctx = buildCtx(player, localGraph, creatureManager, combatSystem);
 
     const result = handleLook(ctx);
-    expect(result.narrations[0]!.text).not.toContain('lurks here');
+    expect(result.narrations[0]!.text).not.toContain('Creatures:');
   });
 });
 

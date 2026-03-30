@@ -74,6 +74,8 @@ export interface CommandContext {
   extractionSystem?: ExtractionSystem;
   /** Living creatures in the current room. */
   creaturesInRoom?: CreatureRef[];
+  /** Resolve creatures in an arbitrary room by ID. */
+  resolveCreaturesInRoom?: (roomId: string) => CreatureRef[];
   /** Downing system reference (available in ShardRoom context). */
   downingSystem?: DowningSystem;
   /** Stash service for personal storage (available in feature_stash rooms). */

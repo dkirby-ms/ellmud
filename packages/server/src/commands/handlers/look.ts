@@ -22,9 +22,8 @@ export function handleLook(ctx: CommandContext): CommandResult {
 
   // Creatures in the room
   if (ctx.creaturesInRoom && ctx.creaturesInRoom.length > 0) {
-    for (const creature of ctx.creaturesInRoom) {
-      lines.push(`A ${creature.name} lurks here.`);
-    }
+    const creatureNames = ctx.creaturesInRoom.map((c) => c.name).join(', ');
+    lines.push(`Creatures: ${creatureNames}`);
   }
 
   // Other players in the room

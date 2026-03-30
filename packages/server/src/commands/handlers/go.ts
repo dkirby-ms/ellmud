@@ -70,6 +70,13 @@ export function handleGo(ctx: CommandContext): CommandResult {
     lines.push(`You see: ${itemNames}`);
   }
 
+  // Creatures in the target room
+  const creatures = ctx.resolveCreaturesInRoom?.(targetRoomId) ?? [];
+  if (creatures.length > 0) {
+    const creatureNames = creatures.map((c) => c.name).join(', ');
+    lines.push(`Creatures: ${creatureNames}`);
+  }
+
   return {
     narrations: [{ text: lines.join('\n'), type: 'room' }],
     roomHeader: {

@@ -1017,6 +1017,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       extractionSystem: this.extractionSystem,
       downingSystem: this.downingSystem,
       creaturesInRoom,
+      resolveCreaturesInRoom: (roomId: string) =>
+        this.creatureManager.getCreaturesInRoom(roomId)
+          .map(c => ({ id: c.id, name: c.name })),
     };
   }
 
