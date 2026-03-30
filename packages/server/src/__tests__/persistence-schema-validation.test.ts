@@ -118,8 +118,8 @@ describe('001_schema.sql — Players', () => {
     expect(extractCreateTables(sql)).toContain('players');
   });
 
-  it('enables pgcrypto extension', () => {
-    expect(sql).toContain('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
+  it('does not require pgcrypto extension (gen_random_uuid is built-in since PG 13)', () => {
+    expect(sql).not.toContain('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
   });
 
   it('player_identities has UUID primary key with default', () => {
