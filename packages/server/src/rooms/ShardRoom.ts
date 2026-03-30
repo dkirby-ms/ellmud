@@ -444,8 +444,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Determine entry room based on zone vs shard
     let startRoom: string;
     if (this.isZone) {
-      // Zones: always spawn at designated start room (e.g., hearth for refuge)
-      startRoom = this.roomGraph.startRoomId;
+      const targetRoom = options['targetRoomSlug'];
+      if (typeof targetRoom === 'string' && this.roomGraph.rooms.has(targetRoom)) {
+        startRoom = targetRoom;
+      } else {
+        startRoom = this.roomGraph.startRoomId;
+      }
     } else {
       // Shards: distribute players across entry points for spatial separation
       const entryIndex = (this.state.playerCount - 1) % this.entryRoomIds.length;

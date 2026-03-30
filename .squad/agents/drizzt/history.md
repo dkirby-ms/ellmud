@@ -2486,3 +2486,15 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 **Key Decision:** Character name flows through CommandContext rather than PlayerState, keeping PlayerState session-scoped. Peaceful toggle immediately removes from combat. Registry pattern handles persistence across room switches.
 
 **Handoff:** Combat narration now correct. Peaceful defense three-layer complete. Zone transition bugs (Batch 2) ready to start.
+
+### 2026-03-24: Zone Entry Room Bug Fix
+**Task:** Cross-zone exits always placed player in zone's startRoomId, ignoring the exit's targetRoomSlug.
+**Status:** ✅ Complete
+
+**Root Cause:** In `ShardRoom.onJoin()`, when `this.isZone` was true, the code unconditionally used `this.roomGraph.startRoomId`. The client was already sending `targetRoomSlug` in join options (from `useShardConnection.ts` line 325), but the server never read it.
+
+**Fix:** In `packages/server/src/rooms/ShardRoom.ts` (line ~447), added a check for `options['targetRoomSlug']`. If it's a valid string AND exists in `this.roomGraph.rooms`, we use it as `startRoom`. Otherwise fall back to `startRoomId` (preserving default entry behavior for direct zone joins).
+
+**Key Pattern:** Cross-zone navigation data flow: `go` command → `zoneTransfer` result → `ZONE_TRANSFER` message to client → client calls `switchRoom()` with `targetRoomSlug` option → server `onJoin` reads it.
+
+**Tests:** ✅ All zone-system (47), zone-adapter (13), orphaned-exits (9), shardroom-zone-mode (12), and command integration (44) tests pass. No regressions.
