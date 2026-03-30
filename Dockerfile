@@ -31,7 +31,7 @@ RUN npm ci --omit=dev --workspace @ellmud/shared --workspace @ellmud/server \
 # Copy compiled output
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/packages/server/dist ./packages/server/dist
-COPY --from=build /app/packages/client/dist ./packages/server/dist/public
+COPY --from=build /app/packages/client/dist ./packages/client/dist
 
 # Copy SQL migration files (not compiled by TypeScript, so missing from dist/)
 COPY packages/server/src/db/migrations/*.sql ./packages/server/dist/db/migrations/
