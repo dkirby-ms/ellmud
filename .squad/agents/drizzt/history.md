@@ -2453,6 +2453,10 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 - **Test regex sensitivity:** The schema validation tests use exact type keywords (`INT` vs `INTEGER`) in regexes. Use `INT` for columns that have inline CHECK constraints to match existing test patterns.
 - **extractForeignKeys only matched UUID:** Had to extend regex to `(?:UUID|TEXT)` since item_definitions.id and player_loadout.item_id are TEXT PKs/FKs.
 - **Warrens zone was never inserted:** Migration 033 assumed a pre-existing warrens zone row but none existed. The consolidation creates it properly with a fresh INSERT.
+- **Character names live on ShardRoom, not PlayerState:** `PlayerState` has `sessionId` only. Character names are in `ShardRoom.characterNames` map (populated from `CharacterRepository` on join). Must pipe `characterName` through `CommandContext` for commands that need it.
+- **Combatant name field is display-facing:** `createCombatant(id, name, ...)` — the `name` flows into all `CombatEvent` narration strings. Passing sessionId here causes raw IDs in combat messages.
+- **Peaceful mode has three layers:** (1) `buildCreatureWorldState` excludes peaceful players from AI world, (2) `processCreatureAction` guards combat initiation, (3) `handlePeaceful` must also call `removeCombatant` to exit active combat immediately.
+- **Combat tests run fast:** `npx vitest run` from `packages/server` with specific test files. Combat suite: `combat.test.ts`, `combat-actions.test.ts`, `pvp-combat.test.ts`, `peaceful-mode.test.ts`, `combat-movement-lock.test.ts`.
 
 ---
 
@@ -2464,3 +2468,21 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 - Decision merged into `.squad/decisions/decisions.md` (inbox file deleted)
 - Commit 95a6f97 logged
 - Tests: 2051 server + 158 shared tests PASSING ✓
+
+## 2026-03-30T00:30Z — Combat Bugs Batch 1 Complete
+
+**Completed:** Fix combat names showing UUIDs instead of character names + peaceful mode combat disengage  
+**Files Modified:** 5
+
+- `commands/index.ts` — Added characterName to CommandContext interface
+- `rooms/ShardRoom.ts` — buildCommandContext populates characterName, processCreatureAction uses name for creatures
+- `commands/handlers/attack.ts` — createCombatant uses characterName from context
+- `commands/handlers/peaceful.ts` — toggles off call removeCombatant to pull from active combat
+- `state/PlayerState.ts` — Added static peacefulRegistry for cross-room persistence
+
+**Build:** ✅ Clean  
+**Tests:** ✅ All 91 combat tests pass
+
+**Key Decision:** Character name flows through CommandContext rather than PlayerState, keeping PlayerState session-scoped. Peaceful toggle immediately removes from combat. Registry pattern handles persistence across room switches.
+
+**Handoff:** Combat narration now correct. Peaceful defense three-layer complete. Zone transition bugs (Batch 2) ready to start.

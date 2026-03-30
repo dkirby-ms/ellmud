@@ -1781,3 +1781,15 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 - **Config pattern:** Follows existing `config.ts` conventions — `envBool('DEV_MODE_ENABLED', false)` with `resetConfig()` for test isolation.
 - **Files changed:** `PlayerState.ts`, `config.ts`, `ShardRoom.ts`, `commands/index.ts`, `commands/parser.ts`, new `commands/handlers/peaceful.ts`, new `__tests__/peaceful-mode.test.ts`.
 - **Tests:** 12 new tests covering behavior tree filtering, flag toggling, command gating, world state integration. All 2276+ tests passing, zero regressions.
+
+## 2026-03-30T00:30Z — Batch 1 Peaceful Mode Completion
+
+**Note:** Peaceful mode defense three-layer now complete:
+1. AI exclusion via buildCreatureWorldState filter
+2. Combat initiation guard in processCreatureAction
+3. Active combat removal in peaceful.ts handler
+4. Cross-room persistence via PlayerState static registry (Coordinator fix)
+
+Peaceful flag properly persists across zone transitions. Dev team can now use `/peaceful` without reset.
+
+**Related Decision:** Peaceful mode now documented as three-layer defense in `.squad/decisions.md`

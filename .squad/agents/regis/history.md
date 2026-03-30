@@ -629,3 +629,65 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 **Root Cause:** Force-directed swap phase could accept swaps that reversed room directions when the combined improvement from diagonal/distance/occlusion reduction outweighed the direction mismatch penalty (15). The same issue existed in diagonal cascade and occlusion fix phases.
 
 **Fix:** Pre-built reverse adjacency map enables efficient bidirectional mismatch counting. Hard guards reject any move/swap that would increase the total direction mismatch count for the affected room and its neighbors.
+
+## 2026-03-29 — Grid Expansion for Occlusion Resolution
+
+**Completed:** Added Phase 7 (grid expansion) to resolve occlusions without violating direction constraints
+**Files Modified:** 2
+
+- `packages/client/src/map/computeLayout.ts` — Added `resolveOcclusionsByExpansion()` function and iterative expansion+fix loop
+- `packages/client/src/map/__tests__/computeLayout.test.ts` — Tightened assertions, added harbourmasters-office/barnacled-quay specific checks
+
+**Build:** ✅ Clean
+**Tests:** ✅ 24 passed (0 failed)
+
+**Problem:** Previous fix (commit 72e9783) added `moveWouldIncreaseMismatches` and `swapWouldIncreaseMismatches` guards that prevented direction reversals but reintroduced occlusions — rooms drawing on top of exit lines because the guards prevented the optimizer from spreading rooms out.
+
+**Solution:** Grid expansion via group shifts. Instead of moving individual rooms (which triggers direction guards), shift entire groups of connected rooms perpendicular to occluded segments. This preserves internal directional structure while creating extra space. Algorithm: BFS from occluder to build shift group (adds neighbors that would break if not shifted together), validates no boundary reversals, accepts if score improves.
+
+**Results:** Siltgate occlusions: 54→16 (70% reduction). harbourmasters-office completely cleared. 0 direction violations. 2 diagonals (unchanged).
+
+## Learnings
+
+- **Grid expansion is the right pattern for occlusion resolution:** When direction guards prevent individual room moves, shifting entire groups of connected rooms preserves relative positions while creating space. Key insight from dkirby-ms: "add extra columns or rows to accommodate incongruous spatial relations."
+- **Iterative expansion+fix loop is effective:** Running fixOcclusions after grid expansion exploits newly freed cells. 3 rounds reduces occlusions further than a single pass.
+- **Group building via BFS with collision cascade:** Start from occluder, add neighbors that would develop diagonal/reversed exits, cascade through collision positions. Group size limit (90) prevents runaway cascading.
+- **Remaining occlusions are in long vertical corridors:** Rooms forming continuous north/south chains on the same column create segments that can't be resolved by perpendicular shifts alone — the entire chain would need to cascade.
+
+## 2026-03-27T18:45Z — Death/Extraction Overlay Clobbering Fix
+
+**Completed:** Fixed death overlay being overwritten by extraction success screen during zone death  
+**Files Modified:** 3
+
+- `useShardConnection.ts` — Guard `onRoomSwitch` handler against overwriting `death` extraction state with `success`; added `extractionRef` for synchronous state reads; added `updateExtraction` helper to keep ref and state in sync; added `deathTimerRef` with 3s auto-dismiss; exposed `dismissExtraction` callback
+- `ExtractionOverlay.tsx` — Added `isZone` prop; death screen conditionally hides shard-specific content (Items Lost, Shard-sickness, Run Stats) when in a zone; zone death shows simpler flavour text
+- `ShardExploration.tsx` — Destructured `dismissExtraction` from hook; wired `onReturnToRefuge` to call `dismissExtraction()` then `navigate('/refuge')`; passed `isZone` to ExtractionOverlay
+
+**Build:** ✅ Clean  
+**Tests:** ✅ 135 passed (11 files)
+
+**Root Cause:** The `onRoomSwitch` handler unconditionally set extraction state to `success` when switching to refuge, clobbering the `death` state set 500ms earlier. The "Return to Refuge" button also never cleared extraction state — `navigate('/refuge')` was a no-op when already at that URL, leaving the overlay stuck.
+
+**Pattern:** Use a ref (`extractionRef`) alongside useState to allow synchronous reads of current extraction state inside Colyseus message handlers (which fire outside React's render cycle). The `updateExtraction` wrapper keeps both in sync.
+
+- **Extraction state ref pattern:** When Colyseus handlers need to read current React state synchronously (e.g. `onRoomSwitch` checking if death is active), use a ref alongside `useState` and an `updateExtraction` wrapper that keeps both in sync. Direct `useState` doesn't work because the handler closure captures stale state.
+- **Death overlay auto-dismiss:** Death screen auto-clears after 3 seconds via `deathTimerRef`. Timer is cleaned up on unmount and on manual dismiss. The button calls `dismissExtraction()` to cancel the timer and clear state immediately.
+- **ExtractionOverlay isZone prop:** When `isZone=true`, the death screen hides shard-specific sections (Items Lost, Shard-sickness, Run Stats) and shows simpler zone-appropriate text instead.
+
+## 2026-03-30T00:30Z — Extraction Overlay & Zone Death Fix
+
+**Completed:** Fix death/extraction overlay clobbering on zone room switches  
+**Files Modified:** 3
+
+- `hooks/useShardConnection.ts` — onRoomSwitch handler now guards extraction state; checks `extractionRef.current.status !== 'death'` before setting success
+- `components/ExtractionOverlay.tsx` — Added isZone prop; hides shard-specific content (Items Lost, Shard-sickness) in zone contexts
+- `pages/ShardExploration.tsx` — Passes isZone prop from useLocation
+
+**Build:** ✅ Clean  
+**Tests:** ✅ 135 tests pass
+
+**Key Decision:** Colyseus handlers fire outside React render cycle — need both ref (synchronous access) and state (re-render). Death state guards room-switch success. Auto-dismiss pattern with manual override (Return to Refuge button).
+
+**Pattern:** Ref + State + Wrapper function pattern is reusable for any future Colyseus handler state-clobbering scenarios.
+
+**Handoff:** Death overlay now reliable across all zone transitions. Zone Designer work (grid expansion, direction guards, occlusion fix) all complete.
