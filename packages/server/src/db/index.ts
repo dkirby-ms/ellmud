@@ -17,12 +17,20 @@ let pool: pg.Pool | null = null;
 /** Lazily initialize the connection pool on first use. */
 export function getPool(): pg.Pool {
   if (!pool) {
+    const needsSsl = process.env.DATABASE_URL?.includes('sslmode=require');
+
     pool = new pg.Pool({
       connectionString: process.env.DATABASE_URL,
       max: 10,
+      ...(needsSsl && { ssl: { rejectUnauthorized: false } }),
     });
 
+    if (needsSsl) {
+      console.log('[db] SSL enabled (rejectUnauthorized: false) for Azure PostgreSQL');
+    }
+
     pool.on('error', (err) => {
+      console.log('[db] ⚠ Database pool error:', err.message);
       console.error('[db] Unexpected pool error:', err.message);
     });
   }

@@ -428,9 +428,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.log(`Failed to load factions for ${this.playerTag(playerId)}: ${err}`);
     }
 
-    // Load character name for log formatting
+    // Load character name for combat narration and log formatting.
+    // Try by character ID first, then by active character for the player account.
     try {
-      const character = await this.characterRepo.getById(playerId);
+      const character = await this.characterRepo.getById(playerId)
+        ?? await this.characterRepo.getActive(playerId);
       if (character?.name) {
         this.characterNames.set(playerId, character.name);
       }
