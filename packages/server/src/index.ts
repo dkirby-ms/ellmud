@@ -185,7 +185,7 @@ console.log('[Ellmud] Character API: enabled');
 app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));
 
 // ─── Admin Dashboard ─────────────────────────────────────────────────────────
-// Admin API at /admin/api/*, dashboard UI at /admin/
+// Admin API at /admin/api/*, diagnostics dashboard at /monitor
 // Protected by ADMIN_TOKEN env var — admin auth is separate from player auth.
 
 // Content CRUD API — admin-managed game content (items, creatures, biomes, etc.)
@@ -218,7 +218,7 @@ if (USE_PG) {
   console.log('[Ellmud] User management API: enabled (PostgreSQL)');
 }
 
-app.use('/admin', createDashboardRouter());
+app.use('/monitor', createDashboardRouter());
 
 // Initialize Colyseus room auth hooks
 initColyseusAuth(authService, AUTH_REQUIRED);
@@ -302,7 +302,7 @@ await server.listen(PORT);
 
 console.log(`[Ellmud] Colyseus server listening on ws://localhost:${PORT}`);
 console.log(`[Ellmud] Admin monitor at http://localhost:${PORT}/colyseus`);
-console.log(`[Ellmud] Admin dashboard at http://localhost:${PORT}/admin`);
+console.log(`[Ellmud] Admin dashboard at http://localhost:${PORT}/monitor`);
 console.log(`[Ellmud] Auth required: ${AUTH_REQUIRED}`);
 console.log(`[Ellmud] Cache: ${isCacheRedis ? 'Redis' : 'in-memory'}, Presence: ${isPresenceRedis ? 'Redis' : 'local'}`);
 console.log(`[Ellmud] Matchmaker driver: ${config.redis.driverEnabled ? 'Redis' : 'local'}`);
