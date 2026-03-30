@@ -2498,3 +2498,16 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 **Key Pattern:** Cross-zone navigation data flow: `go` command → `zoneTransfer` result → `ZONE_TRANSFER` message to client → client calls `switchRoom()` with `targetRoomSlug` option → server `onJoin` reads it.
 
 **Tests:** ✅ All zone-system (47), zone-adapter (13), orphaned-exits (9), shardroom-zone-mode (12), and command integration (44) tests pass. No regressions.
+
+---
+
+## Team Update (2026-03-30T00:40:00Z)
+
+**Documented:** Zone transition bugs batch (Drizzt + Regis parallel work)
+- Orchestration log created: `.squad/orchestration-log/2026-03-30T00-40-drizzt.md`
+- Session log created: `.squad/log/2026-03-30T00-40-zone-bugs.md`
+- Decision merged into `.squad/decisions/decisions.md` (inbox file deleted)
+- Cross-zone exit targeting now fully functional
+- Tests: ✅ All 125 server tests PASSING
+
+**Key Pattern Documented:** `options['targetRoomSlug']` validated against zone roomGraph on join — falls back to startRoomId for direct joins or invalid slugs.

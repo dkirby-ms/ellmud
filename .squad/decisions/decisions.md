@@ -4745,3 +4745,71 @@ A city with 100+ unique room names feels like a theme park. A city with repeated
 **Impact on dungeon zones:** This pattern is specific to **city/urban zones**. Dungeon zones like The Warrens should continue using unique room names — every room in a dungeon is a designed encounter space.
 
 **Applies to:** The Siltgate (implemented), and any future city zones.
+
+---
+
+## 2026-03-30T00:40Z: Zone Entry Room Respects targetRoomSlug
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-03-30  
+**File:** `packages/server/src/rooms/ShardRoom.ts` (onJoin, line ~447)
+
+### What
+
+When a player joins a zone via a cross-zone exit, the server now checks `options['targetRoomSlug']` and places the player in that room if it's valid in the zone's room graph. Falls back to `startRoomId` for direct zone joins or invalid slugs.
+
+### Why
+
+Cross-zone exits (e.g., the-refuge → the-siltgate via a portal targeting `market-square`) were always dropping players at the zone's start room, breaking spatial consistency. The client was already sending the correct target — the server just wasn't reading it.
+
+### Impact
+
+- **Jarlaxle:** Client-side zone transfer already sends `targetRoomSlug` correctly — no client changes needed.
+- **Regis:** Zone Designer portal exits with `targetRoomSlug` now actually work end-to-end.
+- **Minsc:** Integration tests for cross-zone navigation should verify player lands in the targeted room, not just the zone's start.
+
+---
+
+## 2026-03-30T00:40Z: Input Focus Restoration Pattern
+
+**By:** Regis (Frontend Dev)  
+**Date:** 2026-03-30
+
+### What
+
+Added ref-based focus restoration to the command input in `ShardExploration.tsx`. A `useEffect` watches `state.connectionStatus` and calls `inputRef.current?.focus()` (via `requestAnimationFrame`) whenever the connection returns to `'connected'`.
+
+### Why
+
+During zone switches, the input is disabled while `connectionStatus === 'connecting'`. When re-enabled, browser focus is lost. `autoFocus` only fires on mount, not re-enable. This broke the seamless MUD typing experience.
+
+### Impact
+
+- Single file change: `packages/client/src/pages/ShardExploration.tsx`
+- No new dependencies or API changes
+- Pattern is reusable: any input disabled during async transitions should use ref + useEffect + rAF to restore focus
+
+---
+
+## 2026-03-30T00:40Z: Up/Down Ghost Rooms Are Not Positioned on the Map
+
+**By:** Regis (Frontend Dev)  
+**Date:** 2026-03-30  
+**Status:** Implemented
+
+### Context
+
+Ghost rooms for up/down exits were being positioned at `parentPos.z ± 1`, inflating floor bounds. This caused all rooms on a floor to show incorrect ↑/↓ indicators and the FloorSelector to show phantom floors.
+
+### Decision
+
+- **Up/down ghost rooms are not given positions.** They exist in `ghostRooms` but have no entry in `positions`, so they don't render or affect floor bounds.
+- **RoomNode shows exit-based ↑/↓ badges** (purple, matching inter-floor stroke color) on rooms that have `up` or `down` in their exits. This replaces the old z-level badge that showed on every room of a non-zero floor.
+- **Floor bounds are now accurate** — only visited rooms (which get real z-values from `computeLayout` BFS) contribute to min/max floor.
+
+### Impact
+
+- `useExplorationMap.ts` — ghost positioning block for up/down removed
+- `RoomNode.tsx` — z-badge replaced with exit-based badges
+- `useFloorFilter.ts`, `MapRenderer.tsx`, `MinimapWidget.tsx` — no changes needed
+- All 24 computeLayout tests still pass

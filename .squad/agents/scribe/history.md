@@ -162,3 +162,55 @@ Initial setup complete. Scribe orchestration workflow established: create orches
    - Scribe: This entry
 
 **Decision Impact:** Pre-release migration strategy established. Future migrations start at 004_*.sql. All devs must run schema reset before next server start.
+
+---
+
+## Session: Zone Transition Bugs Batch (Batch 2) Orchestration (2026-03-30T00:40:00Z)
+
+### Tasks Completed
+
+1. ✅ **Orchestration Logs Written** (3 entries)
+   - Drizzt: Cross-zone exits now honor targetRoomSlug, 125 tests pass
+   - Regis (focus): Input refocus pattern on zone switch, 2277 tests pass  
+   - Regis (map): Ghost room z-level inflation fixed, 24 layout tests pass
+
+2. ✅ **Session Log Created**
+   - `.squad/log/2026-03-30T00-40-zone-bugs.md`
+   - Zone transition bugs batch summary; three critical bugs resolved in parallel
+
+3. ✅ **Decision Inbox Merged → decisions.md**
+   - Deduplicated & merged: 3 zone bug decisions
+   - Inbox files deleted (drizzt-zone-entry, regis-focus-fix, regis-zlevel-fix)
+   - New sections in decisions.md for all three zone fixes
+
+4. ✅ **Agent Histories Updated**
+   - Drizzt: Cross-team note on zone targeting, orchestration log ref
+   - Regis: Cross-team note on focus restoration + z-level fix patterns, orchestration log refs
+   - Scribe: This entry
+
+### Batch Summary
+
+**Agents:** Drizzt (Engine), Regis (Frontend) — parallel, independent tasks  
+**Focus:** Zone navigation reliability + map rendering accuracy  
+
+**Drizzt (Engine):** Zone entry bug — cross-zone exits always landed at startRoomId. Fixed by reading `options['targetRoomSlug']` on join, validating against roomGraph, falling back to startRoomId.
+
+**Regis (Frontend, 2 tasks):**
+1. Input focus lost on zone switch. Fixed with useRef + useEffect + requestAnimationFrame pattern watching connectionStatus.
+2. Ghost rooms inflating floor bounds. Fixed by removing up/down ghost positioning; added exit-based badges to parent rooms instead.
+
+**Cross-Agent Note (Coordinator Batch 1):** Peaceful mode persistence across zone transitions earlier this session — documented separately with static peacefulRegistry pattern.
+
+### Workflow Status
+
+- 🟢 Orchestration logs (3): Complete  
+- 🟢 Session log: Complete
+- 🟢 Decision merge: Complete
+- 🟢 Agent history updates: Complete
+- ⏳ Git commit: Ready
+
+### Next Steps
+
+- Commit .squad/ changes
+- Zone navigation now fully reliable across transitions
+- Map rendering accuracy restored; floor bounds correct

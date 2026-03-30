@@ -691,3 +691,52 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 **Pattern:** Ref + State + Wrapper function pattern is reusable for any future Colyseus handler state-clobbering scenarios.
 
 **Handoff:** Death overlay now reliable across all zone transitions. Zone Designer work (grid expansion, direction guards, occlusion fix) all complete.
+
+## 2026-03-27 — Input Focus Restoration on Zone Switch
+
+**Completed:** Fixed command input losing focus when switching zones  
+**Files Modified:** 1
+
+- `pages/ShardExploration.tsx` — Added `useRef` + `useEffect` to refocus input when `connectionStatus` returns to `'connected'`
+
+**Build:** ✅ Clean  
+**Tests:** ✅ 2277 passed (106 files)
+
+**Root Cause:** During zone switches, `connectionStatus` transitions to `'connecting'`, which disables the input (`disabled={state.connectionStatus !== "connected"}`). When re-enabled, focus is lost because `autoFocus` only fires on initial mount, not on re-enable.
+
+**Solution:** Added `inputRef` (useRef) on the command input and a `useEffect` watching `state.connectionStatus`. When status becomes `'connected'`, we `requestAnimationFrame(() => inputRef.current?.focus())` — the rAF ensures the disabled attribute is removed before focus is attempted.
+
+**Pattern:** For any input that gets disabled/re-enabled during async transitions, use ref + useEffect + rAF to restore focus. The `autoFocus` attribute alone is insufficient for re-enable scenarios.
+
+## 2026-03-28 — Map Z-Level Ghost Room Bug Fix
+
+**Completed:** Fixed ghost rooms inflating floor bounds, causing incorrect ↑/↓ indicators on all rooms  
+**Files Modified:** 2
+
+- `hooks/useExplorationMap.ts` — Removed the up/down ghost room positioning block (lines ~101-121). Ghost rooms for vertical exits no longer get positions, so they can't inflate `computeFloorBounds`.
+- `components/map/RoomNode.tsx` — Replaced the z-level badge (`position.z !== 0 → ↑/↓`) with exit-based badges. Now shows purple ↑ if room has an 'up' exit, ↓ if room has a 'down' exit. Color matches `INTER_FLOOR_STROKE` (#a78bfa).
+
+**Build:** ✅ Clean  
+**Tests:** ✅ 24 computeLayout tests passed
+
+## Learnings
+
+- **Floor bounds come from positions, not rooms.** `useFloorFilter.ts:computeFloorBounds` scans ALL positions (including ghosts). Any ghost with a synthetic z-value inflates the bounds, which cascades to FloorSelector, inter-floor edge filtering, and room visibility.
+- **Up/down ghosts should not be positioned.** Unlike cardinal ghosts (which offset x/y), vertical ghosts would overlap the parent room at the same (x,y). Better to skip positioning entirely and show exit badges on the parent.
+- **RoomNode exit badges vs z-badges.** The old z-badge (`position.z !== 0`) was misleading — it showed on ALL rooms of a non-zero floor. Exit-based badges (checking `roomData.exits.up/down`) are more useful and only appear on rooms that actually have vertical exits.
+- **Key file paths for map rendering:** `useExplorationMap.ts` (state + ghost logic), `useFloorFilter.ts` (floor bounds + edge filtering), `MapRenderer.tsx` (SVG rendering + floor selector), `RoomNode.tsx` (room circles + badges), `ExitEdge.tsx` (edge lines + inter-floor styling), `constants.ts` (sizing/colors).
+
+---
+
+## Team Update (2026-03-30T00:40:00Z)
+
+**Documented:** Zone transition bugs batch — parallel work with Drizzt on zone bugs
+- Orchestration logs created: `.squad/orchestration-log/2026-03-30T00-40-regis-focus.md` and `.squad/orchestration-log/2026-03-30T00-40-regis-zlevel.md`
+- Session log created: `.squad/log/2026-03-30T00-40-zone-bugs.md`
+- Decisions merged into `.squad/decisions/decisions.md` (inbox files deleted)
+- Client: ✅ Input focus restored on zone switch (2277 tests pass)
+- Map: ✅ Ghost room z-level inflation fixed (24 layout tests pass)
+
+**Key Patterns Documented:**
+- Input focus restoration: `useRef` + `useEffect` watching `connectionStatus` + `requestAnimationFrame` for re-enable scenarios
+- Ghost room positioning: Don't position up/down ghosts; show exit-based badges on parent rooms instead
