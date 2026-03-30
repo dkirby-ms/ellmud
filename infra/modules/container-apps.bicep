@@ -39,7 +39,7 @@ param postgresAdminUsername string = ''
 @secure()
 param postgresAdminPassword string = ''
 
-@description('Redis add-on service name (CLI-managed, used for service bind)')
+@description('Redis add-on service name (deployed as ACA dev service, used for service bind)')
 param redisServiceName string = ''
 
 @description('Deploy the game server container app (false = environment only)')
@@ -99,6 +99,21 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = if (cr
 
 var resolvedEnvironmentId = createEnvironment ? containerAppEnv.id : existingEnvironmentId
 
+// Redis dev service (ACA add-on) — created before the app so service bind works
+resource redisService 'Microsoft.App/containerApps@2024-03-01' = if (deployApp && redisServiceName != '') {
+  name: redisServiceName
+  location: location
+  tags: tags
+  properties: {
+    managedEnvironmentId: resolvedEnvironmentId
+    configuration: {
+      service: {
+        type: 'redis'
+      }
+    }
+  }
+}
+
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) {
   name: '${resourcePrefix}-app'
   location: location
@@ -106,6 +121,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
   identity: {
     type: 'SystemAssigned'
   }
+  dependsOn: [
+    redisService
+  ]
   properties: {
     managedEnvironmentId: resolvedEnvironmentId
     configuration: {

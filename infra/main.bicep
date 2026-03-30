@@ -108,8 +108,8 @@ module containerAppsEnv 'modules/container-apps.bicep' = {
   }
 }
 
-// 5. Redis — managed as ACA add-on via CLI (az containerapp add-on redis create)
-// Not deployed via Bicep. Service bind references the CLI-managed add-on by name.
+// 5. Redis — deployed as ACA dev service (add-on) inside container-apps module
+// Created automatically when redisServiceName is provided to the app module.
 
 // 6. Container Apps Game Server (reuses existing environment, deploys the app)
 module containerAppsApp 'modules/container-apps.bicep' = {
