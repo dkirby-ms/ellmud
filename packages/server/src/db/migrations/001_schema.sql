@@ -1,6 +1,5 @@
 -- 001_schema.sql — Full database schema for Ellmud.
-
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- gen_random_uuid() is built-in since PostgreSQL 13 — no extension needed.
 
 -- ============================================================================
 -- Independent tables (no foreign key dependencies)
