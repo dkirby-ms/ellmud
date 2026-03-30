@@ -76,3 +76,20 @@ Siltgate revision finalized and merged into team decisions archive.
 - `.squad/orchestration-log/2026-03-29T17-34-laeral-siltgate-revision.md`
 
 **Team Roster Status:** Laeral — 1 major content revision with philosophy update this cycle
+
+### 2025-07-24: Siltgate Topology Analysis & Zone Grid Constraint Skill
+- Performed full topology analysis of The Siltgate (136 rooms, 286 exits) against the `computeLayout.ts` BFS grid engine.
+- Identified **6 topological conflicts** where rooms are reachable via paths that imply contradictory grid positions:
+  1. `dock-street-5 ↔ narrow-alley-3` (Dockward ↔ Beggar's Span shortcut, Δ=9) — cross-neighborhood shortcut
+  2. `rubble-street-1 ↔ rubble-street-2` (Beggar's Span ↔ Ashgate, Δ=5) — dual-approach neighborhood border
+  3. `sewer-junction-2 ↔ sewer-tunnel-4` (Drowned Veins ring, Δ=17) — sewer loop with mismatched surface access points
+  4. `narrow-alley-5 ↔ narrow-alley-6` (surface ↔ sewer vertical shortcut, Δ=8)
+  5. `garden-terrace ↔ iron-balcony-2` (Highwind Estates L-loop, Δ=3)
+  6. Self-referencing exits on `city-gate` and `ashgate`
+- Also identified 35 grid position collisions (rooms wanting the same cell) and 11 four-way junctions.
+- **Core insight:** These conflicts are content problems, not algorithm problems. The zone data creates impossible geometry that no layout engine can resolve. The fix is adding intermediate "bridge" rooms to absorb grid distance.
+- Proposed 6 specific fixes adding 8–9 intermediate rooms (zone grows to ~144–145 rooms). Fixes prioritized by conflict severity (Δ value).
+- **Key design principle learned:** For any cycle in a zone graph, the sum of cardinal direction offsets around the cycle must be zero. Non-zero sums = topological impossibility on a 2D grid.
+- Created **zone-topology skill** at `.squad/skills/zone-topology/SKILL.md` — covers the grid constraint, conflict patterns (shortcuts, rings, L-loops, vertical shortcuts), design guidelines (junction density, shortcut savings limits, bridge room budgeting), cycle validation formula, and a pre-handoff checklist.
+- Proposal document: `.squad/decisions/inbox/laeral-siltgate-topology-fixes.md`
+- **File paths:** Zone data at `packages/server/src/db/migrations/004_seed_siltgate.sql`, layout engine at `packages/client/src/map/computeLayout.ts`, layout tests at `packages/client/src/map/__tests__/computeLayout.test.ts`

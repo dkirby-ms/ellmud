@@ -2579,3 +2579,32 @@ Redis ACA add-on was previously created manually via `az containerapp add-on red
 - Existing `resourceId('Microsoft.App/containerApps', redisServiceName)` in serviceBinds still resolves correctly since the resource is now created in the same template
 
 **Build:** ✅ `az bicep build` passes clean
+
+---
+
+## Layout Engine Analysis (2026-03-30)
+
+**Task:** Analyze `computeLayout.ts` (2727 lines) and produce a technical reference document for zone designers explaining topological conflicts, scoring weights, and design guidelines.
+
+**Status:** ✅ Complete — Reference doc written
+
+### What I Found
+
+The layout algorithm is an 8-phase pipeline: BFS → z-levels → disconnected subgraphs → force-relaxation → diagonal cascade → direction repair → occlusion fix → grid expansion. It enforces direction correctness as a hard constraint (weight 50), treats diagonals as a heavy soft constraint (weight 20), and penalizes distance stretch at 1/cell. Occlusion penalties are phased (3 during relaxation, 15 during dedicated fix).
+
+Key insight: Topological conflicts are fundamentally about cycle offset sums. Any cycle where the direction offsets don't sum to (0,0) creates an irreconcilable conflict that forces the algorithm to stretch exits or misalign rooms. The algorithm doesn't detect these explicitly — it encounters them during BFS when a room is reachable via two paths with different ideal positions.
+
+### Output
+
+- **Decision doc:** `.squad/decisions/inbox/drizzt-layout-constraints.md`
+  - Explains topological conflicts and why they're unavoidable in cyclic graphs
+  - Documents scoring weights and phase behavior
+  - 5 zone design guidelines for minimizing conflicts
+  - Conceptual "conflict test" (walk cycles, sum offsets, check for zero)
+  - Proposed `validateZoneTopology()` utility API (not implemented yet — pending team review)
+
+### Learnings
+- The layout engine uses two separate scoring functions: `layoutScore` (occlusion=3) for Phases 4-5b, and `occlusionAwareScore` (occlusion=15) for Phases 6-8. The phased weighting prevents occlusion fixes from destabilizing direction/diagonal corrections.
+- Grid clusters (≥9 rooms with perpendicular path convergence) are detected pre-BFS and placed as rigid blocks, avoiding BFS-order displacement.
+- Direction violation repair (Phase 5b) uses three escalating strategies: single-room moves, pairwise swaps with occupants, and group shifts. Each strategy checks `moveWouldIncreaseMismatches()` as a hard guard to prevent regression.
+- The cycle offset sum test (for every fundamental cycle, sum DIRECTION_OFFSETS — must return to (0,0)) is the key insight for a pre-layout validation utility.

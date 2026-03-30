@@ -41,3 +41,27 @@
 - **Bosses:** the_harbourmaster (Dockward), plague_bearer (Drowned Veins)
 - **Room duplication directive followed:** Generic rooms (Narrow Alley, Dock Street, Sewer Tunnel, etc.) share display names with unique slugs and distinct descriptions
 - **Validation:** All exits bidirectional, no orphaned refs, no duplicate slugs, all cross-zone targets verified
+
+---
+
+## 2026-03-30T19:15Z: Zone-Topology Skill Reference — Future Implementation Guide
+
+**Relevant to:** Siltgate implementation work and all future zone design tasks  
+**Skill Location:** `.squad/skills/zone-topology/SKILL.md` (created by Laeral)
+
+**Context:** Laeral analyzed the Siltgate zone topology and identified 6 topological conflicts (Δ=3 to Δ=17) with 35+ position collisions. These arise from the zone's exit graph structure, not engine defects. The zone-topology skill captures lessons learned and provides guidelines for designing topologies that layout cleanly.
+
+**For Bruenor — Building Siltgate:**
+- Reference the skill's **Pre-Handoff Checklist** before implementing room additions
+- Use the **Cycle Validation Formula** to verify any major structural changes
+- When fixing conflicts, budget intermediate bridge rooms based on the **Bridge Room Budgeting** guidelines (roughly N/2 rooms per Δ=N conflict)
+- Proposed fixes are documented in `laeral-siltgate-topology-fixes.md` (now merged to decisions.md) — prioritized by conflict severity
+
+**Cross-Skill Resources:**
+- Drizzt's constraint documentation (decisions.md, 2026-03-30T19:15) explains the layout algorithm phases, penalty weights, and why conflicts arise in cyclic graphs
+- Together, Laeral's design patterns + Drizzt's engine constraints = complete reference for zone design
+
+**Files Generated:**
+- Skill: `.squad/skills/zone-topology/SKILL.md`
+- Orchestration log: `.squad/orchestration-log/2026-03-30T19-15-laeral.md`
+- Decisions merged: decisions.md now contains user directive, Drizzt's constraints, and Laeral's topology analysis
