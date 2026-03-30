@@ -93,6 +93,8 @@ export interface CreatureAction {
   creatureId: string;
   /** Target room for movement actions. */
   targetRoomId?: string;
+  /** Source room the creature moved from (set by CreatureManager.updateAll). */
+  sourceRoomId?: string;
   /** Target combatant for combat actions. */
   targetCombatantId?: string;
 }

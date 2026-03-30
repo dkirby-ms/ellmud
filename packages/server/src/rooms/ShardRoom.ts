@@ -1466,6 +1466,66 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         break;
       }
       // patrol_move and alert_move already handled by CreatureManager.updateAll()
+      // Broadcast arrival/departure narrations to players in affected rooms
+      case 'patrol_move':
+      case 'alert_move': {
+        if (action.targetRoomId && action.sourceRoomId) {
+          this.broadcastCreatureMovement(creature, action.sourceRoomId, action.targetRoomId);
+        }
+        break;
+      }
+    }
+  }
+
+  /**
+   * Broadcast creature arrival/departure narrations when a creature moves between rooms.
+   * Players in the target room see "A {name} arrives from the {direction}."
+   * Players in the source room see "A {name} leaves to the {direction}."
+   */
+  private broadcastCreatureMovement(
+    creature: import('../creatures/types.js').Creature,
+    sourceRoomId: string,
+    targetRoomId: string,
+  ): void {
+    const targetRoom = this.roomGraph.rooms.get(targetRoomId);
+    const sourceRoom = this.roomGraph.rooms.get(sourceRoomId);
+
+    // Find which direction the creature arrived FROM (from target room's perspective)
+    if (targetRoom) {
+      let fromDirection: string | undefined;
+      for (const [dir, exitId] of targetRoom.exits) {
+        if (exitId === sourceRoomId) {
+          fromDirection = dir;
+          break;
+        }
+      }
+
+      const arrivalText = fromDirection
+        ? `A ${creature.name} arrives from the ${fromDirection}.`
+        : `A ${creature.name} arrives.`;
+
+      this.broadcastToRoom(targetRoomId, {
+        narrations: [{ text: arrivalText, type: 'ambient' }],
+      });
+    }
+
+    // Find which direction the creature left TO (from source room's perspective)
+    if (sourceRoom) {
+      let toDirection: string | undefined;
+      for (const [dir, exitId] of sourceRoom.exits) {
+        if (exitId === targetRoomId) {
+          toDirection = dir;
+          break;
+        }
+      }
+
+      const departureText = toDirection
+        ? `A ${creature.name} leaves to the ${toDirection}.`
+        : `A ${creature.name} leaves.`;
+
+      this.broadcastToRoom(sourceRoomId, {
+        narrations: [{ text: departureText, type: 'ambient' }],
+      });
     }
   }
 

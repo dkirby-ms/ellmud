@@ -257,6 +257,7 @@ export class CreatureManager {
       // Apply movement from patrol/alert actions
       if (action.type === 'patrol_move' || action.type === 'alert_move') {
         if (action.targetRoomId) {
+          action.sourceRoomId = creature.currentRoomId;
           creature.currentRoomId = action.targetRoomId;
         }
       }

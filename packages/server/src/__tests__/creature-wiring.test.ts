@@ -15,6 +15,7 @@ import { generateShardGraph } from '../shard/generator.js';
 import { adaptRoomGraph } from '../shard/graph-adapter.js';
 import { handleLook } from '../commands/handlers/look.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
+import { handleGo } from '../commands/handlers/go.js';
 import { PlayerState } from '../state/PlayerState.js';
 import type { RoomGraph as LocalRoomGraph } from '../shard/RoomGraph.js';
 
@@ -80,6 +81,9 @@ function buildCtx(
     stability: 1.0,
     combatSystem,
     creaturesInRoom,
+    resolveCreaturesInRoom: (roomId: string) =>
+      creatureManager.getCreaturesInRoom(roomId)
+        .map(c => ({ id: c.id, name: c.name })),
   };
 }
 
@@ -391,5 +395,146 @@ describe('CombatSystem.getActiveEncounterRoomIds', () => {
 
     const rooms = combatSystem.getActiveEncounterRoomIds();
     expect(rooms).toContain('room-1');
+  });
+});
+
+// ─── Go Command with Creatures ────────────────────────────────────────────────
+
+describe('Go Command with Creatures', () => {
+  it('shows creatures in target room when player moves', () => {
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const creature = spawned[0]!;
+    const creatureRoomId = creature.currentRoomId;
+
+    // Find a room adjacent to the creature's room so the player can move there
+    const creatureRoom = localGraph.rooms.get(creatureRoomId)!;
+    let playerStartRoom: string | undefined;
+    let direction: string | undefined;
+
+    // Find a room that has an exit leading to the creature's room
+    for (const [roomId, room] of localGraph.rooms) {
+      for (const [dir, exitId] of room.exits) {
+        if (exitId === creatureRoomId && roomId !== creatureRoomId) {
+          playerStartRoom = roomId;
+          direction = dir;
+          break;
+        }
+      }
+      if (playerStartRoom) break;
+    }
+
+    // Skip if no adjacent room found (shouldn't happen in generated graphs)
+    if (!playerStartRoom || !direction) return;
+
+    const player = new PlayerState('player-1', playerStartRoom);
+    const ctx = buildCtx(player, localGraph, creatureManager, combatSystem, [direction]);
+
+    const result = handleGo(ctx);
+    expect(result.narrations[0]!.text).toContain('Creatures:');
+    expect(result.narrations[0]!.text).toContain('Drowned Revenant');
+  });
+
+  it('does not show creatures line when target room has none', () => {
+    const { localGraph, creatureManager, combatSystem } = createTestShard();
+
+    // Start at entry room (no creatures) and move to an adjacent room without creatures
+    const startRoom = localGraph.rooms.get(localGraph.startRoomId)!;
+    const firstExit = Array.from(startRoom.exits.entries())[0];
+    if (!firstExit) return;
+
+    const [dir, targetId] = firstExit;
+    // Only test if target room has no creatures
+    const creaturesInTarget = creatureManager.getCreaturesInRoom(targetId);
+    if (creaturesInTarget.length > 0) return;
+
+    const player = new PlayerState('player-1', localGraph.startRoomId);
+    const ctx = buildCtx(player, localGraph, creatureManager, combatSystem, [dir]);
+
+    const result = handleGo(ctx);
+    expect(result.narrations[0]!.text).not.toContain('Creatures:');
+  });
+});
+
+// ─── Creature Movement Actions ────────────────────────────────────────────────
+
+describe('Creature Movement Actions', () => {
+  it('patrol_move sets sourceRoomId on the action', () => {
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const creature = spawned[0]!;
+    const originalRoom = creature.currentRoomId;
+
+    // Tick until creature patrols (idle timer expires)
+    const players = new Map<string, PlayerState>();
+    let patrolAction;
+    for (let tick = 0; tick < 50; tick++) {
+      const world = buildWorldState(localGraph, players, combatSystem);
+      const actions = creatureManager.updateAll(world);
+      patrolAction = actions.find(a => a.creatureId === creature.id && a.type === 'patrol_move');
+      if (patrolAction) break;
+    }
+
+    expect(patrolAction).toBeDefined();
+    expect(patrolAction!.sourceRoomId).toBe(originalRoom);
+    expect(patrolAction!.targetRoomId).toBeDefined();
+    expect(creature.currentRoomId).toBe(patrolAction!.targetRoomId);
+  });
+
+  it('alert_move sets sourceRoomId on the action', () => {
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const creature = spawned[0]!;
+    const creatureRoom = creature.currentRoomId;
+
+    // Find an adjacent room and make it noisy to trigger alert
+    const adjacentRooms = Array.from(localGraph.rooms.get(creatureRoom)!.exits.values());
+    if (adjacentRooms.length === 0) return;
+
+    const noisyRoom = adjacentRooms[0]!;
+    const noisyRooms = new Set<string>([noisyRoom]);
+    const playersInRoom = new Map<string, string[]>();
+    const roomExits = new Map<string, string[]>();
+    for (const [id, room] of localGraph.rooms) {
+      roomExits.set(id, Array.from(room.exits.values()));
+    }
+
+    const world: CreatureWorldState = { playersInRoom, roomExits, noisyRooms };
+    const actions = creatureManager.updateAll(world);
+
+    const alertAction = actions.find(
+      a => a.creatureId === creature.id && a.type === 'alert_move',
+    );
+
+    if (alertAction) {
+      expect(alertAction.sourceRoomId).toBe(creatureRoom);
+      expect(alertAction.targetRoomId).toBe(noisyRoom);
+    }
+  });
+
+  it('creature visible in new room after patrol_move', () => {
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const creature = spawned[0]!;
+    const originalRoom = creature.currentRoomId;
+
+    // Tick until creature patrols
+    const players = new Map<string, PlayerState>();
+    for (let tick = 0; tick < 50; tick++) {
+      const world = buildWorldState(localGraph, players, combatSystem);
+      const actions = creatureManager.updateAll(world);
+      const moved = actions.find(a => a.creatureId === creature.id && a.type === 'patrol_move');
+      if (moved) break;
+    }
+
+    // Creature should have moved
+    expect(creature.currentRoomId).not.toBe(originalRoom);
+
+    // Creature should be visible in new room via look
+    const player = new PlayerState('player-look', creature.currentRoomId);
+    const ctx = buildCtx(player, localGraph, creatureManager, combatSystem);
+    const result = handleLook(ctx);
+    expect(result.narrations[0]!.text).toContain('Drowned Revenant');
+
+    // Creature should NOT be visible in old room
+    const oldRoomCreatures = creatureManager.getCreaturesInRoom(originalRoom);
+    const creatureInOldRoom = oldRoomCreatures.find(c => c.id === creature.id);
+    expect(creatureInOldRoom).toBeUndefined();
   });
 });
