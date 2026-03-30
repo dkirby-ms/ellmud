@@ -3,6 +3,8 @@ import { useNavigate } from "react-router";
 interface ExtractionOverlayProps {
   state: "in-progress" | "success" | "death" | null;
   progress: number;
+  /** True when in a static zone (not a shard) — hides shard-specific language */
+  isZone?: boolean;
   onClose?: () => void;
   onReturnToRefuge?: () => void;
 }
@@ -10,6 +12,7 @@ interface ExtractionOverlayProps {
 export default function ExtractionOverlay({
   state,
   progress,
+  isZone,
   onReturnToRefuge,
 }: ExtractionOverlayProps) {
   const navigate = useNavigate();
@@ -163,49 +166,62 @@ export default function ExtractionOverlay({
             </h2>
 
             <div className="space-y-6">
-              {/* Items Lost */}
-              <div>
-                <h3
-                  className="text-text-secondary text-sm mb-3 font-sans"
-                >
-                  Items Lost
-                </h3>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1 h-1 rounded-full bg-text-disabled"></div>
-                    <span className="text-text-disabled line-through font-serif">
-                      Veilkeeper's Scroll
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-1 h-1 rounded-full bg-text-disabled"></div>
-                    <span className="text-text-disabled line-through font-serif">
-                      Weathered Dagger
-                    </span>
+              {/* Items Lost — only in shards where loot is at stake */}
+              {!isZone && (
+                <div>
+                  <h3
+                    className="text-text-secondary text-sm mb-3 font-sans"
+                  >
+                    Items Lost
+                  </h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-1 rounded-full bg-text-disabled"></div>
+                      <span className="text-text-disabled line-through font-serif">
+                        Veilkeeper's Scroll
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-1 rounded-full bg-text-disabled"></div>
+                      <span className="text-text-disabled line-through font-serif">
+                        Weathered Dagger
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Status */}
-              <div>
-                <h3
-                  className="text-text-secondary text-sm mb-2 font-sans"
-                >
-                  Status Acquired
-                </h3>
-                <p className="text-warning font-serif">
-                  Shard-sickness (moderate)
+              {/* Status — shard-sickness only in shards */}
+              {!isZone && (
+                <div>
+                  <h3
+                    className="text-text-secondary text-sm mb-2 font-sans"
+                  >
+                    Status Acquired
+                  </h3>
+                  <p className="text-warning font-serif">
+                    Shard-sickness (moderate)
+                  </p>
+                </div>
+              )}
+
+              {/* Zone death — simple flavour text */}
+              {isZone && (
+                <p className="text-text-secondary text-center font-serif">
+                  You were defeated. Your wounds will mend at the Refuge.
                 </p>
-              </div>
+              )}
 
               {/* Run Stats */}
-              <div className="border-t border-border-muted pt-4">
-                <div className="text-text-secondary text-sm flex justify-between font-mono">
-                  <span>Time: 4m 12s</span>
-                  <span>Rooms: 6</span>
-                  <span>Creatures: 2</span>
+              {!isZone && (
+                <div className="border-t border-border-muted pt-4">
+                  <div className="text-text-secondary text-sm flex justify-between font-mono">
+                    <span>Time: 4m 12s</span>
+                    <span>Rooms: 6</span>
+                    <span>Creatures: 2</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <button
                 onClick={() => onReturnToRefuge?.() ?? navigate("/refuge")}

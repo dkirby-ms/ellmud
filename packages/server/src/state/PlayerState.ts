@@ -32,6 +32,14 @@ const DEFAULT_MAX_CARRY_WEIGHT = 20;
 const DEFAULT_SKILLS: PlayerSkills = { stealth: 5, awareness: 5 };
 
 export class PlayerState {
+  /** Cross-room registry: tracks which player IDs have peaceful mode enabled. */
+  private static peacefulRegistry = new Set<string>();
+
+  static setPeaceful(playerId: string, value: boolean): void {
+    if (value) PlayerState.peacefulRegistry.add(playerId);
+    else PlayerState.peacefulRegistry.delete(playerId);
+  }
+
   readonly sessionId: string;
   currentRoomId: string;
   readonly inventory: Map<string, InventoryEntry> = new Map();
@@ -55,6 +63,8 @@ export class PlayerState {
     this.maxCarryWeight = maxCarryWeight;
     this.skills = { ...DEFAULT_SKILLS, ...skills };
     this.equipment = equipment;
+    // Restore peaceful flag from cross-room registry (survives zone transitions)
+    this.peaceful = PlayerState.peacefulRegistry.has(sessionId);
   }
 
   get currentWeight(): number {

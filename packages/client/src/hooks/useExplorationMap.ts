@@ -98,27 +98,11 @@ function computeAllPositions(
     }
   }
 
-  // Ghost rooms from up/down exits: place at same x,y, different z
-  for (const [ghostId] of ghosts) {
-    if (positions.has(ghostId)) continue;
-
-    for (const [, room] of visited) {
-      for (const [dir, targetId] of Object.entries(room.exits)) {
-        if (targetId === ghostId && (dir === 'up' || dir === 'down')) {
-          const parentPos = positions.get(room.roomId);
-          if (parentPos) {
-            positions.set(ghostId, {
-              x: parentPos.x,
-              y: parentPos.y,
-              z: parentPos.z + (dir === 'up' ? 1 : -1),
-            });
-          }
-          break;
-        }
-      }
-      if (positions.has(ghostId)) break;
-    }
-  }
+  // Up/down ghost rooms are intentionally NOT positioned.
+  // They live on a different floor that hasn't been explored yet, so
+  // assigning them z ± 1 would inflate floor bounds and cause incorrect
+  // ↑/↓ indicators on every room of that floor.  Instead, RoomNode
+  // renders exit badges (↑/↓) on the parent room itself.
 
   return positions;
 }

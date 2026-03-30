@@ -75,18 +75,31 @@ export function RoomNode({ roomId, position, roomData, isCurrent, compact, onCli
         </text>
       )}
 
-      {/* Z-layer badge */}
-      {position.z !== 0 && (
+      {/* Up/down exit badges — show when room has vertical exits */}
+      {roomData.exits.up && (
         <text
           x={cx + r + 2}
           y={cy - r + 2}
           textAnchor="start"
-          fill="#C9A84C"
+          fill="#a78bfa"
           fontSize={compact ? 7 : 9}
           fontFamily="var(--font-mono)"
           fontWeight="bold"
         >
-          {position.z > 0 ? '↑' : '↓'}
+          ↑
+        </text>
+      )}
+      {roomData.exits.down && (
+        <text
+          x={cx + r + 2}
+          y={cy + (roomData.exits.up ? 0 : -r + 2)}
+          textAnchor="start"
+          fill="#a78bfa"
+          fontSize={compact ? 7 : 9}
+          fontFamily="var(--font-mono)"
+          fontWeight="bold"
+        >
+          ↓
         </text>
       )}
     </g>

@@ -65,6 +65,8 @@ export interface CommandContext {
   otherPlayersInRoom: string[];
   /** Current shard stability (0–1). */
   stability: number;
+  /** The player's in-game character name. */
+  characterName?: string;
   /** Combat system reference (available in ShardRoom context). */
   combatSystem?: CombatSystem;
   /** Extraction system reference (available in ShardRoom context). */

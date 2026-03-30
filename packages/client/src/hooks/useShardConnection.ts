@@ -52,6 +52,8 @@ export interface UseShardConnectionResult {
   sendChatMessage: (text: string) => void;
   /** Current extraction state */
   extraction: ExtractionState;
+  /** Dismiss the extraction/death overlay */
+  dismissExtraction: () => void;
   /** Reconnection state for overlay */
   reconnection: ReturnType<typeof useReconnection>;
   /** Current room ref for direct message sending (e.g. equipment) */
@@ -66,7 +68,26 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
   const roomRef = useRef<Room | null>(null);
   const switchingRef = useRef(false);
   const soundCueCounterRef = useRef(0);
+  const deathTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [extraction, setExtraction] = useState<ExtractionState>(INITIAL_EXTRACTION);
+  const extractionRef = useRef<ExtractionState>(INITIAL_EXTRACTION);
+
+  // Keep ref in sync with state so onRoomSwitch can read current value synchronously
+  const updateExtraction = useCallback((updater: ExtractionState | ((prev: ExtractionState) => ExtractionState)) => {
+    setExtraction((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      extractionRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const dismissExtraction = useCallback(() => {
+    if (deathTimerRef.current) {
+      clearTimeout(deathTimerRef.current);
+      deathTimerRef.current = null;
+    }
+    updateExtraction(INITIAL_EXTRACTION);
+  }, [updateExtraction]);
 
   const addMessage = useCallback((text: string, type: TerminalMessage['type'], combatSubtype?: TerminalMessage['combatSubtype']) => {
     dispatch({
@@ -216,11 +237,14 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
           dispatch({ type: 'CLEAR_MESSAGES' });
           dispatch({ type: 'SET_SHARD_STATE', state: null as unknown as import('@ellmud/shared').ShardState });
           dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
-          setExtraction((prev) => ({
-            status: 'success',
-            progress: 100,
-            narration: prev.narration ?? msg.reason,
-          }));
+          // Don't overwrite death state — the death overlay must stay visible
+          if (extractionRef.current.status !== 'death') {
+            updateExtraction((prev) => ({
+              status: 'success',
+              progress: 100,
+              narration: prev.narration ?? msg.reason,
+            }));
+          }
         }
 
         switchRoom(currentRoom, msg.target, state.token, handlers, msg.options, state.activeCharacter?.id)
@@ -342,19 +366,19 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
       if (disposed) return;
       switch (msg.state) {
         case 'started':
-          setExtraction({ status: 'in-progress', progress: 0, narration: msg.narration });
+          updateExtraction({ status: 'in-progress', progress: 0, narration: msg.narration });
           addMessage(msg.narration, 'system');
           break;
         case 'progress': {
           const progress = msg.totalTicks && msg.ticksRemaining != null
             ? ((msg.totalTicks - msg.ticksRemaining) / msg.totalTicks) * 100
             : 0;
-          setExtraction({ status: 'in-progress', progress, narration: msg.narration });
+          updateExtraction({ status: 'in-progress', progress, narration: msg.narration });
           addMessage(msg.narration, 'system');
           break;
         }
         case 'completed':
-          setExtraction({ status: 'success', progress: 100, narration: msg.narration });
+          updateExtraction({ status: 'success', progress: 100, narration: msg.narration });
           addMessage(msg.narration, 'system');
           if (!switchingRef.current) {
             handlers.onRoomSwitch({
@@ -364,13 +388,18 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
           }
           break;
         case 'death':
-          setExtraction({ status: 'death', progress: 0, narration: msg.narration });
+          updateExtraction({ status: 'death', progress: 0, narration: msg.narration });
           addMessage(msg.narration, 'system');
-          // After death, server will send ROOM_SWITCH to refuge after a delay
-          // onRoomSwitch handler will navigate to /refuge
+          // Auto-dismiss death screen after 3s — server sends ROOM_SWITCH in the meantime
+          if (deathTimerRef.current) clearTimeout(deathTimerRef.current);
+          deathTimerRef.current = setTimeout(() => {
+            if (!disposed) {
+              updateExtraction(INITIAL_EXTRACTION);
+            }
+          }, 3000);
           break;
         case 'interrupted':
-          setExtraction(INITIAL_EXTRACTION);
+          updateExtraction(INITIAL_EXTRACTION);
           addMessage(msg.narration, 'system');
           break;
       }
@@ -407,6 +436,7 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
 
     return () => {
       disposed = true;
+      if (deathTimerRef.current) clearTimeout(deathTimerRef.current);
       roomRef.current?.leave();
       roomRef.current = null;
     };
@@ -449,6 +479,7 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
     handleCombatAction,
     sendChatMessage,
     extraction,
+    dismissExtraction,
     reconnection,
     roomRef,
   };

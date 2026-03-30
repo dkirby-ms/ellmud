@@ -1010,6 +1010,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       resolveRoom: (roomId: string) => this.roomGraph.rooms.get(roomId),
       otherPlayersInRoom,
       stability: this.state.stability,
+      characterName: this.characterNames.get(player.sessionId),
       combatSystem: this.combatSystem,
       extractionSystem: this.extractionSystem,
       downingSystem: this.downingSystem,
@@ -1431,8 +1432,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         if (action.targetCombatantId && !this.combatSystem.getCombatant(action.targetCombatantId)) {
           const player = this.players.get(action.targetCombatantId);
           if (player) {
+            const displayName = this.characterNames.get(player.sessionId) ?? player.sessionId;
             this.combatSystem.registerCombatant(
-              createCombatant(player.sessionId, player.sessionId, player.currentRoomId, true),
+              createCombatant(player.sessionId, displayName, player.currentRoomId, true),
             );
           }
         }

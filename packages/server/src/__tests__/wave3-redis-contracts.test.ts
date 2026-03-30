@@ -126,6 +126,7 @@ function makeServerConfig(overrides: Partial<ServerConfig['redis']> = {}): Serve
     authRequired: false,
     reconnectionTimeoutS: 30,
     reconnectDeathBehavior: 'kill',
+    devModeEnabled: false,
   };
 }
 

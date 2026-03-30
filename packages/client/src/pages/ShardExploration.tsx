@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
 import {
   Eye,
@@ -50,6 +50,7 @@ export default function ShardExploration() {
     handleCombatAction: sendCombatAction,
     sendChatMessage,
     extraction,
+    dismissExtraction,
     reconnection,
     roomRef,
   } = useShardConnection(roomName);
@@ -63,6 +64,15 @@ export default function ShardExploration() {
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const { containerRef: narrativeRef, bottomRef } = useAutoScroll(state.messages);
+
+  // Re-focus the command input after zone switches (input is disabled while connecting)
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (state.connectionStatus === "connected") {
+      // Defer focus to next frame so the input is re-enabled first
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }, [state.connectionStatus]);
 
   // Derive room info from server state
   const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
@@ -640,6 +650,7 @@ export default function ShardExploration() {
             &gt;
           </span>
           <input
+            ref={inputRef}
             type="text"
             value={command}
             onChange={(e) => setCommand(e.target.value)}
@@ -695,8 +706,9 @@ export default function ShardExploration() {
       <ExtractionOverlay
         state={extraction.status}
         progress={extraction.progress}
+        isZone={isZone}
         onReturnToRefuge={() => {
-          // Navigate directly to refuge and let useShardConnection handle the reconnection
+          dismissExtraction();
           navigate('/refuge');
         }}
       />

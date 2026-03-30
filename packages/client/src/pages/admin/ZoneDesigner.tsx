@@ -57,6 +57,13 @@ const FEATURE_COLOR = { fill: "#2A1A3A", stroke: "#7B4FA0" };
 const DEFAULT_COLOR = { fill: "#1C1D27", stroke: "#4A4B55" };
 const PORTAL_COLOR = "#06b6d4"; // cyan/teal for cross-zone exits
 const INTER_FLOOR_COLOR = "#a78bfa"; // purple for inter-floor exits
+const ONE_WAY_COLOR = "#F59E0B"; // amber for one-way exits
+
+interface ExitPair {
+  forward: ZoneExitDefinition;
+  reverse: ZoneExitDefinition | null;
+  isBidirectional: boolean;
+}
 
 function roomColor(type: string): { fill: string; stroke: string } {
   if (type.startsWith("feature_")) return FEATURE_COLOR;
@@ -238,6 +245,11 @@ export default function ZoneDesigner({
     toRoomSlug: "",
     targetZoneSlug: "",
     targetRoomSlug: "",
+    locked: false,
+    hidden: false,
+  });
+  const [reverseExitEditForm, setReverseExitEditForm] = useState({
+    direction: "",
     locked: false,
     hidden: false,
   });
@@ -489,6 +501,50 @@ export default function ZoneDesigner({
     };
   }, [positions, intraZoneExits, currentFloor, floorBounds.isMultiFloor]);
 
+  // ─── Exit pairs (group bidirectional connections) ────────
+  const exitPairs = useMemo(() => {
+    const pairs: ExitPair[] = [];
+    const seen = new Set<string>();
+
+    for (const exit of floorIntraExits) {
+      if (seen.has(exit.id)) continue;
+
+      const reverse = floorIntraExits.find(
+        (r) =>
+          r.fromRoomSlug === exit.toRoomSlug &&
+          r.toRoomSlug === exit.fromRoomSlug &&
+          r.direction === OPPOSITE[exit.direction] &&
+          !seen.has(r.id),
+      );
+
+      seen.add(exit.id);
+      if (reverse) seen.add(reverse.id);
+
+      pairs.push({
+        forward: exit,
+        reverse: reverse ?? null,
+        isBidirectional: !!reverse,
+      });
+    }
+
+    return pairs;
+  }, [floorIntraExits]);
+
+  // Sync reverse exit edit form when pair selection changes
+  useEffect(() => {
+    if (!selectedExit) return;
+    const pair = exitPairs.find((p) => p.forward.id === selectedExit || p.reverse?.id === selectedExit);
+    if (pair?.reverse) {
+      setReverseExitEditForm({
+        direction: pair.reverse.direction,
+        locked: pair.reverse.locked,
+        hidden: pair.reverse.hidden,
+      });
+    } else {
+      setReverseExitEditForm({ direction: "", locked: false, hidden: false });
+    }
+  }, [selectedExit, exitPairs]);
+
   // ─── Validation ─────────────────────────────────────────
   const validationWarnings = useMemo(() => {
     const warnings: Array<{ type: string; message: string; roomSlugs?: string[] }> = [];
@@ -534,17 +590,6 @@ export default function ZoneDesigner({
   const disconnectedSlugs = useMemo(() => {
     return new Set(validationWarnings.find((w) => w.type === "disconnected")?.roomSlugs ?? []);
   }, [validationWarnings]);
-
-  const missingReverseIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const e of exits.filter((ex) => !ex.targetZoneSlug)) {
-      const hasReverse = exits.some(
-        (r) => r.fromRoomSlug === e.toRoomSlug && r.toRoomSlug === e.fromRoomSlug && !r.targetZoneSlug,
-      );
-      if (!hasReverse) ids.add(e.id);
-    }
-    return ids;
-  }, [exits]);
 
   // Detect true orphan exit IDs (toRoomSlug doesn't exist in zone rooms) for SVG highlighting
   const orphanExitIds = useMemo(() => {
@@ -874,6 +919,77 @@ export default function ZoneDesigner({
     }
   }
 
+  // ─── Pair-aware exit operations ────────────────────────
+  async function handleAddReverse() {
+    if (!selectedExit || !zoneId) return;
+    const exit = exits.find((e) => e.id === selectedExit);
+    if (!exit || exit.targetZoneSlug) return;
+    const reverseDir = OPPOSITE[exit.direction];
+    if (!reverseDir) return;
+    try {
+      setBusy(true);
+      setError(null);
+      await createExit(zoneId, {
+        fromRoomSlug: exit.toRoomSlug,
+        direction: reverseDir,
+        toRoomSlug: exit.fromRoomSlug,
+        locked: false,
+        hidden: false,
+      } as Partial<ZoneExitDefinition>);
+      onZoneChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add reverse exit");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSavePair() {
+    const pair = exitPairs.find((p) => p.forward.id === selectedExit || p.reverse?.id === selectedExit);
+    if (!pair) return;
+    try {
+      setBusy(true);
+      setError(null);
+      await updateExit(pair.forward.id, {
+        direction: exitEditForm.direction,
+        toRoomSlug: exitEditForm.toRoomSlug,
+        locked: exitEditForm.locked,
+        hidden: exitEditForm.hidden,
+        ...(exitEditForm.targetZoneSlug
+          ? { targetZoneSlug: exitEditForm.targetZoneSlug, targetRoomSlug: exitEditForm.targetRoomSlug }
+          : { targetZoneSlug: null, targetRoomSlug: null }),
+      } as Partial<ZoneExitDefinition>);
+      if (pair.reverse) {
+        await updateExit(pair.reverse.id, {
+          direction: reverseExitEditForm.direction,
+          locked: reverseExitEditForm.locked,
+          hidden: reverseExitEditForm.hidden,
+        } as Partial<ZoneExitDefinition>);
+      }
+      onZoneChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update exit pair");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteReverseOnly() {
+    const pair = exitPairs.find((p) => p.forward.id === selectedExit || p.reverse?.id === selectedExit);
+    if (!pair?.reverse) return;
+    if (!confirm(`Delete reverse exit ${pair.reverse.fromRoomSlug} → ${pair.reverse.toRoomSlug}? This makes the connection one-way.`)) return;
+    try {
+      setBusy(true);
+      setError(null);
+      await deleteExit(pair.reverse.id);
+      onZoneChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete reverse exit");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // ─── Orphan management ─────────────────────────────────
   const handleScanOrphans = useCallback(async () => {
     try {
@@ -989,6 +1105,10 @@ export default function ZoneDesigner({
   // ─── Render helpers ─────────────────────────────────────
   const selectedRoomData = selectedRoom ? roomMap.get(selectedRoom) : null;
   const selectedExitData = selectedExit ? exits.find((e) => e.id === selectedExit) : null;
+  const selectedPair = useMemo(() => {
+    if (!selectedExit) return null;
+    return exitPairs.find((p) => p.forward.id === selectedExit || p.reverse?.id === selectedExit) ?? null;
+  }, [selectedExit, exitPairs]);
 
   // Empty state (no zone saved yet)
   if (!zoneId && rooms.length === 0) {
@@ -1221,14 +1341,8 @@ export default function ZoneDesigner({
               onMouseLeave={handlePanMouseUp}
             >
               <defs>
-                <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                  <polygon points="0 0, 8 3, 0 6" fill="#8A8B95" />
-                </marker>
                 <marker id="arrowhead-selected" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
                   <polygon points="0 0, 8 3, 0 6" fill="#C9A84C" />
-                </marker>
-                <marker id="arrowhead-warning" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                  <polygon points="0 0, 8 3, 0 6" fill="#B8860B" />
                 </marker>
                 <marker id="arrowhead-portal" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
                   <polygon points="0 0, 8 3, 0 6" fill={PORTAL_COLOR} />
@@ -1236,76 +1350,79 @@ export default function ZoneDesigner({
                 <marker id="arrowhead-orphan" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
                   <polygon points="0 0, 8 3, 0 6" fill="#EF4444" />
                 </marker>
-                <marker id="arrowhead-interfloor" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                  <polygon points="0 0, 8 3, 0 6" fill={INTER_FLOOR_COLOR} />
+                <marker id="arrowhead-oneway" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                  <polygon points="0 0, 10 3.5, 0 7" fill={ONE_WAY_COLOR} />
+                </marker>
+                <marker id="arrowhead-oneway-selected" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                  <polygon points="0 0, 10 3.5, 0 7" fill="#C9A84C" />
                 </marker>
               </defs>
 
-              {/* ── Missing reverse exit ghost lines ─────────── */}
-              {floorIntraExits.filter((e) => missingReverseIds.has(e.id)).map((exit) => {
-                const fromPos = positions.get(exit.toRoomSlug);
-                const toPos = positions.get(exit.fromRoomSlug);
-                if (!fromPos || !toPos) return null;
-                const from = roomCenter(fromPos.x, fromPos.y);
-                const to = roomCenter(toPos.x, toPos.y);
-                const { x1, y1, x2, y2 } = clipToRect(from.cx, from.cy, to.cx, to.cy);
-                return (
-                  <line
-                    key={`ghost-${exit.id}`}
-                    x1={x1} y1={y1} x2={x2} y2={y2}
-                    stroke="#B8860B"
-                    strokeWidth={1}
-                    strokeDasharray="4 4"
-                    opacity={0.5}
-                    markerEnd="url(#arrowhead-warning)"
-                  />
-                );
-              })}
-
-              {/* ── Exit edges (current floor) ─────────────────── */}
-              {floorIntraExits.map((exit) => {
-                const fromPos = positions.get(exit.fromRoomSlug);
-                const toPos = positions.get(exit.toRoomSlug);
+              {/* ── Exit pair edges (current floor) ─────────────── */}
+              {exitPairs.map((pair) => {
+                const fromPos = positions.get(pair.forward.fromRoomSlug);
+                const toPos = positions.get(pair.forward.toRoomSlug);
                 if (!fromPos || !toPos) return null;
 
                 const from = roomCenter(fromPos.x, fromPos.y);
                 const to = roomCenter(toPos.x, toPos.y);
                 const { x1, y1, x2, y2 } = clipToRect(from.cx, from.cy, to.cx, to.cy);
                 const { lx, ly } = edgeLabelPos(x1, y1, x2, y2);
-                const isSelected = selectedExit === exit.id;
-                const isMissingReverse = missingReverseIds.has(exit.id);
-                const isOrphan = orphanExitIds.has(exit.id);
+                const isSelected = selectedExit === pair.forward.id || selectedExit === pair.reverse?.id;
+                const isOrphanFwd = orphanExitIds.has(pair.forward.id);
+                const isOrphanRev = pair.reverse ? orphanExitIds.has(pair.reverse.id) : false;
+                const isOrphan = isOrphanFwd || isOrphanRev;
 
-                const strokeColor = isSelected ? "#C9A84C"
-                  : isOrphan ? "#EF4444"
-                  : isMissingReverse ? "#B8860B"
-                  : "#4A4B55";
-                const markerEnd = isSelected ? "url(#arrowhead-selected)"
-                  : isOrphan ? "url(#arrowhead-orphan)"
-                  : isMissingReverse ? "url(#arrowhead-warning)"
-                  : "url(#arrowhead)";
+                let strokeColor: string;
+                let markerEnd: string | undefined;
+                let strokeWidth: number;
+                let strokeDash: string | undefined;
+
+                if (isSelected) {
+                  strokeColor = "#C9A84C";
+                  strokeWidth = 2.5;
+                  markerEnd = pair.isBidirectional ? undefined : "url(#arrowhead-oneway-selected)";
+                } else if (isOrphan) {
+                  strokeColor = "#EF4444";
+                  strokeWidth = 1.5;
+                  strokeDash = "6 3";
+                  markerEnd = "url(#arrowhead-orphan)";
+                } else if (pair.isBidirectional) {
+                  strokeColor = "#4A4B55";
+                  strokeWidth = 1.5;
+                  markerEnd = undefined;
+                } else {
+                  strokeColor = ONE_WAY_COLOR;
+                  strokeWidth = 2;
+                  markerEnd = "url(#arrowhead-oneway)";
+                }
+
+                const fwdMod = pair.forward.locked || pair.forward.hidden;
+                const revMod = pair.reverse?.locked || pair.reverse?.hidden;
+                const hasModifiers = fwdMod || revMod;
 
                 return (
                   <g
-                    key={exit.id}
-                    onClick={(e) => { e.stopPropagation(); handleExitClick(exit.id); }}
+                    key={pair.forward.id}
+                    onClick={(e) => { e.stopPropagation(); handleExitClick(pair.forward.id); }}
                     style={{ cursor: "pointer" }}
                   >
                     <line
                       x1={x1} y1={y1} x2={x2} y2={y2}
                       stroke={strokeColor}
-                      strokeWidth={isSelected ? 2.5 : 1.5}
-                      strokeDasharray={isOrphan ? "6 3" : undefined}
+                      strokeWidth={strokeWidth}
+                      strokeDasharray={strokeDash}
                       markerEnd={markerEnd}
                     />
                     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={12} />
-                    {(exit.locked || exit.hidden) && (
+                    {hasModifiers && (
                       <text
                         x={lx} y={ly}
                         textAnchor="middle" dominantBaseline="central"
                         fill="#B8860B" fontSize="9" fontFamily="var(--font-sans)"
                       >
-                        {exit.locked ? "🔒" : ""}{exit.hidden ? "👁" : ""}
+                        {(pair.forward.locked || pair.reverse?.locked) ? "🔒" : ""}
+                        {(pair.forward.hidden || pair.reverse?.hidden) ? "👁" : ""}
                       </text>
                     )}
                   </g>
@@ -1687,22 +1804,36 @@ export default function ZoneDesigner({
                     <div>
                       <div className="text-[#8A8B95] uppercase tracking-wider mb-1.5" style={{ fontSize: 9 }}>Exits</div>
                       <div className="space-y-1">
+                        {/* Bidirectional (no arrow) */}
+                        <div className="flex items-center gap-1.5">
+                          <svg width="24" height="10" viewBox="0 0 24 10">
+                            <line x1="2" y1="5" x2="22" y2="5" stroke="#4A4B55" strokeWidth={1.5} />
+                          </svg>
+                          <span className="text-[#E8E0D0]">Bidirectional</span>
+                        </div>
+                        {/* One-way (amber arrow) */}
+                        <div className="flex items-center gap-1.5">
+                          <svg width="24" height="10" viewBox="0 0 24 10">
+                            <line x1="2" y1="5" x2="17" y2="5" stroke={ONE_WAY_COLOR} strokeWidth={2} />
+                            <polygon points="17 1.5, 23 5, 17 8.5" fill={ONE_WAY_COLOR} />
+                          </svg>
+                          <span className="text-[#E8E0D0]">One-Way</span>
+                        </div>
+                        {/* Other exit styles */}
                         {([
-                          { color: "#4A4B55", dash: undefined, width: 1.5, label: "Normal" },
-                          { color: "#C9A84C", dash: undefined, width: 2, label: "Selected" },
-                          { color: "#B8860B", dash: "4 4", width: 1.5, label: "Missing Reverse" },
-                          { color: "#EF4444", dash: "6 3", width: 1.5, label: "Orphaned" },
-                          { color: PORTAL_COLOR, dash: "4 2", width: 2, label: "Cross-Zone Portal" },
-                          { color: INTER_FLOOR_COLOR, dash: undefined, width: 1.5, label: "Inter-Floor" },
+                          { color: "#C9A84C", dash: undefined, width: 2, label: "Selected", hasArrow: false },
+                          { color: "#EF4444", dash: "6 3", width: 1.5, label: "Orphaned", hasArrow: true },
+                          { color: PORTAL_COLOR, dash: "4 2", width: 2, label: "Cross-Zone Portal", hasArrow: true },
+                          { color: INTER_FLOOR_COLOR, dash: undefined, width: 1.5, label: "Inter-Floor", hasArrow: false },
                         ] as const).map((e) => (
                           <div key={e.label} className="flex items-center gap-1.5">
                             <svg width="24" height="10" viewBox="0 0 24 10">
                               <line
-                                x1="2" y1="5" x2="19" y2="5"
+                                x1="2" y1="5" x2={e.hasArrow ? "19" : "22"} y2="5"
                                 stroke={e.color} strokeWidth={e.width}
                                 strokeDasharray={e.dash}
                               />
-                              <polygon points="19 2, 23 5, 19 8" fill={e.color} />
+                              {e.hasArrow && <polygon points="19 2, 23 5, 19 8" fill={e.color} />}
                             </svg>
                             <span className="text-[#E8E0D0]">{e.label}</span>
                           </div>
@@ -1871,7 +2002,7 @@ export default function ZoneDesigner({
                   Create Connection
                 </h4>
                 <div className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-                  {selectedRoom} → {connectTarget}
+                  {selectedRoom} {connectBidirectional ? "↔" : "→"} {connectTarget}
                 </div>
                 <div>
                   <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
@@ -1886,16 +2017,27 @@ export default function ZoneDesigner({
                     {DIRECTION_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label
+                  className={`flex items-center gap-2 cursor-pointer rounded p-2 border transition-colors ${
+                    connectBidirectional
+                      ? "border-[#3A7D7B] bg-[#3A7D7B]/10"
+                      : "border-[#2A2B35]"
+                  }`}
+                >
                   <input
                     type="checkbox"
                     checked={connectBidirectional}
                     onChange={(e) => setConnectBidirectional(e.target.checked)}
                     className="accent-[#C9A84C]"
                   />
-                  <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
-                    Also create {connectTarget} → {selectedRoom} ({OPPOSITE[connectDirection] || "reverse"})
-                  </span>
+                  <div>
+                    <span className="text-[#E8E0D0] text-xs font-medium" style={{ fontFamily: "var(--font-sans)" }}>
+                      ↔ Bidirectional
+                    </span>
+                    <div className="text-[#6A6B75] text-xs mt-0.5" style={{ fontFamily: "var(--font-sans)" }}>
+                      Also create {connectTarget} → {selectedRoom} ({OPPOSITE[connectDirection] || "reverse"})
+                    </div>
+                  </div>
                 </label>
                 <div className="flex gap-2">
                   <button
@@ -2244,8 +2386,115 @@ export default function ZoneDesigner({
               </div>
             )}
 
-            {/* Selected exit edit panel */}
-            {selectedExitData && (
+            {/* Selected exit pair or single exit panel */}
+            {selectedPair ? (
+              <div className="space-y-3">
+                <h4
+                  className="text-[#C9A84C] text-xs uppercase tracking-wider"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  {selectedPair.isBidirectional ? "Exit Pair ↔" : "One-Way Exit →"}
+                </h4>
+                {/* Connection summary */}
+                <div className="bg-[#12131A] border border-[#2A2B35] rounded p-2">
+                  <div className="text-[#E8E0D0] text-xs flex items-center gap-1.5" style={{ fontFamily: "var(--font-mono)" }}>
+                    <span>{roomMap.get(selectedPair.forward.fromRoomSlug)?.name ?? selectedPair.forward.fromRoomSlug}</span>
+                    <span style={{ color: selectedPair.isBidirectional ? "#4A4B55" : ONE_WAY_COLOR }}>
+                      {selectedPair.isBidirectional ? "↔" : "→"}
+                    </span>
+                    <span>{roomMap.get(selectedPair.forward.toRoomSlug)?.name ?? selectedPair.forward.toRoomSlug}</span>
+                  </div>
+                </div>
+                {/* Forward direction */}
+                <div className="border border-[#2A2B35] rounded p-3 space-y-2">
+                  <div className="text-[#8A8B95] text-xs uppercase tracking-wider" style={{ fontFamily: "var(--font-sans)" }}>
+                    {selectedPair.forward.fromRoomSlug} → {selectedPair.forward.direction}
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exitEditForm.locked}
+                      onChange={(e) => setExitEditForm((f) => ({ ...f, locked: e.target.checked }))}
+                      className="accent-[#C9A84C]"
+                    />
+                    <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>🔒 Locked</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exitEditForm.hidden}
+                      onChange={(e) => setExitEditForm((f) => ({ ...f, hidden: e.target.checked }))}
+                      className="accent-[#C9A84C]"
+                    />
+                    <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>👁 Hidden</span>
+                  </label>
+                </div>
+                {/* Reverse direction */}
+                {selectedPair.reverse ? (
+                  <div className="border border-[#2A2B35] rounded p-3 space-y-2">
+                    <div className="text-[#8A8B95] text-xs uppercase tracking-wider flex items-center justify-between" style={{ fontFamily: "var(--font-sans)" }}>
+                      <span>{selectedPair.reverse.fromRoomSlug} → {selectedPair.reverse.direction}</span>
+                      <button
+                        onClick={() => void handleDeleteReverseOnly()}
+                        disabled={busy}
+                        className="text-[#8B2500] hover:text-[#EF4444] disabled:opacity-40"
+                        title="Delete reverse (make one-way)"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={reverseExitEditForm.locked}
+                        onChange={(e) => setReverseExitEditForm((f) => ({ ...f, locked: e.target.checked }))}
+                        className="accent-[#C9A84C]"
+                      />
+                      <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>🔒 Locked</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={reverseExitEditForm.hidden}
+                        onChange={(e) => setReverseExitEditForm((f) => ({ ...f, hidden: e.target.checked }))}
+                        className="accent-[#C9A84C]"
+                      />
+                      <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>👁 Hidden</span>
+                    </label>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => void handleAddReverse()}
+                    disabled={busy || !OPPOSITE[selectedPair.forward.direction]}
+                    className="w-full px-2 py-1.5 border border-dashed border-[#3A7D7B] text-[#3A7D7B] hover:bg-[#3A7D7B]/10 rounded text-xs flex items-center justify-center gap-1.5 disabled:opacity-40 transition-colors"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Reverse ({OPPOSITE[selectedPair.forward.direction] ?? "?"})
+                  </button>
+                )}
+                {/* Save / Delete */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => void handleSavePair()}
+                    disabled={busy}
+                    className="flex-1 px-2 py-1.5 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded text-xs flex items-center justify-center gap-1 disabled:opacity-40"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    <Save className="w-3 h-3" />
+                    Save
+                  </button>
+                  <button
+                    onClick={() => void handleDeleteExit()}
+                    disabled={busy}
+                    className="px-2 py-1.5 border border-[#8B2500] text-[#8B2500] hover:bg-[#8B2500]/20 rounded text-xs flex items-center gap-1 disabled:opacity-40"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            ) : selectedExitData ? (
               <div className="space-y-3">
                 <h4
                   className="text-[#C9A84C] text-xs uppercase tracking-wider"
@@ -2395,7 +2644,7 @@ export default function ZoneDesigner({
                   </button>
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
         )}
       </div>
@@ -2724,6 +2973,8 @@ export default function ZoneDesigner({
           { label: "Junction", color: "#3A7D7B" },
           { label: "Corridor", color: "#4A4B55" },
           { label: "Feature", color: "#7B4FA0" },
+          { label: "↔ Bidirectional", color: "#4A4B55" },
+          { label: "→ One-Way", color: ONE_WAY_COLOR },
           { label: "⟐ Portal", color: PORTAL_COLOR },
           { label: "▲▼ Vertical exit", color: INTER_FLOOR_COLOR },
           { label: "⚠ Disconnected", color: "#B8860B" },
