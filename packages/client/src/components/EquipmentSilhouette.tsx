@@ -128,6 +128,7 @@ export function EquipmentSilhouette({ loadout }: EquipmentSilhouetteProps) {
                     key={slot}
                     className="equipment-cell"
                     data-slot={slot}
+                    aria-label={item ? `${SLOT_LABELS[slot]}: ${item.name}, ${item.tier} tier` : `${SLOT_LABELS[slot]}: empty`}
                     onMouseEnter={(e) => handleMouseEnter(slot, e)}
                     onMouseMove={handleMouseMove}
                     onMouseLeave={handleMouseLeave}

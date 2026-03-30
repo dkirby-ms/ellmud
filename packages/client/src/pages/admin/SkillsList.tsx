@@ -48,7 +48,7 @@ export default function SkillsList() {
       <div className="flex items-center justify-between mb-6">
         <h1
           className="text-[#C9A84C] text-2xl"
-          style={{ fontFamily: "var(--font-serif)" }}
+         
         >
           Skills
         </h1>
@@ -102,7 +102,7 @@ export default function SkillsList() {
                   <Link
                     to={`/admin/skills/${skill.id}`}
                     className="text-[#E8E0D0] hover:text-[#C9A84C] transition-colors"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   >
                     {skill.name}
                   </Link>

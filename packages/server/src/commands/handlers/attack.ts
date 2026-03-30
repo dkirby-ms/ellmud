@@ -10,7 +10,7 @@ import type { CommandResult, CommandContext, CreatureRef } from '../index.js';
 import { createCombatant } from '../../combat/CombatState.js';
 
 export function handleAttack(ctx: CommandContext): CommandResult {
-  const { player, args, combatSystem, otherPlayersInRoom, creaturesInRoom } = ctx;
+  const { player, args, combatSystem, otherPlayersInRoom, creaturesInRoom, characterName } = ctx;
 
   if (!combatSystem) {
     return {
@@ -49,17 +49,19 @@ export function handleAttack(ctx: CommandContext): CommandResult {
   }
 
   // Register combatants if not already registered
+  const playerDisplayName = characterName ?? player.sessionId;
   if (!combatSystem.getCombatant(player.sessionId)) {
     combatSystem.registerCombatant(
-      createCombatant(player.sessionId, player.sessionId, player.currentRoomId, true),
+      createCombatant(player.sessionId, playerDisplayName, player.currentRoomId, true),
     );
   }
   if (!combatSystem.getCombatant(targetId)) {
     // Creature combatants are registered by the ShardRoom creature tick,
     // but if a player attacks first, register a placeholder for initiation.
     // The ShardRoom will sync the full creature combatant on the next tick.
+    const targetDisplayName = creaturesInRoom?.find(c => c.id === targetId)?.name ?? targetId;
     combatSystem.registerCombatant(
-      createCombatant(targetId, targetId, player.currentRoomId, !isCreatureId(targetId)),
+      createCombatant(targetId, targetDisplayName, player.currentRoomId, !isCreatureId(targetId)),
     );
   }
 

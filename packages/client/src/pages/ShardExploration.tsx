@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
 import {
   Eye,
@@ -16,12 +16,24 @@ import { FullMapOverlay } from "../components/map/FullMapOverlay.js";
 import { EquipmentSilhouette } from "../components/EquipmentSilhouette.js";
 import "../components/map/map.css";
 import MudPrompt from "../components/MudPrompt.js";
-import { useAppContext } from "../store.js";
+import { useAppContext, type StatusEffect } from "../store.js";
 import { useShardConnection } from "../hooks/useShardConnection.js";
 import { useAutoScroll } from "../hooks/useAutoScroll.js";
 import { useExplorationMap } from "../hooks/useExplorationMap.js";
 import { useMapToggle } from "../hooks/useMapToggle.js";
 import type { CombatAction } from "@ellmud/shared";
+
+// ─── Status Effect Classifier ────────────────────────────────────────────────
+
+const DEBUFF_KEYWORDS = ['bleeding', 'poisoned', 'burning', 'weakened', 'slowed', 'stunned', 'confused', 'cursed', 'blind', 'fear', 'shard-sick'];
+const BUFF_KEYWORDS = ['haste', 'strength', 'shield', 'regeneration', 'regen', 'blessed', 'fortified', 'empowered', 'protect', 'harden'];
+
+function getEffectType(effect: StatusEffect): 'buff' | 'debuff' | 'neutral' {
+  const name = effect.name.toLowerCase();
+  if (DEBUFF_KEYWORDS.some(d => name.includes(d))) return 'debuff';
+  if (BUFF_KEYWORDS.some(b => name.includes(b))) return 'buff';
+  return 'neutral';
+}
 
 export default function ShardExploration() {
   const navigate = useNavigate();
@@ -38,6 +50,7 @@ export default function ShardExploration() {
     handleCombatAction: sendCombatAction,
     sendChatMessage,
     extraction,
+    dismissExtraction,
     reconnection,
     roomRef,
   } = useShardConnection(roomName);
@@ -50,7 +63,16 @@ export default function ShardExploration() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const narrativeRef = useAutoScroll(state.messages);
+  const { containerRef: narrativeRef, bottomRef } = useAutoScroll(state.messages);
+
+  // Re-focus the command input after zone switches (input is disabled while connecting)
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (state.connectionStatus === "connected") {
+      // Defer focus to next frame so the input is re-enabled first
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }, [state.connectionStatus]);
 
   // Derive room info from server state
   const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
@@ -138,13 +160,14 @@ export default function ShardExploration() {
   // Enemy status derived from real combat data
   const enemyStatus = state.enemyStatus;
 
-  // ─── HP State Helpers ──────────────────────────────────────────────────
+  // ─── HP / Stamina State Helpers ─────────────────────────────────────────
   const hpPercent = state.playerMaxHp > 0 ? state.playerHp / state.playerMaxHp : 0;
+  const staminaPercent = state.playerMaxStamina > 0 ? state.playerStamina / state.playerMaxStamina : 0;
   const healthState = hpPercent > 0.6
-    ? { label: 'Healthy', color: 'text-success', barColor: 'bg-success', pulse: false }
-    : hpPercent >= 0.25
-    ? { label: 'Wounded', color: 'text-warning', barColor: 'bg-warning', pulse: false }
-    : { label: 'Critical', color: 'text-danger', barColor: 'bg-danger', pulse: true };
+    ? { label: 'Healthy', color: 'text-success', barColor: 'bg-success', barClass: 'status-bar-hp-healthy', numericClass: 'status-numeric-hp-healthy', pulse: false }
+    : hpPercent >= 0.3
+    ? { label: 'Wounded', color: 'text-warning', barColor: 'bg-warning', barClass: 'status-bar-hp-wounded', numericClass: 'status-numeric-hp-wounded', pulse: false }
+    : { label: 'Critical', color: 'text-danger', barColor: 'bg-danger', barClass: 'status-bar-hp-critical', numericClass: 'status-numeric-hp-critical', pulse: true };
 
   // ─── Sound Cue Direction Highlighting ──────────────────────────────────
   const highlightDirections = (text: string) => {
@@ -208,7 +231,7 @@ export default function ShardExploration() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Narrative Panel (70%) */}
-        <div className="w-[70%] flex flex-col bg-bg-primary">
+        <div className="w-[70%] flex flex-col min-h-0 bg-bg-primary">
           {/* Room header */}
           <div className="bg-bg-panel border-b border-border-muted px-6 py-3 flex items-center justify-between">
             <h2
@@ -312,6 +335,7 @@ export default function ShardExploration() {
                 )}
               </div>
             ))}
+            <div ref={bottomRef} aria-hidden="true" />
           </div>
 
           {/* MUD-style status prompt — positioned below scroll container */}
@@ -328,27 +352,60 @@ export default function ShardExploration() {
               STATUS
             </h3>
             <div className="space-y-3">
+              {/* HP Bar */}
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <span
-                    className="text-text-disabled text-xs font-sans"
-                  >
-                    Health
-                  </span>
-                  <span
-                    className={`${healthState.color} text-xs font-mono ${healthState.pulse ? 'animate-pulse' : ''}`}
-                  >
-                    {healthState.label}
-                  </span>
+                  <span className="text-text-disabled text-xs font-sans">Health</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`${healthState.color} text-xs font-mono ${healthState.pulse ? 'animate-pulse' : ''}`}
+                    >
+                      {healthState.label}
+                    </span>
+                    <span className={`text-xs font-mono ${healthState.numericClass}`}>
+                      {state.playerHp}/{state.playerMaxHp}
+                    </span>
+                  </div>
                 </div>
-                <div className="h-2 bg-bg-elevated rounded-full overflow-hidden">
+                <div
+                  className="status-bar"
+                  role="progressbar"
+                  aria-label={`Health: ${state.playerHp} of ${state.playerMaxHp}`}
+                  aria-valuenow={state.playerHp}
+                  aria-valuemin={0}
+                  aria-valuemax={state.playerMaxHp}
+                >
                   <div
-                    className={`h-full ${healthState.barColor}`}
+                    className={`status-bar-fill ${healthState.barClass}`}
                     style={{ width: `${hpPercent * 100}%` }}
                   ></div>
                 </div>
               </div>
 
+              {/* Stamina Bar */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-text-disabled text-xs font-sans">Stamina</span>
+                  <span className="text-xs font-mono status-numeric-stamina">
+                    {state.playerStamina}/{state.playerMaxStamina}
+                  </span>
+                </div>
+                <div
+                  className="status-bar"
+                  role="progressbar"
+                  aria-label={`Stamina: ${state.playerStamina} of ${state.playerMaxStamina}`}
+                  aria-valuenow={state.playerStamina}
+                  aria-valuemin={0}
+                  aria-valuemax={state.playerMaxStamina}
+                >
+                  <div
+                    className="status-bar-fill status-bar-stamina"
+                    style={{ width: staminaPercent > 0 ? `${staminaPercent * 100}%` : '0%' }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Stance */}
               <div>
                 <span
                   className="text-text-disabled text-xs font-sans"
@@ -364,24 +421,25 @@ export default function ShardExploration() {
             </div>
           </div>
 
-          {/* Status Effects (Gap #11) */}
+          {/* Status Effects */}
           {state.statusEffects && state.statusEffects.length > 0 && (
             <div className="p-4 border-b border-border-muted" data-testid="status-effects">
               <h3 className="text-text-secondary text-xs mb-3 font-sans">STATUS EFFECTS</h3>
-              <div className="flex flex-wrap gap-2">
-                {state.statusEffects.map((effect) => (
-                  <span
-                    key={effect.id}
-                    data-effect={effect.id}
-                    className={`text-xs font-mono px-2 py-0.5 rounded border border-border-muted ${
-                      ['bleeding', 'poisoned', 'burning'].includes(effect.id.toLowerCase())
-                        ? 'text-danger'
-                        : 'text-warning'
-                    }`}
-                  >
-                    {effect.name}
-                  </span>
-                ))}
+              <div className="flex flex-wrap gap-1.5">
+                {state.statusEffects.map((effect) => {
+                  const type = getEffectType(effect);
+                  return (
+                    <span
+                      key={effect.id}
+                      data-effect={effect.id}
+                      className={`status-pill status-pill-${type} ${
+                        type === 'debuff' ? 'text-danger' : type === 'buff' ? 'text-success' : 'text-text-secondary'
+                      }`}
+                    >
+                      {effect.name}
+                    </span>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -592,6 +650,7 @@ export default function ShardExploration() {
             &gt;
           </span>
           <input
+            ref={inputRef}
             type="text"
             value={command}
             onChange={(e) => setCommand(e.target.value)}
@@ -647,8 +706,9 @@ export default function ShardExploration() {
       <ExtractionOverlay
         state={extraction.status}
         progress={extraction.progress}
+        isZone={isZone}
         onReturnToRefuge={() => {
-          // Navigate directly to refuge and let useShardConnection handle the reconnection
+          dismissExtraction();
           navigate('/refuge');
         }}
       />

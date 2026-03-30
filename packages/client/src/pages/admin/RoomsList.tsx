@@ -49,7 +49,7 @@ export default function RoomsList() {
       <div className="flex items-center justify-between mb-6">
         <h1
           className="text-[#C9A84C] text-2xl"
-          style={{ fontFamily: "var(--font-serif)" }}
+         
         >
           Room Templates
         </h1>
@@ -103,7 +103,7 @@ export default function RoomsList() {
                   <Link
                     to={`/admin/rooms/${room.id}`}
                     className="text-[#E8E0D0] hover:text-[#C9A84C] transition-colors"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   >
                     {room.name}
                   </Link>
@@ -123,7 +123,7 @@ export default function RoomsList() {
                 <td className="p-4">
                   <span
                     className="text-[#8A8B95] text-sm"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   >
                     {room.description && room.description.length > 60
                       ? room.description.substring(0, 60) + "..."

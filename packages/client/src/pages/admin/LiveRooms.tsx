@@ -45,7 +45,7 @@ export default function LiveRooms() {
         <div>
           <h1
             className="text-[#C9A84C] text-2xl"
-            style={{ fontFamily: "var(--font-serif)" }}
+           
           >
             Live Rooms
           </h1>

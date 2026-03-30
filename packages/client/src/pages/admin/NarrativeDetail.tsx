@@ -178,7 +178,7 @@ export default function NarrativeDetail() {
           </Link>
           <h1
             className="text-[#C9A84C] text-xl"
-            style={{ fontFamily: "var(--font-serif)" }}
+           
           >
             {isNew ? "New Narrative" : formData.name}
           </h1>
@@ -220,7 +220,7 @@ export default function NarrativeDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Basic Information
               </h2>
@@ -253,7 +253,7 @@ export default function NarrativeDetail() {
                     value={formData.name}
                     onChange={(e) => updateField("name", e.target.value)}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -334,7 +334,7 @@ export default function NarrativeDetail() {
               <div className="flex items-center justify-between mb-4">
                 <h2
                   className="text-[#C9A84C] text-lg"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 >
                   {formData.narrativeType === "dialogue" ? "Dialogue Lines" : "Narrative Content"}
                 </h2>
@@ -386,7 +386,7 @@ export default function NarrativeDetail() {
                           rows={2}
                           placeholder="Dialogue text..."
                           className="w-full bg-[#0A0B0F] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none text-sm"
-                          style={{ fontFamily: "var(--font-serif)" }}
+                         
                         />
                       </div>
                       <button
@@ -412,7 +412,7 @@ export default function NarrativeDetail() {
                   onChange={(e) => updateField("template", e.target.value)}
                   rows={12}
                   className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-4 py-3 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                  style={{ fontFamily: "var(--font-serif)", lineHeight: "1.7" }}
+                  style={{ lineHeight: "1.7" }}
                 />
               )}
             </div>
@@ -423,7 +423,7 @@ export default function NarrativeDetail() {
                 <div className="flex items-center justify-between mb-4">
                   <h2
                     className="text-[#C9A84C] text-lg"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   >
                     Player Choices
                   </h2>
@@ -449,7 +449,7 @@ export default function NarrativeDetail() {
                           onChange={(e) => updateChoice(index, "text", e.target.value)}
                           placeholder="Choice text..."
                           className="w-full bg-[#0A0B0F] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none text-sm"
-                          style={{ fontFamily: "var(--font-serif)" }}
+                         
                         />
                         <div className="flex gap-2">
                           <input
@@ -487,7 +487,7 @@ export default function NarrativeDetail() {
               <div className="flex items-center justify-between mb-4">
                 <h2
                   className="text-[#C9A84C] text-lg"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 >
                   Display Conditions
                 </h2>
@@ -574,7 +574,7 @@ export default function NarrativeDetail() {
                         </div>
                         <div
                           className="text-[#E8E0D0] text-sm"
-                          style={{ fontFamily: "var(--font-serif)" }}
+                         
                         >
                           {line.text || "(empty)"}
                         </div>
@@ -592,7 +592,7 @@ export default function NarrativeDetail() {
                 ) : (
                   <div
                     className="text-[#E8E0D0] text-sm"
-                    style={{ fontFamily: "var(--font-serif)", lineHeight: "1.7" }}
+                    style={{ lineHeight: "1.7" }}
                   >
                     {formData.template.slice(0, 300)}
                     {formData.template.length > 300 && "..."}

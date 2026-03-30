@@ -22,6 +22,7 @@ import { handleSay } from './handlers/say.js';
 import { handleWhisper } from './handlers/whisper.js';
 import { handleEmote } from './handlers/emote.js';
 import { handleStabilize } from './handlers/stabilize.js';
+import { handlePeaceful } from './handlers/peaceful.js';
 import type { DowningSystem } from '../systems/DowningSystem.js';
 import type { StashService } from '../stash/StashService.js';
 import type { LoadoutService } from '../loadout/LoadoutService.js';
@@ -64,6 +65,8 @@ export interface CommandContext {
   otherPlayersInRoom: string[];
   /** Current shard stability (0–1). */
   stability: number;
+  /** The player's in-game character name. */
+  characterName?: string;
   /** Combat system reference (available in ShardRoom context). */
   combatSystem?: CombatSystem;
   /** Extraction system reference (available in ShardRoom context). */
@@ -126,6 +129,7 @@ handlers.set('say', handleSay);
 handlers.set('whisper', handleWhisper);
 handlers.set('emote', handleEmote);
 handlers.set('stabilize', handleStabilize);
+handlers.set('peaceful', handlePeaceful);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(

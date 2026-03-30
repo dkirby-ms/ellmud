@@ -38,6 +38,7 @@ import { initCharacterProvider } from './character/index.js';
 import { createCharacterRouter } from './api/characters.js';
 import { initZoneProvider, getZoneRepository } from './zones/index.js';
 import { initExplorationProvider } from './exploration/index.js';
+import { initContentRegistry } from './content/index.js';
 
 const config = getConfig();
 const PORT = config.port;
@@ -97,6 +98,18 @@ console.log(`[Ellmud] Zone persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`)
 initExplorationProvider(USE_PG);
 console.log(`[Ellmud] Exploration persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
+// ─── Content Registry (DB-driven creature/item definitions) ─────────────────
+if (USE_PG) {
+  try {
+    const { getPool } = await import('./db/index.js');
+    await initContentRegistry(getPool());
+  } catch (err) {
+    console.error('[Ellmud] ⚠ ContentRegistry initialization failed — using code fallback');
+    console.error('[Ellmud] Error:', err instanceof Error ? err.message : String(err));
+  }
+} else {
+  console.log('[Ellmud] Content registry: code fallback (no DATABASE_URL)');
+}
 // ─── Redis Bootstrap ─────────────────────────────────────────────────────────
 const { cache: narrationCache, isRedis: isCacheRedis } = await createNarrationCache(config);
 const { presence, isRedis: isPresenceRedis } = await createPresence(config);

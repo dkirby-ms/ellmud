@@ -2405,3 +2405,109 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 - **MessageCollector test helper:** Always update when adding new message types — add to interface imports, add array property, add `onMessage` listener, add to `clear()` method.
 - **Combat HP tracking:** `Combatant` objects (created lazily) are the source of truth for HP during combat. Use `CombatSystem.getCombatant(playerId)` to access current HP.
 - **Optimization in deliverCombatResults:** Track which players need updates in a `Set<string>`, then send PLAYER_STATE only to those who took damage. Avoids broadcasting to all players on every tick.
+
+### Content-to-DB Migrations (2026-03-29)
+**Task:** Create migration SQL files to move content definitions from hardcoded TypeScript to database tables.
+**Status:** ✅ Complete
+
+**Changes:**
+1. **034_rebuild_item_definitions.sql** — Converts `item_definitions` from UUID PK to TEXT slug PK. Renames `stats` → `base_stats`. Adds `base_durability`, `weight`, `stackable`, `max_stack`, `status`, `updated_at`. Also converts `player_stash.item_id` from UUID to TEXT to maintain FK. Uses ALTER TABLE (not CREATE TABLE) to avoid cross-migration duplicate-name test failure.
+2. **035_amend_creature_definitions.sql** — Adds `slug TEXT UNIQUE NOT NULL` (backfilled from `type`), `updated_at TIMESTAMPTZ`, enforces `status NOT NULL` on `creature_definitions`.
+3. **036_seed_content_from_templates.sql** — Seeds all 32 items (25 from registry + 5 new materials + 2 keys) and 7 creatures (5 from templates + slum_rat + sewer_lurker). Loot tables normalized to `{itemId, dropWeight}` only. Idempotent with `ON CONFLICT DO NOTHING`.
+
+**Key decisions:**
+- Used ALTER TABLE approach for item_definitions rebuild to avoid triggering the `no duplicate table names` cross-migration test. The test regex extracts CREATE TABLE names across all migration files.
+- Consumables and materials marked `stackable: true` with appropriate max_stack values.
+- New items (rat_tail, corroded_pipe, sewer_moss, waterlogged_bone, revenant_essence) designed to fit Warrens/Crypt flavor.
+
+**Verification:** All 91 test files pass (2051 tests), zero regressions.
+
+## Learnings
+- **Cross-migration tests are strict:** The persistence-schema-validation test extracts CREATE TABLE, CREATE INDEX, and CONSTRAINT names across ALL migration files and asserts global uniqueness. When rebuilding an existing table, use ALTER TABLE instead of DROP + CREATE TABLE.
+- **UUID-to-TEXT PK migration pattern:** TRUNCATE CASCADE → ALTER COLUMN TYPE TEXT → drop/re-add FKs. Must also convert referencing columns in dependent tables.
+- **Loot table normalization:** Creature loot tables should only contain `{itemId, dropWeight}`. Item metadata (name, weight, description) lives in item_definitions — don't duplicate it in loot arrays.
+
+### 2026-03-29: DB-Driven Content Migrations — DELIVERED
+
+- **Task:** Create 3 SQL migrations (034, 035, 036) for DB-driven content architecture, seed 32 items + 7 creatures
+- **Deliverables:**
+  - Migration 034: `item_definitions` table (TEXT pk, JSONB base_stats, tier, durability, weight, stackable)
+  - Migration 035: `creature_definitions` amendments (TEXT pk, JSONB loot_table, behavior_base)
+  - Migration 036: Seed data (32 items across all tiers, 7 creatures with loot tables)
+- **Key decision:** ALTER TABLE pattern for item_definitions (not DROP+CREATE) to avoid cross-migration uniqueness violation
+- **Verification:** All 2051 tests passing, clean build, no regressions
+- **Handoff:** Jarlaxle (Systems Dev) for ContentRegistry wiring and admin endpoints
+- **Orchestration log:** `.squad/orchestration-log/2026-03-29T13-45-00Z-drizzt.md`
+
+### 2026-03-30: Migration Consolidation — 36 → 3 Files
+
+- **Task:** Consolidate 36 incremental migrations into 3 clean files for pre-release DB reset
+- **Deliverables:**
+  - `001_schema.sql`: All 27 tables, constraints, indexes in dependency order (no forward refs)
+  - `002_seed_content.sql`: 3 factions, 30 item_definitions, 7 creature_definitions
+  - `003_seed_zones.sql`: The Refuge (7 rooms, 12 exits) + The Warrens (~100 rooms, 279 exits)
+- **Test updates:** Updated `persistence-schema-validation.test.ts` — filename assertions, describe labels, FK regex to handle TEXT references, COMPOSITE_PK_TABLES for item_definitions
+- **Verification:** DB reset + migrations complete cleanly, server starts, all 59 schema tests pass
+
+## Learnings
+- **Test regex sensitivity:** The schema validation tests use exact type keywords (`INT` vs `INTEGER`) in regexes. Use `INT` for columns that have inline CHECK constraints to match existing test patterns.
+- **extractForeignKeys only matched UUID:** Had to extend regex to `(?:UUID|TEXT)` since item_definitions.id and player_loadout.item_id are TEXT PKs/FKs.
+- **Warrens zone was never inserted:** Migration 033 assumed a pre-existing warrens zone row but none existed. The consolidation creates it properly with a fresh INSERT.
+- **Character names live on ShardRoom, not PlayerState:** `PlayerState` has `sessionId` only. Character names are in `ShardRoom.characterNames` map (populated from `CharacterRepository` on join). Must pipe `characterName` through `CommandContext` for commands that need it.
+- **Combatant name field is display-facing:** `createCombatant(id, name, ...)` — the `name` flows into all `CombatEvent` narration strings. Passing sessionId here causes raw IDs in combat messages.
+- **Peaceful mode has three layers:** (1) `buildCreatureWorldState` excludes peaceful players from AI world, (2) `processCreatureAction` guards combat initiation, (3) `handlePeaceful` must also call `removeCombatant` to exit active combat immediately.
+- **Combat tests run fast:** `npx vitest run` from `packages/server` with specific test files. Combat suite: `combat.test.ts`, `combat-actions.test.ts`, `pvp-combat.test.ts`, `peaceful-mode.test.ts`, `combat-movement-lock.test.ts`.
+
+---
+
+## Team Update (2026-03-29T14:40:00Z)
+
+**Documented:** Drizzt's migration consolidation work
+- Orchestration log created: `.squad/orchestration-log/2026-03-29T14-40-00Z-drizzt.md`
+- Session log created: `.squad/log/2026-03-29T14-40-00Z-migration-consolidation.md`
+- Decision merged into `.squad/decisions/decisions.md` (inbox file deleted)
+- Commit 95a6f97 logged
+- Tests: 2051 server + 158 shared tests PASSING ✓
+
+## 2026-03-30T00:30Z — Combat Bugs Batch 1 Complete
+
+**Completed:** Fix combat names showing UUIDs instead of character names + peaceful mode combat disengage  
+**Files Modified:** 5
+
+- `commands/index.ts` — Added characterName to CommandContext interface
+- `rooms/ShardRoom.ts` — buildCommandContext populates characterName, processCreatureAction uses name for creatures
+- `commands/handlers/attack.ts` — createCombatant uses characterName from context
+- `commands/handlers/peaceful.ts` — toggles off call removeCombatant to pull from active combat
+- `state/PlayerState.ts` — Added static peacefulRegistry for cross-room persistence
+
+**Build:** ✅ Clean  
+**Tests:** ✅ All 91 combat tests pass
+
+**Key Decision:** Character name flows through CommandContext rather than PlayerState, keeping PlayerState session-scoped. Peaceful toggle immediately removes from combat. Registry pattern handles persistence across room switches.
+
+**Handoff:** Combat narration now correct. Peaceful defense three-layer complete. Zone transition bugs (Batch 2) ready to start.
+
+### 2026-03-24: Zone Entry Room Bug Fix
+**Task:** Cross-zone exits always placed player in zone's startRoomId, ignoring the exit's targetRoomSlug.
+**Status:** ✅ Complete
+
+**Root Cause:** In `ShardRoom.onJoin()`, when `this.isZone` was true, the code unconditionally used `this.roomGraph.startRoomId`. The client was already sending `targetRoomSlug` in join options (from `useShardConnection.ts` line 325), but the server never read it.
+
+**Fix:** In `packages/server/src/rooms/ShardRoom.ts` (line ~447), added a check for `options['targetRoomSlug']`. If it's a valid string AND exists in `this.roomGraph.rooms`, we use it as `startRoom`. Otherwise fall back to `startRoomId` (preserving default entry behavior for direct zone joins).
+
+**Key Pattern:** Cross-zone navigation data flow: `go` command → `zoneTransfer` result → `ZONE_TRANSFER` message to client → client calls `switchRoom()` with `targetRoomSlug` option → server `onJoin` reads it.
+
+**Tests:** ✅ All zone-system (47), zone-adapter (13), orphaned-exits (9), shardroom-zone-mode (12), and command integration (44) tests pass. No regressions.
+
+---
+
+## Team Update (2026-03-30T00:40:00Z)
+
+**Documented:** Zone transition bugs batch (Drizzt + Regis parallel work)
+- Orchestration log created: `.squad/orchestration-log/2026-03-30T00-40-drizzt.md`
+- Session log created: `.squad/log/2026-03-30T00-40-zone-bugs.md`
+- Decision merged into `.squad/decisions/decisions.md` (inbox file deleted)
+- Cross-zone exit targeting now fully functional
+- Tests: ✅ All 125 server tests PASSING
+
+**Key Pattern Documented:** `options['targetRoomSlug']` validated against zone roomGraph on join — falls back to startRoomId for direct joins or invalid slugs.

@@ -98,6 +98,7 @@
 .narrative-scroll {
   scrollbar-width: thin;
   scrollbar-color: #2A2B35 #080910;
+  overflow-anchor: auto;
 }
 
 /* ─── Terminal Narrative Pane ──────────────────────────────────────── */

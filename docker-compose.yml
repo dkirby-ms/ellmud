@@ -67,6 +67,7 @@ services:
       ENTRA_TENANT_ID: ${ENTRA_TENANT_ID}
       ENTRA_REDIRECT_URI: ${ENTRA_REDIRECT_URI}
       ALLOW_LOCAL_AUTH: ${ALLOW_LOCAL_AUTH:-true}
+      DEV_MODE_ENABLED: "true"
     depends_on:
       redis:
         condition: service_healthy

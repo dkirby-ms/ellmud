@@ -75,7 +75,7 @@ export default function AuditLog() {
     <div className="p-8">
       <h1
         className="text-[#C9A84C] text-2xl mb-6"
-        style={{ fontFamily: "var(--font-serif)" }}
+       
       >
         Audit Log
       </h1>
@@ -212,7 +212,7 @@ export default function AuditLog() {
                   </td>
                   <td
                     className="p-4 text-[#E8E0D0] text-sm"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   >
                     {log.entity_name || log.entity_id || '-'}
                   </td>

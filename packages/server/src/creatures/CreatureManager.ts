@@ -16,11 +16,26 @@ import { updateCreature, type CreatureWorldState } from './behavior.js';
 import { generateLoot, type LootItem } from './loot.js';
 import type { Combatant } from '../combat/CombatState.js';
 import { DROWNED_REVENANT } from './templates/drowned-revenant.js';
+import { getContentRegistry } from '../content/index.js';
 
-/** Registry mapping creature IDs to templates. */
-const CREATURE_TEMPLATES = new Map<string, CreatureTemplate>([
+/** Hardcoded fallback — used when ContentRegistry is not initialized. */
+const FALLBACK_TEMPLATES = new Map<string, CreatureTemplate>([
   ['drowned_revenant', DROWNED_REVENANT],
 ]);
+
+/** Get all creature templates (for admin UI). */
+export function getAllCreatureTemplates(): CreatureTemplate[] {
+  const registry = getContentRegistry();
+  if (registry) return registry.getAllCreatures();
+  return Array.from(FALLBACK_TEMPLATES.values());
+}
+
+/** Resolve a creature template by slug/type, checking ContentRegistry first. */
+function resolveCreatureTemplate(id: string): CreatureTemplate | undefined {
+  const registry = getContentRegistry();
+  if (registry) return registry.getCreature(id);
+  return FALLBACK_TEMPLATES.get(id);
+}
 
 /** Tracks a zone-spawned creature for repop. */
 interface ZoneCreatureRecord {
@@ -150,7 +165,7 @@ export class CreatureManager {
 
     for (const zoneRoom of zoneData.rooms) {
       for (const npc of zoneRoom.npcs) {
-        const template = CREATURE_TEMPLATES.get(npc.creatureId);
+        const template = resolveCreatureTemplate(npc.creatureId);
         if (!template) continue;
 
         for (let i = 0; i < npc.spawnCount; i++) {
@@ -180,7 +195,7 @@ export class CreatureManager {
       const existing = this.creatures.get(record.creatureId);
       if (existing && existing.isAlive) continue;
 
-      const template = CREATURE_TEMPLATES.get(record.templateId);
+      const template = resolveCreatureTemplate(record.templateId);
       if (!template) continue;
 
       // Remove the dead creature entry

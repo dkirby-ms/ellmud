@@ -135,7 +135,7 @@ export default function SkillsDetail() {
           </Link>
           <h1
             className="text-[#C9A84C] text-xl"
-            style={{ fontFamily: "var(--font-serif)" }}
+           
           >
             {isNew ? "New Skill" : formData.name}
           </h1>
@@ -174,7 +174,7 @@ export default function SkillsDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Basic Information
               </h2>
@@ -207,7 +207,7 @@ export default function SkillsDetail() {
                     value={formData.name}
                     onChange={(e) => updateField("name", e.target.value)}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   />
                 </div>
                 <div>
@@ -243,7 +243,7 @@ export default function SkillsDetail() {
                     onChange={(e) => updateField("description", e.target.value)}
                     rows={3}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -284,7 +284,7 @@ export default function SkillsDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Effects & Requirements
               </h2>

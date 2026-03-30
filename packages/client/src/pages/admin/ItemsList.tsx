@@ -92,7 +92,7 @@ export default function ItemsList() {
       <div className="flex items-center justify-between mb-6">
         <h1
           className="text-[#C9A84C] text-2xl"
-          style={{ fontFamily: "var(--font-serif)" }}
+         
         >
           Items
         </h1>
@@ -213,7 +213,7 @@ export default function ItemsList() {
                   <Link
                     to={`/admin/items/${item.id}`}
                     className="text-[#E8E0D0] hover:text-[#C9A84C] transition-colors"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   >
                     {item.name}
                   </Link>

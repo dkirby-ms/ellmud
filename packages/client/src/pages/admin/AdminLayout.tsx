@@ -185,7 +185,7 @@ export default function AdminLayout() {
     return (
       <div className="h-screen bg-[#0A0B0F] flex items-center justify-center">
         <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-8 w-full max-w-sm">
-          <h1 className="text-[#C9A84C] text-xl mb-2" style={{ fontFamily: "var(--font-serif)" }}>
+          <h1 className="text-[#C9A84C] text-xl mb-2">
             ⚙ Ellmud Admin
           </h1>
           <p className="text-[#8A8B95] text-sm mb-6">Enter admin token to continue.</p>
@@ -221,7 +221,7 @@ export default function AdminLayout() {
           <Link to="/refuge" className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors flex items-center gap-2" title="Back to Game">
             <ArrowLeft className="w-4 h-4" />
           </Link>
-          <h1 className="text-[#C9A84C] text-lg" style={{ fontFamily: "var(--font-serif)" }}>⚙ Ellmud Content Admin</h1>
+          <h1 className="text-[#C9A84C] text-lg">⚙ Ellmud Content Admin</h1>
           <span className="px-2 py-1 bg-[#2D6B4F] text-[#E8E0D0] text-xs rounded" style={{ fontFamily: "var(--font-sans)" }}>STAGING</span>
         </div>
 

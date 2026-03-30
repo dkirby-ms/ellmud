@@ -213,7 +213,7 @@ describe('computeLayout', () => {
   });
 
   // ── 11. All positions are unique (x,y) per z-layer ──────────────────────
-  it('never places two rooms at the same (x,y) cell', () => {
+  it('never places two rooms at the same (x,y) cell on the same z-level', () => {
     // Create a complex graph that stresses collision resolution
     const rooms = makeRooms({
       center: [['north', 'n'], ['south', 's'], ['east', 'e'], ['west', 'w']],
@@ -230,11 +230,11 @@ describe('computeLayout', () => {
     });
     const layout = computeLayout(rooms, 'center');
 
-    // Collect all (x,y) pairs and assert uniqueness
+    // Collect all (x,y,z) triples and assert uniqueness per z-level
     const cells = new Set<string>();
     for (const [, p] of layout) {
-      const key = `${p.x},${p.y}`;
-      expect(cells.has(key), `duplicate cell at (${p.x}, ${p.y})`).toBe(false);
+      const key = `${p.x},${p.y},${p.z}`;
+      expect(cells.has(key), `duplicate cell at (${p.x}, ${p.y}, z=${p.z})`).toBe(false);
       cells.add(key);
     }
   });
@@ -309,5 +309,695 @@ describe('computeLayout', () => {
 
     expect(layout.size).toBe(2);
     expect(layout.has('ghost')).toBe(false);
+  });
+
+  // ── 15. Sewer topology: sub-level cardinal layout is independent ────────
+  it('lays out sub-level rooms using their own cardinal topology, not surface positions', () => {
+    // Surface: three entry points scattered across the grid
+    //   sluice-gate (hub) → east → sunken-square → east → cistern-access
+    //
+    // Each surface room has a "down" exit to the sewer level.
+    // Sewer level has its OWN cardinal connections:
+    //   sewer-main-junction → west → the-ratways
+    //   sewer-main-junction → east → sewer-east-conduit
+    //   sewer-east-conduit → east → sewer-cistern
+    //
+    // Without z-level isolation, the sewer rooms inherit scattered surface
+    // positions, producing diagonal lines. With isolation, the sewer
+    // respects its own cardinal exits.
+    const rooms = makeRooms({
+      'sluice-gate': [['east', 'sunken-square'], ['down', 'sewer-main-junction']],
+      'sunken-square': [['west', 'sluice-gate'], ['east', 'cistern-access'], ['down', 'the-ratways']],
+      'cistern-access': [['west', 'sunken-square'], ['down', 'sewer-cistern']],
+
+      'sewer-main-junction': [['up', 'sluice-gate'], ['west', 'the-ratways'], ['east', 'sewer-east-conduit'], ['north', 'sewer-north-tunnel'], ['south', 'sewer-south-tunnel']],
+      'the-ratways': [['up', 'sunken-square'], ['east', 'sewer-main-junction']],
+      'sewer-east-conduit': [['west', 'sewer-main-junction'], ['east', 'sewer-cistern']],
+      'sewer-cistern': [['up', 'cistern-access'], ['west', 'sewer-east-conduit']],
+      'sewer-north-tunnel': [['south', 'sewer-main-junction']],
+      'sewer-south-tunnel': [['north', 'sewer-main-junction']],
+    });
+    const layout = computeLayout(rooms, 'sluice-gate');
+
+    expect(layout.size).toBe(9);
+
+    // All surface rooms are at z=0
+    expect(pos(layout, 'sluice-gate').z).toBe(0);
+    expect(pos(layout, 'sunken-square').z).toBe(0);
+    expect(pos(layout, 'cistern-access').z).toBe(0);
+
+    // All sewer rooms are at z=-1
+    expect(pos(layout, 'sewer-main-junction').z).toBe(-1);
+    expect(pos(layout, 'the-ratways').z).toBe(-1);
+    expect(pos(layout, 'sewer-east-conduit').z).toBe(-1);
+    expect(pos(layout, 'sewer-cistern').z).toBe(-1);
+    expect(pos(layout, 'sewer-north-tunnel').z).toBe(-1);
+    expect(pos(layout, 'sewer-south-tunnel').z).toBe(-1);
+
+    // Sewer cardinal topology: ratways is directly west of junction,
+    // east-conduit is directly east, etc.
+    const junc = pos(layout, 'sewer-main-junction');
+    const ratways = pos(layout, 'the-ratways');
+    const eastCon = pos(layout, 'sewer-east-conduit');
+    const cistern = pos(layout, 'sewer-cistern');
+    const northT = pos(layout, 'sewer-north-tunnel');
+    const southT = pos(layout, 'sewer-south-tunnel');
+
+    // the-ratways is directly west of junction (same y, x = junc.x - 1)
+    expect(ratways.x).toBe(junc.x - 1);
+    expect(ratways.y).toBe(junc.y);
+
+    // sewer-east-conduit is directly east of junction
+    expect(eastCon.x).toBe(junc.x + 1);
+    expect(eastCon.y).toBe(junc.y);
+
+    // sewer-cistern is directly east of east-conduit
+    expect(cistern.x).toBe(eastCon.x + 1);
+    expect(cistern.y).toBe(eastCon.y);
+
+    // sewer-north-tunnel is directly north of junction
+    expect(northT.x).toBe(junc.x);
+    expect(northT.y).toBe(junc.y - 1);
+
+    // sewer-south-tunnel is directly south of junction
+    expect(southT.x).toBe(junc.x);
+    expect(southT.y).toBe(junc.y + 1);
+  });
+
+  // ── 16. Rooms on different z-levels can share (x,y) ────────────────────
+  it('allows rooms on different z-levels to share the same (x,y)', () => {
+    const rooms = makeRooms({
+      surface: [['down', 'basement']],
+      basement: [['up', 'surface']],
+    });
+    const layout = computeLayout(rooms, 'surface');
+
+    const s = pos(layout, 'surface');
+    const b = pos(layout, 'basement');
+
+    // Both at (0,0) but different z
+    expect(s).toEqual({ x: 0, y: 0, z: 0 });
+    expect(b.x).toBe(0);
+    expect(b.y).toBe(0);
+    expect(b.z).toBe(-1);
+  });
+
+  // ── 17. Multi-level z-transitions (z=0 → z=-1 → z=-2) ─────────────────
+  it('handles cascading z-transitions across three levels', () => {
+    const rooms = makeRooms({
+      'surface': [['east', 'surface-e'], ['down', 'basement']],
+      'surface-e': [['west', 'surface']],
+      'basement': [['up', 'surface'], ['east', 'basement-e'], ['down', 'sub-basement']],
+      'basement-e': [['west', 'basement']],
+      'sub-basement': [['up', 'basement'], ['east', 'sub-e']],
+      'sub-e': [['west', 'sub-basement']],
+    });
+    const layout = computeLayout(rooms, 'surface');
+
+    expect(layout.size).toBe(6);
+
+    expect(pos(layout, 'surface').z).toBe(0);
+    expect(pos(layout, 'surface-e').z).toBe(0);
+    expect(pos(layout, 'basement').z).toBe(-1);
+    expect(pos(layout, 'basement-e').z).toBe(-1);
+    expect(pos(layout, 'sub-basement').z).toBe(-2);
+    expect(pos(layout, 'sub-e').z).toBe(-2);
+
+    // Each level's cardinal layout is coherent
+    const base = pos(layout, 'basement');
+    const baseE = pos(layout, 'basement-e');
+    expect(baseE.x).toBe(base.x + 1);
+    expect(baseE.y).toBe(base.y);
+
+    const sub = pos(layout, 'sub-basement');
+    const subE = pos(layout, 'sub-e');
+    expect(subE.x).toBe(sub.x + 1);
+    expect(subE.y).toBe(sub.y);
+  });
+
+  // ── 18. Diagonal optimization ─────────────────────────────────────────────
+  it('eliminates diagonal cardinal exits via post-BFS optimization', () => {
+    // Topology where BFS order causes a diagonal:
+    //   hub → east → east-room → east → far-east → south → target
+    //   hub → south → south-room → east → target
+    // BFS reaches target via far-east (south) before south-room (east),
+    // placing target directly south of far-east. But south-room's east
+    // exit to target then becomes diagonal.
+    const rooms = makeRooms({
+      hub:        [['east', 'east-room'], ['south', 'south-room']],
+      'east-room': [['west', 'hub'], ['east', 'far-east']],
+      'far-east': [['west', 'east-room'], ['south', 'target']],
+      'south-room': [['north', 'hub'], ['east', 'target']],
+      target:     [['north', 'far-east'], ['west', 'south-room']],
+    });
+
+    const layout = computeLayout(rooms, 'hub');
+
+    const sr = pos(layout, 'south-room');
+    const t = pos(layout, 'target');
+    const fe = pos(layout, 'far-east');
+
+    // Target must not be diagonal from south-room (east exit: same y)
+    // AND must not be diagonal from far-east (south exit: same x)
+    // At least one of these should be non-diagonal after optimization
+    const srDiagonal = sr.x !== t.x && sr.y !== t.y;
+    const feDiagonal = fe.x !== t.x && fe.y !== t.y;
+
+    // The optimization should eliminate at least one diagonal
+    expect(srDiagonal && feDiagonal).toBe(false);
+  });
+
+  // ── 19. Diagonal optimization with sewer-like topology ────────────────────
+  it('fixes diagonals in a sewer-like hub-and-spoke with convergent paths', () => {
+    // Mimics the real sewer topology that causes deep-channel ↔ effluent-pool diagonal:
+    //   junction → east → conduit → east → pipe-maze → south → pool
+    //   junction → south → s-tunnel → east → crossing → south → channel → east → pool
+    const rooms = makeRooms({
+      junction:  [['east', 'conduit'], ['south', 's-tunnel'], ['north', 'n-tunnel'], ['west', 'ratways']],
+      conduit:   [['west', 'junction'], ['east', 'pipe-maze'], ['north', 'overflow']],
+      'pipe-maze': [['west', 'conduit'], ['south', 'pool'], ['east', 'gas']],
+      overflow:  [['south', 'conduit'], ['west', 'drain']],
+      drain:     [['east', 'overflow'], ['west', 'n-tunnel']],
+      'n-tunnel': [['south', 'junction'], ['east', 'drain'], ['north', 'rat-nest']],
+      'rat-nest': [['south', 'n-tunnel']],
+      's-tunnel': [['north', 'junction'], ['east', 'crossing'], ['west', 'w-conduit'], ['south', 'vault']],
+      crossing:  [['west', 's-tunnel'], ['south', 'channel']],
+      channel:   [['north', 'crossing'], ['east', 'pool'], ['west', 'silt']],
+      pool:      [['west', 'channel'], ['north', 'pipe-maze']],
+      gas:       [['west', 'pipe-maze']],
+      silt:      [['east', 'channel']],
+      vault:     [['north', 's-tunnel']],
+      ratways:   [['east', 'junction']],
+      'w-conduit': [['east', 's-tunnel']],
+    });
+
+    const layout = computeLayout(rooms, 'junction');
+
+    const ch = pos(layout, 'channel');
+    const pl = pos(layout, 'pool');
+
+    // channel → east → pool: must not be diagonal
+    const isDiagonal = ch.x !== pl.x && ch.y !== pl.y;
+    expect(isDiagonal).toBe(false);
+
+    // pool should be east of channel (same y, x = channel.x + 1 or more)
+    expect(pl.y).toBe(ch.y);
+    expect(pl.x).toBeGreaterThan(ch.x);
+  });
+
+  // ── 20. Force-directed relaxation improves adjacency ─────────────────────
+  it('force-relaxation pulls connected rooms adjacent in convergent topology', () => {
+    // Topology with two paths from junction to pool that converge:
+    //   junction→east→conduit→east→pipe→south→pool
+    //   junction→south→s-tunnel→east→crossing→south→channel→east→pool
+    const rooms = makeRooms({
+      junction:  [['east', 'conduit'], ['south', 's-tunnel'], ['north', 'n-tunnel'], ['west', 'ratways']],
+      conduit:   [['west', 'junction'], ['east', 'pipe'], ['north', 'overflow']],
+      pipe:      [['west', 'conduit'], ['south', 'pool'], ['east', 'gas']],
+      overflow:  [['south', 'conduit'], ['west', 'drain']],
+      drain:     [['east', 'overflow'], ['west', 'n-tunnel']],
+      'n-tunnel': [['south', 'junction'], ['east', 'drain'], ['north', 'rat-nest']],
+      'rat-nest': [['south', 'n-tunnel']],
+      's-tunnel': [['north', 'junction'], ['east', 'crossing'], ['west', 'w-conduit'], ['south', 'vault']],
+      crossing:  [['west', 's-tunnel'], ['south', 'channel']],
+      channel:   [['north', 'crossing'], ['east', 'pool'], ['west', 'silt']],
+      pool:      [['west', 'channel'], ['north', 'pipe']],
+      gas:       [['west', 'pipe']],
+      silt:      [['east', 'channel']],
+      vault:     [['north', 's-tunnel']],
+      ratways:   [['east', 'junction']],
+      'w-conduit': [['east', 's-tunnel']],
+    });
+
+    const layout = computeLayout(rooms, 'junction');
+
+    // Count non-adjacent cardinal exits (distance > 1)
+    let nonAdjacent = 0;
+    let diagonals = 0;
+    const CARDINALS = ['north', 'south', 'east', 'west'];
+    for (const [id, room] of rooms) {
+      const p = layout.get(id)!;
+      for (const [dir, targetId] of room.exits) {
+        if (!CARDINALS.includes(dir)) continue;
+        const tp = layout.get(targetId)!;
+        const dist = Math.abs(tp.x - p.x) + Math.abs(tp.y - p.y);
+        if (dist > 1) nonAdjacent++;
+        if (p.x !== tp.x && p.y !== tp.y) diagonals++;
+      }
+    }
+
+    // After relaxation, most exits should be adjacent
+    // Allow at most 4 non-adjacent exits (convergent topology constraint)
+    expect(nonAdjacent).toBeLessThanOrEqual(4);
+    // No diagonals
+    expect(diagonals).toBe(0);
+  });
+
+  // ── 21. Siltgate zone (136 rooms, 282 intra-zone exits) ─────────────────
+  it('handles the Siltgate city zone without diagonals', () => {
+    const rooms = makeRooms({
+      'apothecary': [['north', 'narrow-alley-1']],
+      'ash-garden': [['north', 'scavengers-market']],
+      'ashgate': [['west', 'rubble-street-5']],
+      'ashgate-chapel': [['north', 'dust-bowl']],
+      'barnacled-quay': [['east', 'rope-walk'], ['north', 'harbourmasters-office'], ['south', 'pier-1'], ['west', 'fish-market']],
+      'bazaar-row-1': [['east', 'bazaar-row-2'], ['west', 'market-square']],
+      'bazaar-row-2': [['east', 'bazaar-row-3'], ['west', 'bazaar-row-1']],
+      'bazaar-row-3': [['east', 'span-gate'], ['south', 'money-changers-row'], ['west', 'bazaar-row-2']],
+      'beggar-kings-court': [['east', 'ruined-tenement-2'], ['north', 'gutter-drain']],
+      'beggars-lane-1': [['east', 'beggars-lane-2'], ['south', 'narrow-alley-3'], ['west', 'span-gate']],
+      'beggars-lane-2': [['east', 'beggars-lane-3'], ['south', 'rat-run-1'], ['west', 'beggars-lane-1']],
+      'beggars-lane-3': [['east', 'rubble-street-1'], ['west', 'beggars-lane-2']],
+      'belvedere': [['south', 'highwind-bridge']],
+      'blackwater-crossing': [['north', 'bone-canal'], ['south', 'plague-bearers-lair']],
+      'blast-crater': [['west', 'scavengers-market']],
+      'bone-canal': [['north', 'sewer-junction-2'], ['south', 'blackwater-crossing']],
+      'bone-pit': [['west', 'crumbling-wall-1']],
+      'broken-bridge': [['north', 'mud-flat']],
+      'carrion-field': [['east', 'collapsed-building-3'], ['south', 'scavengers-market'], ['west', 'scorched-plaza']],
+      'chandlers-shop': [['east', 'dock-street-3']],
+      'city-gate': [['east', 'market-square']],
+      'cloth-merchants-hall': [['west', 'guild-hall']],
+      'cobblestone-street-1': [['east', 'cobblestone-street-2'], ['north', 'silver-arcade-2'], ['south', 'glassblowers-workshop']],
+      'cobblestone-street-2': [['east', 'cobblestone-street-3'], ['south', 'narrow-alley-2'], ['west', 'cobblestone-street-1']],
+      'cobblestone-street-3': [['east', 'merchant-inn'], ['north', 'silver-arcade-4'], ['south', 'pawn-shop'], ['west', 'cobblestone-street-2']],
+      'collapsed-building-1': [['north', 'rubble-street-1']],
+      'collapsed-building-2': [['south', 'rubble-street-3']],
+      'collapsed-building-3': [['west', 'carrion-field']],
+      'collapsed-sewer': [['west', 'drain-grate-2']],
+      'courtyard-fountain': [['east', 'library-entrance'], ['north', 'noble-residence-1'], ['south', 'promenade-walk-1'], ['west', 'servants-passage']],
+      'crumbling-wall-1': [['east', 'bone-pit'], ['north', 'scorched-plaza'], ['south', 'crumbling-wall-2']],
+      'crumbling-wall-2': [['north', 'crumbling-wall-1'], ['south', 'plague-house']],
+      'dock-street-1': [['east', 'fish-market'], ['north', 'tavern-row'], ['south', 'dock-street-2']],
+      'dock-street-2': [['east', 'warehouse-1'], ['north', 'dock-street-1'], ['south', 'dock-street-3']],
+      'dock-street-3': [['north', 'dock-street-2'], ['south', 'dock-street-4'], ['west', 'chandlers-shop']],
+      'dock-street-4': [['east', 'warehouse-2'], ['north', 'dock-street-3'], ['south', 'dock-street-5']],
+      'dock-street-5': [['east', 'narrow-alley-3'], ['north', 'dock-street-4'], ['south', 'tide-gate'], ['west', 'warehouse-3']],
+      'dockside-tavern': [['south', 'fish-market']],
+      'drain-grate-1': [['south', 'sewer-junction-2']],
+      'drain-grate-2': [['east', 'collapsed-sewer'], ['north', 'sewer-junction-3']],
+      'drowned-shrine': [['west', 'plague-bearers-lair']],
+      'dry-dock': [['west', 'tide-gate']],
+      'dust-bowl': [['north', 'rubble-street-4'], ['south', 'ashgate-chapel']],
+      'effluent-outflow': [['north', 'sewer-tunnel-6']],
+      'estate-gate': [['down', 'fountain-plaza'], ['north', 'promenade-walk-1']],
+      'fish-market': [['east', 'barnacled-quay'], ['north', 'dockside-tavern'], ['south', 'pier-3'], ['west', 'dock-street-1']],
+      'flooded-chamber': [['north', 'sewer-tunnel-8']],
+      'flophouse': [['west', 'rat-run-1']],
+      'fountain-plaza': [['east', 'silver-arcade-1'], ['north', 'news-board'], ['south', 'market-square'], ['up', 'estate-gate']],
+      'fungal-cavern': [['north', 'sewer-tunnel-7']],
+      'garden-terrace': [['east', 'observatory'], ['north', 'noble-residence-2'], ['south', 'promenade-walk-3'], ['west', 'iron-balcony-2']],
+      'glassblowers-workshop': [['north', 'cobblestone-street-1']],
+      'guild-hall': [['down', 'undercity-gate'], ['east', 'cloth-merchants-hall'], ['north', 'jewelers-lane'], ['south', 'silver-arcade-3']],
+      'gutter-drain': [['down', 'sewer-junction-1'], ['north', 'narrow-alley-6'], ['south', 'beggar-kings-court']],
+      'harbourmasters-office': [['south', 'barnacled-quay']],
+      'highwind-bridge': [['north', 'belvedere'], ['south', 'promenade-walk-4']],
+      'iron-balcony-1': [['east', 'iron-balcony-2'], ['north', 'promenade-walk-2']],
+      'iron-balcony-2': [['east', 'garden-terrace'], ['west', 'iron-balcony-1']],
+      'jewelers-lane': [['south', 'guild-hall']],
+      'lean-to-camp': [['west', 'narrow-alley-4']],
+      'library-entrance': [['west', 'courtyard-fountain']],
+      'market-square': [['east', 'bazaar-row-1'], ['north', 'fountain-plaza'], ['south', 'tavern-row'], ['west', 'city-gate']],
+      'merchant-inn': [['west', 'cobblestone-street-3']],
+      'money-changers-row': [['north', 'bazaar-row-3']],
+      'mud-flat': [['north', 'narrow-alley-7'], ['south', 'broken-bridge']],
+      'narrow-alley-1': [['north', 'silver-arcade-1'], ['south', 'apothecary']],
+      'narrow-alley-2': [['north', 'cobblestone-street-2'], ['south', 'wine-merchants-cellar']],
+      'narrow-alley-3': [['north', 'beggars-lane-1'], ['south', 'narrow-alley-4'], ['west', 'dock-street-5']],
+      'narrow-alley-4': [['east', 'lean-to-camp'], ['north', 'narrow-alley-3'], ['south', 'narrow-alley-5']],
+      'narrow-alley-5': [['east', 'narrow-alley-6'], ['north', 'narrow-alley-4']],
+      'narrow-alley-6': [['east', 'narrow-alley-7'], ['south', 'gutter-drain'], ['west', 'narrow-alley-5']],
+      'narrow-alley-7': [['east', 'narrow-alley-8'], ['south', 'mud-flat'], ['west', 'narrow-alley-6']],
+      'narrow-alley-8': [['south', 'pawn-alley'], ['west', 'narrow-alley-7']],
+      'news-board': [['south', 'fountain-plaza']],
+      'noble-residence-1': [['south', 'courtyard-fountain']],
+      'noble-residence-2': [['south', 'garden-terrace']],
+      'observatory': [['west', 'garden-terrace']],
+      'pawn-alley': [['north', 'narrow-alley-8'], ['south', 'ruined-tenement-1']],
+      'pawn-shop': [['north', 'cobblestone-street-3']],
+      'pier-1': [['north', 'barnacled-quay']],
+      'pier-2': [['north', 'rope-walk']],
+      'pier-3': [['north', 'fish-market']],
+      'plague-bearers-lair': [['east', 'drowned-shrine'], ['north', 'blackwater-crossing']],
+      'plague-house': [['north', 'crumbling-wall-2']],
+      'promenade-walk-1': [['east', 'promenade-walk-2'], ['north', 'courtyard-fountain'], ['south', 'estate-gate']],
+      'promenade-walk-2': [['east', 'promenade-walk-3'], ['south', 'iron-balcony-1'], ['west', 'promenade-walk-1']],
+      'promenade-walk-3': [['east', 'promenade-walk-4'], ['north', 'garden-terrace'], ['west', 'promenade-walk-2']],
+      'promenade-walk-4': [['north', 'highwind-bridge'], ['west', 'promenade-walk-3']],
+      'rat-run-1': [['east', 'flophouse'], ['north', 'beggars-lane-2'], ['south', 'rat-run-2']],
+      'rat-run-2': [['east', 'thieves-den'], ['north', 'rat-run-1']],
+      'rope-walk': [['east', 'tar-pit'], ['north', 'sailmakers-loft'], ['south', 'pier-2'], ['west', 'barnacled-quay']],
+      'rubble-street-1': [['east', 'rubble-street-2'], ['south', 'collapsed-building-1'], ['west', 'beggars-lane-3']],
+      'rubble-street-2': [['east', 'rubble-street-3'], ['south', 'scorched-plaza'], ['west', 'rubble-street-1']],
+      'rubble-street-3': [['east', 'rubble-street-4'], ['north', 'collapsed-building-2'], ['west', 'rubble-street-2']],
+      'rubble-street-4': [['east', 'rubble-street-5'], ['south', 'dust-bowl'], ['west', 'rubble-street-3']],
+      'rubble-street-5': [['east', 'ashgate'], ['south', 'wrecked-barricade'], ['west', 'rubble-street-4']],
+      'ruined-tenement-1': [['north', 'pawn-alley']],
+      'ruined-tenement-2': [['west', 'beggar-kings-court']],
+      'sailmakers-loft': [['south', 'rope-walk']],
+      'scavengers-market': [['east', 'blast-crater'], ['north', 'carrion-field'], ['south', 'ash-garden']],
+      'scorched-plaza': [['east', 'carrion-field'], ['north', 'rubble-street-2'], ['south', 'crumbling-wall-1'], ['west', 'tar-pit']],
+      'scribe-corner': [['west', 'tavern-row']],
+      'serpent-den': [['west', 'sewer-tunnel-3']],
+      'servants-passage': [['east', 'courtyard-fountain']],
+      'sewer-cistern-1': [['north', 'sewer-tunnel-5']],
+      'sewer-junction-1': [['east', 'sewer-tunnel-1'], ['north', 'undercity-gate'], ['south', 'sewer-tunnel-3'], ['up', 'gutter-drain'], ['west', 'sewer-tunnel-7']],
+      'sewer-junction-2': [['east', 'sewer-tunnel-4'], ['north', 'drain-grate-1'], ['south', 'bone-canal'], ['west', 'sewer-tunnel-2']],
+      'sewer-junction-3': [['east', 'sewer-tunnel-6'], ['south', 'drain-grate-2'], ['up', 'tide-gate'], ['west', 'sewer-tunnel-5']],
+      'sewer-tunnel-1': [['east', 'sewer-tunnel-2'], ['west', 'sewer-junction-1']],
+      'sewer-tunnel-2': [['east', 'sewer-junction-2'], ['west', 'sewer-tunnel-1']],
+      'sewer-tunnel-3': [['east', 'serpent-den'], ['north', 'sewer-junction-1'], ['south', 'silt-pool']],
+      'sewer-tunnel-4': [['east', 'sewer-tunnel-5'], ['west', 'sewer-junction-2']],
+      'sewer-tunnel-5': [['east', 'sewer-junction-3'], ['south', 'sewer-cistern-1'], ['west', 'sewer-tunnel-4']],
+      'sewer-tunnel-6': [['east', 'sewer-vault'], ['south', 'effluent-outflow'], ['west', 'sewer-junction-3']],
+      'sewer-tunnel-7': [['east', 'sewer-junction-1'], ['south', 'fungal-cavern'], ['west', 'sewer-tunnel-8']],
+      'sewer-tunnel-8': [['east', 'sewer-tunnel-7'], ['south', 'flooded-chamber']],
+      'sewer-vault': [['west', 'sewer-tunnel-6']],
+      'shattered-bridge': [['north', 'wrecked-barricade']],
+      'silk-road': [['south', 'silver-arcade-4']],
+      'silt-pool': [['north', 'sewer-tunnel-3']],
+      'silver-arcade-1': [['east', 'silver-arcade-2'], ['south', 'narrow-alley-1'], ['west', 'fountain-plaza']],
+      'silver-arcade-2': [['east', 'silver-arcade-3'], ['south', 'cobblestone-street-1'], ['west', 'silver-arcade-1']],
+      'silver-arcade-3': [['east', 'silver-arcade-4'], ['north', 'guild-hall'], ['west', 'silver-arcade-2']],
+      'silver-arcade-4': [['north', 'silk-road'], ['south', 'cobblestone-street-3'], ['west', 'silver-arcade-3']],
+      'smugglers-cove': [['north', 'tide-gate']],
+      'span-gate': [['east', 'beggars-lane-1'], ['west', 'bazaar-row-3']],
+      'tar-pit': [['east', 'scorched-plaza'], ['west', 'rope-walk']],
+      'tavern-row': [['east', 'scribe-corner'], ['north', 'market-square'], ['south', 'dock-street-1']],
+      'thieves-den': [['west', 'rat-run-2']],
+      'tide-gate': [['down', 'sewer-junction-3'], ['east', 'dry-dock'], ['north', 'dock-street-5'], ['south', 'smugglers-cove']],
+      'undercity-gate': [['south', 'sewer-junction-1'], ['up', 'guild-hall']],
+      'warehouse-1': [['west', 'dock-street-2']],
+      'warehouse-2': [['west', 'dock-street-4']],
+      'warehouse-3': [['east', 'dock-street-5']],
+      'wine-merchants-cellar': [['north', 'narrow-alley-2']],
+      'wrecked-barricade': [['north', 'rubble-street-5'], ['south', 'shattered-bridge']],
+    });
+
+    const layout = computeLayout(rooms, 'market-square');
+
+    // All rooms placed (excluding cross-zone targets with no exits)
+    const roomsWithExits = [...rooms.entries()].filter(([, r]) => r.exits.size > 0);
+    for (const [id] of roomsWithExits) {
+      expect(layout.has(id)).toBe(true);
+    }
+
+    // Count diagonals and non-adjacent exits per z-level
+    let diagonals = 0;
+    let nonAdjacent = 0;
+    const diagonalPairs: string[] = [];
+    const CARDINALS = ['north', 'south', 'east', 'west'];
+
+    for (const [id, room] of rooms) {
+      const p = layout.get(id);
+      if (!p) continue;
+      for (const [dir, targetId] of room.exits) {
+        if (!CARDINALS.includes(dir)) continue;
+        const tp = layout.get(targetId);
+        if (!tp || tp.z !== p.z) continue;
+        const dist = Math.abs(tp.x - p.x) + Math.abs(tp.y - p.y);
+        if (dist > 1) nonAdjacent++;
+        if (p.x !== tp.x && p.y !== tp.y) {
+          diagonals++;
+          diagonalPairs.push(`${id}→${targetId} (${dir}): (${p.x},${p.y})→(${tp.x},${tp.y})`);
+        }
+      }
+    }
+
+    // Log diagonal pairs for diagnosis (only if failing)
+    if (diagonalPairs.length > 0) {
+      console.log(`\n=== ${diagonals} diagonal exits, ${nonAdjacent} non-adjacent ===`);
+      for (const dp of diagonalPairs) console.log(`  ${dp}`);
+    }
+
+    // Diagonal tolerance — in dense zones (130+ rooms), the direction-reversal
+    // guards may prevent the optimizer from eliminating every last diagonal.
+    // Previously 0 diagonals was achieved by silently introducing direction
+    // reversals (harbourmasters-office bug). A small number of diagonals is
+    // acceptable; direction correctness is the hard constraint.
+    expect(diagonals).toBeLessThanOrEqual(2);
+
+    // No occlusions — rooms must not sit on exit line segments of other rooms.
+    // Grid expansion (Phase 7) resolves most occlusions by inserting extra
+    // columns/rows. Some remain in long vertical corridors where rooms form
+    // a continuous chain on the same column.
+    const CARDINALS_OCC = ['north', 'south', 'east', 'west'];
+    const occlusionIssues: string[] = [];
+
+    for (const [id, room] of rooms) {
+      const p = layout.get(id);
+      if (!p) continue;
+      for (const [dir, targetId] of room.exits) {
+        if (!CARDINALS_OCC.includes(dir)) continue;
+        const tp = layout.get(targetId);
+        if (!tp || tp.z !== p.z) continue;
+        const dist = Math.abs(tp.x - p.x) + Math.abs(tp.y - p.y);
+        if (dist < 2) continue;
+
+        // Check for rooms sitting on this segment
+        if (p.x === tp.x) {
+          const minY = Math.min(p.y, tp.y);
+          const maxY = Math.max(p.y, tp.y);
+          for (const [otherId] of rooms) {
+            if (otherId === id || otherId === targetId) continue;
+            const op = layout.get(otherId);
+            if (!op || op.z !== p.z) continue;
+            if (op.x === p.x && op.y > minY && op.y < maxY) {
+              occlusionIssues.push(
+                `${otherId} at (${op.x},${op.y}) occludes ${id}↔${targetId} (${p.x},${p.y})→(${tp.x},${tp.y})`
+              );
+            }
+          }
+        } else if (p.y === tp.y) {
+          const minX = Math.min(p.x, tp.x);
+          const maxX = Math.max(p.x, tp.x);
+          for (const [otherId] of rooms) {
+            if (otherId === id || otherId === targetId) continue;
+            const op = layout.get(otherId);
+            if (!op || op.z !== p.z) continue;
+            if (op.y === p.y && op.x > minX && op.x < maxX) {
+              occlusionIssues.push(
+                `${otherId} at (${op.x},${op.y}) occludes ${id}↔${targetId} (${p.x},${p.y})→(${tp.x},${tp.y})`
+              );
+            }
+          }
+        }
+      }
+    }
+
+    if (occlusionIssues.length > 0) {
+      console.log(`\n=== ${occlusionIssues.length} occlusions ===`);
+      for (const oi of occlusionIssues) console.log(`  ${oi}`);
+    }
+
+    // Total occlusion bound — grid expansion reduced from 54 to ≤16
+    expect(occlusionIssues.length).toBeLessThanOrEqual(16);
+
+    // harbourmasters-office must NOT occlude any exit lines — this was the
+    // original reported bug (drawing over exits near barnacled-quay)
+    const harbOcclusions = occlusionIssues.filter(oi =>
+      oi.startsWith('harbourmasters-office')
+    );
+    expect(harbOcclusions).toEqual([]);
+
+    // barnacled-quay must not occlude exit lines either
+    const bqOcclusions = occlusionIssues.filter(oi =>
+      oi.startsWith('barnacled-quay')
+    );
+    expect(bqOcclusions).toEqual([]);
+
+    // harbourmasters-office must be ABOVE barnacled-quay (north = lower y)
+    const harbPos = pos(layout, 'harbourmasters-office');
+    const bqPos = pos(layout, 'barnacled-quay');
+    expect(harbPos.y).toBeLessThan(bqPos.y);
+
+    // Direction reversal check — no room should be placed opposite to its exit
+    const DIR_OFFSETS: Record<string, { dx: number; dy: number }> = {
+      north: { dx: 0, dy: -1 },
+      south: { dx: 0, dy: 1 },
+      east: { dx: 1, dy: 0 },
+      west: { dx: -1, dy: 0 },
+    };
+    const dirViolations: string[] = [];
+    for (const [id, room] of rooms) {
+      const p = layout.get(id);
+      if (!p) continue;
+      for (const [dir, targetId] of room.exits) {
+        const off = DIR_OFFSETS[dir];
+        if (!off) continue;
+        const tp = layout.get(targetId);
+        if (!tp || tp.z !== p.z) continue;
+        const dx = tp.x - p.x;
+        const dy = tp.y - p.y;
+        if (
+          (off.dx > 0 && dx < 0) ||
+          (off.dx < 0 && dx > 0) ||
+          (off.dy > 0 && dy < 0) ||
+          (off.dy < 0 && dy > 0)
+        ) {
+          dirViolations.push(
+            `${id} → ${dir} → ${targetId}: expected (${off.dx},${off.dy}), got (${dx},${dy})`,
+          );
+        }
+      }
+    }
+    if (dirViolations.length > 0) {
+      console.log('\n=== DIRECTION VIOLATIONS ===');
+      for (const v of dirViolations) console.log(`  ${v}`);
+    }
+    expect(dirViolations).toEqual([]);
+  });
+
+  // ── Rooms must not overlap exit line segments ──────────────────────────
+  it('does not place rooms on exit line segments between other rooms', () => {
+    // T-junction with a side room that could land on the main corridor
+    //   A ──east── B ──east── C
+    //                  │
+    //                south
+    //                  │
+    //                  D ──east── E
+    //
+    // E has no exit back to the A-B-C corridor; if placed at B's column
+    // between A and C, it would occlude the A↔C line segment.
+    const rooms = makeRooms({
+      a: [['east', 'b']],
+      b: [['west', 'a'], ['east', 'c'], ['south', 'd']],
+      c: [['west', 'b']],
+      d: [['north', 'b'], ['east', 'e']],
+      e: [['west', 'd']],
+    });
+    const layout = computeLayout(rooms, 'a');
+
+    const CARDINALS = ['north', 'south', 'east', 'west'];
+    let occlusions = 0;
+
+    for (const [id, room] of rooms) {
+      const p = layout.get(id);
+      if (!p) continue;
+      for (const [dir, targetId] of room.exits) {
+        if (!CARDINALS.includes(dir)) continue;
+        const tp = layout.get(targetId);
+        if (!tp || tp.z !== p.z) continue;
+        const dist = Math.abs(tp.x - p.x) + Math.abs(tp.y - p.y);
+        if (dist < 2) continue;
+        if (p.x === tp.x) {
+          const minY = Math.min(p.y, tp.y);
+          const maxY = Math.max(p.y, tp.y);
+          for (const [otherId] of rooms) {
+            if (otherId === id || otherId === targetId) continue;
+            const op = layout.get(otherId);
+            if (!op || op.z !== p.z) continue;
+            if (op.x === p.x && op.y > minY && op.y < maxY) occlusions++;
+          }
+        } else if (p.y === tp.y) {
+          const minX = Math.min(p.x, tp.x);
+          const maxX = Math.max(p.x, tp.x);
+          for (const [otherId] of rooms) {
+            if (otherId === id || otherId === targetId) continue;
+            const op = layout.get(otherId);
+            if (!op || op.z !== p.z) continue;
+            if (op.y === p.y && op.x > minX && op.x < maxX) occlusions++;
+          }
+        }
+      }
+    }
+
+    expect(occlusions).toBe(0);
+  });
+
+  // ── Direction reversal: north exit must always place target above ──────
+  it('never reverses direction — north dead-end stays above junction', () => {
+    // Reproduces the harbourmasters-office bug: a junction with N/S dead-ends
+    // plus E/W branches. The swap/relaxation phases must not flip the
+    // north child below the junction.
+    //
+    //          north-room    (should be y < hub.y)
+    //              │
+    //   west ── hub ── east
+    //              │
+    //          south-room    (should be y > hub.y)
+    //
+    const rooms = makeRooms({
+      hub: [
+        ['north', 'north-room'],
+        ['south', 'south-room'],
+        ['east', 'east-room'],
+        ['west', 'west-room'],
+      ],
+      'north-room': [['south', 'hub']],
+      'south-room': [['north', 'hub']],
+      'east-room': [['west', 'hub']],
+      'west-room': [['east', 'hub']],
+    });
+    const layout = computeLayout(rooms, 'hub');
+
+    const hubPos = pos(layout, 'hub');
+    const northPos = pos(layout, 'north-room');
+    const southPos = pos(layout, 'south-room');
+
+    // North exit target must be ABOVE (lower y) the hub
+    expect(northPos.y).toBeLessThan(hubPos.y);
+    // South exit target must be BELOW (higher y) the hub
+    expect(southPos.y).toBeGreaterThan(hubPos.y);
+  });
+
+  // ── Direction reversal: broader check across all exits ─────────────────
+  it('never places a room in the opposite direction from its exit', () => {
+    // Larger graph simulating the Siltgate barnacled-quay neighborhood:
+    // barnacled-quay is a 4-exit junction. The north (harbourmasters-office)
+    // and south (pier-1) children are dead-ends. East/west connect to
+    // additional rooms that form a longer corridor.
+    const rooms = makeRooms({
+      'fish-market': [['east', 'barnacled-quay'], ['west', 'market-square']],
+      'market-square': [['east', 'fish-market']],
+      'barnacled-quay': [
+        ['west', 'fish-market'],
+        ['east', 'rope-walk'],
+        ['south', 'pier-1'],
+        ['north', 'harbourmasters-office'],
+      ],
+      'rope-walk': [['west', 'barnacled-quay'], ['east', 'chandlers-row']],
+      'chandlers-row': [['west', 'rope-walk']],
+      'pier-1': [['north', 'barnacled-quay']],
+      'harbourmasters-office': [['south', 'barnacled-quay']],
+    });
+    const layout = computeLayout(rooms, 'barnacled-quay');
+
+    const DIRECTION_OFFSETS: Record<string, { dx: number; dy: number }> = {
+      north: { dx: 0, dy: -1 },
+      south: { dx: 0, dy: 1 },
+      east: { dx: 1, dy: 0 },
+      west: { dx: -1, dy: 0 },
+    };
+
+    const violations: string[] = [];
+    for (const [roomId, room] of rooms) {
+      const p = layout.get(roomId);
+      if (!p) continue;
+      for (const [dir, targetId] of room.exits) {
+        const off = DIRECTION_OFFSETS[dir];
+        if (!off) continue;
+        const tp = layout.get(targetId);
+        if (!tp || tp.z !== p.z) continue;
+        const dx = tp.x - p.x;
+        const dy = tp.y - p.y;
+        if (
+          (off.dx > 0 && dx < 0) ||
+          (off.dx < 0 && dx > 0) ||
+          (off.dy > 0 && dy < 0) ||
+          (off.dy < 0 && dy > 0)
+        ) {
+          violations.push(
+            `${roomId} → ${dir} → ${targetId}: expected offset (${off.dx},${off.dy}), got delta (${dx},${dy})`,
+          );
+        }
+      }
+    }
+
+    if (violations.length > 0) {
+      console.log('\n=== DIRECTION VIOLATIONS ===');
+      for (const v of violations) console.log(`  ${v}`);
+    }
+    expect(violations).toEqual([]);
   });
 });

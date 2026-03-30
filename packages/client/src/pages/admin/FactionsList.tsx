@@ -38,7 +38,7 @@ export default function FactionsList() {
       <div className="flex items-center justify-between mb-6">
         <h1
           className="text-[#C9A84C] text-2xl"
-          style={{ fontFamily: "var(--font-serif)" }}
+         
         >
           Factions
         </h1>
@@ -98,7 +98,7 @@ export default function FactionsList() {
                   <Link
                     to={`/admin/factions/${faction.id}`}
                     className="text-[#E8E0D0] hover:text-[#C9A84C] transition-colors"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   >
                     {faction.name}
                   </Link>
@@ -114,7 +114,7 @@ export default function FactionsList() {
                 <td className="p-4">
                   <span
                     className="text-[#8A8B95] text-sm"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   >
                     {faction.description?.slice(0, 60)}{(faction.description?.length ?? 0) > 60 ? "…" : ""}
                   </span>

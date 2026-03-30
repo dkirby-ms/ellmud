@@ -6,7 +6,7 @@ export default function RecipesList() {
       <div className="flex items-center gap-3 mb-6">
         <Hammer className="w-8 h-8 text-[#C9A84C]" />
         <div>
-          <h1 className="text-[#C9A84C] text-2xl" style={{ fontFamily: "var(--font-serif)" }}>Crafting Recipes</h1>
+          <h1 className="text-[#C9A84C] text-2xl">Crafting Recipes</h1>
           <p className="text-[#8A8B95] text-sm" style={{ fontFamily: "var(--font-sans)" }}>
             Item transformation rules — combine materials into gear, consumables, and upgrades
           </p>
@@ -32,7 +32,7 @@ export default function RecipesList() {
       </div>
 
       <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6 mb-6">
-        <h2 className="text-[#E8E0D0] text-lg mb-4" style={{ fontFamily: "var(--font-serif)" }}>Dependencies</h2>
+        <h2 className="text-[#E8E0D0] text-lg mb-4">Dependencies</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
             { icon: Package, label: "Item System (Phase 1)", done: true, desc: "Item definitions for inputs and outputs" },
@@ -52,7 +52,7 @@ export default function RecipesList() {
       </div>
 
       <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
-        <h2 className="text-[#E8E0D0] text-lg mb-3" style={{ fontFamily: "var(--font-serif)" }}>Planned Features</h2>
+        <h2 className="text-[#E8E0D0] text-lg mb-3">Planned Features</h2>
         <ul className="space-y-2">
           {["Visual recipe editor with drag-and-drop ingredient slots", "Tiered output quality based on skill level and material rarity", "Recipe prerequisite chains and discovery mechanics", "Biome-specific crafting station requirements", "Batch crafting rules and time-cost configuration"].map((item) => (
             <li key={item} className="flex items-center gap-2 text-[#8A8B95] text-sm" style={{ fontFamily: "var(--font-sans)" }}>

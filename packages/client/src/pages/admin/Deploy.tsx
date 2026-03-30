@@ -92,7 +92,7 @@ export default function Deploy() {
   if (loading) {
     return (
       <div className="p-8">
-        <h1 className="text-[#C9A84C] text-2xl mb-6" style={{ fontFamily: 'var(--font-serif)' }}>
+        <h1 className="text-[#C9A84C] text-2xl mb-6">
           Deploy Content
         </h1>
         <p className="text-[#8A8B95]">Loading...</p>
@@ -118,7 +118,7 @@ export default function Deploy() {
 
   return (
     <div className="p-8">
-      <h1 className="text-[#C9A84C] text-2xl mb-6" style={{ fontFamily: 'var(--font-serif)' }}>
+      <h1 className="text-[#C9A84C] text-2xl mb-6">
         Deploy Content
       </h1>
 
@@ -226,7 +226,7 @@ export default function Deploy() {
       {showProductionConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-[#12131A] border border-[#C9A84C] rounded-lg p-6 max-w-md w-full mx-4">
-            <h2 className="text-[#C9A84C] text-xl mb-4" style={{ fontFamily: 'var(--font-serif)' }}>
+            <h2 className="text-[#C9A84C] text-xl mb-4">
               Confirm Production Deployment
             </h2>
             <p className="text-[#E8E0D0] mb-4" style={{ fontFamily: 'var(--font-sans)' }}>
@@ -271,7 +271,7 @@ export default function Deploy() {
       )}
 
       <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
-        <h2 className="text-[#C9A84C] text-lg mb-4" style={{ fontFamily: 'var(--font-serif)' }}>
+        <h2 className="text-[#C9A84C] text-lg mb-4">
           Deployment History
         </h2>
         {history.length === 0 ? (

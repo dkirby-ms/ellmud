@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { Link, useParams, useNavigate } from "react-router";
-import { ArrowLeft, Save, Send, Plus, X, Trash2, Edit2 } from "lucide-react";
+import { ArrowLeft, Save, Send, Plus, X, Trash2, Edit2, ChevronDown, ChevronRight, ArrowRight, ArrowRightLeft } from "lucide-react";
 import {
   getZone, createZone, updateZone,
   createRoom, updateRoom, deleteRoom,
@@ -19,6 +19,53 @@ const CATEGORY_OPTIONS = ["hub", "dungeon", "wilderness", "social"] as const;
 const ROOM_TYPE_OPTIONS = ["entry", "corridor", "junction", "dead_end", "extraction", "boss"];
 const DIRECTION_OPTIONS = ["north", "south", "east", "west", "up", "down"];
 const ROOM_PROPERTY_OPTIONS = ["heavy_door", "cavern", "water"];
+
+const OPPOSITE: Record<string, string> = {
+  north: "south", south: "north",
+  east: "west", west: "east",
+  up: "down", down: "up",
+};
+
+type ExitPair = {
+  key: string;
+  forward: ZoneExitDefinition;
+  reverse: ZoneExitDefinition | null;
+  isInterZone: boolean;
+};
+
+function groupExitsIntoPairs(exits: ZoneExitDefinition[]): ExitPair[] {
+  const matched = new Set<string>();
+  const pairs: ExitPair[] = [];
+
+  for (const exit of exits) {
+    if (matched.has(exit.id)) continue;
+
+    const isInterZone = !!exit.targetZoneSlug;
+    const opp = OPPOSITE[exit.direction];
+    const reverse = !isInterZone && opp
+      ? exits.find(
+          (r) =>
+            r.id !== exit.id &&
+            !matched.has(r.id) &&
+            r.fromRoomSlug === exit.toRoomSlug &&
+            r.toRoomSlug === exit.fromRoomSlug &&
+            r.direction === opp &&
+            !r.targetZoneSlug
+        ) ?? null
+      : null;
+
+    matched.add(exit.id);
+    if (reverse) matched.add(reverse.id);
+
+    pairs.push({
+      key: reverse ? [exit.id, reverse.id].sort().join(":") : exit.id,
+      forward: exit,
+      reverse,
+      isInterZone,
+    });
+  }
+  return pairs;
+}
 
 export default function ZonesDetail() {
   const { slug } = useParams();
@@ -62,6 +109,10 @@ export default function ZonesDetail() {
     fromRoomSlug: "", direction: "north", toRoomSlug: "",
     targetZoneSlug: "", targetRoomSlug: "", locked: false, hidden: false,
   });
+  const [exitFormBidirectional, setExitFormBidirectional] = useState(true);
+
+  // Exit pair expand/collapse state
+  const [expandedPairs, setExpandedPairs] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!isNew && slug) {
@@ -187,6 +238,21 @@ export default function ZonesDetail() {
         if (!data.targetRoomSlug) delete data.targetRoomSlug;
         const created = await createExit(zoneId, data as Partial<ZoneExitDefinition>);
         setExits((prev) => [...prev, created]);
+
+        // Create reverse exit for bidirectional pair
+        const isInterZone = !!exitForm.targetZoneSlug;
+        const opp = OPPOSITE[exitForm.direction];
+        if (exitFormBidirectional && !isInterZone && opp) {
+          const reverseData: Record<string, unknown> = {
+            fromRoomSlug: exitForm.toRoomSlug,
+            direction: opp,
+            toRoomSlug: exitForm.fromRoomSlug,
+            locked: false,
+            hidden: false,
+          };
+          const reverseCreated = await createExit(zoneId, reverseData as Partial<ZoneExitDefinition>);
+          setExits((prev) => [...prev, reverseCreated]);
+        }
       }
       setShowExitForm(false);
     } catch (err) {
@@ -202,6 +268,45 @@ export default function ZonesDetail() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete exit");
     }
+  }
+
+  async function handleAddReverse(exit: ZoneExitDefinition) {
+    const opp = OPPOSITE[exit.direction];
+    if (!opp || !zoneId) return;
+    try {
+      setError(null);
+      const reverseData: Record<string, unknown> = {
+        fromRoomSlug: exit.toRoomSlug,
+        direction: opp,
+        toRoomSlug: exit.fromRoomSlug,
+        locked: false,
+        hidden: false,
+      };
+      const created = await createExit(zoneId, reverseData as Partial<ZoneExitDefinition>);
+      setExits((prev) => [...prev, created]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add reverse exit");
+    }
+  }
+
+  async function handleDeletePair(pair: ExitPair) {
+    try {
+      setError(null);
+      await deleteExit(pair.forward.id);
+      if (pair.reverse) await deleteExit(pair.reverse.id);
+      setExits((prev) => prev.filter((e) => e.id !== pair.forward.id && e.id !== pair.reverse?.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete exit pair");
+    }
+  }
+
+  function togglePairExpanded(key: string) {
+    setExpandedPairs((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -258,7 +363,7 @@ export default function ZonesDetail() {
           <Link to="/admin/zones" className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <h1 className="text-[#C9A84C] text-xl" style={{ fontFamily: "var(--font-serif)" }}>
+          <h1 className="text-[#C9A84C] text-xl">
             {isNew ? "New Zone" : formData.name || "Untitled Zone"}
           </h1>
           {error && (
@@ -307,15 +412,14 @@ export default function ZonesDetail() {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="grid grid-cols-3 gap-6 p-8">
-          {/* Left Column */}
-          <div className="col-span-2">
+      <div className={`flex-1 ${activeTab === "designer" ? "overflow-hidden relative" : "overflow-y-auto"}`}>
+        <div className={activeTab === "designer" ? "h-full" : "p-8"}>
+          <div className={activeTab === "designer" ? "h-full relative" : ""}>
             {/* ─── General Tab ──────────────────────────────────────────────── */}
             {activeTab === "general" && (
               <div className="space-y-6">
                 <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
-                  <h2 className="text-[#C9A84C] text-lg mb-4" style={{ fontFamily: "var(--font-serif)" }}>
+                  <h2 className="text-[#C9A84C] text-lg mb-4">
                     Basic Information
                   </h2>
                   <div className="space-y-4">
@@ -343,7 +447,7 @@ export default function ZonesDetail() {
                           onChange={(e) => updateField("name", e.target.value)}
                           placeholder="e.g., The Flooded Crypt"
                           className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                          style={{ fontFamily: "var(--font-serif)" }}
+                         
                         />
                       </div>
                     </div>
@@ -357,7 +461,7 @@ export default function ZonesDetail() {
                         placeholder="Describe the zone..."
                         rows={3}
                         className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                        style={{ fontFamily: "var(--font-serif)" }}
+                       
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-4">
@@ -535,7 +639,7 @@ export default function ZonesDetail() {
               <div className="space-y-6">
                 <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-[#C9A84C] text-lg" style={{ fontFamily: "var(--font-serif)" }}>
+                    <h2 className="text-[#C9A84C] text-lg">
                       Rooms
                     </h2>
                     {!isNew && (
@@ -577,7 +681,7 @@ export default function ZonesDetail() {
                                 <span className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-mono)" }}>{room.slug}</span>
                               </td>
                               <td className="p-3">
-                                <span className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-serif)" }}>{room.name}</span>
+                                <span className="text-[#E8E0D0] text-sm">{room.name}</span>
                               </td>
                               <td className="p-3">
                                 <span className="text-[#8A8B95] text-sm capitalize" style={{ fontFamily: "var(--font-sans)" }}>{room.type.replace(/_/g, " ")}</span>
@@ -631,7 +735,7 @@ export default function ZonesDetail() {
                               onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })}
                               placeholder="e.g., Entrance Hall"
                               className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] text-sm focus:border-[#C9A84C] focus:outline-none"
-                              style={{ fontFamily: "var(--font-serif)" }}
+                             
                             />
                           </div>
                         </div>
@@ -643,7 +747,7 @@ export default function ZonesDetail() {
                             placeholder="Describe this room..."
                             rows={2}
                             className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] text-sm focus:border-[#C9A84C] focus:outline-none resize-none"
-                            style={{ fontFamily: "var(--font-serif)" }}
+                           
                           />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -705,7 +809,7 @@ export default function ZonesDetail() {
               <div className="space-y-6">
                 <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-[#C9A84C] text-lg" style={{ fontFamily: "var(--font-serif)" }}>
+                    <h2 className="text-[#C9A84C] text-lg">
                       Exits
                     </h2>
                     {!isNew && rooms.length > 0 && (
@@ -737,45 +841,167 @@ export default function ZonesDetail() {
                       <table className="w-full">
                         <thead className="bg-[#1C1D27] border-b border-[#2A2B35]">
                           <tr>
-                            <th className="p-3 text-left text-[#8A8B95] text-xs uppercase tracking-wider" style={{ fontFamily: "var(--font-sans)" }}>From Room</th>
-                            <th className="p-3 text-left text-[#8A8B95] text-xs uppercase tracking-wider" style={{ fontFamily: "var(--font-sans)" }}>Direction</th>
-                            <th className="p-3 text-left text-[#8A8B95] text-xs uppercase tracking-wider" style={{ fontFamily: "var(--font-sans)" }}>To Room</th>
-                            <th className="p-3 text-left text-[#8A8B95] text-xs uppercase tracking-wider" style={{ fontFamily: "var(--font-sans)" }}>Inter-Zone Target</th>
+                            <th className="p-3 w-8" />
+                            <th className="p-3 text-left text-[#8A8B95] text-xs uppercase tracking-wider" style={{ fontFamily: "var(--font-sans)" }}>Connection</th>
+                            <th className="p-3 text-left text-[#8A8B95] text-xs uppercase tracking-wider" style={{ fontFamily: "var(--font-sans)" }}>Directions</th>
+                            <th className="p-3 text-left text-[#8A8B95] text-xs uppercase tracking-wider" style={{ fontFamily: "var(--font-sans)" }}>Status</th>
                             <th className="p-3 text-right text-[#8A8B95] text-xs uppercase tracking-wider" style={{ fontFamily: "var(--font-sans)" }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {exits.map((exit) => (
-                            <tr key={exit.id} className="border-b border-[#2A2B35] hover:bg-[#1C1D27] transition-colors">
-                              <td className="p-3">
-                                <span className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-mono)" }}>{exit.fromRoomSlug}</span>
-                              </td>
-                              <td className="p-3">
-                                <span className="text-[#C9A84C] text-sm capitalize" style={{ fontFamily: "var(--font-sans)" }}>{exit.direction}</span>
-                              </td>
-                              <td className="p-3">
-                                <span className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-mono)" }}>{exit.toRoomSlug}</span>
-                              </td>
-                              <td className="p-3">
-                                {exit.targetZoneSlug ? (
-                                  <span className="text-[#3A7D7B] text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-                                    {exit.targetZoneSlug}/{exit.targetRoomSlug}
-                                  </span>
-                                ) : (
-                                  <span className="text-[#4A4B55] text-sm" style={{ fontFamily: "var(--font-sans)" }}>—</span>
+                          {groupExitsIntoPairs(exits).map((pair) => {
+                            const isExpanded = expandedPairs.has(pair.key);
+                            const isBidirectional = !!pair.reverse;
+                            const roomA = pair.forward.fromRoomSlug;
+                            const roomB = pair.forward.toRoomSlug;
+                            const dirFwd = pair.forward.direction;
+                            const dirRev = pair.reverse?.direction;
+
+                            return (
+                              <Fragment key={pair.key}>
+                                {/* ── Pair summary row ── */}
+                                <tr className="border-b border-[#2A2B35] hover:bg-[#1C1D27] transition-colors">
+                                  <td className="p-3 w-8">
+                                    <button
+                                      onClick={() => togglePairExpanded(pair.key)}
+                                      className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors"
+                                    >
+                                      {isExpanded
+                                        ? <ChevronDown className="w-4 h-4" />
+                                        : <ChevronRight className="w-4 h-4" />}
+                                    </button>
+                                  </td>
+                                  <td className="p-3">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-mono)" }}>{roomA}</span>
+                                      {isBidirectional ? (
+                                        <ArrowRightLeft className="w-4 h-4 text-[#C9A84C] flex-shrink-0" />
+                                      ) : (
+                                        <ArrowRight className="w-4 h-4 text-[#8A8B95] flex-shrink-0" />
+                                      )}
+                                      <span className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-mono)" }}>{roomB}</span>
+                                      {pair.isInterZone && (
+                                        <span className="ml-2 px-1.5 py-0.5 bg-[#1A2E2E] text-[#3A7D7B] text-[10px] rounded uppercase tracking-wider" style={{ fontFamily: "var(--font-sans)" }}>
+                                          inter-zone
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="p-3">
+                                    <span className="text-[#C9A84C] text-sm capitalize" style={{ fontFamily: "var(--font-sans)" }}>
+                                      {isBidirectional ? `${dirFwd} / ${dirRev}` : dirFwd}
+                                    </span>
+                                  </td>
+                                  <td className="p-3">
+                                    <div className="flex items-center gap-2 text-xs">
+                                      {pair.forward.locked && <span className="text-[#B8860B]" title={`${dirFwd}: locked`}>🔒</span>}
+                                      {pair.forward.hidden && <span className="text-[#8A8B95]" title={`${dirFwd}: hidden`}>👁</span>}
+                                      {pair.reverse?.locked && <span className="text-[#B8860B]" title={`${dirRev}: locked`}>🔒</span>}
+                                      {pair.reverse?.hidden && <span className="text-[#8A8B95]" title={`${dirRev}: hidden`}>👁</span>}
+                                      {!pair.forward.locked && !pair.forward.hidden && !pair.reverse?.locked && !pair.reverse?.hidden && (
+                                        <span className="text-[#4A4B55]" style={{ fontFamily: "var(--font-sans)" }}>—</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="p-3 text-right">
+                                    <div className="flex justify-end gap-2">
+                                      {!isBidirectional && !pair.isInterZone && (
+                                        <button
+                                          onClick={() => handleAddReverse(pair.forward)}
+                                          className="px-2 py-0.5 border border-[#3A7D7B] text-[#3A7D7B] rounded text-[10px] hover:bg-[#1A2E2E] transition-colors"
+                                          style={{ fontFamily: "var(--font-sans)" }}
+                                          title="Add reverse direction"
+                                        >
+                                          + reverse
+                                        </button>
+                                      )}
+                                      <button onClick={() => handleDeletePair(pair)} className="text-[#8A8B95] hover:text-[#8B2500] transition-colors" title={isBidirectional ? "Delete pair" : "Delete exit"}>
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+
+                                {/* ── Expanded individual exit rows ── */}
+                                {isExpanded && (
+                                  <>
+                                    <tr className="bg-[#0E0F15] border-b border-[#2A2B35]">
+                                      <td className="p-2 pl-8" colSpan={2}>
+                                        <div className="flex items-center gap-2">
+                                          <ArrowRight className="w-3 h-3 text-[#C9A84C]" />
+                                          <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+                                            {pair.forward.fromRoomSlug}
+                                          </span>
+                                          <span className="text-[#C9A84C] text-xs capitalize" style={{ fontFamily: "var(--font-sans)" }}>
+                                            {pair.forward.direction}
+                                          </span>
+                                          <span className="text-[#4A4B55] text-xs">→</span>
+                                          <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+                                            {pair.forward.toRoomSlug}
+                                          </span>
+                                          {pair.isInterZone && pair.forward.targetZoneSlug && (
+                                            <span className="text-[#3A7D7B] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+                                              → {pair.forward.targetZoneSlug}/{pair.forward.targetRoomSlug}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="p-2">
+                                        <span className="text-[#8A8B95] text-xs capitalize" style={{ fontFamily: "var(--font-sans)" }}>{pair.forward.direction}</span>
+                                      </td>
+                                      <td className="p-2">
+                                        <div className="flex items-center gap-2 text-xs">
+                                          {pair.forward.locked && <span className="text-[#B8860B]">🔒 locked</span>}
+                                          {pair.forward.hidden && <span className="text-[#8A8B95]">👁 hidden</span>}
+                                          {!pair.forward.locked && !pair.forward.hidden && <span className="text-[#4A4B55]">open</span>}
+                                        </div>
+                                      </td>
+                                      <td className="p-2 text-right">
+                                        <button onClick={() => handleDeleteExit(pair.forward.id)} className="text-[#8A8B95] hover:text-[#8B2500] transition-colors" title="Delete this direction only">
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
+                                      </td>
+                                    </tr>
+
+                                    {pair.reverse && (
+                                      <tr className="bg-[#0E0F15] border-b border-[#2A2B35]">
+                                        <td className="p-2 pl-8" colSpan={2}>
+                                          <div className="flex items-center gap-2">
+                                            <ArrowRight className="w-3 h-3 text-[#C9A84C]" />
+                                            <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+                                              {pair.reverse.fromRoomSlug}
+                                            </span>
+                                            <span className="text-[#C9A84C] text-xs capitalize" style={{ fontFamily: "var(--font-sans)" }}>
+                                              {pair.reverse.direction}
+                                            </span>
+                                            <span className="text-[#4A4B55] text-xs">→</span>
+                                            <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+                                              {pair.reverse.toRoomSlug}
+                                            </span>
+                                          </div>
+                                        </td>
+                                        <td className="p-2">
+                                          <span className="text-[#8A8B95] text-xs capitalize" style={{ fontFamily: "var(--font-sans)" }}>{pair.reverse.direction}</span>
+                                        </td>
+                                        <td className="p-2">
+                                          <div className="flex items-center gap-2 text-xs">
+                                            {pair.reverse.locked && <span className="text-[#B8860B]">🔒 locked</span>}
+                                            {pair.reverse.hidden && <span className="text-[#8A8B95]">👁 hidden</span>}
+                                            {!pair.reverse.locked && !pair.reverse.hidden && <span className="text-[#4A4B55]">open</span>}
+                                          </div>
+                                        </td>
+                                        <td className="p-2 text-right">
+                                          <button onClick={() => handleDeleteExit(pair.reverse!.id)} className="text-[#8A8B95] hover:text-[#8B2500] transition-colors" title="Delete this direction only">
+                                            <Trash2 className="w-3 h-3" />
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </>
                                 )}
-                              </td>
-                              <td className="p-3 text-right">
-                                <div className="flex justify-end gap-2">
-                                  {exit.locked && <span className="text-[#B8860B] text-xs" title="Locked">🔒</span>}
-                                  {exit.hidden && <span className="text-[#8A8B95] text-xs" title="Hidden">👁</span>}
-                                  <button onClick={() => handleDeleteExit(exit.id)} className="text-[#8A8B95] hover:text-[#8B2500] transition-colors">
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                              </Fragment>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -876,6 +1102,19 @@ export default function ZonesDetail() {
                             />
                             <span className="text-[#8A8B95] text-sm" style={{ fontFamily: "var(--font-sans)" }}>Hidden</span>
                           </label>
+                          {!exitForm.targetZoneSlug && (
+                            <label className="flex items-center gap-2 cursor-pointer ml-4 pl-4 border-l border-[#2A2B35]">
+                              <input
+                                type="checkbox"
+                                checked={exitFormBidirectional}
+                                onChange={(e) => setExitFormBidirectional(e.target.checked)}
+                                className="accent-[#C9A84C]"
+                              />
+                              <span className="text-[#C9A84C] text-sm" style={{ fontFamily: "var(--font-sans)" }}>
+                                Create pair (bidirectional)
+                              </span>
+                            </label>
+                          )}
                         </div>
                         <div className="flex justify-end gap-2">
                           <button
@@ -890,7 +1129,7 @@ export default function ZonesDetail() {
                             className="px-3 py-1.5 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors text-sm"
                             style={{ fontFamily: "var(--font-sans)" }}
                           >
-                            Create Exit
+                            {exitFormBidirectional && !exitForm.targetZoneSlug ? "Create Pair" : "Create Exit"}
                           </button>
                         </div>
                       </div>
@@ -902,7 +1141,7 @@ export default function ZonesDetail() {
 
             {/* ─── Designer Tab ─────────────────────────────────────────────── */}
             {activeTab === "designer" && (
-              <div className="space-y-6">
+              <div className="absolute inset-0">
                 <ZoneDesigner
                   zone={formData as ZoneDefinition}
                   rooms={rooms}
@@ -915,44 +1154,7 @@ export default function ZonesDetail() {
               </div>
             )}
           </div>
-          <div className="space-y-6">
-            <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
-              <h3 className="text-[#C9A84C] text-sm mb-4" style={{ fontFamily: "var(--font-sans)" }}>
-                Preview
-              </h3>
-              <div
-                className="bg-[#1C1D27] rounded p-4 text-sm space-y-2"
-                style={{ fontFamily: "var(--font-serif)", color: "#E8E0D0" }}
-              >
-                <div className="text-[#C9A84C] text-lg mb-2">
-                  {formData.name || "Untitled Zone"}
-                </div>
-                <p className="text-[#8A8B95] text-xs">
-                  {formData.description || "No description"}
-                </p>
-                <div className="border-t border-[#2A2B35] my-2"></div>
-                <div className="text-xs space-y-1">
-                  <div>Slug: <span className="text-[#8A8B95]" style={{ fontFamily: "var(--font-mono)" }}>{formData.slug || "—"}</span></div>
-                  <div>Tier: {formData.tier || 1}</div>
-                  <div>Biome: <span className="capitalize">{(formData.biome || "—").replace(/_/g, " ")}</span></div>
-                  <div>Levels: {formData.levelMin || 1}–{formData.levelMax || 5}</div>
-                  <div>Category: <span className="capitalize">{formData.category || "—"}</span></div>
-                  <div>Lifecycle: <span className="capitalize">{formData.lifecycle || "—"}</span></div>
-                  <div>PvP: {formData.pvpEnabled ? "Yes" : "No"}</div>
-                  <div>Rooms: {rooms.length}</div>
-                  <div>Exits: {exits.length}</div>
-                </div>
-              </div>
-            </div>
 
-            {!error && formData.name && formData.slug && (
-              <div className="bg-[#2D6B4F] border border-[#256B4A] rounded-lg p-4">
-                <p className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-sans)" }}>
-                  ✓ Zone ready to save
-                </p>
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </div>

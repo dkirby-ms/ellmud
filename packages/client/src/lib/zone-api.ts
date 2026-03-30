@@ -24,6 +24,17 @@ export interface ZoneDefinition {
   repopIntervalSeconds: number;
 }
 
+export interface RoomNPC {
+  creatureId: string;
+  spawnCount: number;
+}
+
+export interface RoomLootContainer {
+  id: string;
+  type: string;
+  items: string[];
+}
+
 export interface ZoneRoomDefinition {
   id: string;
   zoneId: string;
@@ -32,9 +43,9 @@ export interface ZoneRoomDefinition {
   description: string;
   type: string;
   properties: string[];
-  lootContainers: unknown[];
+  lootContainers: RoomLootContainer[];
   hazards: unknown[];
-  npcs: unknown[];
+  npcs: RoomNPC[];
 }
 
 export interface ZoneExitDefinition {
@@ -117,8 +128,56 @@ export async function createExit(zoneId: string, data: Partial<ZoneExitDefinitio
   });
 }
 
+export async function updateExit(exitId: string, data: Partial<ZoneExitDefinition>): Promise<ZoneExitDefinition> {
+  return adminFetch<ZoneExitDefinition>(`/admin/api/zones/exits/${exitId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function deleteExit(exitId: string): Promise<void> {
   await adminFetch(`/admin/api/zones/exits/${exitId}`, {
     method: 'DELETE',
   });
+}
+
+// ─── Orphaned Exit Cleanup ───────────────────────────────────────────────────
+
+export interface OrphanedExitInfo {
+  exit: ZoneExitDefinition;
+  reason: string;
+}
+
+export async function getOrphanedExits(): Promise<{ count: number; orphanedExits: OrphanedExitInfo[] }> {
+  return adminFetch<{ count: number; orphanedExits: OrphanedExitInfo[] }>('/admin/api/zones/cleanup/orphaned-exits');
+}
+
+export async function removeOrphanedExits(): Promise<{ removed: number; orphanedExits: OrphanedExitInfo[] }> {
+  return adminFetch<{ removed: number; orphanedExits: OrphanedExitInfo[] }>('/admin/api/zones/cleanup/orphaned-exits', {
+    method: 'POST',
+  });
+}
+
+// ─── Creature & Item Registry ────────────────────────────────────────────────
+
+export interface CreatureTemplate {
+  type: string;
+  name: string;
+}
+
+export interface ItemDefinition {
+  id: string;
+  name: string;
+  type: string;
+  tier: string;
+}
+
+export async function listCreatures(): Promise<CreatureTemplate[]> {
+  const data = await adminFetch<{ templates: CreatureTemplate[]; count: number }>('/admin/api/creature-templates');
+  return data.templates || [];
+}
+
+export async function listItems(): Promise<ItemDefinition[]> {
+  const data = await adminFetch<{ items: ItemDefinition[]; count: number }>('/admin/api/items');
+  return data.items || [];
 }

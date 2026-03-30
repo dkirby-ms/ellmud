@@ -15,6 +15,7 @@
  *   PUT    /admin/api/zones/rooms/:id    — Update room
  *   DELETE /admin/api/zones/rooms/:id    — Delete room
  *   POST   /admin/api/zones/:id/exits    — Create exit in zone
+ *   PUT    /admin/api/zones/exits/:id    — Update exit
  *   DELETE /admin/api/zones/exits/:id    — Delete exit
  */
 
@@ -422,6 +423,46 @@ export function createZoneRouter(): Router {
     } catch (err) {
       console.error('[Admin] Failed to create exit:', err);
       res.status(500).json({ error: 'Failed to create exit' });
+    }
+  });
+
+  // ─── PUT /admin/api/zones/exits/:id — Update exit ──────────────────
+  router.put(`${basePath}/exits/:id`, adminAuth, async (req: Request, res: Response) => {
+    try {
+      const data = req.body as Record<string, unknown>;
+
+      // Validate direction if provided
+      if (data['direction'] !== undefined) {
+        const dir = data['direction'] as string;
+        if (!ALL_DIRECTIONS.includes(dir as Direction)) {
+          res.status(400).json({ error: 'Validation failed', details: [`direction must be one of: ${ALL_DIRECTIONS.join(', ')}`] });
+          return;
+        }
+      }
+
+      const repo = getZoneRepository();
+      const { id: _id, zoneId: _zid, createdAt: _ca, ...rest } = data;
+      const updated = await repo.updateExit(
+        req.params.id,
+        rest as Parameters<typeof repo.updateExit>[1],
+      );
+
+      await logAuditEvent({
+        action: 'update',
+        entityType: 'zone-exit',
+        entityId: updated.id,
+        actor: 'admin',
+        details: { updated },
+      }).catch(() => {});
+
+      res.json(updated);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('not found')) {
+        res.status(404).json({ error: err.message });
+        return;
+      }
+      console.error('[Admin] Failed to update exit:', err);
+      res.status(500).json({ error: 'Failed to update exit' });
     }
   });
 

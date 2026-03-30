@@ -120,7 +120,7 @@ export default function FactionsDetail() {
           </Link>
           <h1
             className="text-[#C9A84C] text-xl"
-            style={{ fontFamily: "var(--font-serif)" }}
+           
           >
             {isNew ? "New Faction" : formData.name}
           </h1>
@@ -165,7 +165,7 @@ export default function FactionsDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Basic Information
               </h2>
@@ -198,7 +198,7 @@ export default function FactionsDetail() {
                     value={formData.name}
                     onChange={(e) => updateField("name", e.target.value)}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   />
                 </div>
                 <div>
@@ -213,7 +213,7 @@ export default function FactionsDetail() {
                     onChange={(e) => updateField("description", e.target.value)}
                     rows={4}
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                    style={{ fontFamily: "var(--font-serif)" }}
+                   
                   />
                 </div>
               </div>
@@ -224,7 +224,7 @@ export default function FactionsDetail() {
               <div className="flex items-center justify-between mb-4">
                 <h2
                   className="text-[#C9A84C] text-lg"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 >
                   Milestones
                 </h2>
@@ -250,7 +250,7 @@ export default function FactionsDetail() {
                         onChange={(e) => updateMilestone(index, "name", e.target.value)}
                         placeholder="Milestone name"
                         className="w-full bg-[#0A0B0F] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none text-sm"
-                        style={{ fontFamily: "var(--font-serif)" }}
+                       
                       />
                     </div>
                     <div className="w-32">
@@ -270,7 +270,7 @@ export default function FactionsDetail() {
                         onChange={(e) => updateMilestone(index, "description", e.target.value)}
                         placeholder="Description"
                         className="w-full bg-[#0A0B0F] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none text-sm"
-                        style={{ fontFamily: "var(--font-serif)" }}
+                       
                       />
                     </div>
                     <button
@@ -300,7 +300,7 @@ export default function FactionsDetail() {
               >
                 <div
                   className="text-lg"
-                  style={{ fontFamily: "var(--font-serif)", color: "#C9A84C" }}
+                  style={{ color: "#C9A84C" }}
                 >
                   {formData.name}
                 </div>

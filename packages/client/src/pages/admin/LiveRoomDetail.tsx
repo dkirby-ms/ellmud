@@ -189,7 +189,7 @@ export default function LiveRoomDetail() {
           <div>
             <h1
               className="text-[#C9A84C] text-xl"
-              style={{ fontFamily: "var(--font-serif)" }}
+             
             >
               {isZone ? "Zone" : room.name === "shard" ? "Shard" : room.name} — {room.roomId.slice(0, 12)}…
             </h1>
@@ -289,7 +289,7 @@ export default function LiveRoomDetail() {
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h2
                 className="text-[#C9A84C] text-lg mb-4"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Room Status
               </h2>
@@ -327,7 +327,7 @@ export default function LiveRoomDetail() {
               <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                 <h2
                   className="text-[#C9A84C] text-lg mb-4"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 >
                   Creatures ({room.creatures.length})
                 </h2>
@@ -354,7 +354,7 @@ export default function LiveRoomDetail() {
                           <div>
                             <span
                               className="text-[#E8E0D0] text-sm"
-                              style={{ fontFamily: "var(--font-serif)" }}
+                             
                             >
                               {c.name}
                             </span>
@@ -408,7 +408,7 @@ export default function LiveRoomDetail() {
               <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                 <h2
                   className="text-[#C9A84C] text-lg mb-4"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 >
                   Players ({room.players.length})
                 </h2>
@@ -504,7 +504,7 @@ export default function LiveRoomDetail() {
           <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6 w-full max-w-md">
             <h3
               className="text-[#C9A84C] text-lg mb-2"
-              style={{ fontFamily: "var(--font-serif)" }}
+             
             >
               {confirmAction.title}
             </h3>
@@ -550,7 +550,7 @@ export default function LiveRoomDetail() {
             <div className="flex items-center justify-between mb-4">
               <h3
                 className="text-[#C9A84C] text-lg"
-                style={{ fontFamily: "var(--font-serif)" }}
+               
               >
                 Spawn Creature
               </h3>
@@ -573,7 +573,7 @@ export default function LiveRoomDetail() {
                   value={selectedTemplate}
                   onChange={(e) => setSelectedTemplate(e.target.value)}
                   className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                  style={{ fontFamily: "var(--font-serif)" }}
+                 
                 >
                   <option value="">Select creature…</option>
                   {creatureTemplates.map((t) => (

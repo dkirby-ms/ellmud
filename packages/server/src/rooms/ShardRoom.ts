@@ -101,6 +101,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private players = new Map<string, PlayerState>();
   /** Maps sessionId → characterId for all gameplay operations. */
   private playerIds = new Map<string, string>();
+  /** Maps characterId → players-table UUID for DB persistence. */
+  private ownerPlayerIds = new Map<string, string>();
   private combatSystem!: CombatSystem;
   private soundSystem!: SoundSystem;
   private traceSystem!: TraceSystem;
@@ -403,11 +405,13 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     this.updateMetadata();
     this.playerIds.set(client.sessionId, playerId);
+    // Track the real players-table ID for DB persistence (characterId FKs to characters, not players).
+    this.ownerPlayerIds.set(playerId, rawPlayerId);
 
     // Load persisted profile (skills, carry weight, equipment) or use defaults
     let profile: PlayerProfile;
     try {
-      const saved = await this.profileRepo.load(playerId);
+      const saved = await this.profileRepo.load(this.dbPlayerId(playerId));
       profile = saved ?? { ...DEFAULT_PROFILE };
     } catch (err) {
       this.log(`Failed to load profile for ${this.playerTag(playerId)}: ${err}`);
@@ -416,7 +420,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Load faction membership (fire-and-forget — faction data is informational)
     try {
-      const factions = await this.factionRepo.getPlayerFactions(playerId);
+      const factions = await this.factionRepo.getPlayerFactions(this.dbPlayerId(playerId));
       if (factions.length > 0) {
         this.log(`Player ${this.playerTag(playerId)} faction: ${factions[0].faction_id}`);
       }
@@ -440,8 +444,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Determine entry room based on zone vs shard
     let startRoom: string;
     if (this.isZone) {
-      // Zones: always spawn at designated start room (e.g., hearth for refuge)
-      startRoom = this.roomGraph.startRoomId;
+      const targetRoom = options['targetRoomSlug'];
+      if (typeof targetRoom === 'string' && this.roomGraph.rooms.has(targetRoom)) {
+        startRoom = targetRoom;
+      } else {
+        startRoom = this.roomGraph.startRoomId;
+      }
     } else {
       // Shards: distribute players across entry points for spatial separation
       const entryIndex = (this.state.playerCount - 1) % this.entryRoomIds.length;
@@ -561,6 +569,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.players.delete(playerId);
       this.combatSystem.removeCombatant(playerId);
       this.characterNames.delete(playerId);
+      this.ownerPlayerIds.delete(playerId);
       this.updateMetadata();
     }
     this.playerIds.delete(client.sessionId);
@@ -1001,6 +1010,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       resolveRoom: (roomId: string) => this.roomGraph.rooms.get(roomId),
       otherPlayersInRoom,
       stability: this.state.stability,
+      characterName: this.characterNames.get(player.sessionId),
       combatSystem: this.combatSystem,
       extractionSystem: this.extractionSystem,
       downingSystem: this.downingSystem,
@@ -1291,6 +1301,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Remove player from shard
     this.players.delete(playerId);
     this.combatSystem.removeCombatant(playerId);
+    this.ownerPlayerIds.delete(playerId);
     this.state.playerCount = Math.max(0, this.state.playerCount - 1);
     this.updateMetadata();
 
@@ -1321,7 +1332,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     if (player.inventory.size === 0) return;
 
     const result = await transferInventoryToStash(
-      playerId, player.inventory, this.stashService!, this.itemDefs,
+      this.dbPlayerId(playerId), player.inventory, this.stashService!, this.itemDefs,
     );
 
     // Remove only items that were successfully stored; keep retained items
@@ -1382,6 +1393,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private buildCreatureWorldState(): CreatureWorldState {
     const playersInRoom = new Map<string, string[]>();
     for (const [sid, ps] of this.players) {
+      // Peaceful players are invisible to creature AI
+      if (ps.peaceful) continue;
       const list = playersInRoom.get(ps.currentRoomId);
       if (list) {
         list.push(sid);
@@ -1406,6 +1419,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     switch (action.type) {
       case 'combat_strike': {
+        // Skip combat initiation against peaceful players (dev mode safety guard)
+        if (action.targetCombatantId) {
+          const targetPlayer = this.players.get(action.targetCombatantId);
+          if (targetPlayer?.peaceful) break;
+        }
         // Register creature as combatant if needed
         if (!this.combatSystem.getCombatant(creature.id)) {
           this.combatSystem.registerCombatant(this.creatureManager.toCombatant(creature));
@@ -1414,8 +1432,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         if (action.targetCombatantId && !this.combatSystem.getCombatant(action.targetCombatantId)) {
           const player = this.players.get(action.targetCombatantId);
           if (player) {
+            const displayName = this.characterNames.get(player.sessionId) ?? player.sessionId;
             this.combatSystem.registerCombatant(
-              createCombatant(player.sessionId, player.sessionId, player.currentRoomId, true),
+              createCombatant(player.sessionId, displayName, player.currentRoomId, true),
             );
           }
         }
@@ -1625,7 +1644,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Clear equipped loadout — gear is lost on death (both in-memory and repo)
     player.equipment = undefined;
     if (this.loadoutService) {
-      this.loadoutService.clearLoadout(playerId).catch((err) => {
+      this.loadoutService.clearLoadout(this.dbPlayerId(playerId)).catch((err) => {
         this.log(`Failed to clear loadout on death for ${this.playerTag(playerId)}: ${err}`);
       });
     }
@@ -1714,6 +1733,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
         // Clean up player from shard state
         this.players.delete(playerId);
+        this.ownerPlayerIds.delete(playerId);
         this.state.playerCount = Math.max(0, this.state.playerCount - 1);
         this.updateMetadata();
         this.log(`Player ${this.playerTag(playerId)} died and returned to refuge`);
@@ -1909,6 +1929,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   // ─── Profile Persistence ─────────────────────────────────────────────────
 
+  /** Resolve the players-table UUID for DB operations (FKs reference players.id, not characters.id). */
+  private dbPlayerId(characterId: string): string {
+    return this.ownerPlayerIds.get(characterId) ?? characterId;
+  }
+
   /** Extract persistable profile from player state and save it. */
   private async savePlayerProfile(playerId: string, playerState: PlayerState): Promise<void> {
     try {
@@ -1917,7 +1942,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         maxCarryWeight: playerState.maxCarryWeight,
         equipment: playerState.equipment,
       };
-      await this.profileRepo.save(playerId, profile);
+      await this.profileRepo.save(this.dbPlayerId(playerId), profile);
     } catch (err) {
       this.log(`Failed to save profile for ${this.playerTag(playerId)}: ${err}`);
     }
@@ -1939,7 +1964,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
       const run: RunRecord = {
         runId: this.roomId,
-        playerId,
+        playerId: this.dbPlayerId(playerId),
         shardTier: this.shardTier,
         biome: (this.state.biome as BiomeType) || null,
         durationSec,
@@ -1987,14 +2012,14 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     try {
       // First try stash, then shard inventory
-      const result = await this.loadoutService.equipItem(playerId, message.itemId, message.targetSlot);
+      const result = await this.loadoutService.equipItem(this.dbPlayerId(playerId), message.itemId, message.targetSlot);
 
       if (!result.ok) {
         // Try equipping from shard inventory
         const invEntry = this.findInInventory(player, message.itemId);
         if (invEntry) {
           const invItem = this.toStashItemInstance(invEntry);
-          const invResult = await this.loadoutService.equipFromInventory(playerId, invItem, message.targetSlot);
+          const invResult = await this.loadoutService.equipFromInventory(this.dbPlayerId(playerId), invItem, message.targetSlot);
 
           if (invResult.ok) {
             // Remove from shard inventory
@@ -2076,7 +2101,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
 
     try {
-      const result = await this.loadoutService.unequipItem(playerId, message.slot);
+      const result = await this.loadoutService.unequipItem(this.dbPlayerId(playerId), message.slot);
 
       if (!result.ok) {
         client.send(MessageTypes.NARRATE, {
@@ -2125,7 +2150,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
 
     try {
-      const result = await this.loadoutService.swapItem(playerId, message.itemId, message.targetSlot);
+      const result = await this.loadoutService.swapItem(this.dbPlayerId(playerId), message.itemId, message.targetSlot);
 
       if (!result.ok) {
         client.send(MessageTypes.NARRATE, {
@@ -2155,7 +2180,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   /** Send loadout update to client after equipment change. */
   private async sendShardLoadoutUpdate(client: Client, playerId: string): Promise<void> {
     if (!this.loadoutService) return;
-    const loadoutView = await this.loadoutService.getLoadoutView(playerId);
+    const loadoutView = await this.loadoutService.getLoadoutView(this.dbPlayerId(playerId));
     client.send(MessageTypes.LOADOUT_UPDATE, {
       slots: loadoutView.slots,
     } satisfies LoadoutUpdateMessage);

@@ -75,6 +75,9 @@ export interface ZoneRepository {
   /** Create an exit within a zone. */
   createExit(exit: Omit<ZoneExitDefinition, 'id' | 'createdAt'>): Promise<ZoneExitDefinition>;
 
+  /** Partial update of an exit. */
+  updateExit(id: string, partial: Partial<Omit<ZoneExitDefinition, 'id' | 'zoneId' | 'createdAt'>>): Promise<ZoneExitDefinition>;
+
   /** Delete an exit by ID. */
   deleteExit(id: string): Promise<void>;
 

@@ -2729,3 +2729,2087 @@ The codebase has two Colyseus room classes — `ShardRoom` and `RefugeRoom` — 
 - Server: `ShardRoom.ts` — 3 code changes
 - Tests: 5 assertion updates across 3 test files
 - Client: No changes required (this was the point)
+### 2026-03-28T00:14:27Z: User directive — Stamina system scoping
+**By:** dkirby-ms (via Copilot)
+**What:** Add stamina as a placeholder in the status panel now (always 0/0). Scope a full stamina system as a future TODO.
+**Why:** User request — captured for team memory
+
+### 2026-03-28T00:14:27Z: User directive — Equipment silhouette style
+**By:** dkirby-ms (via Copilot)
+**What:** Use an abstract slot diagram (not pixel-art body outline) for the equipment silhouette.
+**Why:** User request — captured for team memory
+
+### 2026-03-28T00:14:27Z: User directive — Shared ItemTooltip
+**By:** dkirby-ms (via Copilot)
+**What:** ItemTooltip component should be shared/reusable between EquipmentSilhouette and CombinedStashLoadout.
+**Why:** User request — captured for team memory
+# Decision: Exploration Messages Are Fire-and-Forget
+
+**Date:** 2025-07-17  
+**Author:** Drizzt (Engine Dev)  
+**Status:** Implemented
+
+## Context
+
+ShardRoom sends exploration data to clients for the in-game map. Three paths trigger exploration messages:
+1. `onJoin` → `EXPLORATION_DATA` (bulk payload with starting room)
+2. Movement command → `EXPLORATION_UPDATE` (incremental room)
+3. Flee (combat tick) → `EXPLORATION_UPDATE` (incremental room)
+
+## Decision
+
+Exploration persistence (`recordVisit`) is fire-and-forget — errors are logged but never block gameplay. The client map renders from messages alone; the repository is for cross-session persistence only.
+
+Exits are serialized as `Record<string, string>` (direction → targetRoomId) in the `ExploredRoomData` payload, converted from the `Map<Direction, string>` used in the room graph.
+
+## Impact
+
+- **Client team:** The `ExploredRoomData` shape matches what `useExplorationMap.ts` expects. No client changes needed.
+- **Persistence team:** If `recordVisit` throws, the player's map still works for the current session. Only cross-session recall is affected.
+# Decision: PLAYER_STATE Message Pipeline
+
+**Date:** 2026-03-27  
+**Agent:** Drizzt (Engine Developer)  
+**Status:** Implemented  
+
+## Context
+
+The client status panel and MUD prompt displayed HP, stamina, and status effects, but all values were hardcoded on the client side. The server never sent player state updates, so combat damage was invisible to the player until they checked their combatant state.
+
+## Decision
+
+Implemented a full message-only pipeline for player state updates:
+
+1. **Message Type:** Added `PLAYER_STATE` to `MessageTypes` enum in shared package
+2. **Message Shape:** `PlayerStateMessage` with `hp`, `maxHp`, `stamina`, `maxStamina`, `statusEffects[]`
+3. **Server Sends:**
+   - On join: Initial state with default HP (100/100)
+   - After combat tick: Updates to players who took damage
+4. **Client Receives:** Updates store fields (`playerHp`, `playerMaxHp`, `playerStamina`, `playerMaxStamina`, `statusEffects`)
+
+## Key Constraints
+
+- **Stamina is a placeholder:** Always 0/0. User explicitly wants to scope full stamina system later.
+- **Status effects array is empty:** Ready for future system but not implemented yet.
+- **HP source:** Pulled from `Combatant` objects in `CombatSystem`, which are created lazily when combat begins.
+- **Optimization:** Only send PLAYER_STATE to players who took damage, not all players on every tick.
+
+## Why This Matters
+
+- **Team-wide pattern:** This establishes the canonical approach for real-time player state updates (message-only, no Schema sync).
+- **Future stamina system:** The pipeline is ready — just populate the stamina fields when the system is implemented.
+- **Status effects:** The structure is in place for status effect tracking (buffs, debuffs, DoTs).
+
+## Files Modified
+
+- `packages/shared/src/index.ts`
+- `packages/server/src/rooms/ShardRoom.ts`
+- `packages/client/src/store.ts`
+- `packages/client/src/hooks/useShardConnection.ts`
+- `packages/client/src/services/connection.ts`
+- `packages/server/src/__tests__/helpers/message-collector.ts`
+
+## Testing
+
+- 3 new tests in `player-state-message.test.ts`:
+  - PLAYER_STATE sent on join
+  - PLAYER_STATE sent after combat damage
+  - Message shape validation
+- All tests pass, build clean
+
+## Related Systems
+
+- **Combat System:** CombatSystem tracks Combatant HP, which is the source for PLAYER_STATE messages
+- **Client Store:** playerHp/maxHp already existed (hardcoded), now updated via message
+- **Future Work:** Stamina system, status effects system
+# Zone Design: The Warrens
+
+**Author:** Laeral (Content Designer)
+**Date:** 2025-07-24
+**Status:** Draft — ready for Bruenor to implement
+
+---
+
+## Overview
+
+| Field | Value |
+|---|---|
+| **Zone slug** | `the-warrens` |
+| **Name** | The Warrens |
+| **Biome** | ruins / urban decay |
+| **Category** | `dungeon` (extraction zone) |
+| **Lifecycle** | `persistent` |
+| **Tier** | 1–2 |
+| **PvP** | `false` |
+| **Max players** | 3 |
+
+**Theme:** A desolate, sparsely inhabited ruined city landscape. Winding streets choked with the detritus of some ancient civilisation — shattered masonry, corroded metal, dust that hasn't settled in centuries. The streets look deserted but the sounds of life and death echo across the cracked pavement. Something lives here. Something hunts here.
+
+**Tone keywords (for LLM narration):** dread, desolation, urban decay, echo, dust, silence-then-noise, ancient loss
+
+---
+
+## 1. ROOMS (11 rooms)
+
+### Room Map (ASCII)
+
+```
+                                    [Overwatch Tower]
+                                           │
+                                          (up)
+                                           │
+[Shattered Gate] ──east──▸ [Rubble Boulevard] ──east──▸ [Hollow Market] ──north──▸ [Broken Sanctuary]
+       │                                                       │                          │
+  (to Refuge/                                                south                  east (LOCKED)
+   Hearth)                                                     │                          │
+                                                      [Whispering Alley] ──────── [Collapsed Tenement]
+                                                               │                   (dead end, east)
+                                                             south
+                                                               │
+                                                   [Dustfall Extraction] ──east──▸ [Sunken Square]
+                                                                                        │
+                                                                                   down (HIDDEN)
+                                                                                        │
+                                                                                   [The Ratways]
+                                                                                        │
+                                                                                      south
+                                                                                        │
+                                                                                  [The Charnel Pit]
+```
+
+**Critical paths:**
+- **Main loop:** Gate → Boulevard → Market → (north) Sanctuary → (locked east) Sunken Square
+- **South loop:** Market → (south) Alley → (south) Extraction → (east) Sunken Square
+- **Hidden descent:** Sunken Square → (hidden down) Ratways → (south) Charnel Pit (boss)
+- **Dead ends:** Overwatch Tower (up from Boulevard), Collapsed Tenement (east from Alley)
+
+---
+
+### Room Definitions
+
+#### 1. Shattered Gate
+| Field | Value |
+|---|---|
+| **slug** | `shattered-gate` |
+| **name** | Shattered Gate |
+| **type** | `entry` |
+| **properties** | `["heavy_door", "open_sky"]` |
+
+**Description:**
+A colossal archway, split down its centre by some ancient cataclysm, frames the entrance to a ruined city. Rubble spills outward like the city is trying to disgorge its own bones. Wind funnels through the gap, carrying the faint tang of rust and something older — something burnt.
+
+**NPCs:** None (safe entry room)
+**Loot:** None
+**Hazards:** None
+
+---
+
+#### 2. Rubble-Choked Boulevard
+| Field | Value |
+|---|---|
+| **slug** | `rubble-boulevard` |
+| **name** | Rubble-Choked Boulevard |
+| **type** | `corridor` |
+| **properties** | `["open_sky", "rubble"]` |
+
+**Description:**
+A once-grand boulevard stretches east, its paving stones heaved upward by roots that died centuries ago. Collapsed facades lean drunkenly against one another, forming accidental tunnels of broken stone. Glass crunches underfoot no matter how carefully you step.
+
+**NPCs:** Gutterspawn ×2–3
+**Loot:** 1× crate (`bent-rebar` or `gutterspawn-fang`)
+**Hazards:** `unstable_rubble` — loud movement may trigger minor rockfall (1–3 damage)
+
+---
+
+#### 3. Overwatch Tower
+| Field | Value |
+|---|---|
+| **slug** | `overwatch-tower` |
+| **name** | Overwatch Tower |
+| **type** | `dead_end` |
+| **properties** | `["elevated", "open_sky"]` |
+
+**Description:**
+A spiralling stair of crumbling stone leads up through the shell of a watchtower. Half the upper floor has sheered away, offering a vertiginous view over the rooftops of the dead city. Wind howls through the gap. Someone has scratched tally marks into the wall — hundreds of them — in neat, obsessive rows.
+
+**NPCs:** None (eerily empty — tension room)
+**Loot:** 1× corpse (`charred-street-map` 20% / `tarnished-medallion` 80%)
+**Hazards:** `unstable_floor` — lingering too long risks collapse (environmental warning after 3 ticks)
+
+---
+
+#### 4. The Hollow Market
+| Field | Value |
+|---|---|
+| **slug** | `hollow-market` |
+| **name** | The Hollow Market |
+| **type** | `junction` |
+| **properties** | `["open_sky", "large_space"]` |
+
+**Description:**
+A sunken plaza opens up where three streets converge, littered with the skeletal frames of market stalls. Faded awnings hang in tatters. A dry fountain at the centre holds a statue with no face — whether eroded or deliberately defaced, it's impossible to tell. Echoes carry strangely here; sounds from every adjacent street pool in this space.
+
+**NPCs:** Rubble Scavenger ×1–2
+**Loot:** 2× crate (`bent-rebar` 50%, `scavenger-shiv` 20%, `tarnished-medallion` 30%)
+**Hazards:** None (but sound propagation is amplified — actions here are audible from adjacent rooms)
+
+---
+
+#### 5. Broken Sanctuary
+| Field | Value |
+|---|---|
+| **slug** | `broken-sanctuary` |
+| **name** | Broken Sanctuary |
+| **type** | `chamber` |
+| **properties** | `["heavy_door", "enclosed"]` |
+
+**Description:**
+Stone columns, cracked but standing, hold up what remains of a vaulted ceiling. This was a place of worship or governance — the distinction has been erased by time. An altar of dark stone dominates the far wall, its surface scarred by claw marks. The air smells of old incense and fresh blood.
+
+**NPCs:** Hollow Stalker ×1
+**Loot:** 1× altar (`rubble-crusted-vest` 40%, `tarnished-medallion` 40%, `sanctuary-key` 20%)
+**Hazards:** None
+
+---
+
+#### 6. Whispering Alley
+| Field | Value |
+|---|---|
+| **slug** | `whispering-alley` |
+| **name** | Whispering Alley |
+| **type** | `corridor` |
+| **properties** | `["narrow", "enclosed"]` |
+
+**Description:**
+The buildings press close here, their upper storeys nearly touching overhead. Every sound — your breath, your footfall, the distant crack of settling stone — bounces between the walls until it sounds like a crowd of invisible speakers. Debris forms knee-high barricades at irregular intervals. Something has been dragging things through here.
+
+**NPCs:** Gutterspawn ×2–4
+**Loot:** 1× corpse (`gutterspawn-fang` 60%, `scavenger-shiv` 25%, `sanctuary-key` 15%)
+**Hazards:** None
+
+---
+
+#### 7. Collapsed Tenement
+| Field | Value |
+|---|---|
+| **slug** | `collapsed-tenement` |
+| **name** | Collapsed Tenement |
+| **type** | `dead_end` |
+| **properties** | `["enclosed", "rubble"]` |
+
+**Description:**
+What was once a three-storey dwelling has pancaked into a single compressed layer of shattered timber, bent pipes, and pulverised plaster. A narrow gap leads into a pocket of relative stability — a room-sized void where the floors above wedged against each other instead of falling. It smells like a den. It smells occupied.
+
+**NPCs:** Rubble Scavenger ×2–3
+**Loot:** 1× chest (`scavenger-shiv` 30%, `rubble-crusted-vest` 30%, `tarnished-medallion` 40%)
+**Hazards:** `unstable_rubble` — combat here risks minor cave-in (1–3 damage per tick to all combatants, 30% chance per combat tick)
+
+---
+
+#### 8. Dustfall Extraction
+| Field | Value |
+|---|---|
+| **slug** | `dustfall-extraction` |
+| **name** | Dustfall Extraction |
+| **type** | `extraction` |
+| **properties** | `["open_sky", "large_space"]` |
+
+**Description:**
+A wide intersection where the ruins fall back, leaving an unexpected expanse of open sky. Dust drifts down endlessly from the crumbling buildings above, catching light like grey snow. A half-collapsed pedestrian bridge arches overhead — beneath it, the ground has been swept clean in a perfect circle. This is where the shard thins. This is where you leave.
+
+**NPCs:** Rubble Scavenger ×0–1 (light patrol)
+**Loot:** None (extraction point — keep it clean)
+**Hazards:** None (but extraction ritual generates noise, drawing creatures from adjacent rooms)
+
+---
+
+#### 9. The Sunken Square
+| Field | Value |
+|---|---|
+| **slug** | `sunken-square` |
+| **name** | The Sunken Square |
+| **type** | `junction` |
+| **properties** | `["water", "enclosed"]` |
+
+**Description:**
+The street dips sharply here, as if the earth itself sagged under the weight of ruin. Stagnant water collects in the depression, ankle-deep and dark. The walls of surrounding buildings rise like the sides of a well. Scratch marks line the stone at water level — long, parallel gouges, ascending from somewhere below.
+
+**NPCs:** Hollow Stalker ×1
+**Loot:** 1× crate (submerged — `tarnished-medallion` 50%, `bent-rebar` 30%, `rubble-crusted-vest` 20%)
+**Hazards:** `standing_water` — movement speed reduced, agility checks at -1 in combat
+
+---
+
+#### 10. The Ratways
+| Field | Value |
+|---|---|
+| **slug** | `the-ratways` |
+| **name** | The Ratways |
+| **type** | `corridor` |
+| **properties** | `["enclosed", "narrow", "water"]` |
+
+**Description:**
+A drainage tunnel, barely tall enough to stand in, runs beneath the square. The ceiling drips steadily. Gutterspawn nests line the walls — tangles of cloth, bone, and wire — most of them empty. Most. The tunnel slopes downward into darkness, and from below comes a sound like stone grinding against stone.
+
+**NPCs:** Gutterspawn ×3–4
+**Loot:** 1× nest-pile (`gutterspawn-fang` ×2 70%, `tarnished-medallion` 30%)
+**Hazards:** `low_ceiling` — no overhead attacks; `water` — sound propagates further
+
+---
+
+#### 11. The Charnel Pit
+| Field | Value |
+|---|---|
+| **slug** | `charnel-pit` |
+| **name** | The Charnel Pit |
+| **type** | `boss` |
+| **properties** | `["cavern", "enclosed"]` |
+
+**Description:**
+The tunnel opens into a vast pit — the foundations of a collapsed building, ripped open like a wound. Bones and rubble are fused into the walls. At the centre, something enormous shifts in the debris, rebar-spiked and concrete-skinned, as if the building itself refused to die and instead became something worse. The air vibrates with each of its slow, grinding breaths.
+
+**NPCs:** The Collapsed One ×1 (boss)
+**Loot:** 1× boss chest (spawns on kill — `charred-street-map` 30%, `scavenger-shiv` 20%, `rubble-crusted-vest` 25%, `tarnished-medallion` 25%)
+**Hazards:** `seismic_tremor` — boss ability: 30% chance per 3 ticks to shake the room (2–5 damage to all players, interrupts channelling)
+
+---
+
+## 2. EXIT MAP
+
+All exits are bidirectional unless noted.
+
+| From Room | Direction | To Room | Flags |
+|---|---|---|---|
+| `shattered-gate` | east | `rubble-boulevard` | — |
+| `shattered-gate` | west | **Refuge / Hearth** | `cross_zone: true`, `target_zone_slug: refuge`, `target_room_slug: hearth` |
+| `rubble-boulevard` | west | `shattered-gate` | — |
+| `rubble-boulevard` | east | `hollow-market` | — |
+| `rubble-boulevard` | up | `overwatch-tower` | — |
+| `overwatch-tower` | down | `rubble-boulevard` | — |
+| `hollow-market` | west | `rubble-boulevard` | — |
+| `hollow-market` | north | `broken-sanctuary` | — |
+| `hollow-market` | south | `whispering-alley` | — |
+| `broken-sanctuary` | south | `hollow-market` | — |
+| `broken-sanctuary` | east | `sunken-square` | `locked: true` (requires `sanctuary-key`) |
+| `sunken-square` | west | `broken-sanctuary` | `locked: true` (requires `sanctuary-key`) |
+| `whispering-alley` | north | `hollow-market` | — |
+| `whispering-alley` | east | `collapsed-tenement` | — |
+| `whispering-alley` | south | `dustfall-extraction` | — |
+| `collapsed-tenement` | west | `whispering-alley` | — |
+| `dustfall-extraction` | north | `whispering-alley` | — |
+| `dustfall-extraction` | east | `sunken-square` | — |
+| `sunken-square` | west | `dustfall-extraction` | — |
+| `sunken-square` | down | `the-ratways` | `hidden: true` (discovered via search/perception check) |
+| `the-ratways` | up | `sunken-square` | — |
+| `the-ratways` | south | `charnel-pit` | — |
+| `charnel-pit` | north | `the-ratways` | — |
+
+**Key doors:** Broken Sanctuary ↔ Sunken Square requires the `sanctuary-key` (found on Hollow Stalkers or in Whispering Alley corpse loot).
+
+**Hidden exit:** Sunken Square → down → The Ratways. The scratch marks in the room description are the hint. Discoverable via `search` command or high Awareness skill.
+
+---
+
+## 3. CREATURES
+
+### 3a. Gutterspawn
+
+| Field | Value |
+|---|---|
+| **type (slug)** | `gutterspawn` |
+| **name** | Gutterspawn |
+| **tier** | 1 |
+| **behavior** | `skulker` (hit-and-flee) |
+
+**Description:** Bloated, rat-like things the size of a large dog, with too many legs and mouths full of needle teeth. They nest in packs in the drainage tunnels and alleyways, emerging to feed on anything that stops moving. Individually pathetic. In numbers, lethal.
+
+**Stats:**
+
+| Stat | Value |
+|---|---|
+| maxHp | 15 |
+| attack | 5 |
+| defence | 1 |
+| armour | 0 |
+| agility | 7 |
+
+**Spawn Rules:**
+
+| Field | Value |
+|---|---|
+| minCount | 2 |
+| maxCount | 4 |
+| preferredRoomTypes | `["corridor", "dead_end"]` |
+| forbiddenRoomTypes | `["entry", "extraction", "boss"]` |
+| idleTicksMin | 3 |
+| idleTicksMax | 6 |
+| fleeThreshold | 0.3 |
+
+**Loot Table:**
+
+| itemId | name | weight | description | dropWeight |
+|---|---|---|---|---|
+| `gutterspawn-fang` | Gutterspawn Fang | 0.2 | A yellowed, hollow fang, still wet with venom. | 80 |
+| `bent-rebar` | Bent Rebar | 3 | A corroded length of rebar. Barely a weapon. | 15 |
+| *(nothing)* | — | — | — | 5 |
+
+---
+
+### 3b. Rubble Scavenger
+
+| Field | Value |
+|---|---|
+| **type (slug)** | `rubble-scavenger` |
+| **name** | Rubble Scavenger |
+| **tier** | 1 |
+| **behavior** | `berserker` (strike-heavy) |
+
+**Description:** Gaunt, hunched humanoids wrapped in rags and scavenged armour. Whether they were once people or something that learned to walk like people is unclear. They fashion crude weapons from debris and fight with desperate, cornered-animal fury. Their eyes are empty but their hands never stop grasping.
+
+**Stats:**
+
+| Stat | Value |
+|---|---|
+| maxHp | 35 |
+| attack | 8 |
+| defence | 3 |
+| armour | 2 |
+| agility | 4 |
+
+**Spawn Rules:**
+
+| Field | Value |
+|---|---|
+| minCount | 1 |
+| maxCount | 3 |
+| preferredRoomTypes | `["junction", "dead_end", "chamber"]` |
+| forbiddenRoomTypes | `["entry", "boss"]` |
+| idleTicksMin | 4 |
+| idleTicksMax | 8 |
+| fleeThreshold | 0.15 |
+
+**Loot Table:**
+
+| itemId | name | weight | description | dropWeight |
+|---|---|---|---|---|
+| `bent-rebar` | Bent Rebar | 3 | A corroded length of rebar. Barely a weapon. | 50 |
+| `tarnished-medallion` | Tarnished Medallion | 0.5 | An ornate disc of dull metal, engraved with a sigil no one remembers. | 25 |
+| `scavenger-shiv` | Scavenger's Shiv | 2 | A blade of broken glass bound with wire. Crude but sharp. | 15 |
+| *(nothing)* | — | — | — | 10 |
+
+---
+
+### 3c. Hollow Stalker
+
+| Field | Value |
+|---|---|
+| **type (slug)** | `hollow-stalker` |
+| **name** | Hollow Stalker |
+| **tier** | 1–2 |
+| **behavior** | `skulker` (ambush, hit-and-disengage) |
+
+**Description:** Tall, emaciated figures that move in absolute silence until the moment they strike. Their skin is grey and taut, their features erased as if sanded smooth. They cling to walls and ceilings in collapsed structures, dropping on prey from above. When they kill, they drag the corpse away and are not seen eating — but the corpse is always found empty.
+
+**Stats:**
+
+| Stat | Value |
+|---|---|
+| maxHp | 60 |
+| attack | 13 |
+| defence | 5 |
+| armour | 4 |
+| agility | 6 |
+
+**Spawn Rules:**
+
+| Field | Value |
+|---|---|
+| minCount | 1 |
+| maxCount | 2 |
+| preferredRoomTypes | `["chamber", "junction"]` |
+| forbiddenRoomTypes | `["entry", "extraction", "corridor"]` |
+| idleTicksMin | 5 |
+| idleTicksMax | 12 |
+| fleeThreshold | 0.15 |
+
+**Loot Table:**
+
+| itemId | name | weight | description | dropWeight |
+|---|---|---|---|---|
+| `tarnished-medallion` | Tarnished Medallion | 0.5 | An ornate disc of dull metal. They collect these — no one knows why. | 40 |
+| `sanctuary-key` | Sanctuary Key | 0.3 | A heavy iron key, corroded but intact. Its teeth are shaped like no modern lock. | 15 |
+| `scavenger-shiv` | Scavenger's Shiv | 2 | Taken from a scavenger that won't be needing it. | 20 |
+| *(nothing)* | — | — | — | 25 |
+
+---
+
+### 3d. The Collapsed One (Boss)
+
+| Field | Value |
+|---|---|
+| **type (slug)** | `the-collapsed-one` |
+| **name** | The Collapsed One |
+| **tier** | 2 |
+| **behavior** | `guardian` (slow, devastating, holds ground) |
+
+**Description:** It was a building once — or it was something that was trapped when the building fell. Now the distinction is academic. Rebar juts from its hunched back like broken ribs. Its skin is powdered concrete and its fists are foundation stones. It moves with terrible, grinding slowness, but when it swings, walls crack. It does not speak. It does not flee. It does not stop.
+
+**Stats:**
+
+| Stat | Value |
+|---|---|
+| maxHp | 150 |
+| attack | 18 |
+| defence | 8 |
+| armour | 10 |
+| agility | 1 |
+
+**Spawn Rules:**
+
+| Field | Value |
+|---|---|
+| minCount | 1 |
+| maxCount | 1 |
+| preferredRoomTypes | `["boss"]` |
+| forbiddenRoomTypes | `["entry", "extraction", "corridor", "junction", "dead_end", "chamber"]` |
+| idleTicksMin | 8 |
+| idleTicksMax | 15 |
+| fleeThreshold | 0 |
+
+**Loot Table:**
+
+| itemId | name | weight | description | dropWeight |
+|---|---|---|---|---|
+| `rubble-crusted-vest` | Rubble-Crusted Vest | 5 | Masonry fragments fused to leather. Heavy, but it stops a blade. | 30 |
+| `scavenger-shiv` | Scavenger's Shiv | 2 | Lodged in its chest. Previous challenger's contribution. | 25 |
+| `charred-street-map` | Charred Street Map | 0.5 | Scorched but legible. Shows routes through the Warrens. | 20 |
+| `tarnished-medallion` | Tarnished Medallion | 0.5 | Embedded in its concrete hide. Pried loose. | 25 |
+
+---
+
+## 4. ITEMS
+
+### 4a. Bent Rebar (Scrap Weapon)
+
+| Field | Value |
+|---|---|
+| **itemId** | `bent-rebar` |
+| **name** | Bent Rebar |
+| **type** | `weapon` |
+| **tier** | `scrap` |
+| **weight** | 3 |
+| **allowedSlots** | `["weapon"]` |
+| **durability** | 20 |
+
+**Description:** A corroded length of rebar, wrenched from a collapsed wall. One end is bent into a rough hook. It's heavy, slow, and ugly — but it's better than bare hands, and you'll find a hundred of them in these ruins.
+
+**Stats (JSONB):**
+```json
+{ "damage": 4, "speed": 0.8 }
+```
+
+---
+
+### 4b. Scavenger's Shiv (Common Weapon)
+
+| Field | Value |
+|---|---|
+| **itemId** | `scavenger-shiv` |
+| **name** | Scavenger's Shiv |
+| **type** | `weapon` |
+| **tier** | `common` |
+| **weight** | 2 |
+| **allowedSlots** | `["weapon"]` |
+| **durability** | 30 |
+
+**Description:** A shard of plate glass, its base wrapped in copper wire for a grip. The edge is wickedly sharp but fragile. The scavengers of the Warrens fashion these by the dozen — they break often, so they make many.
+
+**Stats (JSONB):**
+```json
+{ "damage": 7, "speed": 1.2 }
+```
+
+---
+
+### 4c. Rubble-Crusted Vest (Common Armour)
+
+| Field | Value |
+|---|---|
+| **itemId** | `rubble-crusted-vest` |
+| **name** | Rubble-Crusted Vest |
+| **type** | `armour` |
+| **tier** | `common` |
+| **weight** | 5 |
+| **allowedSlots** | `["chest"]` |
+| **durability** | 40 |
+
+**Description:** A padded leather vest with chunks of masonry and tile lashed to its surface. Improvised but effective — the Warrens teach you to armour yourself with whatever the ruins provide. Weighs more than proper plate but costs nothing but sweat.
+
+**Stats (JSONB):**
+```json
+{ "armour": 3 }
+```
+
+---
+
+### 4d. Tarnished Medallion (Common Material)
+
+| Field | Value |
+|---|---|
+| **itemId** | `tarnished-medallion` |
+| **name** | Tarnished Medallion |
+| **type** | `material` |
+| **tier** | `common` |
+| **weight** | 0.5 |
+| **allowedSlots** | `[]` |
+| **durability** | — |
+
+**Description:** An ornate disc of tarnished metal, stamped with a sigil that might once have been a face or a sun or a wheel. The civilisation that minted these is dust, but the metal still has value. Merchants in the Refuge pay decent coin for pre-collapse artefacts.
+
+**Stats (JSONB):**
+```json
+{ "vendor_value": 15 }
+```
+
+---
+
+### 4e. Gutterspawn Fang (Scrap Material)
+
+| Field | Value |
+|---|---|
+| **itemId** | `gutterspawn-fang` |
+| **name** | Gutterspawn Fang |
+| **type** | `material` |
+| **tier** | `scrap` |
+| **weight** | 0.2 |
+| **allowedSlots** | `[]` |
+| **durability** | — |
+
+**Description:** A hollow, yellowed fang pulled from a gutterspawn's maw. The interior canal still glistens with venom. Alchemists and crafters use these for poison extraction or as improvised needles. Not worth much individually, but you'll have pockets full of them.
+
+**Stats (JSONB):**
+```json
+{ "vendor_value": 3 }
+```
+
+---
+
+### 4f. Sanctuary Key (Common Key)
+
+| Field | Value |
+|---|---|
+| **itemId** | `sanctuary-key` |
+| **name** | Sanctuary Key |
+| **type** | `key` |
+| **tier** | `common` |
+| **weight** | 0.3 |
+| **allowedSlots** | `[]` |
+| **durability** | — |
+
+**Description:** A heavy iron key, its shaft thick with verdigris but its teeth still sharp. It fits the reinforced door between the Broken Sanctuary and the Sunken Square — a shortcut through the ruins that someone once locked for a reason.
+
+**Stats (JSONB):**
+```json
+{ "unlocks": "broken-sanctuary-east" }
+```
+
+---
+
+### 4g. Charred Street Map (Sturdy Tool — Rare)
+
+| Field | Value |
+|---|---|
+| **itemId** | `charred-street-map` |
+| **name** | Charred Street Map |
+| **type** | `tool` |
+| **tier** | `sturdy` |
+| **weight** | 0.5 |
+| **allowedSlots** | `[]` |
+| **durability** | — |
+| **soulbound** | `false` |
+
+**Description:** A fragment of vellum, edges blackened by fire, showing a street grid that matches the ruins around you. Landmarks are annotated in a precise, alien script. When consulted, it reveals the layout of rooms you haven't yet visited — including passages others might miss. The rare find that makes a run profitable even before you swing a blade.
+
+**Stats (JSONB):**
+```json
+{ "effect": "reveal_zone_map", "uses": 1, "vendor_value": 40 }
+```
+
+---
+
+## 5. ENCOUNTER FLOW & PACING
+
+### Intended Player Experience
+
+1. **Shattered Gate** — Safe arrival. Read the scene, orient yourself. The silence is the first threat.
+2. **Rubble Boulevard** — First gutterspawn encounter. Easy, but teaches pack combat. Crate as tutorial loot.
+3. **Overwatch Tower** (optional) — Risk/reward dead end. Good loot (rare map chance) but floor collapse hazard. Environmental storytelling via tally marks.
+4. **Hollow Market** — Central junction. First rubble scavenger encounter. Three exits create decision paralysis — north toward the locked sanctuary path, or south into the alleys?
+5. **Broken Sanctuary** (north path) — Hollow stalker ambush. Dangerous solo. The locked east door is visible but requires the key, creating a reason to explore further or return later.
+6. **Whispering Alley** (south path) — Gutterspawn gauntlet. Narrow corridors amplify sound. The corpse loot can include the sanctuary key (alternate source).
+7. **Collapsed Tenement** (dead end) — Scavenger den. Hazardous combat space (cave-in risk). Good loot chest as reward for the dead-end exploration.
+8. **Dustfall Extraction** — The way out. Light patrols. The extraction ritual generates noise — creatures from Whispering Alley and Sunken Square may respond.
+9. **Sunken Square** — Second hollow stalker. The hidden exit rewards searching. Standing water adds tactical complexity.
+10. **The Ratways** (hidden) — Gutterspawn nest. Tense, claustrophobic. Signals the boss ahead via sound design (grinding stone).
+11. **The Charnel Pit** (boss) — The Collapsed One. The zone's climax. High risk, strong loot. Seismic tremor mechanic prevents passive play.
+
+### Difficulty Curve
+- **Rooms 1-3:** Tier 1 introductory. Gutterspawn are cannon fodder.
+- **Rooms 4-7:** Tier 1 standard. Rubble scavengers and gutterspawn packs. First hollow stalker is a difficulty spike.
+- **Rooms 8-9:** Tier 1-2 transition. Second hollow stalker. Environmental hazards layer onto combat.
+- **Rooms 10-11:** Tier 2. Gutterspawn swarm + boss. The Collapsed One requires kiting (low agility) or a party.
+
+### Sound Propagation Notes
+- The Hollow Market's `large_space` property means combat there echoes into Boulevard, Sanctuary, and Alley.
+- The Ratways' `water` property carries sound down to the Charnel Pit — the boss may be alert when you arrive.
+- Whispering Alley's `narrow` property creates echo — creatures here respond quickly to noise.
+- Extraction ritual at Dustfall Extraction is audible in Whispering Alley and Sunken Square.
+
+---
+
+## 6. LORE HOOKS
+
+- **The Tally Marks (Overwatch Tower):** Who was counting? What were they counting? Days? Kills? Arrivals? Future content can answer this with a journal item or NPC.
+- **The Faceless Statue (Hollow Market):** Deliberate defacement suggests the civilisation fell to internal conflict, not external invasion. Connects to broader Ellmud lore about pre-collapse factions.
+- **The Medallions:** The Hollow Stalkers collect tarnished medallions. They don't use them. They don't trade them. Future quest: figure out why. Possible connection to the Collapsed One or to a deeper zone beneath the Warrens.
+- **The Collapsed One:** Is it a creature that merged with debris, or a building that became animate? The answer matters for future zone design — if structures can come alive in shards, that changes everything.
+- **The Locked Sanctuary:** What was being kept out? Or kept in? The scratch marks in the Sunken Square descend — something was climbing up from below.
+
+---
+
+*End of design document. Ready for implementation.*
+# Equipment Silhouette + Shared ItemTooltip Component
+
+**Date:** 2026-03-28  
+**Agent:** Regis (Frontend Developer)  
+**Status:** ✅ Implemented  
+
+## Context
+
+Built a visual equipment slot diagram for the ShardExploration sidebar, allowing players to see their equipped gear at a glance without opening the full inventory modal. Created a reusable ItemTooltip component that can be shared across multiple UI elements.
+
+## Decision
+
+### 1. Abstract Slot Diagram (Not Body Outline)
+
+Chose a **compact grid layout** showing equipment slots arranged logically:
+```
+       [Head]
+  [Weapon] [Chest] [Offhand]
+       [Hands]
+       [Legs]
+       [Feet]
+  [Ring1] [Amulet] [Ring2]
+```
+
+**Rationale:**
+- More space-efficient than pixel-art body silhouette
+- Clearer slot identification with labels
+- Easier to scan visually in sidebar
+- Matches MUD text-first aesthetic
+
+### 2. Reusable ItemTooltip Component
+
+Created standalone `ItemTooltip.tsx` that can be used by:
+- EquipmentSilhouette (current)
+- CombinedStashLoadout (future enhancement)
+- Any future item display context
+
+**Features:**
+- Viewport-aware positioning (prevents overflow)
+- Tier-colored border and glow effect
+- Shows: name, type, slot, weight, description, tier badge
+- Ready for stats display when server provides them
+
+### 3. Tier Color Standardization
+
+Both components use identical tier color mapping:
+- scrap: `#808080` (gray)
+- common: `#d4d4d4` (white)
+- sturdy: `#4ade80` (green)
+- refined: `#60a5fa` (blue)
+- masterwork: `#c084fc` (purple)
+- anomalous: `#fbbf24` (gold)
+
+These match the existing tier colors throughout the client codebase.
+
+### 4. Sidebar Placement
+
+Positioned between **status effects** and **quick inventory** in the right sidebar.
+
+**Rationale:**
+- Status effects → Equipment → Inventory forms a logical flow
+- Player condition → What they're wearing → What they're carrying
+- Equipment is semi-static (changes less frequently than inventory)
+
+### 5. Stats Placeholder
+
+ItemTooltip shows `?` for weapon/armour stats since `DisplayItem` doesn't include computed stats.
+
+**Future Enhancement Needed:**
+- Server must add computed stats (damage/speed/armour) to `DisplayItem` message
+- Or create separate stat lookup endpoint
+- Tooltip code already structured to display stats when available
+
+## Implementation Files
+
+**Created:**
+- `packages/client/src/components/ItemTooltip.tsx`
+- `packages/client/src/components/EquipmentSilhouette.tsx`
+
+**Modified:**
+- `packages/client/src/pages/ShardExploration.tsx` — Sidebar integration
+- `packages/client/src/styles/theme.css` — Equipment + tooltip CSS
+
+## Technical Details
+
+### Layout Grid Definition
+```typescript
+const LAYOUT_GRID: (EquipmentSlotType | null)[][] = [
+  [null, 'head', null],
+  ['weapon', 'chest', 'offhand'],
+  [null, 'hands', null],
+  [null, 'legs', null],
+  [null, 'feet', null],
+  ['ring1', 'amulet', 'ring2'],
+];
+```
+
+### Tooltip Positioning Algorithm
+1. Default: mouse + 12px offset (down-right)
+2. If overflow right edge → mouse - width - 12px (left)
+3. If overflow bottom edge → mouse - height - 12px (up)
+4. Clamp to viewport with 8px minimum margin
+
+### CSS Classes
+- `.equipment-grid`, `.equipment-row`, `.equipment-cell`
+- `.equipment-slot-label` (empty slots)
+- `.equipment-item-name` (equipped items)
+- `.item-tooltip` with fade-in animation
+
+## MUD Aesthetic Compliance
+
+✅ Dark backgrounds with subtle borders  
+✅ Monospace fonts for equipment names  
+✅ Tier-colored glows on equipped items  
+✅ Dotted borders for empty slots  
+✅ Compact design for sidebar space constraints  
+✅ Text-primary with ANSI color heritage  
+
+## Testing Considerations
+
+**Manual Testing:**
+- [ ] Tooltip appears on equipment hover
+- [ ] Tooltip repositions to avoid viewport overflow
+- [ ] Tier colors match across components
+- [ ] Empty slots show dotted borders
+- [ ] Item name truncation works correctly
+
+**Future Automated Tests:**
+- Component renders with empty loadout
+- Component renders with full loadout
+- Tooltip shows correct item details
+- Tier colors applied correctly
+
+## Cross-Team Dependencies
+
+**Drizzt (Engine):**
+- Future: Add computed stats to `DisplayItem` for tooltip display
+- Current: LOADOUT_UPDATE message already flows correctly
+
+**Minsc (Content/Testing):**
+- Can write tests for equipment silhouette rendering
+- Tooltip positioning logic may need viewport mock
+
+## Decision Rationale
+
+This implementation prioritizes:
+1. **Space efficiency** — Sidebar real estate is limited
+2. **Reusability** — ItemTooltip can be used elsewhere
+3. **MUD aesthetic** — Matches existing UI patterns
+4. **Extensibility** — Ready for stats when server provides them
+5. **Accessibility** — Semantic HTML, hover states
+
+The abstract slot diagram scales better than a body outline and provides clearer information density for the MUD-style text interface.
+### Zone Exit Update API + Designer Enhancements
+**By:** Regis (Frontend Dev)
+**Date:** 2026-03-28
+
+**What**
+Added `PUT /admin/api/zones/exits/:id` endpoint and `updateExit` method to `ZoneRepository` interface (both Pg and InMemory implementations). Client-side: `updateExit`, `getOrphanedExits`, `removeOrphanedExits` wrappers in `zone-api.ts`.
+
+Portal exits now render with cyan/teal (#06b6d4) color and ⟐ glyph in the SVG canvas. Orphaned exits get dashed red stroke highlighting plus a toolbar scan/cleanup workflow. Exit selection opens a full edit panel (direction, to-room, locked, hidden, portal fields).
+
+**Why**
+Exits were select-and-delete only — no way to edit properties after creation. Portal exits were visually identical to intra-zone exits. Orphaned exit cleanup API existed server-side but had no UI to invoke it.
+
+**Impact**
+- `ZoneRepository` interface gained `updateExit` — any custom implementations need to add it
+- No DB migration needed — `zone_exits` table already has all columns
+- Portal color changed from purple (#7B4FA0) to cyan (#06b6d4) to distinguish from feature rooms
+# Status Panel Wireup — Styling Pattern Decision
+
+**By:** Regis (Frontend Dev)
+**Date:** 2026-03-28
+
+## What
+
+Status bars (HP, stamina) and status effect pills use dedicated CSS classes in `theme.css` rather than Tailwind utility-only approach. CSS variables `--hp-healthy`, `--hp-wounded`, `--hp-critical`, `--stamina` added to `:root`.
+
+## Why
+
+- Keeps bar colors consistent with game theme and easy to adjust in one place
+- Dynamic bar width is the only inline style (per project constraint)
+- Status effect classification uses name-based keyword matching since `StatusEffect` has no `type` field — if the server adds an effect type field later, the classifier should be updated
+
+## Impact
+
+- **Drizzt:** When stamina system is implemented server-side, the stamina bar is already wired — just send non-zero values in `PLAYER_STATE` and the UI will reflect it automatically
+- **Content/Testing:** Status effect keyword lists live in `ShardExploration.tsx` (`DEBUFF_KEYWORDS`, `BUFF_KEYWORDS`). New effect names should be added to the appropriate list for correct coloring.
+# Decision: Z-Level Floor Switching Architecture
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2025-07-23  
+**Status:** Implemented
+
+## Context
+
+The layout engine already computes z-levels from up/down exits. The map rendered all rooms regardless of z, making multi-floor zones cluttered and hard to read.
+
+## Decision
+
+### Floor filtering is client-side, stateful, per-component
+
+- `MapRenderer` owns its own `currentFloor` state (defaults to current room's z)
+- `FullMapOverlay` manages floor state separately so it can be reset when opened
+- `ZoneDesigner` has its own floor state in the admin canvas
+- `FloorSelector` is a stateless controlled component — consumers own the state
+
+### Inter-floor exits are visible as ghost connections
+
+When viewing floor N, if an exit connects floor N to floor M, both the edge and the off-floor endpoint are shown:
+- Edge: dashed purple (#a78bfa) with ↑/↓ indicator
+- Off-floor room: 30% opacity ghost node, clickable to switch floors
+
+### Single-floor zones unchanged
+
+`FloorSelector` returns `null` when `minFloor === maxFloor`. No new UI elements appear for the common single-floor case.
+
+### Color constants
+
+New constants in `packages/client/src/components/map/constants.ts`:
+- `INTER_FLOOR_STROKE` = `#a78bfa`
+- `INTER_FLOOR_DASH` = `'4 3'`
+- `GHOST_FLOOR_OPACITY` = 0.3
+
+### Keyboard shortcuts
+
+`[` = floor down, `]` = floor up. Only active when not in an input field.
+
+## Files Changed
+
+- `packages/client/src/components/map/constants.ts` — new color constants
+- `packages/client/src/components/map/FloorSelector.tsx` — **new** shared component
+- `packages/client/src/components/map/useFloorFilter.ts` — **new** floor bounds + edge filtering utils
+- `packages/client/src/components/map/ExitEdge.tsx` — inter-floor styling prop
+- `packages/client/src/components/map/MapRenderer.tsx` — floor state, filtering, ghost layers
+- `packages/client/src/components/map/FullMapOverlay.tsx` — floor selector in header
+- `packages/client/src/components/map/MinimapWidget.tsx` — conditional floor selector
+- `packages/client/src/pages/admin/ZoneDesigner.tsx` — floor state, filtered rendering, inter-floor ghost rooms
+
+---
+
+## 2026-03-28T17:33:19Z: Pan uses SVG viewBox offset, not CSS transform
+
+**Author:** Regis (Frontend)  
+**Date:** 2026-03-28  
+**Status:** Implemented
+
+**Context**
+
+The Zone Designer needed pan support alongside the existing zoom (which uses viewBox scaling). Two approaches were possible:
+1. CSS transform on the SVG or a wrapper div
+2. Offset the SVG viewBox coordinates
+
+**Decision**
+
+Pan is implemented as a viewBox offset (`panX`/`panY` added to the zoom-adjusted origin). This keeps pan and zoom in the same coordinate space — no layering of CSS transforms on top of viewBox manipulations, which avoids coordinate conversion bugs when both are active.
+
+**Consequences**
+
+- Pan and zoom compose naturally since both modify the same viewBox
+- Mouse-to-SVG coordinate conversion is straightforward (one scale factor from `getBoundingClientRect`)
+- Room click handlers, exit rendering, and context menus are unaffected since they work in SVG coordinate space
+- If we later add zoom-to-cursor, the shared viewBox approach makes that simpler
+# Decision: Direction-Biased Room Layout in Zone Designer
+
+**Date:** 2026-03-27  
+**Decider:** Regis (Frontend Dev)  
+**Status:** Implemented
+
+## Problem
+
+The zone designer was placing rooms in visually misleading positions. When a room's ideal position (determined by exit direction) was occupied, the layout engine used a direction-unaware spiral search to find the nearest free cell. This caused rooms with cardinal exits (east, west, north, south) to be placed at incorrect angles — for example, an "east" exit might place the target room north-east, south, or even west of the source, depending on which cell was free first.
+
+**Example:** "blighted-courtyard" with an east exit might appear diagonal from its neighbor even though the exit is cardinal.
+
+## Solution
+
+Replaced the plain spiral search with a direction-biased algorithm for cardinal exits:
+
+1. **Added `findNearestDirectional()`** — searches in concentric rings by Manhattan distance (same as before) but within each ring, uses a dot product score to prefer cells aligned with the exit direction.
+
+   - For an "east" exit (dx=1, dy=0), cells further east get higher scores.
+   - For a "north" exit (dx=0, dy=-1), cells further north get higher scores.
+
+2. **Updated BFS** — the main layout loop now calls `findNearestDirectional(idealX, idealY, offset.dx, offset.dy, occupied)` instead of `findNearestUnoccupied(idealX, idealY, occupied)` when placing cardinal-direction neighbors (~line 387 in `computeLayout.ts`).
+
+3. **Kept `findNearestUnoccupied()`** — still used for disconnected subgraph placement. No breaking changes to that code path.
+
+## Impact
+
+- **Zone designer UI:** Rooms now appear in visually correct positions relative to their exits. Cardinal exits produce straight lines, not diagonals.
+- **Grid clusters:** Already placed as coherent blocks; this fix improves the linear/tree-shaped approach areas connecting to grids.
+- **Tests:** All 14 existing `computeLayout.test.ts` tests still pass. No test expectations needed updating because the old tests didn't rely on the specific non-directional spiral behavior.
+
+## Files Modified
+
+- `packages/client/src/map/computeLayout.ts`
+  - Added `findNearestDirectional()` function (37 lines)
+  - Updated cardinal exit placement to use direction-biased search (1-line change in BFS loop)
+
+## Build/Test Results
+
+- **Build:** ✅ Clean (`npm run build`)
+- **Tests:** ✅ 14/14 passed (`packages/client/src/map/__tests__/computeLayout.test.ts`)
+- **Full client suite:** ✅ 125/125 passed
+
+## Rationale
+
+The layout engine is a pure function shared by both the admin zone designer and the player minimap. Visual accuracy is critical for zone design — designers need to see rooms where they logically belong. The direction-biased search maintains the "nearest free cell" property (minimal displacement) while respecting the semantic meaning of exit directions.
+
+This is a targeted fix: grid clusters already work correctly, and disconnected subgraphs don't need directional bias. The change only affects the cardinal-exit placement in BFS, which is the exact code path that was producing misleading layouts.
+
+# Decision: Z-Level Independent BFS Layout
+
+**By:** Regis (Frontend Dev)
+**Date:** 2026-03-27T20:05Z
+**Component:** `packages/client/src/map/computeLayout.ts`
+
+## What
+
+The BFS layout engine now treats each z-level as an independent coordinate space:
+
+1. **Phase 1** BFS-es the primary z-level (z=0), deferring all `up`/`down` exits into a pending list instead of placing targets immediately.
+2. **Phase 2** processes each deferred z-level: the first transition anchors the sub-level at the source room's (x,y), then a fresh BFS expands the subgraph using only cardinal exits. Further `up`/`down` exits to deeper levels (z=-2, etc.) are deferred recursively.
+3. **Phase 3** handles disconnected subgraphs (unchanged).
+
+Each z-level gets its own `occupied` set — rooms on different floors can share the same (x,y) without collision since the designer displays one floor at a time.
+
+## Why
+
+The sewer level has 3 entry points from scattered surface rooms. The old BFS placed sub-level rooms at the surface room's (x,y), inheriting arbitrary positions that didn't match the sewer's own cardinal topology. Cardinal exits between sewer rooms then produced diagonal lines in the zone designer.
+
+## Impact
+
+- **Zone designer:** Sub-levels now display coherent cardinal layouts regardless of how many surface entry points exist.
+- **Minimap:** Same engine, same fix applies.
+- **Grid cluster detection:** Unchanged — still works within each z-level.
+- **Tests:** 3 new tests (sewer topology, shared x/y across z-levels, 3-level cascade). All 17 passing.
+
+
+---
+
+## 2026-03-28: Remove zone preview and save-ready panels from ZonesDetail
+
+**By:** Regis (Frontend Dev)  
+**Date:** 2026-03-28  
+**Status:** Implemented
+
+**What:** Removed the right-side "Preview" panel and "✓ Zone ready to save" indicator from the zones detail page (`ZonesDetail.tsx`). The page layout changed from a 3-column grid (2/3 form + 1/3 sidebar) to full-width single column.
+
+**Why:** The Zone Designer tab now provides a richer, interactive view of the zone — the static preview panel was redundant. The save-ready indicator added no value beyond what the Save button already communicates.
+
+**Impact:** No state, handlers, or imports became unused — the removed panels only referenced existing `formData`, `rooms`, `exits`, and `error` state that are still used by the form tabs.
+
+---
+
+## 2026-03-29: Zone Designer UX Improvements
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-03-29  
+**Status:** Implemented
+
+## Context
+
+Zone Designer had three UX pain points:
+1. Narrow side panel (256px) cramped room editing forms
+2. Wide rectangle room nodes (140×60) felt unbalanced and wasted vertical space
+3. Room names truncated at 16 chars created information loss on the map
+
+## Decision
+
+Made three coordinated improvements:
+
+1. **Wider Details Panel** — Increased from w-64 to w-80 (256px → 320px) for better form layout
+2. **Square Room Nodes** — Changed to 100×100 squares with proportional cell spacing (160×160), repositioned all badges and indicators
+3. **Toggleable Labels + Hover Tooltips** — Default shows only slug on map, hover displays rich tooltip with full details; toggle "Labels On" restores old behavior with both name and slug visible
+
+## Rationale
+
+- Square nodes provide better visual balance and work well with centered text
+- Hover tooltips allow full information access without cluttering the map
+- Toggle gives power users the option to always show names if preferred
+- Wider panel eliminates form field cramping without significantly reducing map area
+
+## Implementation Notes
+
+- HTML div tooltips (not SVG) for better styling and no clipping issues
+- 150ms hover delay prevents flickering on quick mouse movements
+- Badge positions all recalculated for square node geometry
+- Cell spacing maintains 60px gutters to prevent node overlap
+- Toggle button follows existing toolbar button patterns
+
+## Impact
+
+**Affected:**
+- **Vex / Content Designers:** Will benefit from cleaner map display and easier editing
+- **Other Admin Tools:** May want to adopt similar hover tooltip patterns for information-dense UIs
+
+**Future Considerations:**
+- Room node size could be made configurable if different zones need different zoom levels
+- Tooltip could be extended with additional room metadata (exits, connections, etc.)
+
+**Commit:** 0a899fd — feat(designer): square rooms, wider panel, hover tooltips with toggle
+# NPC and Item Room Management for Zone Designer
+
+**Prepared by:** Elminster (Technical Lead)  
+**Requested by:** dkirby-ms  
+**Date:** March 2026  
+**Scope:** Two new admin features for the Zone Designer tool
+
+---
+
+## Executive Summary
+
+The Zone Designer already has foundational support for NPCs and items in rooms — the `ZoneRoomDefinition` interface exposes `npcs[]` and `lootContainers[]` fields, and the database stores them as JSONB in the `zone_rooms` table. However, the admin UI lacks UI components to manage them. Additionally, the NPC spawn data structure needs clarification, and creature template discovery is not yet exposed to admins.
+
+This document proposes:
+
+1. **NPC Management Feature:** UI to add/remove/configure creatures spawned per room (spawn count, creature type selection).
+2. **Item/Loot Management Feature:** UI to add/remove loot containers and configure items within them.
+
+Both features require minimal DB changes, rely on existing creature and item definition tables, and integrate into the existing zone CRUD API.
+
+---
+
+## Current State: Data Model
+
+### NPCs in Rooms
+
+**Database:** `zone_rooms.npcs` (JSONB)
+
+Current structure (inferred from seed data and `CreatureManager.spawnCreaturesFromZone()`):
+
+```json
+[
+  {
+    "creatureId": "gutterspawn",
+    "spawnCount": 2
+  },
+  {
+    "creatureId": "slum_rat",
+    "spawnCount": 1
+  }
+]
+```
+
+**Fields:**
+- `creatureId` (string): References a creature template (e.g., "drowned_revenant", "gutterspawn", "rubble_scavenger").
+- `spawnCount` (number): How many instances of this creature spawn in the room.
+
+**How it works:**
+- At shard/zone runtime, `CreatureManager.spawnCreaturesFromZone()` iterates rooms, reads the `npcs` array, and spawns instances.
+- Creatures are tracked for repop (respawning after death) via `zoneCreatureRecords`.
+
+**Creature templates available:**
+- `drowned_revenant` (migration 023 seed)
+- `gutterspawn` (inferred from seed data; template likely in templates/ folder)
+- `slum_rat` (inferred)
+- `rubble_scavenger` (inferred)
+- Additional templates likely defined in `/creatures/templates/` directory
+
+### Loot Containers in Rooms
+
+**Database:** `zone_rooms.loot_containers` (JSONB)
+
+Current structure (from seed data):
+
+```json
+[
+  {
+    "id": "r4c1-crate-1",
+    "type": "crate",
+    "items": [
+      "bent_rebar",
+      "gutterspawn_fang"
+    ]
+  },
+  {
+    "id": "r4c2-sack-1",
+    "type": "crate",
+    "items": [
+      "rat_tail",
+      "scavenger_shiv"
+    ]
+  }
+]
+```
+
+**Fields:**
+- `id` (string): Unique identifier for this container (e.g., "r4c1-crate-1").
+- `type` (string): Container type (e.g., "crate", "corpse", "sack", "altar").
+- `items` (string[]): Array of item definition slugs/IDs.
+
+**How it works:**
+- At runtime, `ShardRoom` reads `lootContainers` and initializes loot piles.
+- Items are player-accessible via the `search` command.
+- Item definitions are resolved from the `item_definitions` table by slug.
+
+**Item definitions available:**
+- See `item_definitions` table schema: `id`, `name`, `type` (weapon, armour, consumable, material, tool, key, blueprint), `tier`, `stats` (JSONB), `description`, `soulbound`.
+- Items are typically identified by slug (e.g., "bent_rebar", "gutterspawn_fang").
+
+### Hazards in Rooms
+
+**Database:** `zone_rooms.hazards` (JSONB)
+
+Current structure (from seed data):
+
+```json
+[
+  {
+    "type": "unstable_rubble",
+    "severity": 0.2
+  },
+  {
+    "type": "standing_water",
+    "severity": 0.2
+  }
+]
+```
+
+**Fields:**
+- `type` (string): Hazard type (e.g., "unstable_rubble", "standing_water").
+- `severity` (number): Intensity (0.0–1.0 scale).
+
+(Hazards are out of scope for this task but documented for completeness.)
+
+---
+
+## Current Admin API
+
+**Zone CRUD routes:** `/admin/api/zones/*`
+
+**Room endpoints:**
+- `POST /admin/api/zones/{zoneId}/rooms` — Create room
+- `PUT /admin/api/zones/rooms/{roomId}` — Update room (all fields, including npcs and lootContainers)
+- `DELETE /admin/api/zones/rooms/{roomId}` — Delete room
+
+**Current validation:** Slug and name only. No validation on `npcs`, `lootContainers`, or `hazards`.
+
+**Client API:** `zone-api.ts`
+- `updateRoom(roomId, data)` — Sends PUT request to update room
+
+---
+
+## Gaps & Design Questions
+
+### 1. Creature Template Discovery
+
+**Problem:** Admins cannot see available creature templates. `CREATURE_TEMPLATES` map in `CreatureManager.ts` is hardcoded and not exposed to the admin API.
+
+**Solution:**
+- Create an admin endpoint: `GET /admin/api/creatures` — Returns list of creature templates with metadata (name, stats, spawn rules, loot table).
+- Response schema:
+  ```json
+  [
+    {
+      "id": "drowned_revenant",
+      "name": "Drowned Revenant",
+      "stats": { "maxHp": 50, "attack": 10, "defence": 3, "armour": 3 },
+      "spawnRules": {
+        "minCount": 3,
+        "maxCount": 5,
+        "preferredRoomTypes": ["corridor", "dead_end"],
+        "forbiddenRoomTypes": ["entry", "extraction"]
+      },
+      "lootTable": [...]
+    },
+    ...
+  ]
+  ```
+- Register all templates in `CREATURE_TEMPLATES` map (currently only `drowned_revenant`; need to discover/register `gutterspawn`, `slum_rat`, `rubble_scavenger`).
+
+### 2. Item Definition Discovery
+
+**Problem:** Admins cannot list available item definitions to populate loot containers.
+
+**Solution:**
+- Create an admin endpoint: `GET /admin/api/items` — Returns list of item definitions with metadata (name, type, tier, description).
+- Response schema:
+  ```json
+  [
+    {
+      "id": "bent_rebar",
+      "name": "Bent Rebar",
+      "type": "material",
+      "tier": "common",
+      "description": "A piece of rusty metal...",
+      "stats": { ... }
+    },
+    ...
+  ]
+  ```
+- Leverage existing `ItemDefinitionsStore` repository.
+
+### 3. NPC Configuration Properties
+
+**Current limitation:** `npcs` array only supports `creatureId` and `spawnCount`. The GDD mentions additional NPC properties:
+- **Aggression:** How quickly to alert and attack.
+- **Patrol route:** Multi-room patrol paths (currently per-creature-template).
+- **Items carried:** NPC-specific loot on death.
+- **Behavior override:** Per-room behavior variations.
+
+**Recommendation for Phase 1:**
+- Keep `npcs` structure minimal: `{creatureId, spawnCount}` only.
+- If zone designers need per-NPC aggression or patrol routes, extend the structure in Phase 2.
+- For now, aggression and patrol are controlled by creature templates (global).
+
+### 4. Loot Container Validation
+
+**Current limitation:** No validation that items in `lootContainers` actually exist in `item_definitions`.
+
+**Recommendation:**
+- Add server-side validation in `updateRoom()` endpoint: cross-check item IDs against `item_definitions` table.
+- Return validation errors if items not found.
+
+### 5. Respawn & Hidden Items
+
+**Question:** Should loot containers support:
+- **Spawn rate:** Like NPCs, should containers have a spawn probability?
+- **Hidden flag:** Items hidden until searched (GDD §4).
+
+**Recommendation for Phase 1:**
+- Loot containers always exist and are always visible.
+- Add `hidden` and `spawnRate` fields in Phase 2 when search/detection mechanics mature.
+
+---
+
+## Data Model: Final Proposal
+
+### NPC Spawn Record (No schema change required)
+
+Keep existing structure; no DB migration needed:
+
+```json
+{
+  "creatureId": "string (creature template ID)",
+  "spawnCount": "number (1+)"
+}
+```
+
+### Loot Container Record (No schema change required)
+
+Keep existing structure; no DB migration needed:
+
+```json
+{
+  "id": "string (unique per room)",
+  "type": "string (crate, corpse, sack, etc.)",
+  "items": "string[] (item definition IDs)"
+}
+```
+
+---
+
+## Implementation Plan
+
+### Phase 1: Admin API Endpoints
+
+**Scope:** Expose creature and item definitions to the admin interface. Validate NPC/loot data on room update.
+
+#### 1.1 New Admin Endpoint: `GET /admin/api/creatures`
+
+**File:** `packages/server/src/admin/zones/zone-routes.ts`
+
+**Route:** `GET /admin/api/creatures`
+
+**Handler:**
+```typescript
+router.get('/admin/api/creatures', adminAuth, async (_req, res) => {
+  try {
+    const creatures = Array.from(CREATURE_TEMPLATES.values()).map(t => ({
+      id: t.type,
+      name: t.name,
+      stats: t.stats,
+      spawnRules: t.spawnRules,
+      lootTable: t.lootTable,
+      idleTicksMin: t.idleTicksMin,
+      idleTicksMax: t.idleTicksMax,
+      fleeThreshold: t.fleeThreshold,
+    }));
+    res.json(creatures);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list creatures' });
+  }
+});
+```
+
+**Notes:**
+- Must ensure all creature templates are registered in `CREATURE_TEMPLATES` (currently only `drowned_revenant`; need to load and register `gutterspawn`, `slum_rat`, `rubble_scavenger` from templates folder).
+- Templates are defined in `/creatures/templates/*.ts` (singleton instances like `DROWNED_REVENANT`).
+
+#### 1.2 New Admin Endpoint: `GET /admin/api/items`
+
+**File:** `packages/server/src/admin/routes.ts` (or create new `admin/items/item-routes.ts`)
+
+**Route:** `GET /admin/api/items`
+
+**Handler:**
+```typescript
+router.get('/admin/api/items', adminAuth, async (_req, res) => {
+  try {
+    const itemRepo = getItemDefinitionsRepository();
+    const items = await itemRepo.getAllItemDefinitions();
+    const mapped = items.map(i => ({
+      id: i.id,
+      name: i.name,
+      type: i.type,
+      tier: i.tier,
+      description: i.description,
+      stats: i.stats,
+    }));
+    res.json(mapped);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list items' });
+  }
+});
+```
+
+**Notes:**
+- Leverage existing `ItemDefinitionsStore` (used by player inventory/stash system).
+- Repository method `getAllItemDefinitions()` may need to be added if it doesn't exist.
+
+#### 1.3 Enhanced Room Validation
+
+**File:** `packages/server/src/admin/zones/zone-routes.ts`
+
+**Enhancement:** `validateRoom()` function
+
+Add checks for `npcs` and `lootContainers`:
+
+```typescript
+function validateRoom(data: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+
+  // ... existing slug/name validation ...
+
+  // Validate npcs array
+  if (data.npcs && Array.isArray(data.npcs)) {
+    for (const npc of data.npcs as any[]) {
+      if (!npc.creatureId) {
+        errors.push('NPC must have creatureId');
+      }
+      if (typeof npc.spawnCount !== 'number' || npc.spawnCount < 1) {
+        errors.push('NPC spawnCount must be >= 1');
+      }
+      // Check if creature template exists
+      const creatureExists = CREATURE_TEMPLATES.has(npc.creatureId);
+      if (!creatureExists) {
+        errors.push(`Unknown creature template: ${npc.creatureId}`);
+      }
+    }
+  }
+
+  // Validate lootContainers array
+  if (data.lootContainers && Array.isArray(data.lootContainers)) {
+    const seenIds = new Set<string>();
+    for (const container of data.lootContainers as any[]) {
+      if (!container.id) {
+        errors.push('Loot container must have id');
+      }
+      if (seenIds.has(container.id)) {
+        errors.push(`Duplicate loot container id: ${container.id}`);
+      }
+      seenIds.add(container.id);
+      
+      if (!container.type) {
+        errors.push('Loot container must have type');
+      }
+      
+      if (!Array.isArray(container.items)) {
+        errors.push('Loot container items must be an array');
+      }
+      // TODO: Cross-check items against item_definitions in Phase 1.2
+    }
+  }
+
+  return errors;
+}
+```
+
+### Phase 2: Client UI Components
+
+**Scope:** Build Zone Designer UI to add/remove/configure NPCs and loot containers.
+
+#### 2.1 NPC Management UI
+
+**File:** `packages/client/src/pages/AdminZoneEditor.tsx` (or new component `RoomNPCPanel.tsx`)
+
+**Features:**
+- Dropdown to select creature template (populated from `GET /admin/api/creatures`).
+- Input field for spawn count (1+).
+- "Add NPC" button to push to `npcs[]` array.
+- "Remove NPC" button to splice from array.
+- List of current NPCs with inline edit/delete.
+- Real-time update to room object.
+
+**Pseudo-code:**
+```tsx
+const [npcs, setNpcs] = useState(room.npcs || []);
+const [creatures, setCreatures] = useState([]);
+
+useEffect(() => {
+  listCreatures().then(setCreatures);
+}, []);
+
+const addNPC = (creatureId, spawnCount) => {
+  setNpcs([...npcs, { creatureId, spawnCount }]);
+};
+
+const removeNPC = (index) => {
+  setNpcs(npcs.filter((_, i) => i !== index));
+};
+
+// Update room.npcs and persist
+useEffect(() => {
+  updateRoom(room.id, { ...room, npcs }).catch(handleError);
+}, [npcs]);
+```
+
+#### 2.2 Loot Container Management UI
+
+**File:** `packages/client/src/pages/AdminZoneEditor.tsx` (or new component `RoomLootPanel.tsx`)
+
+**Features:**
+- Input field for container ID (validated as slug-like).
+- Dropdown for container type (crate, corpse, sack, etc.).
+- Multi-select or tag input for items (populated from `GET /admin/api/items`).
+- "Add Container" button.
+- "Remove Container" button.
+- List of current containers with inline edit/delete.
+- Real-time update to room object.
+
+**Pseudo-code:**
+```tsx
+const [lootContainers, setLootContainers] = useState(room.lootContainers || []);
+const [items, setItems] = useState([]);
+
+useEffect(() => {
+  listItems().then(setItems);
+}, []);
+
+const addContainer = (id, type, items) => {
+  setLootContainers([...lootContainers, { id, type, items }]);
+};
+
+const removeContainer = (index) => {
+  setLootContainers(lootContainers.filter((_, i) => i !== index));
+};
+
+// Update room.lootContainers and persist
+useEffect(() => {
+  updateRoom(room.id, { ...room, lootContainers }).catch(handleError);
+}, [lootContainers]);
+```
+
+### Phase 3: Testing & Validation
+
+**Scope:** Ensure NPCs and loot containers spawn correctly at runtime.
+
+#### 3.1 Unit Tests
+
+**File:** `packages/server/src/__tests__/admin-crud.test.ts`
+
+**Tests:**
+- Validate `npcs` array structure (creatureId, spawnCount required, spawnCount >= 1).
+- Validate `lootContainers` array structure (id unique, type present, items is array).
+- Reject unknown creature templates.
+- Reject invalid item references (Phase 1.3 enhancement).
+- Update room with valid NPC/loot data.
+- Reject room update with invalid NPC/loot data.
+
+#### 3.2 Integration Tests
+
+**File:** `packages/server/src/__tests__/zone-system.test.ts` (or extend)
+
+**Tests:**
+- Load zone with NPCs defined in rooms.
+- Spawn creatures via `CreatureManager.spawnCreaturesFromZone()`.
+- Verify creatures appear in the correct rooms.
+- Load zone with loot containers.
+- Verify containers appear in `ShardRoom` loot piles.
+- Verify items are searchable/accessible.
+
+#### 3.3 E2E Tests (Admin UI)
+
+**File:** `packages/client/src/__tests__/admin-zone-editor.e2e.ts` (or similar)
+
+**Tests:**
+- Navigate to zone editor for a test zone.
+- Add an NPC to a room.
+- Verify NPC appears in the room's NPC list.
+- Remove the NPC.
+- Verify NPC is removed.
+- Add a loot container with items.
+- Verify container appears in the room's loot list.
+- Remove the container.
+- Verify container is removed.
+- Persist changes and reload the zone.
+- Verify changes are retained.
+
+---
+
+## Work Breakdown
+
+### Server-Side (Backend)
+
+| Task | File | Effort | Dependencies |
+|------|------|--------|--------------|
+| **1.1** Register missing creature templates in `CREATURE_TEMPLATES` | `/creatures/CreatureManager.ts` + `/creatures/templates/` | 1d | None |
+| **1.2** Implement `GET /admin/api/creatures` endpoint | `/admin/zones/zone-routes.ts` | 1d | 1.1 |
+| **1.3** Implement `GET /admin/api/items` endpoint | `/admin/routes.ts` or new `/admin/items/` | 1d | None (ItemDefinitionsStore exists) |
+| **1.4** Add NPC/loot validation to room update | `/admin/zones/zone-routes.ts` | 1d | 1.2, 1.3 |
+| **2.1** Unit tests for validation | `/__tests__/admin-crud.test.ts` | 1d | 1.4 |
+| **2.2** Integration tests for spawning | `/__tests__/zone-system.test.ts` | 1d | 1.1, 1.4 |
+
+**Server-side total:** ~6 days
+
+### Client-Side (Frontend)
+
+| Task | File | Effort | Dependencies |
+|------|------|--------|--------------|
+| **3.1** Fetch creature and item definitions | `/lib/zone-api.ts` | 0.5d | 1.2, 1.3 |
+| **3.2** Build NPC management UI component | `/pages/AdminZoneEditor.tsx` + `/components/RoomNPCPanel.tsx` | 2d | 3.1 |
+| **3.3** Build loot container UI component | `/pages/AdminZoneEditor.tsx` + `/components/RoomLootPanel.tsx` | 2d | 3.1 |
+| **3.4** Integrate NPC panel into room editor | `/pages/AdminZoneEditor.tsx` | 1d | 3.2 |
+| **3.5** Integrate loot panel into room editor | `/pages/AdminZoneEditor.tsx` | 1d | 3.3 |
+| **4.1** E2E tests (admin UI) | `/__tests__/admin-zone-editor.e2e.ts` | 1d | 3.5 |
+
+**Client-side total:** ~7.5 days
+
+### Total Effort
+
+- **Backend:** ~6 days
+- **Frontend:** ~7.5 days
+- **Total:** ~13.5 days (~2 weeks)
+
+### Parallelization
+
+- Backend tasks 1.2 and 1.3 can run in parallel (independent endpoints).
+- Client tasks 3.2 and 3.3 can run in parallel (independent UI components).
+- Server and client work can fully parallelize after initial API specs are agreed.
+
+---
+
+## Architecture & Design Decisions
+
+### 1. No Separate Tables for NPC/Loot Data
+
+**Decision:** Store `npcs` and `lootContainers` as JSONB in `zone_rooms` table (no new tables).
+
+**Rationale:**
+- `zone_rooms` already has JSONB columns for `npcs`, `lootContainers`, `hazards`.
+- Room-level data (what spawns where) is authoritatively stored with the room definition.
+- Avoids normalization overhead for data that is always queried/updated as a set.
+- Matches existing pattern (hazards also stored inline).
+
+### 2. Creature Templates as Read-Only Admin Reference
+
+**Decision:** Expose creature templates via API as read-only metadata (no CRUD).
+
+**Rationale:**
+- Creature templates are global definitions (not per-room or per-zone).
+- Defined in code and seeded to the database (migrations).
+- For now, admins can only *use* existing templates to spawn creatures in rooms.
+- If template editing is needed later, it can be added as a separate admin feature.
+
+### 3. Item Definitions as Read-Only Admin Reference
+
+**Decision:** Expose item definitions via API as read-only metadata (no CRUD).
+
+**Rationale:**
+- Same as creatures: items are global definitions.
+- Zone designers select from the pool of defined items to populate loot containers.
+- Item CRUD is a separate concern (item design tool, not zone design tool).
+
+### 4. Validation at API Boundary
+
+**Decision:** Validate `npcs` and `lootContainers` in the room update endpoint, not in the database.
+
+**Rationale:**
+- Fail fast with clear error messages.
+- No constraint checking in the database (would require stored procedures or triggers).
+- Admins get immediate feedback in the UI.
+
+---
+
+## Risks & Mitigations
+
+### Risk 1: Missing Creature Templates
+
+**Problem:** Not all creature types used in seed data are registered in `CREATURE_TEMPLATES`.
+
+**Mitigation:**
+- Audit `/creatures/templates/` directory and seed migrations to identify all in-use creature types.
+- Register each in `CREATURE_TEMPLATES` during task 1.1.
+- Add a test to verify `CREATURE_TEMPLATES` contains all types used in any zone.
+
+### Risk 2: Item Definition Gaps
+
+**Problem:** Items referenced in seed loot containers may not exist in `item_definitions` table.
+
+**Mitigation:**
+- Add optional validation in task 1.4 (cross-check items against table).
+- If validation fails, zone admin will see errors on room update.
+- Seed migration may need a follow-up to add missing item definitions.
+
+### Risk 3: Complex NPC Behavior Requirements
+
+**Problem:** Zone designers may want to configure per-NPC aggression, patrol routes, or items carried.
+
+**Mitigation:**
+- Phase 1 keeps `npcs` structure minimal: `{creatureId, spawnCount}` only.
+- Document this limitation in release notes.
+- Plan Phase 2 feature to extend NPC structure with behavior overrides.
+- Current creature templates already support these via code, so it's a *configuration* problem, not a capability problem.
+
+### Risk 4: Loot Container Spawn Rate
+
+**Problem:** Some zones may want loot containers to spawn conditionally (e.g., 50% chance).
+
+**Mitigation:**
+- Phase 1: Loot containers always spawn.
+- Phase 2: Add optional `spawnRate` field (0.0–1.0).
+- Deterministic PRNG seeding ensures consistent spawns across shard replicas.
+
+---
+
+## Future Enhancements (Phase 2+)
+
+1. **NPC Behavior Overrides:** Extend `npcs` structure to include `{creatureId, spawnCount, aggression?, patrolRoute?, items?}`.
+2. **Loot Spawn Rates:** Add `spawnRate` field to loot containers.
+3. **Hidden Items:** Add `hidden` flag to loot containers (integration with search/detection mechanics).
+4. **Creature Type Creation:** Add admin interface for defining new creature templates (code-level today).
+5. **Item Type Creation:** Add admin interface for defining new item definitions (already possible via CMS-like interface; could be polished).
+6. **Loot Table Editor:** Link loot containers to loot table definitions (currently items are inline).
+7. **Multi-Zone NPC Wandering:** Allow NPCs to patrol across multiple zones (Refuge-only feature today).
+
+---
+
+## Success Criteria
+
+1. **Admin API:**
+   - ✅ `GET /admin/api/creatures` returns all registered creature templates with metadata.
+   - ✅ `GET /admin/api/items` returns all item definitions with metadata.
+   - ✅ Room update endpoint validates `npcs` and `lootContainers` and rejects invalid data with clear errors.
+
+2. **Admin UI:**
+   - ✅ Zone editor displays NPC management panel in room details.
+   - ✅ Admin can add/remove NPCs from a room with dropdown selection and numeric input.
+   - ✅ Zone editor displays loot management panel in room details.
+   - ✅ Admin can add/remove loot containers with tag-based item selection.
+   - ✅ Changes persist to the database (room update).
+
+3. **Runtime:**
+   - ✅ Creatures defined in room `npcs` spawn at zone load and repop correctly.
+   - ✅ Loot containers defined in room `lootContainers` are searchable and accessible to players.
+
+4. **Testing:**
+   - ✅ Unit tests verify validation logic.
+   - ✅ Integration tests verify spawning behavior.
+   - ✅ E2E tests verify admin UI workflows.
+
+---
+
+## Conclusion
+
+The foundational infrastructure for NPC and item room management exists in the codebase. The primary work is:
+
+1. **Expose creature and item templates to the admin API** (so admins can see what they can use).
+2. **Build UI components** to manage `npcs` and `lootContainers` in the room editor.
+3. **Validate data** at the API boundary.
+
+The data model requires no schema changes, and the runtime behavior is already implemented in `CreatureManager` and `ShardRoom`. This is a **high-confidence, high-value feature** with clear dependencies and low architectural risk.
+
+Estimated delivery: **~2 weeks** (6 days backend + 7.5 days frontend, with parallelization).
+# Decision: Zone Designer NPC & Loot Management
+
+**Date:** 2026-03-27  
+**Author:** Regis (Frontend Dev)  
+**Status:** Implemented
+
+## Summary
+
+Added two new admin API endpoints and UI features to the Zone Designer:
+1. Resizable room details panel (drag handle on left edge)
+2. NPC and loot container management in room editor
+
+## New API Endpoints
+
+### `GET /admin/api/creature-templates`
+- Returns all creature templates from `CREATURE_TEMPLATES` registry
+- Response: `{ templates: CreatureTemplate[], count: number }`
+- Used by Zone Designer to populate NPC dropdown
+
+### `GET /admin/api/items`
+- Returns all item definitions from `ITEM_REGISTRY`
+- Response: `{ items: ItemDefinition[], count: number }`
+- Used by Zone Designer to populate loot item dropdown
+
+## Data Model Changes
+
+**Zone Room Definition (client types):**
+- `npcs: RoomNPC[]` — was `unknown[]`
+  - `RoomNPC = { creatureId: string, spawnCount: number }`
+- `lootContainers: RoomLootContainer[]` — was `unknown[]`
+  - `RoomLootContainer = { itemId: string, quantity: number }`
+
+**Existing backend (no changes):**
+- `zone_rooms.npcs` JSONB column already exists
+- `zone_rooms.loot_containers` JSONB column already exists
+- Room CRUD endpoints already accept these fields
+
+## UI Changes
+
+**Room details panel (ZoneDesigner.tsx):**
+- Panel is now horizontally resizable (280px - 600px, default 320px)
+- Drag handle on left edge (4px, subtle hover effect)
+- NPCs section with add/remove rows (creature dropdown + spawn count input)
+- Loot section with add/remove rows (item dropdown + quantity input)
+- Both sections replace the previous read-only "Content summary"
+
+## Impact
+
+**For Backend Devs:**
+- New creature templates should be registered in `CREATURE_TEMPLATES` (CreatureManager.ts)
+- New items should be registered in `ITEM_REGISTRY` (items/registry.ts)
+- Both will automatically appear in Zone Designer dropdowns
+
+**For Content Designers:**
+- Can now populate rooms with NPCs and loot via Zone Designer UI
+- No need to manually edit JSONB in database
+- Spawn counts and quantities editable inline
+
+## Files Modified
+
+**Server:**
+- `packages/server/src/creatures/CreatureManager.ts` — added `getAllCreatureTemplates()`
+- `packages/server/src/admin/routes.ts` — added two new endpoints
+
+**Client:**
+- `packages/client/src/lib/zone-api.ts` — added types and API functions
+- `packages/client/src/pages/admin/ZoneDesigner.tsx` — UI implementation
+
+## Testing
+
+- Build: ✅ Clean (TypeScript compilation successful)
+- Server tests: Running (91 test files, takes ~5+ minutes)
+- Manual testing recommended for full UI verification
+
+---
+
+## 2026-03-30: Migration consolidation — 36 files → 3 clean files
+
+**By:** Drizzt (Engine Dev)  
+**Requested by:** dkirby-ms
+
+**Decision:** Consolidate 36 incremental migration files into 3 clean migrations for pre-release clean slate.
+
+**Migrations Created:**
+- `001_schema.sql` — all tables, constraints, indexes
+- `002_seed_content.sql` — factions, items, creatures  
+- `003_seed_zones.sql` — Refuge + Warrens zones
+
+**Why:** Pre-release project with zero production databases. Clean slate makes onboarding easier and removes accumulated ALTER/DROP/recreate noise from 36 incremental migrations.
+
+**Impact:**
+- Every dev must run `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` and restart the server
+- All 36 old migration files deleted
+- Future migrations start at `004_*.sql`
+- Bug fix: stash-provider.ts `stats` → `base_stats` column reference
+- Tests passing: 2051 server + 158 shared tests ✓
+- Commit: 95a6f97
+
+---
+
+## 2026-03-29: Zone Designer Legend Panel
+
+**By:** Regis (Frontend Dev)  
+**Date:** 2026-03-28
+
+### Decision
+
+Added a collapsible floating legend panel to the Zone Designer map view. The legend is positioned in the bottom-left corner of the canvas, collapsed by default (showing only a small "Legend" button), and expands to show all visual element meanings.
+
+### Rationale
+
+- Designers need to understand what the various colors, line styles, badges, and indicators mean without guessing
+- The legend uses the exact same SVG elements and hex colors as the map itself (show-don't-tell approach)
+- Collapsed by default to avoid cluttering the map view — toggled via a compact button
+- Semi-transparent background with backdrop blur so it doesn't fully obscure the map when expanded
+
+### Impact
+
+- No new dependencies or API changes
+- All visual element styling references the same constants (`ROOM_TYPE_COLORS`, `FEATURE_COLOR`, `PORTAL_COLOR`, etc.)
+- If room type colors or exit styles change in the future, the legend will need to be updated in tandem
+
+---
+
+## 2026-03-29: Exit Pairs View in ZonesDetail.tsx
+
+**By:** Regis (Frontend Dev)
+
+### Decision
+
+The Exits tab now groups bidirectional exits into pairs. One-way exits are shown distinctly with a "+ reverse" action. Expanded rows reveal per-direction details. The "Add Exit" form defaults to creating bidirectional pairs.
+
+### Rationale
+
+- Reduces visual clutter — 10 bidirectional connections show as 10 rows instead of 20
+- Matches the mental model zone designers already have (rooms are *connected*, not just exited)
+- Consistent with ZoneDesigner's `connectBidirectional` pattern
+
+---
+
+## 2026-03-29T17:17: User Directive — Room Duplication in City Zones
+
+**By:** dkirby-ms (via Copilot)
+
+### Decision
+
+It's totally okay for rooms to be duplicated, especially streets or grid areas that will have many rooms with similar descriptions/names. Repeated room names/descriptions are expected and desirable for urban grid layouts.
+
+### Rationale
+
+User request — captured for team memory. This affects zone design philosophy: cities should feel large and repetitive like real streets, not every room needs a unique name.
+
+---
+
+## 2026-03-29: Room Duplication Pattern for City Zones
+
+**By:** Laeral (Content Designer)  
+**Status:** Approved — aligns with user directive (2026-03-29T17:17)
+
+### Decision
+
+City zones should use **repeated display names** for generic connective rooms (streets, alleys, tunnels, passages). Only landmarks, shops, taverns, quest locations, and boss rooms get unique names.
+
+**Slug Convention:** Repeated rooms use `{name-slug}-{n}` pattern for DB primary key uniqueness:
+- `narrow-alley-1`, `narrow-alley-2`, `narrow-alley-3`, …
+- `sewer-tunnel-1`, `sewer-tunnel-2`, …
+- `cobblestone-street-1`, `cobblestone-street-2`, …
+
+**Display Name:** The `name` column in `zone_rooms` repeats freely. Players see "Narrow Alley" multiple times — this is intentional.
+
+**Description Variation:** Each room with a shared name MUST have a unique description with different sensory details. Same name ≠ same text.
+
+**Property Variation:** Rooms with shared names MAY differ in properties (e.g. one "Narrow Alley" has `stench`, another has `water`). This creates mechanical variety.
+
+### When to repeat vs. keep unique
+
+| Repeat | Keep Unique |
+|--------|-------------|
+| Streets, alleys, passages | Named gates and entries |
+| Sewer tunnels, junctions | Boss rooms, quest rooms |
+| Rubble fields, ruins | Shops, taverns, inns |
+| Tenement blocks, warehouse rows | Plazas, squares with features |
+| Generic corridors | NPC locations, chapels |
+
+### Rationale
+
+A city with 100+ unique room names feels like a theme park. A city with repeated street names feels like a real place. The repetition makes the city feel large and grid-like, and makes landmark rooms memorable by contrast.
+
+**Impact on dungeon zones:** This pattern is specific to **city/urban zones**. Dungeon zones like The Warrens should continue using unique room names — every room in a dungeon is a designed encounter space.
+
+**Applies to:** The Siltgate (implemented), and any future city zones.
+
+---
+
+## 2026-03-30T00:40Z: Zone Entry Room Respects targetRoomSlug
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-03-30  
+**File:** `packages/server/src/rooms/ShardRoom.ts` (onJoin, line ~447)
+
+### What
+
+When a player joins a zone via a cross-zone exit, the server now checks `options['targetRoomSlug']` and places the player in that room if it's valid in the zone's room graph. Falls back to `startRoomId` for direct zone joins or invalid slugs.
+
+### Why
+
+Cross-zone exits (e.g., the-refuge → the-siltgate via a portal targeting `market-square`) were always dropping players at the zone's start room, breaking spatial consistency. The client was already sending the correct target — the server just wasn't reading it.
+
+### Impact
+
+- **Jarlaxle:** Client-side zone transfer already sends `targetRoomSlug` correctly — no client changes needed.
+- **Regis:** Zone Designer portal exits with `targetRoomSlug` now actually work end-to-end.
+- **Minsc:** Integration tests for cross-zone navigation should verify player lands in the targeted room, not just the zone's start.
+
+---
+
+## 2026-03-30T00:40Z: Input Focus Restoration Pattern
+
+**By:** Regis (Frontend Dev)  
+**Date:** 2026-03-30
+
+### What
+
+Added ref-based focus restoration to the command input in `ShardExploration.tsx`. A `useEffect` watches `state.connectionStatus` and calls `inputRef.current?.focus()` (via `requestAnimationFrame`) whenever the connection returns to `'connected'`.
+
+### Why
+
+During zone switches, the input is disabled while `connectionStatus === 'connecting'`. When re-enabled, browser focus is lost. `autoFocus` only fires on mount, not re-enable. This broke the seamless MUD typing experience.
+
+### Impact
+
+- Single file change: `packages/client/src/pages/ShardExploration.tsx`
+- No new dependencies or API changes
+- Pattern is reusable: any input disabled during async transitions should use ref + useEffect + rAF to restore focus
+
+---
+
+## 2026-03-30T00:40Z: Up/Down Ghost Rooms Are Not Positioned on the Map
+
+**By:** Regis (Frontend Dev)  
+**Date:** 2026-03-30  
+**Status:** Implemented
+
+### Context
+
+Ghost rooms for up/down exits were being positioned at `parentPos.z ± 1`, inflating floor bounds. This caused all rooms on a floor to show incorrect ↑/↓ indicators and the FloorSelector to show phantom floors.
+
+### Decision
+
+- **Up/down ghost rooms are not given positions.** They exist in `ghostRooms` but have no entry in `positions`, so they don't render or affect floor bounds.
+- **RoomNode shows exit-based ↑/↓ badges** (purple, matching inter-floor stroke color) on rooms that have `up` or `down` in their exits. This replaces the old z-level badge that showed on every room of a non-zero floor.
+- **Floor bounds are now accurate** — only visited rooms (which get real z-values from `computeLayout` BFS) contribute to min/max floor.
+
+### Impact
+
+- `useExplorationMap.ts` — ghost positioning block for up/down removed
+- `RoomNode.tsx` — z-badge replaced with exit-based badges
+- `useFloorFilter.ts`, `MapRenderer.tsx`, `MinimapWidget.tsx` — no changes needed
+- All 24 computeLayout tests still pass
