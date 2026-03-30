@@ -150,6 +150,11 @@ jobs:
               "ENTRA_TENANT_ID=${{ secrets.ENTRA_TENANT_ID }}" \
               "ENTRA_REDIRECT_URI=${{ secrets.ENTRA_REDIRECT_URI }}" \
               "ALLOW_LOCAL_AUTH=false" \
+              "DATABASE_URL=${{ secrets.DATABASE_URL }}" \
+              "REDIS_CONNECTION_STRING=${{ secrets.REDIS_CONNECTION_STRING }}" \
+              "REDIS_PRESENCE_ENABLED=true" \
+              "REDIS_CACHE_ENABLED=true" \
+              "REDIS_DRIVER_ENABLED=true" \
             --container-name ellmud \
             --command "node" "packages/server/dist/index.js"
 
