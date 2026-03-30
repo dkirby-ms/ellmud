@@ -45,6 +45,19 @@ const PORT = config.port;
 const AUTH_REQUIRED = config.authRequired;
 let USE_PG = !!process.env.DATABASE_URL;
 
+// Validate DATABASE_URL format if present
+if (USE_PG) {
+  try {
+    new URL(process.env.DATABASE_URL!);
+  } catch (err) {
+    console.log('[Ellmud] ⚠ DATABASE_URL is set but cannot be parsed as a valid URL');
+    console.log('[Ellmud]   This usually means the password contains characters that need percent-encoding');
+    console.log('[Ellmud]   Characters like | < > { } must be encoded (e.g., | → %7C, < → %3C)');
+    console.log('[Ellmud]   Falling back to in-memory persistence');
+    USE_PG = false;
+  }
+}
+
 // ─── Database Bootstrap ──────────────────────────────────────────────────────
 if (USE_PG) {
   console.log('[Ellmud] DATABASE_URL detected — running PostgreSQL migrations…');
@@ -52,8 +65,8 @@ if (USE_PG) {
     await runMigrations();
     console.log('[Ellmud] Migrations complete.');
   } catch (err) {
-    console.error('[Ellmud] ⚠ PostgreSQL migration failed — starting without database persistence');
-    console.error('[Ellmud] Error details:', err instanceof Error ? err.message : String(err));
+    console.log('[Ellmud] ⚠ PostgreSQL migration failed — starting without database persistence');
+    console.log('[Ellmud] Error details:', err instanceof Error ? err.message : String(err));
     USE_PG = false;
   }
 }
@@ -104,8 +117,8 @@ if (USE_PG) {
     const { getPool } = await import('./db/index.js');
     await initContentRegistry(getPool());
   } catch (err) {
-    console.error('[Ellmud] ⚠ ContentRegistry initialization failed — using code fallback');
-    console.error('[Ellmud] Error:', err instanceof Error ? err.message : String(err));
+    console.log('[Ellmud] ⚠ ContentRegistry initialization failed — using code fallback');
+    console.log('[Ellmud] Error:', err instanceof Error ? err.message : String(err));
   }
 } else {
   console.log('[Ellmud] Content registry: code fallback (no DATABASE_URL)');
@@ -151,8 +164,8 @@ if (entraConfig.clientId && entraConfig.clientSecret && entraConfig.tenantId) {
     app.use(createEntraRouter(authService, entraService));
     console.log('[Ellmud] Entra External ID OAuth: enabled');
   } catch (err) {
-    console.error('[Ellmud] ⚠ Entra OAuth initialization failed:', err instanceof Error ? err.message : String(err));
-    console.error('[Ellmud] Continuing without Entra authentication');
+    console.log('[Ellmud] ⚠ Entra OAuth initialization failed:', err instanceof Error ? err.message : String(err));
+    console.log('[Ellmud] Continuing without Entra authentication');
   }
 } else {
   console.log('[Ellmud] Entra OAuth: disabled (missing ENTRA_* env vars)');
@@ -270,7 +283,7 @@ try {
     console.log(`[Ellmud] Registered zone: ${roomName}`);
   }
 } catch (err) {
-  console.error('[Ellmud] Failed to load zones for registration:', err instanceof Error ? err.message : String(err));
+  console.log('[Ellmud] Failed to load zones for registration:', err instanceof Error ? err.message : String(err));
 }
 
 // Ensure the-refuge is always registered (fallback if not in DB)
