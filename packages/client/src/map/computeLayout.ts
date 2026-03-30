@@ -1105,7 +1105,7 @@ export function computeLayout(
 
         if (diags.length === 0) break;
 
-        let currentScore = layoutScore(z);
+        const currentScore = layoutScore(z);
         let improved = false;
 
         for (const { roomId, targetId, dir } of diags) {

@@ -2511,3 +2511,40 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 - Tests: ✅ All 125 server tests PASSING
 
 **Key Pattern Documented:** `options['targetRoomSlug']` validated against zone roomGraph on join — falls back to startRoomId for direct joins or invalid slugs.
+
+---
+
+## 2026-03-30T01:15Z — Startup Logging Fixes for Azure Container Apps
+
+**Completed:** Fix silent DATABASE_URL failures in ACA by logging to stdout instead of stderr  
+**Files Modified:** 2
+
+### Problem
+When DATABASE_URL contains URL-invalid characters (like `|`, `<`, `>`), the server silently falls back to in-memory persistence. The user sees "Stash persistence: in-memory" but NO error explanation, because:
+1. All `[Ellmud]` prefixed failure messages use `console.error` (goes to stderr)
+2. Azure Container Apps default log stream shows stdout only
+
+### Changes Made
+
+**`packages/server/src/index.ts`:**
+1. Added DATABASE_URL validation block after line 46:
+   - Validates DATABASE_URL with `new URL()` before attempting migrations
+   - If parsing fails, logs clear diagnostic to stdout explaining percent-encoding requirements
+   - Sets `USE_PG = false` to prevent migration attempts with invalid URL
+2. Changed all `console.error` calls with `[Ellmud]` prefix to `console.log` (lines 55, 56, 107, 108, 154, 155, 273):
+   - Migration failure messages
+   - ContentRegistry initialization failures
+   - Entra OAuth initialization failures
+   - Zone loading failures
+
+**`packages/server/src/db/index.ts`:**
+- Added `console.log` BEFORE existing `console.error` in pool error handler (line 26)
+- Keeps both: stdout for visibility in ACA, stderr for error tracking tools
+
+### Key Decision
+User-facing startup narrative messages should ALL go to stdout. Internal error details can duplicate to stderr for tooling, but stdout must be complete. URL validation prevents silent fallback by catching malformed DATABASE_URL before migration attempts.
+
+**Build:** ✅ TypeScript compilation clean  
+**Tests:** Not needed — logging-only changes
+
+**Pattern Documented:** Azure Container Apps stdout-first logging strategy for user-facing diagnostics.
