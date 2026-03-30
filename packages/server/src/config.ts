@@ -98,10 +98,13 @@ export function loadConfig(): ServerConfig {
       connectionString: envStr(
         'REDIS_CONNECTION_STRING',
         envStr(
-          'REDIS_URL',
-          process.env.REDIS_HOST
-            ? `redis://${process.env.REDIS_PASSWORD ? `:${process.env.REDIS_PASSWORD}@` : ''}${process.env.REDIS_HOST}:${process.env.REDIS_PORT || '6379'}`
-            : 'redis://localhost:6379'
+          'REDIS_CONNECTIONSTRING', // ACA service-bind injected name (no underscore)
+          envStr(
+            'REDIS_URL',
+            process.env.REDIS_HOST
+              ? `redis://${process.env.REDIS_PASSWORD ? `:${process.env.REDIS_PASSWORD}@` : ''}${process.env.REDIS_HOST}:${process.env.REDIS_PORT || '6379'}`
+              : 'redis://localhost:6379'
+          )
         )
       ),
       cacheEnabled: envBool('REDIS_CACHE_ENABLED', false),
