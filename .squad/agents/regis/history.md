@@ -740,3 +740,21 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 **Key Patterns Documented:**
 - Input focus restoration: `useRef` + `useEffect` watching `connectionStatus` + `requestAnimationFrame` for re-enable scenarios
 - Ghost room positioning: Don't position up/down ghosts; show exit-based badges on parent rooms instead
+
+## 2026-03-30 — Creature Display in Room Output
+
+**Completed:** Updated room rendering to show creatures on their own line matching items/exits format  
+**Files Modified:** 5
+
+- `packages/server/src/commands/handlers/look.ts` — Changed creature display from individual `A creature lurks here.` lines to a single `Creatures: name1, name2` line
+- `packages/server/src/commands/handlers/go.ts` — Added creature display for target room when player moves (uses `resolveCreaturesInRoom`)
+- `packages/server/src/commands/index.ts` — Added `resolveCreaturesInRoom` to `CommandContext` interface
+- `packages/server/src/rooms/ShardRoom.ts` — Wired up `resolveCreaturesInRoom` in `buildCommandContext` using `creatureManager.getCreaturesInRoom()`
+- `packages/server/src/__tests__/creature-wiring.test.ts` — Updated assertions from `lurks here` to `Creatures:`
+
+**Build:** ✅ Clean  
+**Tests:** ✅ 2228 server tests pass, 144 client tests pass
+
+**Key Decision:** Creatures now display as `Creatures: name1, name2` (comma-separated, single line) matching the `Exits:` and `You see:` patterns. Both `look` and `go` (entering a room) show creatures.
+
+**Pattern:** Added `resolveCreaturesInRoom` resolver function to `CommandContext` (parallels existing `resolveRoom`) so `go.ts` can look up creatures in the target room (since `creaturesInRoom` on the context refers to the source room, not the destination).

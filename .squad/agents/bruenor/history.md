@@ -78,3 +78,16 @@
 - **Zone total:** 138 rooms, 284 exits (was 136 rooms, 286 exits)
 - **Pattern notes:** Matched 004_seed_siltgate.sql exactly — cross-join VALUES, NULLIF for target columns, subquery for zone_id in DELETEs, text[] casts for properties
 - **Transaction:** Full BEGIN/COMMIT wrap for atomicity
+
+### Warrens Topology Fixes (2025-07-25)
+- **Migration:** `007_warrens_topology_fixes.sql`
+- **Source:** Laeral's warrens-topology-fixes (`.squad/decisions/inbox/laeral-warrens-topology-fixes.md`)
+- **Changes applied:**
+  - 8 new rooms: `sewer-drip-tunnel`, `sewer-cracked-conduit`, `sewer-blind-turn`, `sewer-narrow-drain` (Fix A-1); `sewer-rubble-choke`, `sewer-trickle-passage`, `sewer-slime-channel`, `sewer-stagnant-pool` (Fix A-2)
+  - 16 exits deleted: 8 bidirectional pairs — ratways↔main-junction (A-1), south-tunnel↔west-conduit (A-2), west-conduit↔cistern (A-2), broken-sanctuary↔sunken-square (B)
+  - 22 exits inserted: 11 bidirectional pairs — 5 pairs for A-1 chain (S→S→W→S→E into sewer-north-tunnel), 6 pairs for A-2 chain (W→S→E→S→E→E into cistern)
+  - `broken-sanctuary` description updated with bricked-up doorway text (now a dead-end)
+- **Zone total:** 109 rooms (was 101); 0 BFS conflicts after changes
+- **Critical slug note:** Warrens zone slug is `warrens`, NOT `the-warrens` — verified from 003_seed_zones.sql
+- **Pattern notes:** Matched 005_siltgate_topology_fixes.sql structure — BEGIN/COMMIT, sectioned comments, cross-join VALUES for rooms/exits, individual DELETEs with subquery zone_id
+- **Transaction:** Full BEGIN/COMMIT wrap for atomicity

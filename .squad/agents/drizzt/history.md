@@ -2648,3 +2648,71 @@ The validator found 10 topological conflicts in Siltgate, grouped into 5 conflic
 - Conflict pairs are symmetric: if room A conflicts reaching B, then B also conflicts reaching A via the reverse cycle. Each pair appears as 2 entries in the conflict list.
 - Z-level tracking is essential for collision detection — without it, every up/down pair creates a false-positive collision since they share (x,y) by design.
 - No barrel file exists for `packages/client/src/map/` — modules are imported directly by file path.
+
+---
+
+## Warrens Zone Topology Analysis (2025-07-25)
+
+**Task:** Analyze the Warrens zone topology for topological conflicts and position collisions, same approach as Siltgate.
+
+**Status:** ✅ Complete — Analysis done, no code changes needed (analysis only)
+
+### Zone Stats
+- **101 rooms**, 278 intra-zone exits
+- Entry room: `shattered-gate`
+- Structure: ~15 approach rooms → 7×7 slum grid → edge rooms → underground sewer network (22 rooms)
+- 3 surface-to-sewer vertical shafts: sunken-square, sluice-gate, cistern-access
+
+### Results
+- **18 topological conflicts** (max delta: 6)
+- **29 position collisions**
+- **0 unreachable rooms** (all 101 connected)
+- Warrens is NOT in `computeLayout.test.ts` — should be added
+
+### Root Causes
+
+**1. Sewer Vertical Shortcuts (delta 5–6, 16 of 18 conflicts)**
+
+The three sewer access points are widely separated on the surface grid:
+- `sunken-square` — NW corner of grid (west of slum-r1c1)
+- `sluice-gate` — W edge mid-row (west of slum-r5c1, 4 grid rows south)
+- `cistern-access` — S edge (south of slum-r7c2, 6+ grid rows south)
+
+But the underground sewer connects them in far fewer steps:
+- sunken-square ↓ the-ratways → 1 east → sewer-main-junction ↑ sluice-gate (1 sewer step ≠ 4 surface rows)
+- sewer-main-junction → south → south-tunnel → west → west-conduit → west → sewer-cistern ↑ cistern-access (4 sewer steps ≠ 6+ surface cells)
+
+This violates the vertical design rule: underground horizontal movement must match surface distances between access points.
+
+**2. Surface Approach Loop (delta 4, 2 of 18 conflicts)**
+
+BFS reaches `slum-r1c1` first via the short path (broken-sanctuary → sunken-square → east → slum-r1c1) instead of the intended grid entry (merchants-row → gutter-run → south → slum-r1c1). These paths imply positions 4 cells apart.
+
+The `sunken-square ↔ slum-r1c1` connection creates an alternative surface route into the grid NW corner that bypasses the approach spine.
+
+### Comparison to Siltgate
+| Metric | Siltgate | Warrens |
+|--------|----------|---------|
+| Rooms | 136 | 101 |
+| Conflicts | 10 | 18 |
+| Max delta | 17 | 6 |
+| Collisions | 26 | 29 |
+| Conflict rate | 7.4% | 17.8% |
+
+Warrens has **more conflicts per room** but **lower severity** per conflict. The max delta (6) is manageable by the layout engine — it won't produce the extreme distortions Siltgate's delta-17 sewer ring caused. But the sheer number of collisions (29) will force heavy spiral placement.
+
+### Recommended Fixes (if pursued)
+
+1. **Sewer path lengthening:** Add ~4 intermediate sewer rooms between the-ratways and sewer-main-junction (matching the 4-row surface gap between sunken-square and sluice-gate). Add ~3 more between sewer-cistern and sewer-west-conduit (matching the surface distance to cistern-access). This is the same "bridge room" approach from the skill doc.
+
+2. **Break the sunken-square → slum-r1c1 surface shortcut:** Remove the direct east/west exit between sunken-square and slum-r1c1, or add 2–3 intermediate rooms so the path length matches the approach spine distance. The locked broken-sanctuary → sunken-square exit already slows players; the topology just needs the grid distance to match.
+
+3. **Alternative: disconnect one sewer shaft.** If 3 surface access points are too many for the underground to support topologically, remove cistern-access's sewer connection (make it a dead-end) and reduce to 2 shafts.
+
+### Verdict
+Topology fixes are **recommended but not urgent**. The delta-6 conflicts are within the layout engine's ability to handle (it resolved Siltgate's delta-17 with Phase 7 grid expansion). The collisions will cause visual density issues in the map but won't break rendering. If we fix the Warrens, the sewer path lengthening (fix #1) gives the best bang for the buck — it addresses 16 of 18 conflicts.
+
+### Learnings
+- The 7×7 slum grid itself is topologically perfect — all row/column offsets sum correctly. The conflicts come entirely from external connections (sewer + approach loop).
+- Sewer path length matching is the single most important topology concern for the Warrens. The grid and approach spine are well-designed.
+- Warrens is not in computeLayout.test.ts — adding it would catch regressions if we fix the topology.

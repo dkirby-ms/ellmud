@@ -1793,3 +1793,34 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 Peaceful flag properly persists across zone transitions. Dev team can now use `/peaceful` without reset.
 
 **Related Decision:** Peaceful mode now documented as three-layer defense in `.squad/decisions.md`
+
+### 2025-07-25: Creature Visibility Fix + Movement Narrations
+
+**Task:** Fix creature visibility in room descriptions and add arrival/departure notifications.
+
+**Issue 1 — Creature Visibility:**
+- Root cause: test helper `buildCtx` in `creature-wiring.test.ts` omitted `resolveCreaturesInRoom` callback, meaning `go` command tests never verified creature visibility in target rooms. The production code in `ShardRoom.buildCommandContext` was already correct.
+- Fix: Added `resolveCreaturesInRoom` to test `buildCtx` helper. Added 2 tests: go-with-creatures shows creatures, go-without-creatures is clean.
+
+**Issue 2 — Creature Movement Narrations:**
+- Added `sourceRoomId?: string` to `CreatureAction` interface in `types.ts`.
+- `CreatureManager.updateAll()` now saves `action.sourceRoomId = creature.currentRoomId` before updating the creature's position.
+- `ShardRoom.processCreatureAction()` now handles `patrol_move` and `alert_move` by calling `broadcastCreatureMovement()`.
+- `broadcastCreatureMovement()` determines arrival/departure directions by checking room exits and broadcasts ambient narrations via `broadcastToRoom()`.
+- Arrival: "A {name} arrives from the {direction}." (sent to target room occupants)
+- Departure: "A {name} leaves to the {direction}." (sent to source room occupants)
+- Falls back to directionless messages when rooms aren't connected via a named exit.
+
+**Files Modified:**
+- `packages/server/src/creatures/types.ts` — Added `sourceRoomId` to `CreatureAction`
+- `packages/server/src/creatures/CreatureManager.ts` — Save sourceRoomId before position update in `updateAll()`
+- `packages/server/src/rooms/ShardRoom.ts` — Added `broadcastCreatureMovement()`, wired into `processCreatureAction()`
+- `packages/server/src/__tests__/creature-wiring.test.ts` — Fixed `buildCtx` helper, added 5 new tests
+
+**Tests:** All 2068 tests passing (23 in creature-wiring, 5 new). Zero regressions.
+
+## Learnings
+
+- `buildCtx` test helper in creature-wiring.test.ts must mirror ShardRoom.buildCommandContext — any new field added to CommandContext in ShardRoom must be added to the test helper too, or tests will pass while production behavior diverges.
+- Creature movement in `CreatureManager.updateAll()` mutates `creature.currentRoomId` before returning actions. Any post-processing of movement actions (like narrations) needs the original room preserved on the action itself.
+- `broadcastToRoom` accepts a `CommandResult` with narrations — use `type: 'ambient'` for world flavor text like creature movement.
