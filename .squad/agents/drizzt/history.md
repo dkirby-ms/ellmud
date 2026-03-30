@@ -2548,3 +2548,34 @@ User-facing startup narrative messages should ALL go to stdout. Internal error d
 **Tests:** Not needed — logging-only changes
 
 **Pattern Documented:** Azure Container Apps stdout-first logging strategy for user-facing diagnostics.
+
+---
+
+## 2026-03-30T02:00Z — Redis ACA Dev Service Bicep Resource
+
+**Completed:** Added Redis dev service (add-on) resource to Bicep template for automatic deployment
+**Files Modified:** 2 (infra/modules/container-apps.bicep, infra/main.bicep)
+
+### Problem
+Redis ACA add-on was previously created manually via `az containerapp add-on redis create` CLI. The Bicep template had the service bind and env vars already wired, but no resource to actually create the Redis service.
+
+### Changes Made
+
+**`infra/modules/container-apps.bicep`:**
+- Added `redisService` resource: `Microsoft.App/containerApps@2024-03-01` with `configuration.service.type: 'redis'`
+- Conditional on `deployApp && redisServiceName != ''` (only in the app deployment phase)
+- Uses same `resolvedEnvironmentId` as the container app
+- Container app has `dependsOn: [redisService]` for correct ordering
+- Updated param description to reflect Bicep-managed (not CLI-managed)
+
+**`infra/main.bicep`:**
+- Updated comment block to indicate Redis is now deployed via Bicep module
+
+### Learnings
+- ACA dev services (add-ons) are `Microsoft.App/containerApps` resources with `configuration.service.type` set to the service type (e.g. 'redis')
+- No container configuration needed — Azure manages the service container
+- The `2024-03-01` API version supports the `service` configuration property
+- `dependsOn` with a conditional resource works correctly in Bicep (no-op when condition is false)
+- Existing `resourceId('Microsoft.App/containerApps', redisServiceName)` in serviceBinds still resolves correctly since the resource is now created in the same template
+
+**Build:** ✅ `az bicep build` passes clean
