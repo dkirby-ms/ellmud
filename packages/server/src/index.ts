@@ -49,7 +49,7 @@ let USE_PG = !!process.env.DATABASE_URL;
 if (USE_PG) {
   try {
     new URL(process.env.DATABASE_URL!);
-  } catch (err) {
+  } catch {
     console.log('[Ellmud] ⚠ DATABASE_URL is set but cannot be parsed as a valid URL');
     console.log('[Ellmud]   This usually means the password contains characters that need percent-encoding');
     console.log('[Ellmud]   Characters like | < > { } must be encoded (e.g., | → %7C, < → %3C)');

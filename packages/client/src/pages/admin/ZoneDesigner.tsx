@@ -455,7 +455,7 @@ export default function ZoneDesigner({
   const floorBounds = useMemo(() => computeFloorBounds(positions), [positions]);
 
   // ─── Floor-filtered views ───────────────────────────────
-  const { floorPositions, floorIntraExits, floorInterFloorExits, ghostFloorRoomSlugs } = useMemo(() => {
+  const { floorPositions, floorIntraExits, floorInterFloorExits: _floorInterFloorExits, ghostFloorRoomSlugs: _ghostFloorRoomSlugs } = useMemo(() => {
     if (!floorBounds.isMultiFloor) {
       return {
         floorPositions: positions,
