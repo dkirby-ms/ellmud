@@ -61,6 +61,7 @@ export function handleGo(ctx: CommandContext): CommandResult {
     `You move ${direction}.`,
     '',
     targetRoom.description,
+    '',
     `Exits: ${exitList}`,
   ];
 
@@ -73,6 +74,7 @@ export function handleGo(ctx: CommandContext): CommandResult {
     narrations: [{ text: lines.join('\n'), type: 'room' }],
     roomHeader: {
       roomName: targetRoom.name,
+      roomSlug: targetRoom.id,
       exits: Array.from(targetRoom.exits.keys()),
       stability: ctx.stability,
     },

@@ -16,6 +16,8 @@ const TOKEN_TTL_SECONDS = 24 * 60 * 60; // 24 hours
 export interface AuthResult {
   playerId: string;
   token: string;
+  username: string;
+  email?: string;
 }
 
 export interface TokenPayload {
@@ -44,7 +46,7 @@ export class AuthService {
     const token = crypto.randomUUID();
     await this.tokenStore.set(token, { playerId: player.id, username }, TOKEN_TTL_SECONDS);
 
-    return { playerId: player.id, token };
+    return { playerId: player.id, token, username };
   }
 
   /**
@@ -69,7 +71,7 @@ export class AuthService {
     const token = crypto.randomUUID();
     await this.tokenStore.set(token, { playerId: player.id, username: player.username }, TOKEN_TTL_SECONDS);
 
-    return { playerId: player.id, token };
+    return { playerId: player.id, token, username: player.username };
   }
 
   /**
@@ -110,7 +112,7 @@ export class AuthService {
     const token = crypto.randomUUID();
     await this.tokenStore.set(token, { playerId: player.id, username: player.username }, TOKEN_TTL_SECONDS);
 
-    return { playerId: player.id, token };
+    return { playerId: player.id, token, username: player.username, ...(email ? { email } : {}) };
   }
 
   /**

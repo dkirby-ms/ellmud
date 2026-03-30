@@ -1023,9 +1023,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private deliverResult(client: Client, result: import('../commands/index.js').CommandResult): void {
     // Send room header before narrations so the yellow header appears first
     if (result.roomHeader) {
+      const { roomSlug, ...rest } = result.roomHeader;
       const header: RoomHeaderMessage = {
-        ...result.roomHeader,
+        ...rest,
         ...(this.isZone && this.zoneData ? { zoneName: this.zoneData.zone.name } : {}),
+        ...(roomSlug && getConfig().devModeEnabled ? { roomSlug } : {}),
       };
       this.sendRoomHeader(client, header);
     }

@@ -41,6 +41,7 @@ export interface RoomHeaderEntry {
   roomName: string;
   exits: string[];
   stability: number;
+  roomSlug?: string;
 }
 
 export interface CommandResult {

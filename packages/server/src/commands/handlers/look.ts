@@ -11,6 +11,7 @@ export function handleLook(ctx: CommandContext): CommandResult {
 
   const lines: string[] = [
     room.description,
+    '',
     `Exits: ${exitList}`,
   ];
 
@@ -36,6 +37,7 @@ export function handleLook(ctx: CommandContext): CommandResult {
     narrations: [{ text: lines.join('\n'), type: 'room' }],
     roomHeader: {
       roomName: room.name,
+      roomSlug: room.id,
       exits: Array.from(room.exits.keys()),
       stability: ctx.stability,
     },

@@ -49,6 +49,8 @@ export interface RoomHeaderMessage {
   zoneName?: string;
   /** Room type (entry, extraction, boss, etc.), present for zone rooms. */
   roomType?: string;
+  /** Room slug identifier, present when dev mode is enabled. */
+  roomSlug?: string;
 }
 
 /** Server → Client: Zone transfer instruction (inter-zone exit). */

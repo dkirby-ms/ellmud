@@ -14,10 +14,11 @@ export default function AuthCallback() {
   useEffect(() => {
     const token = searchParams.get("token");
     const playerId = searchParams.get("playerId");
+    const email = searchParams.get("email");
 
     if (token && playerId) {
       // Authenticate with OAuth token
-      dispatch({ type: "LOGIN_SUCCESS", token, playerId });
+      dispatch({ type: "LOGIN_SUCCESS", token, playerId, email: email ?? undefined });
       navigate("/characters", { replace: true });
     } else {
       // No token in URL — redirect to login

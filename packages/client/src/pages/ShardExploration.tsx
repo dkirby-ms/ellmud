@@ -78,6 +78,7 @@ export default function ShardExploration() {
   const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
   const zoneName = state.roomHeader?.zoneName;
   const roomType = state.roomHeader?.roomType;
+  const roomSlug = state.roomHeader?.roomSlug;
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -211,7 +212,7 @@ export default function ShardExploration() {
             </button>
           )}
           <span className="text-text-secondary text-sm font-sans">
-            {state.playerId ?? "Unknown"}
+            {state.email ?? state.playerId ?? "Unknown"}
           </span>
           <span className="text-text-disabled">|</span>
           <div className="flex items-center gap-2">
@@ -239,6 +240,11 @@ export default function ShardExploration() {
               style={{ fontSize: "1.125rem" }}
             >
               {currentRoom}
+              {roomSlug && (
+                <span className="text-text-disabled font-mono text-xs ml-2 font-normal">
+                  [{roomSlug}]
+                </span>
+              )}
               {roomType && (
                 <span
                   className={`ml-2 text-xs font-sans font-semibold px-1.5 py-0.5 rounded ${
