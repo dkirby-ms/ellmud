@@ -4975,3 +4975,44 @@ The codebase has an extraction mechanic implemented (multi-tick channel, marked 
 **Rationale:** MUD-style death (corpse drop, gear loss, corpse runs) is more natural to the text-game medium than channeled extraction rituals. Creates continuous tension and enables emergent gameplay (corpse camping, corpse runs, risk assessment at every fight). Simpler to implement and reason about.
 
 **Decision Status:** Proposed — awaiting review by dkirby-ms.
+
+---
+
+## 2026-03-31T20:05:17Z: GDD-Codebase Gap Analysis & 15-Issue Sprint Plan
+
+**By:** Elminster (Lead/Architect)  
+**Date:** 2026-03-31  
+**Scope:** Complete audit of codebase vs GDD (extraction removal, biome removal, shard→zone terminology, Refuge repurpose, faction strongholds, death system)  
+**Status:** AUDIT COMPLETE — 15 GitHub issues created (#228–#242)  
+
+**Executive Summary:**
+
+Comprehensive audit of codebase against three major GDD revisions: (1) removal of shards/biomes as player-facing concepts, (2) Refuge repurposed as designer hub with faction strongholds as player home, (3) extraction mechanic replaced with MUD-style death. The codebase has deep architectural roots in all three removed concepts. This is not a naming pass — it is architectural.
+
+**Findings Summary:**
+
+- **🔴 Must Change (8 issues):** Extraction system removal, biome type removal, Shardwalker branding, Shardboard UI, ShardRoom architecture, shard-sickness rename, faction strongholds implementation, corpse system implementation
+- **🟡 Should Change (14 issues):** Internal "shard" terminology (~500 occurrences), player-facing flavor text, DB column renames, lifecycle decoupling, Refuge hub repurposing, NPC spawn routing, admin UI, leaderboard metrics, chat context, lore item names
+- **🟢 Nice to Have (1 issue):** Lore item name updates
+
+**Issues Created (Tracked in #228):**
+- Sprint 1: #228–#231 (Foundation: extraction & biome removal)
+- Sprint 2: #232–#235 (Internal naming: shard → zone)
+- Sprint 3: #236–#239 (Game mechanics: faction strongholds & death)
+- Sprint 4: #240–#242 (Schema migrations & polish)
+
+**Cross-References & Dependencies:**
+- Master tracker: Issue #228 with checklist, links to all 15 issues
+- Sprint dependencies: S2 depends on S1, S3 on S1–S2, S4 on S1–S3
+- Labels: `gdd-alignment`, `priority:must/should/nice-to-have`, `sprint:1/2/3/4`
+
+**Rationale:**
+
+The three GDD revisions represent a maturation of design intent: away from extraction-based genre mechanics toward traditional MUD/MMORPG with meaningful death and faction-based home systems. Aligning the codebase with this intent requires architectural changes, not cosmetic renames. The 15 issues are sequenced to allow parallel work within sprints while respecting inter-sprint dependencies.
+
+**Next Steps:**
+
+1. Review and approve #228 master tracker and child issues
+2. Assign issues to team members per sprint capacity
+3. Begin Sprint 1 work: extraction system removal and biome type deletion
+4. DB migrations deferred to Sprint 4 to avoid blocking other work

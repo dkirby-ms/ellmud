@@ -1400,3 +1400,29 @@ CREATE TABLE zone_definitions (
 **Artifacts Created:**
 - Decision document: `.squad/decisions/inbox/elminster-extraction-removal.md`
 - Updated: `GDD.md` (extraction removed, death & corpse system added, genre reframed)
+
+---
+
+## Learnings — GDD vs Codebase Audit (2026-03-20)
+
+**Context:** Audited the full codebase against the updated GDD after three major revisions (shards/biomes removed, Refuge repurposed, extraction removed).
+
+### Key Findings
+
+1. **Extraction system is deeply embedded.** `ExtractionSystem` (server), `ExtractionOverlay` (client), `extract` command handler, `EXTRACTION_STATE` message type, extraction room type in `RoomType` union, and `extractionRoomIds` on all graph types. The generator has ~200 lines dedicated to extraction room placement and distance constraints. Full removal required.
+
+2. **"Shard" permeates everything.** 93 occurrences in `ShardRoom.ts` alone (2491 lines). The class name, state class, shared types (`ShardState`, `ShardTier`, `ShardModifier`, `ShardStateMessage`, `ShardSicknessInfo`), the `shard/` directory, client hooks (`useShardConnection`), client pages (`ShardExploration`), store actions (`SET_SHARD_STATE`), and the Colyseus room registration (`server.define('shard', ShardRoom)`) all use "shard". Renaming is a cross-cutting concern touching every package.
+
+3. **"Shardwalker" is player-facing.** Used on Login (`"Create Shardwalker"`), CharacterSelect (`"Your Shardwalkers"`, `"+ New Shardwalker"`). Must be renamed before any public release.
+
+4. **Biome system is in DB schema.** `biome_definitions` table exists (dead code), `biome` columns on `zones`, `room_definitions`, `creature_definitions`, `run_history`, and `character_explored_rooms` tables. `BiomeType` is a shared type used across 15+ files. The Siltgate zone uses `biome: 'urban'` which isn't even in the `BiomeType` union — the type is already stale.
+
+5. **Death routes to Refuge, not faction stronghold.** Both `handlePlayerDeath()` and `handleSuccessfulExtraction()` send `ROOM_SWITCH` to `zone:the-refuge`. No faction-based routing exists. The faction module can look up player factions but doesn't influence spawn/death routing.
+
+6. **Corpse system is a trace, not an entity.** Death creates a `corpse` trace (visual marker with TTL) and drops items as loose floor objects. There's no corpse *entity* with an inventory that other players can `loot`. The test `it.todo('PvP death drops non-soulbound items as lootable corpse')` confirms this is known-missing.
+
+7. **Refuge is `category: 'hub'` in DB, should be `'dev'`.** GDD says Refuge is `category: 'dev'` for designers. Faction strongholds (category: `faction_hub`) don't exist yet.
+
+8. **DB schema has extraction-centric columns:** `run_history.extracted`, `run_history.extracted_items`, `run_history.shard_tier`, `player_shard_sickness` table name, `biome` columns across 5+ tables.
+
+**Audit report:** `.squad/decisions/inbox/elminster-gdd-code-audit.md`
