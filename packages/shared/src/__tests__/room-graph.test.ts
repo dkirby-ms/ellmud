@@ -25,7 +25,6 @@ const FEATURE_ROOM_TYPES: RoomType[] = [
 
 const NON_FEATURE_ROOM_TYPES: RoomType[] = [
   'entry',
-  'extraction',
   'boss',
   'corridor',
   'junction',

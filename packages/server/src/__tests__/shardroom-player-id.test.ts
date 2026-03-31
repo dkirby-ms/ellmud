@@ -145,25 +145,16 @@ describe('ShardRoom reconnection with playerId', () => {
 // ─── 3. Stash Persistence ────────────────────────────────────────────────────
 
 describe('ShardRoom stash keyed by playerId', () => {
-  it('should use playerId (not sessionId) for extraction stash transfer', async () => {
+  it('should use playerId (not sessionId) for player state', async () => {
     const room = await createShardRoom();
     const { client } = await connectWithPlayerId(room, 'stash-player-1');
 
-    // Verify the extraction system uses playerId for keying.
-    // The extraction system's startExtraction call should receive 'stash-player-1'.
     const serverRoom = room as unknown as {
-      extractionSystem: { isExtracting: (id: string) => boolean };
       players: Map<string, unknown>;
     };
 
     // Player exists under playerId
     expect(serverRoom.players.has('stash-player-1')).toBe(true);
-
-    // If extraction were started, it should be keyed by playerId
-    // (extraction start requires being in an extraction room; we just verify identity)
-    expect(serverRoom.extractionSystem.isExtracting('stash-player-1')).toBe(false);
-    // Should NOT be keyed by sessionId
-    expect(serverRoom.extractionSystem.isExtracting(client.sessionId)).toBe(false);
 
     await client.leave();
   });

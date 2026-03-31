@@ -50,7 +50,7 @@ export const HOLLOW_STALKER: CreatureTemplate = {
     minCount: 1,
     maxCount: 2,
     preferredRoomTypes: ['junction'],
-    forbiddenRoomTypes: ['entry', 'extraction', 'corridor'],
+    forbiddenRoomTypes: ['entry', 'corridor'],
   },
   idleTicksMin: 50,
   idleTicksMax: 120,

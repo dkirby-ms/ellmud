@@ -1,10 +1,10 @@
 /**
  * Wave 4 — Stash Persistence Wiring (#11) anticipatory tests.
  *
- * Tests the integration between extraction completion, stash persistence,
- * and the zone-mode ShardRoom stash-load-on-entry flow. Covers:
- *   - Extraction → stash transfer pipeline
- *   - Weight enforcement during extraction deposits
+ * Tests the integration between stash persistence and the zone-mode
+ * ShardRoom stash-load-on-entry flow. Covers:
+ *   - Stash transfer pipeline
+ *   - Weight enforcement during deposits
  *   - Capacity upgrades through the full pipeline
  *   - Server restart durability (StashService recreation)
  *   - Zone ShardRoom stash-load-on-join wiring
@@ -18,7 +18,7 @@ import {
   DEFAULT_STASH_CAPACITY,
 } from '../stash/index.js';
 import type { StashRepository } from '../stash/index.js';
-import { transferInventoryToStash } from '../extraction/stash-transfer.js';
+import { transferInventoryToStash } from '../systems/stash-transfer.js';
 import { PlayerState, type InventoryEntry } from '../state/PlayerState.js';
 
 // ─── Shared Fixtures ────────────────────────────────────────────────────────
@@ -80,9 +80,9 @@ function buildInventory(
   return inv;
 }
 
-// ─── Extraction → Stash Transfer Pipeline ───────────────────────────────────
+// ─── Stash Transfer Pipeline ─────────────────────────────────────────────────
 
-describe('Extraction → Stash Transfer (Issue #11)', () => {
+describe('Stash Transfer (Issue #11)', () => {
   let repo: StashRepository;
   let defs: Map<string, StashItem>;
   let service: StashService;
@@ -461,13 +461,13 @@ describe('Stash Load on Refuge Entry (Issue #11)', () => {
     expect(summary).toContain('100');
   });
 
-  it('full extraction→stash→zone-load pipeline works end to end', async () => {
+  it('full stash→zone-load pipeline works end to end', async () => {
     // Simulate a shard run: player picks up items
     const player = new PlayerState(PLAYER_ID, 'entry');
     player.addItem({ id: 'rusty_blade', name: 'Rusty Blade', weight: 5, description: 'Sword' });
     player.addItem({ id: 'revenant_bone', name: 'Revenant Bone', weight: 2, description: 'Bone' });
 
-    // Extraction completes → transfer to stash
+    // Transfer to stash
     const result = await transferInventoryToStash(
       PLAYER_ID,
       player.inventory,

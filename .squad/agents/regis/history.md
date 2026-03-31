@@ -873,3 +873,8 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - All 158 shared tests pass, all 40 feature-gate tests pass (including new alias test)
 - Pre-existing biome-related failures (20) are unrelated to this rename
 - Default branch is `dev` — confirmed again
+### Issue #230 — Rename Shardwalker → Character (PR #243)
+- Replaced 4 instances of "Shardwalker" with "Character" across Login.tsx and CharacterSelect.tsx
+- Grep confirmed zero remaining references in packages/client/
+- tsc --noEmit passed cleanly
+- Default branch is `dev`, not `main` — always branch from `dev`

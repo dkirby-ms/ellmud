@@ -8,7 +8,7 @@ export default function ContractsList() {
         <div>
           <h1 className="text-[#C9A84C] text-2xl">Contracts</h1>
           <p className="text-[#8A8B95] text-sm" style={{ fontFamily: "var(--font-sans)" }}>
-            Faction-issued missions that drive the extraction gameplay loop
+            Faction-issued missions that drive the shard gameplay loop
           </p>
         </div>
       </div>

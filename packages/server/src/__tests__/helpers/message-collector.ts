@@ -3,7 +3,7 @@
  * Wires up listeners for every known MessageType so tests don't need boilerplate.
  */
 import { MessageTypes } from '@ellmud/shared';
-import type { NarrateMessage, RoomHeaderMessage, ShardStateMessage, RoomSwitchMessage, ExtractionMessage, PlayerStateMessage } from '@ellmud/shared';
+import type { NarrateMessage, RoomHeaderMessage, ShardStateMessage, RoomSwitchMessage, OverlayMessage, PlayerStateMessage } from '@ellmud/shared';
 
 export interface CollectedMessage {
   type: string;
@@ -17,7 +17,7 @@ export class MessageCollector {
   readonly roomHeader: RoomHeaderMessage[] = [];
   readonly shardState: ShardStateMessage[] = [];
   readonly roomSwitch: RoomSwitchMessage[] = [];
-  readonly extractionState: ExtractionMessage[] = [];
+  readonly overlayState: OverlayMessage[] = [];
   readonly playerState: PlayerStateMessage[] = [];
 
   constructor(client: { onMessage: (type: string, cb: (data: unknown) => void) => void }) {
@@ -45,10 +45,10 @@ export class MessageCollector {
       this.all.push({ type: MessageTypes.ROOM_SWITCH, data: msg, receivedAt: Date.now() });
     });
 
-    client.onMessage(MessageTypes.EXTRACTION_STATE, (data) => {
-      const msg = data as ExtractionMessage;
-      this.extractionState.push(msg);
-      this.all.push({ type: MessageTypes.EXTRACTION_STATE, data: msg, receivedAt: Date.now() });
+    client.onMessage(MessageTypes.OVERLAY_STATE, (data) => {
+      const msg = data as OverlayMessage;
+      this.overlayState.push(msg);
+      this.all.push({ type: MessageTypes.OVERLAY_STATE, data: msg, receivedAt: Date.now() });
     });
 
     client.onMessage(MessageTypes.PLAYER_STATE, (data) => {
@@ -81,7 +81,7 @@ export class MessageCollector {
     this.roomHeader.length = 0;
     this.shardState.length = 0;
     this.roomSwitch.length = 0;
-    this.extractionState.length = 0;
+    this.overlayState.length = 0;
     this.playerState.length = 0;
   }
 }

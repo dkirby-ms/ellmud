@@ -289,7 +289,7 @@ describe('Shared Repository Across Rooms', () => {
     // Register item def
     defs.set(IRON_ORE.id, IRON_ORE);
 
-    // Store via service1 (simulating ShardRoom extraction)
+    // Store via service1 (simulating ShardRoom stash transfer)
     const playerId = 'shared-player';
     await service1.storeItem(playerId, makeInstance(IRON_ORE.id));
 

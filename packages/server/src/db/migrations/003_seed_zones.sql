@@ -47,7 +47,7 @@ WHERE z.slug = 'the-refuge';
 
 
 -- ============================================================================
--- The Warrens — expanded 100+ room extraction zone
+-- The Warrens — expanded 100+ room zone
 -- ============================================================================
 
 INSERT INTO zones (id, slug, name, description, level_min, level_max, tier, biome, entry_room_slugs, lifecycle, category, max_players, pvp_enabled, repop_interval_seconds)
@@ -127,11 +127,11 @@ FROM zones z, (VALUES
    '[{"id": "alley-corpse-1", "type": "corpse", "items": ["gutterspawn_fang", "scavenger_shiv", "sanctuary_key"]}]',
    '[]'),
 
-  -- A7. Dustfall Extraction (extraction)
+  -- A7. Dustfall Extraction (dead_end)
   ('dustfall-extraction',
    'Dustfall Extraction',
    'A wide intersection where the ruins fall back, leaving an unexpected expanse of open sky. Dust drifts down endlessly from the crumbling buildings above, catching light like grey snow. A half-collapsed pedestrian bridge arches overhead — beneath it, the ground has been swept clean in a perfect circle. This is where the shard thins. This is where you leave.',
-   'extraction',
+   'dead_end',
    '{}',
    '[]',
    '[]',

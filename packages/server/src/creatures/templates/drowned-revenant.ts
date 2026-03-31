@@ -8,7 +8,7 @@
  *   HP: 50, Attack: 10, Defence: 3, Armour: 3
  *
  * Loot: crafting materials (waterlogged bone, revenant essence).
- * Spawn: 3–5 per shard, prefers corridors and dead ends, never entry/extraction.
+ * Spawn: 3–5 per shard, prefers corridors and dead ends, never entry.
  */
 
 import type { CreatureTemplate } from '../types.js';
@@ -43,7 +43,7 @@ export const DROWNED_REVENANT: CreatureTemplate = {
     minCount: 3,
     maxCount: 5,
     preferredRoomTypes: ['corridor', 'dead_end'],
-    forbiddenRoomTypes: ['entry', 'extraction'],
+    forbiddenRoomTypes: ['entry'],
   },
   idleTicksMin: 30,
   idleTicksMax: 50,

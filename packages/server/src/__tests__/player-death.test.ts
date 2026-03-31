@@ -3,7 +3,7 @@
  *
  * Verifies that when a player is defeated in combat (HP=0):
  * 1. The combat system generates a 'defeated' event with the player's sessionId
- * 2. The server sends EXTRACTION_STATE with state='death' to the defeated player
+ * 2. The server sends OVERLAY_STATE with state='death' to the defeated player
  * 3. Player inventory is dropped to the room floor
  * 4. After a delay, ROOM_SWITCH sends the player back to refuge
  * 5. Player is cleaned up from combat and shard state
@@ -14,7 +14,7 @@ import { CombatSystem, createCombatant, DEFAULT_PLAYER_STATS } from '../combat/i
 import type { CombatStats } from '../combat/CombatState.js';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { MessageTypes } from '@ellmud/shared';
-import type { ExtractionMessage } from '@ellmud/shared';
+import type { OverlayMessage } from '@ellmud/shared';
 import { bootTestServer, wait } from './helpers/index.js';
 import type { PlayerState } from '../state/PlayerState.js';
 import type { Room, Item } from '../shard/RoomGraph.js';
@@ -109,13 +109,13 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
     await colyseus.shutdown();
   });
 
-  it('should send EXTRACTION_STATE with state=death when player is defeated', async () => {
+  it('should send OVERLAY_STATE with state=death when player is defeated', async () => {
     const room = await colyseus.createRoom('shard', { useTestGraph: true, openDelayMs: 0 });
     const client = await colyseus.connectTo(room);
 
-    const extractionMessages: ExtractionMessage[] = [];
-    client.onMessage(MessageTypes.EXTRACTION_STATE, (data: ExtractionMessage) => {
-      extractionMessages.push(data);
+    const overlayMessages: OverlayMessage[] = [];
+    client.onMessage(MessageTypes.OVERLAY_STATE, (data: OverlayMessage) => {
+      overlayMessages.push(data);
     });
 
     // Wait for room to be ready (seeding → open)
@@ -145,8 +145,8 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
     // Wait for combat ticks to resolve defeat + downing bleed-out timer
     await wait(15_000);
 
-    // Check for death extraction message (downed → bleed-out → death)
-    const deathMessages = extractionMessages.filter(m => m.state === 'death');
+    // Check for death overlay message (downed → bleed-out → death)
+    const deathMessages = overlayMessages.filter(m => m.state === 'death');
     if (combatant) {
       // If combat was initiated, we should have a death message
       expect(deathMessages.length).toBeGreaterThanOrEqual(1);
@@ -162,11 +162,11 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
     const room = await colyseus.createRoom('shard', { useTestGraph: true, openDelayMs: 0 });
     const client = await colyseus.connectTo(room);
 
-    const extractionMessages: ExtractionMessage[] = [];
+    const overlayMessages: OverlayMessage[] = [];
     const roomSwitchMessages: Array<{ target: string; reason: string }> = [];
 
-    client.onMessage(MessageTypes.EXTRACTION_STATE, (data: ExtractionMessage) => {
-      extractionMessages.push(data);
+    client.onMessage(MessageTypes.OVERLAY_STATE, (data: OverlayMessage) => {
+      overlayMessages.push(data);
     });
     client.onMessage(MessageTypes.ROOM_SWITCH, (data: { target: string; reason: string }) => {
       roomSwitchMessages.push(data);
@@ -268,9 +268,9 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
   }, 25_000);
 });
 
-// ─── E2E Integration: Downed → Stabilized → Extract ──────────────────────────────────────────────
+// ─── E2E Integration: Downed → Stabilized ──────────────────────────────────────────────
 
-describe('Player Death E2E: down → stabilize → extract', () => {
+describe('Player Death E2E: down → stabilize', () => {
   let colyseus: ColyseusTestServer;
 
   beforeAll(async () => {
@@ -281,23 +281,15 @@ describe('Player Death E2E: down → stabilize → extract', () => {
     await colyseus.shutdown();
   });
 
-  it('player reaches 0 HP, squadmate stabilizes, squad extracts', async () => {
+  it('player reaches 0 HP, squadmate stabilizes', async () => {
     const room = await colyseus.createRoom('shard', { useTestGraph: true, openDelayMs: 0 });
     const victim = await colyseus.connectTo(room);
     const healer = await colyseus.connectTo(room);
 
-    const victimExtraction: ExtractionMessage[] = [];
-    const healerExtraction: ExtractionMessage[] = [];
-    const healerRoomSwitch: Array<{ target: string; reason: string }> = [];
+    const victimOverlay: OverlayMessage[] = [];
 
-    victim.onMessage(MessageTypes.EXTRACTION_STATE, (data: ExtractionMessage) => {
-      victimExtraction.push(data);
-    });
-    healer.onMessage(MessageTypes.EXTRACTION_STATE, (data: ExtractionMessage) => {
-      healerExtraction.push(data);
-    });
-    healer.onMessage(MessageTypes.ROOM_SWITCH, (data: { target: string; reason: string }) => {
-      healerRoomSwitch.push(data);
+    victim.onMessage(MessageTypes.OVERLAY_STATE, (data: OverlayMessage) => {
+      victimOverlay.push(data);
     });
 
     // Wait for shard to reach 'open' state
@@ -338,7 +330,7 @@ describe('Player Death E2E: down → stabilize → extract', () => {
     // Verify victim is downed
     expect(roomInstance.downingSystem.isPlayerDowned(victimId)).toBe(true);
 
-    const downedMessages = victimExtraction.filter(m => m.state === 'downed');
+    const downedMessages = victimOverlay.filter(m => m.state === 'downed');
     expect(downedMessages.length).toBeGreaterThanOrEqual(1);
 
     // ── Step 2: Healer stabilizes the victim ────────────────────────────
@@ -354,31 +346,8 @@ describe('Player Death E2E: down → stabilize → extract', () => {
     await wait(4000);
 
     // Verify victim received stabilized state
-    const stabilizedMessages = victimExtraction.filter(m => m.state === 'stabilized');
+    const stabilizedMessages = victimOverlay.filter(m => m.state === 'stabilized');
     expect(stabilizedMessages.length).toBeGreaterThanOrEqual(1);
-
-    // ── Step 3: Healer extracts (moves to extraction room, extracts) ────
-    // Test graph path: entry → north → corridor → west → crypt → down → extraction-chamber
-    healer.send(MessageTypes.COMMAND, { verb: 'go', args: ['north'] });
-    await wait(1500);
-    healer.send(MessageTypes.COMMAND, { verb: 'go', args: ['west'] });
-    await wait(1500);
-    healer.send(MessageTypes.COMMAND, { verb: 'go', args: ['down'] });
-    await wait(1500);
-
-    // Start extraction
-    healer.send(MessageTypes.COMMAND, { verb: 'extract', args: [] });
-
-    // Wait for extraction channel (5 ticks default) + processing time
-    await wait(8000);
-
-    // Verify healer received extraction complete + room switch to refuge
-    const completedExtractions = healerExtraction.filter(m => m.state === 'completed');
-    expect(completedExtractions.length).toBeGreaterThanOrEqual(1);
-
-    const refugeSwitches = healerRoomSwitch.filter(m => m.reason === 'extraction_complete');
-    expect(refugeSwitches.length).toBeGreaterThanOrEqual(1);
-    expect(refugeSwitches[0]!.target).toBe('zone:the-refuge');
 
     await victim.leave();
   }, 30_000);
