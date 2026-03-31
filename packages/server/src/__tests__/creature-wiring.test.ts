@@ -406,8 +406,6 @@ describe('Go Command with Creatures', () => {
     const creature = spawned[0]!;
     const creatureRoomId = creature.currentRoomId;
 
-    // Find a room adjacent to the creature's room so the player can move there
-    const creatureRoom = localGraph.rooms.get(creatureRoomId)!;
     let playerStartRoom: string | undefined;
     let direction: string | undefined;
 
@@ -480,12 +478,12 @@ describe('Creature Movement Actions', () => {
   });
 
   it('alert_move sets sourceRoomId on the action', () => {
-    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const { localGraph, creatureManager, combatSystem: _cs, spawned } = createTestShard();
     const creature = spawned[0]!;
-    const creatureRoom = creature.currentRoomId;
+    const creatureRoomId = creature.currentRoomId;
 
     // Find an adjacent room and make it noisy to trigger alert
-    const adjacentRooms = Array.from(localGraph.rooms.get(creatureRoom)!.exits.values());
+    const adjacentRooms = Array.from(localGraph.rooms.get(creatureRoomId)!.exits.values());
     if (adjacentRooms.length === 0) return;
 
     const noisyRoom = adjacentRooms[0]!;
@@ -504,7 +502,7 @@ describe('Creature Movement Actions', () => {
     );
 
     if (alertAction) {
-      expect(alertAction.sourceRoomId).toBe(creatureRoom);
+      expect(alertAction.sourceRoomId).toBe(creatureRoomId);
       expect(alertAction.targetRoomId).toBe(noisyRoom);
     }
   });

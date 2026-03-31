@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  validateZoneTopology,
-  type TopologyValidationResult,
-} from '../validateZoneTopology.js';
+import { validateZoneTopology } from '../validateZoneTopology.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
