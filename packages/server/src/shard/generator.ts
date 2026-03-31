@@ -27,13 +27,12 @@ import { createPRNG, type PRNG } from './prng.js';
 
 export const ROOM_NAMES: Record<RoomType, readonly string[]> = {
   entry: ['Drowned Vestibule', 'Sunken Threshold', 'Waterlogged Gate', 'Flooded Antechamber'],
-  extraction: ['Crumbling Breach', 'Fissure Ascent', 'Collapsed Stairwell', 'Eroded Vent'],
   boss: ['Sanctum of the Drowned', 'Revenants\' Throne', 'The Ossuary Heart'],
   corridor: ['Submerged Gallery', 'Waterlogged Passage', 'Dripping Corridor', 'Moss-Choked Tunnel', 'Brackish Channel', 'Sunken Walkway', 'Fungal-Lit Passage', 'Silted Hallway'],
   junction: ['Flooded Crossroads', 'Tidal Junction', 'Rotting Intersection', 'Branching Cistern', 'Cracked Atrium', 'Collapsed Forum'],
   dead_end: ['Waterlogged Alcove', 'Sealed Reliquary', 'Drowned Cell', 'Stagnant Niche', 'Bone-Strewn Recess'],
   feature_stash: ['Secure Alcove'],
-  feature_shardboard: ['Etched Vestibule'],
+  feature_expedition_board: ['Etched Vestibule'],
   feature_marketplace: ['Sunken Bazaar'],
   feature_crafting: ['Flooded Workshop'],
   feature_training: ['Drowned Sparring Hall'],
@@ -45,10 +44,6 @@ const ROOM_DESCRIPTIONS: Record<RoomType, readonly string[]> = {
   entry: [
     'Pale light seeps through cracked stone above. Ankle-deep water sloshes with each step. This is where the shard begins — and where retreat is still possible.',
     'A jagged opening in the earth leads down into darkness. Water drips steadily from the ceiling, pooling on worn flagstones.',
-  ],
-  extraction: [
-    'A narrow fissure in the wall reveals a sliver of grey sky. The water here is shallower — the ground slopes upward. This could be a way out.',
-    'Broken masonry has created a gap in the ceiling. Cold air rushes down. With effort, one could climb free of this place.',
   ],
   boss: [
     'The water here is waist-deep and unnervingly still. Ancient pillars ring a raised stone platform. Something stirs beneath the surface — something that has waited a very long time.',
@@ -70,7 +65,7 @@ const ROOM_DESCRIPTIONS: Record<RoomType, readonly string[]> = {
     'A small alcove, barely large enough to stand in. The walls are carved with worn symbols.',
   ],
   feature_stash: ['A recessed alcove sealed by a heavy iron grate. The air smells of rust and damp cloth.'],
-  feature_shardboard: ['Faded etchings cover a smooth stone slab set into the wall. Notices have been pinned with bone splints.'],
+  feature_expedition_board: ['Faded etchings cover a smooth stone slab set into the wall. Notices have been pinned with bone splints.'],
   feature_marketplace: ['A vaulted chamber where merchants once gathered. Waterlogged stalls line the perimeter.'],
   feature_crafting: ['Workbenches and scattered tools suggest this was once a place of making. The forge is cold.'],
   feature_training: ['A wide, low-ceilinged room with weapon racks and scarred practice dummies.'],

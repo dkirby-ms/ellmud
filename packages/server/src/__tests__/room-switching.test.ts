@@ -18,11 +18,8 @@ import {
   bootTestServer,
   connectTestClient,
   wait,
-  waitUntil,
   makeCommand,
-  quickCollapseOptions,
 } from './helpers/index.js';
-import { MessageCollector } from './helpers/message-collector.js';
 import { resetConfig } from '../config.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
