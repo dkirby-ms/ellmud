@@ -20,7 +20,9 @@ import {
   type ExploredRoomData,
   type ExplorationDataMessage,
   type ExplorationUpdateMessage,
+  type RoomOccupantsMessage,
   SHARD_SICKNESS_DEFAULTS,
+  OPPOSITE_DIRECTION,
   MessageTypes,
 } from '@ellmud/shared';
 import { ShardState } from '../state.js';
@@ -484,6 +486,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Send exploration data so client map can render the starting room
     this.sendExplorationData(client, playerId, startRoom);
+
+    // Send initial room occupants
+    this.sendRoomOccupants(client, playerId, startRoom);
 
     this.sendShardState(client, {
       state: this.lifecycle,
@@ -949,6 +954,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         actorName: playerId,
       }, direction);
 
+      // Broadcast arrival/departure narrations to other players
+      this.broadcastPlayerMovement(playerId, previousRoomId, player.currentRoomId, direction);
+
       // Awareness: notify observers in destination room about entering player
       this.runAwarenessChecks(playerId, player.currentRoomId, 'arrival');
       // Awareness: notify observers in source room about departing player
@@ -956,6 +964,13 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
       // Exploration: send map update for the new room
       this.sendExplorationUpdate(client, playerId, player.currentRoomId);
+
+      // Send updated room occupants to the moving player
+      this.sendRoomOccupants(client, playerId, player.currentRoomId);
+
+      // Broadcast updated occupants to other players in both rooms
+      this.broadcastRoomOccupantsUpdate(previousRoomId);
+      this.broadcastRoomOccupantsUpdate(player.currentRoomId);
     }
 
     // Social commands (say, emote) broadcast to all players in the same room
@@ -1003,7 +1018,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
 
     const creaturesInRoom = this.creatureManager.getCreaturesInRoom(player.currentRoomId)
-      .map(c => ({ id: c.id, name: c.name }));
+      .map(c => ({ id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription }));
 
     return {
       player,
@@ -1017,15 +1032,20 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       extractionSystem: this.extractionSystem,
       downingSystem: this.downingSystem,
       creaturesInRoom,
+      resolveCreaturesInRoom: (roomId: string) =>
+        this.creatureManager.getCreaturesInRoom(roomId)
+          .map(c => ({ id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription })),
     };
   }
 
   private deliverResult(client: Client, result: import('../commands/index.js').CommandResult): void {
     // Send room header before narrations so the yellow header appears first
     if (result.roomHeader) {
+      const { roomSlug, ...rest } = result.roomHeader;
       const header: RoomHeaderMessage = {
-        ...result.roomHeader,
+        ...rest,
         ...(this.isZone && this.zoneData ? { zoneName: this.zoneData.zone.name } : {}),
+        ...(roomSlug && getConfig().devModeEnabled ? { roomSlug } : {}),
       };
       this.sendRoomHeader(client, header);
     }
@@ -1461,6 +1481,111 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         break;
       }
       // patrol_move and alert_move already handled by CreatureManager.updateAll()
+      // Broadcast arrival/departure narrations to players in affected rooms
+      case 'patrol_move':
+      case 'alert_move': {
+        if (action.targetRoomId && action.sourceRoomId) {
+          this.broadcastCreatureMovement(creature, action.sourceRoomId, action.targetRoomId);
+        }
+        break;
+      }
+    }
+  }
+
+  /**
+   * Broadcast creature arrival/departure narrations when a creature moves between rooms.
+   * Players in the target room see "A {name} arrives from the {direction}."
+   * Players in the source room see "A {name} leaves to the {direction}."
+   */
+  private broadcastCreatureMovement(
+    creature: import('../creatures/types.js').Creature,
+    sourceRoomId: string,
+    targetRoomId: string,
+  ): void {
+    const targetRoom = this.roomGraph.rooms.get(targetRoomId);
+    const sourceRoom = this.roomGraph.rooms.get(sourceRoomId);
+
+    // Find which direction the creature arrived FROM (from target room's perspective)
+    if (targetRoom) {
+      let fromDirection: string | undefined;
+      for (const [dir, exitId] of targetRoom.exits) {
+        if (exitId === sourceRoomId) {
+          fromDirection = dir;
+          break;
+        }
+      }
+
+      const arrivalText = fromDirection
+        ? `A ${creature.name} arrives from the ${fromDirection}.`
+        : `A ${creature.name} arrives.`;
+
+      this.broadcastToRoom(targetRoomId, {
+        narrations: [{ text: arrivalText, type: 'ambient' }],
+      });
+    }
+
+    // Find which direction the creature left TO (from source room's perspective)
+    if (sourceRoom) {
+      let toDirection: string | undefined;
+      for (const [dir, exitId] of sourceRoom.exits) {
+        if (exitId === targetRoomId) {
+          toDirection = dir;
+          break;
+        }
+      }
+
+      const departureText = toDirection
+        ? `A ${creature.name} leaves to the ${toDirection}.`
+        : `A ${creature.name} leaves.`;
+
+      this.broadcastToRoom(sourceRoomId, {
+        narrations: [{ text: departureText, type: 'ambient' }],
+      });
+    }
+
+    // Send updated room occupants to all players in both rooms
+    this.broadcastRoomOccupantsUpdate(targetRoomId);
+    this.broadcastRoomOccupantsUpdate(sourceRoomId);
+  }
+
+  /**
+   * Broadcast player arrival/departure narrations when a player moves between rooms.
+   * Other players in the target room see "{Name} arrives from the {direction}."
+   * Other players in the source room see "{Name} leaves to the {direction}."
+   */
+  private broadcastPlayerMovement(
+    playerId: string,
+    sourceRoomId: string,
+    targetRoomId: string,
+    direction?: string,
+  ): void {
+    const name = this.characterNames.get(playerId) ?? 'A wanderer';
+
+    // Departure: tell players in the source room
+    const departureText = direction
+      ? `${name} leaves to the ${direction}.`
+      : `${name} leaves.`;
+    for (const [sid, ps] of this.players) {
+      if (sid !== playerId && ps.currentRoomId === sourceRoomId) {
+        const c = this.findClient(sid);
+        if (c) {
+          this.sendNarrate(c, { text: departureText, type: 'ambient', timestamp: Date.now() });
+        }
+      }
+    }
+
+    // Arrival: tell players in the target room
+    const fromDirection = direction ? OPPOSITE_DIRECTION[direction as Direction] : undefined;
+    const arrivalText = fromDirection
+      ? `${name} arrives from the ${fromDirection}.`
+      : `${name} arrives.`;
+    for (const [sid, ps] of this.players) {
+      if (sid !== playerId && ps.currentRoomId === targetRoomId) {
+        const c = this.findClient(sid);
+        if (c) {
+          this.sendNarrate(c, { text: arrivalText, type: 'ambient', timestamp: Date.now() });
+        }
+      }
     }
   }
 
@@ -1499,6 +1624,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
             actorId: event.actorId,
             actorName: event.actorName,
           });
+
+          // Send updated room occupants to all players in the room
+          this.broadcastRoomOccupantsUpdate(roomId);
         }
       }
     }
@@ -1927,6 +2055,41 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }).catch((err) => {
       this.log(`Failed to record exploration visit for ${this.playerTag(playerId)}: ${err}`);
     });
+  }
+
+  // ─── Room Occupants ──────────────────────────────────────────────────────
+
+  /** Send structured room occupants data to a specific client. */
+  private sendRoomOccupants(client: Client, playerId: string, roomId: string): void {
+    const creatures = this.creatureManager.getCreaturesInRoom(roomId).map((c) => ({
+      id: c.id,
+      name: c.name,
+      type: c.type,
+      aggressive: c.behaviorState === 'hostile',
+    }));
+
+    const players: Array<{ id: string; name: string }> = [];
+    for (const [sid, ps] of this.players) {
+      if (ps.currentRoomId === roomId && sid !== playerId) {
+        const displayName = this.characterNames.get(sid) ?? sid;
+        players.push({ id: sid, name: displayName });
+      }
+    }
+
+    const message: RoomOccupantsMessage = { creatures, players };
+    client.send(MessageTypes.ROOM_OCCUPANTS, message);
+  }
+
+  /** Broadcast room occupants update to all players in a room. */
+  private broadcastRoomOccupantsUpdate(roomId: string): void {
+    for (const [sid, ps] of this.players) {
+      if (ps.currentRoomId === roomId) {
+        const client = this.findClient(sid);
+        if (client) {
+          this.sendRoomOccupants(client, sid, roomId);
+        }
+      }
+    }
   }
 
   // ─── Profile Persistence ─────────────────────────────────────────────────

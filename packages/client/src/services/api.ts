@@ -8,6 +8,8 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 export interface AuthResponse {
   playerId: string;
   token: string;
+  username?: string;
+  email?: string;
 }
 
 // Global 401 handler — called when any API request returns 401 (stale token).

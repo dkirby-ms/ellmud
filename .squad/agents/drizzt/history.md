@@ -2579,3 +2579,140 @@ Redis ACA add-on was previously created manually via `az containerapp add-on red
 - Existing `resourceId('Microsoft.App/containerApps', redisServiceName)` in serviceBinds still resolves correctly since the resource is now created in the same template
 
 **Build:** ✅ `az bicep build` passes clean
+
+---
+
+## Layout Engine Analysis (2026-03-30)
+
+**Task:** Analyze `computeLayout.ts` (2727 lines) and produce a technical reference document for zone designers explaining topological conflicts, scoring weights, and design guidelines.
+
+**Status:** ✅ Complete — Reference doc written
+
+### What I Found
+
+The layout algorithm is an 8-phase pipeline: BFS → z-levels → disconnected subgraphs → force-relaxation → diagonal cascade → direction repair → occlusion fix → grid expansion. It enforces direction correctness as a hard constraint (weight 50), treats diagonals as a heavy soft constraint (weight 20), and penalizes distance stretch at 1/cell. Occlusion penalties are phased (3 during relaxation, 15 during dedicated fix).
+
+Key insight: Topological conflicts are fundamentally about cycle offset sums. Any cycle where the direction offsets don't sum to (0,0) creates an irreconcilable conflict that forces the algorithm to stretch exits or misalign rooms. The algorithm doesn't detect these explicitly — it encounters them during BFS when a room is reachable via two paths with different ideal positions.
+
+### Output
+
+- **Decision doc:** `.squad/decisions/inbox/drizzt-layout-constraints.md`
+  - Explains topological conflicts and why they're unavoidable in cyclic graphs
+  - Documents scoring weights and phase behavior
+  - 5 zone design guidelines for minimizing conflicts
+  - Conceptual "conflict test" (walk cycles, sum offsets, check for zero)
+  - Proposed `validateZoneTopology()` utility API (not implemented yet — pending team review)
+
+### Learnings
+- The layout engine uses two separate scoring functions: `layoutScore` (occlusion=3) for Phases 4-5b, and `occlusionAwareScore` (occlusion=15) for Phases 6-8. The phased weighting prevents occlusion fixes from destabilizing direction/diagonal corrections.
+- Grid clusters (≥9 rooms with perpendicular path convergence) are detected pre-BFS and placed as rigid blocks, avoiding BFS-order displacement.
+- Direction violation repair (Phase 5b) uses three escalating strategies: single-room moves, pairwise swaps with occupants, and group shifts. Each strategy checks `moveWouldIncreaseMismatches()` as a hard guard to prevent regression.
+- The cycle offset sum test (for every fundamental cycle, sum DIRECTION_OFFSETS — must return to (0,0)) is the key insight for a pre-layout validation utility.
+
+---
+
+## Zone Topology Validator (2025-07-25)
+
+**Task:** Implement `validateZoneTopology()` — a pure graph analysis utility that detects topological conflicts and position collisions BEFORE the layout engine runs, giving zone designers instant feedback.
+
+**Status:** ✅ Complete — Implementation + 9 passing tests
+
+### What I Built
+
+- **`packages/client/src/map/validateZoneTopology.ts`** — BFS-based validator that assigns ideal grid positions using direction offsets (cardinal: 1 cell, up/down: 0 displacement) and detects:
+  - **Topological conflicts:** Same room reachable via 2+ paths with different ideal (x,y) positions. Sorted by severity (Manhattan delta).
+  - **Position collisions:** Two different rooms wanting the same 3D grid cell (x,y,z). Z-aware to avoid false positives from up/down pairs on different floors.
+  - Returns a human-readable summary string for designer tooling.
+
+- **`packages/client/src/map/__tests__/validateZoneTopology.test.ts`** — 9 tests covering:
+  - Simple tree (no cycles) → valid
+  - Rectangular cycle (offsets sum to 0) → valid
+  - Mismatched rectangle → conflict detected
+  - Cross-neighborhood shortcut → large delta conflict
+  - Position collision detection
+  - Up/down zero-displacement semantics (conflict and valid cases)
+  - Siltgate zone (136 rooms) → 10 conflicts (max delta 17), 26 collisions
+  - Single room → valid
+  - Up/down same-column → valid (no false collision)
+
+### Siltgate Analysis
+
+The validator found 10 topological conflicts in Siltgate, grouped into 5 conflict pairs:
+1. **Sewer tunnels 4/junction-2** (delta 17) — sewer ring connecting through surface at vastly different positions
+2. **dock-street-5/narrow-alley-3** (delta 9) — the known cross-neighborhood shortcut
+3. **narrow-alley-6/gutter-drain** (delta 8) — vertical shortcut via sewer-junction-1
+4. **rubble-street-1/2** (delta 5) — scorched-plaza cycle with unequal path lengths
+5. **iron-balcony-2/garden-terrace** (delta 3) — promenade/garden loop mismatch
+
+### Learnings
+- Conflict pairs are symmetric: if room A conflicts reaching B, then B also conflicts reaching A via the reverse cycle. Each pair appears as 2 entries in the conflict list.
+- Z-level tracking is essential for collision detection — without it, every up/down pair creates a false-positive collision since they share (x,y) by design.
+- No barrel file exists for `packages/client/src/map/` — modules are imported directly by file path.
+
+---
+
+## Warrens Zone Topology Analysis (2025-07-25)
+
+**Task:** Analyze the Warrens zone topology for topological conflicts and position collisions, same approach as Siltgate.
+
+**Status:** ✅ Complete — Analysis done, no code changes needed (analysis only)
+
+### Zone Stats
+- **101 rooms**, 278 intra-zone exits
+- Entry room: `shattered-gate`
+- Structure: ~15 approach rooms → 7×7 slum grid → edge rooms → underground sewer network (22 rooms)
+- 3 surface-to-sewer vertical shafts: sunken-square, sluice-gate, cistern-access
+
+### Results
+- **18 topological conflicts** (max delta: 6)
+- **29 position collisions**
+- **0 unreachable rooms** (all 101 connected)
+- Warrens is NOT in `computeLayout.test.ts` — should be added
+
+### Root Causes
+
+**1. Sewer Vertical Shortcuts (delta 5–6, 16 of 18 conflicts)**
+
+The three sewer access points are widely separated on the surface grid:
+- `sunken-square` — NW corner of grid (west of slum-r1c1)
+- `sluice-gate` — W edge mid-row (west of slum-r5c1, 4 grid rows south)
+- `cistern-access` — S edge (south of slum-r7c2, 6+ grid rows south)
+
+But the underground sewer connects them in far fewer steps:
+- sunken-square ↓ the-ratways → 1 east → sewer-main-junction ↑ sluice-gate (1 sewer step ≠ 4 surface rows)
+- sewer-main-junction → south → south-tunnel → west → west-conduit → west → sewer-cistern ↑ cistern-access (4 sewer steps ≠ 6+ surface cells)
+
+This violates the vertical design rule: underground horizontal movement must match surface distances between access points.
+
+**2. Surface Approach Loop (delta 4, 2 of 18 conflicts)**
+
+BFS reaches `slum-r1c1` first via the short path (broken-sanctuary → sunken-square → east → slum-r1c1) instead of the intended grid entry (merchants-row → gutter-run → south → slum-r1c1). These paths imply positions 4 cells apart.
+
+The `sunken-square ↔ slum-r1c1` connection creates an alternative surface route into the grid NW corner that bypasses the approach spine.
+
+### Comparison to Siltgate
+| Metric | Siltgate | Warrens |
+|--------|----------|---------|
+| Rooms | 136 | 101 |
+| Conflicts | 10 | 18 |
+| Max delta | 17 | 6 |
+| Collisions | 26 | 29 |
+| Conflict rate | 7.4% | 17.8% |
+
+Warrens has **more conflicts per room** but **lower severity** per conflict. The max delta (6) is manageable by the layout engine — it won't produce the extreme distortions Siltgate's delta-17 sewer ring caused. But the sheer number of collisions (29) will force heavy spiral placement.
+
+### Recommended Fixes (if pursued)
+
+1. **Sewer path lengthening:** Add ~4 intermediate sewer rooms between the-ratways and sewer-main-junction (matching the 4-row surface gap between sunken-square and sluice-gate). Add ~3 more between sewer-cistern and sewer-west-conduit (matching the surface distance to cistern-access). This is the same "bridge room" approach from the skill doc.
+
+2. **Break the sunken-square → slum-r1c1 surface shortcut:** Remove the direct east/west exit between sunken-square and slum-r1c1, or add 2–3 intermediate rooms so the path length matches the approach spine distance. The locked broken-sanctuary → sunken-square exit already slows players; the topology just needs the grid distance to match.
+
+3. **Alternative: disconnect one sewer shaft.** If 3 surface access points are too many for the underground to support topologically, remove cistern-access's sewer connection (make it a dead-end) and reduce to 2 shafts.
+
+### Verdict
+Topology fixes are **recommended but not urgent**. The delta-6 conflicts are within the layout engine's ability to handle (it resolved Siltgate's delta-17 with Phase 7 grid expansion). The collisions will cause visual density issues in the map but won't break rendering. If we fix the Warrens, the sewer path lengthening (fix #1) gives the best bang for the buck — it addresses 16 of 18 conflicts.
+
+### Learnings
+- The 7×7 slum grid itself is topologically perfect — all row/column offsets sum correctly. The conflicts come entirely from external connections (sewer + approach loop).
+- Sewer path length matching is the single most important topology concern for the Warrens. The grid and approach spine are well-designed.
+- Warrens is not in computeLayout.test.ts — adding it would catch regressions if we fix the topology.

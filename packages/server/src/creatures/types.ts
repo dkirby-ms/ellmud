@@ -14,7 +14,10 @@ export type CreatureType =
   | 'gutterspawn'
   | 'rubble_scavenger'
   | 'hollow_stalker'
-  | 'the_collapsed_one';
+  | 'the_collapsed_one'
+  | 'city_dog'
+  | 'pigeon_flock'
+  | string;
 
 // ─── Behavior States (GDD §6.6) ─────────────────────────────────────────────
 
@@ -55,6 +58,10 @@ export interface CreatureTemplate {
   idleTicksMax: number;
   /** HP percentage threshold to enter fleeing state. */
   fleeThreshold: number;
+  /** Whether creature attacks players on sight. False = passive wildlife. */
+  aggressive: boolean;
+  /** Short atmospheric description shown when the creature is in a room. */
+  roomDescription?: string;
 }
 
 // ─── Creature Instance ───────────────────────────────────────────────────────
@@ -82,6 +89,10 @@ export interface Creature {
   alertTargetRoomId: string | null;
   lootTable: LootEntry[];
   isAlive: boolean;
+  /** Whether creature attacks players on sight. False = passive wildlife. */
+  aggressive: boolean;
+  /** Short atmospheric description shown when the creature is in a room. */
+  roomDescription?: string;
 }
 
 // ─── Creature Action Output ──────────────────────────────────────────────────
@@ -93,6 +104,8 @@ export interface CreatureAction {
   creatureId: string;
   /** Target room for movement actions. */
   targetRoomId?: string;
+  /** Source room the creature moved from (set by CreatureManager.updateAll). */
+  sourceRoomId?: string;
   /** Target combatant for combat actions. */
   targetCombatantId?: string;
 }

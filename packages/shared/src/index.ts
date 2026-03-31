@@ -49,6 +49,8 @@ export interface RoomHeaderMessage {
   zoneName?: string;
   /** Room type (entry, extraction, boss, etc.), present for zone rooms. */
   roomType?: string;
+  /** Room slug identifier, present when dev mode is enabled. */
+  roomSlug?: string;
 }
 
 /** Server → Client: Zone transfer instruction (inter-zone exit). */
@@ -252,6 +254,7 @@ export const MessageTypes = {
   ZONE_TRANSFER: 'zone_transfer',
   EXPLORATION_DATA: 'exploration_data',
   EXPLORATION_UPDATE: 'exploration_update',
+  ROOM_OCCUPANTS: 'room_occupants',
 } as const;
 
 export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
@@ -279,6 +282,19 @@ export interface ExplorationDataMessage {
 export interface ExplorationUpdateMessage {
   type: typeof MessageTypes.EXPLORATION_UPDATE;
   room: ExploredRoomData;
+}
+
+export interface RoomOccupantsMessage {
+  creatures: Array<{
+    id: string;
+    name: string;
+    type: string;
+    aggressive: boolean;
+  }>;
+  players: Array<{
+    id: string;
+    name: string;
+  }>;
 }
 
 // ─── Room Graph (GDD §10.1) ─────────────────────────────────────────────────

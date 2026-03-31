@@ -110,6 +110,19 @@ function findNearestDirectional(
   occupied: Set<string>,
   exitLineCells?: Set<string>,
 ): { x: number; y: number } {
+  // Hard directional constraint: the placed room must be strictly in the
+  // correct direction from the parent (parent = ideal - offset).
+  const parentX = idealX - dirDx;
+  const parentY = idealY - dirDy;
+
+  function satisfiesDirection(cx: number, cy: number): boolean {
+    if (dirDx > 0 && cx <= parentX) return false; // east: must be right of parent
+    if (dirDx < 0 && cx >= parentX) return false; // west: must be left of parent
+    if (dirDy > 0 && cy <= parentY) return false; // south: must be below parent
+    if (dirDy < 0 && cy >= parentY) return false; // north: must be above parent
+    return true;
+  }
+
   if (!occupied.has(cellKey(idealX, idealY))) {
     if (!exitLineCells || !exitLineCells.has(cellKey(idealX, idealY))) {
       return { x: idealX, y: idealY };
@@ -131,6 +144,7 @@ function findNearestDirectional(
         const cx = idealX + ddx;
         const cy = idealY + ddy;
         if (occupied.has(cellKey(cx, cy))) continue;
+        if (!satisfiesDirection(cx, cy)) continue;
 
         const score = ddx * dirDx + ddy * dirDy;
         const onLine = exitLineCells?.has(cellKey(cx, cy));
@@ -627,10 +641,10 @@ export function computeLayout(
         const dx = np.x - px;
         const dy = np.y - py;
         if (
-          (off.dx > 0 && dx < 0) ||
-          (off.dx < 0 && dx > 0) ||
-          (off.dy > 0 && dy < 0) ||
-          (off.dy < 0 && dy > 0)
+          (off.dx > 0 && dx <= 0) ||
+          (off.dx < 0 && dx >= 0) ||
+          (off.dy > 0 && dy <= 0) ||
+          (off.dy < 0 && dy >= 0)
         ) {
           count++;
         }
@@ -646,10 +660,10 @@ export function computeLayout(
         const dx = px - fp.x;
         const dy = py - fp.y;
         if (
-          (off.dx > 0 && dx < 0) ||
-          (off.dx < 0 && dx > 0) ||
-          (off.dy > 0 && dy < 0) ||
-          (off.dy < 0 && dy > 0)
+          (off.dx > 0 && dx <= 0) ||
+          (off.dx < 0 && dx >= 0) ||
+          (off.dy > 0 && dy <= 0) ||
+          (off.dy < 0 && dy >= 0)
         ) {
           count++;
         }
@@ -707,6 +721,16 @@ export function computeLayout(
   // new diagonals created by that move.
   fixDiagonalCascade();
 
+  // ── Phase 5b: Direction violation repair ────────────────────────────────
+  // After BFS + relaxation + diagonal fix, some exits may still violate
+  // strict direction constraints (e.g., east-connected rooms at the same x).
+  // This happens when two BFS paths place rooms in conflicting positions.
+  // This phase specifically repairs direction violations by:
+  //   1. Moving single endpoints to correct positions
+  //   2. Swapping with occupants of ideal cells
+  //   3. Shifting groups of rooms to create space ("add space to accommodate")
+  fixDirectionViolations();
+
   // ── Phase 6: Occlusion fix ────────────────────────────────────────────
   // After all placement/relaxation phases, rooms may still sit on the
   // straight-line segment between two other connected rooms, visually
@@ -758,18 +782,20 @@ export function computeLayout(
         // axis-aligned connections over short diagonal ones.
         if (pos.x !== tp.x && pos.y !== tp.y) score += 20;
         // Direction mismatch penalty — penalizes rooms placed opposite to
-        // their exit direction. The hard guards (moveWouldIncreaseMismatches,
-        // swapWouldIncreaseMismatches) enforce the constraint; this penalty
-        // guides the optimizer to prefer direction-correct placements.
+        // or perpendicular to their exit direction. Strict: east exits must
+        // have dx > 0, not just dx >= 0. This catches perpendicular placements
+        // (dx=0 for east) that would render as wrong-direction lines.
+        // Weight is dominant (50) to ensure direction correctness is prioritized
+        // over distance compactness or diagonal elimination.
         const dx = tp.x - pos.x;
         const dy = tp.y - pos.y;
         if (
-          (offset.dx > 0 && dx < 0) ||
-          (offset.dx < 0 && dx > 0) ||
-          (offset.dy > 0 && dy < 0) ||
-          (offset.dy < 0 && dy > 0)
+          (offset.dx > 0 && dx <= 0) ||
+          (offset.dx < 0 && dx >= 0) ||
+          (offset.dy > 0 && dy <= 0) ||
+          (offset.dy < 0 && dy >= 0)
         ) {
-          score += 15;
+          score += 50;
         }
         // Line-through-room occlusion penalty — rooms sitting on an exit
         // line segment between two other connected rooms are visually
@@ -1340,10 +1366,10 @@ export function computeLayout(
                     const newDy = ptPos.y - pNewY;
                     const wouldDiag = pNewX !== ptPos.x && pNewY !== ptPos.y;
                     const wouldReverse =
-                      (pOff.dx > 0 && newDx < 0) ||
-                      (pOff.dx < 0 && newDx > 0) ||
-                      (pOff.dy > 0 && newDy < 0) ||
-                      (pOff.dy < 0 && newDy > 0);
+                      (pOff.dx > 0 && newDx <= 0) ||
+                      (pOff.dx < 0 && newDx >= 0) ||
+                      (pOff.dy > 0 && newDy <= 0) ||
+                      (pOff.dy < 0 && newDy >= 0);
                     const wouldBeDistant =
                       Math.abs(newDx) + Math.abs(newDy) > 2;
 
@@ -1505,6 +1531,328 @@ export function computeLayout(
     }
   }
 
+  // ── Direction violation repair ────────────────────────────────────────────
+
+  /**
+   * Repair remaining direction violations after relaxation and diagonal fixes.
+   *
+   * A direction violation occurs when an exit's target room is not strictly
+   * in the correct direction (e.g., an east exit where target.x <= source.x).
+   *
+   * Strategy 1: Move one endpoint to a free cell in the correct half-plane.
+   * Strategy 2: Swap the target with the occupant of an ideal cell.
+   * Strategy 3: Shift a group of connected rooms to create space.
+   */
+  function fixDirectionViolations(): void {
+    for (const [z, occupied] of occupiedByZ) {
+      for (let pass = 0; pass < 100; pass++) {
+        // Find all direction violations on this z-level
+        const violations: Array<{
+          roomId: string;
+          targetId: string;
+          dir: string;
+          offset: Offset;
+        }> = [];
+
+        for (const [roomId, pos] of result) {
+          if (pos.z !== z) continue;
+          const room = rooms.get(roomId);
+          if (!room) continue;
+          for (const [dir, targetId] of room.exits) {
+            const offset = DIRECTION_OFFSETS[dir];
+            if (!offset || offset.dz !== 0) continue;
+            const tp = result.get(targetId);
+            if (!tp || tp.z !== z) continue;
+            const dx = tp.x - pos.x;
+            const dy = tp.y - pos.y;
+            if (
+              (offset.dx > 0 && dx <= 0) ||
+              (offset.dx < 0 && dx >= 0) ||
+              (offset.dy > 0 && dy <= 0) ||
+              (offset.dy < 0 && dy >= 0)
+            ) {
+              violations.push({ roomId, targetId, dir, offset });
+            }
+          }
+        }
+
+        if (violations.length === 0) break;
+
+        let currentScore = layoutScore(z);
+        let fixed = false;
+
+        for (const { roomId, targetId, offset } of violations) {
+          if (fixed) break;
+          const posA = result.get(roomId)!;
+          const posB = result.get(targetId)!;
+
+          // ── Strategy 1: Move target room to correct position ──
+          const idealBx = posA.x + offset.dx;
+          const idealBy = posA.y + offset.dy;
+
+          const candidates: Array<{ x: number; y: number }> = [];
+          for (let r = 0; r <= 10; r++) {
+            for (let ddx = -r; ddx <= r; ddx++) {
+              const absRem = r - Math.abs(ddx);
+              const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
+              for (const ddy of dyOpts) {
+                const cx = idealBx + ddx;
+                const cy = idealBy + ddy;
+                if (offset.dx > 0 && cx <= posA.x) continue;
+                if (offset.dx < 0 && cx >= posA.x) continue;
+                if (offset.dy > 0 && cy <= posA.y) continue;
+                if (offset.dy < 0 && cy >= posA.y) continue;
+                candidates.push({ x: cx, y: cy });
+              }
+            }
+          }
+
+          // Try moving target (B)
+          for (const mover of [targetId, roomId]) {
+            if (fixed) break;
+            const moverPos = result.get(mover)!;
+            const anchor = mover === targetId ? roomId : targetId;
+            const anchorPos = result.get(anchor)!;
+            const isTarget = mover === targetId;
+
+            // Build candidate list in the correct half-plane
+            const mCands: Array<{ x: number; y: number }> = [];
+            const baseX = isTarget ? anchorPos.x + offset.dx : anchorPos.x - offset.dx;
+            const baseY = isTarget ? anchorPos.y + offset.dy : anchorPos.y - offset.dy;
+            for (let r = 0; r <= 10; r++) {
+              for (let ddx = -r; ddx <= r; ddx++) {
+                const absRem = r - Math.abs(ddx);
+                const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
+                for (const ddy of dyOpts) {
+                  const cx = baseX + ddx;
+                  const cy = baseY + ddy;
+                  if (isTarget) {
+                    if (offset.dx > 0 && cx <= anchorPos.x) continue;
+                    if (offset.dx < 0 && cx >= anchorPos.x) continue;
+                    if (offset.dy > 0 && cy <= anchorPos.y) continue;
+                    if (offset.dy < 0 && cy >= anchorPos.y) continue;
+                  } else {
+                    // Moving source: source must be in the opposite direction
+                    if (offset.dx > 0 && cx >= anchorPos.x) continue;
+                    if (offset.dx < 0 && cx <= anchorPos.x) continue;
+                    if (offset.dy > 0 && cy >= anchorPos.y) continue;
+                    if (offset.dy < 0 && cy <= anchorPos.y) continue;
+                  }
+                  mCands.push({ x: cx, y: cy });
+                }
+              }
+            }
+
+            for (const cand of mCands) {
+              if (cand.x === moverPos.x && cand.y === moverPos.y) continue;
+              const ck = cellKey(cand.x, cand.y);
+              if (occupied.has(ck)) continue;
+
+              const beforeM = countMismatchesInvolving(mover, moverPos.x, moverPos.y, z);
+              const oldKey = cellKey(moverPos.x, moverPos.y);
+              occupied.delete(oldKey);
+              occupied.add(ck);
+              result.set(mover, { x: cand.x, y: cand.y, z });
+
+              const afterM = countMismatchesInvolving(mover, cand.x, cand.y, z);
+
+              if (afterM < beforeM) {
+                const newScore = layoutScore(z);
+                if (newScore < currentScore) {
+                  currentScore = newScore;
+                  fixed = true;
+                  break;
+                }
+              }
+
+              // Undo
+              occupied.delete(ck);
+              occupied.add(oldKey);
+              result.set(mover, moverPos);
+            }
+          }
+
+          if (fixed) continue;
+
+          // ── Strategy 2: Swap target with occupant of ideal cell ──
+          for (const mover of [targetId, roomId]) {
+            if (fixed) break;
+            const moverPos = result.get(mover)!;
+            const anchor = mover === targetId ? roomId : targetId;
+            const anchorPos = result.get(anchor)!;
+            const isTarget = mover === targetId;
+            const swapBaseX = isTarget ? anchorPos.x + offset.dx : anchorPos.x - offset.dx;
+            const swapBaseY = isTarget ? anchorPos.y + offset.dy : anchorPos.y - offset.dy;
+
+            // Try swapping with rooms at or near the ideal position
+            for (let sr = 0; sr <= 4; sr++) {
+              if (fixed) break;
+              for (let ddx = -sr; ddx <= sr; ddx++) {
+                if (fixed) break;
+                const absRem = sr - Math.abs(ddx);
+                const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
+                for (const ddy of dyOpts) {
+                  const sx = swapBaseX + ddx;
+                  const sy = swapBaseY + ddy;
+                  const sk = cellKey(sx, sy);
+                  if (!occupied.has(sk)) continue;
+                  if (sx === moverPos.x && sy === moverPos.y) continue;
+
+                  // Find who's at this position
+                  let swapTarget: string | null = null;
+                  for (const [rid, rp] of result) {
+                    if (rp.z === z && rp.x === sx && rp.y === sy) {
+                      swapTarget = rid;
+                      break;
+                    }
+                  }
+                  if (!swapTarget || swapTarget === roomId || swapTarget === targetId) continue;
+
+                  const stPos = result.get(swapTarget)!;
+
+                  if (swapWouldIncreaseMismatches(mover, moverPos, swapTarget, stPos, z)) continue;
+
+                  // Tentatively swap
+                  result.set(mover, { x: stPos.x, y: stPos.y, z });
+                  result.set(swapTarget, { x: moverPos.x, y: moverPos.y, z });
+
+                  const newScore = layoutScore(z);
+                  if (newScore < currentScore) {
+                    currentScore = newScore;
+                    fixed = true;
+                    break;
+                  }
+
+                  // Undo
+                  result.set(mover, moverPos);
+                  result.set(swapTarget, stPos);
+                }
+              }
+            }
+          }
+
+          if (fixed) continue;
+
+          // ── Strategy 3: Group shift to create space ──
+          // Try shifting target room + connected rooms in the correct direction
+          const shiftOnX = offset.dx !== 0;
+          const shiftDir = offset.dx !== 0
+            ? (posB.x <= posA.x ? 1 : -1) * Math.sign(offset.dx)
+            : (posB.y <= posA.y ? 1 : -1) * Math.sign(offset.dy);
+          const shiftAmount = shiftOnX
+            ? (posA.x + offset.dx) - posB.x
+            : (posA.y + offset.dy) - posB.y;
+
+          for (const shift of [shiftAmount, shiftAmount > 0 ? shiftAmount + 1 : shiftAmount - 1, shiftDir, shiftDir * 2]) {
+            if (fixed || shift === 0) continue;
+
+            // Build shift group starting from the target room
+            const group = new Set<string>();
+            const gQueue: string[] = [targetId];
+            group.add(targetId);
+            let tooLarge = false;
+
+            const posRoom = new Map<string, string>();
+            const zRooms: string[] = [];
+            for (const [rid, p] of result) {
+              if (p.z === z) {
+                posRoom.set(cellKey(p.x, p.y), rid);
+                zRooms.push(rid);
+              }
+            }
+
+            while (gQueue.length > 0) {
+              const rid = gQueue.shift()!;
+              const rp = result.get(rid)!;
+              const nx = shiftOnX ? rp.x + shift : rp.x;
+              const ny = shiftOnX ? rp.y : rp.y + shift;
+
+              // Collision cascade
+              const nk = cellKey(nx, ny);
+              const collider = posRoom.get(nk);
+              if (collider && !group.has(collider) && collider !== roomId) {
+                group.add(collider);
+                gQueue.push(collider);
+              }
+
+              // Include neighbors that would break
+              const room = rooms.get(rid);
+              if (room) {
+                for (const [d, nid] of room.exits) {
+                  if (group.has(nid) || nid === roomId) continue;
+                  const o = DIRECTION_OFFSETS[d];
+                  if (!o || o.dz !== 0) continue;
+                  const np = result.get(nid);
+                  if (!np || np.z !== z) continue;
+                  const wouldDiag = nx !== np.x && ny !== np.y;
+                  const ddx = np.x - nx, ddy = np.y - ny;
+                  const wouldViolate =
+                    (o.dx > 0 && ddx <= 0) || (o.dx < 0 && ddx >= 0) ||
+                    (o.dy > 0 && ddy <= 0) || (o.dy < 0 && ddy >= 0);
+                  if (wouldDiag || wouldViolate) {
+                    group.add(nid);
+                    gQueue.push(nid);
+                  }
+                }
+              }
+
+              if (group.size > 60) { tooLarge = true; break; }
+            }
+
+            if (tooLarge || group.has(roomId)) continue;
+
+            // Compute new positions
+            const moves = new Map<string, { ox: number; oy: number; nx: number; ny: number }>();
+            const oldKeys = new Set<string>();
+            for (const rid of group) {
+              const rp = result.get(rid)!;
+              moves.set(rid, {
+                ox: rp.x, oy: rp.y,
+                nx: shiftOnX ? rp.x + shift : rp.x,
+                ny: shiftOnX ? rp.y : rp.y + shift,
+              });
+              oldKeys.add(cellKey(rp.x, rp.y));
+            }
+
+            // Validate no collisions with non-group rooms
+            let valid = true;
+            const newKeys = new Set<string>();
+            for (const [, m] of moves) {
+              const nk = cellKey(m.nx, m.ny);
+              if (newKeys.has(nk)) { valid = false; break; }
+              newKeys.add(nk);
+              if (occupied.has(nk) && !oldKeys.has(nk)) { valid = false; break; }
+            }
+            if (!valid) continue;
+
+            // Apply tentatively
+            for (const [, m] of moves) occupied.delete(cellKey(m.ox, m.oy));
+            for (const [rid, m] of moves) {
+              occupied.add(cellKey(m.nx, m.ny));
+              result.set(rid, { x: m.nx, y: m.ny, z });
+            }
+
+            const newScore = layoutScore(z);
+            if (newScore < currentScore) {
+              currentScore = newScore;
+              fixed = true;
+              break;
+            }
+
+            // Undo
+            for (const [, m] of moves) occupied.delete(cellKey(m.nx, m.ny));
+            for (const [rid, m] of moves) {
+              occupied.add(cellKey(m.ox, m.oy));
+              result.set(rid, { x: m.ox, y: m.oy, z });
+            }
+          }
+        }
+
+        if (!fixed) break;
+      }
+    }
+  }
+
   // ── Occlusion fix ──────────────────────────────────────────────────────────
 
   /**
@@ -1535,12 +1883,12 @@ export function computeLayout(
         const dx = tp.x - pos.x;
         const dy = tp.y - pos.y;
         if (
-          (offset.dx > 0 && dx < 0) ||
-          (offset.dx < 0 && dx > 0) ||
-          (offset.dy > 0 && dy < 0) ||
-          (offset.dy < 0 && dy > 0)
+          (offset.dx > 0 && dx <= 0) ||
+          (offset.dx < 0 && dx >= 0) ||
+          (offset.dy > 0 && dy <= 0) ||
+          (offset.dy < 0 && dy >= 0)
         ) {
-          score += 15;
+          score += 50;
         }
         // Heavy occlusion penalty — the whole point of this phase
         if (dist >= 2 && (pos.x === tp.x || pos.y === tp.y)) {
@@ -2229,8 +2577,8 @@ export function computeLayout(
                 const wouldDiag = nx !== np.x && ny !== np.y;
                 const dx = np.x - nx, dy = np.y - ny;
                 const wouldReverse =
-                  (o.dx > 0 && dx < 0) || (o.dx < 0 && dx > 0) ||
-                  (o.dy > 0 && dy < 0) || (o.dy < 0 && dy > 0);
+                  (o.dx > 0 && dx <= 0) || (o.dx < 0 && dx >= 0) ||
+                  (o.dy > 0 && dy <= 0) || (o.dy < 0 && dy >= 0);
 
                 if (wouldDiag || wouldReverse) {
                   group.add(nid);
@@ -2251,8 +2599,8 @@ export function computeLayout(
                   const wouldDiag = fp.x !== nx && fp.y !== ny;
                   const dx = nx - fp.x, dy = ny - fp.y;
                   const wouldReverse =
-                    (o.dx > 0 && dx < 0) || (o.dx < 0 && dx > 0) ||
-                    (o.dy > 0 && dy < 0) || (o.dy < 0 && dy > 0);
+                    (o.dx > 0 && dx <= 0) || (o.dx < 0 && dx >= 0) ||
+                    (o.dy > 0 && dy <= 0) || (o.dy < 0 && dy >= 0);
 
                   if (wouldDiag || wouldReverse) {
                     group.add(fromId);
@@ -2304,7 +2652,7 @@ export function computeLayout(
             }
             if (!valid) continue;
 
-            // Validate: no direction reversals at group boundary
+            // Validate: no direction violations at group boundary
             for (const rid of group) {
               if (!valid) break;
               const room = rooms.get(rid);
@@ -2319,8 +2667,8 @@ export function computeLayout(
                 if (!np || np.z !== z) continue;
                 const dx = np.x - m.nx, dy = np.y - m.ny;
                 if (
-                  (o.dx > 0 && dx < 0) || (o.dx < 0 && dx > 0) ||
-                  (o.dy > 0 && dy < 0) || (o.dy < 0 && dy > 0)
+                  (o.dx > 0 && dx <= 0) || (o.dx < 0 && dx >= 0) ||
+                  (o.dy > 0 && dy <= 0) || (o.dy < 0 && dy >= 0)
                 ) { valid = false; break; }
               }
               if (!valid) break;
@@ -2335,8 +2683,8 @@ export function computeLayout(
                   if (!fp || fp.z !== z) continue;
                   const dx = m.nx - fp.x, dy = m.ny - fp.y;
                   if (
-                    (o.dx > 0 && dx < 0) || (o.dx < 0 && dx > 0) ||
-                    (o.dy > 0 && dy < 0) || (o.dy < 0 && dy > 0)
+                    (o.dx > 0 && dx <= 0) || (o.dx < 0 && dx >= 0) ||
+                    (o.dy > 0 && dy <= 0) || (o.dy < 0 && dy >= 0)
                   ) { valid = false; break; }
                 }
               }

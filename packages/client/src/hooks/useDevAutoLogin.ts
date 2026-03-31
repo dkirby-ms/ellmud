@@ -36,7 +36,7 @@ export function useDevAutoLogin(): void {
           // Login failed — user may not exist yet, try registering
           result = await register('dev', 'devdev');
         }
-        dispatch({ type: 'LOGIN_SUCCESS', token: result.token, playerId: result.playerId });
+        dispatch({ type: 'LOGIN_SUCCESS', token: result.token, playerId: result.playerId, email: result.email });
       } catch {
         // Server not running or other failure — fall back to AuthScreen
       }

@@ -4813,3 +4813,101 @@ Ghost rooms for up/down exits were being positioned at `parentPos.z ± 1`, infla
 - `RoomNode.tsx` — z-badge replaced with exit-based badges
 - `useFloorFilter.ts`, `MapRenderer.tsx`, `MinimapWidget.tsx` — no changes needed
 - All 24 computeLayout tests still pass
+
+---
+
+## 2026-03-30T19:15:45Z: User directive — Zone topology constraints for future zones
+
+**By:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-30
+
+**Decision:** Zone topology lessons learned from Siltgate layout issues must be captured and applied to all future zone building work. The zone design itself (exit graph) creates unavoidable layout conflicts — 6 topological conflicts and 35+ position collisions in a 136-room zone. Future zones must be designed with layout-algorithm constraints in mind.
+
+**Why:** User request. Zone design is the controllable variable in the layout system; the algorithm is correct. Preventing conflicts requires upfront validation during zone design, not post-hoc fixes after database commit.
+
+**Impact:**
+- Zone-topology skill created at `.squad/skills/zone-topology/SKILL.md` — available to all zone designers
+- Layout engine constraints documented by Drizzt for reference during design
+- Proposed `validateZoneTopology()` API can be wired into admin zone submission flow
+- All future zone designs should be validated against the constraint checklist before implementation
+
+**Cross-Team References:**
+- **Laeral's Siltgate analysis:** `.squad/decisions/inbox/laeral-siltgate-topology-fixes.md` — identified 6 specific conflicts (Δ=3 to Δ=17) with proposed bridge-room fixes
+- **Drizzt's constraint documentation:** `.squad/decisions/inbox/drizzt-layout-constraints.md` — layout algorithm phases, scoring weights, zone design guidelines
+- **Engine files:** Zone data at `packages/server/src/db/migrations/004_seed_siltgate.sql`, layout engine at `packages/client/src/map/computeLayout.ts`, tests at `packages/client/src/map/__tests__/computeLayout.test.ts`
+
+---
+
+## 2026-03-30T19:15:45Z: Layout Engine Topological Constraints & Scoring System
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-03-30  
+**Scope:** `packages/client/src/map/computeLayout.ts` (~2700 lines) — comprehensive reference documentation
+
+**Decision:** Documented the `computeLayout` algorithm's hard and soft constraints, penalty weights, and optimization phases. Zone designers now have clear guidelines for designing topologies that layout cleanly.
+
+**Key Findings:**
+- **Topological conflicts are inevitable in cyclic graphs** — each room occupies exactly one grid cell; when two paths assign different ideal cells to the same room, at least one exit becomes non-adjacent or diagonal.
+- **Cycle sum constraint:** For every cycle, cardinal direction offsets must sum to (0, 0). Non-zero sums = impossible geometry.
+- **Penalty hierarchy:** Direction mismatch (50) > diagonal (20) > distance stretch (1 per cell) > occlusion (3/15)
+- **Algorithm phases:** 8 phases from BFS greedy placement through grid expansion and occlusion cleanup
+
+**Zone Design Guidelines from Engine Constraints:**
+- Keep cycles short (4–6 rooms ideal; 8+ expect stretch)
+- Match path lengths between neighborhoods to avoid conflicting offsets
+- Limit cross-neighborhood shortcuts (each shortcut increases cycle length)
+- Budget intermediate bridge rooms to absorb grid distance
+- Pre-validate cycles with formula: `Σ(direction_offsets) must equal (0, 0)` before submission
+
+**Deliverables:**
+- Comprehensive documentation: `.squad/decisions/inbox/drizzt-layout-constraints.md`
+- Proposed API: `validateZoneTopology(roomGraph): ValidationResult` for content submission pipeline
+- Pre-handoff checklist: Enables designers to self-validate before database commit
+
+**Cross-Team Impact:**
+- **Laeral:** Topology constraints inform all future zone design; Siltgate fixes prioritized by Δ severity
+- **Bruenor:** Can wire `validateZoneTopology()` into admin zone designer UI
+- **Minsc:** Can build integration tests for API validation
+- **All zone designers:** Have clear constraint checklist to follow
+
+---
+
+## 2026-03-30T19:15:45Z: Zone-Topology Skill Created
+
+**By:** Laeral (Content Designer)  
+**Date:** 2026-03-30  
+**Status:** Deployed to team  
+**File:** `.squad/skills/zone-topology/SKILL.md`
+
+**Scope:** Comprehensive skill covering grid constraints, conflict patterns, design guidelines, and pre-handoff checklist for zone designers.
+
+**What It Covers:**
+1. **Grid Constraint Fundamentals** — Every room occupies exactly one grid cell; for any cycle, cardinal direction offsets must sum to (0, 0)
+2. **Conflict Patterns:**
+   - Shortcuts: Cross-neighborhood bypasses create non-zero cycle sums
+   - Rings: Multi-entry systems (e.g., sewers with two entry points) diverge on opposite ends
+   - L-loops: 5-room loops can't fit in 4-cell rectangle; creates topological impossibility
+   - Vertical shortcuts: Sewer connections bridging surface and underground create additional paths
+3. **Design Guidelines:**
+   - Junction density: 4–6 junctions per quarter acceptable; 8+ signals over-connection
+   - Shortcut savings: Each shortcut should save 3+ steps minimum (narrow/corridor shortcut at 2 steps doesn't justify conflict budget)
+   - Bridge room budgeting: Each Δ=N conflict requires roughly N/2 intermediate rooms
+4. **Cycle Validation Formula:** For designers to check their own work before submission
+5. **Pre-Handoff Checklist:** Self-validation questionnaire for zone designers
+
+**Siltgate Case Study:**
+- 136 rooms, 286 exits
+- 6 conflicts identified (Δ=3 to Δ=17)
+- 35+ position collisions
+- Proposed fixes: 8–9 bridge rooms (zone grows to ~144–145 rooms)
+- Fixes prioritized by conflict severity
+
+**Deployment:**
+- Skill available to Bruenor for Siltgate implementation work
+- Available to all future zone designers (Dune, Elminster, etc.)
+- Complements Drizzt's engine constraints documentation
+
+**Team Impact:**
+- Prevents recurring topology issues in new zones
+- Shifts validation left: catch issues during design, not after commit
+- Creates shared vocabulary for zone design discussions (shortcuts, rings, L-loops, etc.)

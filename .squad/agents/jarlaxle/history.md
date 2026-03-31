@@ -1793,3 +1793,210 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 Peaceful flag properly persists across zone transitions. Dev team can now use `/peaceful` without reset.
 
 **Related Decision:** Peaceful mode now documented as three-layer defense in `.squad/decisions.md`
+
+### 2025-07-25: Creature Visibility Fix + Movement Narrations
+
+**Task:** Fix creature visibility in room descriptions and add arrival/departure notifications.
+
+**Issue 1 — Creature Visibility:**
+- Root cause: test helper `buildCtx` in `creature-wiring.test.ts` omitted `resolveCreaturesInRoom` callback, meaning `go` command tests never verified creature visibility in target rooms. The production code in `ShardRoom.buildCommandContext` was already correct.
+- Fix: Added `resolveCreaturesInRoom` to test `buildCtx` helper. Added 2 tests: go-with-creatures shows creatures, go-without-creatures is clean.
+
+**Issue 2 — Creature Movement Narrations:**
+- Added `sourceRoomId?: string` to `CreatureAction` interface in `types.ts`.
+- `CreatureManager.updateAll()` now saves `action.sourceRoomId = creature.currentRoomId` before updating the creature's position.
+- `ShardRoom.processCreatureAction()` now handles `patrol_move` and `alert_move` by calling `broadcastCreatureMovement()`.
+- `broadcastCreatureMovement()` determines arrival/departure directions by checking room exits and broadcasts ambient narrations via `broadcastToRoom()`.
+- Arrival: "A {name} arrives from the {direction}." (sent to target room occupants)
+- Departure: "A {name} leaves to the {direction}." (sent to source room occupants)
+- Falls back to directionless messages when rooms aren't connected via a named exit.
+
+**Files Modified:**
+- `packages/server/src/creatures/types.ts` — Added `sourceRoomId` to `CreatureAction`
+- `packages/server/src/creatures/CreatureManager.ts` — Save sourceRoomId before position update in `updateAll()`
+- `packages/server/src/rooms/ShardRoom.ts` — Added `broadcastCreatureMovement()`, wired into `processCreatureAction()`
+- `packages/server/src/__tests__/creature-wiring.test.ts` — Fixed `buildCtx` helper, added 5 new tests
+
+**Tests:** All 2068 tests passing (23 in creature-wiring, 5 new). Zero regressions.
+
+## Learnings
+
+- `buildCtx` test helper in creature-wiring.test.ts must mirror ShardRoom.buildCommandContext — any new field added to CommandContext in ShardRoom must be added to the test helper too, or tests will pass while production behavior diverges.
+- Creature movement in `CreatureManager.updateAll()` mutates `creature.currentRoomId` before returning actions. Any post-processing of movement actions (like narrations) needs the original room preserved on the action itself.
+- `broadcastToRoom` accepts a `CommandResult` with narrations — use `type: 'ambient'` for world flavor text like creature movement.
+
+### 2025-03-30: Passive Creatures — Aggressive Flag for Wildlife
+
+**Task:** Fix city wildlife (pigeons, dogs) attacking players in Siltgate zone.
+
+**Root Cause:** In `behavior.ts` line 62, ALL creatures unconditionally transitioned to hostile when players were present. There was no concept of passive/non-aggressive creatures.
+
+**Solution:** Added `aggressive: boolean` flag to creature system (defaults to true for backward compatibility).
+
+**Changes Made:**
+1. **Types** (`packages/server/src/creatures/types.ts`):
+   - Added `aggressive: boolean` to `Creature` interface
+   - Added `aggressive: boolean` to `CreatureTemplate` interface
+   - Extended `CreatureType` union to include `'city_dog' | 'pigeon_flock' | string` for dynamic types
+
+2. **Behavior Logic** (`packages/server/src/creatures/behavior.ts`):
+   - Early-exit in `transitionState()`: if `!creature.aggressive`, always return 'idle'
+   - Passive creatures never enter hostile or alert states
+   - They still patrol normally via patrol_move actions
+
+3. **CreatureManager** (`packages/server/src/creatures/CreatureManager.ts`):
+   - Updated `createCreature()`, `createZoneCreature()`, `spawnSingleCreature()` to read `aggressive` from template and pass to instance
+
+4. **ContentRegistry** (`packages/server/src/content/ContentRegistry.ts`):
+   - Added `aggressive: boolean` to `CreatureRow` interface
+   - Updated `loadCreatures()` query to SELECT aggressive column
+   - Set `aggressive: row.aggressive ?? true` when building templates (default true for fallback)
+
+5. **Migration** (`packages/server/src/db/migrations/008_passive_creatures.sql`):
+   - `ALTER TABLE creature_definitions ADD COLUMN aggressive BOOLEAN NOT NULL DEFAULT true`
+   - `UPDATE creature_definitions SET aggressive = false WHERE type IN ('pigeon_flock', 'city_dog')`
+
+6. **Templates** — Updated all hardcoded creature templates to include `aggressive: true`:
+   - `drowned-revenant.ts`
+   - `gutterspawn.ts`
+   - `hollow-stalker.ts`
+   - `rubble-scavenger.ts`
+   - `the-collapsed-one.ts`
+
+7. **Tests** (`packages/server/src/__tests__/creatures.test.ts`):
+   - Added 4 new tests in "passive creatures" describe block:
+     - Passive creatures never go hostile with players present
+     - Passive creatures ignore noise and never alert
+     - Passive creatures can still patrol normally
+     - Aggressive creatures still attack players (regression check)
+   - Updated test helpers to include `aggressive: true` default
+
+**Test Results:** 68 creature tests passing (45 in creatures.test.ts + 23 in creature-wiring.test.ts). Zero regressions. TypeScript compilation clean.
+
+**Design Decisions:**
+- Backward compatibility: default to `aggressive: true` in both DB schema (DEFAULT clause) and code (fallback `?? true`)
+- Non-aggressive creatures ONLY skip combat states — they still patrol, obey movement rules, and can be attacked
+- The aggressive check happens at the top of `transitionState()` before any other logic — clean early exit
+- Existing procedurally-generated creatures (non-zone) remain aggressive by default since templates have `aggressive: true`
+
+**Key File Paths:**
+- Behavior state machine: `packages/server/src/creatures/behavior.ts`
+- Creature spawning: `packages/server/src/creatures/CreatureManager.ts`
+- DB loader: `packages/server/src/content/ContentRegistry.ts`
+- Migration: `packages/server/src/db/migrations/008_passive_creatures.sql`
+- Tests: `packages/server/src/__tests__/creatures.test.ts`, `packages/server/src/__tests__/peaceful-mode.test.ts`
+
+### 2026-03-30: Room Description Rendering for Creatures
+
+**Task:** Add atmospheric room descriptions for creatures, displayed when entering rooms.
+
+**Deliverable 1 — Migration 009:**
+- Created `packages/server/src/db/migrations/009_creature_room_descriptions.sql`
+- `ALTER TABLE creature_definitions ADD COLUMN room_description TEXT`
+- Seeded room descriptions for 15 existing creatures with atmospheric flavor text
+
+**Deliverable 2 — Types + ContentRegistry + CreatureManager:**
+- Added `roomDescription?: string` to `CreatureTemplate` and `Creature` interfaces in `types.ts`
+- Updated `ContentRegistry.ts`:
+  - Added `room_description` to `CreatureRow` interface
+  - Updated SQL query to SELECT `room_description` column
+  - Mapped `row.room_description` to template `roomDescription` field
+- Updated `CreatureManager.ts`:
+  - All three creature creation methods (`createCreature`, `createZoneCreature`, `spawnSingleCreature`) now copy `roomDescription` from template to instance
+
+**Deliverable 3 — Rich Room Descriptions in look/go:**
+- Updated `CreatureRef` type in `commands/index.ts` to include `type?: string` and `roomDescription?: string`
+- Updated `ShardRoom.ts` `buildCommandContext()` to pass `type` and `roomDescription` when building creature refs
+- Updated `look.ts` and `go.ts` handlers:
+  - Replaced "Creatures: {names}" format with rich per-line descriptions
+  - Group creatures by type, show `roomDescription` if available, fallback to "A {name} lurks here."
+  - Append ` (x{count})` when multiple creatures of same type
+  - Example output: "A slum rat sniffs along the ground. (x3)"
+- Updated test assertions in `creature-wiring.test.ts` to check for "lurks here" instead of "Creatures:"
+- Updated `buildCtx` test helper to include `type` and `roomDescription` fields (matches production code pattern)
+
+**Tests:** All 112 creature/command/wiring tests passing. TypeScript compilation clean.
+
+**Design Pattern:**
+- Followed exact same pattern as `aggressive` field addition (see history entry from 2025-03-30)
+- DB migration → Types → ContentRegistry query + mapping → CreatureManager copy → ShardRoom wiring → Command handlers
+
+## Learnings
+
+- When adding fields to creatures, the pattern is: migration → types → ContentRegistry → CreatureManager (all 3 create methods) → ShardRoom (both maps) → CreatureRef type → command handlers
+- Test helpers like `buildCtx` in creature-wiring.test.ts must mirror production code mapping — any field passed in ShardRoom must be passed in tests, or tests diverge from production behavior
+- Room description rendering groups creatures by `type` (not `name`) because type is the unique identifier for creature templates — multiple instances of the same type get aggregated with count
+
+### 2026-03-31: ROOM_OCCUPANTS Message Type and Server Broadcasting
+
+**Task:** Add structured data about room occupants (creatures and players) so the client status panel can show a clickable list.
+
+**Background:**
+Previously, creature and player presence was only sent as narration text. The client had no structured data to build interactive UI elements (clickable lists, status indicators, etc.).
+
+**Implementation:**
+
+**Step 1 — Shared Types:**
+- Added `ROOM_OCCUPANTS: 'room_occupants'` to `MessageTypes` in `packages/shared/src/index.ts` (already existed)
+- Added `RoomOccupantsMessage` interface (already existed):
+  - `creatures`: array of `{ id, name, type, aggressive }`
+  - `players`: array of `{ id, name }`
+
+**Step 2 — ShardRoom Helper Methods:**
+Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
+
+1. `sendRoomOccupants(client: Client, playerId: string, roomId: string)`:
+   - Gathers all creatures in room via `creatureManager.getCreaturesInRoom(roomId)`
+   - Maps creatures to structured data: `{ id: c.id, name: c.name, type: c.type, aggressive: c.behaviorState === 'hostile' }`
+   - Gathers all OTHER players in the room (not the recipient)
+   - Uses `characterNames.get(sid)` for player display names
+   - Sends via `client.send(MessageTypes.ROOM_OCCUPANTS, message)`
+
+2. `broadcastRoomOccupantsUpdate(roomId: string)`:
+   - Calls `sendRoomOccupants` for ALL players in the specified room
+   - Used when room occupants change without a specific recipient
+
+**Step 3 — Broadcasting Scenarios:**
+
+1. **Player joins shard** (`onJoin` handler):
+   - Called after `sendExplorationData()`
+   - Sends initial occupants list to the joining player
+
+2. **Player moves rooms** (command handler, line ~966):
+   - Sends updated occupants to the moving player
+   - Broadcasts updated occupants to all players in BOTH source and target rooms
+
+3. **Creature moves rooms** (`broadcastCreatureMovement`, line ~1544):
+   - After sending arrival/departure narrations
+   - Broadcasts updated occupants to both source and target rooms
+
+4. **Creature dies** (`syncCreaturesAfterCombat`, line ~1627):
+   - After adding corpse trace
+   - Broadcasts updated occupants to the room where creature died
+
+**Verification:**
+- ✅ `npx tsc --noEmit -p packages/shared/tsconfig.json` — clean
+- ✅ `npx tsc --noEmit -p packages/server/tsconfig.json` — clean
+- ✅ `npx vitest run packages/server/src/__tests__/rooms.test.ts` — all tests pass
+- ✅ `npx vitest run packages/server/src/__tests__/creature-wiring.test.ts` — all 23 tests pass
+- ✅ `npx vitest run packages/shared/src/__tests__/types.test.ts` — updated count to 25 message types, all pass
+
+**Technical Notes:**
+- Used `c.type` (not `c.templateId`) for creature type — matches Creature interface
+- Used `c.behaviorState === 'hostile'` for aggressive flag — matches behavior tree state machine
+- Player list excludes the message recipient (players see "others" in their room, not themselves)
+- Broadcasting happens AFTER narrations so players see story text first, then UI updates
+
+**Design Pattern:**
+- Followed exploration message pattern (`sendExplorationData`, `sendExplorationUpdate`)
+- Added helper methods near exploration methods (line ~2042) for consistency
+- All broadcast scenarios mirror existing narration broadcasts (movement, combat, creature events)
+
+**Key File Paths:**
+- Message types: `packages/shared/src/index.ts` (line 257, 287-298)
+- ShardRoom helpers: `packages/server/src/rooms/ShardRoom.ts` (line 2063-2094)
+- OnJoin call: `packages/server/src/rooms/ShardRoom.ts` (line 491)
+- Movement call: `packages/server/src/rooms/ShardRoom.ts` (line 966-973)
+- Creature movement call: `packages/server/src/rooms/ShardRoom.ts` (line 1547-1548)
+- Creature death call: `packages/server/src/rooms/ShardRoom.ts` (line 1627)
+- Test update: `packages/shared/src/__tests__/types.test.ts` (line 52)

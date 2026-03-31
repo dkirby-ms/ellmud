@@ -41,6 +41,7 @@ export interface RoomHeaderEntry {
   roomName: string;
   exits: string[];
   stability: number;
+  roomSlug?: string;
 }
 
 export interface CommandResult {
@@ -53,6 +54,8 @@ export interface CommandResult {
 export interface CreatureRef {
   id: string;
   name: string;
+  type?: string;
+  roomDescription?: string;
 }
 
 export interface CommandContext {
@@ -73,6 +76,8 @@ export interface CommandContext {
   extractionSystem?: ExtractionSystem;
   /** Living creatures in the current room. */
   creaturesInRoom?: CreatureRef[];
+  /** Resolve creatures in an arbitrary room by ID. */
+  resolveCreaturesInRoom?: (roomId: string) => CreatureRef[];
   /** Downing system reference (available in ShardRoom context). */
   downingSystem?: DowningSystem;
   /** Stash service for personal storage (available in feature_stash rooms). */

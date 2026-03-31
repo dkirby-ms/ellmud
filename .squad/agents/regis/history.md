@@ -740,3 +740,124 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 **Key Patterns Documented:**
 - Input focus restoration: `useRef` + `useEffect` watching `connectionStatus` + `requestAnimationFrame` for re-enable scenarios
 - Ghost room positioning: Don't position up/down ghosts; show exit-based badges on parent rooms instead
+
+## 2026-03-30 — Creature Display in Room Output
+
+**Completed:** Updated room rendering to show creatures on their own line matching items/exits format  
+**Files Modified:** 5
+
+- `packages/server/src/commands/handlers/look.ts` — Changed creature display from individual `A creature lurks here.` lines to a single `Creatures: name1, name2` line
+- `packages/server/src/commands/handlers/go.ts` — Added creature display for target room when player moves (uses `resolveCreaturesInRoom`)
+- `packages/server/src/commands/index.ts` — Added `resolveCreaturesInRoom` to `CommandContext` interface
+- `packages/server/src/rooms/ShardRoom.ts` — Wired up `resolveCreaturesInRoom` in `buildCommandContext` using `creatureManager.getCreaturesInRoom()`
+- `packages/server/src/__tests__/creature-wiring.test.ts` — Updated assertions from `lurks here` to `Creatures:`
+
+**Build:** ✅ Clean  
+**Tests:** ✅ 2228 server tests pass, 144 client tests pass
+
+**Key Decision:** Creatures now display as `Creatures: name1, name2` (comma-separated, single line) matching the `Exits:` and `You see:` patterns. Both `look` and `go` (entering a room) show creatures.
+
+**Pattern:** Added `resolveCreaturesInRoom` resolver function to `CommandContext` (parallels existing `resolveRoom`) so `go.ts` can look up creatures in the target room (since `creaturesInRoom` on the context refers to the source room, not the destination).
+
+## 2026-03-30 — Creature Admin Page: Aggressive Toggle + Loot Table Fix + Room Description
+
+**Completed:** Fixed three issues in creature admin detail page  
+**Files Modified:** 2
+
+- `packages/client/src/pages/admin/CreatureDetail.tsx`:
+  - Added `aggressive` boolean checkbox in new "Behavior & Spawn" section (default: true)
+  - Added `roomDescription` textarea field for in-room flavor text (e.g., "A slum rat sniffs along the ground.")
+  - Added `idleTicksMin` and `idleTicksMax` inputs in Behavior & Spawn section
+  - Fixed loot table "Unknown Item" bug by fetching items list via `listItems()` and building `itemLookup` Map
+  - Updated loot table dropdown to show all available items (not just current item)
+  - Updated `updateLootEntry` to resolve item names from lookup when `itemId` changes
+  
+- `packages/server/src/admin/content/PgCreatureDefinitionsStore.ts`:
+  - Added `room_description` and `aggressive` columns to `CreatureRow` interface
+  - Updated `rowToEntity` to map `room_description → roomDescription` and `aggressive` boolean
+  - Updated `getAll()`, `getById()`, `create()`, and `update()` SQL to include both columns
+  - `aggressive` defaults to `true` (matches DB default from migration 008)
+  - `room_description` defaults to `null`
+
+**Build:** ✅ Client and server TypeScript compile clean  
+**Database:** Migration 009 adds `room_description` column (already exists); migration 008 adds `aggressive` column (already exists)
+
+## Learnings
+
+- **Item lookup pattern for loot tables:** Admin pages displaying foreign key references need to fetch the related entities list and build a lookup Map. Don't rely on the API returning joined data — the loot table stores only `{itemId, dropWeight}`, so the client must resolve names.
+- **Parallel useEffect hooks:** When one effect depends on data from another (creature fetch depends on `itemLookup`), include the dependency in the dep array. The items effect runs first (no deps except `[]`), then the creature effect runs when `itemLookup` changes.
+- **CamelCase ↔ snake_case mapping:** Server DB uses `room_description`, `aggressive`, etc. (snake_case). Admin API returns camelCase (`roomDescription`, `aggressive`). Store conversion happens in `rowToEntity()` and the parameter binding in INSERT/UPDATE.
+- **Loot table dropdown UX:** The old dropdown only showed the current item as a single `<option>`. Fixed by fetching all items and rendering them in the dropdown, allowing admins to change the item without editing JSON.
+- **Behavior & Spawn section organization:** Grouped `aggressive` checkbox with `idleTicksMin`/`idleTicksMax` inputs since they all relate to creature AI behavior (aggro, patrol frequency).
+
+## 2026-03-30 — Room Occupants UI Implementation
+
+**Completed:** Added room occupants display to client showing creatures and players in current room  
+**Files Modified:** 6 files created/modified
+
+### Files Changed:
+
+1. **packages/shared/src/index.ts**
+   - Added `ROOM_OCCUPANTS: 'room_occupants'` to MessageTypes
+   - Added `RoomOccupantsMessage` interface with creatures and players arrays
+
+2. **packages/client/src/store.ts**
+   - Added `roomOccupants` to AppState with creatures and players arrays
+   - Added to initialState: `roomOccupants: { creatures: [], players: [] }`
+   - Added `SET_ROOM_OCCUPANTS` action type
+   - Added reducer case for `SET_ROOM_OCCUPANTS`
+   - Clear occupants when `CLEAR_MESSAGES` fires (on room switch/zone transfer)
+
+3. **packages/client/src/services/connection.ts**
+   - Added `RoomOccupantsMessage` import
+   - Added `onRoomOccupants` optional handler to `MessageHandlers` interface
+   - Register handler in both `connect()` and `switchRoom()` functions
+
+4. **packages/client/src/hooks/useShardConnection.ts**
+   - Added `onRoomOccupants` handler to message handlers object
+   - Handler dispatches `SET_ROOM_OCCUPANTS` action with message data
+
+5. **packages/client/src/components/RoomOccupants.tsx** *(new file)*
+   - Compact component showing creatures and players in current room
+   - Groups creatures by type with count (e.g., "Slum Rat (x3)")
+   - Aggressive creatures get amber ⚔ indicator, passive get gray ·
+   - Players get blue 👤 indicator
+   - Shows "The room is quiet." when empty
+   - Each entry is clickable (no-op for now per spec)
+   - Matches MUD aesthetic with dark bg, muted colors, compact spacing
+
+6. **packages/client/src/pages/ShardExploration.tsx**
+   - Imported RoomOccupants component
+   - Added component to right status panel between Status Effects and Equipment Silhouette
+   - Passes `state.roomOccupants.creatures` and `state.roomOccupants.players`
+
+**Build:** ✅ Client TypeScript compiles clean (after rebuilding shared package)  
+**Tests:** ✅ 10 connection tests pass
+
+### Key Patterns:
+
+- **Message-driven UI updates:** Room occupants state is populated entirely via `ROOM_OCCUPANTS` messages from server (no polling, no Schema sync)
+- **Grouped creature display:** Multiple creatures of same type are aggregated into single line with count badge (reduces visual clutter)
+- **Aggressive visual indicator:** Amber ⚔ for aggressive creatures, neutral · for passive (matches zone designer patterns)
+- **Empty state handling:** "The room is quiet." when no occupants (better than blank section)
+- **Click handlers as placeholders:** All occupant entries are `<button>` elements with cursor-pointer, onClick no-op (ready for future targeting/inspect features)
+
+### Coordination:
+
+- **Parallel work with Jarlaxle (Backend Dev):** This implementation assumes Jarlaxle is simultaneously implementing the server-side `ROOM_OCCUPANTS` message broadcast. The shared types (`RoomOccupantsMessage`) are the contract between frontend and backend.
+- **Server-side requirements:** Server must send `ROOM_OCCUPANTS` message when player enters room (look, go commands) and when room occupants change (creature spawn, player enter/leave).
+
+### Learnings:
+
+- **Shared package rebuild required:** Changes to `packages/shared/src/index.ts` require `npm run build -w packages/shared` before client TypeScript will compile
+- **State clearing on room switch:** Occupants must clear when `CLEAR_MESSAGES` fires to prevent stale data from previous room showing in new room
+- **Optional handler pattern:** Following existing pattern of optional handlers (onZoneTransfer, onLoadoutUpdate, etc.) — handler is only registered if provided
+- **Creature aggregation logic:** Using `reduce()` to group by `type` field, incrementing count for duplicates — assumes creatures of same type have same name/aggressive properties
+
+### Next Steps (if needed):
+
+- Once server implementation is complete, verify message flow in runtime
+- Future enhancement: Click creature to target for attack/inspect
+- Future enhancement: Show player level/class in occupants list
+- Future enhancement: Distinguish NPCs from player characters visually
+

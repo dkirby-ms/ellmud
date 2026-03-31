@@ -61,6 +61,7 @@ export function handleGo(ctx: CommandContext): CommandResult {
     `You move ${direction}.`,
     '',
     targetRoom.description,
+    '',
     `Exits: ${exitList}`,
   ];
 
@@ -69,10 +70,31 @@ export function handleGo(ctx: CommandContext): CommandResult {
     lines.push(`You see: ${itemNames}`);
   }
 
+  // Creatures in the target room
+  const creatures = ctx.resolveCreaturesInRoom?.(targetRoomId) ?? [];
+  if (creatures.length > 0) {
+    // Group creatures by type and count
+    const creaturesByType = new Map<string, { creature: import('../index.js').CreatureRef; count: number }>();
+    for (const c of creatures) {
+      const key = c.type ?? c.name;
+      const existing = creaturesByType.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        creaturesByType.set(key, { creature: c, count: 1 });
+      }
+    }
+    for (const [, { creature, count }] of creaturesByType) {
+      const desc = creature.roomDescription || `A ${creature.name} lurks here.`;
+      lines.push(count > 1 ? `${desc} (x${count})` : desc);
+    }
+  }
+
   return {
     narrations: [{ text: lines.join('\n'), type: 'room' }],
     roomHeader: {
       roomName: targetRoom.name,
+      roomSlug: targetRoom.id,
       exits: Array.from(targetRoom.exits.keys()),
       stability: ctx.stability,
     },

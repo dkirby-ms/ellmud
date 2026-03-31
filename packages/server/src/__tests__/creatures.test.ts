@@ -68,6 +68,7 @@ function makeCreature(overrides: Partial<Creature> = {}): Creature {
     alertTargetRoomId: null,
     lootTable: DROWNED_REVENANT.lootTable,
     isAlive: true,
+    aggressive: true,
     ...overrides,
   };
 }
@@ -272,6 +273,70 @@ describe('Creature Behavior Tree', () => {
       updateCreature(creature, world, 0.25);
 
       expect(creature.behaviorState).toBe('fleeing');
+    });
+  });
+
+  describe('passive creatures', () => {
+    it('passive creatures never go hostile even with players present', () => {
+      const pigeon = makeCreature({
+        type: 'pigeon_flock',
+        name: 'Pigeon Flock',
+        aggressive: false,
+      });
+      const world = makeWorldState({
+        playersInRoom: new Map([['corridor-1', ['player-1']]]),
+      });
+
+      const action = updateCreature(pigeon, world, 0.8);
+
+      expect(pigeon.behaviorState).toBe('idle');
+      expect(action.type).toBe('idle');
+    });
+
+    it('passive creatures ignore noise and never go alert', () => {
+      const dog = makeCreature({
+        type: 'city_dog',
+        name: 'City Dog',
+        aggressive: false,
+      });
+      const world = makeWorldState({
+        noisyRooms: new Set(['junction-1']),
+      });
+
+      updateCreature(dog, world, 0.4);
+
+      expect(dog.behaviorState).toBe('idle');
+      expect(dog.alertTargetRoomId).toBeNull();
+    });
+
+    it('passive creatures can still patrol normally', () => {
+      const pigeon = makeCreature({
+        type: 'pigeon_flock',
+        name: 'Pigeon Flock',
+        aggressive: false,
+        idleTicks: 3,
+        idleTicksTarget: 4,
+      });
+      const world = makeWorldState();
+
+      const action = updateCreature(pigeon, world, 0.8);
+
+      expect(action.type).toBe('patrol_move');
+      expect(action.targetRoomId).toBeDefined();
+    });
+
+    it('aggressive creatures still attack players', () => {
+      const revenant = makeCreature({
+        aggressive: true,
+      });
+      const world = makeWorldState({
+        playersInRoom: new Map([['corridor-1', ['player-1']]]),
+      });
+
+      const action = updateCreature(revenant, world, 0.25);
+
+      expect(revenant.behaviorState).toBe('hostile');
+      expect(action.type).toBe('combat_strike');
     });
   });
 
@@ -664,8 +729,8 @@ describe('Drowned Revenant Template', () => {
     expect(DROWNED_REVENANT.fleeThreshold).toBe(0.25);
   });
 
-  it('idle patrol ticks are 3-5', () => {
-    expect(DROWNED_REVENANT.idleTicksMin).toBe(3);
-    expect(DROWNED_REVENANT.idleTicksMax).toBe(5);
+  it('idle patrol ticks are 30-50', () => {
+    expect(DROWNED_REVENANT.idleTicksMin).toBe(30);
+    expect(DROWNED_REVENANT.idleTicksMax).toBe(50);
   });
 });

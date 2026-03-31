@@ -165,9 +165,10 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
       onRoomHeader: (msg: RoomHeaderMessage) => {
         if (disposed) return;
         dispatch({ type: 'SET_ROOM_HEADER', header: msg });
+        const slugSuffix = msg.roomSlug ? ` (${msg.roomSlug})` : '';
         const headerLabel = msg.zoneName
-          ? `\n── [${msg.zoneName}] ${msg.roomName} ──`
-          : `\n── ${msg.roomName} ──`;
+          ? `\n── [${msg.zoneName}] ${msg.roomName}${slugSuffix} ──`
+          : `\n── ${msg.roomName}${slugSuffix} ──`;
         addMessage(headerLabel, 'header');
       },
       onShardState: (msg: ShardStateMessage) => {
@@ -343,6 +344,10 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
           .finally(() => {
             switchingRef.current = false;
           });
+      },
+      onRoomOccupants: (msg: import('@ellmud/shared').RoomOccupantsMessage) => {
+        if (disposed) return;
+        dispatch({ type: 'SET_ROOM_OCCUPANTS', occupants: msg });
       },
       onLeave: (code: number) => {
         if (!disposed && !switchingRef.current) {

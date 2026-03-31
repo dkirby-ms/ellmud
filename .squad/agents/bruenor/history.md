@@ -41,3 +41,53 @@
 - **Bosses:** the_harbourmaster (Dockward), plague_bearer (Drowned Veins)
 - **Room duplication directive followed:** Generic rooms (Narrow Alley, Dock Street, Sewer Tunnel, etc.) share display names with unique slugs and distinct descriptions
 - **Validation:** All exits bidirectional, no orphaned refs, no duplicate slugs, all cross-zone targets verified
+
+---
+
+## 2026-03-30T19:15Z: Zone-Topology Skill Reference — Future Implementation Guide
+
+**Relevant to:** Siltgate implementation work and all future zone design tasks  
+**Skill Location:** `.squad/skills/zone-topology/SKILL.md` (created by Laeral)
+
+**Context:** Laeral analyzed the Siltgate zone topology and identified 6 topological conflicts (Δ=3 to Δ=17) with 35+ position collisions. These arise from the zone's exit graph structure, not engine defects. The zone-topology skill captures lessons learned and provides guidelines for designing topologies that layout cleanly.
+
+**For Bruenor — Building Siltgate:**
+- Reference the skill's **Pre-Handoff Checklist** before implementing room additions
+- Use the **Cycle Validation Formula** to verify any major structural changes
+- When fixing conflicts, budget intermediate bridge rooms based on the **Bridge Room Budgeting** guidelines (roughly N/2 rooms per Δ=N conflict)
+- Proposed fixes are documented in `laeral-siltgate-topology-fixes.md` (now merged to decisions.md) — prioritized by conflict severity
+
+**Cross-Skill Resources:**
+- Drizzt's constraint documentation (decisions.md, 2026-03-30T19:15) explains the layout algorithm phases, penalty weights, and why conflicts arise in cyclic graphs
+- Together, Laeral's design patterns + Drizzt's engine constraints = complete reference for zone design
+
+**Files Generated:**
+- Skill: `.squad/skills/zone-topology/SKILL.md`
+- Orchestration log: `.squad/orchestration-log/2026-03-30T19-15-laeral.md`
+- Decisions merged: decisions.md now contains user directive, Drizzt's constraints, and Laeral's topology analysis
+
+### Siltgate Topology Fixes (2025-07-24)
+- **Migration:** `005_siltgate_topology_fixes.sql`
+- **Source:** Laeral's bridge-room-designs (`.squad/decisions/inbox/laeral-bridge-room-designs.md`)
+- **Changes applied:**
+  - 2 new rooms: `rubble-passage-1` (corridor, Ashgate bridge) and `gutter-sewer` (dead_end, slum sewer access)
+  - 10 exits deleted: 5 bidirectional pairs that caused topological conflicts (Δ=3 to Δ=17)
+  - 8 exits inserted: 4 bidirectional pairs — bridge connections via new rooms + promenade reroute
+  - `collapsed-building-1` type changed from `dead_end` to `corridor` (now has north+south exits)
+  - `sewer-junction-2` and `sewer-tunnel-4` descriptions updated with collapsed-passage narrative text
+- **Zone total:** 138 rooms, 284 exits (was 136 rooms, 286 exits)
+- **Pattern notes:** Matched 004_seed_siltgate.sql exactly — cross-join VALUES, NULLIF for target columns, subquery for zone_id in DELETEs, text[] casts for properties
+- **Transaction:** Full BEGIN/COMMIT wrap for atomicity
+
+### Warrens Topology Fixes (2025-07-25)
+- **Migration:** `007_warrens_topology_fixes.sql`
+- **Source:** Laeral's warrens-topology-fixes (`.squad/decisions/inbox/laeral-warrens-topology-fixes.md`)
+- **Changes applied:**
+  - 8 new rooms: `sewer-drip-tunnel`, `sewer-cracked-conduit`, `sewer-blind-turn`, `sewer-narrow-drain` (Fix A-1); `sewer-rubble-choke`, `sewer-trickle-passage`, `sewer-slime-channel`, `sewer-stagnant-pool` (Fix A-2)
+  - 16 exits deleted: 8 bidirectional pairs — ratways↔main-junction (A-1), south-tunnel↔west-conduit (A-2), west-conduit↔cistern (A-2), broken-sanctuary↔sunken-square (B)
+  - 22 exits inserted: 11 bidirectional pairs — 5 pairs for A-1 chain (S→S→W→S→E into sewer-north-tunnel), 6 pairs for A-2 chain (W→S→E→S→E→E into cistern)
+  - `broken-sanctuary` description updated with bricked-up doorway text (now a dead-end)
+- **Zone total:** 109 rooms (was 101); 0 BFS conflicts after changes
+- **Critical slug note:** Warrens zone slug is `warrens`, NOT `the-warrens` — verified from 003_seed_zones.sql
+- **Pattern notes:** Matched 005_siltgate_topology_fixes.sql structure — BEGIN/COMMIT, sectioned comments, cross-join VALUES for rooms/exits, individual DELETEs with subquery zone_id
+- **Transaction:** Full BEGIN/COMMIT wrap for atomicity

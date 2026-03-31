@@ -81,7 +81,9 @@ export function createEntraRouter(
 
       // Redirect to client with token and playerId as query params
       const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
-      const redirectUrl = `${clientUrl}/auth/callback?token=${encodeURIComponent(token)}&playerId=${encodeURIComponent(playerId)}`;
+      const params = new URLSearchParams({ token, playerId });
+      if (userInfo.email) params.set('email', userInfo.email);
+      const redirectUrl = `${clientUrl}/auth/callback?${params.toString()}`;
       
       res.redirect(redirectUrl);
     } catch (err) {

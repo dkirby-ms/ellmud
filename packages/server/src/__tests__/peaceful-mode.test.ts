@@ -30,6 +30,7 @@ function makeCreature(overrides: Partial<Creature> = {}): Creature {
     alertTargetRoomId: null,
     lootTable: [],
     isAlive: true,
+    aggressive: true,
     ...overrides,
   };
 }

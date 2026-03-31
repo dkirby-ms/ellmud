@@ -14,6 +14,7 @@ import CompassControl from "../components/CompassControl";
 import { MinimapWidget } from "../components/map/MinimapWidget.js";
 import { FullMapOverlay } from "../components/map/FullMapOverlay.js";
 import { EquipmentSilhouette } from "../components/EquipmentSilhouette.js";
+import { RoomOccupants } from "../components/RoomOccupants.js";
 import "../components/map/map.css";
 import MudPrompt from "../components/MudPrompt.js";
 import { useAppContext, type StatusEffect } from "../store.js";
@@ -78,6 +79,7 @@ export default function ShardExploration() {
   const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
   const zoneName = state.roomHeader?.zoneName;
   const roomType = state.roomHeader?.roomType;
+  const roomSlug = state.roomHeader?.roomSlug;
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -211,7 +213,7 @@ export default function ShardExploration() {
             </button>
           )}
           <span className="text-text-secondary text-sm font-sans">
-            {state.playerId ?? "Unknown"}
+            {state.email ?? state.playerId ?? "Unknown"}
           </span>
           <span className="text-text-disabled">|</span>
           <div className="flex items-center gap-2">
@@ -239,6 +241,11 @@ export default function ShardExploration() {
               style={{ fontSize: "1.125rem" }}
             >
               {currentRoom}
+              {roomSlug && (
+                <span className="text-text-disabled font-mono text-xs ml-2 font-normal">
+                  [{roomSlug}]
+                </span>
+              )}
               {roomType && (
                 <span
                   className={`ml-2 text-xs font-sans font-semibold px-1.5 py-0.5 rounded ${
@@ -331,6 +338,21 @@ export default function ShardExploration() {
                 {msg.type === "speech" && (
                   <p className="mud-speech max-w-[80ch]">
                     &ldquo;{msg.text}&rdquo;
+                  </p>
+                )}
+
+                {msg.type === "ambient" && (
+                  <p className="ansi-dim ansi-italic max-w-[80ch]">
+                    {msg.text}
+                  </p>
+                )}
+
+                {msg.type === "awareness" && (
+                  <p
+                    className="ansi-dim pl-4 max-w-[80ch] flex items-start gap-2"
+                  >
+                    <Eye className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    <span>{msg.text}</span>
                   </p>
                 )}
               </div>
@@ -443,6 +465,14 @@ export default function ShardExploration() {
               </div>
             </div>
           )}
+
+          {/* Room Occupants */}
+          <div className="p-4 border-b border-border-muted">
+            <RoomOccupants 
+              creatures={state.roomOccupants.creatures}
+              players={state.roomOccupants.players}
+            />
+          </div>
 
           {/* Equipment Silhouette */}
           <div className="p-4 border-b border-border-muted">

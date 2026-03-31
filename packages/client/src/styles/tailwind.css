@@ -178,7 +178,7 @@
 .mud-exits      { color: #C4A000; font-weight: 700; } /* yellow + bold */
 .mud-speech     { color: #34E2E2; }              /* bright cyan */
 .mud-sound      { color: #555753; font-style: italic; }
-.mud-room-desc  { color: #D3D7CF; }             /* standard white */
+.mud-room-desc  { color: #D3D7CF; white-space: pre-line; }  /* standard white, preserve newlines */
 
 /* ─── MUD Prompt / Status Line ─────────────────────────────────────── */
 .mud-prompt {

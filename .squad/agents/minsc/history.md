@@ -1288,3 +1288,40 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 - 8 new decisions merged from inbox to decisions.md (deduplicated)
 - Inbox directory cleared
 - Full decision trail available for team reference
+
+## Learnings — Siltgate Topology Test Data Update (2025-07-24)
+
+### What happened
+- Updated Siltgate test data in `computeLayout.test.ts` to reflect Laeral's 5 topology fixes
+- Added 2 new rooms: `rubble-passage-1`, `gutter-sewer`
+- Removed 10 exits (5 broken pairs) and added 8 exits (4 corrected pairs)
+- Zone grew from 136 → 138 rooms, exits from 282 → 280
+- Diagonal threshold tightened from ≤10 to ≤6 (actual: 2 diagonals)
+- Direction violations remain at 0 (hard constraint preserved)
+- Occlusion threshold unchanged at ≤16
+
+### Test results
+- `computeLayout.test.ts`: 24/24 passed (Siltgate: 2 diagonals, 0 direction violations)
+- `validateZoneTopology.test.ts`: 9/9 passed (Drizzt's validator detects the OLD topology's 10 conflicts correctly)
+- Full client suite: 144/144 passed across 12 test files
+
+### Key insight
+- The topology fixes dramatically reduced diagonals (from ~8-10 to 2). The remaining 2 are `collapsed-building-1 ↔ rubble-street-1`, which is the new bridge room area — acceptable given the dense Ashgate topology.
+
+## Learnings — Warrens Topology Test Data (2025-07-25)
+
+### What happened
+- Added Warrens zone layout test to `computeLayout.test.ts` — 109 rooms with Laeral's fixed topology
+- Added Warrens topology validation test to `validateZoneTopology.test.ts`
+- Test data built from `003_seed_zones.sql` (101 original rooms) + Laeral's 8 new rooms + exit changes
+- Applied all 3 fixes: A-1 (ratways→junction chain), A-2 (west-conduit→cistern chain), B (broken-sanctuary shortcut removal)
+- 8 exit pairs removed (16 rows), 11 exit pairs added (22 rows), net: 101→109 rooms, 278→292 exits
+
+### Test results
+- `computeLayout.test.ts`: All passed — 109 rooms placed, 0 direction violations
+- `validateZoneTopology.test.ts`: All passed — 0 BFS conflicts, 8 position collisions (expected up/down overlaps)
+- Full client suite: 146/146 passed across 12 test files (was 144)
+
+### Key insight
+- The `validateZoneTopology` validator marks `valid: false` when collisions > 0, even with 0 conflicts. Collisions from up/down overlaps (sewer under surface) are expected and unavoidable — test asserts `conflicts.length === 0` and `collisions ≤ 22` instead of `valid === true`.
+- Warrens fixed topology has zero direction violations in computeLayout — Laeral's cycle-verified path lengths produce clean BFS positions.

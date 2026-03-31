@@ -119,6 +119,8 @@ export class CreatureManager {
       alertTargetRoomId: null,
       lootTable: [...template.lootTable],
       isAlive: true,
+      aggressive: template.aggressive,
+      roomDescription: template.roomDescription,
     };
   }
 
@@ -148,6 +150,8 @@ export class CreatureManager {
       alertTargetRoomId: null,
       lootTable: [...template.lootTable],
       isAlive: true,
+      aggressive: template.aggressive,
+      roomDescription: template.roomDescription,
     };
 
     this.creatures.set(creature.id, creature);
@@ -235,6 +239,8 @@ export class CreatureManager {
       alertTargetRoomId: null,
       lootTable: [...template.lootTable],
       isAlive: true,
+      aggressive: template.aggressive,
+      roomDescription: template.roomDescription,
     };
   }
 
@@ -257,6 +263,7 @@ export class CreatureManager {
       // Apply movement from patrol/alert actions
       if (action.type === 'patrol_move' || action.type === 'alert_move') {
         if (action.targetRoomId) {
+          action.sourceRoomId = creature.currentRoomId;
           creature.currentRoomId = action.targetRoomId;
         }
       }

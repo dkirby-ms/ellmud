@@ -76,3 +76,38 @@ Siltgate revision finalized and merged into team decisions archive.
 - `.squad/orchestration-log/2026-03-29T17-34-laeral-siltgate-revision.md`
 
 **Team Roster Status:** Laeral — 1 major content revision with philosophy update this cycle
+
+### 2025-07-24: Siltgate Topology Analysis & Zone Grid Constraint Skill
+- Performed full topology analysis of The Siltgate (136 rooms, 286 exits) against the `computeLayout.ts` BFS grid engine.
+- Identified **6 topological conflicts** where rooms are reachable via paths that imply contradictory grid positions:
+  1. `dock-street-5 ↔ narrow-alley-3` (Dockward ↔ Beggar's Span shortcut, Δ=9) — cross-neighborhood shortcut
+  2. `rubble-street-1 ↔ rubble-street-2` (Beggar's Span ↔ Ashgate, Δ=5) — dual-approach neighborhood border
+  3. `sewer-junction-2 ↔ sewer-tunnel-4` (Drowned Veins ring, Δ=17) — sewer loop with mismatched surface access points
+  4. `narrow-alley-5 ↔ narrow-alley-6` (surface ↔ sewer vertical shortcut, Δ=8)
+  5. `garden-terrace ↔ iron-balcony-2` (Highwind Estates L-loop, Δ=3)
+  6. Self-referencing exits on `city-gate` and `ashgate`
+- Also identified 35 grid position collisions (rooms wanting the same cell) and 11 four-way junctions.
+- **Core insight:** These conflicts are content problems, not algorithm problems. The zone data creates impossible geometry that no layout engine can resolve. The fix is adding intermediate "bridge" rooms to absorb grid distance.
+- Proposed 6 specific fixes adding 8–9 intermediate rooms (zone grows to ~144–145 rooms). Fixes prioritized by conflict severity (Δ value).
+- **Key design principle learned:** For any cycle in a zone graph, the sum of cardinal direction offsets around the cycle must be zero. Non-zero sums = topological impossibility on a 2D grid.
+- Created **zone-topology skill** at `.squad/skills/zone-topology/SKILL.md` — covers the grid constraint, conflict patterns (shortcuts, rings, L-loops, vertical shortcuts), design guidelines (junction density, shortcut savings limits, bridge room budgeting), cycle validation formula, and a pre-handoff checklist.
+- Proposal document: `.squad/decisions/inbox/laeral-siltgate-topology-fixes.md`
+- **File paths:** Zone data at `packages/server/src/db/migrations/004_seed_siltgate.sql`, layout engine at `packages/client/src/map/computeLayout.ts`, layout tests at `packages/client/src/map/__tests__/computeLayout.test.ts`
+
+### 2025-07-24: Siltgate Bridge Room Designs — Topology Fix Implementation
+- Designed concrete fixes for all 6 topological conflicts. Zone grows from 136 to 138 rooms with 0 BFS conflicts.
+- **Key design decision — removal over bridging:** For Δ≥5 conflicts, removing the shortcut is almost always better than adding bridge rooms. The Siltgate grid is too dense (35 cell collisions) to fit bridge room chains. Only 2 new rooms were needed; the rest were pure exit surgery.
+- **Bridge room sweet spot:** Bridge rooms work for Δ≤3. For Δ=3 (Estates L-loop), re-routing through an existing room (promenade-walk-3) eliminated the conflict with zero new rooms. For Δ=5 (Ashgate dual-approach), a single bridge room reconnected two sub-areas through nearby dead-ends.
+- **Sewer ring lesson:** Ring topologies where two surface access points feed a single underground loop are almost always impossible on a 2D grid. The surface distance between access points never matches the underground tunnel length. Solution: break the ring into two dead-end branches. Use narrative (cave-in, sealed gate) to justify the break and create a quest hook for future reconnection.
+- **Vertical shortcut lesson:** When room A connects down to sewer, sewer connects up to room B, and A and B are far apart on the surface, the ENTIRE chain from A through the underground gets pulled to B's grid position by BFS. Fix: sever the underground connection and replace with a standalone dead-end sewer access. This repositions the entire surface chain correctly.
+- **Grid density metric:** At 35 collisions in 136 rooms, every candidate bridge path was blocked by existing rooms. Future zones should target <20% collision rate before attempting bridge room insertion.
+- Design document: `.squad/decisions/inbox/laeral-bridge-room-designs.md`
+
+### 2025-07-25: Warrens Topology Fixes — Sewer Path Lengthening
+- Designed fixes for all 19 BFS conflicts in the Warrens zone. Zone grows from 101 to 109 rooms with 0 conflicts.
+- **Vertical shortcut fix — path lengthening over severing:** Unlike Siltgate (where sewer rings were broken into dead-ends), the Warrens sewer is a tree, not a ring. The fix is to lengthen underground paths so their cardinal offsets match surface shaft distances. This preserves full sewer connectivity — all 3 shafts remain linked underground.
+- **Direction zigzag technique:** When a straight N/S chain can't connect because the target room's exits are full, route the chain through an adjacent existing room. The Warrens ratways chain uses S→S→W→S→E to reach `sewer-north-tunnel` (which already connects S to main-junction), avoiding the blocked north exit on `sewer-main-junction`. The W/E pair cancels out, preserving the required net offset (0, +4).
+- **Dual-approach conflict pattern:** When a room is reachable via two BFS-equidistant paths with different grid offsets, removing ONE link is always cheaper than bridging. For `sunken-square`, removing the approach-side link (broken-sanctuary↔sunken-square) was better than removing the grid-side link (sunken-square↔slum-r1c1) because the grid-side link keeps the sewer shafts close together on the grid, minimizing Fix A's room budget.
+- **Intermediate room insertion technique:** For Fix A-2, inserting 1 room between south-tunnel and west-conduit (changing W to W→S) adjusted the running offset enough that only 3 more rooms were needed between west-conduit and cistern. Splitting the problem at an intermediate junction reduced total rooms from 5 to 4.
+- **BFS simulation is essential:** Ran full BFS topology verification in Python before and after changes. Confirmed 0 conflicts and consistent grid positions for all 109 rooms. Never trust cycle math alone — always simulate.
+- Design document: `.squad/decisions/inbox/laeral-warrens-topology-fixes.md`
