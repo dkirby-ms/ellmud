@@ -14,12 +14,6 @@ export const ROOM_NAMES: Record<RoomType, readonly string[]> = {
     'Waterlogged Gate',
     'Flooded Antechamber',
   ],
-  extraction: [
-    'Crumbling Breach',
-    'Fissure Ascent',
-    'Collapsed Stairwell',
-    'Eroded Vent',
-  ],
   boss: [
     'Sanctum of the Drowned',
     'Revenants\' Throne',
@@ -66,10 +60,6 @@ export const ROOM_DESCRIPTIONS: Record<RoomType, readonly string[]> = {
   entry: [
     'Pale light seeps through cracked stone above. Ankle-deep water sloshes with each step. This is where the shard begins — and where retreat is still possible.',
     'A jagged opening in the earth leads down into darkness. Water drips steadily from the ceiling, pooling on worn flagstones.',
-  ],
-  extraction: [
-    'A narrow fissure in the wall reveals a sliver of grey sky. The water here is shallower — the ground slopes upward. This could be a way out.',
-    'Broken masonry has created a gap in the ceiling. Cold air rushes down. With effort, one could climb free of this place.',
   ],
   boss: [
     'The water here is waist-deep and unnervingly still. Ancient pillars ring a raised stone platform. Something stirs beneath the surface — something that has waited a very long time.',

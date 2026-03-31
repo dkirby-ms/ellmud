@@ -7,7 +7,6 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import CombinedStashLoadout from "../components/CombinedStashLoadout";
-import ExtractionOverlay from "../components/ExtractionOverlay";
 import ChatPanel from "../components/ChatPanel";
 import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
 import CompassControl from "../components/CompassControl";
@@ -50,8 +49,8 @@ export default function ShardExploration() {
     handleExitClick,
     handleCombatAction: sendCombatAction,
     sendChatMessage,
-    extraction,
-    dismissExtraction,
+    overlay,
+    dismissOverlay,
     reconnection,
     roomRef,
   } = useShardConnection(roomName);
@@ -250,7 +249,6 @@ export default function ShardExploration() {
                 <span
                   className={`ml-2 text-xs font-sans font-semibold px-1.5 py-0.5 rounded ${
                     roomType === 'boss' ? 'text-danger bg-danger/10'
-                    : roomType === 'extraction' ? 'text-success bg-success/10'
                     : roomType === 'entry' ? 'text-interactive bg-interactive/10'
                     : 'text-text-disabled bg-bg-elevated'
                   }`}
@@ -732,16 +730,23 @@ export default function ShardExploration() {
         onClose={closeMap}
       />
 
-      {/* Extraction Overlay */}
-      <ExtractionOverlay
-        state={extraction.status}
-        progress={extraction.progress}
-        isZone={isZone}
-        onReturnToRefuge={() => {
-          dismissExtraction();
-          navigate('/refuge');
-        }}
-      />
+      {/* Death Overlay */}
+      {overlay.status === 'death' && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-danger text-lg mb-4">{overlay.narration}</p>
+            <button
+              onClick={() => {
+                dismissOverlay();
+                navigate('/refuge');
+              }}
+              className="px-4 py-2 bg-bg-elevated text-text-primary rounded hover:bg-bg-surface"
+            >
+              Return to Refuge
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Chat Panel */}
       <ChatPanel

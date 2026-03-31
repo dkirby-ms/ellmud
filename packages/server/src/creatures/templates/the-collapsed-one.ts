@@ -57,7 +57,7 @@ export const THE_COLLAPSED_ONE: CreatureTemplate = {
     minCount: 1,
     maxCount: 1,
     preferredRoomTypes: ['boss'],
-    forbiddenRoomTypes: ['entry', 'extraction', 'corridor', 'junction', 'dead_end'],
+    forbiddenRoomTypes: ['entry', 'corridor', 'junction', 'dead_end'],
   },
   idleTicksMin: 80,
   idleTicksMax: 150,

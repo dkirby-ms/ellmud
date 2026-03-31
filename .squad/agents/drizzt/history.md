@@ -35,6 +35,26 @@
 
 ## Recent Work
 
+### Delete Extraction System (#228) — PR #244
+**Task:** Remove the entire extraction system (dead code), replaced by walk-out-alive zone-exit model.
+**Status:** ✅ Complete — PR #244 opened against dev
+**Branch:** `squad/228-delete-extraction`
+
+**Changes (53 files, +228 −2,632):**
+- Deleted `extraction/` module, `extract` command handler, `ExtractionOverlay` component, extraction tests
+- Moved `stash-transfer.ts` to `systems/stash-transfer.ts` (preserved for zone-exit use)
+- Replaced `EXTRACTION_STATE`/`ExtractionMessage` with `OVERLAY_STATE`/`OverlayMessage` — the extraction_state channel was overloaded for death/downed/stabilized UI, so those states needed a new home
+- Removed `'extraction'` from `RoomType` union and `extractionRoomIds` from `RoomGraph`
+- Rewrote generator: removed extraction rooms, distance constraints, simplified connectivity
+- Cleaned ShardRoom (~15 distinct changes), client hooks, admin pages, creature templates, DB seeds
+- Updated 20+ test files; removed ~500 lines of extraction-specific test code
+
+**Key insight:** The extraction_state message channel was overloaded — it carried death/downed/stabilized states too. Created OVERLAY_STATE to preserve this client overlay functionality.
+
+**Verification:** Build passes, 2145 tests pass (shared + server), zero regressions.
+
+---
+
 ### Static File Serving Fix (2026-03-19T22:30)
 **Task:** Fix production deployment so React client is served from Express server
 **Status:** ✅ Complete

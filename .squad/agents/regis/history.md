@@ -861,3 +861,9 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - Future enhancement: Show player level/class in occupants list
 - Future enhancement: Distinguish NPCs from player characters visually
 
+
+### Issue #230 — Rename Shardwalker → Character (PR #243)
+- Replaced 4 instances of "Shardwalker" with "Character" across Login.tsx and CharacterSelect.tsx
+- Grep confirmed zero remaining references in packages/client/
+- tsc --noEmit passed cleanly
+- Default branch is `dev`, not `main` — always branch from `dev`

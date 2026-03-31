@@ -107,15 +107,6 @@ describe('Creature Spawning in Shard', () => {
     }
   });
 
-  it('does not spawn creatures in extraction rooms', () => {
-    const { sharedGraph, spawned } = createTestShard();
-    const extractionIds = new Set(sharedGraph.extractionRoomIds);
-
-    for (const creature of spawned) {
-      expect(extractionIds.has(creature.currentRoomId)).toBe(false);
-    }
-  });
-
   it('spawning is deterministic with the same seed', () => {
     const { spawned: spawned1 } = createTestShard(42);
     const { spawned: spawned2 } = createTestShard(42);

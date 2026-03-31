@@ -84,7 +84,6 @@ describe('Shard Graph Generation', () => {
 
     expect(g1.rooms.size).toBe(g2.rooms.size);
     expect(g1.entryRoomIds).toEqual(g2.entryRoomIds);
-    expect(g1.extractionRoomIds).toEqual(g2.extractionRoomIds);
     expect(g1.bossRoomId).toBe(g2.bossRoomId);
 
     for (const [id, room1] of g1.rooms) {
@@ -106,16 +105,14 @@ describe('Shard Graph Generation', () => {
     }
   });
 
-  it('all anchor rooms present: 2 entry, 2 extraction, 1 boss', () => {
+  it('all anchor rooms present: 2 entry, 1 boss', () => {
     const graph = generateShardGraph(T1_CONFIG);
     const types = Array.from(graph.rooms.values()).map(r => r.type);
 
     expect(types.filter(t => t === 'entry').length).toBe(2);
-    expect(types.filter(t => t === 'extraction').length).toBe(2);
     expect(types.filter(t => t === 'boss').length).toBe(1);
 
     expect(graph.entryRoomIds).toHaveLength(2);
-    expect(graph.extractionRoomIds).toHaveLength(2);
     expect(graph.bossRoomId).toBeTruthy();
   });
 
@@ -129,21 +126,6 @@ describe('Shard Graph Generation', () => {
           graph.rooms.size,
           // (message is for debugging only — vitest doesn't support msg param in toBe)
         );
-      }
-    }
-  });
-
-  it('no trivial path: entry to nearest extraction ≥ 5 hops', () => {
-    for (const seed of [42, 7, 256, 65535, 1000]) {
-      const graph = generateShardGraph({ ...T1_CONFIG, seed });
-
-      for (const entryId of graph.entryRoomIds) {
-        const dist = bfs(entryId, graph.rooms);
-        for (const extId of graph.extractionRoomIds) {
-          const d = dist.get(extId);
-          expect(d).toBeDefined();
-          expect(d!).toBeGreaterThanOrEqual(5);
-        }
       }
     }
   });
@@ -206,7 +188,6 @@ describe('Shard Graph Generation', () => {
 
     expect(restored.rooms.size).toBe(graph.rooms.size);
     expect(restored.entryRoomIds).toEqual(graph.entryRoomIds);
-    expect(restored.extractionRoomIds).toEqual(graph.extractionRoomIds);
     expect(restored.bossRoomId).toBe(graph.bossRoomId);
     expect(restored.seed).toBe(graph.seed);
     expect(restored.biome).toBe(graph.biome);
@@ -227,9 +208,8 @@ describe('Shard Graph Generation', () => {
     for (const room of graph.rooms.values()) {
       if (room.items.length > 0) {
         hasLoot = true;
-        // Entry and extraction rooms should not have loot
+        // Entry rooms should not have loot
         expect(room.type).not.toBe('entry');
-        expect(room.type).not.toBe('extraction');
       }
     }
     expect(hasLoot).toBe(true);
@@ -276,14 +256,13 @@ describe('Shard Graph Generation', () => {
     }
   });
 
-  it('hazards placed only in non-entry/extraction rooms', () => {
+  it('hazards placed only in non-entry rooms', () => {
     const graph = generateShardGraph(T1_CONFIG);
     let hasHazard = false;
     for (const room of graph.rooms.values()) {
       if (room.hazards.length > 0) {
         hasHazard = true;
         expect(room.type).not.toBe('entry');
-        expect(room.type).not.toBe('extraction');
         for (const hazard of room.hazards) {
           expect(hazard.type).toBeTruthy();
           expect(hazard.severity).toBeGreaterThan(0);

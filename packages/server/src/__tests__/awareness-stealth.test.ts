@@ -371,10 +371,6 @@ describe('Awareness & Stealth — Concurrent Events (#25)', () => {
     it.todo('flee reduces effective stealth (running is noisy)');
   });
 
-  describe.skip('entry during extraction', () => {
-    it.todo('extracting player still receives detection messages');
-    it.todo('entering player sees extracting player if awareness check passes');
-  });
 });
 
 // ─── Cross-System: Stealth + Sound (#25 × #22) ─────────────────────────────

@@ -63,7 +63,6 @@ export default function RoomsDetail() {
 
   const roomTypeColors: Record<string, string> = {
     entry: "#2D6B4F",
-    extraction: "#C9A84C",
     boss: "#8B2500",
     corridor: "#4A4B55",
     junction: "#3A7D7B",
@@ -176,7 +175,6 @@ export default function RoomsDetail() {
                   >
                     <option value="">Select type...</option>
                     <option value="entry">Entry</option>
-                    <option value="extraction">Extraction</option>
                     <option value="boss">Boss</option>
                     <option value="corridor">Corridor</option>
                     <option value="junction">Junction</option>

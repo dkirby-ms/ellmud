@@ -1,7 +1,7 @@
 /**
  * RunHistoryRepository — Persistent shard run records.
  *
- * Records extraction outcomes and shard completion data per player.
+ * Records shard run outcomes and completion data per player.
  * Follows the Interface + InMemory + Pg pattern used by PlayerProfileRepository.
  *
  * The Pg implementation reads/writes the `run_history` table (migration 005).

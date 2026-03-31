@@ -8,7 +8,7 @@ import {
   type NarrateMessage,
   type RoomHeaderMessage,
   type ShardStateMessage,
-  type ExtractionMessage,
+  type OverlayMessage,
   type RoomSwitchMessage,
   type NarrationType,
   type ShardState,
@@ -37,8 +37,8 @@ describe('MessageTypes', () => {
     expect(MessageTypes.SHARD_STATE).toBe('shard_state');
   });
 
-  it('should export EXTRACTION_STATE type key', () => {
-    expect(MessageTypes.EXTRACTION_STATE).toBe('extraction_state');
+  it('should export OVERLAY_STATE type key', () => {
+    expect(MessageTypes.OVERLAY_STATE).toBe('overlay_state');
   });
 
   it('should export STASH_UPDATE type key', () => {
@@ -97,18 +97,15 @@ describe('Message Type Shapes', () => {
     expect(msg.collapseTimer).toBeUndefined();
   });
 
-  it('ExtractionMessage should accept extraction state fields', () => {
-    const msg: ExtractionMessage = {
+  it('OverlayMessage should accept overlay state fields', () => {
+    const msg: OverlayMessage = {
       playerId: 'p1',
-      state: 'started',
-      ticksRemaining: 5,
-      totalTicks: 10,
-      narration: 'You begin channelling extraction.',
+      state: 'death',
+      narration: 'The darkness claims you.',
       timestamp: 12345,
     };
     expect(msg.playerId).toBe('p1');
-    expect(msg.state).toBe('started');
-    expect(msg.ticksRemaining).toBe(5);
+    expect(msg.state).toBe('death');
   });
 
   it('RoomSwitchMessage should accept target, reason, and optional options', () => {
@@ -122,7 +119,7 @@ describe('Message Type Shapes', () => {
 
     const msgWithOptions: RoomSwitchMessage = {
       target: 'zone:the-refuge',
-      reason: 'extraction_complete',
+      reason: 'zone_exit',
       options: { biome: 'flooded_crypt', roomId: 'room-123' },
     };
     expect(msgWithOptions.options).toEqual({ biome: 'flooded_crypt', roomId: 'room-123' });

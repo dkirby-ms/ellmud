@@ -26,7 +26,6 @@ export const ALL_DIRECTIONS: readonly Direction[] = [
 
 export type RoomType =
   | 'entry'
-  | 'extraction'
   | 'boss'
   | 'corridor'
   | 'junction'
@@ -94,7 +93,6 @@ export interface Room {
 export interface RoomGraph {
   rooms: Map<string, Room>;
   entryRoomIds: string[];
-  extractionRoomIds: string[];
   bossRoomId: string;
   seed: number;
   biome: BiomeType;
@@ -117,7 +115,6 @@ export interface SerializedRoom {
 export interface SerializedRoomGraph {
   rooms: SerializedRoom[];
   entryRoomIds: string[];
-  extractionRoomIds: string[];
   bossRoomId: string;
   seed: number;
   biome: BiomeType;
@@ -142,7 +139,6 @@ export function serializeRoomGraph(graph: RoomGraph): SerializedRoomGraph {
   return {
     rooms,
     entryRoomIds: graph.entryRoomIds,
-    extractionRoomIds: graph.extractionRoomIds,
     bossRoomId: graph.bossRoomId,
     seed: graph.seed,
     biome: graph.biome,
@@ -168,7 +164,6 @@ export function deserializeRoomGraph(data: SerializedRoomGraph): RoomGraph {
   return {
     rooms,
     entryRoomIds: data.entryRoomIds,
-    extractionRoomIds: data.extractionRoomIds,
     bossRoomId: data.bossRoomId,
     seed: data.seed,
     biome: data.biome,
