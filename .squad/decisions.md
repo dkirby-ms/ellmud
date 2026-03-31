@@ -8123,3 +8123,95 @@ The game evolved since inception. Hand-crafted zones provide better pacing, more
 **Why:** Game design has evolved from procedural-first to hand-crafted zone-first exploration. Combat needs complete ground-up redesign.
 
 **Status:** Complete — GDD.md restructured and all objectives delivered
+
+---
+
+### 2026-03-31T18:23:34Z: User directive — Refuge repurposed, faction starting areas
+
+**By:** dkirby-ms (via Copilot)
+
+**What:**
+1. **Refuge repurposed:** The Refuge is no longer the player starting zone. It becomes a location for game designers to hang out in-game, and serves as a hub for in-game exploration and debugging since it is (or will be) connected to all zones.
+2. **Faction starting areas:** Each faction should have its own starting area for actual players. Players begin in their faction's zone, not the Refuge.
+
+**Why:** The game's design is evolving — the Refuge was an initial starting zone but the game now needs faction-specific onboarding and the Refuge serves better as an internal dev/design tool connected to all zones.
+
+---
+
+## Decision: Refuge Repurposed + Faction Starting Areas
+
+**Author:** Elminster (Lead / Architect)  
+**Requested by:** dkirby-ms  
+**Date:** 2026-03-31  
+**Scope:** GDD.md only — no code changes
+
+### Summary
+
+The Refuge is no longer the player starting zone. It becomes a designer/debug hub connected to all zones. Each faction gets its own persistent starting area (faction stronghold) that provides the gameplay features players need.
+
+### Changes Made
+
+**§1 High-Level Vision**
+- Updated core fantasy and vision paragraphs: players now begin in their "faction's stronghold" instead of "the Refuge"
+
+**§2.1 — Major Rewrite**
+- Section renamed to "Faction Starting Zones & The Refuge"
+- **Faction Strongholds (Planned):** New subsection describing per-faction persistent hub zones with all feature rooms (stash, armoury, expedition board, market, training, infirmary, war room, commons)
+- **The Refuge — Designer & Debug Hub:** Reframed as an internal tool for game designers. Connected to all zones for exploration/debugging. Retains its 7-room layout as a feature-room reference implementation.
+- **Refuge Technical Details:** Preserved existing implementation details (Colyseus Room, DB zone, navigation)
+- **Feature Rooms:** Reframed as a shared pattern used by both faction strongholds and the Refuge
+- **Ambient World Simulation:** Retargeted to faction strongholds
+
+**§2.2 Extraction Zones**
+- Extraction now returns players to "their faction stronghold" instead of "the Refuge"
+
+**§3 Core Gameplay Loop**
+- Step 7 (Return) and Death respawn both reference faction stronghold
+
+**§7.3 Stash & Loadout**
+- Stash is now in the faction stronghold; Refuge Stash Alcove noted as designer-testing only
+
+**§9.2 Crafting**
+- Crafting stations moved to faction strongholds
+
+**§9.3 Trading**
+- Direct trade now happens in faction strongholds
+
+**§9.4 Factions**
+- Added "Faction Starting Zones" subsection with working names for each faction's stronghold (The Foundry, The Cartographium, The Counting House)
+- Described feature-room equivalence, theming differences, implementation via existing zone schema, and routing logic
+
+**§10.1 Zone Types**
+- Replaced `hub` category with `faction_hub` and `dev` categories
+- Updated examples and use cases accordingly
+
+**§13.3 Colyseus Room Architecture**
+- RefugeRoom description updated to "designer/debug hub zone"
+- Noted future FactionHubRoom for player-facing strongholds
+- Architecture diagram label updated
+- Client layout and tick model references generalized to "Hub (Refuge / Faction Stronghold)"
+
+**§17 Roadmap**
+- Phase 1: RefugeRoom annotated as designer hub; Refuge zone annotated as designer/debug; client layout generalized
+- Phase 2: Added faction strongholds line item
+- Phase 3: Faction system item expanded to include strongholds
+- Phase 4: Marketplace reference generalized
+
+### What Was Preserved
+
+- All Refuge technical implementation details (Colyseus Room, DB schema, room layout)
+- The feature-room pattern (moved to faction zones, kept in Refuge as reference)
+- Zone system architecture
+- All implementation status markers
+- `RefugeRoom` as a code class name (code changes are out of scope)
+
+### Architectural Implications
+
+- Zone category enum gains `faction_hub` and `dev` values (DB migration needed when implemented)
+- Player routing after login/extraction/death must resolve faction membership → stronghold zone
+- Cross-faction trade becomes a design question (neutral zones?)
+- `FactionHubRoom` may be a new Colyseus Room type or a configured `RefugeRoom` — decision deferred to implementation
+
+### Status
+
+Complete. GDD updated. No code changes made.

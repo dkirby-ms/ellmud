@@ -1352,3 +1352,27 @@ CREATE TABLE zone_definitions (
 2. Schema migration plan for biome/shard terminology in database
 3. Code refactoring plan for ShardRoom → InstanceRoom (if desired)
 4. Content authoring focus: hand-crafted zones as primary deliverable
+
+---
+
+### 2025-07-22 — Refuge Repurposed + Faction Starting Areas
+
+**Task:** Reframe the Refuge from player hub to designer/debug tool; introduce faction starting zones.
+
+**Scope:** GDD.md only, ~25 edits across 10+ sections.
+
+## Learnings
+
+1. **Hub Abstraction Is Overdue:** The Refuge was serving double duty — player home *and* the only persistent hub implementation. Splitting into faction-specific hubs and a designer hub forces us to think about the hub as a pattern (feature rooms, persistent lifecycle, stash/board/market) rather than a singleton. This abstraction will simplify the eventual `FactionHubRoom` implementation.
+
+2. **Zone Category Enum Needs Expansion:** The current `hub` category was a catch-all. Splitting into `faction_hub` and `dev` is cleaner but requires a DB migration and audit of any code that filters on `category = 'hub'`. Flag for implementation phase.
+
+3. **Player Routing Is a New Concern:** With multiple starting zones, the server needs logic to resolve which zone a player spawns into after login, extraction, or death. This depends on `faction_membership` — a table that exists but has no runtime consumers yet. This is a new system boundary that didn't exist when everyone landed in the Refuge.
+
+4. **Cross-Faction Interaction Becomes a Design Question:** If players live in separate faction hubs, where do cross-faction trades happen? The GDD currently says "same faction stronghold" for direct trade. Neutral zones or marketplace mechanics are needed for cross-faction economy. Noted as a future design question.
+
+5. **Surgical GDD Editing Scales:** This was ~25 targeted edits across the document, not a rewrite. The grep-first approach (find all "Refuge" references → classify each → edit contextually) avoids drift and ensures nothing is missed. Same pattern used in the previous GDD overhaul works well for thematic pivots.
+
+**Artifacts Created:**
+- Decision document: `.squad/decisions/inbox/elminster-refuge-faction-starts.md`
+- Updated: `GDD.md` (Refuge → designer hub, faction starting zones introduced)
