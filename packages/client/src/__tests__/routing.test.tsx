@@ -70,8 +70,8 @@ describe('Routing', () => {
       await waitFor(() => {
         expect(screen.getByText('ELLMUD')).toBeInTheDocument();
       });
-      // Microsoft sign-in is always visible regardless of VITE_ALLOW_LOCAL_AUTH
-      expect(screen.getByText('Sign in with Microsoft')).toBeInTheDocument();
+      // Sign-in button is always visible regardless of VITE_ALLOW_LOCAL_AUTH
+      expect(screen.getByText('Sign in or sign up')).toBeInTheDocument();
     });
 
     it('redirects /refuge to / when not authenticated', async () => {
