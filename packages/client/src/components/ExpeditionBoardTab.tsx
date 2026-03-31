@@ -73,7 +73,7 @@ const getTierColor = (tier: number) => {
   }
 };
 
-interface ShardboardTabProps {
+interface ExpeditionBoardTabProps {
   onEnterShard?: (shardId: string) => void;
   onEnterZone?: (zoneSlug: string) => void;
 }
@@ -88,7 +88,7 @@ const getCategoryStyle = (category: ZoneListing['category']) => {
   }
 };
 
-export default function ShardboardTab({ onEnterShard, onEnterZone }: ShardboardTabProps) {
+export default function ExpeditionBoardTab({ onEnterShard, onEnterZone }: ExpeditionBoardTabProps) {
   const navigate = useNavigate();
   const [zones, setZones] = useState<ZoneListing[]>([]);
   const [zonesLoading, setZonesLoading] = useState(true);
@@ -208,7 +208,7 @@ export default function ShardboardTab({ onEnterShard, onEnterZone }: ShardboardT
         className="text-accent-gold mb-6 font-serif"
         style={{ fontSize: "1.5rem" }}
       >
-        Shardboard
+        Expedition Board
       </h2>
 
       <div className="grid gap-6">

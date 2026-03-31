@@ -26,13 +26,12 @@ export const ALL_DIRECTIONS: readonly Direction[] = [
 
 export type RoomType =
   | 'entry'
-  | 'extraction'
   | 'boss'
   | 'corridor'
   | 'junction'
   | 'dead_end'
   | 'feature_stash'
-  | 'feature_shardboard'
+  | 'feature_expedition_board'
   | 'feature_marketplace'
   | 'feature_crafting'
   | 'feature_training'
@@ -94,7 +93,6 @@ export interface Room {
 export interface RoomGraph {
   rooms: Map<string, Room>;
   entryRoomIds: string[];
-  extractionRoomIds: string[];
   bossRoomId: string;
   seed: number;
   tier: ShardTier;
@@ -116,7 +114,6 @@ export interface SerializedRoom {
 export interface SerializedRoomGraph {
   rooms: SerializedRoom[];
   entryRoomIds: string[];
-  extractionRoomIds: string[];
   bossRoomId: string;
   seed: number;
   tier: ShardTier;
@@ -140,7 +137,6 @@ export function serializeRoomGraph(graph: RoomGraph): SerializedRoomGraph {
   return {
     rooms,
     entryRoomIds: graph.entryRoomIds,
-    extractionRoomIds: graph.extractionRoomIds,
     bossRoomId: graph.bossRoomId,
     seed: graph.seed,
     tier: graph.tier,
@@ -165,7 +161,6 @@ export function deserializeRoomGraph(data: SerializedRoomGraph): RoomGraph {
   return {
     rooms,
     entryRoomIds: data.entryRoomIds,
-    extractionRoomIds: data.extractionRoomIds,
     bossRoomId: data.bossRoomId,
     seed: data.seed,
     tier: data.tier,

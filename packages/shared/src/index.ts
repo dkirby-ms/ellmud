@@ -47,7 +47,7 @@ export interface RoomHeaderMessage {
   stability: number; // 0–1, shard stability
   /** Zone name, present when the room is part of a hand-crafted zone. */
   zoneName?: string;
-  /** Room type (entry, extraction, boss, etc.), present for zone rooms. */
+  /** Room type (entry, boss, etc.), present for zone rooms. */
   roomType?: string;
   /** Room slug identifier, present when dev mode is enabled. */
   roomSlug?: string;
@@ -71,7 +71,7 @@ export interface ShardStateMessage {
 export type ShardState =
   | 'seeding'        // Room graph generation, creature spawning
   | 'open'           // Entry points active, players may join
-  | 'active'         // Full exploration, combat, extraction
+  | 'active'         // Full exploration, combat
   | 'destabilising'  // Final 25% — hazards intensify
   | 'collapse';      // Shard destroyed, items lost
 
@@ -238,7 +238,7 @@ export const MessageTypes = {
   SHARD_STATE: 'shard_state',
   COMBAT_RESULT: 'combat_result',
   PLAYER_STATE: 'player_state',
-  EXTRACTION_STATE: 'extraction_state',
+  OVERLAY_STATE: 'overlay_state',
   STASH_UPDATE: 'stash_update',
   LOADOUT_UPDATE: 'loadout_update',
   ROOM_SWITCH: 'room_switch',
@@ -336,7 +336,6 @@ export type SoundType =
   | 'running'
   | 'walking'
   | 'striking_door'
-  | 'extraction'
   | 'explosion'
   | 'sneaking';
 
@@ -346,7 +345,6 @@ export const NOISE_VALUES: Record<SoundType, number> = {
   running: 4,
   walking: 2,
   striking_door: 7,
-  extraction: 8,
   explosion: 9,
   sneaking: 1,
 } as const;
@@ -357,7 +355,6 @@ export const SOUND_DESCRIPTIONS: Record<SoundType, string> = {
   running: 'hurried footsteps',
   walking: 'soft footsteps',
   striking_door: 'a heavy impact against a door',
-  extraction: 'a rising hum of energy',
   explosion: 'a thunderous explosion',
   sneaking: 'a faint rustle',
 } as const;
@@ -439,7 +436,7 @@ export {
 } from './items.js';
 
 
-// ─── Shard Card Types (Shardboard UI) ────────────────────────────────────────
+// ─── Shard Card Types (Expedition Board UI) ──────────────────────────────────
 
 export type { ShardKeyType, ShardCardData } from './shard-card.js';
 
@@ -584,14 +581,12 @@ export {
   TIME_PERIOD_TICKS,
 } from './ambient-types.js';
 
-// ─── Extraction Types (GDD §3 step 6) ────────────────────────────────────────
+// ─── Overlay State Types (death / downing UI) ────────────────────────────────
 
-/** Server → Client: Extraction channel state update. */
-export interface ExtractionMessage {
+/** Server → Client: Player overlay state for death, downing, and stabilization UI. */
+export interface OverlayMessage {
   playerId: string;
-  state: 'started' | 'progress' | 'completed' | 'interrupted' | 'death' | 'downed' | 'stabilized' | 'bleed_out';
-  ticksRemaining?: number;
-  totalTicks?: number;
+  state: 'death' | 'downed' | 'stabilized' | 'bleed_out';
   narration: string;
   timestamp: number;
 }

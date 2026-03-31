@@ -143,19 +143,6 @@ afterAll(async () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('C1 — ROOM_SWITCH targets use zone:the-refuge', () => {
-  it('extraction complete ROOM_SWITCH should target zone:the-refuge', async () => {
-    // Phase C contract: all ROOM_SWITCH messages that previously targeted 'refuge'
-    // should now target 'zone:the-refuge'. We validate the expected message shape.
-    const extractionComplete: RoomSwitchMessage = {
-      target: 'zone:the-refuge',
-      reason: 'extraction_complete',
-    };
-
-    expect(extractionComplete.target).toBe('zone:the-refuge');
-    expect(extractionComplete.target).toMatch(/^zone:/);
-    expect(extractionComplete.reason).toBe('extraction_complete');
-  });
-
   it('player death ROOM_SWITCH should target zone:the-refuge', () => {
     const deathSwitch: RoomSwitchMessage = {
       target: 'zone:the-refuge',
@@ -181,7 +168,7 @@ describe('C1 — ROOM_SWITCH targets use zone:the-refuge', () => {
 
     // If any ROOM_SWITCH arrived, none should use bare 'refuge'
     for (const sw of collector.roomSwitch) {
-      if (sw.reason === 'extraction_complete' || sw.reason === 'player_death') {
+      if (sw.reason === 'player_death') {
         expect(sw.target).not.toBe('refuge');
         expect(sw.target).toBe('zone:the-refuge');
       }

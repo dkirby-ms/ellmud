@@ -37,13 +37,12 @@ function makeTestRoomGraph(): RoomGraph {
   rooms.set('junction-1', makeRoom('junction-1', 'junction', [['south', 'corridor-1'], ['north', 'corridor-2']]));
   rooms.set('dead-end-1', makeRoom('dead-end-1', 'dead_end', [['west', 'corridor-1']]));
   rooms.set('corridor-2', makeRoom('corridor-2', 'corridor', [['south', 'junction-1'], ['north', 'boss-1']]));
-  rooms.set('boss-1', makeRoom('boss-1', 'boss', [['south', 'corridor-2'], ['north', 'extraction-1']]));
-  rooms.set('extraction-1', makeRoom('extraction-1', 'extraction', [['south', 'boss-1']]));
+  rooms.set('boss-1', makeRoom('boss-1', 'boss', [['south', 'corridor-2'], ['north', 'dead-end-2']]));
+  rooms.set('dead-end-2', makeRoom('dead-end-2', 'dead_end', [['south', 'boss-1']]));
 
   return {
     rooms,
     entryRoomIds: ['entry-1'],
-    extractionRoomIds: ['extraction-1'],
     bossRoomId: 'boss-1',
     seed: 42,
     tier: 1,
@@ -81,8 +80,8 @@ function makeWorldState(overrides: Partial<CreatureWorldState> = {}): CreatureWo
       ['junction-1', ['corridor-1', 'corridor-2']],
       ['dead-end-1', ['corridor-1']],
       ['corridor-2', ['junction-1', 'boss-1']],
-      ['boss-1', ['corridor-2', 'extraction-1']],
-      ['extraction-1', ['boss-1']],
+      ['boss-1', ['corridor-2', 'dead-end-2']],
+      ['dead-end-2', ['boss-1']],
     ]),
     noisyRooms: new Set(),
     ...overrides,
@@ -470,15 +469,6 @@ describe('Creature Spawning', () => {
     }
   });
 
-  it('never spawns in extraction rooms', () => {
-    const prng = createPRNG(42);
-    const spawned = manager.spawnCreatures(graph, DROWNED_REVENANT, prng);
-
-    for (const creature of spawned) {
-      expect(graph.extractionRoomIds).not.toContain(creature.currentRoomId);
-    }
-  });
-
   it('prefers corridor and dead_end rooms', () => {
     const prng = createPRNG(42);
     const spawned = manager.spawnCreatures(graph, DROWNED_REVENANT, prng);
@@ -714,9 +704,8 @@ describe('Drowned Revenant Template', () => {
     expect(names).toContain('revenant essence');
   });
 
-  it('spawn rules forbid entry and extraction rooms', () => {
+  it('spawn rules forbid entry rooms', () => {
     expect(DROWNED_REVENANT.spawnRules.forbiddenRoomTypes).toContain('entry');
-    expect(DROWNED_REVENANT.spawnRules.forbiddenRoomTypes).toContain('extraction');
   });
 
   it('spawn rules prefer corridors and dead ends', () => {

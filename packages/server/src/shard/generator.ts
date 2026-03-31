@@ -4,7 +4,7 @@
  *
  * Algorithm:
  *  1. Determine room count from tier
- *  2. Place anchor rooms (entries, extractions, boss)
+ *  2. Place anchor rooms (entries, boss)
  *  3. Fill remaining slots with corridor/junction/dead_end rooms
  *  4. Build a spanning tree for connectivity, then add cycles
  *  5. Apply room templates for names/descriptions
@@ -117,14 +117,11 @@ const TIER_ROOM_COUNTS: Record<ShardTier, [min: number, max: number]> = {
 
 // ─── Anchor room counts by tier ─────────────────────────────────────────────
 
-const TIER_ANCHORS: Record<ShardTier, { entries: number; extractions: number; boss: number }> = {
-  1: { entries: 2, extractions: 2, boss: 1 },
-  2: { entries: 3, extractions: 3, boss: 1 },
-  3: { entries: 4, extractions: 3, boss: 1 },
+const TIER_ANCHORS: Record<ShardTier, { entries: number; boss: number }> = {
+  1: { entries: 2, boss: 1 },
+  2: { entries: 3, boss: 1 },
+  3: { entries: 4, boss: 1 },
 };
-
-// Minimum hops from any entry to any extraction
-const MIN_ENTRY_TO_EXTRACTION_HOPS = 5;
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
@@ -145,9 +142,8 @@ export function generateShardGraph(config: ShardGenConfig): RoomGraph {
   // Step 2: Build connectivity — spanning tree + cycles
   connectRooms(rooms, rng);
 
-  // Step 3: Ensure minimum distance constraint from entries to extractions
+  // Step 3: Verify connectivity
   const entryIds = rooms.filter(r => r.type === 'entry').map(r => r.id);
-  const extractionIds = rooms.filter(r => r.type === 'extraction').map(r => r.id);
   const bossId = rooms.find(r => r.type === 'boss')!.id;
 
   // Step 4: Apply room templates
@@ -167,7 +163,6 @@ export function generateShardGraph(config: ShardGenConfig): RoomGraph {
   return {
     rooms: roomMap,
     entryRoomIds: entryIds,
-    extractionRoomIds: extractionIds,
     bossRoomId: bossId,
     seed: config.seed,
     tier: config.tier,
@@ -178,7 +173,7 @@ export function generateShardGraph(config: ShardGenConfig): RoomGraph {
 
 function createRooms(
   total: number,
-  anchors: { entries: number; extractions: number; boss: number },
+  anchors: { entries: number; boss: number },
   rng: PRNG,
 ): Room[] {
   const rooms: Room[] = [];
@@ -196,7 +191,6 @@ function createRooms(
 
   // Anchor rooms first
   for (let i = 0; i < anchors.entries; i++) rooms.push(makeRoom('entry'));
-  for (let i = 0; i < anchors.extractions; i++) rooms.push(makeRoom('extraction'));
   for (let i = 0; i < anchors.boss; i++) rooms.push(makeRoom('boss'));
 
   // Fill remaining with corridor, junction, dead_end
@@ -229,17 +223,16 @@ function createRooms(
 
 function connectRooms(rooms: Room[], rng: PRNG): void {
   const entryRooms = rooms.filter(r => r.type === 'entry');
-  const extractionRooms = rooms.filter(r => r.type === 'extraction');
   const bossRoom = rooms.find(r => r.type === 'boss')!;
   const deadEndRooms = rooms.filter(r => r.type === 'dead_end');
   const backbonePool = rooms.filter(
-    r => r.type !== 'entry' && r.type !== 'extraction' && r.type !== 'boss' && r.type !== 'dead_end',
+    r => r.type !== 'entry' && r.type !== 'boss' && r.type !== 'dead_end',
   );
   rng.shuffle(backbonePool);
 
   // Phase 1: Build a backbone chain through corridor/junction rooms.
   // Dead-end rooms are excluded — they attach as branches to preserve single-exit topology.
-  // Entries at the start, boss in the middle, extractions at the end.
+  // Entries at the start, boss deeper in.
   const backbone = [...backbonePool];
 
   // Connect backbone as a chain
@@ -256,15 +249,6 @@ function connectRooms(rooms: Room[], rng: PRNG): void {
   // Attach boss to the middle of the backbone
   const midIdx = Math.floor(backbone.length * 0.6);
   linkRooms(bossRoom, backbone[midIdx], rng);
-
-  // Attach extractions to the last few backbone nodes
-  for (let i = 0; i < extractionRooms.length; i++) {
-    const attachIdx = Math.max(
-      backbone.length - 1 - i,
-      Math.floor(backbone.length * 0.85),
-    );
-    linkRooms(extractionRooms[i], backbone[attachIdx], rng);
-  }
 
   // Attach dead-end rooms as single branches off the backbone
   for (const deadEnd of deadEndRooms) {
@@ -285,12 +269,6 @@ function connectRooms(rooms: Room[], rng: PRNG): void {
     const b = rng.pick(cyclePool);
     if (a.id === b.id) continue;
 
-    // Never directly connect entry ↔ extraction
-    if (
-      (a.type === 'entry' && b.type === 'extraction') ||
-      (a.type === 'extraction' && b.type === 'entry')
-    ) continue;
-
     // Don't shortcut between rooms in different halves of the backbone
     const idxA = backbone.indexOf(a);
     const idxB = backbone.indexOf(b);
@@ -308,11 +286,10 @@ function connectRooms(rooms: Room[], rng: PRNG): void {
     added++;
   }
 
-  // Phase 3: Verify and enforce minimum distance constraint
-  ensureMinDistance(rooms, rng);
+  // Phase 3: Ensure connectivity
+  ensureConnectivity(rooms, rng);
 
   // Phase 4: Ensure junction rooms have ≥ 3 exits (their defining characteristic)
-  // Runs after distance enforcement so edge cuts don't reduce junction exits.
   ensureJunctionExits(rooms, rng);
 }
 
@@ -334,9 +311,6 @@ function linkRooms(a: Room, b: Room, rng: PRNG): void {
 function ensureJunctionExits(rooms: Room[], rng: PRNG): void {
   const junctions = rooms.filter(r => r.type === 'junction');
   const targets = rooms.filter(r => r.type !== 'dead_end');
-  const roomMap = new Map(rooms.map(r => [r.id, r]));
-  const entryIds = rooms.filter(r => r.type === 'entry').map(r => r.id);
-  const extractionIds = rooms.filter(r => r.type === 'extraction').map(r => r.id);
 
   for (const junction of junctions) {
     let attempts = 0;
@@ -347,122 +321,14 @@ function ensureJunctionExits(rooms: Room[], rng: PRNG): void {
       if (Array.from(junction.exits.values()).includes(target.id)) continue;
       if (target.exits.size >= ALL_DIRECTIONS.length) continue;
       linkRooms(junction, target, rng);
-      // Undo if this edge violates the minimum distance constraint
-      if (!distanceOk(roomMap, entryIds, extractionIds)) {
-        unlinkRooms(junction, target);
-      }
     }
   }
 }
 
-// ─── Minimum Distance Enforcement ───────────────────────────────────────────
+// ─── Connectivity Enforcement ───────────────────────────────────────────────
 
-function ensureMinDistance(rooms: Room[], rng: PRNG): void {
+function ensureConnectivity(rooms: Room[], rng: PRNG): void {
   const roomMap = new Map(rooms.map(r => [r.id, r]));
-  const entryIds = rooms.filter(r => r.type === 'entry').map(r => r.id);
-  const extractionIds = rooms.filter(r => r.type === 'extraction').map(r => r.id);
-
-  // Iteratively find and break shortest paths that are too short
-  for (let iteration = 0; iteration < 30; iteration++) {
-    let worstDist = Infinity;
-    let worstPath: string[] | null = null;
-
-    for (const entryId of entryIds) {
-      const parent = bfsParent(entryId, roomMap);
-      const dist = bfsDist(entryId, roomMap);
-      for (const extId of extractionIds) {
-        const d = dist.get(extId);
-        if (d !== undefined && d < MIN_ENTRY_TO_EXTRACTION_HOPS && d < worstDist) {
-          worstDist = d;
-          worstPath = reconstructPath(extId, parent);
-        }
-      }
-    }
-
-    if (worstPath === null || worstDist >= MIN_ENTRY_TO_EXTRACTION_HOPS) break;
-
-    // Remove an edge in the middle of the shortest offending path
-    if (worstPath.length >= 3) {
-      const cutIdx = Math.floor(worstPath.length / 2);
-      unlinkRooms(roomMap.get(worstPath[cutIdx - 1])!, roomMap.get(worstPath[cutIdx])!);
-    }
-
-    // Repair connectivity without introducing short entry→extraction paths
-    repairConnectivitySafe(rooms, rng, entryIds, extractionIds);
-  }
-}
-
-/** Remove the bidirectional link between two rooms. */
-function unlinkRooms(a: Room, b: Room): void {
-  for (const [dir, targetId] of a.exits) {
-    if (targetId === b.id) { a.exits.delete(dir); break; }
-  }
-  for (const [dir, targetId] of b.exits) {
-    if (targetId === a.id) { b.exits.delete(dir); break; }
-  }
-}
-
-function bfsParent(startId: string, roomMap: Map<string, Room>): Map<string, string | null> {
-  const parent = new Map<string, string | null>();
-  parent.set(startId, null);
-  const queue = [startId];
-  let head = 0;
-
-  while (head < queue.length) {
-    const current = queue[head++];
-    const room = roomMap.get(current)!;
-
-    for (const neighborId of room.exits.values()) {
-      if (!parent.has(neighborId)) {
-        parent.set(neighborId, current);
-        queue.push(neighborId);
-      }
-    }
-  }
-
-  return parent;
-}
-
-function bfsDist(startId: string, roomMap: Map<string, Room>): Map<string, number> {
-  return bfs(startId, roomMap);
-}
-
-function reconstructPath(targetId: string, parent: Map<string, string | null>): string[] {
-  const path: string[] = [];
-  let current: string | null = targetId;
-  while (current !== null) {
-    path.unshift(current);
-    current = parent.get(current) ?? null;
-  }
-  return path;
-}
-
-/** Check whether all entry→extraction distances meet the minimum. */
-function distanceOk(
-  roomMap: Map<string, Room>,
-  entryIds: string[],
-  extractionIds: string[],
-): boolean {
-  for (const entryId of entryIds) {
-    const dist = bfs(entryId, roomMap);
-    for (const extId of extractionIds) {
-      const d = dist.get(extId);
-      if (d !== undefined && d < MIN_ENTRY_TO_EXTRACTION_HOPS) return false;
-    }
-  }
-  return true;
-}
-
-/** Repair connectivity while respecting distance constraints. */
-function repairConnectivitySafe(
-  rooms: Room[],
-  rng: PRNG,
-  entryIds: string[],
-  extractionIds: string[],
-): void {
-  const roomMap = new Map(rooms.map(r => [r.id, r]));
-  const entrySet = new Set(entryIds);
-  const extractionSet = new Set(extractionIds);
 
   for (let iter = 0; iter < rooms.length; iter++) {
     const visited = bfs(rooms[0].id, roomMap);
@@ -471,11 +337,7 @@ function repairConnectivitySafe(
     const disconnected = rooms.filter(r => !visited.has(r.id));
     for (const room of disconnected) {
       // Dead-end rooms with an exit are reachable once their parent is reconnected.
-      // Skip to preserve their single-exit topology.
       if (room.type === 'dead_end' && room.exits.size >= 1) continue;
-
-      const isEntry = entrySet.has(room.id);
-      const isExtraction = extractionSet.has(room.id);
 
       // Collect candidates: rooms in the main component with free directions
       // Exclude dead-end rooms as targets to preserve their single-exit topology
@@ -483,21 +345,14 @@ function repairConnectivitySafe(
         r =>
           visited.has(r.id) &&
           r.exits.size < ALL_DIRECTIONS.length &&
-          r.type !== 'dead_end' &&
-          !(isEntry && extractionSet.has(r.id)) &&
-          !(isExtraction && entrySet.has(r.id)),
+          r.type !== 'dead_end',
       );
       rng.shuffle(candidates);
 
       for (const target of candidates) {
         linkRooms(room, target, rng);
-        // Check if this reconnection violates the distance constraint
-        if (distanceOk(roomMap, entryIds, extractionIds)) {
-          visited.set(room.id, (visited.get(target.id) ?? 0) + 1);
-          break;
-        }
-        // Undo — this reconnection creates a short path
-        unlinkRooms(room, target);
+        visited.set(room.id, (visited.get(target.id) ?? 0) + 1);
+        break;
       }
     }
   }
@@ -551,7 +406,7 @@ function applyRoomTemplates(rooms: Room[], rng: PRNG): void {
 // ─── Loot Placement ─────────────────────────────────────────────────────────
 
 function placeLoot(rooms: Room[], rng: PRNG): void {
-  const anchorTypes: RoomType[] = ['entry', 'extraction'];
+  const anchorTypes: RoomType[] = ['entry'];
 
   for (const room of rooms) {
     if (anchorTypes.includes(room.type)) continue;
@@ -580,7 +435,7 @@ function placeLoot(rooms: Room[], rng: PRNG): void {
 
 function placeHazards(rooms: Room[], rng: PRNG): void {
   for (const room of rooms) {
-    if (room.type === 'entry' || room.type === 'extraction') continue;
+    if (room.type === 'entry') continue;
 
     // 25% chance of hazard
     if (rng.next() > 0.25) continue;

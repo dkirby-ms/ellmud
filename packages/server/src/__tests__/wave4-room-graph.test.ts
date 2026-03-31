@@ -63,26 +63,22 @@ describe('Multi-Tier Room Count Validation (#5)', () => {
     }
   });
 
-  it('Tier 2 has 3 entries, 3 extractions, 1 boss', () => {
+  it('Tier 2 has 3 entries, 1 boss', () => {
     const graph = generateShardGraph(T2_CONFIG);
     const types = Array.from(graph.rooms.values()).map(r => r.type);
 
     expect(types.filter(t => t === 'entry').length).toBe(3);
-    expect(types.filter(t => t === 'extraction').length).toBe(3);
     expect(types.filter(t => t === 'boss').length).toBe(1);
     expect(graph.entryRoomIds).toHaveLength(3);
-    expect(graph.extractionRoomIds).toHaveLength(3);
   });
 
-  it('Tier 3 has 4 entries, 3 extractions, 1 boss', () => {
+  it('Tier 3 has 4 entries, 1 boss', () => {
     const graph = generateShardGraph(T3_CONFIG);
     const types = Array.from(graph.rooms.values()).map(r => r.type);
 
     expect(types.filter(t => t === 'entry').length).toBe(4);
-    expect(types.filter(t => t === 'extraction').length).toBe(3);
     expect(types.filter(t => t === 'boss').length).toBe(1);
     expect(graph.entryRoomIds).toHaveLength(4);
-    expect(graph.extractionRoomIds).toHaveLength(3);
   });
 
   it('all tiers are fully connected', () => {
@@ -95,19 +91,6 @@ describe('Multi-Tier Room Count Validation (#5)', () => {
     }
   });
 
-  it('all tiers enforce minimum entry→extraction distance', () => {
-    for (const config of [T1_CONFIG, T2_CONFIG, T3_CONFIG]) {
-      for (const seed of [42, 7, 256]) {
-        const graph = generateShardGraph({ ...config, seed });
-        for (const entryId of graph.entryRoomIds) {
-          const dist = bfs(entryId, graph.rooms);
-          for (const extId of graph.extractionRoomIds) {
-            expect(dist.get(extId)!).toBeGreaterThanOrEqual(5);
-          }
-        }
-      }
-    }
-  });
 });
 
 // ─── Theme Name Verification ────────────────────────────────────────────────
@@ -161,11 +144,11 @@ describe('Hazard Placement (#5)', () => {
     expect(hasHazards).toBe(true);
   });
 
-  it('hazards are not placed in entry or extraction rooms', () => {
+  it('hazards are not placed in entry rooms', () => {
     for (const seed of [42, 7, 256, 65535]) {
       const graph = generateShardGraph({ ...T1_CONFIG, seed });
       for (const room of graph.rooms.values()) {
-        if (room.type === 'entry' || room.type === 'extraction') {
+        if (room.type === 'entry') {
           expect(room.hazards).toHaveLength(0);
         }
       }
@@ -210,12 +193,6 @@ describe('Graph Adapter — Shared → Local Conversion (#5)', () => {
     const shared = generateShardGraph(T1_CONFIG);
     const local = adaptRoomGraph(shared);
     expect(local.startRoomId).toBe(shared.entryRoomIds[0]);
-  });
-
-  it('preserves extraction room IDs', () => {
-    const shared = generateShardGraph(T1_CONFIG);
-    const local = adaptRoomGraph(shared);
-    expect(local.extractionRoomIds).toEqual(shared.extractionRoomIds);
   });
 
   it('preserves boss room ID', () => {
@@ -293,7 +270,6 @@ describe('Serialization Round-Trip — All Tiers (#5)', () => {
 
       expect(restored.rooms.size).toBe(graph.rooms.size);
       expect(restored.entryRoomIds).toEqual(graph.entryRoomIds);
-      expect(restored.extractionRoomIds).toEqual(graph.extractionRoomIds);
       expect(restored.bossRoomId).toBe(graph.bossRoomId);
       expect(restored.seed).toBe(graph.seed);
       expect(restored.tier).toBe(graph.tier);
@@ -321,7 +297,6 @@ describe('Determinism — All Tiers (#5)', () => {
 
       expect(g1.rooms.size).toBe(g2.rooms.size);
       expect(g1.entryRoomIds).toEqual(g2.entryRoomIds);
-      expect(g1.extractionRoomIds).toEqual(g2.extractionRoomIds);
       expect(g1.bossRoomId).toBe(g2.bossRoomId);
 
       for (const [id, room1] of g1.rooms) {

@@ -100,23 +100,23 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
     }
   });
 
-  it.todo('should handle shardboard command in refuge zone', async () => {
+  it.todo('should handle board command in refuge zone', async () => {
     const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room);
     const collector = new MessageCollector(client);
     await wait(500);
 
-    // Navigate to the shardboard room (west from hearth)
+    // Navigate to the expedition board room (west from hearth)
     client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
     await wait(300);
 
     const initialCount = collector.narrate.length;
-    client.send(MessageTypes.COMMAND, makeCommand('shardboard'));
+    client.send(MessageTypes.COMMAND, makeCommand('board'));
     await wait(500);
 
     expect(collector.narrate.length).toBeGreaterThan(initialCount);
     const newMessages = collector.narrate.slice(initialCount);
-    const response = newMessages.find(m => m.text.includes('Shardboard'));
+    const response = newMessages.find(m => m.text.includes('Expedition Board'));
     expect(response).toBeDefined();
     expect(response!.text).toContain('Tier');
     expect(response!.text).toContain('enter <shard-id>');
@@ -130,7 +130,7 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
     const collector = new MessageCollector(client);
     await wait(500);
 
-    // Navigate to the shardboard room first
+    // Navigate to the expedition board room first
     client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
     await wait(300);
 
@@ -156,7 +156,7 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
     const collector = new MessageCollector(client);
     await wait(500);
 
-    // Navigate to the shardboard room first
+    // Navigate to the expedition board room first
     client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
     await wait(300);
 
@@ -177,7 +177,7 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
     const collector = new MessageCollector(client);
     await wait(500);
 
-    // Navigate to the shardboard room first
+    // Navigate to the expedition board room first
     client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
     await wait(300);
 
@@ -196,7 +196,7 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
     const collector = new MessageCollector(client);
     await wait(500);
 
-    // Navigate to the shardboard room first
+    // Navigate to the expedition board room first
     client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
     await wait(300);
 

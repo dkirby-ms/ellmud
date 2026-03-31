@@ -339,7 +339,7 @@ describe('Zone Adapter Integration (repo → adapter round-trip)', () => {
     expect(nave.exits.get('east')).toBe('altar');
   });
 
-  it('multi-room zone with extraction rooms', async () => {
+  it('multi-room zone with boss rooms', async () => {
     const zone = await repo.createZone(
       zoneInput({
         slug: 'fungal-deep',
@@ -349,20 +349,20 @@ describe('Zone Adapter Integration (repo → adapter round-trip)', () => {
     );
     await repo.createRoom(roomInput(zone.id, 'shaft', { type: 'entry' }));
     await repo.createRoom(roomInput(zone.id, 'cavern', { type: 'corridor' }));
-    await repo.createRoom(roomInput(zone.id, 'spore-vent', { type: 'extraction' }));
+    await repo.createRoom(roomInput(zone.id, 'spore-vent', { type: 'boss' }));
     await repo.createExit(exitInput(zone.id, 'shaft', 'down', 'cavern'));
     await repo.createExit(exitInput(zone.id, 'cavern', 'east', 'spore-vent'));
 
     const bundle = await repo.getZoneBySlug('fungal-deep');
     const graph = convertZoneToRoomGraph(bundle!);
 
-    expect(graph.extractionRoomIds).toEqual(['spore-vent']);
+    expect(graph.bossRoomId).toBe('spore-vent');
     expect(graph.rooms.has('shaft')).toBe(true);
     expect(graph.rooms.has('cavern')).toBe(true);
     expect(graph.rooms.has('spore-vent')).toBe(true);
   });
 
-  it('hub category zone has no extraction or boss rooms', async () => {
+  it('hub category zone has no boss rooms', async () => {
     const zone = await repo.createZone(
       zoneInput({
         slug: 'the-refuge',
@@ -384,7 +384,6 @@ describe('Zone Adapter Integration (repo → adapter round-trip)', () => {
     const graph = convertZoneToRoomGraph(bundle!);
 
     expect(graph.rooms.size).toBe(3);
-    expect(graph.extractionRoomIds).toEqual([]);
     expect(graph.bossRoomId).toBe('');
     expect(graph.entryRoomIds).toEqual(['hearth']);
   });
@@ -550,7 +549,6 @@ describe('Repop Logic (specification-based)', () => {
         ],
       ]),
       entryRoomIds: ['vault'],
-      extractionRoomIds: [],
       bossRoomId: '',
       seed: 42,
       tier: 1,
@@ -594,7 +592,6 @@ describe('Repop Logic (specification-based)', () => {
         ],
       ]),
       entryRoomIds: ['hall'],
-      extractionRoomIds: [],
       bossRoomId: '',
       seed: 42,
       tier: 1,
@@ -643,7 +640,6 @@ describe('Repop Logic (specification-based)', () => {
         ],
       ]),
       entryRoomIds: ['trove'],
-      extractionRoomIds: [],
       bossRoomId: '',
       seed: 42,
       tier: 1,
@@ -688,7 +684,6 @@ describe('Repop Logic (specification-based)', () => {
     const currentGraph: RoomGraph = {
       rooms: new Map(),
       entryRoomIds: [],
-      extractionRoomIds: [],
       bossRoomId: '',
       seed: 42,
       tier: 1,
@@ -829,7 +824,7 @@ describe('Zone-Based ShardRoom Creation', () => {
     await repo.createRoom(roomInput(zone.id, 'start', { type: 'entry' }));
     await repo.createRoom(roomInput(zone.id, 'mid', { type: 'corridor' }));
     await repo.createRoom(roomInput(zone.id, 'boss-lair', { type: 'boss' }));
-    await repo.createRoom(roomInput(zone.id, 'escape', { type: 'extraction' }));
+    await repo.createRoom(roomInput(zone.id, 'escape', { type: 'dead_end' }));
     await repo.createExit(exitInput(zone.id, 'start', 'north', 'mid'));
     await repo.createExit(exitInput(zone.id, 'mid', 'south', 'start'));
     await repo.createExit(exitInput(zone.id, 'mid', 'east', 'boss-lair'));
@@ -844,7 +839,6 @@ describe('Zone-Based ShardRoom Creation', () => {
     // ShardRoom expects these properties from the graph
     expect(graph.rooms.size).toBe(4);
     expect(graph.entryRoomIds).toContain('start');
-    expect(graph.extractionRoomIds).toContain('escape');
     expect(graph.bossRoomId).toBe('boss-lair');
     expect(graph.seed).toBeGreaterThan(0);
     expect(graph.tier).toBe(2);

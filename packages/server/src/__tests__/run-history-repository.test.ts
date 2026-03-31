@@ -87,7 +87,7 @@ function runHistoryRepositoryContractTests(
       expect(history[0].extractedItems).toHaveLength(1);
     });
 
-    it('records a failed (non-extraction) run', async () => {
+    it('records a failed run', async () => {
       await repo.recordRun(makeRun({
         runId: 'shard-dead',
         extracted: false,

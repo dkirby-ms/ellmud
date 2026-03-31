@@ -55,7 +55,8 @@ vi.mock('../hooks/useShardConnection.js', () => ({
     handleExitClick: vi.fn(),
     handleCombatAction: vi.fn(),
     sendChatMessage: vi.fn(),
-    extraction: { status: null, progress: 0, narration: null },
+    overlay: { status: null, progress: 0, narration: null },
+    dismissOverlay: vi.fn(),
     reconnection: {
       overlayState: 'hidden',
       attempt: 0,

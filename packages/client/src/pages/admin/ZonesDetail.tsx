@@ -16,7 +16,7 @@ const THEME_OPTIONS = [
 ];
 const LIFECYCLE_OPTIONS = ["persistent", "scheduled", "event"] as const;
 const CATEGORY_OPTIONS = ["hub", "dungeon", "wilderness", "social"] as const;
-const ROOM_TYPE_OPTIONS = ["entry", "corridor", "junction", "dead_end", "extraction", "boss"];
+const ROOM_TYPE_OPTIONS = ["entry", "corridor", "junction", "dead_end", "boss"];
 const DIRECTION_OPTIONS = ["north", "south", "east", "west", "up", "down"];
 const ROOM_PROPERTY_OPTIONS = ["heavy_door", "cavern", "water"];
 

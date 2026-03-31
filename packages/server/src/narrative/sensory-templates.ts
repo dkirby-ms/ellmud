@@ -35,11 +35,6 @@ const SOUND_QUALIFIERS = {
     moderate: 'hurried footsteps',
     loud: 'running, heavy boots pounding stone',
   },
-  extraction: {
-    faint: 'faint grinding',
-    moderate: 'grinding of ancient mechanisms',
-    loud: 'grinding and shrieking of stone',
-  },
   creature: {
     faint: 'distant snarl',
     moderate: 'growl or hiss',
@@ -270,7 +265,7 @@ export function renderTraceHigh(ctx: NarrationContext): string {
       break;
     case 'residue':
       parts.push(
-        `${ageDesc.adjective} extraction residue — arcane, potent. ${trace.description ? `Likely from a ${trace.description}` : 'Source unclear'}.`,
+        `${ageDesc.adjective} arcane residue — potent. ${trace.description ? `Likely from a ${trace.description}` : 'Source unclear'}.`,
       );
       break;
     default:
