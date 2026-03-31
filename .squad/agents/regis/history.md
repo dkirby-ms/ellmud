@@ -861,3 +861,15 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - Future enhancement: Show player level/class in occupants list
 - Future enhancement: Distinguish NPCs from player characters visually
 
+
+### Issue #231 — Rename Shardboard → Expedition Board (PR #245)
+- Renamed `ShardboardTab.tsx` → `ExpeditionBoardTab.tsx` (component + interface + all internal refs)
+- Updated `Refuge.tsx` — tab type `"shardboard"` → `"expedition_board"`, label to "Expedition Board"
+- Updated `map/constants.ts` — `feature_shardboard` → `feature_expedition_board`
+- Updated `ZoneDesigner.tsx` — room type option renamed
+- Updated CSS class names: `.shardboard` → `.expedition-board`
+- Server: renamed `shardboard.ts` → `board.ts`, command `shardboard` → `board` (kept `shardboard` as alias)
+- Updated `feature_shardboard` → `feature_expedition_board` in shared types, server RoomGraph, biomes, ShardRoom, DB seeds
+- All 158 shared tests pass, all 40 feature-gate tests pass (including new alias test)
+- Pre-existing biome-related failures (20) are unrelated to this rename
+- Default branch is `dev` — confirmed again
