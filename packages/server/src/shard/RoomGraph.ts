@@ -17,7 +17,7 @@ export type Direction = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
 
 export type RoomType =
   | 'entry' | 'boss' | 'corridor' | 'junction' | 'dead_end'
-  | 'feature_stash' | 'feature_shardboard' | 'feature_marketplace'
+  | 'feature_stash' | 'feature_expedition_board' | 'feature_marketplace'
   | 'feature_crafting' | 'feature_training' | 'feature_contracts' | 'feature_infirmary';
 
 export type RoomProperty = 'heavy_door' | 'cavern' | 'water';

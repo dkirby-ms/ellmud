@@ -31,7 +31,7 @@ type DesignerMode = "select" | "connect";
 
 const ROOM_TYPE_OPTIONS = [
   "entry", "corridor", "junction", "dead_end", "boss",
-  "feature_stash", "feature_shardboard", "feature_marketplace",
+  "feature_stash", "feature_expedition_board", "feature_marketplace",
   "feature_crafting", "feature_training", "feature_contracts", "feature_infirmary",
 ];
 

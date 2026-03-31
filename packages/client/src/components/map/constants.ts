@@ -16,7 +16,7 @@ export const ROOM_TYPE_COLORS: Record<string, string> = {
   dead_end: '#6b7280',
   // feature rooms — teal family
   feature_stash: '#2dd4bf',
-  feature_shardboard: '#2dd4bf',
+  feature_expedition_board: '#2dd4bf',
   feature_marketplace: '#2dd4bf',
   feature_crafting: '#2dd4bf',
   feature_training: '#2dd4bf',

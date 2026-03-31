@@ -7,7 +7,6 @@ import {
   type ShardState as SharedShardState,
   type ShardStateMessage,
   type StashItem,
-  type BiomeType,
   type ShardTier,
   type OverlayMessage,
   type PvPKillEvent,
@@ -196,9 +195,6 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Set tier-based max players
     this.maxClients = getMaxPlayersForTier(this.shardTier, getConfig());
 
-    if (typeof options['biome'] === 'string') {
-      this.state.biome = options['biome'];
-    }
     if (typeof options['collapseTimer'] === 'number') {
       this.collapseTimerSeconds = options['collapseTimer'];
     }
@@ -227,7 +223,6 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         this.roomGraph = adaptRoomGraph(sharedGraph);
         this.entryRoomIds = sharedGraph.entryRoomIds;
         this.shardTier = sharedGraph.tier;
-        this.state.biome = sharedGraph.biome;
       } else if (options['zoneSlug'] === 'the-refuge') {
         // B7: Fallback hardcoded graph when DB zone data is missing
         this.roomGraph = createFallbackRefugeGraph();
@@ -256,8 +251,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.entryRoomIds = [this.roomGraph.startRoomId]; // Test graph has single entry
     } else {
       const seed = typeof options['seed'] === 'number' ? options['seed'] : Date.now();
-      const biome = (typeof options['biome'] === 'string' ? options['biome'] : 'flooded_crypt') as BiomeType;
-      const sharedGraph = generateShardGraph({ tier: this.shardTier, biome, seed });
+      const sharedGraph = generateShardGraph({ tier: this.shardTier, seed });
       this.roomGraph = adaptRoomGraph(sharedGraph);
       this.entryRoomIds = sharedGraph.entryRoomIds; // Store all entry points
 
@@ -342,7 +336,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     this.updateMetadata();
 
-    this.log(`ShardRoom created: ${this.roomId} (biome=${this.state.biome}, tier=${this.shardTier}${this.isZone ? `, zone=${this.zoneSlug}` : ''})`);
+    this.log(`ShardRoom created: ${this.roomId} (tier=${this.shardTier}${this.isZone ? `, zone=${this.zoneSlug}` : ''})`);
 
     // Start repop timer for zone-based rooms
     if (this.isZone) {
@@ -819,7 +813,6 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }));
 
     this.setMetadata({
-      biome: this.state.biome,
       tier: this.state.tier,
       lifecycle: this.lifecycle,
       playerCount: this.state.playerCount,
@@ -1915,7 +1908,6 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       roomType: roomData.roomType,
       roomName: roomData.roomName,
       shardTier: this.shardTier,
-      biome: this.state.biome,
     }).catch((err) => {
       this.log(`Failed to record exploration visit for ${this.playerTag(playerId)}: ${err}`);
     });
@@ -1995,7 +1987,6 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         runId: this.roomId,
         playerId: this.dbPlayerId(playerId),
         shardTier: this.shardTier,
-        biome: (this.state.biome as BiomeType) || null,
         durationSec,
         extracted,
         extractedItems: player
@@ -2257,7 +2248,7 @@ function createFallbackRefugeGraph(): RoomGraph {
     exits: new Map<Direction, string>([
       ['east', 'stash-alcove'],
       ['north', 'training-grounds'],
-      ['west', 'shardboard'],
+      ['west', 'expedition-board'],
       ['south', 'market'],
     ]),
     items: [],
@@ -2284,11 +2275,11 @@ function createFallbackRefugeGraph(): RoomGraph {
     items: [],
   });
 
-  rooms.set('shardboard', {
-    id: 'shardboard',
-    name: 'The Shardboard',
+  rooms.set('expedition-board', {
+    id: 'expedition-board',
+    name: 'The Expedition Board',
     description: 'A massive board of pinned notes, sketched maps, and shard coordinates. This is where expeditions begin.',
-    type: 'feature_shardboard',
+    type: 'feature_expedition_board',
     exits: new Map<Direction, string>([['east', 'hearth']]),
     items: [],
   });

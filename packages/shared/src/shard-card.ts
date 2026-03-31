@@ -1,5 +1,5 @@
 /**
- * Shard card data types for the Shardboard UI.
+ * Shard card data types for the Expedition Board UI.
  * Defines the shape of shard selection cards displayed to players.
  */
 
@@ -11,7 +11,7 @@ export type ShardKeyType = 'bone' | 'iron' | 'crystal' | 'void';
 
 // ─── Shard Card Data ────────────────────────────────────────────────────────
 
-/** Data required to render a shard selection card on the Shardboard. */
+/** Data required to render a shard selection card on the Expedition Board. */
 export interface ShardCardData {
   shardId: string;
   name: string;

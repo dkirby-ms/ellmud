@@ -46,7 +46,7 @@ export const ROOM_NAMES: Record<RoomType, readonly string[]> = {
   ],
   // Feature rooms — placeholders; biome-specific names TBD when feature rooms enter generation
   feature_stash: ['Secure Alcove'],
-  feature_shardboard: ['Etched Vestibule'],
+  feature_expedition_board: ['Etched Vestibule'],
   feature_marketplace: ['Sunken Bazaar'],
   feature_crafting: ['Flooded Workshop'],
   feature_training: ['Drowned Sparring Hall'],
@@ -82,7 +82,7 @@ export const ROOM_DESCRIPTIONS: Record<RoomType, readonly string[]> = {
   ],
   // Feature rooms — placeholders; biome-specific descriptions TBD when feature rooms enter generation
   feature_stash: ['A recessed alcove sealed by a heavy iron grate. The air smells of rust and damp cloth.'],
-  feature_shardboard: ['Faded etchings cover a smooth stone slab set into the wall. Notices have been pinned with bone splints.'],
+  feature_expedition_board: ['Faded etchings cover a smooth stone slab set into the wall. Notices have been pinned with bone splints.'],
   feature_marketplace: ['A vaulted chamber where merchants once gathered. Waterlogged stalls line the perimeter.'],
   feature_crafting: ['Workbenches and scattered tools suggest this was once a place of making. The forge is cold.'],
   feature_training: ['A wide, low-ceilinged room with weapon racks and scarred practice dummies.'],
