@@ -8049,3 +8049,77 @@ Exits are serialized as `Record<string, string>` (direction → targetRoomId) in
 - **Client team:** The `ExploredRoomData` shape matches what `useExplorationMap.ts` expects. No client changes needed.
 - **Persistence team:** If `recordVisit` throws, the player's map still works for the current session. Only cross-session recall is affected.
 
+
+# Decision: GDD Major Overhaul — Strategic Pivot
+
+**Date:** 2026-03-31
+**Author:** Elminster (Lead/Architect)
+**Requested by:** dkirby-ms
+**Status:** Complete
+
+## Summary
+
+Completed comprehensive restructuring of GDD.md to reflect evolved game design direction. The game now centers on hand-crafted zone exploration rather than procedurally generated shards, with combat system redesigned from ground up.
+
+## Major Changes
+
+- **Core Identity:** "Shardwalker in procedural shards" → "Explorer in hand-crafted zones"
+- **Biomes:** Removed entire biome system from documentation
+- **Terminology:** Systematic replacement of shard-based language with zone-based language throughout document
+- **Combat System (§6):** Completely replaced with redesign placeholder
+- **PvP System (§8):** Simplified to placeholder, awaiting combat redesign
+- **Zone System (§10):** Restructured to prioritize hand-crafted content (primary) over procedural generation (future/secondary)
+- **Roadmap (§17):** Realigned all phases with new design direction
+- **Database References:** Updated schema documentation (biome → environment, shard-sickness → death tracking)
+
+## Impact Assessment
+
+- **Documentation:** 144 insertions, 221 deletions in GDD.md. All cross-references updated, no broken links.
+- **Code Impact:** ZERO code changes — documentation only. Database migration can be coordinated separately.
+- **Design Clarity:** Game identity now clearly positioned as "zone-based extraction MUD with hand-crafted content, modern narration, and high-stakes PvP"
+
+## What Was Preserved
+
+- Zone system implementation foundation (§10.1)
+- LLM narrative system architecture (§4)
+- Technical architecture (§13)
+- Trace and sound systems (§11, §12)
+- Progression and character build (§7)
+- Economy and factions (§9)
+- All implementation status markers
+
+## Next Steps
+
+1. **Combat System Design** — Finalize new mechanics, update §6 with full documentation
+2. **PvP System Design** — Complete documentation in §8 once combat is finalized
+3. **Procedural Generation Decision** — Determine future role (remove entirely, special events only, or secondary content mode)
+4. **Database Schema Alignment** — Migrate `biome` → `environment`, `player_shard_sickness` → `player_death_tracking`
+5. **UI Updates** — Update player-facing terminology ("Shardboard" → "Expedition Board")
+6. **Content Population** — Begin authoring hand-crafted zones as primary content
+
+## Rationale
+
+The game evolved since inception. Hand-crafted zones provide better pacing, more memorable experiences, and clearer design intent than procedural generation. Technical foundation already supports this direction. Combat redesign is necessary to support new game identity.
+
+## References
+
+- **GDD.md:** Complete document with updated game design
+- **Orchestration Log:** `/home/saitcho/ellmud/.squad/orchestration-log/2026-03-31T18-16-35Z-elminster.md`
+- **Session Log:** `/home/saitcho/ellmud/.squad/log/2026-03-31T18-16-35Z-gdd-overhaul.md`
+
+---
+
+### 2026-03-31T17:54:46Z: User directive — GDD design direction overhaul
+
+**By:** dkirby-ms (via Copilot)
+
+**What:**
+1. De-emphasize shards — Procedurally generated areas are no longer the primary focus
+2. Remove biomes — Biome concept is no longer relevant to game design
+3. Shift gameplay identity — Static zones (hand-crafted, traditional MUD/MMORPG style) are now primary
+4. Combat system overhaul — Remove current combat documentation, replace with placeholder for redesign
+5. GDD only — No code changes, documentation updates only
+
+**Why:** Game design has evolved from procedural-first to hand-crafted zone-first exploration. Combat needs complete ground-up redesign.
+
+**Status:** Complete — GDD.md restructured and all objectives delivered

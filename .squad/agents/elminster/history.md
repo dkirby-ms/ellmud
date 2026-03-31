@@ -1308,3 +1308,47 @@ CREATE TABLE zone_definitions (
 - **Next phase:** Handed off to Drizzt (Engine Dev) for SQL migrations (034–036) and data seeding
 - **Handoff:** Jarlaxle (Systems Dev) to follow with ContentRegistry wiring and admin CRUD endpoints
 - **Orchestration log:** `.squad/orchestration-log/2026-03-29T13-45-00Z-elminster.md`
+
+## Learnings
+
+### GDD Major Overhaul (2024)
+**Context:** Comprehensive restructure of GDD.md to reflect evolved design direction — from procedural "shard" focus to hand-crafted zone-based content.
+
+**Key Learnings:**
+
+1. **Design Documentation Must Track Reality:** The GDD had documented the game as "procedural-first with static zones as secondary," but the implementation and design evolution showed hand-crafted zones were actually primary. Documentation drift creates confusion for contributors and undermines design clarity.
+
+2. **Flavor Terminology Has Outsized Impact:** Player-facing terms like "Shardwalker" and "shard-sickness" aren't just naming — they communicate the game's identity. Changing from "Shardwalker diving into procedural shards" to "explorer in hand-crafted extraction zones" fundamentally reframes what the game is about. This shift required updates in 100+ locations across the GDD.
+
+3. **Placeholder > Deprecated Documentation:** When the combat system needed a ground-up redesign, I replaced 50+ lines of detailed (but obsolete) combat mechanics with a clear placeholder acknowledging the redesign. This is better than leaving deprecated details that contributors might implement.
+
+4. **Biome Systems Are Pervasive:** Removing the biome concept required changes in:
+   - Content sourcing tables
+   - Database schema documentation
+   - LLM narrative prompts
+   - Creature spawn rules
+   - Loot distribution
+   - Skill descriptions
+   Lesson: Environmental categorization systems touch everything. Removing one requires systematic review of the entire document.
+
+5. **Roadmap Alignment Is Critical:** The Phase 1-4 roadmap had items like "All five biomes" and "Shard modifiers runtime" that assumed the old design direction. Updated roadmap to reflect "Environment variety" and "Zone modifiers" — small changes that signal the new direction.
+
+6. **Technical vs Design Terminology:** Preserved `ShardRoom` as a codebase class name while updating conceptual references to `InstanceRoom`. This separation acknowledges that code refactoring is separate from design documentation — we can update docs immediately while code changes happen incrementally.
+
+7. **Surgical Edits Over Wholesale Deletion:** Rather than deleting sections wholesale, I reframed and rewrote to preserve structure and completeness. The GDD remains comprehensive (~1094 lines), just with updated direction. This approach maintains the document's utility as a reference.
+
+8. **Combat Systems Deserve Their Own Design Phase:** Attempting to document a complex combat system before it's been prototyped and validated leads to documentation churn. Better to acknowledge "redesigning from ground up" and document once the design is settled.
+
+9. **Database Terminology Matters for Migration:** Noting that `zones.biome` should become `zones.environment` and `player_shard_sickness` should become `player_death_tracking` sets clear expectations for future migration work. Documentation should call out these alignment tasks.
+
+10. **Open Questions Show Design Maturity:** Added "Hand-crafted vs procedural balance" to Open Questions because even though we've de-emphasized procedural generation, the question of its role remains open. Good design docs acknowledge what's still being figured out.
+
+**Artifacts Created:**
+- Decision document: `.squad/decisions/inbox/elminster-gdd-overhaul.md` (comprehensive change log and rationale)
+- Updated: `GDD.md` (major restructuring across all sections)
+
+**Recommended Follow-Up:**
+1. Combat system design workshop → document in §6 once validated
+2. Schema migration plan for biome/shard terminology in database
+3. Code refactoring plan for ShardRoom → InstanceRoom (if desired)
+4. Content authoring focus: hand-crafted zones as primary deliverable
