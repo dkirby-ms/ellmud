@@ -7,7 +7,7 @@
  * Validates row→entity mapping, CRUD operations, error handling, and edge
  * cases with a mocked pg pool (no real database needed).
  *
- * Follows the established pattern from pg-shard-sickness-store.test.ts.
+ * Follows the established pattern from pg-death-penalty-store.test.ts.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';

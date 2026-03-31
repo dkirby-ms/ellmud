@@ -20,20 +20,20 @@ export {
 } from './DowningSystem.js';
 export {
   calculateStatMultiplier,
-  getShardSicknessDebuff,
-  applyShardSickness,
-  isShardSicknessActive,
-  InMemoryShardSicknessStore,
+  getDeathPenaltyDebuff,
+  applyDeathPenalty,
+  isDeathPenaltyActive,
+  InMemoryDeathPenaltyStore,
   MAX_PENALTY,
   STACK_RATE,
-  SHARD_SICKNESS_DURATION_S,
-  type ShardSicknessDebuff,
-  type ShardSicknessStore,
+  DEATH_PENALTY_DURATION_S,
+  type DeathPenaltyDebuff,
+  type DeathPenaltyStore,
   type CombatStatModifiers,
-} from './ShardSickness.js';
-export { PgShardSicknessStore } from './PgShardSicknessStore.js';
+} from './DeathPenalty.js';
+export { PgDeathPenaltyStore } from './PgDeathPenaltyStore.js';
 export {
-  initShardSicknessProvider,
-  getShardSicknessStore,
-  resetShardSicknessProvider,
-} from './shard-sickness-provider.js';
+  initDeathPenaltyProvider,
+  getDeathPenaltyStore,
+  resetDeathPenaltyProvider,
+} from './death-penalty-provider.js';

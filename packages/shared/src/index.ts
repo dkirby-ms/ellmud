@@ -591,23 +591,23 @@ export interface OverlayMessage {
   timestamp: number;
 }
 
-// ─── Downing & Shard-Sickness Types (GDD §6.4) ──────────────────────────────
+// ─── Downing & Death Penalty Types (GDD §6.5) ──────────────────────────────
 
 /** Player status in the downing lifecycle. */
 export type PlayerVitalStatus = 'alive' | 'downed' | 'stabilized' | 'dead';
 
-/** Shard-sickness debuff summary sent to the client. */
-export interface ShardSicknessInfo {
-  /** Number of recent deaths contributing to sickness. */
+/** Death penalty debuff summary sent to the client. */
+export interface DeathPenaltyInfo {
+  /** Number of recent deaths contributing to penalty. */
   deathCount: number;
   /** Stat penalty as percentage (0–50). */
   penaltyPercent: number;
-  /** Whether shard-sickness is currently active. */
+  /** Whether death penalty is currently active. */
   active: boolean;
 }
 
-/** Default shard-sickness parameters (GDD §6.4). */
-export const SHARD_SICKNESS_DEFAULTS = {
+/** Default death penalty parameters (GDD §6.5). */
+export const DEATH_PENALTY_DEFAULTS = {
   durationMs: 120_000,
   attackPenalty: -5,
   defencePenalty: -3,

@@ -229,16 +229,16 @@ describe('Gap #11: Status effects in sidebar', () => {
     expect(bleedingEl.closest('[data-effect]') ?? bleedingEl).toHaveClass('text-danger');
   });
 
-  it('Shard-sickness debuff displays correctly', () => {
+  it('Death penalty debuff displays correctly', () => {
     // UX Review Batch 2 — anticipatory test (gap #11)
     renderShardExploration({
       statusEffects: [
-        { id: 'shard-sick', name: 'Shard-sick', duration: 10 },
+        { id: 'death-penalty', name: 'Death Penalty', duration: 10 },
       ],
     } as Partial<AppState>);
 
     const sidebar = screen.getByTestId('status-effects');
-    expect(within(sidebar).getByText('Shard-sick')).toBeInTheDocument();
+    expect(within(sidebar).getByText('Death Penalty')).toBeInTheDocument();
   });
 
   it('no status effects section when no effects active', () => {
