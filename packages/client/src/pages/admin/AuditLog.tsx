@@ -90,7 +90,6 @@ export default function AuditLog() {
           <option value="">All Entities</option>
           <option value="items">Items</option>
           <option value="creatures">Creatures</option>
-          <option value="biomes">Biomes</option>
           <option value="modifiers">Modifiers</option>
           <option value="skills">Skills</option>
           <option value="loot-tables">Loot Tables</option>

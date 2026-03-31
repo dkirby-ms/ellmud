@@ -27,7 +27,6 @@ function makeContext(overrides: Partial<NarrationContext> = {}): NarrationContex
     narration_type: 'room_description',
     room: {
       id: 'shard-0a3f::room-17',
-      biome: 'flooded_crypt',
       light_level: 0.3,
       exits: ['north', 'east', 'down'],
       features: ['collapsed_pillar', 'altar_bloodstained'],
@@ -190,7 +189,7 @@ describe('Template Fallback', () => {
     const ctx = makeContext();
     const prose = renderTemplate('room_description', ctx);
     expect(prose.length).toBeGreaterThan(50);
-    // Should contain biome atmosphere
+    // Should contain atmosphere
     expect(prose.toLowerCase()).toContain('water');
     // Should mention exits
     expect(prose.toLowerCase()).toContain('north');

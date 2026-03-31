@@ -110,11 +110,11 @@ describe('Edge Cases — ShardRoom', () => {
     await client.leave();
   });
 
-  it('should handle look command with biome option', async () => {
+  it('should handle look command with theme option', async () => {
     const { client, collector } = await connectTestClient(
       colyseus,
       'shard',
-      { biome: 'void_rift' },
+      { theme: 'void_rift' },
     );
 
     const preCount = collector.narrate.length;

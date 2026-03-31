@@ -2,24 +2,11 @@
  * Admin content entity type definitions.
  *
  * For entity types with existing shared types (items, creatures), we re-use those.
- * For new entity types (biomes, modifiers, skills, loot-tables, factions, rooms, narrative),
+ * For new entity types (modifiers, skills, loot-tables, factions, rooms, narrative),
  * we define extensible admin content schemas here.
  */
 
 import type { ContentEntity } from './ContentStore.js';
-
-// ─── Biome Definition (admin-managed) ────────────────────────────────────────
-
-export interface BiomeDefinition extends ContentEntity {
-  id: string;
-  name: string;
-  description: string;
-  tier: number;
-  features: string[];
-  hazardTypes: string[];
-  roomProperties: string[];
-  narrationHints: string[];
-}
 
 // ─── Modifier Definition (shard modifiers) ───────────────────────────────────
 
@@ -102,7 +89,6 @@ export interface NarrativeTemplateDefinition extends ContentEntity {
   id: string;
   name: string;
   narrativeType: string;
-  biome: string;
   template: string;
   tone: string;
   verbosity: string;
@@ -114,7 +100,6 @@ export interface NarrativeTemplateDefinition extends ContentEntity {
 export const CONTENT_ENTITY_TYPES = [
   'items',
   'creatures',
-  'biomes',
   'modifiers',
   'skills',
   'loot-tables',

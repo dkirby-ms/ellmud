@@ -7,7 +7,6 @@ interface NarrativeData {
   id: string;
   name: string;
   narrativeType: string;
-  biome: string;
   template: string;
   tone: string;
   verbosity: string;
@@ -49,7 +48,6 @@ export default function NarrativeDetail() {
     id: "",
     name: "",
     narrativeType: "dialogue" as string,
-    biome: "",
     template: "",
     tone: "",
     verbosity: "",
@@ -68,7 +66,6 @@ export default function NarrativeDetail() {
         id: apiData.id,
         name: apiData.name,
         narrativeType: apiData.narrativeType,
-        biome: apiData.biome,
         template: apiData.template,
         tone: apiData.tone,
         verbosity: apiData.verbosity,
@@ -277,21 +274,6 @@ export default function NarrativeDetail() {
                       <option value="discovery">Discovery</option>
                       <option value="epilogue">Epilogue</option>
                     </select>
-                  </div>
-                  <div>
-                    <label
-                      className="block text-[#8A8B95] text-sm mb-2"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      Biome
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.biome}
-                      onChange={(e) => updateField("biome", e.target.value)}
-                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">

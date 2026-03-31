@@ -1,8 +1,8 @@
 /**
  * Content CRUD routes — RESTful endpoints for admin-editable game content.
  *
- * Provides GET/POST/PUT/DELETE for 9 entity types:
- *   items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narrative
+ * Provides GET/POST/PUT/DELETE for 8 entity types:
+ *   items, creatures, modifiers, skills, loot-tables, factions, rooms, narrative
  *
  * All routes are protected by adminAuth middleware.
  * Data lives in ContentStore (in-memory, Phase 1). Swappable to PG later.

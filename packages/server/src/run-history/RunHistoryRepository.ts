@@ -7,7 +7,7 @@
  * The Pg implementation reads/writes the `run_history` table (migration 005).
  */
 
-import type { BiomeType, ShardTier } from '@ellmud/shared';
+import type { ShardTier } from '@ellmud/shared';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -16,7 +16,6 @@ export interface RunRecord {
   runId: string;
   playerId: string;
   shardTier: ShardTier;
-  biome: BiomeType | null;
   durationSec: number;
   extracted: boolean;
   extractedItems: unknown[];

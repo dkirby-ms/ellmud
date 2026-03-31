@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import {
-  LayoutDashboard, Sword, Package, Mountain, Zap, Trophy, TrendingUp, Building2,
+  LayoutDashboard, Sword, Package, Zap, Trophy, TrendingUp, Building2,
   Home, FileText, Scale, ClipboardList, Hammer, Upload, ScrollText, Users,
   Bell, Search, ArrowLeft, Radio, AlertTriangle, AlertCircle, FileEdit, Loader2, X, Map,
 } from "lucide-react";
@@ -17,13 +17,13 @@ interface SearchableEntity {
 }
 
 const ENTITY_TYPE_LABELS: Record<EntityType, string> = {
-  items: "Item", creatures: "Creature", biomes: "Biome", modifiers: "Modifier",
+  items: "Item", creatures: "Creature", modifiers: "Modifier",
   skills: "Skill", "loot-tables": "Loot Table", factions: "Faction",
   rooms: "Room", narrative: "Narrative",
 };
 
 const SEARCHABLE_ENTITY_TYPES: EntityType[] = [
-  "items", "creatures", "biomes", "modifiers", "skills",
+  "items", "creatures", "modifiers", "skills",
   "loot-tables", "factions", "rooms", "narrative",
 ];
 
@@ -40,7 +40,6 @@ const navSections = [
     items: [
       { path: "/admin/creatures", icon: Sword, label: "Creatures" },
       { path: "/admin/items", icon: Package, label: "Items" },
-      { path: "/admin/biomes", icon: Mountain, label: "Biomes" },
       { path: "/admin/modifiers", icon: Zap, label: "Modifiers" },
       { path: "/admin/loot-tables", icon: Trophy, label: "Loot Tables" },
       { path: "/admin/skills", icon: TrendingUp, label: "Skills" },

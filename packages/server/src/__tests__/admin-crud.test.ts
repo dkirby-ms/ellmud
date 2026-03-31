@@ -2,7 +2,7 @@
  * Integration tests for the Admin Content CRUD API (Issue #139).
  *
  * Tests the full CRUD lifecycle for all 9 content entity types:
- *   items, creatures, biomes, modifiers, skills, loot-tables, factions, rooms, narrative
+ *   items, creatures, modifiers, skills, loot-tables, factions, rooms, narrative
  *
  * Written TDD-style — these tests define the contract and will fail until
  * Drizzt lands the implementation on this branch.
@@ -39,10 +39,6 @@ const ENTITY_FIXTURES: Record<string, { create: Record<string, unknown>; update:
     create: { name: 'Drowned Revenant', type: 'drowned_revenant', hp: 50, maxHp: 50, attack: 8, defence: 4, armour: 2 },
     update: { name: 'Greater Drowned Revenant', hp: 80, maxHp: 80 },
   },
-  biomes: {
-    create: { name: 'Flooded Crypt', type: 'flooded_crypt', description: 'A waterlogged burial ground', tier: 1 },
-    update: { description: 'A dark, waterlogged burial ground', tier: 2 },
-  },
   modifiers: {
     create: { name: 'Darkness', type: 'darkness', description: 'Vision is severely limited', effect: { visibility: -0.5 } },
     update: { description: 'Near-total darkness engulfs the shard' },
@@ -52,7 +48,7 @@ const ENTITY_FIXTURES: Record<string, { create: Record<string, unknown>; update:
     update: { description: 'A devastating overhead blow', staminaCost: 20 },
   },
   'loot-tables': {
-    create: { name: 'Crypt Standard', biome: 'flooded_crypt', tier: 1, entries: [{ itemId: 'rusty_blade', dropWeight: 30 }] },
+    create: { name: 'Crypt Standard', tier: 1, entries: [{ itemId: 'rusty_blade', dropWeight: 30 }] },
     update: { entries: [{ itemId: 'rusty_blade', dropWeight: 20 }, { itemId: 'bone_shard', dropWeight: 40 }] },
   },
   factions: {
@@ -64,13 +60,13 @@ const ENTITY_FIXTURES: Record<string, { create: Record<string, unknown>; update:
     update: { description: 'A fully submerged passage', exits: { north: 'room-2' } },
   },
   narrative: {
-    create: { name: 'Crypt Entry', type: 'room_description', template: 'You step into {biome}...', tags: ['entry', 'atmospheric'] },
-    update: { template: 'You cautiously enter {biome}...', tags: ['entry', 'atmospheric', 'revised'] },
+    create: { name: 'Crypt Entry', type: 'room_description', template: 'You step into the crypt...', tags: ['entry', 'atmospheric'] },
+    update: { template: 'You cautiously enter the crypt...', tags: ['entry', 'atmospheric', 'revised'] },
   },
 };
 
 /**
- * All 9 entity type slugs used in URL paths.
+ * All 8 entity type slugs used in URL paths.
  */
 const ENTITY_TYPES = Object.keys(ENTITY_FIXTURES);
 

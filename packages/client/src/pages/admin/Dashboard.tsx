@@ -15,7 +15,6 @@ const REFRESH_INTERVAL_MS = 30_000;
 const ENTITY_LABELS: Record<string, string> = {
   items: "Items",
   creatures: "Creatures",
-  biomes: "Biomes",
   modifiers: "Modifiers",
   skills: "Skills",
   "loot-tables": "Loot Tables",

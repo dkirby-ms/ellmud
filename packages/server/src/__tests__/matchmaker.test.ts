@@ -26,7 +26,6 @@ function makeShard(roomId: string, overrides?: Partial<ShardSlot>): ShardSlot {
   return {
     roomId,
     tier: 1,
-    biome: 'flooded_crypt',
     currentPlayers: 0,
     maxPlayers: TIER_CAPACITY[1].max,
     entryPoints: ['entry-a', 'entry-b'],
@@ -203,13 +202,6 @@ describe('Matchmaker — Match Logic', () => {
     mm.registerShard(makeShard('tier2', { tier: 2, maxPlayers: 4 }));
     const match = mm.findMatch(makePlayer('p1', { preferredTier: 2 }));
     expect(match?.roomId).toBe('tier2');
-  });
-
-  it('should prefer shard matching biome preference', () => {
-    mm.registerShard(makeShard('crypt', { biome: 'flooded_crypt' }));
-    mm.registerShard(makeShard('bastion', { biome: 'shattered_bastion' }));
-    const match = mm.findMatch(makePlayer('p1', { preferredBiome: 'shattered_bastion' }));
-    expect(match?.roomId).toBe('bastion');
   });
 
   it('should prefer fuller shards for social density', () => {

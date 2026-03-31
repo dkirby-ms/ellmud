@@ -2,7 +2,7 @@
  * Test helpers — unit tests to verify the test infrastructure itself works.
  */
 import { describe, it, expect } from 'vitest';
-import { createPRNG, MOCK_PLAYERS, MOCK_ITEMS, makeCommand, ALL_BIOMES } from './helpers/index.js';
+import { createPRNG, MOCK_PLAYERS, MOCK_ITEMS, makeCommand } from './helpers/index.js';
 
 describe('Test Fixtures', () => {
   it('createPRNG should be deterministic with same seed', () => {
@@ -54,9 +54,5 @@ describe('Test Fixtures', () => {
     const cmd = makeCommand('inventory');
     expect(cmd.verb).toBe('inventory');
     expect(cmd.args).toEqual([]);
-  });
-
-  it('ALL_BIOMES should have 5 biome types', () => {
-    expect(ALL_BIOMES).toHaveLength(5);
   });
 });

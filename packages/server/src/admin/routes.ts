@@ -662,7 +662,6 @@ function safeGetRoom(roomId: string): import('@colyseus/core').Room | undefined 
 function getShardDetail(room: import('@colyseus/core').Room): AdminShardDetail {
   const state = room.state as {
     shardId?: string;
-    biome?: string;
     lifecycle?: string;
     stability?: number;
     collapseTimer?: number;
@@ -715,7 +714,6 @@ function getShardDetail(room: import('@colyseus/core').Room): AdminShardDetail {
     roomId: room.roomId,
     name: 'shard',
     clients: room.clients.length,
-    biome: state.biome ?? 'unknown',
     lifecycle: state.lifecycle ?? 'unknown',
     stability: state.stability ?? 0,
     collapseTimer: state.collapseTimer ?? 0,

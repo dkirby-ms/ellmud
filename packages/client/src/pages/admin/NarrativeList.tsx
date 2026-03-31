@@ -9,7 +9,6 @@ interface NarrativeTemplate {
   id: string;
   name: string;
   narrativeType: string;
-  biome: string;
   template: string;
   tone: string;
   verbosity: string;
@@ -62,14 +61,13 @@ export default function NarrativeList() {
 
   const filteredEntries = narrativeEntries.filter((entry) => {
     const matchesSearch =
-      entry.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      entry.biome.toLowerCase().includes(searchQuery.toLowerCase());
+      entry.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = selectedType === "all" || entry.narrativeType === selectedType;
-    const matchesCategory = selectedCategory === "all" || entry.biome === selectedCategory;
+    const matchesCategory = selectedCategory === "all" || entry.tone === selectedCategory;
     return matchesSearch && matchesType && matchesCategory;
   });
 
-  const categories = Array.from(new Set(narrativeEntries.map(e => e.biome)));
+  const categories = Array.from(new Set(narrativeEntries.map(e => e.tone)));
 
   return (
     <div className="p-8">
@@ -157,7 +155,7 @@ export default function NarrativeList() {
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Biome
+                Tone
               </th>
               <th
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
@@ -200,7 +198,7 @@ export default function NarrativeList() {
                     className="text-[#8A8B95] text-sm"
                     style={{ fontFamily: "var(--font-sans)" }}
                   >
-                    {entry.biome}
+                    {entry.tone}
                   </span>
                 </td>
                 <td className="p-4">

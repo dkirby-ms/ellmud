@@ -50,7 +50,6 @@ export interface NarrationTrace {
 /** Room state as the LLM sees it. */
 export interface NarrationRoom {
   id: string;
-  biome: string;
   light_level: number;
   exits: string[];
   features: string[];

@@ -22,7 +22,7 @@ import type { RoomGraph as LocalRoomGraph } from '../shard/RoomGraph.js';
 // ─── Test Helpers ─────────────────────────────────────────────────────────────
 
 function createTestShard(seed = 42) {
-  const sharedGraph = generateShardGraph({ tier: 1, biome: 'flooded_crypt', seed });
+  const sharedGraph = generateShardGraph({ tier: 1, seed });
   const localGraph = adaptRoomGraph(sharedGraph);
   const creatureManager = new CreatureManager();
   const creaturePrng = createPRNG(seed + 7919);

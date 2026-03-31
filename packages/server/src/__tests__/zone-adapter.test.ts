@@ -19,7 +19,7 @@ function makeZone(overrides: Partial<ZoneDefinition> = {}): ZoneDefinition {
     levelMin: 1,
     levelMax: 5,
     tier: 1,
-    biome: 'flooded_crypt',
+    theme: 'flooded_crypt',
     entryRoomSlugs: ['entrance'],
     lifecycle: 'persistent',
     category: 'dungeon',
@@ -217,16 +217,15 @@ describe('convertZoneToRoomGraph', () => {
     expect(graph1.seed).toBeGreaterThan(0);
   });
 
-  it('preserves biome and tier from zone definition', () => {
+  it('preserves tier from zone definition', () => {
     const zoneData: ZoneData = {
-      zone: makeZone({ biome: 'fungal_deep', tier: 2 }),
+      zone: makeZone({ tier: 2 }),
       rooms: [makeRoom('entrance', { type: 'entry' })],
       exits: [],
     };
 
     const graph = convertZoneToRoomGraph(zoneData);
 
-    expect(graph.biome).toBe('fungal_deep');
     expect(graph.tier).toBe(2);
   });
 

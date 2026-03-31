@@ -12,13 +12,8 @@ import { renderSensoryTemplate } from './sensory-templates.js';
 
 // ─── Atmospheric Fragments ───────────────────────────────────────────────────
 
-const BIOME_ATMOSPHERES: Record<string, string> = {
-  flooded_crypt: 'Dark water laps at ancient stone, carrying the scent of rot and forgotten prayers.',
-  shattered_bastion: 'Broken ramparts claw at a bruised sky. Dust sifts through shattered masonry.',
-  fungal_deep: 'Bioluminescent fungi pulse with sickly light, their spores thick in the stagnant air.',
-  ashen_reach: 'Grey ash coats every surface. The air tastes of cinder and distant fire.',
-  void_rift: 'Reality frays at the edges here. The darkness between things feels alive.',
-};
+const DEFAULT_ATMOSPHERE = 'The air hangs heavy in this place.';
+const DEFAULT_MOVEMENT_ATMOSPHERE = 'A new space opens before you.';
 
 const LIGHT_DESCRIPTIONS: Record<string, string> = {
   dark: 'Darkness presses in, swallowing detail beyond arm\'s reach.',
@@ -143,7 +138,7 @@ function pickRandom<T>(arr: T[]): T {
 function renderRoomDescription(ctx: NarrationContext): string {
   const parts: string[] = [];
 
-  const atmosphere = BIOME_ATMOSPHERES[ctx.room.biome] ?? 'The air hangs heavy in this place.';
+  const atmosphere = DEFAULT_ATMOSPHERE;
   parts.push(atmosphere);
   parts.push(getLightDesc(ctx.room.light_level));
 
@@ -235,7 +230,7 @@ function renderMovement(ctx: NarrationContext): string {
     parts.push('You move onward.');
   }
 
-  const atmosphere = BIOME_ATMOSPHERES[ctx.room.biome] ?? 'A new space opens before you.';
+  const atmosphere = DEFAULT_MOVEMENT_ATMOSPHERE;
   parts.push(atmosphere);
   parts.push(getLightDesc(ctx.room.light_level));
   parts.push(describeExits(ctx.room.exits));

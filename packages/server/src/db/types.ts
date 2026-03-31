@@ -5,7 +5,7 @@
  * Used by server code to type-check queries against the schema.
  */
 
-import type { GearTier, BiomeType, ShardTier } from '@ellmud/shared';
+import type { GearTier, ShardTier } from '@ellmud/shared';
 
 // ─── Player Identity (normalized for future OAuth) ───────────────────────────
 
@@ -111,7 +111,6 @@ export interface RunHistory {
   player_id: string;
   run_id: string;
   shard_tier: ShardTier;
-  biome: BiomeType | null;
   duration_sec: number;
   extracted: boolean;
   extracted_items: unknown[];

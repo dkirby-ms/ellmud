@@ -39,7 +39,7 @@ async function seedZone(
     levelMin: 1,
     levelMax: 5,
     tier: 1,
-    biome: 'flooded_crypt',
+    theme: 'flooded_crypt',
     entryRoomSlugs: ['hearth'],
     lifecycle: 'persistent',
     category,
@@ -257,7 +257,6 @@ describe('C3 — Shard room name remains "shard"', () => {
       reason: 'enter_shard',
       options: {
         roomId: 'test-shard-id',
-        biome: 'flooded_crypt',
         tier: 1,
       },
     };

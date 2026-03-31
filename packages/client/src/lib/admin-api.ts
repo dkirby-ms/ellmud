@@ -72,7 +72,6 @@ export async function adminFetch<T>(
 export type EntityType =
   | 'items'
   | 'creatures'
-  | 'biomes'
   | 'modifiers'
   | 'skills'
   | 'loot-tables'
@@ -203,7 +202,6 @@ export interface LiveRoomDetail {
   roomId: string;
   name: string;
   clients: number;
-  biome?: string;
   lifecycle?: string;
   stability?: number;
   collapseTimer?: number;

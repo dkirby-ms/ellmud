@@ -29,7 +29,7 @@ function zoneInput(
     levelMin: 1,
     levelMax: 5,
     tier: 1,
-    biome: 'flooded_crypt',
+    theme: 'flooded_crypt',
     entryRoomSlugs: ['room-a'],
     lifecycle: 'persistent',
     category: 'dungeon',

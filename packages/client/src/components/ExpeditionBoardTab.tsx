@@ -236,7 +236,7 @@ export default function ExpeditionBoardTab({ onEnterShard, onEnterZone }: Expedi
                     Tier {shard.tier}
                   </span>
                   <span className="text-text-secondary text-sm font-sans">
-                    Tier {shard.tier}
+                    {shard.name}
                   </span>
                 </div>
               </div>

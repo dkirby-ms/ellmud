@@ -3,7 +3,7 @@
  * Defines the shape of shard selection cards displayed to players.
  */
 
-import type { BiomeType, ShardTier, ShardModifier } from './index.js';
+import type { ShardTier, ShardModifier } from './index.js';
 
 // ─── Shard Key Types (GDD §10.4) ────────────────────────────────────────────
 
@@ -16,7 +16,6 @@ export interface ShardCardData {
   shardId: string;
   name: string;
   tier: ShardTier;
-  biome: BiomeType;
   modifiers: ShardModifier[];
   currentPlayers: number;
   maxPlayers: number;

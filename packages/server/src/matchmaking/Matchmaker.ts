@@ -10,7 +10,7 @@
  *   Tier 3 (Abyssal): 3–6 players, 4 entry points
  */
 
-import type { ShardTier, BiomeType } from '@ellmud/shared';
+import type { ShardTier } from '@ellmud/shared';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -29,14 +29,12 @@ export const QUEUE_TIMEOUT_MS = 30_000;
 export interface QueuedPlayer {
   readonly playerId: string;
   readonly preferredTier?: ShardTier;
-  readonly preferredBiome?: BiomeType;
   readonly queuedAt: number;
 }
 
 export interface ShardSlot {
   readonly roomId: string;
   readonly tier: ShardTier;
-  readonly biome: BiomeType;
   readonly currentPlayers: number;
   readonly maxPlayers: number;
   readonly entryPoints: string[];
@@ -50,7 +48,6 @@ export interface MatchResult {
   readonly roomId: string;
   readonly entryPointId: string;
   readonly tier: ShardTier;
-  readonly biome: BiomeType;
 }
 
 export interface MatchmakerStats {
@@ -151,9 +148,8 @@ export class Matchmaker {
   /**
    * Find the best shard for a player. Prefers:
    * 1. Matching tier preference
-   * 2. Matching biome preference
-   * 3. Fewest players (fill evenly)
-   * 4. Not full, not locked, lifecycle is 'open'
+   * 2. Fewest players (fill evenly)
+   * 3. Not full, not locked, lifecycle is 'open'
    */
   findMatch(player: QueuedPlayer): ShardSlot | null {
     const joinable = this.getJoinableShards();
@@ -163,7 +159,6 @@ export class Matchmaker {
     const scored = joinable.map(shard => {
       let score = 0;
       if (player.preferredTier && shard.tier === player.preferredTier) score += 10;
-      if (player.preferredBiome && shard.biome === player.preferredBiome) score += 5;
       // Prefer fuller shards (social density), but not at capacity
       score += shard.currentPlayers;
       return { shard, score };
@@ -247,7 +242,6 @@ export class Matchmaker {
             roomId: shard.roomId,
             entryPointId,
             tier: shard.tier,
-            biome: shard.biome,
           });
           continue;
         }

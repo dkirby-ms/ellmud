@@ -11,7 +11,6 @@ import type {
   LootContainer,
   HazardPlaceholder,
 } from './room-graph.js';
-import type { BiomeType } from './index.js';
 
 // ─── Zone Definition ────────────────────────────────────────────────────────
 
@@ -24,7 +23,7 @@ export interface ZoneDefinition {
   levelMin: number;
   levelMax: number;
   tier: number;
-  biome: BiomeType;
+  theme: string;
   entryRoomSlugs: string[];
   lifecycle: 'persistent' | 'scheduled' | 'event';
   category: 'hub' | 'dungeon' | 'wilderness' | 'social';
