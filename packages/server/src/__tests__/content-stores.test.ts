@@ -815,7 +815,7 @@ describe('PgCreatureDefinitionsStore', () => {
       expect(entity.name).toBe('Drowned Revenant');
     });
 
-    it('inserts into creature_definitions with 21 params', async () => {
+    it('inserts into creature_definitions with 23 params', async () => {
       queryMock.mockResolvedValueOnce(mockQueryResult([CREATURE_ROW]));
       await store.create({ id: 'x', type: 'test', name: 'Test' });
 
@@ -824,7 +824,7 @@ describe('PgCreatureDefinitionsStore', () => {
         expect.any(Array),
       );
       const callArgs = queryMock.mock.calls[0][1] as unknown[];
-      expect(callArgs).toHaveLength(21);
+      expect(callArgs).toHaveLength(23);
     });
 
     it('serializes loot_table as JSON', async () => {
@@ -839,8 +839,8 @@ describe('PgCreatureDefinitionsStore', () => {
       });
 
       const callArgs = queryMock.mock.calls[0][1] as unknown[];
-      // loot_table is the 21st param ($21)
-      expect(callArgs[20]).toBe(JSON.stringify(loot));
+      // loot_table is the 23rd param ($23)
+      expect(callArgs[22]).toBe(JSON.stringify(loot));
     });
 
     it('throws ContentStoreError DUPLICATE_ID on unique violation', async () => {
@@ -870,10 +870,10 @@ describe('PgCreatureDefinitionsStore', () => {
       await store.create({ id: 'x', type: 'test', name: 'Bare Creature' });
 
       const callArgs = queryMock.mock.calls[0][1] as unknown[];
-      // max_hp=$5 defaults to 100, attack=$6 defaults to 10
-      expect(callArgs[4]).toBe(100); // maxHp
-      expect(callArgs[5]).toBe(10);  // attack
-      expect(callArgs[6]).toBe(5);   // defence
+      // max_hp=$7 defaults to 100, attack=$8 defaults to 10
+      expect(callArgs[6]).toBe(100); // maxHp
+      expect(callArgs[7]).toBe(10);  // attack
+      expect(callArgs[8]).toBe(5);   // defence
     });
   });
 
@@ -902,7 +902,7 @@ describe('PgCreatureDefinitionsStore', () => {
       expect(updated.type).toBe('drowned_revenant'); // unchanged
     });
 
-    it('passes 22 params to the UPDATE query (21 cols + WHERE id)', async () => {
+    it('passes 24 params to the UPDATE query (23 cols + WHERE id)', async () => {
       queryMock.mockResolvedValueOnce(mockQueryResult([CREATURE_ROW]));
       queryMock.mockResolvedValueOnce(mockQueryResult([CREATURE_ROW]));
 
@@ -910,8 +910,8 @@ describe('PgCreatureDefinitionsStore', () => {
 
       // Second call is the UPDATE
       const callArgs = queryMock.mock.calls[1][1] as unknown[];
-      expect(callArgs).toHaveLength(22);
-      expect(callArgs[21]).toBe('c-001'); // WHERE id = $22
+      expect(callArgs).toHaveLength(24);
+      expect(callArgs[23]).toBe('c-001'); // WHERE id = $24
     });
   });
 
