@@ -20,6 +20,7 @@ import {
   type ExploredRoomData,
   type ExplorationDataMessage,
   type ExplorationUpdateMessage,
+  type RoomOccupantsMessage,
   SHARD_SICKNESS_DEFAULTS,
   OPPOSITE_DIRECTION,
   MessageTypes,
@@ -485,6 +486,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Send exploration data so client map can render the starting room
     this.sendExplorationData(client, playerId, startRoom);
+
+    // Send initial room occupants
+    this.sendRoomOccupants(client, playerId, startRoom);
 
     this.sendShardState(client, {
       state: this.lifecycle,
@@ -960,6 +964,13 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
       // Exploration: send map update for the new room
       this.sendExplorationUpdate(client, playerId, player.currentRoomId);
+
+      // Send updated room occupants to the moving player
+      this.sendRoomOccupants(client, playerId, player.currentRoomId);
+
+      // Broadcast updated occupants to other players in both rooms
+      this.broadcastRoomOccupantsUpdate(previousRoomId);
+      this.broadcastRoomOccupantsUpdate(player.currentRoomId);
     }
 
     // Social commands (say, emote) broadcast to all players in the same room
@@ -1531,6 +1542,10 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         narrations: [{ text: departureText, type: 'ambient' }],
       });
     }
+
+    // Send updated room occupants to all players in both rooms
+    this.broadcastRoomOccupantsUpdate(targetRoomId);
+    this.broadcastRoomOccupantsUpdate(sourceRoomId);
   }
 
   /**
@@ -1609,6 +1624,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
             actorId: event.actorId,
             actorName: event.actorName,
           });
+
+          // Send updated room occupants to all players in the room
+          this.broadcastRoomOccupantsUpdate(roomId);
         }
       }
     }
@@ -2037,6 +2055,41 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }).catch((err) => {
       this.log(`Failed to record exploration visit for ${this.playerTag(playerId)}: ${err}`);
     });
+  }
+
+  // ─── Room Occupants ──────────────────────────────────────────────────────
+
+  /** Send structured room occupants data to a specific client. */
+  private sendRoomOccupants(client: Client, playerId: string, roomId: string): void {
+    const creatures = this.creatureManager.getCreaturesInRoom(roomId).map((c) => ({
+      id: c.id,
+      name: c.name,
+      type: c.type,
+      aggressive: c.behaviorState === 'hostile',
+    }));
+
+    const players: Array<{ id: string; name: string }> = [];
+    for (const [sid, ps] of this.players) {
+      if (ps.currentRoomId === roomId && sid !== playerId) {
+        const displayName = this.characterNames.get(sid) ?? sid;
+        players.push({ id: sid, name: displayName });
+      }
+    }
+
+    const message: RoomOccupantsMessage = { creatures, players };
+    client.send(MessageTypes.ROOM_OCCUPANTS, message);
+  }
+
+  /** Broadcast room occupants update to all players in a room. */
+  private broadcastRoomOccupantsUpdate(roomId: string): void {
+    for (const [sid, ps] of this.players) {
+      if (ps.currentRoomId === roomId) {
+        const client = this.findClient(sid);
+        if (client) {
+          this.sendRoomOccupants(client, sid, roomId);
+        }
+      }
+    }
   }
 
   // ─── Profile Persistence ─────────────────────────────────────────────────

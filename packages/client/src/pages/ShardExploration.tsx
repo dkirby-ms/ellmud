@@ -14,6 +14,7 @@ import CompassControl from "../components/CompassControl";
 import { MinimapWidget } from "../components/map/MinimapWidget.js";
 import { FullMapOverlay } from "../components/map/FullMapOverlay.js";
 import { EquipmentSilhouette } from "../components/EquipmentSilhouette.js";
+import { RoomOccupants } from "../components/RoomOccupants.js";
 import "../components/map/map.css";
 import MudPrompt from "../components/MudPrompt.js";
 import { useAppContext, type StatusEffect } from "../store.js";
@@ -464,6 +465,14 @@ export default function ShardExploration() {
               </div>
             </div>
           )}
+
+          {/* Room Occupants */}
+          <div className="p-4 border-b border-border-muted">
+            <RoomOccupants 
+              creatures={state.roomOccupants.creatures}
+              players={state.roomOccupants.players}
+            />
+          </div>
 
           {/* Equipment Silhouette */}
           <div className="p-4 border-b border-border-muted">

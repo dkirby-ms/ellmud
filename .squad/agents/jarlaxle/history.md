@@ -1926,3 +1926,77 @@ Peaceful flag properly persists across zone transitions. Dev team can now use `/
 - When adding fields to creatures, the pattern is: migration → types → ContentRegistry → CreatureManager (all 3 create methods) → ShardRoom (both maps) → CreatureRef type → command handlers
 - Test helpers like `buildCtx` in creature-wiring.test.ts must mirror production code mapping — any field passed in ShardRoom must be passed in tests, or tests diverge from production behavior
 - Room description rendering groups creatures by `type` (not `name`) because type is the unique identifier for creature templates — multiple instances of the same type get aggregated with count
+
+### 2026-03-31: ROOM_OCCUPANTS Message Type and Server Broadcasting
+
+**Task:** Add structured data about room occupants (creatures and players) so the client status panel can show a clickable list.
+
+**Background:**
+Previously, creature and player presence was only sent as narration text. The client had no structured data to build interactive UI elements (clickable lists, status indicators, etc.).
+
+**Implementation:**
+
+**Step 1 — Shared Types:**
+- Added `ROOM_OCCUPANTS: 'room_occupants'` to `MessageTypes` in `packages/shared/src/index.ts` (already existed)
+- Added `RoomOccupantsMessage` interface (already existed):
+  - `creatures`: array of `{ id, name, type, aggressive }`
+  - `players`: array of `{ id, name }`
+
+**Step 2 — ShardRoom Helper Methods:**
+Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
+
+1. `sendRoomOccupants(client: Client, playerId: string, roomId: string)`:
+   - Gathers all creatures in room via `creatureManager.getCreaturesInRoom(roomId)`
+   - Maps creatures to structured data: `{ id: c.id, name: c.name, type: c.type, aggressive: c.behaviorState === 'hostile' }`
+   - Gathers all OTHER players in the room (not the recipient)
+   - Uses `characterNames.get(sid)` for player display names
+   - Sends via `client.send(MessageTypes.ROOM_OCCUPANTS, message)`
+
+2. `broadcastRoomOccupantsUpdate(roomId: string)`:
+   - Calls `sendRoomOccupants` for ALL players in the specified room
+   - Used when room occupants change without a specific recipient
+
+**Step 3 — Broadcasting Scenarios:**
+
+1. **Player joins shard** (`onJoin` handler):
+   - Called after `sendExplorationData()`
+   - Sends initial occupants list to the joining player
+
+2. **Player moves rooms** (command handler, line ~966):
+   - Sends updated occupants to the moving player
+   - Broadcasts updated occupants to all players in BOTH source and target rooms
+
+3. **Creature moves rooms** (`broadcastCreatureMovement`, line ~1544):
+   - After sending arrival/departure narrations
+   - Broadcasts updated occupants to both source and target rooms
+
+4. **Creature dies** (`syncCreaturesAfterCombat`, line ~1627):
+   - After adding corpse trace
+   - Broadcasts updated occupants to the room where creature died
+
+**Verification:**
+- ✅ `npx tsc --noEmit -p packages/shared/tsconfig.json` — clean
+- ✅ `npx tsc --noEmit -p packages/server/tsconfig.json` — clean
+- ✅ `npx vitest run packages/server/src/__tests__/rooms.test.ts` — all tests pass
+- ✅ `npx vitest run packages/server/src/__tests__/creature-wiring.test.ts` — all 23 tests pass
+- ✅ `npx vitest run packages/shared/src/__tests__/types.test.ts` — updated count to 25 message types, all pass
+
+**Technical Notes:**
+- Used `c.type` (not `c.templateId`) for creature type — matches Creature interface
+- Used `c.behaviorState === 'hostile'` for aggressive flag — matches behavior tree state machine
+- Player list excludes the message recipient (players see "others" in their room, not themselves)
+- Broadcasting happens AFTER narrations so players see story text first, then UI updates
+
+**Design Pattern:**
+- Followed exploration message pattern (`sendExplorationData`, `sendExplorationUpdate`)
+- Added helper methods near exploration methods (line ~2042) for consistency
+- All broadcast scenarios mirror existing narration broadcasts (movement, combat, creature events)
+
+**Key File Paths:**
+- Message types: `packages/shared/src/index.ts` (line 257, 287-298)
+- ShardRoom helpers: `packages/server/src/rooms/ShardRoom.ts` (line 2063-2094)
+- OnJoin call: `packages/server/src/rooms/ShardRoom.ts` (line 491)
+- Movement call: `packages/server/src/rooms/ShardRoom.ts` (line 966-973)
+- Creature movement call: `packages/server/src/rooms/ShardRoom.ts` (line 1547-1548)
+- Creature death call: `packages/server/src/rooms/ShardRoom.ts` (line 1627)
+- Test update: `packages/shared/src/__tests__/types.test.ts` (line 52)

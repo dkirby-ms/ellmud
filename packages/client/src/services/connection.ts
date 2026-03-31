@@ -19,6 +19,7 @@ import {
   type ZoneTransferMessage,
   type EquipItemMessage,
   type UnequipItemMessage,
+  type RoomOccupantsMessage,
 } from '@ellmud/shared';
 
 const WS_ENDPOINT = import.meta.env.VITE_WS_URL ??
@@ -36,6 +37,7 @@ export interface MessageHandlers {
   onLoadoutUpdate?: (msg: LoadoutUpdateMessage) => void;
   onStashUpdate?: (msg: StashUpdateMessage) => void;
   onPlayerState?: (msg: import('@ellmud/shared').PlayerStateMessage) => void;
+  onRoomOccupants?: (msg: RoomOccupantsMessage) => void;
   onError: (code: number, message: string) => void;
   onLeave: (code: number) => void;
 }
@@ -81,6 +83,9 @@ export async function connect(
   }
   if (handlers.onZoneTransfer) {
     room.onMessage(MessageTypes.ZONE_TRANSFER, handlers.onZoneTransfer);
+  }
+  if (handlers.onRoomOccupants) {
+    room.onMessage(MessageTypes.ROOM_OCCUPANTS, handlers.onRoomOccupants);
   }
 
   room.onError((code, message) => handlers.onError(code, message ?? 'Unknown error'));
@@ -133,6 +138,9 @@ export async function switchRoom(
   }
   if (handlers.onZoneTransfer) {
     newRoom.onMessage(MessageTypes.ZONE_TRANSFER, handlers.onZoneTransfer);
+  }
+  if (handlers.onRoomOccupants) {
+    newRoom.onMessage(MessageTypes.ROOM_OCCUPANTS, handlers.onRoomOccupants);
   }
 
   newRoom.onError((code, message) => handlers.onError(code, message ?? 'Unknown error'));

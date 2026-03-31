@@ -345,6 +345,10 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
             switchingRef.current = false;
           });
       },
+      onRoomOccupants: (msg: import('@ellmud/shared').RoomOccupantsMessage) => {
+        if (disposed) return;
+        dispatch({ type: 'SET_ROOM_OCCUPANTS', occupants: msg });
+      },
       onLeave: (code: number) => {
         if (!disposed && !switchingRef.current) {
           dispatch({ type: 'SET_CONNECTION_STATUS', status: 'disconnected' });

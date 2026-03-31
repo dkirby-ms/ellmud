@@ -90,6 +90,10 @@ export interface AppState {
   loadout: EquipmentSlots;
   stashItems: DisplayItem[];
   pendingEquipAction: boolean;
+  roomOccupants: {
+    creatures: Array<{ id: string; name: string; type: string; aggressive: boolean }>;
+    players: Array<{ id: string; name: string }>;
+  };
 }
 
 export const initialState: AppState = {
@@ -120,6 +124,7 @@ export const initialState: AppState = {
   loadout: createEmptyEquipmentSlots(),
   stashItems: [],
   pendingEquipAction: false,
+  roomOccupants: { creatures: [], players: [] },
 };
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
@@ -148,7 +153,8 @@ export type AppAction =
   | { type: 'SET_STASH_ITEMS'; items: DisplayItem[] }
   | { type: 'SET_PENDING_EQUIP'; pending: boolean }
   | { type: 'SET_ACTIVE_CHARACTER'; character: CharacterSummary | null }
-  | { type: 'SET_PLAYER_STATE'; hp: number; maxHp: number; stamina: number; maxStamina: number; statusEffects: StatusEffect[] };
+  | { type: 'SET_PLAYER_STATE'; hp: number; maxHp: number; stamina: number; maxStamina: number; statusEffects: StatusEffect[] }
+  | { type: 'SET_ROOM_OCCUPANTS'; occupants: AppState['roomOccupants'] };
 
 const MAX_MESSAGES = 500;
 
@@ -194,7 +200,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_INVENTORY':
       return { ...state, inventory: action.items };
     case 'CLEAR_MESSAGES':
-      return { ...state, messages: [] };
+      return { ...state, messages: [], roomOccupants: { creatures: [], players: [] } };
     case 'SET_LOADOUT':
       return { ...state, loadout: action.slots, pendingEquipAction: false };
     case 'SET_STASH_ITEMS':
@@ -212,6 +218,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         playerMaxStamina: action.maxStamina,
         statusEffects: action.statusEffects,
       };
+    case 'SET_ROOM_OCCUPANTS':
+      return { ...state, roomOccupants: action.occupants };
     default:
       return state;
   }
