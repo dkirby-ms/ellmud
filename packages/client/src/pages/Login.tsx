@@ -228,7 +228,7 @@ export default function Login() {
               {loading
                 ? "Connecting..."
                 : isRegister
-                  ? "Create Shardwalker"
+                  ? "Create Character"
                   : "Enter the Refuge"}
             </button>
           </form>
