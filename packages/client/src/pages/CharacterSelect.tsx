@@ -131,7 +131,7 @@ export default function CharacterSelect() {
           className="text-accent-gold mb-6 font-serif"
           style={{ fontSize: "1.5rem" }}
         >
-          Your Shardwalkers
+          Your Characters
         </h2>
 
         {error && (
@@ -208,7 +208,7 @@ export default function CharacterSelect() {
             }}
             className="w-full border-2 border-dashed border-border-muted hover:border-accent-gold text-text-secondary hover:text-accent-gold py-6 rounded-lg transition-colors font-sans"
           >
-            + New Shardwalker
+            + New Character
           </button>
         </div>
       </div>
@@ -221,7 +221,7 @@ export default function CharacterSelect() {
               className="text-accent-gold mb-6 font-serif"
               style={{ fontSize: "1.5rem" }}
             >
-              Create New Shardwalker
+              Create New Character
             </h2>
 
             <form onSubmit={handleCreate} className="space-y-6">
