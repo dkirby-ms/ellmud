@@ -6377,3 +6377,1675 @@ Modifying the shared `layoutScore` weight breaks the diagonal optimization traje
 
 - Layout computation ~10% slower for large zones (additional relaxation pass)
 - Future zone topology issues should be addressed by enhancing Phase 6 strategies, not by modifying `layoutScore` weights
+# Decision: SVG Favicon for Ellmud Client
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2025-03-31  
+**Status:** Implemented
+
+## Context
+The Ellmud client had no favicon — browsers showed a generic blank tab icon. The `index.html` had no `<link rel="icon">` tag, and no favicon file existed in `public/`.
+
+## Decision
+- Created `packages/client/public/favicon.svg` — a sword icon on a dark background (`#0A0B0F`, matching the app's body background).
+- Used SVG format for crisp rendering at any size and zero build tooling overhead.
+- The sword has a steel blade gradient, gold crossguard/pommel (matching the app's gold accent palette), and a leather grip — fitting the dark fantasy aesthetic.
+- Added `<link rel="icon" type="image/svg+xml" href="/favicon.svg" />` to `index.html`.
+
+## Why SVG?
+- Scales perfectly to any tab/bookmark size.
+- Supported by all modern browsers.
+- No need for multiple PNG sizes or a `.ico` file.
+- Easy to tweak colors later if the palette evolves.
+
+## Tradeoffs
+- Very old browsers (IE) won't show the SVG favicon. Acceptable for this project — the client is a React/Vite app that doesn't run in IE anyway.
+- No `site.webmanifest` was added since none existed. Can be added later if PWA support is needed.
+
+### Redis ACA Dev Service: Bicep-Managed
+
+**By:** Drizzt (Engine Dev)
+**Date:** 2026-03-30
+
+**What**
+
+Redis ACA add-on is now deployed via Bicep as a `Microsoft.App/containerApps` resource with `configuration.service.type: 'redis'`, replacing the manual `az containerapp add-on redis create` CLI step.
+
+**Why**
+
+Infrastructure should be fully declarative. The Redis add-on was the last manually-provisioned resource, creating a gap between what Bicep deploys and what the app expects at runtime.
+
+**Constraints**
+
+- The Redis resource must be created in the `deployApp=true` module call (second phase), not the environment-only phase
+- `dependsOn` ensures the Redis service exists before the container app tries to bind to it
+- Conditional on `redisServiceName != ''` to preserve backward compatibility
+
+**Impact**
+
+- `az containerapp add-on redis create` CLI step is no longer needed for new deployments
+- Existing environments with CLI-created Redis: no conflict — Bicep will adopt or recreate the resource by name
+- All team members deploying infrastructure should use `az deployment group create` with the Bicep template; no manual add-on steps required
+
+# Room Occupants UI
+
+**Date:** 2026-03-30  
+**Author:** Regis (Frontend Dev)  
+**Status:** Implemented
+
+## Decision
+
+Added room occupants display to the client's right status panel showing creatures and players in the current room. The UI groups creatures by type, shows counts for duplicates, and uses visual indicators for aggressive vs. passive creatures.
+
+## Context
+
+Players need to know what creatures and other players are in their current room. This is fundamental MUD information that was previously only available through text output (look command). The server (Jarlaxle) is implementing a `ROOM_OCCUPANTS` message that broadcasts this data on room entry and when occupants change.
+
+## Implementation
+
+### Shared Types (packages/shared)
+
+```typescript
+// MessageTypes
+ROOM_OCCUPANTS: 'room_occupants'
+
+// Interface
+export interface RoomOccupantsMessage {
+  creatures: Array<{
+    id: string;
+    name: string;
+    type: string;
+    aggressive: boolean;
+  }>;
+  players: Array<{
+    id: string;
+    name: string;
+  }>;
+}
+```
+
+### Client State (store.ts)
+
+- Added `roomOccupants: { creatures: [], players: [] }` to AppState
+- Added `SET_ROOM_OCCUPANTS` action
+- Clear occupants on `CLEAR_MESSAGES` (room switch/zone transfer)
+
+### Message Handler (connection.ts, useShardConnection.ts)
+
+- Added optional `onRoomOccupants` handler to MessageHandlers interface
+- Registered in both `connect()` and `switchRoom()`
+- Handler dispatches `SET_ROOM_OCCUPANTS` action
+
+### UI Component (RoomOccupants.tsx)
+
+**Creature Display:**
+- Groups by `type` field (e.g., 3 slum rats → "⚔ Slum Rat (x3)")
+- Aggressive creatures: amber ⚔ icon
+- Passive creatures: gray · icon
+
+**Player Display:**
+- Each player on separate line with blue 👤 icon
+- Format: "👤 PlayerName"
+
+**Empty State:**
+- Shows "The room is quiet." when no occupants
+
+**Interaction:**
+- All entries are clickable buttons (onClick no-op for now)
+- Ready for future targeting/inspect features
+
+## Visual Design
+
+Matches existing MUD aesthetic:
+- Dark background (`bg-gray-800/50` on hover)
+- Muted text colors (gray-300 for names, gray-500 for counts)
+- Section header: "IN THIS ROOM" (uppercase, gray-500, tracking-wider)
+- Compact spacing (space-y-1 for entries, space-y-2 for section)
+- Amber (#F59E0B) for danger indicators (aggressive creatures)
+- Blue (#60A5FA) for player indicators
+
+## Placement
+
+Right status panel in ShardExploration.tsx, between:
+1. Status Effects (above)
+2. **Room Occupants** (new)
+3. Equipment Silhouette (below)
+
+This puts occupants near the top of the status panel for quick visibility during exploration and combat.
+
+## Pattern: Creature Aggregation
+
+```typescript
+const groupedCreatures = creatures.reduce<GroupedCreature[]>((acc, creature) => {
+  const existing = acc.find(g => g.type === creature.type);
+  if (existing) {
+    existing.count++;
+  } else {
+    acc.push({ type: creature.type, name: creature.name, aggressive: creature.aggressive, count: 1 });
+  }
+  return acc;
+}, []);
+```
+
+**Why group by type?**
+- Reduces visual clutter (3 rats → 1 line with count)
+- Still shows total threat level (count is visible)
+- Matches how MUDs traditionally display multiple creatures
+
+**Assumption:** Creatures of the same `type` have identical `name` and `aggressive` properties. The server should ensure this consistency.
+
+## Server Contract
+
+The server must send `ROOM_OCCUPANTS` message:
+1. When player enters room (look, go commands)
+2. When room occupants change (creature spawn/despawn, player enter/leave)
+3. Message includes ALL current occupants (not deltas)
+
+The client does not maintain occupant state across rooms — each room entry gets a fresh `ROOM_OCCUPANTS` message.
+
+## State Lifecycle
+
+1. **Room entry:** Server sends `ROOM_OCCUPANTS` → client updates state → UI renders
+2. **Occupants change:** Server sends updated `ROOM_OCCUPANTS` → state updates → UI re-renders
+3. **Room switch:** `CLEAR_MESSAGES` fires → occupants cleared → wait for new `ROOM_OCCUPANTS`
+4. **Zone transfer:** Same as room switch
+
+## Future Enhancements
+
+**Click to target:**
+- Wire onClick to dispatch "attack <creature>" or "inspect <creature>"
+- Visual feedback on hover/click
+
+**Player metadata:**
+- Show level, class, or status (idle, in-combat, etc.)
+- Distinguish NPCs from player characters
+
+**Creature status:**
+- Show HP bars for creatures in combat
+- Show "sleeping", "patrolling" states
+
+**Filtering/sorting:**
+- Toggle to hide/show players
+- Sort by threat (aggressive first) or alphabetically
+
+## Trade-offs
+
+**Grouping vs. individual entries:**
+- ✅ Reduces clutter (3 rats → 1 line)
+- ❌ Loses individual creature identity (can't target "the injured rat")
+- **Decision:** Grouping is better for exploration. Combat targeting can use a separate targeting system if needed.
+
+**Always visible vs. conditional render:**
+- ✅ Always shows "IN THIS ROOM" section (even when empty)
+- ✅ "The room is quiet." empty state is informative
+- ❌ Takes up vertical space when empty
+- **Decision:** Always visible. Knowing a room is empty is valuable information.
+
+**Icons vs. text labels:**
+- ✅ ⚔ and 👤 are compact and instantly recognizable
+- ❌ May not render on all platforms/fonts
+- **Decision:** Use icons. They're part of the modern MUD aesthetic and match the zone designer UI patterns.
+
+## Testing
+
+**TypeScript:** ✅ Clean compilation after shared package rebuild  
+**Client tests:** ✅ 10 connection tests pass (no changes to connection logic)  
+**Runtime:** ⏳ Pending server implementation (Jarlaxle's parallel task)
+
+## Impact on Other Systems
+
+**None.** This is a purely additive feature:
+- No changes to existing state or handlers
+- No changes to combat system
+- No changes to command processing
+- Component can be removed without breaking anything
+
+## Dependencies
+
+**Blocked on:** Jarlaxle implementing server-side `ROOM_OCCUPANTS` message broadcast  
+**Blocks:** None. Feature is optional and non-critical for gameplay.
+
+# Fix 7 — Collapsed-Building-1 ↔ Rubble-Street-1 Diagonal (Δ=2)
+
+**Author:** Laeral (Content Designer)
+**Date:** 2025-07-25
+**Zone:** The Siltgate (138 rooms, unchanged)
+**For:** Bruenor (SQL migration), Minsc (test data update)
+
+---
+
+## Conflict
+
+`rubble-street-1` (13,0) ↔ `collapsed-building-1` (15,1) — south/north exit with dx=±2.
+
+These are the **last 2 diagonal exits** in the zone (one exit pair, bidirectional).
+
+## Root Cause
+
+Two BFS branches converge at `collapsed-building-1`:
+
+- **Eastern branch** (tree edge): `carrion-field` (13,2) →E→ `collapsed-building-3` (14,2) →E→ `rubble-passage-1` (15,2) →N→ `collapsed-building-1` (15,1). This pins cb1 to **x=15**.
+- **Northern branch** (back edge): `rubble-street-1` (13,0) →S→ cb1. rs1 sits at **x=13** due to the beggars-lane chain: bl3(12,0) →E→ rs1(13,0).
+
+The south exit from rs1 expects cb1 at (13,1), but the tree already placed it at (15,1). **Offset: dx=+2.**
+
+Key observation: `rubble-street-3` sits at **(15,0)** — three east steps along the chain: bl3→rs1→rs2→rs3. That x-coordinate (15) matches cb1's x (15). The south exit from rs3 to cb1 would be perfectly orthogonal.
+
+## Resolution
+
+**REROUTE** the exit from `rubble-street-1` ↔ `collapsed-building-1` to `rubble-street-3` ↔ `collapsed-building-1`. No new rooms. No structural changes. Pure exit reroute.
+
+**Narrative justification:** The collapsed building is accessed from the eastern end of Rubble Street, where the destruction is heaviest and entire facades have toppled across the road — a natural point where a gap in the rubble leads south into the ruined structure. The western stretch of the street (rs1) no longer offers direct access; players proceed east along the rubble to find the entry.
+
+---
+
+### Exits to REMOVE
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `rubble-street-1` | south | `collapsed-building-1` |
+| `collapsed-building-1` | north | `rubble-street-1` |
+
+### Exits to ADD
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `rubble-street-3` | south | `collapsed-building-1` |
+| `collapsed-building-1` | north | `rubble-street-3` |
+
+### New Rooms
+
+None.
+
+### Room Type Changes
+
+None. `rubble-street-3` currently has 3 exits (north, west, east) and gains a 4th (south), remaining type `corridor`. This mirrors the Fix 5 precedent where `promenade-walk-3` gained a 4th cardinal exit without a type change.
+
+---
+
+### Cycle Validation
+
+The reroute creates a new cycle through the full Ashgate loop. Walking it:
+
+```
+rubble-street-3 →S→ collapsed-building-1 →S→ rubble-passage-1
+→W→ collapsed-building-3 →W→ carrion-field →W→ scorched-plaza
+→W→ tar-pit →W→ rope-walk →W→ barnacled-quay →W→ fish-market
+→W→ dock-street-1 →N→ tavern-row →N→ market-square →E→ bazaar-row-1
+→E→ bazaar-row-2 →E→ bazaar-row-3 →E→ span-gate →E→ beggars-lane-1
+→E→ beggars-lane-2 →E→ beggars-lane-3 →E→ rubble-street-1
+→E→ rubble-street-2 →E→ rubble-street-3
+```
+
+| Direction | Count | Offset |
+|---|---|---|
+| South | 2 | dy = +2 |
+| North | 2 | dy = −2 |
+| East | 10 | dx = +10 |
+| West | 8 | dx = −8 |
+
+**Cycle sum: (10−8, 2−2) = (2, 0)**
+
+The cycle sum is non-zero, meaning not all edges can be simultaneously grid-perfect. However, in BFS layout this is harmless — only **non-tree (back) edges** can be diagonal, and the sole back edge in this cycle is `rubble-street-3` →S→ `collapsed-building-1`.
+
+**Back-edge check:**
+- `rubble-street-3` at (15, 0)
+- `collapsed-building-1` at (15, 1)
+- Direction: south → expected offset (0, +1)
+- Actual offset: (15−15, 1−0) = **(0, +1) ✓ ORTHOGONAL**
+
+The (2, 0) cycle slack is absorbed by the BFS tree structure — the two branches from `market-square` naturally accumulate different x-totals, but they converge at the correct position for the back edge. All tree edges remain unit-length cardinal by construction.
+
+**Diagonal count: 2 → 0 ✓**
+
+---
+
+### Gameplay Impact
+
+| Metric | Before | After |
+|---|---|---|
+| Shortest path: beggars-lane-3 → cb1 | 2 hops (bl3→rs1→cb1) | 4 hops (bl3→rs1→rs2→rs3→cb1) |
+| Shortest path: bl3 → carrion-field | 6 hops | 8 hops |
+| rs1 exit count | 3 (W, E, S) | 2 (W, E) |
+| rs3 exit count | 3 (N, W, E) | 4 (N, S, W, E) |
+| Zone room count | 138 | 138 (unchanged) |
+| Zone connectivity | Fully connected | Fully connected |
+
+The 2-hop increase is minor. The Ashgate Ruins remain fully explorable and interconnected via the same rooms — only the entry point shifts from the western end of Rubble Street to the eastern end, which narratively matches the "destruction intensifies eastward" description already present on `rubble-street-3`.
+
+`rubble-street-1` becomes a simple east-west corridor (its description mentions "the street dissolves into a field of broken stone" — still fits without a south exit). `rubble-street-3` becomes a 4-way hub where the destruction is worst — a natural junction where a gap leads south into the collapsed building.
+
+---
+
+## Notes for Bruenor
+
+1. This requires a migration `006_siltgate_diagonal_fix.sql` (or appended to 005 if not yet applied).
+2. Only 2 DELETE + 2 INSERT on `zone_exits`. No room inserts, no type changes.
+3. Consider appending to `rubble-street-3` description: `A gap in the southern wall reveals a passage into a pancaked building below.` (nice-to-have, not blocking).
+
+## Notes for Minsc
+
+1. Update any test assertions that check rs1's south exit or cb1's north exit.
+2. The diagonal-count assertion should drop from 2 to 0.
+
+# Decision: Passive Creature System
+
+**Author:** Jarlaxle (Game Systems Developer)  
+**Date:** 2025-03-30  
+**Status:** Implemented
+
+## Context
+
+City wildlife creatures (pigeons, dogs) in the Siltgate zone were unconditionally attacking players when they entered the same room. This broke immersion — ambient city animals should not be hostile.
+
+## Problem
+
+The behavior state machine in `behavior.ts` had no concept of "passive" creatures. Line 62 forced ALL creatures into hostile state when players were present:
+
+```typescript
+if (playersHere.length > 0) {
+  return 'hostile';
+}
+```
+
+## Solution
+
+Added an `aggressive: boolean` flag to the creature system:
+- Defaults to `true` for backward compatibility
+- When `false`, creatures remain `idle` regardless of player presence or noise
+- Passive creatures can still patrol normally
+
+## Implementation
+
+### Type Changes
+- `Creature` interface: added `aggressive: boolean`
+- `CreatureTemplate` interface: added `aggressive: boolean`
+- `CreatureType`: extended to `string` union to support dynamic types from DB
+
+### Behavior Logic
+Early-exit check in `transitionState()`:
+```typescript
+if (!creature.aggressive) {
+  return 'idle';
+}
+```
+
+### Database
+Migration `008_passive_creatures.sql`:
+```sql
+ALTER TABLE creature_definitions ADD COLUMN aggressive BOOLEAN NOT NULL DEFAULT true;
+UPDATE creature_definitions SET aggressive = false WHERE type IN ('pigeon_flock', 'city_dog');
+```
+
+## Team Impact
+
+**For Content Designers:**
+- When adding wildlife/ambient NPCs, set `aggressive: false` in creature_definitions
+- Examples: pigeons, dogs, ambient city rats, merchants, quest givers
+
+**For Developers:**
+- All new CreatureTemplate definitions must include `aggressive: boolean`
+- Test helpers creating creatures must include `aggressive` field
+- Backward compatibility ensured: existing creatures default to aggressive=true
+
+**For QA:**
+- Verify passive creatures in Siltgate (pigeons at market square, dogs in alleys) do not initiate combat
+- Verify passive creatures still patrol normally
+- Verify aggressive creatures (thugs, smugglers, etc.) still attack on sight
+
+## Testing
+
+- 68 creature tests passing (4 new tests for passive behavior)
+- Zero regressions in combat, behavior, or spawning systems
+- TypeScript compilation clean
+
+## Files Changed
+
+- `packages/server/src/creatures/types.ts`
+- `packages/server/src/creatures/behavior.ts`
+- `packages/server/src/creatures/CreatureManager.ts`
+- `packages/server/src/content/ContentRegistry.ts`
+- `packages/server/src/db/migrations/008_passive_creatures.sql`
+- All creature template files (5 total)
+- Test files (2 files updated)
+
+# Decision: Creature Admin Page — Aggressive Toggle + Loot Table Item Lookup + Room Description Field
+
+**Date:** 2026-03-30  
+**Author:** Regis (Frontend Dev)  
+**Status:** Implemented
+
+## Context
+
+The creature admin detail page (`CreatureDetail.tsx`) had three issues:
+
+1. **Missing aggressive toggle** — The `aggressive` boolean column exists in DB (migration 008) but wasn't exposed in the UI
+2. **Loot table "Unknown Item" bug** — Dropdown showed "Unknown Item" because the API returns only `{itemId, dropWeight}`, not item names
+3. **Missing room_description field** — Migration 009 added `room_description` column but UI had no textarea to edit it
+
+## Decision
+
+### 1. Aggressive Toggle + Behavior Fields
+
+Added a new "Behavior & Spawn" section to the admin form containing:
+- **Aggressive checkbox** — Labeled "Aggressive (attacks players on sight)", defaults to `true`
+- **Idle Ticks Min/Max inputs** — Already existed in form state but not visible; now rendered in Behavior & Spawn section
+
+### 2. Room Description Textarea
+
+Added a new textarea field for `room_description` (in-room flavor text):
+- Placed after the Description field in the Identity section
+- 2-row textarea with placeholder: "A slum rat sniffs along the ground."
+- Helper text: "In-room flavor text shown to players"
+- Maps to DB column `room_description` via camelCase conversion (`roomDescription` in JS)
+
+### 3. Loot Table Item Lookup
+
+Fixed the "Unknown Item" bug by:
+- Fetching all items via `listItems()` in a `useEffect` on mount
+- Building a `Map<string, string>` (itemId → itemName) in state
+- Updating the loot table dropdown to render all available items (not just the current item)
+- Resolving item names from the lookup when loading creature data or changing dropdown selection
+
+**Key pattern:** When `updateLootEntry` is called with `field === 'itemId'`, it looks up the item name from `itemLookup` and updates both `itemId` and `itemName` in the entry.
+
+### 4. Server-Side Store Updates
+
+Updated `PgCreatureDefinitionsStore.ts` to include the new columns:
+- Added `room_description: string | null` and `aggressive: boolean` to `CreatureRow` interface
+- Updated `rowToEntity()` to map `room_description → roomDescription` and `aggressive`
+- Updated all SQL queries (`getAll`, `getById`, `create`, `update`) to include both columns
+- Defaults: `aggressive = true`, `room_description = null`
+
+## Rationale
+
+- **Aggressive toggle needed for wildlife:** Passive creatures (city rats, pigeons, dogs) don't attack players. Admins need UI control over this behavior.
+- **Room description for immersion:** Players see this text when entering a room with the creature (e.g., "A slum rat sniffs along the ground."). Essential for atmosphere.
+- **Item lookup prevents "Unknown Item":** The loot table stores only IDs, not names. Fetching the items list and resolving names client-side matches patterns from other admin pages.
+- **Behavior section groups AI fields:** `aggressive`, `idleTicksMin`, `idleTicksMax` all relate to creature AI behavior, so they belong in the same section.
+
+## Impact
+
+- **UI:** Creature admin page now exposes all creature behavior fields
+- **Database:** No migration needed (columns already exist from migrations 008 & 009)
+- **API:** No API changes needed — `aggressive` and `roomDescription` are already part of `ContentEntity` payload
+- **Build:** ✅ Client and server TypeScript compile clean
+
+## Files Modified
+
+- `packages/client/src/pages/admin/CreatureDetail.tsx` — UI changes (form fields, item lookup)
+- `packages/server/src/admin/content/PgCreatureDefinitionsStore.ts` — SQL queries + column mapping
+
+## Future Considerations
+
+- If more foreign key references are added to admin pages (e.g., creature modifiers, skills), follow the same item lookup pattern: fetch the related entities list, build a Map, resolve names client-side.
+- Consider extracting the item lookup logic into a custom hook (`useItemLookup`) if it's needed on other admin pages.
+
+# Warrens Zone Topology Analysis
+
+**Date:** 2025-07-25
+**Author:** Drizzt (Engine Dev)
+**Status:** Analysis complete — fixes recommended, not yet implemented
+
+## Findings
+
+Ran `validateZoneTopology()` against the Warrens zone (101 rooms, 278 exits):
+
+- **18 topological conflicts** (max delta: 6)
+- **29 position collisions**
+- All 101 rooms reachable (no orphans)
+
+## Root Cause
+
+**Sewer vertical shortcuts** cause 16 of 18 conflicts. Three surface-to-sewer shafts (sunken-square, sluice-gate, cistern-access) are 4–6 grid cells apart on the surface, but the underground sewer connects them in 1–4 steps. The underground path lengths don't match the surface distances.
+
+The remaining 2 conflicts come from a **surface approach loop** where `sunken-square → east → slum-r1c1` creates a shortcut into the grid NW corner that disagrees with the main approach spine by 4 cells.
+
+The 7×7 slum grid itself has zero internal topology issues.
+
+## Recommended Fixes (team decision needed)
+
+1. **Lengthen sewer paths** — add ~4 intermediate rooms between the-ratways and sewer-main-junction, ~3 between sewer-cistern and sewer-west-conduit. Fixes 16 of 18 conflicts.
+2. **Break sunken-square → slum-r1c1 shortcut** — add 2–3 bridge rooms or remove the direct connection. Fixes remaining 2 conflicts.
+3. **Alternative: reduce to 2 sewer shafts** — disconnect cistern-access from the sewer, making it a dead-end. Simpler but reduces gameplay options.
+
+## Priority
+
+**Medium.** Max delta (6) is within the layout engine's tolerance — Siltgate's delta-17 was much worse and still rendered. But the 29 collisions will cause dense spiral placement in the map. Fix if we're doing a topology pass; skip if shipping soon.
+
+## Action Items
+
+- [ ] Team decides which fix approach (1/2/3 or combination)
+- [ ] Add Warrens to `computeLayout.test.ts` to catch regressions
+- [ ] Implement chosen fixes in `003_seed_zones.sql`
+
+# Decision: Creature Room Descriptions
+
+**Date:** 2026-03-30  
+**Agent:** Jarlaxle (Game Systems Developer)  
+**Status:** Implemented
+
+## What
+
+Added atmospheric room descriptions for creatures that replace the generic "Creatures: {names}" listing with rich, immersive per-creature flavor text.
+
+## How
+
+1. **Database Layer:**
+   - Migration 009 adds `room_description TEXT` column to `creature_definitions`
+   - Seeded 15 existing creatures with atmospheric descriptions (e.g., "A slum rat sniffs along the ground.")
+
+2. **Type System:**
+   - Added `roomDescription?: string` to both `CreatureTemplate` and `Creature` interfaces
+   - Added to `CreatureRef` type with `type?: string` for grouping
+
+3. **Data Flow:**
+   - ContentRegistry queries and maps `room_description` from DB to template
+   - CreatureManager copies `roomDescription` from template to instance in all 3 spawn methods
+   - ShardRoom includes `type` and `roomDescription` when building creature refs for command context
+
+4. **Rendering Logic (look.ts + go.ts):**
+   - Group creatures by `type` (not name — type is the unique identifier)
+   - Show `roomDescription` if available, otherwise fallback to "A {name} lurks here."
+   - Append ` (x{count})` when multiple of same type
+   - Each creature type gets its own line (no "Creatures:" prefix)
+
+## Why
+
+**Immersion:** Generic "Creatures: Drowned Revenant, Slum Rat" is mechanical and breaks atmosphere. Rich descriptions like "A drowned revenant sways in the murk, waterlogged limbs dragging." make rooms feel alive.
+
+**Grouping by Type:** Prevents spam when there are multiple rats/dogs in a room. "A slum rat sniffs along the ground. (x3)" is cleaner than three separate lines.
+
+**Fallback Pattern:** Optional field with graceful fallback ensures backward compatibility — creatures without room descriptions still render (using generic "lurks here" text).
+
+## Impact
+
+- **Room descriptions are now immersive** — players see atmospheric creature flavor instead of bare names
+- **Backward compatible** — creatures without `roomDescription` still render with fallback text
+- **Extensible** — new creatures can be added with room descriptions via ContentRegistry/admin CRUD
+- **Test coverage maintained** — 112 tests passing, including updated assertions for new format
+
+## Pattern for Future Fields
+
+When adding optional fields to creatures:
+1. Migration → add column with nullable or default value
+2. Types → add field to `CreatureTemplate` and `Creature` interfaces
+3. ContentRegistry → add to `CreatureRow`, update query, map in `loadCreatures()`
+4. CreatureManager → copy field in all 3 create methods (`createCreature`, `createZoneCreature`, `spawnSingleCreature`)
+5. If command-visible: add to `CreatureRef` type, update ShardRoom mappings, update command handlers
+6. Update test helpers (e.g., `buildCtx`) to mirror production code
+
+**Related Files:**
+- `packages/server/src/db/migrations/009_creature_room_descriptions.sql`
+- `packages/server/src/creatures/types.ts`
+- `packages/server/src/content/ContentRegistry.ts`
+- `packages/server/src/creatures/CreatureManager.ts`
+- `packages/server/src/commands/index.ts` (CreatureRef type)
+- `packages/server/src/rooms/ShardRoom.ts` (buildCommandContext)
+- `packages/server/src/commands/handlers/look.ts`
+- `packages/server/src/commands/handlers/go.ts`
+- `packages/server/src/__tests__/creature-wiring.test.ts`
+
+# Bridge Room Designs — Siltgate Topology Fixes
+
+**Author:** Laeral (Content Designer)
+**Date:** 2025-07-24
+**Zone:** The Siltgate (136 → 138 rooms)
+**For:** Bruenor (SQL migration), Minsc (test data update)
+
+---
+
+## Summary
+
+Six topological conflicts were identified in the Siltgate zone data. After analysis, the fixes require:
+
+- **2 new rooms** added (zone grows from 136 to 138)
+- **5 exit pairs removed** (10 individual exit rows deleted)
+- **3 exit pairs added** (6 individual exit rows inserted)
+- **1 exit pair re-routed** through an existing room (no new room needed)
+
+The fixes eliminate all cycles where direction offsets fail to sum to (0,0), verified by BFS from `market-square`.
+
+---
+
+## Fix 1 — Docks-to-Slums Shortcut (Δ=9, CRITICAL)
+
+**Conflict:** `dock-street-5` (0,6) ↔ `narrow-alley-3` (5,1) — direct east/west exit across 9 grid cells.
+
+**Root cause:** Dockward and Beggar's Span are reached via completely different routes from Market Square. The shortcut implies adjacency that contradicts the grid by (-4, +5).
+
+**Resolution:** REMOVE the shortcut. No bridge rooms — the 9-cell gap would require 9 intermediate rooms, which is unjustifiable. Players traverse between Dockward and Beggar's Span via Market Square (the intended main route).
+
+### Exits to REMOVE
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `dock-street-5` | east | `narrow-alley-3` |
+| `narrow-alley-3` | west | `dock-street-5` |
+
+### Exits to ADD
+
+None.
+
+### New Rooms
+
+None.
+
+### Cycle Validation
+
+Removing the exit eliminates the only cycle connecting these rooms. No cycle to validate.
+
+---
+
+## Fix 2 — Ashgate Dual-Approach (Δ=5, HIGH)
+
+**Conflict:** `rubble-street-1` (8,0) ↔ `rubble-street-2` via east exit implied position (9,0), but `rubble-street-2` is also reached via `scorched-plaza` (5,2) → north at position (5,1). Delta = 5.
+
+**Root cause:** Ashgate Wastes is reachable from two directions — Beggar's Span (via rubble-street-1) and Dockward (via tar-pit → scorched-plaza). These surface routes place the shared room `rubble-street-2` in contradictory grid positions.
+
+**Resolution:** REMOVE the `scorched-plaza` ↔ `rubble-street-2` link. ADD 1 bridge room (`rubble-passage-1`) connecting `collapsed-building-1` to `collapsed-building-3`, re-linking the two Ashgate sub-areas through a rubble crawlway.
+
+### Exits to REMOVE
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `scorched-plaza` | north | `rubble-street-2` |
+| `rubble-street-2` | south | `scorched-plaza` |
+
+### Exits to ADD
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `collapsed-building-1` | south | `rubble-passage-1` |
+| `rubble-passage-1` | north | `collapsed-building-1` |
+| `rubble-passage-1` | west | `collapsed-building-3` |
+| `collapsed-building-3` | east | `rubble-passage-1` |
+
+### New Room: `rubble-passage-1`
+
+| Field | Value |
+|---|---|
+| **slug** | `rubble-passage-1` |
+| **name** | `Rubble Passage` |
+| **description** | `A narrow crawlway hacked through fallen masonry, barely wide enough for one. Splintered roof beams jut from the walls like broken ribs, and the dust is so thick each step raises a grey cloud that coats the throat. Something skitters in the dark gap ahead — too large for a rat.` |
+| **type** | `corridor` |
+| **properties** | `{pvp,rubble,narrow}` |
+| **npcs** | `[]` |
+| **loot_containers** | `[]` |
+| **hazards** | `[]` |
+
+**Grid position:** (8, 2)
+
+### Cycle Validation
+
+Cycle through the bridge (20 steps):
+
+```
+collapsed-building-1 →S→ rubble-passage-1 →W→ collapsed-building-3
+→W→ carrion-field →W→ scorched-plaza →W→ tar-pit →W→ rope-walk
+→W→ barnacled-quay →W→ fish-market →W→ dock-street-1 →N→ tavern-row
+→N→ market-square →E→ bazaar-row-1 →E→ bazaar-row-2 →E→ bazaar-row-3
+→E→ span-gate →E→ beggars-lane-1 →E→ beggars-lane-2 →E→ beggars-lane-3
+→E→ rubble-street-1 →S→ collapsed-building-1
+```
+
+**East exits:** 8 | **West exits:** 8 | **North exits:** 2 | **South exits:** 2
+**Sum:** (8−8, 2−2) = **(0, 0) ✓**
+
+---
+
+## Fix 3 — Sewer Ring (Δ=17, CRITICAL)
+
+**Conflict:** `sewer-junction-2` (6,−1) ↔ `sewer-tunnel-4` (−2,7) — direct east/west exit across 17 grid cells.
+
+**Root cause:** The sewer system forms a continuous east-west tunnel, but its two surface access points (`guild-hall`/`undercity-gate` at (3,−2) and `tide-gate` at (0,7)) are on opposite sides of the city. The underground tunnel implies the rooms are adjacent, but the surface routes place them 17 grid cells apart. This is the most severe conflict in the zone.
+
+**Resolution:** REMOVE the `sewer-junction-2` ↔ `sewer-tunnel-4` connection. The sewer splits into two independent branches:
+
+- **Western branch** (accessed via `guild-hall` → `undercity-gate` → `sewer-junction-1`): sewer-tunnel-8, sewer-tunnel-7, sewer-junction-1, sewer-tunnel-1, sewer-tunnel-2, sewer-junction-2, plus dead-end branches (fungal-cavern, flooded-chamber, sewer-tunnel-3/silt-pool/serpent-den, bone-canal/blackwater-crossing/plague-bearers-lair, drain-grate-1)
+- **Eastern branch** (accessed via `tide-gate` → `sewer-junction-3`): sewer-tunnel-4, sewer-tunnel-5, sewer-junction-3, sewer-tunnel-6, plus dead-end branches (sewer-cistern-1, drain-grate-2/collapsed-sewer, sewer-vault, effluent-outflow)
+
+**Narrative justification:** A massive cave-in has sealed the passage between the two sewer sections. The rubble is impassable — for now. (Future quest hook: "Clear the Sewer Collapse" could re-open this connection once the layout engine supports it, or if the zone is restructured.)
+
+### Exits to REMOVE
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `sewer-junction-2` | east | `sewer-tunnel-4` |
+| `sewer-tunnel-4` | west | `sewer-junction-2` |
+
+### Exits to ADD
+
+None.
+
+### New Rooms
+
+None.
+
+### Cycle Validation
+
+Removing the exit eliminates the ring cycle. The two sewer branches become tree structures (no cycles). No cycle to validate.
+
+**Note for Bruenor:** Consider updating `sewer-junction-2`'s description to mention the collapsed eastern tunnel, and `sewer-tunnel-4`'s description to mention rubble blocking the western passage. Suggested text appended below:
+
+- **sewer-junction-2** append: `The eastern tunnel is choked with fallen masonry — whatever collapse sealed it was recent enough that the dust hasn't settled.`
+- **sewer-tunnel-4** append: `The western end of the tunnel terminates in a wall of rubble and twisted iron. Water seeps through the gaps, but nothing larger than a rat could pass.`
+
+---
+
+## Fix 4 — Vertical Shortcut via Sewer (Δ=8, HIGH)
+
+**Conflict:** `narrow-alley-5` (5,3) ↔ `narrow-alley-6` (3,−2) — direct east/west exit across 8 grid cells.
+
+**Root cause:** `gutter-drain` connects down to `sewer-junction-1`, which connects up to `guild-hall` (via `undercity-gate`). This underground shortcut reaches `narrow-alley-6` (via `gutter-drain` → north) from the guild-hall area instead of from the adjacent alleys. BFS places `narrow-alley-6` at (3,−2) near guild-hall, but it belongs at (6,3) near the other alleys.
+
+**Resolution:** REMOVE the `gutter-drain` ↔ `sewer-junction-1` vertical connection. ADD 1 new room (`gutter-sewer`) as a standalone dead-end sewer access beneath gutter-drain. This gives Beggar's Span residents sewer access without creating a vertical shortcut to the Silver Arcade.
+
+### Exits to REMOVE
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `gutter-drain` | down | `sewer-junction-1` |
+| `sewer-junction-1` | up | `gutter-drain` |
+
+### Exits to ADD
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `gutter-drain` | down | `gutter-sewer` |
+| `gutter-sewer` | up | `gutter-drain` |
+
+### New Room: `gutter-sewer`
+
+| Field | Value |
+|---|---|
+| **slug** | `gutter-sewer` |
+| **name** | `Flooded Gutter` |
+| **description** | `Below the drain grate, a low brick chamber fills with the slum's grey runoff. The water is knee-deep and warm in a way that suggests sources best not contemplated. Crude scratch-marks on the walls — tally marks, names, a crude map — indicate this space has served as a hideout before. The passage south has long since collapsed, leaving only the climb back up.` |
+| **type** | `dead_end` |
+| **properties** | `{pvp,water,enclosed}` |
+| **npcs** | `[{"creatureId": "slum_rat", "spawnCount": 2}]` |
+| **loot_containers** | `[{"type": "search", "items": [{"itemId": "alley_thugs_coin", "dropWeight": 40}]}]` |
+| **hazards** | `[]` |
+
+**Grid position:** (6, 4) — same as `gutter-drain` (up/down = zero displacement)
+
+### Cycle Validation
+
+The new room is a dead-end (single exit: up to `gutter-drain`). Dead-ends create no cycles. No cycle to validate.
+
+**Effect on alley positions:** With the sewer shortcut removed, BFS now reaches `narrow-alley-6` through `narrow-alley-5` → east, placing it at (6,3). All alleys 5–8, gutter-drain, mud-flat, pawn-alley, and their southern branches shift to correct Beggar's Span positions:
+
+| Room | Old position | New position |
+|---|---|---|
+| narrow-alley-6 | (3, −2) | (6, 3) |
+| narrow-alley-7 | (4, −2) | (7, 3) |
+| narrow-alley-8 | (5, −2) | (8, 3) |
+| gutter-drain | (3, −1) | (6, 4) |
+| mud-flat | (4, −1) | (7, 4) |
+| pawn-alley | (5, −1) | (8, 4) |
+| beggar-kings-court | (3, 0) | (6, 5) |
+| broken-bridge | (4, 0) | (7, 5) |
+| ruined-tenement-1 | (5, 0) | (8, 5) |
+| ruined-tenement-2 | (4, 0) | (7, 5) |
+
+---
+
+## Fix 5 — Estates L-Loop (Δ=3, MODERATE)
+
+**Conflict:** `garden-terrace` (2,−3) ↔ `iron-balcony-2` (2,−1) — direct west/east exit across 3 grid cells.
+
+**Root cause:** The cycle garden-terrace → W → iron-balcony-2 → W → iron-balcony-1 → N → promenade-walk-2 → E → promenade-walk-3 → N → garden-terrace sums to (−1, −2) instead of (0, 0). The west exit from garden-terrace implies iron-balcony-2 is at (1,−3), but it's at (2,−1).
+
+**Resolution:** REMOVE the direct `garden-terrace` ↔ `iron-balcony-2` link. ADD a south exit from `promenade-walk-3` to `iron-balcony-2`, re-routing the connection through an existing room. No new rooms needed.
+
+**Narrative justification:** The overlook at promenade-walk-3 has stone steps descending to the iron balcony below. The old direct passage between the garden terrace and balcony (a servant's shortcut) has been sealed.
+
+### Exits to REMOVE
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `garden-terrace` | west | `iron-balcony-2` |
+| `iron-balcony-2` | east | `garden-terrace` |
+
+### Exits to ADD
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `promenade-walk-3` | south | `iron-balcony-2` |
+| `iron-balcony-2` | north | `promenade-walk-3` |
+
+### New Rooms
+
+None.
+
+### Cycle Validation
+
+Cycle through the rerouted connection (6 steps):
+
+```
+garden-terrace →S→ promenade-walk-3 →S→ iron-balcony-2
+→W→ iron-balcony-1 →N→ promenade-walk-2
+→E→ promenade-walk-3 →N→ garden-terrace
+```
+
+| Step | Direction | Offset |
+|---|---|---|
+| garden-terrace → promenade-walk-3 | south | (0, +1) |
+| promenade-walk-3 → iron-balcony-2 | south | (0, +1) |
+| iron-balcony-2 → iron-balcony-1 | west | (−1, 0) |
+| iron-balcony-1 → promenade-walk-2 | north | (0, −1) |
+| promenade-walk-2 → promenade-walk-3 | east | (+1, 0) |
+| promenade-walk-3 → garden-terrace | north | (0, −1) |
+
+**Sum:** (1−1, 2−2) = **(0, 0) ✓**
+
+**Note:** `promenade-walk-3` gains a 4th cardinal exit (N/S/E/W), becoming a 4-way junction. This is acceptable — it represents a formal crossroads in the noble estates where the promenade overlook connects to the iron balconies below via decorative steps.
+
+---
+
+## Fix 6 — Self-Referencing Cross-Zone Exits
+
+**Conflict:** `city-gate` and `ashgate` have exits where `to_room_slug` equals `from_room_slug`:
+
+```sql
+('city-gate', 'west', 'city-gate', 'the-refuge', 'market', false, false)
+('ashgate', 'east', 'ashgate', 'warrens', 'shattered-gate', false, false)
+```
+
+**Root cause:** Cross-zone exits use `to_room_slug` as the local slug (same room), with `target_zone_slug` and `target_room_slug` specifying the actual destination. If the engine interprets `to_room_slug` as a same-zone target, it creates a self-loop.
+
+**Resolution:** This depends on how the exit system processes cross-zone exits. If `target_zone_slug` being non-null causes the engine to ignore `to_room_slug`, these are fine as-is. If not, the `to_room_slug` should be set to NULL or to the actual target room slug.
+
+**For Bruenor:** Verify the exit-processing code. If `to_room_slug` is used for same-zone navigation even when `target_zone_slug` is set, change these exits to use `NULL` for `to_room_slug`. No content design change needed — this is a data-format question.
+
+---
+
+## Complete Change Summary
+
+### New Rooms (2)
+
+| slug | name | type | grid position |
+|---|---|---|---|
+| `rubble-passage-1` | Rubble Passage | corridor | (8, 2) |
+| `gutter-sewer` | Flooded Gutter | dead_end | (6, 4) |
+
+### Exits Removed (10 rows)
+
+| from_room_slug | direction | to_room_slug | fix # |
+|---|---|---|---|
+| `dock-street-5` | east | `narrow-alley-3` | 1 |
+| `narrow-alley-3` | west | `dock-street-5` | 1 |
+| `scorched-plaza` | north | `rubble-street-2` | 2 |
+| `rubble-street-2` | south | `scorched-plaza` | 2 |
+| `sewer-junction-2` | east | `sewer-tunnel-4` | 3 |
+| `sewer-tunnel-4` | west | `sewer-junction-2` | 3 |
+| `gutter-drain` | down | `sewer-junction-1` | 4 |
+| `sewer-junction-1` | up | `gutter-drain` | 4 |
+| `garden-terrace` | west | `iron-balcony-2` | 5 |
+| `iron-balcony-2` | east | `garden-terrace` | 5 |
+
+### Exits Added (8 rows)
+
+| from_room_slug | direction | to_room_slug | fix # |
+|---|---|---|---|
+| `collapsed-building-1` | south | `rubble-passage-1` | 2 |
+| `rubble-passage-1` | north | `collapsed-building-1` | 2 |
+| `rubble-passage-1` | west | `collapsed-building-3` | 2 |
+| `collapsed-building-3` | east | `rubble-passage-1` | 2 |
+| `gutter-drain` | down | `gutter-sewer` | 4 |
+| `gutter-sewer` | up | `gutter-drain` | 4 |
+| `promenade-walk-3` | south | `iron-balcony-2` | 5 |
+| `iron-balcony-2` | north | `promenade-walk-3` | 5 |
+
+### Room Type Changes
+
+| room | old type | new type | reason |
+|---|---|---|---|
+| `collapsed-building-1` | `dead_end` | `corridor` | Now has 2 exits (N, S) |
+
+### Topology Result
+
+- **138 rooms**, all reachable from `market-square`
+- **0 topological conflicts** (BFS-verified)
+- **33 grid collisions** (down from 35 — mostly expected up/down overlaps)
+
+---
+
+## Notes for Bruenor
+
+1. The 10 exit removals and 8 exit additions are in `004_seed_siltgate.sql`. Write a new migration (`005_siltgate_topology_fixes.sql` or similar) that DELETEs the old exits and INSERTs the new ones + new rooms.
+2. `collapsed-building-1` changes from `dead_end` to `corridor` (it now has north and south exits).
+3. The optional description updates for `sewer-junction-2` and `sewer-tunnel-4` (mentioning the collapsed passage) are nice-to-have, not blocking.
+4. The self-referencing cross-zone exits (#6) need a code check before deciding on a fix.
+
+## Notes for Minsc
+
+The `computeLayout.test.ts` topology test data needs updating:
+1. If there's a Siltgate-specific test case, update it to reflect 138 rooms and the changed exits.
+2. The cycle-validation tests (if any) should pass with zero conflicts after these changes.
+3. Key positions to verify in tests: `narrow-alley-6` should be at approximately (6, 3), not (3, −2). `rubble-street-2` should be at approximately (9, 0), not (5, 1).
+
+# Warrens Zone Topology Fixes — Design Specification
+
+**Author:** Laeral (Content Designer)
+**Date:** 2025-07-25
+**Zone:** The Warrens (101 → 109 rooms)
+**For:** Bruenor (SQL migration), Minsc (test data update)
+**Reference:** Siltgate bridge room designs (`.squad/decisions/inbox/laeral-bridge-room-designs.md`)
+
+---
+
+## Summary
+
+Drizzt's topology analysis found 19 BFS conflicts (max delta 6) and 29 position collisions in the Warrens. The root cause: three surface-to-sewer vertical shafts are 4–7 grid cells apart on the surface, but connected in 1–3 hops underground. Additionally, a dual-approach path to `sunken-square` creates conflicting BFS positions for the entire slum grid.
+
+The fixes require:
+
+- **8 new rooms** added (zone grows from 101 to 109)
+- **8 exit pairs removed** (16 individual exit rows deleted)
+- **11 exit pairs added** (22 individual exit rows inserted)
+- **0 topological conflicts** after changes (BFS-verified)
+- **22 grid collisions** (down from 29; remaining are expected up/down overlaps)
+
+---
+
+## Fix A-1 — Lengthen Ratways-to-Junction Sewer Path (4 new rooms)
+
+**Conflict:** The underground path from `the-ratways` to `sewer-main-junction` is 1 east hop. But the surface distance between their shafts (`sunken-square` at grid (3,2) and `sluice-gate` at (3,6)) is 4 cells south. The 1-hop underground shortcut pulls the entire sewer network to the wrong grid position, causing 16 of 19 conflicts.
+
+**Root cause:** `the-ratways →east→ sewer-main-junction` implies the two rooms are 1 east cell apart. But their surface access points are 4 south cells apart with 0 east offset.
+
+**Resolution:** REMOVE the direct `the-ratways ↔ sewer-main-junction` link. ADD a 4-room sewer tunnel chain with net displacement (0, +4): south, south, west, south — then east into the existing `sewer-north-tunnel`, which already connects south to `sewer-main-junction`. The zigzag route (S→S→W→S→E) matches the required grid offset while creating a winding, disorienting sewer passage that fits the Warrens' atmosphere.
+
+### Exits to REMOVE
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `the-ratways` | east | `sewer-main-junction` |
+| `sewer-main-junction` | west | `the-ratways` |
+
+### Exits to ADD
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `the-ratways` | south | `sewer-drip-tunnel` |
+| `sewer-drip-tunnel` | north | `the-ratways` |
+| `sewer-drip-tunnel` | south | `sewer-cracked-conduit` |
+| `sewer-cracked-conduit` | north | `sewer-drip-tunnel` |
+| `sewer-cracked-conduit` | west | `sewer-blind-turn` |
+| `sewer-blind-turn` | east | `sewer-cracked-conduit` |
+| `sewer-blind-turn` | south | `sewer-narrow-drain` |
+| `sewer-narrow-drain` | north | `sewer-blind-turn` |
+| `sewer-narrow-drain` | east | `sewer-north-tunnel` |
+| `sewer-north-tunnel` | west | `sewer-narrow-drain` |
+
+### New Room: `sewer-drip-tunnel`
+
+| Field | Value |
+|---|---|
+| **slug** | `sewer-drip-tunnel` |
+| **name** | `Drip Tunnel` |
+| **description** | `A low tunnel sloping downward from the Ratways, its ceiling bristling with stalactites of calcite and rust. Water drips in an irregular rhythm from every surface — not a steady leak, but the sporadic bleeding of a dozen cracked pipes hidden above the stonework. The floor is slick with mineral deposits, and each footfall sends a splash echoing ahead into unseen darkness. Rat droppings crunch underfoot between the puddles.` |
+| **type** | `corridor` |
+| **properties** | `{pvp,water,enclosed,narrow}` |
+| **npcs** | `[{"creatureId": "slum_rat", "spawnCount": 2}]` |
+| **loot_containers** | `[]` |
+| **hazards** | `[]` |
+
+### New Room: `sewer-cracked-conduit`
+
+| Field | Value |
+|---|---|
+| **slug** | `sewer-cracked-conduit` |
+| **name** | `Cracked Conduit` |
+| **description** | `The tunnel widens here where a massive clay conduit has split lengthwise, disgorging its contents across the passage floor. The crack runs from floor to ceiling like a wound, and through it seeps a slow, oily liquid that smells of iron and decay. Makeshift bridges of salvaged planks span the worst of the flow. The walls are scored with claw marks — something uses this route regularly.` |
+| **type** | `corridor` |
+| **properties** | `{pvp,water,enclosed}` |
+| **npcs** | `[{"creatureId": "gutterspawn", "spawnCount": 2}]` |
+| **loot_containers** | `[{"id": "cracked-conduit-sack-1", "type": "crate", "items": ["corroded_pipe", "bent_rebar"]}]` |
+| **hazards** | `[]` |
+
+### New Room: `sewer-blind-turn`
+
+| Field | Value |
+|---|---|
+| **slug** | `sewer-blind-turn` |
+| **name** | `Blind Turn` |
+| **description** | `The tunnel bends sharply here, visibility dropping to nothing around the corner. The walls are scratched with crude directional arrows — the work of some previous explorer who learned the hard way that the sewers do not run straight. The acoustics play tricks; sounds from ahead seem to come from behind. A rusted iron grate is bolted across a side passage, whatever lies beyond it long since sealed away.` |
+| **type** | `corridor` |
+| **properties** | `{pvp,enclosed,narrow}` |
+| **npcs** | `[]` |
+| **loot_containers** | `[]` |
+| **hazards** | `[]` |
+
+### New Room: `sewer-narrow-drain`
+
+| Field | Value |
+|---|---|
+| **slug** | `sewer-narrow-drain` |
+| **name** | `Narrow Drain` |
+| **description** | `A drainage channel barely wide enough for one, carved through bedrock rather than brick. The walls press in close, and the ceiling forces a stoop. Water runs ankle-deep along a central groove, cold and fast enough to tug at the feet. The passage opens slightly ahead where it meets a larger tunnel — the sound of flowing water grows louder, echoing off brick walls.` |
+| **type** | `corridor` |
+| **properties** | `{pvp,water,enclosed,narrow}` |
+| **npcs** | `[{"creatureId": "slum_rat", "spawnCount": 3}]` |
+| **loot_containers** | `[{"id": "narrow-drain-corpse-1", "type": "corpse", "items": ["tarnished_medallion", "corroded_pipe"]}]` |
+| **hazards** | `[]` |
+
+### Cycle Validation (Sunken-Square ↔ Sluice-Gate)
+
+Walk the cycle from `sunken-square` through the surface grid to `sluice-gate`, then back underground:
+
+**Surface leg** (sunken-square → sluice-gate):
+```
+sunken-square →E→ slum-r1c1 →S→ slum-r2c1 →S→ slum-r3c1 →S→ slum-r4c1 →S→ slum-r5c1 →W→ sluice-gate
+```
+
+| Step | Direction | Offset |
+|---|---|---|
+| sunken-square → slum-r1c1 | east | (+1, 0) |
+| slum-r1c1 → slum-r2c1 | south | (0, +1) |
+| slum-r2c1 → slum-r3c1 | south | (0, +1) |
+| slum-r3c1 → slum-r4c1 | south | (0, +1) |
+| slum-r4c1 → slum-r5c1 | south | (0, +1) |
+| slum-r5c1 → sluice-gate | west | (−1, 0) |
+
+**Surface subtotal:** (+1−1, +4) = **(0, +4)**
+
+**Underground leg** (sluice-gate → sunken-square):
+```
+sluice-gate →down→ sewer-main-junction →N→ sewer-north-tunnel →W→ sewer-narrow-drain
+→N→ sewer-blind-turn →E→ sewer-cracked-conduit →N→ sewer-drip-tunnel →N→ the-ratways →up→ sunken-square
+```
+
+| Step | Direction | Offset |
+|---|---|---|
+| sluice-gate → sewer-main-junction | down | (0, 0) |
+| sewer-main-junction → sewer-north-tunnel | north | (0, −1) |
+| sewer-north-tunnel → sewer-narrow-drain | west | (−1, 0) |
+| sewer-narrow-drain → sewer-blind-turn | north | (0, −1) |
+| sewer-blind-turn → sewer-cracked-conduit | east | (+1, 0) |
+| sewer-cracked-conduit → sewer-drip-tunnel | north | (0, −1) |
+| sewer-drip-tunnel → the-ratways | north | (0, −1) |
+| the-ratways → sunken-square | up | (0, 0) |
+
+**Underground subtotal:** (−1+1, −1−1−1−1) = **(0, −4)**
+
+**Cycle total:** (0, +4) + (0, −4) = **(0, 0) ✓**
+
+---
+
+## Fix A-2 — Lengthen West-Conduit-to-Cistern Sewer Path (4 new rooms)
+
+**Conflict:** The underground path from `sewer-main-junction` to `sewer-cistern` via `sewer-south-tunnel → sewer-west-conduit` has net offset (−2, +1), but the surface distance between `sluice-gate` and `cistern-access` is (+2, +3). The underground path needs net offset (+2, +3) from main-junction to cistern to match.
+
+**Root cause:** `sewer-west-conduit →west→ sewer-cistern` is only 1 hop, and the preceding `sewer-south-tunnel →west→ sewer-west-conduit` moves in the wrong direction (west instead of east). Together they place `sewer-cistern` at grid (1, 7) instead of the required (5, 9).
+
+**Resolution:** INSERT 1 room between `sewer-south-tunnel` and `sewer-west-conduit` (changing the path from direct W to W→S). Then INSERT 3 rooms between `sewer-west-conduit` and `sewer-cistern` (E→S→E→E chain). The full underground path from main-junction to cistern becomes: S→W→S→E→S→E→E = net (+2, +3).
+
+**Narrative justification:** A section of the old conduit between the western tunnel and the cistern collapsed years ago. The current route follows a makeshift bypass through maintenance passages and drainage channels that the sewer-dwellers carved around the blockage.
+
+### Exits to REMOVE
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `sewer-south-tunnel` | west | `sewer-west-conduit` |
+| `sewer-west-conduit` | east | `sewer-south-tunnel` |
+| `sewer-west-conduit` | west | `sewer-cistern` |
+| `sewer-cistern` | east | `sewer-west-conduit` |
+
+### Exits to ADD
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `sewer-south-tunnel` | west | `sewer-rubble-choke` |
+| `sewer-rubble-choke` | east | `sewer-south-tunnel` |
+| `sewer-rubble-choke` | south | `sewer-west-conduit` |
+| `sewer-west-conduit` | north | `sewer-rubble-choke` |
+| `sewer-west-conduit` | east | `sewer-trickle-passage` |
+| `sewer-trickle-passage` | west | `sewer-west-conduit` |
+| `sewer-trickle-passage` | south | `sewer-slime-channel` |
+| `sewer-slime-channel` | north | `sewer-trickle-passage` |
+| `sewer-slime-channel` | east | `sewer-stagnant-pool` |
+| `sewer-stagnant-pool` | west | `sewer-slime-channel` |
+| `sewer-stagnant-pool` | east | `sewer-cistern` |
+| `sewer-cistern` | west | `sewer-stagnant-pool` |
+
+### New Room: `sewer-rubble-choke`
+
+| Field | Value |
+|---|---|
+| **slug** | `sewer-rubble-choke` |
+| **name** | `Rubble Choke` |
+| **description** | `The tunnel narrows to a crawlspace where a partial collapse has choked the passage with broken brick and morite. Someone — or something — has cleared just enough space to squeeze through, leaving scrape marks on the remaining masonry. Dust sifts from the ceiling with every vibration, a constant reminder that the rest could come down at any moment. Beyond the rubble, the passage drops downward.` |
+| **type** | `corridor` |
+| **properties** | `{pvp,enclosed,narrow,rubble}` |
+| **npcs** | `[]` |
+| **loot_containers** | `[]` |
+| **hazards** | `[]` |
+
+### New Room: `sewer-trickle-passage`
+
+| Field | Value |
+|---|---|
+| **slug** | `sewer-trickle-passage` |
+| **name** | `Trickle Passage` |
+| **description** | `A low maintenance corridor with a shallow channel cut into the floor, carrying a thin stream of grey water eastward. The walls are lined with corroded brass fixtures — the remnants of a valve system that once controlled flow to the western conduit. Most have been pried loose for scrap. Gutterspawn silk stretches between the remaining pipes, glistening with moisture.` |
+| **type** | `corridor` |
+| **properties** | `{pvp,water,enclosed}` |
+| **npcs** | `[{"creatureId": "gutterspawn", "spawnCount": 2}]` |
+| **loot_containers** | `[{"id": "trickle-sack-1", "type": "crate", "items": ["corroded_pipe", "bent_rebar"]}]` |
+| **hazards** | `[]` |
+
+### New Room: `sewer-slime-channel`
+
+| Field | Value |
+|---|---|
+| **slug** | `sewer-slime-channel` |
+| **name** | `Slime Channel` |
+| **description** | `The passage floor drops into a shallow trough coated in a thick, luminescent green slime that pulses faintly in the darkness. The slime is warm to the touch and smells of copper and rotting vegetation. It clings to boots and gear, and anything left in contact with it too long begins to corrode. The walls weep the same substance from hairline cracks in the mortar.` |
+| **type** | `corridor` |
+| **properties** | `{pvp,water,enclosed,hazardous}` |
+| **npcs** | `[{"creatureId": "sewer_lurker", "spawnCount": 1}]` |
+| **loot_containers** | `[]` |
+| **hazards** | `[]` |
+
+### New Room: `sewer-stagnant-pool`
+
+| Field | Value |
+|---|---|
+| **slug** | `sewer-stagnant-pool` |
+| **name** | `Stagnant Pool` |
+| **description** | `The tunnel opens into a low, vaulted chamber where drainage from multiple passages collects in a broad, motionless pool. The water is black and perfectly still, its surface broken only by the occasional bubble rising from whatever decays beneath. A narrow stone ledge runs along the eastern wall — the only dry path forward. The stench is extraordinary, even by sewer standards.` |
+| **type** | `chamber` |
+| **properties** | `{pvp,water,enclosed,stench}` |
+| **npcs** | `[{"creatureId": "gutterspawn", "spawnCount": 3}]` |
+| **loot_containers** | `[{"id": "stagnant-pool-corpse-1", "type": "corpse", "items": ["corroded_pipe", "gutterspawn_fang", "tarnished_medallion"]}]` |
+| **hazards** | `[]` |
+
+### Cycle Validation (Sluice-Gate ↔ Cistern-Access)
+
+Walk the cycle from `sluice-gate` through the surface grid to `cistern-access`, then back underground:
+
+**Surface leg** (sluice-gate → cistern-access):
+```
+sluice-gate →E→ slum-r5c1 →S→ slum-r6c1 →S→ slum-r7c1 →E→ slum-r7c2 →S→ cistern-access
+```
+
+| Step | Direction | Offset |
+|---|---|---|
+| sluice-gate → slum-r5c1 | east | (+1, 0) |
+| slum-r5c1 → slum-r6c1 | south | (0, +1) |
+| slum-r6c1 → slum-r7c1 | south | (0, +1) |
+| slum-r7c1 → slum-r7c2 | east | (+1, 0) |
+| slum-r7c2 → cistern-access | south | (0, +1) |
+
+**Surface subtotal:** (+2, +3)
+
+**Underground leg** (cistern-access → sluice-gate):
+```
+cistern-access →down→ sewer-cistern →W→ sewer-stagnant-pool →W→ sewer-slime-channel
+→N→ sewer-trickle-passage →W→ sewer-west-conduit →N→ sewer-rubble-choke
+→E→ sewer-south-tunnel →N→ sewer-main-junction →up→ sluice-gate
+```
+
+| Step | Direction | Offset |
+|---|---|---|
+| cistern-access → sewer-cistern | down | (0, 0) |
+| sewer-cistern → sewer-stagnant-pool | west | (−1, 0) |
+| sewer-stagnant-pool → sewer-slime-channel | west | (−1, 0) |
+| sewer-slime-channel → sewer-trickle-passage | north | (0, −1) |
+| sewer-trickle-passage → sewer-west-conduit | west | (−1, 0) |
+| sewer-west-conduit → sewer-rubble-choke | north | (0, −1) |
+| sewer-rubble-choke → sewer-south-tunnel | east | (+1, 0) |
+| sewer-south-tunnel → sewer-main-junction | north | (0, −1) |
+| sewer-main-junction → sluice-gate | up | (0, 0) |
+
+**Underground subtotal:** (−1−1−1+1, −1−1−1) = **(−2, −3)**
+
+**Cycle total:** (+2, +3) + (−2, −3) = **(0, 0) ✓**
+
+---
+
+## Fix B — Remove Broken-Sanctuary ↔ Sunken-Square Approach Shortcut
+
+**Conflict:** `sunken-square` is reachable via two paths from `shattered-gate`:
+1. **Approach spine:** hollow-market →N→ broken-sanctuary →E(locked)→ sunken-square — places it at (4, −1)
+2. **Grid path:** merchants-row →S→ gutter-run →S→ slum-r1c1 →W→ sunken-square — places it at (3, 2)
+
+Both paths are the same BFS distance (5 hops). BFS reaches sunken-square via path 1 first (because `hollow-market →N→ broken-sanctuary` is queued before `hollow-market →E→ merchants-row`), placing the entire slum grid at incorrect positions. This causes 2 direct conflicts and cascades into the 16 sewer conflicts (which depend on correct surface shaft positions).
+
+**Root cause:** The task description identifies `sunken-square →east→ slum-r1c1` as the shortcut. However, the actual conflict is the **dual-approach** to `sunken-square` — it's connected to both the approach area (via broken-sanctuary) and the slum grid (via slum-r1c1). Removing either link fixes the conflict. I recommend removing the **approach link** (`broken-sanctuary ↔ sunken-square`) because:
+
+1. **Fix A depends on it.** If sunken-square stays at (4, −1) via the approach, the underground path to sewer-main-junction at (3, 6) requires 8 intermediate rooms — untenable. At (3, 2) via the grid, the path needs only 4 rooms.
+2. **Gameplay flow is preserved.** Players enter the slums via the approach spine → gutter-run → grid. Sunken-square (sewer access) is found by exploring westward from the grid. This is the natural exploration flow — discover the slums first, then find the sewer.
+3. **The locked exit was niche.** The sanctuary-key shortcut from the approach to the sewer shaft was a nice reward, but it created impossible geometry. The sewer is already accessible from 3 surface shafts.
+
+**Resolution:** REMOVE `broken-sanctuary ↔ sunken-square` (both directions). Broken-sanctuary becomes a dead-end off hollow-market (atmospheric exploration room, no traversal function).
+
+### Exits to REMOVE
+
+| from_room_slug | direction | to_room_slug |
+|---|---|---|
+| `broken-sanctuary` | east | `sunken-square` |
+| `sunken-square` | west | `broken-sanctuary` |
+
+### Exits to ADD
+
+None.
+
+### New Rooms
+
+None.
+
+### Cycle Validation
+
+Removing the exit eliminates the only alternative path to `sunken-square`. No cycle exists to validate. BFS now reaches `sunken-square` exclusively via `slum-r1c1 →west`, placing it at (3, 2).
+
+### Sanctuary Key Impact
+
+The `sanctuary_key` item currently unlocks the `broken-sanctuary →east→ sunken-square` exit. With this exit removed, the key has no remaining use. Options:
+
+1. **Repurpose:** Add a new locked exit elsewhere (e.g., a locked gate to a hidden sewer room, or a locked door in the slum grid).
+2. **Remove from loot tables:** Delete `sanctuary_key` from `sewer-blackwater-crossing`, `sewer-cistern`, and `sewer-lurker-den` loot containers.
+3. **Defer:** Leave the key as a collectible with no current use. Future zone expansions can assign it a new lock.
+
+**Recommendation:** Option 1 — repurpose the key to unlock a new gate between `sewer-blind-turn` and a hidden alcove (future content). For now, proceed with option 3 (defer) to avoid scope creep.
+
+---
+
+## Complete Change Summary
+
+### New Rooms (8)
+
+| slug | name | type | grid position | fix # |
+|---|---|---|---|---|
+| `sewer-drip-tunnel` | Drip Tunnel | corridor | (3, 3) | A-1 |
+| `sewer-cracked-conduit` | Cracked Conduit | corridor | (3, 4) | A-1 |
+| `sewer-blind-turn` | Blind Turn | corridor | (2, 4) | A-1 |
+| `sewer-narrow-drain` | Narrow Drain | corridor | (2, 5) | A-1 |
+| `sewer-rubble-choke` | Rubble Choke | corridor | (2, 7) | A-2 |
+| `sewer-trickle-passage` | Trickle Passage | corridor | (3, 8) | A-2 |
+| `sewer-slime-channel` | Slime Channel | corridor | (3, 9) | A-2 |
+| `sewer-stagnant-pool` | Stagnant Pool | chamber | (4, 9) | A-2 |
+
+### Exits Removed (16 rows, 8 pairs)
+
+| from_room_slug | direction | to_room_slug | fix # |
+|---|---|---|---|
+| `the-ratways` | east | `sewer-main-junction` | A-1 |
+| `sewer-main-junction` | west | `the-ratways` | A-1 |
+| `sewer-south-tunnel` | west | `sewer-west-conduit` | A-2 |
+| `sewer-west-conduit` | east | `sewer-south-tunnel` | A-2 |
+| `sewer-west-conduit` | west | `sewer-cistern` | A-2 |
+| `sewer-cistern` | east | `sewer-west-conduit` | A-2 |
+| `broken-sanctuary` | east | `sunken-square` | B |
+| `sunken-square` | west | `broken-sanctuary` | B |
+
+### Exits Added (22 rows, 11 pairs)
+
+| from_room_slug | direction | to_room_slug | fix # |
+|---|---|---|---|
+| `the-ratways` | south | `sewer-drip-tunnel` | A-1 |
+| `sewer-drip-tunnel` | north | `the-ratways` | A-1 |
+| `sewer-drip-tunnel` | south | `sewer-cracked-conduit` | A-1 |
+| `sewer-cracked-conduit` | north | `sewer-drip-tunnel` | A-1 |
+| `sewer-cracked-conduit` | west | `sewer-blind-turn` | A-1 |
+| `sewer-blind-turn` | east | `sewer-cracked-conduit` | A-1 |
+| `sewer-blind-turn` | south | `sewer-narrow-drain` | A-1 |
+| `sewer-narrow-drain` | north | `sewer-blind-turn` | A-1 |
+| `sewer-narrow-drain` | east | `sewer-north-tunnel` | A-1 |
+| `sewer-north-tunnel` | west | `sewer-narrow-drain` | A-1 |
+| `sewer-south-tunnel` | west | `sewer-rubble-choke` | A-2 |
+| `sewer-rubble-choke` | east | `sewer-south-tunnel` | A-2 |
+| `sewer-rubble-choke` | south | `sewer-west-conduit` | A-2 |
+| `sewer-west-conduit` | north | `sewer-rubble-choke` | A-2 |
+| `sewer-west-conduit` | east | `sewer-trickle-passage` | A-2 |
+| `sewer-trickle-passage` | west | `sewer-west-conduit` | A-2 |
+| `sewer-trickle-passage` | south | `sewer-slime-channel` | A-2 |
+| `sewer-slime-channel` | north | `sewer-trickle-passage` | A-2 |
+| `sewer-slime-channel` | east | `sewer-stagnant-pool` | A-2 |
+| `sewer-stagnant-pool` | west | `sewer-slime-channel` | A-2 |
+| `sewer-stagnant-pool` | east | `sewer-cistern` | A-2 |
+| `sewer-cistern` | west | `sewer-stagnant-pool` | A-2 |
+
+---
+
+## Gameplay Impact
+
+### Hop Count Changes
+
+| Route | Before | After | Δ | Notes |
+|---|---|---|---|---|
+| shattered-gate → sunken-square | 5 | 7 | +2 | Must go through grid, not approach |
+| shattered-gate → sewer-main-junction | 7 | 12 | +5 | Sewer is deeper into the zone |
+| shattered-gate → sewer-cistern | 10 | 15 | +5 | Deep sewer is appropriately distant |
+| sunken-square → sewer-main-junction | 2 | 7 | +5 | The core fix: sewer path lengthened |
+| sluice-gate → sewer-cistern | 4 | 6 | +2 | Modest increase |
+| sewer-west-conduit → sewer-cistern | 1 | 4 | +3 | West conduit chain lengthened |
+| the-ratways → sewer-main-junction | 1 | 6 | +5 | Was trivially short, now a real journey |
+| broken-sanctuary → sunken-square | 1 | 5 | +4 | Now requires going through grid |
+| slum-r1c1 → sunken-square | 1 | 1 | 0 | Unchanged — grid access preserved |
+
+### Design Assessment
+
+**Positive:**
+- The sewer system now feels appropriately vast and dangerous. Getting from one shaft to another underground is a commitment, not a shortcut.
+- The 4-room ratways chain creates a "descent" narrative — players physically travel deeper before reaching the sewer hub.
+- The west-conduit chain adds exploration content to an area that was previously a straight line.
+- The 7×7 slum grid remains fully interconnected and unchanged.
+
+**Negative:**
+- The sanctuary-key locked shortcut from the approach to the sewer is lost. This was a nice exploration reward but was topologically impossible.
+- `broken-sanctuary` becomes a dead-end (was a through-room to sunken-square). Its atmosphere still works as an eerie exploration destination.
+- Total sewer traversal time increases. Players who want to traverse the full sewer will need more time, which increases PvP exposure in dangerous territory — intentionally.
+
+---
+
+## Full Cycle Verification (Sunken-Square ↔ Cistern-Access)
+
+The largest cycle in the zone — all three shafts:
+
+**Surface leg** (sunken-square → cistern-access):
+```
+sunken-square →E→ slum-r1c1 →S(×6)→ slum-r7c1 →E→ slum-r7c2 →S→ cistern-access
+```
+**Net:** E + 6S + E + S = **(+2, +7)**
+
+**Underground leg** (cistern-access → sunken-square):
+```
+cistern-access →down→ sewer-cistern →W→ stagnant-pool →W→ slime-channel →N→ trickle-passage
+→W→ west-conduit →N→ rubble-choke →E→ south-tunnel →N→ main-junction →N→ north-tunnel
+→W→ narrow-drain →N→ blind-turn →E→ cracked-conduit →N→ drip-tunnel →N→ ratways →up→ sunken-square
+```
+**Net:** W+W+N+W+N+E+N+N+W+N+E+N+N + (2 × zero from up/down) = **(−2, −7)**
+
+**Cycle total:** (+2, +7) + (−2, −7) = **(0, 0) ✓**
+
+---
+
+## Topology Result
+
+- **109 rooms**, all reachable from `shattered-gate`
+- **0 topological conflicts** (BFS-verified with Python simulation)
+- **22 grid collisions** (down from 29; remaining are expected up/down overlaps and sewer-under-grid overlaps)
+
+---
+
+## Notes for Bruenor
+
+1. Write a new migration (e.g., `005_warrens_topology_fixes.sql`) that:
+   - INSERTs 8 new rooms into the Warrens zone
+   - DELETEs the 8 exit pairs listed above (16 rows)
+   - INSERTs the 11 exit pairs listed above (22 rows)
+2. The `broken-sanctuary` room description could optionally be updated to mention the sealed eastern passage: *"The eastern wall shows the outline of a bricked-up doorway — sealed deliberately, and recently."*
+3. The `sewer-north-tunnel` gains a new west exit (`sewer-narrow-drain`). It already had north/south/east, so it becomes a 4-way junction. This is acceptable — it's a major sewer intersection.
+4. `sewer-west-conduit` changes from east/west/south exits to north/east/south exits (the old east→south-tunnel and west→cistern are replaced by north→rubble-choke and east→trickle-passage).
+5. Room data (slugs, names, descriptions, types, properties, NPCs, loot) is SQL-ready — copy directly into the migration VALUES clause.
+
+## Notes for Minsc
+
+1. Add a Warrens topology test to `computeLayout.test.ts` (if not already present).
+2. Key positions to verify after the fix:
+   - `sunken-square` at approximately (3, 2), NOT (4, −1)
+   - `sewer-main-junction` at approximately (3, 6), matching `sluice-gate`
+   - `sewer-cistern` at approximately (5, 9), matching `cistern-access`
+   - `slum-r1c1` at approximately (4, 2)
+3. The test should confirm 0 BFS conflicts for the Warrens zone.
+4. All 109 rooms should be reachable from `shattered-gate`.
+
+# Decision: Startup Logging Strategy for Azure Container Apps
+
+**Date:** 2026-03-30  
+**Author:** Drizzt (Engine Developer)  
+**Status:** Implemented  
+**Context:** Azure Container Apps (ACA) deployment
+
+## Problem
+
+When DATABASE_URL contains URL-invalid characters (e.g., `|`, `<`, `>`, `{`, `}`), the server silently falls back to in-memory persistence. Users see "Stash persistence: in-memory" but no explanation because:
+
+1. The `pg` library parses DATABASE_URL as a URL — invalid characters cause silent URL parsing failure
+2. Migration throws, catch block sets `USE_PG = false`
+3. All error messages use `console.error` (stderr)
+4. Azure Container Apps default log stream shows **stdout only**
+
+Result: Users have no visibility into why their database isn't being used.
+
+## Decision
+
+**All user-facing startup diagnostics MUST go to stdout (`console.log`).**
+
+### Implementation
+
+1. **URL Validation Block** — Added after DATABASE_URL detection:
+   ```typescript
+   if (USE_PG) {
+     try {
+       new URL(process.env.DATABASE_URL!);
+     } catch (err) {
+       console.log('[Ellmud] ⚠ DATABASE_URL is set but cannot be parsed as a valid URL');
+       console.log('[Ellmud]   This usually means the password contains characters that need percent-encoding');
+       console.log('[Ellmud]   Characters like | < > { } must be encoded (e.g., | → %7C, < → %3C)');
+       console.log('[Ellmud]   Falling back to in-memory persistence');
+       USE_PG = false;
+     }
+   }
+   ```
+   This catches malformed URLs BEFORE migration attempts.
+
+2. **Changed `console.error` → `console.log` for all `[Ellmud]` prefixed messages:**
+   - PostgreSQL migration failures
+   - ContentRegistry initialization failures
+   - Entra OAuth initialization failures
+   - Zone loading failures
+
+3. **Database Pool Errors** — Added stdout logging alongside stderr:
+   ```typescript
+   pool.on('error', (err) => {
+     console.log('[db] ⚠ Database pool error:', err.message);  // stdout for visibility
+     console.error('[db] Unexpected pool error:', err.message); // stderr for tooling
+   });
+   ```
+
+## Rationale
+
+- **Azure Container Apps** default log stream = stdout only. Stderr requires explicit configuration.
+- **User-facing diagnostics** need to be visible in the default log stream
+- **Internal error details** can duplicate to stderr for error tracking tools
+- **URL validation** prevents silent fallback by catching format errors early
+
+## Guidelines
+
+- `console.log` for all `[Ellmud]` prefixed startup messages (user-facing narrative)
+- `console.error` for internal debug output or tool-facing errors
+- Critical errors (like pool failures) should log to BOTH for maximum visibility
+- Always validate external inputs (like DATABASE_URL) before attempting operations
+
+## Files Modified
+
+- `packages/server/src/index.ts` — URL validation + stdout logging for startup messages
+- `packages/server/src/db/index.ts` — Dual logging for pool errors
+
+## Testing
+
+- TypeScript compilation: ✅ Clean
+- No functional changes — logging destination only
+
+# Room Occupants Message Type
+
+**Date:** 2026-03-31  
+**Agent:** Jarlaxle (Game Systems Developer)  
+**Issue:** Room occupants structured data for client UI
+
+## Decision
+
+Add `ROOM_OCCUPANTS` message type to provide structured data about creatures and players in the current room. This enables the client to build interactive UI elements (clickable lists, status indicators) instead of relying on text parsing.
+
+## Context
+
+Previously, room occupants were only communicated through narration text:
+- "A Drowned Revenant lurks here."
+- "Player Bob is here."
+
+The client had no structured data to build interactive elements. This blocked features like:
+- Clickable creature/player lists in status panel
+- Target selection UI for combat
+- Visual indicators for aggressive vs passive creatures
+- Player presence indicators
+
+## Implementation
+
+### Message Structure
+
+```typescript
+interface RoomOccupantsMessage {
+  creatures: Array<{
+    id: string;           // creature-0, creature-1, etc.
+    name: string;         // "Drowned Revenant"
+    type: string;         // creature type identifier
+    aggressive: boolean;  // true if behaviorState === 'hostile'
+  }>;
+  players: Array<{
+    id: string;   // character ID
+    name: string; // display name from character
+  }>;
+}
+```
+
+### Broadcasting Strategy
+
+Room occupants are sent in these scenarios:
+
+1. **Player joins shard** — initial state
+2. **Player moves rooms** — updates for player + broadcasts to both rooms
+3. **Creature moves rooms** — broadcasts to both rooms
+4. **Creature dies** — broadcasts to room where death occurred
+
+### Data Sources
+
+- **Creatures:** `creatureManager.getCreaturesInRoom(roomId)` — authoritative source
+- **Players:** Iterate `this.players` map, filter by `currentRoomId`
+- **Display names:** `characterNames.get(sid)` for players, fallback to ID
+- **Aggressive flag:** Derived from `creature.behaviorState === 'hostile'` (not template `aggressive` flag — actual runtime behavior)
+
+## Rationale
+
+### Why Structured Data?
+
+- **Interactive UI:** Client can build clickable lists, not just show text
+- **Real-time updates:** Server pushes changes, client doesn't need to poll
+- **Separation of concerns:** Narration for story, structured data for UI
+- **Type safety:** Client gets typed data via `RoomOccupantsMessage`
+
+### Why Include `aggressive` Flag?
+
+- Lets client show visual indicators (red icon, warning color)
+- Player can see threat level at a glance
+- Uses runtime behavior state (not just template default)
+
+### Why Exclude Self from Player List?
+
+- Players don't need to see themselves in the occupants list
+- Reduces clutter in UI
+- Self-awareness is handled by PLAYER_STATE message
+
+### Why Broadcast on Movement?
+
+- Both source and target rooms need updates
+- Players in source see someone leave
+- Players in target see someone arrive
+- Same pattern as narration broadcasts
+
+## Alternatives Considered
+
+### Alternative 1: Client Parses Narration Text
+
+**Rejected because:**
+- Fragile (breaks if narration wording changes)
+- Requires regex/parsing on client
+- Can't distinguish creature types reliably
+- Loses type safety
+
+### Alternative 2: Send Full Room State on Every Change
+
+**Rejected because:**
+- Wasteful bandwidth
+- Duplicates data already sent via other messages
+- Doesn't follow message-only protocol pattern
+
+### Alternative 3: Polling via Explicit Command
+
+**Rejected because:**
+- Breaks real-time feel
+- Adds client latency
+- Players miss updates between polls
+- Unnecessary client complexity
+
+## Impact
+
+### Client Side
+
+- New message handler: `room.onMessage(MessageTypes.ROOM_OCCUPANTS, ...)`
+- Status panel can show occupants list
+- Target selection UI enabled
+- Visual threat indicators enabled
+
+### Server Side
+
+- 4 new broadcast call sites (join, move, creature move, creature death)
+- Minimal performance impact (room occupants typically < 10 entities)
+- No database changes
+- No breaking changes to existing messages
+
+### Testing
+
+- All existing tests pass (rooms, creatures, commands)
+- Updated `types.test.ts` to expect 25 message types
+- No new tests needed (integration tests already exercise these code paths)
+
+## Open Questions
+
+**Q:** Should we include player HP/status in occupants list?  
+**A:** No. PLAYER_STATE message already covers this. Occupants message is for "who's here", not "what's their state". Avoids duplication.
+
+**Q:** Should we include creature HP?  
+**A:** No. Fog of war — players shouldn't see exact HP. Future: awareness skill checks could reveal rough HP tiers.
+
+**Q:** What if a room has 50+ creatures?  
+**A:** Not a game design scenario (procedural generation caps at ~3 per room, zone max is ~10). If needed, add pagination or summary format.
+
+## Follow-Up Tasks
+
+None — implementation is complete and tested.
+
+## References
+
+- Message type definition: `packages/shared/src/index.ts:257`
+- ShardRoom implementation: `packages/server/src/rooms/ShardRoom.ts:2063`
+- Design pattern: mirrors exploration messages (`EXPLORATION_DATA`, `EXPLORATION_UPDATE`)
+
+# Decision: Exploration Messages Are Fire-and-Forget
+
+**Date:** 2025-07-17  
+**Author:** Drizzt (Engine Dev)  
+**Status:** Implemented
+
+## Context
+
+ShardRoom sends exploration data to clients for the in-game map. Three paths trigger exploration messages:
+1. `onJoin` → `EXPLORATION_DATA` (bulk payload with starting room)
+2. Movement command → `EXPLORATION_UPDATE` (incremental room)
+3. Flee (combat tick) → `EXPLORATION_UPDATE` (incremental room)
+
+## Decision
+
+Exploration persistence (`recordVisit`) is fire-and-forget — errors are logged but never block gameplay. The client map renders from messages alone; the repository is for cross-session persistence only.
+
+Exits are serialized as `Record<string, string>` (direction → targetRoomId) in the `ExploredRoomData` payload, converted from the `Map<Direction, string>` used in the room graph.
+
+## Impact
+
+- **Client team:** The `ExploredRoomData` shape matches what `useExplorationMap.ts` expects. No client changes needed.
+- **Persistence team:** If `recordVisit` throws, the player's map still works for the current session. Only cross-session recall is affected.
+
