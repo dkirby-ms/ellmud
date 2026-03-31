@@ -64,29 +64,29 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO creature_definitions (type, name, slug, description, max_hp, attack, defence, armour, agility, min_count, max_count, preferred_rooms, forbidden_rooms, idle_ticks_min, idle_ticks_max, flee_threshold, loot_table, status)
 VALUES
-  ('drowned_revenant', 'Drowned Revenant', 'drowned_revenant', '', 50, 10, 3, 3, 0, 3, 5, '{corridor,dead_end}', '{entry,extraction}', 3, 5, 0.25,
+  ('drowned_revenant', 'Drowned Revenant', 'drowned_revenant', '', 50, 10, 3, 3, 0, 3, 5, '{corridor,dead_end}', '{entry,extraction}', 30, 50, 0.25,
    '[{"itemId":"waterlogged_bone","dropWeight":1},{"itemId":"revenant_essence","dropWeight":1}]'::jsonb, 'published'),
 
-  ('gutterspawn', 'Gutterspawn', 'gutterspawn', '', 15, 5, 1, 0, 7, 2, 4, '{corridor,dead_end}', '{entry,extraction,boss}', 3, 6, 0.3,
+  ('gutterspawn', 'Gutterspawn', 'gutterspawn', '', 15, 5, 1, 0, 7, 2, 4, '{corridor,dead_end}', '{entry,extraction,boss}', 30, 60, 0.3,
    '[{"itemId":"gutterspawn_fang","dropWeight":80},{"itemId":"bent_rebar","dropWeight":15}]'::jsonb, 'published'),
 
-  ('rubble_scavenger', 'Rubble Scavenger', 'rubble_scavenger', '', 35, 8, 3, 2, 4, 1, 3, '{junction,dead_end}', '{entry,boss}', 4, 8, 0.15,
+  ('rubble_scavenger', 'Rubble Scavenger', 'rubble_scavenger', '', 35, 8, 3, 2, 4, 1, 3, '{junction,dead_end}', '{entry,boss}', 40, 80, 0.15,
    '[{"itemId":"bent_rebar","dropWeight":50},{"itemId":"tarnished_medallion","dropWeight":25},{"itemId":"scavenger_shiv","dropWeight":15}]'::jsonb, 'published'),
 
-  ('hollow_stalker', 'Hollow Stalker', 'hollow_stalker', '', 60, 13, 5, 4, 6, 1, 2, '{junction}', '{entry,extraction,corridor}', 5, 12, 0.15,
+  ('hollow_stalker', 'Hollow Stalker', 'hollow_stalker', '', 60, 13, 5, 4, 6, 1, 2, '{junction}', '{entry,extraction,corridor}', 50, 120, 0.15,
    '[{"itemId":"tarnished_medallion","dropWeight":40},{"itemId":"sanctuary_key","dropWeight":15},{"itemId":"scavenger_shiv","dropWeight":20}]'::jsonb, 'published'),
 
-  ('the_collapsed_one', 'The Collapsed One', 'the_collapsed_one', '', 150, 18, 8, 10, 1, 1, 1, '{boss}', '{entry,extraction,corridor,junction,dead_end}', 8, 15, 0,
+  ('the_collapsed_one', 'The Collapsed One', 'the_collapsed_one', '', 150, 18, 8, 10, 1, 1, 1, '{boss}', '{entry,extraction,corridor,junction,dead_end}', 80, 150, 0,
    '[{"itemId":"rubble_crusted_vest","dropWeight":30},{"itemId":"scavenger_shiv","dropWeight":25},{"itemId":"charred_street_map","dropWeight":20},{"itemId":"tarnished_medallion","dropWeight":25}]'::jsonb, 'published'),
 
   ('slum_rat', 'Slum Rat', 'slum_rat',
    'A bloated rat the size of a terrier, its fur matted with filth and its eyes bright with cunning malice. Individually a nuisance; in packs, a genuine threat to the wounded.',
-   8, 3, 0, 0, 6, 2, 5, '{corridor,dead_end}', '{boss}', 2, 4, 0.5,
+   8, 3, 0, 0, 6, 2, 5, '{corridor,dead_end}', '{boss}', 20, 40, 0.5,
    '[{"itemId":"rat_tail","dropWeight":60}]'::jsonb, 'published'),
 
   ('sewer_lurker', 'Sewer Lurker', 'sewer_lurker',
    'A long-limbed thing that clings to sewer ceilings, its pale skin slick with condensation. It drops silently onto prey, striking fast before retreating into the pipes.',
-   25, 7, 2, 0, 5, 1, 2, '{corridor,dead_end,junction}', '{entry,extraction,boss}', 4, 8, 0.3,
+   25, 7, 2, 0, 5, 1, 2, '{corridor,dead_end,junction}', '{entry,extraction,boss}', 40, 80, 0.3,
    '[{"itemId":"corroded_pipe","dropWeight":40},{"itemId":"sewer_moss","dropWeight":30}]'::jsonb, 'published')
 
 ON CONFLICT (type) DO NOTHING;

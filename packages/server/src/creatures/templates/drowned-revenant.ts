@@ -45,8 +45,8 @@ export const DROWNED_REVENANT: CreatureTemplate = {
     preferredRoomTypes: ['corridor', 'dead_end'],
     forbiddenRoomTypes: ['entry', 'extraction'],
   },
-  idleTicksMin: 3,
-  idleTicksMax: 5,
+  idleTicksMin: 30,
+  idleTicksMax: 50,
   fleeThreshold: 0.25,
   aggressive: true,
 };

@@ -52,8 +52,8 @@ export const RUBBLE_SCAVENGER: CreatureTemplate = {
     preferredRoomTypes: ['junction', 'dead_end'],
     forbiddenRoomTypes: ['entry', 'boss'],
   },
-  idleTicksMin: 4,
-  idleTicksMax: 8,
+  idleTicksMin: 40,
+  idleTicksMax: 80,
   fleeThreshold: 0.15,
   aggressive: true,
 };

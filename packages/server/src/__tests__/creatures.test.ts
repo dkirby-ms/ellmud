@@ -729,8 +729,8 @@ describe('Drowned Revenant Template', () => {
     expect(DROWNED_REVENANT.fleeThreshold).toBe(0.25);
   });
 
-  it('idle patrol ticks are 3-5', () => {
-    expect(DROWNED_REVENANT.idleTicksMin).toBe(3);
-    expect(DROWNED_REVENANT.idleTicksMax).toBe(5);
+  it('idle patrol ticks are 30-50', () => {
+    expect(DROWNED_REVENANT.idleTicksMin).toBe(30);
+    expect(DROWNED_REVENANT.idleTicksMax).toBe(50);
   });
 });
