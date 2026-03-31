@@ -6,7 +6,6 @@ interface Shard {
   id: string;
   name: string;
   tier: number;
-  biome: string;
   modifiers: string[];
   players: { current: number; max: number };
   timeRemaining: string;
@@ -33,7 +32,6 @@ const mockShards: Shard[] = [
     id: "1",
     name: "Ashen Reach — Flooded Crypt",
     tier: 1,
-    biome: "Flooded Crypt",
     modifiers: ["Dense", "Dark"],
     players: { current: 2, max: 4 },
     timeRemaining: "14m 32s",
@@ -44,7 +42,6 @@ const mockShards: Shard[] = [
     id: "2",
     name: "Hollow Archive — Shattered Bastion",
     tier: 2,
-    biome: "Shattered Bastion",
     modifiers: ["Hunted", "Unstable"],
     players: { current: 1, max: 4 },
     timeRemaining: "8m 15s",
@@ -55,7 +52,6 @@ const mockShards: Shard[] = [
     id: "3",
     name: "Crimson Depths — Fungal Deep",
     tier: 3,
-    biome: "Fungal Deep",
     modifiers: ["Toxic", "Dense", "Dark"],
     players: { current: 0, max: 4 },
     timeRemaining: "22m 45s",
@@ -240,7 +236,7 @@ export default function ShardboardTab({ onEnterShard, onEnterZone }: ShardboardT
                     Tier {shard.tier}
                   </span>
                   <span className="text-text-secondary text-sm font-sans">
-                    {shard.biome}
+                    {shard.name}
                   </span>
                 </div>
               </div>

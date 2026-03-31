@@ -133,7 +133,7 @@ export function createDashboardApiRouter(deps: DashboardRouterDeps): Router {
           const name = (entity['name'] as string) || entity.id;
 
           // Missing description (for types that require it)
-          const needsDescription: ContentEntityType[] = ['biomes', 'modifiers', 'skills', 'factions', 'rooms', 'items'];
+          const needsDescription: ContentEntityType[] = ['modifiers', 'skills', 'factions', 'rooms', 'items'];
           if (needsDescription.includes(entityType)) {
             if (!entity['description'] || (typeof entity['description'] === 'string' && entity['description'].trim() === '')) {
               warnings.push({

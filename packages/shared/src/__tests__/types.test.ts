@@ -13,7 +13,7 @@ import {
   type NarrationType,
   type ShardState,
   type CombatAction,
-  type BiomeType,
+
   type GearTier,
   type ShardTier,
   type ShardModifier,
@@ -123,9 +123,9 @@ describe('Message Type Shapes', () => {
     const msgWithOptions: RoomSwitchMessage = {
       target: 'zone:the-refuge',
       reason: 'extraction_complete',
-      options: { biome: 'flooded_crypt', roomId: 'room-123' },
+      options: { roomId: 'room-123' },
     };
-    expect(msgWithOptions.options).toEqual({ biome: 'flooded_crypt', roomId: 'room-123' });
+    expect(msgWithOptions.options).toEqual({ roomId: 'room-123' });
   });
 });
 
@@ -145,13 +145,6 @@ describe('Type Enumerations', () => {
       'strike', 'heavy_strike', 'dodge', 'block', 'use_item', 'skill', 'flee', 'observe',
     ];
     expect(actions).toHaveLength(8);
-  });
-
-  it('BiomeType should allow all biome types', () => {
-    const biomes: BiomeType[] = [
-      'flooded_crypt', 'shattered_bastion', 'fungal_deep', 'ashen_reach', 'void_rift',
-    ];
-    expect(biomes).toHaveLength(5);
   });
 
   it('GearTier should allow all gear tiers', () => {

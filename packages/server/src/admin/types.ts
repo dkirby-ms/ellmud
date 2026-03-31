@@ -27,7 +27,6 @@ export interface AdminShardDetail {
   roomId: string;
   name: string;
   clients: number;
-  biome: string;
   lifecycle: string;
   stability: number;
   collapseTimer: number;

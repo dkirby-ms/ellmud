@@ -46,7 +46,6 @@ function makeTestRoomGraph(): RoomGraph {
     extractionRoomIds: ['extraction-1'],
     bossRoomId: 'boss-1',
     seed: 42,
-    biome: 'flooded_crypt',
     tier: 1,
   };
 }

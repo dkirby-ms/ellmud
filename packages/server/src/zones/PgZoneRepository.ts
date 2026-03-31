@@ -2,7 +2,7 @@
  * PgZoneRepository — PostgreSQL implementation of ZoneRepository.
  *
  * Uses the shared connection pool from db/index.ts. Follows the same patterns
- * as PgBiomeDefinitionsStore and PgItemDefinitionsStore: query helper,
+ * as PgItemDefinitionsStore: query helper,
  * row-to-entity mapping, proper camelCase ↔ snake_case conversion.
  *
  * JSONB fields (loot_containers, hazards, npcs, condition) are serialized
@@ -29,7 +29,7 @@ interface ZoneRow {
   level_min: number;
   level_max: number;
   tier: number;
-  biome: string;
+  theme: string;
   entry_room_slugs: string[];
   lifecycle: string;
   category: string;
@@ -80,7 +80,7 @@ function zoneRowToEntity(row: ZoneRow): ZoneDefinition {
     levelMin: row.level_min,
     levelMax: row.level_max,
     tier: row.tier,
-    biome: row.biome as ZoneDefinition['biome'],
+    theme: row.theme as ZoneDefinition['theme'],
     entryRoomSlugs: row.entry_room_slugs,
     lifecycle: row.lifecycle as ZoneDefinition['lifecycle'],
     category: row.category as ZoneDefinition['category'],
@@ -165,7 +165,7 @@ export class PgZoneRepository implements ZoneRepository {
   ): Promise<ZoneDefinition> {
     const result = await query<ZoneRow>(
       `INSERT INTO zones (
-        slug, name, description, level_min, level_max, tier, biome,
+        slug, name, description, level_min, level_max, tier, theme,
         entry_room_slugs, lifecycle, category, max_players,
         pvp_enabled, repop_interval_seconds
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
@@ -177,7 +177,7 @@ export class PgZoneRepository implements ZoneRepository {
         zone.levelMin,
         zone.levelMax,
         zone.tier,
-        zone.biome,
+        zone.theme,
         zone.entryRoomSlugs,
         zone.lifecycle,
         zone.category,
@@ -207,7 +207,7 @@ export class PgZoneRepository implements ZoneRepository {
     const result = await query<ZoneRow>(
       `UPDATE zones SET
         slug = $1, name = $2, description = $3, level_min = $4, level_max = $5,
-        tier = $6, biome = $7, entry_room_slugs = $8, lifecycle = $9, category = $10,
+        tier = $6, theme = $7, entry_room_slugs = $8, lifecycle = $9, category = $10,
         max_players = $11, pvp_enabled = $12, repop_interval_seconds = $13,
         updated_at = now()
       WHERE id = $14
@@ -219,7 +219,7 @@ export class PgZoneRepository implements ZoneRepository {
         merged.levelMin,
         merged.levelMax,
         merged.tier,
-        merged.biome,
+        merged.theme,
         merged.entryRoomSlugs,
         merged.lifecycle,
         merged.category,

@@ -49,17 +49,6 @@ function validateCreature(data: Record<string, unknown>, isUpdate: boolean): str
   return errors;
 }
 
-// ─── Biomes ──────────────────────────────────────────────────────────────────
-
-function validateBiome(data: Record<string, unknown>, isUpdate: boolean): string[] {
-  const errors: string[] = [];
-  if (!isUpdate) {
-    requireString(data, 'name', errors);
-    requireString(data, 'description', errors);
-  }
-  return errors;
-}
-
 // ─── Modifiers ───────────────────────────────────────────────────────────────
 
 function validateModifier(data: Record<string, unknown>, isUpdate: boolean): string[] {
@@ -133,7 +122,6 @@ function validateNarrative(data: Record<string, unknown>, isUpdate: boolean): st
 const validators: Record<ContentEntityType, Validator> = {
   items: validateItem,
   creatures: validateCreature,
-  biomes: validateBiome,
   modifiers: validateModifier,
   skills: validateSkill,
   'loot-tables': validateLootTable,

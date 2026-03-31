@@ -10,7 +10,6 @@ interface Creature {
   name: string;
   type: string;
   maxHp: number;
-  biomeAffinity?: string[];
   status?: Status;
 }
 
@@ -232,12 +231,6 @@ export default function CreaturesList() {
                 className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
                 style={{ fontFamily: "var(--font-sans)" }}
               >
-                Biome(s)
-              </th>
-              <th
-                className="p-4 text-left text-[#8A8B95] text-xs uppercase tracking-wider"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
                 Status
               </th>
             </tr>
@@ -280,19 +273,6 @@ export default function CreaturesList() {
                   >
                     {creature.maxHp}
                   </span>
-                </td>
-                <td className="p-4">
-                  <div className="flex gap-1">
-                    {creature.biomeAffinity?.map((biome) => (
-                      <span
-                        key={biome}
-                        className="px-2 py-1 bg-[#1C1D27] text-[#8A8B95] text-xs rounded"
-                        style={{ fontFamily: "var(--font-mono)" }}
-                      >
-                        {biome}
-                      </span>
-                    ))}
-                  </div>
                 </td>
                 <td className="p-4">{getStatusBadge(creature.status || "draft")}</td>
               </tr>

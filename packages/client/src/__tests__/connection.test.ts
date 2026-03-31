@@ -207,12 +207,11 @@ describe('Connection — runtime behavior', () => {
       'shard',
       'test-token',
       handlers,
-      { roomId: 'room-123', biome: 'flooded_crypt', tier: 1 },
+      { roomId: 'room-123', tier: 1 },
     );
 
     expect(mockJoinById).toHaveBeenCalledWith('room-123', {
       token: 'test-token',
-      biome: 'flooded_crypt',
       tier: 1,
     });
     expect(result).toBe(newMockRoom);

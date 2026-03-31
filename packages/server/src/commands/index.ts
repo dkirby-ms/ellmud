@@ -99,7 +99,6 @@ export type CommandHandler = (ctx: CommandContext) => CommandResult;
 /** Shard listing summary for shardboard display. */
 export interface ShardListing {
   roomId: string;
-  biome: string;
   tier: number;
   lifecycle: string;
   playerCount: number;

@@ -41,7 +41,7 @@ function zoneInput(
     levelMin: 1,
     levelMax: 5,
     tier: 1,
-    biome: 'flooded_crypt',
+    theme: 'flooded_crypt',
     entryRoomSlugs: ['entrance'],
     lifecycle: 'persistent',
     category: 'dungeon',
@@ -310,7 +310,7 @@ describe('Zone Adapter Integration (repo → adapter round-trip)', () => {
         name: 'Sunken Temple',
         entryRoomSlugs: ['foyer'],
         tier: 2,
-        biome: 'flooded_crypt',
+        theme: 'flooded_crypt',
       }),
     );
     await repo.createRoom(roomInput(zone.id, 'foyer', { type: 'entry' }));
@@ -329,7 +329,6 @@ describe('Zone Adapter Integration (repo → adapter round-trip)', () => {
     expect(graph.rooms.size).toBe(3);
     expect(graph.entryRoomIds).toEqual(['foyer']);
     expect(graph.bossRoomId).toBe('altar');
-    expect(graph.biome).toBe('flooded_crypt');
     expect(graph.tier).toBe(2);
 
     // Verify exit wiring
@@ -345,7 +344,7 @@ describe('Zone Adapter Integration (repo → adapter round-trip)', () => {
       zoneInput({
         slug: 'fungal-deep',
         entryRoomSlugs: ['shaft'],
-        biome: 'fungal_deep',
+        theme: 'fungal_deep',
       }),
     );
     await repo.createRoom(roomInput(zone.id, 'shaft', { type: 'entry' }));
@@ -554,7 +553,6 @@ describe('Repop Logic (specification-based)', () => {
       extractionRoomIds: [],
       bossRoomId: '',
       seed: 42,
-      biome: 'flooded_crypt',
       tier: 1,
     };
 
@@ -599,7 +597,6 @@ describe('Repop Logic (specification-based)', () => {
       extractionRoomIds: [],
       bossRoomId: '',
       seed: 42,
-      biome: 'flooded_crypt',
       tier: 1,
     };
 
@@ -649,7 +646,6 @@ describe('Repop Logic (specification-based)', () => {
       extractionRoomIds: [],
       bossRoomId: '',
       seed: 42,
-      biome: 'flooded_crypt',
       tier: 1,
     };
 
@@ -695,7 +691,6 @@ describe('Repop Logic (specification-based)', () => {
       extractionRoomIds: [],
       bossRoomId: '',
       seed: 42,
-      biome: 'flooded_crypt',
       tier: 1,
     };
 
@@ -828,7 +823,7 @@ describe('Zone-Based ShardRoom Creation', () => {
         slug: 'test-shard-zone',
         entryRoomSlugs: ['start'],
         tier: 2,
-        biome: 'shattered_bastion',
+        theme: 'shattered_bastion',
       }),
     );
     await repo.createRoom(roomInput(zone.id, 'start', { type: 'entry' }));
@@ -852,7 +847,6 @@ describe('Zone-Based ShardRoom Creation', () => {
     expect(graph.extractionRoomIds).toContain('escape');
     expect(graph.bossRoomId).toBe('boss-lair');
     expect(graph.seed).toBeGreaterThan(0);
-    expect(graph.biome).toBe('shattered_bastion');
     expect(graph.tier).toBe(2);
 
     // Verify all rooms have valid structure

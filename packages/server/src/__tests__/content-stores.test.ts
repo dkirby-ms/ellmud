@@ -1,6 +1,5 @@
 /**
  * Unit tests for the dedicated Pg content stores:
- *   - PgBiomeDefinitionsStore
  *   - PgModifierDefinitionsStore
  *   - PgNarrativeDefinitionsStore
  *   - PgCreatureDefinitionsStore
@@ -15,7 +14,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { QueryResultRow } from 'pg';
 
 import { ContentStoreError } from '../admin/content/ContentStore.js';
-import { PgBiomeDefinitionsStore } from '../admin/content/PgBiomeDefinitionsStore.js';
 import { PgModifierDefinitionsStore } from '../admin/content/PgModifierDefinitionsStore.js';
 import { PgNarrativeDefinitionsStore } from '../admin/content/PgNarrativeDefinitionsStore.js';
 import { PgCreatureDefinitionsStore } from '../admin/content/PgCreatureDefinitionsStore.js';
@@ -47,241 +45,6 @@ function pgUniqueViolation(): Error {
   err.code = '23505';
   return err;
 }
-
-// ─── PgBiomeDefinitionsStore ─────────────────────────────────────────────────
-
-describe('PgBiomeDefinitionsStore', () => {
-  let store: PgBiomeDefinitionsStore;
-
-  const BIOME_ROW = {
-    id: 'b-001',
-    slug: 'flooded-crypt',
-    name: 'Flooded Crypt',
-    description: 'A waterlogged burial ground',
-    tier: 2,
-    features: ['water', 'darkness'],
-    hazard_types: ['drowning', 'undead'],
-    room_properties: ['submerged', 'narrow'],
-    narration_hints: ['dripping sounds', 'cold air'],
-    created_at: new Date('2025-01-01'),
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    store = new PgBiomeDefinitionsStore();
-  });
-
-  it('has entityType "biomes"', () => {
-    expect(store.entityType).toBe('biomes');
-  });
-
-  // ── rowToEntity via getAll ──────────────────────────────────────────────
-
-  describe('getAll', () => {
-    it('maps DB rows to entities with correct camelCase field names', async () => {
-      queryMock.mockResolvedValueOnce(mockQueryResult([BIOME_ROW]));
-
-      const entities = await store.getAll();
-
-      expect(entities).toHaveLength(1);
-      const e = entities[0];
-      expect(e.id).toBe('b-001');
-      expect(e.slug).toBe('flooded-crypt');
-      expect(e.name).toBe('Flooded Crypt');
-      expect(e.description).toBe('A waterlogged burial ground');
-      expect(e.tier).toBe(2);
-      expect(e.features).toEqual(['water', 'darkness']);
-      expect(e.hazardTypes).toEqual(['drowning', 'undead']);
-      expect(e.roomProperties).toEqual(['submerged', 'narrow']);
-      expect(e.narrationHints).toEqual(['dripping sounds', 'cold air']);
-    });
-
-    it('returns empty array when no rows', async () => {
-      queryMock.mockResolvedValueOnce(mockQueryResult([]));
-      const entities = await store.getAll();
-      expect(entities).toEqual([]);
-    });
-
-    it('queries biome_definitions table with ORDER BY name', async () => {
-      queryMock.mockResolvedValueOnce(mockQueryResult([]));
-      await store.getAll();
-      expect(queryMock).toHaveBeenCalledWith(
-        expect.stringContaining('FROM biome_definitions'),
-      );
-      expect(queryMock).toHaveBeenCalledWith(
-        expect.stringContaining('ORDER BY name'),
-      );
-    });
-  });
-
-  // ── getById ────────────────────────────────────────────────────────────
-
-  describe('getById', () => {
-    it('returns entity when found', async () => {
-      queryMock.mockResolvedValueOnce(mockQueryResult([BIOME_ROW]));
-      const entity = await store.getById('b-001');
-      expect(entity).toBeDefined();
-      expect(entity!.id).toBe('b-001');
-      expect(entity!.hazardTypes).toEqual(['drowning', 'undead']);
-    });
-
-    it('returns undefined when not found', async () => {
-      queryMock.mockResolvedValueOnce(mockQueryResult([]));
-      const entity = await store.getById('nonexistent');
-      expect(entity).toBeUndefined();
-    });
-
-    it('passes id as parameterised query value', async () => {
-      queryMock.mockResolvedValueOnce(mockQueryResult([]));
-      await store.getById('b-001');
-      expect(queryMock).toHaveBeenCalledWith(
-        expect.stringContaining('WHERE id = $1'),
-        ['b-001'],
-      );
-    });
-  });
-
-  // ── create ─────────────────────────────────────────────────────────────
-
-  describe('create', () => {
-    it('returns the created entity', async () => {
-      queryMock.mockResolvedValueOnce(mockQueryResult([BIOME_ROW]));
-
-      const entity = await store.create({
-        id: 'ignored',
-        slug: 'flooded-crypt',
-        name: 'Flooded Crypt',
-        description: 'A waterlogged burial ground',
-        tier: 2,
-        features: ['water', 'darkness'],
-        hazardTypes: ['drowning', 'undead'],
-        roomProperties: ['submerged', 'narrow'],
-        narrationHints: ['dripping sounds', 'cold air'],
-      });
-
-      expect(entity.id).toBe('b-001');
-      expect(entity.name).toBe('Flooded Crypt');
-    });
-
-    it('inserts into biome_definitions with RETURNING', async () => {
-      queryMock.mockResolvedValueOnce(mockQueryResult([BIOME_ROW]));
-      await store.create({ id: 'x', name: 'Test', slug: 'test' });
-      expect(queryMock).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO biome_definitions'),
-        expect.any(Array),
-      );
-      expect(queryMock).toHaveBeenCalledWith(
-        expect.stringContaining('RETURNING'),
-        expect.any(Array),
-      );
-    });
-
-    it('throws ContentStoreError DUPLICATE_ID on unique violation', async () => {
-      queryMock.mockRejectedValueOnce(pgUniqueViolation());
-
-      await expect(
-        store.create({ id: 'dup', name: 'Dup' }),
-      ).rejects.toThrow(ContentStoreError);
-
-      try {
-        queryMock.mockRejectedValueOnce(pgUniqueViolation());
-        await store.create({ id: 'dup', name: 'Dup' });
-      } catch (err) {
-        expect(err).toBeInstanceOf(ContentStoreError);
-        expect((err as ContentStoreError).code).toBe('DUPLICATE_ID');
-      }
-    });
-
-    it('re-throws non-PG errors as-is', async () => {
-      const genericError = new Error('connection lost');
-      queryMock.mockRejectedValueOnce(genericError);
-
-      await expect(
-        store.create({ id: 'x', name: 'Test' }),
-      ).rejects.toThrow('connection lost');
-    });
-
-    it('defaults arrays to empty when not provided', async () => {
-      queryMock.mockResolvedValueOnce(mockQueryResult([{
-        ...BIOME_ROW,
-        features: [],
-        hazard_types: [],
-        room_properties: [],
-        narration_hints: [],
-      }]));
-
-      await store.create({ id: 'x', name: 'Bare Biome' });
-
-      const callArgs = queryMock.mock.calls[0][1] as unknown[];
-      // features, hazardTypes, roomProperties, narrationHints positions (5th–8th params)
-      expect(callArgs[4]).toEqual([]);
-      expect(callArgs[5]).toEqual([]);
-      expect(callArgs[6]).toEqual([]);
-      expect(callArgs[7]).toEqual([]);
-    });
-  });
-
-  // ── update ─────────────────────────────────────────────────────────────
-
-  describe('update', () => {
-    it('throws ContentStoreError NOT_FOUND for missing id', async () => {
-      queryMock.mockResolvedValueOnce(mockQueryResult([])); // getById returns nothing
-
-      await expect(
-        store.update('missing', { name: 'Updated' }),
-      ).rejects.toThrow(ContentStoreError);
-
-      try {
-        queryMock.mockResolvedValueOnce(mockQueryResult([]));
-        await store.update('missing', { name: 'Updated' });
-      } catch (err) {
-        expect((err as ContentStoreError).code).toBe('NOT_FOUND');
-      }
-    });
-
-    it('merges partial fields and returns updated entity', async () => {
-      // First call: getById
-      queryMock.mockResolvedValueOnce(mockQueryResult([BIOME_ROW]));
-      // Second call: UPDATE
-      queryMock.mockResolvedValueOnce(mockQueryResult([{
-        ...BIOME_ROW,
-        name: 'Sunken Crypt',
-        tier: 3,
-      }]));
-
-      const updated = await store.update('b-001', { name: 'Sunken Crypt', tier: 3 });
-
-      expect(updated.name).toBe('Sunken Crypt');
-      expect(updated.tier).toBe(3);
-      expect(updated.slug).toBe('flooded-crypt'); // unchanged
-    });
-  });
-
-  // ── delete ─────────────────────────────────────────────────────────────
-
-  describe('delete', () => {
-    it('returns true when row deleted', async () => {
-      queryMock.mockResolvedValueOnce(mockQueryResult([], 1));
-      const result = await store.delete('b-001');
-      expect(result).toBe(true);
-    });
-
-    it('returns false when no row found', async () => {
-      queryMock.mockResolvedValueOnce(mockQueryResult([], 0));
-      const result = await store.delete('nonexistent');
-      expect(result).toBe(false);
-    });
-
-    it('targets biome_definitions table', async () => {
-      queryMock.mockResolvedValueOnce(mockQueryResult([], 0));
-      await store.delete('b-001');
-      expect(queryMock).toHaveBeenCalledWith(
-        expect.stringContaining('DELETE FROM biome_definitions'),
-        ['b-001'],
-      );
-    });
-  });
-});
 
 // ─── PgModifierDefinitionsStore ──────────────────────────────────────────────
 
@@ -474,8 +237,7 @@ describe('PgNarrativeDefinitionsStore', () => {
     slug: 'crypt-entry',
     name: 'Crypt Entry',
     narrative_type: 'room_description',
-    biome: 'flooded_crypt',
-    template: 'You step into {biome}...',
+    template: 'You step into the crypt...',
     tone: 'foreboding',
     verbosity: 'detailed',
     tags: ['entry', 'atmospheric'],
@@ -505,17 +267,15 @@ describe('PgNarrativeDefinitionsStore', () => {
       expect(e.slug).toBe('crypt-entry');
       expect(e.name).toBe('Crypt Entry');
       expect(e.narrativeType).toBe('room_description');
-      expect(e.biome).toBe('flooded_crypt');
-      expect(e.template).toBe('You step into {biome}...');
+      expect(e.template).toBe('You step into the crypt...');
       expect(e.tone).toBe('foreboding');
       expect(e.verbosity).toBe('detailed');
       expect(e.tags).toEqual(['entry', 'atmospheric']);
     });
 
-    it('converts null biome, tone, verbosity to empty strings', async () => {
+    it('converts null tone, verbosity to empty strings', async () => {
       queryMock.mockResolvedValueOnce(mockQueryResult([{
         ...NARRATIVE_ROW,
-        biome: null,
         tone: null,
         verbosity: null,
       }]));
@@ -523,7 +283,6 @@ describe('PgNarrativeDefinitionsStore', () => {
       const entities = await store.getAll();
       const e = entities[0];
 
-      expect(e.biome).toBe('');
       expect(e.tone).toBe('');
       expect(e.verbosity).toBe('');
     });
@@ -569,7 +328,7 @@ describe('PgNarrativeDefinitionsStore', () => {
         slug: 'crypt-entry',
         name: 'Crypt Entry',
         narrativeType: 'room_description',
-        template: 'You step into {biome}...',
+        template: 'You step into the crypt...',
       });
 
       expect(entity.id).toBe('n-001');
@@ -600,8 +359,8 @@ describe('PgNarrativeDefinitionsStore', () => {
       await store.create({ id: 'x', slug: 'test', name: 'Test' });
 
       const callArgs = queryMock.mock.calls[0][1] as unknown[];
-      // tags is the 8th param ($8)
-      expect(callArgs[7]).toEqual([]);
+      // tags is the 7th param ($7)
+      expect(callArgs[6]).toEqual([]);
     });
   });
 
@@ -681,7 +440,6 @@ describe('PgCreatureDefinitionsStore', () => {
     idle_ticks_min: 3,
     idle_ticks_max: 6,
     flee_threshold: 0.2,
-    biome_affinity: ['flooded_crypt', 'drowned_ruins'],
     tier_min: 2,
     tier_max: 4,
     status: 'published',
@@ -725,7 +483,6 @@ describe('PgCreatureDefinitionsStore', () => {
       expect(e.idleTicksMin).toBe(3);
       expect(e.idleTicksMax).toBe(6);
       expect(e.fleeThreshold).toBe(0.2);
-      expect(e.biomeAffinity).toEqual(['flooded_crypt', 'drowned_ruins']);
       expect(e.tierMin).toBe(2);
       expect(e.tierMax).toBe(4);
       expect(e.status).toBe('published');
@@ -737,7 +494,6 @@ describe('PgCreatureDefinitionsStore', () => {
         ...CREATURE_ROW,
         description: null,
         behavior: null,
-        biome_affinity: null,
         tier_min: null,
         tier_max: null,
         status: null,
@@ -748,7 +504,6 @@ describe('PgCreatureDefinitionsStore', () => {
 
       expect(e.description).toBe('');
       expect(e.behavior).toBeNull();
-      expect(e.biomeAffinity).toEqual([]);
       expect(e.tierMin).toBeNull();
       expect(e.tierMax).toBeNull();
       expect(e.status).toBe('published');
@@ -815,7 +570,7 @@ describe('PgCreatureDefinitionsStore', () => {
       expect(entity.name).toBe('Drowned Revenant');
     });
 
-    it('inserts into creature_definitions with 23 params', async () => {
+    it('inserts into creature_definitions with 22 params', async () => {
       queryMock.mockResolvedValueOnce(mockQueryResult([CREATURE_ROW]));
       await store.create({ id: 'x', type: 'test', name: 'Test' });
 
@@ -824,7 +579,7 @@ describe('PgCreatureDefinitionsStore', () => {
         expect.any(Array),
       );
       const callArgs = queryMock.mock.calls[0][1] as unknown[];
-      expect(callArgs).toHaveLength(23);
+      expect(callArgs).toHaveLength(22);
     });
 
     it('serializes loot_table as JSON', async () => {
@@ -839,8 +594,8 @@ describe('PgCreatureDefinitionsStore', () => {
       });
 
       const callArgs = queryMock.mock.calls[0][1] as unknown[];
-      // loot_table is the 23rd param ($23)
-      expect(callArgs[22]).toBe(JSON.stringify(loot));
+      // loot_table is the 22nd param ($22)
+      expect(callArgs[21]).toBe(JSON.stringify(loot));
     });
 
     it('throws ContentStoreError DUPLICATE_ID on unique violation', async () => {
@@ -902,7 +657,7 @@ describe('PgCreatureDefinitionsStore', () => {
       expect(updated.type).toBe('drowned_revenant'); // unchanged
     });
 
-    it('passes 24 params to the UPDATE query (23 cols + WHERE id)', async () => {
+    it('passes 23 params to the UPDATE query (22 cols + WHERE id)', async () => {
       queryMock.mockResolvedValueOnce(mockQueryResult([CREATURE_ROW]));
       queryMock.mockResolvedValueOnce(mockQueryResult([CREATURE_ROW]));
 
@@ -910,8 +665,8 @@ describe('PgCreatureDefinitionsStore', () => {
 
       // Second call is the UPDATE
       const callArgs = queryMock.mock.calls[1][1] as unknown[];
-      expect(callArgs).toHaveLength(24);
-      expect(callArgs[23]).toBe('c-001'); // WHERE id = $24
+      expect(callArgs).toHaveLength(23);
+      expect(callArgs[22]).toBe('c-001'); // WHERE id = $23
     });
   });
 

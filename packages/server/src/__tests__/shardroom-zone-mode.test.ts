@@ -38,7 +38,7 @@ async function seedZone(
     levelMin: 1,
     levelMax: 5,
     tier: 1,
-    biome: 'flooded_crypt',
+    theme: 'flooded_crypt',
     entryRoomSlugs: ['hearth'],
     lifecycle: 'persistent',
     category,

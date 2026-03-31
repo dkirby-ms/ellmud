@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { Room, RoomGraph, ShardTier, BiomeType } from '@ellmud/shared';
+import type { Room, RoomGraph, ShardTier } from '@ellmud/shared';
 import { serializeRoomGraph, deserializeRoomGraph } from '@ellmud/shared';
 import { generateShardGraph } from '../shard/generator.js';
 import { createPRNG } from '../shard/prng.js';
@@ -36,7 +36,7 @@ function bfs(startId: string, rooms: Map<string, Room>): Map<string, number> {
 
 // ─── Default test config ────────────────────────────────────────────────────
 
-const T1_CONFIG = { tier: 1 as ShardTier, biome: 'flooded_crypt' as BiomeType, seed: 42 };
+const T1_CONFIG = { tier: 1 as ShardTier, seed: 42 };
 
 describe('PRNG', () => {
   it('is deterministic — same seed, same sequence', () => {
@@ -156,7 +156,7 @@ describe('Shard Graph Generation', () => {
     expect(edgeCount).toBeGreaterThan(nodeCount - 1);
   });
 
-  it('biome templates applied: all rooms have names and descriptions', () => {
+  it('all rooms have names and descriptions', () => {
     const graph = generateShardGraph(T1_CONFIG);
     for (const room of graph.rooms.values()) {
       expect(room.name).toBeTruthy();
@@ -209,7 +209,6 @@ describe('Shard Graph Generation', () => {
     expect(restored.extractionRoomIds).toEqual(graph.extractionRoomIds);
     expect(restored.bossRoomId).toBe(graph.bossRoomId);
     expect(restored.seed).toBe(graph.seed);
-    expect(restored.biome).toBe(graph.biome);
     expect(restored.tier).toBe(graph.tier);
 
     for (const [id, room] of graph.rooms) {
@@ -302,10 +301,9 @@ describe('Shard Graph Generation', () => {
     expect(types.has('dead_end')).toBe(true);
   });
 
-  it('graph metadata preserved: seed, biome, tier', () => {
+  it('graph metadata preserved: seed, tier', () => {
     const graph = generateShardGraph(T1_CONFIG);
     expect(graph.seed).toBe(T1_CONFIG.seed);
-    expect(graph.biome).toBe(T1_CONFIG.biome);
     expect(graph.tier).toBe(T1_CONFIG.tier);
   });
 });

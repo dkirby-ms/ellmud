@@ -3,7 +3,7 @@
  * Defines the data structures for rooms, connections, and shard layouts.
  */
 
-import type { BiomeType, ShardTier } from './index.js';
+import type { ShardTier } from './index.js';
 
 // ─── Directions ──────────────────────────────────────────────────────────────
 
@@ -97,7 +97,6 @@ export interface RoomGraph {
   extractionRoomIds: string[];
   bossRoomId: string;
   seed: number;
-  biome: BiomeType;
   tier: ShardTier;
 }
 
@@ -120,7 +119,6 @@ export interface SerializedRoomGraph {
   extractionRoomIds: string[];
   bossRoomId: string;
   seed: number;
-  biome: BiomeType;
   tier: ShardTier;
 }
 
@@ -145,7 +143,6 @@ export function serializeRoomGraph(graph: RoomGraph): SerializedRoomGraph {
     extractionRoomIds: graph.extractionRoomIds,
     bossRoomId: graph.bossRoomId,
     seed: graph.seed,
-    biome: graph.biome,
     tier: graph.tier,
   };
 }
@@ -171,7 +168,6 @@ export function deserializeRoomGraph(data: SerializedRoomGraph): RoomGraph {
     extractionRoomIds: data.extractionRoomIds,
     bossRoomId: data.bossRoomId,
     seed: data.seed,
-    biome: data.biome,
     tier: data.tier,
   };
 }

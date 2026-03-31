@@ -8,7 +8,7 @@
  * Uses real production imports from the run-history module.
  *
  * Schema reference: migration 005_create_run_history.sql
- *   - run_history: player_id, run_id, shard_tier (1-3), biome, duration_sec (>=0),
+ *   - run_history: player_id, run_id, shard_tier (1-3), duration_sec (>=0),
  *     extracted (boolean), extracted_items (JSONB), xp_gained (>=0), created_at
  */
 
@@ -32,7 +32,6 @@ function makeRun(overrides?: Partial<RunRecord>): RunRecord {
     runId: overrides?.runId ?? `shard-${Math.random().toString(36).slice(2, 10)}`,
     playerId: overrides?.playerId ?? PLAYER_A,
     shardTier: overrides?.shardTier ?? 1,
-    biome: overrides && 'biome' in overrides ? overrides.biome ?? null : 'flooded_crypt',
     durationSec: overrides?.durationSec ?? 300,
     extracted: overrides?.extracted ?? true,
     extractedItems: overrides?.extractedItems ?? [{ itemId: 'bone-shard', name: 'Bone Shard' }],
@@ -82,7 +81,6 @@ function runHistoryRepositoryContractTests(
       expect(history[0].runId).toBe('shard-001');
       expect(history[0].playerId).toBe(PLAYER_A);
       expect(history[0].shardTier).toBe(1);
-      expect(history[0].biome).toBe('flooded_crypt');
       expect(history[0].durationSec).toBe(300);
       expect(history[0].extracted).toBe(true);
       expect(history[0].xpGained).toBe(50);
@@ -207,12 +205,6 @@ function runHistoryRepositoryContractTests(
       await repo.recordRun(makeRun({ xpGained: 0 }));
       const history = await repo.getPlayerHistory(PLAYER_A);
       expect(history[0].xpGained).toBe(0);
-    });
-
-    it('handles null biome', async () => {
-      await repo.recordRun(makeRun({ biome: null }));
-      const history = await repo.getPlayerHistory(PLAYER_A);
-      expect(history[0].biome).toBeNull();
     });
 
     it('handles all shard tiers', async () => {

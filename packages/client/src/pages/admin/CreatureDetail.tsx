@@ -29,7 +29,6 @@ interface CreatureFormData {
   idleTicksMin: number;
   idleTicksMax: number;
   fleeThreshold: number;
-  biomeAffinity: string[];
   tierMin: number;
   tierMax: number;
   status?: Status;
@@ -81,7 +80,6 @@ export default function CreatureDetail() {
     idleTicksMin: 3,
     idleTicksMax: 5,
     fleeThreshold: 0.25,
-    biomeAffinity: [],
     tierMin: 1,
     tierMax: 3,
   });

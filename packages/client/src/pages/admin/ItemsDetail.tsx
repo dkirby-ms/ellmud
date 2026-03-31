@@ -524,7 +524,7 @@ export default function ItemsDetail() {
                   className="text-[#8A8B95]"
                   style={{ fontFamily: "var(--font-sans)" }}
                 >
-                  • Flooded Crypt biome
+                  • Flooded Crypt zone
                 </div>
               </div>
             </div>

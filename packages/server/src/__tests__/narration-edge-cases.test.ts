@@ -23,7 +23,6 @@ function makeContext(overrides: Partial<NarrationContext> = {}): NarrationContex
     narration_type: 'room_description',
     room: {
       id: 'shard-0a3f::room-17',
-      biome: 'flooded_crypt',
       light_level: 0.3,
       exits: ['north', 'east', 'down'],
       features: ['collapsed_pillar', 'altar_bloodstained'],
@@ -173,7 +172,6 @@ describe('Template Rendering Boundaries', () => {
     const ctx = makeContext({
       room: {
         id: 'empty-room',
-        biome: 'flooded_crypt',
         light_level: 0.5,
         exits: ['north'],
         features: [],
@@ -263,23 +261,10 @@ describe('Template Rendering Boundaries', () => {
     expect(result).toBeTruthy();
   });
 
-  it('renders room description for all biomes', () => {
-    const biomes = ['flooded_crypt', 'shattered_bastion', 'fungal_deep', 'ashen_reach', 'void_rift'];
-    for (const biome of biomes) {
-      const ctx = makeContext({
-        room: { ...makeContext().room, biome },
-      });
-      const result = renderTemplate('room_description', ctx);
-      expect(result.length).toBeGreaterThan(20);
-    }
-  });
-
-  it('renders room description for unknown biome gracefully', () => {
-    const ctx = makeContext({
-      room: { ...makeContext().room, biome: 'unknown_biome' },
-    });
+  it('renders room description for default room context', () => {
+    const ctx = makeContext();
     const result = renderTemplate('room_description', ctx);
-    expect(result).toContain('air hangs heavy'); // fallback atmosphere
+    expect(result.length).toBeGreaterThan(20);
   });
 });
 
@@ -312,7 +297,6 @@ describe('State Hasher Edge Cases', () => {
     const ctx1 = makeContext({
       room: {
         id: 'room-1',
-        biome: 'flooded_crypt',
         light_level: 0.3,
         exits: ['north'],
         features: [],
@@ -333,7 +317,6 @@ describe('State Hasher Edge Cases', () => {
         features: [],
         exits: ['north'],
         light_level: 0.3,
-        biome: 'flooded_crypt',
         id: 'room-1',
       },
     });

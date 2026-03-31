@@ -97,7 +97,6 @@ export function convertZoneToRoomGraph(zoneData: ZoneData): RoomGraph {
     extractionRoomIds,
     bossRoomId,
     seed: hashString(zone.slug),
-    biome: zone.biome,
     tier,
   };
 }

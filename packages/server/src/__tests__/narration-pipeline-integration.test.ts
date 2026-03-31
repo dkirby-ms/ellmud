@@ -28,7 +28,6 @@ function makeContext(overrides: Partial<NarrationContext> = {}): NarrationContex
     narration_type: 'room_description',
     room: {
       id: 'shard-0a3f::room-17',
-      biome: 'flooded_crypt',
       light_level: 0.3,
       exits: ['north', 'east', 'down'],
       features: ['collapsed_pillar', 'altar_bloodstained'],
@@ -359,7 +358,7 @@ describe('AC: Template fallback delivers atmospheric prose', () => {
     }
   });
 
-  it('room_description template mentions biome atmosphere, creatures, exits', () => {
+  it('room_description template mentions atmosphere, creatures, exits', () => {
     const ctx = makeContext();
     const prose = renderTemplate('room_description', ctx);
 
@@ -522,7 +521,6 @@ describe('AC: State snapshot schema matches GDD §4.3', () => {
   it('room contains all GDD §4.3 fields', () => {
     const ctx = makeContext();
     expect(ctx.room).toHaveProperty('id');
-    expect(ctx.room).toHaveProperty('biome');
     expect(ctx.room).toHaveProperty('light_level');
     expect(ctx.room).toHaveProperty('exits');
     expect(ctx.room).toHaveProperty('features');

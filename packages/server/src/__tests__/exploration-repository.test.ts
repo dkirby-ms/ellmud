@@ -5,7 +5,7 @@
  * zone filtering, hasVisited checks, aggregate stats, and zone/shard isolation.
  *
  * Schema: characterId, zoneSlug (null for shards), roomId, roomType, roomName,
- * shardTier?, biome? — NO coordinate fields.
+ * shardTier? — NO coordinate fields.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -38,7 +38,6 @@ function shardVisit(overrides: Partial<ExplorationVisit> = {}): ExplorationVisit
     roomType: 'junction',
     roomName: 'Shattered Junction',
     shardTier: 2,
-    biome: 'flooded_crypt',
     ...overrides,
   };
 }
@@ -68,13 +67,12 @@ describe('InMemoryExplorationRepository', () => {
       expect(room.roomType).toBe('corridor');
       expect(room.roomName).toBe('Flooded Corridor');
       expect(room.shardTier).toBeNull();
-      expect(room.biome).toBeNull();
       expect(room.visitCount).toBe(1);
       expect(room.firstVisited).toBeInstanceOf(Date);
       expect(room.lastVisited).toBeInstanceOf(Date);
     });
 
-    it('records a shard visit with shardTier and biome', async () => {
+    it('records a shard visit with shardTier', async () => {
       const visit = shardVisit();
       await repo.recordVisit(visit);
 
@@ -84,7 +82,6 @@ describe('InMemoryExplorationRepository', () => {
       const room = rooms[0]!;
       expect(room.zoneSlug).toBeNull();
       expect(room.shardTier).toBe(2);
-      expect(room.biome).toBe('flooded_crypt');
     });
 
     it('returns empty array for character with no visits', async () => {

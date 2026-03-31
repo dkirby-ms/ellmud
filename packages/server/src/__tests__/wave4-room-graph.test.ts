@@ -4,23 +4,22 @@
  * Supplements shard-gen.test.ts with integration tests for:
  *   - Graph adapter (shared → local format conversion)
  *   - Multi-tier room count validation (Tier 2, Tier 3)
- *   - Biome-specific naming verification (Flooded Crypt pools)
+ *   - Theme-specific naming verification (Flooded Crypt pools)
  *   - Hazard placement in non-anchor rooms
  *   - Graph adapter item resolution via registry
  */
 
 import { describe, it, expect } from 'vitest';
-import type { BiomeType, ShardTier, Room as SharedRoom } from '@ellmud/shared';
+import type { ShardTier, Room as SharedRoom } from '@ellmud/shared';
 import { serializeRoomGraph, deserializeRoomGraph } from '@ellmud/shared';
-import { generateShardGraph } from '../shard/generator.js';
+import { generateShardGraph, ROOM_NAMES } from '../shard/generator.js';
 import { adaptRoomGraph } from '../shard/graph-adapter.js';
-import { ROOM_NAMES } from '../shard/biomes/flooded-crypt.js';
 
 // ─── Configs ────────────────────────────────────────────────────────────────
 
-const T1_CONFIG = { tier: 1 as ShardTier, biome: 'flooded_crypt' as BiomeType, seed: 42 };
-const T2_CONFIG = { tier: 2 as ShardTier, biome: 'flooded_crypt' as BiomeType, seed: 42 };
-const T3_CONFIG = { tier: 3 as ShardTier, biome: 'flooded_crypt' as BiomeType, seed: 42 };
+const T1_CONFIG = { tier: 1 as ShardTier, seed: 42 };
+const T2_CONFIG = { tier: 2 as ShardTier, seed: 42 };
+const T3_CONFIG = { tier: 3 as ShardTier, seed: 42 };
 
 // ─── BFS Helper ─────────────────────────────────────────────────────────────
 
@@ -111,20 +110,20 @@ describe('Multi-Tier Room Count Validation (#5)', () => {
   });
 });
 
-// ─── Biome Name Verification ────────────────────────────────────────────────
+// ─── Theme Name Verification ────────────────────────────────────────────────
 
-describe('Flooded Crypt Biome Naming (#5)', () => {
-  it('all room names come from the flooded_crypt biome pool', () => {
+describe('Flooded Crypt Theme Naming (#5)', () => {
+  it('all room names come from the flooded_crypt theme pool', () => {
     const graph = generateShardGraph(T1_CONFIG);
-    const allBiomeNames = new Set<string>();
+    const allThemeNames = new Set<string>();
     for (const names of Object.values(ROOM_NAMES)) {
       for (const name of names) {
-        allBiomeNames.add(name);
+        allThemeNames.add(name);
       }
     }
 
     for (const room of graph.rooms.values()) {
-      expect(allBiomeNames.has(room.name)).toBe(true);
+      expect(allThemeNames.has(room.name)).toBe(true);
     }
   });
 
@@ -138,9 +137,8 @@ describe('Flooded Crypt Biome Naming (#5)', () => {
     }
   });
 
-  it('biome metadata is stored on the graph', () => {
+  it('graph metadata is stored on the graph', () => {
     const graph = generateShardGraph(T1_CONFIG);
-    expect(graph.biome).toBe('flooded_crypt');
     expect(graph.tier).toBe(1);
     expect(graph.seed).toBe(42);
   });
@@ -298,7 +296,6 @@ describe('Serialization Round-Trip — All Tiers (#5)', () => {
       expect(restored.extractionRoomIds).toEqual(graph.extractionRoomIds);
       expect(restored.bossRoomId).toBe(graph.bossRoomId);
       expect(restored.seed).toBe(graph.seed);
-      expect(restored.biome).toBe(graph.biome);
       expect(restored.tier).toBe(graph.tier);
 
       for (const [id, room] of graph.rooms) {

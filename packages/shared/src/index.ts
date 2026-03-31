@@ -88,15 +88,6 @@ export type CombatAction =
   | 'flee'
   | 'observe';
 
-// ─── Biomes (GDD §10.2) ─────────────────────────────────────────────────────
-
-export type BiomeType =
-  | 'flooded_crypt'
-  | 'shattered_bastion'
-  | 'fungal_deep'
-  | 'ashen_reach'
-  | 'void_rift';
-
 // ─── Gear & Loot (GDD §9) ───────────────────────────────────────────────────
 
 /** Gear quality tiers, ascending. */
@@ -459,7 +450,6 @@ export interface RoomSwitchOptions {
   /** Join a specific room instance by ID (used for shard selection). */
   roomId?: string;
   /** Optional shard metadata for UI or future matchmaking. */
-  biome?: BiomeType;
   tier?: ShardTier;
 }
 

@@ -188,7 +188,7 @@ app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg
 // Admin API at /admin/api/*, diagnostics dashboard at /monitor
 // Protected by ADMIN_TOKEN env var — admin auth is separate from player auth.
 
-// Content CRUD API — admin-managed game content (items, creatures, biomes, etc.)
+// Content CRUD API — admin-managed game content (items, creatures, etc.)
 const contentStores = initializeContentStores(USE_PG);
 app.use(createContentRouter({ stores: contentStores }));
 app.use(createDashboardApiRouter({ stores: contentStores, usePg: USE_PG }));

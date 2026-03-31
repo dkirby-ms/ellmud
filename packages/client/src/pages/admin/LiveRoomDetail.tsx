@@ -296,7 +296,6 @@ export default function LiveRoomDetail() {
               <div className="grid grid-cols-2 gap-4">
                 {isShard && (
                   <>
-                    <StatRow label="Biome" value={room.biome ?? "—"} />
                     <StatRow label="Lifecycle" value={room.lifecycle ?? "—"} />
                     <StatRow
                       label="Stability"
@@ -463,7 +462,6 @@ export default function LiveRoomDetail() {
               >
                 <div>Room Type: {room.name}</div>
                 <div>Full ID: {room.roomId}</div>
-                {isShard && <div>Biome: {room.biome ?? "—"}</div>}
                 <div>Paused: {room.paused ? "Yes" : "No"}</div>
               </div>
             </div>

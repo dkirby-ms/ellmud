@@ -1,7 +1,7 @@
 /**
  * Test fixtures — mock data and deterministic helpers for tests.
  */
-import type { CommandMessage, NarrationType, GearTier, BiomeType, ShardTier, ShardModifier } from '@ellmud/shared';
+import type { CommandMessage, NarrationType, GearTier, ShardTier, ShardModifier } from '@ellmud/shared';
 
 // ─── Deterministic PRNG ──────────────────────────────────────────────────────
 
@@ -57,14 +57,6 @@ export function makeCommand(verb: string, ...args: string[]): CommandMessage {
 }
 
 // ─── Shard Option Fixtures ───────────────────────────────────────────────────
-
-export const ALL_BIOMES: BiomeType[] = [
-  'flooded_crypt',
-  'shattered_bastion',
-  'fungal_deep',
-  'ashen_reach',
-  'void_rift',
-];
 
 export const ALL_SHARD_TIERS: ShardTier[] = [1, 2, 3];
 

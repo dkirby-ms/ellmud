@@ -21,7 +21,7 @@ export default function RecipesList() {
           The Crafting System lets players combine extracted materials into usable gear and
           consumables. Recipes define input items, required skill levels, success rates, and
           output items with quality variance. The admin editor will support recipe trees,
-          prerequisite chains, and biome-locked crafting stations.
+          prerequisite chains, and zone-locked crafting stations.
         </p>
         <a href="https://github.com/dkirby-ms/ellmud/issues/33" target="_blank" rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-4 py-2 bg-[#1C1D27] border border-[#2A2B35] rounded text-[#C9A84C] hover:bg-[#2A2B35] transition-colors"
