@@ -18,7 +18,7 @@ import { useReconnection } from "../hooks/useReconnection";
 import { useAutoScroll } from "../hooks/useAutoScroll";
 import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
 import { logout } from "../services/api";
-import ShardboardTab from "../components/ShardboardTab";
+import ExpeditionBoardTab from "../components/ExpeditionBoardTab";
 import CombinedStashLoadout from "../components/CombinedStashLoadout";
 import type {
   NarrateMessage,
@@ -38,7 +38,7 @@ type TabType =
   | "marketplace"
   | "factions"
   | "contracts"
-  | "shardboard";
+  | "expedition_board";
 
 const tabs: { id: TabType; icon: React.ReactNode; label: string }[] = [
   { id: "equipment", icon: <Shield className="w-5 h-5" />, label: "Equipment" },
@@ -54,7 +54,7 @@ const tabs: { id: TabType; icon: React.ReactNode; label: string }[] = [
     icon: <FileText className="w-5 h-5" />,
     label: "Contracts",
   },
-  { id: "shardboard", icon: <Map className="w-5 h-5" />, label: "Shardboard" },
+  { id: "expedition_board", icon: <Map className="w-5 h-5" />, label: "Expedition Board" },
 ];
 
 let msgCounter = 0;
@@ -64,7 +64,7 @@ function nextMsgId(): string {
 
 export default function Refuge() {
   const { state, dispatch } = useAppContext();
-  const [activeTab, setActiveTab] = useState<TabType>("shardboard");
+  const [activeTab, setActiveTab] = useState<TabType>("expedition_board");
   const [chatMessage, setChatMessage] = useState("");
   const navigate = useNavigate();
   const navigateRef = useRef(navigate);
@@ -408,8 +408,8 @@ export default function Refuge() {
 
         {/* Center column - Content */}
         <div className="flex-1 bg-bg-primary overflow-y-auto">
-          {activeTab === "shardboard" && (
-            <ShardboardTab onEnterShard={handleEnterShard} />
+          {activeTab === "expedition_board" && (
+            <ExpeditionBoardTab onEnterShard={handleEnterShard} />
           )}
           {activeTab === "equipment" && (
             <CombinedStashLoadout room={roomRef.current} />

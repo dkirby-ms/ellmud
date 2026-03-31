@@ -448,7 +448,7 @@ export {
 } from './items.js';
 
 
-// ─── Shard Card Types (Shardboard UI) ────────────────────────────────────────
+// ─── Shard Card Types (Expedition Board UI) ──────────────────────────────────
 
 export type { ShardKeyType, ShardCardData } from './shard-card.js';
 

@@ -26,7 +26,7 @@ import { handlePeaceful } from './handlers/peaceful.js';
 import type { DowningSystem } from '../systems/DowningSystem.js';
 import type { StashService } from '../stash/StashService.js';
 import type { LoadoutService } from '../loadout/LoadoutService.js';
-import { handleShardboard, handleEnter } from './handlers/shardboard.js';
+import { handleBoard, handleEnter } from './handlers/board.js';
 import { handleStashView, handleStore } from './handlers/stash-command.js';
 import { handleLoadoutView } from './handlers/loadout-command.js';
 
@@ -84,9 +84,9 @@ export interface CommandContext {
   stashService?: StashService;
   /** Loadout service for equipment management (available in feature_stash rooms). */
   loadoutService?: LoadoutService;
-  /** Query available shards (available in feature_shardboard rooms). */
+  /** Query available shards (available in feature_expedition_board rooms). */
   queryShards?: () => Promise<ShardListing[]>;
-  /** Create/join a shard (available in feature_shardboard rooms). */
+  /** Create/join a shard (available in feature_expedition_board rooms). */
   createShard?: (opts?: { tier?: number }) => Promise<ShardListing | null>;
   /** Current zone display name (e.g. "The Refuge"). */
   zoneName?: string;
@@ -96,10 +96,9 @@ export interface CommandContext {
 
 export type CommandHandler = (ctx: CommandContext) => CommandResult;
 
-/** Shard listing summary for shardboard display. */
+/** Shard listing summary for expedition board display. */
 export interface ShardListing {
   roomId: string;
-  biome: string;
   tier: number;
   lifecycle: string;
   playerCount: number;
@@ -110,8 +109,10 @@ export interface ShardListing {
 // ─── Feature-Gated Handlers ────────────────────────────────────────────────
 
 const featureHandlers = new Map<string, { handler: CommandHandler; requiredRoomType: string }>();
-featureHandlers.set('shardboard', { handler: handleShardboard, requiredRoomType: 'feature_shardboard' });
-featureHandlers.set('enter', { handler: handleEnter, requiredRoomType: 'feature_shardboard' });
+featureHandlers.set('board', { handler: handleBoard, requiredRoomType: 'feature_expedition_board' });
+featureHandlers.set('enter', { handler: handleEnter, requiredRoomType: 'feature_expedition_board' });
+// Keep legacy alias
+featureHandlers.set('shardboard', { handler: handleBoard, requiredRoomType: 'feature_expedition_board' });
 featureHandlers.set('stash', { handler: handleStashView, requiredRoomType: 'feature_stash' });
 featureHandlers.set('store', { handler: handleStore, requiredRoomType: 'feature_stash' });
 featureHandlers.set('loadout', { handler: handleLoadoutView, requiredRoomType: 'feature_stash' });

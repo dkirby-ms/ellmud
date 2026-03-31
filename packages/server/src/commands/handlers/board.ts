@@ -1,7 +1,7 @@
 /**
- * shardboard / enter — Shard discovery and entry commands.
+ * board / enter — Expedition discovery and entry commands.
  *
- * These handlers are feature-gated to `feature_shardboard` rooms.
+ * These handlers are feature-gated to `feature_expedition_board` rooms.
  * The actual matchMaker/shard-manager integration will be wired in a
  * later phase; for now the handlers reference ctx service fields for
  * type safety and return placeholder narrations.
@@ -9,10 +9,10 @@
 
 import type { CommandResult, CommandContext } from '../index.js';
 
-export function handleShardboard(ctx: CommandContext): CommandResult {
+export function handleBoard(ctx: CommandContext): CommandResult {
   if (!ctx.queryShards) {
     return {
-      narrations: [{ text: 'The shardboard is dark. No rift energy flows here.', type: 'system' }],
+      narrations: [{ text: 'The expedition board is dark. No rift energy flows here.', type: 'system' }],
     };
   }
 
@@ -20,7 +20,7 @@ export function handleShardboard(ctx: CommandContext): CommandResult {
   // For now, return atmospheric placeholder narration.
   return {
     narrations: [{
-      text: 'The shardboard crackles with energy… Rift signatures shimmer across its surface.\n\n'
+      text: 'The expedition board crackles with energy… Rift signatures shimmer across its surface.\n\n'
         + 'Type `enter <shard-id>` to step through a rift.',
       type: 'system',
     }],

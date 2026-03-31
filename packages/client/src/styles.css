@@ -694,13 +694,13 @@ body {
   color: var(--danger);
 }
 
-/* ─── Shardboard ─────────────────────────────────────────────────────────── */
+/* ─── Expedition Board ────────────────────────────────────────────────────── */
 
-.shardboard {
+.expedition-board {
   padding: 1.5rem;
 }
 
-.shardboard__empty {
+.expedition-board__empty {
   text-align: center;
   color: var(--text-secondary);
   font-family: var(--font-serif);
@@ -708,26 +708,26 @@ body {
   padding: 3rem 1rem;
 }
 
-.shardboard__grid {
+.expedition-board__grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 1rem;
 }
 
 @media (max-width: 1440px) {
-  .shardboard__grid {
+  .expedition-board__grid {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
 @media (max-width: 1024px) {
-  .shardboard__grid {
+  .expedition-board__grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 640px) {
-  .shardboard__grid {
+  .expedition-board__grid {
     grid-template-columns: 1fr;
   }
 }
@@ -2557,9 +2557,9 @@ body {
   letter-spacing: 0.04em;
 }
 
-/* ─── Shardboard ─── */
+/* ─── Expedition Board ─── */
 
-.shardboard__grid {
+.expedition-board__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 0.75rem;

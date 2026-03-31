@@ -32,7 +32,7 @@ export type RoomType =
   | 'junction'
   | 'dead_end'
   | 'feature_stash'
-  | 'feature_shardboard'
+  | 'feature_expedition_board'
   | 'feature_marketplace'
   | 'feature_crafting'
   | 'feature_training'
