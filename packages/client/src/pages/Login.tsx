@@ -108,22 +108,13 @@ export default function Login() {
           The shards are calling.
         </p>
 
-        {/* Microsoft Sign In Button */}
+        {/* Sign In Button */}
         <button
           onClick={handleMicrosoftSignIn}
           className="w-full bg-[#2F2F2F] hover:bg-[#1a1a1a] text-white font-medium py-3 px-4 rounded transition-colors shadow-lg flex items-center justify-center gap-3 mb-6"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 21 21"
-            className="w-5 h-5"
-          >
-            <rect x="1" y="1" width="9" height="9" fill="#f25022" />
-            <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
-            <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
-            <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
-          </svg>
-          <span>Sign in with Microsoft</span>
+          <img src="/ellmud-logo.png" alt="eLLMud" className="w-6 h-6 object-contain" />
+          <span>Sign in or sign up</span>
         </button>
 
         {error && (
