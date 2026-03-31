@@ -339,6 +339,21 @@ export default function ShardExploration() {
                     &ldquo;{msg.text}&rdquo;
                   </p>
                 )}
+
+                {msg.type === "ambient" && (
+                  <p className="ansi-dim ansi-italic max-w-[80ch]">
+                    {msg.text}
+                  </p>
+                )}
+
+                {msg.type === "awareness" && (
+                  <p
+                    className="ansi-dim pl-4 max-w-[80ch] flex items-start gap-2"
+                  >
+                    <Eye className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    <span>{msg.text}</span>
+                  </p>
+                )}
               </div>
             ))}
             <div ref={bottomRef} aria-hidden="true" />

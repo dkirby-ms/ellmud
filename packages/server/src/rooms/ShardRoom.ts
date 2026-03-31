@@ -21,6 +21,7 @@ import {
   type ExplorationDataMessage,
   type ExplorationUpdateMessage,
   SHARD_SICKNESS_DEFAULTS,
+  OPPOSITE_DIRECTION,
   MessageTypes,
 } from '@ellmud/shared';
 import { ShardState } from '../state.js';
@@ -949,6 +950,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         actorName: playerId,
       }, direction);
 
+      // Broadcast arrival/departure narrations to other players
+      this.broadcastPlayerMovement(playerId, previousRoomId, player.currentRoomId, direction);
+
       // Awareness: notify observers in destination room about entering player
       this.runAwarenessChecks(playerId, player.currentRoomId, 'arrival');
       // Awareness: notify observers in source room about departing player
@@ -1526,6 +1530,47 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.broadcastToRoom(sourceRoomId, {
         narrations: [{ text: departureText, type: 'ambient' }],
       });
+    }
+  }
+
+  /**
+   * Broadcast player arrival/departure narrations when a player moves between rooms.
+   * Other players in the target room see "{Name} arrives from the {direction}."
+   * Other players in the source room see "{Name} leaves to the {direction}."
+   */
+  private broadcastPlayerMovement(
+    playerId: string,
+    sourceRoomId: string,
+    targetRoomId: string,
+    direction?: string,
+  ): void {
+    const name = this.characterNames.get(playerId) ?? 'A wanderer';
+
+    // Departure: tell players in the source room
+    const departureText = direction
+      ? `${name} leaves to the ${direction}.`
+      : `${name} leaves.`;
+    for (const [sid, ps] of this.players) {
+      if (sid !== playerId && ps.currentRoomId === sourceRoomId) {
+        const c = this.findClient(sid);
+        if (c) {
+          this.sendNarrate(c, { text: departureText, type: 'ambient', timestamp: Date.now() });
+        }
+      }
+    }
+
+    // Arrival: tell players in the target room
+    const fromDirection = direction ? OPPOSITE_DIRECTION[direction as Direction] : undefined;
+    const arrivalText = fromDirection
+      ? `${name} arrives from the ${fromDirection}.`
+      : `${name} arrives.`;
+    for (const [sid, ps] of this.players) {
+      if (sid !== playerId && ps.currentRoomId === targetRoomId) {
+        const c = this.findClient(sid);
+        if (c) {
+          this.sendNarrate(c, { text: arrivalText, type: 'ambient', timestamp: Date.now() });
+        }
+      }
     }
   }
 
