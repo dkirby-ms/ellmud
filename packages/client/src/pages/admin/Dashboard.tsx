@@ -137,13 +137,13 @@ export default function Dashboard() {
         { label: "Total Content", value: metrics.totalItems, icon: CheckCircle, color: "#2D6B4F" },
         { label: "Active Rooms", value: metrics.activeRooms, icon: Server, color: "#3A7D7B" },
         { label: "Active Players", value: metrics.activePlayers, icon: Users, color: "#C9A84C" },
-        { label: "Entity Types", value: Object.keys(metrics.entityCounts).length, icon: CheckCircle, color: "#2D6B4F" },
+        { label: "Entity Types", value: Object.keys(metrics.entityCounts ?? {}).length, icon: CheckCircle, color: "#2D6B4F" },
       ]
     : [];
 
   // Build content coverage from entity counts
   const contentCoverage = metrics
-    ? Object.entries(metrics.entityCounts).map(([type, count]) => ({
+    ? Object.entries(metrics.entityCounts ?? {}).map(([type, count]) => ({
         domain: ENTITY_LABELS[type] || type,
         current: count,
       }))
