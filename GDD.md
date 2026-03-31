@@ -1,29 +1,28 @@
 # Ellmud — Game Design Document (GDD)
 
 ## Genre
-PvPvE Extraction RPG · Real-Time MUD · Zone-Based Exploration
+PvPvE Real-Time MUD · Zone-Based Exploration · Meaningful Death
 
 ## Core Fantasy
-You are an **explorer** in a world of high-stakes extraction runs. Venture into dangerous, hand-crafted zones filled with hostile creatures, environmental hazards, and other opportunistic players. Scavenge valuable artifacts, survive encounters, and extract safely — or lose everything you carried. Every excursion is a calculated risk. Every extraction is a hard-earned victory.
+You are an **individual** in a world of adventure filled with danger and exotic things great and small. Venture into dangerous, hand-crafted zones filled with hostile creatures, environmental hazards, and other opportunistic players. Scavenge valuable artifacts, survive encounters, and walk out alive — or die and leave your gear on your corpse for anyone to claim. Every excursion is a calculated risk. Every safe return is a hard-earned victory. Every death stings.
 
 ## Platform
 Web browser only (React + Vite client via WebSocket). Text-primary interface with modern UI components, compass navigation, and styled terminal output. Optional ANSI colour support. No graphics engine. No SSH or raw TCP support. Accessible by design.
 
 ## Target Audience
 - Players who grew up on MUDs, roguelikes, or interactive fiction and want modern design sensibility
-- Extraction-game fans (Tarkov, Dark and Darker, Hunt: Showdown) looking for a different medium
+- Fans of high-stakes PvPvE games (Tarkov, Dark and Darker, Hunt: Showdown) looking for a different medium
 - Tabletop RPG players who enjoy theatre-of-the-mind combat
-- Anyone drawn to emergent, high-stakes multiplayer in short sessions (20-40 min runs)
+- Anyone drawn to emergent, high-stakes multiplayer where death has real consequences
 
 ---
 
 # 1. HIGH-LEVEL VISION
 
-**Ellmud** blends the tension of extraction games with the imagination and readability of classic MUDs.
-Players live in **the Refuge**, a persistent hub where they manage gear, prepare for runs, and socialize.
-From there, they venture into **dangerous zones** — hand-crafted environments designed for tactical exploration, combat encounters, and high-stakes extraction.
+**Ellmud** is a real-time MUD where death means something. Players begin in their **faction's stronghold**, a persistent hub where they manage gear, prepare for excursions, and socialize with faction members.
+From there, they venture into **dangerous zones** — hand-crafted environments designed for tactical exploration, combat encounters, and the ever-present risk of losing everything.
 
-Each zone is a **designed experience**: permanent room layouts, deliberate encounter placement, and authored narrative beats. These are not random dungeons — they are traditional MUD/MMORPG-style areas with extraction game stakes. You might learn the layout over multiple runs, but that knowledge must be earned. Other players hunting the same loot add an unpredictable PvP layer to every excursion.
+Each zone is a **designed experience**: permanent room layouts, deliberate encounter placement, and authored narrative beats. These are not random dungeons — they are traditional MUD/MMORPG-style areas where death drops your gear on your corpse for anyone to loot. You might learn the layout over multiple runs, but that knowledge must be earned. Other players hunting the same loot add an unpredictable PvP layer to every excursion.
 
 **Future expansion:** Procedurally generated instances may complement the hand-crafted zones, but they are not the primary content focus.
 
@@ -32,7 +31,7 @@ The LLM is a *lens*, not a *game engine*.
 
 ### Design Pillars
 1. **Tension through information scarcity.** You never have the full picture. Sound cues, traces, and partial descriptions force decisions under uncertainty.
-2. **Meaningful risk.** Gear brought into a zone can be lost. Gear extracted is earned. No run is free.
+2. **Meaningful risk.** Gear brought into a zone is risked. Death drops your corpse and everything on it. No excursion is free.
 3. **Emergent narrative.** The LLM weaves flavour around mechanical truth, so every run reads differently even when the underlying events are similar.
 4. **Respect for the player's time.** Runs are 20-40 minutes. Preparation is fast. Death stings but doesn't erase weeks of progress.
 
@@ -40,44 +39,64 @@ The LLM is a *lens*, not a *game engine*.
 
 # 2. GAME STRUCTURE
 
-## 2.1 Persistent World (The Refuge)
-A safe, persistent hub — "The Refuge" — implemented as a **zone** in the database with 7 interconnected rooms, where players:
-- Manage their **stash** (persistent inventory stored between runs) in the **Stash Alcove**
-- Equip **loadouts** from stash items
-- Read **the Expedition Board** in the dedicated board room (a bulletin of available zone entries and run history)
-- Access the **Market** (future: player trading and faction vendors)
-- Train at the **Training Grounds** (future: skill progression)
-- Visit the **Infirmary** (future: debuff removal and healing services)
-- Strategize in the **War Room** (future: faction headquarters)
-- Socialize in the **Hearth** (central gathering area)
+## 2.1 Faction Starting Zones & The Refuge
 
-No combat occurs here. The Refuge serves as a **feature-room hub** — each room provides access to specific gameplay systems.
+### Faction Strongholds *(Planned)*
+Each faction operates its own **persistent hub zone** — a faction stronghold — where affiliated players spawn, prepare for runs, and interact with faction-specific services. Faction strongholds replace the Refuge as the player-facing home base.
 
-### Refuge as a Zone *(Implemented)*
-The Refuge is a persistent zone (category: `hub`, lifecycle: `persistent`) defined in the database (`zones`, `zone_rooms`, `zone_exits` tables). Players navigate between rooms using standard directional commands (`go north`, `n`, etc.) or the compass UI. The RefugeRoom implementation is a long-lived Colyseus Room that persists across player sessions.
+Every faction stronghold provides the same core gameplay features, themed and named to fit its faction identity:
+- **Stash room**: Persistent inventory storage (same `player_stash` mechanics)
+- **Loadout / armoury room**: Equip gear from stash into equipment slots
+- **Expedition Board room**: Browse and enter available zone instances
+- **Market room**: Player trading, faction vendors *(future)*
+- **Training room**: Skill progression *(future)*
+- **Infirmary room**: Debuff removal and healing services *(future)*
+- **War Room**: Faction strategy, contracts, reputation tracking *(future)*
+- **Commons / gathering area**: Socializing with faction members
+
+Players spawn in their faction's stronghold after character creation and after death. The stronghold is the primary player hub — no combat occurs here.
+
+Each stronghold is implemented as a **zone** in the database (category: `faction_hub`, lifecycle: `persistent`) using the same `zones`, `zone_rooms`, `zone_exits` schema as all other zones. Room layouts and naming are faction-specific, but the underlying feature-room pattern is shared.
+
+### The Refuge — Designer & Debug Hub *(Implemented)*
+The Refuge is a persistent zone (category: `dev`, lifecycle: `persistent`) that serves as an **internal tool for game designers and developers**. It is **not** the player starting zone.
+
+The Refuge's purpose:
+- A **hangout space** for game designers working in the live game world
+- A **hub connected to all zones** — designers can traverse to any zone in the game from the Refuge for exploration, testing, and debugging
+- A **feature-room reference implementation** — the original 7-room layout (hearth, stash-alcove, training-grounds, expedition-board, market, infirmary, war-room) remains intact as a working example of the feature-room pattern
+- A **debug environment** for verifying zone connections, testing commands, and inspecting game state
+
+The Refuge may still be accessible to players (it is not hidden), but it is not their home base and is not presented as a starting area. Players who find their way to the Refuge encounter a designer space, not a gameplay hub.
+
+### Refuge Technical Details *(Implemented)*
+The Refuge is defined in the database (`zones`, `zone_rooms`, `zone_exits` tables). Players navigate between rooms using standard directional commands (`go north`, `n`, etc.) or the compass UI. The RefugeRoom implementation is a long-lived Colyseus Room that persists across player sessions.
 
 ### Feature Rooms
-Specific gameplay features are accessed in designated rooms:
-- **Stash Alcove**: `stash`, `take`, `store` commands
-- **Expedition Board**: `board`, `enter` commands (join zone instances)
-- **Market**, **Training Grounds**, **Infirmary**, **War Room**: Reserved for future feature implementations
+The feature-room pattern — specific gameplay features accessed in designated rooms — is the standard for both faction strongholds and the Refuge:
+- **Stash room**: `stash`, `take`, `store` commands
+- **Expedition Board room**: `board`, `enter` commands (join zone instances)
+- **Market**, **Training**, **Infirmary**, **War Room**: Reserved for future feature implementations
+
+In faction strongholds, these rooms carry faction-specific theming and names. In the Refuge, they retain their original names (Stash Alcove, Expedition Board, etc.) and serve as debug/test instances of each feature.
 
 ### Future: Ambient World Simulation *(Planned, Not Implemented)*
-Future phases will add tick-driven ambient life to the Refuge:
+Future phases will add tick-driven ambient life to faction strongholds:
 - NPC merchants wandering between rooms
 - Faction representatives and dynamic vendor appearances
 - Time-of-day cycles and weather atmosphere
 - Collective faction milestone events (construction projects, banner changes)
 
-## 2.2 Extraction Zones (Instances / Runs)
-Each run is:
+## 2.2 Adventure Zones (Instances / Dungeons)
+Each zone is:
 - A **hand-crafted room-graph** sourced from the **database zone system**. Room count varies by zone tier: 15-60 rooms. *(Future: Procedurally assembled zones may be added as secondary content.)*
 - Populated with **creatures, hazards, loot, and traces** from database content tables
-- **Time-limited**: a collapse timer ticks down; optional events can accelerate or delay it
 - Designed for **1-6 players** entering independently or in squads of up to 3
 - Host to both **PvE** and **emergent PvP** — other players are not marked as friend or foe
 
-Extraction returns players to the Refuge with whatever they carry. Anything left behind is lost when the instance collapses.
+Players enter zones through exits from their faction stronghold (or connected overworld areas) and leave the same way — by walking out through an exit. The danger is not a timer; the danger is death. If you die, you drop a corpse containing your equipped gear (see §6.5). If you survive, you walk out with everything you found.
+
+Zones may be **persistent** (always available, repopulating creatures and loot on a schedule) or **instanced** (spun up on demand for a specific group of players, with a defined lifecycle). The zone's `lifecycle` field in the database determines which model applies.
 
 ### Content Sourcing *(Implemented)*
 Zone instances load content from **PostgreSQL** content tables:
@@ -90,12 +109,25 @@ Zone instances load content from **PostgreSQL** content tables:
 
 The game supports **hand-crafted zones** as the primary content mode: Designer-built room graphs stored in `zones`, `zone_rooms`, `zone_exits` tables. *(Future: Procedural assembly from `room_definitions` may be added as a secondary generation mode.)*
 
-## 2.3 The Instance Lifecycle
-1. **Seeding** — Server generates the room graph, populates loot tables, spawns creatures, places extraction nodes, and rolls zone modifiers.
-2. **Open** — Entry points activate. Players may enter over a staggered window (first 5 minutes).
-3. **Active** — Full exploration, combat, and extraction. Collapse timer is visible.
-4. **Destabilising** — Final 25% of the timer. Environmental hazards intensify, new creature waves spawn, extraction nodes may shift.
-5. **Collapse** — Instance destroys. Any player still inside loses all carried items and takes a **death penalty debuff** (reduced stats for the next run).
+## 2.3 Zone Lifecycle
+Zones operate under one of two models:
+
+### Persistent Zones
+- Always available. Creatures and loot **respawn on a schedule** (configurable per zone).
+- Players can enter and leave freely through zone exits.
+- Population scales with player count (more players → more spawns, tuned per zone).
+- Primary model for most adventure content.
+
+### Instanced Zones *(Future)*
+- Spun up on demand (e.g., from the Expedition Board or a locked dungeon entrance).
+- May have a **time limit** (collapse timer) after which the instance is destroyed and any player still inside is killed (death penalty applies).
+- Useful for special events, high-tier dungeons, or competitive PvP scenarios.
+- Instance lifecycle phases (when applicable):
+  1. **Seeding** — Server generates the room graph, populates loot tables, spawns creatures, and rolls zone modifiers.
+  2. **Open** — Entry points activate. Players may enter over a staggered window.
+  3. **Active** — Full exploration and combat. Collapse timer (if any) is visible.
+  4. **Destabilising** — Final 25% of the timer. Environmental hazards intensify, new creature waves spawn.
+  5. **Collapse** — Instance destroys. Any player still inside dies (corpse is lost with the instance; death penalty debuff applies).
 
 ---
 
@@ -116,13 +148,13 @@ The game supports **hand-crafted zones** as the primary content mode: Designer-b
 5. **Encounter**
    Detect other players via the **awareness system** (§8.1). Choose to avoid, stalk, ambush, cooperate, or trade. Communication is proximity-based.
 
-6. **Extract**
-   Locate an extraction node. Begin the **extraction ritual** — a multi-round channel that generates noise, drawing attention (creatures and players). Survive until complete.
+6. **Return or Die**
+   Navigate back to a zone exit and walk out alive — you keep everything you carry. Or die, and leave a **lootable corpse** behind (see §6.5).
 
-7. **Return**
-   Arrive at the Refuge. Carried items enter your stash. Gain XP. Complete any fulfilled contracts. Review the run summary.
+7. **Debrief**
+   Arrive at your faction stronghold. Carried items enter your stash. Gain XP. Complete any fulfilled contracts. Review the run summary.
 
-**Death:** If you die in a zone, you drop all **non-soulbound** carried items on your corpse. Other players (or creatures) can loot it. You respawn at the Refuge with a death penalty debuff.
+**Death:** If you die in a zone, you drop all **non-soulbound** equipped gear on your corpse. Other players (or creatures) can loot it. You respawn at your faction stronghold with a death penalty debuff. See §6.5 for full death mechanics.
 
 ---
 
@@ -270,7 +302,6 @@ Players type commands in a **verb-noun** syntax familiar to MUD players:
 > listen
 > say Anyone there?
 > drop torch
-> extract
 ```
 
 Commands are parsed **server-side** using a deterministic parser (not the LLM). The parser supports:
@@ -308,11 +339,47 @@ The combat system is currently undergoing a complete redesign from the ground up
 - Combat will remain **server-authoritative** and **deterministic**
 - The system will support both PvE (creatures) and PvP (player vs player) encounters
 - Combat outcomes will be narrated by the LLM for immersive feedback
-- The redesigned system will integrate with the extraction game loop
+- The redesigned system will integrate with the death-and-corpse risk mechanic
 
 **Status:** The detailed mechanics, action types, resolution systems, and progression integration are all under active design. This section will be updated once the new combat system has been prototyped and validated.
 
 *Previous implementation note: The old tick-based combat system with strike/dodge/flee actions has been deprecated. See git history for reference if needed.*
+
+## 6.5 Death & Corpse System *(Planned — Foundation Exists)*
+
+Death is the primary risk mechanic in Ellmud. When a player dies:
+
+1. **Corpse creation.** A **lootable corpse** is placed in the room where the player died. The corpse contains all **non-soulbound equipped gear** from the player's loadout.
+2. **Soulbound items preserved.** Any items flagged as `soulbound` in the database are **kept** — the player retains them on respawn.
+3. **Corpse is lootable.** Other players (and potentially creatures with looting behaviour) can interact with the corpse to take items from it, using standard `loot` / `take` commands.
+4. **Player respawns at faction stronghold.** After death, the player is routed to their faction's stronghold based on `faction_membership`. They arrive with only their soulbound items.
+5. **Death penalty debuff.** On respawn, the player receives a **death penalty debuff** — reduced stats for a duration (exact parameters TBD through playtesting). The debuff discourages reckless play and creates a recovery period.
+6. **Corpse persistence.** Corpses persist for a configurable duration (design question — see §18). After expiry, unclaimed items are destroyed.
+7. **Corpse recovery.** Players *may* be able to return to their own corpse to reclaim gear before others loot it (design question — see §18). This creates a "corpse run" dynamic familiar to MUD and MMO players.
+
+### Death Tracking *(Database Foundation Implemented)*
+The `player_death_tracking` table records death events (death_count, last_death_at). This supports:
+- Death penalty debuff application
+- Analytics and balancing (are players dying too much? too little?)
+- Potential "hardcore" mode where death count matters
+
+### Design Intent
+Death should **sting but not devastate**. Losing a full loadout of Sturdy gear hurts. Losing Masterwork gear is a genuine setback. But the player's skills, faction reputation, stash contents, and soulbound items are all preserved. The goal is tension on every excursion, not permanent character destruction.
+
+## 6.6 Equipment Loss & Destruction *(Design Space — Future)*
+
+Beyond death, there are (or will be) other meaningful ways equipment can be lost or destroyed:
+
+| Vector | Description | Status |
+|---|---|---|
+| **Death (corpse drop)** | Primary loss vector. All non-soulbound equipped gear dropped on corpse. | §6.5 — planned |
+| **Durability breakage** | Equipment degrades with use. At zero durability, the item **breaks** (destroyed or reduced to salvage materials). | Item durability fields exist in DB; break mechanics TBD |
+| **Cursed / corrupted items** | Some items or zone effects may corrupt gear, degrading stats or eventually destroying it. | Design space — not specified |
+| **NPC theft** | Certain creature types (thieves, pickpockets) could steal equipped or carried items during encounters. | Design space — not specified |
+| **Trap destruction** | Environmental traps might damage or destroy specific equipment slots. | Design space — not specified |
+| **Sacrificial mechanics** | Some zone puzzles or faction rituals might require sacrificing an item. | Design space — not specified |
+
+**Design intent:** Multiple vectors for equipment loss create a richer economy and more interesting decisions. Players must weigh the risk of bringing valuable gear against all the ways they might lose it — not just death. Details for each vector will be specified as they are designed and prototyped.
 
 ---
 
@@ -350,11 +417,11 @@ Skills are stored in the `skill_definitions` table (slug, name, description, cat
 *Note: Item definitions exist in the database; full durability/repair mechanics are not yet implemented.*
 
 ## 7.3 Stash & Loadout *(Implemented)*
-- The **stash** is persistent storage in the Refuge, stored in PostgreSQL (`player_stash` table). It uses a **weight-based capacity system** (default 200 weight units, expandable via upgrades in `player_stash_capacity` table).
-- Stash is accessed in the **Stash Alcove** room via `stash`, `take <item>`, and `store <item>` commands.
+- The **stash** is persistent storage in the player's faction stronghold, stored in PostgreSQL (`player_stash` table). It uses a **weight-based capacity system** (default 200 weight units, expandable via upgrades in `player_stash_capacity` table).
+- Stash is accessed in the **stash room** of the faction stronghold (or the Stash Alcove in the Refuge for designer testing) via `stash`, `take <item>`, and `store <item>` commands.
 - A **loadout** is equipment you wear into a zone, stored in **equipment slots**: weapon, offhand, head, chest, legs, feet (`player_loadout` table). Managed via `equipment` and `loadout` commands.
 - Each item has **durability** that degrades during runs and can be repaired using materials.
-- Anything in your loadout that isn't extracted is **lost forever** (except soulbound items).
+- If you die while wearing your loadout, all non-soulbound equipped gear is **dropped on your corpse** and can be looted by others (see §6.5). Soulbound items are kept on respawn.
 
 ## 7.4 Characters *(Implemented)*
 Players can create **multiple characters** per account (1:N relationship):
@@ -368,10 +435,10 @@ Players can create **multiple characters** per account (1:N relationship):
 
 # 8. PvP SYSTEM *(Placeholder — Depends on Combat Redesign)*
 
-The PvP system is being redesigned in parallel with the combat system overhaul. The core extraction game tension — the risk of encountering hostile players while carrying valuable loot — remains central to the design.
+The PvP system is being redesigned in parallel with the combat system overhaul. The core tension — the risk of encountering hostile players while carrying valuable gear, knowing that death means losing it all — remains central to the design.
 
 **Core Principles (Preserved):**
-- PvP is **always possible** inside extraction zones — there is no opt-out, safe zone, or flagging system
+- PvP is **always possible** inside adventure zones — there is no opt-out, safe zone, or flagging system
 - Player encounters are **not instant or obvious** — detection depends on awareness, stealth, sound, and traces
 - Players are **never identified by name** in narration — you see equipment descriptions, not nameplates
 - On death, victims drop **all non-soulbound items** as a lootable corpse
@@ -403,13 +470,13 @@ There is **no universal currency**. The economy runs on **barter and materials**
 | **Blueprints** | Loot, quest rewards, faction rank-ups | Unlock new crafting recipes (consumed on learn) |
 
 ## 9.2 Crafting *(Planned)*
-- Crafting stations are in the Refuge, gated by **faction membership**.
+- Crafting stations are in faction strongholds, gated by **faction membership**.
 - Recipes require materials + a learned blueprint + a skill check (Survival or relevant crafting skill).
 - Output quality varies based on skill level and material quality — slight randomness within a range.
 - No crafting XP grind: crafting skill improves alongside Survival, which levels during zone runs.
 
 ## 9.3 Trading *(Planned)*
-- **Direct trade**: Two players in the Refuge can open a trade window (text-based offer/counter-offer/confirm).
+- **Direct trade**: Two players in the same faction stronghold can open a trade window (text-based offer/counter-offer/confirm).
 - **Marketplace**: A faction-run bulletin board. Players post offers (item for item/materials). Listings expire after 24 hours. A small listing fee (Echo Dust) prevents spam.
 - No auction house / no gold. Prices are emergent and player-determined.
 
@@ -428,6 +495,23 @@ Three factions compete for influence over zone access and world events:
 - **Reputation** is gained through contracts, donating materials, and achieving faction objectives.
 - **Rank** unlocks crafting recipes, faction gear, and passive perks.
 - Players can only belong to **one faction** at a time. Switching is possible but resets reputation to zero.
+
+### Faction Starting Zones *(Planned)*
+Each faction has its own **persistent hub zone** (category: `faction_hub`) — the player's home base. These replace the Refuge as the player-facing starting area.
+
+| Faction | Stronghold (Working Name) | Theme |
+|---|---|---|
+| **The Ironwright Compact** | The Foundry | Industrial workshop aesthetic. Forges, armour racks, crafting benches. Pragmatic and utilitarian. |
+| **The Veil Cartographers** | The Cartographium | Library-observatory hybrid. Map tables, astrolabes, specimen cases. Scholarly and meticulous. |
+| **The Scarlet Ledger** | The Counting House | Shadowy trading post. Ledger desks, concealed alcoves, a black-market board. Risk and reward on display. |
+
+Each stronghold contains the same core **feature rooms** (stash, armoury, expedition board, market, training, infirmary, war room, commons) but with faction-specific room names, descriptions, and narrative flavour. The underlying game mechanics are identical across factions — the difference is aesthetic and narrative.
+
+**Implementation notes:**
+- Strongholds use the existing `zones` / `zone_rooms` / `zone_exits` schema with category `faction_hub`
+- A `FactionHubRoom` Colyseus Room type (or reuse of `RefugeRoom` with configuration) manages these zones
+- Players are routed to their faction's stronghold based on `faction_membership` after login / death
+- Cross-faction trade requires meeting at a neutral zone or marketplace (future design question)
 - **World events**: When a faction collectively donates enough resources, they unlock a **special zone** — a limited-time, high-difficulty instance with unique loot.
 
 *Note: Faction tables exist in the database; reputation gain, rank progression, crafting unlocks, and world events are not yet implemented.*
@@ -448,10 +532,11 @@ Zones are defined in three core tables:
 ### Zone Types
 | Category | Examples | Lifecycle | Use Case |
 |---|---|---|---|
-| **hub** | The Refuge | `persistent` | Safe zone, feature rooms, long-lived |
-| **dungeon** | Hand-crafted extraction zones | `persistent` or `scheduled` | Designer-built encounters, primary content |
+| **faction_hub** | The Foundry, The Cartographium, The Counting House | `persistent` | Faction starting zones, player home base, feature rooms |
+| **dev** | The Refuge | `persistent` | Designer/debug hub, connected to all zones, feature-room reference |
+| **dungeon** | Hand-crafted adventure zones | `persistent` or `scheduled` | Designer-built encounters, primary content |
 | **wilderness** | Open exploration zones | `persistent` | Future: open-world areas |
-| **social** | Faction headquarters | `persistent` | Future: faction-specific hubs |
+| **social** | Neutral meeting grounds | `persistent` | Future: cross-faction social areas |
 
 ### Inter-Zone Travel
 The `zone_exits` table supports connections between zones:
@@ -462,7 +547,7 @@ The `zone_exits` table supports connections between zones:
 ## 10.2 Hand-Crafted Zones *(Primary Content Mode — Implemented)*
 Designers create zones in the database via the **admin dashboard**. The zone management view allows:
 - Creating zones with metadata (name, tier, environment theme, lifecycle, PvP settings)
-- Defining rooms (type: entry, corridor, chamber, boss, extraction)
+- Defining rooms (type: entry, corridor, chamber, boss)
 - Connecting rooms with directional exits
 - Setting room properties, hazards, NPCs, loot containers
 
@@ -473,14 +558,14 @@ Hand-crafted zones enable:
 - **Authored experiences**: Designers control pacing, difficulty curves, and narrative beats
 - **Learning and mastery**: Players can learn layouts, optimize routes, develop strategies
 - **Memorable encounters**: Specific rooms and challenges become recognized and discussed
-- **Traditional MUD/MMORPG feel**: Static worlds with extraction game stakes
+- **Traditional MUD/MMORPG feel**: Static worlds with real death stakes
 
 ### Zone Size by Tier
-| Zone Tier | Rooms | Entry Points | Extraction Nodes | Player Slots |
-|---|---|---|---|---|
-| Tier 1 (Shallow) | 15-25 | 2 | 2 | 1-3 |
-| Tier 2 (Deep) | 25-40 | 3 | 2-3 | 2-4 |
-| Tier 3 (Abyssal) | 40-60 | 4 | 2-3 | 3-6 |
+| Zone Tier | Rooms | Entry Points | Player Slots |
+|---|---|---|---|
+| Tier 1 (Shallow) | 15-25 | 2 | 1-3 |
+| Tier 2 (Deep) | 25-40 | 3 | 2-4 |
+| Tier 3 (Abyssal) | 40-60 | 4 | 3-6 |
 
 ## 10.3 Procedural Assembly *(Future Feature — Partial Implementation)*
 **Status:** Procedural generation exists in the codebase but is **not the primary focus**. It may be used for:
@@ -491,7 +576,7 @@ Hand-crafted zones enable:
 **How it works (when enabled):**
 1. Select a **seed** (determines all procedural outcomes for reproducibility)
 2. Choose rooms from the `room_definitions` table based on environment and tier
-3. Algorithmically connect rooms into a graph with anchor points (entry, extraction, boss, treasure)
+3. Algorithmically connect rooms into a graph with anchor points (entry, boss, treasure)
 4. Add **dead ends** and **loops** for non-trivial navigation
 5. Place **locked doors** and **barriers** that require keys or actions to pass
 
@@ -524,7 +609,7 @@ Each zone instance can roll 1-3 **modifiers** that alter the run:
 - Loot spawns are determined by **loot table definitions** (`loot_table_definitions` table) which contain weighted entries for item drops.
 - **Loot tiers** scale with zone tier and room danger (rooms closer to boss rooms or behind locks have better loot).
 - All items are stored in the `item_definitions` table (name, type, tier, stats, durability, soulbound flag).
-- Containers types include: crates (common), locked chests (require Lockpicking or keys), altars (require special skills), corpses of previous failed explorers (environmental storytelling — not real player corpses, procedurally placed).
+- Containers types include: crates (common), locked chests (require Lockpicking or keys), altars (require special skills), corpses (player death corpses are lootable — see §6.5; environmental corpses are designer-placed for loot and storytelling).
 - Creatures drop loot on death from loot tables defined in `creature_definitions.loot_table` (JSONB field).
 
 ---
@@ -581,7 +666,6 @@ Sound is the primary medium for **cross-room awareness**. In a text game without
 | Combat (melee) | 5 |
 | Breaking a door | 7 |
 | Explosion (grenade) | 9 |
-| Extraction ritual | 8 (sustained for duration) |
 | Sneaking | 0 (with Stealth skill) to 1 (without) |
 
 ## 12.3 Information Conveyed
@@ -609,8 +693,8 @@ Ellmud is built on **Colyseus 0.17.x** (MIT-licensed, self-hosted) running on **
                          │  │  │  Game Server (Colyseus 0.17.x) │      │                         │
                          │  │  │  ┌──────────┐  ┌───────────┐  │      │                         │
                          │  │  │  │InstanceRoom│  │RefugeRoom │  │      │                         │
-                         │  │  │  │ (1:1 per │  │ (living   │  │      │                         │
-                         │  │  │  │  zone)    │  │  hub)     │  │      │                         │
+                         │  │  │  │ (1:1 per │  │ (dev hub/ │  │      │                         │
+                         │  │  │  │  zone)    │  │  fac hub) │  │      │                         │
                          │  │  │  └──────────┘  └───────────┘  │      │                         │
                          │  │  │  ┌───────────────────┐        │      │                         │
                          │  │  │  │ Built-in Matchmaker│        │      │                         │
@@ -704,7 +788,7 @@ Each Colyseus Room maps 1:1 to a game instance:
 | Room Type | Lifecycle | Purpose |
 |---|---|---|
 | **`InstanceRoom`** | Ephemeral (20-40 min) | One zone instance. Holds room graph, creature state, player positions, loot, timers. Created at zone seeding, disposed at collapse. |
-| **`RefugeRoom`** | Long-lived | The persistent hub zone. Handles navigation between feature rooms (stash, expedition board, market, etc.). Loads zone structure from database (`zones`, `zone_rooms`, `zone_exits` tables). |
+| **`RefugeRoom`** | Long-lived | The persistent designer/debug hub zone. Handles navigation between feature rooms (stash, expedition board, market, etc.). Loads zone structure from database (`zones`, `zone_rooms`, `zone_exits` tables). Connected to all zones for designer traversal. *Future: `FactionHubRoom` (or `RefugeRoom` with config) will serve faction strongholds as the player-facing equivalent.* |
 
 ### Message-Only Client Protocol
 The client communicates exclusively via Colyseus messages. **Schema state sync is server-internal only — it is never sent to game clients.**
@@ -734,7 +818,7 @@ The web client is built with **React 18 + Vite** using the **`@colyseus/sdk`** p
 - Provides a **compass navigation control** (3×3 directional grid) for intuitive movement
 - Displays two distinct layouts:
   - **Zone Exploration**: 2-column layout (70% narrative panel + 30% combat/status sidebar)
-  - **Refuge**: 3-column tab-based layout (left sidebar with compass, center content tabs, right ambient events/chat)
+  - **Hub (Refuge / Faction Stronghold)**: 3-column tab-based layout (left sidebar with compass, center content tabs, right ambient events/chat)
 - Handles **direction aliases client-side** for UI prediction, though server-side parsing is authoritative
 - Supports reconnection token infrastructure for graceful handling of brief network drops
 
@@ -750,7 +834,7 @@ The admin/debug dashboard is designed from day one to use **Colyseus Schema sync
 |---|---|
 | **Exploration** | Tick handles background systems: creature AI (patrol, alert), trace decay, collapse timer countdown, sound propagation. Player commands are processed immediately in `onMessage` handlers. |
 | **Combat** | Tick additionally collects player actions during the tick window and resolves them simultaneously at tick boundary. No input received = default to `dodge` (see §6.3). |
-| **Refuge** | Tick handles room navigation and zone state. *Future: Will drive ambient world simulation (NPC movement, weather cycles, faction events, merchant schedules).* |
+| **Hub (Refuge / Faction Stronghold)** | Tick handles room navigation and zone state. *Future: Will drive ambient world simulation (NPC movement, weather cycles, faction events, merchant schedules).* |
 
 ### Horizontal Scaling
 - **Redis presence** (unmanaged Redis container) tracks which Colyseus process owns which Room. Wired from day one even in single-replica Phase 1 to avoid rework.
@@ -774,7 +858,7 @@ Ellmud uses **Azure Database for PostgreSQL Flexible Server** with a comprehensi
 | **`player_stash_capacity`** | Per-player weight limits (default 200, expandable) |
 | **`player_profile`** | Extended profile (max_carry_weight, equipment JSONB) |
 | **`faction_membership`** | One faction per player (reputation, rank) |
-| **`run_history`** | Zone run records (zone_tier, environment, duration, extracted, items, xp_gained) |
+| **`run_history`** | Zone run records (zone_tier, environment, duration, survived, items, xp_gained) |
 | **`player_death_tracking`** | Death tracking (death_count, last_death_at) |
 | **`auth_tokens`** | Session tokens (JWT, expires_at) |
 
@@ -849,7 +933,7 @@ The dashboard provides full CRUD for all content types:
 ### Zone Management
 The **Zone Manager** view allows designers to:
 - Create zones (slug, name, tier, environment theme, lifecycle, category, PvP settings)
-- Define rooms within zones (type: entry, corridor, chamber, boss, extraction)
+- Define rooms within zones (type: entry, corridor, chamber, boss)
 - Connect rooms with directional exits (north, south, east, west, up, down)
 - Set inter-zone exits (target_zone_slug + target_room_slug)
 - Configure locked/hidden exits
@@ -938,10 +1022,10 @@ If the game uses a monetisation model, it adheres to these principles:
 ### Phase 1 — Core Loop (MVP) *(Mostly Complete)*
 *Stack: Colyseus 0.17.x on Azure Container Apps, GPT-4o-mini via Azure AI Foundry, PostgreSQL, Redis container, GitHub Actions CI/CD, Bicep IaC.*
 - [x] Azure infrastructure provisioning (Container Apps, PostgreSQL, Foundry, Redis, ACR) via Bicep
-- [x] Colyseus server scaffold: `InstanceRoom`, `RefugeRoom`, message protocol
+- [x] Colyseus server scaffold: `InstanceRoom`, `RefugeRoom` (designer hub), message protocol
 - [x] Database schema (31 migrations): player persistence, content definitions, zone system
 - [x] Zone system (zones, zone_rooms, zone_exits tables)
-- [x] Refuge as a database zone (7 rooms: hearth, stash-alcove, training-grounds, expedition-board, market, infirmary, war-room)
+- [x] Refuge as a database zone (7 rooms: hearth, stash-alcove, training-grounds, expedition-board, market, infirmary, war-room) — now serves as designer/debug hub
 - [x] Character creation and selection system (multi-character support)
 - [x] Hand-crafted zone loading (primary content mode)
 - [ ] Procedural zone assembly (future/secondary content mode — partial implementation exists)
@@ -951,12 +1035,13 @@ If the game uses a monetisation model, it adheres to these principles:
 - [ ] Combat system (redesigning from ground up — old system deprecated)
 - [x] Single creature type (foundation implemented)
 - [x] LLM narration pipeline: Redis cache → Foundry → template fallback
-- [x] Extraction mechanic (multi-tick channel)
+- [x] Death mechanic (corpse drop on death — foundation implemented, full corpse looting planned)
+- [ ] Corpse looting system (other players/creatures loot corpses — planned Phase 2)
 - [x] Stash persistence (PostgreSQL, weight-based capacity)
 - [x] Loadout system (equipment slots: weapon, offhand, head, chest, legs, feet)
 - [x] Username/password auth (bcrypt + JWT, OAuth-ready schema)
 - [x] React + Vite client (TailwindCSS, shadcn/ui, compass navigation)
-- [x] Two client layouts: Zone (2-column) and Refuge (3-column tabs)
+- [x] Two client layouts: Zone (2-column) and Hub (3-column tabs)
 - [x] Admin dashboard (content management, zone management, SSE updates)
 - [x] Repository Provider pattern (Interface + PgImpl + InMemoryImpl)
 - [x] Audit logging (admin CRUD actions)
@@ -971,9 +1056,12 @@ If the game uses a monetisation model, it adheres to these principles:
 - [ ] PvP combat (depends on combat redesign)
 - [ ] Awareness / stealth detection
 - [ ] Proximity communication (`say`, `whisper` — foundation exists)
-- [ ] Death, corpse looting, death penalty (death tracking table ✅, mechanics partial)
+- [ ] Death & corpse system: corpse creation, lootable corpses, corpse persistence/decay (§6.5) (death tracking table ✅, mechanics partial)
+- [ ] Death penalty debuff system (design TBD through playtesting)
+- [ ] Corpse recovery ("corpse run") mechanics
 - [ ] WebSocket reconnection tuning (`allowReconnection` ✅ implemented)
-- [ ] Refuge ambient world (NPC activity, weather, events — not implemented)
+- [ ] Faction strongholds (3 faction hub zones with feature rooms — replaces Refuge as player home)
+- [ ] Refuge ambient world (NPC activity, weather, events — not implemented; may apply to faction hubs instead)
 - [ ] Custom domain (`kirbytoso.xyz`) configuration ✅
 
 ### Phase 3 — Depth *(Planned)*
@@ -981,14 +1069,14 @@ If the game uses a monetisation model, it adheres to these principles:
 - [ ] Crafting system (not implemented)
 - [ ] Environment variety (content population needed for zones)
 - [ ] Zone modifiers (modifier_definitions table ✅, runtime mechanics not implemented)
-- [ ] Faction system with reputation (faction tables ✅, reputation/rank mechanics not implemented)
+- [ ] Faction system with reputation and strongholds (faction tables ✅, reputation/rank mechanics not implemented, stronghold zones not created)
 - [ ] Tier 2 and Tier 3 zones (foundation exists)
 - [ ] Creature variety (creature_definitions table ✅, content population needed)
 - [ ] Standalone matchmaker process (built-in matchmaker ✅)
 - [ ] GPT-4o quality tier for room descriptions (optional, cost-controlled)
 
 ### Phase 4 — World *(Planned)*
-- [ ] Marketplace (UI placeholder ✅ in Refuge tabs, mechanics not implemented)
+- [ ] Marketplace (UI placeholder ✅ in hub tabs, mechanics not implemented)
 - [ ] Faction world events (not implemented)
 - [ ] Contracts system (not implemented)
 - [ ] Seasonal zone rotations (not implemented)
@@ -1004,13 +1092,16 @@ These are deliberate design questions to resolve through playtesting:
 
 1. **Solo viability at high tiers.** Should Tier 3 zones require a squad, or should a skilled solo player always have a path?
 2. **PvP loot drop amount.** Drop all non-soulbound (punishing) vs drop a percentage (forgiving)? Needs testing for how it affects player willingness to bring good gear.
-3. **Zone collapse strictness.** Is the death penalty debuff enough, or should collapse = full inventory loss + debuff?
+3. **Zone collapse strictness.** For instanced zones with collapse timers: is death (corpse lost with instance, death debuff) the right penalty for failing to leave in time? Or should collapse offer a last-chance grace period?
 4. **LLM model economics.** At ~$0.006/player-hour (50-70% cache hit rate) with GPT-4o-mini, costs are manageable through Phase 1. At what player count does the linear scaling of uncached calls become prohibitive? Fine-tuning and batch API pricing (50% discount) are levers for Phase 2+.
 5. **Squad size.** Is 3 the right cap? Does duo-vs-duo produce better emergent encounters than trio-vs-solo?
-6. **Extraction ritual duration.** Too short = no tension. Too long = feels tedious. Needs iteration.
+6. **Corpse persistence duration.** How long should a player corpse remain lootable? Too short = no risk. Too long = feels punishing if you can't recover gear. Needs iteration.
 7. **Trace system fidelity.** How much trace information is "fun espionage" vs "overwhelming noise"?
 8. **Communication meta.** Will players just use Discord to bypass in-game proximity chat? Does that matter, or does it only help squads (who'd coordinate externally anyway)?
 9. **Hand-crafted vs procedural balance.** With hand-crafted zones as primary content, what role (if any) should procedural generation play? Special events? Practice zones? Or eliminate it entirely?
+10. **Corpse recovery mechanics.** Should players be able to return to their own corpse to recover gear? If so, is there a time window? Does the corpse despawn if the instance collapses?
+11. **Death penalty severity.** How harsh should the death debuff be? Duration, stat reduction amount, stackability. Needs playtesting to find the line between "meaningful consequence" and "rage quit."
+12. **Equipment degradation balance.** How fast should durability degrade? Should breakage destroy the item or leave a repairable husk? How does this interact with death (does corpse gear have reduced durability)?
 
 ---
 

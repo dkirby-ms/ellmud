@@ -1376,3 +1376,27 @@ CREATE TABLE zone_definitions (
 **Artifacts Created:**
 - Decision document: `.squad/decisions/inbox/elminster-refuge-faction-starts.md`
 - Updated: `GDD.md` (Refuge → designer hub, faction starting zones introduced)
+
+---
+
+### 2025-07-22 — Extraction Removal + MUD-Style Death
+
+**Task:** Remove the extraction mechanic entirely from the GDD and replace it with MUD-style death as the primary risk mechanic. Requested by dkirby-ms.
+
+**Scope:** GDD.md only, ~30 edits across 15+ sections plus two new sections (§6.5, §6.6).
+
+## Learnings
+
+1. **Genre Identity Was Load-Bearing:** "Extraction RPG" was woven into nearly every section — genre line, core fantasy, design pillars, gameplay loop, zone design, PvP framing, sound system, roadmap, and open questions. A grep for "extract" (case-insensitive) hit 30+ lines. Removing a genre identity from a GDD is not a find-and-replace — each reference requires contextual rewriting because the surrounding language was shaped by the extraction assumption.
+
+2. **Death-as-Risk Is Simpler and More MUD-Native:** The extraction mechanic was a genre import that fought the medium. A channeled extraction ritual in text lacks the physical tension of a 3D game. MUD-style death (corpse drop, gear loss, corpse run) is native to the form, creates continuous tension rather than point-of-extraction tension, and is mechanically simpler. This is a case where removing complexity improved the design.
+
+3. **Zone Lifecycle Needed a Split:** The old lifecycle (Seeding → Open → Active → Destabilising → Collapse) was entirely extraction-driven. Without extraction, zones don't inherently need a collapse timer. The replacement is a dual model: Persistent zones (the primary model, always available) and Instanced zones (future, optional timer). This is more flexible and better matches the MUD paradigm of persistent areas you enter and leave.
+
+4. **Equipment Loss Is a Design Space, Not a Single Mechanic:** Death is now the primary gear loss vector, but acknowledging other vectors (durability, curses, theft, traps) early prevents the design from over-indexing on death as the only meaningful risk. Planting these seeds now means future designers won't have to retcon the philosophy.
+
+5. **Open Questions Are the Right Place for Unresolved Death Parameters:** Corpse persistence, recovery mechanics, death penalty severity — these are all playtest-dependent. Specifying them prematurely in the GDD would create false precision. The §18 additions are correctly framed as questions, not answers.
+
+**Artifacts Created:**
+- Decision document: `.squad/decisions/inbox/elminster-extraction-removal.md`
+- Updated: `GDD.md` (extraction removed, death & corpse system added, genre reframed)
