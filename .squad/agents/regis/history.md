@@ -758,3 +758,34 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 **Key Decision:** Creatures now display as `Creatures: name1, name2` (comma-separated, single line) matching the `Exits:` and `You see:` patterns. Both `look` and `go` (entering a room) show creatures.
 
 **Pattern:** Added `resolveCreaturesInRoom` resolver function to `CommandContext` (parallels existing `resolveRoom`) so `go.ts` can look up creatures in the target room (since `creaturesInRoom` on the context refers to the source room, not the destination).
+
+## 2026-03-30 — Creature Admin Page: Aggressive Toggle + Loot Table Fix + Room Description
+
+**Completed:** Fixed three issues in creature admin detail page  
+**Files Modified:** 2
+
+- `packages/client/src/pages/admin/CreatureDetail.tsx`:
+  - Added `aggressive` boolean checkbox in new "Behavior & Spawn" section (default: true)
+  - Added `roomDescription` textarea field for in-room flavor text (e.g., "A slum rat sniffs along the ground.")
+  - Added `idleTicksMin` and `idleTicksMax` inputs in Behavior & Spawn section
+  - Fixed loot table "Unknown Item" bug by fetching items list via `listItems()` and building `itemLookup` Map
+  - Updated loot table dropdown to show all available items (not just current item)
+  - Updated `updateLootEntry` to resolve item names from lookup when `itemId` changes
+  
+- `packages/server/src/admin/content/PgCreatureDefinitionsStore.ts`:
+  - Added `room_description` and `aggressive` columns to `CreatureRow` interface
+  - Updated `rowToEntity` to map `room_description → roomDescription` and `aggressive` boolean
+  - Updated `getAll()`, `getById()`, `create()`, and `update()` SQL to include both columns
+  - `aggressive` defaults to `true` (matches DB default from migration 008)
+  - `room_description` defaults to `null`
+
+**Build:** ✅ Client and server TypeScript compile clean  
+**Database:** Migration 009 adds `room_description` column (already exists); migration 008 adds `aggressive` column (already exists)
+
+## Learnings
+
+- **Item lookup pattern for loot tables:** Admin pages displaying foreign key references need to fetch the related entities list and build a lookup Map. Don't rely on the API returning joined data — the loot table stores only `{itemId, dropWeight}`, so the client must resolve names.
+- **Parallel useEffect hooks:** When one effect depends on data from another (creature fetch depends on `itemLookup`), include the dependency in the dep array. The items effect runs first (no deps except `[]`), then the creature effect runs when `itemLookup` changes.
+- **CamelCase ↔ snake_case mapping:** Server DB uses `room_description`, `aggressive`, etc. (snake_case). Admin API returns camelCase (`roomDescription`, `aggressive`). Store conversion happens in `rowToEntity()` and the parameter binding in INSERT/UPDATE.
+- **Loot table dropdown UX:** The old dropdown only showed the current item as a single `<option>`. Fixed by fetching all items and rendering them in the dropdown, allowing admins to change the item without editing JSON.
+- **Behavior & Spawn section organization:** Grouped `aggressive` checkbox with `idleTicksMin`/`idleTicksMax` inputs since they all relate to creature AI behavior (aggro, patrol frequency).

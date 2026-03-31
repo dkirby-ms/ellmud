@@ -120,6 +120,7 @@ export class CreatureManager {
       lootTable: [...template.lootTable],
       isAlive: true,
       aggressive: template.aggressive,
+      roomDescription: template.roomDescription,
     };
   }
 
@@ -150,6 +151,7 @@ export class CreatureManager {
       lootTable: [...template.lootTable],
       isAlive: true,
       aggressive: template.aggressive,
+      roomDescription: template.roomDescription,
     };
 
     this.creatures.set(creature.id, creature);
@@ -238,6 +240,7 @@ export class CreatureManager {
       lootTable: [...template.lootTable],
       isAlive: true,
       aggressive: template.aggressive,
+      roomDescription: template.roomDescription,
     };
   }
 

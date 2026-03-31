@@ -60,6 +60,8 @@ export interface CreatureTemplate {
   fleeThreshold: number;
   /** Whether creature attacks players on sight. False = passive wildlife. */
   aggressive: boolean;
+  /** Short atmospheric description shown when the creature is in a room. */
+  roomDescription?: string;
 }
 
 // ─── Creature Instance ───────────────────────────────────────────────────────
@@ -89,6 +91,8 @@ export interface Creature {
   isAlive: boolean;
   /** Whether creature attacks players on sight. False = passive wildlife. */
   aggressive: boolean;
+  /** Short atmospheric description shown when the creature is in a room. */
+  roomDescription?: string;
 }
 
 // ─── Creature Action Output ──────────────────────────────────────────────────

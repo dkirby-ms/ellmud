@@ -1007,7 +1007,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
 
     const creaturesInRoom = this.creatureManager.getCreaturesInRoom(player.currentRoomId)
-      .map(c => ({ id: c.id, name: c.name }));
+      .map(c => ({ id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription }));
 
     return {
       player,
@@ -1023,7 +1023,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       creaturesInRoom,
       resolveCreaturesInRoom: (roomId: string) =>
         this.creatureManager.getCreaturesInRoom(roomId)
-          .map(c => ({ id: c.id, name: c.name })),
+          .map(c => ({ id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription })),
     };
   }
 

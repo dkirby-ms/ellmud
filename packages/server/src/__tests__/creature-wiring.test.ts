@@ -70,7 +70,7 @@ function buildCtx(
 ): CommandContext {
   const room = localGraph.rooms.get(player.currentRoomId)!;
   const creaturesInRoom = creatureManager.getCreaturesInRoom(player.currentRoomId)
-    .map(c => ({ id: c.id, name: c.name }));
+    .map(c => ({ id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription }));
 
   return {
     player,
@@ -83,7 +83,7 @@ function buildCtx(
     creaturesInRoom,
     resolveCreaturesInRoom: (roomId: string) =>
       creatureManager.getCreaturesInRoom(roomId)
-        .map(c => ({ id: c.id, name: c.name })),
+        .map(c => ({ id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription })),
   };
 }
 
@@ -317,7 +317,7 @@ describe('Look Command with Creatures', () => {
 
     const result = handleLook(ctx);
     expect(result.narrations[0]!.text).toContain('Drowned Revenant');
-    expect(result.narrations[0]!.text).toContain('Creatures:');
+    expect(result.narrations[0]!.text).toContain('lurks here');
   });
 
   it('does not show dead creatures', () => {
@@ -428,7 +428,7 @@ describe('Go Command with Creatures', () => {
     const ctx = buildCtx(player, localGraph, creatureManager, combatSystem, [direction]);
 
     const result = handleGo(ctx);
-    expect(result.narrations[0]!.text).toContain('Creatures:');
+    expect(result.narrations[0]!.text).toContain('lurks here');
     expect(result.narrations[0]!.text).toContain('Drowned Revenant');
   });
 

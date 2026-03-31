@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Send, X, Plus, AlertCircle } from "lucide-react";
-import { getCreature, createCreature, updateCreature, AdminAPIError, simulateCreatureReroll, type CreatureRerollResult } from "../../lib/admin-api";
+import { getCreature, createCreature, updateCreature, listItems, AdminAPIError, simulateCreatureReroll, type CreatureRerollResult } from "../../lib/admin-api";
 
 type Status = "draft" | "review" | "published" | "deprecated";
 
@@ -15,7 +15,9 @@ interface CreatureFormData {
   type: string;
   name: string;
   description: string;
+  roomDescription: string;
   behavior: string;
+  aggressive: boolean;
   maxHp: number;
   attack: number;
   defence: number;
@@ -65,7 +67,9 @@ export default function CreatureDetail() {
     type: "",
     name: "",
     description: "",
+    roomDescription: "",
     behavior: "guardian",
+    aggressive: true,
     maxHp: 50,
     attack: 10,
     defence: 3,
@@ -90,6 +94,28 @@ export default function CreatureDetail() {
   const [rerollResult, setRerollResult] = useState<CreatureRerollResult | null>(null);
   const [rerolling, setRerolling] = useState(false);
   const [rerollError, setRerollError] = useState<string | null>(null);
+  const [allItems, setAllItems] = useState<Array<{ id?: string; slug?: string; name: string }>>([]);
+  const [itemLookup, setItemLookup] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    const fetchItems = async () => {
+      try {
+        const items = await listItems<{ id?: string; slug?: string; name: string }>();
+        setAllItems(items);
+        const lookup = new Map<string, string>();
+        items.forEach(item => {
+          const key = item.slug || item.id;
+          if (key) {
+            lookup.set(key, item.name);
+          }
+        });
+        setItemLookup(lookup);
+      } catch (err) {
+        console.error('Failed to fetch items:', err);
+      }
+    };
+    fetchItems();
+  }, []);
 
   useEffect(() => {
     if (isNew) return;
@@ -102,11 +128,15 @@ export default function CreatureDetail() {
         // Load lootTable from API response
         if (creature.lootTable && Array.isArray(creature.lootTable)) {
           setLootTable(
-            creature.lootTable.map((entry: Record<string, unknown>) => ({
-              itemId: (entry.itemId as string) || "",
-              itemName: (entry.name as string) || (entry.itemName as string) || "Unknown Item",
-              weight: (entry.dropWeight as number) || (entry.weight as number) || 50,
-            }))
+            creature.lootTable.map((entry: Record<string, unknown>) => {
+              const itemId = (entry.itemId as string) || "";
+              const itemName = itemLookup.get(itemId) || (entry.name as string) || (entry.itemName as string) || "Unknown Item";
+              return {
+                itemId,
+                itemName,
+                weight: (entry.dropWeight as number) || (entry.weight as number) || 50,
+              };
+            })
           );
         }
       } catch (err) {
@@ -121,7 +151,7 @@ export default function CreatureDetail() {
       }
     };
     fetchCreature();
-  }, [id, isNew]);
+  }, [id, isNew, itemLookup]);
 
   const updateField = (field: string, value: string | number | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -196,7 +226,12 @@ export default function CreatureDetail() {
     value: string | number
   ) => {
     const updated = [...lootTable];
-    updated[index] = { ...updated[index], [field]: value };
+    if (field === 'itemId') {
+      const itemName = itemLookup.get(value as string) || "Unknown Item";
+      updated[index] = { ...updated[index], itemId: value as string, itemName };
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
+    }
     setLootTable(updated);
   };
 
@@ -343,6 +378,28 @@ export default function CreatureDetail() {
                     className="block text-[#8A8B95] text-sm mb-2"
                     style={{ fontFamily: "var(--font-sans)" }}
                   >
+                    Room Description
+                  </label>
+                  <textarea
+                    value={formData.roomDescription}
+                    onChange={(e) => updateField("roomDescription", e.target.value)}
+                    rows={2}
+                    placeholder="A slum rat sniffs along the ground."
+                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
+                   
+                  />
+                  <p
+                    className="text-[#4A4B55] text-xs mt-1"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    In-room flavor text shown to players
+                  </p>
+                </div>
+                <div>
+                  <label
+                    className="block text-[#8A8B95] text-sm mb-2"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
                     Behavior Archetype
                   </label>
                   <select
@@ -356,6 +413,65 @@ export default function CreatureDetail() {
                     <option value="guardian">Guardian</option>
                     <option value="patrol">Patrol</option>
                   </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Behavior & Spawn */}
+            <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
+              <h2
+                className="text-[#C9A84C] text-lg mb-4"
+               
+              >
+                Behavior & Spawn
+              </h2>
+              <div className="space-y-4">
+                <label className="flex items-center gap-2" style={{ fontFamily: "var(--font-sans)" }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.aggressive}
+                    onChange={(e) => updateField("aggressive", e.target.checked)}
+                    className="w-4 h-4 bg-[#1C1D27] border border-[#2A2B35] rounded focus:ring-[#C9A84C] focus:ring-offset-0"
+                  />
+                  <span className="text-[#E8E0D0]">
+                    Aggressive (attacks players on sight)
+                  </span>
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label
+                      className="block text-[#8A8B95] text-sm mb-2"
+                      style={{ fontFamily: "var(--font-sans)" }}
+                    >
+                      Idle Ticks Min
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.idleTicksMin}
+                      onChange={(e) =>
+                        updateField("idleTicksMin", parseInt(e.target.value))
+                      }
+                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
+                      style={{ fontFamily: "var(--font-mono)" }}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      className="block text-[#8A8B95] text-sm mb-2"
+                      style={{ fontFamily: "var(--font-sans)" }}
+                    >
+                      Idle Ticks Max
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.idleTicksMax}
+                      onChange={(e) =>
+                        updateField("idleTicksMax", parseInt(e.target.value))
+                      }
+                      className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
+                      style={{ fontFamily: "var(--font-mono)" }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -466,7 +582,12 @@ export default function CreatureDetail() {
                         className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none text-sm"
                        
                       >
-                        <option>{entry.itemName}</option>
+                        <option value="">— Select item —</option>
+                        {allItems.map(item => (
+                          <option key={item.id || item.slug} value={item.slug || item.id}>
+                            {item.name}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="w-24">

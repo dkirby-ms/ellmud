@@ -54,6 +54,8 @@ export interface CommandResult {
 export interface CreatureRef {
   id: string;
   name: string;
+  type?: string;
+  roomDescription?: string;
 }
 
 export interface CommandContext {

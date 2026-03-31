@@ -1885,3 +1885,44 @@ Peaceful flag properly persists across zone transitions. Dev team can now use `/
 - DB loader: `packages/server/src/content/ContentRegistry.ts`
 - Migration: `packages/server/src/db/migrations/008_passive_creatures.sql`
 - Tests: `packages/server/src/__tests__/creatures.test.ts`, `packages/server/src/__tests__/peaceful-mode.test.ts`
+
+### 2026-03-30: Room Description Rendering for Creatures
+
+**Task:** Add atmospheric room descriptions for creatures, displayed when entering rooms.
+
+**Deliverable 1 — Migration 009:**
+- Created `packages/server/src/db/migrations/009_creature_room_descriptions.sql`
+- `ALTER TABLE creature_definitions ADD COLUMN room_description TEXT`
+- Seeded room descriptions for 15 existing creatures with atmospheric flavor text
+
+**Deliverable 2 — Types + ContentRegistry + CreatureManager:**
+- Added `roomDescription?: string` to `CreatureTemplate` and `Creature` interfaces in `types.ts`
+- Updated `ContentRegistry.ts`:
+  - Added `room_description` to `CreatureRow` interface
+  - Updated SQL query to SELECT `room_description` column
+  - Mapped `row.room_description` to template `roomDescription` field
+- Updated `CreatureManager.ts`:
+  - All three creature creation methods (`createCreature`, `createZoneCreature`, `spawnSingleCreature`) now copy `roomDescription` from template to instance
+
+**Deliverable 3 — Rich Room Descriptions in look/go:**
+- Updated `CreatureRef` type in `commands/index.ts` to include `type?: string` and `roomDescription?: string`
+- Updated `ShardRoom.ts` `buildCommandContext()` to pass `type` and `roomDescription` when building creature refs
+- Updated `look.ts` and `go.ts` handlers:
+  - Replaced "Creatures: {names}" format with rich per-line descriptions
+  - Group creatures by type, show `roomDescription` if available, fallback to "A {name} lurks here."
+  - Append ` (x{count})` when multiple creatures of same type
+  - Example output: "A slum rat sniffs along the ground. (x3)"
+- Updated test assertions in `creature-wiring.test.ts` to check for "lurks here" instead of "Creatures:"
+- Updated `buildCtx` test helper to include `type` and `roomDescription` fields (matches production code pattern)
+
+**Tests:** All 112 creature/command/wiring tests passing. TypeScript compilation clean.
+
+**Design Pattern:**
+- Followed exact same pattern as `aggressive` field addition (see history entry from 2025-03-30)
+- DB migration → Types → ContentRegistry query + mapping → CreatureManager copy → ShardRoom wiring → Command handlers
+
+## Learnings
+
+- When adding fields to creatures, the pattern is: migration → types → ContentRegistry → CreatureManager (all 3 create methods) → ShardRoom (both maps) → CreatureRef type → command handlers
+- Test helpers like `buildCtx` in creature-wiring.test.ts must mirror production code mapping — any field passed in ShardRoom must be passed in tests, or tests diverge from production behavior
+- Room description rendering groups creatures by `type` (not `name`) because type is the unique identifier for creature templates — multiple instances of the same type get aggregated with count
