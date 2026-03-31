@@ -53,13 +53,13 @@ import {
 //    /    |    \
 //  crypt entry  armory
 //    ↓
-//  extraction-chamber
+//  deep-chamber
 //
 // entry→corridor: north    corridor→entry: south
 // corridor→shrine: north   shrine→corridor: south
 // corridor→crypt: west     crypt→corridor: east
 // entry→armory: east       armory→entry: west
-// crypt→extraction: down   extraction→crypt: up
+// crypt→deep-chamber: down deep-chamber→crypt: up
 // ═══════════════════════════════════════════════════════════════════════════
 
 const ROOMS = {
@@ -68,7 +68,7 @@ const ROOMS = {
   SHRINE: 'shrine',
   CRYPT: 'crypt',
   ARMORY: 'armory',
-  EXTRACTION: 'extraction-chamber',
+  DEEP_CHAMBER: 'deep-chamber',
 } as const;
 
 // --- Shared test room graph for sound propagation ---
@@ -97,15 +97,15 @@ function buildSoundTestRooms(): Map<string, SoundRoom> {
     id: ROOMS.CRYPT,
     exits: new Map<Direction, string>([
       ['east', ROOMS.CORRIDOR],
-      ['down', ROOMS.EXTRACTION],
+      ['down', ROOMS.DEEP_CHAMBER],
     ]),
   });
   rooms.set(ROOMS.ARMORY, {
     id: ROOMS.ARMORY,
     exits: new Map<Direction, string>([['west', ROOMS.ENTRY]]),
   });
-  rooms.set(ROOMS.EXTRACTION, {
-    id: ROOMS.EXTRACTION,
+  rooms.set(ROOMS.DEEP_CHAMBER, {
+    id: ROOMS.DEEP_CHAMBER,
     exits: new Map<Direction, string>([['up', ROOMS.CRYPT]]),
   });
   return rooms;
@@ -220,7 +220,7 @@ describe('Phase 2 QA — Multi-Player Shard (4 players)', () => {
     expect(armoryResult!.distance).toBe(1);
   });
 
-  it('combat sound reaches SHRINE (2 hops) but not EXTRACTION (3+ hops from entry)', () => {
+  it('combat sound reaches SHRINE (2 hops) but not DEEP_CHAMBER (3+ hops from entry)', () => {
     const results = sound.propagateSound(ROOMS.ENTRY, NOISE_VALUES.combat);
 
     // SHRINE (2 hops: entry→corridor→shrine): 5 - 4 = 1
@@ -229,9 +229,9 @@ describe('Phase 2 QA — Multi-Player Shard (4 players)', () => {
     expect(shrineResult!.effectiveNoise).toBe(1);
     expect(shrineResult!.distance).toBe(2);
 
-    // EXTRACTION (3+ hops: entry→corridor→crypt→extraction): 5 - 6 = -1 ≤ 0 — not audible
-    const extractionResult = results.find(r => r.roomId === ROOMS.EXTRACTION);
-    expect(extractionResult).toBeUndefined();
+    // DEEP_CHAMBER (3+ hops: entry→corridor→crypt→deep-chamber): 5 - 6 = -1 ≤ 0 — not audible
+    const deepChamberResult = results.find(r => r.roomId === ROOMS.DEEP_CHAMBER);
+    expect(deepChamberResult).toBeUndefined();
   });
 
   it('simultaneous combat events generate both sound and traces', () => {
@@ -626,11 +626,10 @@ describe('Phase 2 QA — Sound Propagation', () => {
 
     expect(explosionResults.length).toBeGreaterThanOrEqual(combatResults.length);
 
-    // Explosion should reach extraction-chamber (4 hops: entry→corridor→crypt→extraction)
-    // noise 9 - 6 = 3 at 3 hops (entry→corridor→crypt→extraction)
-    // Actually extraction is 3 hops from entry via corridor→crypt→extraction
-    const explosionExtraction = explosionResults.find(r => r.roomId === ROOMS.EXTRACTION);
-    expect(explosionExtraction).toBeDefined();
+    // Explosion should reach deep-chamber (3 hops: entry→corridor→crypt→deep-chamber)
+    // noise 9 - 6 = 3 at 3 hops
+    const explosionDeepChamber = explosionResults.find(r => r.roomId === ROOMS.DEEP_CHAMBER);
+    expect(explosionDeepChamber).toBeDefined();
   });
 
   it('sneaking sound (noise 1) barely propagates', () => {
@@ -803,7 +802,7 @@ describe('Phase 2 QA — Database Consistency', () => {
   it.todo('concurrent inventory writes from 2 players resolve without data loss');
   it.todo('concurrent combat state updates from tick + player action are serialized');
   it.todo('player stash save during shard collapse preserves all items');
-  it.todo('simultaneous extraction + death does not duplicate items');
+
   it.todo('Redis session store handles concurrent read-modify-write (CAS)');
 });
 

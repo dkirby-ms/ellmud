@@ -1,7 +1,7 @@
 /**
- * Extraction Stash Transfer — moves shard inventory into persistent stash.
+ * Stash Transfer — moves shard inventory into persistent stash.
  *
- * Called at the end of a successful extraction. Converts shard Items to
+ * Called when a player exits a shard. Converts shard Items to
  * StashItemInstances and stores them via StashService, respecting weight limits.
  * Items that exceed the stash capacity are retained in the player's carried
  * inventory (never silently lost).

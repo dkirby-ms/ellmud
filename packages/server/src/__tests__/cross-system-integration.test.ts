@@ -1,14 +1,13 @@
 /**
  * Cross-System Integration Tests
  *
- * Tests interactions between combat, extraction, movement, and the shard lifecycle.
+ * Tests interactions between combat, movement, and the shard lifecycle.
  * These test scenarios that span multiple game systems simultaneously.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CombatSystem, createCombatant, DEFAULT_PLAYER_STATS } from '../combat/index.js';
 import type { Combatant, CombatStats } from '../combat/CombatState.js';
-import { ExtractionSystem } from '../extraction/ExtractionSystem.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
 import { createTestRoomGraph, type Room } from '../shard/RoomGraph.js';
@@ -17,7 +16,6 @@ import { createTestRoomGraph, type Room } from '../shard/RoomGraph.js';
 
 const TEST_ROOM = 'room-1';
 const ADJACENT_ROOM = 'room-2';
-const EXTRACTION_ROOM = 'extraction-chamber';
 
 function testExitResolver(roomId: string): string[] {
   if (roomId === TEST_ROOM) return [ADJACENT_ROOM];
@@ -52,117 +50,6 @@ function buildContext(
     ...overrides,
   };
 }
-
-// ─── Combat + Extraction Integration ────────────────────────────────────────
-
-describe('Combat + Extraction Integration', () => {
-  let combat: CombatSystem;
-  let extraction: ExtractionSystem;
-
-  beforeEach(() => {
-    combat = new CombatSystem(testExitResolver);
-    extraction = new ExtractionSystem(5);
-  });
-
-  it('combat strike interrupts an active extraction channel', () => {
-    const player = makePlayer('player1', EXTRACTION_ROOM);
-    const creature = makeCreature('mob1', EXTRACTION_ROOM);
-    combat.registerCombatant(player);
-    combat.registerCombatant(creature);
-
-    // Start extraction
-    const startResult = extraction.startExtraction('player1', EXTRACTION_ROOM, 'extraction');
-    expect(startResult.success).toBe(true);
-    expect(extraction.isExtracting('player1')).toBe(true);
-
-    // Initiate combat — creature attacks the extracting player
-    combat.initiateCombat('mob1', 'player1');
-
-    // Resolve a combat tick
-    const tickResult = combat.resolveTick();
-
-    // Simulate what ShardRoom.update() does: check if extraction target was struck
-    for (const event of tickResult.events) {
-      if (event.type === 'strike' && event.targetId) {
-        if (extraction.isExtracting(event.targetId)) {
-          extraction.interruptExtraction(event.targetId, 'you were struck by an enemy');
-        }
-      }
-    }
-
-    // Extraction should be interrupted
-    expect(extraction.isExtracting('player1')).toBe(false);
-  });
-
-  it('extraction command lock prevents combat commands while channeling', () => {
-    const extractionRoom = createTestRoomGraph().rooms.get('extraction-chamber')!;
-    const player = new PlayerState('player1', 'extraction-chamber');
-
-    extraction.startExtraction('player1', 'extraction-chamber', 'extraction');
-
-    const ctx = buildContext(player, extractionRoom, [], {
-      extractionSystem: extraction,
-      combatSystem: combat,
-    });
-
-    // Combat commands should be blocked
-    for (const verb of ['strike', 'dodge', 'flee', 'attack']) {
-      const result = handleCommand(verb, ctx);
-      expect(result.narrations[0]!.text).toContain('cannot');
-    }
-
-    // Movement should be blocked
-    const goResult = handleCommand('go', { ...ctx, args: ['north'] });
-    expect(goResult.narrations[0]!.text).toContain('cannot');
-  });
-
-  it('passive commands still work during extraction', () => {
-    const extractionRoom = createTestRoomGraph().rooms.get('extraction-chamber')!;
-    const player = new PlayerState('player1', 'extraction-chamber');
-
-    extraction.startExtraction('player1', 'extraction-chamber', 'extraction');
-
-    const ctx = buildContext(player, extractionRoom, [], {
-      extractionSystem: extraction,
-    });
-
-    // Look and inventory should work
-    const lookResult = handleCommand('look', ctx);
-    expect(lookResult.narrations.length).toBeGreaterThan(0);
-    expect(lookResult.narrations[0]!.type).not.toBe('system');
-
-    const invResult = handleCommand('inventory', ctx);
-    expect(invResult.narrations.length).toBeGreaterThan(0);
-  });
-
-  it('multiple players can extract simultaneously from different rooms', () => {
-    extraction.startExtraction('player1', 'ext-1', 'extraction');
-    extraction.startExtraction('player2', 'ext-2', 'extraction');
-
-    expect(extraction.isExtracting('player1')).toBe(true);
-    expect(extraction.isExtracting('player2')).toBe(true);
-    expect(extraction.getActiveExtractions()).toHaveLength(2);
-
-    // Ticking one doesn't affect the other
-    extraction.tickExtraction('player1');
-    expect(extraction.getChannel('player1')!.ticksRemaining).toBe(4);
-    expect(extraction.getChannel('player2')!.ticksRemaining).toBe(5);
-  });
-
-  it('shard collapse interrupts all extractions simultaneously', () => {
-    extraction.startExtraction('p1', 'ext-1', 'extraction');
-    extraction.startExtraction('p2', 'ext-2', 'extraction');
-    extraction.startExtraction('p3', 'ext-3', 'extraction');
-
-    const results = extraction.interruptAll('the shard collapsed');
-
-    expect(results).toHaveLength(3);
-    expect(extraction.getActiveExtractions()).toHaveLength(0);
-    for (const r of results) {
-      expect(r.narration).toContain('shard collapsed');
-    }
-  });
-});
 
 // ─── Combat System Edge Cases ───────────────────────────────────────────────
 
@@ -295,70 +182,6 @@ describe('Combat System Edge Cases', () => {
     // Creature should be defeated
     const defeated = tick2.events.filter((e) => e.type === 'defeated');
     expect(defeated.length).toBe(1);
-  });
-});
-
-// ─── Extraction Edge Cases ──────────────────────────────────────────────────
-
-describe('Extraction Edge Cases', () => {
-  let extraction: ExtractionSystem;
-
-  beforeEach(() => {
-    extraction = new ExtractionSystem(3); // short for testing
-  });
-
-  it('tickExtraction returns null for non-extracting player', () => {
-    const result = extraction.tickExtraction('nobody');
-    expect(result).toBeNull();
-  });
-
-  it('interruptExtraction returns null for non-extracting player', () => {
-    const result = extraction.interruptExtraction('nobody', 'test');
-    expect(result).toBeNull();
-  });
-
-  it('getChannel returns undefined for non-extracting player', () => {
-    expect(extraction.getChannel('nobody')).toBeUndefined();
-  });
-
-  it('extraction completes after exact tick count', () => {
-    extraction.startExtraction('p1', 'ext', 'extraction');
-
-    // Tick 1 and 2: in progress
-    for (let i = 0; i < 2; i++) {
-      const result = extraction.tickExtraction('p1');
-      expect(result!.completed).toBe(false);
-    }
-
-    // Tick 3: completes
-    const final = extraction.tickExtraction('p1');
-    expect(final!.completed).toBe(true);
-    expect(extraction.isExtracting('p1')).toBe(false);
-  });
-
-  it('interruptAll on empty system returns empty array', () => {
-    const results = extraction.interruptAll('collapse');
-    expect(results).toHaveLength(0);
-  });
-
-  it('custom channel duration works correctly', () => {
-    const shortExtraction = new ExtractionSystem(1);
-    shortExtraction.startExtraction('p1', 'ext', 'extraction');
-
-    const result = shortExtraction.tickExtraction('p1');
-    expect(result!.completed).toBe(true);
-  });
-
-  it('noise events are generated on every extraction tick', () => {
-    extraction.startExtraction('p1', 'ext-room', 'extraction');
-
-    for (let i = 0; i < 3; i++) {
-      const result = extraction.tickExtraction('p1');
-      expect(result!.noiseEvent).toBeDefined();
-      expect(result!.noiseEvent!.noiseLevel).toBe(8);
-      expect(result!.noiseEvent!.sustained).toBe(true);
-      expect(result!.noiseEvent!.roomId).toBe('ext-room');
-    }
   });
 });
 

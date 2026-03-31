@@ -80,12 +80,10 @@ export function convertZoneToRoomGraph(zoneData: ZoneData): RoomGraph {
   // Identify anchor rooms
   const entryRoomIds = zone.entryRoomSlugs.filter(slug => rooms.has(slug));
 
-  const extractionRoomIds: string[] = [];
   let bossRoomId = '';
 
-  for (const [id, room] of rooms) {
-    if (room.type === 'extraction') extractionRoomIds.push(id);
-    if (room.type === 'boss' && bossRoomId === '') bossRoomId = id;
+  for (const [, room] of rooms) {
+    if (room.type === 'boss' && bossRoomId === '') bossRoomId = room.id;
   }
 
   // Clamp tier to valid ShardTier range
@@ -94,7 +92,6 @@ export function convertZoneToRoomGraph(zoneData: ZoneData): RoomGraph {
   return {
     rooms,
     entryRoomIds,
-    extractionRoomIds,
     bossRoomId,
     seed: hashString(zone.slug),
     biome: zone.biome,

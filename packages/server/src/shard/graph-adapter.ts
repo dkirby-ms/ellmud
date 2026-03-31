@@ -24,7 +24,6 @@ export function adaptRoomGraph(shared: SharedRoomGraph): RoomGraph {
   return {
     rooms,
     startRoomId: shared.entryRoomIds[0]!,
-    extractionRoomIds: shared.extractionRoomIds,
     bossRoomId: shared.bossRoomId,
   };
 }

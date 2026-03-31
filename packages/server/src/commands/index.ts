@@ -9,7 +9,6 @@ import type { NarrationType } from '@ellmud/shared';
 import type { Room } from '../shard/RoomGraph.js';
 import type { PlayerState } from '../state/PlayerState.js';
 import type { CombatSystem } from '../combat/CombatSystem.js';
-import { ExtractionSystem } from '../extraction/ExtractionSystem.js';
 import { handleGo } from './handlers/go.js';
 import { handleLook } from './handlers/look.js';
 import { handleTake } from './handlers/take.js';
@@ -17,7 +16,6 @@ import { handleDrop } from './handlers/drop.js';
 import { handleInventory } from './handlers/inventory.js';
 import { handleAttack } from './handlers/attack.js';
 import { handleStrike, handleDodge, handleFlee } from './handlers/combat-actions.js';
-import { handleExtract } from './handlers/extract.js';
 import { handleSay } from './handlers/say.js';
 import { handleWhisper } from './handlers/whisper.js';
 import { handleEmote } from './handlers/emote.js';
@@ -72,8 +70,6 @@ export interface CommandContext {
   characterName?: string;
   /** Combat system reference (available in ShardRoom context). */
   combatSystem?: CombatSystem;
-  /** Extraction system reference (available in ShardRoom context). */
-  extractionSystem?: ExtractionSystem;
   /** Living creatures in the current room. */
   creaturesInRoom?: CreatureRef[];
   /** Resolve creatures in an arbitrary room by ID. */
@@ -129,7 +125,6 @@ handlers.set('attack', handleAttack);
 handlers.set('strike', handleStrike);
 handlers.set('dodge', handleDodge);
 handlers.set('flee', handleFlee);
-handlers.set('extract', handleExtract);
 handlers.set('say', handleSay);
 handlers.set('whisper', handleWhisper);
 handlers.set('emote', handleEmote);
@@ -150,18 +145,6 @@ export function handleCommand(
       };
     }
     return featureCmd.handler(ctx);
-  }
-
-  // Extraction command lock: block movement/combat while channeling
-  if (ctx.extractionSystem) {
-    const lockMessage = ExtractionSystem.checkCommandLock(
-      verb, ctx.player.sessionId, ctx.extractionSystem,
-    );
-    if (lockMessage) {
-      return {
-        narrations: [{ text: lockMessage, type: 'system' }],
-      };
-    }
   }
 
   // Combat movement lock: block 'go' while in combat (must use 'flee')

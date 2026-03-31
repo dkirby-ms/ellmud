@@ -42,7 +42,7 @@ export const GUTTERSPAWN: CreatureTemplate = {
     minCount: 2,
     maxCount: 4,
     preferredRoomTypes: ['corridor', 'dead_end'],
-    forbiddenRoomTypes: ['entry', 'extraction', 'boss'],
+    forbiddenRoomTypes: ['entry', 'boss'],
   },
   idleTicksMin: 30,
   idleTicksMax: 60,
