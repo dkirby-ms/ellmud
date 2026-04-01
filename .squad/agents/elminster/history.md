@@ -1465,3 +1465,9 @@ CREATE TABLE zone_definitions (
 - **Cross-references updated:** §6.2 tick loop (added position resolution as step 1), §6.3 abilities (melee/ranged position requirements, AoE zone targeting, taunt repositioning), §6.4 HUD (position badges on group frames and target panel, zone buttons, telegraph warnings), §6.5 telegraphs (cleave/cone now zone-based instead of engagement-stance-based), §6.10 threat resolution (reachable target mechanic, unreachable target AI decisions), §8.3 PvP (positioning applies, less impactful 1v1 but significant in group PvP).
 - **Design principles preserved:** No hard class enforcement (anyone can go Front). Server-authoritative (position is server state). Meaningful but not mandatory (solo play unaffected). Scales with group size (3-player → light tactical layer; 20-player → critical for survival). No grid, no action points, no tactical miniatures — keeps the MUD feel.
 - **Key files:** `GDD.md` (§6.2, §6.3, §6.4, §6.5, §6.10, §6.11, §8.3)
+
+---
+
+## 2026-04-01: Agent Work Summary
+
+**Two tasks completed:** Group Combat System (20-player scale) and Room Positioning System (§6.11). Total updates: 2 major GDD sections (§6.10, §6.11) + 8 cross-references updated. Decisions recorded in `.squad/decisions.md`. Orchestration logs created in `.squad/orchestration-log/`.

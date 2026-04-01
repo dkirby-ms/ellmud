@@ -8215,3 +8215,186 @@ The Refuge is no longer the player starting zone. It becomes a designer/debug hu
 ### Status
 
 Complete. GDD updated. No code changes made.
+
+---
+
+## 2026-04-01 — Combat System Overhaul & Versioning
+
+### 2026-04-01T00:40:35Z: User directive — Combat system design direction
+**By:** dkirby-ms (via Copilot)
+**What:** Combat should be real-time continuous (not turn-based or command-queued). The client should provide built-in browser buttons and UI functions to assist with reducing typing/command spam — making combat accessible without requiring rapid typing.
+**Why:** User request — captured for team memory. Sets the foundational combat design direction for the new system replacing the removed placeholder.
+
+### 2026-04-01T01:07:20Z: User directive — Group combat scale
+**By:** dkirby-ms (via Copilot)
+**What:** The combat system must accommodate group combat where groups of up to 20 players zone together and fight groups of enemies. The current GDD mentions squads of 3 — this needs to scale significantly higher.
+**Why:** User request — captured for team memory. Changes the scale assumptions for the combat system, HUD design, and server tick architecture.
+
+### 2026-04-01T01:08:58Z: User directive — Position-based combat mechanics
+**By:** dkirby-ms (via Copilot)
+**What:** Combat should have position-based mechanics inside rooms so players can organize themselves to optimize combat effectiveness (e.g., front line / back line, flanking, formation).
+**Why:** User request — captured for team memory. Adds a spatial/tactical layer to the real-time combat system.
+
+### 2026-04-01T01:12:00Z: User directive — Build versioning system
+**By:** dkirby-ms (via Copilot)
+**What:** Implement a standard semver versioning system (major.minor.build) across the project. Display the build version unobtrusively in both the game client UI and admin UI. Keep it simple and standard.
+**Why:** User request — the team needs version tracking as iteration continues. Captured for team memory.
+
+### 2026-04-01: Combat System Design — GDD §6 & §8
+**By:** Elminster (Lead/Architect)
+**Requested by:** dkirby-ms
+**Status:** Drafted — awaiting playtest validation
+
+#### Decision Summary
+The combat system design is now codified in GDD §6 (Combat System) and §8 (PvP System), replacing the previous placeholder sections.
+
+#### Design Direction (Confirmed by User)
+- **Real-time continuous** — auto-attack baseline on a 1-second server tick. Players do not type "attack" each tick; they make tactical decisions (abilities, defence, flee).
+- **UI-assisted input** — 5-slot ability bar with clickable buttons and hotkeys (1–5). Text input remains for non-combat verbs. Combat is accessible without rapid typing.
+- **Server-authoritative** — all combat resolution (damage, cooldowns, hit/miss, death) happens server-side via Colyseus. Client displays outcomes only.
+
+#### Key Design Decisions
+1. **Auto-attack + abilities model.** Auto-attack fires every tick by default; using an ability replaces that tick's auto-attack. One ability per tick. This keeps combat active without demanding constant input.
+2. **5-slot ability bar, locked per run.** Players choose 5 abilities before entering a zone. No mid-run swapping. This forces meaningful loadout decisions and keeps the UI compact.
+3. **Enemy telegraphs as core tactical mechanic.** Powerful enemy abilities have 2–4 tick wind-ups with narration cues and countdown indicators. This creates a reaction window that rewards situational awareness over raw stats.
+4. **Signal classification for narration.** All combat events are server-tagged by class (player action, enemy action, environmental, status, system) with colour coding. This replaces the brainstorm's spatial anchoring (Layer 3) and threaded logs (Layer 4) — simpler, equally readable.
+5. **Temporal micro-batching.** Rapid same-type events are collapsed into summary lines ("flurry of strikes — 4, 5, 6 damage"). Reduces scroll spam while preserving information.
+6. **PvP uses the same combat system.** No separate PvP mode or damage formula. Faction-based soft flagging creates social friction (attacking your own faction costs reputation) without a hard opt-out.
+7. **Cinematic screen effects deferred.** The brainstorm's Layer 8 (screen vignettes, slow-motion) is replaced by better narration text. The brainstorm's Layer 9 (multiple readability modes) and Layer 10 (architecture diagram) are deferred.
+
+#### What Was Explicitly Excluded
+| Brainstorm Layer | Reason |
+|---|---|
+| Layer 3 — Spatial anchoring (left/right alignment) | Too complex for text rendering; coloured prefixes achieve the same goal |
+| Layer 4 — Threaded micro-logs | Single feed with classification is sufficient; defer until multi-enemy playtesting |
+| Layer 8 — Cinematic screen effects | Better narration text > screen vignettes for a text-primary game |
+| Layer 9 — Multiple readability modes | Build one good default first |
+| Layer 10 — Architecture diagram | GDD is a design doc, not a tech spec |
+
+#### Cross-References Updated
+- §5.2 (Tick Model) updated to describe auto-attack + ability queue resolution order
+- §6.5 → §6.8, §6.6 → §6.9 (Death & Corpse, Equipment Loss renumbered)
+- All external §6.5 references across the GDD updated to §6.8
+- §8 (PvP) fully rewritten with engagement rules, faction flagging, anti-griefing
+
+#### Open for Playtest
+- Auto-attack damage tuning (weapon + skill scaling)
+- Ability cooldown values
+- Flee success formula
+- Telegraph wind-up durations per creature tier
+- Death penalty debuff parameters
+- Micro-batching window (50–150ms — exact value TBD)
+
+### 2026-04-01: Group Combat System — GDD Update
+**By:** Elminster (Lead/Architect)
+**Directive from:** dkirby-ms (via user directive)
+**Status:** Decided — written into GDD.md
+
+#### Decision
+Scale the combat system from "squads of 3" to **groups of up to 20 players**. All combat, HUD, narration, and cooperation systems updated to support this scale.
+
+#### What Changed in GDD.md
+**§6.2 Group Combat.** Groups of 20 enter zones together, spawn in the same room, persist across room transitions. Tab-cycle and click targeting for multi-enemy fights. Shared target damage resolved in a single tick pass. Tick loop is O(P + C) — hard performance constraint.
+
+**§6.3 New Ability Types.** AoE attacks (diminishing damage per target: 100% primary, 70% additional), group buffs (one per type, refresh on reapply), group heals (healing budget split across injured allies, generates threat), taunts (set threat to highest + 10%, fixated debuff for 3-5 ticks).
+
+**§6.4 Group Frames.** Compact party member HP/status display. 1-5 players expanded, 6-20 compact grid. Sorted by threat. Out-of-room members greyed. Target panel adds scrollable enemy list with tab-cycling.
+
+**§6.5 Group Telegraphs.** Room-wide AoE (all players see same warning), targeted (personalised "toward you" vs third-person for others), cleave/cone (melee stance = hit, ranged = safe). Client-side telegraph priority: you > room-wide > your target > others.
+
+**§6.6 Narration at Scale.** Aggressive group-scale micro-batching: ally actions summarised ("Your allies strike for 142 total"), kills always individual. Client-side verbosity filter: Mine Only / Party Focus / Balanced (default) / Full.
+
+**§6.10 Threat & Aggro.** New section. Per-creature per-player threat tables. Damage = 1:1 threat, healing = 0.5:1 split across creatures, taunt = highest + 10%, base entry = 10. Shield Mastery gives 1.3x threat multiplier, Stealth gives 0.7x. Creatures attack highest-threat player. No decay during combat.
+
+**§8.5 Group System.** Complete rewrite. Group formation (invite/leave/kick/promote), group leader role, loot distribution (Round-Robin default, Free-for-All, Need/Greed), server-enforced friendly fire protection, group zone entry.
+
+#### Design Constraints Preserved
+- **No hard classes.** Threat system enables organic tank/healer/DPS via skill training, not class selection.
+- **No instanced dungeons.** Groups enter the same persistent zones as everyone else.
+- **Same death mechanics.** Group membership does not soften death — corpse drop, gear loss, death debuff all apply.
+- **Server-authoritative.** All group combat resolution is server-side. Client does verbosity filtering only.
+- **1-second tick budget.** The tick loop must handle 20 players + N creatures in one pass.
+- **Text-first.** Narration remains primary output. Group frames and HUD are augmentations, not replacements.
+
+#### Open Questions for Playtesting
+1. Is 20 the right group cap? Load test the tick loop with 20P + 10-15C in a single room.
+2. Does Round-Robin loot feel fair at 20 players, or does Need/Greed need to be the default for large groups?
+3. Does the 0.5x healing threat multiplier create enough pressure on healers, or should it be higher?
+4. At what group size does "Balanced" verbosity become unreadable? Is 5-player threshold for compact group frames correct?
+5. Should threat multipliers from skills (1.3x tank, 0.7x stealth) be tunable per-zone or fixed globally?
+
+#### Risks
+- **Tick budget at scale.** 20 players + 15 creatures = 35 entities resolving per tick. If any per-entity operation is O(N), the tick exceeds 1 second. Must profile early.
+- **Narration bandwidth.** Even with batching, 20 players generating events means significant WebSocket traffic per tick. May need to cap events-per-tick-per-client.
+- **Group formation UX.** Inviting 19 players one-by-one is tedious. May need a "group code" or "join group" command. Not specified yet — iteration needed.
+- **Loot drama.** Need/Greed at 20 players with 15-second timers means loot popups every few seconds during intense fights. May need a "auto-greed" or "auto-pass" setting.
+
+### 2026-04-01: Room Positioning System — §6.11
+**By:** Elminster (Lead/Architect)
+**Requested by:** dkirby-ms
+**GDD Section:** §6.11 Room Positioning
+
+#### What
+Added abstract position-based combat mechanics to GDD.md. Each room has three position zones — **Front**, **Flank**, **Rear** — that affect targeting, damage, and tactical group dynamics without introducing a tactical grid.
+
+#### Key Decisions
+1. **Three zones, not four or five.** Front/Flank/Rear is sufficient for text MUD spatial reasoning. Players can't see a grid — positions must be simple enough to hold in the mind from narrated prose. A fourth zone (e.g., "Middle") adds cognitive overhead without meaningful tactical differentiation.
+
+2. **Repositioning costs a tick's action.** Moving between zones forfeits auto-attack and ability use for that tick, plus a 3-tick cooldown before moving again. This makes positional commitment matter without being punitive. No movement points or action-point economy — stays within the existing tick model.
+
+3. **Threat becomes "highest-threat *reachable* target."** The core change to §6.10: melee creatures can only reach Front and Flank from their own Front/Flank position. Reaching Rear requires repositioning (costs the creature a tick). Ranged creatures and bosses ignore position restrictions. This is the mechanical backbone — tanks at Front hold melee aggro through threat + reachability, protecting Rear healers.
+
+4. **Creatures have position AI types.** "Aggressive" creatures (skirmishers, pack hunters) chase unreachable high-threat targets by repositioning. "Steady" creatures attack the highest-threat reachable target and stay put. Bosses occupy "All" zones. This per-creature-type decision is the primary knob for encounter design — a boss with aggressive add creatures that hunt the Rear line creates a fundamentally different fight than one with steady adds.
+
+5. **Solo play is unaffected.** Default position is Front. Solo players who never issue a `position` command experience zero difference from pre-positioning combat. Positioning is an emergent group mechanic, not a universal tax.
+
+6. **Flanking bonus (+15%).** Flank position grants a damage bonus against targets focused on a Front player. This is the primary incentive for melee DPS to choose Flank over Front — higher damage output at the cost of losing the "tank first" targeting priority.
+
+7. **Melee from Rear is invalid.** Players at Rear with melee weapons cannot auto-attack or use melee abilities. This is a hard constraint — the system message "You are too far away to strike" communicates it clearly. Healing and ranged attacks work from any position.
+
+#### Sections Modified
+- §6.2 Combat Flow — tick loop gains position resolution as step 1
+- §6.3 Abilities — melee/ranged position requirements, AoE zone targeting, taunt repositioning
+- §6.4 Combat HUD — position badges, zone buttons, telegraph warnings on group frames
+- §6.5 Enemy Telegraphs — cleave/cone telegraphs now zone-based (replaces engagement-stance flag)
+- §6.10 Threat & Aggro — reachable target mechanic, unreachable target AI decisions
+- §6.11 Room Positioning — new section (full design)
+- §8.3 PvP Combat Flow — positioning applies in PvP
+
+#### Why
+User request. Adds meaningful tactical depth to group combat — tanks, DPS, and healers gain positional tools to organise combat effectiveness. The system is designed to scale: invisible in solo play, light in small groups, critical in full 20-player encounters. Keeps the MUD feel by avoiding grids, hexes, or spatial rendering.
+
+#### Impact
+- Encounter design now has a positional axis (which zones do creatures target? do they chase the Rear?)
+- Creature data schema needs a `default_position` and `position_ai` field
+- Combat tick loop has one additional resolution step (position changes)
+- HUD needs position badges and zone selector buttons
+- Narration templates need position-change and zone-telegraph variants
+
+### 2026-04-01: Build Versioning Infrastructure
+**By:** Drizzt (Engine Dev)
+**Date:** 2026-04-01
+
+#### What
+Established a semver versioning system across the monorepo:
+- **Single source of truth:** root `package.json` version (currently `0.1.0`)
+- **Client injection:** Vite `define` injects `__APP_VERSION__` and `__BUILD_TIME__` at build time
+- **Server endpoint:** `GET /api/version` returns `{ version, buildTime, nodeEnv }` — reads version from root package.json at startup
+- **Sync script:** `npm run version:sync` propagates root version → all workspace package.json files
+- **Bump workflow:** `npm run version:bump patch|minor|major` → then `npm run version:sync`
+
+#### Why
+- Admin UI needs to verify server version matches client version
+- Release workflow (`squad-release.yml`) already reads root package.json version for git tags — this keeps the version flow consistent
+- Build-time injection means no runtime overhead for version checks
+
+#### Impact
+- Any version bump should use `npm run version:bump <level>` then `npm run version:sync`
+- The `squad-release.yml` workflow was NOT modified — it already works with this setup
+- Client code can use `useVersion()` hook or raw `__APP_VERSION__` / `__BUILD_TIME__` globals
+
+### 2026-04-01: Version display placement and styling
+**By:** Regis (Frontend Dev)
+**When:** 2026-04-01
+**What:** Version indicators placed inline in existing layouts — admin top bar (right side, near user avatar) and game sidebar (bottom-right, pinned with `mt-auto`). Both use the shared `useVersion()` hook with safe fallbacks. Admin uses muted `#6A6555` text; game uses `opacity-30` that increases on hover. Native `title` attribute provides build time on hover — no tooltip library needed.
+**Why:** Keeps version discoverable without adding visual noise. `mt-auto` in a flex-col sidebar ensures the indicator stays at the bottom regardless of sidebar content length. Fallback values mean the UI works before Drizzt's Vite config changes land.

@@ -2753,3 +2753,9 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 - Server `buildTime` = module load time (effectively deploy/start time in containers).
 - Used `.mjs` for sync script since root package.json has no `"type": "module"`.
 - Version router placed before health check, after character API — consistent with existing route ordering.
+
+---
+
+## 2026-04-01: Agent Work Summary
+
+**Task completed:** Versioning Infrastructure. Semver system established with Vite injection, /api/version endpoint, sync scripts, and bump workflows. Decision and orchestration logs created. Client-side integration via `useVersion()` hook is ready; server-side routes operational.
