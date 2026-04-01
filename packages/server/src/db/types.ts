@@ -110,10 +110,10 @@ export interface RunHistory {
   id: string;
   player_id: string;
   run_id: string;
-  shard_tier: ZoneTier;
+  zone_tier: ZoneTier;
   duration_sec: number;
-  extracted: boolean;
-  extracted_items: unknown[];
+  survived: boolean;
+  items_carried_out: unknown[];
   xp_gained: number;
   created_at: Date;
 }

@@ -1972,11 +1972,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
   // ─── Run History Persistence ────────────────────────────────────────────
 
-  /** Record a zone run when a player extracts or the zone collapses. */
+  /** Record a zone run when a player survives or the zone collapses. */
   private async recordRunHistory(
     playerId: string,
     player: PlayerState | undefined,
-    extracted: boolean,
+    survived: boolean,
   ): Promise<void> {
     try {
       const joinTime = this.playerJoinTimes.get(playerId);
@@ -1989,8 +1989,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         playerId: this.dbPlayerId(playerId),
         zoneTier: this.zoneTier,
         durationSec,
-        extracted,
-        extractedItems: player
+        survived,
+        itemsCarriedOut: player
           ? Array.from(player.inventory.values()).map((entry) => ({
               itemId: entry.item.id,
               name: entry.item.name,

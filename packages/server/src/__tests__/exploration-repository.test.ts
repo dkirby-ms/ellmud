@@ -168,7 +168,7 @@ describe('InMemoryExplorationRepository', () => {
     it('does not return zone rooms when filtering by zone', async () => {
       await repo.recordVisit(instanceVisit());
 
-      const rooms = await repo.getExploredRoomsInZone(CHAR_A, '__shard__');
+      const rooms = await repo.getExploredRoomsInZone(CHAR_A, '__instance__');
       expect(rooms).toEqual([]);
     });
   });
@@ -225,7 +225,7 @@ describe('InMemoryExplorationRepository', () => {
       const stats = await repo.getExplorationStats(CHAR_A);
       expect(stats.totalRooms).toBe(3);
       expect(stats.totalVisits).toBe(5); // 3 first visits + 2 revisits
-      // 3 zones: flooded-crypt, shattered-bastion, __shard__ (null slug)
+      // 3 zones: flooded-crypt, shattered-bastion, __instance__ (null slug)
       expect(stats.zones).toBe(3);
     });
 
@@ -235,7 +235,7 @@ describe('InMemoryExplorationRepository', () => {
 
       const stats = await repo.getExplorationStats(CHAR_A);
       expect(stats.totalRooms).toBe(2);
-      expect(stats.zones).toBe(1); // both zone rooms → same __shard__ bucket
+      expect(stats.zones).toBe(1); // both zone rooms → same __instance__ bucket
     });
   });
 
