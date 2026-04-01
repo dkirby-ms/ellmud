@@ -15,7 +15,7 @@ export interface ZoneDefinition {
   levelMin: number;
   levelMax: number;
   tier: number;
-  biome: string;
+  theme: string;
   entryRoomSlugs: string[];
   lifecycle: 'persistent' | 'scheduled' | 'event';
   category: 'hub' | 'dungeon' | 'wilderness' | 'social';

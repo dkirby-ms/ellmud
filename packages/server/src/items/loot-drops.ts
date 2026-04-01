@@ -4,10 +4,10 @@
  * Phase 1: Deterministic loot based on PRNG seed.
  * Drop tables use weighted selection — rarity affects drop probability.
  *
- * GDD §7.2, §10.2 (loot tiers scale with shard tier)
+ * GDD §7.2, §10.2 (loot tiers scale with zone tier)
  */
 
-import type { GearTier, ShardTier, ItemDefinition, ItemInstance } from '@ellmud/shared';
+import type { GearTier, ZoneTier, ItemDefinition, ItemInstance } from '@ellmud/shared';
 import { RARITY_TIERS, createItemInstance } from '@ellmud/shared';
 import { ITEM_REGISTRY } from './registry.js';
 
@@ -27,17 +27,17 @@ export interface DropTable {
 
 // ─── Tier-Based Loot Pools ──────────────────────────────────────────────────
 
-/** Shard tier determines maximum rarity of drops. */
-const SHARD_TIER_MAX_RARITY: Record<ShardTier, GearTier> = {
+/** Zone tier determines maximum rarity of drops. */
+const ZONE_TIER_MAX_RARITY: Record<ZoneTier, GearTier> = {
   1: 'sturdy',
   2: 'refined',
   3: 'anomalous',
 };
 
-/** Get all items eligible to drop in a given shard tier. */
-export function getEligibleItems(shardTier: ShardTier): ItemDefinition[] {
+/** Get all items eligible to drop in a given zone tier. */
+export function getEligibleItems(zoneTier: ZoneTier): ItemDefinition[] {
   const maxTierIndex = RARITY_TIERS.findIndex(
-    r => r.tier === SHARD_TIER_MAX_RARITY[shardTier],
+    r => r.tier === ZONE_TIER_MAX_RARITY[zoneTier],
   );
   const eligible: ItemDefinition[] = [];
   for (const item of ITEM_REGISTRY.values()) {
@@ -86,15 +86,15 @@ export interface SpawnedLoot {
 }
 
 /**
- * Generate loot items for a room during shard seeding.
+ * Generate loot items for a room during zone seeding.
  * Uses a deterministic roll sequence.
  */
 export function spawnRoomLoot(
   roomId: string,
-  shardTier: ShardTier,
+  zoneTier: ZoneTier,
   rollValues: number[],
 ): SpawnedLoot[] {
-  const eligible = getEligibleItems(shardTier);
+  const eligible = getEligibleItems(zoneTier);
   if (eligible.length === 0) return [];
 
   return rollValues.map((roll, index) => {
@@ -113,7 +113,7 @@ export function spawnRoomLoot(
 export interface CreatureLootConfig {
   creatureId: string;
   creatureType: string;
-  shardTier: ShardTier;
+  zoneTier: ZoneTier;
   /** PRNG roll values for selecting drops. */
   rollValues: number[];
   /** Number of items to drop. */
@@ -122,10 +122,10 @@ export interface CreatureLootConfig {
 
 /**
  * Generate loot from a creature death.
- * Drop count and quality scale with shard tier.
+ * Drop count and quality scale with zone tier.
  */
 export function generateCreatureLoot(config: CreatureLootConfig): SpawnedLoot[] {
-  const eligible = getEligibleItems(config.shardTier);
+  const eligible = getEligibleItems(config.zoneTier);
   if (eligible.length === 0) return [];
 
   const drops: SpawnedLoot[] = [];
@@ -144,17 +144,17 @@ export function generateCreatureLoot(config: CreatureLootConfig): SpawnedLoot[] 
   return drops;
 }
 
-// ─── Drop Count by Shard Tier ───────────────────────────────────────────────
+// ─── Drop Count by Zone Tier ───────────────────────────────────────────────
 
-/** Base creature drop count by shard tier. */
-export const CREATURE_DROP_COUNTS: Record<ShardTier, { min: number; max: number }> = {
+/** Base creature drop count by zone tier. */
+export const CREATURE_DROP_COUNTS: Record<ZoneTier, { min: number; max: number }> = {
   1: { min: 1, max: 2 },
   2: { min: 1, max: 3 },
   3: { min: 2, max: 4 },
 };
 
 /** Determine drop count from a roll value. */
-export function rollDropCount(shardTier: ShardTier, rollValue: number): number {
-  const { min, max } = CREATURE_DROP_COUNTS[shardTier];
+export function rollDropCount(zoneTier: ZoneTier, rollValue: number): number {
+  const { min, max } = CREATURE_DROP_COUNTS[zoneTier];
   return min + Math.floor(rollValue * (max - min + 1));
 }

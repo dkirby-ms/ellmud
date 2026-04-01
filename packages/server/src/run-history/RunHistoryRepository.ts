@@ -1,22 +1,21 @@
 /**
- * RunHistoryRepository — Persistent shard run records.
+ * RunHistoryRepository — Persistent zone run records.
  *
- * Records extraction outcomes and shard completion data per player.
+ * Records zone run outcomes and completion data per player.
  * Follows the Interface + InMemory + Pg pattern used by PlayerProfileRepository.
  *
  * The Pg implementation reads/writes the `run_history` table (migration 005).
  */
 
-import type { BiomeType, ShardTier } from '@ellmud/shared';
+import type { ZoneTier } from '@ellmud/shared';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-/** A single shard run record. */
+/** A single zone run record. */
 export interface RunRecord {
   runId: string;
   playerId: string;
-  shardTier: ShardTier;
-  biome: BiomeType | null;
+  zoneTier: ZoneTier;
   durationSec: number;
   extracted: boolean;
   extractedItems: unknown[];
@@ -26,7 +25,7 @@ export interface RunRecord {
 // ─── Interface ──────────────────────────────────────────────────────────────
 
 export interface RunHistoryRepository {
-  /** Record a completed shard run. */
+  /** Record a completed zone run. */
   recordRun(run: RunRecord): Promise<void>;
 
   /** Get a player's run history, most recent first. */

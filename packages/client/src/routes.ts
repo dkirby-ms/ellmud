@@ -2,7 +2,7 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
 import CharacterSelect from "./pages/CharacterSelect";
-import ShardExploration from "./pages/ShardExploration";
+import ZoneExploration from "./pages/ZoneExploration";
 import Leaderboard from "./pages/Leaderboard";
 import Settings from "./pages/Settings";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -13,8 +13,6 @@ import CreaturesList from "./pages/admin/CreaturesList";
 import CreatureDetail from "./pages/admin/CreatureDetail";
 import ItemsList from "./pages/admin/ItemsList";
 import ItemsDetail from "./pages/admin/ItemsDetail";
-import BiomesList from "./pages/admin/BiomesList";
-import BiomesDetail from "./pages/admin/BiomesDetail";
 import ModifiersList from "./pages/admin/ModifiersList";
 import ModifiersDetail from "./pages/admin/ModifiersDetail";
 import LootTablesList from "./pages/admin/LootTablesList";
@@ -58,11 +56,11 @@ export const routes: RouteObject[] = [
       },
       {
         path: "/refuge",
-        Component: ShardExploration,
+        Component: ZoneExploration,
       },
       {
-        path: "/shard/:shardId",
-        Component: ShardExploration,
+        path: "/zone/:zoneId",
+        Component: ZoneExploration,
       },
       {
         path: "/leaderboard",
@@ -101,14 +99,6 @@ export const routes: RouteObject[] = [
           {
             path: "items/:id",
             Component: ItemsDetail,
-          },
-          {
-            path: "biomes",
-            Component: BiomesList,
-          },
-          {
-            path: "biomes/:id",
-            Component: BiomesDetail,
           },
           {
             path: "modifiers",

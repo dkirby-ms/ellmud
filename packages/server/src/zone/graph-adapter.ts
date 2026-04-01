@@ -12,7 +12,7 @@ import { getItemDefinition } from '../items/registry.js';
 
 /**
  * Convert a generator-produced RoomGraph into the local format
- * consumed by ShardRoom and command handlers.
+ * consumed by ZoneRoom and command handlers.
  */
 export function adaptRoomGraph(shared: SharedRoomGraph): RoomGraph {
   const rooms = new Map<string, Room>();
@@ -24,7 +24,6 @@ export function adaptRoomGraph(shared: SharedRoomGraph): RoomGraph {
   return {
     rooms,
     startRoomId: shared.entryRoomIds[0]!,
-    extractionRoomIds: shared.extractionRoomIds,
     bossRoomId: shared.bossRoomId,
   };
 }

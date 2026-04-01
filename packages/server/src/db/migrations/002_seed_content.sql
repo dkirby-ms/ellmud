@@ -6,7 +6,7 @@
 
 INSERT INTO factions (id, name, slug, philosophy, specialty, description, milestones, events) VALUES
   (gen_random_uuid(), 'The Ironwright Compact', 'ironwright', 'Pragmatic survivalists. Gear and craftsmanship above all.', 'Best crafting recipes, armour bonuses, durability perks.', 'Pragmatic survivalists. Gear and craftsmanship above all.', '[]', '[]'),
-  (gen_random_uuid(), 'The Veil Cartographers', 'veil', 'Knowledge-seekers. Map the shards, understand the collapse.', 'Awareness bonuses, extended shard timers, anomaly detection.', 'Knowledge-seekers. Map the shards, understand the collapse.', '[]', '[]'),
+  (gen_random_uuid(), 'The Veil Cartographers', 'veil', 'Knowledge-seekers. Map the zones, understand the collapse.', 'Awareness bonuses, extended expedition timers, anomaly detection.', 'Knowledge-seekers. Map the zones, understand the collapse.', '[]', '[]'),
   (gen_random_uuid(), 'The Scarlet Ledger', 'scarlet', 'Risk-takers and profiteers. High risk, high reward.', 'Better loot rolls, PvP stealth bonuses, black-market access.', 'Risk-takers and profiteers. High risk, high reward.', '[]', '[]');
 
 -- ============================================================================
@@ -19,10 +19,10 @@ INSERT INTO item_definitions (id, name, type, tier, base_stats, base_durability,
   ('rusty_blade',       'Rusty Blade',        'weapon', 'scrap',     '{"damage":8,"speed":1}',            30,  5,    'A corroded shortsword. It cuts, barely.',                                                                                                false, false, 1, 'published'),
   ('iron_sword',        'Iron Sword',         'weapon', 'common',    '{"damage":12,"speed":1}',           50,  6,    'A serviceable blade of hammered iron.',                                                                                                  false, false, 1, 'published'),
   ('corroded_halberd',  'Corroded Halberd',   'weapon', 'sturdy',    '{"damage":18,"speed":2}',           60,  12,   'A polearm eaten by salt water, still dangerous.',                                                                                       false, false, 1, 'published'),
-  ('shardsteel_sabre',  'Shardsteel Sabre',   'weapon', 'refined',   '{"damage":16,"speed":1}',           80,  5,    'Forged from metal recovered deep within the shards.',                                                                                   false, false, 1, 'published'),
+  ('shardsteel_sabre',  'Shardsteel Sabre',   'weapon', 'refined',   '{"damage":16,"speed":1}',           80,  5,    'Forged from metal recovered deep within the ruins.',                                                                                   false, false, 1, 'published'),
   ('voidforged_blade',  'Voidforged Blade',   'weapon', 'anomalous', '{"damage":20,"speed":1}',          120,  4,    'A blade that shimmers between planes. Disturbingly light.',                                                                             false, false, 1, 'published'),
   ('bent_rebar',        'Bent Rebar',         'weapon', 'scrap',     '{"damage":4,"speed":0.8}',          20,  3,    'A corroded length of rebar, wrenched from a collapsed wall. One end is bent into a rough hook. Heavy, slow, and ugly — but better than bare hands.', false, false, 1, 'published'),
-  ('scavenger_shiv',    'Scavenger''s Shiv',  'weapon', 'common',    '{"damage":7,"speed":1.2}',          30,  2,    'A shard of plate glass, its base wrapped in copper wire for a grip. The edge is wickedly sharp but fragile.',                             false, false, 1, 'published'),
+  ('scavenger_shiv',    'Scavenger''s Shiv',  'weapon', 'common',    '{"damage":7,"speed":1.2}',          30,  2,    'A sliver of plate glass, its base wrapped in copper wire for a grip. The edge is wickedly sharp but fragile.',                             false, false, 1, 'published'),
 
   -- ─── Armour ───────────────────────────────────────────────────────────────
   ('tattered_leather',    'Tattered Leather',    'armour', 'scrap',   '{"armour":3,"weight":8}',           25,  8,    'Barely held together with sinew and hope.',                                                                                              false, false, 1, 'published'),
@@ -37,8 +37,8 @@ INSERT INTO item_definitions (id, name, type, tier, base_stats, base_durability,
   ('stamina_tonic',      'Stamina Tonic',      'consumable', 'common', '{"staminaRestore":30,"duration":5}', NULL, 1, 'A bitter brew that quickens the limbs.',                                                                                                 false, true,  5, 'published'),
 
   -- ─── Materials ────────────────────────────────────────────────────────────
-  ('revenant_bone',      'Revenant Bone',      'material', 'common',  '{}', NULL, 2,    'A bleached bone from a shard creature. Crafting material.',                                                                                    false, true, 20, 'published'),
-  ('shardsteel_shard',   'Shardsteel Shard',   'material', 'sturdy',  '{}', NULL, 3,    'A fragment of metal infused with shard energy.',                                                                                              false, true, 20, 'published'),
+  ('revenant_bone',      'Revenant Bone',      'material', 'common',  '{}', NULL, 2,    'A bleached bone from a dungeon creature. Crafting material.',                                                                                    false, true, 20, 'published'),
+  ('shardsteel_shard',   'Shardsteel Shard',   'material', 'sturdy',  '{}', NULL, 3,    'A fragment of metal infused with void energy.',                                                                                              false, true, 20, 'published'),
   ('sodden_scroll',      'Sodden Scroll',      'material', 'common',  '{}', NULL, 1,    'Barely legible parchment. Might be useful to scholars.',                                                                                      false, true, 20, 'published'),
   ('tarnished_amulet',   'Tarnished Amulet',   'material', 'sturdy',  '{}', NULL, 1,    'A faded trinket with faint inscriptions.',                                                                                                    false, true, 20, 'published'),
   ('drowned_offering',   'Drowned Offering',   'material', 'refined', '{}', NULL, 2,    'A ritualistic token left at submerged altars.',                                                                                               false, true, 20, 'published'),
@@ -64,19 +64,19 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO creature_definitions (type, name, slug, description, max_hp, attack, defence, armour, agility, min_count, max_count, preferred_rooms, forbidden_rooms, idle_ticks_min, idle_ticks_max, flee_threshold, loot_table, status)
 VALUES
-  ('drowned_revenant', 'Drowned Revenant', 'drowned_revenant', '', 50, 10, 3, 3, 0, 3, 5, '{corridor,dead_end}', '{entry,extraction}', 30, 50, 0.25,
+  ('drowned_revenant', 'Drowned Revenant', 'drowned_revenant', '', 50, 10, 3, 3, 0, 3, 5, '{corridor,dead_end}', '{entry}', 30, 50, 0.25,
    '[{"itemId":"waterlogged_bone","dropWeight":1},{"itemId":"revenant_essence","dropWeight":1}]'::jsonb, 'published'),
 
-  ('gutterspawn', 'Gutterspawn', 'gutterspawn', '', 15, 5, 1, 0, 7, 2, 4, '{corridor,dead_end}', '{entry,extraction,boss}', 30, 60, 0.3,
+  ('gutterspawn', 'Gutterspawn', 'gutterspawn', '', 15, 5, 1, 0, 7, 2, 4, '{corridor,dead_end}', '{entry,boss}', 30, 60, 0.3,
    '[{"itemId":"gutterspawn_fang","dropWeight":80},{"itemId":"bent_rebar","dropWeight":15}]'::jsonb, 'published'),
 
   ('rubble_scavenger', 'Rubble Scavenger', 'rubble_scavenger', '', 35, 8, 3, 2, 4, 1, 3, '{junction,dead_end}', '{entry,boss}', 40, 80, 0.15,
    '[{"itemId":"bent_rebar","dropWeight":50},{"itemId":"tarnished_medallion","dropWeight":25},{"itemId":"scavenger_shiv","dropWeight":15}]'::jsonb, 'published'),
 
-  ('hollow_stalker', 'Hollow Stalker', 'hollow_stalker', '', 60, 13, 5, 4, 6, 1, 2, '{junction}', '{entry,extraction,corridor}', 50, 120, 0.15,
+  ('hollow_stalker', 'Hollow Stalker', 'hollow_stalker', '', 60, 13, 5, 4, 6, 1, 2, '{junction}', '{entry,corridor}', 50, 120, 0.15,
    '[{"itemId":"tarnished_medallion","dropWeight":40},{"itemId":"sanctuary_key","dropWeight":15},{"itemId":"scavenger_shiv","dropWeight":20}]'::jsonb, 'published'),
 
-  ('the_collapsed_one', 'The Collapsed One', 'the_collapsed_one', '', 150, 18, 8, 10, 1, 1, 1, '{boss}', '{entry,extraction,corridor,junction,dead_end}', 80, 150, 0,
+  ('the_collapsed_one', 'The Collapsed One', 'the_collapsed_one', '', 150, 18, 8, 10, 1, 1, 1, '{boss}', '{entry,corridor,junction,dead_end}', 80, 150, 0,
    '[{"itemId":"rubble_crusted_vest","dropWeight":30},{"itemId":"scavenger_shiv","dropWeight":25},{"itemId":"charred_street_map","dropWeight":20},{"itemId":"tarnished_medallion","dropWeight":25}]'::jsonb, 'published'),
 
   ('slum_rat', 'Slum Rat', 'slum_rat',
@@ -86,7 +86,7 @@ VALUES
 
   ('sewer_lurker', 'Sewer Lurker', 'sewer_lurker',
    'A long-limbed thing that clings to sewer ceilings, its pale skin slick with condensation. It drops silently onto prey, striking fast before retreating into the pipes.',
-   25, 7, 2, 0, 5, 1, 2, '{corridor,dead_end,junction}', '{entry,extraction,boss}', 40, 80, 0.3,
+   25, 7, 2, 0, 5, 1, 2, '{corridor,dead_end,junction}', '{entry,boss}', 40, 80, 0.3,
    '[{"itemId":"corroded_pipe","dropWeight":40},{"itemId":"sewer_moss","dropWeight":30}]'::jsonb, 'published')
 
 ON CONFLICT (type) DO NOTHING;

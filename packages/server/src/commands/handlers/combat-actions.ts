@@ -60,7 +60,7 @@ export function handleFlee(ctx: CommandContext): CommandResult {
   // Resolve flee target room from direction arg
   let fleeRoomId: string | undefined;
   if (ctx.args.length > 0) {
-    const direction = ctx.args[0]!.toLowerCase() as import('../../shard/RoomGraph.js').Direction;
+    const direction = ctx.args[0]!.toLowerCase() as import('../../zone/RoomGraph.js').Direction;
     fleeRoomId = room.exits.get(direction);
     if (!fleeRoomId) {
       return {

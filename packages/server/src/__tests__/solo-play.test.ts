@@ -15,28 +15,28 @@ describe('Solo Play — Player Limit Enforcement', () => {
   });
 
   beforeEach(() => {
-    // Force solo-play config (MAX_PLAYERS_PER_SHARD=1)
-    process.env['MAX_PLAYERS_PER_SHARD'] = '1';
+    // Force solo-play config (MAX_PLAYERS_PER_ZONE=1)
+    process.env['MAX_PLAYERS_PER_ZONE'] = '1';
     resetConfig();
   });
 
   afterEach(() => {
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     resetConfig();
   });
 
-  it('should allow the first player to join a shard', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+  it('should allow the first player to join a zone', async () => {
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     // First player should receive welcome narration
     expect(collector.narrate.length).toBeGreaterThan(0);
-    expect(collector.narrate[0]!.text).toContain('shard');
+    expect(collector.narrate[0]!.text).toContain('rift');
 
     await client.leave();
   });
 
-  it('should reject the second player from a solo shard (maxPlayersPerShard=1)', async () => {
-    const room = await colyseus.createRoom('shard', {});
+  it('should reject the second player from a solo zone (maxPlayersPerZone=1)', async () => {
+    const room = await colyseus.createRoom('zone', {});
     const client1 = await colyseus.connectTo(room);
     await wait(500);
 
@@ -56,12 +56,12 @@ describe('Solo Play — Player Limit Enforcement', () => {
     await client1.leave();
   });
 
-  it('should respect configurable maxPlayersPerShard', async () => {
+  it('should respect configurable maxPlayersPerZone', async () => {
     // Set to 2 players (simulating Phase 2 config)
-    process.env['MAX_PLAYERS_PER_SHARD'] = '2';
+    process.env['MAX_PLAYERS_PER_ZONE'] = '2';
     resetConfig();
 
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('zone', {});
 
     // Both players should connect
     const client1 = await colyseus.connectTo(room);
@@ -88,7 +88,7 @@ describe('Solo Play — Player Limit Enforcement', () => {
 
 describe('Solo Play — Config Module', () => {
   beforeEach(() => {
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     delete process.env['MAX_REPLICAS'];
     delete process.env['REDIS_PRESENCE_ENABLED'];
     delete process.env['REDIS_CONNECTION_STRING'];
@@ -96,7 +96,7 @@ describe('Solo Play — Config Module', () => {
   });
 
   afterEach(() => {
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     delete process.env['MAX_REPLICAS'];
     delete process.env['REDIS_PRESENCE_ENABLED'];
     delete process.env['REDIS_CONNECTION_STRING'];
@@ -108,7 +108,7 @@ describe('Solo Play — Config Module', () => {
     resetConfig();
     const config = getConfig();
 
-    expect(config.maxPlayersPerShard).toBe(4);
+    expect(config.maxPlayersPerZone).toBe(4);
     expect(config.maxReplicas).toBe(4);
     expect(config.matchmakerMode).toBe('in-process');
     expect(config.redis.enabled).toBe(false);
@@ -116,7 +116,7 @@ describe('Solo Play — Config Module', () => {
   });
 
   it('should override config from env vars', async () => {
-    process.env['MAX_PLAYERS_PER_SHARD'] = '4';
+    process.env['MAX_PLAYERS_PER_ZONE'] = '4';
     process.env['MAX_REPLICAS'] = '3';
     process.env['REDIS_PRESENCE_ENABLED'] = 'true';
     process.env['REDIS_CONNECTION_STRING'] = 'redis://prod:6380';
@@ -125,14 +125,14 @@ describe('Solo Play — Config Module', () => {
     resetConfig();
     const config = getConfig();
 
-    expect(config.maxPlayersPerShard).toBe(4);
+    expect(config.maxPlayersPerZone).toBe(4);
     expect(config.maxReplicas).toBe(3);
     expect(config.redis.enabled).toBe(true);
     expect(config.redis.connectionString).toBe('redis://prod:6380');
   });
 
   it('should handle invalid env var values gracefully', async () => {
-    process.env['MAX_PLAYERS_PER_SHARD'] = 'not-a-number';
+    process.env['MAX_PLAYERS_PER_ZONE'] = 'not-a-number';
     process.env['REDIS_PRESENCE_ENABLED'] = 'maybe';
 
     const { getConfig } = await import('../config.js');
@@ -140,7 +140,7 @@ describe('Solo Play — Config Module', () => {
     const config = getConfig();
 
     // Falls back to defaults for unparseable values
-    expect(config.maxPlayersPerShard).toBe(4);
+    expect(config.maxPlayersPerZone).toBe(4);
     expect(config.redis.enabled).toBe(false);
   });
 

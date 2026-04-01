@@ -9,7 +9,6 @@ export { initializeContentStores } from './init.js';
 export { validateContent } from './content-validation.js';
 export { CONTENT_ENTITY_TYPES, type ContentEntityType } from './content-types.js';
 export type {
-  BiomeDefinition,
   ModifierDefinition,
   SkillDefinition,
   LootTableDefinition,

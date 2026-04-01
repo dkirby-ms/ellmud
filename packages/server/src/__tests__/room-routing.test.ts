@@ -4,7 +4,7 @@
  * Validates the routing conventions introduced by Phase C:
  *   C1: ROOM_SWITCH targets use 'zone:the-refuge' instead of 'refuge'
  *   C2: Zone rooms are defined with 'zone:{slug}' naming convention
- *   C3: Shard rooms keep their 'shard' room name (no prefix)
+ *   C3: Procedural rooms keep their 'zone' room name (no prefix)
  *
  * These tests verify the CONTRACTS — the message shapes and naming patterns
  * that clients depend on. Written anticipatorily; will pass once Phase C lands.
@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
-import { ShardRoom } from '../rooms/ShardRoom.js';
+import { ZoneRoom } from '../rooms/ZoneRoom.js';
 
 import type { RoomSwitchMessage } from '@ellmud/shared';
 import {
@@ -39,7 +39,7 @@ async function seedZone(
     levelMin: 1,
     levelMax: 5,
     tier: 1,
-    biome: 'flooded_crypt',
+    theme: 'flooded_crypt',
     entryRoomSlugs: ['hearth'],
     lifecycle: 'persistent',
     category,
@@ -119,11 +119,11 @@ beforeAll(async () => {
 
   const server = new Server();
 
-  // Phase C registers zone rooms as 'zone:{slug}' and shards as 'shard'
-  server.define('shard', ShardRoom);
+  // Phase C registers zone rooms as 'zone:{slug}' and procedural as 'zone'
+  server.define('zone', ZoneRoom);
   // After Phase C, the refuge is registered as 'zone:the-refuge' rather than 'refuge'
-  server.define('zone:the-refuge', ShardRoom);
-  server.define('zone:flooded-crypt', ShardRoom);
+  server.define('zone:the-refuge', ZoneRoom);
+  server.define('zone:flooded-crypt', ZoneRoom);
 
   await server.listen(0);
   const addr = (
@@ -143,19 +143,6 @@ afterAll(async () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('C1 — ROOM_SWITCH targets use zone:the-refuge', () => {
-  it('extraction complete ROOM_SWITCH should target zone:the-refuge', async () => {
-    // Phase C contract: all ROOM_SWITCH messages that previously targeted 'refuge'
-    // should now target 'zone:the-refuge'. We validate the expected message shape.
-    const extractionComplete: RoomSwitchMessage = {
-      target: 'zone:the-refuge',
-      reason: 'extraction_complete',
-    };
-
-    expect(extractionComplete.target).toBe('zone:the-refuge');
-    expect(extractionComplete.target).toMatch(/^zone:/);
-    expect(extractionComplete.reason).toBe('extraction_complete');
-  });
-
   it('player death ROOM_SWITCH should target zone:the-refuge', () => {
     const deathSwitch: RoomSwitchMessage = {
       target: 'zone:the-refuge',
@@ -168,9 +155,9 @@ describe('C1 — ROOM_SWITCH targets use zone:the-refuge', () => {
   });
 
   it('ROOM_SWITCH target never uses bare "refuge" after Phase C', async () => {
-    // Integration test: create a shard room and verify that any ROOM_SWITCH
+    // Integration test: create a zone room and verify that any ROOM_SWITCH
     // messages sent DON'T use the old 'refuge' target
-    const room = await colyseus.createRoom('shard', {
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       collapseTimer: 120,
     });
@@ -181,7 +168,7 @@ describe('C1 — ROOM_SWITCH targets use zone:the-refuge', () => {
 
     // If any ROOM_SWITCH arrived, none should use bare 'refuge'
     for (const sw of collector.roomSwitch) {
-      if (sw.reason === 'extraction_complete' || sw.reason === 'player_death') {
+      if (sw.reason === 'player_death') {
         expect(sw.target).not.toBe('refuge');
         expect(sw.target).toBe('zone:the-refuge');
       }
@@ -240,18 +227,18 @@ describe('C2 — Zone rooms are defined with zone: prefix', () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// C3: Shard room name is still 'shard'
+// C3: Procedural room name is still 'zone'
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe('C3 — Shard room name remains "shard"', () => {
-  it('procedural shard uses room type "shard" (no zone: prefix)', async () => {
-    const room = await colyseus.createRoom('shard', {
+describe('C3 — Procedural room name remains "zone"', () => {
+  it('procedural zone uses room type "zone" (no zone: prefix)', async () => {
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       collapseTimer: 120,
     });
-    const { client, collector } = await connectWithPlayer(room, 'route-shard-player');
+    const { client, collector } = await connectWithPlayer(room, 'route-zone-player');
 
-    // Shard room should be operational
+    // Procedural room should be operational
     expect(collector.narrate.length).toBeGreaterThan(0);
 
     // Should NOT be in zone mode
@@ -262,45 +249,44 @@ describe('C3 — Shard room name remains "shard"', () => {
     await client.leave();
   });
 
-  it('shard ROOM_SWITCH enter still targets "shard"', () => {
-    // The ROOM_SWITCH message for entering a shard should still use 'shard'
-    // (not 'zone:shard' or any other prefix)
+  it('procedural ROOM_SWITCH enter still targets "zone"', () => {
+    // The ROOM_SWITCH message for entering a zone should still use 'zone'
+    // (not 'zone:procedural' or any other prefix)
     const enterMsg: RoomSwitchMessage = {
-      target: 'shard',
-      reason: 'enter_shard',
+      target: 'zone',
+      reason: 'enter_zone',
       options: {
-        roomId: 'test-shard-id',
-        biome: 'flooded_crypt',
+        roomId: 'test-zone-id',
         tier: 1,
       },
     };
 
-    expect(enterMsg.target).toBe('shard');
+    expect(enterMsg.target).toBe('zone');
     expect(enterMsg.target).not.toMatch(/^zone:/);
-    expect(enterMsg.reason).toBe('enter_shard');
+    expect(enterMsg.reason).toBe('enter_zone');
   });
 
-  it('zone rooms and shard rooms can coexist on the same server', async () => {
+  it('zone rooms and procedural rooms can coexist on the same server', async () => {
     // Create both room types on the same server
     const zoneRoom = await colyseus.createRoom('zone:the-refuge', {
       zoneSlug: 'the-refuge',
     });
-    const shardRoom = await colyseus.createRoom('shard', {
+    const proceduralRoom = await colyseus.createRoom('zone', {
       useTestGraph: true,
       collapseTimer: 120,
     });
 
     const { client: zoneClient } = await connectWithPlayer(zoneRoom, 'coexist-zone-player');
-    const { client: shardClient } = await connectWithPlayer(shardRoom, 'coexist-shard-player');
+    const { client: proceduralClient } = await connectWithPlayer(proceduralRoom, 'coexist-zone-player');
 
     // Both rooms should be operational simultaneously
     const zoneInternals = zoneRoom as unknown as { isZone: boolean };
-    const shardInternals = shardRoom as unknown as { isZone: boolean };
+    const proceduralInternals = proceduralRoom as unknown as { isZone: boolean };
 
     expect(zoneInternals.isZone).toBe(true);
-    expect(shardInternals.isZone).toBe(false);
+    expect(proceduralInternals.isZone).toBe(false);
 
     await zoneClient.leave();
-    await shardClient.leave();
+    await proceduralClient.leave();
   });
 });

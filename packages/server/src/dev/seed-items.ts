@@ -177,7 +177,7 @@ export const RAG_WRAPPED_BOOTS: StashItem = {
   type: 'armour',
   weight: 2,
   rarity: 'scrap',
-  description: 'Strips of cloth over cracked soles. Better than barefoot in the shards.',
+  description: 'Strips of cloth over cracked soles. Better than barefoot in the zones.',
   baseDurability: 10,
 };
 
@@ -229,7 +229,7 @@ export const FLAYED_HIDE_GRIPS: StashItem = {
   type: 'armour',
   weight: 3,
   rarity: 'sturdy',
-  description: 'Cured from something that once lived in the shards. Supple and warm.',
+  description: 'Cured from something that once lived in the zones. Supple and warm.',
   baseDurability: 50,
 };
 
@@ -319,35 +319,35 @@ export const SHARD_TOUCHED_MEDALLION: StashItem = {
   baseDurability: null,
 };
 
-// ─── Shard Keys ─────────────────────────────────────────────────────────────
+// ─── Zone Keys ─────────────────────────────────────────────────────────────
 
 export const BONE_SHARD_KEY: StashItem = {
   id: 'bone-shard-key',
-  name: 'Bone Shard Key',
+  name: 'Bone Zone Key',
   type: 'key',
   weight: 1,
   rarity: 'common',
-  description: 'A key carved from revenant bone. Opens Tier 1 shards.',
+  description: 'A key carved from revenant bone. Opens Tier 1 zones.',
   baseDurability: null,
 };
 
 export const IRON_SHARD_KEY: StashItem = {
   id: 'iron-shard-key',
-  name: 'Iron Shard Key',
+  name: 'Iron Zone Key',
   type: 'key',
   weight: 1,
   rarity: 'sturdy',
-  description: 'A blackened iron key etched with shard-glyphs. Opens Tier 2 shards.',
+  description: 'A blackened iron key etched with shard-glyphs. Opens Tier 2 zones.',
   baseDurability: null,
 };
 
 export const CRYSTAL_SHARD_KEY: StashItem = {
   id: 'crystal-shard-key',
-  name: 'Crystal Shard Key',
+  name: 'Crystal Zone Key',
   type: 'key',
   weight: 1,
   rarity: 'refined',
-  description: 'A translucent key that refracts light wrong. Opens Tier 3 shards.',
+  description: 'A translucent key that refracts light wrong. Opens Tier 3 zones.',
   baseDurability: null,
 };
 
@@ -411,7 +411,7 @@ export const REVENANT_MARROW: StashItem = {
   type: 'material',
   weight: 2,
   rarity: 'common',
-  description: 'Viscous black marrow from a shard creature. Alchemists pay well.',
+  description: 'Viscous black marrow from a zone creature. Alchemists pay well.',
   baseDurability: null,
 };
 

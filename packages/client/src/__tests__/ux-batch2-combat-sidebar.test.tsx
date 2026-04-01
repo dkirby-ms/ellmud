@@ -25,7 +25,7 @@ import {
   type AppContextValue,
   type TerminalMessage,
 } from '../store.js';
-import ShardExploration from '../pages/ShardExploration.js';
+import ZoneExploration from '../pages/ZoneExploration.js';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -49,13 +49,14 @@ vi.mock('../services/connection.js', () => ({
   resetClient: vi.fn(),
 }));
 
-vi.mock('../hooks/useShardConnection.js', () => ({
-  useShardConnection: () => ({
+vi.mock('../hooks/useZoneConnection.js', () => ({
+  useZoneConnection: () => ({
     handleCommand: vi.fn(),
     handleExitClick: vi.fn(),
     handleCombatAction: vi.fn(),
     sendChatMessage: vi.fn(),
-    extraction: { status: null, progress: 0, narration: null },
+    overlay: { status: null, progress: 0, narration: null },
+    dismissOverlay: vi.fn(),
     reconnection: {
       overlayState: 'hidden',
       attempt: 0,
@@ -99,7 +100,7 @@ function makeMsg(
   };
 }
 
-function renderShardExploration(stateOverrides: Partial<AppState> = {}) {
+function renderZoneExploration(stateOverrides: Partial<AppState> = {}) {
   const state: AppState = {
     ...initialState,
     authenticated: true,
@@ -110,8 +111,8 @@ function renderShardExploration(stateOverrides: Partial<AppState> = {}) {
   };
 
   const router = createMemoryRouter(
-    [{ path: '/shard', Component: ShardExploration }],
-    { initialEntries: ['/shard'] },
+    [{ path: '/zone', Component: ZoneExploration }],
+    { initialEntries: ['/zone'] },
   );
 
   function Wrapper() {
@@ -144,7 +145,7 @@ describe('Gap #10: Combat text color-coding', () => {
       combatSubtype: 'hit_dealt',
     } as TerminalMessage);
 
-    renderShardExploration({ messages: [msg] });
+    renderZoneExploration({ messages: [msg] });
 
     const element = screen.getByText(/You strike the corrupted sentinel/);
     expect(element.closest('[data-combat-type]') ?? element).toHaveClass('mud-damage');
@@ -158,7 +159,7 @@ describe('Gap #10: Combat text color-coding', () => {
       combatSubtype: 'hit_taken',
     } as TerminalMessage);
 
-    renderShardExploration({ messages: [msg] });
+    renderZoneExploration({ messages: [msg] });
 
     const element = screen.getByText(/The sentinel slashes you/);
     expect(element.closest('[data-combat-type]') ?? element).toHaveClass('mud-critical');
@@ -172,7 +173,7 @@ describe('Gap #10: Combat text color-coding', () => {
       combatSubtype: 'dodge',
     } as TerminalMessage);
 
-    renderShardExploration({ messages: [msg] });
+    renderZoneExploration({ messages: [msg] });
 
     const element = screen.getByText(/You sidestep the attack/);
     expect(element.closest('[data-combat-type]') ?? element).toHaveClass('mud-dodge');
@@ -186,7 +187,7 @@ describe('Gap #10: Combat text color-coding', () => {
       makeMsg({ text: 'You dodge the tail sweep.', combatSubtype: 'dodge' } as TerminalMessage),
     ];
 
-    renderShardExploration({ messages });
+    renderZoneExploration({ messages });
 
     const hitDealt = screen.getByText(/You strike for 10 damage/);
     const hitTaken = screen.getByText(/The goblin bites you/);
@@ -205,7 +206,7 @@ describe('Gap #10: Combat text color-coding', () => {
 describe('Gap #11: Status effects in sidebar', () => {
   it('status effects section renders when effects are active', () => {
     // UX Review Batch 2 — anticipatory test (gap #11)
-    renderShardExploration({
+    renderZoneExploration({
       statusEffects: [
         { id: 'bleeding', name: 'Bleeding', duration: 3 },
       ],
@@ -216,7 +217,7 @@ describe('Gap #11: Status effects in sidebar', () => {
 
   it('Bleeding effect shows with appropriate styling', () => {
     // UX Review Batch 2 — anticipatory test (gap #11)
-    renderShardExploration({
+    renderZoneExploration({
       statusEffects: [
         { id: 'bleeding', name: 'Bleeding', duration: 3 },
       ],
@@ -228,21 +229,21 @@ describe('Gap #11: Status effects in sidebar', () => {
     expect(bleedingEl.closest('[data-effect]') ?? bleedingEl).toHaveClass('text-danger');
   });
 
-  it('Shard-sickness debuff displays correctly', () => {
+  it('Death penalty debuff displays correctly', () => {
     // UX Review Batch 2 — anticipatory test (gap #11)
-    renderShardExploration({
+    renderZoneExploration({
       statusEffects: [
-        { id: 'shard-sick', name: 'Shard-sick', duration: 10 },
+        { id: 'death-penalty', name: 'Death Penalty', duration: 10 },
       ],
     } as Partial<AppState>);
 
     const sidebar = screen.getByTestId('status-effects');
-    expect(within(sidebar).getByText('Shard-sick')).toBeInTheDocument();
+    expect(within(sidebar).getByText('Death Penalty')).toBeInTheDocument();
   });
 
   it('no status effects section when no effects active', () => {
     // UX Review Batch 2 — anticipatory test (gap #11)
-    renderShardExploration({
+    renderZoneExploration({
       statusEffects: [],
     } as Partial<AppState>);
 
@@ -257,7 +258,7 @@ describe('Gap #11: Status effects in sidebar', () => {
 describe('Gap #12: HP bar dynamic states', () => {
   it('HP > 60% renders healthy state with success/green indicator', () => {
     // UX Review Batch 2 — anticipatory test (gap #12)
-    renderShardExploration({
+    renderZoneExploration({
       playerHp: 80,
       playerMaxHp: 100,
     } as Partial<AppState>);
@@ -268,7 +269,7 @@ describe('Gap #12: HP bar dynamic states', () => {
 
   it('HP 25-60% renders wounded state with warning/amber indicator', () => {
     // UX Review Batch 2 — anticipatory test (gap #12)
-    renderShardExploration({
+    renderZoneExploration({
       playerHp: 40,
       playerMaxHp: 100,
     } as Partial<AppState>);
@@ -279,7 +280,7 @@ describe('Gap #12: HP bar dynamic states', () => {
 
   it('HP < 25% renders critical state with danger/red and pulse animation', () => {
     // UX Review Batch 2 — anticipatory test (gap #12)
-    renderShardExploration({
+    renderZoneExploration({
       playerHp: 15,
       playerMaxHp: 100,
     } as Partial<AppState>);
@@ -292,7 +293,7 @@ describe('Gap #12: HP bar dynamic states', () => {
 
 // ─── Gap #13-15: Stability bar & collapse warning (DEPRECATED) ───────────────
 // Stability bar and collapse timer UI removed per user directive (2026-03-27).
-// These shard-specific UI elements are no longer rendered.
+// These zone-specific UI elements are no longer rendered.
 
 // ─── Gap #16: Sound cue direction highlighting ───────────────────────────────
 // UX Review Batch 2 — anticipatory test (gap #16)
@@ -301,7 +302,7 @@ describe('Gap #12: HP bar dynamic states', () => {
 describe('Gap #16: Sound cue direction highlighting', () => {
   it('direction words (north, south, east, west, above, below) highlighted with interactive/teal class', () => {
     // UX Review Batch 2 — anticipatory test (gap #16)
-    renderShardExploration({
+    renderZoneExploration({
       soundCues: [
         { id: 'sc-1', text: 'Footsteps echo from the north', timestamp: Date.now() },
       ],
@@ -315,7 +316,7 @@ describe('Gap #16: Sound cue direction highlighting', () => {
 
   it('non-direction words in sound cues are not highlighted', () => {
     // UX Review Batch 2 — anticipatory test (gap #16)
-    renderShardExploration({
+    renderZoneExploration({
       soundCues: [
         { id: 'sc-2', text: 'A distant growl from the east', timestamp: Date.now() },
       ],
@@ -335,7 +336,7 @@ describe('Gap #18: Auto-complete hint above command input', () => {
   it('auto-complete suggestion appears above command input when typing', async () => {
     // UX Review Batch 2 — anticipatory test (gap #18)
     const user = userEvent.setup();
-    renderShardExploration();
+    renderZoneExploration();
 
     const input = screen.getByPlaceholderText('Type a command...');
     await user.type(input, 'str');
@@ -348,7 +349,7 @@ describe('Gap #18: Auto-complete hint above command input', () => {
   it('hint updates as user types more characters', async () => {
     // UX Review Batch 2 — anticipatory test (gap #18)
     const user = userEvent.setup();
-    renderShardExploration();
+    renderZoneExploration();
 
     const input = screen.getByPlaceholderText('Type a command...');
     await user.type(input, 'lo');
@@ -360,7 +361,7 @@ describe('Gap #18: Auto-complete hint above command input', () => {
   it('hint disappears when input is empty', async () => {
     // UX Review Batch 2 — anticipatory test (gap #18)
     const user = userEvent.setup();
-    renderShardExploration();
+    renderZoneExploration();
 
     const input = screen.getByPlaceholderText('Type a command...');
     await user.type(input, 'go');
@@ -378,7 +379,7 @@ describe('Gap #18: Auto-complete hint above command input', () => {
 describe('Gap #20: Tick timer renders as progress bar', () => {
   it('tick timer renders a progress bar element during combat', () => {
     // UX Review Batch 2 — anticipatory test (gap #20)
-    renderShardExploration({
+    renderZoneExploration({
       inCombat: true,
       combatTick: 3,
     });
@@ -390,7 +391,7 @@ describe('Gap #20: Tick timer renders as progress bar', () => {
 
   it('tick timer bar reflects tick progress', () => {
     // UX Review Batch 2 — anticipatory test (gap #20)
-    renderShardExploration({
+    renderZoneExploration({
       inCombat: true,
       combatTick: 3,
     });
@@ -410,7 +411,7 @@ describe('Gap #20: Tick timer renders as progress bar', () => {
 describe('Gap #21: Skill button in combat quickbar', () => {
   it('combat quickbar has 8 action buttons (not 7)', () => {
     // UX Review Batch 2 — anticipatory test (gap #21)
-    renderShardExploration({
+    renderZoneExploration({
       inCombat: true,
       combatTick: 1,
     });
@@ -424,7 +425,7 @@ describe('Gap #21: Skill button in combat quickbar', () => {
 
   it('"Skill" button is present in the combat quickbar', () => {
     // UX Review Batch 2 — anticipatory test (gap #21)
-    renderShardExploration({
+    renderZoneExploration({
       inCombat: true,
       combatTick: 1,
     });

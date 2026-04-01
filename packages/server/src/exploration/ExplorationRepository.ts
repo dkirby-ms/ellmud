@@ -14,8 +14,7 @@ export interface ExplorationVisit {
   roomId: string;
   roomType: string;
   roomName: string;
-  shardTier?: number | null;
-  biome?: string | null;
+  zoneTier?: number | null;
 }
 
 /** A persisted explored-room record. */
@@ -25,8 +24,7 @@ export interface ExploredRoom {
   roomId: string;
   roomType: string;
   roomName: string;
-  shardTier: number | null;
-  biome: string | null;
+  zoneTier: number | null;
   firstVisited: Date;
   lastVisited: Date;
   visitCount: number;
@@ -84,8 +82,7 @@ export class InMemoryExplorationRepository implements ExplorationRepository {
         roomId: visit.roomId,
         roomType: visit.roomType,
         roomName: visit.roomName,
-        shardTier: visit.shardTier ?? null,
-        biome: visit.biome ?? null,
+        zoneTier: visit.zoneTier ?? null,
         firstVisited: now,
         lastVisited: now,
         visitCount: 1,

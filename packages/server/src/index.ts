@@ -10,7 +10,7 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { monitor } from '@colyseus/monitor';
 import express from 'express';
 import http from 'http';
-import { ShardRoom } from './rooms/index.js';
+import { ZoneRoom } from './rooms/index.js';
 import {
   AuthService,
   InMemoryTokenStore,
@@ -33,7 +33,7 @@ import { initProfileProvider } from './player/index.js';
 import { initFactionProvider } from './faction/index.js';
 import { initRunHistoryProvider } from './run-history/index.js';
 import { initLoadoutProvider } from './loadout/index.js';
-import { initShardSicknessProvider } from './systems/index.js';
+import { initDeathPenaltyProvider } from './systems/index.js';
 import { initCharacterProvider } from './character/index.js';
 import { createCharacterRouter } from './api/characters.js';
 import { initZoneProvider, getZoneRepository } from './zones/index.js';
@@ -101,9 +101,9 @@ console.log(`[Ellmud] Run history persistence: ${USE_PG ? 'PostgreSQL' : 'in-mem
 initLoadoutProvider(USE_PG);
 console.log(`[Ellmud] Loadout persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
-// ─── Shard-Sickness Persistence ─────────────────────────────────────────────
-initShardSicknessProvider(USE_PG);
-console.log(`[Ellmud] Shard-sickness persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+// ─── Death Penalty Persistence ─────────────────────────────────────────────
+initDeathPenaltyProvider(USE_PG);
+console.log(`[Ellmud] Death penalty persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Character Persistence ──────────────────────────────────────────────────
 initCharacterProvider(USE_PG);
@@ -188,7 +188,7 @@ app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg
 // Admin API at /admin/api/*, diagnostics dashboard at /monitor
 // Protected by ADMIN_TOKEN env var — admin auth is separate from player auth.
 
-// Content CRUD API — admin-managed game content (items, creatures, biomes, etc.)
+// Content CRUD API — admin-managed game content (items, creatures, etc.)
 const contentStores = initializeContentStores(USE_PG);
 app.use(createContentRouter({ stores: contentStores }));
 app.use(createDashboardApiRouter({ stores: contentStores, usePg: USE_PG }));
@@ -275,7 +275,7 @@ const server = new Server({
 });
 
 // Register room types
-server.define('shard', ShardRoom);
+server.define('zone', ZoneRoom);
 
 // Dynamic zone registration — register each zone from the zone repository
 const registeredZoneSlugs = new Set<string>();
@@ -284,7 +284,7 @@ try {
   const zones = await zoneRepo.getAllZones();
   for (const zone of zones) {
     const roomName = `zone:${zone.slug}`;
-    server.define(roomName, ShardRoom);
+    server.define(roomName, ZoneRoom);
     registeredZoneSlugs.add(zone.slug);
     console.log(`[Ellmud] Registered zone: ${roomName}`);
   }
@@ -294,7 +294,7 @@ try {
 
 // Ensure the-refuge is always registered (fallback if not in DB)
 if (!registeredZoneSlugs.has('the-refuge')) {
-  server.define('zone:the-refuge', ShardRoom);
+  server.define('zone:the-refuge', ZoneRoom);
   console.log('[Ellmud] Registered zone: zone:the-refuge (fallback)');
 }
 
@@ -307,4 +307,4 @@ console.log(`[Ellmud] Auth required: ${AUTH_REQUIRED}`);
 console.log(`[Ellmud] Cache: ${isCacheRedis ? 'Redis' : 'in-memory'}, Presence: ${isPresenceRedis ? 'Redis' : 'local'}`);
 console.log(`[Ellmud] Matchmaker driver: ${config.redis.driverEnabled ? 'Redis' : 'local'}`);
 console.log(`[Ellmud] Stash persistence: ${isStashPg() ? 'PostgreSQL' : 'in-memory'}`);
-console.log(`[Ellmud] Max players/shard (default): ${config.maxPlayersPerShard}, Max replicas: ${config.maxReplicas}`);
+console.log(`[Ellmud] Max players/zone (default): ${config.maxPlayersPerZone}, Max replicas: ${config.maxReplicas}`);

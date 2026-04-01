@@ -1308,3 +1308,121 @@ CREATE TABLE zone_definitions (
 - **Next phase:** Handed off to Drizzt (Engine Dev) for SQL migrations (034–036) and data seeding
 - **Handoff:** Jarlaxle (Systems Dev) to follow with ContentRegistry wiring and admin CRUD endpoints
 - **Orchestration log:** `.squad/orchestration-log/2026-03-29T13-45-00Z-elminster.md`
+
+## Learnings
+
+### GDD Major Overhaul (2024)
+**Context:** Comprehensive restructure of GDD.md to reflect evolved design direction — from procedural "shard" focus to hand-crafted zone-based content.
+
+**Key Learnings:**
+
+1. **Design Documentation Must Track Reality:** The GDD had documented the game as "procedural-first with static zones as secondary," but the implementation and design evolution showed hand-crafted zones were actually primary. Documentation drift creates confusion for contributors and undermines design clarity.
+
+2. **Flavor Terminology Has Outsized Impact:** Player-facing terms like "Shardwalker" and "shard-sickness" aren't just naming — they communicate the game's identity. Changing from "Shardwalker diving into procedural shards" to "explorer in hand-crafted extraction zones" fundamentally reframes what the game is about. This shift required updates in 100+ locations across the GDD.
+
+3. **Placeholder > Deprecated Documentation:** When the combat system needed a ground-up redesign, I replaced 50+ lines of detailed (but obsolete) combat mechanics with a clear placeholder acknowledging the redesign. This is better than leaving deprecated details that contributors might implement.
+
+4. **Biome Systems Are Pervasive:** Removing the biome concept required changes in:
+   - Content sourcing tables
+   - Database schema documentation
+   - LLM narrative prompts
+   - Creature spawn rules
+   - Loot distribution
+   - Skill descriptions
+   Lesson: Environmental categorization systems touch everything. Removing one requires systematic review of the entire document.
+
+5. **Roadmap Alignment Is Critical:** The Phase 1-4 roadmap had items like "All five biomes" and "Shard modifiers runtime" that assumed the old design direction. Updated roadmap to reflect "Environment variety" and "Zone modifiers" — small changes that signal the new direction.
+
+6. **Technical vs Design Terminology:** Preserved `ShardRoom` as a codebase class name while updating conceptual references to `InstanceRoom`. This separation acknowledges that code refactoring is separate from design documentation — we can update docs immediately while code changes happen incrementally.
+
+7. **Surgical Edits Over Wholesale Deletion:** Rather than deleting sections wholesale, I reframed and rewrote to preserve structure and completeness. The GDD remains comprehensive (~1094 lines), just with updated direction. This approach maintains the document's utility as a reference.
+
+8. **Combat Systems Deserve Their Own Design Phase:** Attempting to document a complex combat system before it's been prototyped and validated leads to documentation churn. Better to acknowledge "redesigning from ground up" and document once the design is settled.
+
+9. **Database Terminology Matters for Migration:** Noting that `zones.biome` should become `zones.environment` and `player_shard_sickness` should become `player_death_tracking` sets clear expectations for future migration work. Documentation should call out these alignment tasks.
+
+10. **Open Questions Show Design Maturity:** Added "Hand-crafted vs procedural balance" to Open Questions because even though we've de-emphasized procedural generation, the question of its role remains open. Good design docs acknowledge what's still being figured out.
+
+**Artifacts Created:**
+- Decision document: `.squad/decisions/inbox/elminster-gdd-overhaul.md` (comprehensive change log and rationale)
+- Updated: `GDD.md` (major restructuring across all sections)
+
+**Recommended Follow-Up:**
+1. Combat system design workshop → document in §6 once validated
+2. Schema migration plan for biome/shard terminology in database
+3. Code refactoring plan for ShardRoom → InstanceRoom (if desired)
+4. Content authoring focus: hand-crafted zones as primary deliverable
+
+---
+
+### 2025-07-22 — Refuge Repurposed + Faction Starting Areas
+
+**Task:** Reframe the Refuge from player hub to designer/debug tool; introduce faction starting zones.
+
+**Scope:** GDD.md only, ~25 edits across 10+ sections.
+
+## Learnings
+
+1. **Hub Abstraction Is Overdue:** The Refuge was serving double duty — player home *and* the only persistent hub implementation. Splitting into faction-specific hubs and a designer hub forces us to think about the hub as a pattern (feature rooms, persistent lifecycle, stash/board/market) rather than a singleton. This abstraction will simplify the eventual `FactionHubRoom` implementation.
+
+2. **Zone Category Enum Needs Expansion:** The current `hub` category was a catch-all. Splitting into `faction_hub` and `dev` is cleaner but requires a DB migration and audit of any code that filters on `category = 'hub'`. Flag for implementation phase.
+
+3. **Player Routing Is a New Concern:** With multiple starting zones, the server needs logic to resolve which zone a player spawns into after login, extraction, or death. This depends on `faction_membership` — a table that exists but has no runtime consumers yet. This is a new system boundary that didn't exist when everyone landed in the Refuge.
+
+4. **Cross-Faction Interaction Becomes a Design Question:** If players live in separate faction hubs, where do cross-faction trades happen? The GDD currently says "same faction stronghold" for direct trade. Neutral zones or marketplace mechanics are needed for cross-faction economy. Noted as a future design question.
+
+5. **Surgical GDD Editing Scales:** This was ~25 targeted edits across the document, not a rewrite. The grep-first approach (find all "Refuge" references → classify each → edit contextually) avoids drift and ensures nothing is missed. Same pattern used in the previous GDD overhaul works well for thematic pivots.
+
+**Artifacts Created:**
+- Decision document: `.squad/decisions/inbox/elminster-refuge-faction-starts.md`
+- Updated: `GDD.md` (Refuge → designer hub, faction starting zones introduced)
+
+---
+
+### 2025-07-22 — Extraction Removal + MUD-Style Death
+
+**Task:** Remove the extraction mechanic entirely from the GDD and replace it with MUD-style death as the primary risk mechanic. Requested by dkirby-ms.
+
+**Scope:** GDD.md only, ~30 edits across 15+ sections plus two new sections (§6.5, §6.6).
+
+## Learnings
+
+1. **Genre Identity Was Load-Bearing:** "Extraction RPG" was woven into nearly every section — genre line, core fantasy, design pillars, gameplay loop, zone design, PvP framing, sound system, roadmap, and open questions. A grep for "extract" (case-insensitive) hit 30+ lines. Removing a genre identity from a GDD is not a find-and-replace — each reference requires contextual rewriting because the surrounding language was shaped by the extraction assumption.
+
+2. **Death-as-Risk Is Simpler and More MUD-Native:** The extraction mechanic was a genre import that fought the medium. A channeled extraction ritual in text lacks the physical tension of a 3D game. MUD-style death (corpse drop, gear loss, corpse run) is native to the form, creates continuous tension rather than point-of-extraction tension, and is mechanically simpler. This is a case where removing complexity improved the design.
+
+3. **Zone Lifecycle Needed a Split:** The old lifecycle (Seeding → Open → Active → Destabilising → Collapse) was entirely extraction-driven. Without extraction, zones don't inherently need a collapse timer. The replacement is a dual model: Persistent zones (the primary model, always available) and Instanced zones (future, optional timer). This is more flexible and better matches the MUD paradigm of persistent areas you enter and leave.
+
+4. **Equipment Loss Is a Design Space, Not a Single Mechanic:** Death is now the primary gear loss vector, but acknowledging other vectors (durability, curses, theft, traps) early prevents the design from over-indexing on death as the only meaningful risk. Planting these seeds now means future designers won't have to retcon the philosophy.
+
+5. **Open Questions Are the Right Place for Unresolved Death Parameters:** Corpse persistence, recovery mechanics, death penalty severity — these are all playtest-dependent. Specifying them prematurely in the GDD would create false precision. The §18 additions are correctly framed as questions, not answers.
+
+**Artifacts Created:**
+- Decision document: `.squad/decisions/inbox/elminster-extraction-removal.md`
+- Updated: `GDD.md` (extraction removed, death & corpse system added, genre reframed)
+
+---
+
+## Learnings — GDD vs Codebase Audit (2026-03-20)
+
+**Context:** Audited the full codebase against the updated GDD after three major revisions (shards/biomes removed, Refuge repurposed, extraction removed).
+
+### Key Findings
+
+1. **Extraction system is deeply embedded.** `ExtractionSystem` (server), `ExtractionOverlay` (client), `extract` command handler, `EXTRACTION_STATE` message type, extraction room type in `RoomType` union, and `extractionRoomIds` on all graph types. The generator has ~200 lines dedicated to extraction room placement and distance constraints. Full removal required.
+
+2. **"Shard" permeates everything.** 93 occurrences in `ShardRoom.ts` alone (2491 lines). The class name, state class, shared types (`ShardState`, `ShardTier`, `ShardModifier`, `ShardStateMessage`, `ShardSicknessInfo`), the `shard/` directory, client hooks (`useShardConnection`), client pages (`ShardExploration`), store actions (`SET_SHARD_STATE`), and the Colyseus room registration (`server.define('shard', ShardRoom)`) all use "shard". Renaming is a cross-cutting concern touching every package.
+
+3. **"Shardwalker" is player-facing.** Used on Login (`"Create Shardwalker"`), CharacterSelect (`"Your Shardwalkers"`, `"+ New Shardwalker"`). Must be renamed before any public release.
+
+4. **Biome system is in DB schema.** `biome_definitions` table exists (dead code), `biome` columns on `zones`, `room_definitions`, `creature_definitions`, `run_history`, and `character_explored_rooms` tables. `BiomeType` is a shared type used across 15+ files. The Siltgate zone uses `biome: 'urban'` which isn't even in the `BiomeType` union — the type is already stale.
+
+5. **Death routes to Refuge, not faction stronghold.** Both `handlePlayerDeath()` and `handleSuccessfulExtraction()` send `ROOM_SWITCH` to `zone:the-refuge`. No faction-based routing exists. The faction module can look up player factions but doesn't influence spawn/death routing.
+
+6. **Corpse system is a trace, not an entity.** Death creates a `corpse` trace (visual marker with TTL) and drops items as loose floor objects. There's no corpse *entity* with an inventory that other players can `loot`. The test `it.todo('PvP death drops non-soulbound items as lootable corpse')` confirms this is known-missing.
+
+7. **Refuge is `category: 'hub'` in DB, should be `'dev'`.** GDD says Refuge is `category: 'dev'` for designers. Faction strongholds (category: `faction_hub`) don't exist yet.
+
+8. **DB schema has extraction-centric columns:** `run_history.extracted`, `run_history.extracted_items`, `run_history.shard_tier`, `player_shard_sickness` table name, `biome` columns across 5+ tables.
+
+**Audit report:** `.squad/decisions/inbox/elminster-gdd-code-audit.md`

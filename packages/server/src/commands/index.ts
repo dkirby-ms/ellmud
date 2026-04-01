@@ -2,14 +2,13 @@
  * Command registry — maps verb strings to handler functions.
  *
  * All command handlers receive a CommandContext and return a CommandResult.
- * The ShardRoom is responsible for building the context and delivering the result.
+ * The ZoneRoom is responsible for building the context and delivering the result.
  */
 
 import type { NarrationType } from '@ellmud/shared';
-import type { Room } from '../shard/RoomGraph.js';
+import type { Room } from '../zone/RoomGraph.js';
 import type { PlayerState } from '../state/PlayerState.js';
 import type { CombatSystem } from '../combat/CombatSystem.js';
-import { ExtractionSystem } from '../extraction/ExtractionSystem.js';
 import { handleGo } from './handlers/go.js';
 import { handleLook } from './handlers/look.js';
 import { handleTake } from './handlers/take.js';
@@ -17,7 +16,6 @@ import { handleDrop } from './handlers/drop.js';
 import { handleInventory } from './handlers/inventory.js';
 import { handleAttack } from './handlers/attack.js';
 import { handleStrike, handleDodge, handleFlee } from './handlers/combat-actions.js';
-import { handleExtract } from './handlers/extract.js';
 import { handleSay } from './handlers/say.js';
 import { handleWhisper } from './handlers/whisper.js';
 import { handleEmote } from './handlers/emote.js';
@@ -26,7 +24,7 @@ import { handlePeaceful } from './handlers/peaceful.js';
 import type { DowningSystem } from '../systems/DowningSystem.js';
 import type { StashService } from '../stash/StashService.js';
 import type { LoadoutService } from '../loadout/LoadoutService.js';
-import { handleShardboard, handleEnter } from './handlers/shardboard.js';
+import { handleBoard, handleEnter } from './handlers/board.js';
 import { handleStashView, handleStore } from './handlers/stash-command.js';
 import { handleLoadoutView } from './handlers/loadout-command.js';
 
@@ -66,28 +64,26 @@ export interface CommandContext {
   resolveRoom: (roomId: string) => Room | undefined;
   /** Other player session IDs in the same room. */
   otherPlayersInRoom: string[];
-  /** Current shard stability (0–1). */
+  /** Current zone stability (0–1). */
   stability: number;
   /** The player's in-game character name. */
   characterName?: string;
-  /** Combat system reference (available in ShardRoom context). */
+  /** Combat system reference (available in ZoneRoom context). */
   combatSystem?: CombatSystem;
-  /** Extraction system reference (available in ShardRoom context). */
-  extractionSystem?: ExtractionSystem;
   /** Living creatures in the current room. */
   creaturesInRoom?: CreatureRef[];
   /** Resolve creatures in an arbitrary room by ID. */
   resolveCreaturesInRoom?: (roomId: string) => CreatureRef[];
-  /** Downing system reference (available in ShardRoom context). */
+  /** Downing system reference (available in ZoneRoom context). */
   downingSystem?: DowningSystem;
   /** Stash service for personal storage (available in feature_stash rooms). */
   stashService?: StashService;
   /** Loadout service for equipment management (available in feature_stash rooms). */
   loadoutService?: LoadoutService;
-  /** Query available shards (available in feature_shardboard rooms). */
-  queryShards?: () => Promise<ShardListing[]>;
-  /** Create/join a shard (available in feature_shardboard rooms). */
-  createShard?: (opts?: { tier?: number }) => Promise<ShardListing | null>;
+  /** Query available zones (available in feature_expedition_board rooms). */
+  queryZones?: () => Promise<ZoneListing[]>;
+  /** Create/join a zone (available in feature_expedition_board rooms). */
+  createZone?: (opts?: { tier?: number }) => Promise<ZoneListing | null>;
   /** Current zone display name (e.g. "The Refuge"). */
   zoneName?: string;
   /** Current zone slug identifier (e.g. "refuge"). */
@@ -96,10 +92,9 @@ export interface CommandContext {
 
 export type CommandHandler = (ctx: CommandContext) => CommandResult;
 
-/** Shard listing summary for shardboard display. */
-export interface ShardListing {
+/** Shard listing summary for expedition board display. */
+export interface ZoneListing {
   roomId: string;
-  biome: string;
   tier: number;
   lifecycle: string;
   playerCount: number;
@@ -110,8 +105,10 @@ export interface ShardListing {
 // ─── Feature-Gated Handlers ────────────────────────────────────────────────
 
 const featureHandlers = new Map<string, { handler: CommandHandler; requiredRoomType: string }>();
-featureHandlers.set('shardboard', { handler: handleShardboard, requiredRoomType: 'feature_shardboard' });
-featureHandlers.set('enter', { handler: handleEnter, requiredRoomType: 'feature_shardboard' });
+featureHandlers.set('board', { handler: handleBoard, requiredRoomType: 'feature_expedition_board' });
+featureHandlers.set('enter', { handler: handleEnter, requiredRoomType: 'feature_expedition_board' });
+// Keep legacy alias
+featureHandlers.set('zoneboard', { handler: handleBoard, requiredRoomType: 'feature_expedition_board' });
 featureHandlers.set('stash', { handler: handleStashView, requiredRoomType: 'feature_stash' });
 featureHandlers.set('store', { handler: handleStore, requiredRoomType: 'feature_stash' });
 featureHandlers.set('loadout', { handler: handleLoadoutView, requiredRoomType: 'feature_stash' });
@@ -129,7 +126,6 @@ handlers.set('attack', handleAttack);
 handlers.set('strike', handleStrike);
 handlers.set('dodge', handleDodge);
 handlers.set('flee', handleFlee);
-handlers.set('extract', handleExtract);
 handlers.set('say', handleSay);
 handlers.set('whisper', handleWhisper);
 handlers.set('emote', handleEmote);
@@ -150,18 +146,6 @@ export function handleCommand(
       };
     }
     return featureCmd.handler(ctx);
-  }
-
-  // Extraction command lock: block movement/combat while channeling
-  if (ctx.extractionSystem) {
-    const lockMessage = ExtractionSystem.checkCommandLock(
-      verb, ctx.player.sessionId, ctx.extractionSystem,
-    );
-    if (lockMessage) {
-      return {
-        narrations: [{ text: lockMessage, type: 'system' }],
-      };
-    }
   }
 
   // Combat movement lock: block 'go' while in combat (must use 'flee')

@@ -7,7 +7,7 @@ export { createDashboardRouter } from './dashboard.js';
 export { adminAuth } from './middleware.js';
 export type {
   AdminRoomSummary,
-  AdminShardDetail,
+  AdminZoneDetail,
   AdminRefugeDetail,
   AdminPlayerInfo,
   AdminCreatureInfo,

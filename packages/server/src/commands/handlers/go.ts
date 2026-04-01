@@ -3,7 +3,7 @@
  */
 
 import type { CommandResult, CommandContext } from '../index.js';
-import type { Direction } from '../../shard/RoomGraph.js';
+import type { Direction } from '../../zone/RoomGraph.js';
 import { isInterZoneId, parseInterZoneId } from '@ellmud/shared';
 
 const VALID_DIRECTIONS = new Set<string>(['north', 'south', 'east', 'west', 'up', 'down']);

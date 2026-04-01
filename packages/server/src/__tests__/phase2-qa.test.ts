@@ -53,13 +53,13 @@ import {
 //    /    |    \
 //  crypt entry  armory
 //    ↓
-//  extraction-chamber
+//  deep-chamber
 //
 // entry→corridor: north    corridor→entry: south
 // corridor→shrine: north   shrine→corridor: south
 // corridor→crypt: west     crypt→corridor: east
 // entry→armory: east       armory→entry: west
-// crypt→extraction: down   extraction→crypt: up
+// crypt→deep-chamber: down deep-chamber→crypt: up
 // ═══════════════════════════════════════════════════════════════════════════
 
 const ROOMS = {
@@ -68,7 +68,7 @@ const ROOMS = {
   SHRINE: 'shrine',
   CRYPT: 'crypt',
   ARMORY: 'armory',
-  EXTRACTION: 'extraction-chamber',
+  DEEP_CHAMBER: 'deep-chamber',
 } as const;
 
 // --- Shared test room graph for sound propagation ---
@@ -97,15 +97,15 @@ function buildSoundTestRooms(): Map<string, SoundRoom> {
     id: ROOMS.CRYPT,
     exits: new Map<Direction, string>([
       ['east', ROOMS.CORRIDOR],
-      ['down', ROOMS.EXTRACTION],
+      ['down', ROOMS.DEEP_CHAMBER],
     ]),
   });
   rooms.set(ROOMS.ARMORY, {
     id: ROOMS.ARMORY,
     exits: new Map<Direction, string>([['west', ROOMS.ENTRY]]),
   });
-  rooms.set(ROOMS.EXTRACTION, {
-    id: ROOMS.EXTRACTION,
+  rooms.set(ROOMS.DEEP_CHAMBER, {
+    id: ROOMS.DEEP_CHAMBER,
     exits: new Map<Direction, string>([['up', ROOMS.CRYPT]]),
   });
   return rooms;
@@ -135,9 +135,9 @@ function makeCreature(id: string, roomId: string, stats?: Partial<CombatStats>):
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 1. MULTI-PLAYER SHARD TEST — 4 players, combat resolution, sound
+// 1. MULTI-PLAYER ZONE TEST — 4 players, combat resolution, sound
 // ═══════════════════════════════════════════════════════════════════════════
-describe('Phase 2 QA — Multi-Player Shard (4 players)', () => {
+describe('Phase 2 QA — Multi-Player Zone (4 players)', () => {
   let combat: CombatSystem;
   let sound: SoundSystem;
   let traces: TraceSystem;
@@ -220,7 +220,7 @@ describe('Phase 2 QA — Multi-Player Shard (4 players)', () => {
     expect(armoryResult!.distance).toBe(1);
   });
 
-  it('combat sound reaches SHRINE (2 hops) but not EXTRACTION (3+ hops from entry)', () => {
+  it('combat sound reaches SHRINE (2 hops) but not DEEP_CHAMBER (3+ hops from entry)', () => {
     const results = sound.propagateSound(ROOMS.ENTRY, NOISE_VALUES.combat);
 
     // SHRINE (2 hops: entry→corridor→shrine): 5 - 4 = 1
@@ -229,9 +229,9 @@ describe('Phase 2 QA — Multi-Player Shard (4 players)', () => {
     expect(shrineResult!.effectiveNoise).toBe(1);
     expect(shrineResult!.distance).toBe(2);
 
-    // EXTRACTION (3+ hops: entry→corridor→crypt→extraction): 5 - 6 = -1 ≤ 0 — not audible
-    const extractionResult = results.find(r => r.roomId === ROOMS.EXTRACTION);
-    expect(extractionResult).toBeUndefined();
+    // DEEP_CHAMBER (3+ hops: entry→corridor→crypt→deep-chamber): 5 - 6 = -1 ≤ 0 — not audible
+    const deepChamberResult = results.find(r => r.roomId === ROOMS.DEEP_CHAMBER);
+    expect(deepChamberResult).toBeUndefined();
   });
 
   it('simultaneous combat events generate both sound and traces', () => {
@@ -249,7 +249,7 @@ describe('Phase 2 QA — Multi-Player Shard (4 players)', () => {
     const strikes = result.events.filter(e => e.type === 'strike');
     expect(strikes.length).toBeGreaterThanOrEqual(1);
 
-    // Simulate what ShardRoom.createCombatTraces does:
+    // Simulate what ZoneRoom.createCombatTraces does:
     for (const event of result.events) {
       if (event.type === 'strike' && event.targetId && event.damage != null) {
         if (event.damage >= BLOOD_TRAIL_DAMAGE_THRESHOLD) {
@@ -382,7 +382,7 @@ describe('Phase 2 QA — PvP Conflict', () => {
 
     const result = combat.resolveTick();
 
-    // Simulate ShardRoom death handling: create corpse trace
+    // Simulate ZoneRoom death handling: create corpse trace
     for (const event of result.events) {
       if (event.type === 'defeated' && !event.actorId.startsWith('creature-')) {
         traces.addTrace(ROOMS.ENTRY, 'corpse', {
@@ -455,9 +455,9 @@ describe('Phase 2 QA — PvP Conflict', () => {
 describe('Phase 2 QA — Scaling (2–4 replicas)', () => {
   it.todo('2 replicas maintain sticky sessions under load (requires Redis + KEDA)');
   it.todo('4 replicas: player stays on same replica after reconnect');
-  it.todo('shard state survives replica restart via Redis persistence');
+  it.todo('zone state survives replica restart via Redis persistence');
   it.todo('load balancer distributes new connections evenly across replicas');
-  it.todo('cross-replica shard listing returns correct player counts');
+  it.todo('cross-replica zone listing returns correct player counts');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -626,11 +626,10 @@ describe('Phase 2 QA — Sound Propagation', () => {
 
     expect(explosionResults.length).toBeGreaterThanOrEqual(combatResults.length);
 
-    // Explosion should reach extraction-chamber (4 hops: entry→corridor→crypt→extraction)
-    // noise 9 - 6 = 3 at 3 hops (entry→corridor→crypt→extraction)
-    // Actually extraction is 3 hops from entry via corridor→crypt→extraction
-    const explosionExtraction = explosionResults.find(r => r.roomId === ROOMS.EXTRACTION);
-    expect(explosionExtraction).toBeDefined();
+    // Explosion should reach deep-chamber (3 hops: entry→corridor→crypt→deep-chamber)
+    // noise 9 - 6 = 3 at 3 hops
+    const explosionDeepChamber = explosionResults.find(r => r.roomId === ROOMS.DEEP_CHAMBER);
+    expect(explosionDeepChamber).toBeDefined();
   });
 
   it('sneaking sound (noise 1) barely propagates', () => {
@@ -785,7 +784,7 @@ describe('Phase 2 QA — Trace Decay', () => {
 // 7. REFUGE AMBIENT TEST
 // ═══════════════════════════════════════════════════════════════════════════
 describe('Phase 2 QA — Refuge Ambient Events', () => {
-  // Zone-mode ShardRoom handles ambient events via AmbientSystem.
+  // Zone-mode ZoneRoom handles ambient events via AmbientSystem.
   // These tests document the expected behavior for when ambient events are implemented.
 
   it.todo('observe 5+ distinct ambient events within 5 minutes (time-accelerated)');
@@ -802,8 +801,8 @@ describe('Phase 2 QA — Refuge Ambient Events', () => {
 describe('Phase 2 QA — Database Consistency', () => {
   it.todo('concurrent inventory writes from 2 players resolve without data loss');
   it.todo('concurrent combat state updates from tick + player action are serialized');
-  it.todo('player stash save during shard collapse preserves all items');
-  it.todo('simultaneous extraction + death does not duplicate items');
+  it.todo('player stash save during zone collapse preserves all items');
+
   it.todo('Redis session store handles concurrent read-modify-write (CAS)');
 });
 
@@ -822,8 +821,8 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
       await colyseus.shutdown();
     });
 
-    it('single player can join shard and receives room description', async () => {
-      const { collector } = await connectTestClient(colyseus, 'shard', {
+    it('single player can join zone and receives room description', async () => {
+      const { collector } = await connectTestClient(colyseus, 'zone', {
         useTestGraph: true,
         ...quickCollapseOptions(300),
       });
@@ -833,7 +832,7 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
     });
 
     it('single player can move between rooms', async () => {
-      const { client, collector } = await connectTestClient(colyseus, 'shard', {
+      const { client, collector } = await connectTestClient(colyseus, 'zone', {
         useTestGraph: true,
         ...quickCollapseOptions(300),
       });
@@ -847,7 +846,7 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
     });
 
     it('single player can look at current room', async () => {
-      const { client, collector } = await connectTestClient(colyseus, 'shard', {
+      const { client, collector } = await connectTestClient(colyseus, 'zone', {
         useTestGraph: true,
         ...quickCollapseOptions(300),
       });
@@ -1019,7 +1018,7 @@ describe('Phase 2 QA — Cross-System Integration', () => {
     const tickResult = combat.resolveTick();
     expect(tickResult.events.length).toBeGreaterThan(0);
 
-    // 2. Sound propagation (what ShardRoom.propagateCombatSounds does)
+    // 2. Sound propagation (what ZoneRoom.propagateCombatSounds does)
     const strikeRoomIds = new Set<string>();
     for (const event of tickResult.events) {
       if (event.type === 'strike' && event.targetId) {
@@ -1035,7 +1034,7 @@ describe('Phase 2 QA — Cross-System Integration', () => {
     }
     expect(allSoundResults.length).toBeGreaterThan(0);
 
-    // 3. Trace creation (what ShardRoom.createCombatTraces does)
+    // 3. Trace creation (what ZoneRoom.createCombatTraces does)
     for (const event of tickResult.events) {
       if (event.type === 'strike' && event.targetId && event.damage != null) {
         if (event.damage >= BLOOD_TRAIL_DAMAGE_THRESHOLD) {
@@ -1085,7 +1084,7 @@ describe('Phase 2 QA — Cross-System Integration', () => {
     const fleeEvent = result.events.find(e => e.type === 'flee');
     expect(fleeEvent).toBeDefined();
 
-    // Simulate footprint trace on flee (ShardRoom.deliverCombatResults does this)
+    // Simulate footprint trace on flee (ZoneRoom.deliverCombatResults does this)
     traces.addTrace(ROOMS.ENTRY, 'footprint', { actorName: 'fleeing-hero' }, 'north');
 
     // Running sound from flee
@@ -1315,7 +1314,7 @@ describe('Phase 2 QA — Edge Cases', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// INTEGRATION TEST — Full Colyseus server (4 players in shard)
+// INTEGRATION TEST — Full Colyseus server (4 players in zone)
 // ═══════════════════════════════════════════════════════════════════════════
 describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
   let colyseus: Awaited<ReturnType<typeof bootTestServer>>;
@@ -1328,8 +1327,8 @@ describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
     await colyseus.shutdown();
   });
 
-  it('4 players join same shard and all receive room descriptions', async () => {
-    const room = await colyseus.createRoom('shard', {
+  it('4 players join same zone and all receive room descriptions', async () => {
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       tier: 2,
       ...quickCollapseOptions(300),
@@ -1349,7 +1348,7 @@ describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
   });
 
   it('player movement triggers sound narration for adjacent-room players', async () => {
-    const room = await colyseus.createRoom('shard', {
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       ...quickCollapseOptions(300),
     });
@@ -1371,14 +1370,14 @@ describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
     await wait(1500);
 
     // p1 should see awareness notification about p2 entering corridor
-    // (depends on awareness system being wired in ShardRoom)
+    // (depends on awareness system being wired in ZoneRoom)
     // At minimum, p1 should receive SOME notification about activity
     // The exact message type depends on awareness tier calculation
     expect(p1.collector.narrate.length).toBeGreaterThanOrEqual(0);
   });
 
   it('player attack command gets a response (no creature in test graph)', async () => {
-    const room = await colyseus.createRoom('shard', {
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       ...quickCollapseOptions(300),
     });
@@ -1398,7 +1397,7 @@ describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
   });
 
   it('two players in same room both receive initial state', async () => {
-    const room = await colyseus.createRoom('shard', {
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       ...quickCollapseOptions(300),
     });

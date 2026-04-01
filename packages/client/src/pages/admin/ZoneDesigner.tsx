@@ -30,8 +30,8 @@ export interface ZoneDesignerProps {
 type DesignerMode = "select" | "connect";
 
 const ROOM_TYPE_OPTIONS = [
-  "entry", "corridor", "junction", "dead_end", "extraction", "boss",
-  "feature_stash", "feature_shardboard", "feature_marketplace",
+  "entry", "corridor", "junction", "dead_end", "boss",
+  "feature_stash", "feature_expedition_board", "feature_marketplace",
   "feature_crafting", "feature_training", "feature_contracts", "feature_infirmary",
 ];
 
@@ -46,7 +46,6 @@ const OPPOSITE: Record<string, string> = {
 
 const ROOM_TYPE_COLORS: Record<string, { fill: string; stroke: string }> = {
   entry:       { fill: "#1A3A2A", stroke: "#2D6B4F" },
-  extraction:  { fill: "#1A2A3A", stroke: "#3A6D9B" },
   boss:        { fill: "#3A1A1A", stroke: "#8B2500" },
   junction:    { fill: "#1A3A3A", stroke: "#3A7D7B" },
   corridor:    { fill: "#1C1D27", stroke: "#4A4B55" },
@@ -1761,7 +1760,6 @@ export default function ZoneDesigner({
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1">
                         {([
                           ["entry", "Entry"],
-                          ["extraction", "Extraction"],
                           ["boss", "Boss"],
                           ["junction", "Junction"],
                           ["corridor", "Corridor"],
@@ -2345,11 +2343,9 @@ export default function ZoneDesigner({
                           style={{
                             fontFamily: "var(--font-sans)",
                             color: editForm.type === "boss" ? "#DC2626"
-                              : editForm.type === "extraction" ? "#22C55E"
                               : editForm.type === "entry" ? "#60A5FA"
                               : "#8A8B95",
                             background: editForm.type === "boss" ? "rgba(220,38,38,0.1)"
-                              : editForm.type === "extraction" ? "rgba(34,197,94,0.1)"
                               : editForm.type === "entry" ? "rgba(96,165,250,0.1)"
                               : "rgba(138,139,149,0.1)",
                           }}
@@ -2968,7 +2964,6 @@ export default function ZoneDesigner({
       >
         {[
           { label: "Entry", color: "#2D6B4F" },
-          { label: "Extraction", color: "#3A6D9B" },
           { label: "Boss", color: "#8B2500" },
           { label: "Junction", color: "#3A7D7B" },
           { label: "Corridor", color: "#4A4B55" },

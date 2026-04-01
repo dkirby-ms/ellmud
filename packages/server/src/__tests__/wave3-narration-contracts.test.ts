@@ -32,8 +32,7 @@ function makeContext(overrides: Partial<NarrationContext> = {}): NarrationContex
   return {
     narration_type: 'room_description',
     room: {
-      id: 'shard-w3::room-01',
-      biome: 'flooded_crypt',
+      id: 'zone-w3::room-01',
       light_level: 0.3,
       exits: ['north', 'east'],
       features: ['collapsed_pillar'],
@@ -43,7 +42,7 @@ function makeContext(overrides: Partial<NarrationContext> = {}): NarrationContex
       ],
       hazards: ['knee_deep_water'],
       traces: [],
-      shard_stability: 0.7,
+      zone_stability: 0.7,
     },
     player: {
       hp_pct: 0.85,
@@ -411,8 +410,8 @@ describe('Output Contract Validation — Forbidden Content (Issue #9)', () => {
     expect(result).toContain('Schema keyword');
   });
 
-  it('rejects text with Schema keywords (shard_stability)', () => {
-    expect(validateLLMOutput('The shard_stability is failing.', ctx)).not.toBeNull();
+  it('rejects text with Schema keywords (zone_stability)', () => {
+    expect(validateLLMOutput('The zone_stability is failing.', ctx)).not.toBeNull();
   });
 
   it('rejects text with Schema keywords (awareness_level)', () => {

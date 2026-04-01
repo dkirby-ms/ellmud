@@ -2000,3 +2000,32 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - Creature movement call: `packages/server/src/rooms/ShardRoom.ts` (line 1547-1548)
 - Creature death call: `packages/server/src/rooms/ShardRoom.ts` (line 1627)
 - Test update: `packages/shared/src/__tests__/types.test.ts` (line 52)
+
+---
+
+## Issue #229 — Remove Biome System
+
+**PR:** #246 | **Branch:** `squad/229-remove-biome-system` | **Base:** `dev`
+
+**Task:** Remove the entire biome system (dead code) per GDD update replacing procedurally-generated biomes with hand-crafted zones.
+
+**Scope:** 79 files changed, ~1650 lines removed across shared types, server, and client.
+
+**Key Changes:**
+- Deleted `BiomeType` union type, `flooded-crypt.ts` biome templates, `PgBiomeDefinitionsStore`, admin biome pages (`BiomesList.tsx`, `BiomesDetail.tsx`)
+- Renamed `zones.biome` → `zones.theme` (column retained as thematic tag for zone flavor)
+- Removed biome fields from: shared types (`RoomGraph`, `ShardCardData`, `NarrationRoom`, `RoomSwitchOptions`), server interfaces (state, run-history, exploration, matchmaker, admin), SQL queries, client admin UI
+- Inlined room templates from deleted `flooded-crypt.ts` into `generator.ts`
+- Replaced `BIOME_ATMOSPHERES` map with `DEFAULT_ATMOSPHERE` constants in narrative templates
+- Migration `011_remove_biome_system.sql`: drops `biome_definitions` table, renames zones column, drops biome columns from `narrative_template_definitions`, `creature_definitions`, `run_history`, `character_explored_rooms`
+
+**Verification:**
+- ✅ All 3 packages compile cleanly (`tsc --noEmit`)
+- ✅ All 2268 tests pass (107 test files, 0 failures)
+
+## Learnings
+
+- **Default branch is `dev`**, not `main`. Always base branches and PRs off `dev`.
+- **Migration ordering matters**: Seed migrations (003, 004) reference `zones.biome` column by its original name. Since they run before migration 011 (which renames biome→theme), they must keep the `biome` column name. Don't rename columns in seed migrations retroactively.
+- **`npx tsc --noEmit` from root shows noise**: Stale `dist/` artifacts cause TS6305 errors. Always run per-package to get real errors.
+- **Beware branch switching by other processes**: Another squad agent switched the working directory mid-edit. Always verify `git branch` before committing.

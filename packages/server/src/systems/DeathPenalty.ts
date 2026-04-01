@@ -1,7 +1,7 @@
 /**
- * Shard-Sickness Debuff System — stat penalties for dying in the shard.
+ * Death Penalty Debuff System — stat penalties for dying in a zone (GDD §6.5).
  *
- * When a player dies and returns to Refuge, they receive shard-sickness.
+ * When a player dies and returns to Refuge, they receive a death penalty.
  * Repeated deaths intensify the debuff with diminishing returns.
  *
  * Formula: stat_multiplier = 1 - (MAX_PENALTY * (1 - e^(-STACK_RATE * deathCount)))
@@ -11,8 +11,8 @@
  *   - 5 deaths: ~31.6% reduction
  *   - asymptote: 50% max reduction
  *
- * Shard-sickness persists across shard runs. The persistence layer is abstracted
- * behind ShardSicknessStore — callers provide the death count, this module does math.
+ * Death penalty persists across zone runs. The persistence layer is abstracted
+ * behind DeathPenaltyStore — callers provide the death count, this module does math.
  *
  * Pure game logic — no Colyseus or DB dependency.
  */
@@ -28,13 +28,13 @@ export const MAX_PENALTY = 0.5;
  */
 export const STACK_RATE = 0.2;
 
-/** Duration of shard-sickness in seconds (30 minutes). */
-export const SHARD_SICKNESS_DURATION_S = 1800;
+/** Duration of death penalty in seconds (30 minutes). */
+export const DEATH_PENALTY_DURATION_S = 1800;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export interface ShardSicknessDebuff {
-  /** Number of consecutive/recent deaths contributing to sickness. */
+export interface DeathPenaltyDebuff {
+  /** Number of consecutive/recent deaths contributing to penalty. */
   deathCount: number;
   /** Multiplier applied to all combat stats (0.5–1.0). 1.0 = no penalty. */
   statMultiplier: number;
@@ -52,10 +52,10 @@ export interface CombatStatModifiers {
 }
 
 /**
- * Persistence interface for shard-sickness data.
+ * Persistence interface for death penalty data.
  * Implementations can be in-memory (testing), PostgreSQL (production), etc.
  */
-export interface ShardSicknessStore {
+export interface DeathPenaltyStore {
   /** Get the current death count for a player. */
   getDeathCount(playerId: string): Promise<number>;
   /** Increment and return the new death count. */
@@ -85,7 +85,7 @@ export function calculateStatMultiplier(deathCount: number): number {
 /**
  * Get the full debuff information for a given death count.
  */
-export function getShardSicknessDebuff(deathCount: number): ShardSicknessDebuff {
+export function getDeathPenaltyDebuff(deathCount: number): DeathPenaltyDebuff {
   const multiplier = calculateStatMultiplier(deathCount);
   return {
     deathCount,
@@ -96,10 +96,10 @@ export function getShardSicknessDebuff(deathCount: number): ShardSicknessDebuff 
 }
 
 /**
- * Apply shard-sickness to combat stats.
+ * Apply death penalty to combat stats.
  * Floors each stat to at least 1 (never fully zeroes a stat).
  */
-export function applyShardSickness(
+export function applyDeathPenalty(
   stats: CombatStatModifiers,
   deathCount: number,
 ): CombatStatModifiers {
@@ -113,17 +113,17 @@ export function applyShardSickness(
 }
 
 /**
- * Check if shard-sickness has expired based on last death timestamp.
- * Returns true if the sickness should still be active.
+ * Check if death penalty has expired based on last death timestamp.
+ * Returns true if the penalty should still be active.
  */
-export function isShardSicknessActive(lastDeathTime: number | null, now: number = Date.now()): boolean {
+export function isDeathPenaltyActive(lastDeathTime: number | null, now: number = Date.now()): boolean {
   if (lastDeathTime === null) return false;
-  return (now - lastDeathTime) < SHARD_SICKNESS_DURATION_S * 1000;
+  return (now - lastDeathTime) < DEATH_PENALTY_DURATION_S * 1000;
 }
 
 // ─── In-Memory Store (for testing / Phase 1) ────────────────────────────────
 
-export class InMemoryShardSicknessStore implements ShardSicknessStore {
+export class InMemoryDeathPenaltyStore implements DeathPenaltyStore {
   private deaths = new Map<string, number>();
   private lastDeathTimes = new Map<string, number>();
 

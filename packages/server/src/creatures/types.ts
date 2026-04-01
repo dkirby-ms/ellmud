@@ -1,5 +1,5 @@
 /**
- * Creature type definitions — data model for all shard creatures.
+ * Creature type definitions — data model for all zone creatures.
  *
  * Creatures are Combatants (same combat resolution as players).
  * Behavior state drives deterministic AI decisions each tick.

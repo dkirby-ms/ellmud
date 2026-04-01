@@ -1,7 +1,7 @@
 /**
  * Zone types for hand-crafted, authored room graphs.
  * Zones are persistent, database-driven areas that coexist alongside
- * procedurally generated shards.
+ * procedurally generated zones.
  */
 
 import type {
@@ -11,7 +11,6 @@ import type {
   LootContainer,
   HazardPlaceholder,
 } from './room-graph.js';
-import type { BiomeType } from './index.js';
 
 // ─── Zone Definition ────────────────────────────────────────────────────────
 
@@ -24,7 +23,7 @@ export interface ZoneDefinition {
   levelMin: number;
   levelMax: number;
   tier: number;
-  biome: BiomeType;
+  theme: string;
   entryRoomSlugs: string[];
   lifecycle: 'persistent' | 'scheduled' | 'event';
   category: 'hub' | 'dungeon' | 'wilderness' | 'social';
@@ -86,7 +85,7 @@ export interface ZoneData {
  * Prefix for inter-zone exit target room IDs in a RoomGraph.
  * Format: `zone:{zoneSlug}/{roomSlug}`
  *
- * Downstream code (e.g. ShardRoom navigation) can detect inter-zone exits
+ * Downstream code (e.g. ZoneRoom navigation) can detect inter-zone exits
  * by checking `roomId.startsWith(INTER_ZONE_PREFIX)`.
  */
 export const INTER_ZONE_PREFIX = 'zone:';

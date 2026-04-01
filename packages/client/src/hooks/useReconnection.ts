@@ -29,7 +29,7 @@ export interface UseReconnectionResult {
   reconnectNow: () => void;
   /** Cancel automatic reconnection */
   cancel: () => void;
-  /** Return to refuge (leave shard) */
+  /** Return to refuge (leave zone) */
   returnToRefuge: () => void;
 }
 

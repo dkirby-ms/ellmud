@@ -3,7 +3,7 @@
  * Wires up listeners for every known MessageType so tests don't need boilerplate.
  */
 import { MessageTypes } from '@ellmud/shared';
-import type { NarrateMessage, RoomHeaderMessage, ShardStateMessage, RoomSwitchMessage, ExtractionMessage, PlayerStateMessage } from '@ellmud/shared';
+import type { NarrateMessage, RoomHeaderMessage, ZoneStateMessage, RoomSwitchMessage, OverlayMessage, PlayerStateMessage } from '@ellmud/shared';
 
 export interface CollectedMessage {
   type: string;
@@ -15,9 +15,9 @@ export class MessageCollector {
   readonly all: CollectedMessage[] = [];
   readonly narrate: NarrateMessage[] = [];
   readonly roomHeader: RoomHeaderMessage[] = [];
-  readonly shardState: ShardStateMessage[] = [];
+  readonly zoneState: ZoneStateMessage[] = [];
   readonly roomSwitch: RoomSwitchMessage[] = [];
-  readonly extractionState: ExtractionMessage[] = [];
+  readonly overlayState: OverlayMessage[] = [];
   readonly playerState: PlayerStateMessage[] = [];
 
   constructor(client: { onMessage: (type: string, cb: (data: unknown) => void) => void }) {
@@ -33,10 +33,10 @@ export class MessageCollector {
       this.all.push({ type: MessageTypes.ROOM_HEADER, data: msg, receivedAt: Date.now() });
     });
 
-    client.onMessage(MessageTypes.SHARD_STATE, (data) => {
-      const msg = data as ShardStateMessage;
-      this.shardState.push(msg);
-      this.all.push({ type: MessageTypes.SHARD_STATE, data: msg, receivedAt: Date.now() });
+    client.onMessage(MessageTypes.ZONE_STATE, (data) => {
+      const msg = data as ZoneStateMessage;
+      this.zoneState.push(msg);
+      this.all.push({ type: MessageTypes.ZONE_STATE, data: msg, receivedAt: Date.now() });
     });
 
     client.onMessage(MessageTypes.ROOM_SWITCH, (data) => {
@@ -45,10 +45,10 @@ export class MessageCollector {
       this.all.push({ type: MessageTypes.ROOM_SWITCH, data: msg, receivedAt: Date.now() });
     });
 
-    client.onMessage(MessageTypes.EXTRACTION_STATE, (data) => {
-      const msg = data as ExtractionMessage;
-      this.extractionState.push(msg);
-      this.all.push({ type: MessageTypes.EXTRACTION_STATE, data: msg, receivedAt: Date.now() });
+    client.onMessage(MessageTypes.OVERLAY_STATE, (data) => {
+      const msg = data as OverlayMessage;
+      this.overlayState.push(msg);
+      this.all.push({ type: MessageTypes.OVERLAY_STATE, data: msg, receivedAt: Date.now() });
     });
 
     client.onMessage(MessageTypes.PLAYER_STATE, (data) => {
@@ -79,9 +79,9 @@ export class MessageCollector {
     this.all.length = 0;
     this.narrate.length = 0;
     this.roomHeader.length = 0;
-    this.shardState.length = 0;
+    this.zoneState.length = 0;
     this.roomSwitch.length = 0;
-    this.extractionState.length = 0;
+    this.overlayState.length = 0;
     this.playerState.length = 0;
   }
 }

@@ -16,8 +16,8 @@ export interface Item {
 export type Direction = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
 
 export type RoomType =
-  | 'entry' | 'extraction' | 'boss' | 'corridor' | 'junction' | 'dead_end'
-  | 'feature_stash' | 'feature_shardboard' | 'feature_marketplace'
+  | 'entry' | 'boss' | 'corridor' | 'junction' | 'dead_end'
+  | 'feature_stash' | 'feature_expedition_board' | 'feature_marketplace'
   | 'feature_crafting' | 'feature_training' | 'feature_contracts' | 'feature_infirmary';
 
 export type RoomProperty = 'heavy_door' | 'cavern' | 'water';
@@ -35,7 +35,6 @@ export interface Room {
 export interface RoomGraph {
   rooms: Map<string, Room>;
   startRoomId: string;
-  extractionRoomIds?: string[];
   bossRoomId?: string;
 }
 
@@ -45,7 +44,7 @@ export function createTestRoomGraph(): RoomGraph {
 
   rooms.set('entry', {
     id: 'entry',
-    name: 'Shard Entry',
+    name: 'Rift Entry',
     description:
       'A jagged rift in reality opens into a vaulted stone chamber. The air tastes of copper and old decay. Faint light seeps through cracks in the ceiling.',
     exits: new Map<Direction, string>([
@@ -93,7 +92,7 @@ export function createTestRoomGraph(): RoomGraph {
       ['south', 'corridor'],
     ]),
     items: [
-      { id: 'relic', name: 'anomalous relic', weight: 2, description: 'A humming shard of crystallised void-stuff. Valuable.' },
+      { id: 'relic', name: 'anomalous relic', weight: 2, description: 'A humming fragment of crystallised void-stuff. Valuable.' },
     ],
   });
 
@@ -104,19 +103,19 @@ export function createTestRoomGraph(): RoomGraph {
       'Stone sarcophagi jut from rubble. The ceiling has partially caved in, and dust motes dance in shafts of dim light. A faint scratching echoes from the walls.',
     exits: new Map<Direction, string>([
       ['east', 'corridor'],
-      ['down', 'extraction-chamber'],
+      ['down', 'deep-chamber'],
     ]),
     items: [
       { id: 'bandage', name: 'crude bandage', weight: 0.5, description: 'A strip of cloth that could staunch a wound.' },
     ],
   });
 
-  rooms.set('extraction-chamber', {
-    id: 'extraction-chamber',
-    name: 'Extraction Chamber',
+  rooms.set('deep-chamber', {
+    id: 'deep-chamber',
+    name: 'Deep Chamber',
     description:
-      'A circular chamber thrums with latent energy. Runes carved into the floor pulse with violet light, forming a portal anchor. This is a way out.',
-    type: 'extraction',
+      'A circular chamber thrums with latent energy. Runes carved into the floor pulse with violet light. The air grows thin.',
+    type: 'dead_end',
     exits: new Map<Direction, string>([
       ['up', 'crypt'],
     ]),

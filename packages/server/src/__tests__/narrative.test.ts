@@ -26,8 +26,7 @@ function makeContext(overrides: Partial<NarrationContext> = {}): NarrationContex
   return {
     narration_type: 'room_description',
     room: {
-      id: 'shard-0a3f::room-17',
-      biome: 'flooded_crypt',
+      id: 'zone-0a3f::room-17',
       light_level: 0.3,
       exits: ['north', 'east', 'down'],
       features: ['collapsed_pillar', 'altar_bloodstained'],
@@ -41,7 +40,7 @@ function makeContext(overrides: Partial<NarrationContext> = {}): NarrationContex
       traces: [
         { type: 'footprints', age_seconds: 180, direction: 'east', source: 'player' },
       ],
-      shard_stability: 0.55,
+      zone_stability: 0.55,
     },
     player: {
       hp_pct: 0.72,
@@ -190,7 +189,7 @@ describe('Template Fallback', () => {
     const ctx = makeContext();
     const prose = renderTemplate('room_description', ctx);
     expect(prose.length).toBeGreaterThan(50);
-    // Should contain biome atmosphere
+    // Should contain atmosphere
     expect(prose.toLowerCase()).toContain('water');
     // Should mention exits
     expect(prose.toLowerCase()).toContain('north');
@@ -239,9 +238,9 @@ describe('Template Fallback', () => {
     expect(prose.length).toBeGreaterThan(30);
   });
 
-  it('should describe stability warnings for unstable shards', () => {
+  it('should describe stability warnings for unstable zones', () => {
     const ctx = makeContext();
-    ctx.room.shard_stability = 0.1;
+    ctx.room.zone_stability = 0.1;
     const prose = renderTemplate('room_description', ctx);
     expect(prose.toLowerCase()).toContain('reality');
   });

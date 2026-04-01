@@ -2,11 +2,10 @@ import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
 import { Clock, Users, Key, MapPin } from "lucide-react";
 
-interface Shard {
+interface Zone {
   id: string;
   name: string;
   tier: number;
-  biome: string;
   modifiers: string[];
   players: { current: number; max: number };
   timeRemaining: string;
@@ -28,12 +27,11 @@ interface ZoneListing {
   playerCount?: number;
 }
 
-const mockShards: Shard[] = [
+const mockZones: Zone[] = [
   {
     id: "1",
     name: "Ashen Reach — Flooded Crypt",
     tier: 1,
-    biome: "Flooded Crypt",
     modifiers: ["Dense", "Dark"],
     players: { current: 2, max: 4 },
     timeRemaining: "14m 32s",
@@ -44,7 +42,6 @@ const mockShards: Shard[] = [
     id: "2",
     name: "Hollow Archive — Shattered Bastion",
     tier: 2,
-    biome: "Shattered Bastion",
     modifiers: ["Hunted", "Unstable"],
     players: { current: 1, max: 4 },
     timeRemaining: "8m 15s",
@@ -55,7 +52,6 @@ const mockShards: Shard[] = [
     id: "3",
     name: "Crimson Depths — Fungal Deep",
     tier: 3,
-    biome: "Fungal Deep",
     modifiers: ["Toxic", "Dense", "Dark"],
     players: { current: 0, max: 4 },
     timeRemaining: "22m 45s",
@@ -77,8 +73,8 @@ const getTierColor = (tier: number) => {
   }
 };
 
-interface ShardboardTabProps {
-  onEnterShard?: (shardId: string) => void;
+interface ExpeditionBoardTabProps {
+  onEnterZoneById?: (zoneId: string) => void;
   onEnterZone?: (zoneSlug: string) => void;
 }
 
@@ -92,7 +88,7 @@ const getCategoryStyle = (category: ZoneListing['category']) => {
   }
 };
 
-export default function ShardboardTab({ onEnterShard, onEnterZone }: ShardboardTabProps) {
+export default function ExpeditionBoardTab({ onEnterZoneById, onEnterZone }: ExpeditionBoardTabProps) {
   const navigate = useNavigate();
   const [zones, setZones] = useState<ZoneListing[]>([]);
   const [zonesLoading, setZonesLoading] = useState(true);
@@ -107,11 +103,11 @@ export default function ShardboardTab({ onEnterShard, onEnterZone }: ShardboardT
       .finally(() => setZonesLoading(false));
   }, []);
 
-  const handleEnterShard = (shardId: string) => {
-    if (onEnterShard) {
-      onEnterShard(shardId);
+  const handleEnterZoneById = (zoneId: string) => {
+    if (onEnterZoneById) {
+      onEnterZoneById(zoneId);
     } else {
-      navigate(`/shard/${shardId}`);
+      navigate(`/zone/${zoneId}`);
     }
   };
 
@@ -120,8 +116,8 @@ export default function ShardboardTab({ onEnterShard, onEnterZone }: ShardboardT
       onEnterZone(zoneSlug);
     } else {
       // TODO: Wire to server-side zone join via matchmaker
-      // For now, navigate to shard route with zoneSlug hint
-      navigate(`/shard?zone=${zoneSlug}`);
+      // For now, navigate to zone route with zoneSlug hint
+      navigate(`/zone?zone=${zoneSlug}`);
     }
   };
 
@@ -207,18 +203,18 @@ export default function ShardboardTab({ onEnterShard, onEnterZone }: ShardboardT
         </p>
       )}
 
-      {/* ── Shards — Procedural Expeditions ──────────────────────────────── */}
+      {/* ── Expeditions — Procedural Dungeons ──────────────────────────────── */}
       <h2
         className="text-accent-gold mb-6 font-serif"
         style={{ fontSize: "1.5rem" }}
       >
-        Shardboard
+        Expedition Board
       </h2>
 
       <div className="grid gap-6">
-        {mockShards.map((shard) => (
+        {mockZones.map((zone) => (
           <div
-            key={shard.id}
+            key={zone.id}
             className="bg-bg-panel border border-border-muted rounded-lg p-6 hover:border-accent-gold transition-colors"
           >
             <div className="flex justify-between items-start mb-4">
@@ -227,34 +223,34 @@ export default function ShardboardTab({ onEnterShard, onEnterZone }: ShardboardT
                   className="text-accent-gold mb-2 font-serif"
                   style={{ fontSize: "1.25rem" }}
                 >
-                  {shard.name}
+                  {zone.name}
                 </h3>
                 <div className="flex items-center gap-3">
                   <span
                     className="px-2 py-1 rounded text-xs font-semibold font-sans"
                     style={{
-                      backgroundColor: `color-mix(in srgb, ${getTierColor(shard.tier)} 20%, transparent)`,
-                      color: getTierColor(shard.tier),
+                      backgroundColor: `color-mix(in srgb, ${getTierColor(zone.tier)} 20%, transparent)`,
+                      color: getTierColor(zone.tier),
                     }}
                   >
-                    Tier {shard.tier}
+                    Tier {zone.tier}
                   </span>
                   <span className="text-text-secondary text-sm font-sans">
-                    {shard.biome}
+                    {zone.name}
                   </span>
                 </div>
               </div>
 
               <button
-                onClick={() => handleEnterShard(shard.id)}
+                onClick={() => handleEnterZoneById(zone.id)}
                 className="bg-accent-gold hover:bg-accent-gold/90 text-bg-primary font-medium px-6 py-2 rounded transition-colors font-sans"
               >
-                Enter Shard
+                Enter Expedition
               </button>
             </div>
 
             <div className="flex gap-2 mb-4 flex-wrap">
-              {shard.modifiers.map((mod) => (
+              {zone.modifiers.map((mod) => (
                 <span
                   key={mod}
                   className="px-3 py-1 bg-bg-elevated text-warning text-xs rounded border border-warning/30 font-sans"
@@ -268,21 +264,21 @@ export default function ShardboardTab({ onEnterShard, onEnterZone }: ShardboardT
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-text-secondary" />
                 <span className="text-text-secondary text-sm font-sans">
-                  {shard.players.current}/{shard.players.max} players
+                  {zone.players.current}/{zone.players.max} players
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-text-secondary" />
                 <span className="text-text-secondary text-sm font-sans">
-                  {shard.timeRemaining}
+                  {zone.timeRemaining}
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
                 <Key className="w-4 h-4 text-text-secondary" />
                 <span className="text-text-secondary text-sm font-sans">
-                  {shard.keyType}
+                  {zone.keyType}
                 </span>
               </div>
             </div>
@@ -295,7 +291,7 @@ export default function ShardboardTab({ onEnterShard, onEnterZone }: ShardboardT
                 className="text-text-secondary text-sm italic font-serif"
                 style={{ lineHeight: 1.6 }}
               >
-                {shard.rumor}
+                {zone.rumor}
               </p>
             </div>
           </div>

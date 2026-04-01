@@ -23,11 +23,10 @@ export interface AdminCreatureInfo {
   isAlive: boolean;
 }
 
-export interface AdminShardDetail {
+export interface AdminZoneDetail {
   roomId: string;
   name: string;
   clients: number;
-  biome: string;
   lifecycle: string;
   stability: number;
   collapseTimer: number;
@@ -60,7 +59,7 @@ export interface AdminMetrics {
   timestamp: number;
   rooms: {
     total: number;
-    shards: number;
+    zones: number;
     refuges: number;
     totalPlayers: number;
   };
@@ -85,6 +84,6 @@ export interface AdminMetrics {
 }
 
 export interface AdminSSEEvent {
-  type: 'rooms' | 'metrics' | 'shard_update';
+  type: 'rooms' | 'metrics' | 'zone_update';
   data: unknown;
 }

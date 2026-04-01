@@ -2,9 +2,9 @@
  * Zone System Integration Tests
  *
  * Validates the zone repository, zone-to-RoomGraph adapter, repop logic,
- * inter-zone exit utilities, and (future) zone-based ShardRoom creation.
+ * inter-zone exit utilities, and (future) zone-based ZoneRoom creation.
  *
- * Written against specifications — Drizzt's ShardRoom polymorphism,
+ * Written against specifications — Drizzt's ZoneRoom polymorphism,
  * repop, and inter-zone exit implementations may land later.
  */
 
@@ -41,7 +41,7 @@ function zoneInput(
     levelMin: 1,
     levelMax: 5,
     tier: 1,
-    biome: 'flooded_crypt',
+    theme: 'flooded_crypt',
     entryRoomSlugs: ['entrance'],
     lifecycle: 'persistent',
     category: 'dungeon',
@@ -310,7 +310,7 @@ describe('Zone Adapter Integration (repo → adapter round-trip)', () => {
         name: 'Sunken Temple',
         entryRoomSlugs: ['foyer'],
         tier: 2,
-        biome: 'flooded_crypt',
+        theme: 'flooded_crypt',
       }),
     );
     await repo.createRoom(roomInput(zone.id, 'foyer', { type: 'entry' }));
@@ -329,7 +329,6 @@ describe('Zone Adapter Integration (repo → adapter round-trip)', () => {
     expect(graph.rooms.size).toBe(3);
     expect(graph.entryRoomIds).toEqual(['foyer']);
     expect(graph.bossRoomId).toBe('altar');
-    expect(graph.biome).toBe('flooded_crypt');
     expect(graph.tier).toBe(2);
 
     // Verify exit wiring
@@ -340,30 +339,30 @@ describe('Zone Adapter Integration (repo → adapter round-trip)', () => {
     expect(nave.exits.get('east')).toBe('altar');
   });
 
-  it('multi-room zone with extraction rooms', async () => {
+  it('multi-room zone with boss rooms', async () => {
     const zone = await repo.createZone(
       zoneInput({
         slug: 'fungal-deep',
         entryRoomSlugs: ['shaft'],
-        biome: 'fungal_deep',
+        theme: 'fungal_deep',
       }),
     );
     await repo.createRoom(roomInput(zone.id, 'shaft', { type: 'entry' }));
     await repo.createRoom(roomInput(zone.id, 'cavern', { type: 'corridor' }));
-    await repo.createRoom(roomInput(zone.id, 'spore-vent', { type: 'extraction' }));
+    await repo.createRoom(roomInput(zone.id, 'spore-vent', { type: 'boss' }));
     await repo.createExit(exitInput(zone.id, 'shaft', 'down', 'cavern'));
     await repo.createExit(exitInput(zone.id, 'cavern', 'east', 'spore-vent'));
 
     const bundle = await repo.getZoneBySlug('fungal-deep');
     const graph = convertZoneToRoomGraph(bundle!);
 
-    expect(graph.extractionRoomIds).toEqual(['spore-vent']);
+    expect(graph.bossRoomId).toBe('spore-vent');
     expect(graph.rooms.has('shaft')).toBe(true);
     expect(graph.rooms.has('cavern')).toBe(true);
     expect(graph.rooms.has('spore-vent')).toBe(true);
   });
 
-  it('hub category zone has no extraction or boss rooms', async () => {
+  it('hub category zone has no boss rooms', async () => {
     const zone = await repo.createZone(
       zoneInput({
         slug: 'the-refuge',
@@ -385,7 +384,6 @@ describe('Zone Adapter Integration (repo → adapter round-trip)', () => {
     const graph = convertZoneToRoomGraph(bundle!);
 
     expect(graph.rooms.size).toBe(3);
-    expect(graph.extractionRoomIds).toEqual([]);
     expect(graph.bossRoomId).toBe('');
     expect(graph.entryRoomIds).toEqual(['hearth']);
   });
@@ -551,10 +549,8 @@ describe('Repop Logic (specification-based)', () => {
         ],
       ]),
       entryRoomIds: ['vault'],
-      extractionRoomIds: [],
       bossRoomId: '',
       seed: 42,
-      biome: 'flooded_crypt',
       tier: 1,
     };
 
@@ -596,10 +592,8 @@ describe('Repop Logic (specification-based)', () => {
         ],
       ]),
       entryRoomIds: ['hall'],
-      extractionRoomIds: [],
       bossRoomId: '',
       seed: 42,
-      biome: 'flooded_crypt',
       tier: 1,
     };
 
@@ -646,10 +640,8 @@ describe('Repop Logic (specification-based)', () => {
         ],
       ]),
       entryRoomIds: ['trove'],
-      extractionRoomIds: [],
       bossRoomId: '',
       seed: 42,
-      biome: 'flooded_crypt',
       tier: 1,
     };
 
@@ -692,10 +684,8 @@ describe('Repop Logic (specification-based)', () => {
     const currentGraph: RoomGraph = {
       rooms: new Map(),
       entryRoomIds: [],
-      extractionRoomIds: [],
       bossRoomId: '',
       seed: 42,
-      biome: 'flooded_crypt',
       tier: 1,
     };
 
@@ -789,24 +779,24 @@ describe('Inter-Zone ID Utilities', () => {
   });
 });
 
-// ─── 5. Zone-Based ShardRoom Creation Test ──────────────────────────────
+// ─── 5. Zone-Based ZoneRoom Creation Test ──────────────────────────────
 
-describe('Zone-Based ShardRoom Creation', () => {
+describe('Zone-Based ZoneRoom Creation', () => {
   /**
-   * TODO: Once Drizzt lands ShardRoom polymorphism (zone-based room creation),
+   * TODO: Once Drizzt lands ZoneRoom polymorphism (zone-based room creation),
    * this test should:
    * 1. Create a zone in InMemoryZoneRepository
-   * 2. Boot a test server with ShardRoom defined
+   * 2. Boot a test server with ZoneRoom defined
    * 3. Create a room with { zoneSlug: 'test-zone' } option
    * 4. Verify the room graph was loaded from the zone (not procedural)
    *
-   * Blocked on: ShardRoom zone integration (no zoneSlug option support yet).
+   * Blocked on: ZoneRoom zone integration (no zoneSlug option support yet).
    * When ready, use the bootTestServer / connectTestClient helpers from
    * packages/server/src/__tests__/helpers/test-client.ts
    */
 
   it.todo(
-    'creates a ShardRoom from zone data when zoneSlug option is provided',
+    'creates a ZoneRoom from zone data when zoneSlug option is provided',
   );
 
   it.todo(
@@ -818,41 +808,39 @@ describe('Zone-Based ShardRoom Creation', () => {
   );
 
   // These tests CAN run now — they validate the zone loading pipeline
-  // that ShardRoom will use internally.
+  // that ZoneRoom will use internally.
 
-  it('zone loading pipeline: repo → bundle → RoomGraph ready for ShardRoom', async () => {
+  it('zone loading pipeline: repo → bundle → RoomGraph ready for ZoneRoom', async () => {
     const repo = new InMemoryZoneRepository();
 
     const zone = await repo.createZone(
       zoneInput({
-        slug: 'test-shard-zone',
+        slug: 'test-zone-slug',
         entryRoomSlugs: ['start'],
         tier: 2,
-        biome: 'shattered_bastion',
+        theme: 'shattered_bastion',
       }),
     );
     await repo.createRoom(roomInput(zone.id, 'start', { type: 'entry' }));
     await repo.createRoom(roomInput(zone.id, 'mid', { type: 'corridor' }));
     await repo.createRoom(roomInput(zone.id, 'boss-lair', { type: 'boss' }));
-    await repo.createRoom(roomInput(zone.id, 'escape', { type: 'extraction' }));
+    await repo.createRoom(roomInput(zone.id, 'escape', { type: 'dead_end' }));
     await repo.createExit(exitInput(zone.id, 'start', 'north', 'mid'));
     await repo.createExit(exitInput(zone.id, 'mid', 'south', 'start'));
     await repo.createExit(exitInput(zone.id, 'mid', 'east', 'boss-lair'));
     await repo.createExit(exitInput(zone.id, 'boss-lair', 'west', 'mid'));
     await repo.createExit(exitInput(zone.id, 'mid', 'up', 'escape'));
 
-    const bundle = await repo.getZoneBySlug('test-shard-zone');
+    const bundle = await repo.getZoneBySlug('test-zone-slug');
     expect(bundle).not.toBeNull();
 
     const graph = convertZoneToRoomGraph(bundle!);
 
-    // ShardRoom expects these properties from the graph
+    // ZoneRoom expects these properties from the graph
     expect(graph.rooms.size).toBe(4);
     expect(graph.entryRoomIds).toContain('start');
-    expect(graph.extractionRoomIds).toContain('escape');
     expect(graph.bossRoomId).toBe('boss-lair');
     expect(graph.seed).toBeGreaterThan(0);
-    expect(graph.biome).toBe('shattered_bastion');
     expect(graph.tier).toBe(2);
 
     // Verify all rooms have valid structure

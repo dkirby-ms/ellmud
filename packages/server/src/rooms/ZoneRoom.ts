@@ -4,12 +4,11 @@ import {
   type NarrateMessage,
   type RoomHeaderMessage,
   type RoomSwitchMessage,
-  type ShardState as SharedShardState,
-  type ShardStateMessage,
+  type ZoneState as SharedZoneState,
+  type ZoneStateMessage,
   type StashItem,
-  type BiomeType,
-  type ShardTier,
-  type ExtractionMessage,
+  type ZoneTier,
+  type OverlayMessage,
   type PvPKillEvent,
   type EquipItemMessage,
   type UnequipItemMessage,
@@ -21,24 +20,24 @@ import {
   type ExplorationDataMessage,
   type ExplorationUpdateMessage,
   type RoomOccupantsMessage,
-  SHARD_SICKNESS_DEFAULTS,
+  DEATH_PENALTY_DEFAULTS,
   OPPOSITE_DIRECTION,
   MessageTypes,
 } from '@ellmud/shared';
-import { ShardState } from '../state.js';
+import { ZoneState } from '../state.js';
 import { parseCommand } from '../commands/parser.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
-import { createTestRoomGraph, type RoomGraph, type Direction } from '../shard/RoomGraph.js';
-import { generateShardGraph } from '../shard/generator.js';
-import { adaptRoomGraph } from '../shard/graph-adapter.js';
+import { createTestRoomGraph, type RoomGraph, type Direction } from '../zone/RoomGraph.js';
+import { generateZoneGraph } from '../zone/generator.js';
+import { adaptRoomGraph } from '../zone/graph-adapter.js';
 import { handleLook } from '../commands/handlers/look.js';
 import { CombatSystem, type TickResult, createCombatant } from '../combat/index.js';
 import { SoundSystem } from '../sound/index.js';
 import { TraceSystem } from '../systems/index.js';
 import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
 import { DowningSystem, type DowningEvent } from '../systems/DowningSystem.js';
-import { type ShardSicknessStore, getShardSicknessStore } from '../systems/index.js';
+import { type DeathPenaltyStore, getDeathPenaltyStore } from '../systems/index.js';
 import {
   NOISE_VALUES,
   SOUND_DESCRIPTIONS,
@@ -46,15 +45,14 @@ import {
   BLOOD_TRAIL_DAMAGE_THRESHOLD,
   TRACKING_THRESHOLDS,
 } from '@ellmud/shared';
-import { ExtractionSystem } from '../extraction/index.js';
 import { authenticateClient } from '../auth/colyseus-auth.js';
 import { getConfig, getMaxPlayersForTier } from '../config.js';
 import { StashService, InMemoryStashRepository, getStashRepository, getItemDefs } from '../stash/index.js';
 import type { StashRepository } from '../stash/index.js';
-import { transferInventoryToStash } from '../extraction/stash-transfer.js';
+import { transferInventoryToStash } from '../systems/stash-transfer.js';
 import { CreatureManager, DROWNED_REVENANT, type CreatureAction } from '../creatures/index.js';
 import type { CreatureWorldState } from '../creatures/behavior.js';
-import { createPRNG } from '../shard/prng.js';
+import { createPRNG } from '../zone/prng.js';
 import {
   type PlayerProfileRepository,
   InMemoryPlayerProfileRepository,
@@ -72,7 +70,7 @@ import { getZoneRepository } from '../zones/index.js';
 import type { ZoneData } from '../zones/index.js';
 import { convertZoneToRoomGraph } from '../zones/zone-adapter.js';
 import { getItemDefinition } from '../items/registry.js';
-import type { Item } from '../shard/RoomGraph.js';
+import type { Item } from '../zone/RoomGraph.js';
 import type { ExplorationRepository } from '../exploration/index.js';
 import { getExplorationRepository } from '../exploration/index.js';
 import type { CharacterRepository } from '../character/index.js';
@@ -80,12 +78,12 @@ import { InMemoryCharacterRepository, getCharacterRepository } from '../characte
 
 const TICK_INTERVAL_MS = 1000;
 
-interface ShardRoomOptions {
-  state: ShardState;
+interface ZoneRoomOptions {
+  state: ZoneState;
 }
 
 /**
- * ShardRoom — A procedurally generated shard instance.
+ * ZoneRoom — A procedurally generated zone instance.
  *
  * Lifecycle: Seeding → Open → Active → Destabilising → Collapse
  *
@@ -94,8 +92,8 @@ interface ShardRoomOptions {
  * - All client communication uses room.send() with typed messages.
  * - The client is a dumb terminal receiving narrated prose only.
  */
-export class ShardRoom extends Room<ShardRoomOptions> {
-  private lifecycle: SharedShardState = 'seeding';
+export class ZoneRoom extends Room<ZoneRoomOptions> {
+  private lifecycle: SharedZoneState = 'seeding';
   private collapseTimerSeconds = 1200; // 20 minutes default
   private openDelayMs = 1000;
   private roomGraph!: RoomGraph;
@@ -110,19 +108,18 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private traceSystem!: TraceSystem;
   private awarenessSystem!: AwarenessSystem;
   private downingSystem!: DowningSystem;
-  private shardSicknessStore!: ShardSicknessStore;
-  private extractionSystem!: ExtractionSystem;
+  private deathPenaltyStore!: DeathPenaltyStore;
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
   private loadoutService?: LoadoutService;
   private itemDefs = new Map<string, StashItem>();
-  private shardTier: ShardTier = 1;
+  private zoneTier: ZoneTier = 1;
   private profileRepo: PlayerProfileRepository = new InMemoryPlayerProfileRepository();
   private factionRepo: FactionRepository = new InMemoryFactionRepository();
   private runHistoryRepo: RunHistoryRepository = new InMemoryRunHistoryRepository();
   private characterRepo: CharacterRepository = new InMemoryCharacterRepository();
   private explorationRepo: ExplorationRepository = getExplorationRepository();
-  /** Tracks when each player joined the shard (for run duration calculation). */
+  /** Tracks when each player joined the zone (for run duration calculation). */
   private playerJoinTimes = new Map<string, number>();
   /** Maps playerId → character name for log formatting. */
   private characterNames = new Map<string, string>();
@@ -186,21 +183,18 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   async onCreate(options: Record<string, unknown>): Promise<void> {
     // Initialize server-internal state (never sent to clients)
-    this.setState(new ShardState());
-    this.state.shardId = this.roomId;
+    this.setState(new ZoneState());
+    this.state.zoneId = this.roomId;
     
     // Parse tier first (needed for max players)
     if (typeof options['tier'] === 'number' && [1, 2, 3].includes(options['tier'])) {
-      this.shardTier = options['tier'] as ShardTier;
+      this.zoneTier = options['tier'] as ZoneTier;
     }
-    this.state.tier = this.shardTier;
+    this.state.tier = this.zoneTier;
     
     // Set tier-based max players
-    this.maxClients = getMaxPlayersForTier(this.shardTier, getConfig());
+    this.maxClients = getMaxPlayersForTier(this.zoneTier, getConfig());
 
-    if (typeof options['biome'] === 'string') {
-      this.state.biome = options['biome'];
-    }
     if (typeof options['collapseTimer'] === 'number') {
       this.collapseTimerSeconds = options['collapseTimer'];
     }
@@ -228,8 +222,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         const sharedGraph = convertZoneToRoomGraph(zoneData);
         this.roomGraph = adaptRoomGraph(sharedGraph);
         this.entryRoomIds = sharedGraph.entryRoomIds;
-        this.shardTier = sharedGraph.tier;
-        this.state.biome = sharedGraph.biome;
+        this.zoneTier = sharedGraph.tier;
       } else if (options['zoneSlug'] === 'the-refuge') {
         // B7: Fallback hardcoded graph when DB zone data is missing
         this.roomGraph = createFallbackRefugeGraph();
@@ -258,8 +251,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.entryRoomIds = [this.roomGraph.startRoomId]; // Test graph has single entry
     } else {
       const seed = typeof options['seed'] === 'number' ? options['seed'] : Date.now();
-      const biome = (typeof options['biome'] === 'string' ? options['biome'] : 'flooded_crypt') as BiomeType;
-      const sharedGraph = generateShardGraph({ tier: this.shardTier, biome, seed });
+      const sharedGraph = generateZoneGraph({ tier: this.zoneTier, seed });
       this.roomGraph = adaptRoomGraph(sharedGraph);
       this.entryRoomIds = sharedGraph.entryRoomIds; // Store all entry points
 
@@ -289,10 +281,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Initialize downing system (GDD §6.4 — bleed-out timers, stabilization)
     this.downingSystem = new DowningSystem();
-    this.shardSicknessStore = getShardSicknessStore();
-
-    // Initialize extraction system (default 5-tick channel)
-    this.extractionSystem = new ExtractionSystem();
+    this.deathPenaltyStore = getDeathPenaltyStore();
 
     // Initialize stash with shared provider if not already injected
     if (!this.stashService) {
@@ -329,7 +318,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       this.handleCommandMessage(client, message);
     });
 
-    // Equipment message handlers (server-authoritative — players can equip mid-shard)
+    // Equipment message handlers (server-authoritative — players can equip mid-zone)
     this.onMessage(MessageTypes.EQUIP_ITEM, (client: Client, message: EquipItemMessage) => {
       void this.handleEquipItem(client, message);
     });
@@ -347,20 +336,20 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     this.updateMetadata();
 
-    this.log(`ShardRoom created: ${this.roomId} (biome=${this.state.biome}, tier=${this.shardTier}${this.isZone ? `, zone=${this.zoneSlug}` : ''})`);
+    this.log(`ZoneRoom created: ${this.roomId} (tier=${this.zoneTier}${this.isZone ? `, zone=${this.zoneSlug}` : ''})`);
 
     // Start repop timer for zone-based rooms
     if (this.isZone) {
       this.startRepopTimer();
     }
 
-    // Begin lifecycle: zones stay 'open', shards follow seeding→active→collapse flow
+    // Begin lifecycle: zones stay 'open', zones follow seeding→active→collapse flow
     if (this.isZone) {
       this.transitionTo('open');
       this.log('Zone initialized: persistent open state (no collapse)');
     } else {
       this.transitionTo('seeding');
-      this.seedShard();
+      this.seedZone();
     }
   }
 
@@ -398,9 +387,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       // Player is already counted — don't increment again
     } else {
       // Enforce tier-based max players (only for genuinely new players)
-      const maxPlayers = this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig());
+      const maxPlayers = this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig());
       if (this.state.playerCount >= maxPlayers) {
-        throw new Error(`Shard is full (${maxPlayers}/${maxPlayers} players).`);
+        throw new Error(`Instance is full (${maxPlayers}/${maxPlayers} players).`);
       }
       this.state.playerCount++;
     }
@@ -445,7 +434,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Track join time for run duration calculation
     this.playerJoinTimes.set(playerId, Date.now());
 
-    // Determine entry room based on zone vs shard
+    // Determine entry room based on zone vs instance
     let startRoom: string;
     if (this.isZone) {
       const targetRoom = options['targetRoomSlug'];
@@ -455,7 +444,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         startRoom = this.roomGraph.startRoomId;
       }
     } else {
-      // Shards: distribute players across entry points for spatial separation
+      // Procedural: distribute players across entry points for spatial separation
       const entryIndex = (this.state.playerCount - 1) % this.entryRoomIds.length;
       startRoom = this.entryRoomIds[entryIndex] || this.roomGraph.startRoomId;
     }
@@ -470,11 +459,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     );
     this.players.set(playerId, playerState);
 
-    this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig())} players)`);
+    this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig())} players)`);
 
     // Send initial system narration
     this.sendNarrate(client, {
-      text: 'You step through the rift into a shard of the dying world...',
+      text: 'You step through the rift into a fragment of the dying world...',
       type: 'system',
       timestamp: Date.now(),
     });
@@ -490,7 +479,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Send initial room occupants
     this.sendRoomOccupants(client, playerId, startRoom);
 
-    this.sendShardState(client, {
+    this.sendZoneState(client, {
       state: this.lifecycle,
       collapseTimer: this.state.collapseTimer,
     });
@@ -543,7 +532,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
         // Send reconnection confirmation
         this.sendNarrate(client, {
-          text: 'Reconnected to the shard.',
+          text: 'Reconnected to the instance.',
           type: 'system',
           timestamp: Date.now(),
         });
@@ -563,13 +552,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
 
     // Clean up player (consented leave or timeout expired)
-    this.extractionSystem.interruptExtraction(playerId, 'you left the shard');
     this.downingSystem.removePlayer(playerId);
     if (this.players.has(playerId)) {
       // Persist player profile (skills, stats) before cleanup
       await this.savePlayerProfile(playerId, this.players.get(playerId)!);
 
-      // Record non-extraction run (player left or timed out)
+      // Record run (player left or timed out)
       await this.recordRunHistory(playerId, this.players.get(playerId), false);
 
       this.state.playerCount = Math.max(0, this.state.playerCount - 1);
@@ -597,7 +585,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       return;
     }
 
-    // Shards apply death behavior based on config
+    // Zones apply death behavior based on config
     const config = getConfig();
     const combatant = this.combatSystem.getCombatant(playerId);
 
@@ -627,7 +615,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     if (this.repopTimer) {
       clearInterval(this.repopTimer);
     }
-    this.log(`ShardRoom disposed: ${this.roomId}`);
+    this.log(`ZoneRoom disposed: ${this.roomId}`);
   }
 
   // ─── Zone Repop System ──────────────────────────────────────────────────────
@@ -702,7 +690,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private update(_deltaTime: number): void {
     this.state.tick++;
 
-    // Hub/social zones skip collapse, combat, and extraction ticking
+    // Hub/social zones skip collapse and combat ticking
     const isNonCombatZone = this.isZone && this.zoneData &&
       (this.zoneData.zone.category === 'hub' || this.zoneData.zone.category === 'social');
 
@@ -740,34 +728,6 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
       // Create blood trail traces for combat damage
       this.createCombatTraces(tickResult);
-
-      // Check if any extracting players took damage — interrupt their channels
-      for (const event of tickResult.events) {
-        if (event.type === 'strike' && event.targetId) {
-          if (this.extractionSystem.isExtracting(event.targetId)) {
-            const narration = this.extractionSystem.interruptExtraction(
-              event.targetId, 'you were struck by an enemy',
-            );
-            if (narration) {
-              const client = this.findClient(event.targetId);
-              if (client) {
-                this.sendNarrate(client, { text: narration, type: 'system', timestamp: Date.now() });
-                this.sendExtractionState(client, {
-                  playerId: event.targetId,
-                  state: 'interrupted',
-                  narration,
-                  timestamp: Date.now(),
-                });
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // Resolve extraction ticks (skip for hub/social zones)
-    if (!isNonCombatZone) {
-      this.tickExtractions();
     }
 
     // Tick downing system — bleed-out timers, stabilize channels
@@ -779,11 +739,11 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     this.traceSystem.tick(TICK_INTERVAL_MS);
   }
 
-  // ─── Shard Lifecycle ─────────────────────────────────────────────────────
+  // ─── Zone Lifecycle ─────────────────────────────────────────────────────
 
-  private seedShard(): void {
+  private seedZone(): void {
     // Placeholder: room graph generation, creature spawning, loot placement
-    this.log('Seeding shard: generating room graph...');
+    this.log('Seeding zone: generating room graph...');
 
     const scheduleActiveTransition = () => {
       this.clock.setTimeout(() => {
@@ -806,7 +766,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }, this.openDelayMs); // Shortened for dev; production = seeding duration
   }
 
-  private transitionTo(newState: SharedShardState): void {
+  private transitionTo(newState: SharedZoneState): void {
     const previousState = this.lifecycle;
     this.lifecycle = newState;
     this.state.lifecycle = newState;
@@ -815,10 +775,10 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     this.log(`Lifecycle: ${previousState} → ${newState}`);
 
     // Notify all clients of state change
-    this.broadcast(MessageTypes.SHARD_STATE, {
+    this.broadcast(MessageTypes.ZONE_STATE, {
       state: newState,
       collapseTimer: this.state.collapseTimer,
-    } satisfies ShardStateMessage);
+    } satisfies ZoneStateMessage);
 
     if (newState === 'collapse') {
       this.handleCollapse();
@@ -826,31 +786,15 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
   private handleCollapse(): void {
-    // Interrupt all active extractions
-    const interrupted = this.extractionSystem.interruptAll('the shard collapsed');
-
-    // Clear all traces on shard collapse
+    // Clear all traces on zone collapse
     this.traceSystem.clear();
 
-    // Clear downing state on shard collapse
+    // Clear downing state on zone collapse
     this.downingSystem.clear();
 
-    // Send EXTRACTION_STATE 'interrupted' to each affected player
-    for (const { playerId, narration } of interrupted) {
-      const client = this.findClient(playerId);
-      if (client) {
-        this.sendExtractionState(client, {
-          playerId,
-          state: 'interrupted',
-          narration,
-          timestamp: Date.now(),
-        });
-      }
-    }
-
-    // Shard-sickness narration for all remaining players
+    // Death penalty narration for all remaining players
     this.broadcast(MessageTypes.NARRATE, {
-      text: 'The shard shatters. Reality folds in on itself. Everything goes dark. A deep sickness settles into your bones — shard-sickness consumes you.',
+      text: 'The dungeon shatters. Reality folds in on itself. Everything goes dark. A creeping weakness takes hold — the death penalty bears down upon you.',
       type: 'system',
       timestamp: Date.now(),
     } satisfies NarrateMessage);
@@ -869,11 +813,10 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }));
 
     this.setMetadata({
-      biome: this.state.biome,
       tier: this.state.tier,
       lifecycle: this.lifecycle,
       playerCount: this.state.playerCount,
-      maxPlayers: this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig()),
+      maxPlayers: this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig()),
       players: playerList,
       ...(this.isZone ? { zoneSlug: this.zoneSlug, zoneName: this.zoneData?.zone.name } : {}),
     });
@@ -886,7 +829,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     const player = this.players.get(playerId);
     if (!player) {
       this.sendNarrate(client, {
-        text: 'Your presence flickers. You are not fully in this shard.',
+        text: 'Your presence flickers. You are not fully in this zone.',
         type: 'system',
         timestamp: Date.now(),
       });
@@ -931,7 +874,6 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
 
     const previousRoomId = player.currentRoomId;
-    const wasExtracting = this.extractionSystem.isExtracting(playerId);
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
 
@@ -993,19 +935,6 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     if (movedRoom || verb === 'look') {
       this.sendTraceNarrations(client, player.currentRoomId);
     }
-
-    // Send EXTRACTION_STATE 'started' if this command initiated an extraction
-    if (!wasExtracting && this.extractionSystem.isExtracting(playerId)) {
-      const channel = this.extractionSystem.getChannel(playerId)!;
-      this.sendExtractionState(client, {
-        playerId,
-        state: 'started',
-        totalTicks: channel.totalTicks,
-        ticksRemaining: channel.ticksRemaining,
-        narration: result.narrations[0]?.text ?? 'The extraction ritual begins...',
-        timestamp: Date.now(),
-      });
-    }
   }
 
   private buildCommandContext(player: PlayerState, args: string[]): CommandContext {
@@ -1029,7 +958,6 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       stability: this.state.stability,
       characterName: this.characterNames.get(player.sessionId),
       combatSystem: this.combatSystem,
-      extractionSystem: this.extractionSystem,
       downingSystem: this.downingSystem,
       creaturesInRoom,
       resolveCreaturesInRoom: (roomId: string) =>
@@ -1193,8 +1121,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     return undefined;
   }
 
-  private sendExtractionState(client: Client, msg: ExtractionMessage): void {
-    client.send(MessageTypes.EXTRACTION_STATE, msg);
+  private sendOverlayState(client: Client, msg: OverlayMessage): void {
+    client.send(MessageTypes.OVERLAY_STATE, msg);
   }
 
   // ─── Sound Propagation (GDD §12) ─────────────────────────────────────────
@@ -1273,79 +1201,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
 
-  // ─── Extraction Tick Delivery ─────────────────────────────────────────────
-
-  private tickExtractions(): void {
-    for (const playerId of this.extractionSystem.getActiveExtractions()) {
-      const result = this.extractionSystem.tickExtraction(playerId);
-      if (!result) continue;
-
-      const client = this.findClient(playerId);
-      if (!client) {
-        this.extractionSystem.interruptExtraction(playerId, 'player disconnected');
-        continue;
-      }
-
-      this.sendNarrate(client, {
-        text: result.narration,
-        type: 'system',
-        timestamp: Date.now(),
-      });
-
-      if (result.completed) {
-        this.handleSuccessfulExtraction(client, playerId);
-      } else {
-        // Send progress update so the client can track channel state
-        const channel = this.extractionSystem.getChannel(playerId);
-        this.sendExtractionState(client, {
-          playerId,
-          state: 'progress',
-          ticksRemaining: channel?.ticksRemaining,
-          totalTicks: channel?.totalTicks,
-          narration: result.narration,
-          timestamp: Date.now(),
-        });
-      }
-    }
-  }
-
-  private async handleSuccessfulExtraction(client: Client, playerId: string): Promise<void> {
-    const player = this.players.get(playerId);
-
-    // Transfer inventory to stash before removing player
-    if (player && this.stashService) {
-      await this.transferToStash(client, playerId, player);
-    }
-
-    // Record run history
-    await this.recordRunHistory(playerId, player, true);
-
-    // Remove player from shard
-    this.players.delete(playerId);
-    this.combatSystem.removeCombatant(playerId);
-    this.ownerPlayerIds.delete(playerId);
-    this.state.playerCount = Math.max(0, this.state.playerCount - 1);
-    this.updateMetadata();
-
-    this.log(`Player ${this.playerTag(playerId)} extracted`);
-
-    // Send extraction completion message
-    client.send(MessageTypes.EXTRACTION_STATE, {
-      playerId,
-      state: 'completed',
-      narration: 'You emerge from the portal into the warm glow of the Refuge. You made it out.',
-      timestamp: Date.now(),
-    });
-
-    // Tell client to switch back to refuge
-    client.send(MessageTypes.ROOM_SWITCH, {
-      target: 'zone:the-refuge',
-      reason: 'extraction_complete',
-    } satisfies RoomSwitchMessage);
-  }
-
   /**
-   * Transfer a player's shard inventory into their persistent stash.
+   * Transfer a player's zone inventory into their persistent stash.
    * Items that don't fit remain in the player's carried inventory.
    */
   private async transferToStash(
@@ -1664,7 +1521,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       // Notify the downed player
       const client = this.findClient(playerId);
       if (client) {
-        this.sendExtractionState(client, {
+        this.sendOverlayState(client, {
           playerId,
           state: 'downed',
           narration: 'You collapse, gravely wounded. Your vision darkens at the edges…',
@@ -1747,7 +1604,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   /**
    * Handle actual player death (from bleed-out or killing blow).
-   * Drops inventory, creates corpse trace, applies shard-sickness on PvP death,
+   * Drops inventory, creates corpse trace, applies death penalty,
    * emits PvPKillEvent, and schedules return to refuge.
    */
   private handlePlayerDeath(playerId: string, playerName: string, roomId: string, killerIds?: string[]): void {
@@ -1785,18 +1642,18 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       actorName: playerName,
     });
 
-    // Apply shard-sickness death penalty (increment death count, record time)
-    void this.shardSicknessStore.incrementDeathCount(playerId).then((newCount: number) => {
-      void this.shardSicknessStore.setLastDeathTime(playerId, Date.now());
-      this.log(`Shard-sickness: ${this.playerTag(playerId)} death count now ${newCount}`);
+    // Apply death penalty (increment death count, record time)
+    void this.deathPenaltyStore.incrementDeathCount(playerId).then((newCount: number) => {
+      void this.deathPenaltyStore.setLastDeathTime(playerId, Date.now());
+      this.log(`Death penalty: ${this.playerTag(playerId)} death count now ${newCount}`);
     });
 
-    // Apply shard-sickness debuff to player state (on any death)
-    player.shardSickness = {
+    // Apply death penalty debuff to player state (on any death)
+    player.deathPenalty = {
       appliedAt: Date.now(),
-      durationMs: SHARD_SICKNESS_DEFAULTS.durationMs,
-      attackPenalty: SHARD_SICKNESS_DEFAULTS.attackPenalty,
-      defencePenalty: SHARD_SICKNESS_DEFAULTS.defencePenalty,
+      durationMs: DEATH_PENALTY_DEFAULTS.durationMs,
+      attackPenalty: DEATH_PENALTY_DEFAULTS.attackPenalty,
+      defencePenalty: DEATH_PENALTY_DEFAULTS.defencePenalty,
     };
 
     // Log PvPKillEvent for each player killer on PvP death
@@ -1835,12 +1692,12 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Send death state to the defeated player
     const client = this.findClient(playerId);
     if (client) {
-      this.sendExtractionState(client, {
+      this.sendOverlayState(client, {
         playerId,
         state: 'death',
         narration: isPvPKill
-          ? 'A rival adventurer fells you. You awaken in the Refuge, wracked with shard-sickness…'
-          : 'The darkness claims you. You awaken in the Refuge, weakened by shard-sickness…',
+          ? 'A rival adventurer fells you. You awaken in the Refuge, bearing the death penalty…'
+          : 'The darkness claims you. You awaken in the Refuge, weakened by the death penalty…',
         timestamp: Date.now(),
       });
 
@@ -1861,7 +1718,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
           reason: 'player_death',
         } satisfies RoomSwitchMessage);
 
-        // Clean up player from shard state
+        // Clean up player from zone state
         this.players.delete(playerId);
         this.ownerPlayerIds.delete(playerId);
         this.state.playerCount = Math.max(0, this.state.playerCount - 1);
@@ -1881,7 +1738,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private handlePlayerStabilized(event: DowningEvent): void {
     const targetClient = this.findClient(event.playerId);
     if (targetClient) {
-      this.sendExtractionState(targetClient, {
+      this.sendOverlayState(targetClient, {
         playerId: event.playerId,
         state: 'stabilized',
         narration: 'You feel firm hands stemming the bleeding. The darkness recedes, but you remain unconscious…',
@@ -1984,8 +1841,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     client.send(MessageTypes.ROOM_HEADER, message);
   }
 
-  private sendShardState(client: Client, message: ShardStateMessage): void {
-    client.send(MessageTypes.SHARD_STATE, message);
+  private sendZoneState(client: Client, message: ZoneStateMessage): void {
+    client.send(MessageTypes.ZONE_STATE, message);
   }
 
   // ─── Exploration Messages ─────────────────────────────────────────────────
@@ -2050,8 +1907,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       roomId,
       roomType: roomData.roomType,
       roomName: roomData.roomName,
-      shardTier: this.shardTier,
-      biome: this.state.biome,
+      zoneTier: this.zoneTier,
     }).catch((err) => {
       this.log(`Failed to record exploration visit for ${this.playerTag(playerId)}: ${err}`);
     });
@@ -2115,7 +1971,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   // ─── Run History Persistence ────────────────────────────────────────────
 
-  /** Record a shard run when a player extracts or the shard collapses. */
+  /** Record a zone run when a player extracts or the zone collapses. */
   private async recordRunHistory(
     playerId: string,
     player: PlayerState | undefined,
@@ -2130,8 +1986,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       const run: RunRecord = {
         runId: this.roomId,
         playerId: this.dbPlayerId(playerId),
-        shardTier: this.shardTier,
-        biome: (this.state.biome as BiomeType) || null,
+        zoneTier: this.zoneTier,
         durationSec,
         extracted,
         extractedItems: player
@@ -2150,7 +2005,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     }
   }
 
-  // ─── Equipment Message Handlers (Server-Authoritative — Mid-Shard) ────
+  // ─── Equipment Message Handlers (Server-Authoritative — Mid-Zone) ────
 
   private async handleEquipItem(client: Client, message: EquipItemMessage): Promise<void> {
     const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
@@ -2165,32 +2020,22 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       return;
     }
 
-    // Check extraction lock
-    if (this.extractionSystem.isExtracting(client.sessionId)) {
-      client.send(MessageTypes.NARRATE, {
-        text: 'Cannot change equipment while extracting!',
-        type: 'system',
-        timestamp: Date.now(),
-      } satisfies NarrateMessage);
-      return;
-    }
-
     try {
-      // First try stash, then shard inventory
+      // First try stash, then zone inventory
       const result = await this.loadoutService.equipItem(this.dbPlayerId(playerId), message.itemId, message.targetSlot);
 
       if (!result.ok) {
-        // Try equipping from shard inventory
+        // Try equipping from zone inventory
         const invEntry = this.findInInventory(player, message.itemId);
         if (invEntry) {
           const invItem = this.toStashItemInstance(invEntry);
           const invResult = await this.loadoutService.equipFromInventory(this.dbPlayerId(playerId), invItem, message.targetSlot);
 
           if (invResult.ok) {
-            // Remove from shard inventory
+            // Remove from zone inventory
             player.inventory.delete(invEntry.item.id);
 
-            // If displaced item, add it back to shard inventory
+            // If displaced item, add it back to zone inventory
             if (invResult.displaced) {
               const displacedDef = this.itemDefs.get(invResult.displaced.itemId);
               if (displacedDef) {
@@ -2203,7 +2048,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
               }
             }
 
-            await this.sendShardLoadoutUpdate(client, playerId);
+            await this.sendZoneLoadoutUpdate(client, playerId);
             client.send(MessageTypes.NARRATE, {
               text: `Equipped from inventory to ${message.targetSlot}.`,
               type: 'system',
@@ -2228,7 +2073,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         return;
       }
 
-      await this.sendShardLoadoutUpdate(client, playerId);
+      await this.sendZoneLoadoutUpdate(client, playerId);
       client.send(MessageTypes.NARRATE, {
         text: `Item equipped to ${message.targetSlot}.`,
         type: 'system',
@@ -2256,15 +2101,6 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       return;
     }
 
-    if (this.extractionSystem.isExtracting(client.sessionId)) {
-      client.send(MessageTypes.NARRATE, {
-        text: 'Cannot change equipment while extracting!',
-        type: 'system',
-        timestamp: Date.now(),
-      } satisfies NarrateMessage);
-      return;
-    }
-
     try {
       const result = await this.loadoutService.unequipItem(this.dbPlayerId(playerId), message.slot);
 
@@ -2277,7 +2113,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         return;
       }
 
-      await this.sendShardLoadoutUpdate(client, playerId);
+      await this.sendZoneLoadoutUpdate(client, playerId);
       client.send(MessageTypes.NARRATE, {
         text: `Item unequipped from ${message.slot}.`,
         type: 'system',
@@ -2305,15 +2141,6 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       return;
     }
 
-    if (this.extractionSystem.isExtracting(client.sessionId)) {
-      client.send(MessageTypes.NARRATE, {
-        text: 'Cannot change equipment while extracting!',
-        type: 'system',
-        timestamp: Date.now(),
-      } satisfies NarrateMessage);
-      return;
-    }
-
     try {
       const result = await this.loadoutService.swapItem(this.dbPlayerId(playerId), message.itemId, message.targetSlot);
 
@@ -2326,7 +2153,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         return;
       }
 
-      await this.sendShardLoadoutUpdate(client, playerId);
+      await this.sendZoneLoadoutUpdate(client, playerId);
       client.send(MessageTypes.NARRATE, {
         text: `Item swapped into ${message.targetSlot}.`,
         type: 'system',
@@ -2343,7 +2170,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
   /** Send loadout update to client after equipment change. */
-  private async sendShardLoadoutUpdate(client: Client, playerId: string): Promise<void> {
+  private async sendZoneLoadoutUpdate(client: Client, playerId: string): Promise<void> {
     if (!this.loadoutService) return;
     const loadoutView = await this.loadoutService.getLoadoutView(this.dbPlayerId(playerId));
     client.send(MessageTypes.LOADOUT_UPDATE, {
@@ -2365,7 +2192,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     } satisfies PlayerStateMessage);
   }
 
-  /** Find an item in the player's shard inventory by instanceId or itemId. */
+  /** Find an item in the player's zone inventory by instanceId or itemId. */
   private findInInventory(
     player: PlayerState,
     itemId: string,
@@ -2381,10 +2208,10 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     return null;
   }
 
-  /** Convert a shard inventory entry to StashItemInstance format. */
+  /** Convert a zone inventory entry to StashItemInstance format. */
   private toStashItemInstance(entry: { item: { id: string } }): import('@ellmud/shared').StashItemInstance {
     return {
-      instanceId: `shard-${entry.item.id}-${Date.now()}`,
+      instanceId: `zone-${entry.item.id}-${Date.now()}`,
       itemId: entry.item.id,
       durability: null,
       maxDurability: null,
@@ -2403,15 +2230,15 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   }
 
   private log(message: string): void {
-    console.log(`[ShardRoom:${this.roomId}] ${message}`);
+    console.log(`[ZoneRoom:${this.roomId}] ${message}`);
   }
 }
 
 // ─── B7: Fallback Refuge Graph ──────────────────────────────────────────────
-// Used when ShardRoom loads in zone mode for 'the-refuge' but no DB data exists.
+// Used when ZoneRoom loads in zone mode for 'the-refuge' but no DB data exists.
 
 function createFallbackRefugeGraph(): RoomGraph {
-  const rooms = new Map<string, import('../shard/RoomGraph.js').Room>();
+  const rooms = new Map<string, import('../zone/RoomGraph.js').Room>();
 
   rooms.set('hearth', {
     id: 'hearth',
@@ -2421,7 +2248,7 @@ function createFallbackRefugeGraph(): RoomGraph {
     exits: new Map<Direction, string>([
       ['east', 'stash-alcove'],
       ['north', 'training-grounds'],
-      ['west', 'shardboard'],
+      ['west', 'expedition-board'],
       ['south', 'market'],
     ]),
     items: [],
@@ -2430,7 +2257,7 @@ function createFallbackRefugeGraph(): RoomGraph {
   rooms.set('stash-alcove', {
     id: 'stash-alcove',
     name: 'Stash Alcove',
-    description: 'A narrow alcove lined with locked chests and hanging satchels. Your belongings are here — what you\'ve kept from the shards.',
+    description: 'A narrow alcove lined with locked chests and hanging satchels. Your belongings are here — what you\'ve kept from the depths.',
     type: 'feature_stash',
     exits: new Map<Direction, string>([['west', 'hearth']]),
     items: [],
@@ -2448,11 +2275,11 @@ function createFallbackRefugeGraph(): RoomGraph {
     items: [],
   });
 
-  rooms.set('shardboard', {
-    id: 'shardboard',
-    name: 'The Shardboard',
-    description: 'A massive board of pinned notes, sketched maps, and shard coordinates. This is where expeditions begin.',
-    type: 'feature_shardboard',
+  rooms.set('expedition-board', {
+    id: 'expedition-board',
+    name: 'The Expedition Board',
+    description: 'A massive board of pinned notes, sketched maps, and rift coordinates. This is where expeditions begin.',
+    type: 'feature_expedition_board',
     exits: new Map<Direction, string>([['east', 'hearth']]),
     items: [],
   });
@@ -2481,7 +2308,7 @@ function createFallbackRefugeGraph(): RoomGraph {
   rooms.set('war-room', {
     id: 'war-room',
     name: 'The War Room',
-    description: 'A locked chamber where faction leaders meet. Maps of known shards cover the walls.',
+    description: 'A locked chamber where faction leaders meet. Maps of known zones cover the walls.',
     type: 'corridor',
     exits: new Map<Direction, string>([['west', 'training-grounds']]),
     items: [],

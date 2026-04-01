@@ -2,7 +2,7 @@
  * Stash Wiring Integration Tests
  *
  * Verifies that the stash persistence provider is correctly wired into
- * the game loop: zone-mode ShardRoom loads stash on entry, ShardRoom persists
+ * the game loop: zone-mode ZoneRoom loads stash on entry, ZoneRoom persists
  * extracted items, and both modes share the same repository instance.
  */
 
@@ -13,7 +13,7 @@ import { MessageTypes } from '@ellmud/shared';
 import type { StashItem, StashItemInstance } from '@ellmud/shared';
 import { MessageCollector } from './helpers/message-collector.js';
 import { wait, makeCommand } from './helpers/index.js';
-import { ShardRoom } from '../rooms/ShardRoom.js';
+import { ZoneRoom } from '../rooms/ZoneRoom.js';
 import {
   InMemoryStashRepository,
   StashService,
@@ -99,16 +99,16 @@ describe('Stash Provider', () => {
   });
 });
 
-// ─── Zone ShardRoom Stash Wiring Tests ──────────────────────────────────────
+// ─── Zone ZoneRoom Stash Wiring Tests ──────────────────────────────────────
 
-describe('Zone ShardRoom Stash Wiring (the-refuge)', () => {
+describe('Zone ZoneRoom Stash Wiring (the-refuge)', () => {
   let colyseus: ColyseusTestServer;
   let repo: InMemoryStashRepository;
   let itemDefs: Map<string, StashItem>;
 
   beforeAll(async () => {
     const server = new Server();
-    server.define('shard', ShardRoom);
+    server.define('zone', ZoneRoom);
     await server.listen(0);
     const addr = (server as unknown as { transport: { server: { address(): { port: number } } } }).transport.server.address();
     (server as unknown as { port: number }).port = addr.port;
@@ -125,7 +125,7 @@ describe('Zone ShardRoom Stash Wiring (the-refuge)', () => {
   });
 
   it.todo('sends STASH_UPDATE with items on zone entry', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (room as any).initStash(repo, itemDefs);
 
@@ -140,7 +140,7 @@ describe('Zone ShardRoom Stash Wiring (the-refuge)', () => {
     });
     await wait(500);
 
-    // Zone-mode ShardRoom sends structured STASH_UPDATE on join
+    // Zone-mode ZoneRoom sends structured STASH_UPDATE on join
     expect(stashUpdates.length).toBeGreaterThan(0);
     const items = stashUpdates[0]!.items;
     expect(items.some((i) => i.name === 'Iron Ore')).toBe(true);
@@ -149,7 +149,7 @@ describe('Zone ShardRoom Stash Wiring (the-refuge)', () => {
   });
 
   it.todo('sends empty STASH_UPDATE for new player', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (room as any).initStash(repo, itemDefs);
 
@@ -167,7 +167,7 @@ describe('Zone ShardRoom Stash Wiring (the-refuge)', () => {
   });
 
   it('stash command responds in zone stash room', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (room as any).initStash(repo, itemDefs);
 
@@ -196,7 +196,7 @@ describe('Zone ShardRoom Stash Wiring (the-refuge)', () => {
   });
 
   it('take command in stash-alcove works within zone', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (room as any).initStash(repo, itemDefs);
 
@@ -233,7 +233,7 @@ describe('Zone ShardRoom Stash Wiring (the-refuge)', () => {
     await repo.addItem(playerId, makeInstance(IRON_ORE.id), 5);
 
     // First connection — verify stash loads with items
-    const room1 = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room1 = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (room1 as any).initStash(repo, itemDefs);
 
@@ -250,7 +250,7 @@ describe('Zone ShardRoom Stash Wiring (the-refuge)', () => {
     await client1.leave();
 
     // Second connection with same repo — stash should still be there
-    const room2 = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room2 = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (room2 as any).initStash(repo, itemDefs);
 
@@ -276,7 +276,7 @@ describe('Shared Repository Across Rooms', () => {
     resetStashProvider();
   });
 
-  it('zone ShardRoom and shard ShardRoom use the same provider repo', async () => {
+  it('zone ZoneRoom and zone ZoneRoom use the same provider repo', async () => {
     initStashProvider(false);
 
     const repo = getStashRepository();
@@ -289,11 +289,11 @@ describe('Shared Repository Across Rooms', () => {
     // Register item def
     defs.set(IRON_ORE.id, IRON_ORE);
 
-    // Store via service1 (simulating ShardRoom extraction)
+    // Store via service1 (simulating ZoneRoom stash transfer)
     const playerId = 'shared-player';
     await service1.storeItem(playerId, makeInstance(IRON_ORE.id));
 
-    // Load via service2 (simulating zone ShardRoom entry)
+    // Load via service2 (simulating zone ZoneRoom entry)
     const view = await service2.loadStash(playerId);
     expect(view.entries.length).toBe(1);
     expect(view.entries[0]!.definition.name).toBe('Iron Ore');

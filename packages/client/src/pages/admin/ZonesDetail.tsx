@@ -11,12 +11,12 @@ import ZoneDesigner from "./ZoneDesigner.js";
 
 type Tab = "general" | "rooms" | "exits" | "designer";
 
-const BIOME_OPTIONS = [
+const THEME_OPTIONS = [
   "flooded_crypt", "shattered_bastion", "fungal_deep", "ashen_reach", "void_rift",
 ];
 const LIFECYCLE_OPTIONS = ["persistent", "scheduled", "event"] as const;
 const CATEGORY_OPTIONS = ["hub", "dungeon", "wilderness", "social"] as const;
-const ROOM_TYPE_OPTIONS = ["entry", "corridor", "junction", "dead_end", "extraction", "boss"];
+const ROOM_TYPE_OPTIONS = ["entry", "corridor", "junction", "dead_end", "boss"];
 const DIRECTION_OPTIONS = ["north", "south", "east", "west", "up", "down"];
 const ROOM_PROPERTY_OPTIONS = ["heavy_door", "cavern", "water"];
 
@@ -81,7 +81,7 @@ export default function ZonesDetail() {
     name: "",
     description: "",
     tier: 1,
-    biome: "flooded_crypt",
+    theme: "flooded_crypt",
     levelMin: 1,
     levelMax: 5,
     lifecycle: "persistent",
@@ -482,15 +482,15 @@ export default function ZonesDetail() {
                       </div>
                       <div>
                         <label className="block text-[#8A8B95] text-sm mb-2" style={{ fontFamily: "var(--font-sans)" }}>
-                          Biome
+                          Theme
                         </label>
                         <select
-                          value={formData.biome || "flooded_crypt"}
-                          onChange={(e) => updateField("biome", e.target.value)}
+                          value={formData.theme || "flooded_crypt"}
+                          onChange={(e) => updateField("theme", e.target.value)}
                           className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
                           style={{ fontFamily: "var(--font-sans)" }}
                         >
-                          {BIOME_OPTIONS.map((b) => (
+                          {THEME_OPTIONS.map((b) => (
                             <option key={b} value={b}>{b.replace(/_/g, " ")}</option>
                           ))}
                         </select>

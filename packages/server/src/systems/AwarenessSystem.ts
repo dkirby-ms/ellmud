@@ -2,7 +2,7 @@
  * AwarenessSystem — Stealth-vs-awareness detection for player encounters (GDD §8.1).
  *
  * Pure game logic. No Colyseus dependency.
- * ShardRoom calls checkRoomEntry() on player movement and delivers results to clients.
+ * ZoneRoom calls checkRoomEntry() on player movement and delivers results to clients.
  *
  * Detection formula: score = awareness - stealth
  *   score <= 0  → 'none'    (target invisible)

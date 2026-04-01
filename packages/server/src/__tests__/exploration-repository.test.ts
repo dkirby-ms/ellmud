@@ -2,10 +2,10 @@
  * Exploration Repository Tests — Phase A
  *
  * Verifies InMemoryExplorationRepository: visit recording, upsert semantics,
- * zone filtering, hasVisited checks, aggregate stats, and zone/shard isolation.
+ * zone filtering, hasVisited checks, aggregate stats, and zone/instance isolation.
  *
- * Schema: characterId, zoneSlug (null for shards), roomId, roomType, roomName,
- * shardTier?, biome? — NO coordinate fields.
+ * Schema: characterId, zoneSlug (null for zones), roomId, roomType, roomName,
+ * zoneTier? — NO coordinate fields.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -30,15 +30,14 @@ function zoneVisit(overrides: Partial<ExplorationVisit> = {}): ExplorationVisit 
   };
 }
 
-function shardVisit(overrides: Partial<ExplorationVisit> = {}): ExplorationVisit {
+function instanceVisit(overrides: Partial<ExplorationVisit> = {}): ExplorationVisit {
   return {
     characterId: CHAR_A,
     zoneSlug: null,
-    roomId: 'shard-room-1',
+    roomId: 'zone-room-1',
     roomType: 'junction',
     roomName: 'Shattered Junction',
-    shardTier: 2,
-    biome: 'flooded_crypt',
+    zoneTier: 2,
     ...overrides,
   };
 }
@@ -67,15 +66,14 @@ describe('InMemoryExplorationRepository', () => {
       expect(room.roomId).toBe('room-corridor-1');
       expect(room.roomType).toBe('corridor');
       expect(room.roomName).toBe('Flooded Corridor');
-      expect(room.shardTier).toBeNull();
-      expect(room.biome).toBeNull();
+      expect(room.zoneTier).toBeNull();
       expect(room.visitCount).toBe(1);
       expect(room.firstVisited).toBeInstanceOf(Date);
       expect(room.lastVisited).toBeInstanceOf(Date);
     });
 
-    it('records a shard visit with shardTier and biome', async () => {
-      const visit = shardVisit();
+    it('records a zone visit with zoneTier', async () => {
+      const visit = instanceVisit();
       await repo.recordVisit(visit);
 
       const rooms = await repo.getExploredRooms(CHAR_A);
@@ -83,8 +81,7 @@ describe('InMemoryExplorationRepository', () => {
 
       const room = rooms[0]!;
       expect(room.zoneSlug).toBeNull();
-      expect(room.shardTier).toBe(2);
-      expect(room.biome).toBe('flooded_crypt');
+      expect(room.zoneTier).toBe(2);
     });
 
     it('returns empty array for character with no visits', async () => {
@@ -150,7 +147,7 @@ describe('InMemoryExplorationRepository', () => {
       await repo.recordVisit(zoneVisit({ zoneSlug: 'flooded-crypt', roomId: 'fc-1' }));
       await repo.recordVisit(zoneVisit({ zoneSlug: 'flooded-crypt', roomId: 'fc-2' }));
       await repo.recordVisit(zoneVisit({ zoneSlug: 'shattered-bastion', roomId: 'sb-1' }));
-      await repo.recordVisit(shardVisit({ roomId: 'shard-r1' }));
+      await repo.recordVisit(instanceVisit({ roomId: 'zone-r1' }));
 
       const cryptRooms = await repo.getExploredRoomsInZone(CHAR_A, 'flooded-crypt');
       expect(cryptRooms).toHaveLength(2);
@@ -168,8 +165,8 @@ describe('InMemoryExplorationRepository', () => {
       expect(rooms).toEqual([]);
     });
 
-    it('does not return shard rooms when filtering by zone', async () => {
-      await repo.recordVisit(shardVisit());
+    it('does not return zone rooms when filtering by zone', async () => {
+      await repo.recordVisit(instanceVisit());
 
       const rooms = await repo.getExploredRoomsInZone(CHAR_A, '__shard__');
       expect(rooms).toEqual([]);
@@ -189,13 +186,13 @@ describe('InMemoryExplorationRepository', () => {
       expect(visited).toBe(false);
     });
 
-    it('respects zoneSlug in lookup (null for shards)', async () => {
-      await repo.recordVisit(shardVisit({ roomId: 'shard-rm' }));
+    it('respects zoneSlug in lookup (null for zones)', async () => {
+      await repo.recordVisit(instanceVisit({ roomId: 'zone-rm' }));
 
-      const visitedWithNull = await repo.hasVisited(CHAR_A, null, 'shard-rm');
+      const visitedWithNull = await repo.hasVisited(CHAR_A, null, 'zone-rm');
       expect(visitedWithNull).toBe(true);
 
-      const visitedWithZone = await repo.hasVisited(CHAR_A, 'some-zone', 'shard-rm');
+      const visitedWithZone = await repo.hasVisited(CHAR_A, 'some-zone', 'zone-rm');
       expect(visitedWithZone).toBe(false);
     });
 
@@ -216,10 +213,10 @@ describe('InMemoryExplorationRepository', () => {
     });
 
     it('counts rooms, visits, and zones correctly', async () => {
-      // 2 zone rooms in different zones + 1 shard room
+      // 2 zone rooms in different zones + 1 zone room
       await repo.recordVisit(zoneVisit({ zoneSlug: 'flooded-crypt', roomId: 'fc-1' }));
       await repo.recordVisit(zoneVisit({ zoneSlug: 'shattered-bastion', roomId: 'sb-1' }));
-      await repo.recordVisit(shardVisit({ roomId: 'shard-1' }));
+      await repo.recordVisit(instanceVisit({ roomId: 'zone-1' }));
 
       // Revisit one room twice
       await repo.recordVisit(zoneVisit({ zoneSlug: 'flooded-crypt', roomId: 'fc-1' }));
@@ -232,18 +229,18 @@ describe('InMemoryExplorationRepository', () => {
       expect(stats.zones).toBe(3);
     });
 
-    it('counts shard null-zone as a separate zone bucket', async () => {
-      await repo.recordVisit(shardVisit({ roomId: 'shard-a' }));
-      await repo.recordVisit(shardVisit({ roomId: 'shard-b' }));
+    it('counts instance null-zone as a separate zone bucket', async () => {
+      await repo.recordVisit(instanceVisit({ roomId: 'zone-a' }));
+      await repo.recordVisit(instanceVisit({ roomId: 'zone-b' }));
 
       const stats = await repo.getExplorationStats(CHAR_A);
       expect(stats.totalRooms).toBe(2);
-      expect(stats.zones).toBe(1); // both shard rooms → same __shard__ bucket
+      expect(stats.zones).toBe(1); // both zone rooms → same __shard__ bucket
     });
   });
 
-  // 6. Zone vs shard isolation
-  describe('zone vs shard isolation', () => {
+  // 6. Zone vs instance isolation
+  describe('zone vs instance isolation', () => {
     it('treats same roomId in different zones as separate entries', async () => {
       await repo.recordVisit(zoneVisit({ zoneSlug: 'flooded-crypt', roomId: 'room-1' }));
       await repo.recordVisit(zoneVisit({ zoneSlug: 'shattered-bastion', roomId: 'room-1' }));
@@ -253,9 +250,9 @@ describe('InMemoryExplorationRepository', () => {
       expect(rooms.map((r) => r.zoneSlug).sort()).toEqual(['flooded-crypt', 'shattered-bastion']);
     });
 
-    it('treats same roomId in zone and shard as separate entries', async () => {
+    it('treats same roomId in zone and instance as separate entries', async () => {
       await repo.recordVisit(zoneVisit({ zoneSlug: 'flooded-crypt', roomId: 'room-1' }));
-      await repo.recordVisit(shardVisit({ roomId: 'room-1' }));
+      await repo.recordVisit(instanceVisit({ roomId: 'room-1' }));
 
       const rooms = await repo.getExploredRooms(CHAR_A);
       expect(rooms).toHaveLength(2);
@@ -266,10 +263,10 @@ describe('InMemoryExplorationRepository', () => {
     });
   });
 
-  // 7. Null zone_slug for shards
-  describe('null zone_slug for shards', () => {
-    it('shard rooms have null zoneSlug', async () => {
-      await repo.recordVisit(shardVisit());
+  // 7. Null zone_slug for zones
+  describe('null zone_slug for zones', () => {
+    it('zone rooms have null zoneSlug', async () => {
+      await repo.recordVisit(instanceVisit());
       const rooms = await repo.getExploredRooms(CHAR_A);
       expect(rooms[0]!.zoneSlug).toBeNull();
     });

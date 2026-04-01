@@ -371,10 +371,6 @@ describe('Awareness & Stealth — Concurrent Events (#25)', () => {
     it.todo('flee reduces effective stealth (running is noisy)');
   });
 
-  describe.skip('entry during extraction', () => {
-    it.todo('extracting player still receives detection messages');
-    it.todo('entering player sees extracting player if awareness check passes');
-  });
 });
 
 // ─── Cross-System: Stealth + Sound (#25 × #22) ─────────────────────────────
@@ -419,7 +415,7 @@ describe('Awareness & Stealth — Regression Scenarios (#25)', () => {
     it.todo('player stealth stat persists across room transitions');
     it.todo('awareness stat not affected by taking damage');
     it.todo('stealth not permanently broken by one combat encounter');
-    it.todo('shard collapse during detection check does not crash');
+    it.todo('zone collapse during detection check does not crash');
     it.todo('disconnected player removal does not trigger false detection');
   });
 

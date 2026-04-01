@@ -1,5 +1,5 @@
 /**
- * Creature wiring tests — spawning in shards, AI tick, loot drops, look command.
+ * Creature wiring tests — spawning in zones, AI tick, loot drops, look command.
  *
  * Covers Issue #7 integration: creature systems wired into the live game loop.
  */
@@ -10,19 +10,19 @@ import { DROWNED_REVENANT } from '../creatures/templates/drowned-revenant.js';
 import type { CreatureWorldState } from '../creatures/behavior.js';
 import { CombatSystem } from '../combat/CombatSystem.js';
 import { createCombatant } from '../combat/CombatState.js';
-import { createPRNG } from '../shard/prng.js';
-import { generateShardGraph } from '../shard/generator.js';
-import { adaptRoomGraph } from '../shard/graph-adapter.js';
+import { createPRNG } from '../zone/prng.js';
+import { generateZoneGraph } from '../zone/generator.js';
+import { adaptRoomGraph } from '../zone/graph-adapter.js';
 import { handleLook } from '../commands/handlers/look.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { handleGo } from '../commands/handlers/go.js';
 import { PlayerState } from '../state/PlayerState.js';
-import type { RoomGraph as LocalRoomGraph } from '../shard/RoomGraph.js';
+import type { RoomGraph as LocalRoomGraph } from '../zone/RoomGraph.js';
 
 // ─── Test Helpers ─────────────────────────────────────────────────────────────
 
-function createTestShard(seed = 42) {
-  const sharedGraph = generateShardGraph({ tier: 1, biome: 'flooded_crypt', seed });
+function createTestZone(seed = 42) {
+  const sharedGraph = generateZoneGraph({ tier: 1, seed });
   const localGraph = adaptRoomGraph(sharedGraph);
   const creatureManager = new CreatureManager();
   const creaturePrng = createPRNG(seed + 7919);
@@ -87,11 +87,11 @@ function buildCtx(
   };
 }
 
-// ─── Creature Spawning in Shard ───────────────────────────────────────────────
+// ─── Creature Spawning in Zone ───────────────────────────────────────────────
 
-describe('Creature Spawning in Shard', () => {
-  it('spawns creatures in eligible rooms during shard creation', () => {
-    const { spawned } = createTestShard();
+describe('Creature Spawning in Zone', () => {
+  it('spawns creatures in eligible rooms during zone creation', () => {
+    const { spawned } = createTestZone();
 
     // Drowned Revenant template: 3-5 creatures
     expect(spawned.length).toBeGreaterThanOrEqual(3);
@@ -99,7 +99,7 @@ describe('Creature Spawning in Shard', () => {
   });
 
   it('does not spawn creatures in entry rooms', () => {
-    const { sharedGraph, spawned } = createTestShard();
+    const { sharedGraph, spawned } = createTestZone();
     const entryIds = new Set(sharedGraph.entryRoomIds);
 
     for (const creature of spawned) {
@@ -107,18 +107,9 @@ describe('Creature Spawning in Shard', () => {
     }
   });
 
-  it('does not spawn creatures in extraction rooms', () => {
-    const { sharedGraph, spawned } = createTestShard();
-    const extractionIds = new Set(sharedGraph.extractionRoomIds);
-
-    for (const creature of spawned) {
-      expect(extractionIds.has(creature.currentRoomId)).toBe(false);
-    }
-  });
-
   it('spawning is deterministic with the same seed', () => {
-    const { spawned: spawned1 } = createTestShard(42);
-    const { spawned: spawned2 } = createTestShard(42);
+    const { spawned: spawned1 } = createTestZone(42);
+    const { spawned: spawned2 } = createTestZone(42);
 
     expect(spawned1.length).toBe(spawned2.length);
     for (let i = 0; i < spawned1.length; i++) {
@@ -128,7 +119,7 @@ describe('Creature Spawning in Shard', () => {
   });
 
   it('all spawned creatures are Drowned Revenants with correct stats', () => {
-    const { spawned } = createTestShard();
+    const { spawned } = createTestZone();
 
     for (const creature of spawned) {
       expect(creature.name).toBe('Drowned Revenant');
@@ -145,7 +136,7 @@ describe('Creature Spawning in Shard', () => {
 
 describe('Creature AI Tick', () => {
   it('hostile creature initiates combat with player in same room', () => {
-    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestZone();
     const creature = spawned[0]!;
 
     // Place player in creature's room
@@ -164,7 +155,7 @@ describe('Creature AI Tick', () => {
   });
 
   it('creature action can be processed through combat system', () => {
-    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestZone();
     const creature = spawned[0]!;
 
     const player = new PlayerState('player-1', creature.currentRoomId);
@@ -189,7 +180,7 @@ describe('Creature AI Tick', () => {
   });
 
   it('combat tick resolves creature vs player simultaneously', () => {
-    const { creatureManager, combatSystem, spawned } = createTestShard();
+    const { creatureManager, combatSystem, spawned } = createTestZone();
     const creature = spawned[0]!;
 
     new PlayerState('player-1', creature.currentRoomId);
@@ -215,7 +206,7 @@ describe('Creature AI Tick', () => {
   });
 
   it('creature AI stays idle when no players nearby', () => {
-    const { localGraph, creatureManager, combatSystem } = createTestShard();
+    const { localGraph, creatureManager, combatSystem } = createTestZone();
     const players = new Map<string, PlayerState>();
 
     const world = buildWorldState(localGraph, players, combatSystem);
@@ -232,7 +223,7 @@ describe('Creature AI Tick', () => {
 
 describe('Creature Loot Drops', () => {
   it('defeated creature drops loot items', () => {
-    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestZone();
     const creature = spawned[0]!;
     const roomId = creature.currentRoomId;
     const room = localGraph.rooms.get(roomId)!;
@@ -284,7 +275,7 @@ describe('Creature Loot Drops', () => {
   });
 
   it('loot items are pickable via take command', () => {
-    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestZone();
     const creature = spawned[0]!;
     const roomId = creature.currentRoomId;
     const room = localGraph.rooms.get(roomId)!;
@@ -309,7 +300,7 @@ describe('Creature Loot Drops', () => {
 
 describe('Look Command with Creatures', () => {
   it('shows creatures present in room', () => {
-    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestZone();
     const creature = spawned[0]!;
 
     const player = new PlayerState('player-1', creature.currentRoomId);
@@ -321,7 +312,7 @@ describe('Look Command with Creatures', () => {
   });
 
   it('does not show dead creatures', () => {
-    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestZone();
     const creature = spawned[0]!;
     const roomId = creature.currentRoomId;
 
@@ -336,7 +327,7 @@ describe('Look Command with Creatures', () => {
   });
 
   it('does not show creatures in rooms without them', () => {
-    const { localGraph, creatureManager, combatSystem } = createTestShard();
+    const { localGraph, creatureManager, combatSystem } = createTestZone();
 
     // Entry room should have no creatures
     const player = new PlayerState('player-1', localGraph.startRoomId);
@@ -351,7 +342,7 @@ describe('Look Command with Creatures', () => {
 
 describe('Attack Command with Creatures', () => {
   it('player can attack a creature by name', () => {
-    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestZone();
     const creature = spawned[0]!;
 
     // Register creature as combatant so attack handler can initiate
@@ -366,7 +357,7 @@ describe('Attack Command with Creatures', () => {
   });
 
   it('player can attack a creature by partial name', () => {
-    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestZone();
     const creature = spawned[0]!;
 
     combatSystem.registerCombatant(creatureManager.toCombatant(creature));
@@ -402,7 +393,7 @@ describe('CombatSystem.getActiveEncounterRoomIds', () => {
 
 describe('Go Command with Creatures', () => {
   it('shows creatures in target room when player moves', () => {
-    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestZone();
     const creature = spawned[0]!;
     const creatureRoomId = creature.currentRoomId;
 
@@ -433,7 +424,7 @@ describe('Go Command with Creatures', () => {
   });
 
   it('does not show creatures line when target room has none', () => {
-    const { localGraph, creatureManager, combatSystem } = createTestShard();
+    const { localGraph, creatureManager, combatSystem } = createTestZone();
 
     // Start at entry room (no creatures) and move to an adjacent room without creatures
     const startRoom = localGraph.rooms.get(localGraph.startRoomId)!;
@@ -457,7 +448,7 @@ describe('Go Command with Creatures', () => {
 
 describe('Creature Movement Actions', () => {
   it('patrol_move sets sourceRoomId on the action', () => {
-    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestZone();
     const creature = spawned[0]!;
     const originalRoom = creature.currentRoomId;
 
@@ -478,7 +469,7 @@ describe('Creature Movement Actions', () => {
   });
 
   it('alert_move sets sourceRoomId on the action', () => {
-    const { localGraph, creatureManager, combatSystem: _cs, spawned } = createTestShard();
+    const { localGraph, creatureManager, combatSystem: _cs, spawned } = createTestZone();
     const creature = spawned[0]!;
     const creatureRoomId = creature.currentRoomId;
 
@@ -508,7 +499,7 @@ describe('Creature Movement Actions', () => {
   });
 
   it('creature visible in new room after patrol_move', () => {
-    const { localGraph, creatureManager, combatSystem, spawned } = createTestShard();
+    const { localGraph, creatureManager, combatSystem, spawned } = createTestZone();
     const creature = spawned[0]!;
     const originalRoom = creature.currentRoomId;
 

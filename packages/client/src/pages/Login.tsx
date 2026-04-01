@@ -38,7 +38,7 @@ export default function Login() {
   }, []);
 
   const flavorTexts = [
-    "The ground trembles. Another shard opens.",
+    "The ground trembles. Another rift opens.",
     "Deep below, something stirs in the darkness.",
     "The Refuge calls to those who would risk everything.",
     "Shadows lengthen. Time grows short.",
@@ -105,7 +105,7 @@ export default function Login() {
         </h1>
 
         <p className="text-center text-text-secondary mb-8 italic font-serif">
-          The shards are calling.
+          The rifts are calling.
         </p>
 
         {/* Sign In Button */}
@@ -228,7 +228,7 @@ export default function Login() {
               {loading
                 ? "Connecting..."
                 : isRegister
-                  ? "Create Shardwalker"
+                  ? "Create Character"
                   : "Enter the Refuge"}
             </button>
           </form>

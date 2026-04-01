@@ -19,7 +19,7 @@ function makeZone(overrides: Partial<ZoneDefinition> = {}): ZoneDefinition {
     levelMin: 1,
     levelMax: 5,
     tier: 1,
-    biome: 'flooded_crypt',
+    theme: 'flooded_crypt',
     entryRoomSlugs: ['entrance'],
     lifecycle: 'persistent',
     category: 'dungeon',
@@ -124,25 +124,6 @@ describe('convertZoneToRoomGraph', () => {
     expect(graph.entryRoomIds).toEqual(['north-gate', 'south-gate']);
   });
 
-  it('identifies extraction rooms by type', () => {
-    const zoneData: ZoneData = {
-      zone: makeZone({ entryRoomSlugs: ['start'] }),
-      rooms: [
-        makeRoom('start', { type: 'entry' }),
-        makeRoom('middle'),
-        makeRoom('way-out', { type: 'extraction' }),
-      ],
-      exits: [
-        makeExit('start', 'north', 'middle'),
-        makeExit('middle', 'north', 'way-out'),
-      ],
-    };
-
-    const graph = convertZoneToRoomGraph(zoneData);
-
-    expect(graph.extractionRoomIds).toEqual(['way-out']);
-  });
-
   it('identifies the boss room by type', () => {
     const zoneData: ZoneData = {
       zone: makeZone({ entryRoomSlugs: ['start'] }),
@@ -218,7 +199,6 @@ describe('convertZoneToRoomGraph', () => {
 
     expect(graph.rooms.size).toBe(1);
     expect(graph.entryRoomIds).toEqual(['cave']);
-    expect(graph.extractionRoomIds).toEqual([]);
     expect(graph.rooms.get('cave')!.exits.size).toBe(0);
   });
 
@@ -237,20 +217,19 @@ describe('convertZoneToRoomGraph', () => {
     expect(graph1.seed).toBeGreaterThan(0);
   });
 
-  it('preserves biome and tier from zone definition', () => {
+  it('preserves tier from zone definition', () => {
     const zoneData: ZoneData = {
-      zone: makeZone({ biome: 'fungal_deep', tier: 2 }),
+      zone: makeZone({ tier: 2 }),
       rooms: [makeRoom('entrance', { type: 'entry' })],
       exits: [],
     };
 
     const graph = convertZoneToRoomGraph(zoneData);
 
-    expect(graph.biome).toBe('fungal_deep');
     expect(graph.tier).toBe(2);
   });
 
-  it('clamps tier to valid ShardTier range', () => {
+  it('clamps tier to valid ZoneTier range', () => {
     const overTier: ZoneData = {
       zone: makeZone({ tier: 5 }),
       rooms: [makeRoom('entrance', { type: 'entry' })],

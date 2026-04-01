@@ -11,13 +11,12 @@ export const NODE_SIZE_COMPACT = 12;
 export const ROOM_TYPE_COLORS: Record<string, string> = {
   entry: '#4ade80',
   boss: '#ef4444',
-  extraction: '#3b82f6',
   junction: '#2dd4bf',
   corridor: '#6b7280',
   dead_end: '#6b7280',
   // feature rooms — teal family
   feature_stash: '#2dd4bf',
-  feature_shardboard: '#2dd4bf',
+  feature_expedition_board: '#2dd4bf',
   feature_marketplace: '#2dd4bf',
   feature_crafting: '#2dd4bf',
   feature_training: '#2dd4bf',

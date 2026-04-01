@@ -7,7 +7,6 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import CombinedStashLoadout from "../components/CombinedStashLoadout";
-import ExtractionOverlay from "../components/ExtractionOverlay";
 import ChatPanel from "../components/ChatPanel";
 import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
 import CompassControl from "../components/CompassControl";
@@ -18,7 +17,7 @@ import { RoomOccupants } from "../components/RoomOccupants.js";
 import "../components/map/map.css";
 import MudPrompt from "../components/MudPrompt.js";
 import { useAppContext, type StatusEffect } from "../store.js";
-import { useShardConnection } from "../hooks/useShardConnection.js";
+import { useZoneConnection } from "../hooks/useZoneConnection.js";
 import { useAutoScroll } from "../hooks/useAutoScroll.js";
 import { useExplorationMap } from "../hooks/useExplorationMap.js";
 import { useMapToggle } from "../hooks/useMapToggle.js";
@@ -26,7 +25,7 @@ import type { CombatAction } from "@ellmud/shared";
 
 // ─── Status Effect Classifier ────────────────────────────────────────────────
 
-const DEBUFF_KEYWORDS = ['bleeding', 'poisoned', 'burning', 'weakened', 'slowed', 'stunned', 'confused', 'cursed', 'blind', 'fear', 'shard-sick'];
+const DEBUFF_KEYWORDS = ['bleeding', 'poisoned', 'burning', 'weakened', 'slowed', 'stunned', 'confused', 'cursed', 'blind', 'fear', 'zone-sick'];
 const BUFF_KEYWORDS = ['haste', 'strength', 'shield', 'regeneration', 'regen', 'blessed', 'fortified', 'empowered', 'protect', 'harden'];
 
 function getEffectType(effect: StatusEffect): 'buff' | 'debuff' | 'neutral' {
@@ -36,25 +35,25 @@ function getEffectType(effect: StatusEffect): 'buff' | 'debuff' | 'neutral' {
   return 'neutral';
 }
 
-export default function ShardExploration() {
+export default function ZoneExploration() {
   const navigate = useNavigate();
   const location = useLocation();
   const { state } = useAppContext();
 
   // Derive zone mode from route path
   const isZone = location.pathname === "/refuge";
-  const roomName = isZone ? "zone:the-refuge" : "shard";
+  const roomName = isZone ? "zone:the-refuge" : "zone";
 
   const {
     handleCommand: sendCommand,
     handleExitClick,
     handleCombatAction: sendCombatAction,
     sendChatMessage,
-    extraction,
-    dismissExtraction,
+    overlay,
+    dismissOverlay,
     reconnection,
     roomRef,
-  } = useShardConnection(roomName);
+  } = useZoneConnection(roomName);
 
   const mapState = useExplorationMap(roomRef.current);
   const { isMapOpen, toggleMap, closeMap } = useMapToggle();
@@ -250,7 +249,6 @@ export default function ShardExploration() {
                 <span
                   className={`ml-2 text-xs font-sans font-semibold px-1.5 py-0.5 rounded ${
                     roomType === 'boss' ? 'text-danger bg-danger/10'
-                    : roomType === 'extraction' ? 'text-success bg-success/10'
                     : roomType === 'entry' ? 'text-interactive bg-interactive/10'
                     : 'text-text-disabled bg-bg-elevated'
                   }`}
@@ -688,7 +686,7 @@ export default function ShardExploration() {
             placeholder={
               state.connectionStatus === "connected"
                 ? "Type a command..."
-                : isZone ? "Connecting to the Refuge..." : "Connecting to shard..."
+                : isZone ? "Connecting to the Refuge..." : "Connecting to instance..."
             }
             disabled={state.connectionStatus !== "connected"}
             className="flex-1 bg-transparent text-text-primary placeholder:text-text-disabled focus:outline-none disabled:opacity-50 font-mono"
@@ -716,7 +714,7 @@ export default function ShardExploration() {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <CombinedStashLoadout room={roomRef.current} inShard={!isZone} />
+              <CombinedStashLoadout room={roomRef.current} inZone={!isZone} />
             </div>
           </div>
         </div>
@@ -732,22 +730,29 @@ export default function ShardExploration() {
         onClose={closeMap}
       />
 
-      {/* Extraction Overlay */}
-      <ExtractionOverlay
-        state={extraction.status}
-        progress={extraction.progress}
-        isZone={isZone}
-        onReturnToRefuge={() => {
-          dismissExtraction();
-          navigate('/refuge');
-        }}
-      />
+      {/* Death Overlay */}
+      {overlay.status === 'death' && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-danger text-lg mb-4">{overlay.narration}</p>
+            <button
+              onClick={() => {
+                dismissOverlay();
+                navigate('/refuge');
+              }}
+              className="px-4 py-2 bg-bg-elevated text-text-primary rounded hover:bg-bg-surface"
+            >
+              Return to Refuge
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Chat Panel */}
       <ChatPanel
         isOpen={chatOpen}
         onClose={() => setChatOpen(false)}
-        context={isZone ? "refuge" : "shard"}
+        context={isZone ? "refuge" : "zone"}
         onSendMessage={sendChatMessage}
       />
 

@@ -17,8 +17,8 @@ export class PgExplorationRepository implements ExplorationRepository {
   async recordVisit(visit: ExplorationVisit): Promise<void> {
     await query(
       `INSERT INTO character_explored_rooms
-         (character_id, zone_slug, room_id, room_type, room_name, shard_tier, biome)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (character_id, zone_slug, room_id, room_type, room_name, shard_tier)
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (character_id, COALESCE(zone_slug, '__shard__'), room_id)
        DO UPDATE SET
          last_visited = NOW(),
@@ -29,8 +29,7 @@ export class PgExplorationRepository implements ExplorationRepository {
         visit.roomId,
         visit.roomType,
         visit.roomName,
-        visit.shardTier ?? null,
-        visit.biome ?? null,
+        visit.zoneTier ?? null,
       ],
     );
   }
@@ -38,7 +37,7 @@ export class PgExplorationRepository implements ExplorationRepository {
   async getExploredRooms(characterId: string): Promise<ExploredRoom[]> {
     const result = await query<ExploredRoomRow>(
       `SELECT character_id, zone_slug, room_id, room_type, room_name,
-              shard_tier, biome, first_visited, last_visited, visit_count
+              shard_tier, first_visited, last_visited, visit_count
        FROM character_explored_rooms
        WHERE character_id = $1
        ORDER BY first_visited`,
@@ -50,7 +49,7 @@ export class PgExplorationRepository implements ExplorationRepository {
   async getExploredRoomsInZone(characterId: string, zoneSlug: string): Promise<ExploredRoom[]> {
     const result = await query<ExploredRoomRow>(
       `SELECT character_id, zone_slug, room_id, room_type, room_name,
-              shard_tier, biome, first_visited, last_visited, visit_count
+              shard_tier, first_visited, last_visited, visit_count
        FROM character_explored_rooms
        WHERE character_id = $1 AND zone_slug = $2
        ORDER BY first_visited`,
@@ -105,7 +104,6 @@ interface ExploredRoomRow {
   room_type: string;
   room_name: string;
   shard_tier: number | null;
-  biome: string | null;
   first_visited: Date;
   last_visited: Date;
   visit_count: number;
@@ -118,8 +116,7 @@ function toExploredRoom(row: ExploredRoomRow): ExploredRoom {
     roomId: row.room_id,
     roomType: row.room_type,
     roomName: row.room_name,
-    shardTier: row.shard_tier,
-    biome: row.biome,
+    zoneTier: row.shard_tier,
     firstVisited: row.first_visited,
     lastVisited: row.last_visited,
     visitCount: row.visit_count,

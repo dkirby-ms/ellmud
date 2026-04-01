@@ -1,16 +1,16 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
-import { ShardRoom } from '../rooms/ShardRoom.js';
+import { ZoneRoom } from '../rooms/ZoneRoom.js';
 import { MessageTypes } from '@ellmud/shared';
-import type { NarrateMessage, ShardStateMessage, RoomHeaderMessage } from '@ellmud/shared';
+import type { NarrateMessage, ZoneStateMessage, RoomHeaderMessage } from '@ellmud/shared';
 
-describe('ShardRoom', () => {
+describe('ZoneRoom', () => {
   let colyseus: ColyseusTestServer;
 
   beforeAll(async () => {
     const server = new Server();
-    server.define('shard', ShardRoom);
+    server.define('zone', ZoneRoom);
     await server.listen(0);
     const addr = (server as unknown as { transport: { server: { address(): { port: number } } } }).transport.server.address();
     (server as unknown as { port: number }).port = addr.port;
@@ -22,7 +22,7 @@ describe('ShardRoom', () => {
   });
 
   it('should NOT send Schema patches to clients (message-only protocol)', async () => {
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('zone', {});
     const client = await colyseus.connectTo(room);
 
     const schemaPatchesReceived: unknown[] = [];
@@ -35,8 +35,8 @@ describe('ShardRoom', () => {
     client.onMessage(MessageTypes.ROOM_HEADER, (data: RoomHeaderMessage) => {
       messagesReceived.push({ type: MessageTypes.ROOM_HEADER, data });
     });
-    client.onMessage(MessageTypes.SHARD_STATE, (data: ShardStateMessage) => {
-      messagesReceived.push({ type: MessageTypes.SHARD_STATE, data });
+    client.onMessage(MessageTypes.ZONE_STATE, (data: ZoneStateMessage) => {
+      messagesReceived.push({ type: MessageTypes.ZONE_STATE, data });
     });
 
     // Listen for Schema state changes — this should NEVER fire
@@ -55,11 +55,11 @@ describe('ShardRoom', () => {
     // Verify we got the right message types
     const narrateMessages = messagesReceived.filter((m) => m.type === MessageTypes.NARRATE);
     const roomHeaderMessages = messagesReceived.filter((m) => m.type === MessageTypes.ROOM_HEADER);
-    const shardStateMessages = messagesReceived.filter((m) => m.type === MessageTypes.SHARD_STATE);
+    const zoneStateMessages = messagesReceived.filter((m) => m.type === MessageTypes.ZONE_STATE);
 
     expect(narrateMessages.length).toBeGreaterThan(0);
     expect(roomHeaderMessages.length).toBeGreaterThan(0);
-    expect(shardStateMessages.length).toBeGreaterThan(0);
+    expect(zoneStateMessages.length).toBeGreaterThan(0);
 
     // Verify narrate message structure
     const narrate = narrateMessages[0]!.data as NarrateMessage;
@@ -77,7 +77,7 @@ describe('ShardRoom', () => {
   });
 
   it('should handle command messages from clients', async () => {
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('zone', {});
     const client = await colyseus.connectTo(room);
 
     const responses: NarrateMessage[] = [];
@@ -100,11 +100,11 @@ describe('ShardRoom', () => {
   });
 
   it('should progress through lifecycle states', async () => {
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('zone', {});
     const client = await colyseus.connectTo(room);
 
-    const stateChanges: ShardStateMessage[] = [];
-    client.onMessage(MessageTypes.SHARD_STATE, (data: ShardStateMessage) => {
+    const stateChanges: ZoneStateMessage[] = [];
+    client.onMessage(MessageTypes.ZONE_STATE, (data: ZoneStateMessage) => {
       stateChanges.push(data);
     });
 
@@ -122,12 +122,12 @@ describe('ShardRoom', () => {
   });
 });
 
-describe('Zone ShardRoom (the-refuge)', () => {
+describe('Zone ZoneRoom (the-refuge)', () => {
   let colyseus: ColyseusTestServer;
 
   beforeAll(async () => {
     const server = new Server();
-    server.define('shard', ShardRoom);
+    server.define('zone', ZoneRoom);
     await server.listen(0);
     const addr = (server as unknown as { transport: { server: { address(): { port: number } } } }).transport.server.address();
     (server as unknown as { port: number }).port = addr.port;
@@ -139,7 +139,7 @@ describe('Zone ShardRoom (the-refuge)', () => {
   });
 
   it('should send welcome narration on join', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room);
 
     const messages: NarrateMessage[] = [];
@@ -156,7 +156,7 @@ describe('Zone ShardRoom (the-refuge)', () => {
   });
 
   it('should handle commands', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room);
 
     const messages: NarrateMessage[] = [];

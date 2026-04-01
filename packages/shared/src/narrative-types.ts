@@ -50,7 +50,6 @@ export interface NarrationTrace {
 /** Room state as the LLM sees it. */
 export interface NarrationRoom {
   id: string;
-  biome: string;
   light_level: number;
   exits: string[];
   features: string[];
@@ -58,7 +57,7 @@ export interface NarrationRoom {
   creatures: NarrationCreature[];
   hazards: string[];
   traces: NarrationTrace[];
-  shard_stability: number;
+  zone_stability: number;
 }
 
 /** Player state visible to the narration layer. */

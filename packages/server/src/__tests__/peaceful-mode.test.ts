@@ -9,7 +9,7 @@ import { handleCommand, type CommandContext } from '../commands/index.js';
 import { parseCommand } from '../commands/parser.js';
 import { PlayerState } from '../state/PlayerState.js';
 import { resetConfig } from '../config.js';
-import { createTestRoomGraph } from '../shard/RoomGraph.js';
+import { createTestRoomGraph } from '../zone/RoomGraph.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -66,7 +66,7 @@ describe('Peaceful Dev Mode', () => {
   describe('creature behavior with peaceful players', () => {
     it('creature stays idle when only peaceful players are in room', () => {
       const creature = makeCreature();
-      // Peaceful player excluded from playersInRoom at the ShardRoom level,
+      // Peaceful player excluded from playersInRoom at the ZoneRoom level,
       // so the creature sees an empty room.
       const world = makeWorldState({
         playersInRoom: new Map(), // peaceful player filtered out
@@ -185,7 +185,7 @@ describe('Peaceful Dev Mode', () => {
 
   describe('world state filtering (integration)', () => {
     it('buildCreatureWorldState pattern excludes peaceful players', () => {
-      // Simulate the ShardRoom.buildCreatureWorldState() logic
+      // Simulate the ZoneRoom.buildCreatureWorldState() logic
       const players = new Map<string, PlayerState>();
       const peacefulPlayer = new PlayerState('peaceful-1', 'room-a');
       peacefulPlayer.peaceful = true;
@@ -193,7 +193,7 @@ describe('Peaceful Dev Mode', () => {
       players.set('peaceful-1', peacefulPlayer);
       players.set('normal-1', normalPlayer);
 
-      // Replicate the filtering logic from ShardRoom
+      // Replicate the filtering logic from ZoneRoom
       const playersInRoom = new Map<string, string[]>();
       for (const [sid, ps] of players) {
         if (ps.peaceful) continue;

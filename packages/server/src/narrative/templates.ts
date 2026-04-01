@@ -12,13 +12,8 @@ import { renderSensoryTemplate } from './sensory-templates.js';
 
 // ─── Atmospheric Fragments ───────────────────────────────────────────────────
 
-const BIOME_ATMOSPHERES: Record<string, string> = {
-  flooded_crypt: 'Dark water laps at ancient stone, carrying the scent of rot and forgotten prayers.',
-  shattered_bastion: 'Broken ramparts claw at a bruised sky. Dust sifts through shattered masonry.',
-  fungal_deep: 'Bioluminescent fungi pulse with sickly light, their spores thick in the stagnant air.',
-  ashen_reach: 'Grey ash coats every surface. The air tastes of cinder and distant fire.',
-  void_rift: 'Reality frays at the edges here. The darkness between things feels alive.',
-};
+const DEFAULT_ATMOSPHERE = 'The air hangs heavy in this place.';
+const DEFAULT_MOVEMENT_ATMOSPHERE = 'A new space opens before you.';
 
 const LIGHT_DESCRIPTIONS: Record<string, string> = {
   dark: 'Darkness presses in, swallowing detail beyond arm\'s reach.',
@@ -29,9 +24,9 @@ const LIGHT_DESCRIPTIONS: Record<string, string> = {
 
 const STABILITY_DESCRIPTIONS: Record<string, string> = {
   stable: '',
-  wavering: 'A faint tremor runs through the ground — the shard\'s fabric strains.',
+  wavering: 'A faint tremor runs through the ground — the zone\'s fabric strains.',
   unstable: 'The walls shudder. Cracks spider through the ceiling. Time grows short.',
-  collapsing: 'Reality buckles and tears. The shard is dying — every moment here is borrowed.',
+  collapsing: 'Reality buckles and tears. The zone is dying — every moment here is borrowed.',
 };
 
 const CREATURE_STATE_VERBS: Record<string, string> = {
@@ -143,7 +138,7 @@ function pickRandom<T>(arr: T[]): T {
 function renderRoomDescription(ctx: NarrationContext): string {
   const parts: string[] = [];
 
-  const atmosphere = BIOME_ATMOSPHERES[ctx.room.biome] ?? 'The air hangs heavy in this place.';
+  const atmosphere = DEFAULT_ATMOSPHERE;
   parts.push(atmosphere);
   parts.push(getLightDesc(ctx.room.light_level));
 
@@ -162,7 +157,7 @@ function renderRoomDescription(ctx: NarrationContext): string {
 
   parts.push(describeExits(ctx.room.exits));
 
-  const stabilityDesc = getStabilityDesc(ctx.room.shard_stability);
+  const stabilityDesc = getStabilityDesc(ctx.room.zone_stability);
   if (stabilityDesc) parts.push(stabilityDesc);
 
   return parts.join(' ');
@@ -235,12 +230,12 @@ function renderMovement(ctx: NarrationContext): string {
     parts.push('You move onward.');
   }
 
-  const atmosphere = BIOME_ATMOSPHERES[ctx.room.biome] ?? 'A new space opens before you.';
+  const atmosphere = DEFAULT_MOVEMENT_ATMOSPHERE;
   parts.push(atmosphere);
   parts.push(getLightDesc(ctx.room.light_level));
   parts.push(describeExits(ctx.room.exits));
 
-  const stabilityDesc = getStabilityDesc(ctx.room.shard_stability);
+  const stabilityDesc = getStabilityDesc(ctx.room.zone_stability);
   if (stabilityDesc) parts.push(stabilityDesc);
 
   return parts.join(' ');
@@ -257,7 +252,7 @@ function renderEvent(ctx: NarrationContext): string {
     parts.push('The world shifts around you.');
   }
 
-  const stabilityDesc = getStabilityDesc(ctx.room.shard_stability);
+  const stabilityDesc = getStabilityDesc(ctx.room.zone_stability);
   if (stabilityDesc) parts.push(stabilityDesc);
 
   return parts.join(' ');

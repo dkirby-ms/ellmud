@@ -2,14 +2,14 @@
  * Centralized server configuration — env vars with sensible defaults.
  *
  * Phase 1: Solo play only. One player per shard, one replica, in-process matchmaker.
- * Phase 2: Multi-player shards (2-6 players), Redis presence, KEDA auto-scaling.
+ * Phase 2: Multi-player zones (2-6 players), Redis presence, KEDA auto-scaling.
  */
 
-import type { ShardTier } from '@ellmud/shared';
+import type { ZoneTier } from '@ellmud/shared';
 
 export interface ServerConfig {
-  /** Max concurrent players allowed in a single shard room. Phase 2 = 4 (default). */
-  maxPlayersPerShard: number;
+  /** Max concurrent players allowed in a single zone room. Phase 2 = 4 (default). */
+  maxPlayersPerZone: number;
 
   /** Max Container Apps replicas. Phase 2 = 4 (KEDA auto-scaling). */
   maxReplicas: number;
@@ -46,7 +46,7 @@ export interface ServerConfig {
 }
 
 /**
- * GDD-defined player capacity per shard tier (GDD §10.1).
+ * GDD-defined player capacity per zone tier (GDD §10.1).
  *   Tier 1 (Shallow): 1–3 players
  *   Tier 2 (Deep):    2–4 players
  *   Tier 3 (Abyssal): 3–6 players
@@ -59,12 +59,12 @@ export const TIER_MAX_PLAYERS: Record<number, number> = {
 
 /**
  * Get tier-specific max players. Uses GDD tier table by default.
- * Respects MAX_PLAYERS_PER_SHARD env override if set.
+ * Respects MAX_PLAYERS_PER_ZONE env override if set.
  */
-export function getMaxPlayersForTier(tier: ShardTier, config: ServerConfig): number {
+export function getMaxPlayersForTier(tier: ZoneTier, config: ServerConfig): number {
   // If env override is set, use it for all tiers
-  if (process.env.MAX_PLAYERS_PER_SHARD) {
-    return config.maxPlayersPerShard;
+  if (process.env.MAX_PLAYERS_PER_ZONE) {
+    return config.maxPlayersPerZone;
   }
   
   // GDD tier-based defaults
@@ -90,7 +90,7 @@ function envStr(key: string, fallback: string): string {
 
 export function loadConfig(): ServerConfig {
   return {
-    maxPlayersPerShard: envInt('MAX_PLAYERS_PER_SHARD', 4),
+    maxPlayersPerZone: envInt('MAX_PLAYERS_PER_ZONE', 4),
     maxReplicas: envInt('MAX_REPLICAS', 4),
     matchmakerMode: 'in-process', // Only mode supported — Colyseus built-in
     redis: {

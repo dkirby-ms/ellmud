@@ -4911,3 +4911,108 @@ Ghost rooms for up/down exits were being positioned at `parentPos.z ± 1`, infla
 - Prevents recurring topology issues in new zones
 - Shifts validation left: catch issues during design, not after commit
 - Creates shared vocabulary for zone design discussions (shortcuts, rings, L-loops, etc.)
+
+---
+
+## 2026-03-31T18:30:47Z: User directive — Remove extraction concept, MUD-style death
+
+**By:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-31
+
+**Decision:** The extraction mechanic (channeling to leave a zone with loot) is no longer part of the design. The game no longer has an "extraction game" identity.
+
+**What Changed:**
+1. **Remove extraction concept:** The extraction mechanic is gone. Players exit zones via normal exits, risking death at any moment.
+2. **MUD-style death:** Death is meaningful — players leave a corpse behind containing their equipped gear. Other players or creatures can loot the corpse.
+3. **Equipment loss/destruction:** There will be other meaningful ways equipment can be lost or destroyed beyond death (details TBD — the GDD notes this as a design space).
+4. **Genre shift:** The game is no longer an "extraction RPG" — it's evolving toward a traditional MUD/MMORPG with meaningful death penalties and gear risk.
+
+**Why:** The game design has evolved away from the extraction genre. Risk and stakes come from death and gear loss mechanics rather than extraction timers and safe-zone returns. MUD-style death (corpse drop, gear loss, corpse runs) is more natural to the text-game medium than channeled extraction rituals. Creates continuous tension and enables emergent gameplay (corpse camping, corpse runs, risk assessment at every fight).
+
+**Impact:**
+- GDD.md fully updated: genre reframed, extraction mechanic removed entirely
+- ~172 insertions, 81 deletions across 15+ sections
+- §6.5 Death & Corpse System added (new)
+- §6.6 Equipment Loss & Destruction added (design space open)
+- Zone lifecycle and core gameplay loop rewritten
+- Roadmap updated: extraction mechanic removed from completed items; Death mechanic, Corpse looting, Death penalty, Corpse recovery added
+
+**Open Design Questions:**
+- Corpse persistence duration
+- Corpse recovery ("corpse run") mechanics
+- Death penalty severity
+- Equipment degradation balance
+
+**Code Impact:**
+The codebase has an extraction mechanic implemented (multi-tick channel, marked as `[x]` in roadmap). This code is now deprecated by design intent. It should be removed or replaced with death/corpse mechanics when the combat system redesign reaches that phase.
+
+**Decision Status:** Proposed — awaiting review by dkirby-ms.
+
+---
+
+## 2026-03-31T18:31:00Z: GDD update — remove extraction concept entirely, add MUD-style death & corpse system
+
+**By:** Elminster (Lead)  
+**Date:** 2026-03-31  
+**Scope:** GDD.md only — no code changes  
+**Outcome:** SUCCESS
+
+**Changes Summary:**
+1. **Genre reframing:** "PvPvE Extraction RPG" → "PvPvE Real-Time MUD · Meaningful Death"
+2. **Mechanics removed:** Extraction nodes, extraction ritual, extraction-based gameplay loop, extraction timer framing, `> extract` command, extraction ritual noise value, Extraction Nodes column from zone size table
+3. **Mechanics added/reframed:**
+   - §6.5 Death & Corpse System (new section) — Corpse drops at death location with non-soulbound gear. Lootable by others. Player respawns at faction stronghold with death debuff. Corpse persistence and recovery are open design questions.
+   - §6.6 Equipment Loss & Destruction (new section) — Documents the design space for non-death gear loss: durability breakage, curses, NPC theft, traps, sacrificial mechanics. Details TBD.
+   - §2.2 "Adventure Zones" (renamed from Extraction Zones) — Zones are entered/exited via exits. The danger is death, not a timer.
+   - §2.3 Zone Lifecycle (rewritten) — Two models: Persistent (always available, respawning content) and Instanced (future, on-demand, optional collapse timer). No extraction in either model.
+   - §3 Core Gameplay Loop — Step 6 now "Return or Die." Step 7 is "Debrief." Walking out through an exit is how you leave.
+4. **Roadmap updated:** Extraction mechanic removed from completed items; Death mechanic, Corpse looting, Death penalty, Corpse recovery added
+
+**Deliverables:**
+- GDD.md (~172 insertions, 81 deletions across 15+ sections)
+- Decision record: `.squad/decisions/inbox/elminster-extraction-removal.md`
+
+**Rationale:** MUD-style death (corpse drop, gear loss, corpse runs) is more natural to the text-game medium than channeled extraction rituals. Creates continuous tension and enables emergent gameplay (corpse camping, corpse runs, risk assessment at every fight). Simpler to implement and reason about.
+
+**Decision Status:** Proposed — awaiting review by dkirby-ms.
+
+---
+
+## 2026-03-31T20:05:17Z: GDD-Codebase Gap Analysis & 15-Issue Sprint Plan
+
+**By:** Elminster (Lead/Architect)  
+**Date:** 2026-03-31  
+**Scope:** Complete audit of codebase vs GDD (extraction removal, biome removal, shard→zone terminology, Refuge repurpose, faction strongholds, death system)  
+**Status:** AUDIT COMPLETE — 15 GitHub issues created (#228–#242)  
+
+**Executive Summary:**
+
+Comprehensive audit of codebase against three major GDD revisions: (1) removal of shards/biomes as player-facing concepts, (2) Refuge repurposed as designer hub with faction strongholds as player home, (3) extraction mechanic replaced with MUD-style death. The codebase has deep architectural roots in all three removed concepts. This is not a naming pass — it is architectural.
+
+**Findings Summary:**
+
+- **🔴 Must Change (8 issues):** Extraction system removal, biome type removal, Shardwalker branding, Shardboard UI, ShardRoom architecture, shard-sickness rename, faction strongholds implementation, corpse system implementation
+- **🟡 Should Change (14 issues):** Internal "shard" terminology (~500 occurrences), player-facing flavor text, DB column renames, lifecycle decoupling, Refuge hub repurposing, NPC spawn routing, admin UI, leaderboard metrics, chat context, lore item names
+- **🟢 Nice to Have (1 issue):** Lore item name updates
+
+**Issues Created (Tracked in #228):**
+- Sprint 1: #228–#231 (Foundation: extraction & biome removal)
+- Sprint 2: #232–#235 (Internal naming: shard → zone)
+- Sprint 3: #236–#239 (Game mechanics: faction strongholds & death)
+- Sprint 4: #240–#242 (Schema migrations & polish)
+
+**Cross-References & Dependencies:**
+- Master tracker: Issue #228 with checklist, links to all 15 issues
+- Sprint dependencies: S2 depends on S1, S3 on S1–S2, S4 on S1–S3
+- Labels: `gdd-alignment`, `priority:must/should/nice-to-have`, `sprint:1/2/3/4`
+
+**Rationale:**
+
+The three GDD revisions represent a maturation of design intent: away from extraction-based genre mechanics toward traditional MUD/MMORPG with meaningful death and faction-based home systems. Aligning the codebase with this intent requires architectural changes, not cosmetic renames. The 15 issues are sequenced to allow parallel work within sprints while respecting inter-sprint dependencies.
+
+**Next Steps:**
+
+1. Review and approve #228 master tracker and child issues
+2. Assign issues to team members per sprint capacity
+3. Begin Sprint 1 work: extraction system removal and biome type deletion
+4. DB migrations deferred to Sprint 4 to avoid blocking other work

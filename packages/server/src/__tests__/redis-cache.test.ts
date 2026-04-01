@@ -22,8 +22,7 @@ function makeContext(overrides: Partial<NarrationContext> = {}): NarrationContex
   return {
     narration_type: 'room_description',
     room: {
-      id: 'shard-test::room-1',
-      biome: 'flooded_crypt',
+      id: 'zone-test::room-1',
       light_level: 0.3,
       exits: ['north', 'east'],
       features: ['collapsed_pillar'],
@@ -33,7 +32,7 @@ function makeContext(overrides: Partial<NarrationContext> = {}): NarrationContex
       ],
       hazards: [],
       traces: [],
-      shard_stability: 0.8,
+      zone_stability: 0.8,
     },
     player: {
       hp_pct: 0.9,

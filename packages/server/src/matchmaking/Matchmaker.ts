@@ -2,7 +2,7 @@
  * Matchmaker — Queue players, enforce tier-based capacity, assign entry points.
  *
  * Phase 2: In-process matchmaker with Redis presence awareness.
- * Handles player queueing, shard selection, and multi-entry-point distribution.
+ * Handles player queueing, zone selection, and multi-entry-point distribution.
  *
  * GDD Shard Tier Table:
  *   Tier 1 (Shallow): 1–3 players, 2 entry points
@@ -10,11 +10,11 @@
  *   Tier 3 (Abyssal): 3–6 players, 4 entry points
  */
 
-import type { ShardTier, BiomeType } from '@ellmud/shared';
+import type { ZoneTier } from '@ellmud/shared';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-/** GDD-defined player capacity per shard tier. */
+/** GDD-defined player capacity per zone tier. */
 export const TIER_CAPACITY: Record<number, { min: number; max: number; entryPoints: number }> = {
   1: { min: 1, max: 3, entryPoints: 2 },
   2: { min: 2, max: 4, entryPoints: 3 },
@@ -28,15 +28,13 @@ export const QUEUE_TIMEOUT_MS = 30_000;
 
 export interface QueuedPlayer {
   readonly playerId: string;
-  readonly preferredTier?: ShardTier;
-  readonly preferredBiome?: BiomeType;
+  readonly preferredTier?: ZoneTier;
   readonly queuedAt: number;
 }
 
-export interface ShardSlot {
+export interface ZoneSlot {
   readonly roomId: string;
-  readonly tier: ShardTier;
-  readonly biome: BiomeType;
+  readonly tier: ZoneTier;
   readonly currentPlayers: number;
   readonly maxPlayers: number;
   readonly entryPoints: string[];
@@ -49,13 +47,12 @@ export interface MatchResult {
   readonly playerId: string;
   readonly roomId: string;
   readonly entryPointId: string;
-  readonly tier: ShardTier;
-  readonly biome: BiomeType;
+  readonly tier: ZoneTier;
 }
 
 export interface MatchmakerStats {
   queueLength: number;
-  activeShards: number;
+  activeZones: number;
   totalPlayers: number;
 }
 
@@ -63,20 +60,20 @@ export interface MatchmakerStats {
 
 export class Matchmaker {
   private queue: QueuedPlayer[] = [];
-  private shards = new Map<string, ShardSlot>();
+  private zones = new Map<string, ZoneSlot>();
 
   /** Get max players for a given tier. */
-  getMaxPlayersForTier(tier: ShardTier): number {
+  getMaxPlayersForTier(tier: ZoneTier): number {
     return TIER_CAPACITY[tier]?.max ?? 4;
   }
 
   /** Get min players for a given tier. */
-  getMinPlayersForTier(tier: ShardTier): number {
+  getMinPlayersForTier(tier: ZoneTier): number {
     return TIER_CAPACITY[tier]?.min ?? 1;
   }
 
   /** Get number of entry points for a given tier. */
-  getEntryPointCount(tier: ShardTier): number {
+  getEntryPointCount(tier: ZoneTier): number {
     return TIER_CAPACITY[tier]?.entryPoints ?? 2;
   }
 
@@ -118,65 +115,63 @@ export class Matchmaker {
 
   // ─── Shard Registration ─────────────────────────────────────────────────
 
-  /** Register an active shard for matchmaking consideration. */
-  registerShard(slot: ShardSlot): void {
-    this.shards.set(slot.roomId, slot);
+  /** Register an active zone for matchmaking consideration. */
+  registerZone(slot: ZoneSlot): void {
+    this.zones.set(slot.roomId, slot);
   }
 
-  /** Unregister a shard (collapsed or disposed). */
-  unregisterShard(roomId: string): void {
-    this.shards.delete(roomId);
+  /** Unregister a zone (collapsed or disposed). */
+  unregisterZone(roomId: string): void {
+    this.zones.delete(roomId);
   }
 
-  /** Update shard player count (called on join/leave). */
-  updateShardPlayerCount(roomId: string, count: number): void {
-    const shard = this.shards.get(roomId);
-    if (!shard) return;
+  /** Update zone player count (called on join/leave). */
+  updateZonePlayerCount(roomId: string, count: number): void {
+    const entry = this.zones.get(roomId);
+    if (!entry) return;
     // Immutable update pattern
-    this.shards.set(roomId, { ...shard, currentPlayers: count });
+    this.zones.set(roomId, { ...entry, currentPlayers: count });
   }
 
-  /** Get registered shard by ID. */
-  getShard(roomId: string): ShardSlot | undefined {
-    return this.shards.get(roomId);
+  /** Get registered zone by ID. */
+  getZone(roomId: string): ZoneSlot | undefined {
+    return this.zones.get(roomId);
   }
 
-  /** Get all active shards. */
-  getActiveShards(): ShardSlot[] {
-    return [...this.shards.values()];
+  /** Get all active zones. */
+  getActiveZones(): ZoneSlot[] {
+    return [...this.zones.values()];
   }
 
   // ─── Match Logic ────────────────────────────────────────────────────────
 
   /**
-   * Find the best shard for a player. Prefers:
+   * Find the best zone for a player. Prefers:
    * 1. Matching tier preference
-   * 2. Matching biome preference
-   * 3. Fewest players (fill evenly)
-   * 4. Not full, not locked, lifecycle is 'open'
+   * 2. Fewest players (fill evenly)
+   * 3. Not full, not locked, lifecycle is 'open'
    */
-  findMatch(player: QueuedPlayer): ShardSlot | null {
-    const joinable = this.getJoinableShards();
+  findMatch(player: QueuedPlayer): ZoneSlot | null {
+    const joinable = this.getJoinableZones();
     if (joinable.length === 0) return null;
 
-    // Score each shard for this player
-    const scored = joinable.map(shard => {
+    // Score each zone for this player
+    const scored = joinable.map(entry => {
       let score = 0;
-      if (player.preferredTier && shard.tier === player.preferredTier) score += 10;
-      if (player.preferredBiome && shard.biome === player.preferredBiome) score += 5;
-      // Prefer fuller shards (social density), but not at capacity
-      score += shard.currentPlayers;
-      return { shard, score };
+      if (player.preferredTier && entry.tier === player.preferredTier) score += 10;
+      // Prefer fuller zones (social density), but not at capacity
+      score += entry.currentPlayers;
+      return { entry, score };
     });
 
     // Sort by score descending (best match first)
     scored.sort((a, b) => b.score - a.score);
-    return scored[0]?.shard ?? null;
+    return scored[0]?.entry ?? null;
   }
 
-  /** Get all shards that can accept new players. */
-  getJoinableShards(): ShardSlot[] {
-    return [...this.shards.values()].filter(s =>
+  /** Get all zones that can accept new players. */
+  getJoinableZones(): ZoneSlot[] {
+    return [...this.zones.values()].filter(s =>
       s.lifecycle === 'open'
       && !s.locked
       && s.currentPlayers < s.maxPlayers,
@@ -184,29 +179,29 @@ export class Matchmaker {
   }
 
   /**
-   * Assign an entry point for a player joining a shard.
+   * Assign an entry point for a player joining a zone.
    * Distributes players across entry points using round-robin.
-   * Returns null if shard is full or has no entry points.
+   * Returns null if zone is full or has no entry points.
    */
   assignEntryPoint(roomId: string, playerId: string): string | null {
-    const shard = this.shards.get(roomId);
-    if (!shard) return null;
-    if (shard.currentPlayers >= shard.maxPlayers) return null;
-    if (shard.entryPoints.length === 0) return null;
+    const entry = this.zones.get(roomId);
+    if (!entry) return null;
+    if (entry.currentPlayers >= entry.maxPlayers) return null;
+    if (entry.entryPoints.length === 0) return null;
 
     // Round-robin across entry points based on current assignments
-    const assignedCount = shard.assignedEntryPoints.size;
-    const entryIndex = assignedCount % shard.entryPoints.length;
-    const entryPointId = shard.entryPoints[entryIndex];
+    const assignedCount = entry.assignedEntryPoints.size;
+    const entryIndex = assignedCount % entry.entryPoints.length;
+    const entryPointId = entry.entryPoints[entryIndex];
 
     // Track assignment
-    const updatedAssignments = new Map(shard.assignedEntryPoints);
+    const updatedAssignments = new Map(entry.assignedEntryPoints);
     updatedAssignments.set(playerId, entryPointId);
 
-    this.shards.set(roomId, {
-      ...shard,
+    this.zones.set(roomId, {
+      ...entry,
       assignedEntryPoints: updatedAssignments,
-      currentPlayers: shard.currentPlayers + 1,
+      currentPlayers: entry.currentPlayers + 1,
     });
 
     return entryPointId;
@@ -216,21 +211,21 @@ export class Matchmaker {
    * Release an entry point when a player leaves.
    */
   releaseEntryPoint(roomId: string, playerId: string): void {
-    const shard = this.shards.get(roomId);
-    if (!shard) return;
+    const entry = this.zones.get(roomId);
+    if (!entry) return;
 
-    const updatedAssignments = new Map(shard.assignedEntryPoints);
+    const updatedAssignments = new Map(entry.assignedEntryPoints);
     updatedAssignments.delete(playerId);
 
-    this.shards.set(roomId, {
-      ...shard,
+    this.zones.set(roomId, {
+      ...entry,
       assignedEntryPoints: updatedAssignments,
-      currentPlayers: Math.max(0, shard.currentPlayers - 1),
+      currentPlayers: Math.max(0, entry.currentPlayers - 1),
     });
   }
 
   /**
-   * Process the queue: attempt to match each queued player to a shard.
+   * Process the queue: attempt to match each queued player to a zone.
    * Returns matched results and leaves unmatched players in queue.
    */
   processQueue(): MatchResult[] {
@@ -238,16 +233,15 @@ export class Matchmaker {
     const remaining: QueuedPlayer[] = [];
 
     for (const player of this.queue) {
-      const shard = this.findMatch(player);
-      if (shard) {
-        const entryPointId = this.assignEntryPoint(shard.roomId, player.playerId);
+      const match = this.findMatch(player);
+      if (match) {
+        const entryPointId = this.assignEntryPoint(match.roomId, player.playerId);
         if (entryPointId) {
           results.push({
             playerId: player.playerId,
-            roomId: shard.roomId,
+            roomId: match.roomId,
             entryPointId,
-            tier: shard.tier,
-            biome: shard.biome,
+            tier: match.tier,
           });
           continue;
         }
@@ -262,21 +256,21 @@ export class Matchmaker {
   // ─── Validation ─────────────────────────────────────────────────────────
 
   /**
-   * Validate that a player can join a shard.
+   * Validate that a player can join a zone.
    * Checks capacity, lifecycle, lock status.
    */
   validateJoin(roomId: string, playerId: string): { valid: boolean; reason?: string } {
-    const shard = this.shards.get(roomId);
-    if (!shard) return { valid: false, reason: 'Shard not found.' };
-    if (shard.locked) return { valid: false, reason: 'Shard is locked.' };
-    if (shard.lifecycle !== 'open') {
-      return { valid: false, reason: `Shard is ${shard.lifecycle}. Wait for it to open.` };
+    const entry = this.zones.get(roomId);
+    if (!entry) return { valid: false, reason: 'Instance not found.' };
+    if (entry.locked) return { valid: false, reason: 'Instance is locked.' };
+    if (entry.lifecycle !== 'open') {
+      return { valid: false, reason: `Instance is ${entry.lifecycle}. Wait for it to open.` };
     }
-    if (shard.currentPlayers >= shard.maxPlayers) {
-      return { valid: false, reason: `Shard is full (${shard.maxPlayers}/${shard.maxPlayers} players).` };
+    if (entry.currentPlayers >= entry.maxPlayers) {
+      return { valid: false, reason: `Instance is full (${entry.maxPlayers}/${entry.maxPlayers} players).` };
     }
-    if (shard.assignedEntryPoints.has(playerId)) {
-      return { valid: false, reason: 'Player already assigned to this shard.' };
+    if (entry.assignedEntryPoints.has(playerId)) {
+      return { valid: false, reason: 'Player already assigned to this instance.' };
     }
     return { valid: true };
   }
@@ -286,11 +280,11 @@ export class Matchmaker {
    * when multiple entry points are available.
    */
   validateEntryPoints(roomId: string): { valid: boolean; distribution: Map<string, number> } {
-    const shard = this.shards.get(roomId);
-    if (!shard) return { valid: false, distribution: new Map() };
+    const entry = this.zones.get(roomId);
+    if (!entry) return { valid: false, distribution: new Map() };
 
     const distribution = new Map<string, number>();
-    for (const [, entryPoint] of shard.assignedEntryPoints) {
+    for (const [, entryPoint] of entry.assignedEntryPoints) {
       distribution.set(entryPoint, (distribution.get(entryPoint) ?? 0) + 1);
     }
 
@@ -308,12 +302,12 @@ export class Matchmaker {
 
   getStats(): MatchmakerStats {
     let totalPlayers = 0;
-    for (const shard of this.shards.values()) {
-      totalPlayers += shard.currentPlayers;
+    for (const slot of this.zones.values()) {
+      totalPlayers += slot.currentPlayers;
     }
     return {
       queueLength: this.queue.length,
-      activeShards: this.shards.size,
+      activeZones: this.zones.size,
       totalPlayers,
     };
   }
@@ -321,6 +315,6 @@ export class Matchmaker {
   /** Reset all state (for testing). */
   reset(): void {
     this.queue = [];
-    this.shards.clear();
+    this.zones.clear();
   }
 }

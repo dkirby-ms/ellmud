@@ -150,7 +150,7 @@ export const CRYPT_KEY: StashItem = {
   type: 'key',
   weight: 1,
   rarity: 'common',
-  description: 'A skeletal key that unlocks deeper shard levels.',
+  description: 'A skeletal key that unlocks deeper zone levels.',
   baseDurability: null,
 };
 

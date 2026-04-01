@@ -56,9 +56,9 @@ export function handleAttack(ctx: CommandContext): CommandResult {
     );
   }
   if (!combatSystem.getCombatant(targetId)) {
-    // Creature combatants are registered by the ShardRoom creature tick,
+    // Creature combatants are registered by the ZoneRoom creature tick,
     // but if a player attacks first, register a placeholder for initiation.
-    // The ShardRoom will sync the full creature combatant on the next tick.
+    // The ZoneRoom will sync the full creature combatant on the next tick.
     const targetDisplayName = creaturesInRoom?.find(c => c.id === targetId)?.name ?? targetId;
     combatSystem.registerCombatant(
       createCombatant(targetId, targetDisplayName, player.currentRoomId, !isCreatureId(targetId)),

@@ -19,7 +19,7 @@ import type { Direction, SoundType } from '@ellmud/shared';
  *                          │
  *                        (west)
  *                          ↓
- *                        crypt ──(down)→ extraction
+ *                        crypt ──(down)→ deep-room
  *
  * 6 rooms, linear + branch. Matches the dev test graph topology.
  */
@@ -57,12 +57,12 @@ function buildTestRooms(): Map<string, SoundRoom> {
     id: 'crypt',
     exits: new Map<Direction, string>([
       ['east', 'corridor'],
-      ['down', 'extraction'],
+      ['down', 'deep-room'],
     ]),
   });
 
-  rooms.set('extraction', {
-    id: 'extraction',
+  rooms.set('deep-room', {
+    id: 'deep-room',
     exits: new Map<Direction, string>([['up', 'crypt']]),
   });
 
@@ -102,9 +102,9 @@ describe('Sound Propagation — Audibility Formula (#22)', () => {
       expect(isAudible(NOISE_VALUES.combat, 3)).toBe(false);
     });
 
-    it('extraction (8) audible at 3 rooms → effective 2', () => {
-      expect(effectiveNoise(NOISE_VALUES.extraction, 3)).toBe(2);
-      expect(isAudible(NOISE_VALUES.extraction, 3)).toBe(true);
+    it('explosion (9) audible at 3 rooms → effective 3', () => {
+      expect(effectiveNoise(NOISE_VALUES.explosion, 3)).toBe(3);
+      expect(isAudible(NOISE_VALUES.explosion, 3)).toBe(true);
     });
 
     it('sneaking (1) NOT audible at 1 room away', () => {
@@ -184,7 +184,7 @@ describe('SoundSystem', () => {
       expect(roomIds).toContain('armory');
       expect(roomIds).toContain('shrine');
       expect(roomIds).toContain('crypt');
-      expect(roomIds).toContain('extraction');
+      expect(roomIds).toContain('deep-room');
     });
 
     it('sneaking noise (1) does not reach adjacent rooms', () => {
@@ -216,7 +216,7 @@ describe('SoundSystem', () => {
     it('tracks distance correctly through multi-hop paths', () => {
       const results = soundSystem.propagateSound('entry', 10);
       expect(results.find((r: { roomId: string }) => r.roomId === 'shrine')!.distance).toBe(2);
-      expect(results.find((r: { roomId: string }) => r.roomId === 'extraction')!.distance).toBe(3);
+      expect(results.find((r: { roomId: string }) => r.roomId === 'deep-room')!.distance).toBe(3);
     });
   });
 
@@ -232,9 +232,9 @@ describe('SoundSystem', () => {
       expect(results.find((r: { roomId: string }) => r.roomId === 'shrine')!.direction).toBe('south');
     });
 
-    it('combat in crypt: extraction hears from up, corridor hears from west', () => {
+    it('combat in crypt: deep-room hears from up, corridor hears from west', () => {
       const results = soundSystem.propagateSound('crypt', NOISE_VALUES.combat);
-      expect(results.find((r: { roomId: string }) => r.roomId === 'extraction')!.direction).toBe('up');
+      expect(results.find((r: { roomId: string }) => r.roomId === 'deep-room')!.direction).toBe('up');
       expect(results.find((r: { roomId: string }) => r.roomId === 'corridor')!.direction).toBe('west');
     });
   });
@@ -318,7 +318,7 @@ describe('SoundSystem', () => {
       expect(NOISE_VALUES.running).toBe(4);
       expect(NOISE_VALUES.walking).toBe(2);
       expect(NOISE_VALUES.striking_door).toBe(7);
-      expect(NOISE_VALUES.extraction).toBe(8);
+      expect(NOISE_VALUES.explosion).toBe(9);
       expect(NOISE_VALUES.sneaking).toBe(1);
     });
 
@@ -329,7 +329,7 @@ describe('SoundSystem', () => {
     it('all sound types have descriptions', () => {
       const soundTypes: SoundType[] = [
         'combat', 'running', 'walking', 'striking_door',
-        'extraction', 'explosion', 'sneaking',
+        'explosion', 'sneaking',
       ];
       for (const st of soundTypes) {
         expect(SOUND_DESCRIPTIONS[st]).toBeDefined();
@@ -362,19 +362,19 @@ describe('SoundSystem', () => {
       expect(crypt.effectiveNoise).toBe(1);
       expect(crypt.distance).toBe(2);
 
-      // Extraction: 3 rooms away, noise = 5-6=-1 → NOT audible
-      expect(results.find((r: { roomId: string }) => r.roomId === 'extraction')).toBeUndefined();
+      // deep-room: 3 rooms away, noise = 5-6=-1 → NOT audible
+      expect(results.find((r: { roomId: string }) => r.roomId === 'deep-room')).toBeUndefined();
     });
 
-    it('extraction sound (8) propagates through entire graph', () => {
-      const results = soundSystem.propagateSound('entry', NOISE_VALUES.extraction);
+    it('explosion sound (8) propagates through entire graph', () => {
+      const results = soundSystem.propagateSound('entry', NOISE_VALUES.explosion);
       const roomIds = results.map((r: { roomId: string }) => r.roomId);
       expect(roomIds).toContain('corridor');
       expect(roomIds).toContain('armory');
       expect(roomIds).toContain('shrine');
       expect(roomIds).toContain('crypt');
-      expect(roomIds).toContain('extraction');
-      expect(results.find((r: { roomId: string }) => r.roomId === 'extraction')!.effectiveNoise).toBe(2);
+      expect(roomIds).toContain('deep-room');
+      expect(results.find((r: { roomId: string }) => r.roomId === 'deep-room')!.effectiveNoise).toBe(3);
     });
   });
 });
@@ -385,11 +385,6 @@ describe('Sound Propagation — Future Cross-System (#22)', () => {
   describe.skip('sound + stealth (#22 × #25)', () => {
     it.todo('sneaking player movement noise = 0–1');
     it.todo('combat breaks stealth and generates full combat noise');
-  });
-
-  describe.skip('sound + extraction (#22 × #10)', () => {
-    it.todo('extraction channel sustains noise over duration');
-    it.todo('interrupted extraction generates final noise burst');
   });
 
   describe.skip('listening skill (#22)', () => {

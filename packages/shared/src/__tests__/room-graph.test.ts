@@ -15,7 +15,7 @@ import {
 
 const FEATURE_ROOM_TYPES: RoomType[] = [
   'feature_stash',
-  'feature_shardboard',
+  'feature_expedition_board',
   'feature_marketplace',
   'feature_crafting',
   'feature_training',
@@ -25,7 +25,6 @@ const FEATURE_ROOM_TYPES: RoomType[] = [
 
 const NON_FEATURE_ROOM_TYPES: RoomType[] = [
   'entry',
-  'extraction',
   'boss',
   'corridor',
   'junction',
@@ -34,7 +33,7 @@ const NON_FEATURE_ROOM_TYPES: RoomType[] = [
 
 const EXPECTED_FEATURE_KEYS: Record<string, string> = {
   feature_stash: 'stash',
-  feature_shardboard: 'shardboard',
+  feature_expedition_board: 'expedition_board',
   feature_marketplace: 'marketplace',
   feature_crafting: 'crafting',
   feature_training: 'training',
@@ -91,8 +90,8 @@ describe('getFeatureKey', () => {
     expect(getFeatureKey('feature_stash')).toBe('stash');
   });
 
-  it('returns "shardboard" for "feature_shardboard"', () => {
-    expect(getFeatureKey('feature_shardboard')).toBe('shardboard');
+  it('returns "expedition_board" for "feature_expedition_board"', () => {
+    expect(getFeatureKey('feature_expedition_board')).toBe('expedition_board');
   });
 
   it.each(Object.entries(EXPECTED_FEATURE_KEYS))(
@@ -135,7 +134,7 @@ describe('FeatureRoomType', () => {
     // Compile-time check: each feature type is assignable to FeatureRoomType
     const featureTypes: FeatureRoomType[] = [
       'feature_stash',
-      'feature_shardboard',
+      'feature_expedition_board',
       'feature_marketplace',
       'feature_crafting',
       'feature_training',

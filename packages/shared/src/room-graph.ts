@@ -1,9 +1,9 @@
 /**
- * Room graph types for procedural shard generation.
- * Defines the data structures for rooms, connections, and shard layouts.
+ * Room graph types for procedural zone generation.
+ * Defines the data structures for rooms, connections, and zone layouts.
  */
 
-import type { BiomeType, ShardTier } from './index.js';
+import type { ZoneTier } from './index.js';
 
 // ─── Directions ──────────────────────────────────────────────────────────────
 
@@ -26,13 +26,12 @@ export const ALL_DIRECTIONS: readonly Direction[] = [
 
 export type RoomType =
   | 'entry'
-  | 'extraction'
   | 'boss'
   | 'corridor'
   | 'junction'
   | 'dead_end'
   | 'feature_stash'
-  | 'feature_shardboard'
+  | 'feature_expedition_board'
   | 'feature_marketplace'
   | 'feature_crafting'
   | 'feature_training'
@@ -94,11 +93,9 @@ export interface Room {
 export interface RoomGraph {
   rooms: Map<string, Room>;
   entryRoomIds: string[];
-  extractionRoomIds: string[];
   bossRoomId: string;
   seed: number;
-  biome: BiomeType;
-  tier: ShardTier;
+  tier: ZoneTier;
 }
 
 // ─── Serialization ───────────────────────────────────────────────────────────
@@ -117,11 +114,9 @@ export interface SerializedRoom {
 export interface SerializedRoomGraph {
   rooms: SerializedRoom[];
   entryRoomIds: string[];
-  extractionRoomIds: string[];
   bossRoomId: string;
   seed: number;
-  biome: BiomeType;
-  tier: ShardTier;
+  tier: ZoneTier;
 }
 
 /** Serialize a RoomGraph to a plain JSON-safe object. */
@@ -142,10 +137,8 @@ export function serializeRoomGraph(graph: RoomGraph): SerializedRoomGraph {
   return {
     rooms,
     entryRoomIds: graph.entryRoomIds,
-    extractionRoomIds: graph.extractionRoomIds,
     bossRoomId: graph.bossRoomId,
     seed: graph.seed,
-    biome: graph.biome,
     tier: graph.tier,
   };
 }
@@ -168,10 +161,8 @@ export function deserializeRoomGraph(data: SerializedRoomGraph): RoomGraph {
   return {
     rooms,
     entryRoomIds: data.entryRoomIds,
-    extractionRoomIds: data.extractionRoomIds,
     bossRoomId: data.bossRoomId,
     seed: data.seed,
-    biome: data.biome,
     tier: data.tier,
   };
 }

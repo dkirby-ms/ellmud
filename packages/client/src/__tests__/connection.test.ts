@@ -37,10 +37,10 @@ describe('Connection — message-only protocol enforcement', () => {
     expect(codeOnly).not.toMatch(/\bSchema\b/);
   });
 
-  it('subscribes to narrate, room_header, shard_state, combat_result, room_switch messages', () => {
+  it('subscribes to narrate, room_header, zone_state, combat_result, room_switch messages', () => {
     expect(connectionSource).toContain('MessageTypes.NARRATE');
     expect(connectionSource).toContain('MessageTypes.ROOM_HEADER');
-    expect(connectionSource).toContain('MessageTypes.SHARD_STATE');
+    expect(connectionSource).toContain('MessageTypes.ZONE_STATE');
     expect(connectionSource).toContain('MessageTypes.COMBAT_RESULT');
     expect(connectionSource).toContain('MessageTypes.ROOM_SWITCH');
   });
@@ -87,7 +87,7 @@ describe('Connection — runtime behavior', () => {
     const handlers = {
       onNarrate: vi.fn(),
       onRoomHeader: vi.fn(),
-      onShardState: vi.fn(),
+      onZoneState: vi.fn(),
       onCombatResult: vi.fn(),
       onRoomSwitch: vi.fn(),
       onError: vi.fn(),
@@ -99,7 +99,7 @@ describe('Connection — runtime behavior', () => {
     // 5 message subscriptions
     expect(mockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.NARRATE, handlers.onNarrate);
     expect(mockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.ROOM_HEADER, handlers.onRoomHeader);
-    expect(mockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.SHARD_STATE, handlers.onShardState);
+    expect(mockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.ZONE_STATE, handlers.onZoneState);
     expect(mockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.COMBAT_RESULT, handlers.onCombatResult);
     expect(mockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.ROOM_SWITCH, handlers.onRoomSwitch);
 
@@ -150,14 +150,14 @@ describe('Connection — runtime behavior', () => {
     const handlers = {
       onNarrate: vi.fn(),
       onRoomHeader: vi.fn(),
-      onShardState: vi.fn(),
+      onZoneState: vi.fn(),
       onCombatResult: vi.fn(),
       onRoomSwitch: vi.fn(),
       onError: vi.fn(),
       onLeave: vi.fn(),
     };
 
-    const result = await switchRoom(currentRoom as unknown as Room, 'shard', 'test-token', handlers);
+    const result = await switchRoom(currentRoom as unknown as Room, 'zone', 'test-token', handlers);
 
     // Should have left the current room
     expect(currentRoom.leave).toHaveBeenCalled();
@@ -165,7 +165,7 @@ describe('Connection — runtime behavior', () => {
     // Should have registered all 5 message handlers on the new room
     expect(newMockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.NARRATE, handlers.onNarrate);
     expect(newMockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.ROOM_HEADER, handlers.onRoomHeader);
-    expect(newMockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.SHARD_STATE, handlers.onShardState);
+    expect(newMockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.ZONE_STATE, handlers.onZoneState);
     expect(newMockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.COMBAT_RESULT, handlers.onCombatResult);
     expect(newMockRoom.onMessage).toHaveBeenCalledWith(MessageTypes.ROOM_SWITCH, handlers.onRoomSwitch);
     expect(newMockRoom.onError).toHaveBeenCalledTimes(1);
@@ -195,7 +195,7 @@ describe('Connection — runtime behavior', () => {
     const handlers = {
       onNarrate: vi.fn(),
       onRoomHeader: vi.fn(),
-      onShardState: vi.fn(),
+      onZoneState: vi.fn(),
       onCombatResult: vi.fn(),
       onRoomSwitch: vi.fn(),
       onError: vi.fn(),
@@ -204,15 +204,14 @@ describe('Connection — runtime behavior', () => {
 
     const result = await switchRoom(
       currentRoom as unknown as Room,
-      'shard',
+      'zone',
       'test-token',
       handlers,
-      { roomId: 'room-123', biome: 'flooded_crypt', tier: 1 },
+      { roomId: 'room-123', tier: 1 },
     );
 
     expect(mockJoinById).toHaveBeenCalledWith('room-123', {
       token: 'test-token',
-      biome: 'flooded_crypt',
       tier: 1,
     });
     expect(result).toBe(newMockRoom);

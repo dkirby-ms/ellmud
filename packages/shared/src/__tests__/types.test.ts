@@ -7,16 +7,16 @@ import {
   type CommandMessage,
   type NarrateMessage,
   type RoomHeaderMessage,
-  type ShardStateMessage,
-  type ExtractionMessage,
+  type ZoneStateMessage,
+  type OverlayMessage,
   type RoomSwitchMessage,
   type NarrationType,
-  type ShardState,
+  type ZoneState,
   type CombatAction,
-  type BiomeType,
+
   type GearTier,
-  type ShardTier,
-  type ShardModifier,
+  type ZoneTier,
+  type ZoneModifier,
   type MessageTypeKey,
 } from '../index.js';
 
@@ -33,12 +33,12 @@ describe('MessageTypes', () => {
     expect(MessageTypes.ROOM_HEADER).toBe('room_header');
   });
 
-  it('should export SHARD_STATE type key', () => {
-    expect(MessageTypes.SHARD_STATE).toBe('shard_state');
+  it('should export ZONE_STATE type key', () => {
+    expect(MessageTypes.ZONE_STATE).toBe('zone_state');
   });
 
-  it('should export EXTRACTION_STATE type key', () => {
-    expect(MessageTypes.EXTRACTION_STATE).toBe('extraction_state');
+  it('should export OVERLAY_STATE type key', () => {
+    expect(MessageTypes.OVERLAY_STATE).toBe('overlay_state');
   });
 
   it('should export STASH_UPDATE type key', () => {
@@ -85,47 +85,44 @@ describe('Message Type Shapes', () => {
     expect(msg.stability).toBe(0.75);
   });
 
-  it('ShardStateMessage should accept state and optional collapseTimer', () => {
-    const msg: ShardStateMessage = { state: 'active', collapseTimer: 600 };
+  it('ZoneStateMessage should accept state and optional collapseTimer', () => {
+    const msg: ZoneStateMessage = { state: 'active', collapseTimer: 600 };
     expect(msg.state).toBe('active');
     expect(msg.collapseTimer).toBe(600);
   });
 
-  it('ShardStateMessage should work without collapseTimer', () => {
-    const msg: ShardStateMessage = { state: 'seeding' };
+  it('ZoneStateMessage should work without collapseTimer', () => {
+    const msg: ZoneStateMessage = { state: 'seeding' };
     expect(msg.state).toBe('seeding');
     expect(msg.collapseTimer).toBeUndefined();
   });
 
-  it('ExtractionMessage should accept extraction state fields', () => {
-    const msg: ExtractionMessage = {
+  it('OverlayMessage should accept overlay state fields', () => {
+    const msg: OverlayMessage = {
       playerId: 'p1',
-      state: 'started',
-      ticksRemaining: 5,
-      totalTicks: 10,
-      narration: 'You begin channelling extraction.',
+      state: 'death',
+      narration: 'The darkness claims you.',
       timestamp: 12345,
     };
     expect(msg.playerId).toBe('p1');
-    expect(msg.state).toBe('started');
-    expect(msg.ticksRemaining).toBe(5);
+    expect(msg.state).toBe('death');
   });
 
   it('RoomSwitchMessage should accept target, reason, and optional options', () => {
     const msg: RoomSwitchMessage = {
-      target: 'shard',
-      reason: 'enter_shard',
+      target: 'zone',
+      reason: 'enter_zone',
     };
-    expect(msg.target).toBe('shard');
-    expect(msg.reason).toBe('enter_shard');
+    expect(msg.target).toBe('zone');
+    expect(msg.reason).toBe('enter_zone');
     expect(msg.options).toBeUndefined();
 
     const msgWithOptions: RoomSwitchMessage = {
       target: 'zone:the-refuge',
-      reason: 'extraction_complete',
-      options: { biome: 'flooded_crypt', roomId: 'room-123' },
+      reason: 'zone_exit',
+      options: { roomId: 'room-123' },
     };
-    expect(msgWithOptions.options).toEqual({ biome: 'flooded_crypt', roomId: 'room-123' });
+    expect(msgWithOptions.options).toEqual({ roomId: 'room-123' });
   });
 });
 
@@ -135,8 +132,8 @@ describe('Type Enumerations', () => {
     expect(types).toHaveLength(6);
   });
 
-  it('ShardState should allow all lifecycle states', () => {
-    const states: ShardState[] = ['seeding', 'open', 'active', 'destabilising', 'collapse'];
+  it('ZoneState should allow all lifecycle states', () => {
+    const states: ZoneState[] = ['seeding', 'open', 'active', 'destabilising', 'collapse'];
     expect(states).toHaveLength(5);
   });
 
@@ -147,13 +144,6 @@ describe('Type Enumerations', () => {
     expect(actions).toHaveLength(8);
   });
 
-  it('BiomeType should allow all biome types', () => {
-    const biomes: BiomeType[] = [
-      'flooded_crypt', 'shattered_bastion', 'fungal_deep', 'ashen_reach', 'void_rift',
-    ];
-    expect(biomes).toHaveLength(5);
-  });
-
   it('GearTier should allow all gear tiers', () => {
     const tiers: GearTier[] = [
       'scrap', 'common', 'sturdy', 'refined', 'masterwork', 'anomalous',
@@ -161,13 +151,13 @@ describe('Type Enumerations', () => {
     expect(tiers).toHaveLength(6);
   });
 
-  it('ShardTier should allow tiers 1-3', () => {
-    const tiers: ShardTier[] = [1, 2, 3];
+  it('ZoneTier should allow tiers 1-3', () => {
+    const tiers: ZoneTier[] = [1, 2, 3];
     expect(tiers).toHaveLength(3);
   });
 
-  it('ShardModifier should allow all modifier types', () => {
-    const mods: ShardModifier[] = [
+  it('ZoneModifier should allow all modifier types', () => {
+    const mods: ZoneModifier[] = [
       'darkness', 'hunted', 'silent', 'echoing', 'bountiful',
     ];
     expect(mods).toHaveLength(5);

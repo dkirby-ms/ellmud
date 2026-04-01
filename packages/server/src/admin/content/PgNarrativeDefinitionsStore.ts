@@ -18,7 +18,6 @@ interface NarrativeRow {
   slug: string;
   name: string;
   narrative_type: string;
-  biome: string | null;
   template: string;
   tone: string | null;
   verbosity: string | null;
@@ -33,7 +32,6 @@ function rowToEntity(row: NarrativeRow): ContentEntity {
     slug: row.slug,
     name: row.name,
     narrativeType: row.narrative_type,
-    biome: row.biome ?? '',
     template: row.template,
     tone: row.tone ?? '',
     verbosity: row.verbosity ?? '',
@@ -46,7 +44,7 @@ export class PgNarrativeDefinitionsStore implements IContentStore<ContentEntity>
 
   async getAll(): Promise<ContentEntity[]> {
     const result = await query<NarrativeRow>(
-      `SELECT id, slug, name, narrative_type, biome, template, tone, verbosity, tags, created_at
+      `SELECT id, slug, name, narrative_type, template, tone, verbosity, tags, created_at
        FROM narrative_template_definitions
        ORDER BY name`,
     );
@@ -55,7 +53,7 @@ export class PgNarrativeDefinitionsStore implements IContentStore<ContentEntity>
 
   async getById(id: string): Promise<ContentEntity | undefined> {
     const result = await query<NarrativeRow>(
-      `SELECT id, slug, name, narrative_type, biome, template, tone, verbosity, tags, created_at
+      `SELECT id, slug, name, narrative_type, template, tone, verbosity, tags, created_at
        FROM narrative_template_definitions
        WHERE id = $1`,
       [id],
@@ -65,19 +63,18 @@ export class PgNarrativeDefinitionsStore implements IContentStore<ContentEntity>
   }
 
   async create(entity: ContentEntity): Promise<ContentEntity> {
-    const { slug, name, narrativeType, biome, template, tone, verbosity, tags } =
+    const { slug, name, narrativeType, template, tone, verbosity, tags } =
       entity as Record<string, unknown>;
 
     try {
       const result = await query<NarrativeRow>(
-        `INSERT INTO narrative_template_definitions (slug, name, narrative_type, biome, template, tone, verbosity, tags)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING id, slug, name, narrative_type, biome, template, tone, verbosity, tags, created_at`,
+        `INSERT INTO narrative_template_definitions (slug, name, narrative_type, template, tone, verbosity, tags)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, slug, name, narrative_type, template, tone, verbosity, tags, created_at`,
         [
           slug as string,
           name as string,
           (narrativeType as string) ?? 'lore',
-          (biome as string) ?? null,
           (template as string) ?? '',
           (tone as string) ?? null,
           (verbosity as string) ?? null,
@@ -106,14 +103,13 @@ export class PgNarrativeDefinitionsStore implements IContentStore<ContentEntity>
 
     const result = await query<NarrativeRow>(
       `UPDATE narrative_template_definitions
-       SET slug = $1, name = $2, narrative_type = $3, biome = $4, template = $5, tone = $6, verbosity = $7, tags = $8
-       WHERE id = $9
-       RETURNING id, slug, name, narrative_type, biome, template, tone, verbosity, tags, created_at`,
+       SET slug = $1, name = $2, narrative_type = $3, template = $4, tone = $5, verbosity = $6, tags = $7
+       WHERE id = $8
+       RETURNING id, slug, name, narrative_type, template, tone, verbosity, tags, created_at`,
       [
         merged.slug as string,
         merged.name as string,
         (merged.narrativeType as string) ?? 'lore',
-        (merged.biome as string) ?? null,
         (merged.template as string) ?? '',
         (merged.tone as string) ?? null,
         (merged.verbosity as string) ?? null,

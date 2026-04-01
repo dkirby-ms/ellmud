@@ -1,8 +1,8 @@
 /**
- * CombatSystem — tick-based combat orchestrator for a shard.
+ * CombatSystem — tick-based combat orchestrator for a zone.
  *
  * Manages active encounters, queued actions, and simultaneous resolution.
- * Called by ShardRoom.update() on every 1-second tick.
+ * Called by ZoneRoom.update() on every 1-second tick.
  *
  * Design constraints:
  * - Deterministic: same inputs → same outputs (no randomness in Phase 1)

@@ -1,11 +1,11 @@
 /**
- * In-memory player state for a shard session.
+ * In-memory player state for a zone session.
  *
  * Tracks current room, inventory, weight budget, skills, and equipment per player.
  * This is server-authoritative — the client never sees this directly.
  */
 
-import type { Item } from '../shard/RoomGraph.js';
+import type { Item } from '../zone/RoomGraph.js';
 import type { VisibleEquipment } from '@ellmud/shared';
 
 export interface InventoryEntry {
@@ -20,8 +20,8 @@ export interface PlayerSkills {
   tracking?: number;
 }
 
-/** Active shard-sickness debuff applied after PvP death. */
-export interface ShardSicknessDebuff {
+/** Active death penalty debuff applied after death. */
+export interface DeathPenaltyDebuff {
   appliedAt: number;
   durationMs: number;
   attackPenalty: number;
@@ -49,7 +49,7 @@ export class PlayerState {
   peaceful: boolean = false;
   skills: PlayerSkills;
   equipment: VisibleEquipment | undefined;
-  shardSickness: ShardSicknessDebuff | null = null;
+  deathPenalty: DeathPenaltyDebuff | null = null;
 
   constructor(
     sessionId: string,

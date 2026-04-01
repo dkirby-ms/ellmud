@@ -1,10 +1,10 @@
 /**
  * Loadout Integration Tests — End-to-end flows with Colyseus rooms.
  *
- * Tests the full lifecycle: Zone ShardRoom (stash screen) → equip → enter shard →
- * find item → equip shard item → extract → items persist.
+ * Tests the full lifecycle: Zone ZoneRoom (stash screen) → equip → enter zone →
+ * find item → equip zone item → extract → items persist.
  *
- * Also tests zone-mode ShardRoom and shard-mode ShardRoom message handlers for EQUIP_ITEM
+ * Also tests zone-mode ZoneRoom and procedural-mode ZoneRoom message handlers for EQUIP_ITEM
  * and UNEQUIP_ITEM message types.
  *
  * ⚠️  PROACTIVE TESTS — written before implementation.
@@ -50,9 +50,9 @@ beforeEach(() => {
 // REFUGE ROOM — EQUIP/UNEQUIP MESSAGE HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe('Zone ShardRoom — EQUIP_ITEM handler', () => {
+describe('Zone ZoneRoom — EQUIP_ITEM handler', () => {
   it('responds to EQUIP_ITEM message with loadout update', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+    const { client, collector } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     // Prepare: add item to stash for this player
     // Note: The room must have access to the stash — this may need
@@ -79,7 +79,7 @@ describe('Zone ShardRoom — EQUIP_ITEM handler', () => {
   });
 
   it('responds to UNEQUIP_ITEM message with updated loadout', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+    const { client, collector } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     client.send(MessageTypes.UNEQUIP_ITEM, {
       slot: 'weapon' as EquipmentSlotType,
@@ -98,7 +98,7 @@ describe('Zone ShardRoom — EQUIP_ITEM handler', () => {
   });
 
   it('invalid EQUIP_ITEM slot type returns error narration', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+    const { client, collector } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     client.send(MessageTypes.EQUIP_ITEM, {
       itemId: 'some-item',
@@ -124,16 +124,16 @@ describe('Zone ShardRoom — EQUIP_ITEM handler', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SHARD ROOM — EQUIP_ITEM MESSAGE HANDLERS
+// ZONE ROOM — EQUIP_ITEM MESSAGE HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe('ShardRoom — EQUIP_ITEM handler', () => {
-  it('responds to EQUIP_ITEM message in shard context', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+describe('ZoneRoom — EQUIP_ITEM handler', () => {
+  it('responds to EQUIP_ITEM message in zone context', async () => {
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
-    // Send equip message (item from shard inventory)
+    // Send equip message (item from zone inventory)
     client.send(MessageTypes.EQUIP_ITEM, {
-      itemId: 'shard-found-item',
+      itemId: 'zone-found-item',
       targetSlot: 'weapon' as EquipmentSlotType,
     });
 
@@ -153,12 +153,12 @@ describe('ShardRoom — EQUIP_ITEM handler', () => {
     await client.leave();
   });
 
-  it('slot restrictions enforced by ShardRoom handler', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+  it('slot restrictions enforced by ZoneRoom handler', async () => {
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     // Try to equip armour in weapon slot
     client.send(MessageTypes.EQUIP_ITEM, {
-      itemId: 'shard-armour-piece',
+      itemId: 'zone-armour-piece',
       targetSlot: 'weapon' as EquipmentSlotType,
     });
 
@@ -180,11 +180,11 @@ describe('ShardRoom — EQUIP_ITEM handler', () => {
 // FULL LIFECYCLE INTEGRATION
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe('Full Lifecycle — Zone Equip → Shard → Extract', () => {
-  it('equip in zone, items carry into shard context', async () => {
-    // 1. Connect to zone ShardRoom (the-refuge)
+describe('Full Lifecycle — Zone Equip → Zone → Extract', () => {
+  it('equip in zone, items carry into zone context', async () => {
+    // 1. Connect to zone ZoneRoom (the-refuge)
     const { client: refugeClient } =
-      await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+      await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     // 2. Equip item from stash (via message)
     refugeClient.send(MessageTypes.EQUIP_ITEM, {
@@ -195,19 +195,19 @@ describe('Full Lifecycle — Zone Equip → Shard → Extract', () => {
 
     await refugeClient.leave();
 
-    // 3. Connect to Shard — loadout should carry over
-    const { client: shardClient } =
-      await connectTestClient(colyseus, 'shard');
+    // 3. Connect to Zone — loadout should carry over
+    const { client: zoneClient } =
+      await connectTestClient(colyseus, 'zone');
 
-    // The shard should have the player's loadout state
+    // The zone should have the player's loadout state
     // Exact assertion depends on how loadout state is communicated on join
     await wait(500);
 
-    await shardClient.leave();
+    await zoneClient.leave();
   });
 
   it('stash update message sent after equip from stash', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+    const { client, collector } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     client.send(MessageTypes.EQUIP_ITEM, {
       itemId: 'some-stash-item',
@@ -234,7 +234,7 @@ describe('Full Lifecycle — Zone Equip → Shard → Extract', () => {
   });
 
   it('multiple players can equip simultaneously in same room', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
 
     const client1 = await colyseus.connectTo(room);
     new MessageCollector(client1);
@@ -268,7 +268,7 @@ describe('Full Lifecycle — Zone Equip → Shard → Extract', () => {
 
 describe('Integration Edge Cases', () => {
   it('disconnecting mid-equip does not corrupt state', async () => {
-    const { client } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+    const { client } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     // Send equip and immediately disconnect
     client.send(MessageTypes.EQUIP_ITEM, {
@@ -285,7 +285,7 @@ describe('Integration Edge Cases', () => {
   });
 
   it('rapid equip/unequip messages do not crash the server', async () => {
-    const { client } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+    const { client } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     // Fire 20 rapid equip/unequip messages
     for (let i = 0; i < 10; i++) {
@@ -305,7 +305,7 @@ describe('Integration Edge Cases', () => {
   });
 
   it('equip message with missing fields is handled gracefully', async () => {
-    const { client } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+    const { client } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     // Send malformed messages
     client.send(MessageTypes.EQUIP_ITEM, {});

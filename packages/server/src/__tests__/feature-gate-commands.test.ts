@@ -1,20 +1,20 @@
 /**
  * Feature-Gate Command Tests — Phase A
  *
- * Verifies that feature-gated commands (shardboard, enter, stash, store, loadout)
+ * Verifies that feature-gated commands (board, enter, stash, store, loadout)
  * only work in rooms with the correct RoomType, while non-gated commands
  * (look, go, say, take) continue to work everywhere.
  *
  * Feature gates:
- *   feature_shardboard → shardboard, enter
- *   feature_stash      → stash, store, loadout
- *   (no gate)          → take, look, go, say, drop, inventory
+ *   feature_expedition_board → board, zoneboard (alias), enter
+ *   feature_stash            → stash, store, loadout
+ *   (no gate)                → take, look, go, say, drop, inventory
  */
 
 import { describe, it, expect } from 'vitest';
 import { handleCommand, type CommandContext, type CommandResult } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
-import type { Room, RoomType, Direction } from '../shard/RoomGraph.js';
+import type { Room, RoomType, Direction } from '../zone/RoomGraph.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -68,35 +68,35 @@ function narrationText(result: CommandResult): string {
   return result.narrations.map((n) => n.text).join('\n');
 }
 
-// ─── Feature-Gated: Shardboard ─────────────────────────────────────────────
+// ─── Feature-Gated: Expedition Board ────────────────────────────────────────
 
 describe('Feature-Gated Commands', () => {
-  describe('shardboard command', () => {
-    it('succeeds in feature_shardboard room', () => {
-      const room = makeRoom({ type: 'feature_shardboard' });
+  describe('board command', () => {
+    it('succeeds in feature_expedition_board room', () => {
+      const room = makeRoom({ type: 'feature_expedition_board' });
       const ctx = buildCtx(room);
 
-      const result = handleCommand('shardboard', ctx);
+      const result = handleCommand('board', ctx);
       // Should NOT be a "can't do that here" rejection
       const text = narrationText(result);
       expect(text).not.toContain("can't do that here");
       expect(text).not.toContain('cannot do that here');
-      // Should return some meaningful response (narration about shards)
+      // Should return some meaningful response (narration about zones)
       expect(result.narrations.length).toBeGreaterThan(0);
     });
 
-    it('rejects in non-shardboard room', () => {
+    it('rejects in non-expedition-board room', () => {
       const room = makeRoom({ type: 'corridor' });
       const ctx = buildCtx(room);
 
-      const result = handleCommand('shardboard', ctx);
+      const result = handleCommand('board', ctx);
       const text = narrationText(result).toLowerCase();
       // Should indicate the command is location-restricted
       expect(
         text.includes("can't") ||
         text.includes('cannot') ||
         text.includes('not available') ||
-        text.includes('no shardboard') ||
+        text.includes('no expedition board') ||
         text.includes('nothing happens'),
       ).toBe(true);
     });
@@ -105,24 +105,34 @@ describe('Feature-Gated Commands', () => {
       const room = makeRoom({ type: undefined });
       const ctx = buildCtx(room);
 
-      const result = handleCommand('shardboard', ctx);
+      const result = handleCommand('board', ctx);
       const text = narrationText(result).toLowerCase();
       expect(
         text.includes("can't") ||
         text.includes('cannot') ||
         text.includes('not available') ||
-        text.includes('no shardboard') ||
+        text.includes('no expedition board') ||
         text.includes('nothing happens'),
       ).toBe(true);
+    });
+
+    it('zoneboard alias still works in feature_expedition_board room', () => {
+      const room = makeRoom({ type: 'feature_expedition_board' });
+      const ctx = buildCtx(room);
+
+      const result = handleCommand('zoneboard', ctx);
+      const text = narrationText(result);
+      expect(text).not.toContain("can't do that here");
+      expect(result.narrations.length).toBeGreaterThan(0);
     });
   });
 
   // ─── Feature-Gated: Enter ──────────────────────────────────────────────
 
   describe('enter command', () => {
-    it('succeeds in feature_shardboard room', () => {
-      const room = makeRoom({ type: 'feature_shardboard' });
-      const ctx = buildCtx(room, ['shard-123']);
+    it('succeeds in feature_expedition_board room', () => {
+      const room = makeRoom({ type: 'feature_expedition_board' });
+      const ctx = buildCtx(room, ['zone-123']);
 
       const result = handleCommand('enter', ctx);
       const text = narrationText(result);
@@ -131,9 +141,9 @@ describe('Feature-Gated Commands', () => {
       expect(result.narrations.length).toBeGreaterThan(0);
     });
 
-    it('rejects in non-shardboard room', () => {
+    it('rejects in non-expedition-board room', () => {
       const room = makeRoom({ type: 'junction' });
-      const ctx = buildCtx(room, ['shard-123']);
+      const ctx = buildCtx(room, ['zone-123']);
 
       const result = handleCommand('enter', ctx);
       const text = narrationText(result).toLowerCase();
@@ -269,8 +279,8 @@ describe('Feature-Gated Commands', () => {
       expect(text).toContain('pick up');
     });
 
-    it('works in a feature_shardboard room', () => {
-      const room = makeRoom({ type: 'feature_shardboard' });
+    it('works in a feature_expedition_board room', () => {
+      const room = makeRoom({ type: 'feature_expedition_board' });
       const ctx = buildCtx(room, ['torch']);
 
       const result = handleCommand('take', ctx);
@@ -287,7 +297,7 @@ describe('Feature-Gated Commands', () => {
       'junction',
       'dead_end',
       'feature_stash',
-      'feature_shardboard',
+      'feature_expedition_board',
       undefined,
     ];
 

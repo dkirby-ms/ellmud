@@ -44,10 +44,10 @@ export interface NarrateMessage {
 export interface RoomHeaderMessage {
   roomName: string;
   exits: string[];
-  stability: number; // 0–1, shard stability
+  stability: number; // 0–1, zone stability
   /** Zone name, present when the room is part of a hand-crafted zone. */
   zoneName?: string;
-  /** Room type (entry, extraction, boss, etc.), present for zone rooms. */
+  /** Room type (entry, boss, etc.), present for zone rooms. */
   roomType?: string;
   /** Room slug identifier, present when dev mode is enabled. */
   roomSlug?: string;
@@ -59,21 +59,21 @@ export interface ZoneTransferMessage {
   targetRoomSlug: string;
 }
 
-/** Server → Client: Shard lifecycle state change notification. */
-export interface ShardStateMessage {
-  state: ShardState;
+/** Server → Client: Zone lifecycle state change notification. */
+export interface ZoneStateMessage {
+  state: ZoneState;
   collapseTimer?: number; // seconds remaining, if applicable
 }
 
-// ─── Shard Lifecycle ─────────────────────────────────────────────────────────
+// ─── Zone Lifecycle ─────────────────────────────────────────────────────────
 
-/** Shard lifecycle states (GDD §2.3). */
-export type ShardState =
+/** Zone lifecycle states (GDD §2.3). */
+export type ZoneState =
   | 'seeding'        // Room graph generation, creature spawning
   | 'open'           // Entry points active, players may join
-  | 'active'         // Full exploration, combat, extraction
+  | 'active'         // Full exploration, combat
   | 'destabilising'  // Final 25% — hazards intensify
-  | 'collapse';      // Shard destroyed, items lost
+  | 'collapse';      // Zone destroyed, items lost
 
 // ─── Combat Actions (GDD §6.2) ──────────────────────────────────────────────
 
@@ -88,15 +88,6 @@ export type CombatAction =
   | 'flee'
   | 'observe';
 
-// ─── Biomes (GDD §10.2) ─────────────────────────────────────────────────────
-
-export type BiomeType =
-  | 'flooded_crypt'
-  | 'shattered_bastion'
-  | 'fungal_deep'
-  | 'ashen_reach'
-  | 'void_rift';
-
 // ─── Gear & Loot (GDD §9) ───────────────────────────────────────────────────
 
 /** Gear quality tiers, ascending. */
@@ -108,13 +99,13 @@ export type GearTier =
   | 'masterwork'
   | 'anomalous';
 
-// ─── Shard Tiers (GDD §10.1) ────────────────────────────────────────────────
+// ─── Zone Tiers (GDD §10.1) ────────────────────────────────────────────────
 
-export type ShardTier = 1 | 2 | 3;
+export type ZoneTier = 1 | 2 | 3;
 
-// ─── Shard Modifiers (GDD §10.3) ────────────────────────────────────────────
+// ─── Zone Modifiers (GDD §10.3) ────────────────────────────────────────────
 
-export type ShardModifier =
+export type ZoneModifier =
   | 'darkness'
   | 'hunted'
   | 'silent'
@@ -244,10 +235,10 @@ export const MessageTypes = {
   // Server → Client
   NARRATE: 'narrate',
   ROOM_HEADER: 'room_header',
-  SHARD_STATE: 'shard_state',
+  ZONE_STATE: 'zone_state',
   COMBAT_RESULT: 'combat_result',
   PLAYER_STATE: 'player_state',
-  EXTRACTION_STATE: 'extraction_state',
+  OVERLAY_STATE: 'overlay_state',
   STASH_UPDATE: 'stash_update',
   LOADOUT_UPDATE: 'loadout_update',
   ROOM_SWITCH: 'room_switch',
@@ -345,7 +336,6 @@ export type SoundType =
   | 'running'
   | 'walking'
   | 'striking_door'
-  | 'extraction'
   | 'explosion'
   | 'sneaking';
 
@@ -355,7 +345,6 @@ export const NOISE_VALUES: Record<SoundType, number> = {
   running: 4,
   walking: 2,
   striking_door: 7,
-  extraction: 8,
   explosion: 9,
   sneaking: 1,
 } as const;
@@ -366,7 +355,6 @@ export const SOUND_DESCRIPTIONS: Record<SoundType, string> = {
   running: 'hurried footsteps',
   walking: 'soft footsteps',
   striking_door: 'a heavy impact against a door',
-  extraction: 'a rising hum of energy',
   explosion: 'a thunderous explosion',
   sneaking: 'a faint rustle',
 } as const;
@@ -448,24 +436,23 @@ export {
 } from './items.js';
 
 
-// ─── Shard Card Types (Shardboard UI) ────────────────────────────────────────
+// ─── Zone Card Types (Expedition Board UI) ──────────────────────────────────
 
-export type { ShardKeyType, ShardCardData } from './shard-card.js';
+export type { ZoneKeyType, ZoneCardData } from './zone-card.js';
 
-// ─── Room Switching (GDD §3 — Refuge ↔ Shard) ────────────────────────────────
+// ─── Room Switching (GDD §3 — Refuge ↔ Zone) ────────────────────────────────
 
 /** Options for joining a target room. */
 export interface RoomSwitchOptions {
-  /** Join a specific room instance by ID (used for shard selection). */
+  /** Join a specific room instance by ID (used for zone selection). */
   roomId?: string;
-  /** Optional shard metadata for UI or future matchmaking. */
-  biome?: BiomeType;
-  tier?: ShardTier;
+  /** Optional zone metadata for UI or future matchmaking. */
+  tier?: ZoneTier;
 }
 
 /** Server → Client: Instruct client to switch rooms. */
 export interface RoomSwitchMessage {
-  target: string;       // Colyseus room name to join (e.g. 'shard', 'refuge')
+  target: string;       // Colyseus room name to join (e.g. 'zone', 'refuge')
   options?: RoomSwitchOptions; // Additional join options for the target room
   reason: string;       // Human-readable reason for the switch
 }
@@ -526,7 +513,7 @@ export type TraceType =
   | 'discarded_item'
   | 'residue';
 
-/** Default TTLs per trace type (seconds). Infinity = permanent for shard lifetime. */
+/** Default TTLs per trace type (seconds). Infinity = permanent for zone lifetime. */
 export const TRACE_TTLS: Record<TraceType, number> = {
   footprint: 300,
   blood_trail: 600,
@@ -537,7 +524,7 @@ export const TRACE_TTLS: Record<TraceType, number> = {
   residue: 120,
 };
 
-/** An ephemeral trace left in a shard room. */
+/** An ephemeral trace left in a zone room. */
 export interface Trace {
   id: string;
   type: TraceType;
@@ -594,35 +581,33 @@ export {
   TIME_PERIOD_TICKS,
 } from './ambient-types.js';
 
-// ─── Extraction Types (GDD §3 step 6) ────────────────────────────────────────
+// ─── Overlay State Types (death / downing UI) ────────────────────────────────
 
-/** Server → Client: Extraction channel state update. */
-export interface ExtractionMessage {
+/** Server → Client: Player overlay state for death, downing, and stabilization UI. */
+export interface OverlayMessage {
   playerId: string;
-  state: 'started' | 'progress' | 'completed' | 'interrupted' | 'death' | 'downed' | 'stabilized' | 'bleed_out';
-  ticksRemaining?: number;
-  totalTicks?: number;
+  state: 'death' | 'downed' | 'stabilized' | 'bleed_out';
   narration: string;
   timestamp: number;
 }
 
-// ─── Downing & Shard-Sickness Types (GDD §6.4) ──────────────────────────────
+// ─── Downing & Death Penalty Types (GDD §6.5) ──────────────────────────────
 
 /** Player status in the downing lifecycle. */
 export type PlayerVitalStatus = 'alive' | 'downed' | 'stabilized' | 'dead';
 
-/** Shard-sickness debuff summary sent to the client. */
-export interface ShardSicknessInfo {
-  /** Number of recent deaths contributing to sickness. */
+/** Death penalty debuff summary sent to the client. */
+export interface DeathPenaltyInfo {
+  /** Number of recent deaths contributing to penalty. */
   deathCount: number;
   /** Stat penalty as percentage (0–50). */
   penaltyPercent: number;
-  /** Whether shard-sickness is currently active. */
+  /** Whether death penalty is currently active. */
   active: boolean;
 }
 
-/** Default shard-sickness parameters (GDD §6.4). */
-export const SHARD_SICKNESS_DEFAULTS = {
+/** Default death penalty parameters (GDD §6.5). */
+export const DEATH_PENALTY_DEFAULTS = {
   durationMs: 120_000,
   attackPenalty: -5,
   defencePenalty: -3,

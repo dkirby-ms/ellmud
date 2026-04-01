@@ -18,12 +18,12 @@ import { useReconnection } from "../hooks/useReconnection";
 import { useAutoScroll } from "../hooks/useAutoScroll";
 import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
 import { logout } from "../services/api";
-import ShardboardTab from "../components/ShardboardTab";
+import ExpeditionBoardTab from "../components/ExpeditionBoardTab";
 import CombinedStashLoadout from "../components/CombinedStashLoadout";
 import type {
   NarrateMessage,
   RoomHeaderMessage,
-  ShardStateMessage,
+  ZoneStateMessage,
   CombatResultMessage,
   RoomSwitchMessage,
   LoadoutUpdateMessage,
@@ -38,7 +38,7 @@ type TabType =
   | "marketplace"
   | "factions"
   | "contracts"
-  | "shardboard";
+  | "expedition_board";
 
 const tabs: { id: TabType; icon: React.ReactNode; label: string }[] = [
   { id: "equipment", icon: <Shield className="w-5 h-5" />, label: "Equipment" },
@@ -54,7 +54,7 @@ const tabs: { id: TabType; icon: React.ReactNode; label: string }[] = [
     icon: <FileText className="w-5 h-5" />,
     label: "Contracts",
   },
-  { id: "shardboard", icon: <Map className="w-5 h-5" />, label: "Shardboard" },
+  { id: "expedition_board", icon: <Map className="w-5 h-5" />, label: "Expedition Board" },
 ];
 
 let msgCounter = 0;
@@ -64,7 +64,7 @@ function nextMsgId(): string {
 
 export default function Refuge() {
   const { state, dispatch } = useAppContext();
-  const [activeTab, setActiveTab] = useState<TabType>("shardboard");
+  const [activeTab, setActiveTab] = useState<TabType>("expedition_board");
   const [chatMessage, setChatMessage] = useState("");
   const navigate = useNavigate();
   const navigateRef = useRef(navigate);
@@ -134,10 +134,10 @@ export default function Refuge() {
           dispatch({ type: "SET_ROOM_HEADER", header: msg });
         }
       },
-      onShardState: (msg: ShardStateMessage) => {
+      onZoneState: (msg: ZoneStateMessage) => {
         if (!disposed) {
           dispatch({
-            type: "SET_SHARD_STATE",
+            type: "SET_ZONE_STATE",
             state: msg.state,
             collapseTimer: msg.collapseTimer,
           });
@@ -164,8 +164,8 @@ export default function Refuge() {
         roomRef.current = null;
         dispatch({ type: "SET_CONNECTION_STATUS", status: "disconnected" });
 
-        if (msg.target === "shard") {
-          navigateRef.current("/shard/live", {
+        if (msg.target === "zone") {
+          navigateRef.current("/zone/live", {
             state: { fromRefuge: true, options: msg.options },
           });
         }
@@ -248,10 +248,10 @@ export default function Refuge() {
     [chatMessage],
   );
 
-  // Enter shard via server command
-  const handleEnterShard = useCallback(() => {
+  // Enter zone via server command
+  const handleEnterZone = useCallback(() => {
     if (!roomRef.current) return;
-    sendRawCommand(roomRef.current, "enter shard");
+    sendRawCommand(roomRef.current, "enter zone");
   }, []);
 
   const handleLogout = useCallback(async () => {
@@ -408,8 +408,8 @@ export default function Refuge() {
 
         {/* Center column - Content */}
         <div className="flex-1 bg-bg-primary overflow-y-auto">
-          {activeTab === "shardboard" && (
-            <ShardboardTab onEnterShard={handleEnterShard} />
+          {activeTab === "expedition_board" && (
+            <ExpeditionBoardTab onEnterZone={handleEnterZone} />
           )}
           {activeTab === "equipment" && (
             <CombinedStashLoadout room={roomRef.current} />
