@@ -2052,3 +2052,23 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 
 **No action required** — stronghold zones are ready for death routing integration.
 
+### Repurpose Refuge as Designer/Debug Hub (2026-04-01, Jarlaxle #239)
+
+**Changes:**
+- Changed Refuge zone DB seed category from `hub` → `dev`, updated description to designer/debug framing
+- Added `'dev'` to shared `ZoneDefinition.category` union type
+- Added `'dev'` to `isNonCombatZone` check in ZoneRoom — dev zones skip collapse/combat like hub zones
+- Updated fallback Refuge graph hearth description to reflect debug staging area
+- Updated comments across NPCSystem, AmbientSystem, WeatherSystem, ambient-templates, stronghold.ts
+- Updated client Refuge.tsx default location label, ambient placeholder text, connection messages
+- Updated faction-strongholds tests to seed Refuge as `category: 'dev'`
+
+**What stays unchanged:**
+- The Refuge zone slug (`the-refuge`) and room structure — still works as fallback for unaffiliated players
+- NPCs are retained (useful for testing NPC interactions)
+- Fallback Refuge graph kept (for cases where no DB data exists)
+- All ambient narration templates kept (atmospheric prose still works for debug hub)
+- Client Refuge.tsx functional behavior unchanged — still connects to `zone:the-refuge`
+
+**Key design decision:** `dev` category added to `isNonCombatZone` so the debug hub behaves like hub/social zones (no collapse timer, no creature AI, no combat). This is correct — designers shouldn't worry about getting killed while testing.
+

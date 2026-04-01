@@ -1,13 +1,13 @@
 -- 003_seed_zones.sql — Seed zone data (Refuge + Warrens).
 
 -- ============================================================================
--- The Refuge — persistent hub zone
+-- The Refuge — designer/debug hub (fallback for unaffiliated players)
 -- ============================================================================
 
 INSERT INTO zones (id, slug, name, description, level_min, level_max, tier, theme, entry_room_slugs, lifecycle, category, max_players, pvp_enabled, repop_interval_seconds)
 VALUES (gen_random_uuid(), 'the-refuge', 'The Refuge',
-  'A battered sanctuary carved from the ruins of a collapsed ruin. The last safe haven for those who dare the rifts.',
-  1, 100, 1, 'flooded_crypt', '{hearth}', 'persistent', 'hub', 0, false, 0);
+  'A pocket dimension maintained by the designers. Test dummies, debug consoles, and prototype systems fill the crumbling halls. Unaffiliated shardwalkers awaken here.',
+  1, 100, 1, 'flooded_crypt', '{hearth}', 'persistent', 'dev', 0, false, 0);
 
 -- Refuge rooms
 INSERT INTO zone_rooms (id, zone_id, slug, name, description, type, properties, loot_containers, hazards, npcs)

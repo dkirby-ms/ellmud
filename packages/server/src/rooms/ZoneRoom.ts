@@ -69,7 +69,7 @@ import { LoadoutService, getLoadoutRepository } from '../loadout/index.js';
 import type { LoadoutRepository } from '../loadout/index.js';
 import { getZoneRepository } from '../zones/index.js';
 import type { ZoneData } from '../zones/index.js';
-import { resolvePlayerHubTarget } from '../zones/stronghold.js';
+import { resolvePlayerHubTarget, resolvePlayerHubName } from '../zones/stronghold.js';
 import { convertZoneToRoomGraph } from '../zones/zone-adapter.js';
 import { getItemDefinition } from '../items/registry.js';
 import type { Item } from '../zone/RoomGraph.js';
@@ -701,11 +701,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private update(_deltaTime: number): void {
     this.state.tick++;
 
-    // Hub/social zones skip collapse and combat ticking
+    // Hub/social/dev zones skip collapse and combat ticking
     const isNonCombatZone = this.isZone && this.zoneData &&
-      (this.zoneData.zone.category === 'hub' || this.zoneData.zone.category === 'faction_hub' || this.zoneData.zone.category === 'social');
+      (this.zoneData.zone.category === 'hub' || this.zoneData.zone.category === 'faction_hub' || this.zoneData.zone.category === 'social' || this.zoneData.zone.category === 'dev');
 
-    // Collapse timer countdown (skip for persistent hub/social zones)
+    // Collapse timer countdown (skip for persistent hub/social/dev zones)
     if (!isNonCombatZone && (this.lifecycle === 'active' || this.lifecycle === 'destabilising')) {
       this.state.collapseTimer = Math.max(0, this.state.collapseTimer - 1);
       this.state.stability = this.state.collapseTimer / this.collapseTimerSeconds;
@@ -723,7 +723,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.tickCreatures();
     }
 
-    // Resolve combat tick (skip for hub/social zones)
+    // Resolve combat tick (skip for hub/social/dev zones)
     if (!isNonCombatZone && this.combatSystem.hasActiveEncounters()) {
       const tickResult = this.combatSystem.resolveTick();
 
@@ -1733,18 +1733,19 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Send death state to the defeated player
     const client = this.findClient(playerId);
     if (client) {
+      // Resolve faction-based hub target (stronghold if faction member, Refuge otherwise)
+      const factionSlug = this.playerFactionSlugs.get(playerId);
+      const hubTarget = resolvePlayerHubTarget(factionSlug);
+      const hubName = resolvePlayerHubName(factionSlug);
+
       this.sendOverlayState(client, {
         playerId,
         state: 'death',
         narration: isPvPKill
-          ? 'A rival adventurer fells you. You awaken at your stronghold, bearing the death penalty…'
-          : 'The darkness claims you. You awaken at your stronghold, weakened by the death penalty…',
+          ? `A rival adventurer fells you. You awaken in ${hubName}, bearing the death penalty…`
+          : `The darkness claims you. You awaken in ${hubName}, weakened by the death penalty…`,
         timestamp: Date.now(),
       });
-
-      // Resolve faction-based hub target (stronghold if faction member, Refuge otherwise)
-      const factionSlug = this.playerFactionSlugs.get(playerId);
-      const hubTarget = resolvePlayerHubTarget(factionSlug);
 
       // Schedule return to hub after 3 seconds
       this.clock.setTimeout(async () => {
@@ -2281,6 +2282,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
 // ─── B7: Fallback Refuge Graph ──────────────────────────────────────────────
 // Used when ZoneRoom loads in zone mode for 'the-refuge' but no DB data exists.
+// The Refuge is now a designer/debug hub — fallback for unaffiliated players.
 
 function createFallbackRefugeGraph(): RoomGraph {
   const rooms = new Map<string, import('../zone/RoomGraph.js').Room>();
@@ -2288,7 +2290,7 @@ function createFallbackRefugeGraph(): RoomGraph {
   rooms.set('hearth', {
     id: 'hearth',
     name: 'The Hearth',
-    description: 'A broad stone chamber warmed by a perpetual fire. Scarred adventurers rest on makeshift benches. The air smells of ash and iron.',
+    description: 'A broad stone chamber repurposed as a debug staging area. Test dummies line one wall; a perpetual fire crackles in the centre. Unaffiliated shardwalkers awaken here.',
     type: 'entry',
     exits: new Map<Direction, string>([
       ['east', 'stash-alcove'],

@@ -28,7 +28,7 @@ import { wait } from './helpers/index.js';
 
 async function seedZone(
   slug: string,
-  category: 'hub' | 'dungeon' | 'wilderness' | 'social' = 'hub',
+  category: 'hub' | 'dev' | 'dungeon' | 'wilderness' | 'social' = 'hub',
 ): Promise<ZoneData> {
   const repo = getZoneRepository();
 

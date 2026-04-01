@@ -1,11 +1,12 @@
 /**
- * NPCSystem — Pre-programmed NPC behaviors for the Refuge.
+ * NPCSystem — Pre-programmed NPC behaviors for the Refuge (designer/debug hub).
  *
  * NPC types:
  *   - Merchants: patrol between stalls on a fixed route
  *   - Faction Reps: hold court at fixed locations, periodic announcements
  *   - Refugees: arrive and depart on schedule
  *
+ * NPCs are retained in the debug hub for testing NPC interactions.
  * GDD §2.1 — NPC activity
  */
 
@@ -21,7 +22,7 @@ export interface NPCEvent {
   idleAction?: string;
 }
 
-/** Default NPC definitions for the Refuge. */
+/** Default NPC definitions for the Refuge (debug hub — kept for testing). */
 export const REFUGE_NPCS: NPCDefinition[] = [
   {
     id: 'merchant-greta',

@@ -117,18 +117,18 @@ describe('getStrongholdForFaction', () => {
 
   it('falls back to Refuge when stronghold zone is not in DB', async () => {
     const repo = new InMemoryZoneRepository();
-    // Create Refuge but no strongholds
+    // Create Refuge (debug hub) but no strongholds
     await repo.createZone({
       slug: 'the-refuge',
       name: 'The Refuge',
-      description: 'Fallback hub',
+      description: 'Designer/debug hub',
       levelMin: 1,
       levelMax: 100,
       tier: 1,
       theme: 'flooded_crypt',
       entryRoomSlugs: ['hearth'],
       lifecycle: 'persistent',
-      category: 'hub',
+      category: 'dev',
       maxPlayers: 0,
       pvpEnabled: false,
       repopIntervalSeconds: 0,
@@ -145,14 +145,14 @@ describe('getStrongholdForFaction', () => {
     await repo.createZone({
       slug: 'the-refuge',
       name: 'The Refuge',
-      description: 'Fallback hub',
+      description: 'Designer/debug hub',
       levelMin: 1,
       levelMax: 100,
       tier: 1,
       theme: 'flooded_crypt',
       entryRoomSlugs: ['hearth'],
       lifecycle: 'persistent',
-      category: 'hub',
+      category: 'dev',
       maxPlayers: 0,
       pvpEnabled: false,
       repopIntervalSeconds: 0,

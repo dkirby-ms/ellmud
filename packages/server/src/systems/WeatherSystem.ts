@@ -1,10 +1,11 @@
 /**
- * WeatherSystem — Time-of-day and weather state machine for the Refuge.
+ * WeatherSystem — Time-of-day and weather state machine for hub zones.
  *
  * A simple cyclic state machine:
  *   Weather: clear → cloudy → rain → storm → rain → cloudy → clear (with randomness)
  *   Time: dawn → morning → midday → afternoon → dusk → night → dawn
  *
+ * Used by the Refuge (debug hub) and faction strongholds.
  * GDD §2.1 — Weather and atmosphere
  */
 
