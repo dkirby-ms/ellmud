@@ -2777,3 +2777,12 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 - Matchmaker `TIER_CAPACITY` constants unchanged (procedural instances)
 
 **Verification:** TypeScript compiles clean, all 2187 tests pass, zero regressions.
+
+### Faction Strongholds Complete (2026-04-01, Jarlaxle #236)
+
+**Context:** Jarlaxle completed faction stronghold zones with new `faction_hub` zone category and `factionSlug` routing. Three strongholds (The Foundry, The Cartographium, The Counting House) with 8 feature rooms each. 21 new tests.
+
+**Relevance to Death System:** The stronghold zones will serve as respawn points for faction-affiliated players following death. The `faction_slug` field in zones table integrates with death routing for automatic respawn destination selection. This unblocks #238 (death/spawn routing) work.
+
+**No action required** — stronghold architecture is compatible with corpse system TTL and item looting workflow. Death handler can route corpses to any zone type.
+

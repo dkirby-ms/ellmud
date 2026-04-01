@@ -2041,3 +2041,14 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - 21 new tests covering all routing paths. All 7 existing player-death tests and 8 room-routing tests pass unchanged.
 - **Key files:** `packages/server/src/zones/stronghold.ts`, `packages/server/src/db/migrations/013_faction_strongholds.sql`
 - **PR #259**, branch `squad/236-faction-strongholds`
+
+### Corpse/Loot-on-Death System Complete (2026-04-01, Drizzt #237)
+
+**Context:** Drizzt completed corpse system with CorpseSystem entity storage, configurable TTL, and `loot` command. On death, non-soulbound items move to corpse; players loot via new verb. 33 new tests.
+
+**Relevance to Faction Strongholds:** Faction strongholds are configured as `faction_hub` zones (non-combat per death system design). When faction-affiliated players die in combat zones, they respawn at their stronghold, where they can manage loot recovery and death debuff state. The corpse system design (TTL-based cleanup, soulbound filtering) is orthogonal to stronghold architecture.
+
+**Integration Note:** Death routing (#238) will coordinate stronghold respawn destination with corpse system's item drop timing to ensure loot is available for recovery.
+
+**No action required** — stronghold zones are ready for death routing integration.
+
