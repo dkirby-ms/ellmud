@@ -2759,3 +2759,21 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 ## 2026-04-01: Agent Work Summary
 
 **Task completed:** Versioning Infrastructure. Semver system established with Vite injection, /api/version endpoint, sync scripts, and bump workflows. Decision and orchestration logs created. Client-side integration via `useVersion()` hook is ready; server-side routes operational.
+
+### Zone Capacity for Shared Persistent Zones (2026-04-02)
+**Task:** Update zone capacity from old shard-model limits (3-6 per tier) to support 100+ players per persistent zone.
+**Status:** ✅ Complete
+
+**Changes:**
+1. **config.ts** — Added `ZONE_DEFAULT_MAX_PLAYERS = 100` constant and `getMaxPlayersForZone()` function. Persistent zones now use this instead of tier-based `TIER_MAX_PLAYERS`. Priority chain: `MAX_PLAYERS_PER_ZONE` env var > per-zone DB `maxPlayers` > 100 default > tier-based (procedural only).
+2. **ZoneRoom.ts** — `onCreate` now calls `getMaxPlayersForZone()` for `isZone=true` rooms instead of `getMaxPlayersForTier()`. Added capacity log on zone creation. Per-zone DB overrides and env var overrides still work.
+3. **index.ts** — Updated startup log to show zone default capacity and env override status.
+
+**What was preserved:**
+- Procedural/generated rooms still use `getMaxPlayersForTier()` with GDD tier limits (3/4/6)
+- `MAX_PLAYERS_PER_ZONE` env var still overrides everything (ops knob)
+- Per-zone DB `maxPlayers` field still takes precedence over the default
+- Client `joinOrCreate` routing already correct — no client changes needed
+- Matchmaker `TIER_CAPACITY` constants unchanged (procedural instances)
+
+**Verification:** TypeScript compiles clean, all 2187 tests pass, zero regressions.

@@ -129,6 +129,50 @@ Zones operate under one of two models:
   4. **Destabilising** — Final 25% of the timer. Environmental hazards intensify, new creature waves spawn.
   5. **Collapse** — Instance destroys. Any player still inside dies (corpse is lost with the instance; death penalty debuff applies).
 
+## 2.4 Zone Instancing & Multi-player Scaling
+
+The core design principle is **shared persistent zones** — when a player enters a zone, they join an existing instance with other players. The goal is for players to encounter each other, forming a living world where PvE and PvP emerge naturally.
+
+### Instancing Model
+Zones are implemented as **Colyseus Rooms** (see §13). When a player enters a zone via an exit, the server routes them to the least-loaded existing instance of that zone:
+
+1. **Server checks** if an instance of the zone exists with available capacity.
+2. **Join existing instance** — Player is added to the room, spawned in the designated entry room. They see other players in the world.
+3. **No capacity** — If the instance is full, a **new instance is created** and the player joins that overflow instance. The two instances are separate; players cannot see or interact across instances.
+4. **Room isolation** — Each zone instance is a separate `ShardRoom`. Creatures, loot, and state are independent per instance.
+
+This is a traditional **MUD/MMO shared-world model**, not an instanced dungeon system. Players share the world by default; overflow instances are transparent infrastructure to handle scaling.
+
+### Max Player Capacity
+Each zone instance has a configurable maximum player count:
+- **Default**: 100+ players per instance
+- **Configurable per zone**: Some zones may have lower caps for design or performance reasons (e.g., a small dungeon may cap at 20 players)
+- **Config table**: `zones.max_players_per_instance` (database)
+- **Server config**: `MAX_PLAYERS_PER_SHARD` (environment variable, allows global override)
+
+When a player attempts to join a full instance, the server automatically creates a new instance and routes them there. The player experience is seamless — they see the zone as one world, unaware of the infrastructure handling overflow.
+
+### Instance Lifecycle & Cleanup
+- **Persistent zones** spawn instances on-demand when the first player enters. They persist indefinitely, repopulating creatures and loot on schedules.
+- **Timed instances** (if enabled) have a defined lifecycle with a collapse timer (see §2.3).
+- **Empty instances** remain in memory for a configurable grace period (default: 5 minutes) before cleanup, allowing quick re-entry if a player returns immediately.
+- **Stale instance cleanup** runs periodically (default: every 10 minutes) to destroy persistent instances that have been empty for the grace period.
+
+### Group Guarantee
+When a group enters a zone (see §8.5), all group members are placed in the **same instance** regardless of the player cap. This ensures the group stays together. The group size counts against the instance capacity — a 20-player group entering a 100-player zone uses 20 slots.
+
+### Player Experience
+- **Encounter other players naturally**: Walk into a room and see other adventurers fighting the same creatures, searching the same loot containers. Proximity-based communication (see §8.4) lets you interact with them.
+- **PvP emerges**: Other players are not flagged as friend or foe. You may cooperate or fight depending on circumstances (e.g., faction, group status). Flagging rules apply (see §8.2).
+- **Living world**: Seeing other players in zones makes the world feel alive. The danger is other players, not isolation. This is core to MUD gameplay.
+- **No private instances**: Zones are never private to a single player. Solo players share the same zone with groups and other soloists.
+
+### Awareness & Visibility
+Players are aware of other players in their zone via:
+- **Presence in room**: When you enter a room, you see other players there (the LLM describes them as figures, silhouettes, or by indirect cues; see §4.4).
+- **Sound and traces**: Hear footsteps, see blood trails, and detect other players indirectly through environmental cues (§5.3).
+- **Proximity communication**: Use `say` or `emote` to interact with players in the same room (§8.4).
+
 ---
 
 # 3. CORE GAMEPLAY LOOP

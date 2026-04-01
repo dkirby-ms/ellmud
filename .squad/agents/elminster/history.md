@@ -1471,3 +1471,17 @@ CREATE TABLE zone_definitions (
 ## 2026-04-01: Agent Work Summary
 
 **Two tasks completed:** Group Combat System (20-player scale) and Room Positioning System (§6.11). Total updates: 2 major GDD sections (§6.10, §6.11) + 8 cross-references updated. Decisions recorded in `.squad/decisions.md`. Orchestration logs created in `.squad/orchestration-log/`.
+
+### 2026-04-02: Zone Instancing & Multi-player Scaling (§2.4)
+- **Action:** Added comprehensive §2.4 Zone Instancing & Multi-player Scaling to GDD.md — a new subsection documenting how persistent shared zones work at scale.
+- **Core design:** Zones are **Colyseus Rooms** with shared persistent instances. When a player enters a zone, the server routes them to the **least-full existing instance**. Only when an instance hits max capacity does overflow create a new instance. This is **shared-world design**, not instanced dungeons.
+- **Key principles documented:**
+  - **Instancing Model**: Server checks capacity, joins existing instance, or creates overflow. Each instance is a separate `ShardRoom` with isolated creatures/loot.
+  - **Max Player Capacity**: Default 100+ players per instance, configurable per zone and globally via `MAX_PLAYERS_PER_SHARD`.
+  - **Instance Lifecycle**: Persistent zones spawn on-demand, timed zones have collapse timers. Empty instances cleaned up after grace period (default 5 min).
+  - **Group Guarantee**: Groups always placed in same instance regardless of cap, ensuring group cohesion. Group size counts against capacity.
+  - **Player Experience**: Shared zones create emergent encounters, PvP, and a living world. This is core MUD design — players feel less alone.
+  - **Awareness & Visibility**: Players discover each other via room presence, traces (footprints, blood), and proximity communication (`say`, `emote`).
+- **Cross-references added:** §2.3 (timed instance lifecycle), §4.4 (LLM indirect player description), §5.3 (traces and sound for detection), §8.2 (PvP flagging), §8.4 (proximity communication), §8.5 (group guarantee), §13 (Colyseus Room architecture).
+- **Design alignment**: Respects the cardinal rule — players share the world by default. Overflow is transparent infrastructure, not a user-facing mechanic. Reinforces the MUD ethos of unscripted player interaction.
+- **Key files:** `GDD.md` (§2.4 new subsection)
