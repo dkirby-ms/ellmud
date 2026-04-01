@@ -87,6 +87,24 @@
 
 ## Learnings (Archived — See Detailed Session Records)
 
+### Death & Spawn Routing (#238) — PR #261
+**Task:** Fix death routing to use faction strongholds instead of hardcoded Refuge.
+**Status:** ✅ Complete — PR #261 opened against dev
+**Branch:** `squad/238-death-spawn-routing`
+
+**Changes (6 files, +474 −7):**
+- Updated death handler narration to include specific hub zone name (The Foundry, etc.)
+- Added `resolvePlayerHubName()` utility and `HUB_DISPLAY_NAMES` map to stronghold.ts
+- Created `/api/spawn-zone` endpoint for login-time zone selection (returns faction-based target)
+- Registered spawn-zone route in index.ts
+- 17 new tests: faction routing (all 3 factions), fallback to Refuge, death debuff, pipeline tests
+
+**Key insight:** The dependency branches (#236 faction strongholds, #237 corpse system) already wired most of the integration — `resolvePlayerHubTarget()` was in the death handler, corpse creation was working, death penalty was applied. The remaining work was: (1) improving narration with zone-specific names, (2) adding the login routing API, and (3) comprehensive test coverage.
+
+**Architecture note:** Login zone routing requires the client to call `/api/spawn-zone` before connecting. Server-side, the faction slug is cached in `playerFactionSlugs` on join for death routing. The client currently hardcodes `zone:the-refuge` — Regis needs to update the client to use the spawn-zone API.
+
+---
+
 ### Architecture & Infrastructure Patterns (Phase 1)
 
 **CI/CD 3-Branch Strategy:** `github.ref_name` maps to environment name (uat/prod), enabling `environment: ${{ github.ref_name }}` for env-aware secrets. Docker tags are environment-prefixed (`ellmud-uat`, `ellmud-prod`). Bicep `resourcePrefix` already matches this convention.
