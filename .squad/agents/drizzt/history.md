@@ -2736,3 +2736,20 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 - The 7×7 slum grid itself is topologically perfect — all row/column offsets sum correctly. The conflicts come entirely from external connections (sewer + approach loop).
 - Sewer path length matching is the single most important topology concern for the Warrens. The grid and approach spine are well-designed.
 - Warrens is not in computeLayout.test.ts — adding it would catch regressions if we fix the topology.
+
+### Build Versioning Infrastructure (2026-04-01)
+**Task:** Set up semver versioning system across the monorepo with build-time version injection.
+**Status:** ✅ Complete
+
+**Changes:**
+1. **Vite version injection** (`packages/client/vite.config.ts`) — reads root `package.json` version via `fs.readFileSync`, injects `__APP_VERSION__` and `__BUILD_TIME__` via Vite `define`.
+2. **TypeScript declarations** (`packages/client/src/vite-env.d.ts`) — added `declare const` for both globals so TS doesn't error.
+3. **`useVersion` hook** (`packages/client/src/hooks/useVersion.ts`) — already existed with defensive typeof checks; left as-is.
+4. **Server `/api/version` endpoint** (`packages/server/src/api/version.ts`) — returns `{ version, buildTime, nodeEnv }`. Follows existing `createXxxRouter()` factory pattern. Registered before health check in index.ts.
+5. **Version scripts** — root `package.json` gains `version:bump` (npm's built-in) and `version:sync` (runs `scripts/sync-versions.mjs` to propagate root version to all workspace packages).
+
+**Key decisions:**
+- Root `package.json` is single source of truth for version.
+- Server `buildTime` = module load time (effectively deploy/start time in containers).
+- Used `.mjs` for sync script since root package.json has no `"type": "module"`.
+- Version router placed before health check, after character API — consistent with existing route ordering.

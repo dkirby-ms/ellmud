@@ -878,3 +878,6 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - Grep confirmed zero remaining references in packages/client/
 - tsc --noEmit passed cleanly
 - Default branch is `dev`, not `main` — always branch from `dev`
+
+- **useVersion hook pattern:** Created `packages/client/src/hooks/useVersion.ts` exporting `useVersion()` which returns `{ version, buildTime }` with safe fallbacks for when Vite globals (`__APP_VERSION__`, `__BUILD_TIME__`) aren't injected yet. TypeScript declarations added to `vite-env.d.ts`.
+- **Version display placement:** Admin panel: muted text in top bar right side (between notifications bell and user avatar). Game client: `mt-auto` pushes it to sidebar bottom-right, opacity-30 → opacity-70 on hover. Both use `title` attribute for build time tooltip and `aria-label` + `tabIndex={0}` for accessibility.
