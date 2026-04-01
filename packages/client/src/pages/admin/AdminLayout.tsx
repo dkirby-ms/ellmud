@@ -9,6 +9,7 @@ import {
   listEntities, fetchNotifications, setAdminToken, getAdminToken, clearAdminToken,
   type EntityType, type AdminNotification,
 } from "../../lib/admin-api";
+import { useVersion } from "../../hooks/useVersion";
 
 interface SearchableEntity {
   id: string;
@@ -66,6 +67,7 @@ const navSections = [
 export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const version = useVersion();
 
   const [authenticated, setAuthenticated] = useState(() => !!getAdminToken());
   const [tokenInput, setTokenInput] = useState("");
@@ -311,6 +313,16 @@ export default function AdminLayout() {
               </div>
             )}
           </div>
+
+          <span
+            className="text-[#6A6555] text-xs cursor-default select-none"
+            style={{ fontFamily: "var(--font-sans)" }}
+            title={`Built: ${version.buildTime}`}
+            aria-label={`Version ${version.version}, built ${version.buildTime}`}
+            tabIndex={0}
+          >
+            v{version.version}
+          </span>
 
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-[#C9A84C] flex items-center justify-center text-[#0A0B0F] font-bold">J</div>

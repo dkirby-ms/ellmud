@@ -12,7 +12,9 @@
     "dev:client": "npm run dev -w @ellmud/client",
     "build": "npm run build -w @ellmud/shared && npm run build -w @ellmud/server && npm run build -w @ellmud/client",
     "test": "npm run test --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "version:bump": "npm version --no-git-tag-version",
+    "version:sync": "node scripts/sync-versions.mjs"
   },
   "keywords": [],
   "author": "",

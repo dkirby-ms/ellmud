@@ -24,6 +24,7 @@ import {
   type EntraConfig,
 } from './auth/index.js';
 import { createHealthRouter } from './health.js';
+import { createVersionRouter } from './api/version.js';
 import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter, createDeployRouter, createZoneRouter } from './admin/index.js';
 import { getConfig } from './config.js';
 import { runMigrations } from './db/index.js';
@@ -180,6 +181,9 @@ if (entraConfig.clientId && entraConfig.clientSecret && entraConfig.tenantId) {
 // ─── Character API ───────────────────────────────────────────────────────────
 app.use(createCharacterRouter(authService, USE_PG));
 console.log('[Ellmud] Character API: enabled');
+
+// Version endpoint — /api/version
+app.use(createVersionRouter());
 
 // Mount health check endpoint — includes Redis + persistence status
 app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg() }));
