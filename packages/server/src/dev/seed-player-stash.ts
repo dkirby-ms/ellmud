@@ -65,9 +65,9 @@ const SEED_ITEMS: SeedItem[] = [
   // Amulets (material type)
   { name: 'Hollow-Eye Pendant', type: 'material',   tier: 'common',     weight: 1,  description: 'A bone disc with a hole bored through centre. Ward against the deep.', baseDurability: null },
   { name: 'Shard-Touched Medallion', type: 'material', tier: 'masterwork', weight: 1, description: 'Metal fused with crystallised shard-energy. Pulses like a heartbeat.', baseDurability: null },
-  // Shard keys
+  // Zone keys
   { name: 'Bone Zone Key',     type: 'key',        tier: 'common',     weight: 1,  description: 'A key carved from revenant bone. Opens Tier 1 zones.', baseDurability: null },
-  { name: 'Iron Zone Key',     type: 'key',        tier: 'sturdy',     weight: 1,  description: 'A blackened iron key etched with shard-glyphs. Opens Tier 2 zones.', baseDurability: null },
+  { name: 'Iron Zone Key',     type: 'key',        tier: 'sturdy',     weight: 1,  description: 'A blackened iron key etched with runic glyphs. Opens Tier 2 zones.', baseDurability: null },
   { name: 'Crystal Zone Key',  type: 'key',        tier: 'refined',    weight: 1,  description: 'A translucent key that refracts light wrong. Opens Tier 3 zones.', baseDurability: null },
   // Consumables
   { name: 'Stale Ration',       type: 'consumable', tier: 'scrap',      weight: 1,  description: 'Hard bread and salt meat. Tastes like regret. Heals a little.', baseDurability: null },
