@@ -55,6 +55,7 @@ const KNOWN_VERBS = new Set([
   'whisper',
   'emote',
   'peaceful',
+  'loot',
 ]);
 
 export interface ParseResult {
