@@ -3,7 +3,7 @@
  * Wires up listeners for every known MessageType so tests don't need boilerplate.
  */
 import { MessageTypes } from '@ellmud/shared';
-import type { NarrateMessage, RoomHeaderMessage, ShardStateMessage, RoomSwitchMessage, OverlayMessage, PlayerStateMessage } from '@ellmud/shared';
+import type { NarrateMessage, RoomHeaderMessage, ZoneStateMessage, RoomSwitchMessage, OverlayMessage, PlayerStateMessage } from '@ellmud/shared';
 
 export interface CollectedMessage {
   type: string;
@@ -15,7 +15,7 @@ export class MessageCollector {
   readonly all: CollectedMessage[] = [];
   readonly narrate: NarrateMessage[] = [];
   readonly roomHeader: RoomHeaderMessage[] = [];
-  readonly shardState: ShardStateMessage[] = [];
+  readonly zoneState: ZoneStateMessage[] = [];
   readonly roomSwitch: RoomSwitchMessage[] = [];
   readonly overlayState: OverlayMessage[] = [];
   readonly playerState: PlayerStateMessage[] = [];
@@ -33,10 +33,10 @@ export class MessageCollector {
       this.all.push({ type: MessageTypes.ROOM_HEADER, data: msg, receivedAt: Date.now() });
     });
 
-    client.onMessage(MessageTypes.SHARD_STATE, (data) => {
-      const msg = data as ShardStateMessage;
-      this.shardState.push(msg);
-      this.all.push({ type: MessageTypes.SHARD_STATE, data: msg, receivedAt: Date.now() });
+    client.onMessage(MessageTypes.ZONE_STATE, (data) => {
+      const msg = data as ZoneStateMessage;
+      this.zoneState.push(msg);
+      this.all.push({ type: MessageTypes.ZONE_STATE, data: msg, receivedAt: Date.now() });
     });
 
     client.onMessage(MessageTypes.ROOM_SWITCH, (data) => {
@@ -79,7 +79,7 @@ export class MessageCollector {
     this.all.length = 0;
     this.narrate.length = 0;
     this.roomHeader.length = 0;
-    this.shardState.length = 0;
+    this.zoneState.length = 0;
     this.roomSwitch.length = 0;
     this.overlayState.length = 0;
     this.playerState.length = 0;

@@ -1,7 +1,7 @@
 /**
  * Room Switching Integration Tests — Issue #65
  *
- * Defines the behavioral CONTRACT for Zone ↔ Shard room switching.
+ * Defines the behavioral CONTRACT for Zone ↔ Zone room switching.
  * Written anticipatorily — some tests validate existing Phase 1 behavior,
  * others define Phase 2 expectations that will fail until implementation lands.
  *
@@ -39,9 +39,9 @@ describe('Room Switching — Happy Path (Integration)', () => {
     await colyseus.shutdown();
   });
 
-  // ✅ PASS NOW — board command displays available shards
-  it.todo('board → shows available shards with enter instructions', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+  // ✅ PASS NOW — board command displays available zones
+  it.todo('board → shows available zones with enter instructions', async () => {
+    const { client, collector } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     // Navigate to the expedition board room (west from hearth)
     client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
@@ -51,7 +51,7 @@ describe('Room Switching — Happy Path (Integration)', () => {
     client.send(MessageTypes.COMMAND, makeCommand('board'));
     await wait(500);
 
-    // Should receive narration with shard list
+    // Should receive narration with zone list
     expect(collector.narrate.length).toBeGreaterThan(before);
     const board = collector.narrate[collector.narrate.length - 1]!;
     expect(board.text).toContain('Expedition Board');
@@ -61,21 +61,21 @@ describe('Room Switching — Happy Path (Integration)', () => {
     await client.leave();
   });
 
-  // ✅ PASS NOW — enter shard sends ROOM_SWITCH message
-  it.todo('enter shard → ROOM_SWITCH with target=shard, reason=enter_shard', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+  // ✅ PASS NOW — enter zone sends ROOM_SWITCH message
+  it.todo('enter zone → ROOM_SWITCH with target=zone, reason=enter_zone', async () => {
+    const { client, collector } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     // Navigate to the expedition board room first
     client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
     await wait(300);
 
-    client.send(MessageTypes.COMMAND, makeCommand('enter', 'shard'));
+    client.send(MessageTypes.COMMAND, makeCommand('enter', 'zone'));
     await wait(500);
 
     expect(collector.roomSwitch.length).toBe(1);
     const sw = collector.roomSwitch[0]!;
-    expect(sw.target).toBe('shard');
-    expect(sw.reason).toBe('enter_shard');
+    expect(sw.target).toBe('zone');
+    expect(sw.reason).toBe('enter_zone');
 
     // Transition narration should mention the rift
     const transition = collector.narrate.find((m) => m.text.includes('rift'));
@@ -101,18 +101,18 @@ describe('Room Switching — Edge Cases (Integration)', () => {
   });
 
   beforeEach(() => {
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     resetConfig();
   });
 
   afterEach(() => {
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     resetConfig();
   });
 
   // ✅ PASS NOW — unknown target rejected
   it.todo('enter unknown target → rejection, no ROOM_SWITCH', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+    const { client, collector } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     // Navigate to expedition board room first
     client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
@@ -129,9 +129,9 @@ describe('Room Switching — Edge Cases (Integration)', () => {
     await client.leave();
   });
 
-  // ✅ PASS NOW — bare enter defaults to shard
-  it.todo('bare "enter" defaults to shard', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+  // ✅ PASS NOW — bare enter defaults to zone
+  it.todo('bare "enter" defaults to zone', async () => {
+    const { client, collector } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     // Navigate to expedition board room first
     client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
@@ -141,19 +141,19 @@ describe('Room Switching — Edge Cases (Integration)', () => {
     await wait(500);
 
     expect(collector.roomSwitch.length).toBe(1);
-    expect(collector.roomSwitch[0]!.target).toBe('shard');
+    expect(collector.roomSwitch[0]!.target).toBe('zone');
 
     await client.leave();
   });
 
-  // ✅ PASS NOW — shard full rejects join at Colyseus level
-  it('shard full (maxPlayers) → second player rejected', async () => {
+  // ✅ PASS NOW — zone full rejects join at Colyseus level
+  it('zone full (maxPlayers) → second player rejected', async () => {
     // Force solo-play mode for this test
-    process.env['MAX_PLAYERS_PER_SHARD'] = '1';
+    process.env['MAX_PLAYERS_PER_ZONE'] = '1';
     const { resetConfig } = await import('../config.js');
     resetConfig();
 
-    const room = await colyseus.createRoom('shard', { useTestGraph: true });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true });
     const client1 = await colyseus.connectTo(room);
     await wait(500);
 
@@ -174,51 +174,51 @@ describe('Room Switching — Edge Cases (Integration)', () => {
     await client1.leave();
 
     // Restore default
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     resetConfig();
   });
 
-  // 🔮 ANTICIPATORY — Phase 2: enter specific shard by ID when that shard is full
+  // 🔮 ANTICIPATORY — Phase 2: enter specific zone by ID when that zone is full
   it.todo(
-    'enter <shard-id> when shard is full → rejection message via narration (Phase 2)',
-    // When Phase 2 implements shard selection by ID, the Refuge should check
-    // shard capacity before sending ROOM_SWITCH. Expected: system narration
+    'enter <zone-id> when zone is full → rejection message via narration (Phase 2)',
+    // When Phase 2 implements zone selection by ID, the Refuge should check
+    // zone capacity before sending ROOM_SWITCH. Expected: system narration
     // "That rift is too unstable — no room for another soul." and NO ROOM_SWITCH.
   );
 
-  // 🔮 ANTICIPATORY — Phase 2: enter shard during non-open lifecycle
+  // 🔮 ANTICIPATORY — Phase 2: enter zone during non-open lifecycle
   it.todo(
-    'enter <shard-id> when shard lifecycle is not open → rejection message (Phase 2)',
-    // When Phase 2 implements shard lifecycle awareness in Refuge, entering a
-    // shard that is 'destabilising' or 'collapse' should be rejected.
+    'enter <zone-id> when zone lifecycle is not open → rejection message (Phase 2)',
+    // When Phase 2 implements zone lifecycle awareness in Refuge, entering a
+    // zone that is 'destabilising' or 'collapse' should be rejected.
     // Expected: system narration "That rift is collapsing" and NO ROOM_SWITCH.
   );
 
-  // 🔮 ANTICIPATORY — Phase 2: expedition board when no shards exist
+  // 🔮 ANTICIPATORY — Phase 2: expedition board when no zones exist
   it.todo(
-    'board with no active shards → shows option to create new shard (Phase 2)',
-    // Phase 2 expedition board should dynamically list active shards. When none exist,
-    // it should show "No active rifts. Type `enter shard` to tear open a new one."
+    'board with no active zones → shows option to create new zone (Phase 2)',
+    // Phase 2 expedition board should dynamically list active zones. When none exist,
+    // it should show "No active rifts. Type `enter zone` to tear open a new one."
   );
 
   // ✅ PASS NOW — rapid double enter should produce two ROOM_SWITCH messages
   // (Phase 2 may add debouncing — update this test then)
-  it.todo('rapid double "enter shard" → at least one ROOM_SWITCH delivered', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+  it.todo('rapid double "enter zone" → at least one ROOM_SWITCH delivered', async () => {
+    const { client, collector } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     // Navigate to expedition board room first
     client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
     await wait(300);
 
     // Fire two enters back-to-back (no wait in between)
-    client.send(MessageTypes.COMMAND, makeCommand('enter', 'shard'));
-    client.send(MessageTypes.COMMAND, makeCommand('enter', 'shard'));
+    client.send(MessageTypes.COMMAND, makeCommand('enter', 'zone'));
+    client.send(MessageTypes.COMMAND, makeCommand('enter', 'zone'));
     await wait(700);
 
     // At minimum, one ROOM_SWITCH should arrive.
     // Phase 2 may debounce to exactly 1; Phase 1 may send 2.
     expect(collector.roomSwitch.length).toBeGreaterThanOrEqual(1);
-    expect(collector.roomSwitch[0]!.target).toBe('shard');
+    expect(collector.roomSwitch[0]!.target).toBe('zone');
 
     await client.leave();
   });
@@ -241,13 +241,13 @@ describe('Room Switching — Message Protocol Contract', () => {
 
   // ✅ PASS NOW — ROOM_SWITCH message structure matches shared type
   it.todo('ROOM_SWITCH message contains required fields: target, reason', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+    const { client, collector } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     // Navigate to expedition board room first
     client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
     await wait(300);
 
-    client.send(MessageTypes.COMMAND, makeCommand('enter', 'shard'));
+    client.send(MessageTypes.COMMAND, makeCommand('enter', 'zone'));
     await wait(500);
 
     expect(collector.roomSwitch.length).toBe(1);
@@ -264,7 +264,7 @@ describe('Room Switching — Message Protocol Contract', () => {
 
   // ✅ PASS NOW — no ROOM_SWITCH sent for regular commands
   it('regular commands (look, go) never produce ROOM_SWITCH', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', { useTestGraph: true });
+    const { client, collector } = await connectTestClient(colyseus, 'zone', { useTestGraph: true });
 
     client.send(MessageTypes.COMMAND, makeCommand('look'));
     await wait(500);
@@ -280,13 +280,13 @@ describe('Room Switching — Message Protocol Contract', () => {
 
   // ✅ PASS NOW — ROOM_SWITCH is accompanied by transition narration
   it.todo('ROOM_SWITCH always preceded by transition narration', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+    const { client, collector } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     // Navigate to expedition board room first
     client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
     await wait(300);
 
-    client.send(MessageTypes.COMMAND, makeCommand('enter', 'shard'));
+    client.send(MessageTypes.COMMAND, makeCommand('enter', 'zone'));
     await wait(500);
 
     // Both narration and ROOM_SWITCH should exist
@@ -318,33 +318,33 @@ describe('Room Switching — Phase 2 Anticipatory Contracts', () => {
   // As Drizzt implements each feature, convert .todo() to .it() and verify.
 
   it.todo(
-    'enter <shard-id> → ROOM_SWITCH with options.shardId for targeted shard join',
-    // Phase 2: board shows specific shard IDs. "enter abc-123" should send
-    // ROOM_SWITCH { target: 'shard', options: { shardId: 'abc-123' }, reason: 'enter_shard' }
+    'enter <zone-id> → ROOM_SWITCH with options.zoneId for targeted zone join',
+    // Phase 2: board shows specific zone IDs. "enter abc-123" should send
+    // ROOM_SWITCH { target: 'zone', options: { zoneId: 'abc-123' }, reason: 'enter_zone' }
   );
 
   it.todo(
-    'board lists multiple active shards with metadata (tier, biome, player count)',
-    // Phase 2: board should query matchmaker for active shards and display
-    // each with tier, biome, current/max players. Format: shard-id | T2 Flooded Crypt | 2/4
+    'board lists multiple active zones with metadata (tier, biome, player count)',
+    // Phase 2: board should query matchmaker for active zones and display
+    // each with tier, biome, current/max players. Format: zone-id | T2 Flooded Crypt | 2/4
   );
 
   it.todo(
     'ROOM_SWITCH options pass through to target room join options',
-    // Phase 2: When client receives ROOM_SWITCH with options.shardId, it should
-    // join the shard room with those options: room.join('shard', { shardId: 'abc-123' })
-    // The ShardRoom.onCreate should use this to connect to the correct instance.
+    // Phase 2: When client receives ROOM_SWITCH with options.zoneId, it should
+    // join the zone room with those options: room.join('zone', { zoneId: 'abc-123' })
+    // The ZoneRoom.onCreate should use this to connect to the correct instance.
   );
 
   it.todo(
     'room switch debouncing: rapid enter commands produce exactly one ROOM_SWITCH',
-    // Phase 2: Server-side debounce. If player sends "enter shard" twice within 500ms,
+    // Phase 2: Server-side debounce. If player sends "enter zone" twice within 500ms,
     // only one ROOM_SWITCH should be sent. Second command gets "already transitioning" narration.
   );
 
   it.todo(
     'zone exit with full stash → items correctly stored up to limit, excess narrated as lost',
-    // Phase 2: After exiting a shard, items transfer to stash. If stash is at
+    // Phase 2: After exiting a zone, items transfer to stash. If stash is at
     // capacity, excess items are lost. The narration should mention both stored and lost counts.
     // ROOM_SWITCH to refuge should still fire regardless of stash overflow.
   );

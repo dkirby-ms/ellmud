@@ -1,9 +1,9 @@
 /**
- * Room graph types for procedural shard generation.
- * Defines the data structures for rooms, connections, and shard layouts.
+ * Room graph types for procedural zone generation.
+ * Defines the data structures for rooms, connections, and zone layouts.
  */
 
-import type { ShardTier } from './index.js';
+import type { ZoneTier } from './index.js';
 
 // ─── Directions ──────────────────────────────────────────────────────────────
 
@@ -95,7 +95,7 @@ export interface RoomGraph {
   entryRoomIds: string[];
   bossRoomId: string;
   seed: number;
-  tier: ShardTier;
+  tier: ZoneTier;
 }
 
 // ─── Serialization ───────────────────────────────────────────────────────────
@@ -116,7 +116,7 @@ export interface SerializedRoomGraph {
   entryRoomIds: string[];
   bossRoomId: string;
   seed: number;
-  tier: ShardTier;
+  tier: ZoneTier;
 }
 
 /** Serialize a RoomGraph to a plain JSON-safe object. */

@@ -65,13 +65,13 @@ function getValidSlots(item: DisplayItem): EquipmentSlotType[] {
 
 interface CombinedStashLoadoutProps {
   room: Room | null;
-  /** When true, also shows shard-found items as equippable. */
-  inShard?: boolean;
+  /** When true, also shows zone-found items as equippable. */
+  inZone?: boolean;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function CombinedStashLoadout({ room, inShard = false }: CombinedStashLoadoutProps) {
+export default function CombinedStashLoadout({ room, inZone = false }: CombinedStashLoadoutProps) {
   const { state, dispatch } = useAppContext();
   const { loadout, stashItems, pendingEquipAction, inventory } = state;
 
@@ -130,9 +130,9 @@ export default function CombinedStashLoadout({ room, inShard = false }: Combined
     setSelectedItem(null);
   }, [room, loadout, dispatch, showFeedback]);
 
-  // ── Shard inventory items (not in stash, found in current run) ──────────
+  // ── Zone inventory items (not in stash, found in current run) ──────────
 
-  const shardItems: InventoryItem[] = inShard ? inventory : [];
+  const zoneItems: InventoryItem[] = inZone ? inventory : [];
 
   // ── Highlighted slots for selected item ─────────────────────────────────
 
@@ -312,14 +312,14 @@ export default function CombinedStashLoadout({ room, inShard = false }: Combined
               </div>
             )}
 
-            {/* ── Shard-Found Items Section ─────────────────────────────── */}
-            {inShard && shardItems.length > 0 && (
+            {/* ── Zone-Found Items Section ─────────────────────────────── */}
+            {inZone && zoneItems.length > 0 && (
               <div style={{ marginTop: '0.75rem', borderTop: '1px dashed #2A2B35', paddingTop: '0.5rem' }}>
                 <span className="ansi-bright-cyan" style={{ fontSize: '0.8rem' }}>
-                  ── SHARD FINDS ──
+                  ── ZONE FINDS ──
                 </span>
                 <div className="space-y-px" style={{ marginTop: '0.25rem' }}>
-                  {shardItems.map(item => (
+                  {zoneItems.map(item => (
                     <div
                       key={item.id}
                       className="flex items-center gap-2"

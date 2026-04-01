@@ -19,28 +19,28 @@ import { resetConfig } from '../config.js';
 let colyseus: ColyseusTestServer;
 
 beforeAll(async () => {
-  // Edge-case tests need multi-player shards
-  process.env['MAX_PLAYERS_PER_SHARD'] = '10';
+  // Edge-case tests need multi-player zones
+  process.env['MAX_PLAYERS_PER_ZONE'] = '10';
   resetConfig();
   colyseus = await bootTestServer();
 });
 
 afterAll(async () => {
   await colyseus.shutdown();
-  delete process.env['MAX_PLAYERS_PER_SHARD'];
+  delete process.env['MAX_PLAYERS_PER_ZONE'];
   resetConfig();
 });
 
-describe('Edge Cases — ShardRoom', () => {
-  it('should handle command during shard collapse without crashing', async () => {
+describe('Edge Cases — ZoneRoom', () => {
+  it('should handle command during zone collapse without crashing', async () => {
     const { client, collector } = await connectTestClient(
       colyseus,
-      'shard',
+      'zone',
       quickCollapseOptions(8),
     );
 
     const reachedCollapse = await waitUntil(
-      () => collector.shardState.some((s) => s.state === 'collapse'),
+      () => collector.zoneState.some((s) => s.state === 'collapse'),
       25_000,
     );
 
@@ -59,7 +59,7 @@ describe('Edge Cases — ShardRoom', () => {
   }, 30_000);
 
   it('should handle player disconnect mid-tick gracefully', async () => {
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('zone', {});
 
     const client1 = await colyseus.connectTo(room);
     new MessageCollector(client1);
@@ -84,7 +84,7 @@ describe('Edge Cases — ShardRoom', () => {
   });
 
   it('should handle rapid command spam without crashing', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     for (let i = 0; i < 20; i++) {
       client.send(MessageTypes.COMMAND, makeCommand('look'));
@@ -99,12 +99,12 @@ describe('Edge Cases — ShardRoom', () => {
   });
 
   it('should handle joining during seeding phase', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', {}, 100);
+    const { client, collector } = await connectTestClient(colyseus, 'zone', {}, 100);
 
     expect(collector.narrate.length).toBeGreaterThan(0);
-    expect(collector.shardState.length).toBeGreaterThan(0);
+    expect(collector.zoneState.length).toBeGreaterThan(0);
 
-    const firstState = collector.shardState[0]!;
+    const firstState = collector.zoneState[0]!;
     expect(firstState.state).toBe('seeding');
 
     await client.leave();
@@ -113,7 +113,7 @@ describe('Edge Cases — ShardRoom', () => {
   it('should handle look command with theme option', async () => {
     const { client, collector } = await connectTestClient(
       colyseus,
-      'shard',
+      'zone',
       { theme: 'void_rift' },
     );
 
@@ -127,9 +127,9 @@ describe('Edge Cases — ShardRoom', () => {
   });
 });
 
-describe('Edge Cases — Zone ShardRoom (the-refuge)', () => {
+describe('Edge Cases — Zone ZoneRoom (the-refuge)', () => {
   it('should handle player disconnect while others remain', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
 
     const client1 = await colyseus.connectTo(room);
     new MessageCollector(client1);
@@ -152,7 +152,7 @@ describe('Edge Cases — Zone ShardRoom (the-refuge)', () => {
   });
 
   it('should handle rapid join/leave cycles', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
 
     // Keep an anchor client connected so the room doesn't auto-dispose
     const anchor = await colyseus.connectTo(room);

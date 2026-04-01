@@ -331,21 +331,165 @@ What a player sees depends on:
 
 ---
 
-# 6. COMBAT SYSTEM *(Placeholder — Being Redesigned)*
+# 6. COMBAT SYSTEM
 
-The combat system is currently undergoing a complete redesign from the ground up. The existing tick-based combat implementation is being replaced with a new system that better serves the game's design goals.
+## 6.1 Combat Overview
 
-**What we know:**
-- Combat will remain **server-authoritative** and **deterministic**
-- The system will support both PvE (creatures) and PvP (player vs player) encounters
-- Combat outcomes will be narrated by the LLM for immersive feedback
-- The redesigned system will integrate with the death-and-corpse risk mechanic
+Combat in Ellmud is **real-time and continuous**. Once engaged, the player's character auto-attacks the current target on every server tick. The player's role is not to type "attack" repeatedly — it is to make tactical decisions: when to use abilities, when to defend, when to flee.
 
-**Status:** The detailed mechanics, action types, resolution systems, and progression integration are all under active design. This section will be updated once the new combat system has been prototyped and validated.
+**Core principles:**
+- **Server-authoritative.** All combat resolution — damage, cooldowns, hit/miss, death — happens on the server. The client displays outcomes; it never decides them.
+- **Auto-attack baseline.** Engaging a target starts an automatic attack cycle. The player does not need to issue a command each tick. This frees the player to focus on ability usage, target switching, and positioning.
+- **UI-assisted input.** Combat actions are issued via an **ability button bar** (clickable buttons, hotkeys 1–5) — not by typing commands. The text input remains available for flee, say, use item, and other non-combat verbs, but the primary combat interface is the HUD.
+- **Deterministic.** Given the same inputs and state, combat produces identical results. The LLM narrates outcomes after the fact; it never influences resolution.
 
-*Previous implementation note: The old tick-based combat system with strike/dodge/flee actions has been deprecated. See git history for reference if needed.*
+## 6.2 Combat Flow
 
-## 6.5 Death & Corpse System *(Planned — Foundation Exists)*
+### Initiation
+Combat begins when a hostile action occurs:
+- A player issues an `attack <target>` command (or clicks an enemy in the target panel)
+- A creature's AI decides to engage the player (proximity aggro, patrol trigger, etc.)
+- Another player initiates a PvP attack (see §8)
+
+Once initiated, the player enters **combat mode**. The Combat HUD appears (§6.4) and auto-attack begins.
+
+### Auto-Attack Tick Loop
+While in combat, the server executes a **1-second tick** cycle:
+1. **Ability resolution.** Any queued ability from the previous tick window is resolved first (see §6.3).
+2. **Auto-attack.** If no ability was used, the player's character performs a basic attack against the current target. Auto-attack damage scales with the equipped weapon and relevant combat skill (§7.1).
+3. **Enemy actions.** All hostile creatures resolve their own actions (attacks, telegraphed abilities, repositioning).
+4. **Status effects.** Damage-over-time, buffs, debuffs, and cooldown timers tick down.
+5. **State broadcast.** Updated HP, cooldowns, status effects, and narration events are sent to affected clients.
+
+### Target Selection
+- On combat initiation, the aggressor's target is the entity they attacked. Creatures that aggro the player become the player's default target.
+- Players can **switch targets** at any time via the target panel (click) or `target <entity>` command. Auto-attack immediately redirects.
+- If the current target dies, auto-attack pauses until the player selects a new target or another creature aggros.
+
+### Disengagement
+- **Flee.** The `flee` command (or Flee button) attempts to leave the room. Success depends on the player's Evasion skill vs. the enemy's ability to prevent escape. On success, the player moves to a random adjacent room and exits combat mode. On failure, the player loses their action for that tick.
+- **Target death.** If all hostile entities in the room are dead, combat mode ends after a 3-second cooldown (prevents premature exit if new threats arrive).
+- **Room transition.** Moving to another room ends the current combat engagement. Creatures do not follow across room boundaries unless their AI specifically supports pursuit (boss creatures, pack hunters).
+
+## 6.3 Abilities & Cooldowns
+
+### Ability Bar
+Each player has **5 ability slots** mapped to hotkeys **1–5** and displayed as clickable buttons in the Combat HUD. Abilities are drawn from the player's trained skills (§7.1) and equipped gear.
+
+### Ability Types
+| Type | Examples | Effect |
+|---|---|---|
+| **Attack** | Heavy Strike, Aimed Shot, Sweeping Blow | Deal increased damage, apply debuffs, or hit multiple targets |
+| **Defence** | Block, Parry, Dodge Roll | Reduce or negate incoming damage for a duration |
+| **Utility** | Bandage, Smoke Bomb, War Cry | Heal, apply crowd control, buff self |
+
+### Resolution
+- When a player activates an ability (button click or hotkey), it is **queued** for the next tick's resolution phase.
+- Only **one ability per tick** can be queued. If an ability is queued, it replaces the auto-attack for that tick.
+- Abilities have a **cooldown** (measured in ticks) that must expire before the ability can be used again. Cooldown timers are visible on the ability buttons.
+- Abilities consume **stamina** (or the relevant resource). If the player lacks the resource, the ability fails silently and the auto-attack fires instead.
+
+### Ability Acquisition
+- Abilities unlock through **skill advancement** (§7.1). Raising Swordsmanship unlocks Heavy Strike; raising Evasion unlocks Dodge Roll.
+- Some abilities are granted by **equipped gear** (a shield grants Block; a poisoned dagger grants Venomous Strike).
+- Players choose which 5 abilities to slot before entering a zone. Loadout is locked during a run — no swapping abilities mid-zone.
+
+## 6.4 Combat HUD
+
+When combat mode is active, the client displays a persistent Combat HUD overlaying the narration feed. The HUD is purely informational — all data originates from server messages.
+
+### HP & Resource Bars
+- **Player HP bar** — current / max, colour-coded (green → yellow → red).
+- **Stamina bar** (or resource appropriate to build) — depletes on ability use, regenerates per tick.
+- **Status effect icons** — active buffs and debuffs with remaining duration.
+
+### Ability Button Bar
+- **5 slots** displayed as clickable buttons with hotkey labels (1–5).
+- Each button shows: ability icon/name, cooldown overlay (greyed-out with countdown), and resource cost.
+- Pressing a button or its hotkey queues the ability for the next tick.
+- Visual feedback on activation: button briefly highlights, then enters cooldown state.
+
+### Target Panel
+- **Target name** — what the player can observe (e.g., "Drowned Revenant", not a hidden internal name).
+- **Target HP bar** — approximate health (exact numbers shown only with sufficient Awareness skill; otherwise shown as descriptive: "badly wounded", "near death").
+- **Intent indicator** — displays the enemy's current telegraph if one is active (see §6.5 Enemy Telegraphs). Shows wind-up text and a countdown indicator.
+
+### Narration Feed
+The existing text feed continues scrolling during combat with signal classification applied (see §6.6 Combat Narration). The HUD elements float above or beside the feed — combat does not replace the narrative; it augments it.
+
+## 6.5 Enemy Telegraphs
+
+Enemies broadcast **intent** before executing powerful abilities. Telegraphs create windows for player reaction — the core tactical decision space in combat.
+
+### How Telegraphs Work
+1. **Wind-up.** The server queues a telegraphed ability with a **wind-up duration** (2–4 ticks). During wind-up, the narration feed displays descriptive text: *"The revenant raises its corroded blade overhead…"*
+2. **Intent indicator.** The target panel shows the telegraph name and a countdown (e.g., "Crushing Blow — 3… 2… 1…").
+3. **Player window.** During the wind-up, the player can react: use a defensive ability (Block, Dodge Roll), flee, or continue attacking and absorb the hit.
+4. **Resolution.** At wind-up expiry, the telegraphed ability fires. If the player used a defensive ability during the window, it mitigates the damage. If not, full damage applies.
+
+### Telegraph Design Guidelines
+- **Common creatures** telegraph 1–2 abilities with long wind-ups (3–4 ticks). Readable, forgiving.
+- **Elite creatures** telegraph faster (2 ticks) and may have abilities with no telegraph (forcing defensive play).
+- **Boss creatures** use chained telegraphs, multi-target telegraphs, and environmental telegraphs ("The chamber floods with brackish water…").
+- Not every attack is telegraphed. Auto-attacks from creatures are not telegraphed — they are the baseline incoming damage the player manages through gear and stats.
+
+## 6.6 Combat Narration
+
+Combat events are displayed in the scrolling text feed, narrated by the LLM where cache/budget allows and by templates as fallback. The narration system uses **signal classification** and **temporal micro-batching** to keep the feed readable during high-intensity combat.
+
+### Signal Classification
+Every combat event is tagged with a **signal class** that determines its visual treatment in the feed:
+
+| Class | Examples | Visual Treatment |
+|---|---|---|
+| **Player Action** | "You slash the ghoul for 12 damage" | Player colour (cool tones), inline damage number |
+| **Enemy Action** | "The ghoul rakes its claws across your arm — 7 damage" | Enemy colour (warm/red tones) |
+| **Environmental** | "The chamber trembles as stone cracks overhead" | Muted/neutral tone |
+| **Status Effect** | "Poison courses through your veins — 3 damage" | Status colour + persistent icon in HUD |
+| **System** | "Cooldown ready: Heavy Strike" | Small, unobtrusive, dimmed text |
+
+Classification is determined server-side and sent as metadata with each narration message. The client renders colour and formatting based on class — no client-side parsing of prose.
+
+### Colour Coding
+- **Player actions:** cool tones (blue/cyan family)
+- **Enemy actions:** warm tones (red/orange family)
+- **Critical hits:** gold highlight
+- **Misses/dodges:** grey/dimmed
+- **Status effects:** colour matched to effect type (green = poison, purple = curse, etc.)
+- **Environmental:** neutral/muted
+
+### Temporal Micro-Batching
+When multiple events of the same type occur within a short window (50–150ms server-side), the narration system **batches** them into a single summary line:
+
+- Three rapid auto-attacks become: *"The goblin unleashes a flurry of strikes — 4, 5, 6 damage"*
+- Multiple poison ticks collapse to: *"Poison burns through you — 9 total damage"*
+
+Batching reduces scroll spam without hiding information. Individual damage numbers are preserved in the summary. Priority ordering within a batch: player actions first, enemy actions second, environmental last.
+
+### Inline Iconography
+Compact icons prefix narration lines for quick visual scanning:
+- 🗡️ melee attack
+- 🏹 ranged attack
+- 🛡️ block/parry
+- 💥 critical hit
+- 🧪 poison/DoT
+
+Icons are supplementary — the narration text is always self-sufficient without them.
+
+## 6.7 Meaningful Death
+
+Death in combat triggers the full **death and corpse system** defined in §6.8. Combat death is the primary way players lose gear, and the threat of death is what gives every combat encounter weight.
+
+**On reaching 0 HP:**
+1. The player dies immediately. There is no "downed" state in the base system.
+2. A lootable corpse is created in the room containing all non-soulbound equipped gear (§6.8).
+3. The player respawns at their faction stronghold with soulbound items only.
+4. A death penalty debuff is applied (§6.8).
+5. The combat narration delivers a final death message with appropriate gravity.
+
+**Design intent:** Every combat encounter is a risk calculation. The auto-attack baseline means even routine fights drain HP and resources. Pushing deeper into a zone with low HP and expended abilities is a deliberate gamble — the tension between "one more room" and "extract now" is the core emotional loop.
+
+## 6.8 Death & Corpse System *(Planned — Foundation Exists)*
 
 Death is the primary risk mechanic in Ellmud. When a player dies:
 
@@ -366,7 +510,7 @@ The `player_death_tracking` table records death events (death_count, last_death_
 ### Design Intent
 Death should **sting but not devastate**. Losing a full loadout of Sturdy gear hurts. Losing Masterwork gear is a genuine setback. But the player's skills, faction reputation, stash contents, and soulbound items are all preserved. The goal is tension on every excursion, not permanent character destruction.
 
-## 6.6 Equipment Loss & Destruction *(Design Space — Future)*
+## 6.9 Equipment Loss & Destruction *(Design Space — Future)*
 
 Beyond death, there are (or will be) other meaningful ways equipment can be lost or destroyed:
 

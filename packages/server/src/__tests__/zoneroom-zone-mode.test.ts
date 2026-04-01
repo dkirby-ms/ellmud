@@ -1,8 +1,8 @@
 /**
- * ShardRoom Zone-Mode Tests — Phase B (ShardRoom Absorption)
+ * ZoneRoom Zone-Mode Tests — Phase B (ZoneRoom Absorption)
  *
- * Validates the NEW capabilities added to ShardRoom after absorbing RefugeRoom:
- *   B1: AmbientSystem gating (all zones → ambient, shard mode → none)
+ * Validates the NEW capabilities added to ZoneRoom after absorbing RefugeRoom:
+ *   B1: AmbientSystem gating (all zones → ambient, procedural mode → none)
  *   B2: Player join/leave announcements in zone mode
  *   B3: Dual message updates (LOADOUT_UPDATE + STASH_UPDATE) on join
  *   B4: PendingEnter guard (double-entry prevention)
@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
-import { ShardRoom } from '../rooms/ShardRoom.js';
+import { ZoneRoom } from '../rooms/ZoneRoom.js';
 import { AmbientSystem } from '../systems/AmbientSystem.js';
 import {
   getZoneRepository,
@@ -108,7 +108,7 @@ beforeAll(async () => {
   await seedZone('test-social', 'social');
 
   const server = new Server();
-  server.define('shard', ShardRoom);
+  server.define('zone', ZoneRoom);
   await server.listen(0);
   const addr = (
     server as unknown as { transport: { server: { address(): { port: number } } } }
@@ -136,10 +136,10 @@ async function connectWithPlayer(
 }
 
 /**
- * Access internal ShardRoom fields via type coercion.
+ * Access internal ZoneRoom fields via type coercion.
  * Phase B adds `ambientSystem`, `pendingEnter`, `isZone`, etc. as private fields.
  */
-interface ShardRoomInternals {
+interface ZoneRoomInternals {
   ambientSystem?: AmbientSystem;
   pendingEnter: Set<string>;
   isZone: boolean;
@@ -151,8 +151,8 @@ interface ShardRoomInternals {
 
 function internals(
   room: Awaited<ReturnType<ColyseusTestServer['createRoom']>>,
-): ShardRoomInternals {
-  return room as unknown as ShardRoomInternals;
+): ZoneRoomInternals {
+  return room as unknown as ZoneRoomInternals;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -161,7 +161,7 @@ function internals(
 
 describe('B1 — AmbientSystem Gating', () => {
   it.todo('hub zone creates AmbientSystem', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'test-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'test-hub' });
     const { client } = await connectWithPlayer(room, 'ambient-hub-player');
 
     expect(internals(room).isZone).toBe(true);
@@ -172,7 +172,7 @@ describe('B1 — AmbientSystem Gating', () => {
   });
 
   it.todo('social zone creates AmbientSystem', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'test-social' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'test-social' });
     const { client } = await connectWithPlayer(room, 'ambient-social-player');
 
     expect(internals(room).isZone).toBe(true);
@@ -183,7 +183,7 @@ describe('B1 — AmbientSystem Gating', () => {
   });
 
   it.todo('dungeon zone creates AmbientSystem', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'test-dungeon' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'test-dungeon' });
     const { client } = await connectWithPlayer(room, 'ambient-dungeon-player');
 
     expect(internals(room).isZone).toBe(true);
@@ -193,9 +193,9 @@ describe('B1 — AmbientSystem Gating', () => {
     await client.leave();
   });
 
-  it('shard mode (no zone) does NOT create AmbientSystem', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true, collapseTimer: 120 });
-    const { client } = await connectWithPlayer(room, 'ambient-shard-player');
+  it('procedural mode (no zone) does NOT create AmbientSystem', async () => {
+    const room = await colyseus.createRoom('zone', { useTestGraph: true, collapseTimer: 120 });
+    const { client } = await connectWithPlayer(room, 'ambient-zone-player');
 
     expect(internals(room).isZone).toBe(false);
     expect(internals(room).ambientSystem).toBeUndefined();
@@ -204,7 +204,7 @@ describe('B1 — AmbientSystem Gating', () => {
   });
 
   it.todo('hub zone sends ambient narration on join', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'test-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'test-hub' });
     const { client, collector } = await connectWithPlayer(room, 'ambient-join-player');
 
     // Player should receive at least one ambient-type narration on join (world snapshot)
@@ -214,8 +214,8 @@ describe('B1 — AmbientSystem Gating', () => {
     await client.leave();
   });
 
-  it('shard mode does NOT send ambient narration on join', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true, collapseTimer: 120 });
+  it('procedural mode does NOT send ambient narration on join', async () => {
+    const room = await colyseus.createRoom('zone', { useTestGraph: true, collapseTimer: 120 });
     const { client, collector } = await connectWithPlayer(room, 'no-ambient-player');
 
     const ambientMessages = collector.narrate.filter((m) => m.type === 'ambient');
@@ -231,7 +231,7 @@ describe('B1 — AmbientSystem Gating', () => {
 
 describe('B2 — Zone-Mode Announcements', () => {
   it.todo('player join announces to others in zone mode', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'test-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'test-hub' });
 
     // Player 1 joins first
     const { client: client1, collector: collector1 } = await connectWithPlayer(
@@ -258,7 +258,7 @@ describe('B2 — Zone-Mode Announcements', () => {
   });
 
   it.todo('player leave announces to others in zone mode', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'test-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'test-hub' });
 
     const { client: client1, collector: collector1 } = await connectWithPlayer(
       room,
@@ -281,19 +281,19 @@ describe('B2 — Zone-Mode Announcements', () => {
     await client1.leave();
   });
 
-  it('shard mode does NOT send arrival announcements', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true, collapseTimer: 120 });
+  it('procedural mode does NOT send arrival announcements', async () => {
+    const room = await colyseus.createRoom('zone', { useTestGraph: true, collapseTimer: 120 });
 
     const { client: client1, collector: collector1 } = await connectWithPlayer(
       room,
-      'shard-no-announce-1',
+      'zone-no-announce-1',
     );
     collector1.clear();
 
-    const { client: client2 } = await connectWithPlayer(room, 'shard-no-announce-2');
+    const { client: client2 } = await connectWithPlayer(room, 'zone-no-announce-2');
     await wait(300);
 
-    // In shard mode, no "arrives" announcements (awareness system handles differently)
+    // In procedural mode, no "arrives" announcements (awareness system handles differently)
     const arrivals = collector1.narrate.filter(
       (m) => m.type === 'awareness' && m.text.includes('arrives'),
     );
@@ -304,7 +304,7 @@ describe('B2 — Zone-Mode Announcements', () => {
   });
 
   it('joining player does NOT receive their own announcement', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'test-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'test-hub' });
 
     // Need another player in room so announceToRoom fires
     const { client: keepAlive } = await connectWithPlayer(room, 'announce-keepalive');
@@ -330,8 +330,8 @@ describe('B2 — Zone-Mode Announcements', () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('B4 — PendingEnter Guard', () => {
-  it.todo('pendingEnter set exists on ShardRoom', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'test-hub' });
+  it.todo('pendingEnter set exists on ZoneRoom', async () => {
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'test-hub' });
     const { client } = await connectWithPlayer(room, 'pending-check-player');
 
     const roomInternals = internals(room);
@@ -342,12 +342,12 @@ describe('B4 — PendingEnter Guard', () => {
   });
 
   it.todo('pendingEnter is cleared on player leave', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'test-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'test-hub' });
     const { client } = await connectWithPlayer(room, 'pending-clear-player');
 
     const roomInternals = internals(room);
 
-    // Simulate adding to pendingEnter (as if player started entering a shard)
+    // Simulate adding to pendingEnter (as if player started entering a zone)
     roomInternals.pendingEnter.add(client.sessionId);
     expect(roomInternals.pendingEnter.has(client.sessionId)).toBe(true);
 
@@ -359,7 +359,7 @@ describe('B4 — PendingEnter Guard', () => {
   });
 
   it.todo('pendingEnter starts empty for new room', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true, collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true, collapseTimer: 120 });
     const roomInternals = internals(room);
 
     expect(roomInternals.pendingEnter.size).toBe(0);
@@ -378,7 +378,7 @@ describe('B4 — PendingEnter Guard', () => {
 
 describe('B6 — Zone Reconnection Grace', () => {
   it('zone mode room is configured as a zone', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'test-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'test-hub' });
     const { client } = await connectWithPlayer(room, 'zone-recon-check');
 
     const roomInternals = internals(room);
@@ -389,18 +389,18 @@ describe('B6 — Zone Reconnection Grace', () => {
     await client.leave();
   });
 
-  it('shard mode uses default reconnection (not zone-specific)', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true, collapseTimer: 120 });
-    const { client } = await connectWithPlayer(room, 'shard-recon-check');
+  it('procedural mode uses default reconnection (not zone-specific)', async () => {
+    const room = await colyseus.createRoom('zone', { useTestGraph: true, collapseTimer: 120 });
+    const { client } = await connectWithPlayer(room, 'zone-recon-check');
 
-    // Shard mode: isZone=false, so reconnection grace falls through to config default (30s)
+    // Procedural mode: isZone=false, so reconnection grace falls through to config default (30s)
     expect(internals(room).isZone).toBe(false);
 
     await client.leave();
   });
 
   it('hub zone has zone-level reconnection grace (non-consented disconnect)', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'test-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'test-hub' });
 
     // Two players: one will disconnect, other keeps room alive
     const { client: keeper } = await connectWithPlayer(room, 'recon-keeper');
@@ -429,7 +429,7 @@ describe('B6 — Zone Reconnection Grace', () => {
 
 describe('Zone Metadata Basics', () => {
   it('zone room stores zoneData with correct category', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'test-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'test-hub' });
     const { client } = await connectWithPlayer(room, 'meta-hub-player');
 
     const roomInternals = internals(room);
@@ -439,7 +439,7 @@ describe('Zone Metadata Basics', () => {
   });
 
   it('dungeon zone stores dungeon category', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'test-dungeon' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'test-dungeon' });
     const { client } = await connectWithPlayer(room, 'meta-dungeon-player');
 
     const roomInternals = internals(room);
@@ -448,9 +448,9 @@ describe('Zone Metadata Basics', () => {
     await client.leave();
   });
 
-  it('shard mode has no zone metadata', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true, collapseTimer: 120 });
-    const { client } = await connectWithPlayer(room, 'meta-shard-player');
+  it('procedural mode has no zone metadata', async () => {
+    const room = await colyseus.createRoom('zone', { useTestGraph: true, collapseTimer: 120 });
+    const { client } = await connectWithPlayer(room, 'meta-zone-player');
 
     const roomInternals = internals(room);
     expect(roomInternals.isZone).toBe(false);

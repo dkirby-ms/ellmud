@@ -2,12 +2,12 @@
  * Wave 4 — Stash Persistence Wiring (#11) anticipatory tests.
  *
  * Tests the integration between stash persistence and the zone-mode
- * ShardRoom stash-load-on-entry flow. Covers:
+ * ZoneRoom stash-load-on-entry flow. Covers:
  *   - Stash transfer pipeline
  *   - Weight enforcement during deposits
  *   - Capacity upgrades through the full pipeline
  *   - Server restart durability (StashService recreation)
- *   - Zone ShardRoom stash-load-on-join wiring
+ *   - Zone ZoneRoom stash-load-on-join wiring
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -52,7 +52,7 @@ function createItemDefs(): Map<string, StashItem> {
     type: 'material',
     rarity: 'common',
     weight: 2.0,
-    description: 'A bleached bone from a shard creature.',
+    description: 'A bleached bone from a zone creature.',
     baseDurability: null,
   });
   defs.set('heavy_anvil', {
@@ -93,7 +93,7 @@ describe('Stash Transfer (Issue #11)', () => {
     service = new StashService(repo, defs);
   });
 
-  it('transfers shard inventory items into persistent stash', async () => {
+  it('transfers zone inventory items into persistent stash', async () => {
     const inventory = buildInventory([
       { id: 'rusty_blade', name: 'Rusty Blade', weight: 5, description: 'Sword', qty: 1 },
       { id: 'waterlogged_potion', name: 'Waterlogged Potion', weight: 1, description: 'Potion', qty: 3 },
@@ -462,7 +462,7 @@ describe('Stash Load on Refuge Entry (Issue #11)', () => {
   });
 
   it('full stash→zone-load pipeline works end to end', async () => {
-    // Simulate a shard run: player picks up items
+    // Simulate a zone run: player picks up items
     const player = new PlayerState(PLAYER_ID, 'entry');
     player.addItem({ id: 'rusty_blade', name: 'Rusty Blade', weight: 5, description: 'Sword' });
     player.addItem({ id: 'revenant_bone', name: 'Revenant Bone', weight: 2, description: 'Bone' });

@@ -417,7 +417,7 @@ describe('Full PvP Encounter Flow', () => {
 });
 
 describe('PvP Integration (requires multi-client)', () => {
-  it.todo('two connected clients can attack each other through ShardRoom');
+  it.todo('two connected clients can attack each other through ZoneRoom');
   it.todo('PvP death drops non-soulbound items as lootable corpse');
   it.todo('PvP narration sent to all players in room');
   it.todo('death penalty debuff applied after PvP');

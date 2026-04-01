@@ -2,7 +2,7 @@
  * Stash persistence tests — Issue #11.
  *
  * Covers: StashRepository CRUD, StashService business logic (weight limits,
- * capacity, item resolution, take/store), zone-mode ShardRoom stash integration.
+ * capacity, item resolution, take/store), zone-mode ZoneRoom stash integration.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -544,8 +544,8 @@ describe('StashService', () => {
     });
 
     it('handles fractional weights', async () => {
-      const shard = makeInstance('void-shard'); // 0.1 weight
-      await service.storeItem(PLAYER_ID, shard, 7);
+      const voidShard = makeInstance('void-shard'); // 0.1 weight
+      await service.storeItem(PLAYER_ID, voidShard, 7);
 
       const weight = await service.calculateWeight(PLAYER_ID);
       expect(weight).toBeCloseTo(0.7);

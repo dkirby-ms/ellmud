@@ -1,5 +1,5 @@
 /**
- * ShardRoom lifecycle tests — verify all state transitions
+ * ZoneRoom lifecycle tests — verify all state transitions
  * seeding → open → active → destabilising → collapse
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -16,23 +16,23 @@ afterAll(async () => {
   await colyseus.shutdown();
 });
 
-describe('ShardRoom Lifecycle', () => {
+describe('ZoneRoom Lifecycle', () => {
   it('should start in seeding state on creation', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
-    expect(collector.shardState.length).toBeGreaterThan(0);
-    const states = collector.shardState.map((s) => s.state);
+    expect(collector.zoneState.length).toBeGreaterThan(0);
+    const states = collector.zoneState.map((s) => s.state);
     expect(states).toContain('seeding');
 
     await client.leave();
   });
 
   it('should transition from seeding → open', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     await wait(1500);
 
-    const states = collector.shardState.map((s) => s.state);
+    const states = collector.zoneState.map((s) => s.state);
     expect(states).toContain('seeding');
     expect(states).toContain('open');
 
@@ -40,12 +40,12 @@ describe('ShardRoom Lifecycle', () => {
   });
 
   it('should transition from open → active', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     // seeding(1s) → open → active(5s)
     await wait(7000);
 
-    const states = collector.shardState.map((s) => s.state);
+    const states = collector.zoneState.map((s) => s.state);
     expect(states).toContain('open');
     expect(states).toContain('active');
 
@@ -55,14 +55,14 @@ describe('ShardRoom Lifecycle', () => {
   it('should reach destabilising when stability drops to 25%', async () => {
     const { client, collector } = await connectTestClient(
       colyseus,
-      'shard',
+      'zone',
       quickCollapseOptions(12),
     );
 
     // seeding(1s) → open(5s) → active, timer=12, destabilise at 75% = 9 ticks
     await wait(16_000);
 
-    const states = collector.shardState.map((s) => s.state);
+    const states = collector.zoneState.map((s) => s.state);
     expect(states).toContain('active');
     expect(states).toContain('destabilising');
 
@@ -72,12 +72,12 @@ describe('ShardRoom Lifecycle', () => {
   it('should reach collapse when stability hits zero', async () => {
     const { client, collector } = await connectTestClient(
       colyseus,
-      'shard',
+      'zone',
       quickCollapseOptions(8),
     );
 
     const reachedCollapse = await waitUntil(
-      () => collector.shardState.some((s) => s.state === 'collapse'),
+      () => collector.zoneState.some((s) => s.state === 'collapse'),
       25_000,
     );
 
@@ -90,11 +90,11 @@ describe('ShardRoom Lifecycle', () => {
     try { await client.leave(); } catch { /* may already be disconnected */ }
   }, 30_000);
 
-  it('should include collapseTimer in shard state messages', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+  it('should include collapseTimer in zone state messages', async () => {
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
-    expect(collector.shardState.length).toBeGreaterThan(0);
-    const firstState = collector.shardState[0]!;
+    expect(collector.zoneState.length).toBeGreaterThan(0);
+    const firstState = collector.zoneState[0]!;
     expect(firstState.collapseTimer).toBeTypeOf('number');
     expect(firstState.collapseTimer).toBeGreaterThan(0);
 
@@ -102,17 +102,17 @@ describe('ShardRoom Lifecycle', () => {
   });
 });
 
-describe('ShardRoom Collapse Timer', () => {
+describe('ZoneRoom Collapse Timer', () => {
   it('should decrement collapse timer during active state', async () => {
     const { client, collector } = await connectTestClient(
       colyseus,
-      'shard',
+      'zone',
       quickCollapseOptions(30),
     );
 
     await wait(7000);
 
-    const activeStates = collector.shardState.filter((s) => s.state === 'active');
+    const activeStates = collector.zoneState.filter((s) => s.state === 'active');
     expect(activeStates.length).toBeGreaterThan(0);
 
     const activeTimer = activeStates[0]!.collapseTimer;
@@ -126,11 +126,11 @@ describe('ShardRoom Collapse Timer', () => {
     const customTimer = 60;
     const { client, collector } = await connectTestClient(
       colyseus,
-      'shard',
+      'zone',
       { collapseTimer: customTimer },
     );
 
-    const firstState = collector.shardState[0]!;
+    const firstState = collector.zoneState[0]!;
     expect(firstState.collapseTimer).toBe(customTimer);
 
     await client.leave();

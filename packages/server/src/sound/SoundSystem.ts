@@ -2,7 +2,7 @@
  * SoundSystem — room-by-room noise propagation (GDD §12).
  *
  * Pure game logic. No Colyseus dependency.
- * ShardRoom calls propagateSound() and delivers results to clients.
+ * ZoneRoom calls propagateSound() and delivers results to clients.
  *
  * Algorithm: BFS from source room, attenuating noise by 2 per room.
  * Room properties modify propagation:

@@ -203,7 +203,7 @@ export function calculateLoadoutWeight(
   return total;
 }
 
-/** Validate a loadout for shard entry. */
+/** Validate a loadout for zone entry. */
 export function validateLoadout(
   loadout: Loadout,
   defs: Map<string, ItemDefinition>,

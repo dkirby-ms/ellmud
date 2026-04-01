@@ -2,11 +2,11 @@
  * Command registry — maps verb strings to handler functions.
  *
  * All command handlers receive a CommandContext and return a CommandResult.
- * The ShardRoom is responsible for building the context and delivering the result.
+ * The ZoneRoom is responsible for building the context and delivering the result.
  */
 
 import type { NarrationType } from '@ellmud/shared';
-import type { Room } from '../shard/RoomGraph.js';
+import type { Room } from '../zone/RoomGraph.js';
 import type { PlayerState } from '../state/PlayerState.js';
 import type { CombatSystem } from '../combat/CombatSystem.js';
 import { handleGo } from './handlers/go.js';
@@ -64,26 +64,26 @@ export interface CommandContext {
   resolveRoom: (roomId: string) => Room | undefined;
   /** Other player session IDs in the same room. */
   otherPlayersInRoom: string[];
-  /** Current shard stability (0–1). */
+  /** Current zone stability (0–1). */
   stability: number;
   /** The player's in-game character name. */
   characterName?: string;
-  /** Combat system reference (available in ShardRoom context). */
+  /** Combat system reference (available in ZoneRoom context). */
   combatSystem?: CombatSystem;
   /** Living creatures in the current room. */
   creaturesInRoom?: CreatureRef[];
   /** Resolve creatures in an arbitrary room by ID. */
   resolveCreaturesInRoom?: (roomId: string) => CreatureRef[];
-  /** Downing system reference (available in ShardRoom context). */
+  /** Downing system reference (available in ZoneRoom context). */
   downingSystem?: DowningSystem;
   /** Stash service for personal storage (available in feature_stash rooms). */
   stashService?: StashService;
   /** Loadout service for equipment management (available in feature_stash rooms). */
   loadoutService?: LoadoutService;
-  /** Query available shards (available in feature_expedition_board rooms). */
-  queryShards?: () => Promise<ShardListing[]>;
-  /** Create/join a shard (available in feature_expedition_board rooms). */
-  createShard?: (opts?: { tier?: number }) => Promise<ShardListing | null>;
+  /** Query available zones (available in feature_expedition_board rooms). */
+  queryZones?: () => Promise<ZoneListing[]>;
+  /** Create/join a zone (available in feature_expedition_board rooms). */
+  createZone?: (opts?: { tier?: number }) => Promise<ZoneListing | null>;
   /** Current zone display name (e.g. "The Refuge"). */
   zoneName?: string;
   /** Current zone slug identifier (e.g. "refuge"). */
@@ -93,7 +93,7 @@ export interface CommandContext {
 export type CommandHandler = (ctx: CommandContext) => CommandResult;
 
 /** Shard listing summary for expedition board display. */
-export interface ShardListing {
+export interface ZoneListing {
   roomId: string;
   tier: number;
   lifecycle: string;
@@ -108,7 +108,7 @@ const featureHandlers = new Map<string, { handler: CommandHandler; requiredRoomT
 featureHandlers.set('board', { handler: handleBoard, requiredRoomType: 'feature_expedition_board' });
 featureHandlers.set('enter', { handler: handleEnter, requiredRoomType: 'feature_expedition_board' });
 // Keep legacy alias
-featureHandlers.set('shardboard', { handler: handleBoard, requiredRoomType: 'feature_expedition_board' });
+featureHandlers.set('zoneboard', { handler: handleBoard, requiredRoomType: 'feature_expedition_board' });
 featureHandlers.set('stash', { handler: handleStashView, requiredRoomType: 'feature_stash' });
 featureHandlers.set('store', { handler: handleStore, requiredRoomType: 'feature_stash' });
 featureHandlers.set('loadout', { handler: handleLoadoutView, requiredRoomType: 'feature_stash' });

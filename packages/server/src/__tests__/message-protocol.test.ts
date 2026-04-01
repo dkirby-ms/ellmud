@@ -23,7 +23,7 @@ afterAll(async () => {
 
 describe('Message Protocol — Server → Client', () => {
   it('should send NARRATE messages with correct shape', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     expect(collector.narrate.length).toBeGreaterThan(0);
 
@@ -38,7 +38,7 @@ describe('Message Protocol — Server → Client', () => {
   });
 
   it('should send ROOM_HEADER messages with correct shape', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     expect(collector.roomHeader.length).toBeGreaterThan(0);
 
@@ -53,13 +53,13 @@ describe('Message Protocol — Server → Client', () => {
     await client.leave();
   });
 
-  it('should send SHARD_STATE messages with correct shape', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+  it('should send ZONE_STATE messages with correct shape', async () => {
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
-    expect(collector.shardState.length).toBeGreaterThan(0);
+    expect(collector.zoneState.length).toBeGreaterThan(0);
 
     const validStates = ['seeding', 'open', 'active', 'destabilising', 'collapse'];
-    for (const msg of collector.shardState) {
+    for (const msg of collector.zoneState) {
       expect(validStates).toContain(msg.state);
       expect(msg.collapseTimer).toBeTypeOf('number');
     }
@@ -67,22 +67,22 @@ describe('Message Protocol — Server → Client', () => {
     await client.leave();
   });
 
-  it('should deliver all three message types on shard join', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+  it('should deliver all three message types on zone join', async () => {
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     expect(collector.narrate.length).toBeGreaterThan(0);
     expect(collector.roomHeader.length).toBeGreaterThan(0);
-    expect(collector.shardState.length).toBeGreaterThan(0);
+    expect(collector.zoneState.length).toBeGreaterThan(0);
 
     await client.leave();
   });
 
   it('should deliver narrate + room_header on zone join', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard', { zoneSlug: 'the-refuge' });
+    const { client, collector } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     expect(collector.narrate.length).toBeGreaterThan(0);
     expect(collector.roomHeader.length).toBeGreaterThan(0);
-    // Zone-mode ShardRoom sends the same message types as shard mode
+    // Zone-mode ZoneRoom sends the same message types as procedural mode
 
     await client.leave();
   });
@@ -90,7 +90,7 @@ describe('Message Protocol — Server → Client', () => {
 
 describe('Message Protocol — Client → Server', () => {
   it('should handle COMMAND messages and respond with NARRATE', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     const preCount = collector.narrate.length;
     client.send(MessageTypes.COMMAND, makeCommand('look'));
@@ -102,7 +102,7 @@ describe('Message Protocol — Client → Server', () => {
   });
 
   it('should handle unknown verbs without crashing', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     const preCount = collector.narrate.length;
     client.send(MessageTypes.COMMAND, makeCommand('xyzzy'));
@@ -116,7 +116,7 @@ describe('Message Protocol — Client → Server', () => {
   });
 
   it('should handle empty verb gracefully', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     const preCount = collector.narrate.length;
     client.send(MessageTypes.COMMAND, makeCommand(''));
@@ -128,7 +128,7 @@ describe('Message Protocol — Client → Server', () => {
   });
 
   it('should handle command with args', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     const preCount = collector.narrate.length;
     client.send(MessageTypes.COMMAND, makeCommand('look', 'north'));

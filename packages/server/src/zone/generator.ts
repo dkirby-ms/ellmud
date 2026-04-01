@@ -1,6 +1,6 @@
 /**
  * Procedural shard graph generator.
- * Creates deterministic room graphs from a seed for shard instances.
+ * Creates deterministic room graphs from a seed for zone instances.
  *
  * Algorithm:
  *  1. Determine room count from tier
@@ -12,7 +12,7 @@
  */
 
 import type {
-  ShardTier,
+  ZoneTier,
   Room,
   RoomGraph,
   RoomType,
@@ -104,7 +104,7 @@ const HAZARD_TEMPLATES: readonly HazardTemplate[] = [
 
 // ─── Room count ranges by tier (GDD §10.1) ─────────────────────────────────
 
-const TIER_ROOM_COUNTS: Record<ShardTier, [min: number, max: number]> = {
+const TIER_ROOM_COUNTS: Record<ZoneTier, [min: number, max: number]> = {
   1: [15, 25],
   2: [25, 40],
   3: [40, 60],
@@ -112,7 +112,7 @@ const TIER_ROOM_COUNTS: Record<ShardTier, [min: number, max: number]> = {
 
 // ─── Anchor room counts by tier ─────────────────────────────────────────────
 
-const TIER_ANCHORS: Record<ShardTier, { entries: number; boss: number }> = {
+const TIER_ANCHORS: Record<ZoneTier, { entries: number; boss: number }> = {
   1: { entries: 2, boss: 1 },
   2: { entries: 3, boss: 1 },
   3: { entries: 4, boss: 1 },
@@ -120,12 +120,12 @@ const TIER_ANCHORS: Record<ShardTier, { entries: number; boss: number }> = {
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
-export interface ShardGenConfig {
-  tier: ShardTier;
+export interface ZoneGenConfig {
+  tier: ZoneTier;
   seed: number;
 }
 
-export function generateShardGraph(config: ShardGenConfig): RoomGraph {
+export function generateZoneGraph(config: ZoneGenConfig): RoomGraph {
   const rng = createPRNG(config.seed);
   const [minRooms, maxRooms] = TIER_ROOM_COUNTS[config.tier];
   const totalRooms = rng.nextInt(minRooms, maxRooms);

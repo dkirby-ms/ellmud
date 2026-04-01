@@ -2,9 +2,9 @@
  * Zone System Integration Tests
  *
  * Validates the zone repository, zone-to-RoomGraph adapter, repop logic,
- * inter-zone exit utilities, and (future) zone-based ShardRoom creation.
+ * inter-zone exit utilities, and (future) zone-based ZoneRoom creation.
  *
- * Written against specifications — Drizzt's ShardRoom polymorphism,
+ * Written against specifications — Drizzt's ZoneRoom polymorphism,
  * repop, and inter-zone exit implementations may land later.
  */
 
@@ -779,24 +779,24 @@ describe('Inter-Zone ID Utilities', () => {
   });
 });
 
-// ─── 5. Zone-Based ShardRoom Creation Test ──────────────────────────────
+// ─── 5. Zone-Based ZoneRoom Creation Test ──────────────────────────────
 
-describe('Zone-Based ShardRoom Creation', () => {
+describe('Zone-Based ZoneRoom Creation', () => {
   /**
-   * TODO: Once Drizzt lands ShardRoom polymorphism (zone-based room creation),
+   * TODO: Once Drizzt lands ZoneRoom polymorphism (zone-based room creation),
    * this test should:
    * 1. Create a zone in InMemoryZoneRepository
-   * 2. Boot a test server with ShardRoom defined
+   * 2. Boot a test server with ZoneRoom defined
    * 3. Create a room with { zoneSlug: 'test-zone' } option
    * 4. Verify the room graph was loaded from the zone (not procedural)
    *
-   * Blocked on: ShardRoom zone integration (no zoneSlug option support yet).
+   * Blocked on: ZoneRoom zone integration (no zoneSlug option support yet).
    * When ready, use the bootTestServer / connectTestClient helpers from
    * packages/server/src/__tests__/helpers/test-client.ts
    */
 
   it.todo(
-    'creates a ShardRoom from zone data when zoneSlug option is provided',
+    'creates a ZoneRoom from zone data when zoneSlug option is provided',
   );
 
   it.todo(
@@ -808,14 +808,14 @@ describe('Zone-Based ShardRoom Creation', () => {
   );
 
   // These tests CAN run now — they validate the zone loading pipeline
-  // that ShardRoom will use internally.
+  // that ZoneRoom will use internally.
 
-  it('zone loading pipeline: repo → bundle → RoomGraph ready for ShardRoom', async () => {
+  it('zone loading pipeline: repo → bundle → RoomGraph ready for ZoneRoom', async () => {
     const repo = new InMemoryZoneRepository();
 
     const zone = await repo.createZone(
       zoneInput({
-        slug: 'test-shard-zone',
+        slug: 'test-zone-slug',
         entryRoomSlugs: ['start'],
         tier: 2,
         theme: 'shattered_bastion',
@@ -831,12 +831,12 @@ describe('Zone-Based ShardRoom Creation', () => {
     await repo.createExit(exitInput(zone.id, 'boss-lair', 'west', 'mid'));
     await repo.createExit(exitInput(zone.id, 'mid', 'up', 'escape'));
 
-    const bundle = await repo.getZoneBySlug('test-shard-zone');
+    const bundle = await repo.getZoneBySlug('test-zone-slug');
     expect(bundle).not.toBeNull();
 
     const graph = convertZoneToRoomGraph(bundle!);
 
-    // ShardRoom expects these properties from the graph
+    // ZoneRoom expects these properties from the graph
     expect(graph.rooms.size).toBe(4);
     expect(graph.entryRoomIds).toContain('start');
     expect(graph.bossRoomId).toBe('boss-lair');

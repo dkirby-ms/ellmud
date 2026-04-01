@@ -1,8 +1,8 @@
 /**
- * CreatureManager — manages all creatures in a shard instance.
+ * CreatureManager — manages all creatures in a zone instance.
  *
  * Responsibilities:
- * - Spawn creatures during shard seeding (deterministic placement)
+ * - Spawn creatures during zone seeding (deterministic placement)
  * - Spawn zone-defined NPCs from ZoneData
  * - Tick all creature behaviors each game tick
  * - Provide room queries for look/combat
@@ -10,7 +10,7 @@
  */
 
 import type { RoomGraph, Room, ZoneData } from '@ellmud/shared';
-import type { PRNG } from '../shard/prng.js';
+import type { PRNG } from '../zone/prng.js';
 import type { Creature, CreatureTemplate, CreatureAction } from './types.js';
 import { updateCreature, type CreatureWorldState } from './behavior.js';
 import { generateLoot, type LootItem } from './loot.js';
@@ -53,7 +53,7 @@ export class CreatureManager {
   // ─── Spawning ──────────────────────────────────────────────────────────────
 
   /**
-   * Spawn creatures into a shard's room graph during seeding.
+   * Spawn creatures into a zone's room graph during seeding.
    * Uses seeded PRNG for deterministic placement.
    */
   spawnCreatures(roomGraph: RoomGraph, template: CreatureTemplate, prng: PRNG): Creature[] {

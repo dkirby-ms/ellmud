@@ -23,7 +23,7 @@ afterAll(async () => {
 
 describe('PLAYER_STATE message — Server → Client', () => {
   it('should send PLAYER_STATE on join with default HP', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     // Player should receive initial PLAYER_STATE message on join
     expect(collector.playerState.length).toBeGreaterThanOrEqual(1);
@@ -40,7 +40,7 @@ describe('PLAYER_STATE message — Server → Client', () => {
   });
 
   it('should send PLAYER_STATE after player takes damage in combat', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     // Clear initial messages
     collector.clear();
@@ -72,7 +72,7 @@ describe('PLAYER_STATE message — Server → Client', () => {
   });
 
   it('PLAYER_STATE message should have correct shape', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     const state = collector.playerState[0];
     

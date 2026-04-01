@@ -2,7 +2,7 @@
  * Wave 1 Multiplayer — Anticipatory Integration Tests
  * 
  * Tests for Phase 2 Wave 1 features being implemented in parallel:
- * - #21: Multi-player shards (Redis presence, matchmaker, KEDA, tier-based max players)
+ * - #21: Multi-player zones (Redis presence, matchmaker, KEDA, tier-based max players)
  * - #26: Proximity communication (say/whisper/emote command handlers, message routing)
  * - #28: Reconnection tuning (state preservation, timeout handling)
  * 
@@ -24,24 +24,24 @@ import {
 } from './helpers/index.js';
 import { resetConfig } from '../config.js';
 
-describe('Wave 1 — Multi-Player Shards (#21)', () => {
+describe('Wave 1 — Multi-Player Zones (#21)', () => {
   let colyseus: ColyseusTestServer;
 
   beforeAll(async () => {
-    // Enable multi-player shards for Wave 1
-    process.env['MAX_PLAYERS_PER_SHARD'] = '4';
+    // Enable multi-player zones for Wave 1
+    process.env['MAX_PLAYERS_PER_ZONE'] = '4';
     resetConfig();
     colyseus = await bootTestServer();
   });
 
   afterAll(async () => {
     await colyseus.shutdown();
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     resetConfig();
   });
 
-  it('should allow two players to join the same shard', async () => {
-    const room = await colyseus.createRoom('shard', {});
+  it('should allow two players to join the same zone', async () => {
+    const room = await colyseus.createRoom('zone', {});
 
     const { client: client1, collector: collector1 } = await connectToExistingRoom(colyseus, room);
     const { client: client2, collector: collector2 } = await connectToExistingRoom(colyseus, room);
@@ -58,8 +58,8 @@ describe('Wave 1 — Multi-Player Shards (#21)', () => {
     await client2.leave();
   });
 
-  it('should allow four players to join the same shard (Tier 1 default)', async () => {
-    const room = await colyseus.createRoom('shard', {});
+  it('should allow four players to join the same zone (Tier 1 default)', async () => {
+    const room = await colyseus.createRoom('zone', {});
 
     const clients = [];
     for (let i = 0; i < 4; i++) {
@@ -78,8 +78,8 @@ describe('Wave 1 — Multi-Player Shards (#21)', () => {
     }
   });
 
-  it('should reject the fifth player when shard is at capacity (maxPlayersPerShard=4)', async () => {
-    const room = await colyseus.createRoom('shard', {});
+  it('should reject the fifth player when zone is at capacity (maxPlayersPerZone=4)', async () => {
+    const room = await colyseus.createRoom('zone', {});
 
     // Connect 4 players (fill to capacity)
     const clients = [];
@@ -109,7 +109,7 @@ describe('Wave 1 — Multi-Player Shards (#21)', () => {
   });
 
   it('should track all four players in the same room', async () => {
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('zone', {});
 
     const clients = [];
     for (let i = 0; i < 4; i++) {
@@ -128,12 +128,12 @@ describe('Wave 1 — Multi-Player Shards (#21)', () => {
     }
   });
 
-  it('should allow 6 players in a Tier 3 shard', async () => {
-    const prevEnv = process.env['MAX_PLAYERS_PER_SHARD'];
-    process.env['MAX_PLAYERS_PER_SHARD'] = '6';
+  it('should allow 6 players in a Tier 3 zone', async () => {
+    const prevEnv = process.env['MAX_PLAYERS_PER_ZONE'];
+    process.env['MAX_PLAYERS_PER_ZONE'] = '6';
     resetConfig();
 
-    const room = await colyseus.createRoom('shard', { tier: 3 });
+    const room = await colyseus.createRoom('zone', { tier: 3 });
     const clients = [];
     for (let i = 0; i < 6; i++) {
       const { client } = await connectToExistingRoom(colyseus, room);
@@ -145,9 +145,9 @@ describe('Wave 1 — Multi-Player Shards (#21)', () => {
       await client.leave();
     }
     if (prevEnv !== undefined) {
-      process.env['MAX_PLAYERS_PER_SHARD'] = prevEnv;
+      process.env['MAX_PLAYERS_PER_ZONE'] = prevEnv;
     } else {
-      delete process.env['MAX_PLAYERS_PER_SHARD'];
+      delete process.env['MAX_PLAYERS_PER_ZONE'];
     }
     resetConfig();
   });
@@ -160,7 +160,7 @@ describe('Wave 1 — Multi-Player Shards (#21)', () => {
   });
 
   it('should decrement player count when a player leaves', async () => {
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('zone', {});
     const { client: c1 } = await connectToExistingRoom(colyseus, room);
     const { client: c2 } = await connectToExistingRoom(colyseus, room);
     await wait(200);
@@ -175,9 +175,9 @@ describe('Wave 1 — Multi-Player Shards (#21)', () => {
     await c3.leave();
   });
 
-  it.todo('should update shard metadata when player count changes');
+  it.todo('should update zone metadata when player count changes');
   it.todo('should distribute players across different start rooms (entry point distribution)');
-  it.todo('should register shard in Redis presence when Redis is enabled');
+  it.todo('should register zone in Redis presence when Redis is enabled');
   it.todo('should update Redis presence on player join/leave');
 });
 
@@ -185,14 +185,14 @@ describe('Wave 1 — Proximity Communication (#26)', () => {
   let colyseus: ColyseusTestServer;
 
   beforeAll(async () => {
-    process.env['MAX_PLAYERS_PER_SHARD'] = '6';
+    process.env['MAX_PLAYERS_PER_ZONE'] = '6';
     resetConfig();
     colyseus = await bootTestServer();
   });
 
   afterAll(async () => {
     await colyseus.shutdown();
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     resetConfig();
   });
 
@@ -201,7 +201,7 @@ describe('Wave 1 — Proximity Communication (#26)', () => {
   // ────────────────────────────────────────────────────────────────────────────
 
   it('should accept say command without crashing (parser level)', async () => {
-    const { client, collector } = await connectTestClient(colyseus, 'shard');
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
 
     // Parser should accept 'say' verb (it's in KNOWN_VERBS)
     client.send(MessageTypes.COMMAND, makeCommand('say', 'hello', 'world'));
@@ -237,14 +237,14 @@ describe('Wave 1 — Say Command End-to-End', () => {
   let colyseus: ColyseusTestServer;
 
   beforeAll(async () => {
-    process.env['MAX_PLAYERS_PER_SHARD'] = '6';
+    process.env['MAX_PLAYERS_PER_ZONE'] = '6';
     resetConfig();
     colyseus = await bootTestServer();
   });
 
   afterAll(async () => {
     await colyseus.shutdown();
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     resetConfig();
   });
 
@@ -257,21 +257,21 @@ describe('Wave 1 — Reconnection Tuning (#28 — Anticipatory)', () => {
   let colyseus: ColyseusTestServer;
 
   beforeAll(async () => {
-    process.env['MAX_PLAYERS_PER_SHARD'] = '4';
+    process.env['MAX_PLAYERS_PER_ZONE'] = '4';
     resetConfig();
     colyseus = await bootTestServer();
   });
 
   afterAll(async () => {
     await colyseus.shutdown();
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     resetConfig();
   });
 
   it.todo('should preserve player state for 30 seconds after disconnect');
   it.todo('should restore player state when reconnecting within 30 seconds');
   it.todo('should apply dodge action when player disconnects during combat');
-  it.todo('should remove player from shard after reconnection timeout expires');
+  it.todo('should remove player from zone after reconnection timeout expires');
   it.todo('should handle player death during disconnect gracefully');
   it.todo('should prevent duplicate player instances on rapid reconnect');
   it.todo('should broadcast "player reconnected" message to room');
@@ -282,12 +282,12 @@ describe('Wave 1 — Tier-Based Player Limits', () => {
   let colyseus: ColyseusTestServer;
 
   beforeEach(() => {
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     resetConfig();
   });
 
   afterEach(() => {
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     resetConfig();
   });
 
@@ -299,33 +299,33 @@ describe('Wave 1 — Tier-Based Player Limits', () => {
     await colyseus.shutdown();
   });
 
-  it.todo('should allow 4 players in a Tier 1 shard (new default)');
-  it.todo('should allow 5 players in a Tier 2 shard');
-  it.todo('should allow 6 players in a Tier 3 shard');
-  it.todo('should respect tier-based limits even when MAX_PLAYERS_PER_SHARD env var is set');
+  it.todo('should allow 4 players in a Tier 1 zone (new default)');
+  it.todo('should allow 5 players in a Tier 2 zone');
+  it.todo('should allow 6 players in a Tier 3 zone');
+  it.todo('should respect tier-based limits even when MAX_PLAYERS_PER_ZONE env var is set');
   it.todo('should reject players beyond tier-based capacity');
 });
 
-describe('Wave 1 — Multi-Player Shard Metadata', () => {
+describe('Wave 1 — Multi-Player Zone Metadata', () => {
   let colyseus: ColyseusTestServer;
 
   beforeAll(async () => {
-    process.env['MAX_PLAYERS_PER_SHARD'] = '4';
+    process.env['MAX_PLAYERS_PER_ZONE'] = '4';
     resetConfig();
     colyseus = await bootTestServer();
   });
 
   afterAll(async () => {
     await colyseus.shutdown();
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     resetConfig();
   });
 
-  it.todo('should expose current player count in shard metadata');
-  it.todo('should expose max player count in shard metadata');
+  it.todo('should expose current player count in zone metadata');
+  it.todo('should expose max player count in zone metadata');
   it.todo('should update metadata when player joins');
   it.todo('should update metadata when player leaves');
-  it.todo('should track player list (names/IDs) in shard state');
+  it.todo('should track player list (names/IDs) in zone state');
   it.todo('should track which room each player is currently in');
 });
 
@@ -333,14 +333,14 @@ describe('Wave 1 — Entry Point Distribution', () => {
   let colyseus: ColyseusTestServer;
 
   beforeAll(async () => {
-    process.env['MAX_PLAYERS_PER_SHARD'] = '6';
+    process.env['MAX_PLAYERS_PER_ZONE'] = '6';
     resetConfig();
     colyseus = await bootTestServer();
   });
 
   afterAll(async () => {
     await colyseus.shutdown();
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     resetConfig();
   });
 
@@ -348,21 +348,21 @@ describe('Wave 1 — Entry Point Distribution', () => {
   it.todo('should spawn second player in a different entry point if multiple exist');
   it.todo('should distribute 4 players across available entry points');
   it.todo('should not spawn players in non-entry rooms');
-  it.todo('should handle single-entry-point shards (all players spawn in same room)');
+  it.todo('should handle single-entry-point zones (all players spawn in same room)');
 });
 
 describe('Wave 1 — Proximity Sanitization', () => {
   let colyseus: ColyseusTestServer;
 
   beforeAll(async () => {
-    process.env['MAX_PLAYERS_PER_SHARD'] = '4';
+    process.env['MAX_PLAYERS_PER_ZONE'] = '4';
     resetConfig();
     colyseus = await bootTestServer();
   });
 
   afterAll(async () => {
     await colyseus.shutdown();
-    delete process.env['MAX_PLAYERS_PER_SHARD'];
+    delete process.env['MAX_PLAYERS_PER_ZONE'];
     resetConfig();
   });
 

@@ -57,7 +57,7 @@ export interface NarrationRoom {
   creatures: NarrationCreature[];
   hazards: string[];
   traces: NarrationTrace[];
-  shard_stability: number;
+  zone_stability: number;
 }
 
 /** Player state visible to the narration layer. */

@@ -1,7 +1,7 @@
 /**
- * Stash Transfer — moves shard inventory into persistent stash.
+ * Stash Transfer — moves zone inventory into persistent stash.
  *
- * Called when a player exits a shard. Converts shard Items to
+ * Called when a player exits a zone. Converts zone Items to
  * StashItemInstances and stores them via StashService, respecting weight limits.
  * Items that exceed the stash capacity are retained in the player's carried
  * inventory (never silently lost).
@@ -26,13 +26,13 @@ export interface TransferResult {
 }
 
 /**
- * Transfer a player's shard inventory into their persistent stash.
+ * Transfer a player's zone inventory into their persistent stash.
  *
  * Items that fit are stored; overflow items are tracked as retained so the
  * caller can keep them in the player's carried inventory and notify them.
  *
  * @param playerId   Stable player identifier for stash ownership
- * @param inventory  The player's current shard inventory entries
+ * @param inventory  The player's current zone inventory entries
  * @param stashService  StashService for weight-checked storage
  * @param itemDefs  Shared item definition registry (mutated to register new defs)
  */

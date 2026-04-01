@@ -173,7 +173,7 @@ export default function LiveRoomDetail() {
   if (!room) return null;
 
   const isZone = room.name.startsWith("zone:");
-  const isShard = room.name === "shard" || isZone;
+  const isZoneRoom = room.name === "zone" || isZone;
 
   return (
     <div className="h-full flex flex-col">
@@ -191,7 +191,7 @@ export default function LiveRoomDetail() {
               className="text-[#C9A84C] text-xl"
              
             >
-              {isZone ? "Zone" : room.name === "shard" ? "Shard" : room.name} — {room.roomId.slice(0, 12)}…
+              {isZone ? "Zone" : room.name === "zone" ? "Zone" : room.name} — {room.roomId.slice(0, 12)}…
             </h1>
             <span
               className="text-[#8A8B95] text-xs"
@@ -253,7 +253,7 @@ export default function LiveRoomDetail() {
               <Pause className="w-4 h-4" /> Pause
             </button>
           )}
-          {isShard && (
+          {isZoneRoom && (
             <button
               onClick={openSpawnModal}
               disabled={actionPending}
@@ -294,7 +294,7 @@ export default function LiveRoomDetail() {
                 Room Status
               </h2>
               <div className="grid grid-cols-2 gap-4">
-                {isShard && (
+                {isZoneRoom && (
                   <>
                     <StatRow label="Lifecycle" value={room.lifecycle ?? "—"} />
                     <StatRow
@@ -321,8 +321,8 @@ export default function LiveRoomDetail() {
               </div>
             </div>
 
-            {/* Creatures (shard only) */}
-            {isShard && room.creatures && (
+            {/* Creatures (zone only) */}
+            {isZoneRoom && room.creatures && (
               <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                 <h2
                   className="text-[#C9A84C] text-lg mb-4"
@@ -335,7 +335,7 @@ export default function LiveRoomDetail() {
                     className="text-[#8A8B95] text-sm"
                     style={{ fontFamily: "var(--font-sans)" }}
                   >
-                    No creatures in this shard.
+                    No creatures in this zone.
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -466,7 +466,7 @@ export default function LiveRoomDetail() {
               </div>
             </div>
 
-            {isShard && (
+            {isZoneRoom && (
               <div
                 className={`border rounded-lg p-4 ${
                   room.paused

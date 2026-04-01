@@ -1,13 +1,13 @@
 /**
  * Exploration Messages Tests — Phase D (Exploration Wiring)
  *
- * Validates client-facing exploration messages sent by ShardRoom:
+ * Validates client-facing exploration messages sent by ZoneRoom:
  *   M1: EXPLORATION_DATA sent on join (bulk visited rooms + current room)
  *   M2: EXPLORATION_UPDATE sent on room movement (single room payload)
  *   M3: recordVisit called with correct parameters on join
  *   M4: recordVisit called with correct parameters on movement
  *   M5: Exploration works in zone mode (zoneSlug present)
- *   M6: Exploration works in shard mode (zoneSlug null)
+ *   M6: Exploration works in procedural mode (zoneSlug null)
  *   M7: Flee records exploration update
  *   M8: Duplicate visits don't crash (upsert semantics)
  */
@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
-import { ShardRoom } from '../rooms/ShardRoom.js';
+import { ZoneRoom } from '../rooms/ZoneRoom.js';
 import {
   MessageTypes,
   type ExplorationDataMessage,
@@ -117,7 +117,7 @@ beforeAll(async () => {
   await seedZone('msg-hub', 'hub');
 
   const server = new Server();
-  server.define('shard', ShardRoom);
+  server.define('zone', ZoneRoom);
   await server.listen(0);
   const addr = (
     server as unknown as { transport: { server: { address(): { port: number } } } }
@@ -171,7 +171,7 @@ function sendCommand(
 
 describe('M1 — EXPLORATION_DATA sent on join', () => {
   it('client receives EXPLORATION_DATA message on join', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'msg-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'msg-hub' });
     const { client, explorationData } = await connectWithExploration(room, 'msg-join-1');
 
     expect(explorationData.length).toBeGreaterThanOrEqual(1);
@@ -179,7 +179,7 @@ describe('M1 — EXPLORATION_DATA sent on join', () => {
   });
 
   it('EXPLORATION_DATA includes currentRoomId', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'msg-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'msg-hub' });
     const { client, explorationData } = await connectWithExploration(room, 'msg-join-2');
 
     expect(explorationData.length).toBeGreaterThanOrEqual(1);
@@ -191,7 +191,7 @@ describe('M1 — EXPLORATION_DATA sent on join', () => {
   });
 
   it('EXPLORATION_DATA rooms array contains at least the starting room', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'msg-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'msg-hub' });
     const { client, explorationData } = await connectWithExploration(room, 'msg-join-3');
 
     expect(explorationData.length).toBeGreaterThanOrEqual(1);
@@ -208,7 +208,7 @@ describe('M1 — EXPLORATION_DATA sent on join', () => {
   });
 
   it('EXPLORATION_DATA rooms have correct shape', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'msg-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'msg-hub' });
     const { client, explorationData } = await connectWithExploration(room, 'msg-join-shape');
 
     const msg = explorationData[0]!;
@@ -230,7 +230,7 @@ describe('M1 — EXPLORATION_DATA sent on join', () => {
 
 describe('M2 — EXPLORATION_UPDATE sent on movement', () => {
   it('client receives EXPLORATION_UPDATE after moving', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'msg-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'msg-hub' });
     const { client, explorationUpdates } = await connectWithExploration(room, 'msg-move-1');
 
     sendCommand(client, 'go', 'north');
@@ -242,7 +242,7 @@ describe('M2 — EXPLORATION_UPDATE sent on movement', () => {
   });
 
   it('EXPLORATION_UPDATE room data has roomId, roomName, exits, roomType', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'msg-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'msg-hub' });
     const { client, explorationUpdates } = await connectWithExploration(room, 'msg-move-2');
 
     sendCommand(client, 'go', 'north');
@@ -260,7 +260,7 @@ describe('M2 — EXPLORATION_UPDATE sent on movement', () => {
   });
 
   it('EXPLORATION_UPDATE room matches destination room', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'msg-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'msg-hub' });
     const { client, explorationUpdates } = await connectWithExploration(room, 'msg-move-dest');
 
     sendCommand(client, 'go', 'north');
@@ -283,7 +283,7 @@ describe('M2 — EXPLORATION_UPDATE sent on movement', () => {
 
 describe('M3 — recordVisit called on join', () => {
   it('exploration repo records a visit for the starting room on join', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'msg-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'msg-hub' });
     const { client } = await connectWithExploration(room, 'msg-record-join');
 
     await wait(500);
@@ -306,7 +306,7 @@ describe('M3 — recordVisit called on join', () => {
 
 describe('M4 — recordVisit called on movement', () => {
   it('exploration repo records the new room after movement', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'msg-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'msg-hub' });
     const { client } = await connectWithExploration(room, 'msg-record-move');
 
     sendCommand(client, 'go', 'north');
@@ -331,7 +331,7 @@ describe('M4 — recordVisit called on movement', () => {
 
 describe('M5 — Exploration works in zone mode', () => {
   it('EXPLORATION_DATA includes zoneSlug for zone rooms', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'msg-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'msg-hub' });
     const { client, explorationData } = await connectWithExploration(room, 'msg-zone-data');
 
     expect(explorationData.length).toBeGreaterThanOrEqual(1);
@@ -345,7 +345,7 @@ describe('M5 — Exploration works in zone mode', () => {
   });
 
   it('EXPLORATION_UPDATE includes zoneSlug after movement in zone', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'msg-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'msg-hub' });
     const { client, explorationUpdates } = await connectWithExploration(room, 'msg-zone-update');
 
     sendCommand(client, 'go', 'north');
@@ -358,7 +358,7 @@ describe('M5 — Exploration works in zone mode', () => {
   });
 
   it('recordVisit stores correct zoneSlug for zone rooms', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'msg-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'msg-hub' });
     const { client } = await connectWithExploration(room, 'msg-zone-repo');
 
     await wait(500);
@@ -376,16 +376,16 @@ describe('M5 — Exploration works in zone mode', () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// M6: Exploration works in shard mode (procedural)
+// M6: Exploration works in procedural mode (procedural)
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe('M6 — Exploration works in shard mode (procedural)', () => {
-  it('EXPLORATION_DATA has null zoneSlug for shard rooms', async () => {
-    const room = await colyseus.createRoom('shard', {
+describe('M6 — Exploration works in procedural mode (procedural)', () => {
+  it('EXPLORATION_DATA has null zoneSlug for zone rooms', async () => {
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       collapseTimer: 120,
     });
-    const { client, explorationData } = await connectWithExploration(room, 'msg-shard-data');
+    const { client, explorationData } = await connectWithExploration(room, 'msg-zone-data');
 
     expect(explorationData.length).toBeGreaterThanOrEqual(1);
     const msg = explorationData[0]!;
@@ -397,13 +397,13 @@ describe('M6 — Exploration works in shard mode (procedural)', () => {
     await client.leave();
   });
 
-  it('EXPLORATION_UPDATE has null zoneSlug after movement in shard', async () => {
-    const room = await colyseus.createRoom('shard', {
+  it('EXPLORATION_UPDATE has null zoneSlug after movement in zone', async () => {
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       collapseTimer: 120,
     });
     const { client, explorationUpdates, explorationData } =
-      await connectWithExploration(room, 'msg-shard-update');
+      await connectWithExploration(room, 'msg-zone-update');
 
     // Find an exit from the starting room
     const startMsg = explorationData[0];
@@ -425,17 +425,17 @@ describe('M6 — Exploration works in shard mode (procedural)', () => {
     await client.leave();
   });
 
-  it('recordVisit stores null zoneSlug for shard rooms', async () => {
-    const room = await colyseus.createRoom('shard', {
+  it('recordVisit stores null zoneSlug for zone rooms', async () => {
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       collapseTimer: 120,
     });
-    const { client } = await connectWithExploration(room, 'msg-shard-repo');
+    const { client } = await connectWithExploration(room, 'msg-procedural-repo');
 
     await wait(500);
 
     const repo = getExplorationRepository();
-    const rooms = await repo.getExploredRooms('msg-shard-repo');
+    const rooms = await repo.getExploredRooms('msg-procedural-repo');
 
     expect(rooms.length).toBeGreaterThanOrEqual(1);
     for (const r of rooms) {
@@ -452,8 +452,8 @@ describe('M6 — Exploration works in shard mode (procedural)', () => {
 
 describe('M7 — Flee records exploration', () => {
   it('flee triggers exploration recording for the flee destination', async () => {
-    // Use shard mode with test graph — creatures spawn in non-entry rooms
-    const room = await colyseus.createRoom('shard', {
+    // Use procedural mode with test graph — creatures spawn in non-entry rooms
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       collapseTimer: 120,
     });
@@ -464,7 +464,7 @@ describe('M7 — Flee records exploration', () => {
     expect(startMsg).toBeDefined();
 
     // Navigate to find combat. Send flee to trigger combat flee path.
-    // In shard mode, entry room has exits. Move to a non-entry room.
+    // In procedural mode, entry room has exits. Move to a non-entry room.
     const startRoom = startMsg!.rooms.find(
       (r: ExploredRoomData) => r.roomId === startMsg!.currentRoomId,
     );
@@ -499,7 +499,7 @@ describe('M7 — Flee records exploration', () => {
 
 describe('M8 — Duplicate visits don\'t crash', () => {
   it('moving to a room, leaving, and returning does not error', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'msg-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'msg-hub' });
     const { client, explorationUpdates } =
       await connectWithExploration(room, 'msg-dup-visit');
 

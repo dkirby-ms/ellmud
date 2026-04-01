@@ -17,7 +17,7 @@ import { RoomOccupants } from "../components/RoomOccupants.js";
 import "../components/map/map.css";
 import MudPrompt from "../components/MudPrompt.js";
 import { useAppContext, type StatusEffect } from "../store.js";
-import { useShardConnection } from "../hooks/useShardConnection.js";
+import { useZoneConnection } from "../hooks/useZoneConnection.js";
 import { useAutoScroll } from "../hooks/useAutoScroll.js";
 import { useExplorationMap } from "../hooks/useExplorationMap.js";
 import { useMapToggle } from "../hooks/useMapToggle.js";
@@ -25,7 +25,7 @@ import type { CombatAction } from "@ellmud/shared";
 
 // ─── Status Effect Classifier ────────────────────────────────────────────────
 
-const DEBUFF_KEYWORDS = ['bleeding', 'poisoned', 'burning', 'weakened', 'slowed', 'stunned', 'confused', 'cursed', 'blind', 'fear', 'shard-sick'];
+const DEBUFF_KEYWORDS = ['bleeding', 'poisoned', 'burning', 'weakened', 'slowed', 'stunned', 'confused', 'cursed', 'blind', 'fear', 'zone-sick'];
 const BUFF_KEYWORDS = ['haste', 'strength', 'shield', 'regeneration', 'regen', 'blessed', 'fortified', 'empowered', 'protect', 'harden'];
 
 function getEffectType(effect: StatusEffect): 'buff' | 'debuff' | 'neutral' {
@@ -35,14 +35,14 @@ function getEffectType(effect: StatusEffect): 'buff' | 'debuff' | 'neutral' {
   return 'neutral';
 }
 
-export default function ShardExploration() {
+export default function ZoneExploration() {
   const navigate = useNavigate();
   const location = useLocation();
   const { state } = useAppContext();
 
   // Derive zone mode from route path
   const isZone = location.pathname === "/refuge";
-  const roomName = isZone ? "zone:the-refuge" : "shard";
+  const roomName = isZone ? "zone:the-refuge" : "zone";
 
   const {
     handleCommand: sendCommand,
@@ -53,7 +53,7 @@ export default function ShardExploration() {
     dismissOverlay,
     reconnection,
     roomRef,
-  } = useShardConnection(roomName);
+  } = useZoneConnection(roomName);
 
   const mapState = useExplorationMap(roomRef.current);
   const { isMapOpen, toggleMap, closeMap } = useMapToggle();
@@ -714,7 +714,7 @@ export default function ShardExploration() {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <CombinedStashLoadout room={roomRef.current} inShard={!isZone} />
+              <CombinedStashLoadout room={roomRef.current} inZone={!isZone} />
             </div>
           </div>
         </div>
@@ -752,7 +752,7 @@ export default function ShardExploration() {
       <ChatPanel
         isOpen={chatOpen}
         onClose={() => setChatOpen(false)}
-        context={isZone ? "refuge" : "shard"}
+        context={isZone ? "refuge" : "zone"}
         onSendMessage={sendChatMessage}
       />
 

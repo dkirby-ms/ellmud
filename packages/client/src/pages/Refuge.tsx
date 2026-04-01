@@ -23,7 +23,7 @@ import CombinedStashLoadout from "../components/CombinedStashLoadout";
 import type {
   NarrateMessage,
   RoomHeaderMessage,
-  ShardStateMessage,
+  ZoneStateMessage,
   CombatResultMessage,
   RoomSwitchMessage,
   LoadoutUpdateMessage,
@@ -134,10 +134,10 @@ export default function Refuge() {
           dispatch({ type: "SET_ROOM_HEADER", header: msg });
         }
       },
-      onShardState: (msg: ShardStateMessage) => {
+      onZoneState: (msg: ZoneStateMessage) => {
         if (!disposed) {
           dispatch({
-            type: "SET_SHARD_STATE",
+            type: "SET_ZONE_STATE",
             state: msg.state,
             collapseTimer: msg.collapseTimer,
           });
@@ -164,8 +164,8 @@ export default function Refuge() {
         roomRef.current = null;
         dispatch({ type: "SET_CONNECTION_STATUS", status: "disconnected" });
 
-        if (msg.target === "shard") {
-          navigateRef.current("/shard/live", {
+        if (msg.target === "zone") {
+          navigateRef.current("/zone/live", {
             state: { fromRefuge: true, options: msg.options },
           });
         }
@@ -248,10 +248,10 @@ export default function Refuge() {
     [chatMessage],
   );
 
-  // Enter shard via server command
-  const handleEnterShard = useCallback(() => {
+  // Enter zone via server command
+  const handleEnterZone = useCallback(() => {
     if (!roomRef.current) return;
-    sendRawCommand(roomRef.current, "enter shard");
+    sendRawCommand(roomRef.current, "enter zone");
   }, []);
 
   const handleLogout = useCallback(async () => {
@@ -409,7 +409,7 @@ export default function Refuge() {
         {/* Center column - Content */}
         <div className="flex-1 bg-bg-primary overflow-y-auto">
           {activeTab === "expedition_board" && (
-            <ExpeditionBoardTab onEnterShard={handleEnterShard} />
+            <ExpeditionBoardTab onEnterZone={handleEnterZone} />
           )}
           {activeTab === "equipment" && (
             <CombinedStashLoadout room={roomRef.current} />

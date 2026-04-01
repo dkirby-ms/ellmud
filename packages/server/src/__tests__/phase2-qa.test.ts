@@ -135,9 +135,9 @@ function makeCreature(id: string, roomId: string, stats?: Partial<CombatStats>):
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 1. MULTI-PLAYER SHARD TEST — 4 players, combat resolution, sound
+// 1. MULTI-PLAYER ZONE TEST — 4 players, combat resolution, sound
 // ═══════════════════════════════════════════════════════════════════════════
-describe('Phase 2 QA — Multi-Player Shard (4 players)', () => {
+describe('Phase 2 QA — Multi-Player Zone (4 players)', () => {
   let combat: CombatSystem;
   let sound: SoundSystem;
   let traces: TraceSystem;
@@ -249,7 +249,7 @@ describe('Phase 2 QA — Multi-Player Shard (4 players)', () => {
     const strikes = result.events.filter(e => e.type === 'strike');
     expect(strikes.length).toBeGreaterThanOrEqual(1);
 
-    // Simulate what ShardRoom.createCombatTraces does:
+    // Simulate what ZoneRoom.createCombatTraces does:
     for (const event of result.events) {
       if (event.type === 'strike' && event.targetId && event.damage != null) {
         if (event.damage >= BLOOD_TRAIL_DAMAGE_THRESHOLD) {
@@ -382,7 +382,7 @@ describe('Phase 2 QA — PvP Conflict', () => {
 
     const result = combat.resolveTick();
 
-    // Simulate ShardRoom death handling: create corpse trace
+    // Simulate ZoneRoom death handling: create corpse trace
     for (const event of result.events) {
       if (event.type === 'defeated' && !event.actorId.startsWith('creature-')) {
         traces.addTrace(ROOMS.ENTRY, 'corpse', {
@@ -455,9 +455,9 @@ describe('Phase 2 QA — PvP Conflict', () => {
 describe('Phase 2 QA — Scaling (2–4 replicas)', () => {
   it.todo('2 replicas maintain sticky sessions under load (requires Redis + KEDA)');
   it.todo('4 replicas: player stays on same replica after reconnect');
-  it.todo('shard state survives replica restart via Redis persistence');
+  it.todo('zone state survives replica restart via Redis persistence');
   it.todo('load balancer distributes new connections evenly across replicas');
-  it.todo('cross-replica shard listing returns correct player counts');
+  it.todo('cross-replica zone listing returns correct player counts');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -784,7 +784,7 @@ describe('Phase 2 QA — Trace Decay', () => {
 // 7. REFUGE AMBIENT TEST
 // ═══════════════════════════════════════════════════════════════════════════
 describe('Phase 2 QA — Refuge Ambient Events', () => {
-  // Zone-mode ShardRoom handles ambient events via AmbientSystem.
+  // Zone-mode ZoneRoom handles ambient events via AmbientSystem.
   // These tests document the expected behavior for when ambient events are implemented.
 
   it.todo('observe 5+ distinct ambient events within 5 minutes (time-accelerated)');
@@ -801,7 +801,7 @@ describe('Phase 2 QA — Refuge Ambient Events', () => {
 describe('Phase 2 QA — Database Consistency', () => {
   it.todo('concurrent inventory writes from 2 players resolve without data loss');
   it.todo('concurrent combat state updates from tick + player action are serialized');
-  it.todo('player stash save during shard collapse preserves all items');
+  it.todo('player stash save during zone collapse preserves all items');
 
   it.todo('Redis session store handles concurrent read-modify-write (CAS)');
 });
@@ -821,8 +821,8 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
       await colyseus.shutdown();
     });
 
-    it('single player can join shard and receives room description', async () => {
-      const { collector } = await connectTestClient(colyseus, 'shard', {
+    it('single player can join zone and receives room description', async () => {
+      const { collector } = await connectTestClient(colyseus, 'zone', {
         useTestGraph: true,
         ...quickCollapseOptions(300),
       });
@@ -832,7 +832,7 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
     });
 
     it('single player can move between rooms', async () => {
-      const { client, collector } = await connectTestClient(colyseus, 'shard', {
+      const { client, collector } = await connectTestClient(colyseus, 'zone', {
         useTestGraph: true,
         ...quickCollapseOptions(300),
       });
@@ -846,7 +846,7 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
     });
 
     it('single player can look at current room', async () => {
-      const { client, collector } = await connectTestClient(colyseus, 'shard', {
+      const { client, collector } = await connectTestClient(colyseus, 'zone', {
         useTestGraph: true,
         ...quickCollapseOptions(300),
       });
@@ -1018,7 +1018,7 @@ describe('Phase 2 QA — Cross-System Integration', () => {
     const tickResult = combat.resolveTick();
     expect(tickResult.events.length).toBeGreaterThan(0);
 
-    // 2. Sound propagation (what ShardRoom.propagateCombatSounds does)
+    // 2. Sound propagation (what ZoneRoom.propagateCombatSounds does)
     const strikeRoomIds = new Set<string>();
     for (const event of tickResult.events) {
       if (event.type === 'strike' && event.targetId) {
@@ -1034,7 +1034,7 @@ describe('Phase 2 QA — Cross-System Integration', () => {
     }
     expect(allSoundResults.length).toBeGreaterThan(0);
 
-    // 3. Trace creation (what ShardRoom.createCombatTraces does)
+    // 3. Trace creation (what ZoneRoom.createCombatTraces does)
     for (const event of tickResult.events) {
       if (event.type === 'strike' && event.targetId && event.damage != null) {
         if (event.damage >= BLOOD_TRAIL_DAMAGE_THRESHOLD) {
@@ -1084,7 +1084,7 @@ describe('Phase 2 QA — Cross-System Integration', () => {
     const fleeEvent = result.events.find(e => e.type === 'flee');
     expect(fleeEvent).toBeDefined();
 
-    // Simulate footprint trace on flee (ShardRoom.deliverCombatResults does this)
+    // Simulate footprint trace on flee (ZoneRoom.deliverCombatResults does this)
     traces.addTrace(ROOMS.ENTRY, 'footprint', { actorName: 'fleeing-hero' }, 'north');
 
     // Running sound from flee
@@ -1314,7 +1314,7 @@ describe('Phase 2 QA — Edge Cases', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// INTEGRATION TEST — Full Colyseus server (4 players in shard)
+// INTEGRATION TEST — Full Colyseus server (4 players in zone)
 // ═══════════════════════════════════════════════════════════════════════════
 describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
   let colyseus: Awaited<ReturnType<typeof bootTestServer>>;
@@ -1327,8 +1327,8 @@ describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
     await colyseus.shutdown();
   });
 
-  it('4 players join same shard and all receive room descriptions', async () => {
-    const room = await colyseus.createRoom('shard', {
+  it('4 players join same zone and all receive room descriptions', async () => {
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       tier: 2,
       ...quickCollapseOptions(300),
@@ -1348,7 +1348,7 @@ describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
   });
 
   it('player movement triggers sound narration for adjacent-room players', async () => {
-    const room = await colyseus.createRoom('shard', {
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       ...quickCollapseOptions(300),
     });
@@ -1370,14 +1370,14 @@ describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
     await wait(1500);
 
     // p1 should see awareness notification about p2 entering corridor
-    // (depends on awareness system being wired in ShardRoom)
+    // (depends on awareness system being wired in ZoneRoom)
     // At minimum, p1 should receive SOME notification about activity
     // The exact message type depends on awareness tier calculation
     expect(p1.collector.narrate.length).toBeGreaterThanOrEqual(0);
   });
 
   it('player attack command gets a response (no creature in test graph)', async () => {
-    const room = await colyseus.createRoom('shard', {
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       ...quickCollapseOptions(300),
     });
@@ -1397,7 +1397,7 @@ describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
   });
 
   it('two players in same room both receive initial state', async () => {
-    const room = await colyseus.createRoom('shard', {
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       ...quickCollapseOptions(300),
     });

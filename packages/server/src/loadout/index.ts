@@ -11,7 +11,7 @@ export type {
   UnequipResult,
   UnequipToInventoryResult,
   SwapResult,
-  ShardEntryResult,
+  ZoneEntryResult,
   LoadoutView,
 } from './LoadoutService.js';
 export {

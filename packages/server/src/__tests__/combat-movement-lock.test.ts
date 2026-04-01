@@ -10,7 +10,7 @@ import { handleCommand, type CommandContext } from '../commands/index.js';
 import { CombatSystem } from '../combat/CombatSystem.js';
 import { createCombatant } from '../combat/CombatState.js';
 import { PlayerState } from '../state/PlayerState.js';
-import { createTestRoomGraph } from '../shard/RoomGraph.js';
+import { createTestRoomGraph } from '../zone/RoomGraph.js';
 
 const TEST_ROOM = 'entry';
 
@@ -97,7 +97,7 @@ describe('Combat Movement Lock', () => {
   });
 
   it('should allow "go" when combatSystem is not present', () => {
-    // Context without combatSystem (e.g., non-shard room)
+    // Context without combatSystem (e.g., non-zone room)
     const ctx: CommandContext = {
       player,
       room: graph.rooms.get(player.currentRoomId)!,

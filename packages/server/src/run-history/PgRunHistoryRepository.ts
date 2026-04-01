@@ -6,7 +6,7 @@
 
 import { query } from '../db/index.js';
 import type { RunHistoryRepository, RunRecord } from './RunHistoryRepository.js';
-import type { ShardTier } from '@ellmud/shared';
+import type { ZoneTier } from '@ellmud/shared';
 
 interface RunRow {
   run_id: string;
@@ -26,7 +26,7 @@ export class PgRunHistoryRepository implements RunHistoryRepository {
       [
         run.runId,
         run.playerId,
-        run.shardTier,
+        run.zoneTier,
         run.durationSec,
         run.extracted,
         JSON.stringify(run.extractedItems),
@@ -48,7 +48,7 @@ export class PgRunHistoryRepository implements RunHistoryRepository {
     return result.rows.map((row) => ({
       runId: row.run_id,
       playerId: row.player_id,
-      shardTier: row.shard_tier as ShardTier,
+      zoneTier: row.shard_tier as ZoneTier,
       durationSec: row.duration_sec,
       extracted: row.extracted,
       extractedItems: row.extracted_items,

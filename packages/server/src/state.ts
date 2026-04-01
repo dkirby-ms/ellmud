@@ -1,15 +1,15 @@
 import { Schema, defineTypes } from '@colyseus/schema';
 
 /**
- * Internal server-only state for a shard room.
+ * Internal server-only state for a zone room.
  *
  * CRITICAL: This Schema is NEVER synchronized to clients.
  * Colyseus Schema is used here for server-internal state tracking,
  * serialization/snapshots, and admin dashboard only.
  * The client receives narrated prose via messages.
  */
-export class ShardState extends Schema {
-  shardId: string = '';
+export class ZoneState extends Schema {
+  zoneId: string = '';
   tier: number = 1;
   lifecycle: string = 'seeding';
   stability: number = 1.0;
@@ -18,8 +18,8 @@ export class ShardState extends Schema {
   playerCount: number = 0;
 }
 
-defineTypes(ShardState, {
-  shardId: 'string',
+defineTypes(ZoneState, {
+  zoneId: 'string',
   tier: 'number',
   lifecycle: 'string',
   stability: 'number',

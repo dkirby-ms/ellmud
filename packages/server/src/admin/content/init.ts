@@ -78,7 +78,7 @@ function initializeInMemoryStores(): Map<ContentEntityType, IContentStore<Conten
   }));
   stores.set('creatures', new ContentStore('creatures', creatureTemplates as unknown as ContentEntity[]));
 
-  // ─── Modifiers — seed from ShardModifier enum ─────────────────────
+  // ─── Modifiers — seed from ZoneModifier enum ─────────────────────
   const modifiers = [
     { id: 'darkness', name: 'Darkness', description: 'Reduced visibility. Sound-based detection emphasized.', effects: { visibility: -50, soundRange: 2 }, stackable: false, tags: ['environmental', 'stealth'] },
     { id: 'hunted', name: 'Hunted', description: 'Creatures are aggressive and patrol more frequently.', effects: { creatureAggro: 2, patrolSpeed: 1.5 }, stackable: false, tags: ['creature', 'danger'] },

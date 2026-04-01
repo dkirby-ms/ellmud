@@ -10,13 +10,13 @@
 import type { CommandResult, CommandContext } from '../index.js';
 
 export function handleBoard(ctx: CommandContext): CommandResult {
-  if (!ctx.queryShards) {
+  if (!ctx.queryZones) {
     return {
       narrations: [{ text: 'The expedition board is dark. No rift energy flows here.', type: 'system' }],
     };
   }
 
-  // queryShards is async — actual invocation will be wired at the room level.
+  // queryZones is async — actual invocation will be wired at the room level.
   // For now, return atmospheric placeholder narration.
   return {
     narrations: [{
@@ -36,18 +36,18 @@ export function handleEnter(ctx: CommandContext): CommandResult {
     };
   }
 
-  if (!ctx.createShard) {
+  if (!ctx.createZone) {
     return {
       narrations: [{ text: 'No rift anchor is available. Try again later.', type: 'system' }],
     };
   }
 
-  const shardId = args.join(' ');
+  const zoneId = args.join(' ');
 
-  // createShard is async — actual invocation wired at the room level.
+  // createZone is async — actual invocation wired at the room level.
   return {
     narrations: [{
-      text: `You reach toward the rift marked "${shardId}"… The veil trembles, pulling you in.`,
+      text: `You reach toward the rift marked "${zoneId}"… The veil trembles, pulling you in.`,
       type: 'room',
     }],
   };

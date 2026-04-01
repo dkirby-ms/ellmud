@@ -44,7 +44,7 @@ export interface NarrateMessage {
 export interface RoomHeaderMessage {
   roomName: string;
   exits: string[];
-  stability: number; // 0–1, shard stability
+  stability: number; // 0–1, zone stability
   /** Zone name, present when the room is part of a hand-crafted zone. */
   zoneName?: string;
   /** Room type (entry, boss, etc.), present for zone rooms. */
@@ -59,21 +59,21 @@ export interface ZoneTransferMessage {
   targetRoomSlug: string;
 }
 
-/** Server → Client: Shard lifecycle state change notification. */
-export interface ShardStateMessage {
-  state: ShardState;
+/** Server → Client: Zone lifecycle state change notification. */
+export interface ZoneStateMessage {
+  state: ZoneState;
   collapseTimer?: number; // seconds remaining, if applicable
 }
 
-// ─── Shard Lifecycle ─────────────────────────────────────────────────────────
+// ─── Zone Lifecycle ─────────────────────────────────────────────────────────
 
-/** Shard lifecycle states (GDD §2.3). */
-export type ShardState =
+/** Zone lifecycle states (GDD §2.3). */
+export type ZoneState =
   | 'seeding'        // Room graph generation, creature spawning
   | 'open'           // Entry points active, players may join
   | 'active'         // Full exploration, combat
   | 'destabilising'  // Final 25% — hazards intensify
-  | 'collapse';      // Shard destroyed, items lost
+  | 'collapse';      // Zone destroyed, items lost
 
 // ─── Combat Actions (GDD §6.2) ──────────────────────────────────────────────
 
@@ -99,13 +99,13 @@ export type GearTier =
   | 'masterwork'
   | 'anomalous';
 
-// ─── Shard Tiers (GDD §10.1) ────────────────────────────────────────────────
+// ─── Zone Tiers (GDD §10.1) ────────────────────────────────────────────────
 
-export type ShardTier = 1 | 2 | 3;
+export type ZoneTier = 1 | 2 | 3;
 
-// ─── Shard Modifiers (GDD §10.3) ────────────────────────────────────────────
+// ─── Zone Modifiers (GDD §10.3) ────────────────────────────────────────────
 
-export type ShardModifier =
+export type ZoneModifier =
   | 'darkness'
   | 'hunted'
   | 'silent'
@@ -235,7 +235,7 @@ export const MessageTypes = {
   // Server → Client
   NARRATE: 'narrate',
   ROOM_HEADER: 'room_header',
-  SHARD_STATE: 'shard_state',
+  ZONE_STATE: 'zone_state',
   COMBAT_RESULT: 'combat_result',
   PLAYER_STATE: 'player_state',
   OVERLAY_STATE: 'overlay_state',
@@ -436,23 +436,23 @@ export {
 } from './items.js';
 
 
-// ─── Shard Card Types (Expedition Board UI) ──────────────────────────────────
+// ─── Zone Card Types (Expedition Board UI) ──────────────────────────────────
 
-export type { ShardKeyType, ShardCardData } from './shard-card.js';
+export type { ZoneKeyType, ZoneCardData } from './zone-card.js';
 
-// ─── Room Switching (GDD §3 — Refuge ↔ Shard) ────────────────────────────────
+// ─── Room Switching (GDD §3 — Refuge ↔ Zone) ────────────────────────────────
 
 /** Options for joining a target room. */
 export interface RoomSwitchOptions {
-  /** Join a specific room instance by ID (used for shard selection). */
+  /** Join a specific room instance by ID (used for zone selection). */
   roomId?: string;
-  /** Optional shard metadata for UI or future matchmaking. */
-  tier?: ShardTier;
+  /** Optional zone metadata for UI or future matchmaking. */
+  tier?: ZoneTier;
 }
 
 /** Server → Client: Instruct client to switch rooms. */
 export interface RoomSwitchMessage {
-  target: string;       // Colyseus room name to join (e.g. 'shard', 'refuge')
+  target: string;       // Colyseus room name to join (e.g. 'zone', 'refuge')
   options?: RoomSwitchOptions; // Additional join options for the target room
   reason: string;       // Human-readable reason for the switch
 }
@@ -513,7 +513,7 @@ export type TraceType =
   | 'discarded_item'
   | 'residue';
 
-/** Default TTLs per trace type (seconds). Infinity = permanent for shard lifetime. */
+/** Default TTLs per trace type (seconds). Infinity = permanent for zone lifetime. */
 export const TRACE_TTLS: Record<TraceType, number> = {
   footprint: 300,
   blood_trail: 600,
@@ -524,7 +524,7 @@ export const TRACE_TTLS: Record<TraceType, number> = {
   residue: 120,
 };
 
-/** An ephemeral trace left in a shard room. */
+/** An ephemeral trace left in a zone room. */
 export interface Trace {
   id: string;
   type: TraceType;

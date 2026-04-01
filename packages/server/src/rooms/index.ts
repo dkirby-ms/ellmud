@@ -1,1 +1,1 @@
-export { ShardRoom } from './ShardRoom.js';
+export { ZoneRoom } from './ZoneRoom.js';

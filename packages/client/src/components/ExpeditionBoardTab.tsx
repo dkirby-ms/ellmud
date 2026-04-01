@@ -2,7 +2,7 @@ import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
 import { Clock, Users, Key, MapPin } from "lucide-react";
 
-interface Shard {
+interface Zone {
   id: string;
   name: string;
   tier: number;
@@ -27,7 +27,7 @@ interface ZoneListing {
   playerCount?: number;
 }
 
-const mockShards: Shard[] = [
+const mockZones: Zone[] = [
   {
     id: "1",
     name: "Ashen Reach — Flooded Crypt",
@@ -74,7 +74,7 @@ const getTierColor = (tier: number) => {
 };
 
 interface ExpeditionBoardTabProps {
-  onEnterShard?: (shardId: string) => void;
+  onEnterZoneById?: (zoneId: string) => void;
   onEnterZone?: (zoneSlug: string) => void;
 }
 
@@ -88,7 +88,7 @@ const getCategoryStyle = (category: ZoneListing['category']) => {
   }
 };
 
-export default function ExpeditionBoardTab({ onEnterShard, onEnterZone }: ExpeditionBoardTabProps) {
+export default function ExpeditionBoardTab({ onEnterZoneById, onEnterZone }: ExpeditionBoardTabProps) {
   const navigate = useNavigate();
   const [zones, setZones] = useState<ZoneListing[]>([]);
   const [zonesLoading, setZonesLoading] = useState(true);
@@ -103,11 +103,11 @@ export default function ExpeditionBoardTab({ onEnterShard, onEnterZone }: Expedi
       .finally(() => setZonesLoading(false));
   }, []);
 
-  const handleEnterShard = (shardId: string) => {
-    if (onEnterShard) {
-      onEnterShard(shardId);
+  const handleEnterZoneById = (zoneId: string) => {
+    if (onEnterZoneById) {
+      onEnterZoneById(zoneId);
     } else {
-      navigate(`/shard/${shardId}`);
+      navigate(`/zone/${zoneId}`);
     }
   };
 
@@ -116,8 +116,8 @@ export default function ExpeditionBoardTab({ onEnterShard, onEnterZone }: Expedi
       onEnterZone(zoneSlug);
     } else {
       // TODO: Wire to server-side zone join via matchmaker
-      // For now, navigate to shard route with zoneSlug hint
-      navigate(`/shard?zone=${zoneSlug}`);
+      // For now, navigate to zone route with zoneSlug hint
+      navigate(`/zone?zone=${zoneSlug}`);
     }
   };
 
@@ -212,9 +212,9 @@ export default function ExpeditionBoardTab({ onEnterShard, onEnterZone }: Expedi
       </h2>
 
       <div className="grid gap-6">
-        {mockShards.map((shard) => (
+        {mockZones.map((zone) => (
           <div
-            key={shard.id}
+            key={zone.id}
             className="bg-bg-panel border border-border-muted rounded-lg p-6 hover:border-accent-gold transition-colors"
           >
             <div className="flex justify-between items-start mb-4">
@@ -223,26 +223,26 @@ export default function ExpeditionBoardTab({ onEnterShard, onEnterZone }: Expedi
                   className="text-accent-gold mb-2 font-serif"
                   style={{ fontSize: "1.25rem" }}
                 >
-                  {shard.name}
+                  {zone.name}
                 </h3>
                 <div className="flex items-center gap-3">
                   <span
                     className="px-2 py-1 rounded text-xs font-semibold font-sans"
                     style={{
-                      backgroundColor: `color-mix(in srgb, ${getTierColor(shard.tier)} 20%, transparent)`,
-                      color: getTierColor(shard.tier),
+                      backgroundColor: `color-mix(in srgb, ${getTierColor(zone.tier)} 20%, transparent)`,
+                      color: getTierColor(zone.tier),
                     }}
                   >
-                    Tier {shard.tier}
+                    Tier {zone.tier}
                   </span>
                   <span className="text-text-secondary text-sm font-sans">
-                    {shard.name}
+                    {zone.name}
                   </span>
                 </div>
               </div>
 
               <button
-                onClick={() => handleEnterShard(shard.id)}
+                onClick={() => handleEnterZoneById(zone.id)}
                 className="bg-accent-gold hover:bg-accent-gold/90 text-bg-primary font-medium px-6 py-2 rounded transition-colors font-sans"
               >
                 Enter Expedition
@@ -250,7 +250,7 @@ export default function ExpeditionBoardTab({ onEnterShard, onEnterZone }: Expedi
             </div>
 
             <div className="flex gap-2 mb-4 flex-wrap">
-              {shard.modifiers.map((mod) => (
+              {zone.modifiers.map((mod) => (
                 <span
                   key={mod}
                   className="px-3 py-1 bg-bg-elevated text-warning text-xs rounded border border-warning/30 font-sans"
@@ -264,21 +264,21 @@ export default function ExpeditionBoardTab({ onEnterShard, onEnterZone }: Expedi
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-text-secondary" />
                 <span className="text-text-secondary text-sm font-sans">
-                  {shard.players.current}/{shard.players.max} players
+                  {zone.players.current}/{zone.players.max} players
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-text-secondary" />
                 <span className="text-text-secondary text-sm font-sans">
-                  {shard.timeRemaining}
+                  {zone.timeRemaining}
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
                 <Key className="w-4 h-4 text-text-secondary" />
                 <span className="text-text-secondary text-sm font-sans">
-                  {shard.keyType}
+                  {zone.keyType}
                 </span>
               </div>
             </div>
@@ -291,7 +291,7 @@ export default function ExpeditionBoardTab({ onEnterShard, onEnterZone }: Expedi
                 className="text-text-secondary text-sm italic font-serif"
                 style={{ lineHeight: 1.6 }}
               >
-                {shard.rumor}
+                {zone.rumor}
               </p>
             </div>
           </div>

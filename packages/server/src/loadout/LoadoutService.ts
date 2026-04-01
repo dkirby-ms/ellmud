@@ -44,7 +44,7 @@ export interface UnequipResult {
 export interface UnequipToInventoryResult {
   ok: boolean;
   error?: string;
-  /** The item removed from the slot, for shard inventory. */
+  /** The item removed from the slot, for zone inventory. */
   item?: StashItemInstance;
 }
 
@@ -53,7 +53,7 @@ export interface SwapResult {
   error?: string;
 }
 
-export interface ShardEntryResult {
+export interface ZoneEntryResult {
   canEnter: boolean;
   reason?: string;
 }
@@ -247,7 +247,7 @@ export class LoadoutService {
     return { ok: result.ok, error: result.error };
   }
 
-  // ─── Equip from shard inventory ─────────────────────────────────────────
+  // ─── Equip from zone inventory ─────────────────────────────────────────
 
   async equipFromInventory(
     playerId: string,
@@ -291,7 +291,7 @@ export class LoadoutService {
     };
   }
 
-  // ─── Unequip to shard inventory ─────────────────────────────────────────
+  // ─── Unequip to zone inventory ─────────────────────────────────────────
 
   async unequipToInventory(
     playerId: string,
@@ -321,9 +321,9 @@ export class LoadoutService {
     return { ok: true, item: itemInSlot };
   }
 
-  // ─── Shard Entry Validation ─────────────────────────────────────────────
+  // ─── Zone Entry Validation ─────────────────────────────────────────────
 
-  async validateShardEntry(playerId: string): Promise<ShardEntryResult> {
+  async validateZoneEntry(playerId: string): Promise<ZoneEntryResult> {
     const stashEntries = await this.stashRepo.loadStash(playerId);
 
     const hasKey = stashEntries.some((entry) => {

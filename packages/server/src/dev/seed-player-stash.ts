@@ -47,13 +47,13 @@ const SEED_ITEMS: SeedItem[] = [
   { name: 'Chainmail Greaves',  type: 'armour',     tier: 'common',     weight: 8,  description: 'Chain leggings buckled over padded linen.', baseDurability: 45 },
   { name: 'Masterwork Cuisses', type: 'armour',     tier: 'masterwork', weight: 10, description: 'Articulated thigh plates of flawless craft. Move like a second skin.', baseDurability: 100 },
   // Feet armour
-  { name: 'Rag-Wrapped Boots',  type: 'armour',     tier: 'scrap',      weight: 2,  description: 'Strips of cloth over cracked soles. Better than barefoot in the shards.', baseDurability: 10 },
+  { name: 'Rag-Wrapped Boots',  type: 'armour',     tier: 'scrap',      weight: 2,  description: 'Strips of cloth over cracked soles. Better than barefoot in the zones.', baseDurability: 10 },
   { name: 'Ironshod Treads',    type: 'armour',     tier: 'common',     weight: 5,  description: 'Sturdy boots with iron-capped toes. Good on wet stone.', baseDurability: 40 },
   { name: 'Voidwalker Sabatons',type: 'armour',     tier: 'anomalous',  weight: 4,  description: 'Footwear from beyond the collapse. They leave no prints.', baseDurability: 130 },
   // Hands armour
   { name: 'Fingerless Wraps',   type: 'armour',     tier: 'scrap',      weight: 1,  description: 'Frayed linen wound tight around the knuckles.', baseDurability: 10 },
   { name: 'Riveted Gauntlets',  type: 'armour',     tier: 'common',     weight: 4,  description: 'Iron-studded leather gloves. Grip like a vice.', baseDurability: 35 },
-  { name: 'Flayed-Hide Grips',  type: 'armour',     tier: 'sturdy',     weight: 3,  description: 'Cured from something that once lived in the shards. Supple and warm.', baseDurability: 50 },
+  { name: 'Flayed-Hide Grips',  type: 'armour',     tier: 'sturdy',     weight: 3,  description: 'Cured from something that once lived in the zones. Supple and warm.', baseDurability: 50 },
   // Offhand / tools
   { name: 'Rusted Lantern',     type: 'tool',       tier: 'common',     weight: 3,  description: 'A battered oil lantern. Throws weak light but it beats the dark.', baseDurability: 30 },
   { name: 'Iron Buckler',       type: 'tool',       tier: 'sturdy',     weight: 6,  description: "A small round shield. Won't stop a halberd, but deflects the rest.", baseDurability: 55 },
@@ -66,9 +66,9 @@ const SEED_ITEMS: SeedItem[] = [
   { name: 'Hollow-Eye Pendant', type: 'material',   tier: 'common',     weight: 1,  description: 'A bone disc with a hole bored through centre. Ward against the deep.', baseDurability: null },
   { name: 'Shard-Touched Medallion', type: 'material', tier: 'masterwork', weight: 1, description: 'Metal fused with crystallised shard-energy. Pulses like a heartbeat.', baseDurability: null },
   // Shard keys
-  { name: 'Bone Shard Key',     type: 'key',        tier: 'common',     weight: 1,  description: 'A key carved from revenant bone. Opens Tier 1 shards.', baseDurability: null },
-  { name: 'Iron Shard Key',     type: 'key',        tier: 'sturdy',     weight: 1,  description: 'A blackened iron key etched with shard-glyphs. Opens Tier 2 shards.', baseDurability: null },
-  { name: 'Crystal Shard Key',  type: 'key',        tier: 'refined',    weight: 1,  description: 'A translucent key that refracts light wrong. Opens Tier 3 shards.', baseDurability: null },
+  { name: 'Bone Zone Key',     type: 'key',        tier: 'common',     weight: 1,  description: 'A key carved from revenant bone. Opens Tier 1 zones.', baseDurability: null },
+  { name: 'Iron Zone Key',     type: 'key',        tier: 'sturdy',     weight: 1,  description: 'A blackened iron key etched with shard-glyphs. Opens Tier 2 zones.', baseDurability: null },
+  { name: 'Crystal Zone Key',  type: 'key',        tier: 'refined',    weight: 1,  description: 'A translucent key that refracts light wrong. Opens Tier 3 zones.', baseDurability: null },
   // Consumables
   { name: 'Stale Ration',       type: 'consumable', tier: 'scrap',      weight: 1,  description: 'Hard bread and salt meat. Tastes like regret. Heals a little.', baseDurability: null },
   { name: 'Blackmoss Salve',    type: 'consumable', tier: 'common',     weight: 1,  description: 'A poultice brewed from shard-grown moss. Stings, but mends flesh.', baseDurability: null },
@@ -76,7 +76,7 @@ const SEED_ITEMS: SeedItem[] = [
   { name: 'Elixir of Mending',  type: 'consumable', tier: 'refined',    weight: 2,  description: 'A rare draught from Refuge alchemists. Knits wounds shut in seconds.', baseDurability: null },
   // Crafting materials / junk
   { name: 'Corroded Nails',     type: 'material',   tier: 'scrap',      weight: 1,  description: 'A fistful of bent nails scavenged from a collapsed doorframe.', baseDurability: null },
-  { name: 'Revenant Marrow',    type: 'material',   tier: 'common',     weight: 2,  description: 'Viscous black marrow from a shard creature. Alchemists pay well.', baseDurability: null },
+  { name: 'Revenant Marrow',    type: 'material',   tier: 'common',     weight: 2,  description: 'Viscous black marrow from a zone creature. Alchemists pay well.', baseDurability: null },
   { name: 'Void Residue',       type: 'material',   tier: 'anomalous',  weight: 1,  description: 'A shimmering dust that floats upward. Handle with extreme care.', baseDurability: null },
   { name: 'Waterlogged Crate',  type: 'material',   tier: 'scrap',      weight: 40, description: 'A heavy salvage crate. Contents unknown. Too stubborn to abandon.', baseDurability: null },
 ];

@@ -41,7 +41,7 @@ const ENTITY_FIXTURES: Record<string, { create: Record<string, unknown>; update:
   },
   modifiers: {
     create: { name: 'Darkness', type: 'darkness', description: 'Vision is severely limited', effect: { visibility: -0.5 } },
-    update: { description: 'Near-total darkness engulfs the shard' },
+    update: { description: 'Near-total darkness engulfs the zone' },
   },
   skills: {
     create: { name: 'Heavy Strike', type: 'active', description: 'A powerful overhead blow', staminaCost: 15 },

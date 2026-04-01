@@ -57,7 +57,7 @@ const FORBIDDEN_PATTERNS = [
 /** Schema keywords that should never appear in narrated prose. */
 const SCHEMA_KEYWORDS = [
   'hp_pct',
-  'shard_stability',
+  'zone_stability',
   'awareness_level',
   'light_level',
   'disposition',

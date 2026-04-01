@@ -55,7 +55,7 @@ export const SHARDSTEEL_SABRE: ItemDefinition = {
   baseStats: { damage: 16, speed: 1 },
   baseDurability: 80,
   weight: 5,
-  description: 'Forged from metal recovered deep within the shards.',
+  description: 'Forged from metal recovered deep within the zones.',
   soulbound: false,
 };
 
@@ -169,7 +169,7 @@ export const REVENANT_BONE: ItemDefinition = {
   baseStats: {},
   baseDurability: null,
   weight: 2,
-  description: 'A bleached bone from a shard creature. Crafting material.',
+  description: 'A bleached bone from a zone creature. Crafting material.',
   soulbound: false,
 };
 

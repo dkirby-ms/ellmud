@@ -1,9 +1,9 @@
 /**
- * useShardConnection — Manages the Colyseus room connection lifecycle for shard exploration.
+ * useZoneConnection — Manages the Colyseus room connection lifecycle for zone exploration.
  *
  * Extracted from the old GameScreen.tsx pattern. Handles:
- * - Connecting to a shard room with auth token
- * - Wiring all message handlers (narrate, room header, shard state, combat, room switch, overlay)
+ * - Connecting to a zone room with auth token
+ * - Wiring all message handlers (narrate, room header, zone state, combat, room switch, overlay)
  * - Command dispatch via sendRawCommand
  * - Reconnection via useReconnection hook
  * - Cleanup on unmount
@@ -17,7 +17,7 @@ import { useReconnection } from './useReconnection.js';
 import type {
   NarrateMessage,
   RoomHeaderMessage,
-  ShardStateMessage,
+  ZoneStateMessage,
   CombatResultMessage,
   RoomSwitchMessage,
   OverlayMessage,
@@ -41,7 +41,7 @@ export interface OverlayState {
   narration: string | null;
 }
 
-export interface UseShardConnectionResult {
+export interface UseZoneConnectionResult {
   /** Send a raw text command to the server */
   handleCommand: (input: string) => void;
   /** Send a directional movement command */
@@ -62,7 +62,7 @@ export interface UseShardConnectionResult {
 
 const INITIAL_OVERLAY: OverlayState = { status: null, progress: 0, narration: null };
 
-export function useShardConnection(roomName: string = 'shard'): UseShardConnectionResult {
+export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionResult {
   const { state, dispatch } = useAppContext();
   const navigate = useNavigate();
   const roomRef = useRef<Room | null>(null);
@@ -171,9 +171,9 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
           : `\n── ${msg.roomName}${slugSuffix} ──`;
         addMessage(headerLabel, 'header');
       },
-      onShardState: (msg: ShardStateMessage) => {
+      onZoneState: (msg: ZoneStateMessage) => {
         if (disposed) return;
-        dispatch({ type: 'SET_SHARD_STATE', state: msg.state, collapseTimer: msg.collapseTimer });
+        dispatch({ type: 'SET_ZONE_STATE', state: msg.state, collapseTimer: msg.collapseTimer });
         addMessage(`[Zone: ${msg.state}${msg.collapseTimer ? ` — ${msg.collapseTimer}s remaining` : ''}]`, 'system');
       },
       onCombatResult: (msg: CombatResultMessage) => {
@@ -236,7 +236,7 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
         const switchingToRefuge = msg.target === 'zone:the-refuge';
         if (switchingToRefuge) {
           dispatch({ type: 'CLEAR_MESSAGES' });
-          dispatch({ type: 'SET_SHARD_STATE', state: null as unknown as import('@ellmud/shared').ShardState });
+          dispatch({ type: 'SET_ZONE_STATE', state: null as unknown as import('@ellmud/shared').ZoneState });
           dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
           // Don't overwrite death state — the death overlay must stay visible
           if (overlayRef.current.status !== 'death') {
@@ -314,9 +314,9 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
         addMessage(`Entering zone: ${msg.targetZoneSlug}...`, 'system');
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
 
-        // Switch to a shard room with the target zone slug as join options.
+        // Switch to a zone room with the target zone slug as join options.
         // The server matchmaker routes zoneSlug to the correct zone instance.
-        switchRoom(currentRoom, 'shard', state.token, handlers, {
+        switchRoom(currentRoom, 'zone', state.token, handlers, {
           zoneSlug: msg.targetZoneSlug,
           targetRoomSlug: msg.targetRoomSlug,
         } as import('@ellmud/shared').RoomSwitchOptions, state.activeCharacter?.id)
