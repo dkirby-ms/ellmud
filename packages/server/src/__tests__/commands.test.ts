@@ -205,7 +205,7 @@ describe('Command Handlers', () => {
       expect(result.narrations.length).toBeGreaterThan(0);
       expect(result.narrations[0]!.type).toBe('room');
       expect(result.roomHeader).toBeDefined();
-      expect(result.roomHeader!.roomName).toBe('Shard Entry');
+      expect(result.roomHeader!.roomName).toBe('Rift Entry');
     });
 
     it('should list exits', () => {
@@ -221,7 +221,7 @@ describe('Command Handlers', () => {
     it('should return a room header', () => {
       const result = handleCommand('look', buildCtx());
       expect(result.roomHeader).toBeDefined();
-      expect(result.roomHeader!.roomName).toBe('Shard Entry');
+      expect(result.roomHeader!.roomName).toBe('Rift Entry');
     });
   });
 
@@ -388,7 +388,7 @@ describe('ShardRoom Commands (Integration)', () => {
 
     // Should have room header
     expect(headers.length).toBeGreaterThanOrEqual(1);
-    expect(headers[0]!.roomName).toBe('Shard Entry');
+    expect(headers[0]!.roomName).toBe('Rift Entry');
 
     await client.leave();
   });

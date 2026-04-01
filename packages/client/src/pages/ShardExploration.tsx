@@ -686,7 +686,7 @@ export default function ShardExploration() {
             placeholder={
               state.connectionStatus === "connected"
                 ? "Type a command..."
-                : isZone ? "Connecting to the Refuge..." : "Connecting to shard..."
+                : isZone ? "Connecting to the Refuge..." : "Connecting to instance..."
             }
             disabled={state.connectionStatus !== "connected"}
             className="flex-1 bg-transparent text-text-primary placeholder:text-text-disabled focus:outline-none disabled:opacity-50 font-mono"

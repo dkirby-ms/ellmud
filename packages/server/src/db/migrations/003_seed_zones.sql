@@ -6,7 +6,7 @@
 
 INSERT INTO zones (id, slug, name, description, level_min, level_max, tier, theme, entry_room_slugs, lifecycle, category, max_players, pvp_enabled, repop_interval_seconds)
 VALUES (gen_random_uuid(), 'the-refuge', 'The Refuge',
-  'A battered sanctuary carved from the ruins of a collapsed shard. The last safe haven for those who dare the rifts.',
+  'A battered sanctuary carved from the ruins of a collapsed ruin. The last safe haven for those who dare the rifts.',
   1, 100, 1, 'flooded_crypt', '{hearth}', 'persistent', 'hub', 0, false, 0);
 
 -- Refuge rooms
@@ -15,12 +15,12 @@ SELECT gen_random_uuid(), z.id, v.slug, v.name, v.description, v.type,
        v.properties::text[], v.loot_containers::jsonb, v.hazards::jsonb, v.npcs::jsonb
 FROM zones z, (VALUES
   ('hearth',           'The Hearth',         'A broad stone chamber warmed by a perpetual fire. Scarred adventurers rest on makeshift benches. The air smells of ash and iron.', 'entry',    '{}', '[]', '[]', '[]'),
-  ('stash-alcove',     'Stash Alcove',       'A narrow alcove lined with locked chests and hanging satchels. Your belongings are here — what you''ve kept from the shards.',    'corridor', '{}', '[]', '[]', '[]'),
+  ('stash-alcove',     'Stash Alcove',       'A narrow alcove lined with locked chests and hanging satchels. Your belongings are here — what you''ve kept from the depths.',    'corridor', '{}', '[]', '[]', '[]'),
   ('training-grounds', 'Training Grounds',   'A cleared space where weapons ring against practice dummies. Scratched tally marks cover the walls.',                              'corridor', '{}', '[]', '[]', '[]'),
-  ('expedition-board', 'The Expedition Board', 'A massive board of pinned notes, sketched maps, and shard coordinates. This is where expeditions begin.',                          'corridor', '{}', '[]', '[]', '[]'),
+  ('expedition-board', 'The Expedition Board', 'A massive board of pinned notes, sketched maps, and rift coordinates. This is where expeditions begin.',                          'corridor', '{}', '[]', '[]', '[]'),
   ('market',           'The Market',         'Makeshift stalls selling salvaged goods. A gruff quartermaster eyes your coin pouch.',                                              'corridor', '{}', '[]', '[]', '[]'),
   ('infirmary',        'The Infirmary',      'Cots and bandages. A healer tends to the wounded. The smell of poultice lingers.',                                                  'corridor', '{}', '[]', '[]', '[]'),
-  ('war-room',         'The War Room',       'A locked chamber where faction leaders meet. Maps of known shards cover the walls.',                                                'corridor', '{}', '[]', '[]', '[]')
+  ('war-room',         'The War Room',       'A locked chamber where faction leaders meet. Maps of known zones cover the walls.',                                                'corridor', '{}', '[]', '[]', '[]')
 ) AS v(slug, name, description, type, properties, loot_containers, hazards, npcs)
 WHERE z.slug = 'the-refuge';
 
@@ -130,7 +130,7 @@ FROM zones z, (VALUES
   -- A7. Dustfall Extraction (dead_end)
   ('dustfall-extraction',
    'Dustfall Extraction',
-   'A wide intersection where the ruins fall back, leaving an unexpected expanse of open sky. Dust drifts down endlessly from the crumbling buildings above, catching light like grey snow. A half-collapsed pedestrian bridge arches overhead — beneath it, the ground has been swept clean in a perfect circle. This is where the shard thins. This is where you leave.',
+   'A wide intersection where the ruins fall back, leaving an unexpected expanse of open sky. Dust drifts down endlessly from the crumbling buildings above, catching light like grey snow. A half-collapsed pedestrian bridge arches overhead — beneath it, the ground has been swept clean in a perfect circle. This is where the veil thins. This is where you leave.',
    'dead_end',
    '{}',
    '[]',

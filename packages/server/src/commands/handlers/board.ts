@@ -21,7 +21,7 @@ export function handleBoard(ctx: CommandContext): CommandResult {
   return {
     narrations: [{
       text: 'The expedition board crackles with energy… Rift signatures shimmer across its surface.\n\n'
-        + 'Type `enter <shard-id>` to step through a rift.',
+        + 'Type `enter <expedition-id>` to step through a rift.',
       type: 'system',
     }],
   };
@@ -32,7 +32,7 @@ export function handleEnter(ctx: CommandContext): CommandResult {
 
   if (args.length === 0) {
     return {
-      narrations: [{ text: 'Enter what? Specify a shard ID. (e.g. "enter shard-1")', type: 'system' }],
+      narrations: [{ text: 'Enter what? Specify an expedition ID. (e.g. "enter expedition-1")', type: 'system' }],
     };
   }
 

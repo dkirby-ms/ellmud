@@ -334,7 +334,7 @@ export class LoadoutService {
     if (!hasKey) {
       return {
         canEnter: false,
-        reason: 'You need a shard key to enter. Check the Refuge vendors.',
+        reason: 'You need an expedition key to enter. Check the Refuge vendors.',
       };
     }
 

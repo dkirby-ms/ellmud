@@ -42,7 +42,7 @@ export const ROOM_NAMES: Record<RoomType, readonly string[]> = {
 
 const ROOM_DESCRIPTIONS: Record<RoomType, readonly string[]> = {
   entry: [
-    'Pale light seeps through cracked stone above. Ankle-deep water sloshes with each step. This is where the shard begins — and where retreat is still possible.',
+    'Pale light seeps through cracked stone above. Ankle-deep water sloshes with each step. This is where the dungeon begins — and where retreat is still possible.',
     'A jagged opening in the earth leads down into darkness. Water drips steadily from the ceiling, pooling on worn flagstones.',
   ],
   boss: [
