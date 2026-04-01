@@ -26,7 +26,7 @@ import {
 import { createHealthRouter } from './health.js';
 import { createVersionRouter } from './api/version.js';
 import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter, createDeployRouter, createZoneRouter } from './admin/index.js';
-import { getConfig } from './config.js';
+import { getConfig, ZONE_DEFAULT_MAX_PLAYERS } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence, testRedisConnection } from './cache/index.js';
 import { initStashProvider, isStashPg, loadItemDefsFromDb } from './stash/index.js';
@@ -311,4 +311,5 @@ console.log(`[Ellmud] Auth required: ${AUTH_REQUIRED}`);
 console.log(`[Ellmud] Cache: ${isCacheRedis ? 'Redis' : 'in-memory'}, Presence: ${isPresenceRedis ? 'Redis' : 'local'}`);
 console.log(`[Ellmud] Matchmaker driver: ${config.redis.driverEnabled ? 'Redis' : 'local'}`);
 console.log(`[Ellmud] Stash persistence: ${isStashPg() ? 'PostgreSQL' : 'in-memory'}`);
-console.log(`[Ellmud] Max players/zone (default): ${config.maxPlayersPerZone}, Max replicas: ${config.maxReplicas}`);
+console.log(`[Ellmud] Zone capacity: ${ZONE_DEFAULT_MAX_PLAYERS} default, ${config.maxPlayersPerZone} env override${process.env.MAX_PLAYERS_PER_ZONE ? ' (active)' : ''}`);
+console.log(`[Ellmud] Max replicas: ${config.maxReplicas}`);
