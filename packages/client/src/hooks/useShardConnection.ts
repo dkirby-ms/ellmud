@@ -112,7 +112,7 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
           room.onMessage('overlay_state', overlayHandlerRef.current);
         }
         dispatch({ type: 'SET_ROOM', room });
-        addMessage(roomName.startsWith('zone:') ? 'Reconnected to the Refuge.' : 'Reconnected to the shard.', 'system');
+        addMessage(roomName.startsWith('zone:') ? 'Reconnected to the Refuge.' : 'Reconnected to the instance.', 'system');
         return true;
       } catch {
         return false;
@@ -174,7 +174,7 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
       onShardState: (msg: ShardStateMessage) => {
         if (disposed) return;
         dispatch({ type: 'SET_SHARD_STATE', state: msg.state, collapseTimer: msg.collapseTimer });
-        addMessage(`[Shard: ${msg.state}${msg.collapseTimer ? ` — ${msg.collapseTimer}s remaining` : ''}]`, 'system');
+        addMessage(`[Zone: ${msg.state}${msg.collapseTimer ? ` — ${msg.collapseTimer}s remaining` : ''}]`, 'system');
       },
       onCombatResult: (msg: CombatResultMessage) => {
         if (disposed) return;
@@ -250,7 +250,7 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
               roomRef.current = newRoom;
               dispatch({ type: 'SET_ROOM', room: newRoom });
               newRoom.onMessage('overlay_state', handleOverlay);
-              addMessage(`Connected to ${switchingToRefuge ? 'the Refuge' : 'shard'}.`, 'system');
+              addMessage(`Connected to ${switchingToRefuge ? 'the Refuge' : 'the instance'}.`, 'system');
               // Navigate after successful room switch to refuge
               if (switchingToRefuge) {
                 navigate('/refuge');
@@ -400,7 +400,7 @@ export function useShardConnection(roomName: string = 'shard'): UseShardConnecti
       if (!disposed) {
         roomRef.current = room;
         dispatch({ type: 'SET_ROOM', room });
-        addMessage(roomName.startsWith('zone:') ? 'Connected to the Refuge.' : 'Connected to the shard.', 'system');
+        addMessage(roomName.startsWith('zone:') ? 'Connected to the Refuge.' : 'Connected to the instance.', 'system');
         reconnectionRef.current.reportConnected();
         room.onMessage('overlay_state', handleOverlay);
       } else {

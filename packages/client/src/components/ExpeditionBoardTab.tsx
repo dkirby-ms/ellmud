@@ -203,7 +203,7 @@ export default function ExpeditionBoardTab({ onEnterShard, onEnterZone }: Expedi
         </p>
       )}
 
-      {/* ── Shards — Procedural Expeditions ──────────────────────────────── */}
+      {/* ── Expeditions — Procedural Dungeons ──────────────────────────────── */}
       <h2
         className="text-accent-gold mb-6 font-serif"
         style={{ fontSize: "1.5rem" }}
@@ -245,7 +245,7 @@ export default function ExpeditionBoardTab({ onEnterShard, onEnterZone }: Expedi
                 onClick={() => handleEnterShard(shard.id)}
                 className="bg-accent-gold hover:bg-accent-gold/90 text-bg-primary font-medium px-6 py-2 rounded transition-colors font-sans"
               >
-                Enter Shard
+                Enter Expedition
               </button>
             </div>
 

@@ -12,7 +12,7 @@ import type { CharacterSummary } from "@ellmud/shared";
 
 const FACTIONS = [
   { slug: "ironwright", name: "Ironwright Compact", desc: "Master smiths and engineers." },
-  { slug: "veil", name: "Veil Cartographers", desc: "Scholars who map the shards." },
+  { slug: "veil", name: "Veil Cartographers", desc: "Scholars who map the unknown." },
   { slug: "scarlet", name: "Scarlet Ledger", desc: "Resourceful brokers and survivors." },
 ];
 

@@ -91,7 +91,7 @@ function initializeInMemoryStores(): Map<ContentEntityType, IContentStore<Conten
   // ─── Factions — seed from known factions ──────────────────────────
   const factions = [
     { id: 'ironhearth', name: 'Ironhearth', description: 'Builders and defenders. They forge the Refuge\'s walls.', milestones: [{ name: 'Wall Menders', threshold: 100, description: 'Basic fortifications restored.' }], events: [] },
-    { id: 'veilwalkers', name: 'Veilwalkers', description: 'Scouts and scholars who chart the shards.', milestones: [{ name: 'Pathfinders', threshold: 100, description: 'New shard routes mapped.' }], events: [] },
+    { id: 'veilwalkers', name: 'Veilwalkers', description: 'Scouts and scholars who chart the unknown.', milestones: [{ name: 'Pathfinders', threshold: 100, description: 'New routes mapped.' }], events: [] },
     { id: 'ashborn', name: 'Ashborn', description: 'Warriors hardened by loss. They push deeper than anyone.', milestones: [{ name: 'First Blood', threshold: 100, description: 'Veteran status recognized.' }], events: [] },
   ];
   stores.set('factions', new ContentStore('factions', factions as unknown as ContentEntity[]));

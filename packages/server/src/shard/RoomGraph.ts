@@ -44,7 +44,7 @@ export function createTestRoomGraph(): RoomGraph {
 
   rooms.set('entry', {
     id: 'entry',
-    name: 'Shard Entry',
+    name: 'Rift Entry',
     description:
       'A jagged rift in reality opens into a vaulted stone chamber. The air tastes of copper and old decay. Faint light seeps through cracks in the ceiling.',
     exits: new Map<Direction, string>([
@@ -92,7 +92,7 @@ export function createTestRoomGraph(): RoomGraph {
       ['south', 'corridor'],
     ]),
     items: [
-      { id: 'relic', name: 'anomalous relic', weight: 2, description: 'A humming shard of crystallised void-stuff. Valuable.' },
+      { id: 'relic', name: 'anomalous relic', weight: 2, description: 'A humming fragment of crystallised void-stuff. Valuable.' },
     ],
   });
 

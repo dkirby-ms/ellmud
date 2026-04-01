@@ -261,16 +261,16 @@ export class Matchmaker {
    */
   validateJoin(roomId: string, playerId: string): { valid: boolean; reason?: string } {
     const shard = this.shards.get(roomId);
-    if (!shard) return { valid: false, reason: 'Shard not found.' };
-    if (shard.locked) return { valid: false, reason: 'Shard is locked.' };
+    if (!shard) return { valid: false, reason: 'Instance not found.' };
+    if (shard.locked) return { valid: false, reason: 'Instance is locked.' };
     if (shard.lifecycle !== 'open') {
-      return { valid: false, reason: `Shard is ${shard.lifecycle}. Wait for it to open.` };
+      return { valid: false, reason: `Instance is ${shard.lifecycle}. Wait for it to open.` };
     }
     if (shard.currentPlayers >= shard.maxPlayers) {
-      return { valid: false, reason: `Shard is full (${shard.maxPlayers}/${shard.maxPlayers} players).` };
+      return { valid: false, reason: `Instance is full (${shard.maxPlayers}/${shard.maxPlayers} players).` };
     }
     if (shard.assignedEntryPoints.has(playerId)) {
-      return { valid: false, reason: 'Player already assigned to this shard.' };
+      return { valid: false, reason: 'Player already assigned to this instance.' };
     }
     return { valid: true };
   }

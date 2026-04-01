@@ -389,7 +389,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       // Enforce tier-based max players (only for genuinely new players)
       const maxPlayers = this.maxClients ?? getMaxPlayersForTier(this.shardTier, getConfig());
       if (this.state.playerCount >= maxPlayers) {
-        throw new Error(`Shard is full (${maxPlayers}/${maxPlayers} players).`);
+        throw new Error(`Instance is full (${maxPlayers}/${maxPlayers} players).`);
       }
       this.state.playerCount++;
     }
@@ -463,7 +463,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Send initial system narration
     this.sendNarrate(client, {
-      text: 'You step through the rift into a shard of the dying world...',
+      text: 'You step through the rift into a fragment of the dying world...',
       type: 'system',
       timestamp: Date.now(),
     });
@@ -532,7 +532,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
         // Send reconnection confirmation
         this.sendNarrate(client, {
-          text: 'Reconnected to the shard.',
+          text: 'Reconnected to the instance.',
           type: 'system',
           timestamp: Date.now(),
         });
@@ -794,7 +794,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Death penalty narration for all remaining players
     this.broadcast(MessageTypes.NARRATE, {
-      text: 'The shard shatters. Reality folds in on itself. Everything goes dark. A creeping weakness takes hold — the death penalty bears down upon you.',
+      text: 'The dungeon shatters. Reality folds in on itself. Everything goes dark. A creeping weakness takes hold — the death penalty bears down upon you.',
       type: 'system',
       timestamp: Date.now(),
     } satisfies NarrateMessage);
@@ -829,7 +829,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     const player = this.players.get(playerId);
     if (!player) {
       this.sendNarrate(client, {
-        text: 'Your presence flickers. You are not fully in this shard.',
+        text: 'Your presence flickers. You are not fully in this zone.',
         type: 'system',
         timestamp: Date.now(),
       });
@@ -2257,7 +2257,7 @@ function createFallbackRefugeGraph(): RoomGraph {
   rooms.set('stash-alcove', {
     id: 'stash-alcove',
     name: 'Stash Alcove',
-    description: 'A narrow alcove lined with locked chests and hanging satchels. Your belongings are here — what you\'ve kept from the shards.',
+    description: 'A narrow alcove lined with locked chests and hanging satchels. Your belongings are here — what you\'ve kept from the depths.',
     type: 'feature_stash',
     exits: new Map<Direction, string>([['west', 'hearth']]),
     items: [],
@@ -2278,7 +2278,7 @@ function createFallbackRefugeGraph(): RoomGraph {
   rooms.set('expedition-board', {
     id: 'expedition-board',
     name: 'The Expedition Board',
-    description: 'A massive board of pinned notes, sketched maps, and shard coordinates. This is where expeditions begin.',
+    description: 'A massive board of pinned notes, sketched maps, and rift coordinates. This is where expeditions begin.',
     type: 'feature_expedition_board',
     exits: new Map<Direction, string>([['east', 'hearth']]),
     items: [],
@@ -2308,7 +2308,7 @@ function createFallbackRefugeGraph(): RoomGraph {
   rooms.set('war-room', {
     id: 'war-room',
     name: 'The War Room',
-    description: 'A locked chamber where faction leaders meet. Maps of known shards cover the walls.',
+    description: 'A locked chamber where faction leaders meet. Maps of known zones cover the walls.',
     type: 'corridor',
     exits: new Map<Direction, string>([['west', 'training-grounds']]),
     items: [],

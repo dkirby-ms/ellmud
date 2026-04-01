@@ -30,7 +30,7 @@ describe('Solo Play — Player Limit Enforcement', () => {
 
     // First player should receive welcome narration
     expect(collector.narrate.length).toBeGreaterThan(0);
-    expect(collector.narrate[0]!.text).toContain('shard');
+    expect(collector.narrate[0]!.text).toContain('rift');
 
     await client.leave();
   });

@@ -24,9 +24,9 @@ const LIGHT_DESCRIPTIONS: Record<string, string> = {
 
 const STABILITY_DESCRIPTIONS: Record<string, string> = {
   stable: '',
-  wavering: 'A faint tremor runs through the ground — the shard\'s fabric strains.',
+  wavering: 'A faint tremor runs through the ground — the zone\'s fabric strains.',
   unstable: 'The walls shudder. Cracks spider through the ceiling. Time grows short.',
-  collapsing: 'Reality buckles and tears. The shard is dying — every moment here is borrowed.',
+  collapsing: 'Reality buckles and tears. The zone is dying — every moment here is borrowed.',
 };
 
 const CREATURE_STATE_VERBS: Record<string, string> = {
