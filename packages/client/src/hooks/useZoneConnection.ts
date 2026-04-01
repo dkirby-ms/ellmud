@@ -316,8 +316,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
 
         // Switch to a zone room with the target zone slug as join options.
         // The server matchmaker routes zoneSlug to the correct zone instance.
-        switchRoom(currentRoom, 'zone', state.token, handlers, {
-          zoneSlug: msg.targetZoneSlug,
+        switchRoom(currentRoom, `zone:${msg.targetZoneSlug}`, state.token, handlers, {
           targetRoomSlug: msg.targetRoomSlug,
         } as import('@ellmud/shared').RoomSwitchOptions, state.activeCharacter?.id)
           .then((newRoom) => {
