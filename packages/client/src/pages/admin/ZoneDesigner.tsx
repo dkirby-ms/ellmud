@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, ZoomIn, ZoomOut, Maximize2, HelpCircle } from "lucide-react";
+import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, ZoomIn, ZoomOut, Maximize2, HelpCircle, Split } from "lucide-react";
 import { computeLayout } from "../../map/computeLayout.js";
 import type { LayoutRoom } from "../../map/computeLayout.js";
 import { FloorSelector } from "../../components/map/FloorSelector.js";
@@ -984,6 +984,98 @@ export default function ZoneDesigner({
       onZoneChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete reverse exit");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ─── Insert room on exit ────────────────────────────────
+  async function handleInsertRoomOnExit() {
+    if (!selectedExit || !zoneId) return;
+    const pair = exitPairs.find(
+      (p) => p.forward.id === selectedExit || p.reverse?.id === selectedExit,
+    );
+    const exit = pair?.forward ?? exits.find((e) => e.id === selectedExit);
+    if (!exit || exit.targetZoneSlug) return;
+
+    const fromSlug = exit.fromRoomSlug;
+    const toSlug = exit.toRoomSlug;
+    const direction = exit.direction;
+    const reverseDir = OPPOSITE[direction];
+    if (!reverseDir) return;
+
+    if (
+      !confirm(
+        `Insert a new room between "${roomMap.get(fromSlug)?.name ?? fromSlug}" and "${roomMap.get(toSlug)?.name ?? toSlug}"?`,
+      )
+    )
+      return;
+
+    const timestamp = Date.now();
+    const newSlug = `inserted-room-${timestamp}`;
+
+    try {
+      setBusy(true);
+      setError(null);
+
+      // 1. Create the new room
+      await createRoom(zoneId, {
+        slug: newSlug,
+        name: "New Room",
+        description: "",
+        type: "corridor",
+        properties: [],
+        lootContainers: [],
+        hazards: [],
+        npcs: [],
+      } as Partial<ZoneRoomDefinition>);
+
+      // 2. Delete the original exit(s)
+      await deleteExit(exit.id);
+      if (pair?.reverse) {
+        await deleteExit(pair.reverse.id);
+      }
+
+      // 3. Create fromRoom → newRoom exit
+      await createExit(zoneId, {
+        fromRoomSlug: fromSlug,
+        direction,
+        toRoomSlug: newSlug,
+        locked: false,
+        hidden: false,
+      } as Partial<ZoneExitDefinition>);
+      // Reverse: newRoom → fromRoom
+      await createExit(zoneId, {
+        fromRoomSlug: newSlug,
+        direction: reverseDir,
+        toRoomSlug: fromSlug,
+        locked: false,
+        hidden: false,
+      } as Partial<ZoneExitDefinition>);
+
+      // 4. Create newRoom → toRoom exit
+      await createExit(zoneId, {
+        fromRoomSlug: newSlug,
+        direction,
+        toRoomSlug: toSlug,
+        locked: false,
+        hidden: false,
+      } as Partial<ZoneExitDefinition>);
+      // Reverse: toRoom → newRoom
+      await createExit(zoneId, {
+        fromRoomSlug: toSlug,
+        direction: reverseDir,
+        toRoomSlug: newSlug,
+        locked: false,
+        hidden: false,
+      } as Partial<ZoneExitDefinition>);
+
+      setSelectedExit(null);
+      onZoneChanged?.();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to insert room on exit",
+      );
     } finally {
       setBusy(false);
     }
@@ -2469,6 +2561,19 @@ export default function ZoneDesigner({
                     Add Reverse ({OPPOSITE[selectedPair.forward.direction] ?? "?"})
                   </button>
                 )}
+                {/* Insert Room on Exit */}
+                {!selectedPair.forward.targetZoneSlug && (
+                  <button
+                    onClick={() => void handleInsertRoomOnExit()}
+                    disabled={busy}
+                    className="w-full px-2 py-1.5 border border-dashed border-[#7B4FA0] text-[#7B4FA0] hover:bg-[#7B4FA0]/10 rounded text-xs flex items-center justify-center gap-1.5 disabled:opacity-40 transition-colors"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                    title="Insert a new room between these two rooms"
+                  >
+                    <Split className="w-3 h-3" />
+                    Insert Room on Exit
+                  </button>
+                )}
                 {/* Save / Delete */}
                 <div className="flex gap-2">
                   <button
@@ -2619,6 +2724,19 @@ export default function ZoneDesigner({
                     👁 Hidden
                   </span>
                 </label>
+                {/* Insert Room on Exit */}
+                {!selectedExitData?.targetZoneSlug && (
+                  <button
+                    onClick={() => void handleInsertRoomOnExit()}
+                    disabled={busy}
+                    className="w-full px-2 py-1.5 border border-dashed border-[#7B4FA0] text-[#7B4FA0] hover:bg-[#7B4FA0]/10 rounded text-xs flex items-center justify-center gap-1.5 disabled:opacity-40 transition-colors"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                    title="Insert a new room between these two rooms"
+                  >
+                    <Split className="w-3 h-3" />
+                    Insert Room on Exit
+                  </button>
+                )}
                 {/* Save / Delete */}
                 <div className="flex gap-2">
                   <button
