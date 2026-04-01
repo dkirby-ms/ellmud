@@ -2777,3 +2777,19 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 - Matchmaker `TIER_CAPACITY` constants unchanged (procedural instances)
 
 **Verification:** TypeScript compiles clean, all 2187 tests pass, zero regressions.
+
+### DB Schema Cleanup Migrations (#240) — PR #264
+**Task:** Rename legacy shard/extraction terminology in DB schema to align with current GDD.
+**Status:** ✅ Complete — PR #264 opened against dev
+**Branch:** `squad/240-db-schema-cleanup`
+
+**Changes (10 files, +72 −51):**
+- Created migration 013_gdd_alignment_renames.sql: renames `shard_tier` → `zone_tier`, `extracted` → `survived`, `extracted_items` → `items_carried_out` in run_history and character_explored_rooms tables; replaces `__shard__` → `__instance__` sentinel in unique index
+- Updated PgRunHistoryRepository and PgExplorationRepository SQL queries
+- Updated RunRecord interface: `extracted` → `survived`, `extractedItems` → `itemsCarriedOut`
+- Updated ExplorationRepository composite keys: `__shard__` → `__instance__`
+- Updated ZoneRoom.recordRunHistory parameter names
+- Updated db/types.ts RunHistory interface
+- Updated all affected tests (106 pass, full suite 1965 pass)
+
+**Note:** Migrations 011 (biome removal) and 012 (player_shard_sickness rename) already existed on dev.
