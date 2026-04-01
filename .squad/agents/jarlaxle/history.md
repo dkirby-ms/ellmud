@@ -2029,3 +2029,15 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - **Migration ordering matters**: Seed migrations (003, 004) reference `zones.biome` column by its original name. Since they run before migration 011 (which renames biome→theme), they must keep the `biome` column name. Don't rename columns in seed migrations retroactively.
 - **`npx tsc --noEmit` from root shows noise**: Stale `dist/` artifacts cause TS6305 errors. Always run per-package to get real errors.
 - **Beware branch switching by other processes**: Another squad agent switched the working directory mid-edit. Always verify `git branch` before committing.
+
+### 2026-04-01: Faction Strongholds (Issue #236)
+- Created 3 faction stronghold zones (The Foundry, The Cartographium, The Counting House) with 8 feature rooms each.
+- Migration `013_faction_strongholds.sql` adds `faction_slug` column to zones table and seeds all 3 strongholds with category `faction_hub`.
+- New `stronghold.ts` utility module maps faction slugs → zone slugs with `resolvePlayerHubTarget()`.
+- Death routing in ZoneRoom now checks `playerFactionSlugs` cache (populated on join via `getPlayerFactionSlug`) and routes to faction stronghold.
+- Players without a faction fall back to the Refuge (backward compatible).
+- Added `faction_hub` to zone category union, `factionSlug` to ZoneDefinition, `feature_armoury` and `feature_war_room` to RoomType.
+- Room layout for each stronghold mirrors the Refuge hub-spoke pattern: commons (entry) → stash/armoury, training/war-room, expedition-board, market/infirmary.
+- 21 new tests covering all routing paths. All 7 existing player-death tests and 8 room-routing tests pass unchanged.
+- **Key files:** `packages/server/src/zones/stronghold.ts`, `packages/server/src/db/migrations/013_faction_strongholds.sql`
+- **PR #259**, branch `squad/236-faction-strongholds`
