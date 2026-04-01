@@ -2041,3 +2041,41 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - 21 new tests covering all routing paths. All 7 existing player-death tests and 8 room-routing tests pass unchanged.
 - **Key files:** `packages/server/src/zones/stronghold.ts`, `packages/server/src/db/migrations/013_faction_strongholds.sql`
 - **PR #259**, branch `squad/236-faction-strongholds`
+
+---
+
+## 2026-04-01: Refuge Repurposing as Designer/Debug Hub (Issue #239)
+
+**PR:** #260 | **Branch:** `squad/239-refuge-repurpose` | **Base:** `dev`
+
+**Task:** Recategorize Refuge from player spawn hub to developer/designer workspace to support new faction-based stronghold routing.
+
+**Work Completed:**
+- Database schema update: Room category changed from `hub` to `dev` for Refuge zone
+- Migration `014_refuge_repurpose.sql` updates Refuge category and preserves all room data
+- Type definitions: Updated `RoomCategory` union to reflect development use case
+- Descriptions: Updated Refuge zone description to reflect designer/debug purpose
+- Tests: 13 tests updated and added for Refuge as development environment
+
+**Architecture:**
+- **Primary change:** Refuge no longer serves as player spawn location
+- **New role:** Isolated development environment for zone design testing and debug workflows
+- **Fallback:** Remains as emergency routing fallback for unaffiliated/unroutable players
+- **Designer access:** Admin/designer tools continue to route to Refuge for safe testing
+- **Stronghold zones:** Ironwright Foundry, Veil Cartographium, Scarlet Counting House become primary player hubs
+
+**Testing:**
+- 13 tests updated for Refuge as designer environment
+- Integrated with Drizzt's faction stronghold routing (#238)
+- All server tests passing, zero regressions
+
+**Cross-team Impact:**
+- **Drizzt (Engine):** Death/spawn routing now uses faction strongholds; Refuge only fallback
+- **Regis (Frontend):** Client routing via `/api/spawn-zone` endpoint; Refuge no longer primary
+- **Designer workflows:** Clear isolation of design environment from player gameplay
+
+**Key Changes:**
+- Zone category enum: `hub` → `dev` for Refuge
+- Database migration standardizes category across all Refuge instances
+- Type system reflects developer-focused use case
+- All admin/designer features preserved and functional

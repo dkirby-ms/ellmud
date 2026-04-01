@@ -2795,3 +2795,41 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 - Matchmaker `TIER_CAPACITY` constants unchanged (procedural instances)
 
 **Verification:** TypeScript compiles clean, all 2187 tests pass, zero regressions.
+
+---
+
+## 2026-04-01: Death/Spawn Routing to Faction Strongholds (Issue #238)
+
+**PR:** #261 | **Branch:** `squad/238-death-spawn-routing` | **Base:** `dev`
+
+**Task:** Implement faction-based death/spawn routing to strongholds instead of hardcoded Refuge.
+
+**Work Completed:**
+- Server-authoritative death routing via `resolvePlayerHubTarget(factionSlug)` — checks player faction from `playerFactionSlugs` cache and routes to faction stronghold, fallback to Refuge
+- New `/api/spawn-zone` endpoint for client login routing, returns `{ target, zoneSlug, factionSlug }`
+- Updated narration layer with `resolvePlayerHubName()` to inject faction-specific stronghold names in death messages
+- Faction routing table:
+  - Ironwright Compact → The Foundry (zone:the-foundry)
+  - Veil Cartographers → The Cartographium (zone:the-cartographium)
+  - Scarlet Ledger → The Counting House (zone:the-counting-house)
+  - Unaffiliated → The Refuge (zone:the-refuge, fallback)
+
+**Architecture:**
+- Death routing: Server-authoritative, cached from faction membership
+- Login routing: Client calls `/api/spawn-zone` before connecting
+- Fallback: Graceful fallback to Refuge if stronghold unavailable or player unaffiliated
+- Narration: Stronghold name injected into death messages
+
+**Testing:**
+- 17 new unit tests covering faction resolution, fallback behavior, API logic, narration generation
+- All 2037 server tests passing, zero regressions
+
+**Cross-team Impact:**
+- **Regis (Frontend):** Must call `/api/spawn-zone` on login and route to returned zone
+- **Jarlaxle (Systems):** Stronghold zones must be registered; works with Refuge repurposing (#239)
+
+**Key Files:**
+- `packages/server/src/api/spawn-zone.ts` (new endpoint)
+- `packages/server/src/zones/stronghold.ts` (faction resolution)
+- `packages/server/src/rooms/ZoneRoom.ts` (death routing)
+- `packages/server/src/narration/narration-engine.ts` (narration integration)
