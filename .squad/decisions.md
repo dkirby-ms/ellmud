@@ -8398,3 +8398,42 @@ Established a semver versioning system across the monorepo:
 **When:** 2026-04-01
 **What:** Version indicators placed inline in existing layouts — admin top bar (right side, near user avatar) and game sidebar (bottom-right, pinned with `mt-auto`). Both use the shared `useVersion()` hook with safe fallbacks. Admin uses muted `#6A6555` text; game uses `opacity-30` that increases on hover. Native `title` attribute provides build time on hover — no tooltip library needed.
 **Why:** Keeps version discoverable without adding visual noise. `mt-auto` in a flex-col sidebar ensures the indicator stays at the bottom regardless of sidebar content length. Fallback values mean the UI works before Drizzt's Vite config changes land.
+
+### 2026-04-02: Persistent zones default to 100 max players
+**By:** Drizzt (Engine Dev)
+
+**What:**
+Persistent zone rooms (`isZone=true`) now default to 100 max players instead of the old tier-based limits (3/4/6). A new `ZONE_DEFAULT_MAX_PLAYERS` constant and `getMaxPlayersForZone()` function in `config.ts` handle this.
+
+**Priority chain for zone capacity:**
+1. `MAX_PLAYERS_PER_ZONE` env var — overrides everything (ops/testing knob)
+2. Per-zone DB `maxPlayers` field — for zones that need lower caps (e.g., 20 for a small dungeon)
+3. `ZONE_DEFAULT_MAX_PLAYERS` (100) — the new shared-world default
+
+**Why:**
+The old shard model used tier-based limits (3-6 players) for private instances. The game is moving to shared persistent zones where players should encounter each other — 3-6 max was blocking that. Procedural instance limits are preserved separately via `getMaxPlayersForTier()`.
+
+**Impact:**
+- Any new persistent zone gets 100 max players by default
+- Zone designers can override per-zone via the DB `maxPlayers` field (no schema change needed)
+- Ops can cap all zones via `MAX_PLAYERS_PER_ZONE` env var for load testing or emergencies
+- Procedural rooms are unaffected — they still use GDD tier limits
+- Client code unchanged — `joinOrCreate` already routes correctly
+
+### 2026-04-01T01:37:55Z: User directive — Shared zone instances
+**By:** dkirby-ms (via Copilot)
+**What:** Players joining a zone should join an existing game room with other players, not create a new zone instance. Zones should have a maximum allowed player count. Target 100+ players per zone instance. Single shared instances per zone, not per-player.
+**Why:** User request — the game should feel populated. Captured for team memory.
+
+### 2026-07-14: Keep `shardboard` as command alias for `board`
+**By:** Regis  
+
+**Context:** Issue #231 renamed the Shardboard to Expedition Board.
+
+## Decision
+The primary command verb is now `board`. The old `shardboard` verb is kept as a legacy alias in both the parser (KNOWN_VERBS) and the feature handler registry. This means players who type `shardboard` will still get the expedition board behavior.
+
+## Rationale
+- Zero-friction migration: existing muscle memory and any docs referencing `shardboard` still work
+- The alias points to `handleBoard` with `feature_expedition_board` room gating — identical behavior
+- Can be removed in a future cleanup pass if desired
