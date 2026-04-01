@@ -1426,3 +1426,62 @@ CREATE TABLE zone_definitions (
 8. **DB schema has extraction-centric columns:** `run_history.extracted`, `run_history.extracted_items`, `run_history.shard_tier`, `player_shard_sickness` table name, `biome` columns across 5+ tables.
 
 **Audit report:** `.squad/decisions/inbox/elminster-gdd-code-audit.md`
+
+### 2026-04-01: Combat System Design — GDD §6 & §8
+- **Action:** Drafted complete Combat System (§6) and PvP System (§8) sections in GDD.md, replacing placeholder sections.
+- **Design direction (user-confirmed):** Real-time continuous combat with auto-attack baseline on 1s tick, UI-assisted input (5-slot ability bar, hotkeys 1–5, clickable buttons), server-authoritative resolution via Colyseus.
+- **Key architecture:** Auto-attack fires every tick by default; abilities replace the auto-attack for that tick (one ability per tick). Enemy telegraphs (2–4 tick wind-ups) create reaction windows. Signal classification + colour coding + temporal micro-batching for narration readability. PvP uses identical combat system with faction-based soft flagging.
+- **Excluded from brainstorm:** Layer 3 (spatial anchoring), Layer 4 (threaded logs), Layer 8 (cinematic screen effects), Layer 9 (multiple readability modes), Layer 10 (architecture diagram).
+- **Section renumbering:** Death & Corpse moved to §6.8, Equipment Loss to §6.9, Future Considerations added at §6.10. All cross-references updated across GDD.
+- **User preference:** dkirby-ms wants combat accessible without rapid typing — UI buttons and hotkeys are the primary combat input, not typed commands.
+- **Decision file:** `.squad/decisions/inbox/elminster-combat-system.md`
+- **Key files:** `GDD.md` (§6, §8), `docs/combat-brainstorm.md` (raw ideas, selectively adopted)
+
+### 2026-04-01: GDD Group Combat Scale Update
+- **Directive:** dkirby-ms requested group combat scaling from "squads of 3" to groups of up to 20 players. Directive file: `.squad/decisions/inbox/copilot-directive-2026-04-01T010720.md`
+- **Sections updated:**
+  - §2.2 Adventure Zones — Zone capacity updated from "1-6 players / squads of 3" to "1-20+ players / groups of up to 20".
+  - §3 Core Gameplay Loop — "squad" references updated to "group".
+  - §6.2 Combat Flow — Added "Group Combat" subsection: group zone entry, tab-cycle/click targeting in multi-enemy fights, shared target damage aggregation, tick loop scaling for 20P+NC rooms, O(P+C) performance constraint.
+  - §6.3 Abilities & Cooldowns — Added AoE Attack, Group Buff, Group Heal, and Taunt ability types to the ability table. Taunt mechanic defined (set to highest threat + 10%, fixated debuff).
+  - §6.4 Combat HUD — Added "Group Frames" subsection: compact party member display (HP, status, role indicator derived from behaviour), scaling rules (1-5 expanded, 6-20 compact grid), out-of-room greying. Target panel updated with tab-cycling and scrollable target list. Narration feed references verbosity filtering.
+  - §6.5 Enemy Telegraphs — Added "Group Telegraph Design" subsection: room-wide AoE telegraphs, targeted telegraphs (personalised vs third-person variants), cleave/cone telegraphs (melee vs ranged stance), telegraph priority ordering.
+  - §6.6 Combat Narration — Added group-scale micro-batching rules (ally damage summarisation, healing batching, kill events always individual). Added "Narration Verbosity" subsection: 4-level client-side verbosity filter (Mine Only / Party Focus / Balanced default / Full).
+  - §6.10 Threat & Aggro System — New section. Threat table per creature per player. Threat generation table (damage 1:1, healing 0.5:1 split, taunt highest+10%, AoE per-target, base entry threat 10, skill multipliers). Threat resolution (highest-threat targeting, room exit fallback, death fallback, no decay during combat). Design intent: emergent roles without hard classes.
+  - §7.1 Skills — "squad buff radius" updated to "group buff radius" in Social category.
+  - §8.5 Cooperation — Complete rewrite from 3-line squad stub to full group system: formation (invite/leave), group leader role (invite/kick/loot/promote), loot distribution (Round-Robin default, Free-for-All, Need/Greed), friendly fire protection (server-enforced), group zone entry.
+  - §18 Open Questions — Squad size question updated to group size question with load testing focus. Solo viability and communication meta questions updated from "squad" to "group" terminology.
+- **Design constraints respected:** No hard class roles (threat system enables organic specialisation via skills). No instanced dungeons (groups enter persistent zones). Same death mechanics in groups. Server-authoritative combat. 1-second tick budget. Text narration primary, HUD augments.
+- **Key cross-references added:** §6.10 referenced from §6.2 (tick loop), §6.3 (taunt/heal threat), §6.4 (group frames threat sorting), §6.5 (telegraph priority).
+- **Section renumbering:** Threat & Aggro takes §6.10 (previously "Future Considerations" which was removed in the combat system update).
+- **Key files:** `GDD.md` (§2.2, §3, §6.2-6.6, §6.10, §7.1, §8.5, §18)
+
+### 2026-04-01: Room Positioning System (§6.11)
+- **Action:** Designed and added §6.11 Room Positioning to GDD.md — a new abstract positional combat system with three zones (Front, Flank, Rear).
+- **Core design:** Three position zones per room. Front (default, melee, tank zone), Flank (melee with flanking bonus, offset from primary target line), Rear (ranged only, protected from melee creatures). Solo players can ignore positioning entirely — default is Front.
+- **Repositioning cost:** Changing position costs the player's action for that tick (no auto-attack or ability). 3-tick cooldown prevents constant shuffling. Meaningful commitment without being punitive.
+- **Creature positioning:** Creatures also have position zone assignments per creature type (melee → Front, ranged → Rear, skirmisher → Flank, boss → All). Creature repositioning costs a tick. Aggressive creatures chase unreachable high-threat targets; steady creatures attack the highest-threat *reachable* target.
+- **Threat integration (§6.10):** Threat resolution extended with reachability — melee creatures target highest-threat player they can reach from their current position. Ranged and boss creatures reach all zones. Taunt overrides reachability (creature repositions toward taunter).
+- **Cross-references updated:** §6.2 tick loop (added position resolution as step 1), §6.3 abilities (melee/ranged position requirements, AoE zone targeting, taunt repositioning), §6.4 HUD (position badges on group frames and target panel, zone buttons, telegraph warnings), §6.5 telegraphs (cleave/cone now zone-based instead of engagement-stance-based), §6.10 threat resolution (reachable target mechanic, unreachable target AI decisions), §8.3 PvP (positioning applies, less impactful 1v1 but significant in group PvP).
+- **Design principles preserved:** No hard class enforcement (anyone can go Front). Server-authoritative (position is server state). Meaningful but not mandatory (solo play unaffected). Scales with group size (3-player → light tactical layer; 20-player → critical for survival). No grid, no action points, no tactical miniatures — keeps the MUD feel.
+- **Key files:** `GDD.md` (§6.2, §6.3, §6.4, §6.5, §6.10, §6.11, §8.3)
+
+---
+
+## 2026-04-01: Agent Work Summary
+
+**Two tasks completed:** Group Combat System (20-player scale) and Room Positioning System (§6.11). Total updates: 2 major GDD sections (§6.10, §6.11) + 8 cross-references updated. Decisions recorded in `.squad/decisions.md`. Orchestration logs created in `.squad/orchestration-log/`.
+
+### 2026-04-02: Zone Instancing & Multi-player Scaling (§2.4)
+- **Action:** Added comprehensive §2.4 Zone Instancing & Multi-player Scaling to GDD.md — a new subsection documenting how persistent shared zones work at scale.
+- **Core design:** Zones are **Colyseus Rooms** with shared persistent instances. When a player enters a zone, the server routes them to the **least-full existing instance**. Only when an instance hits max capacity does overflow create a new instance. This is **shared-world design**, not instanced dungeons.
+- **Key principles documented:**
+  - **Instancing Model**: Server checks capacity, joins existing instance, or creates overflow. Each instance is a separate `ShardRoom` with isolated creatures/loot.
+  - **Max Player Capacity**: Default 100+ players per instance, configurable per zone and globally via `MAX_PLAYERS_PER_SHARD`.
+  - **Instance Lifecycle**: Persistent zones spawn on-demand, timed zones have collapse timers. Empty instances cleaned up after grace period (default 5 min).
+  - **Group Guarantee**: Groups always placed in same instance regardless of cap, ensuring group cohesion. Group size counts against capacity.
+  - **Player Experience**: Shared zones create emergent encounters, PvP, and a living world. This is core MUD design — players feel less alone.
+  - **Awareness & Visibility**: Players discover each other via room presence, traces (footprints, blood), and proximity communication (`say`, `emote`).
+- **Cross-references added:** §2.3 (timed instance lifecycle), §4.4 (LLM indirect player description), §5.3 (traces and sound for detection), §8.2 (PvP flagging), §8.4 (proximity communication), §8.5 (group guarantee), §13 (Colyseus Room architecture).
+- **Design alignment**: Respects the cardinal rule — players share the world by default. Overflow is transparent infrastructure, not a user-facing mechanic. Reinforces the MUD ethos of unscripted player interaction.
+- **Key files:** `GDD.md` (§2.4 new subsection)

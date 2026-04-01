@@ -1,14 +1,15 @@
 /**
  * Centralized server configuration — env vars with sensible defaults.
  *
- * Phase 1: Solo play only. One player per shard, one replica, in-process matchmaker.
- * Phase 2: Multi-player zones (2-6 players), Redis presence, KEDA auto-scaling.
+ * Persistent zones default to 100 max players (shared world).
+ * Procedural instances use GDD tier-based limits (3/4/6).
+ * MAX_PLAYERS_PER_ZONE env var overrides everything (ops knob).
  */
 
 import type { ZoneTier } from '@ellmud/shared';
 
 export interface ServerConfig {
-  /** Max concurrent players allowed in a single zone room. Phase 2 = 4 (default). */
+  /** Max concurrent players allowed in a single zone room. Env override via MAX_PLAYERS_PER_ZONE. */
   maxPlayersPerZone: number;
 
   /** Max Container Apps replicas. Phase 2 = 4 (KEDA auto-scaling). */
@@ -46,7 +47,7 @@ export interface ServerConfig {
 }
 
 /**
- * GDD-defined player capacity per zone tier (GDD §10.1).
+ * GDD-defined player capacity per zone tier (GDD §10.1) — for procedural instances.
  *   Tier 1 (Shallow): 1–3 players
  *   Tier 2 (Deep):    2–4 players
  *   Tier 3 (Abyssal): 3–6 players
@@ -57,8 +58,11 @@ export const TIER_MAX_PLAYERS: Record<number, number> = {
   3: 6,
 };
 
+/** Default max players for persistent shared zones (non-procedural). */
+export const ZONE_DEFAULT_MAX_PLAYERS = 100;
+
 /**
- * Get tier-specific max players. Uses GDD tier table by default.
+ * Get tier-specific max players for procedural instances.
  * Respects MAX_PLAYERS_PER_ZONE env override if set.
  */
 export function getMaxPlayersForTier(tier: ZoneTier, config: ServerConfig): number {
@@ -67,8 +71,24 @@ export function getMaxPlayersForTier(tier: ZoneTier, config: ServerConfig): numb
     return config.maxPlayersPerZone;
   }
   
-  // GDD tier-based defaults
+  // GDD tier-based defaults (procedural instances)
   return TIER_MAX_PLAYERS[tier] ?? 4;
+}
+
+/**
+ * Get max players for a persistent zone room.
+ * Priority: env override > per-zone DB value > ZONE_DEFAULT_MAX_PLAYERS (100).
+ */
+export function getMaxPlayersForZone(config: ServerConfig, dbMaxPlayers?: number): number {
+  // Env override trumps everything (ops/testing knob)
+  if (process.env.MAX_PLAYERS_PER_ZONE) {
+    return config.maxPlayersPerZone;
+  }
+  // Per-zone DB override (some zones may cap lower, e.g. 20 for a small dungeon)
+  if (dbMaxPlayers !== undefined && dbMaxPlayers > 0) {
+    return dbMaxPlayers;
+  }
+  return ZONE_DEFAULT_MAX_PLAYERS;
 }
 
 function envInt(key: string, fallback: number): number {

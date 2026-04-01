@@ -21,6 +21,7 @@ import { useZoneConnection } from "../hooks/useZoneConnection.js";
 import { useAutoScroll } from "../hooks/useAutoScroll.js";
 import { useExplorationMap } from "../hooks/useExplorationMap.js";
 import { useMapToggle } from "../hooks/useMapToggle.js";
+import { useVersion } from "../hooks/useVersion.js";
 import type { CombatAction } from "@ellmud/shared";
 
 // ─── Status Effect Classifier ────────────────────────────────────────────────
@@ -39,6 +40,7 @@ export default function ZoneExploration() {
   const navigate = useNavigate();
   const location = useLocation();
   const { state } = useAppContext();
+  const version = useVersion();
 
   // Derive zone mode from route path
   const isZone = location.pathname === "/refuge";
@@ -621,6 +623,19 @@ export default function ZoneExploration() {
                 Inventory
               </button>
             </div>
+          </div>
+
+          {/* Version indicator */}
+          <div className="mt-auto px-4 py-2 text-right">
+            <span
+              className="text-[10px] font-mono opacity-30 hover:opacity-70 transition-opacity cursor-default select-none"
+              style={{ color: 'var(--color-text-disabled, #555)' }}
+              title={`v${version.version} — Built: ${version.buildTime}`}
+              aria-label={`Version ${version.version}, built ${version.buildTime}`}
+              tabIndex={0}
+            >
+              v{version.version}
+            </span>
           </div>
         </div>
       </div>

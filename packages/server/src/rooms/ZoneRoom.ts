@@ -46,7 +46,7 @@ import {
   TRACKING_THRESHOLDS,
 } from '@ellmud/shared';
 import { authenticateClient } from '../auth/colyseus-auth.js';
-import { getConfig, getMaxPlayersForTier } from '../config.js';
+import { getConfig, getMaxPlayersForTier, getMaxPlayersForZone } from '../config.js';
 import { StashService, InMemoryStashRepository, getStashRepository, getItemDefs } from '../stash/index.js';
 import type { StashRepository } from '../stash/index.js';
 import { transferInventoryToStash } from '../systems/stash-transfer.js';
@@ -237,10 +237,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.zoneData = zoneData ?? undefined;
       this.isZone = true;
 
-      // Zone-level max players override (0 = unlimited, keep tier default)
-      if (zoneData && zoneData.zone.maxPlayers > 0) {
-        this.maxClients = zoneData.zone.maxPlayers;
-      }
+      // Persistent zones use a high default (100) instead of tier-based limits.
+      // Per-zone DB override and env override are respected via getMaxPlayersForZone.
+      this.maxClients = getMaxPlayersForZone(getConfig(), zoneData?.zone.maxPlayers);
+
+      this.log(`Zone capacity: ${this.maxClients} max players (zone=${this.zoneSlug})`);
 
       // Spawn creatures from zone NPC definitions
       if (zoneData) {
@@ -336,7 +337,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     this.updateMetadata();
 
-    this.log(`ZoneRoom created: ${this.roomId} (tier=${this.zoneTier}${this.isZone ? `, zone=${this.zoneSlug}` : ''})`);
+    this.log(`ZoneRoom created: ${this.roomId} (tier=${this.zoneTier}, maxPlayers=${this.maxClients}${this.isZone ? `, zone=${this.zoneSlug}` : ''})`);
 
     // Start repop timer for zone-based rooms
     if (this.isZone) {

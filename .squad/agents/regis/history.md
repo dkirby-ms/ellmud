@@ -878,3 +878,12 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - Grep confirmed zero remaining references in packages/client/
 - tsc --noEmit passed cleanly
 - Default branch is `dev`, not `main` — always branch from `dev`
+
+- **useVersion hook pattern:** Created `packages/client/src/hooks/useVersion.ts` exporting `useVersion()` which returns `{ version, buildTime }` with safe fallbacks for when Vite globals (`__APP_VERSION__`, `__BUILD_TIME__`) aren't injected yet. TypeScript declarations added to `vite-env.d.ts`.
+- **Version display placement:** Admin panel: muted text in top bar right side (between notifications bell and user avatar). Game client: `mt-auto` pushes it to sidebar bottom-right, opacity-30 → opacity-70 on hover. Both use `title` attribute for build time tooltip and `aria-label` + `tabIndex={0}` for accessibility.
+
+---
+
+## 2026-04-01: Agent Work Summary
+
+**Task completed:** Version Display in Admin & Game UI. Indicators placed in admin top bar (muted text, right side) and game sidebar (mt-auto flex bottom, opacity hover effect). Shared `useVersion()` hook with safe fallbacks. No tooltip library needed — native title attribute. Awaits Drizzt's Vite config; UI works with fallbacks in the meantime. Decision and orchestration logs created.

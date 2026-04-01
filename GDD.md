@@ -91,7 +91,7 @@ Future phases will add tick-driven ambient life to faction strongholds:
 Each zone is:
 - A **hand-crafted room-graph** sourced from the **database zone system**. Room count varies by zone tier: 15-60 rooms. *(Future: Procedurally assembled zones may be added as secondary content.)*
 - Populated with **creatures, hazards, loot, and traces** from database content tables
-- Designed for **1-6 players** entering independently or in squads of up to 3
+- Designed for **1-20+ players** entering independently or in groups of up to 20
 - Host to both **PvE** and **emergent PvP** — other players are not marked as friend or foe
 
 Players enter zones through exits from their faction stronghold (or connected overworld areas) and leave the same way — by walking out through an exit. The danger is not a timer; the danger is death. If you die, you drop a corpse containing your equipped gear (see §6.5). If you survive, you walk out with everything you found.
@@ -129,12 +129,56 @@ Zones operate under one of two models:
   4. **Destabilising** — Final 25% of the timer. Environmental hazards intensify, new creature waves spawn.
   5. **Collapse** — Instance destroys. Any player still inside dies (corpse is lost with the instance; death penalty debuff applies).
 
+## 2.4 Zone Instancing & Multi-player Scaling
+
+The core design principle is **shared persistent zones** — when a player enters a zone, they join an existing instance with other players. The goal is for players to encounter each other, forming a living world where PvE and PvP emerge naturally.
+
+### Instancing Model
+Zones are implemented as **Colyseus Rooms** (see §13). When a player enters a zone via an exit, the server routes them to the least-loaded existing instance of that zone:
+
+1. **Server checks** if an instance of the zone exists with available capacity.
+2. **Join existing instance** — Player is added to the room, spawned in the designated entry room. They see other players in the world.
+3. **No capacity** — If the instance is full, a **new instance is created** and the player joins that overflow instance. The two instances are separate; players cannot see or interact across instances.
+4. **Room isolation** — Each zone instance is a separate `ShardRoom`. Creatures, loot, and state are independent per instance.
+
+This is a traditional **MUD/MMO shared-world model**, not an instanced dungeon system. Players share the world by default; overflow instances are transparent infrastructure to handle scaling.
+
+### Max Player Capacity
+Each zone instance has a configurable maximum player count:
+- **Default**: 100+ players per instance
+- **Configurable per zone**: Some zones may have lower caps for design or performance reasons (e.g., a small dungeon may cap at 20 players)
+- **Config table**: `zones.max_players_per_instance` (database)
+- **Server config**: `MAX_PLAYERS_PER_SHARD` (environment variable, allows global override)
+
+When a player attempts to join a full instance, the server automatically creates a new instance and routes them there. The player experience is seamless — they see the zone as one world, unaware of the infrastructure handling overflow.
+
+### Instance Lifecycle & Cleanup
+- **Persistent zones** spawn instances on-demand when the first player enters. They persist indefinitely, repopulating creatures and loot on schedules.
+- **Timed instances** (if enabled) have a defined lifecycle with a collapse timer (see §2.3).
+- **Empty instances** remain in memory for a configurable grace period (default: 5 minutes) before cleanup, allowing quick re-entry if a player returns immediately.
+- **Stale instance cleanup** runs periodically (default: every 10 minutes) to destroy persistent instances that have been empty for the grace period.
+
+### Group Guarantee
+When a group enters a zone (see §8.5), all group members are placed in the **same instance** regardless of the player cap. This ensures the group stays together. The group size counts against the instance capacity — a 20-player group entering a 100-player zone uses 20 slots.
+
+### Player Experience
+- **Encounter other players naturally**: Walk into a room and see other adventurers fighting the same creatures, searching the same loot containers. Proximity-based communication (see §8.4) lets you interact with them.
+- **PvP emerges**: Other players are not flagged as friend or foe. You may cooperate or fight depending on circumstances (e.g., faction, group status). Flagging rules apply (see §8.2).
+- **Living world**: Seeing other players in zones makes the world feel alive. The danger is other players, not isolation. This is core to MUD gameplay.
+- **No private instances**: Zones are never private to a single player. Solo players share the same zone with groups and other soloists.
+
+### Awareness & Visibility
+Players are aware of other players in their zone via:
+- **Presence in room**: When you enter a room, you see other players there (the LLM describes them as figures, silhouettes, or by indirect cues; see §4.4).
+- **Sound and traces**: Hear footsteps, see blood trails, and detect other players indirectly through environmental cues (§5.3).
+- **Proximity communication**: Use `say` or `emote` to interact with players in the same room (§8.4).
+
 ---
 
 # 3. CORE GAMEPLAY LOOP
 
 1. **Prepare**
-   Select loadout from stash. Choose skills. Read the Expedition Board for intel. Optionally form a squad.
+   Select loadout from stash. Choose skills. Read the Expedition Board for intel. Optionally form a group.
 
 2. **Enter Zone**
    Choose an entry point (different entry points land you in different parts of the graph). Spawn into a dynamically described room.
@@ -355,11 +399,12 @@ Once initiated, the player enters **combat mode**. The Combat HUD appears (§6.4
 
 ### Auto-Attack Tick Loop
 While in combat, the server executes a **1-second tick** cycle:
-1. **Ability resolution.** Any queued ability from the previous tick window is resolved first (see §6.3).
-2. **Auto-attack.** If no ability was used, the player's character performs a basic attack against the current target. Auto-attack damage scales with the equipped weapon and relevant combat skill (§7.1).
-3. **Enemy actions.** All hostile creatures resolve their own actions (attacks, telegraphed abilities, repositioning).
-4. **Status effects.** Damage-over-time, buffs, debuffs, and cooldown timers tick down.
-5. **State broadcast.** Updated HP, cooldowns, status effects, and narration events are sent to affected clients.
+1. **Position resolution.** Any queued position change is resolved first. The entity moves to the new zone and forfeits their action for this tick (§6.11).
+2. **Ability resolution.** Any queued ability from the previous tick window is resolved (see §6.3). Abilities are validated against the player's current position (e.g., melee abilities fail from Rear).
+3. **Auto-attack.** If no ability was used and no reposition occurred, the player's character performs a basic attack against the current target. Auto-attack damage scales with the equipped weapon and relevant combat skill (§7.1). Melee auto-attacks require Front or Flank position; ranged auto-attacks work from any position.
+4. **Enemy actions.** All hostile creatures resolve their own actions (attacks, telegraphed abilities, repositioning). Creatures target the highest-threat *reachable* player based on position (§6.10, §6.11).
+5. **Status effects.** Damage-over-time, buffs, debuffs, and cooldown timers tick down.
+6. **State broadcast.** Updated HP, cooldowns, status effects, position states, and narration events are sent to affected clients.
 
 ### Target Selection
 - On combat initiation, the aggressor's target is the entity they attacked. Creatures that aggro the player become the player's default target.
@@ -371,6 +416,29 @@ While in combat, the server executes a **1-second tick** cycle:
 - **Target death.** If all hostile entities in the room are dead, combat mode ends after a 3-second cooldown (prevents premature exit if new threats arrive).
 - **Room transition.** Moving to another room ends the current combat engagement. Creatures do not follow across room boundaries unless their AI specifically supports pursuit (boss creatures, pack hunters).
 
+### Group Combat
+Groups of up to **20 players** can enter and fight together in the same zone. Group combat extends the core combat loop — it does not replace it. Every player still has their own target, auto-attack cycle, and ability bar.
+
+**Zone entry.** Group members enter a zone together from the Expedition Board. All members spawn in the same entry room. The group persists across room transitions within the zone — players moving to different rooms remain in the group but fight independently in their respective rooms.
+
+**Target selection in group fights.** When multiple enemies are present:
+- Players **tab-cycle** through hostile entities in the room (Tab key or `target next` command), cycling in proximity order.
+- **Click targeting** on the target panel or within the narration feed selects a specific entity.
+- `target <entity>` command works as in solo play.
+- Auto-attack redirects immediately on target switch.
+
+**Shared targets.** Multiple players can auto-attack and use abilities against the same target simultaneously. Damage from all sources is resolved in the same tick. The server aggregates damage per target per tick — there is no "last-hit" mechanic. Kill credit (for XP and loot eligibility) goes to all group members who dealt damage or provided healing during the encounter.
+
+**Tick loop scaling.** The 1-second tick loop processes all players and creatures in a room in a single pass:
+1. Position resolution — all queued position changes resolve (players and creatures). Entities that reposition forfeit their action.
+2. Ability resolution — all queued player abilities resolve (order: lowest entity ID first; deterministic). Position-dependent abilities are validated.
+3. Auto-attacks — all players without a queued ability or reposition auto-attack their targets. Melee range validated against position (§6.11).
+4. Creature actions — each creature consults its threat table (§6.10) and acts against its highest-threat *reachable* target (§6.11).
+5. Status effects — all active effects tick down for all entities.
+6. State broadcast — each player receives only the events relevant to their perception (their actions, effects on them, position changes, and summarised group activity).
+
+**Server performance.** A room with 20 players and N creatures must resolve within the 1-second tick budget. The tick loop is O(P + C) where P = players and C = creatures. No per-player nested loops over other players. Damage aggregation uses a single pass over the damage queue. This is a hard constraint — encounter design must respect it.
+
 ## 6.3 Abilities & Cooldowns
 
 ### Ability Bar
@@ -379,9 +447,13 @@ Each player has **5 ability slots** mapped to hotkeys **1–5** and displayed as
 ### Ability Types
 | Type | Examples | Effect |
 |---|---|---|
-| **Attack** | Heavy Strike, Aimed Shot, Sweeping Blow | Deal increased damage, apply debuffs, or hit multiple targets |
+| **Attack** | Heavy Strike, Aimed Shot, Sweeping Blow | Deal increased damage, apply debuffs, or hit multiple targets. **Melee attacks** require Front or Flank position; **ranged attacks** work from any position (§6.11). |
 | **Defence** | Block, Parry, Dodge Roll | Reduce or negate incoming damage for a duration |
 | **Utility** | Bandage, Smoke Bomb, War Cry | Heal, apply crowd control, buff self |
+| **AoE Attack** | Whirlwind, Rain of Arrows, Ground Slam | Deal damage to enemies in the room. **Melee AoE** (Whirlwind, Ground Slam) hits all enemies in the caster's position zone. **Ranged AoE** (Rain of Arrows) can target any position zone. Damage scales with target count (diminishing: 100% to primary, 70% to each additional). Generates threat on all targets hit (§6.11). |
+| **Group Buff** | Rally, Battle Hymn, Fortify | Apply a buff to **all group members in the room** regardless of position. Duration measured in ticks. Only one group buff of the same type can be active — reapplication refreshes duration. |
+| **Group Heal** | Field Triage, Rejuvenating Aura | Restore HP to **all group members in the room** regardless of position. Healing generates threat on all creatures that have the healer on their threat table (§6.10). Healing is split across targets (total healing budget ÷ injured allies). |
+| **Taunt** | Provoke, Shield Slam, Challenging Shout | Force a target (single-target taunt) or all creatures in the room (AoE taunt) to set the taunter as highest threat for a duration (3–5 ticks). Taunt does not permanently fix threat — it sets threat to current highest + 10% and applies a "fixated" debuff that prevents threat table re-evaluation for the taunt duration. Taunted creatures reposition toward the taunter if unreachable (§6.11). |
 
 ### Resolution
 - When a player activates an ability (button click or hotkey), it is **queued** for the next tick's resolution phase.
@@ -402,6 +474,7 @@ When combat mode is active, the client displays a persistent Combat HUD overlayi
 - **Player HP bar** — current / max, colour-coded (green → yellow → red).
 - **Stamina bar** (or resource appropriate to build) — depletes on ability use, regenerates per tick.
 - **Status effect icons** — active buffs and debuffs with remaining duration.
+- **Position indicator** — current zone badge (`[F]`, `[K]`, `[R]`) and three clickable zone buttons to reposition (§6.11). Repositioning cooldown is shown as a dimmed state on zone buttons.
 
 ### Ability Button Bar
 - **5 slots** displayed as clickable buttons with hotkey labels (1–5).
@@ -412,10 +485,20 @@ When combat mode is active, the client displays a persistent Combat HUD overlayi
 ### Target Panel
 - **Target name** — what the player can observe (e.g., "Drowned Revenant", not a hidden internal name).
 - **Target HP bar** — approximate health (exact numbers shown only with sufficient Awareness skill; otherwise shown as descriptive: "badly wounded", "near death").
+- **Target position** — the target's current position zone badge (`[F]`, `[K]`, `[R]`, or `[All]` for boss creatures). See §6.11.
 - **Intent indicator** — displays the enemy's current telegraph if one is active (see §6.5 Enemy Telegraphs). Shows wind-up text and a countdown indicator.
+- **Target cycling** — when multiple enemies are present, Tab key cycles through available targets. The target panel updates immediately. A small target list (scrollable if >5 entities) shows all hostile entities in the room with abbreviated HP status and position badge.
+
+### Group Frames
+When the player is in a group, the HUD displays **group frames** — a compact list of group members currently in the same room:
+- Each frame shows: **player name** (or alias if anonymous), **HP bar** (percentage), **status effect icons**, a **role indicator** based on their current behaviour (generating high threat = shield icon, healing = cross icon, damage = sword icon — derived from actions, not assigned), and a **position badge** (`[F]`, `[K]`, `[R]`) showing their current zone (§6.11).
+- Group frames are sorted by threat level (highest threat at top) so players can see who the creatures are targeting. Optionally, players can sort or group frames by position zone.
+- **Scaling:** For groups of 1–5, all frames are visible by default. For 6–20, frames collapse to a compact grid (name + HP bar + position badge only) with a hover/click to expand details. Players can pin specific group members to always show expanded frames.
+- **Out-of-room members** are shown greyed out with "(other room)" label. No HP updates are sent for players in different rooms — data is stale until they rejoin.
+- **Position-targeted telegraph warnings:** When a telegraph targets a specific position zone, the position badge on affected group members' frames highlights (pulsing or colour change) during the wind-up window.
 
 ### Narration Feed
-The existing text feed continues scrolling during combat with signal classification applied (see §6.6 Combat Narration). The HUD elements float above or beside the feed — combat does not replace the narrative; it augments it.
+The existing text feed continues scrolling during combat with signal classification applied (see §6.6 Combat Narration). The HUD elements float above or beside the feed — combat does not replace the narrative; it augments it. In group combat, the narration feed applies **verbosity filtering** (see §6.6) to prevent 20-player scroll spam.
 
 ## 6.5 Enemy Telegraphs
 
@@ -432,6 +515,21 @@ Enemies broadcast **intent** before executing powerful abilities. Telegraphs cre
 - **Elite creatures** telegraph faster (2 ticks) and may have abilities with no telegraph (forcing defensive play).
 - **Boss creatures** use chained telegraphs, multi-target telegraphs, and environmental telegraphs ("The chamber floods with brackish water…").
 - Not every attack is telegraphed. Auto-attacks from creatures are not telegraphed — they are the baseline incoming damage the player manages through gear and stats.
+
+### Group Telegraph Design
+In group combat, telegraphs must communicate clearly to all affected players simultaneously:
+
+**Room-wide AoE telegraphs.** Some creatures (especially bosses) telegraph abilities that affect **all players in the room**. These are communicated as environmental narration visible to everyone: *"The dragon rears back, flames building in its maw…"* All players see the same wind-up text and countdown. Players must individually choose to defend, flee, or absorb the hit.
+
+**Targeted telegraphs.** Creatures can telegraph attacks aimed at a **specific player** (typically the highest-threat target). The targeted player receives a personalised narration: *"The dragon turns its burning gaze toward you…"* Other group members see a third-person variant: *"The dragon fixes its gaze on [player]…"* This creates opportunities for coordinated defence — a healer preparing to heal the target, or the target using a defensive ability.
+
+**Cleave / cone telegraphs.** Some telegraphs affect a **subset of players** based on position zone (§6.11). The narration communicates the area of effect: *"The ogre winds up a massive horizontal sweep across the front line…"* Players at Front are warned; players at Flank and Rear are not. The server determines who is affected based on position zone — Front-zone telegraphs hit all Front players, multi-zone telegraphs specify which zones are affected.
+
+**Telegraph priority in group combat.** When multiple telegraphs are active simultaneously (common with multiple elite creatures), the client prioritises display:
+1. Telegraphs targeting **you** — always shown with full detail.
+2. Room-wide AoE telegraphs — always shown.
+3. Telegraphs targeting your **current target** — shown in the target panel.
+4. Other telegraphs — summarised or omitted based on verbosity settings (§6.6).
 
 ## 6.6 Combat Narration
 
@@ -465,6 +563,24 @@ When multiple events of the same type occur within a short window (50–150ms se
 - Multiple poison ticks collapse to: *"Poison burns through you — 9 total damage"*
 
 Batching reduces scroll spam without hiding information. Individual damage numbers are preserved in the summary. Priority ordering within a batch: player actions first, enemy actions second, environmental last.
+
+**Group-scale batching.** In group combat, micro-batching becomes critical. With 20 players generating events every tick, unbatched narration is unreadable. The server applies aggressive batching for group combat:
+- **Ally actions against the same target** are collapsed: *"Your allies strike the Drowned Revenant for 142 total damage"* (individual damage numbers omitted at default verbosity).
+- **Ally damage received** is batched: *"The ogre's sweep strikes three of your allies"* rather than three individual lines.
+- **Healing events** from others are summarised: *"Your wounds close as healing energy washes over the group — you recover 18 HP"* (only your healing is specified).
+- **Kill events** are always shown individually — kills are satisfying and should not be batched away.
+
+### Narration Verbosity
+Group combat supports **configurable verbosity** to let players control narration density. Verbosity is a client-side setting that filters which server events are rendered:
+
+| Level | Name | What You See |
+|---|---|---|
+| 1 | **Mine Only** | Your actions, effects on you, telegraphs targeting you, kills, deaths. Minimal noise. |
+| 2 | **Party Focus** | Level 1 + actions by/against players you have pinned in group frames. Good for coordinating with a sub-group. |
+| **3** | **Balanced (default)** | Level 2 + summarised ally actions (batched), all telegraphs, group heals/buffs. Recommended for most group play. |
+| 4 | **Full** | Every combat event for every entity in the room. Only useful for debugging or very small groups. |
+
+The server always sends all events to all affected clients. Verbosity filtering happens client-side, so players can adjust without server round-trips and can scroll back to see filtered events if needed.
 
 ### Inline Iconography
 Compact icons prefix narration lines for quick visual scanning:
@@ -525,6 +641,174 @@ Beyond death, there are (or will be) other meaningful ways equipment can be lost
 
 **Design intent:** Multiple vectors for equipment loss create a richer economy and more interesting decisions. Players must weigh the risk of bringing valuable gear against all the ways they might lose it — not just death. Details for each vector will be specified as they are designed and prototyped.
 
+## 6.10 Threat & Aggro System
+
+Every creature in combat maintains a **threat table** — a per-player score that determines who the creature attacks. The threat system is what enables emergent tank/healer/DPS group dynamics without enforcing hard class roles.
+
+### Threat Generation
+| Source | Threat Generated | Notes |
+|---|---|---|
+| **Damage dealt** | 1 threat per 1 damage | Linear scaling. A player dealing 50 damage generates 50 threat. |
+| **Healing done** | 0.5 threat per 1 HP healed | Healing generates threat on **all creatures that have the healer on their threat table**. Split evenly across those creatures. A healer who heals 40 HP against 4 creatures generates 5 threat on each. |
+| **Taunt** | Set to highest + 10% | Taunt sets the taunter's threat to the current highest value + 10%, and applies a "fixated" debuff (§6.3) preventing threat re-evaluation for the taunt duration. |
+| **AoE abilities** | Normal threat per target | AoE damage generates threat on each creature hit. A Whirlwind dealing 30 damage to 5 creatures generates 30 threat on each. |
+| **Entering combat** | Base threat (10) | Simply being in the room when combat starts puts you on every creature's threat table. Prevents zero-threat players from being invisible. |
+| **Threat modifiers (skills)** | Multiplier | Shield Mastery provides a passive 1.3x threat multiplier (trained tanks generate more threat per damage). Stealth-related skills provide a 0.7x threat multiplier (subterfuge players generate less threat). These are passive effects from skill training, not active abilities. |
+
+### Threat Resolution
+- Each creature attacks the **highest-threat player it can reach** from its current position zone (§6.11) by default. Melee creatures at Front can reach Front and Flank; they cannot reach Rear without repositioning. Ranged creatures and bosses can reach all zones. Threat is re-evaluated at the start of each tick before creature actions resolve.
+- If the highest-threat reachable player leaves the room, the creature immediately switches to the next-highest reachable player.
+- If a creature's target dies, it re-evaluates threat against reachable players and switches to the next-highest living reachable player.
+- **Unreachable high-threat targets.** When a creature's highest-threat player is in an unreachable zone, creature AI determines whether to attack the highest-threat *reachable* target or reposition toward the unreachable target (§6.11 — per creature type: aggressive vs. steady).
+- **Threat decay:** Threat does not decay over time during active combat. When combat ends (all creatures or all players dead/fled), threat tables are cleared.
+- **Aggro radius:** Creatures not yet in combat have an aggro radius (configurable per creature type). When any player enters the radius, the creature enters combat and builds an initial threat table from all players in the room (base threat each).
+
+### Design Intent
+The threat system enables group roles **organically**. A player who trains Shield Mastery and equips a shield generates 1.3x threat and has access to Taunt — they naturally become the tank. A player who trains First Aid and heals the group generates threat from healing — they need a tank to hold aggro. A player who trains Swordsmanship and deals raw damage wants to avoid pulling aggro — they need the tank to be effective.
+
+**No hard roles.** There is no "tank class" or "healer class." Any player can train any combination of skills. A player might train both Shield Mastery and Swordsmanship — they can off-tank and deal damage. The threat system rewards specialisation but does not require it. Solo players ignore threat entirely — creatures attack the only target available.
+
+## 6.11 Room Positioning *(Planned)*
+
+Each room has abstract **position zones** that affect combat mechanics. This is not a grid, hex map, or tactical miniatures system — positions are simplified abstract zones appropriate for a text MUD. Positioning adds a spatial layer to group combat without replacing the core auto-attack and ability loop.
+
+### Position Zones
+
+Every room in combat has three position zones:
+
+| Zone | Tag | Description |
+|---|---|---|
+| **Front** | `[F]` | The front line. Melee range. Players here are the first targets for melee creatures. This is the default position for all players and melee creatures entering combat. |
+| **Flank** | `[K]` | The sides. Players here can engage in melee but are offset from the primary line of engagement. Exposed to AoE sweeps but not the primary target of single-target melee attacks. |
+| **Rear** | `[R]` | The back line. Ranged attacks only — melee weapons cannot reach targets from Rear, and melee creatures cannot hit Rear players without repositioning. Ideal for healers and ranged combatants. |
+
+**Design note:** Three zones is deliberate. More zones add cognitive overhead that doesn't serve a text MUD — players can't see a grid, so spatial relationships must be simple enough to hold in the mind. Front/Flank/Rear maps to the natural language players already use to describe combat ("get behind the tank", "stay in the back", "hit them from the side").
+
+### Position Selection
+
+Players choose their position via command or HUD:
+- **Commands:** `position front`, `position flank`, `position rear` (or shorthand `pos f`, `pos k`, `pos r`).
+- **HUD:** A position selector in the Combat HUD (§6.4) — three clickable zone buttons.
+- **Default:** All players enter combat at **Front**. This means solo players and new group members who never issue a position command fight normally — positioning is invisible to them.
+
+### Repositioning Mid-Combat
+
+Changing position during combat has a cost:
+- Repositioning **consumes the player's action for that tick** — no auto-attack and no ability fires. The tick is spent moving.
+- After repositioning, a **3-tick cooldown** prevents further position changes. This prevents constant shuffling and makes positional commitment meaningful.
+- Repositioning is narrated to all players in the room: *"You fall back to the rear line."* / *"[Player] pushes forward to the front."*
+- If a player is repositioning when a telegraphed ability resolves, they are considered to be in their **destination zone** (they've committed to the move).
+
+### Combat Effects by Position
+
+**Front:**
+- Full melee range. Auto-attacks and melee abilities function normally.
+- **Primary melee target zone.** Melee creatures target the highest-threat player at Front before considering other zones (see §6.10 integration below).
+- Defensive skills (Shield Mastery, Block, Parry) function at full effectiveness.
+- **Cleave exposure.** Cleave and cone telegraphs (§6.5) affect all players at Front.
+
+**Flank:**
+- Full melee range. Auto-attacks and melee abilities function normally.
+- **Flanking bonus.** +15% damage against targets whose highest-threat target is at Front (the creature is "facing" the tank, exposing its flank). This bonus does not apply if the creature's primary target is also at Flank.
+- **Secondary melee target zone.** Melee creatures target Flank players only if no reachable Front targets remain, or if the creature explicitly repositions to Flank.
+- Defensive skills function normally (no bonus or penalty).
+- **AoE exposure.** Room-wide AoE telegraphs hit Flank. Cone/cleave telegraphs targeting Front do **not** hit Flank (they're offset from the main line).
+
+**Rear:**
+- **Ranged only.** Players at Rear can only auto-attack with ranged weapons (bows, crossbows, thrown weapons). Melee weapons have no valid target from Rear — auto-attack pauses, and melee abilities fail with a system message: *"You are too far away to strike."*
+- **Protected from melee.** Melee creatures cannot hit Rear players from Front or Flank. A melee creature must **reposition to Rear** to attack Rear players (costing it a tick — see Creature Positioning below).
+- **Healing and buffs.** Healing abilities and group buffs function from any position — they do not require melee range.
+- **Ranged attacks are unaffected.** Ranged creature attacks and ranged telegraphs can hit Rear players normally.
+
+### Creature Positioning
+
+Creatures also occupy position zones, defined per creature type in their data:
+
+| Creature Type | Default Position | Behaviour |
+|---|---|---|
+| **Melee (standard)** | Front | Engages highest-threat reachable target. Repositions toward unreachable high-threat targets over 1 tick. |
+| **Ranged** | Rear | Attacks any position. Does not reposition unless forced (e.g., a player charges into Rear via a special ability). |
+| **Skirmisher** | Flank | Attacks from the side. May reposition to Rear to harass healers if their threat table indicates a healer is high-value. |
+| **Boss** | **All** | Occupies all positions simultaneously. Can target any player regardless of zone. Ignores positioning restrictions. Boss telegraphs specify which zones they affect. |
+| **Elite (varies)** | Per creature data | Elites may have custom positioning AI — some hold Front, some actively hunt the Rear. Defined per creature. |
+
+**Creature repositioning:**
+- A creature repositioning to a new zone **spends its action for that tick** — it moves but does not attack. This is narrated: *"The ghoul scrambles toward the rear line…"*
+- If no valid targets exist at a creature's current position (e.g., all Front players died or fled), the creature **automatically repositions** toward the nearest occupied zone on its next tick.
+- Ranged creatures can attack any position and do not need to reposition.
+
+### Interaction with Threat (§6.10)
+
+Threat resolution is extended to consider **reachability**:
+
+- Each creature targets the highest-threat player **it can reach from its current position**.
+- **Melee creatures at Front** can reach players at Front and Flank. They cannot reach Rear without repositioning.
+- **Melee creatures at Flank** can reach players at Front and Flank. They cannot reach Rear without repositioning.
+- **Ranged creatures** can reach all positions.
+- **Boss creatures** can reach all positions (they occupy "All").
+
+When a creature's highest-threat target is unreachable, the creature AI makes a per-type decision:
+1. **Aggressive** creatures (e.g., Skirmishers, pack hunters) reposition toward the high-threat target, spending a tick to move.
+2. **Steady** creatures (e.g., standard melee) attack the highest-threat *reachable* target instead.
+3. **Taunt override** — Taunt (§6.3) forces the creature to target the taunter. If the taunter is unreachable, the creature repositions toward them immediately (Taunt is compelling enough to override steady behaviour).
+
+This creates emergent tactical depth: a tank at Front with high threat holds the attention of steady melee creatures. An aggressive creature might break for the Rear to attack a high-threat healer — the group must respond (taunt it back, intercept it, or let the healer fend for themselves).
+
+### Group Synergy & Tactics
+
+Position zones create **emergent group roles** without enforcing them:
+
+- **Tank at Front.** A Shield Mastery player at Front generates threat and absorbs melee damage. Creatures fixate on them, protecting Flank and Rear allies. This is the natural consequence of threat + position — no "tank role" is assigned.
+- **DPS at Flank.** Melee DPS players at Flank deal bonus damage to creatures focused on the Front-line tank. They avoid being the primary target while staying in melee range.
+- **Ranged DPS / Healers at Rear.** Ranged attackers and healers at Rear are protected from melee creatures entirely. They can output damage or healing safely — unless a creature repositions to Rear or a ranged creature targets them.
+- **Position-targeted AoE.** AoE abilities (§6.3) hit all entities in the caster's position zone. A Whirlwind at Front hits all Front creatures. Rain of Arrows can target any zone (ranged AoE). This creates positional decision-making for AoE users — cluster at Front for maximum melee AoE value, or spread out for safety.
+- **Group buffs** affect all group members in the room regardless of position. Healing abilities likewise reach all positions — healers don't need proximity.
+
+**Positioning scales with group size.** In a 3-player group, positioning adds a light tactical layer (one Front, one Flank, one Rear). In a 20-player group, positional organisation becomes critical — without it, creatures freely target squishy healers, AoE telegraphs hit everyone, and the group has no structure. The system rewards coordination without requiring it.
+
+### Position-Targeted Telegraphs
+
+Enemy telegraphs (§6.5) can target specific position zones:
+
+- **Zone telegraphs.** *"The dragon sweeps its tail across the front line…"* — all players at Front must defend or reposition. Wind-up gives time to react (move to Flank costs a tick's action but avoids the hit).
+- **Multi-zone telegraphs.** *"The wyvern beats its wings, gale-force winds raking the front and flanks…"* — Front and Flank affected, Rear safe.
+- **Room-wide telegraphs.** These ignore positioning entirely — all zones are hit. *"The cavern shakes as the ceiling begins to collapse…"*
+- **Chase telegraphs.** Some boss abilities target a **specific player** and ignore position: *"The revenant fixes its hollow gaze on you — it will not be deterred."* The player must use a defensive ability; repositioning won't help.
+
+Telegraph narration always specifies the affected zone(s) so players can make informed decisions within the wind-up window.
+
+### HUD Integration
+
+The Combat HUD (§6.4) displays position information:
+
+- **Player position indicator.** A zone badge (`[F]`, `[K]`, `[R]`) displayed near the player's HP bar, plus three clickable zone buttons to change position.
+- **Group frames.** Each group member's frame shows their position badge. Frames can be sorted or grouped by position zone (player preference).
+- **Target panel.** The target's current position is shown alongside its HP bar and intent indicator.
+- **Position-targeted telegraph warnings.** When a telegraph targets a specific zone, the zone badge on affected players' frames highlights (pulsing or colour change).
+
+### Narration
+
+Position changes and position-relevant events are narrated in the text feed:
+
+| Event | Narration Example |
+|---|---|
+| **Player repositions** | *"You advance to the front line, shield raised."* / *"You fall back to the rear, nocking an arrow."* |
+| **Creature repositions** | *"The ghoul scrambles past the front line toward the rear…"* / *"The archer retreats to the back."* |
+| **Position-targeted telegraph** | *"The ogre winds up a massive sweep aimed at the front line — 3… 2…"* |
+| **Flanking bonus** | *"You strike the distracted revenant from the flank — enhanced damage!"* |
+| **Melee from Rear blocked** | *"You are too far from the front to strike with your blade."* |
+| **Creature reaches Rear** | *"The wolf breaks through to the rear line — the healers are exposed!"* |
+
+Narration uses natural spatial language. Players read "the front line" and "the rear," not coordinate pairs or zone IDs. The system is spatial in *feel* without being spatial in *rendering*.
+
+### Solo Play
+
+Solo players can **completely ignore positioning**. The default position is Front, melee creatures default to Front, and the system resolves identically to a non-positional combat encounter. There is no penalty for never issuing a `position` command. Positioning becomes relevant only when group dynamics create a reason to spread out — and even then, a disorganised group still functions (it just takes more damage than a coordinated one).
+
+### Server Authority
+
+Position is **server-authoritative state**. The server tracks each entity's current position zone as part of the combat state. Position changes are validated server-side (cooldown enforcement, combat-mode check). The client displays position information from server messages — it never determines position locally. Position state is included in the tick loop's state broadcast (§6.2, step 5).
+
 ---
 
 # 7. PROGRESSION & CHARACTER BUILD
@@ -542,7 +826,7 @@ Skills are stored in the `skill_definitions` table (slug, name, description, cat
 | **Survival** | First Aid, Trapping, Foraging, Endurance | Healing, crafting field items, extending collapse timers |
 | **Subterfuge** | Stealth, Lockpicking, Pickpocket, Sabotage | Avoiding detection, accessing locked containers, disabling traps |
 | **Awareness** | Tracking, Listening, Alertness, Appraisal | Trace detail, sound range, detecting hidden entities, identifying item quality |
-| **Social** | Intimidation, Barter, Leadership | PvP negotiation bonuses, trade prices, squad buff radius |
+| **Social** | Intimidation, Barter, Leadership | PvP negotiation bonuses, trade prices, group buff radius |
 
 ### Advancement *(Planned, Not Implemented)*
 - Skills level through **use** (swing a sword → Swordsmanship XP). No grinding mobs at a safe spot: XP is only granted during zone runs and scales with zone tier.
@@ -577,26 +861,82 @@ Players can create **multiple characters** per account (1:N relationship):
 
 ---
 
-# 8. PvP SYSTEM *(Placeholder — Depends on Combat Redesign)*
+# 8. PvP SYSTEM
 
-The PvP system is being redesigned in parallel with the combat system overhaul. The core tension — the risk of encountering hostile players while carrying valuable gear, knowing that death means losing it all — remains central to the design.
+PvP combat uses the **same combat system** as PvE (§6). There is no separate PvP mode, special arena, or alternate damage formula. If you can fight a creature, you can fight a player — and the consequences are identical.
 
-**Core Principles (Preserved):**
-- PvP is **always possible** inside adventure zones — there is no opt-out, safe zone, or flagging system
-- Player encounters are **not instant or obvious** — detection depends on awareness, stealth, sound, and traces
-- Players are **never identified by name** in narration — you see equipment descriptions, not nameplates
-- On death, victims drop **all non-soulbound items** as a lootable corpse
-- Death carries a **penalty debuff** (design in progress)
+## 8.1 Engagement Rules
 
-**What's Being Designed:**
-- Detection and awareness mechanics (sound propagation, trace reading, stealth vs awareness)
-- Engagement systems (how combat initiates, disengagement rules, fleeing mechanics)
-- Anti-griefing measures (entry point distribution, resource costs, staggered spawns)
-- Cooperation mechanics (squad systems, temporary truces, trading)
+- PvP is **always possible** inside adventure zones. There is no opt-out, safe zone, or explicit flagging toggle.
+- To attack another player, use `attack <player>` or click their entity in the room. This initiates combat mode for both players.
+- Player encounters are **not instant or obvious**. Detection depends on the sound system (§12), trace system (§11), awareness skill, and stealth — you may hear footsteps three rooms away before you ever see the other player.
+- Players are **never identified by name** in narration. You see equipment descriptions and physical appearance, not nameplates. Identifying another player requires deduction.
 
-**Status:** Detailed PvP mechanics will be documented once the combat system redesign is complete and validated through playtesting.
+## 8.2 Faction-Based Flagging
 
-*Note: The awareness system, trace system, and sound system (§11, §12) provide the foundation for PvP detection, but their combat integration is pending.*
+While there is no PvP opt-out, faction affiliation creates **soft social friction**:
+- Attacking a member of your **own faction** marks you as a **faction traitor**, reducing faction reputation and triggering a temporary "hostile" flag visible to other faction members in the zone.
+- Attacking members of a **rival faction** carries no penalty — this is expected behaviour. Faction rivalry is a core motivator for PvP.
+- Faction affiliation is **not visible** in narration. You cannot tell another player's faction by looking at them — only by their gear (faction-specific equipment) or behaviour. Friendly fire is a real risk.
+
+## 8.3 PvP Combat Flow
+
+1. **Detection.** Players become aware of each other through sound, traces, or direct room entry. The awareness and stealth skills determine who knows what and when (§5.3).
+2. **Engagement.** One player initiates combat. Both players enter combat mode with auto-attack and the full ability bar. Both players default to Front position.
+3. **Resolution.** Standard combat resolution (§6.2). Auto-attack ticks, abilities, telegraphs, and status effects work identically to PvE. **Positioning (§6.11) applies** — players can reposition mid-fight (e.g., a ranged player falls back to Rear to force a melee opponent to spend a tick repositioning). Position zones are less impactful in 1v1 (no group to protect) but become significant in group-vs-group PvP.
+4. **Death.** The losing player drops a lootable corpse with all non-soulbound gear (§6.8). The victor can loot immediately.
+5. **Disengagement.** Either player can attempt to flee (§6.2). PvP flee success factors in both players' relevant skills (the attacker's awareness vs. the defender's evasion).
+
+## 8.4 Anti-Griefing Measures
+
+- **Staggered zone entry.** Players entering a zone do not spawn in the same room. Entry points are distributed to prevent spawn camping.
+- **Resource cost of aggression.** Combat drains HP, stamina, and ability cooldowns. A player who fights PvP is weakened for subsequent PvE encounters — aggression has an opportunity cost.
+- **Sound propagation.** PvP combat generates noise (§12) that attracts creatures and alerts other players. Fighting draws attention.
+- **No safe extraction camping.** Zone exits are placed to prevent single-chokepoint ambushes (multiple exit paths per zone).
+- **Death penalty stacking.** Repeated deaths in a short window increase the death penalty debuff duration, discouraging reckless re-entry to grief.
+
+## 8.5 Cooperation — Group System *(Planned)*
+
+### Group Formation
+- **Groups** of up to **20 players** can form and enter zones together. Groups replace the earlier "squad" concept — the system scales from duo play to full 20-player raids.
+- A group is created when a player invites another player via `group invite <player>` (or the group UI). The inviter becomes the **group leader**.
+- Players can only belong to **one group** at a time. Leaving a group is instant (`group leave`).
+- Groups persist across zone transitions. The group disbands when the leader leaves (leadership auto-transfers to the longest-tenured member) or when all members leave.
+
+### Group Leader
+The group leader has additional commands:
+- `group invite <player>` — invite a player in the same room to the group.
+- `group kick <player>` — remove a player from the group.
+- `group loot <mode>` — set the loot distribution mode (see below).
+- `group promote <player>` — transfer leadership to another group member.
+- Leadership is a social tool, not a mechanical advantage. The leader has no combat bonuses.
+
+### Loot Distribution
+The group leader selects a loot distribution mode before entering a zone. Mode is locked for the duration of the zone run:
+
+| Mode | Behaviour | Best For |
+|---|---|---|
+| **Round-Robin (default)** | Loot from creature kills is assigned to group members in rotation. Each member receives items in turn. Players can trade unwanted items afterward. | General-purpose group play. Fair, low-friction. |
+| **Free-for-All** | Loot drops on the ground. Any group member can pick it up with `take`. First come, first served. | Trusted groups, speed runs. |
+| **Need / Greed** | When loot drops, all eligible group members receive a prompt: Need (I want this for my build), Greed (I'll take it if nobody needs it), or Pass. Highest-priority roll wins. Need beats Greed. Ties broken by random roll. 15-second decision timer — no response defaults to Pass. | High-value loot, larger groups. |
+
+**Design note:** Round-Robin is the default because it requires zero player interaction and prevents loot drama. Need/Greed is available for groups that want more control. Free-for-All is the "trust your friends" option.
+
+### Friendly Fire Protection
+- Group members **cannot damage each other**. Attacks targeting a group member are rejected by the server (the action is wasted for that tick, same as attacking an invalid target).
+- AoE abilities from group members do **not** hit other group members — only enemies.
+- This is a hard server-side rule, not a client-side filter. There is no "friendly fire toggle."
+- PvP between non-group players in the same zone remains fully enabled. Groups do not create safe zones for non-members.
+
+### Group Zone Entry
+- Groups enter zones together from the Expedition Board. All members must be in the Expedition Board room. The group leader initiates entry; all members are transported to the same entry room.
+- Group members can split up within the zone (move to different rooms). They remain in the group but fight independently. Group frames (§6.4) show out-of-room members as greyed out.
+- If a group member dies, standard death rules apply (§6.7, §6.8). The dead player respawns at their faction stronghold and is removed from the active zone instance. They remain in the group and can re-enter the zone if it is persistent.
+
+- **Temporary truce** — a social mechanic, not a system mechanic. Players can communicate via `say` and choose not to fight. There is no mechanical enforcement of truces.
+- **Trading** between players in the same room is supported via the trade system (§9.3).
+
+*Note: The awareness system (§5.3), trace system (§11), and sound system (§12) provide the foundation for PvP detection. Group mechanics are planned but not yet implemented.*
 
 ---
 
@@ -1234,14 +1574,14 @@ If the game uses a monetisation model, it adheres to these principles:
 
 These are deliberate design questions to resolve through playtesting:
 
-1. **Solo viability at high tiers.** Should Tier 3 zones require a squad, or should a skilled solo player always have a path?
+1. **Solo viability at high tiers.** Should Tier 3 zones require a group, or should a skilled solo player always have a path?
 2. **PvP loot drop amount.** Drop all non-soulbound (punishing) vs drop a percentage (forgiving)? Needs testing for how it affects player willingness to bring good gear.
 3. **Zone collapse strictness.** For instanced zones with collapse timers: is death (corpse lost with instance, death debuff) the right penalty for failing to leave in time? Or should collapse offer a last-chance grace period?
 4. **LLM model economics.** At ~$0.006/player-hour (50-70% cache hit rate) with GPT-4o-mini, costs are manageable through Phase 1. At what player count does the linear scaling of uncached calls become prohibitive? Fine-tuning and batch API pricing (50% discount) are levers for Phase 2+.
-5. **Squad size.** Is 3 the right cap? Does duo-vs-duo produce better emergent encounters than trio-vs-solo?
+5. **Group size.** Is 20 the right cap? Does the server tick loop degrade meaningfully above 15 players + enemies in a single room? Needs load testing to validate the O(P + C) assumption.
 6. **Corpse persistence duration.** How long should a player corpse remain lootable? Too short = no risk. Too long = feels punishing if you can't recover gear. Needs iteration.
 7. **Trace system fidelity.** How much trace information is "fun espionage" vs "overwhelming noise"?
-8. **Communication meta.** Will players just use Discord to bypass in-game proximity chat? Does that matter, or does it only help squads (who'd coordinate externally anyway)?
+8. **Communication meta.** Will players just use Discord to bypass in-game proximity chat? Does that matter, or does it only help groups (who'd coordinate externally anyway)?
 9. **Hand-crafted vs procedural balance.** With hand-crafted zones as primary content, what role (if any) should procedural generation play? Special events? Practice zones? Or eliminate it entirely?
 10. **Corpse recovery mechanics.** Should players be able to return to their own corpse to recover gear? If so, is there a time window? Does the corpse despawn if the instance collapses?
 11. **Death penalty severity.** How harsh should the death debuff be? Duration, stat reduction amount, stackability. Needs playtesting to find the line between "meaningful consequence" and "rage quit."

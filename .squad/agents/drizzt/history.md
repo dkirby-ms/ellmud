@@ -2736,3 +2736,44 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 - The 7×7 slum grid itself is topologically perfect — all row/column offsets sum correctly. The conflicts come entirely from external connections (sewer + approach loop).
 - Sewer path length matching is the single most important topology concern for the Warrens. The grid and approach spine are well-designed.
 - Warrens is not in computeLayout.test.ts — adding it would catch regressions if we fix the topology.
+
+### Build Versioning Infrastructure (2026-04-01)
+**Task:** Set up semver versioning system across the monorepo with build-time version injection.
+**Status:** ✅ Complete
+
+**Changes:**
+1. **Vite version injection** (`packages/client/vite.config.ts`) — reads root `package.json` version via `fs.readFileSync`, injects `__APP_VERSION__` and `__BUILD_TIME__` via Vite `define`.
+2. **TypeScript declarations** (`packages/client/src/vite-env.d.ts`) — added `declare const` for both globals so TS doesn't error.
+3. **`useVersion` hook** (`packages/client/src/hooks/useVersion.ts`) — already existed with defensive typeof checks; left as-is.
+4. **Server `/api/version` endpoint** (`packages/server/src/api/version.ts`) — returns `{ version, buildTime, nodeEnv }`. Follows existing `createXxxRouter()` factory pattern. Registered before health check in index.ts.
+5. **Version scripts** — root `package.json` gains `version:bump` (npm's built-in) and `version:sync` (runs `scripts/sync-versions.mjs` to propagate root version to all workspace packages).
+
+**Key decisions:**
+- Root `package.json` is single source of truth for version.
+- Server `buildTime` = module load time (effectively deploy/start time in containers).
+- Used `.mjs` for sync script since root package.json has no `"type": "module"`.
+- Version router placed before health check, after character API — consistent with existing route ordering.
+
+---
+
+## 2026-04-01: Agent Work Summary
+
+**Task completed:** Versioning Infrastructure. Semver system established with Vite injection, /api/version endpoint, sync scripts, and bump workflows. Decision and orchestration logs created. Client-side integration via `useVersion()` hook is ready; server-side routes operational.
+
+### Zone Capacity for Shared Persistent Zones (2026-04-02)
+**Task:** Update zone capacity from old shard-model limits (3-6 per tier) to support 100+ players per persistent zone.
+**Status:** ✅ Complete
+
+**Changes:**
+1. **config.ts** — Added `ZONE_DEFAULT_MAX_PLAYERS = 100` constant and `getMaxPlayersForZone()` function. Persistent zones now use this instead of tier-based `TIER_MAX_PLAYERS`. Priority chain: `MAX_PLAYERS_PER_ZONE` env var > per-zone DB `maxPlayers` > 100 default > tier-based (procedural only).
+2. **ZoneRoom.ts** — `onCreate` now calls `getMaxPlayersForZone()` for `isZone=true` rooms instead of `getMaxPlayersForTier()`. Added capacity log on zone creation. Per-zone DB overrides and env var overrides still work.
+3. **index.ts** — Updated startup log to show zone default capacity and env override status.
+
+**What was preserved:**
+- Procedural/generated rooms still use `getMaxPlayersForTier()` with GDD tier limits (3/4/6)
+- `MAX_PLAYERS_PER_ZONE` env var still overrides everything (ops knob)
+- Per-zone DB `maxPlayers` field still takes precedence over the default
+- Client `joinOrCreate` routing already correct — no client changes needed
+- Matchmaker `TIER_CAPACITY` constants unchanged (procedural instances)
+
+**Verification:** TypeScript compiles clean, all 2187 tests pass, zero regressions.
