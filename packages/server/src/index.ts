@@ -33,7 +33,7 @@ import { initProfileProvider } from './player/index.js';
 import { initFactionProvider } from './faction/index.js';
 import { initRunHistoryProvider } from './run-history/index.js';
 import { initLoadoutProvider } from './loadout/index.js';
-import { initShardSicknessProvider } from './systems/index.js';
+import { initDeathPenaltyProvider } from './systems/index.js';
 import { initCharacterProvider } from './character/index.js';
 import { createCharacterRouter } from './api/characters.js';
 import { initZoneProvider, getZoneRepository } from './zones/index.js';
@@ -101,9 +101,9 @@ console.log(`[Ellmud] Run history persistence: ${USE_PG ? 'PostgreSQL' : 'in-mem
 initLoadoutProvider(USE_PG);
 console.log(`[Ellmud] Loadout persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
-// ─── Shard-Sickness Persistence ─────────────────────────────────────────────
-initShardSicknessProvider(USE_PG);
-console.log(`[Ellmud] Shard-sickness persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+// ─── Death Penalty Persistence ─────────────────────────────────────────────
+initDeathPenaltyProvider(USE_PG);
+console.log(`[Ellmud] Death penalty persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Character Persistence ──────────────────────────────────────────────────
 initCharacterProvider(USE_PG);

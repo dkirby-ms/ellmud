@@ -20,8 +20,8 @@ export interface PlayerSkills {
   tracking?: number;
 }
 
-/** Active shard-sickness debuff applied after PvP death. */
-export interface ShardSicknessDebuff {
+/** Active death penalty debuff applied after death. */
+export interface DeathPenaltyDebuff {
   appliedAt: number;
   durationMs: number;
   attackPenalty: number;
@@ -49,7 +49,7 @@ export class PlayerState {
   peaceful: boolean = false;
   skills: PlayerSkills;
   equipment: VisibleEquipment | undefined;
-  shardSickness: ShardSicknessDebuff | null = null;
+  deathPenalty: DeathPenaltyDebuff | null = null;
 
   constructor(
     sessionId: string,
