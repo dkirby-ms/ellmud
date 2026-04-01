@@ -43,6 +43,7 @@ const ROOM_TYPE_OPTIONS = [
   "entry", "corridor", "junction", "dead_end", "boss",
   "feature_stash", "feature_expedition_board", "feature_marketplace",
   "feature_crafting", "feature_training", "feature_contracts", "feature_infirmary",
+  "feature_armoury", "feature_war_room",
 ];
 
 const ROOM_PROPERTY_OPTIONS = ["heavy_door", "cavern", "water"] as const;
