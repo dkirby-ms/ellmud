@@ -1,19 +1,19 @@
 /**
- * ShardSickness unit tests — stat penalty calculations, stacking, persistence interface.
+ * DeathPenalty unit tests — stat penalty calculations, stacking, persistence interface.
  */
 
 import { describe, it, expect } from 'vitest';
 import {
   calculateStatMultiplier,
-  getShardSicknessDebuff,
-  applyShardSickness,
-  isShardSicknessActive,
-  InMemoryShardSicknessStore,
+  getDeathPenaltyDebuff,
+  applyDeathPenalty,
+  isDeathPenaltyActive,
+  InMemoryDeathPenaltyStore,
   MAX_PENALTY,
-  SHARD_SICKNESS_DURATION_S,
-} from '../systems/ShardSickness.js';
+  DEATH_PENALTY_DURATION_S,
+} from '../systems/DeathPenalty.js';
 
-describe('ShardSickness', () => {
+describe('DeathPenalty', () => {
 
   // ─── Stat Multiplier Calculation ──────────────────────────────────────────
 
@@ -64,39 +64,39 @@ describe('ShardSickness', () => {
 
   // ─── Debuff Info ──────────────────────────────────────────────────────────
 
-  describe('getShardSicknessDebuff', () => {
+  describe('getDeathPenaltyDebuff', () => {
     it('should return inactive debuff for 0 deaths', () => {
-      const debuff = getShardSicknessDebuff(0);
+      const debuff = getDeathPenaltyDebuff(0);
       expect(debuff.active).toBe(false);
       expect(debuff.penaltyPercent).toBe(0);
       expect(debuff.statMultiplier).toBe(1.0);
     });
 
     it('should return active debuff for 1+ deaths', () => {
-      const debuff = getShardSicknessDebuff(1);
+      const debuff = getDeathPenaltyDebuff(1);
       expect(debuff.active).toBe(true);
       expect(debuff.penaltyPercent).toBeGreaterThan(0);
       expect(debuff.deathCount).toBe(1);
     });
 
     it('should cap penalty at 50%', () => {
-      const debuff = getShardSicknessDebuff(100);
+      const debuff = getDeathPenaltyDebuff(100);
       expect(debuff.penaltyPercent).toBeLessThanOrEqual(50);
     });
   });
 
   // ─── Stat Application ────────────────────────────────────────────────────
 
-  describe('applyShardSickness', () => {
+  describe('applyDeathPenalty', () => {
     const baseStats = { maxHp: 100, attack: 10, defence: 5, armour: 2 };
 
     it('should return unmodified stats for 0 deaths', () => {
-      const modified = applyShardSickness(baseStats, 0);
+      const modified = applyDeathPenalty(baseStats, 0);
       expect(modified).toEqual(baseStats);
     });
 
     it('should reduce all stats for 1 death', () => {
-      const modified = applyShardSickness(baseStats, 1);
+      const modified = applyDeathPenalty(baseStats, 1);
       expect(modified.maxHp).toBeLessThan(baseStats.maxHp);
       expect(modified.attack).toBeLessThan(baseStats.attack);
       expect(modified.defence).toBeLessThan(baseStats.defence);
@@ -106,7 +106,7 @@ describe('ShardSickness', () => {
 
     it('should never reduce stats below 1', () => {
       const tinyStats = { maxHp: 1, attack: 1, defence: 1, armour: 1 };
-      const modified = applyShardSickness(tinyStats, 100);
+      const modified = applyDeathPenalty(tinyStats, 100);
       expect(modified.maxHp).toBeGreaterThanOrEqual(1);
       expect(modified.attack).toBeGreaterThanOrEqual(1);
       expect(modified.defence).toBeGreaterThanOrEqual(1);
@@ -114,14 +114,14 @@ describe('ShardSickness', () => {
     });
 
     it('should reduce stats more with more deaths', () => {
-      const mod1 = applyShardSickness(baseStats, 1);
-      const mod3 = applyShardSickness(baseStats, 3);
+      const mod1 = applyDeathPenalty(baseStats, 1);
+      const mod3 = applyDeathPenalty(baseStats, 3);
       expect(mod3.maxHp).toBeLessThan(mod1.maxHp);
       expect(mod3.attack).toBeLessThan(mod1.attack);
     });
 
     it('should floor stat values (no fractional stats)', () => {
-      const modified = applyShardSickness(baseStats, 1);
+      const modified = applyDeathPenalty(baseStats, 1);
       expect(Number.isInteger(modified.maxHp)).toBe(true);
       expect(Number.isInteger(modified.attack)).toBe(true);
       expect(Number.isInteger(modified.defence)).toBe(true);
@@ -131,46 +131,46 @@ describe('ShardSickness', () => {
 
   // ─── Sickness Duration ───────────────────────────────────────────────────
 
-  describe('isShardSicknessActive', () => {
+  describe('isDeathPenaltyActive', () => {
     it('should be inactive when no death recorded', () => {
-      expect(isShardSicknessActive(null)).toBe(false);
+      expect(isDeathPenaltyActive(null)).toBe(false);
     });
 
     it('should be active immediately after death', () => {
       const now = Date.now();
-      expect(isShardSicknessActive(now, now)).toBe(true);
+      expect(isDeathPenaltyActive(now, now)).toBe(true);
     });
 
     it('should be active within duration window', () => {
       const now = Date.now();
-      const halfDuration = (SHARD_SICKNESS_DURATION_S * 1000) / 2;
-      expect(isShardSicknessActive(now - halfDuration, now)).toBe(true);
+      const halfDuration = (DEATH_PENALTY_DURATION_S * 1000) / 2;
+      expect(isDeathPenaltyActive(now - halfDuration, now)).toBe(true);
     });
 
     it('should be inactive after duration expires', () => {
       const now = Date.now();
-      const expired = now - (SHARD_SICKNESS_DURATION_S * 1000) - 1;
-      expect(isShardSicknessActive(expired, now)).toBe(false);
+      const expired = now - (DEATH_PENALTY_DURATION_S * 1000) - 1;
+      expect(isDeathPenaltyActive(expired, now)).toBe(false);
     });
   });
 
   // ─── In-Memory Store ──────────────────────────────────────────────────────
 
-  describe('InMemoryShardSicknessStore', () => {
+  describe('InMemoryDeathPenaltyStore', () => {
     it('should start with 0 deaths', async () => {
-      const store = new InMemoryShardSicknessStore();
+      const store = new InMemoryDeathPenaltyStore();
       expect(await store.getDeathCount('p1')).toBe(0);
     });
 
     it('should increment death count', async () => {
-      const store = new InMemoryShardSicknessStore();
+      const store = new InMemoryDeathPenaltyStore();
       expect(await store.incrementDeathCount('p1')).toBe(1);
       expect(await store.incrementDeathCount('p1')).toBe(2);
       expect(await store.getDeathCount('p1')).toBe(2);
     });
 
     it('should reset death count', async () => {
-      const store = new InMemoryShardSicknessStore();
+      const store = new InMemoryDeathPenaltyStore();
       await store.incrementDeathCount('p1');
       await store.incrementDeathCount('p1');
       await store.resetDeathCount('p1');
@@ -178,7 +178,7 @@ describe('ShardSickness', () => {
     });
 
     it('should track death times', async () => {
-      const store = new InMemoryShardSicknessStore();
+      const store = new InMemoryDeathPenaltyStore();
       expect(await store.getLastDeathTime('p1')).toBeNull();
       const now = Date.now();
       await store.setLastDeathTime('p1', now);
@@ -186,7 +186,7 @@ describe('ShardSickness', () => {
     });
 
     it('should isolate players from each other', async () => {
-      const store = new InMemoryShardSicknessStore();
+      const store = new InMemoryDeathPenaltyStore();
       await store.incrementDeathCount('p1');
       await store.incrementDeathCount('p1');
       await store.incrementDeathCount('p2');

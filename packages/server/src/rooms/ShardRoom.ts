@@ -20,7 +20,7 @@ import {
   type ExplorationDataMessage,
   type ExplorationUpdateMessage,
   type RoomOccupantsMessage,
-  SHARD_SICKNESS_DEFAULTS,
+  DEATH_PENALTY_DEFAULTS,
   OPPOSITE_DIRECTION,
   MessageTypes,
 } from '@ellmud/shared';
@@ -37,7 +37,7 @@ import { SoundSystem } from '../sound/index.js';
 import { TraceSystem } from '../systems/index.js';
 import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
 import { DowningSystem, type DowningEvent } from '../systems/DowningSystem.js';
-import { type ShardSicknessStore, getShardSicknessStore } from '../systems/index.js';
+import { type DeathPenaltyStore, getDeathPenaltyStore } from '../systems/index.js';
 import {
   NOISE_VALUES,
   SOUND_DESCRIPTIONS,
@@ -108,7 +108,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
   private traceSystem!: TraceSystem;
   private awarenessSystem!: AwarenessSystem;
   private downingSystem!: DowningSystem;
-  private shardSicknessStore!: ShardSicknessStore;
+  private deathPenaltyStore!: DeathPenaltyStore;
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
   private loadoutService?: LoadoutService;
@@ -281,7 +281,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
     // Initialize downing system (GDD §6.4 — bleed-out timers, stabilization)
     this.downingSystem = new DowningSystem();
-    this.shardSicknessStore = getShardSicknessStore();
+    this.deathPenaltyStore = getDeathPenaltyStore();
 
     // Initialize stash with shared provider if not already injected
     if (!this.stashService) {
@@ -792,9 +792,9 @@ export class ShardRoom extends Room<ShardRoomOptions> {
     // Clear downing state on shard collapse
     this.downingSystem.clear();
 
-    // Shard-sickness narration for all remaining players
+    // Death penalty narration for all remaining players
     this.broadcast(MessageTypes.NARRATE, {
-      text: 'The shard shatters. Reality folds in on itself. Everything goes dark. A deep sickness settles into your bones — shard-sickness consumes you.',
+      text: 'The shard shatters. Reality folds in on itself. Everything goes dark. A creeping weakness takes hold — the death penalty bears down upon you.',
       type: 'system',
       timestamp: Date.now(),
     } satisfies NarrateMessage);
@@ -1604,7 +1604,7 @@ export class ShardRoom extends Room<ShardRoomOptions> {
 
   /**
    * Handle actual player death (from bleed-out or killing blow).
-   * Drops inventory, creates corpse trace, applies shard-sickness on PvP death,
+   * Drops inventory, creates corpse trace, applies death penalty,
    * emits PvPKillEvent, and schedules return to refuge.
    */
   private handlePlayerDeath(playerId: string, playerName: string, roomId: string, killerIds?: string[]): void {
@@ -1642,18 +1642,18 @@ export class ShardRoom extends Room<ShardRoomOptions> {
       actorName: playerName,
     });
 
-    // Apply shard-sickness death penalty (increment death count, record time)
-    void this.shardSicknessStore.incrementDeathCount(playerId).then((newCount: number) => {
-      void this.shardSicknessStore.setLastDeathTime(playerId, Date.now());
-      this.log(`Shard-sickness: ${this.playerTag(playerId)} death count now ${newCount}`);
+    // Apply death penalty (increment death count, record time)
+    void this.deathPenaltyStore.incrementDeathCount(playerId).then((newCount: number) => {
+      void this.deathPenaltyStore.setLastDeathTime(playerId, Date.now());
+      this.log(`Death penalty: ${this.playerTag(playerId)} death count now ${newCount}`);
     });
 
-    // Apply shard-sickness debuff to player state (on any death)
-    player.shardSickness = {
+    // Apply death penalty debuff to player state (on any death)
+    player.deathPenalty = {
       appliedAt: Date.now(),
-      durationMs: SHARD_SICKNESS_DEFAULTS.durationMs,
-      attackPenalty: SHARD_SICKNESS_DEFAULTS.attackPenalty,
-      defencePenalty: SHARD_SICKNESS_DEFAULTS.defencePenalty,
+      durationMs: DEATH_PENALTY_DEFAULTS.durationMs,
+      attackPenalty: DEATH_PENALTY_DEFAULTS.attackPenalty,
+      defencePenalty: DEATH_PENALTY_DEFAULTS.defencePenalty,
     };
 
     // Log PvPKillEvent for each player killer on PvP death
@@ -1696,8 +1696,8 @@ export class ShardRoom extends Room<ShardRoomOptions> {
         playerId,
         state: 'death',
         narration: isPvPKill
-          ? 'A rival adventurer fells you. You awaken in the Refuge, wracked with shard-sickness…'
-          : 'The darkness claims you. You awaken in the Refuge, weakened by shard-sickness…',
+          ? 'A rival adventurer fells you. You awaken in the Refuge, bearing the death penalty…'
+          : 'The darkness claims you. You awaken in the Refuge, weakened by the death penalty…',
         timestamp: Date.now(),
       });
 

@@ -7,7 +7,7 @@
  * - Friendly fire (no squad immunity)
  * - Attribution (killerIds on defeated events)
  * - No XP from PvP detection
- * - Shard-sickness debuff constants
+ * - Death penalty debuff constants
  * - Flee mechanics in PvP
  * - Mixed PvP/PvE encounters
  */
@@ -19,7 +19,7 @@ import {
   DEFAULT_PLAYER_STATS,
   type Combatant,
 } from '../combat/CombatState.js';
-import { SHARD_SICKNESS_DEFAULTS, type PvPKillEvent } from '@ellmud/shared';
+import { DEATH_PENALTY_DEFAULTS, type PvPKillEvent } from '@ellmud/shared';
 
 // Stub exit resolver: every room has an exit to room-2
 const stubExits = (_roomId: string) => ['room-2'];
@@ -239,12 +239,12 @@ describe('No XP from PvP (detection logic)', () => {
   });
 });
 
-describe('Shard-Sickness Defaults', () => {
-  it('exports shard-sickness debuff constants', () => {
-    expect(SHARD_SICKNESS_DEFAULTS).toBeDefined();
-    expect(SHARD_SICKNESS_DEFAULTS.durationMs).toBe(120_000);
-    expect(SHARD_SICKNESS_DEFAULTS.attackPenalty).toBe(-5);
-    expect(SHARD_SICKNESS_DEFAULTS.defencePenalty).toBe(-3);
+describe('Death Penalty Defaults', () => {
+  it('exports death penalty debuff constants', () => {
+    expect(DEATH_PENALTY_DEFAULTS).toBeDefined();
+    expect(DEATH_PENALTY_DEFAULTS.durationMs).toBe(120_000);
+    expect(DEATH_PENALTY_DEFAULTS.attackPenalty).toBe(-5);
+    expect(DEATH_PENALTY_DEFAULTS.defencePenalty).toBe(-3);
   });
 });
 
@@ -420,5 +420,5 @@ describe('PvP Integration (requires multi-client)', () => {
   it.todo('two connected clients can attack each other through ShardRoom');
   it.todo('PvP death drops non-soulbound items as lootable corpse');
   it.todo('PvP narration sent to all players in room');
-  it.todo('shard-sickness debuff applied after PvP');
+  it.todo('death penalty debuff applied after PvP');
 });

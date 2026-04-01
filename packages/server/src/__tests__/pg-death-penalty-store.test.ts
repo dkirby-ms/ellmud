@@ -1,11 +1,11 @@
 /**
- * PgShardSicknessStore — unit tests with mocked pg pool.
+ * PgDeathPenaltyStore — unit tests with mocked pg pool.
  *
  * Validates SQL generation and data mapping without a live database.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PgShardSicknessStore } from '../systems/PgShardSicknessStore.js';
+import { PgDeathPenaltyStore } from '../systems/PgDeathPenaltyStore.js';
 
 import type { QueryResultRow } from 'pg';
 
@@ -33,12 +33,12 @@ function mockQueryResult(rows: QueryResultRow[] = []) {
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
-describe('PgShardSicknessStore', () => {
-  let store: PgShardSicknessStore;
+describe('PgDeathPenaltyStore', () => {
+  let store: PgDeathPenaltyStore;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    store = new PgShardSicknessStore();
+    store = new PgDeathPenaltyStore();
   });
 
   // ─── getDeathCount ─────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ describe('PgShardSicknessStore', () => {
       await store.resetDeathCount('p1');
 
       expect(queryMock).toHaveBeenCalledWith(
-        expect.stringContaining('DELETE FROM player_shard_sickness'),
+        expect.stringContaining('DELETE FROM player_death_penalty'),
         ['p1'],
       );
     });
@@ -149,7 +149,7 @@ describe('PgShardSicknessStore', () => {
       await store.setLastDeathTime('p1', 1700000000000);
 
       expect(queryMock).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO player_shard_sickness'),
+        expect.stringContaining('INSERT INTO player_death_penalty'),
         ['p1', 1700000000000],
       );
       expect(queryMock).toHaveBeenCalledWith(
