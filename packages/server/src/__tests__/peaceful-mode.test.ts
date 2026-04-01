@@ -9,7 +9,7 @@ import { handleCommand, type CommandContext } from '../commands/index.js';
 import { parseCommand } from '../commands/parser.js';
 import { PlayerState } from '../state/PlayerState.js';
 import { resetConfig } from '../config.js';
-import { createTestRoomGraph } from '../zone/RoomGraph.js';
+import { createTestRoomGraph } from '../generator/RoomGraph.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

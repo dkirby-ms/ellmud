@@ -14,7 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import { handleCommand, type CommandContext, type CommandResult } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
-import type { Room, RoomType, Direction } from '../zone/RoomGraph.js';
+import type { Room, RoomType, Direction } from '../generator/RoomGraph.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

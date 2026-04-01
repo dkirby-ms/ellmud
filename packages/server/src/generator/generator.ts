@@ -1,5 +1,5 @@
 /**
- * Procedural shard graph generator.
+ * Procedural zone graph generator.
  * Creates deterministic room graphs from a seed for zone instances.
  *
  * Algorithm:
@@ -23,7 +23,7 @@ import { ALL_DIRECTIONS, OPPOSITE_DIRECTION } from '@ellmud/shared';
 
 import { createPRNG, type PRNG } from './prng.js';
 
-// ─── Room Templates (inlined from former flooded-crypt biome) ───────────────
+// ─── Room Theme Templates ────────────────────────────────────────────────────
 
 export const ROOM_NAMES: Record<RoomType, readonly string[]> = {
   entry: ['Drowned Vestibule', 'Sunken Threshold', 'Waterlogged Gate', 'Flooded Antechamber'],

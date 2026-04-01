@@ -44,6 +44,9 @@ export interface ServerConfig {
 
   /** Enable /peaceful command for dev exploration (per-player creature aggro bypass). */
   devModeEnabled: boolean;
+
+  /** Enable procedural zone generation (GDD §10 — future complement to hand-crafted zones). */
+  enableProceduralGeneration: boolean;
 }
 
 /**
@@ -135,6 +138,7 @@ export function loadConfig(): ServerConfig {
     reconnectionTimeoutS: envInt('RECONNECTION_TIMEOUT_S', 30),
     reconnectDeathBehavior: (envStr('RECONNECT_DEATH_BEHAVIOR', 'kill') === 'safe-room' ? 'safe-room' : 'kill') as 'kill' | 'safe-room',
     devModeEnabled: envBool('DEV_MODE_ENABLED', false),
+    enableProceduralGeneration: envBool('ENABLE_PROCEDURAL_GENERATION', false),
   };
 }
 
