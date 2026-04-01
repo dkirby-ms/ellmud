@@ -187,7 +187,7 @@ export default function LoadoutTab() {
             <h3
               className="text-text-secondary text-sm mb-4 font-sans"
             >
-              Shard Key
+              Zone Key
             </h3>
             <div className="bg-bg-panel border border-border-muted rounded-lg p-4">
               <div className="flex items-center gap-3">
@@ -197,7 +197,7 @@ export default function LoadoutTab() {
                     Corrupted Iron Key
                   </p>
                   <p className="text-text-disabled text-xs font-sans">
-                    Grants access to Tier 1 shards
+                    Grants access to Tier 1 zones
                   </p>
                 </div>
               </div>

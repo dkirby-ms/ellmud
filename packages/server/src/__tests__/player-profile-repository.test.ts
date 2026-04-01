@@ -459,13 +459,13 @@ describe('PlayerProfile Provider Wiring', () => {
   });
 });
 
-// ─── ShardRoom profile lifecycle (placeholder — requires Colyseus integration tests) ──
+// ─── ZoneRoom profile lifecycle (placeholder — requires Colyseus integration tests) ──
 
-describe('ShardRoom profile lifecycle (placeholder)', () => {
-  it.todo('player joins shard → state loaded from saved profile, not hardcoded defaults');
-  it.todo('player leaves shard (consented) → state saved to profile');
+describe('ZoneRoom profile lifecycle (placeholder)', () => {
+  it.todo('player joins zone → state loaded from saved profile, not hardcoded defaults');
+  it.todo('player leaves zone (consented) → state saved to profile');
   it.todo('new player with no saved profile → gets default skill/weight values');
-  it.todo('player reconnects to shard → sees previously saved state');
+  it.todo('player reconnects to zone → sees previously saved state');
   it.todo('profile data survives multiple join/leave/rejoin cycles');
   it.todo('player leaves mid-combat → profile still saved');
 });

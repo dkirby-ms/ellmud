@@ -229,7 +229,7 @@ describe('convertZoneToRoomGraph', () => {
     expect(graph.tier).toBe(2);
   });
 
-  it('clamps tier to valid ShardTier range', () => {
+  it('clamps tier to valid ZoneTier range', () => {
     const overTier: ZoneData = {
       zone: makeZone({ tier: 5 }),
       rooms: [makeRoom('entrance', { type: 'entry' })],

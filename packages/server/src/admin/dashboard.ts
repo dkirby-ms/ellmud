@@ -266,7 +266,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
           html += '<div class="stat"><span class="label">Tick</span><span class="value">' + (data.tick || 0) + '</span></div>';
           html += '<div class="stat"><span class="label">Paused</span><span class="value">' + (data.paused ? 'YES' : 'no') + '</span></div>';
 
-          if (data.name === 'shard') {
+          if (data.name === 'zone') {
             html += '<div class="stat"><span class="label">Lifecycle</span><span class="value"><span class="lifecycle ' + data.lifecycle + '">' + data.lifecycle + '</span></span></div>';
             html += '<div class="stat"><span class="label">Stability</span><span class="value">' + (data.stability * 100).toFixed(1) + '%</span></div>';
             html += '<div class="stat"><span class="label">Collapse Timer</span><span class="value">' + data.collapseTimer + 's</span></div>';

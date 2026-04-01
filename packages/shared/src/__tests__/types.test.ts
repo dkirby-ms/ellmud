@@ -7,16 +7,16 @@ import {
   type CommandMessage,
   type NarrateMessage,
   type RoomHeaderMessage,
-  type ShardStateMessage,
+  type ZoneStateMessage,
   type OverlayMessage,
   type RoomSwitchMessage,
   type NarrationType,
-  type ShardState,
+  type ZoneState,
   type CombatAction,
 
   type GearTier,
-  type ShardTier,
-  type ShardModifier,
+  type ZoneTier,
+  type ZoneModifier,
   type MessageTypeKey,
 } from '../index.js';
 
@@ -33,8 +33,8 @@ describe('MessageTypes', () => {
     expect(MessageTypes.ROOM_HEADER).toBe('room_header');
   });
 
-  it('should export SHARD_STATE type key', () => {
-    expect(MessageTypes.SHARD_STATE).toBe('shard_state');
+  it('should export ZONE_STATE type key', () => {
+    expect(MessageTypes.ZONE_STATE).toBe('zone_state');
   });
 
   it('should export OVERLAY_STATE type key', () => {
@@ -85,14 +85,14 @@ describe('Message Type Shapes', () => {
     expect(msg.stability).toBe(0.75);
   });
 
-  it('ShardStateMessage should accept state and optional collapseTimer', () => {
-    const msg: ShardStateMessage = { state: 'active', collapseTimer: 600 };
+  it('ZoneStateMessage should accept state and optional collapseTimer', () => {
+    const msg: ZoneStateMessage = { state: 'active', collapseTimer: 600 };
     expect(msg.state).toBe('active');
     expect(msg.collapseTimer).toBe(600);
   });
 
-  it('ShardStateMessage should work without collapseTimer', () => {
-    const msg: ShardStateMessage = { state: 'seeding' };
+  it('ZoneStateMessage should work without collapseTimer', () => {
+    const msg: ZoneStateMessage = { state: 'seeding' };
     expect(msg.state).toBe('seeding');
     expect(msg.collapseTimer).toBeUndefined();
   });
@@ -110,11 +110,11 @@ describe('Message Type Shapes', () => {
 
   it('RoomSwitchMessage should accept target, reason, and optional options', () => {
     const msg: RoomSwitchMessage = {
-      target: 'shard',
-      reason: 'enter_shard',
+      target: 'zone',
+      reason: 'enter_zone',
     };
-    expect(msg.target).toBe('shard');
-    expect(msg.reason).toBe('enter_shard');
+    expect(msg.target).toBe('zone');
+    expect(msg.reason).toBe('enter_zone');
     expect(msg.options).toBeUndefined();
 
     const msgWithOptions: RoomSwitchMessage = {
@@ -132,8 +132,8 @@ describe('Type Enumerations', () => {
     expect(types).toHaveLength(6);
   });
 
-  it('ShardState should allow all lifecycle states', () => {
-    const states: ShardState[] = ['seeding', 'open', 'active', 'destabilising', 'collapse'];
+  it('ZoneState should allow all lifecycle states', () => {
+    const states: ZoneState[] = ['seeding', 'open', 'active', 'destabilising', 'collapse'];
     expect(states).toHaveLength(5);
   });
 
@@ -151,13 +151,13 @@ describe('Type Enumerations', () => {
     expect(tiers).toHaveLength(6);
   });
 
-  it('ShardTier should allow tiers 1-3', () => {
-    const tiers: ShardTier[] = [1, 2, 3];
+  it('ZoneTier should allow tiers 1-3', () => {
+    const tiers: ZoneTier[] = [1, 2, 3];
     expect(tiers).toHaveLength(3);
   });
 
-  it('ShardModifier should allow all modifier types', () => {
-    const mods: ShardModifier[] = [
+  it('ZoneModifier should allow all modifier types', () => {
+    const mods: ZoneModifier[] = [
       'darkness', 'hunted', 'silent', 'echoing', 'bountiful',
     ];
     expect(mods).toHaveLength(5);

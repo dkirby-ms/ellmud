@@ -489,7 +489,7 @@ describe('Weight Calculations', () => {
 
 describe('Loot Drops', () => {
   describe('Eligible Items', () => {
-    it('tier 1 shards cap at sturdy', () => {
+    it('tier 1 zones cap at sturdy', () => {
       const eligible = getEligibleItems(1);
       for (const item of eligible) {
         const tierIdx = GEAR_TIER_ORDER.indexOf(item.tier);
@@ -498,7 +498,7 @@ describe('Loot Drops', () => {
       }
     });
 
-    it('tier 2 shards cap at refined', () => {
+    it('tier 2 zones cap at refined', () => {
       const eligible = getEligibleItems(2);
       for (const item of eligible) {
         const tierIdx = GEAR_TIER_ORDER.indexOf(item.tier);
@@ -507,7 +507,7 @@ describe('Loot Drops', () => {
       }
     });
 
-    it('tier 3 shards include anomalous', () => {
+    it('tier 3 zones include anomalous', () => {
       const eligible = getEligibleItems(3);
       expect(eligible.some(i => i.tier === 'anomalous')).toBe(true);
     });
@@ -578,7 +578,7 @@ describe('Loot Drops', () => {
       const loot = generateCreatureLoot({
         creatureId: 'creature_1',
         creatureType: 'drowned_revenant',
-        shardTier: 1,
+        zoneTier: 1,
         rollValues: [0.3, 0.7, 0.1],
         dropCount: 2,
       });
@@ -589,7 +589,7 @@ describe('Loot Drops', () => {
       const loot = generateCreatureLoot({
         creatureId: 'creature_2',
         creatureType: 'drowned_revenant',
-        shardTier: 1,
+        zoneTier: 1,
         rollValues: [0.5],
         dropCount: 3,
       });
@@ -600,7 +600,7 @@ describe('Loot Drops', () => {
       const loot = generateCreatureLoot({
         creatureId: 'creature_3',
         creatureType: 'drowned_revenant',
-        shardTier: 2,
+        zoneTier: 2,
         rollValues: [0.2, 0.6],
         dropCount: 2,
       });
@@ -609,11 +609,11 @@ describe('Loot Drops', () => {
       }
     });
 
-    it('respects shard tier rarity cap', () => {
+    it('respects zone tier rarity cap', () => {
       const loot = generateCreatureLoot({
         creatureId: 'creature_4',
         creatureType: 'drowned_revenant',
-        shardTier: 1,
+        zoneTier: 1,
         rollValues: [0.99, 0.99],
         dropCount: 2,
       });

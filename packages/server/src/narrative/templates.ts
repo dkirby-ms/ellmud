@@ -157,7 +157,7 @@ function renderRoomDescription(ctx: NarrationContext): string {
 
   parts.push(describeExits(ctx.room.exits));
 
-  const stabilityDesc = getStabilityDesc(ctx.room.shard_stability);
+  const stabilityDesc = getStabilityDesc(ctx.room.zone_stability);
   if (stabilityDesc) parts.push(stabilityDesc);
 
   return parts.join(' ');
@@ -235,7 +235,7 @@ function renderMovement(ctx: NarrationContext): string {
   parts.push(getLightDesc(ctx.room.light_level));
   parts.push(describeExits(ctx.room.exits));
 
-  const stabilityDesc = getStabilityDesc(ctx.room.shard_stability);
+  const stabilityDesc = getStabilityDesc(ctx.room.zone_stability);
   if (stabilityDesc) parts.push(stabilityDesc);
 
   return parts.join(' ');
@@ -252,7 +252,7 @@ function renderEvent(ctx: NarrationContext): string {
     parts.push('The world shifts around you.');
   }
 
-  const stabilityDesc = getStabilityDesc(ctx.room.shard_stability);
+  const stabilityDesc = getStabilityDesc(ctx.room.zone_stability);
   if (stabilityDesc) parts.push(stabilityDesc);
 
   return parts.join(' ');

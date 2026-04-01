@@ -13,7 +13,7 @@ import type { NarrationCache } from '../narrative/cache.js';
 import type { InMemoryNarrationCache } from '../narrative/cache.js';
 import type {
   AdminRoomSummary,
-  AdminShardDetail,
+  AdminZoneDetail,
   AdminRefugeDetail,
   AdminPlayerInfo,
   AdminCreatureInfo,
@@ -72,8 +72,8 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         return;
       }
 
-      if (room.roomName === 'shard') {
-        const detail = getShardDetail(room);
+      if (room.roomName === 'zone') {
+        const detail = getZoneDetail(room);
         res.json(detail);
       } else if (room.roomName === 'refuge') {
         const detail = getRefugeDetail(room);
@@ -91,14 +91,14 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
     }
   });
 
-  // ─── GET /admin/api/creatures — List all creatures across shards ──────────
+  // ─── GET /admin/api/creatures — List all creatures across zones ──────────
   router.get('/admin/api/creatures', adminAuth, async (_req: Request, res: Response) => {
     try {
       const rooms = await safeQueryRooms();
-      const creatures: Array<AdminCreatureInfo & { shardRoomId: string }> = [];
+      const creatures: Array<AdminCreatureInfo & { zoneRoomId: string }> = [];
 
       for (const roomCache of rooms) {
-        if (roomCache.name !== 'shard') continue;
+        if (roomCache.name !== 'zone') continue;
         const room = safeGetRoom(roomCache.roomId);
         if (!room) continue;
 
@@ -118,7 +118,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
               currentRoomId: c.currentRoomId,
               behaviorState: c.behaviorState,
               isAlive: c.isAlive,
-              shardRoomId: roomCache.roomId,
+              zoneRoomId: roomCache.roomId,
             });
           }
         }
@@ -372,10 +372,10 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         const room = safeGetRoom(roomCache.roomId);
         if (!room) continue;
 
-        if (room.roomName === 'shard') {
-          const shardPlayers = getShardPlayers(room);
-          for (const p of shardPlayers) {
-            players.push({ ...p, roomId: roomCache.roomId, roomName: 'shard' });
+        if (room.roomName === 'zone') {
+          const zonePlayers = getZonePlayers(room);
+          for (const p of zonePlayers) {
+            players.push({ ...p, roomId: roomCache.roomId, roomName: 'zone' });
           }
         } else if (room.roomName === 'refuge') {
           // Refuge doesn't have PlayerState objects, just session→playerId mapping
@@ -409,7 +409,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
   router.get('/admin/api/metrics', adminAuth, async (_req: Request, res: Response) => {
     try {
       const rooms = await safeQueryRooms();
-      const shards = rooms.filter((r) => r.name === 'shard');
+      const zones = rooms.filter((r) => r.name === 'zone');
       const refuges = rooms.filter((r) => r.name === 'refuge');
       const totalPlayers = rooms.reduce((sum, r) => sum + r.clients, 0);
 
@@ -421,7 +421,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         timestamp: Date.now(),
         rooms: {
           total: rooms.length,
-          shards: shards.length,
+          zones: zones.length,
           refuges: refuges.length,
           totalPlayers,
         },
@@ -539,13 +539,13 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
           res.json({
             roomId: room.roomId,
             spawned: { type, id },
-            message: `Broadcast spawn of "${id}" — room has no creature manager (non-shard room)`,
+            message: `Broadcast spawn of "${id}" — room has no creature manager (non-zone room)`,
           });
           return;
         }
 
         // Determine spawn room — use targetRoomId if provided, otherwise pick
-        // first room from the shard's room graph
+        // first room from the zone's room graph
         let spawnRoomId = targetRoomId;
         if (!spawnRoomId) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -659,9 +659,9 @@ function safeGetRoom(roomId: string): import('@colyseus/core').Room | undefined 
   }
 }
 
-function getShardDetail(room: import('@colyseus/core').Room): AdminShardDetail {
+function getZoneDetail(room: import('@colyseus/core').Room): AdminZoneDetail {
   const state = room.state as {
-    shardId?: string;
+    zoneId?: string;
     lifecycle?: string;
     stability?: number;
     collapseTimer?: number;
@@ -712,7 +712,7 @@ function getShardDetail(room: import('@colyseus/core').Room): AdminShardDetail {
 
   return {
     roomId: room.roomId,
-    name: 'shard',
+    name: 'zone',
     clients: room.clients.length,
     lifecycle: state.lifecycle ?? 'unknown',
     stability: state.stability ?? 0,
@@ -741,7 +741,7 @@ function getRefugeDetail(room: import('@colyseus/core').Room): AdminRefugeDetail
   };
 }
 
-function getShardPlayers(room: import('@colyseus/core').Room): AdminPlayerInfo[] {
+function getZonePlayers(room: import('@colyseus/core').Room): AdminPlayerInfo[] {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const playersMap = (room as any)['players'] as
     | Map<string, { sessionId: string; currentRoomId: string; inventory: Map<string, unknown>; currentWeight: number; maxCarryWeight: number }>
@@ -774,21 +774,21 @@ function getCacheSize(cache: NarrationCache | undefined): number {
 async function sendSSESnapshot(res: Response, deps: AdminRouterDeps): Promise<void> {
   try {
     const rooms = await safeQueryRooms();
-    const shards = rooms.filter((r) => r.name === 'shard');
+    const zones = rooms.filter((r) => r.name === 'zone');
     const refuges = rooms.filter((r) => r.name === 'refuge');
     const totalPlayers = rooms.reduce((sum, r) => sum + r.clients, 0);
 
     const telemetry = deps.telemetry?.getTelemetry();
     const cacheSize = getCacheSize(deps.cache);
 
-    // Count creatures across shards
+    // Count creatures across zones
     let totalCreatures = 0;
     let livingCreatures = 0;
-    for (const shardCache of shards) {
-      const shardRoom = safeGetRoom(shardCache.roomId);
-      if (!shardRoom) continue;
+    for (const zoneCache of zones) {
+      const zoneRoom = safeGetRoom(zoneCache.roomId);
+      if (!zoneRoom) continue;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const cm = (shardRoom as any)['creatureManager'] as
+      const cm = (zoneRoom as any)['creatureManager'] as
         | { getAllCreatures(): Array<{ isAlive: boolean }>; getLivingCreatures(): Array<unknown> }
         | undefined;
       if (cm) {
@@ -802,7 +802,7 @@ async function sendSSESnapshot(res: Response, deps: AdminRouterDeps): Promise<vo
       uptime: process.uptime(),
       rooms: {
         total: rooms.length,
-        shards: shards.length,
+        zones: zones.length,
         refuges: refuges.length,
         totalPlayers,
         totalCreatures,

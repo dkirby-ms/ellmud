@@ -10,7 +10,7 @@ import {
   MessageTypes,
   type NarrateMessage,
   type RoomHeaderMessage,
-  type ShardStateMessage,
+  type ZoneStateMessage,
   type CombatResultMessage,
   type RoomSwitchMessage,
   type RoomSwitchOptions,
@@ -30,7 +30,7 @@ const WS_ENDPOINT = import.meta.env.VITE_WS_URL ??
 export interface MessageHandlers {
   onNarrate: (msg: NarrateMessage) => void;
   onRoomHeader: (msg: RoomHeaderMessage) => void;
-  onShardState: (msg: ShardStateMessage) => void;
+  onZoneState: (msg: ZoneStateMessage) => void;
   onCombatResult: (msg: CombatResultMessage) => void;
   onRoomSwitch: (msg: RoomSwitchMessage) => void;
   onZoneTransfer?: (msg: ZoneTransferMessage) => void;
@@ -69,7 +69,7 @@ export async function connect(
   // Message-only subscriptions (dumb terminal protocol)
   room.onMessage(MessageTypes.NARRATE, handlers.onNarrate);
   room.onMessage(MessageTypes.ROOM_HEADER, handlers.onRoomHeader);
-  room.onMessage(MessageTypes.SHARD_STATE, handlers.onShardState);
+  room.onMessage(MessageTypes.ZONE_STATE, handlers.onZoneState);
   room.onMessage(MessageTypes.COMBAT_RESULT, handlers.onCombatResult);
   room.onMessage(MessageTypes.ROOM_SWITCH, handlers.onRoomSwitch);
   if (handlers.onLoadoutUpdate) {
@@ -124,7 +124,7 @@ export async function switchRoom(
   // Re-register all message handlers on the new room
   newRoom.onMessage(MessageTypes.NARRATE, handlers.onNarrate);
   newRoom.onMessage(MessageTypes.ROOM_HEADER, handlers.onRoomHeader);
-  newRoom.onMessage(MessageTypes.SHARD_STATE, handlers.onShardState);
+  newRoom.onMessage(MessageTypes.ZONE_STATE, handlers.onZoneState);
   newRoom.onMessage(MessageTypes.COMBAT_RESULT, handlers.onCombatResult);
   newRoom.onMessage(MessageTypes.ROOM_SWITCH, handlers.onRoomSwitch);
   if (handlers.onLoadoutUpdate) {

@@ -1,6 +1,6 @@
 /**
- * Zone-mode ShardRoom tests — verify multi-player behavior and welcome messages.
- * (Migrated from RefugeRoom tests — ShardRoom with zoneSlug replaces RefugeRoom.)
+ * Zone-mode ZoneRoom tests — verify multi-player behavior and welcome messages.
+ * (Migrated from RefugeRoom tests — ZoneRoom with zoneSlug replaces RefugeRoom.)
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ColyseusTestServer } from '@colyseus/testing';
@@ -12,7 +12,7 @@ import {
 } from './helpers/index.js';
 import { MessageCollector } from './helpers/message-collector.js';
 
-describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
+describe('Zone ZoneRoom Multi-Player (the-refuge)', () => {
   let colyseus: ColyseusTestServer;
 
   beforeAll(async () => {
@@ -24,7 +24,7 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
   });
 
   it('should send welcome narration to each player individually', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
 
     const client1 = await colyseus.connectTo(room);
     const collector1 = new MessageCollector(client1);
@@ -47,7 +47,7 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
   });
 
   it('should send room header to each player on join', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
 
     const client1 = await colyseus.connectTo(room);
     const collector1 = new MessageCollector(client1);
@@ -76,7 +76,7 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
   });
 
   it('should handle three or more concurrent players', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
 
     const clients: Array<Awaited<ReturnType<typeof colyseus.connectTo>>> = [];
     const collectors: MessageCollector[] = [];
@@ -101,7 +101,7 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
   });
 
   it.todo('should handle board command in refuge zone', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room);
     const collector = new MessageCollector(client);
     await wait(500);
@@ -119,13 +119,13 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
     const response = newMessages.find(m => m.text.includes('Expedition Board'));
     expect(response).toBeDefined();
     expect(response!.text).toContain('Tier');
-    expect(response!.text).toContain('enter <shard-id>');
+    expect(response!.text).toContain('enter <zone-id>');
 
     await client.leave();
   });
 
-  it.todo('should send ROOM_SWITCH message when "enter shard" command is used', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+  it.todo('should send ROOM_SWITCH message when "enter zone" command is used', async () => {
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room);
     const collector = new MessageCollector(client);
     await wait(500);
@@ -134,13 +134,13 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
     client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
     await wait(300);
 
-    client.send(MessageTypes.COMMAND, makeCommand('enter', 'shard'));
+    client.send(MessageTypes.COMMAND, makeCommand('enter', 'zone'));
     await wait(500);
 
-    // Should receive a ROOM_SWITCH message targeting 'shard'
+    // Should receive a ROOM_SWITCH message targeting 'zone'
     expect(collector.roomSwitch.length).toBe(1);
-    expect(collector.roomSwitch[0]!.target).toBe('shard');
-    expect(collector.roomSwitch[0]!.reason).toBe('enter_shard');
+    expect(collector.roomSwitch[0]!.target).toBe('zone');
+    expect(collector.roomSwitch[0]!.reason).toBe('enter_zone');
     expect(collector.roomSwitch[0]!.options?.roomId).toBeDefined();
 
     // Should also receive transition narration
@@ -150,8 +150,8 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
     await client.leave();
   });
 
-  it.todo('should send ROOM_SWITCH for bare "enter" command (defaults to shard)', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+  it.todo('should send ROOM_SWITCH for bare "enter" command (defaults to zone)', async () => {
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room);
     const collector = new MessageCollector(client);
     await wait(500);
@@ -164,15 +164,15 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
     await wait(500);
 
     expect(collector.roomSwitch.length).toBe(1);
-    expect(collector.roomSwitch[0]!.target).toBe('shard');
+    expect(collector.roomSwitch[0]!.target).toBe('zone');
     expect(collector.roomSwitch[0]!.options?.roomId).toBeDefined();
 
     await client.leave();
   });
 
-  it.todo('should send ROOM_SWITCH when entering a specific shard id', async () => {
-    const shard = await colyseus.createRoom('shard', { openDelayMs: 0 });
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+  it.todo('should send ROOM_SWITCH when entering a specific zone id', async () => {
+    const zone = await colyseus.createRoom('zone', { openDelayMs: 0 });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room);
     const collector = new MessageCollector(client);
     await wait(500);
@@ -181,17 +181,17 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
     client.send(MessageTypes.COMMAND, makeCommand('go', 'west'));
     await wait(300);
 
-    client.send(MessageTypes.COMMAND, makeCommand('enter', shard.roomId));
+    client.send(MessageTypes.COMMAND, makeCommand('enter', zone.roomId));
     await wait(500);
 
     expect(collector.roomSwitch.length).toBe(1);
-    expect(collector.roomSwitch[0]!.options?.roomId).toBe(shard.roomId);
+    expect(collector.roomSwitch[0]!.options?.roomId).toBe(zone.roomId);
 
     await client.leave();
   });
 
   it.todo('should reject "enter" with unknown target', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room);
     const collector = new MessageCollector(client);
     await wait(500);
@@ -210,8 +210,8 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
     // Should narrate the error (search by content, not position — ambient narration may arrive after)
     expect(collector.narrate.length).toBeGreaterThan(initialCount);
     const newMessages = collector.narrate.slice(initialCount);
-    const errorMsg = newMessages.find(m => m.text.includes('No shard with id'));
-    expect(errorMsg, 'Expected a system narration containing "No shard with id"').toBeTruthy();
+    const errorMsg = newMessages.find(m => m.text.includes('No zone with id'));
+    expect(errorMsg, 'Expected a system narration containing "No zone with id"').toBeTruthy();
     expect(errorMsg!.text).toContain('tavern');
     expect(errorMsg!.type).toBe('system');
 
@@ -219,7 +219,7 @@ describe('Zone ShardRoom Multi-Player (the-refuge)', () => {
   });
 
   it('should handle unknown commands gracefully', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room);
     const collector = new MessageCollector(client);
     await wait(500);

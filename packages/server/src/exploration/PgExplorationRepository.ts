@@ -29,7 +29,7 @@ export class PgExplorationRepository implements ExplorationRepository {
         visit.roomId,
         visit.roomType,
         visit.roomName,
-        visit.shardTier ?? null,
+        visit.zoneTier ?? null,
       ],
     );
   }
@@ -116,7 +116,7 @@ function toExploredRoom(row: ExploredRoomRow): ExploredRoom {
     roomId: row.room_id,
     roomType: row.room_type,
     roomName: row.room_name,
-    shardTier: row.shard_tier,
+    zoneTier: row.shard_tier,
     firstVisited: row.first_visited,
     lastVisited: row.last_visited,
     visitCount: row.visit_count,

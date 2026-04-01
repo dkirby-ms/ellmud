@@ -27,7 +27,7 @@ function makeContext(overrides: Partial<NarrationContext> = {}): NarrationContex
   return {
     narration_type: 'room_description',
     room: {
-      id: 'shard-0a3f::room-17',
+      id: 'zone-0a3f::room-17',
       light_level: 0.3,
       exits: ['north', 'east', 'down'],
       features: ['collapsed_pillar', 'altar_bloodstained'],
@@ -41,7 +41,7 @@ function makeContext(overrides: Partial<NarrationContext> = {}): NarrationContex
       traces: [
         { type: 'footprints', age_seconds: 180, direction: 'east', source: 'player' },
       ],
-      shard_stability: 0.55,
+      zone_stability: 0.55,
     },
     player: {
       hp_pct: 0.72,
@@ -528,7 +528,7 @@ describe('AC: State snapshot schema matches GDD §4.3', () => {
     expect(ctx.room).toHaveProperty('creatures');
     expect(ctx.room).toHaveProperty('hazards');
     expect(ctx.room).toHaveProperty('traces');
-    expect(ctx.room).toHaveProperty('shard_stability');
+    expect(ctx.room).toHaveProperty('zone_stability');
   });
 
   it('player contains all GDD §4.3 fields', () => {
@@ -572,7 +572,7 @@ describe('AC: LLM output contract enforcement (GDD §4.4)', () => {
   it('rejects output with Schema keywords', () => {
     expect(validateLLMOutput('The hp_pct drops rapidly.', ctx)).not.toBeNull();
     expect(validateLLMOutput('Your awareness_level increases.', ctx)).not.toBeNull();
-    expect(validateLLMOutput('The shard_stability is failing.', ctx)).not.toBeNull();
+    expect(validateLLMOutput('The zone_stability is failing.', ctx)).not.toBeNull();
     expect(validateLLMOutput('The light_level changes.', ctx)).not.toBeNull();
   });
 

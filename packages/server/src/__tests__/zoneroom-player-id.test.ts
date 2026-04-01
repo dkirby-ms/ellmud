@@ -1,7 +1,7 @@
 /**
- * ShardRoom playerId keying tests — Issue #197
+ * ZoneRoom playerId keying tests — Issue #197
  *
- * Validates that ShardRoom uses persistent playerId (from auth context)
+ * Validates that ZoneRoom uses persistent playerId (from auth context)
  * instead of ephemeral client.sessionId for all player state keying.
  * This ensures reconnecting players recover their state across sessions.
  */
@@ -25,7 +25,7 @@ afterAll(async () => {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Connect a client to a shard room with specific join options (including playerId).
+ * Connect a client to a zone room with specific join options (including playerId).
  * Unlike the default connectTestClient, this passes options to connectTo (onJoin)
  * rather than createRoom (onCreate).
  */
@@ -41,22 +41,22 @@ async function connectWithPlayerId(
 }
 
 /**
- * Create a shard room with short collapse timer for faster tests.
+ * Create a zone room with short collapse timer for faster tests.
  */
-async function createShardRoom(options: Record<string, unknown> = {}) {
-  return colyseus.createRoom('shard', { collapseTimer: 120, ...options });
+async function createZoneRoom(options: Record<string, unknown> = {}) {
+  return colyseus.createRoom('zone', { collapseTimer: 120, ...options });
 }
 
 // ─── 1. Basic Identity ───────────────────────────────────────────────────────
 
-describe('ShardRoom playerId keying', () => {
+describe('ZoneRoom playerId keying', () => {
   it('should key player state to playerId, not sessionId', async () => {
-    const room = await createShardRoom();
+    const room = await createZoneRoom();
     const { client, collector } = await connectWithPlayerId(room, 'persistent-player-1');
 
     // Player should have joined and received initial messages
     expect(collector.narrate.length).toBeGreaterThan(0);
-    expect(collector.shardState.length).toBeGreaterThan(0);
+    expect(collector.zoneState.length).toBeGreaterThan(0);
 
     // The room should track the player under playerId, not sessionId.
     // Access the server-side room to verify internal state.
@@ -69,7 +69,7 @@ describe('ShardRoom playerId keying', () => {
   });
 
   it('should resolve playerId from join options, not fabricate it', async () => {
-    const room = await createShardRoom();
+    const room = await createZoneRoom();
     const { client } = await connectWithPlayerId(room, 'auth-player-abc');
 
     const serverRoom = room as unknown as { players: Map<string, unknown> };
@@ -82,7 +82,7 @@ describe('ShardRoom playerId keying', () => {
   });
 
   it('should fall back to sessionId when no playerId is provided', async () => {
-    const room = await createShardRoom();
+    const room = await createZoneRoom();
     // Connect without playerId — should use sessionId as fallback
     const client = await colyseus.connectTo(room, {});
     const collector = new MessageCollector(client);
@@ -99,9 +99,9 @@ describe('ShardRoom playerId keying', () => {
 
 // ─── 2. Reconnection ─────────────────────────────────────────────────────────
 
-describe('ShardRoom reconnection with playerId', () => {
+describe('ZoneRoom reconnection with playerId', () => {
   it('should preserve player state when reconnecting with same playerId', async () => {
-    const room = await createShardRoom();
+    const room = await createZoneRoom();
     const { client: client1, collector: collector1 } = await connectWithPlayerId(
       room,
       'reconnect-player-1',
@@ -144,9 +144,9 @@ describe('ShardRoom reconnection with playerId', () => {
 
 // ─── 3. Stash Persistence ────────────────────────────────────────────────────
 
-describe('ShardRoom stash keyed by playerId', () => {
+describe('ZoneRoom stash keyed by playerId', () => {
   it('should use playerId (not sessionId) for player state', async () => {
-    const room = await createShardRoom();
+    const room = await createZoneRoom();
     const { client } = await connectWithPlayerId(room, 'stash-player-1');
 
     const serverRoom = room as unknown as {
@@ -162,9 +162,9 @@ describe('ShardRoom stash keyed by playerId', () => {
 
 // ─── 4. Combat Continuity ────────────────────────────────────────────────────
 
-describe('ShardRoom combat keyed by playerId', () => {
+describe('ZoneRoom combat keyed by playerId', () => {
   it('should register combatants using playerId', async () => {
-    const room = await createShardRoom();
+    const room = await createZoneRoom();
     const { client } = await connectWithPlayerId(room, 'combat-player-1');
 
     const serverRoom = room as unknown as {
@@ -188,7 +188,7 @@ describe('ShardRoom combat keyed by playerId', () => {
   });
 
   it('should use playerId when sending strike command', async () => {
-    const room = await createShardRoom();
+    const room = await createZoneRoom();
     const { client } = await connectWithPlayerId(room, 'striker-player-1');
     await wait(500);
 
@@ -218,9 +218,9 @@ describe('ShardRoom combat keyed by playerId', () => {
 
 // ─── 5. Multiple Players ─────────────────────────────────────────────────────
 
-describe('ShardRoom multiple players with distinct playerIds', () => {
+describe('ZoneRoom multiple players with distinct playerIds', () => {
   it('should maintain separate state for different playerIds', async () => {
-    const room = await createShardRoom();
+    const room = await createZoneRoom();
     const { client: c1, collector: col1 } = await connectWithPlayerId(room, 'multi-player-1');
     const { client: c2, collector: col2 } = await connectWithPlayerId(room, 'multi-player-2');
 
@@ -243,7 +243,7 @@ describe('ShardRoom multiple players with distinct playerIds', () => {
   });
 
   it('should not cross-contaminate state between different playerIds', async () => {
-    const room = await createShardRoom();
+    const room = await createZoneRoom();
     const { client: c1 } = await connectWithPlayerId(room, 'iso-player-A');
     const { client: c2 } = await connectWithPlayerId(room, 'iso-player-B');
 
@@ -271,9 +271,9 @@ describe('ShardRoom multiple players with distinct playerIds', () => {
 
 // ─── 6. Auth Integration ─────────────────────────────────────────────────────
 
-describe('ShardRoom auth integration', () => {
+describe('ZoneRoom auth integration', () => {
   it('should map sessionId to playerId from join options', async () => {
-    const room = await createShardRoom();
+    const room = await createZoneRoom();
     const { client } = await connectWithPlayerId(room, 'auth-mapped-player');
 
     // The room should maintain a sessionId → playerId mapping
@@ -285,7 +285,7 @@ describe('ShardRoom auth integration', () => {
     // Primary assertion: player state is keyed by the auth-provided playerId
     expect(serverRoom.players.has('auth-mapped-player')).toBe(true);
 
-    // If the room maintains a sessionId → playerId map (like zone-mode ShardRoom),
+    // If the room maintains a sessionId → playerId map (like zone-mode ZoneRoom),
     // verify the mapping exists
     if (serverRoom.playerIds) {
       expect(serverRoom.playerIds.get(client.sessionId)).toBe('auth-mapped-player');
@@ -295,7 +295,7 @@ describe('ShardRoom auth integration', () => {
   });
 
   it('should handle playerId from options context consistently', async () => {
-    const room = await createShardRoom();
+    const room = await createZoneRoom();
 
     // Connect two clients: one with explicit playerId, one without
     const { client: authClient } = await connectWithPlayerId(room, 'explicit-player');

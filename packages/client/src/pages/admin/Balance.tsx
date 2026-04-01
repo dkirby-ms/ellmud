@@ -23,7 +23,7 @@ export default function Balance() {
           The Balance Constants editor will provide a single interface for tuning all core game
           parameters — damage formulas, stance multipliers, HP scaling, stamina costs, loot drop
           rates, and economy values. This is part of the Contracts System which governs
-          risk/reward loops across shards.
+          risk/reward loops across zones.
         </p>
         <a href="https://github.com/dkirby-ms/ellmud/issues/44" target="_blank" rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-4 py-2 bg-[#1C1D27] border border-[#2A2B35] rounded text-[#C9A84C] hover:bg-[#2A2B35] transition-colors"
@@ -58,7 +58,7 @@ export default function Balance() {
       <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
         <h2 className="text-[#E8E0D0] text-lg mb-3">Planned Features</h2>
         <ul className="space-y-2">
-          {["Live-preview damage calculator with stance combinations", "HP/stamina curve editor with graph visualization", "Loot probability simulator with expected-value analysis", "Per-shard-tier modifier overrides", "Versioned snapshots for A/B testing balance patches"].map((item) => (
+          {["Live-preview damage calculator with stance combinations", "HP/stamina curve editor with graph visualization", "Loot probability simulator with expected-value analysis", "Per-zone-tier modifier overrides", "Versioned snapshots for A/B testing balance patches"].map((item) => (
             <li key={item} className="flex items-center gap-2 text-[#8A8B95] text-sm" style={{ fontFamily: "var(--font-sans)" }}>
               <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C] flex-shrink-0" />{item}
             </li>

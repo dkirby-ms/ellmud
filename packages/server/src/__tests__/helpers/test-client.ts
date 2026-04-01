@@ -4,7 +4,7 @@
  */
 import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
-import { ShardRoom } from '../../rooms/ShardRoom.js';
+import { ZoneRoom } from '../../rooms/ZoneRoom.js';
 import { MessageCollector } from './message-collector.js';
 
 export interface TestClientHandle {
@@ -13,7 +13,7 @@ export interface TestClientHandle {
 }
 
 /**
- * Boot a test server with ShardRoom defined.
+ * Boot a test server with ZoneRoom defined.
  * Zone-mode tests pass `{ zoneSlug: 'the-refuge' }` as options.
  * Uses server.listen(0) so the OS assigns a random available port,
  * then patches server.port so ColyseusTestServer connects correctly.
@@ -21,7 +21,7 @@ export interface TestClientHandle {
  */
 export async function bootTestServer(): Promise<ColyseusTestServer> {
   const server = new Server();
-  server.define('shard', ShardRoom);
+  server.define('zone', ZoneRoom);
   await server.listen(0);
   // After listen(0), the OS-assigned port is on the underlying HTTP server
   const addr = (server as unknown as { transport: { server: { address(): { port: number } } } }).transport.server.address();
@@ -35,7 +35,7 @@ export async function bootTestServer(): Promise<ColyseusTestServer> {
  */
 export async function connectTestClient(
   colyseus: ColyseusTestServer,
-  roomType: string = 'shard',
+  roomType: string = 'zone',
   options: Record<string, unknown> = {},
   settleMs = 500,
 ): Promise<TestClientHandle> {

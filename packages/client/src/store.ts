@@ -6,7 +6,7 @@
 import { createContext, useContext } from 'react';
 import type { Room } from '@colyseus/sdk';
 import type {
-  NarrationType, RoomHeaderMessage, ShardState, CombatAction, GearTier,
+  NarrationType, RoomHeaderMessage, ZoneState, CombatAction, GearTier,
   EquipmentSlots, DisplayItem, CharacterSummary,
 } from '@ellmud/shared';
 import { createEmptyEquipmentSlots } from '@ellmud/shared';
@@ -71,7 +71,7 @@ export interface AppState {
   room: Room | null;
   messages: TerminalMessage[];
   roomHeader: RoomHeaderMessage | null;
-  shardState: ShardState | null;
+  zoneState: ZoneState | null;
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
   error: string | null;
   collapseTimer: number | null;
@@ -105,7 +105,7 @@ export const initialState: AppState = {
   room: null,
   messages: [],
   roomHeader: null,
-  shardState: null,
+  zoneState: null,
   connectionStatus: 'disconnected',
   error: null,
   collapseTimer: null,
@@ -137,7 +137,7 @@ export type AppAction =
   | { type: 'SET_ROOM'; room: Room }
   | { type: 'ADD_MESSAGE'; message: TerminalMessage }
   | { type: 'SET_ROOM_HEADER'; header: RoomHeaderMessage }
-  | { type: 'SET_SHARD_STATE'; state: ShardState; collapseTimer?: number }
+  | { type: 'SET_ZONE_STATE'; state: ZoneState; collapseTimer?: number }
   | { type: 'SET_CONNECTION_STATUS'; status: AppState['connectionStatus'] }
   | { type: 'SET_ERROR'; error: string }
   | { type: 'CLEAR_ERROR' }
@@ -172,10 +172,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
     case 'SET_ROOM_HEADER':
       return { ...state, roomHeader: action.header };
-    case 'SET_SHARD_STATE': {
+    case 'SET_ZONE_STATE': {
       const timer = action.collapseTimer ?? null;
       const maxTimer = timer != null && (state.collapseTimerMax == null || timer > state.collapseTimerMax) ? timer : state.collapseTimerMax;
-      return { ...state, shardState: action.state, collapseTimer: timer, collapseTimerMax: maxTimer };
+      return { ...state, zoneState: action.state, collapseTimer: timer, collapseTimerMax: maxTimer };
     }
     case 'SET_CONNECTION_STATUS':
       return { ...state, connectionStatus: action.status };

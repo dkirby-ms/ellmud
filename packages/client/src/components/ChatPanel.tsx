@@ -4,7 +4,7 @@ import { X, Send } from "lucide-react";
 interface ChatPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  context: "shard" | "refuge";
+  context: "zone" | "refuge";
   onSendMessage?: (text: string) => void;
 }
 
@@ -24,7 +24,7 @@ export default function ChatPanel({
   onSendMessage,
 }: ChatPanelProps) {
   const [activeTab, setActiveTab] = useState<ChatTab>(
-    context === "shard" ? "proximity" : "refuge"
+    context === "zone" ? "proximity" : "refuge"
   );
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -79,7 +79,7 @@ export default function ChatPanel({
   if (!isOpen) return null;
 
   const tabs: { id: ChatTab; label: string; available: boolean }[] = [
-    { id: "proximity", label: "Proximity", available: context === "shard" },
+    { id: "proximity", label: "Proximity", available: context === "zone" },
     { id: "whisper", label: "Whisper", available: true },
     { id: "refuge", label: "Refuge", available: context === "refuge" },
     { id: "squad", label: "Squad", available: false },
@@ -133,8 +133,8 @@ export default function ChatPanel({
           </button>
         </div>
 
-        {/* Players Nearby (if in shard) */}
-        {context === "shard" && (
+        {/* Players Nearby (if in zone) */}
+        {context === "zone" && (
           <div className="p-4 border-b border-border-muted">
             <h3
               className="text-text-secondary text-xs mb-3 font-sans"

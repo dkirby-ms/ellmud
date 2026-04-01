@@ -1,6 +1,6 @@
 /**
  * RoomOccupants — Shows creatures and players in the current room.
- * Displayed in the right status panel of ShardExploration.
+ * Displayed in the right status panel of ZoneExploration.
  */
 
 interface Creature {

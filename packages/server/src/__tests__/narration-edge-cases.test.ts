@@ -22,7 +22,7 @@ function makeContext(overrides: Partial<NarrationContext> = {}): NarrationContex
   return {
     narration_type: 'room_description',
     room: {
-      id: 'shard-0a3f::room-17',
+      id: 'zone-0a3f::room-17',
       light_level: 0.3,
       exits: ['north', 'east', 'down'],
       features: ['collapsed_pillar', 'altar_bloodstained'],
@@ -36,7 +36,7 @@ function makeContext(overrides: Partial<NarrationContext> = {}): NarrationContex
       traces: [
         { type: 'footprints', age_seconds: 180, direction: 'east', source: 'player' },
       ],
-      shard_stability: 0.55,
+      zone_stability: 0.55,
     },
     player: {
       hp_pct: 0.72,
@@ -128,8 +128,8 @@ describe('LLM Output Validation Edge Cases', () => {
     expect(result).toContain('Schema keyword');
   });
 
-  it('rejects output containing shard_stability keyword', () => {
-    const result = validateLLMOutput('The shard_stability is dropping', ctx);
+  it('rejects output containing zone_stability keyword', () => {
+    const result = validateLLMOutput('The zone_stability is dropping', ctx);
     expect(result).not.toBeNull();
   });
 
@@ -179,7 +179,7 @@ describe('Template Rendering Boundaries', () => {
         creatures: [],
         hazards: [],
         traces: [],
-        shard_stability: 1.0,
+        zone_stability: 1.0,
       },
     });
 
@@ -193,7 +193,7 @@ describe('Template Rendering Boundaries', () => {
     const ctx = makeContext({
       room: {
         ...makeContext().room,
-        shard_stability: 0.1,
+        zone_stability: 0.1,
       },
     });
 
@@ -254,7 +254,7 @@ describe('Template Rendering Boundaries', () => {
   it('renders event template with stability warning', () => {
     const ctx = makeContext({
       narration_type: 'event',
-      room: { ...makeContext().room, shard_stability: 0.15 },
+      room: { ...makeContext().room, zone_stability: 0.15 },
     });
 
     const result = renderTemplate('event', ctx);
@@ -304,12 +304,12 @@ describe('State Hasher Edge Cases', () => {
         creatures: [],
         hazards: [],
         traces: [],
-        shard_stability: 0.5,
+        zone_stability: 0.5,
       },
     });
     const ctx2 = makeContext({
       room: {
-        shard_stability: 0.5,
+        zone_stability: 0.5,
         traces: [],
         hazards: [],
         creatures: [],

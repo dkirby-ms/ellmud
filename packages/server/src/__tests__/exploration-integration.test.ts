@@ -1,13 +1,13 @@
 /**
  * Exploration Integration Tests — Phase D (Exploration Wiring)
  *
- * Validates that ShardRoom records exploration visits via the ExplorationRepository
+ * Validates that ZoneRoom records exploration visits via the ExplorationRepository
  * when players join zones and move between rooms. Written anticipatorily for Phase D.
  *
  * Expected behavior:
  *   D1: Join records entry room in exploration repo
  *   D2: Movement ('go') records new room in exploration repo
- *   D3: Zone rooms record zoneSlug; shard rooms record null
+ *   D3: Zone rooms record zoneSlug; zone rooms record null
  *   D4: Fire-and-forget — repo errors don't crash the game loop
  *   D5: Duplicate visits increment visit_count (upsert semantics)
  */
@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
-import { ShardRoom } from '../rooms/ShardRoom.js';
+import { ZoneRoom } from '../rooms/ZoneRoom.js';
 import { MessageTypes } from '@ellmud/shared';
 import {
   InMemoryExplorationRepository,
@@ -103,9 +103,9 @@ async function seedZone(
   return data;
 }
 
-// ─── ShardRoom Internals Access ──────────────────────────────────────────────
+// ─── ZoneRoom Internals Access ──────────────────────────────────────────────
 
-interface ShardRoomInternals {
+interface ZoneRoomInternals {
   explorationRepo?: ExplorationRepository;
   isZone: boolean;
   zoneSlug?: string;
@@ -115,8 +115,8 @@ interface ShardRoomInternals {
 
 function internals(
   room: Awaited<ReturnType<ColyseusTestServer['createRoom']>>,
-): ShardRoomInternals {
-  return room as unknown as ShardRoomInternals;
+): ZoneRoomInternals {
+  return room as unknown as ZoneRoomInternals;
 }
 
 // ─── Server Boot ─────────────────────────────────────────────────────────────
@@ -131,7 +131,7 @@ beforeAll(async () => {
   await seedZone('explore-dungeon', 'dungeon');
 
   const server = new Server();
-  server.define('shard', ShardRoom);
+  server.define('zone', ZoneRoom);
   await server.listen(0);
   const addr = (
     server as unknown as { transport: { server: { address(): { port: number } } } }
@@ -173,8 +173,8 @@ function sendCommand(
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('D1 — Exploration recording on join', () => {
-  it.todo('records entry room when player joins a zone ShardRoom', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'explore-hub' });
+  it.todo('records entry room when player joins a zone ZoneRoom', async () => {
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'explore-hub' });
     const { client } = await connectWithPlayer(room, 'explore-join-player');
 
     // Give fire-and-forget time to complete
@@ -183,7 +183,7 @@ describe('D1 — Exploration recording on join', () => {
     const repo = getExplorationRepository();
     const rooms = await repo.getExploredRooms('explore-join-player');
 
-    // Phase D wiring: ShardRoom.onJoin() should call recordVisit with the entry room.
+    // Phase D wiring: ZoneRoom.onJoin() should call recordVisit with the entry room.
     // Until Phase D lands, this will be 0. After, it should be >= 1.
     expect(rooms.length).toBeGreaterThanOrEqual(1);
     const entryRoom = rooms.find((r) => r.roomType === 'entry');
@@ -200,7 +200,7 @@ describe('D1 — Exploration recording on join', () => {
 
 describe('D2 — Exploration recording on movement', () => {
   it.todo('records new room when player moves via "go" command', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'explore-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'explore-hub' });
     const { client } = await connectWithPlayer(room, 'explore-move-player');
 
     // Move north to hallway
@@ -227,7 +227,7 @@ describe('D2 — Exploration recording on movement', () => {
 
 describe('D3 — Exploration records correct zone slug', () => {
   it.todo('zone rooms record the zone slug', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'explore-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'explore-hub' });
     const { client } = await connectWithPlayer(room, 'explore-zone-slug-player');
 
     await wait(500);
@@ -243,19 +243,19 @@ describe('D3 — Exploration records correct zone slug', () => {
     await client.leave();
   });
 
-  it('shard rooms record null zoneSlug', async () => {
-    const room = await colyseus.createRoom('shard', {
+  it('zone rooms record null zoneSlug', async () => {
+    const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
       collapseTimer: 120,
     });
-    const { client } = await connectWithPlayer(room, 'explore-shard-slug-player');
+    const { client } = await connectWithPlayer(room, 'explore-zone-slug-player');
 
     await wait(500);
 
     const repo = getExplorationRepository();
-    const rooms = await repo.getExploredRooms('explore-shard-slug-player');
+    const rooms = await repo.getExploredRooms('explore-zone-slug-player');
 
-    // Phase D should record shard visits with null zoneSlug
+    // Phase D should record zone visits with null zoneSlug
     // If not yet implemented, this array may be empty — that's OK
     if (rooms.length > 0) {
       for (const r of rooms) {
@@ -292,7 +292,7 @@ describe('D4 — Exploration is fire-and-forget', () => {
       },
     };
 
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'explore-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'explore-hub' });
 
     // Inject throwing repo if the field exists (Phase D adds it)
     const roomInternals = internals(room);
@@ -331,7 +331,7 @@ describe('D4 — Exploration is fire-and-forget', () => {
 
 describe('D5 — Duplicate visits update visit_count', () => {
   it('visiting the same room twice increments visit_count', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'explore-hub' });
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'explore-hub' });
     const { client } = await connectWithPlayer(room, 'explore-revisit-player');
 
     // Move north to hallway, then back south to hearth (revisiting entry)

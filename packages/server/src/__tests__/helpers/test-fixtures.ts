@@ -1,7 +1,7 @@
 /**
  * Test fixtures — mock data and deterministic helpers for tests.
  */
-import type { CommandMessage, NarrationType, GearTier, ShardTier, ShardModifier } from '@ellmud/shared';
+import type { CommandMessage, NarrationType, GearTier, ZoneTier, ZoneModifier } from '@ellmud/shared';
 
 // ─── Deterministic PRNG ──────────────────────────────────────────────────────
 
@@ -58,9 +58,9 @@ export function makeCommand(verb: string, ...args: string[]): CommandMessage {
 
 // ─── Shard Option Fixtures ───────────────────────────────────────────────────
 
-export const ALL_SHARD_TIERS: ShardTier[] = [1, 2, 3];
+export const ALL_SHARD_TIERS: ZoneTier[] = [1, 2, 3];
 
-export const ALL_SHARD_MODIFIERS: ShardModifier[] = [
+export const ALL_SHARD_MODIFIERS: ZoneModifier[] = [
   'darkness',
   'hunted',
   'silent',

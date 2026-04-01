@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
-import { ShardRoom } from '../rooms/ShardRoom.js';
+import { ZoneRoom } from '../rooms/ZoneRoom.js';
 import { MessageTypes } from '@ellmud/shared';
 import type { NarrateMessage, RoomHeaderMessage } from '@ellmud/shared';
 
 import { parseCommand } from '../commands/parser.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
-import { createTestRoomGraph } from '../shard/RoomGraph.js';
+import { createTestRoomGraph } from '../zone/RoomGraph.js';
 
 // ─── Parser Unit Tests ────────────────────────────────────────────────────
 
@@ -353,12 +353,12 @@ describe('Command Handlers', () => {
 
 // ─── Integration Tests (Colyseus client → server) ─────────────────────────
 
-describe('ShardRoom Commands (Integration)', () => {
+describe('ZoneRoom Commands (Integration)', () => {
   let colyseus: ColyseusTestServer;
 
   beforeAll(async () => {
     const server = new Server();
-    server.define('shard', ShardRoom);
+    server.define('zone', ZoneRoom);
     await server.listen(0);
     const addr = (server as unknown as { transport: { server: { address(): { port: number } } } }).transport.server.address();
     (server as unknown as { port: number }).port = addr.port;
@@ -370,7 +370,7 @@ describe('ShardRoom Commands (Integration)', () => {
   });
 
   it('should send room description on join', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true });
     const client = await colyseus.connectTo(room);
 
     const narrations: NarrateMessage[] = [];
@@ -394,7 +394,7 @@ describe('ShardRoom Commands (Integration)', () => {
   });
 
   it('should handle look command via messages', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true });
     const client = await colyseus.connectTo(room);
 
     const narrations: NarrateMessage[] = [];
@@ -415,7 +415,7 @@ describe('ShardRoom Commands (Integration)', () => {
   });
 
   it('should handle movement commands', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true });
     const client = await colyseus.connectTo(room);
 
     const narrations: NarrateMessage[] = [];
@@ -443,7 +443,7 @@ describe('ShardRoom Commands (Integration)', () => {
   });
 
   it('should handle direction alias via message', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true });
     const client = await colyseus.connectTo(room);
 
     const narrations: NarrateMessage[] = [];
@@ -464,7 +464,7 @@ describe('ShardRoom Commands (Integration)', () => {
   });
 
   it('should handle take and inventory commands', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true });
     const client = await colyseus.connectTo(room);
 
     const narrations: NarrateMessage[] = [];
@@ -495,7 +495,7 @@ describe('ShardRoom Commands (Integration)', () => {
   });
 
   it('should reject unknown commands with system narration', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true });
     const client = await colyseus.connectTo(room);
 
     const narrations: NarrateMessage[] = [];

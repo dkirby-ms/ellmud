@@ -47,7 +47,7 @@ const KNOWN_VERBS = new Set([
   'listen',
   'extract',
   'board',
-  'shardboard',
+  'zoneboard',
   'enter',
   'stash',
   'store',

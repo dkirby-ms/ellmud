@@ -70,7 +70,7 @@ export const REFUGE_NPCS: NPCDefinition[] = [
     idleActions: [
       'traces sigils in the air with pale fingers',
       'whispers to an unseen presence',
-      'studies a shard-fragment that pulses faintly',
+      'studies a zone-fragment that pulses faintly',
       'closes her eyes and tilts her head, listening',
     ],
     patrolInterval: 0,

@@ -169,7 +169,7 @@ describe('TraceSystem', () => {
       expect(traces[0].type).toBe('blood_trail');
     });
 
-    it('should support clear() for shard collapse', () => {
+    it('should support clear() for zone collapse', () => {
       system.addTrace(ROOM_A, 'corpse', {});
       system.addTrace(ROOM_B, 'footprint', {});
       system.clear();

@@ -51,7 +51,7 @@ vi.mock('../lib/admin-api.js', () => ({
     serverUptime: 0,
     onlinePlayers: 0,
     totalPlayers: 0,
-    activeShards: 0,
+    activeZones: 0,
     dbStatus: 'connected',
   }),
 }));

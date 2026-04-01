@@ -2,8 +2,8 @@
  * Zone-to-RoomGraph adapter.
  *
  * Converts database-shaped ZoneData into the shared RoomGraph structure
- * used by procedural shards, enabling zones to flow through the same
- * ShardRoom infrastructure.
+ * used by procedural zones, enabling zones to flow through the same
+ * ZoneRoom infrastructure.
  */
 
 import type {
@@ -11,7 +11,7 @@ import type {
   Room,
   RoomGraph,
   Direction,
-  ShardTier,
+  ZoneTier,
 } from '@ellmud/shared';
 import { makeInterZoneId } from '@ellmud/shared';
 
@@ -31,8 +31,8 @@ function hashString(str: string): number {
 /**
  * Convert a ZoneData bundle (database-shaped) into a shared RoomGraph.
  *
- * Produces output compatible with the procedural shard generator,
- * allowing zone rooms to be processed by ShardRoom and command handlers
+ * Produces output compatible with the procedural zone generator,
+ * allowing zone rooms to be processed by ZoneRoom and command handlers
  * through the same graph-adapter pipeline.
  */
 export function convertZoneToRoomGraph(zoneData: ZoneData): RoomGraph {
@@ -86,8 +86,8 @@ export function convertZoneToRoomGraph(zoneData: ZoneData): RoomGraph {
     if (room.type === 'boss' && bossRoomId === '') bossRoomId = room.id;
   }
 
-  // Clamp tier to valid ShardTier range
-  const tier = Math.max(1, Math.min(3, zone.tier)) as ShardTier;
+  // Clamp tier to valid ZoneTier range
+  const tier = Math.max(1, Math.min(3, zone.tier)) as ZoneTier;
 
   return {
     rooms,

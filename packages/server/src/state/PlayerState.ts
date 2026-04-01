@@ -1,11 +1,11 @@
 /**
- * In-memory player state for a shard session.
+ * In-memory player state for a zone session.
  *
  * Tracks current room, inventory, weight budget, skills, and equipment per player.
  * This is server-authoritative — the client never sees this directly.
  */
 
-import type { Item } from '../shard/RoomGraph.js';
+import type { Item } from '../zone/RoomGraph.js';
 import type { VisibleEquipment } from '@ellmud/shared';
 
 export interface InventoryEntry {

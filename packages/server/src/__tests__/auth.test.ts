@@ -11,7 +11,7 @@ import { createAuthRouter } from '../auth/routes.js';
 import express from 'express';
 import { ColyseusTestServer } from '@colyseus/testing';
 import { Server } from '@colyseus/core';
-import { ShardRoom } from '../rooms/ShardRoom.js';
+import { ZoneRoom } from '../rooms/ZoneRoom.js';
 import { MessageTypes } from '@ellmud/shared';
 import type { NarrateMessage } from '@ellmud/shared';
 
@@ -412,7 +412,7 @@ describe('Room join with auth', () => {
     initColyseusAuth(authService, false);
 
     const server = new Server();
-    server.define('shard', ShardRoom);
+    server.define('zone', ZoneRoom);
     await server.listen(0);
     const addr = (server as unknown as { transport: { server: { address(): { port: number } } } }).transport.server.address();
     (server as unknown as { port: number }).port = addr.port;
@@ -425,8 +425,8 @@ describe('Room join with auth', () => {
     tokenStore.dispose();
   });
 
-  it('should allow anonymous join to shard (auth optional)', async () => {
-    const room = await colyseus.createRoom('shard', {});
+  it('should allow anonymous join to zone (auth optional)', async () => {
+    const room = await colyseus.createRoom('zone', {});
     const client = await colyseus.connectTo(room);
 
     const messages: NarrateMessage[] = [];
@@ -440,10 +440,10 @@ describe('Room join with auth', () => {
     await client.leave();
   });
 
-  it('should allow authenticated join to shard', async () => {
-    const reg = await authService.register('ShardRunner', 'password123');
+  it('should allow authenticated join to zone', async () => {
+    const reg = await authService.register('ZoneRunner', 'password123');
 
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('zone', {});
     const client = await colyseus.connectTo(room, { token: reg.token });
 
     const messages: NarrateMessage[] = [];
@@ -457,8 +457,8 @@ describe('Room join with auth', () => {
     await client.leave();
   });
 
-  it('should allow anonymous join to zone ShardRoom (auth optional)', async () => {
-    const room = await colyseus.createRoom('shard', { zoneSlug: 'the-refuge' });
+  it('should allow anonymous join to zone ZoneRoom (auth optional)', async () => {
+    const room = await colyseus.createRoom('zone', { zoneSlug: 'the-refuge' });
     const client = await colyseus.connectTo(room);
 
     const messages: NarrateMessage[] = [];
@@ -482,7 +482,7 @@ describe('Room join with auth', () => {
     expect(login.playerId).toBe(reg.playerId);
 
     // Step 3: Join room with login token
-    const room = await colyseus.createRoom('shard', {});
+    const room = await colyseus.createRoom('zone', {});
     const client = await colyseus.connectTo(room, { token: login.token });
 
     const messages: NarrateMessage[] = [];

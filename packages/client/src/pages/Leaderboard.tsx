@@ -8,7 +8,7 @@ interface LeaderboardEntry {
   rank: number;
   name: string;
   faction: string;
-  shardsCompleted: number;
+  zonesCompleted: number;
   itemsExtracted: number;
   pvpSurvived: number;
 }
@@ -18,7 +18,7 @@ const mockLeaderboard: LeaderboardEntry[] = [
     rank: 1,
     name: "Shadow Reaper",
     faction: "Ashen Guard",
-    shardsCompleted: 147,
+    zonesCompleted: 147,
     itemsExtracted: 523,
     pvpSurvived: 34,
   },
@@ -26,7 +26,7 @@ const mockLeaderboard: LeaderboardEntry[] = [
     rank: 2,
     name: "Ironforge",
     faction: "Ironwright Compact",
-    shardsCompleted: 139,
+    zonesCompleted: 139,
     itemsExtracted: 612,
     pvpSurvived: 28,
   },
@@ -34,7 +34,7 @@ const mockLeaderboard: LeaderboardEntry[] = [
     rank: 3,
     name: "Veilwalker",
     faction: "Veilkeepers",
-    shardsCompleted: 132,
+    zonesCompleted: 132,
     itemsExtracted: 445,
     pvpSurvived: 41,
   },
@@ -42,7 +42,7 @@ const mockLeaderboard: LeaderboardEntry[] = [
     rank: 47,
     name: "Kael Darkwater",
     faction: "Ironwright Compact",
-    shardsCompleted: 23,
+    zonesCompleted: 23,
     itemsExtracted: 87,
     pvpSurvived: 5,
   },
@@ -142,7 +142,7 @@ export default function Leaderboard() {
                       className="text-left px-6 py-3 text-[#8A8B95] text-xs"
                       style={{ fontFamily: "var(--font-sans)" }}
                     >
-                      Shards Completed
+                      Zones Completed
                     </th>
                     <th
                       className="text-left px-6 py-3 text-[#8A8B95] text-xs"
@@ -196,7 +196,7 @@ export default function Leaderboard() {
                         className="px-6 py-4 text-[#E8E0D0]"
                         style={{ fontFamily: "var(--font-mono)" }}
                       >
-                        {entry.shardsCompleted}
+                        {entry.zonesCompleted}
                       </td>
                       <td
                         className="px-6 py-4 text-[#E8E0D0]"
@@ -322,7 +322,7 @@ export default function Leaderboard() {
                 className="text-[#8A8B95] text-sm mb-4"
                 style={{ fontFamily: "var(--font-serif)", lineHeight: 1.6 }}
               >
-                Eliminate 5 Drowned Revenants in Flooded Crypt shards. The
+                Eliminate 5 Drowned Revenants in Flooded Crypt zones. The
                 Refuge scholars seek to understand their corruption.
               </p>
               <div className="mb-4">

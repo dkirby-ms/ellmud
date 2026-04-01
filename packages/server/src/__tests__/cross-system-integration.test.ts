@@ -1,7 +1,7 @@
 /**
  * Cross-System Integration Tests
  *
- * Tests interactions between combat, movement, and the shard lifecycle.
+ * Tests interactions between combat, movement, and the zone lifecycle.
  * These test scenarios that span multiple game systems simultaneously.
  */
 
@@ -10,7 +10,7 @@ import { CombatSystem, createCombatant, DEFAULT_PLAYER_STATS } from '../combat/i
 import type { Combatant, CombatStats } from '../combat/CombatState.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
-import { createTestRoomGraph, type Room } from '../shard/RoomGraph.js';
+import { createTestRoomGraph, type Room } from '../zone/RoomGraph.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

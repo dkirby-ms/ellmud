@@ -8,7 +8,7 @@ export default function ContractsList() {
         <div>
           <h1 className="text-[#C9A84C] text-2xl">Contracts</h1>
           <p className="text-[#8A8B95] text-sm" style={{ fontFamily: "var(--font-sans)" }}>
-            Faction-issued missions that drive the shard gameplay loop
+            Faction-issued missions that drive the zone gameplay loop
           </p>
         </div>
       </div>
@@ -18,7 +18,7 @@ export default function ContractsList() {
           <span className="px-3 py-1 bg-[#B8860B]/20 text-[#B8860B] text-xs rounded-full font-semibold" style={{ fontFamily: "var(--font-sans)" }}>PLANNED — PHASE 3</span>
         </div>
         <p className="text-[#E8E0D0] mb-4 leading-relaxed" style={{ fontFamily: "var(--font-sans)" }}>
-          Contracts are faction-issued objectives that players undertake before entering shards.
+          Contracts are faction-issued objectives that players undertake before entering zones.
           Each contract specifies targets (kill, collect, explore), reward tiers, time limits,
           and faction reputation consequences. The admin editor will let designers create contract
           templates, set reward curves, and manage the active contract pool per faction.
@@ -54,7 +54,7 @@ export default function ContractsList() {
       <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
         <h2 className="text-[#E8E0D0] text-lg mb-3">Planned Features</h2>
         <ul className="space-y-2">
-          {["Contract template editor with objective types (kill, collect, explore, survive)", "Reward curve designer — scale payouts by shard tier and difficulty", "Faction assignment rules and rotation scheduling", "Time-limit and failure-penalty configuration", "Active contract pool management per faction"].map((item) => (
+          {["Contract template editor with objective types (kill, collect, explore, survive)", "Reward curve designer — scale payouts by zone tier and difficulty", "Faction assignment rules and rotation scheduling", "Time-limit and failure-penalty configuration", "Active contract pool management per faction"].map((item) => (
             <li key={item} className="flex items-center gap-2 text-[#8A8B95] text-sm" style={{ fontFamily: "var(--font-sans)" }}>
               <span className="w-1.5 h-1.5 rounded-full bg-[#C9A84C] flex-shrink-0" />{item}
             </li>

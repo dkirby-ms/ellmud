@@ -92,7 +92,7 @@ export function handleWhisper(ctx: CommandContext): CommandResult {
   }
 
   // Return narration for the sender (confirmation)
-  // The target will receive a separate message via ShardRoom broadcasting logic
+  // The target will receive a separate message via ZoneRoom broadcasting logic
   return {
     narrations: [{
       text: `You whisper to a nearby figure: "${sanitized}"`,

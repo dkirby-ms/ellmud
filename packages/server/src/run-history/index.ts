@@ -1,5 +1,5 @@
 /**
- * Run history module — persistent shard run records (GDD §7.4).
+ * Run history module — persistent zone run records (GDD §7.4).
  */
 
 export type { RunRecord, RunHistoryRepository } from './RunHistoryRepository.js';

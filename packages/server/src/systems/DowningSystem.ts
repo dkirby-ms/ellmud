@@ -5,7 +5,7 @@
  * A 10-tick bleed-out timer starts. Squadmates can stabilize using `stabilize [player]`
  * (costs 2 ticks + a bandage). If the timer expires or a killing blow lands, the player dies.
  *
- * Pure game logic — no Colyseus dependency. ShardRoom wires this into the tick loop.
+ * Pure game logic — no Colyseus dependency. ZoneRoom wires this into the tick loop.
  */
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -252,7 +252,7 @@ export class DowningSystem {
     return this.stabilizeChannels.get(playerId);
   }
 
-  /** Clear all state (shard collapse). */
+  /** Clear all state (zone collapse). */
   clear(): void {
     this.downedPlayers.clear();
     this.stabilizeChannels.clear();

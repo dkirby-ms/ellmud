@@ -1,11 +1,11 @@
 /**
- * TraceSystem — Ephemeral environmental traces in shard rooms.
+ * TraceSystem — Ephemeral environmental traces in zone rooms.
  *
  * Traces are evidence left by player/creature actions: footprints, blood trails,
  * opened containers, corpses. They decay over time based on TTL and are
  * filtered by tracking skill when presented to players.
  *
- * Storage: Map<roomId, Trace[]> — shard-scoped, destroyed on shard collapse.
+ * Storage: Map<roomId, Trace[]> — zone-scoped, destroyed on zone collapse.
  * Tick: Called once per game tick to decay/expire traces.
  *
  * GDD §11.2 — Trace System
@@ -125,7 +125,7 @@ export class TraceSystem {
     return count;
   }
 
-  /** Clear all traces. Used on shard collapse. */
+  /** Clear all traces. Used on zone collapse. */
   clear(): void {
     this.traces.clear();
   }

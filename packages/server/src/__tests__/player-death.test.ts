@@ -6,7 +6,7 @@
  * 2. The server sends OVERLAY_STATE with state='death' to the defeated player
  * 3. Player inventory is dropped to the room floor
  * 4. After a delay, ROOM_SWITCH sends the player back to refuge
- * 5. Player is cleaned up from combat and shard state
+ * 5. Player is cleaned up from combat and zone state
  */
 
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
@@ -17,7 +17,7 @@ import { MessageTypes } from '@ellmud/shared';
 import type { OverlayMessage } from '@ellmud/shared';
 import { bootTestServer, wait } from './helpers/index.js';
 import type { PlayerState } from '../state/PlayerState.js';
-import type { Room, Item } from '../shard/RoomGraph.js';
+import type { Room, Item } from '../zone/RoomGraph.js';
 
 // ─── Unit Tests: Combat System Defeat Detection ─────────────────────────────
 
@@ -96,9 +96,9 @@ describe('Player Defeat Detection (CombatSystem)', () => {
   });
 });
 
-// ─── Integration Tests: Full Player Death Flow via ShardRoom ─────────────────
+// ─── Integration Tests: Full Player Death Flow via ZoneRoom ─────────────────
 
-describe('Player Death Flow (ShardRoom Integration)', () => {
+describe('Player Death Flow (ZoneRoom Integration)', () => {
   let colyseus: ColyseusTestServer;
 
   beforeAll(async () => {
@@ -110,7 +110,7 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
   });
 
   it('should send OVERLAY_STATE with state=death when player is defeated', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true, openDelayMs: 0 });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true, openDelayMs: 0 });
     const client = await colyseus.connectTo(room);
 
     const overlayMessages: OverlayMessage[] = [];
@@ -159,7 +159,7 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
   }, 25_000);
 
   it('should send ROOM_SWITCH to refuge after death delay', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true, openDelayMs: 0 });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true, openDelayMs: 0 });
     const client = await colyseus.connectTo(room);
 
     const overlayMessages: OverlayMessage[] = [];
@@ -201,7 +201,7 @@ describe('Player Death Flow (ShardRoom Integration)', () => {
   }, 25_000);
 
   it('should drop player inventory items to the room floor on death', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true, openDelayMs: 0 });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true, openDelayMs: 0 });
     const client = await colyseus.connectTo(room);
 
     // Wait for room to be ready (seeding → open)
@@ -282,7 +282,7 @@ describe('Player Death E2E: down → stabilize', () => {
   });
 
   it('player reaches 0 HP, squadmate stabilizes', async () => {
-    const room = await colyseus.createRoom('shard', { useTestGraph: true, openDelayMs: 0 });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true, openDelayMs: 0 });
     const victim = await colyseus.connectTo(room);
     const healer = await colyseus.connectTo(room);
 
@@ -292,7 +292,7 @@ describe('Player Death E2E: down → stabilize', () => {
       victimOverlay.push(data);
     });
 
-    // Wait for shard to reach 'open' state
+    // Wait for zone to reach 'open' state
     await wait(2000);
 
     // ── Step 1: Down the victim via combat ──────────────────────────────

@@ -12,7 +12,7 @@ import { DROWNED_REVENANT } from '../creatures/templates/drowned-revenant.js';
 import type { Creature } from '../creatures/types.js';
 import { CombatSystem } from '../combat/CombatSystem.js';
 import { createCombatant } from '../combat/CombatState.js';
-import { createPRNG } from '../shard/prng.js';
+import { createPRNG } from '../zone/prng.js';
 import type { Room, RoomGraph, RoomType, Direction } from '@ellmud/shared';
 
 // ─── Test Helpers ─────────────────────────────────────────────────────────────

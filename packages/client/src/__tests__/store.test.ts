@@ -56,26 +56,26 @@ describe('appReducer', () => {
     expect(state.roomHeader).toEqual(header);
   });
 
-  it('SET_SHARD_STATE updates shardState', () => {
-    const state = appReducer(initialState, { type: 'SET_SHARD_STATE', state: 'active' });
-    expect(state.shardState).toBe('active');
+  it('SET_ZONE_STATE updates zoneState', () => {
+    const state = appReducer(initialState, { type: 'SET_ZONE_STATE', state: 'active' });
+    expect(state.zoneState).toBe('active');
   });
 
-  it('SET_SHARD_STATE sets collapseTimer and collapseTimerMax', () => {
-    const state = appReducer(initialState, { type: 'SET_SHARD_STATE', state: 'active', collapseTimer: 120 });
+  it('SET_ZONE_STATE sets collapseTimer and collapseTimerMax', () => {
+    const state = appReducer(initialState, { type: 'SET_ZONE_STATE', state: 'active', collapseTimer: 120 });
     expect(state.collapseTimer).toBe(120);
     expect(state.collapseTimerMax).toBe(120);
   });
 
-  it('SET_SHARD_STATE preserves higher collapseTimerMax', () => {
-    const s1 = appReducer(initialState, { type: 'SET_SHARD_STATE', state: 'active', collapseTimer: 120 });
-    const s2 = appReducer(s1, { type: 'SET_SHARD_STATE', state: 'active', collapseTimer: 90 });
+  it('SET_ZONE_STATE preserves higher collapseTimerMax', () => {
+    const s1 = appReducer(initialState, { type: 'SET_ZONE_STATE', state: 'active', collapseTimer: 120 });
+    const s2 = appReducer(s1, { type: 'SET_ZONE_STATE', state: 'active', collapseTimer: 90 });
     expect(s2.collapseTimer).toBe(90);
     expect(s2.collapseTimerMax).toBe(120);
   });
 
-  it('SET_SHARD_STATE without collapseTimer sets timer to null', () => {
-    const state = appReducer(initialState, { type: 'SET_SHARD_STATE', state: 'active' });
+  it('SET_ZONE_STATE without collapseTimer sets timer to null', () => {
+    const state = appReducer(initialState, { type: 'SET_ZONE_STATE', state: 'active' });
     expect(state.collapseTimer).toBeNull();
   });
 

@@ -161,7 +161,7 @@ export class AmbientSystem {
 
   /**
    * Advance one tick. Returns all ambient events that occurred.
-   * Called from ShardRoom's setSimulationInterval.
+   * Called from ZoneRoom's setSimulationInterval.
    */
   tick(): AmbientEvent[] {
     this.tickCount++;
