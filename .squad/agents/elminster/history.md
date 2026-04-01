@@ -1485,3 +1485,16 @@ CREATE TABLE zone_definitions (
 - **Cross-references added:** §2.3 (timed instance lifecycle), §4.4 (LLM indirect player description), §5.3 (traces and sound for detection), §8.2 (PvP flagging), §8.4 (proximity communication), §8.5 (group guarantee), §13 (Colyseus Room architecture).
 - **Design alignment**: Respects the cardinal rule — players share the world by default. Overflow is transparent infrastructure, not a user-facing mechanic. Reinforces the MUD ethos of unscripted player interaction.
 - **Key files:** `GDD.md` (§2.4 new subsection)
+
+### 2025-07-18: PR Reviews — #255 and #256
+
+**PR #255 — fix: disable text selection in zone designer (issue #251)**
+- Reviewed and merged. CSS-only change: `select-none` on ZoneDesigner root div with form element exclusions via Tailwind arbitrary variants (`[&_input]:select-text`, etc.).
+- Zero risk — no logic modifications. TypeScript compiles clean.
+
+**PR #256 — feat: insert room on exit (issue #252)**
+- Reviewed and merged. Adds `handleInsertRoomOnExit()` to ZoneDesigner — creates a corridor room at midpoint between two connected rooms, rewires exits bidirectionally.
+- Non-atomic multi-step operation (create room → delete old exits → create 4 new exits) is consistent with existing zone designer patterns. Proper guards: confirm dialog, busy state, portal exclusion.
+- Button appears in both exit-pair and single-exit panels. Purple dashed border styling distinguishes from standard CRUD.
+- TypeScript compiles clean. `Split` icon from lucide-react added to imports.
+- **Key file:** `packages/client/src/pages/admin/ZoneDesigner.tsx`
