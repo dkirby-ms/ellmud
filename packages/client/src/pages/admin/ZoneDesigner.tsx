@@ -1155,7 +1155,7 @@ export default function ZoneDesigner({
   const canvasCursor = mode === "connect" ? "crosshair" : isPanning ? "grabbing" : "grab";
 
   return (
-    <div ref={designerRef} className="bg-[#12131A] border border-[#2A2B35] rounded-lg h-full flex flex-col" style={{ position: "relative" }}>
+    <div ref={designerRef} className="bg-[#12131A] border border-[#2A2B35] rounded-lg h-full flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_select]:select-text [&_[contenteditable]]:select-text" style={{ position: "relative" }}>
       {/* ─── Error banner ─────────────────────────────────── */}
       {error && (
         <div className="px-4 py-2 bg-[#8B2500]/30 border-b border-[#8B2500] flex items-center justify-between">
