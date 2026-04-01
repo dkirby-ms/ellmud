@@ -2029,3 +2029,12 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - **Migration ordering matters**: Seed migrations (003, 004) reference `zones.biome` column by its original name. Since they run before migration 011 (which renames biome→theme), they must keep the `biome` column name. Don't rename columns in seed migrations retroactively.
 - **`npx tsc --noEmit` from root shows noise**: Stale `dist/` artifacts cause TS6305 errors. Always run per-package to get real errors.
 - **Beware branch switching by other processes**: Another squad agent switched the working directory mid-edit. Always verify `git branch` before committing.
+
+### 2026-04-02: Procedural Generator Cleanup (Issue #241)
+- Renamed `packages/server/src/zone/` → `packages/server/src/generator/` — directory now reflects its role as the procedural generation module, separate from the zone management system.
+- Added `ENABLE_PROCEDURAL_GENERATION` feature flag to `config.ts` (env var: `ENABLE_PROCEDURAL_GENERATION`, default: `false`). Generator is off by default; hand-crafted zones are the primary path.
+- Gated `generateZoneGraph()` call in `ZoneRoom.ts` behind the feature flag. When disabled, falls back to `createTestRoomGraph()` with a log message.
+- Updated 21 import paths across 16 test files and 5 production files (`ZoneRoom.ts`, `PlayerState.ts`, `CreatureManager.ts`, `commands/index.ts`, `commands/handlers/go.ts`, `combat-actions.ts`).
+- Cleaned up "flooded-crypt biome" terminology → generic "theme" terminology in generator.ts comments and wave4-room-graph.test.ts describe blocks.
+- Confirmed: extraction anchors were already removed (no references in generator). Flooded-crypt biome file already deleted; templates already inlined into generator.ts.
+- All 151 tests pass (45 generator + 106 dependent). PR #263.
