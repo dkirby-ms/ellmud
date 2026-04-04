@@ -36,6 +36,7 @@ interface ZoneRow {
   max_players: number;
   pvp_enabled: boolean;
   repop_interval_seconds: number;
+  faction_slug: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -87,6 +88,7 @@ function zoneRowToEntity(row: ZoneRow): ZoneDefinition {
     maxPlayers: row.max_players,
     pvpEnabled: row.pvp_enabled,
     repopIntervalSeconds: row.repop_interval_seconds,
+    factionSlug: row.faction_slug ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -149,6 +151,17 @@ export class PgZoneRepository implements ZoneRepository {
     return this.fetchZoneBundle(zone);
   }
 
+  async getZoneByFactionSlug(factionSlug: string): Promise<ZoneData | null> {
+    const zoneResult = await query<ZoneRow>(
+      `SELECT * FROM zones WHERE faction_slug = $1 AND category = 'faction_hub' LIMIT 1`,
+      [factionSlug],
+    );
+    if (zoneResult.rows.length === 0) return null;
+
+    const zone = zoneRowToEntity(zoneResult.rows[0]);
+    return this.fetchZoneBundle(zone);
+  }
+
   async getZoneById(id: string): Promise<ZoneData | null> {
     const zoneResult = await query<ZoneRow>(
       `SELECT * FROM zones WHERE id = $1`,
@@ -167,8 +180,8 @@ export class PgZoneRepository implements ZoneRepository {
       `INSERT INTO zones (
         slug, name, description, level_min, level_max, tier, theme,
         entry_room_slugs, lifecycle, category, max_players,
-        pvp_enabled, repop_interval_seconds
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        pvp_enabled, repop_interval_seconds, faction_slug
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
       RETURNING *`,
       [
         zone.slug,
@@ -184,6 +197,7 @@ export class PgZoneRepository implements ZoneRepository {
         zone.maxPlayers,
         zone.pvpEnabled,
         zone.repopIntervalSeconds,
+        zone.factionSlug ?? null,
       ],
     );
     return zoneRowToEntity(result.rows[0]);
@@ -209,8 +223,8 @@ export class PgZoneRepository implements ZoneRepository {
         slug = $1, name = $2, description = $3, level_min = $4, level_max = $5,
         tier = $6, theme = $7, entry_room_slugs = $8, lifecycle = $9, category = $10,
         max_players = $11, pvp_enabled = $12, repop_interval_seconds = $13,
-        updated_at = now()
-      WHERE id = $14
+        faction_slug = $14, updated_at = now()
+      WHERE id = $15
       RETURNING *`,
       [
         merged.slug,
@@ -226,6 +240,7 @@ export class PgZoneRepository implements ZoneRepository {
         merged.maxPlayers,
         merged.pvpEnabled,
         merged.repopIntervalSeconds,
+        merged.factionSlug ?? null,
         id,
       ],
     );

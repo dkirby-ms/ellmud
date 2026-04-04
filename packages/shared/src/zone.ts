@@ -26,10 +26,12 @@ export interface ZoneDefinition {
   theme: string;
   entryRoomSlugs: string[];
   lifecycle: 'persistent' | 'scheduled' | 'event';
-  category: 'hub' | 'dungeon' | 'wilderness' | 'social';
+  category: 'hub' | 'faction_hub' | 'dungeon' | 'wilderness' | 'social';
   maxPlayers: number; // 0 = unlimited
   pvpEnabled: boolean;
   repopIntervalSeconds: number; // e.g. 300 = 5 min respawn cycle
+  /** Faction slug for faction_hub zones. Undefined for non-faction zones. */
+  factionSlug?: string;
 }
 
 // ─── Zone Room Definition ───────────────────────────────────────────────────

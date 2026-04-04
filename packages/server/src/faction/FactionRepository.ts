@@ -15,6 +15,9 @@ export interface FactionRepository {
   /** Load the player's faction membership. Returns null if unaffiliated. */
   getPlayerFactions(playerId: string): Promise<FactionMembership[]>;
 
+  /** Get the faction slug for a player (e.g. 'ironwright'). Returns null if unaffiliated. */
+  getPlayerFactionSlug(playerId: string): Promise<string | null>;
+
   /** Set or update a player's faction standing (reputation/rank). */
   updateFaction(
     playerId: string,
@@ -27,11 +30,23 @@ export interface FactionRepository {
 
 export class InMemoryFactionRepository implements FactionRepository {
   private memberships = new Map<string, FactionMembership>();
+  private factionSlugs = new Map<string, string>(); // factionId → slug
+
+  /** Register a faction ID → slug mapping (for testing). */
+  registerFaction(factionId: string, slug: string): void {
+    this.factionSlugs.set(factionId, slug);
+  }
 
   async getPlayerFactions(playerId: string): Promise<FactionMembership[]> {
     const m = this.memberships.get(playerId);
     if (!m) return [];
     return [structuredClone(m)];
+  }
+
+  async getPlayerFactionSlug(playerId: string): Promise<string | null> {
+    const m = this.memberships.get(playerId);
+    if (!m) return null;
+    return this.factionSlugs.get(m.faction_id) ?? null;
   }
 
   async updateFaction(
