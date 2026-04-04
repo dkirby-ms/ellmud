@@ -1456,7 +1456,7 @@ The **Zone Manager** view allows designers to:
 - Connect rooms with directional exits (north, south, east, west, up, down)
 - Set inter-zone exits (target_zone_slug + target_room_slug)
 - Configure locked/hidden exits
-- Preview zone topology
+- Preview zone topology (ReactFlow canvas with ELK hierarchical layout)
 
 ### Audit & Deployment
 - **Audit Log**: All admin CRUD actions are logged to `audit_log` table (action, entity_type, entity_id, actor, timestamp)
