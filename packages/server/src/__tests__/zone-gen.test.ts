@@ -7,8 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import type { Room, RoomGraph, ZoneTier } from '@ellmud/shared';
 import { serializeRoomGraph, deserializeRoomGraph } from '@ellmud/shared';
-import { generateZoneGraph } from '../zone/generator.js';
-import { createPRNG } from '../zone/prng.js';
+import { generateZoneGraph } from '../generator/generator.js';
+import { createPRNG } from '../generator/prng.js';
 
 // ─── Helper: BFS distance map ───────────────────────────────────────────────
 

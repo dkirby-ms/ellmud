@@ -17,9 +17,9 @@ export class PgExplorationRepository implements ExplorationRepository {
   async recordVisit(visit: ExplorationVisit): Promise<void> {
     await query(
       `INSERT INTO character_explored_rooms
-         (character_id, zone_slug, room_id, room_type, room_name, shard_tier)
+         (character_id, zone_slug, room_id, room_type, room_name, zone_tier)
        VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (character_id, COALESCE(zone_slug, '__shard__'), room_id)
+       ON CONFLICT (character_id, COALESCE(zone_slug, '__instance__'), room_id)
        DO UPDATE SET
          last_visited = NOW(),
          visit_count  = character_explored_rooms.visit_count + 1`,
@@ -37,7 +37,7 @@ export class PgExplorationRepository implements ExplorationRepository {
   async getExploredRooms(characterId: string): Promise<ExploredRoom[]> {
     const result = await query<ExploredRoomRow>(
       `SELECT character_id, zone_slug, room_id, room_type, room_name,
-              shard_tier, first_visited, last_visited, visit_count
+              zone_tier, first_visited, last_visited, visit_count
        FROM character_explored_rooms
        WHERE character_id = $1
        ORDER BY first_visited`,
@@ -49,7 +49,7 @@ export class PgExplorationRepository implements ExplorationRepository {
   async getExploredRoomsInZone(characterId: string, zoneSlug: string): Promise<ExploredRoom[]> {
     const result = await query<ExploredRoomRow>(
       `SELECT character_id, zone_slug, room_id, room_type, room_name,
-              shard_tier, first_visited, last_visited, visit_count
+              zone_tier, first_visited, last_visited, visit_count
        FROM character_explored_rooms
        WHERE character_id = $1 AND zone_slug = $2
        ORDER BY first_visited`,
@@ -63,7 +63,7 @@ export class PgExplorationRepository implements ExplorationRepository {
       `SELECT EXISTS(
          SELECT 1 FROM character_explored_rooms
          WHERE character_id = $1
-           AND COALESCE(zone_slug, '__shard__') = COALESCE($2, '__shard__')
+           AND COALESCE(zone_slug, '__instance__') = COALESCE($2, '__instance__')
            AND room_id = $3
        ) AS exists`,
       [characterId, zoneSlug, roomId],
@@ -80,7 +80,7 @@ export class PgExplorationRepository implements ExplorationRepository {
       `SELECT
          COUNT(*)::TEXT                                    AS total_rooms,
          COALESCE(SUM(visit_count), 0)::TEXT              AS total_visits,
-         COUNT(DISTINCT COALESCE(zone_slug, '__shard__'))::TEXT AS zones
+         COUNT(DISTINCT COALESCE(zone_slug, '__instance__'))::TEXT AS zones
        FROM character_explored_rooms
        WHERE character_id = $1`,
       [characterId],
@@ -103,7 +103,7 @@ interface ExploredRoomRow {
   room_id: string;
   room_type: string;
   room_name: string;
-  shard_tier: number | null;
+  zone_tier: number | null;
   first_visited: Date;
   last_visited: Date;
   visit_count: number;
@@ -116,7 +116,7 @@ function toExploredRoom(row: ExploredRoomRow): ExploredRoom {
     roomId: row.room_id,
     roomType: row.room_type,
     roomName: row.room_name,
-    zoneTier: row.shard_tier,
+    zoneTier: row.zone_tier,
     firstVisited: row.first_visited,
     lastVisited: row.last_visited,
     visitCount: row.visit_count,

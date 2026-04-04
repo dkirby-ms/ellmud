@@ -5,7 +5,7 @@
  * This is server-authoritative — the client never sees this directly.
  */
 
-import type { Item } from '../zone/RoomGraph.js';
+import type { Item } from '../generator/RoomGraph.js';
 import type { VisibleEquipment } from '@ellmud/shared';
 
 export interface InventoryEntry {

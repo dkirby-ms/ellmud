@@ -9,7 +9,7 @@
  *
  * Schema reference: migration 005_create_run_history.sql
  *   - run_history: player_id, run_id, zone_tier (1-3), duration_sec (>=0),
- *     extracted (boolean), extracted_items (JSONB), xp_gained (>=0), created_at
+ *     survived (boolean), items_carried_out (JSONB), xp_gained (>=0), created_at
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -33,8 +33,8 @@ function makeRun(overrides?: Partial<RunRecord>): RunRecord {
     playerId: overrides?.playerId ?? PLAYER_A,
     zoneTier: overrides?.zoneTier ?? 1,
     durationSec: overrides?.durationSec ?? 300,
-    extracted: overrides?.extracted ?? true,
-    extractedItems: overrides?.extractedItems ?? [{ itemId: 'bone-shard', name: 'Bone Shard' }],
+    survived: overrides?.survived ?? true,
+    itemsCarriedOut: overrides?.itemsCarriedOut ?? [{ itemId: 'bone-shard', name: 'Bone Shard' }],
     xpGained: overrides?.xpGained ?? 50,
   };
 }
@@ -82,22 +82,22 @@ function runHistoryRepositoryContractTests(
       expect(history[0].playerId).toBe(PLAYER_A);
       expect(history[0].zoneTier).toBe(1);
       expect(history[0].durationSec).toBe(300);
-      expect(history[0].extracted).toBe(true);
+      expect(history[0].survived).toBe(true);
       expect(history[0].xpGained).toBe(50);
-      expect(history[0].extractedItems).toHaveLength(1);
+      expect(history[0].itemsCarriedOut).toHaveLength(1);
     });
 
     it('records a failed run', async () => {
       await repo.recordRun(makeRun({
         runId: 'zone-dead',
-        extracted: false,
-        extractedItems: [],
+        survived: false,
+        itemsCarriedOut: [],
         xpGained: 10,
       }));
 
       const history = await repo.getPlayerHistory(PLAYER_A);
-      expect(history[0].extracted).toBe(false);
-      expect(history[0].extractedItems).toEqual([]);
+      expect(history[0].survived).toBe(false);
+      expect(history[0].itemsCarriedOut).toEqual([]);
     });
 
     it('records multiple runs for same player', async () => {
@@ -217,20 +217,20 @@ function runHistoryRepositoryContractTests(
       expect(tiers).toEqual([1, 2, 3]);
     });
 
-    it('handles empty extracted items', async () => {
-      await repo.recordRun(makeRun({ extractedItems: [] }));
+    it('handles empty carried-out items', async () => {
+      await repo.recordRun(makeRun({ itemsCarriedOut: [] }));
       const history = await repo.getPlayerHistory(PLAYER_A);
-      expect(history[0].extractedItems).toEqual([]);
+      expect(history[0].itemsCarriedOut).toEqual([]);
     });
 
-    it('handles complex extracted items', async () => {
+    it('handles complex carried-out items', async () => {
       const items = [
         { itemId: 'bone-shard', name: 'Bone Shard', quantity: 3 },
         { itemId: 'shadow-blade', name: 'Shadow Blade' },
       ];
-      await repo.recordRun(makeRun({ extractedItems: items }));
+      await repo.recordRun(makeRun({ itemsCarriedOut: items }));
       const history = await repo.getPlayerHistory(PLAYER_A);
-      expect(history[0].extractedItems).toHaveLength(2);
+      expect(history[0].itemsCarriedOut).toHaveLength(2);
     });
 
     it('deep-copies data (mutation safety)', async () => {

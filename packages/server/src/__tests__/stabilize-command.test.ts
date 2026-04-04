@@ -7,8 +7,8 @@ import { handleStabilize } from '../commands/handlers/stabilize.js';
 import { DowningSystem, BANDAGE_ITEM_ID } from '../systems/DowningSystem.js';
 import { PlayerState } from '../state/PlayerState.js';
 import type { CommandContext } from '../commands/index.js';
-import type { Room } from '../zone/RoomGraph.js';
-import type { Item } from '../zone/RoomGraph.js';
+import type { Room } from '../generator/RoomGraph.js';
+import type { Item } from '../generator/RoomGraph.js';
 
 const ROOM_ID = 'room-1';
 

@@ -2030,6 +2030,14 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - **`npx tsc --noEmit` from root shows noise**: Stale `dist/` artifacts cause TS6305 errors. Always run per-package to get real errors.
 - **Beware branch switching by other processes**: Another squad agent switched the working directory mid-edit. Always verify `git branch` before committing.
 
+### 2026-04-02: Procedural Generator Cleanup (Issue #241)
+- Renamed `packages/server/src/zone/` → `packages/server/src/generator/` — directory now reflects its role as the procedural generation module, separate from the zone management system.
+- Added `ENABLE_PROCEDURAL_GENERATION` feature flag to `config.ts` (env var: `ENABLE_PROCEDURAL_GENERATION`, default: `false`). Generator is off by default; hand-crafted zones are the primary path.
+- Gated `generateZoneGraph()` call in `ZoneRoom.ts` behind the feature flag. When disabled, falls back to `createTestRoomGraph()` with a log message.
+- Updated 21 import paths across 16 test files and 5 production files (`ZoneRoom.ts`, `PlayerState.ts`, `CreatureManager.ts`, `commands/index.ts`, `commands/handlers/go.ts`, `combat-actions.ts`).
+- Cleaned up "flooded-crypt biome" terminology → generic "theme" terminology in generator.ts comments and wave4-room-graph.test.ts describe blocks.
+- Confirmed: extraction anchors were already removed (no references in generator). Flooded-crypt biome file already deleted; templates already inlined into generator.ts.
+- All 151 tests pass (45 generator + 106 dependent). PR #263.
 ### 2026-04-01: Faction Strongholds (Issue #236)
 - Created 3 faction stronghold zones (The Foundry, The Cartographium, The Counting House) with 8 feature rooms each.
 - Migration `013_faction_strongholds.sql` adds `faction_slug` column to zones table and seeds all 3 strongholds with category `faction_hub`.
@@ -2085,3 +2093,49 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 
 **Status:** Rejection filed to decisions.md. PR author (Jarlaxle #239 work) to add migration and push revision.
 
+---
+
+## 2026-04-01: Refuge Repurposing as Designer/Debug Hub (Issue #239)
+
+**PR:** #260 | **Branch:** `squad/239-refuge-repurpose` | **Base:** `dev`
+
+**Task:** Recategorize Refuge from player spawn hub to developer/designer workspace to support new faction-based stronghold routing.
+
+**Work Completed:**
+- Database schema update: Room category changed from `hub` to `dev` for Refuge zone
+- Migration `014_refuge_repurpose.sql` updates Refuge category and preserves all room data
+- Type definitions: Updated `RoomCategory` union to reflect development use case
+- Descriptions: Updated Refuge zone description to reflect designer/debug purpose
+- Tests: 13 tests updated and added for Refuge as development environment
+
+**Architecture:**
+- **Primary change:** Refuge no longer serves as player spawn location
+- **New role:** Isolated development environment for zone design testing and debug workflows
+- **Fallback:** Remains as emergency routing fallback for unaffiliated/unroutable players
+- **Designer access:** Admin/designer tools continue to route to Refuge for safe testing
+- **Stronghold zones:** Ironwright Foundry, Veil Cartographium, Scarlet Counting House become primary player hubs
+
+**Testing:**
+- 13 tests updated for Refuge as designer environment
+- Integrated with Drizzt's faction stronghold routing (#238)
+- All server tests passing, zero regressions
+
+**Cross-team Impact:**
+- **Drizzt (Engine):** Death/spawn routing now uses faction strongholds; Refuge only fallback
+- **Regis (Frontend):** Client routing via `/api/spawn-zone` endpoint; Refuge no longer primary
+- **Designer workflows:** Clear isolation of design environment from player gameplay
+
+**Key Changes:**
+- Zone category enum: `hub` → `dev` for Refuge
+- Database migration standardizes category across all Refuge instances
+- Type system reflects developer-focused use case
+- All admin/designer features preserved and functional
+
+### 2026-04-04: PR #263 Merge Conflict Resolution
+- Merged `origin/dev` into `squad/241-generator-cleanup` after PRs #258, #259, #262, #264 landed first.
+- Three files conflicted — all were additive (both sides added different config fields/imports):
+  - `config.ts`: kept both `enableProceduralGeneration` (mine) and `corpseTTLSeconds` (from #237 corpse system)
+  - `player-death.test.ts`: kept my `generator/` import path rename + new `CorpseSystem` import from dev
+  - `wave3-redis-contracts.test.ts`: kept both config test defaults
+- **Lesson:** When another process shares the worktree, use a single bash session for the full checkout→merge→resolve→commit→push cycle to avoid branch-switching race conditions.
+- 153 targeted tests passing post-merge.

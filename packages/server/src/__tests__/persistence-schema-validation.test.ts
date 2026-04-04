@@ -317,7 +317,7 @@ describe('001_schema.sql — Run History', () => {
     expect(extractCreateTables(sql)).toContain('run_history');
   });
 
-  it('has shard_tier CHECK constraint (1-3)', () => {
+  it('has zone_tier CHECK constraint (1-3)', () => {
     expect(sql).toMatch(/shard_tier\s+INT\s+NOT NULL\s+CHECK\s*\(shard_tier BETWEEN 1 AND 3\)/i);
   });
 
@@ -329,11 +329,11 @@ describe('001_schema.sql — Run History', () => {
     expect(sql).toMatch(/xp_gained\s+INT\s+NOT NULL\s+DEFAULT\s+0\s+CHECK\s*\(xp_gained\s*>=\s*0\)/i);
   });
 
-  it('has extracted boolean default false', () => {
+  it('has survived boolean default false', () => {
     expect(sql).toMatch(/extracted\s+BOOLEAN\s+NOT NULL\s+DEFAULT\s+false/i);
   });
 
-  it('has extracted_items JSONB column', () => {
+  it('has items_carried_out JSONB column', () => {
     expect(sql).toMatch(/extracted_items\s+JSONB\s+NOT NULL\s+DEFAULT\s+'\[\]'/i);
   });
 
@@ -342,7 +342,7 @@ describe('001_schema.sql — Run History', () => {
     expect(fks.some(fk => fk.refTable === 'players')).toBe(true);
   });
 
-  it('has leaderboard index (shard_tier + xp_gained DESC)', () => {
+  it('has leaderboard index (zone_tier + xp_gained DESC)', () => {
     const indexes = extractIndexes(sql);
     expect(indexes).toContain('idx_runs_leaderboard');
   });

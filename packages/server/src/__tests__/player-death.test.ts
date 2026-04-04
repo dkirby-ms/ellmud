@@ -17,7 +17,7 @@ import { MessageTypes } from '@ellmud/shared';
 import type { OverlayMessage } from '@ellmud/shared';
 import { bootTestServer, wait } from './helpers/index.js';
 import type { PlayerState } from '../state/PlayerState.js';
-import type { Room, Item } from '../zone/RoomGraph.js';
+import type { Room, Item } from '../generator/RoomGraph.js';
 import type { CorpseSystem } from '../systems/CorpseSystem.js';
 
 // ─── Unit Tests: Combat System Defeat Detection ─────────────────────────────

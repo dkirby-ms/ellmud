@@ -17,7 +17,7 @@ import type { OverlayMessage, RoomSwitchMessage } from '@ellmud/shared';
 import { bootTestServer, wait } from './helpers/index.js';
 import type { PlayerState } from '../state/PlayerState.js';
 import { CombatSystem, createCombatant, DEFAULT_PLAYER_STATS } from '../combat/index.js';
-import type { Room } from '../zone/RoomGraph.js';
+
 import { InMemoryFactionRepository } from '../faction/FactionRepository.js';
 import {
   resolvePlayerHubTarget,

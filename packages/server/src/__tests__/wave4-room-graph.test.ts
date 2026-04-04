@@ -4,7 +4,7 @@
  * Supplements zone-gen.test.ts with integration tests for:
  *   - Graph adapter (shared → local format conversion)
  *   - Multi-tier room count validation (Tier 2, Tier 3)
- *   - Theme-specific naming verification (Flooded Crypt pools)
+ *   - Theme-specific naming verification
  *   - Hazard placement in non-anchor rooms
  *   - Graph adapter item resolution via registry
  */
@@ -12,8 +12,8 @@
 import { describe, it, expect } from 'vitest';
 import type { ZoneTier, Room as SharedRoom } from '@ellmud/shared';
 import { serializeRoomGraph, deserializeRoomGraph } from '@ellmud/shared';
-import { generateZoneGraph, ROOM_NAMES } from '../zone/generator.js';
-import { adaptRoomGraph } from '../zone/graph-adapter.js';
+import { generateZoneGraph, ROOM_NAMES } from '../generator/generator.js';
+import { adaptRoomGraph } from '../generator/graph-adapter.js';
 
 // ─── Configs ────────────────────────────────────────────────────────────────
 
@@ -95,8 +95,8 @@ describe('Multi-Tier Room Count Validation (#5)', () => {
 
 // ─── Theme Name Verification ────────────────────────────────────────────────
 
-describe('Flooded Crypt Theme Naming (#5)', () => {
-  it('all room names come from the flooded_crypt theme pool', () => {
+describe('Theme Naming (#5)', () => {
+  it('all room names come from the theme pool', () => {
     const graph = generateZoneGraph(T1_CONFIG);
     const allThemeNames = new Set<string>();
     for (const names of Object.values(ROOM_NAMES)) {
@@ -167,7 +167,7 @@ describe('Hazard Placement (#5)', () => {
     }
   });
 
-  it('hazard types are from the flooded_crypt template set', () => {
+  it('hazard types are from the theme template set', () => {
     const validTypes = new Set(['rising_water', 'slippery_floor', 'crumbling_ceiling', 'submerged_trap']);
     for (const seed of [42, 7, 100]) {
       const graph = generateZoneGraph({ ...T1_CONFIG, seed });

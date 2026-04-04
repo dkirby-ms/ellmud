@@ -28,9 +28,9 @@ import { ZoneState } from '../state.js';
 import { parseCommand } from '../commands/parser.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
-import { createTestRoomGraph, type RoomGraph, type Direction } from '../zone/RoomGraph.js';
-import { generateZoneGraph } from '../zone/generator.js';
-import { adaptRoomGraph } from '../zone/graph-adapter.js';
+import { createTestRoomGraph, type RoomGraph, type Direction } from '../generator/RoomGraph.js';
+import { generateZoneGraph } from '../generator/generator.js';
+import { adaptRoomGraph } from '../generator/graph-adapter.js';
 import { handleLook } from '../commands/handlers/look.js';
 import { CombatSystem, type TickResult, createCombatant } from '../combat/index.js';
 import { SoundSystem } from '../sound/index.js';
@@ -53,7 +53,7 @@ import type { StashRepository } from '../stash/index.js';
 import { transferInventoryToStash } from '../systems/stash-transfer.js';
 import { CreatureManager, DROWNED_REVENANT, type CreatureAction } from '../creatures/index.js';
 import type { CreatureWorldState } from '../creatures/behavior.js';
-import { createPRNG } from '../zone/prng.js';
+import { createPRNG } from '../generator/prng.js';
 import {
   type PlayerProfileRepository,
   InMemoryPlayerProfileRepository,
@@ -72,7 +72,7 @@ import type { ZoneData } from '../zones/index.js';
 import { resolvePlayerHubTarget, resolvePlayerHubName } from '../zones/stronghold.js';
 import { convertZoneToRoomGraph } from '../zones/zone-adapter.js';
 import { getItemDefinition } from '../items/registry.js';
-import type { Item } from '../zone/RoomGraph.js';
+import type { Item } from '../generator/RoomGraph.js';
 import type { ExplorationRepository } from '../exploration/index.js';
 import { getExplorationRepository } from '../exploration/index.js';
 import type { CharacterRepository } from '../character/index.js';
@@ -255,7 +255,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     } else if (options['useTestGraph'] === true) {
       this.roomGraph = createTestRoomGraph();
       this.entryRoomIds = [this.roomGraph.startRoomId]; // Test graph has single entry
-    } else {
+    } else if (getConfig().enableProceduralGeneration) {
       const seed = typeof options['seed'] === 'number' ? options['seed'] : Date.now();
       const sharedGraph = generateZoneGraph({ tier: this.zoneTier, seed });
       this.roomGraph = adaptRoomGraph(sharedGraph);
@@ -264,6 +264,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       // Spawn creatures using a derived seed (distinct from generator's PRNG)
       const creaturePrng = createPRNG(seed + 7919);
       this.creatureManager.spawnCreatures(sharedGraph, DROWNED_REVENANT, creaturePrng);
+    } else {
+      // Procedural generation disabled — fall back to test graph
+      this.roomGraph = createTestRoomGraph();
+      this.entryRoomIds = [this.roomGraph.startRoomId];
+      this.log('Procedural generation disabled (ENABLE_PROCEDURAL_GENERATION=false) — using fallback graph.');
     }
 
     // Initialize combat system with room exit resolver
@@ -2017,11 +2022,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
   // ─── Run History Persistence ────────────────────────────────────────────
 
-  /** Record a zone run when a player extracts or the zone collapses. */
+  /** Record a zone run when a player survives or the zone collapses. */
   private async recordRunHistory(
     playerId: string,
     player: PlayerState | undefined,
-    extracted: boolean,
+    survived: boolean,
   ): Promise<void> {
     try {
       const joinTime = this.playerJoinTimes.get(playerId);
@@ -2034,8 +2039,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         playerId: this.dbPlayerId(playerId),
         zoneTier: this.zoneTier,
         durationSec,
-        extracted,
-        extractedItems: player
+        survived,
+        itemsCarriedOut: player
           ? Array.from(player.inventory.values()).map((entry) => ({
               itemId: entry.item.id,
               name: entry.item.name,
@@ -2285,7 +2290,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 // The Refuge is now a designer/debug hub — fallback for unaffiliated players.
 
 function createFallbackRefugeGraph(): RoomGraph {
-  const rooms = new Map<string, import('../zone/RoomGraph.js').Room>();
+  const rooms = new Map<string, import('../generator/RoomGraph.js').Room>();
 
   rooms.set('hearth', {
     id: 'hearth',

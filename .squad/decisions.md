@@ -16,6 +16,54 @@ This is the second time this pattern has been noted (Jarlaxle's own history ment
 - PR #260 needs a new `014_repurpose_refuge.sql` migration before merge
 - All future data modifications must follow the same pattern: new migration file + optional seed file update
 - This rule applies to all seed migrations (003, 004, and any future seed files)
+### 2026-04-01: Death & Spawn Routing — Faction Strongholds
+**By:** Drizzt (Engine Dev)  
+**Issue:** #238  
+
+## Decision
+Death routing and login routing now use faction-based stronghold resolution instead of hardcoded Refuge. Added `/api/spawn-zone` endpoint for client login routing.
+
+## Routing Table
+| Faction | Stronghold | Zone Target |
+|---------|-----------|-------------|
+| ironwright | The Foundry | zone:the-foundry |
+| veil | The Cartographium | zone:the-cartographium |
+| scarlet | The Counting House | zone:the-counting-house |
+| _(none)_ | The Refuge | zone:the-refuge |
+
+## Architecture
+- **Death routing** is server-authoritative: `resolvePlayerHubTarget(factionSlug)` on death, cached from `playerFactionSlugs` map
+- **Login routing** requires client cooperation: `GET /api/spawn-zone` returns `{ target, zoneSlug, factionSlug }` — client must call before connecting
+- **Narration** uses `resolvePlayerHubName()` to inject the specific zone name ("You awaken in The Foundry…")
+
+## Impact
+- **Regis (Frontend):** Client needs to call `/api/spawn-zone` on login and connect to the returned zone target instead of hardcoded `zone:the-refuge`
+- **Jarlaxle (Systems):** Faction stronghold zones must exist and be registered for routing to work; falls back to Refuge gracefully
+- **All:** The Refuge is now the fallback hub for unaffiliated players only
+
+---
+
+### 2026-04-01: Refuge Repurposing — Designer/Debug Hub
+**By:** Jarlaxle (Systems Dev)  
+**Issue:** #239  
+
+## Decision
+The Refuge has been recategorized from `hub` (player spawn location) to `dev` (designer/debug workspace). This shift reflects the architectural move to faction-based strongholds for player spawning and respawning.
+
+## Rationale
+Players now respawn at faction-specific strongholds rather than a universal hub. The Refuge becomes a dedicated development environment where designers can safely test new room templates, spawn creatures, and debug zone mechanics without impacting production gameplay. This provides isolation and clear purpose separation.
+
+## Changes
+- Database: Room category changed from `hub` to `dev`
+- Type definitions: Updated `RoomCategory` union
+- Descriptions: Updated to reflect designer/developer purpose
+- Tests: 13 tests updated for developer workflow context
+
+## Impact
+- **Refuge as fallback:** Remains as emergency routing fallback for unaffiliated/unroutable players
+- **Designer workflows:** Provides isolated test environment for zone design iteration
+- **Admin access:** Unchanged; admin/designer tools continue to use Refuge
+- **Player experience:** No disruption; players route to faction strongholds via `/api/spawn-zone`
 
 ---
 

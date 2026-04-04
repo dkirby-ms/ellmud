@@ -1,4 +1,4 @@
--- 014_repurpose_refuge.sql — Repurpose Refuge as designer/debug hub.
+-- 015_repurpose_refuge.sql — Repurpose Refuge as designer/debug hub.
 -- Matches the seed-file change in 003_seed_zones.sql for existing databases.
 
 UPDATE zones
