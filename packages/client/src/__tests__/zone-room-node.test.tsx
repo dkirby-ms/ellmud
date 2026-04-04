@@ -15,8 +15,15 @@
  * - Portal exit badge (⟐)
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
+
+// Mock @xyflow/react — Handle requires ReactFlow provider context
+vi.mock('@xyflow/react', () => ({
+  Handle: () => null,
+  Position: { Top: 'top', Bottom: 'bottom', Left: 'left', Right: 'right' },
+}));
+
 import { ZoneRoomNode, type RoomNodeData } from '../components/map/ZoneRoomNode.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

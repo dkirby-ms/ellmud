@@ -178,14 +178,14 @@ describe('elkLayout — graph construction', () => {
   });
 });
 
-// ─── Position Normalization ─────────────────────────────────────────────────
+// ─── Position Extraction ────────────────────────────────────────────────────
 
-describe('elkLayout — grid coordinate normalization', () => {
+describe('elkLayout — position extraction', () => {
   beforeEach(() => {
     mockLayout.mockReset();
   });
 
-  it('converts ELK pixel coords to grid units (÷100)', async () => {
+  it('passes ELK pixel coords through directly', async () => {
     mockLayout.mockResolvedValueOnce(
       mockElkResult([
         { id: 'room-1', x: 0, y: 0 },
@@ -202,10 +202,10 @@ describe('elkLayout — grid coordinate normalization', () => {
     );
 
     expect(positions.get('room-1')).toEqual({ x: 0, y: 0, z: 0 });
-    expect(positions.get('room-2')).toEqual({ x: 3, y: 2, z: 0 });
+    expect(positions.get('room-2')).toEqual({ x: 300, y: 200, z: 0 });
   });
 
-  it('rounds fractional coordinates to nearest grid cell', async () => {
+  it('defaults missing coordinates to 0', async () => {
     mockLayout.mockResolvedValueOnce(
       mockElkResult([{ id: 'room-1', x: 149, y: 251 }]),
     );
@@ -215,7 +215,7 @@ describe('elkLayout — grid coordinate normalization', () => {
       'room-1',
     );
 
-    expect(positions.get('room-1')).toEqual({ x: 1, y: 3, z: 0 });
+    expect(positions.get('room-1')).toEqual({ x: 149, y: 251, z: 0 });
   });
 });
 

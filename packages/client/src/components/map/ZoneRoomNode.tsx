@@ -3,6 +3,7 @@
  */
 
 import React from 'react';
+import { Handle, Position } from '@xyflow/react';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,16 @@ const PROPERTY_ICONS: Record<string, string> = {
   heavy_door: '🚪',
   cavern: '🕳',
   water: '💧',
+};
+
+const HANDLE_STYLE: React.CSSProperties = {
+  opacity: 0,
+  width: 1,
+  height: 1,
+  minWidth: 0,
+  minHeight: 0,
+  border: 'none',
+  padding: 0,
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -322,6 +333,16 @@ export function ZoneRoomNode(props: { data: RoomNodeData; selected?: boolean }) 
           ⟐
         </span>
       )}
+
+      {/* Invisible handles for ReactFlow edge connections (4 source + 4 target) */}
+      <Handle type="source" position={Position.Top} id="north-source" style={HANDLE_STYLE} />
+      <Handle type="target" position={Position.Top} id="north-target" style={HANDLE_STYLE} />
+      <Handle type="source" position={Position.Bottom} id="south-source" style={HANDLE_STYLE} />
+      <Handle type="target" position={Position.Bottom} id="south-target" style={HANDLE_STYLE} />
+      <Handle type="source" position={Position.Right} id="east-source" style={HANDLE_STYLE} />
+      <Handle type="target" position={Position.Right} id="east-target" style={HANDLE_STYLE} />
+      <Handle type="source" position={Position.Left} id="west-source" style={HANDLE_STYLE} />
+      <Handle type="target" position={Position.Left} id="west-target" style={HANDLE_STYLE} />
 
       {/* Property tags (4.6) */}
       {data.properties && data.properties.length > 0 && (

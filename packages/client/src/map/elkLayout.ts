@@ -5,8 +5,8 @@
  * The legacy BFS engine (computeLayout.ts) is deprecated for new work but
  * retained for the player minimap which requires synchronous layout.
  *
- * Coordinate system mapping:
- * - ELK uses pixel coordinates; we normalize to a 100×100 grid
+ * Coordinate system:
+ * - ELK outputs pixel coordinates which are passed directly to ReactFlow
  * - Z-axis (floors) are handled via separate ELK graphs per floor
  */
 
@@ -292,7 +292,7 @@ function mergeLayoutOptions(options?: ElkLayoutOptions): LayoutOptions {
 /**
  * Extract room positions from ELK layout output.
  *
- * Converts ELK pixel coordinates → grid coordinates (÷ CELL_SIZE).
+ * Passes ELK pixel coordinates directly to the consumer (ReactFlow).
  * Assigns the provided floor number (z) to all positions.
  */
 function extractPositions(graph: ElkNode, floor: number): Map<string, RoomPosition> {
@@ -300,15 +300,11 @@ function extractPositions(graph: ElkNode, floor: number): Map<string, RoomPositi
   
   if (!graph.children) return positions;
   
-  // ELK uses pixel coordinates; convert to grid units
-  // Current grid: 100×100 cells, so divide by 100 to get cell coords
-  const CELL_SIZE = 100;
-  
   for (const node of graph.children) {
     if (!node.id) continue;
     
-    const x = Math.round((node.x ?? 0) / CELL_SIZE);
-    const y = Math.round((node.y ?? 0) / CELL_SIZE);
+    const x = node.x ?? 0;
+    const y = node.y ?? 0;
     const z = floor;
     
     positions.set(node.id, { x, y, z });

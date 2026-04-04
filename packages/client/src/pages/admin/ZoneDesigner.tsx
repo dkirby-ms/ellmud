@@ -152,7 +152,7 @@ function roomsToFlowNodes(
     nodes.push({
       id: room.slug,
       type: 'room',
-      position: { x: pos.x * 100, y: pos.y * 100 },
+      position: { x: pos.x, y: pos.y },
       data: {
         slug: room.slug,
         name: room.name,
@@ -174,6 +174,16 @@ function roomsToFlowNodes(
 
   return nodes;
 }
+
+/** Map exit direction to the opposite compass direction (for target handles). */
+const OPPOSITE_DIRECTION: Record<string, string> = {
+  north: 'south',
+  south: 'north',
+  east: 'west',
+  west: 'east',
+  up: 'north',
+  down: 'south',
+};
 
 /**
  * Convert zone exits → ReactFlow edges.
@@ -197,10 +207,15 @@ function exitsToFlowEdges(
     const isOrphanFwd = orphanExitIds.has(pair.forward.id);
     const isOrphanRev = pair.reverse ? orphanExitIds.has(pair.reverse.id) : false;
 
+    const dir = pair.forward.direction;
+    const oppositeDir = OPPOSITE_DIRECTION[dir] ?? 'north';
+
     edges.push({
       id: pair.forward.id,
       source: pair.forward.fromRoomSlug,
       target: pair.forward.toRoomSlug,
+      sourceHandle: `${dir}-source`,
+      targetHandle: `${oppositeDir}-target`,
       type: 'exit',
       data: {
         direction: pair.forward.direction,
