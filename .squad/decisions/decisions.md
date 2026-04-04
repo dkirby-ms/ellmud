@@ -5162,3 +5162,148 @@ PR #260 initially lacked the numbered migration and was rejected by Elminster. D
 - Migration `014_repurpose_refuge.sql` added and verified
 - Decision documented for team reference
 - Pattern now part of standard review checklist
+
+---
+
+## 2026-04-04T19:52:00Z: User Directive — elkjs + ReactFlow for Zone Designer
+
+**By:** saitcho (via Copilot)  
+**Date:** 2026-04-04  
+**Context:** User reviewed 6 alternatives for zone designer map rendering improvements
+
+**Decision:** elkjs + ReactFlow (xyflow) is the preferred long-term approach for zone designer map rendering.
+
+**Rationale:**
+- **elkjs** replaces `computeLayout.ts` for layout (crossing minimization, edge routing, layered algorithms)
+- **ReactFlow** replaces hand-rolled SVG for rendering (pan/zoom/drag/minimap)
+- **MUD-specific constraints** encoded as elkjs port-side and layer constraints (compass directions, grid alignment)
+- User reviewed 6 alternatives and chose this combination as the bulletproof long-term solution
+
+**Key Details:**
+- Layout engine: BFS (`computeLayout.ts`, ~2700 lines) → ELK.js (Sugiyama layered algorithm)
+- Rendering: Hand-crafted SVG (~3600 lines) → ReactFlow (@xyflow/react)
+- Direction mapping: Compass directions (N/S/E/W) → ELK port-side constraints
+- Multi-floor support: Z-axis → ELK layer constraints
+
+---
+
+## 2026-04-04T19:54:00Z: Architecture Decision — Zone Designer Migration Plan (6 Phases)
+
+**By:** Elminster (Lead / Architect)  
+**Date:** 2026-04-04  
+**Related Issues:** Zone designer UX/layout improvements  
+**Decision Status:** Approved for Architecture Phase
+
+**Decision:** The zone designer will migrate from its current hand-rolled architecture to a phased, production-grade system using elkjs + ReactFlow.
+
+**Migration Approach:**
+1. Layout engine: BFS (`computeLayout.ts`) → ELK.js for crossing minimization & layered layout
+2. Rendering: Hand-crafted SVG → ReactFlow (@xyflow/react) for pan/zoom/minimap/edge routing
+3. Execution: 6 phased milestones, each delivering standalone value (no big-bang rewrite)
+4. Visual enhancements: Bezier curves, direction coloring, room shape variety (phases 1 & 4)
+
+**Phases Summary:**
+
+| Phase | Focus | Duration | Effort |
+|-------|-------|----------|--------|
+| 0 | Foundation (install, wrap modules) | 2–3 days | Foundation |
+| 1 | Visual Polish (curves, colors, shapes) | 1–2 weeks | Immediate UX |
+| 2 | Layout Engine Swap (ELK integration) | 1–2 weeks | Crossing reduction |
+| 3 | ReactFlow Integration (pan/zoom/minimap) | 2–3 weeks | Major UX leap |
+| 4 | Advanced Polish (animations, shapes) | 1–2 weeks | Refinement |
+| 5 | Optional Features (undo/redo, search) | 1–2 weeks | Quality-of-life |
+| 6 | Cleanup & Docs | 1 week | Maintenance |
+
+**Total Timeline:** 6–8 weeks
+
+**Rationale:**
+
+*Current State Problems:*
+- Exit crossings: Hand-rolled BFS places rooms greedily; no crossing penalty. 15–30% unnecessary line crossings.
+- No pan/zoom/minimap: 100×100 cell grid forces tiny room nodes; navigating large zones tedious.
+- No edge routing: Straight lines cross visually even when exits don't topologically cross.
+- Visual polish ceiling: SVG rendering is low-level; curves/glow/shapes require substantial manual work.
+- Maintenance cost: 2700 + 3600 lines of tightly coupled layout + rendering logic.
+
+*Why elkjs:*
+- Proven battle-tested layout engine (used in graphviz, yEd, VS Code)
+- Sugiyama layered algorithm automatically reduces edge crossings to near-optimal
+- Direction-aware (port-side constraints map compass directions to layout edges)
+- Z-axis support (layer constraints enforce multi-floor relationships)
+- Performance adequate for 100+ room zones (~100–300ms)
+
+*Why ReactFlow:*
+- Complete solution: Pan, zoom, minimap, edge routing, selection all built-in
+- Decoupling: Node & edge rendering are components; custom styling without touching core logic
+- Performance: Hardware-accelerated with fallback; efficient for large graphs
+- Active maintenance, good docs, React-native styling
+- Familiar UX (Figma, Notion, Obsidian patterns)
+
+*Why Phased, Not Big-Bang:*
+- Risk mitigation: Each phase independently testable; earlier phases deliver value
+- Parallelization: Teams can work on phases 1 & 2 simultaneously
+- Feedback loop: Phase 1 gets designer feedback before Phase 3's UI refactor
+- Reversibility: If ELK causes issues, fallback to BFS while keeping visual improvements
+
+**Feature Preservation:**
+
+All existing features remain intact:
+- Room CRUD (create, rename, type, properties, NPC/loot/hazard)
+- Exit CRUD (bidirectional pairing, one-way, modifiers, portals)
+- Floor switching (Z-axis filtering, pan reset)
+- Orphan detection & cleanup
+- Context menus (room creation, copy/paste, edit, delete)
+- Insert room on exit (room splitting)
+- Validation warnings (entry type, connectivity, one-way)
+- Zoom/pan/reset (improved in Phase 3)
+
+**New Capabilities:**
+- Exit crossing minimization (Phase 2, ELK)
+- Minimap (Phase 3, ReactFlow)
+- Bezier curves (Phase 1, Phase 4)
+- Room shape variety (Phase 1, Phase 4)
+- Direction-based coloring (Phase 1, Phase 4)
+
+**Risks & Mitigations:**
+
+| Risk | Mitigation |
+|------|-----------|
+| ELK output visually differs from BFS | Phase 2 includes before/after comparison; fallback to BFS if problematic |
+| ReactFlow accessibility issues | Early testing with screen readers; validate keyboard nav (Phase 3 testing checklist) |
+| Performance regression on 100+ room zones | Profile ELK + ReactFlow during Phase 2–3; lazy-load or optimize if needed |
+| Portal exits break during migration | Portal logic is separate from main layout; explicit testing in Phase 3 |
+| Z-axis multi-floor breaks | Phase 2 validates Z-axis mapping; Phase 3 tests floor switching explicitly |
+| Designer blocked during migration | Phases are independent; partial features available early (Phase 1 usable immediately) |
+
+**Dependencies:**
+
+- elkjs (≥0.8.0)
+- @xyflow/react (≥11.0 or latest)
+- All existing zone API / room / exit DTOs remain unchanged
+
+**Success Criteria:**
+
+1. ✅ All existing CRUD operations work identically
+2. ✅ Exit crossings visibly reduced (compare screenshots)
+3. ✅ Pan/zoom/minimap smooth on 100+ room zones
+4. ✅ All validation warnings & error flows intact
+5. ✅ Floor switching preserves user's pan position
+6. ✅ No performance regression on player minimap
+7. ✅ Designer can complete typical zone creation in <5min
+
+**Implementation Ownership:**
+
+- **Phase 0:** Regis (Frontend Dev) + Elminster (Arch review)
+- **Phase 1:** Regis (Designer UX enhancements)
+- **Phase 2:** Regis + Elminster (ELK integration; coordinate mapping)
+- **Phase 3:** Regis (ReactFlow migration; major refactor)
+- **Phases 4–6:** Regis (visual polish, cleanup)
+
+**Approval:**
+
+**Elminster** approves this migration plan as the architectural direction for the zone designer, provided:
+1. Phase 0 verification passes (no dependency conflicts, clean module scaffolding)
+2. Phase 1 delivers visual improvements without regression
+3. Phase 2 demonstrates crossing reduction without breaking multi-floor zones
+4. Phase 3 includes comprehensive testing before production rollout
+
