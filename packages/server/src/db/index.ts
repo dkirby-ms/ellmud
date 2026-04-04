@@ -18,15 +18,22 @@ let pool: pg.Pool | null = null;
 export function getPool(): pg.Pool {
   if (!pool) {
     const needsSsl = process.env.DATABASE_URL?.includes('sslmode=require');
+    
+    // Strip sslmode from connection string to avoid pg deprecation warnings.
+    // We manage SSL via the pool config instead.
+    let connectionString = process.env.DATABASE_URL;
+    if (needsSsl && connectionString) {
+      connectionString = connectionString.replace(/[?&]sslmode=require/, '');
+    }
 
     pool = new pg.Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString,
       max: 10,
       ...(needsSsl && { ssl: { rejectUnauthorized: false } }),
     });
 
     if (needsSsl) {
-      console.log('[db] SSL enabled (rejectUnauthorized: false) for Azure PostgreSQL');
+      console.log('[db] SSL enabled (rejectUnauthorized: false, sslmode managed via pool config)');
     }
 
     pool.on('error', (err) => {
