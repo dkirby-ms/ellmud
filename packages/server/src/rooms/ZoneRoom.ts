@@ -665,7 +665,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     this.creatureManager.respawnZoneCreatures(this.zoneData);
 
     // Narrate repop to players in affected rooms
-    this.broadcastRepopNarration();
+    // this.broadcastRepopNarration(); // removing for now since it can be spammy and the effect is visible through item respawns and creature respawns
   }
 
   /** Convert zone room loot containers into resolved Item objects. */
