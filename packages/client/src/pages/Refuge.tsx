@@ -101,7 +101,7 @@ export default function Refuge() {
         );
         roomRef.current = room;
         dispatch({ type: "SET_ROOM", room });
-        addMessage("Reconnected to the Refuge.", "system");
+        addMessage("Reconnected to the Refuge (debug hub).", "system");
         return true;
       } catch {
         return false;
@@ -117,7 +117,7 @@ export default function Refuge() {
   const reconnectionRef = useRef(reconnection);
   reconnectionRef.current = reconnection;
 
-  // Connect to refuge room on mount
+  // Connect to refuge (debug hub) room on mount
   useEffect(() => {
     if (!state.token) return;
 
@@ -159,7 +159,7 @@ export default function Refuge() {
         // Clear stale messages so the target page starts fresh
         dispatch({ type: "CLEAR_MESSAGES" });
 
-        // Leave refuge room — the target page will establish its own connection
+        // Leave debug hub — the target page will establish its own connection
         roomRef.current?.leave();
         roomRef.current = null;
         dispatch({ type: "SET_CONNECTION_STATUS", status: "disconnected" });
@@ -277,7 +277,7 @@ export default function Refuge() {
   );
 
   // Derive display data from real state
-  const locationName = state.roomHeader?.roomName ?? "The Refuge";
+  const locationName = state.roomHeader?.roomName ?? "The Refuge (Debug Hub)";
   const isConnected = state.connectionStatus === "connected";
 
   // Ambient events: 'sound' and 'room' type messages
@@ -390,7 +390,7 @@ export default function Refuge() {
             <div className="space-y-1 narrative-terminal rounded" style={{ padding: '0.5rem' }}>
               {ambientEvents.length === 0 ? (
                 <p className="mud-sound">
-                  The Refuge hums with quiet activity...
+                  The debug hub hums with prototype systems and test fixtures...
                 </p>
               ) : (
                 ambientEvents.map((event) => (
@@ -496,7 +496,7 @@ export default function Refuge() {
                 <p className="mud-system">
                   {isConnected
                     ? "Connected. Type a command below."
-                    : "Connecting to the Refuge..."}
+                    : "Connecting to the debug hub..."}
                 </p>
               )}
               {chatMessages.map((msg) => (

@@ -301,7 +301,7 @@ try {
   console.log('[Ellmud] Failed to load zones for registration:', err instanceof Error ? err.message : String(err));
 }
 
-// Ensure the-refuge is always registered (fallback if not in DB)
+// Ensure the-refuge is always registered (fallback debug hub for unaffiliated players)
 if (!registeredZoneSlugs.has('the-refuge')) {
   server.define('zone:the-refuge', ZoneRoom);
   console.log('[Ellmud] Registered zone: zone:the-refuge (fallback)');

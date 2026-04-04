@@ -1498,3 +1498,17 @@ CREATE TABLE zone_definitions (
 - Button appears in both exit-pair and single-exit panels. Purple dashed border styling distinguishes from standard CRUD.
 - TypeScript compiles clean. `Split` icon from lucide-react added to imports.
 - **Key file:** `packages/client/src/pages/admin/ZoneDesigner.tsx`
+
+### 2026-04-01: Sprint 3 PR Review — Corpse, Strongholds, Refuge, Death Routing
+- **PRs Reviewed:** #258 (Corpse/Loot), #259 (Faction Strongholds), #260 (Repurpose Refuge), #261 (Death/Spawn Routing)
+- **Verdicts:**
+  - #258 ✅ APPROVE — Solid CorpseSystem, proper soulbound filtering, 33 tests. GDD §6.8 alignment strong.
+  - #259 ✅ APPROVE — Clean stronghold zones, proper migration 013, good routing utilities. 21 tests.
+  - #260 ❌ REQUEST CHANGES — Missing migration for Refuge category hub→dev. Modified 003_seed_zones.sql which is already applied. Needs new 014_repurpose_refuge.sql. Assigned to Jarlaxle.
+  - #261 ⚠️ APPROVE WITH NOTES — Good death/spawn routing integration. Client needs /api/spawn-zone wiring (Regis follow-up). 17 tests.
+- **Cross-PR risks:** All 4 branches share dependency commits from #258 and #259. PRs #260 and #261 both include all changes from the dependency branches. Merge order must be: #258 → #259 → #260 (after fix) → #261.
+- **Architecture observations:**
+  - Client hub detection hardcodes 4 zone slugs — fragile pattern, needs server-sent isHub flag in future
+  - playerFactionSlugs cache won't update mid-session — acceptable since faction changes require re-login
+  - All 3 strongholds use flooded_crypt theme — should be diversified in future pass
+  - Migration system tracks by filename — modifying already-applied seed files is a recurring team pitfall

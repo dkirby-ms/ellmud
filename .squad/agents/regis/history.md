@@ -896,3 +896,12 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - Follows existing patterns: `handleAddRoomInDirection()` for room+exit creation, `confirmDeleteExit()` for exit deletion
 - New room gets slug `inserted-room-{timestamp}` and type `corridor` by default
 - BFS layout engine (`computeLayout`) automatically positions the new room on the grid between the originals
+
+### 2026-04-04: PR Review — Approval (Minsc)
+
+**Sprint 4 PR Review:** Minsc reviewed #262 (regis PR) and approved with minor note.
+
+**Minor Note:** Straggler export name inconsistency flagged; approved pending author cleanup (non-blocking).
+
+**Status:** PR cleared for merge with minor outstanding note.
+

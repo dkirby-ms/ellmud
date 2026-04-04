@@ -3,7 +3,7 @@
  *
  * Used for login spawning and death respawn:
  * - Players with a faction spawn in their faction's stronghold
- * - Players without a faction fall back to the Refuge
+ * - Players without a faction fall back to the Refuge (designer/debug hub)
  */
 
 import type { ZoneRepository } from './ZoneRepository.js';
@@ -19,7 +19,7 @@ const FACTION_STRONGHOLD_MAP: Record<FactionSlug, string> = {
   scarlet: 'the-counting-house',
 };
 
-/** Fallback zone slug when player has no faction. */
+/** Fallback zone slug when player has no faction (designer/debug hub). */
 export const DEFAULT_HUB_SLUG = 'the-refuge';
 
 /** Display names for hub zones (used in death narration). */

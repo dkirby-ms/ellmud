@@ -706,11 +706,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private update(_deltaTime: number): void {
     this.state.tick++;
 
-    // Hub/social zones skip collapse and combat ticking
+    // Hub/social/dev zones skip collapse and combat ticking
     const isNonCombatZone = this.isZone && this.zoneData &&
-      (this.zoneData.zone.category === 'hub' || this.zoneData.zone.category === 'faction_hub' || this.zoneData.zone.category === 'social');
+      (this.zoneData.zone.category === 'hub' || this.zoneData.zone.category === 'faction_hub' || this.zoneData.zone.category === 'social' || this.zoneData.zone.category === 'dev');
 
-    // Collapse timer countdown (skip for persistent hub/social zones)
+    // Collapse timer countdown (skip for persistent hub/social/dev zones)
     if (!isNonCombatZone && (this.lifecycle === 'active' || this.lifecycle === 'destabilising')) {
       this.state.collapseTimer = Math.max(0, this.state.collapseTimer - 1);
       this.state.stability = this.state.collapseTimer / this.collapseTimerSeconds;
@@ -728,7 +728,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.tickCreatures();
     }
 
-    // Resolve combat tick (skip for hub/social zones)
+    // Resolve combat tick (skip for hub/social/dev zones)
     if (!isNonCombatZone && this.combatSystem.hasActiveEncounters()) {
       const tickResult = this.combatSystem.resolveTick();
 
@@ -2287,6 +2287,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
 // ─── B7: Fallback Refuge Graph ──────────────────────────────────────────────
 // Used when ZoneRoom loads in zone mode for 'the-refuge' but no DB data exists.
+// The Refuge is now a designer/debug hub — fallback for unaffiliated players.
 
 function createFallbackRefugeGraph(): RoomGraph {
   const rooms = new Map<string, import('../generator/RoomGraph.js').Room>();
@@ -2294,7 +2295,7 @@ function createFallbackRefugeGraph(): RoomGraph {
   rooms.set('hearth', {
     id: 'hearth',
     name: 'The Hearth',
-    description: 'A broad stone chamber warmed by a perpetual fire. Scarred adventurers rest on makeshift benches. The air smells of ash and iron.',
+    description: 'A broad stone chamber repurposed as a debug staging area. Test dummies line one wall; a perpetual fire crackles in the centre. Unaffiliated shardwalkers awaken here.',
     type: 'entry',
     exits: new Map<Direction, string>([
       ['east', 'stash-alcove'],

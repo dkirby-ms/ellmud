@@ -1,3 +1,21 @@
+### 2026-04-04: Sprint 3 PR Review — Migration Discipline
+**By:** Elminster (Lead / Architect)
+**Issues:** #236, #237, #238, #239
+
+## Decision
+Seed migration files (003_seed_zones.sql, 004_seed_siltgate.sql, etc.) must NOT be modified to change runtime data in existing databases. The migration runner tracks applied files by filename — once a file is in the `_migrations` table, it will never re-run. Any data changes to existing rows (category updates, description changes, column value modifications) must use a **new numbered migration file** with UPDATE statements.
+
+Modifying seed files is acceptable ONLY for maintaining correctness on fresh installations (both the seed update AND a new migration are needed).
+
+## Rationale
+PR #260 modified 003_seed_zones.sql to change the Refuge category from `hub` → `dev`, but this change will not apply to existing databases. The Refuge will remain `category='hub'` on any database that has already run the migration set. This was caught in review and flagged as a blocking issue.
+
+This is the second time this pattern has been noted (Jarlaxle's own history mentions "Migration ordering matters: Seed migrations reference columns by original name"). It needs to be a documented team rule.
+
+## Impact
+- PR #260 needs a new `014_repurpose_refuge.sql` migration before merge
+- All future data modifications must follow the same pattern: new migration file + optional seed file update
+- This rule applies to all seed migrations (003, 004, and any future seed files)
 ### 2026-04-01: Death & Spawn Routing — Faction Strongholds
 **By:** Drizzt (Engine Dev)  
 **Issue:** #238  

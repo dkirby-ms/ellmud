@@ -2796,6 +2796,32 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 
 **Verification:** TypeScript compiles clean, all 2187 tests pass, zero regressions.
 
+### Faction Strongholds Complete (2026-04-01, Jarlaxle #236)
+
+**Context:** Jarlaxle completed faction stronghold zones with new `faction_hub` zone category and `factionSlug` routing. Three strongholds (The Foundry, The Cartographium, The Counting House) with 8 feature rooms each. 21 new tests.
+
+**Relevance to Death System:** The stronghold zones will serve as respawn points for faction-affiliated players following death. The `faction_slug` field in zones table integrates with death routing for automatic respawn destination selection. This unblocks #238 (death/spawn routing) work.
+
+**No action required** — stronghold architecture is compatible with corpse system TTL and item looting workflow. Death handler can route corpses to any zone type.
+
+
+### 2026-04-04: PR Review — Approvals (Elminster & Minsc)
+
+**Sprint 3 PR Review:** Elminster reviewed #258 and #261 (drizzt PRs) and approved both.
+
+**Sprint 4 PR Review:** Minsc reviewed #263 (drizzt PR) and approved.
+
+**Status:** Three PRs cleared for merge. No blockers.
+
+
+
+### 2026-04-04: Fix PR #260 — Add Migration for Refuge Repurpose
+
+**Context:** Jarlaxle's PR #260 (branch `squad/239-repurpose-refuge`) changed the Refuge zone category from `hub` to `dev` in seed file `003_seed_zones.sql`, but Elminster correctly flagged that seed changes only affect fresh installs — existing databases need a migration.
+
+**Fix:** Added `packages/server/src/db/migrations/014_repurpose_refuge.sql` with an UPDATE on the `zones` table (`category='dev'`, updated description) keyed on `slug='the-refuge'`.
+
+**Learning:** Seed files are one-shot — any change to already-applied seed data requires a corresponding numbered migration file. Always pair seed edits with migrations for existing environments.
 ---
 
 ## 2026-04-01: Death/Spawn Routing to Faction Strongholds (Issue #238)

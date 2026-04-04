@@ -27,7 +27,7 @@ import { wait } from './helpers/index.js';
 /** Seed a complete zone into the InMemory zone repository. */
 async function seedZone(
   slug: string,
-  category: 'hub' | 'dungeon' | 'wilderness' | 'social',
+  category: 'hub' | 'dev' | 'dungeon' | 'wilderness' | 'social',
 ): Promise<ZoneData> {
   const repo = getZoneRepository();
 

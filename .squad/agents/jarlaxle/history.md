@@ -2050,6 +2050,49 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - **Key files:** `packages/server/src/zones/stronghold.ts`, `packages/server/src/db/migrations/013_faction_strongholds.sql`
 - **PR #259**, branch `squad/236-faction-strongholds`
 
+### Corpse/Loot-on-Death System Complete (2026-04-01, Drizzt #237)
+
+**Context:** Drizzt completed corpse system with CorpseSystem entity storage, configurable TTL, and `loot` command. On death, non-soulbound items move to corpse; players loot via new verb. 33 new tests.
+
+**Relevance to Faction Strongholds:** Faction strongholds are configured as `faction_hub` zones (non-combat per death system design). When faction-affiliated players die in combat zones, they respawn at their stronghold, where they can manage loot recovery and death debuff state. The corpse system design (TTL-based cleanup, soulbound filtering) is orthogonal to stronghold architecture.
+
+**Integration Note:** Death routing (#238) will coordinate stronghold respawn destination with corpse system's item drop timing to ensure loot is available for recovery.
+
+**No action required** — stronghold zones are ready for death routing integration.
+
+### Repurpose Refuge as Designer/Debug Hub (2026-04-01, Jarlaxle #239)
+
+**Changes:**
+- Changed Refuge zone DB seed category from `hub` → `dev`, updated description to designer/debug framing
+- Added `'dev'` to shared `ZoneDefinition.category` union type
+- Added `'dev'` to `isNonCombatZone` check in ZoneRoom — dev zones skip collapse/combat like hub zones
+- Updated fallback Refuge graph hearth description to reflect debug staging area
+- Updated comments across NPCSystem, AmbientSystem, WeatherSystem, ambient-templates, stronghold.ts
+- Updated client Refuge.tsx default location label, ambient placeholder text, connection messages
+- Updated faction-strongholds tests to seed Refuge as `category: 'dev'`
+
+**What stays unchanged:**
+- The Refuge zone slug (`the-refuge`) and room structure — still works as fallback for unaffiliated players
+- NPCs are retained (useful for testing NPC interactions)
+- Fallback Refuge graph kept (for cases where no DB data exists)
+- All ambient narration templates kept (atmospheric prose still works for debug hub)
+- Client Refuge.tsx functional behavior unchanged — still connects to `zone:the-refuge`
+
+**Key design decision:** `dev` category added to `isNonCombatZone` so the debug hub behaves like hub/social zones (no collapse timer, no creature AI, no combat). This is correct — designers shouldn't worry about getting killed while testing.
+
+
+### 2026-04-04: PR Review — #260 Rejection (Elminster)
+
+**Sprint 3 PR Review:** Elminster reviewed #260 (Repurpose Refuge) and flagged a blocking issue.
+
+**Finding:** PR #260 modified the seed migration file (003_seed_zones.sql) to change Refuge category from `hub` → `dev`. However, this change will not apply to existing databases where the migration has already run. The migration runner tracks applied files by filename — once applied, seed files are never re-executed.
+
+**Decision:** Data modifications to existing rows must use a **new numbered migration file** (e.g., `014_repurpose_refuge.sql`) with UPDATE statements. Modifying seed files is acceptable only for fresh installations (both seed update AND new migration required).
+
+**Action:** PR #260 needs `014_repurpose_refuge.sql` migration before merge. This is now a documented team rule per the "Migration Discipline" decision.
+
+**Status:** Rejection filed to decisions.md. PR author (Jarlaxle #239 work) to add migration and push revision.
+
 ---
 
 ## 2026-04-01: Refuge Repurposing as Designer/Debug Hub (Issue #239)
