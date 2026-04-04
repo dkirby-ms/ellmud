@@ -1046,3 +1046,30 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - Performance profiling on large graphs (100+ rooms)
 - Consider incremental layout updates (preserve positions on edit)
 - Optimize ELK parameters (node spacing, layer spacing, edge routing strategy)
+
+## 2026-04-05T21:55Z — Phase 1 Visual Polish Verified Complete
+
+**Task:** Implement Phase 1 visual polish for Zone Designer (#268)
+**Outcome:** All work already completed and merged in PR #275 (Phase 2)
+
+### Findings
+- Phase 1 and Phase 2 work were combined and merged together in PR #275
+- All visual polish deliverables confirmed present in current dev:
+  - Bézier curve exits with perpendicular control points
+  - Direction-based gradient coloring (N/S blue→cyan, E/W amber→orange, Up/Down purple→indigo)
+  - Room shape variety (shield, diamond, pentagon, hexagon, rounded rect)
+  - SVG filters for glow and drop shadow effects
+  - Portal glow on inter-zone exits
+- Implementation details:
+  - `renderRoomShape()` helper (lines 177-223) handles shape generation
+  - SVG gradient and filter defs (lines 1593-1625)
+  - Bézier path computation (lines 1642-1653) with 50px perpendicular offset
+  - Applied to exit pairs and portal exits
+- All 146 client tests passing
+- Issue #268 closed as completed
+
+### Learnings
+- **Phase merging:** Visual polish (Phase 1) was practical to implement alongside layout engine swap (Phase 2) since both touched the same rendering code
+- **React import for JSX:** Helper functions returning JSX elements need `React.ReactElement` return type and `import React from "react"`
+- **SVG filters:** Can apply multiple filters via space-separated URL references: `filter="url(#selection-glow) url(#drop-shadow)"`
+- **Gradient IDs:** Linear gradients defined in `<defs>` and referenced via `stroke="url(#gradient-id)"`
