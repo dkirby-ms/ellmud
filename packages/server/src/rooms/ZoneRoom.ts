@@ -69,7 +69,7 @@ import { LoadoutService, getLoadoutRepository } from '../loadout/index.js';
 import type { LoadoutRepository } from '../loadout/index.js';
 import { getZoneRepository } from '../zones/index.js';
 import type { ZoneData } from '../zones/index.js';
-import { resolvePlayerHubTarget } from '../zones/stronghold.js';
+import { resolvePlayerHubTarget, resolvePlayerHubName } from '../zones/stronghold.js';
 import { convertZoneToRoomGraph } from '../zones/zone-adapter.js';
 import { getItemDefinition } from '../items/registry.js';
 import type { Item } from '../generator/RoomGraph.js';
@@ -1738,18 +1738,19 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Send death state to the defeated player
     const client = this.findClient(playerId);
     if (client) {
+      // Resolve faction-based hub target (stronghold if faction member, Refuge otherwise)
+      const factionSlug = this.playerFactionSlugs.get(playerId);
+      const hubTarget = resolvePlayerHubTarget(factionSlug);
+      const hubName = resolvePlayerHubName(factionSlug);
+
       this.sendOverlayState(client, {
         playerId,
         state: 'death',
         narration: isPvPKill
-          ? 'A rival adventurer fells you. You awaken at your stronghold, bearing the death penalty…'
-          : 'The darkness claims you. You awaken at your stronghold, weakened by the death penalty…',
+          ? `A rival adventurer fells you. You awaken in ${hubName}, bearing the death penalty…`
+          : `The darkness claims you. You awaken in ${hubName}, weakened by the death penalty…`,
         timestamp: Date.now(),
       });
-
-      // Resolve faction-based hub target (stronghold if faction member, Refuge otherwise)
-      const factionSlug = this.playerFactionSlugs.get(playerId);
-      const hubTarget = resolvePlayerHubTarget(factionSlug);
 
       // Schedule return to hub after 3 seconds
       this.clock.setTimeout(async () => {

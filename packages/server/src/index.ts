@@ -37,6 +37,7 @@ import { initLoadoutProvider } from './loadout/index.js';
 import { initDeathPenaltyProvider } from './systems/index.js';
 import { initCharacterProvider } from './character/index.js';
 import { createCharacterRouter } from './api/characters.js';
+import { createSpawnZoneRouter } from './api/spawn-zone.js';
 import { initZoneProvider, getZoneRepository } from './zones/index.js';
 import { initExplorationProvider } from './exploration/index.js';
 import { initContentRegistry } from './content/index.js';
@@ -181,6 +182,10 @@ if (entraConfig.clientId && entraConfig.clientSecret && entraConfig.tenantId) {
 // ─── Character API ───────────────────────────────────────────────────────────
 app.use(createCharacterRouter(authService, USE_PG));
 console.log('[Ellmud] Character API: enabled');
+
+// ─── Spawn Zone API ─────────────────────────────────────────────────────────
+app.use(createSpawnZoneRouter(authService));
+console.log('[Ellmud] Spawn Zone API: enabled');
 
 // Version endpoint — /api/version
 app.use(createVersionRouter());

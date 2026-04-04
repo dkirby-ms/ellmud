@@ -56,6 +56,7 @@ export {
   getStrongholdSlugForFaction,
   resolvePlayerHubSlug,
   resolvePlayerHubTarget,
+  resolvePlayerHubName,
   getStrongholdForFaction,
 } from './stronghold.js';
 export type { FactionSlug } from './stronghold.js';
