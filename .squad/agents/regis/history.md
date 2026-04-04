@@ -1073,3 +1073,88 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - **React import for JSX:** Helper functions returning JSX elements need `React.ReactElement` return type and `import React from "react"`
 - **SVG filters:** Can apply multiple filters via space-separated URL references: `filter="url(#selection-glow) url(#drop-shadow)"`
 - **Gradient IDs:** Linear gradients defined in `<defs>` and referenced via `stroke="url(#gradient-id)"`
+
+### 2026-04-04: Phase 3 ReactFlow Integration Complete
+**Issue:** #270  
+**Branch:** squad/270-phase3-reactflow (pushed to squad/270-phase3-tests PR #276)
+
+Implemented Phase 3 of the ReactFlow migration — the core replacement of hand-rolled SVG rendering with ReactFlow components.
+
+**Components Created:**
+1. **ZoneRoomNode.tsx** (~300 lines) — Custom ReactFlow node component
+   - Type-based shapes: shields (entry), diamonds (boss), pentagons (feature), hexagons (junction), rounded rects (default)
+   - Preserved exact ROOM_TYPE_COLORS from original implementation
+   - Badges: NPCs 👤, loot 📦, hazards ⚠
+   - Indicators: up ▲, down ▼, portals ⟐, floor z-level
+   - State styling: selection (cyan glow), disconnected (gold border), connect source (teal dash)
+
+2. **ZoneExitEdge.tsx** (~150 lines) — Custom ReactFlow edge component
+   - Bézier curve routing via ReactFlow's getBezierPath
+   - Direction-based gradients: N/S blue, E/W amber, U/D purple
+   - One-way (amber arrow) vs bidirectional (no arrow) styling
+   - Orphan detection (red dashed)
+   - Modifiers: lock 🔒, hidden 👁
+   - Selection highlighting (gold)
+
+3. **ZoneDesignerFlow.tsx updates** (~200 lines)
+   - Registered custom node/edge types
+   - Added ReactFlow context provider
+   - Integrated Controls, MiniMap, Background
+   - SVG defs for gradients and markers
+   - Floor indicator overlay
+   - Context menu event wiring
+
+4. **ZoneDesigner.tsx migration** (~400 lines removed, ~100 added)
+   - Removed entire SVG rendering section (lines 1566-2015)
+   - Created helper functions: `roomsToFlowNodes`, `exitsToFlowEdges`
+   - Converted rooms → nodes with RoomNodeData interface
+   - Converted exits → edges with ExitEdgeData interface
+   - Wired callbacks: onNodeClick, onEdgeClick, onNodeContextMenu, onEdgeContextMenu, onPaneClick
+   - Preserved all CRUD operations, context menus, side panels, validation
+
+**Technical Decisions:**
+- Used ReactFlow's native pan/zoom instead of custom SVG viewBox manipulation → eliminated ~200 lines of pan state/handlers
+- Type assertions for custom data types (RoomNodeData, ExitEdgeData) to work around ReactFlow's generic typing
+- Floor filtering via node/edge visibility (filter by z-value before passing to ReactFlow)
+- Portal exits shown as node badges only (not drawn as edges since they don't connect to in-zone nodes)
+- MiniMap configured with type-based node colors, bottom-left positioning
+- Controls positioned top-right with zoom/fit/interactive buttons
+
+**Preserved Functionality:**
+✅ All CRUD operations (createRoom, updateRoom, deleteRoom, createExit, updateExit, deleteExit)
+✅ Context menus (room/exit right-click actions)
+✅ Side panel selection binding
+✅ Floor switching with auto-fit
+✅ Connect mode for exit creation
+✅ Orphaned exit detection
+✅ Validation warnings
+✅ ELK layout toggle
+✅ Room hover tooltips
+✅ Disconnected room warnings
+
+**Removed (ReactFlow native replacements):**
+- Manual pan state (panX, panY, isPanning, panStartRef)
+- Manual zoom calculations (viewBox, finalX, finalY, zoomedW, zoomedH)
+- Pan mouse handlers (handlePanMouseDown, handlePanMouseMove, handlePanMouseUp)
+- SVG rendering functions (roomCenter, clipToRect, edgeLabelPos, renderRoomShape — kept for reference but unused)
+- Custom cursor state (canvasCursor)
+
+**Testing:**
+- TypeScript compiles clean (0 errors)
+- All vitest tests pass (146 passed, 94 todo, 12 files)
+- Verified ZoneDesigner renders with ReactFlow
+- Confirmed CRUD operations functional
+
+**Next Steps:**
+Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow for all visualization. Future enhancements could include:
+- Drag-to-reposition nodes
+- Interactive exit creation (drag from handles)
+- Advanced layout algorithms
+- Animation/transitions
+
+**Learnings:**
+- ReactFlow custom components require careful typing — use `(props: {data: T, selected?: boolean})` pattern for nodes
+- EdgeProps generic is too strict — use base EdgeProps with type assertions
+- getBezierPath is superior to hand-rolled curves — handles edge cases automatically
+- ReactFlow's fitView needs a setTimeout(50ms) delay to work reliably after data changes
+- Floor indicator overlays need `pointerEvents: 'none'` to avoid blocking ReactFlow interactions
