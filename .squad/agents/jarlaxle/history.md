@@ -2139,3 +2139,40 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
   - `wave3-redis-contracts.test.ts`: kept both config test defaults
 - **Lesson:** When another process shares the worktree, use a single bash session for the full checkout→merge→resolve→commit→push cycle to avoid branch-switching race conditions.
 - 153 targeted tests passing post-merge.
+
+---
+
+## 2026-04-04: Merge Round — All 7 Sprint 3/4 PRs to Dev
+
+**Status:** ✅ Complete
+
+### PRs Merged (in order)
+
+1. ✅ **PR #258** (Corpse/Loot) — Drizzt author. Clean merge. Base for later PRs.
+2. ✅ **PR #259** (Faction Strongholds) — Jarlaxle author. Clean merge. Unblocks #260, #261.
+3. ✅ **PR #264** (DB Schema) — Drizzt author. Clean merge. Independent.
+4. ✅ **PR #262** (Client UI Terminology) — Independent. Clean merge.
+5. ✅ **PR #263** (Generator Cleanup) — Jarlaxle author. Merge after base moved. 3 conflicts resolved (config, test imports). 153 tests pass.
+6. ✅ **PR #261** (Death/Spawn Routing) — Drizzt author. Depends on #259. Clean merge.
+7. ✅ **PR #260** (Repurpose Refuge) — Jarlaxle author. Rejected once (missing migration), fixed by Drizzt, then merged.
+
+### Test Results
+
+- Server: 2187 tests passing
+- Client: All passing
+- Zero regressions
+
+### Key Outcomes
+
+- All 7 squad issues (#236-#242) completed and merged to dev
+- Migration Discipline decision established (seed files pair with numbered migrations)
+- Full backlog clear
+- Ready for Sprint 5 planning
+
+### Jarlaxle's Role in Merge Round
+
+- Authored PR #259 (Faction Strongholds) — foundational for #260, #261
+- Authored PR #260 (Repurpose Refuge) — rejected once (missing migration), fixed by Drizzt, then merged
+- Authored PR #263 (Generator Cleanup) — resolved 3 merge conflicts after base branch shift
+- PR #259 merged cleanly. PR #263 had 3 merge conflicts due to base branch changes after #258, #262, #264 landed.
+- Learned: Migration discipline is an engine-team responsibility; Drizzt applied the #260 fix (adding migration 014)

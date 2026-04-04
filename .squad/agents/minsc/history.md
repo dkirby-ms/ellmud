@@ -1348,3 +1348,42 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 - Self-review limitation: GitHub blocks `gh pr review --approve` when the token owner is the PR author. Use `gh pr comment` as fallback.
 - Schema validation tests that check original migration SQL files should keep test names matching the original column names, even when later migrations rename them. Renaming test descriptions creates confusion.
 - ALTER TABLE RENAME COLUMN in PostgreSQL automatically updates simple column-reference indexes but NOT expression-based indexes (COALESCE, etc.) — those need manual drop/recreate.
+
+---
+
+## 2026-04-04: Merge Round — All 7 Sprint 3/4 PRs to Dev
+
+**Status:** ✅ Complete — Coordinator: Minsc
+
+### PRs Merged (in order)
+
+1. ✅ **PR #258** (Corpse/Loot) — Drizzt author. Clean merge. Base for later PRs.
+2. ✅ **PR #259** (Faction Strongholds) — Jarlaxle author. Clean merge. Unblocks #260, #261.
+3. ✅ **PR #264** (DB Schema) — Drizzt author. Clean merge. Independent.
+4. ✅ **PR #262** (Client UI Terminology) — Independent. Clean merge.
+5. ✅ **PR #263** (Generator Cleanup) — Jarlaxle author. Merge after base moved. 3 conflicts resolved (config, test imports). 153 tests pass.
+6. ✅ **PR #261** (Death/Spawn Routing) — Drizzt author. Depends on #259. Clean merge.
+7. ✅ **PR #260** (Repurpose Refuge) — Jarlaxle author. Rejected once (missing migration), fixed by Drizzt, then merged.
+
+### Test Results
+
+- Server: 2187 tests passing
+- Client: All passing
+- Zero regressions
+
+### Key Outcomes
+
+- All 7 squad issues (#236-#242) completed and merged to dev
+- Migration Discipline decision established (seed files pair with numbered migrations)
+- Full backlog clear
+- Ready for Sprint 5 planning
+
+### Minsc's Role in Merge Round (Coordinator)
+
+- Identified merge order from Elminster's dependency analysis (#258→#259→#260→#261 chain, parallel #262/#263/#264)
+- Executed merges in correct order to prevent base branch conflicts
+- Resolved 3 merge conflicts in PR #263 (config.ts, player-death.test.ts, wave3-redis-contracts.test.ts)
+- Validated post-merge test results (2187 server tests, all client tests passing)
+- Handled PR #260 rejection: noted Drizzt's fix (migration 014), proceeded with merge after fix
+- Confirmed zero regressions across all 7 merged PRs
+- Documented merge round outcomes in orchestration logs and session log

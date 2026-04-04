@@ -5091,3 +5091,74 @@ Implemented corpses as zone-scoped in-memory entities (CorpseSystem), separate f
 
 - Equipment-to-corpse conversion deferred (loadout items stay equipped at death)
 - Corpse cosmetics hardcoded; customization deferred to future work
+
+---
+
+## 2026-04-01T16:45:00Z: Repurpose Refuge as Designer/Debug Hub
+
+**By:** Jarlaxle (Systems Dev)  
+**Issue:** #239  
+**Scope:** Zone categorization, Refuge repurposing  
+**Outcome:** ✅ SUCCESS — PR #260 (after migration fix)
+
+### Decision
+
+The Refuge zone category changed from `hub` to `dev`. The shared `ZoneDefinition.category` type now includes `'dev'` as a valid value. The `dev` category is treated identically to `hub`/`social` in the ZoneRoom tick loop — no collapse timer, no creature AI, no combat resolution. Faction strongholds (#236) are now the primary player hubs.
+
+### Rationale
+
+With faction strongholds serving as the real player hubs, the Refuge is no longer the canonical starting area for most players. Rather than remove it (it still serves as the fallback for unaffiliated players), it's repurposed as a designer/debug hub where game systems can be tested safely. The `dev` category signals this intent clearly in the DB and shared types.
+
+### Impact
+
+- **Shared types:** `ZoneDefinition.category` gains `'dev'` — any code that exhaustively switches on category needs updating
+- **DB seed:** Refuge zone row changes category column value; requires migration for existing databases
+- **Server:** `isNonCombatZone` in ZoneRoom now includes `'dev'` — dev zones are safe from combat/collapse
+- **Client:** Refuge.tsx descriptions updated but file not renamed (still functional as fallback)
+- **Tests:** Faction-stronghold tests updated to seed Refuge as `dev`; test helpers accept `'dev'` category
+
+### Deliverables
+
+- Refuge category changed from `hub` to `dev` in seed and live databases
+- Migration `014_repurpose_refuge.sql` added for existing database instances
+- Type definitions updated to include `'dev'` category
+- 13 tests updated for Refuge as development environment
+- Zero regressions
+
+---
+
+## 2026-04-04T17:24:38Z: Migration Discipline — Seed Files Pair with Numbered Migrations
+
+**By:** Elminster (Reviewer), enforced by Drizzt (Engine Dev)  
+**Issue:** #260 (Repurpose Refuge) — Rejection & Fix  
+**Scope:** Database migration patterns  
+
+### Decision
+
+Any modification to data in seed files (e.g., `003_seed_zones.sql`) must be paired with a corresponding numbered migration file (e.g., `014_repurpose_refuge.sql`) that makes the same change for existing databases where the seed file has already been applied. The migration system tracks applied files by filename — once executed, seed files are never re-run.
+
+### Rationale
+
+Seed files execute once per fresh database installation. For existing databases in development or production, data changes require numbered migrations that the Flyway/migration runner will execute on every startup. Without the numbered migration, existing data will remain in the old state indefinitely.
+
+**Example from PR #260:**
+- Seed file change: `003_seed_zones.sql` changed Refuge category from `hub` to `dev`
+- Numbered migration added: `014_repurpose_refuge.sql` with UPDATE statement to apply the same change to existing databases
+- Result: Fresh installs get `dev` category via seed. Existing databases get `dev` category via migration 014.
+
+### Impact
+
+- **Team Policy:** All seed file edits must have corresponding numbered migrations
+- **Review Checklist:** Reviewers must flag seed file edits without migrations as blocking issues
+- **Pattern:** Edit seed file + add numbered migration = correct pattern
+- **Anti-Pattern:** Edit seed file only (will miss existing databases)
+
+### Related Learning
+
+PR #260 initially lacked the numbered migration and was rejected by Elminster. Drizzt applied the fix (adding migration 014) instead of Jarlaxle (original author), establishing the pattern that migration discipline is an engine-team responsibility. This prevents recurrence of the same issue.
+
+### Deliverables
+
+- Migration `014_repurpose_refuge.sql` added and verified
+- Decision documented for team reference
+- Pattern now part of standard review checklist

@@ -2874,3 +2874,40 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 - Updated all affected tests (106 pass, full suite 1965 pass)
 
 **Note:** Migrations 011 (biome removal) and 012 (player_shard_sickness rename) already existed on dev.
+
+---
+
+## 2026-04-04: Merge Round — All 7 Sprint 3/4 PRs to Dev
+
+**Status:** ✅ Complete
+
+### PRs Merged (in order)
+
+1. ✅ **PR #258** (Corpse/Loot) — Drizzt author. Clean merge. Base for later PRs.
+2. ✅ **PR #259** (Faction Strongholds) — Jarlaxle author. Clean merge. Unblocks #260, #261.
+3. ✅ **PR #264** (DB Schema) — Drizzt author. Clean merge. Independent.
+4. ✅ **PR #262** (Client UI Terminology) — Independent. Clean merge.
+5. ✅ **PR #263** (Generator Cleanup) — Jarlaxle author. Merge after base moved. 3 conflicts resolved (config, test imports). 153 tests pass.
+6. ✅ **PR #261** (Death/Spawn Routing) — Drizzt author. Depends on #259. Clean merge.
+7. ✅ **PR #260** (Repurpose Refuge) — Jarlaxle author. Rejected once (missing migration), fixed by Drizzt, then merged.
+
+### Test Results
+
+- Server: 2187 tests passing
+- Client: All passing
+- Zero regressions
+
+### Key Outcomes
+
+- All 7 squad issues (#236-#242) completed and merged to dev
+- Migration Discipline decision established (seed files pair with numbered migrations)
+- Full backlog clear
+- Ready for Sprint 5 planning
+
+### Drizzt's Role in Merge Round
+
+- Authored PR #258 (Corpse/Loot) — foundational for later PRs
+- Authored PR #264 (DB Schema Cleanup)
+- Authored PR #261 (Death/Spawn Routing)
+- Fixed PR #260 by adding migration `014_repurpose_refuge.sql` (Reviewer Rejection Lockout pattern)
+- No Drizzt PRs had merge conflicts; base branch changes flowed cleanly into dependent work
