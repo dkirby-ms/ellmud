@@ -1474,3 +1474,27 @@ All 94 tests use `.todo()` syntax and will activate on component merge. No block
 - Test patterns reusable for Phase 4+ features
 
 **Orchestration log:** `.squad/orchestration-log/2026-04-04T22-25-minsc-phase3-tests.md`
+
+---
+
+## Team Status Update (2026-04-04T22:47:57Z)
+
+### Agents Completed This Round
+- **Regis (Phase 4 #271):** PR #287 merged. Visual enhancements — edge hover, selection glow, minimap type coloring, direction emoji, property tags. +120/-8.
+- **Minsc (Phase 4 tests):** 106 passing tests for Phase 4 features across 4 test files. Committed directly to dev.
+- **Regis (Phase 6 #273):** PR #288 merged. Cleanup — removed ~280 lines legacy SVG, deprecated computeLayout.ts, ELK sole engine. +65/-322.
+
+### Phase 4 Completion Summary
+**Zone Designer UI now complete through Phase 4:**
+- Visual feedback system (hover, selection, property tags)
+- Minimap coloring for room types
+- Direction emoji labels on edges
+- All functionality stable and tested (106 test cases)
+
+### Decisions Finalized
+- **GDD §6.7 DowningSystem Documentation** (Elminster): Combat audit completed; GDD now accurately reflects downed/bleed-out/stabilization mechanics
+- **ELK as Sole Layout Engine** (Regis): Phase 6 completed; BFS fallback removed, ELK now sole zone designer engine
+
+### Next Phase
+- Phase 5 advanced features (real-time collab, drag-to-create exits)
+- Player minimap refactoring (computeLayout.ts migration)

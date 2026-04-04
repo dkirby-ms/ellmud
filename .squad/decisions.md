@@ -1,3 +1,46 @@
+### 2026-04-05: ELK as Sole Zone Designer Layout Engine
+**By:** Regis (Frontend Dev)
+**Issue:** #273
+
+## Decision
+ELK (elkjs) is now the **sole layout engine** for the admin zone designer. The BFS/ELK toggle button and BFS fallback have been removed. If ELK fails, an error is shown instead of silently falling back.
+
+## Rationale
+The BFS engine (`computeLayout.ts`) was the original layout algorithm. Phases 2-4 introduced ELK as a replacement with better handling of complex graphs. With Phase 6, the toggle and fallback are removed to simplify the codebase.
+
+## Impact
+- **computeLayout.ts is deprecated** but retained — the player minimap (`useExplorationMap`) still uses it for synchronous layout
+- **6 other components** import `RoomPosition` type from computeLayout.ts — these type imports can be migrated to elkLayout.ts when convenient
+- **Zone designer** users no longer have a BFS fallback if ELK errors — this is acceptable since ELK has been stable through Phases 2-5
+- **Future:** Once player minimap migrates away, computeLayout.ts (~2700 lines) can be fully removed
+
+---
+
+### 2026-04-04: GDD §6.7 Updated to Document DowningSystem
+**By:** Elminster (Lead/Architect)
+**Issue:** #286
+**Status:** Executed
+
+## Context
+The combat audit identified that the codebase has a `DowningSystem` (`packages/server/src/systems/DowningSystem.ts`) implementing a downed/bleedout/stabilization flow, while GDD §6.7 stated: "The player dies immediately. There is no downed state in the base system." This was a positive divergence — the implementation is better than what was designed.
+
+## Decision
+Updated GDD §6.7 to accurately describe the implemented DowningSystem mechanics:
+
+- **Downed state:** 0 HP → incapacitated, not dead. Removed from combat. 10-tick bleed-out timer.
+- **Stabilization:** `stabilize [player]` command, 2-tick channel, bandage required, cannot self-stabilize, interruptible.
+- **Death triggers:** Bleed-out timer expiry OR finishing blow (active combat in room with downed player).
+- **Stabilized protection:** Stabilized players are not subject to finishing blows.
+- **Attribution:** killerIds tracked for PvP attribution.
+
+Also updated cross-references in §8.3 (PvP) and §8.5 (Groups) to reference the downing flow.
+
+## Team Impact
+- **Minsc/Regis:** If building combat UI or tests, §6.7 now accurately describes the downed overlay state and stabilize interactions.
+- **Future work:** Revive mechanic for stabilized players is not yet designed or implemented — stabilized players currently stay downed until encounter ends or zone collapses.
+
+---
+
 ### 2026-04-04: Sprint 3 PR Review — Migration Discipline
 **By:** Elminster (Lead / Architect)
 **Issues:** #236, #237, #238, #239
