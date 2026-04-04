@@ -16,6 +16,7 @@
 
 ## Learnings
 
+- **Zone Designer migration issues created (2026-04-04):** Tracking issue #266 (elkjs + ReactFlow Migration epic). Phase issues: #267 (Phase 0: Foundation), #268 (Phase 1: Visual Polish), #269 (Phase 2: elkjs Layout Swap), #270 (Phase 3: ReactFlow Integration), #271 (Phase 4: Visual Enhancements), #272 (Phase 5: Advanced Features), #273 (Phase 6: Cleanup). All labeled `enhancement` in `dkirby-ms/ellmud`.
 - **Zone API uses a separate base path:** Zones use `/admin/api/zones/*` not the generic `/admin/api/content/{type}` path. Created `zone-api.ts` wrapping `adminFetch` for zone/room/exit CRUD.
 - **`adminFetch` was not exported:** Had to add `export` to the function declaration in `admin-api.ts` so `zone-api.ts` could import it.
 - **Zone types from shared:** `ZoneDefinition`, `ZoneRoomDefinition`, `ZoneExitDefinition`, `ZoneData` live in `packages/shared/src/zone.ts`. Defined local interfaces in `zone-api.ts` to avoid cross-package import issues in the client bundle.
@@ -905,3 +906,35 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 
 **Status:** PR cleared for merge with minor outstanding note.
 
+
+### 2026-04-05: Zone Designer Layout Algorithm — Deep Investigation
+
+**Request:** User wanted to understand why garden-terrace>observatory on z+1 in Siltgate draws as a long exit instead of promenade-walk-3>promenade-walk-4, and why exits cross when they wouldn't have to.
+
+**Key findings:**
+- The core layout engine lives in `packages/client/src/map/computeLayout.ts` (~2700 lines). Pure function, no React.
+- Layout is an 8-phase pipeline: BFS placement → z-level anchoring → disconnected subgraphs → force-directed relaxation → diagonal cascade fix → direction violation repair → occlusion fix → grid expansion + occlusion cleanup (3 rounds).
+- "Long exits" are not explicitly chosen — they're emergent. The scoring functions (`layoutScore`, `occlusionAwareScore`) penalize distance (cost: dist-1 per cell), diagonals (cost: 20), direction violations (cost: 50), and occlusions (rooms-on-exit-lines, cost: 3 or 15), but **have zero penalty for exit crossings**.
+- Z-levels are laid out independently with their own occupied sets. The z+1 BFS is anchored at the source room's (x,y) from z=0 (line 592). The z+1 topology may be completely different, causing different stretch patterns.
+- BFS visit order (Map iteration order of exits) determines which rooms claim ideal cells first. Later rooms spiral outward via `findNearestDirectional`.
+- `resolveOcclusionsByExpansion` builds shift groups and pushes them ±1-2 cells perpendicular to occluded segments. It tries directions `[1, -1, 2, -2]` and takes the first improvement — **greedy, not globally optimal**.
+- Adding a crossing penalty to the scoring functions would be the path to fixing this, but would significantly increase complexity.
+
+### 2026-04-05: Zone Designer Map Rendering — Design Exploration
+
+**Request:** User asked for concrete alternatives to render a prettier zone designer map, focused on the exit-crossing problem and general visual quality.
+
+**Current architecture constraints discovered during investigation:**
+- SVG-based rendering in ZoneDesigner.tsx (~3600 lines). Exits are SVG `<line>` elements, room-center to room-center, clipped at node boundaries via `clipToRect()`.
+- Layout is computed in `useMemo` — positions are derived, not stored. No manual drag-to-position override exists yet. Positions are purely algorithmic output.
+- Grid is fixed: CELL_W=100, CELL_H=100, NODE_W=50, NODE_H=50. Room positions are integer grid coordinates multiplied by cell size.
+- No third-party graph layout or visualization libraries in dependencies.
+- Exit rendering has no routing — straight lines only. No `<path>` elements, no waypoints, no Bezier curves.
+
+**Alternatives assessed (see decision doc for full analysis):**
+1. **Crossing penalty in scoring** — lowest effort, highest crossing-impact, works within existing architecture
+2. **Orthogonal edge routing** — moderate effort, eliminates visual ambiguity, render-only change
+3. **elkjs integration** — high effort but production-grade layout quality, would need to replace or wrap computeLayout
+4. **d3-force augmentation** — moderate effort, good for organic layouts but less MUD-appropriate
+5. **ReactFlow adoption** — high effort full rewrite, best long-term DX but loses MUD aesthetic control
+6. **Visual polish (non-layout)** — low effort incremental improvements to the existing SVG renderer
