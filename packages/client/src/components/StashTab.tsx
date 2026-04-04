@@ -63,7 +63,7 @@ const mockItems: GridItem[] = [
   },
   {
     id: "4",
-    name: "Shard-Touched Amulet",
+    name: "Rift-Touched Amulet",
     type: "Accessory",
     tier: "anomalous",
     width: 1,
