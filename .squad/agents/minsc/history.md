@@ -1387,3 +1387,52 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 - Handled PR #260 rejection: noted Drizzt's fix (migration 014), proceeded with merge after fix
 - Confirmed zero regressions across all 7 merged PRs
 - Documented merge round outcomes in orchestration logs and session log
+
+## Learnings — Phase 3 ReactFlow Test Cases (2025-04-04)
+
+### What happened
+- Created comprehensive test suite for Phase 3 ReactFlow integration (Issue #270)
+- 3 test files: ZoneRoomNode.test.tsx (28 tests), ZoneExitEdge.test.tsx (30 tests), ZoneDesignerFlow.test.tsx (36 integration tests)
+- All tests marked as `.todo()` — ready for Regis to implement components
+- Tests written against expected interfaces from Phase 3 spec
+- PR #276 created with full testing checklist coverage
+
+### Test organization
+- Tests follow existing project patterns (vitest + @testing-library/react)
+- Co-located in `packages/client/src/components/map/__tests__/`
+- Each test file maps to a component: ZoneRoomNode, ZoneExitEdge, ZoneDesignerFlow
+- Integration tests cover full flow: rendering, floor filtering, pan/zoom, context menus, CRUD operations
+
+### Coverage highlights
+- **ZoneRoomNode**: Room type colors, badges (▲▼⟐👤📦⚠), selection styling, floor indicators, disconnected warnings, tooltips
+- **ZoneExitEdge**: Directional arrows, edge colors (grey/amber/gold/red dashed), locked/hidden icons (🔒👁), orphaned exits, portal stubs
+- **ZoneDesignerFlow**: Node/edge rendering, floor filtering with pan reset, minimap navigation, keyboard shortcuts (+/-/0), context menus, performance (50+ rooms)
+
+### Testing checklist
+All 15 items from #270 testing checklist covered:
+- CRUD operations (create/edit/delete room/exit)
+- Exit pairs (bidirectional) vs one-way (arrows)
+- Locked/hidden modifiers visible
+- Orphaned exits highlighted (red dashed)
+- Portal exits as stubs with labels
+- Floor switching + pan reset
+- Context menus (rooms, edges, canvas)
+- Minimap click navigation
+- Zoom controls (buttons + keyboard)
+- Selection → side panel population
+- Room hover tooltips
+- Disconnected room warnings
+- Room type colors + badges
+- Large zone performance (50+ rooms)
+
+### Key decisions
+- Used `.todo()` for all tests since components not yet implemented by Regis
+- Tests reference expected ReactFlow interfaces (@xyflow/react) even though library not yet installed
+- No production code modified — tests only
+- Tests will activate when Regis completes Phase 3 component implementations
+
+### Future work
+- Tests will need ReactFlow (@xyflow/react) installed before running
+- Some tests may need adjustment based on actual component implementations
+- Integration tests assume side panel callbacks — may need wiring adjustments
+- Performance tests (50+ rooms) may need threshold tuning based on actual render times
