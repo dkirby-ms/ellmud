@@ -37,3 +37,4 @@ export {
   getDeathPenaltyStore,
   resetDeathPenaltyProvider,
 } from './death-penalty-provider.js';
+export { CorpseSystem, resetCorpseIdCounter, type Corpse } from './CorpseSystem.js';

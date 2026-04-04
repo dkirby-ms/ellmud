@@ -37,6 +37,7 @@ import { SoundSystem } from '../sound/index.js';
 import { TraceSystem } from '../systems/index.js';
 import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
 import { DowningSystem, type DowningEvent } from '../systems/DowningSystem.js';
+import { CorpseSystem } from '../systems/CorpseSystem.js';
 import { type DeathPenaltyStore, getDeathPenaltyStore } from '../systems/index.js';
 import {
   NOISE_VALUES,
@@ -68,6 +69,7 @@ import { LoadoutService, getLoadoutRepository } from '../loadout/index.js';
 import type { LoadoutRepository } from '../loadout/index.js';
 import { getZoneRepository } from '../zones/index.js';
 import type { ZoneData } from '../zones/index.js';
+import { resolvePlayerHubTarget } from '../zones/stronghold.js';
 import { convertZoneToRoomGraph } from '../zones/zone-adapter.js';
 import { getItemDefinition } from '../items/registry.js';
 import type { Item } from '../zone/RoomGraph.js';
@@ -108,6 +110,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private traceSystem!: TraceSystem;
   private awarenessSystem!: AwarenessSystem;
   private downingSystem!: DowningSystem;
+  private corpseSystem!: CorpseSystem;
   private deathPenaltyStore!: DeathPenaltyStore;
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
@@ -123,6 +126,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private playerJoinTimes = new Map<string, number>();
   /** Maps playerId → character name for log formatting. */
   private characterNames = new Map<string, string>();
+  /** Maps playerId → faction slug for death routing (cached on join). */
+  private playerFactionSlugs = new Map<string, string>();
 
   // ─── Zone-specific fields ──────────────────────────────────────────────────
   private zoneSlug?: string;
@@ -277,6 +282,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Initialize trace system (GDD §11.2)
     this.traceSystem = new TraceSystem();
 
+    // Initialize corpse system (GDD §6.8 — lootable corpses on death)
+    this.corpseSystem = new CorpseSystem();
+
     // Initialize awareness/stealth detection system (GDD §8.1)
     this.awarenessSystem = new AwarenessSystem();
 
@@ -410,11 +418,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       profile = { ...DEFAULT_PROFILE };
     }
 
-    // Load faction membership (fire-and-forget — faction data is informational)
+    // Load faction membership and cache slug for death routing
     try {
-      const factions = await this.factionRepo.getPlayerFactions(this.dbPlayerId(playerId));
-      if (factions.length > 0) {
-        this.log(`Player ${this.playerTag(playerId)} faction: ${factions[0].faction_id}`);
+      const factionSlug = await this.factionRepo.getPlayerFactionSlug(this.dbPlayerId(playerId));
+      if (factionSlug) {
+        this.playerFactionSlugs.set(playerId, factionSlug);
+        this.log(`Player ${this.playerTag(playerId)} faction: ${factionSlug}`);
       }
     } catch (err) {
       this.log(`Failed to load factions for ${this.playerTag(playerId)}: ${err}`);
@@ -565,6 +574,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.players.delete(playerId);
       this.combatSystem.removeCombatant(playerId);
       this.characterNames.delete(playerId);
+      this.playerFactionSlugs.delete(playerId);
       this.ownerPlayerIds.delete(playerId);
       this.updateMetadata();
     }
@@ -693,7 +703,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Hub/social zones skip collapse and combat ticking
     const isNonCombatZone = this.isZone && this.zoneData &&
-      (this.zoneData.zone.category === 'hub' || this.zoneData.zone.category === 'social');
+      (this.zoneData.zone.category === 'hub' || this.zoneData.zone.category === 'faction_hub' || this.zoneData.zone.category === 'social');
 
     // Collapse timer countdown (skip for persistent hub/social zones)
     if (!isNonCombatZone && (this.lifecycle === 'active' || this.lifecycle === 'destabilising')) {
@@ -738,6 +748,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Decay traces
     this.traceSystem.tick(TICK_INTERVAL_MS);
+
+    // Decay corpses (GDD §6.8 — configurable TTL)
+    this.corpseSystem.tick(TICK_INTERVAL_MS);
   }
 
   // ─── Zone Lifecycle ─────────────────────────────────────────────────────
@@ -789,6 +802,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private handleCollapse(): void {
     // Clear all traces on zone collapse
     this.traceSystem.clear();
+
+    // Clear corpses on zone collapse
+    this.corpseSystem.clear();
 
     // Clear downing state on zone collapse
     this.downingSystem.clear();
@@ -964,6 +980,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       resolveCreaturesInRoom: (roomId: string) =>
         this.creatureManager.getCreaturesInRoom(roomId)
           .map(c => ({ id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription })),
+      corpseSystem: this.corpseSystem,
     };
   }
 
@@ -1605,8 +1622,10 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
   /**
    * Handle actual player death (from bleed-out or killing blow).
-   * Drops inventory, creates corpse trace, applies death penalty,
+   * Creates lootable corpse with non-soulbound items, applies death penalty,
    * emits PvPKillEvent, and schedules return to refuge.
+   *
+   * GDD §6.5, §6.8 — Corpse/Loot-on-Death
    */
   private handlePlayerDeath(playerId: string, playerName: string, roomId: string, killerIds?: string[]): void {
     const player = this.players.get(playerId);
@@ -1617,17 +1636,31 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // PvP detection: any non-creature attacker means this was a PvP kill
     const isPvPKill = (killerIds ?? []).some(id => !id.startsWith('creature-'));
 
-    // Drop all inventory items to the room floor
-    const droppedItems: { name: string }[] = [];
-    if (room) {
-      for (const [, entry] of player.inventory) {
-        for (let i = 0; i < entry.quantity; i++) {
-          room.items.push(entry.item);
-          droppedItems.push(entry.item);
+    // Separate inventory into soulbound (kept) and non-soulbound (dropped into corpse)
+    const corpseItems: Item[] = [];
+    const keptItemIds: string[] = [];
+
+    for (const [, entry] of player.inventory) {
+      const def = getItemDefinition(entry.item.id);
+      const isSoulbound = def?.soulbound ?? false;
+
+      for (let i = 0; i < entry.quantity; i++) {
+        if (isSoulbound) {
+          keptItemIds.push(entry.item.id);
+        } else {
+          corpseItems.push(entry.item);
         }
       }
     }
+
+    // Clear inventory, then re-add soulbound items
     player.inventory.clear();
+    for (const itemId of keptItemIds) {
+      const def = getItemDefinition(itemId);
+      if (def) {
+        player.addItem({ id: def.id, name: def.name, weight: def.weight, description: def.description });
+      }
+    }
 
     // Clear equipped loadout — gear is lost on death (both in-memory and repo)
     player.equipment = undefined;
@@ -1637,10 +1670,17 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       });
     }
 
-    // Trace: player death creates corpse trace (lootable)
+    // Create lootable corpse entity with non-soulbound items (GDD §6.8)
+    const charName = this.characterNames.get(playerId) ?? playerName;
+    if (room && corpseItems.length > 0) {
+      const config = getConfig();
+      this.corpseSystem.addCorpse(roomId, playerId, charName, corpseItems, config.corpseTTLSeconds);
+    }
+
+    // Trace: player death creates corpse trace (visual marker)
     this.traceSystem.addTrace(roomId, 'corpse', {
       actorId: playerId,
-      actorName: playerName,
+      actorName: charName,
     });
 
     // Apply death penalty (increment death count, record time)
@@ -1675,14 +1715,14 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
     }
 
-    // Narrate dropped items to other players in the room
-    if (droppedItems.length > 0 && room) {
+    // Narrate corpse creation to other players in the room
+    if (corpseItems.length > 0 && room) {
       for (const [sid, ps] of this.players) {
         if (sid === playerId || ps.currentRoomId !== roomId) continue;
         const otherClient = this.findClient(sid);
         if (otherClient) {
           this.sendNarrate(otherClient, {
-            text: droppedItems.map(i => `${playerName} drops a ${i.name} as they fall.`).join('\n'),
+            text: `${charName} falls, leaving behind a lootable corpse.`,
             type: 'room',
             timestamp: Date.now(),
           });
@@ -1697,12 +1737,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         playerId,
         state: 'death',
         narration: isPvPKill
-          ? 'A rival adventurer fells you. You awaken in the Refuge, bearing the death penalty…'
-          : 'The darkness claims you. You awaken in the Refuge, weakened by the death penalty…',
+          ? 'A rival adventurer fells you. You awaken at your stronghold, bearing the death penalty…'
+          : 'The darkness claims you. You awaken at your stronghold, weakened by the death penalty…',
         timestamp: Date.now(),
       });
 
-      // Schedule return to refuge after 3 seconds
+      // Resolve faction-based hub target (stronghold if faction member, Refuge otherwise)
+      const factionSlug = this.playerFactionSlugs.get(playerId);
+      const hubTarget = resolvePlayerHubTarget(factionSlug);
+
+      // Schedule return to hub after 3 seconds
       this.clock.setTimeout(async () => {
         if (!this.players.has(playerId)) {
           this.log(`Player ${this.playerTag(playerId)} already left during death delay — skipping cleanup`);
@@ -1715,7 +1759,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         await this.savePlayerProfile(playerId, this.players.get(playerId)!);
 
         client.send(MessageTypes.ROOM_SWITCH, {
-          target: 'zone:the-refuge',
+          target: hubTarget,
           reason: 'player_death',
         } satisfies RoomSwitchMessage);
 
@@ -1724,7 +1768,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         this.ownerPlayerIds.delete(playerId);
         this.state.playerCount = Math.max(0, this.state.playerCount - 1);
         this.updateMetadata();
-        this.log(`Player ${this.playerTag(playerId)} died and returned to refuge`);
+        this.log(`Player ${this.playerTag(playerId)} died and returned to ${hubTarget}`);
       }, 3000);
     }
 
