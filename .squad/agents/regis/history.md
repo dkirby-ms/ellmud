@@ -1235,3 +1235,15 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 ### Next Phase
 - Player minimap migration away from computeLayout.ts (enables full deprecation)
 - Phase 5+ advanced features (real-time collab, performance optimization)
+
+---
+
+## Learnings
+
+### Phase 5.1 — Undo/Redo (2026-04-05, PR #290, Issue #272)
+
+- **Architecture:** Created `useUndoRedo` hook with dual stacks (undo/redo), max 50 entries. Operations store async `undo()`/`redo()` closures that make real API calls — not purely client-side state reversal.
+- **ID mutation pattern:** When redo re-creates a deleted entity, the server assigns a new ID. Closures must capture mutable references (e.g., `savedExit.id = re.id`) so subsequent undo/redo cycles use the correct ID. This is the trickiest part of API-backed undo.
+- **Keyboard shortcut precedence:** `useUndoRedo` registers `Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y` on `window.keydown`. Must skip when `target` is INPUT/TEXTAREA/SELECT to avoid hijacking text editing. The existing `Ctrl+F` search shortcut in ZoneDesigner and `Escape` handler coexist naturally since they use different key combos.
+- **Stack invalidation:** New operations always clear the redo stack — standard UX convention. No branching history.
+- **Not tracked:** Complex multi-step operations like "Insert Room on Exit" and "Add Reverse" are not wrapped yet — they compose multiple CRUD calls and would need compound undo. Left as future work.

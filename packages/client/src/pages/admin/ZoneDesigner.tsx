@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, HelpCircle, Search, Filter } from "lucide-react";
+import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, HelpCircle, Search, Filter, Undo2, Redo2 } from "lucide-react";
+import { useUndoRedo } from "../../hooks/useUndoRedo.js";
 import { computeElkLayout, type LayoutRoom } from "../../map/elkLayout.js";
 import { FloorSelector } from "../../components/map/FloorSelector.js";
 import { computeFloorBounds } from "../../components/map/useFloorFilter.js";
@@ -351,6 +352,18 @@ export default function ZoneDesigner({
   // Creature and item lists for NPC/loot management
   const [creatures, setCreatures] = useState<Array<{ type: string; name: string }>>([]);
   const [items, setItems] = useState<Array<{ id: string; name: string }>>([]);
+
+  // Undo/redo operation stack (5.1)
+  const {
+    pushOperation,
+    handleUndo,
+    handleRedo,
+    undoRedoBusy,
+    canUndo,
+    canRedo,
+    undoLabel,
+    redoLabel,
+  } = useUndoRedo(onZoneChanged);
 
   // Sync edit form when selection changes
   useEffect(() => {
@@ -871,7 +884,15 @@ export default function ZoneDesigner({
       setBusy(true);
       setError(null);
       if (zoneId) {
-        await createRoom(zoneId, roomForm);
+        const created = await createRoom(zoneId, roomForm);
+        const savedForm = { ...roomForm };
+        const savedZoneId = zoneId;
+        pushOperation({
+          type: 'createRoom',
+          label: `Create room '${savedForm.name}'`,
+          undo: async () => { await deleteRoom(created.id); },
+          redo: async () => { await createRoom(savedZoneId, savedForm); },
+        });
       }
       setShowRoomForm(false);
       onZoneChanged?.();
@@ -888,13 +909,29 @@ export default function ZoneDesigner({
     try {
       setBusy(true);
       setError(null);
-      await updateRoom(room.id, {
+      const previousData = {
+        name: room.name,
+        description: room.description,
+        type: room.type,
+        properties: Array.isArray(room.properties) ? [...room.properties] : [],
+        npcs: Array.isArray(room.npcs) ? [...room.npcs] : [],
+        lootContainers: Array.isArray(room.lootContainers) ? [...room.lootContainers] : [],
+      };
+      const newData = {
         name: editForm.name,
         description: editForm.description,
         type: editForm.type,
         properties: editForm.properties,
         npcs: editForm.npcs,
         lootContainers: editForm.lootContainers,
+      };
+      await updateRoom(room.id, newData);
+      const savedRoomId = room.id;
+      pushOperation({
+        type: 'updateRoom',
+        label: `Update room '${room.name}'`,
+        undo: async () => { await updateRoom(savedRoomId, previousData); },
+        redo: async () => { await updateRoom(savedRoomId, newData); },
       });
       onZoneChanged?.();
     } catch (err) {
@@ -910,7 +947,33 @@ export default function ZoneDesigner({
     try {
       setBusy(true);
       setError(null);
+      // Snapshot room data for undo restoration
+      const savedRoom = { ...room };
+      const savedZoneId = zoneId;
       await deleteRoom(room.id);
+      if (savedZoneId) {
+        pushOperation({
+          type: 'deleteRoom',
+          label: `Delete room '${savedRoom.name}'`,
+          undo: async () => {
+            await createRoom(savedZoneId, {
+              slug: savedRoom.slug,
+              name: savedRoom.name,
+              description: savedRoom.description,
+              type: savedRoom.type,
+              properties: savedRoom.properties,
+              lootContainers: savedRoom.lootContainers,
+              hazards: savedRoom.hazards,
+              npcs: savedRoom.npcs,
+            });
+          },
+          redo: async () => {
+            // Find the re-created room by slug to get its new ID
+            const refreshed = rooms.find((r) => r.slug === savedRoom.slug);
+            if (refreshed) await deleteRoom(refreshed.id);
+          },
+        });
+      }
       setSelectedRoom(null);
       onZoneChanged?.();
     } catch (err) {
@@ -933,8 +996,9 @@ export default function ZoneDesigner({
         locked: false,
         hidden: false,
       };
-      await createExit(zoneId, exitData as Partial<ZoneExitDefinition>);
+      const created = await createExit(zoneId, exitData as Partial<ZoneExitDefinition>);
 
+      let createdReverse: ZoneExitDefinition | null = null;
       if (connectBidirectional && OPPOSITE[connectDirection]) {
         const reverseData: Record<string, unknown> = {
           fromRoomSlug: connectTarget,
@@ -943,8 +1007,34 @@ export default function ZoneDesigner({
           locked: false,
           hidden: false,
         };
-        await createExit(zoneId, reverseData as Partial<ZoneExitDefinition>);
+        createdReverse = await createExit(zoneId, reverseData as Partial<ZoneExitDefinition>);
       }
+
+      const savedZoneId = zoneId;
+      const savedExitData = { ...exitData } as Partial<ZoneExitDefinition>;
+      const savedReverseData = createdReverse
+        ? ({ fromRoomSlug: connectTarget, direction: OPPOSITE[connectDirection], toRoomSlug: selectedRoom, locked: false, hidden: false } as Partial<ZoneExitDefinition>)
+        : null;
+      const fromName = rooms.find(r => r.slug === selectedRoom)?.name ?? selectedRoom;
+      const toName = rooms.find(r => r.slug === connectTarget)?.name ?? connectTarget;
+
+      pushOperation({
+        type: 'createExit',
+        label: `Connect '${fromName}' → '${toName}'`,
+        undo: async () => {
+          await deleteExit(created.id);
+          if (createdReverse) await deleteExit(createdReverse.id);
+        },
+        redo: async () => {
+          const re = await createExit(savedZoneId, savedExitData);
+          // Update closure reference for future undo
+          created.id = re.id;
+          if (savedReverseData) {
+            const reRev = await createExit(savedZoneId, savedReverseData);
+            if (createdReverse) createdReverse.id = reRev.id;
+          }
+        },
+      });
 
       setConnectTarget(null);
       setMode("select");
@@ -981,6 +1071,11 @@ export default function ZoneDesigner({
       setBusy(true);
       setError(null);
       
+      // Snapshot exit data for undo
+      const savedExit = { ...exit };
+      const savedZoneId = exit.zoneId;
+      let savedReverseExit: ZoneExitDefinition | null = null;
+      
       // Delete the selected exit
       await deleteExit(selectedExit);
       
@@ -992,9 +1087,44 @@ export default function ZoneDesigner({
           e.direction === OPPOSITE[exit.direction]
         );
         if (reverseExit?.id) {
+          savedReverseExit = { ...reverseExit };
           await deleteExit(reverseExit.id);
         }
       }
+
+      const fromName = rooms.find(r => r.slug === savedExit.fromRoomSlug)?.name ?? savedExit.fromRoomSlug;
+      const toName = rooms.find(r => r.slug === savedExit.toRoomSlug)?.name ?? savedExit.toRoomSlug;
+
+      pushOperation({
+        type: 'deleteExit',
+        label: `Delete exit '${fromName}' → '${toName}'`,
+        undo: async () => {
+          const re = await createExit(savedZoneId, {
+            fromRoomSlug: savedExit.fromRoomSlug,
+            direction: savedExit.direction,
+            toRoomSlug: savedExit.toRoomSlug,
+            locked: savedExit.locked,
+            hidden: savedExit.hidden,
+            targetZoneSlug: savedExit.targetZoneSlug,
+            targetRoomSlug: savedExit.targetRoomSlug,
+          });
+          savedExit.id = re.id;
+          if (savedReverseExit) {
+            const reRev = await createExit(savedZoneId, {
+              fromRoomSlug: savedReverseExit.fromRoomSlug,
+              direction: savedReverseExit.direction,
+              toRoomSlug: savedReverseExit.toRoomSlug,
+              locked: savedReverseExit.locked,
+              hidden: savedReverseExit.hidden,
+            });
+            savedReverseExit.id = reRev.id;
+          }
+        },
+        redo: async () => {
+          await deleteExit(savedExit.id);
+          if (savedReverseExit) await deleteExit(savedReverseExit.id);
+        },
+      });
       
       setSelectedExit(null);
       setShowDeleteExitModal(false);
@@ -1011,6 +1141,11 @@ export default function ZoneDesigner({
     try {
       setBusy(true);
       setError(null);
+      const exit = exits.find((e) => e.id === selectedExit);
+      // Snapshot previous data for undo
+      const previousData: Partial<ZoneExitDefinition> = exit
+        ? { direction: exit.direction, toRoomSlug: exit.toRoomSlug, locked: exit.locked, hidden: exit.hidden, targetZoneSlug: exit.targetZoneSlug, targetRoomSlug: exit.targetRoomSlug }
+        : {};
       const data: Record<string, unknown> = {
         direction: exitEditForm.direction,
         toRoomSlug: exitEditForm.toRoomSlug,
@@ -1024,7 +1159,17 @@ export default function ZoneDesigner({
         data.targetZoneSlug = null;
         data.targetRoomSlug = null;
       }
+      const savedExitId = selectedExit;
+      const newData = { ...data } as Partial<ZoneExitDefinition>;
       await updateExit(selectedExit, data as Partial<ZoneExitDefinition>);
+
+      const fromName = exit ? (rooms.find(r => r.slug === exit.fromRoomSlug)?.name ?? exit.fromRoomSlug) : selectedExit;
+      pushOperation({
+        type: 'updateExit',
+        label: `Update exit from '${fromName}'`,
+        undo: async () => { await updateExit(savedExitId, previousData); },
+        redo: async () => { await updateExit(savedExitId, newData); },
+      });
       onZoneChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update exit");
@@ -1418,6 +1563,28 @@ export default function ZoneDesigner({
             keyboardEnabled={true}
           />
         )}
+
+        {/* Undo / Redo (5.1) */}
+        <div className="flex items-center gap-1 border-l border-[#2A2B35] pl-2">
+          <button
+            onClick={() => void handleUndo()}
+            disabled={!canUndo || busy || undoRedoBusy}
+            className="px-2 py-1.5 border border-[#4A4B55] text-[#8A8B95] hover:text-[#E8E0D0] hover:bg-[#1C1D27] rounded text-xs flex items-center gap-1 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#8A8B95] transition-colors"
+            style={{ fontFamily: "var(--font-sans)" }}
+            title={undoLabel ? `Undo: ${undoLabel}` : "Nothing to undo"}
+          >
+            <Undo2 className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => void handleRedo()}
+            disabled={!canRedo || busy || undoRedoBusy}
+            className="px-2 py-1.5 border border-[#4A4B55] text-[#8A8B95] hover:text-[#E8E0D0] hover:bg-[#1C1D27] rounded text-xs flex items-center gap-1 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#8A8B95] transition-colors"
+            style={{ fontFamily: "var(--font-sans)" }}
+            title={redoLabel ? `Redo: ${redoLabel}` : "Nothing to redo"}
+          >
+            <Redo2 className="w-3 h-3" />
+          </button>
+        </div>
 
         <div className="flex-1" />
 
