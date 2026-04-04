@@ -1754,3 +1754,52 @@ All 8 issues now have correct squad labels aligned with work scope. Epic (#266) 
 
 **Next steps:** Fixes are outlined with file paths and line numbers in decision document. Implementation ~40 lines of added logic across two workflows.
 
+## Learnings — GDD §6 Combat Audit (2026-07-25)
+
+### Combat System Architecture
+- **CombatSystem lives at** `packages/server/src/combat/CombatSystem.ts` — tick-based orchestrator called by ZoneRoom.update()
+- **Supporting files:** `CombatState.ts` (types), `actions.ts` (narration events), `damage.ts` (damage model with dodge chance)
+- **Creature AI:** `packages/server/src/creatures/behavior.ts` — deterministic state machine (idle/alert/hostile/fleeing). Simple targeting: `playersHere[0]`
+- **DowningSystem:** `packages/server/src/systems/DowningSystem.ts` — bleed-out/stabilize. Diverges from GDD §6.7 ("no downed state")
+- **CorpseSystem:** `packages/server/src/systems/CorpseSystem.ts` — lootable corpses with TTL decay. Fully implemented.
+- **DeathPenalty:** `packages/server/src/systems/DeathPenalty.ts` — exponential decay curve, 30-min duration, persistence layer
+- **TraceSystem:** `packages/server/src/systems/TraceSystem.ts` — ephemeral environmental traces, not combat-specific
+- **Client combat UI:** `packages/client/src/pages/ZoneExploration.tsx` — HP bar, combat action buttons, enemy status sidebar, tick timer
+
+### Key Gaps Identified (Issues #278-#286)
+- **No auto-attack baseline** — defaults to dodge, not strike (#278)
+- **No ability/cooldown system** — CombatAction type stubs exist but no resolution (#279)
+- **No enemy telegraphs** — no wind-up/intent/reaction windows (#280)
+- **No threat tables** — creatures target first player, no damage-based aggro (#281)
+- **No room positioning** — no Front/Flank/Rear zones (#282)
+- **No signal classification/batching** — partial combatSubtype, no micro-batching (#283)
+- **Combat HUD gaps** — no stamina bar, no group frames, partial target panel (#284)
+- **Flee always succeeds** — no skill check, no post-combat cooldown (#285)
+- **DowningSystem divergence** — exists but GDD says no downed state (#286)
+
+### Patterns Observed
+- Combat system is well-structured for extension — `CombatSystem.resolveTick()` has clear phases that map to GDD tick loop
+- Simultaneous damage resolution (all damage from start-of-tick HP) is correct and matches GDD determinism requirement
+- Shared types (`@ellmud/shared`) have forward-looking stubs (stamina fields, CombatAction variants) that are unused
+- Client has anticipatory tests (ux-batch2-combat-sidebar.test.tsx) for UI gaps that aren't yet implemented
+
+### Decisions Made
+- **Combat brainstorm exclusions confirmed:** Layers 3 (spatial anchoring), 4 (threaded logs), 8 (cinematic effects), 9 (readability modes), 10 (architecture) correctly excluded from GDD. No gaps from these.
+- **DowningSystem recommendation:** Keep it (Option A), update GDD to document it. Good group dynamics.
+- **Issue priority order:** #278 (auto-attack) → #279 (abilities) → #281 (threat) → #280 (telegraphs) → #285 (flee) → #283 (narration) → #284 (HUD) → #282 (positioning) → #286 (GDD alignment)
+
+
+### 2026-04-04: GDD §6 Combat System Audit Complete
+- **Decision:** Systematic audit of GDD §6 (all subsections §6.1–§6.11) against the codebase identified 9 implementation gaps and 1 GDD alignment issue. Decision filed to `.squad/decisions/decisions.md`.
+- **Outcome:** 9 GitHub issues created (#278-#286) mapping GDD gaps. All issues labeled `squad` with dependency analysis embedded.
+- **Key finding:** DowningSystem is positive divergence from GDD §6.7. Recommendation: update GDD, don't remove the system.
+- **Architectural strength:** CombatSystem.resolveTick() is well-structured for extension. Simultaneous damage resolution is correct and matches GDD determinism requirement.
+- **Critical gap:** Creature AI targeting—creatures targeting `playersHere[0]` makes group combat meaningless. Threat tables (#281) should be high priority.
+- **Priority order:** #278 (auto-attack) → #279 (abilities) → #281 (threat) → #280 (telegraphs) → #285 (flee) → #283 (signals) → #284 (HUD) → #282 (positioning) → #286 (GDD update).
+- **Orchestration log:** `.squad/orchestration-log/2026-04-04T22-25-elminster-combat-audit.md`
+
+### 2026-04-04: Phase 3 Completion Coordinated
+- **Status:** Regis Phase 3 (ReactFlow integration) merged; Minsc Phase 3 (test cases) delivered; orchestration logs written.
+- **Regis outcome:** PR #276 merged (+2004/-516). Zone designer refactored to ReactFlow with custom ZoneRoomNode, ZoneExitEdge, ZoneDesignerFlow. All 146 tests passing.
+- **Minsc outcome:** 94 test cases across zone designer components. All pending .todo() activation. Ready for component merge validation.
+- **Session log:** `.squad/sessions/2026-04-04T22-25-combat-audit-phase3.md`

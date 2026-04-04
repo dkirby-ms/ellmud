@@ -5420,3 +5420,37 @@ The triage action was built for **domain routing** (finding the right expert), n
 3. **No ownership guard:** Allows multiple member labels → creates coordination ambiguity
 
 All three are fixable in the triage workflow with ~40 lines of added logic. No database changes, no schema updates, no breaking changes.
+
+---
+
+## 2026-04-04T22:25:00Z: GDD §6 Combat System Audit — Gap Analysis & Issue Backlog
+**By:** Elminster (Lead / Architect)  
+**Issues:** #278, #279, #280, #281, #282, #283, #284, #285, #286
+
+**Decision:** Systematic audit of GDD §6 (all subsections §6.1–§6.11) against the codebase identified 9 implementation gaps and 1 GDD alignment issue. All gaps filed as GitHub issues with the `squad` label. No issues duplicate existing tracked work (#32, #161, #167, #277).
+
+**Key Findings:**
+1. **CombatSystem.resolveTick() is well-structured for extension.** The tick phases map cleanly to the GDD tick loop. Adding abilities, threat, and positioning will extend these phases rather than replacing them.
+
+2. **Simultaneous damage resolution is correct.** All damage calculated from start-of-tick HP, applied at once. This matches the GDD determinism requirement.
+
+3. **DowningSystem is a net positive divergence.** GDD §6.7 says "no downed state" but the DowningSystem creates meaningful group rescue dynamics. Recommendation: update GDD, don't remove the system.
+
+4. **Creature AI targeting is the most impactful gap.** Creatures targeting `playersHere[0]` makes group combat meaningless — threat tables (#281) should be high priority.
+
+**Implementation Priority:**
+1. #278 Auto-attack baseline (foundational)
+2. #279 Abilities & cooldowns (unlocks tactical depth)
+3. #281 Threat system (enables meaningful group combat)
+4. #280 Enemy telegraphs (requires abilities)
+5. #285 Flee skill check (small, independent)
+6. #283 Signal classification (improves readability)
+7. #284 Combat HUD (client work, blocked)
+8. #282 Room positioning (largest feature)
+9. #286 GDD alignment (documentation)
+
+**Impact:**
+- Drizzt (Engine Dev): Primary assignee for #278, #279, #281, #280, #285
+- Regis (Frontend Dev): Primary assignee for #284, #283
+- Jarlaxle (Systems Dev): May assist with #282 (positioning)
+- GDD: Needs update for DowningSystem documentation (#286)

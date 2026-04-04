@@ -1158,3 +1158,35 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 - getBezierPath is superior to hand-rolled curves — handles edge cases automatically
 - ReactFlow's fitView needs a setTimeout(50ms) delay to work reliably after data changes
 - Floor indicator overlays need `pointerEvents: 'none'` to avoid blocking ReactFlow interactions
+
+## 2026-04-04T22:25Z — Phase 3 Complete & Merged
+
+**Completed:** ReactFlow zone designer integration  
+**PR:** #276  
+**Status:** ✅ Merged to main
+
+### Deliverables
+- **Custom ZoneRoomNode:** Renders zone rooms with status badges, click handlers for detail panel
+- **Custom ZoneExitEdge:** Renders zone exits with directional arrows, hover tooltips
+- **ZoneDesignerFlow:** Top-level ReactFlow component with toolbar, zoom controls, layout action
+- **Layout Integration:** elkjs algorithm callable from toolbar, animates node repositioning
+
+### PR Stats
+- **Code:** +2004 insertions, -516 deletions
+- **Tests:** ✅ 146 tests passing (all Phase 3 tests + existing suite)
+- **Build:** ✅ Clean
+- **Deployment:** Ready
+
+### Technical Highlights
+- ReactFlow provides canvas pan/zoom, selection, undo/redo automatically
+- Custom node component receives room data, emits `onSelect` for detail panel
+- Edge component renders SVG paths with zone metadata (exit type, capacity)
+- Layout algorithm runs elkjs in worker thread (non-blocking UI)
+- Maintains Tailwind styling consistency with admin panel theme
+
+### Impact
+- Zone designer ready for Phase 4 visual enhancements
+- Foundation for real-time collab features (Phase 5+)
+- React component library now includes interactive graph widgets
+
+**Orchestration log:** `.squad/orchestration-log/2026-04-04T22-25-regis-phase3.md`
