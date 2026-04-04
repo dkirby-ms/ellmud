@@ -1,6 +1,6 @@
 /**
  * Seed item catalog — development & test items covering all equipment slots,
- * rarity tiers, shard keys, consumables, and stash-only materials.
+ * rarity tiers, zone keys, consumables, and stash-only materials.
  *
  * ~40 items. Enough to fill a stash, test every loadout slot, and push
  * against weight capacity (default 200). Every word earns its place.
@@ -321,8 +321,8 @@ export const SHARD_TOUCHED_MEDALLION: StashItem = {
 
 // ─── Zone Keys ─────────────────────────────────────────────────────────────
 
-export const BONE_SHARD_KEY: StashItem = {
-  id: 'bone-shard-key',
+export const BONE_ZONE_KEY: StashItem = {
+  id: 'bone-zone-key',
   name: 'Bone Zone Key',
   type: 'key',
   weight: 1,
@@ -331,18 +331,18 @@ export const BONE_SHARD_KEY: StashItem = {
   baseDurability: null,
 };
 
-export const IRON_SHARD_KEY: StashItem = {
-  id: 'iron-shard-key',
+export const IRON_ZONE_KEY: StashItem = {
+  id: 'iron-zone-key',
   name: 'Iron Zone Key',
   type: 'key',
   weight: 1,
   rarity: 'sturdy',
-  description: 'A blackened iron key etched with shard-glyphs. Opens Tier 2 zones.',
+  description: 'A blackened iron key etched with runic glyphs. Opens Tier 2 zones.',
   baseDurability: null,
 };
 
-export const CRYSTAL_SHARD_KEY: StashItem = {
-  id: 'crystal-shard-key',
+export const CRYSTAL_ZONE_KEY: StashItem = {
+  id: 'crystal-zone-key',
   name: 'Crystal Zone Key',
   type: 'key',
   weight: 1,
@@ -476,10 +476,10 @@ export const SEED_ITEMS: readonly StashItem[] = [
   // Amulets
   HOLLOW_EYE_PENDANT,
   SHARD_TOUCHED_MEDALLION,
-  // Shard keys
-  BONE_SHARD_KEY,
-  IRON_SHARD_KEY,
-  CRYSTAL_SHARD_KEY,
+  // Zone keys
+  BONE_ZONE_KEY,
+  IRON_ZONE_KEY,
+  CRYSTAL_ZONE_KEY,
   // Consumables
   STALE_RATION,
   BLACKMOSS_SALVE,

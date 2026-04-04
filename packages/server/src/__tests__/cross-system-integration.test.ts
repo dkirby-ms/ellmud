@@ -10,7 +10,7 @@ import { CombatSystem, createCombatant, DEFAULT_PLAYER_STATS } from '../combat/i
 import type { Combatant, CombatStats } from '../combat/CombatState.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
-import { createTestRoomGraph, type Room } from '../zone/RoomGraph.js';
+import { createTestRoomGraph, type Room } from '../generator/RoomGraph.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

@@ -1,11 +1,11 @@
 /**
- * Ambient Narration Templates — fallback prose for Refuge ambient events.
+ * Ambient Narration Templates — fallback prose for Refuge/debug hub ambient events.
  *
  * Each ambient event type has a template renderer that produces atmospheric
  * prose from state. Templates must be good enough that players don't notice
  * the LLM was skipped. Every word earns its place.
  *
- * GDD §2.1 — The Refuge as a Living World
+ * GDD §2.1 — The Refuge as a Living World (now designer/debug hub)
  */
 
 import type { WeatherState, TimeOfDay, NPCRole } from '@ellmud/shared';

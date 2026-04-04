@@ -5016,3 +5016,149 @@ The three GDD revisions represent a maturation of design intent: away from extra
 2. Assign issues to team members per sprint capacity
 3. Begin Sprint 1 work: extraction system removal and biome type deletion
 4. DB migrations deferred to Sprint 4 to avoid blocking other work
+
+---
+
+## 2026-04-01T16:45:00Z: Faction Strongholds — Zone Category & Routing Pattern
+
+**By:** Jarlaxle (Systems Dev)  
+**Issue:** #236  
+**Scope:** Faction stronghold zones with new zone category and death routing  
+**Outcome:** ✅ SUCCESS — PR #259
+
+### Decision
+
+Faction strongholds use a new zone category `faction_hub` (distinct from `hub`) and link to factions via a `faction_slug` column on the `zones` table. Death routing resolves the player's faction slug at join time and caches it for the session. The static mapping in `stronghold.ts` maps faction slug → zone slug without a DB query at death time.
+
+### Rationale
+
+- Separate `faction_hub` category lets existing `hub` checks (Refuge) remain untouched while allowing faction-specific behavior to be gated on the new category.
+- Caching `factionSlug` on join avoids async DB queries during the time-critical death handler (3-second delay timer).
+- Static mapping is acceptable for 3 factions; if factions become user-created, the mapping should move to DB lookup.
+
+### Impact
+
+- **Server:** `ZoneRoom` now has a `playerFactionSlugs` map. `isNonCombatZone` check includes `faction_hub`.
+- **Client:** `useZoneConnection.ts` recognizes all 3 stronghold targets as hub zones for state cleanup.
+- **Shared:** `ZoneDefinition.category` union expanded, `factionSlug` field added (optional).
+- **Database:** `zones` table has new `factionSlug` column (nullable, indexed).
+- **Unblocks:** #238 (death/spawn routing), #239 (Refuge repurposing)
+
+### Deliverables
+
+- 3 stronghold zones: The Foundry (Ironwright Compact), The Cartographium (Veil Cartographers), The Counting House (Scarlet Ledger)
+- 8 feature rooms per stronghold (24 total)
+- 21 new tests covering zone generation, faction routing, capacity
+- Zero regressions in existing test suite
+
+---
+
+## 2026-04-01T16:45:00Z: Corpse/Loot-on-Death System
+
+**By:** Drizzt (Engine Dev)  
+**Issue:** #237  
+**Scope:** In-memory corpse system replacing direct item drop on death  
+**Outcome:** ✅ SUCCESS — PR #258
+
+### Decision
+
+Implemented corpses as zone-scoped in-memory entities (CorpseSystem), separate from the existing TraceSystem. On player death, non-soulbound inventory items move into a Corpse entity in the room instead of dropping to the room floor. Players loot corpses via the new `loot` command. Corpses decay after a configurable TTL (default 600s).
+
+### Rationale
+
+- Corpses need inventory storage, which traces don't support (traces are visual markers only)
+- In-memory storage is appropriate since room items are already ephemeral (destroyed on zone collapse)
+- Soulbound check leverages existing `ItemDefinition.soulbound` field from the item registry
+- Keeping trace and corpse systems separate maintains single-responsibility: traces = environmental evidence filtered by tracking skill, corpses = lootable containers visible to all
+
+### Impact
+
+- Death handler no longer drops items to `room.items[]` — they go into corpse entity
+- `look` command now shows corpses with item counts (e.g., "A corpse (8 items)")
+- `loot` verb added to parser and command registry
+- `corpseTTLSeconds` added to ServerConfig (env: CORPSE_TTL_SECONDS)
+- Tests expecting items on room floor after death need updating (completed in this PR)
+- Equipment-to-corpse conversion (loadout items) deferred to future work — requires async loadout resolution
+
+### Deliverables
+
+- CorpseSystem in-memory entity storage with TTL-based cleanup
+- `loot <corpse>` command with weight validation
+- 33 new tests covering corpse creation, looting, TTL expiry, soulbound filtering
+- Zero regressions in existing test suite
+
+### Known Limitations
+
+- Equipment-to-corpse conversion deferred (loadout items stay equipped at death)
+- Corpse cosmetics hardcoded; customization deferred to future work
+
+---
+
+## 2026-04-01T16:45:00Z: Repurpose Refuge as Designer/Debug Hub
+
+**By:** Jarlaxle (Systems Dev)  
+**Issue:** #239  
+**Scope:** Zone categorization, Refuge repurposing  
+**Outcome:** ✅ SUCCESS — PR #260 (after migration fix)
+
+### Decision
+
+The Refuge zone category changed from `hub` to `dev`. The shared `ZoneDefinition.category` type now includes `'dev'` as a valid value. The `dev` category is treated identically to `hub`/`social` in the ZoneRoom tick loop — no collapse timer, no creature AI, no combat resolution. Faction strongholds (#236) are now the primary player hubs.
+
+### Rationale
+
+With faction strongholds serving as the real player hubs, the Refuge is no longer the canonical starting area for most players. Rather than remove it (it still serves as the fallback for unaffiliated players), it's repurposed as a designer/debug hub where game systems can be tested safely. The `dev` category signals this intent clearly in the DB and shared types.
+
+### Impact
+
+- **Shared types:** `ZoneDefinition.category` gains `'dev'` — any code that exhaustively switches on category needs updating
+- **DB seed:** Refuge zone row changes category column value; requires migration for existing databases
+- **Server:** `isNonCombatZone` in ZoneRoom now includes `'dev'` — dev zones are safe from combat/collapse
+- **Client:** Refuge.tsx descriptions updated but file not renamed (still functional as fallback)
+- **Tests:** Faction-stronghold tests updated to seed Refuge as `dev`; test helpers accept `'dev'` category
+
+### Deliverables
+
+- Refuge category changed from `hub` to `dev` in seed and live databases
+- Migration `014_repurpose_refuge.sql` added for existing database instances
+- Type definitions updated to include `'dev'` category
+- 13 tests updated for Refuge as development environment
+- Zero regressions
+
+---
+
+## 2026-04-04T17:24:38Z: Migration Discipline — Seed Files Pair with Numbered Migrations
+
+**By:** Elminster (Reviewer), enforced by Drizzt (Engine Dev)  
+**Issue:** #260 (Repurpose Refuge) — Rejection & Fix  
+**Scope:** Database migration patterns  
+
+### Decision
+
+Any modification to data in seed files (e.g., `003_seed_zones.sql`) must be paired with a corresponding numbered migration file (e.g., `014_repurpose_refuge.sql`) that makes the same change for existing databases where the seed file has already been applied. The migration system tracks applied files by filename — once executed, seed files are never re-run.
+
+### Rationale
+
+Seed files execute once per fresh database installation. For existing databases in development or production, data changes require numbered migrations that the Flyway/migration runner will execute on every startup. Without the numbered migration, existing data will remain in the old state indefinitely.
+
+**Example from PR #260:**
+- Seed file change: `003_seed_zones.sql` changed Refuge category from `hub` to `dev`
+- Numbered migration added: `014_repurpose_refuge.sql` with UPDATE statement to apply the same change to existing databases
+- Result: Fresh installs get `dev` category via seed. Existing databases get `dev` category via migration 014.
+
+### Impact
+
+- **Team Policy:** All seed file edits must have corresponding numbered migrations
+- **Review Checklist:** Reviewers must flag seed file edits without migrations as blocking issues
+- **Pattern:** Edit seed file + add numbered migration = correct pattern
+- **Anti-Pattern:** Edit seed file only (will miss existing databases)
+
+### Related Learning
+
+PR #260 initially lacked the numbered migration and was rejected by Elminster. Drizzt applied the fix (adding migration 014) instead of Jarlaxle (original author), establishing the pattern that migration discipline is an engine-team responsibility. This prevents recurrence of the same issue.
+
+### Deliverables
+
+- Migration `014_repurpose_refuge.sql` added and verified
+- Decision documented for team reference
+- Pattern now part of standard review checklist

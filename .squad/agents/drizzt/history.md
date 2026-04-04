@@ -87,6 +87,24 @@
 
 ## Learnings (Archived — See Detailed Session Records)
 
+### Death & Spawn Routing (#238) — PR #261
+**Task:** Fix death routing to use faction strongholds instead of hardcoded Refuge.
+**Status:** ✅ Complete — PR #261 opened against dev
+**Branch:** `squad/238-death-spawn-routing`
+
+**Changes (6 files, +474 −7):**
+- Updated death handler narration to include specific hub zone name (The Foundry, etc.)
+- Added `resolvePlayerHubName()` utility and `HUB_DISPLAY_NAMES` map to stronghold.ts
+- Created `/api/spawn-zone` endpoint for login-time zone selection (returns faction-based target)
+- Registered spawn-zone route in index.ts
+- 17 new tests: faction routing (all 3 factions), fallback to Refuge, death debuff, pipeline tests
+
+**Key insight:** The dependency branches (#236 faction strongholds, #237 corpse system) already wired most of the integration — `resolvePlayerHubTarget()` was in the death handler, corpse creation was working, death penalty was applied. The remaining work was: (1) improving narration with zone-specific names, (2) adding the login routing API, and (3) comprehensive test coverage.
+
+**Architecture note:** Login zone routing requires the client to call `/api/spawn-zone` before connecting. Server-side, the faction slug is cached in `playerFactionSlugs` on join for death routing. The client currently hardcodes `zone:the-refuge` — Regis needs to update the client to use the spawn-zone API.
+
+---
+
 ### Architecture & Infrastructure Patterns (Phase 1)
 
 **CI/CD 3-Branch Strategy:** `github.ref_name` maps to environment name (uat/prod), enabling `environment: ${{ github.ref_name }}` for env-aware secrets. Docker tags are environment-prefixed (`ellmud-uat`, `ellmud-prod`). Bicep `resourcePrefix` already matches this convention.
@@ -2777,3 +2795,119 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 - Matchmaker `TIER_CAPACITY` constants unchanged (procedural instances)
 
 **Verification:** TypeScript compiles clean, all 2187 tests pass, zero regressions.
+
+### Faction Strongholds Complete (2026-04-01, Jarlaxle #236)
+
+**Context:** Jarlaxle completed faction stronghold zones with new `faction_hub` zone category and `factionSlug` routing. Three strongholds (The Foundry, The Cartographium, The Counting House) with 8 feature rooms each. 21 new tests.
+
+**Relevance to Death System:** The stronghold zones will serve as respawn points for faction-affiliated players following death. The `faction_slug` field in zones table integrates with death routing for automatic respawn destination selection. This unblocks #238 (death/spawn routing) work.
+
+**No action required** — stronghold architecture is compatible with corpse system TTL and item looting workflow. Death handler can route corpses to any zone type.
+
+
+### 2026-04-04: PR Review — Approvals (Elminster & Minsc)
+
+**Sprint 3 PR Review:** Elminster reviewed #258 and #261 (drizzt PRs) and approved both.
+
+**Sprint 4 PR Review:** Minsc reviewed #263 (drizzt PR) and approved.
+
+**Status:** Three PRs cleared for merge. No blockers.
+
+
+
+### 2026-04-04: Fix PR #260 — Add Migration for Refuge Repurpose
+
+**Context:** Jarlaxle's PR #260 (branch `squad/239-repurpose-refuge`) changed the Refuge zone category from `hub` to `dev` in seed file `003_seed_zones.sql`, but Elminster correctly flagged that seed changes only affect fresh installs — existing databases need a migration.
+
+**Fix:** Added `packages/server/src/db/migrations/014_repurpose_refuge.sql` with an UPDATE on the `zones` table (`category='dev'`, updated description) keyed on `slug='the-refuge'`.
+
+**Learning:** Seed files are one-shot — any change to already-applied seed data requires a corresponding numbered migration file. Always pair seed edits with migrations for existing environments.
+---
+
+## 2026-04-01: Death/Spawn Routing to Faction Strongholds (Issue #238)
+
+**PR:** #261 | **Branch:** `squad/238-death-spawn-routing` | **Base:** `dev`
+
+**Task:** Implement faction-based death/spawn routing to strongholds instead of hardcoded Refuge.
+
+**Work Completed:**
+- Server-authoritative death routing via `resolvePlayerHubTarget(factionSlug)` — checks player faction from `playerFactionSlugs` cache and routes to faction stronghold, fallback to Refuge
+- New `/api/spawn-zone` endpoint for client login routing, returns `{ target, zoneSlug, factionSlug }`
+- Updated narration layer with `resolvePlayerHubName()` to inject faction-specific stronghold names in death messages
+- Faction routing table:
+  - Ironwright Compact → The Foundry (zone:the-foundry)
+  - Veil Cartographers → The Cartographium (zone:the-cartographium)
+  - Scarlet Ledger → The Counting House (zone:the-counting-house)
+  - Unaffiliated → The Refuge (zone:the-refuge, fallback)
+
+**Architecture:**
+- Death routing: Server-authoritative, cached from faction membership
+- Login routing: Client calls `/api/spawn-zone` before connecting
+- Fallback: Graceful fallback to Refuge if stronghold unavailable or player unaffiliated
+- Narration: Stronghold name injected into death messages
+
+**Testing:**
+- 17 new unit tests covering faction resolution, fallback behavior, API logic, narration generation
+- All 2037 server tests passing, zero regressions
+
+**Cross-team Impact:**
+- **Regis (Frontend):** Must call `/api/spawn-zone` on login and route to returned zone
+- **Jarlaxle (Systems):** Stronghold zones must be registered; works with Refuge repurposing (#239)
+
+**Key Files:**
+- `packages/server/src/api/spawn-zone.ts` (new endpoint)
+- `packages/server/src/zones/stronghold.ts` (faction resolution)
+- `packages/server/src/rooms/ZoneRoom.ts` (death routing)
+- `packages/server/src/narration/narration-engine.ts` (narration integration)
+### DB Schema Cleanup Migrations (#240) — PR #264
+**Task:** Rename legacy shard/extraction terminology in DB schema to align with current GDD.
+**Status:** ✅ Complete — PR #264 opened against dev
+**Branch:** `squad/240-db-schema-cleanup`
+
+**Changes (10 files, +72 −51):**
+- Created migration 013_gdd_alignment_renames.sql: renames `shard_tier` → `zone_tier`, `extracted` → `survived`, `extracted_items` → `items_carried_out` in run_history and character_explored_rooms tables; replaces `__shard__` → `__instance__` sentinel in unique index
+- Updated PgRunHistoryRepository and PgExplorationRepository SQL queries
+- Updated RunRecord interface: `extracted` → `survived`, `extractedItems` → `itemsCarriedOut`
+- Updated ExplorationRepository composite keys: `__shard__` → `__instance__`
+- Updated ZoneRoom.recordRunHistory parameter names
+- Updated db/types.ts RunHistory interface
+- Updated all affected tests (106 pass, full suite 1965 pass)
+
+**Note:** Migrations 011 (biome removal) and 012 (player_shard_sickness rename) already existed on dev.
+
+---
+
+## 2026-04-04: Merge Round — All 7 Sprint 3/4 PRs to Dev
+
+**Status:** ✅ Complete
+
+### PRs Merged (in order)
+
+1. ✅ **PR #258** (Corpse/Loot) — Drizzt author. Clean merge. Base for later PRs.
+2. ✅ **PR #259** (Faction Strongholds) — Jarlaxle author. Clean merge. Unblocks #260, #261.
+3. ✅ **PR #264** (DB Schema) — Drizzt author. Clean merge. Independent.
+4. ✅ **PR #262** (Client UI Terminology) — Independent. Clean merge.
+5. ✅ **PR #263** (Generator Cleanup) — Jarlaxle author. Merge after base moved. 3 conflicts resolved (config, test imports). 153 tests pass.
+6. ✅ **PR #261** (Death/Spawn Routing) — Drizzt author. Depends on #259. Clean merge.
+7. ✅ **PR #260** (Repurpose Refuge) — Jarlaxle author. Rejected once (missing migration), fixed by Drizzt, then merged.
+
+### Test Results
+
+- Server: 2187 tests passing
+- Client: All passing
+- Zero regressions
+
+### Key Outcomes
+
+- All 7 squad issues (#236-#242) completed and merged to dev
+- Migration Discipline decision established (seed files pair with numbered migrations)
+- Full backlog clear
+- Ready for Sprint 5 planning
+
+### Drizzt's Role in Merge Round
+
+- Authored PR #258 (Corpse/Loot) — foundational for later PRs
+- Authored PR #264 (DB Schema Cleanup)
+- Authored PR #261 (Death/Spawn Routing)
+- Fixed PR #260 by adding migration `014_repurpose_refuge.sql` (Reviewer Rejection Lockout pattern)
+- No Drizzt PRs had merge conflicts; base branch changes flowed cleanly into dependent work

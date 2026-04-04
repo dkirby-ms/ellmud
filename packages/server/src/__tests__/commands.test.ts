@@ -8,7 +8,7 @@ import type { NarrateMessage, RoomHeaderMessage } from '@ellmud/shared';
 import { parseCommand } from '../commands/parser.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
-import { createTestRoomGraph } from '../zone/RoomGraph.js';
+import { createTestRoomGraph } from '../generator/RoomGraph.js';
 
 // ─── Parser Unit Tests ────────────────────────────────────────────────────
 

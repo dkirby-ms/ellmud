@@ -1485,3 +1485,68 @@ CREATE TABLE zone_definitions (
 - **Cross-references added:** §2.3 (timed instance lifecycle), §4.4 (LLM indirect player description), §5.3 (traces and sound for detection), §8.2 (PvP flagging), §8.4 (proximity communication), §8.5 (group guarantee), §13 (Colyseus Room architecture).
 - **Design alignment**: Respects the cardinal rule — players share the world by default. Overflow is transparent infrastructure, not a user-facing mechanic. Reinforces the MUD ethos of unscripted player interaction.
 - **Key files:** `GDD.md` (§2.4 new subsection)
+
+### 2025-07-18: PR Reviews — #255 and #256
+
+**PR #255 — fix: disable text selection in zone designer (issue #251)**
+- Reviewed and merged. CSS-only change: `select-none` on ZoneDesigner root div with form element exclusions via Tailwind arbitrary variants (`[&_input]:select-text`, etc.).
+- Zero risk — no logic modifications. TypeScript compiles clean.
+
+**PR #256 — feat: insert room on exit (issue #252)**
+- Reviewed and merged. Adds `handleInsertRoomOnExit()` to ZoneDesigner — creates a corridor room at midpoint between two connected rooms, rewires exits bidirectionally.
+- Non-atomic multi-step operation (create room → delete old exits → create 4 new exits) is consistent with existing zone designer patterns. Proper guards: confirm dialog, busy state, portal exclusion.
+- Button appears in both exit-pair and single-exit panels. Purple dashed border styling distinguishes from standard CRUD.
+- TypeScript compiles clean. `Split` icon from lucide-react added to imports.
+- **Key file:** `packages/client/src/pages/admin/ZoneDesigner.tsx`
+
+### 2026-04-01: Sprint 3 PR Review — Corpse, Strongholds, Refuge, Death Routing
+- **PRs Reviewed:** #258 (Corpse/Loot), #259 (Faction Strongholds), #260 (Repurpose Refuge), #261 (Death/Spawn Routing)
+- **Verdicts:**
+  - #258 ✅ APPROVE — Solid CorpseSystem, proper soulbound filtering, 33 tests. GDD §6.8 alignment strong.
+  - #259 ✅ APPROVE — Clean stronghold zones, proper migration 013, good routing utilities. 21 tests.
+  - #260 ❌ REQUEST CHANGES — Missing migration for Refuge category hub→dev. Modified 003_seed_zones.sql which is already applied. Needs new 014_repurpose_refuge.sql. Assigned to Jarlaxle.
+  - #261 ⚠️ APPROVE WITH NOTES — Good death/spawn routing integration. Client needs /api/spawn-zone wiring (Regis follow-up). 17 tests.
+- **Cross-PR risks:** All 4 branches share dependency commits from #258 and #259. PRs #260 and #261 both include all changes from the dependency branches. Merge order must be: #258 → #259 → #260 (after fix) → #261.
+- **Architecture observations:**
+  - Client hub detection hardcodes 4 zone slugs — fragile pattern, needs server-sent isHub flag in future
+  - playerFactionSlugs cache won't update mid-session — acceptable since faction changes require re-login
+  - All 3 strongholds use flooded_crypt theme — should be diversified in future pass
+  - Migration system tracks by filename — modifying already-applied seed files is a recurring team pitfall
+
+---
+
+## 2026-04-04: Merge Round — All 7 Sprint 3/4 PRs to Dev
+
+**Status:** ✅ Complete
+
+### PRs Merged (in order)
+
+1. ✅ **PR #258** (Corpse/Loot) — Drizzt author. Clean merge. Base for later PRs.
+2. ✅ **PR #259** (Faction Strongholds) — Jarlaxle author. Clean merge. Unblocks #260, #261.
+3. ✅ **PR #264** (DB Schema) — Drizzt author. Clean merge. Independent.
+4. ✅ **PR #262** (Client UI Terminology) — Independent. Clean merge.
+5. ✅ **PR #263** (Generator Cleanup) — Jarlaxle author. Merge after base moved. 3 conflicts resolved (config, test imports). 153 tests pass.
+6. ✅ **PR #261** (Death/Spawn Routing) — Drizzt author. Depends on #259. Clean merge.
+7. ✅ **PR #260** (Repurpose Refuge) — Jarlaxle author. Rejected once (missing migration), fixed by Drizzt, then merged.
+
+### Test Results
+
+- Server: 2187 tests passing
+- Client: All passing
+- Zero regressions
+
+### Key Outcomes
+
+- All 7 squad issues (#236-#242) completed and merged to dev
+- Migration Discipline decision established (seed files pair with numbered migrations)
+- Full backlog clear
+- Ready for Sprint 5 planning
+
+### Elminster's Role in Merge Round
+
+- Reviewed all 7 PRs and established merge order (#258→#259→#260→#261 dependency chain)
+- Flagged PR #260 rejection (missing migration for Refuge category change)
+- Documented Migration Discipline decision (seed files must pair with numbered migrations for existing databases)
+- Identified cross-PR architecture observations (client hub detection fragile, faction cache acceptable, stronghold theme diversity deferred)
+- Approved all 7 PRs once corrections applied (PR #260 fix by Drizzt)
+- Verified zero regressions post-merge

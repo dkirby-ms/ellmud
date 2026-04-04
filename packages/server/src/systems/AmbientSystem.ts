@@ -1,9 +1,12 @@
 /**
- * AmbientSystem — Orchestrates the living world of the Refuge.
+ * AmbientSystem — Orchestrates the living world of the Refuge (designer/debug hub).
  *
  * Drives weather, NPC behavior, faction events, and wandering merchants.
  * Each tick produces zero or more AmbientEvents, narrated by template
  * fallback (cache-first LLM enhancement planned).
+ *
+ * The Refuge now serves as a debug/fallback hub; faction strongholds are
+ * the primary player hubs.
  *
  * GDD §2.1 — The Refuge as a Living World
  */

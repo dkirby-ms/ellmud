@@ -233,8 +233,11 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
         addMessage('The world shifts around you...', 'system');
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
 
-        const switchingToRefuge = msg.target === 'zone:the-refuge';
-        if (switchingToRefuge) {
+        const switchingToHub = msg.target === 'zone:the-refuge'
+          || msg.target === 'zone:the-foundry'
+          || msg.target === 'zone:the-cartographium'
+          || msg.target === 'zone:the-counting-house';
+        if (switchingToHub) {
           dispatch({ type: 'CLEAR_MESSAGES' });
           dispatch({ type: 'SET_ZONE_STATE', state: null as unknown as import('@ellmud/shared').ZoneState });
           dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
@@ -250,9 +253,9 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
               roomRef.current = newRoom;
               dispatch({ type: 'SET_ROOM', room: newRoom });
               newRoom.onMessage('overlay_state', handleOverlay);
-              addMessage(`Connected to ${switchingToRefuge ? 'the Refuge' : 'the instance'}.`, 'system');
-              // Navigate after successful room switch to refuge
-              if (switchingToRefuge) {
+              addMessage(`Connected to ${switchingToHub ? 'your stronghold' : 'the instance'}.`, 'system');
+              // Navigate after successful room switch to hub
+              if (switchingToHub) {
                 navigate('/refuge');
               }
             } else {

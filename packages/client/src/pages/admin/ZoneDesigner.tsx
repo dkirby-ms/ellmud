@@ -12,6 +12,16 @@ import {
   type ZoneDefinition, type ZoneRoomDefinition, type ZoneExitDefinition,
   type OrphanedExitInfo, type RoomNPC, type RoomLootContainer,
 } from "../../lib/zone-api.js";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "../../components/ui/alert-dialog.js";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -33,6 +43,7 @@ const ROOM_TYPE_OPTIONS = [
   "entry", "corridor", "junction", "dead_end", "boss",
   "feature_stash", "feature_expedition_board", "feature_marketplace",
   "feature_crafting", "feature_training", "feature_contracts", "feature_infirmary",
+  "feature_armoury", "feature_war_room",
 ];
 
 const ROOM_PROPERTY_OPTIONS = ["heavy_door", "cavern", "water"] as const;
@@ -254,8 +265,12 @@ export default function ZoneDesigner({
   });
   const [exitEditTargetRooms, setExitEditTargetRooms] = useState<ZoneRoomDefinition[]>([]);
 
-  // Context menu
+  // Context menus
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; roomSlug: string } | null>(null);
+  const [exitContextMenu, setExitContextMenu] = useState<{ x: number; y: number; exitId: string } | null>(null);
+
+  // Insert room on exit confirm
+  const [insertRoomTarget, setInsertRoomTarget] = useState<string | null>(null);
   const designerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -635,6 +650,7 @@ export default function ZoneDesigner({
 
   function handleCanvasClick() {
     setContextMenu(null);
+    setExitContextMenu(null);
     if (mode === "select") {
       setSelectedRoom(null);
       setSelectedExit(null);
@@ -645,11 +661,24 @@ export default function ZoneDesigner({
   function handleRoomContextMenu(e: React.MouseEvent, slug: string) {
     e.preventDefault();
     e.stopPropagation();
+    setExitContextMenu(null);
     const bounds = designerRef.current?.getBoundingClientRect();
     setContextMenu({
       x: e.clientX - (bounds?.left ?? 0),
       y: e.clientY - (bounds?.top ?? 0),
       roomSlug: slug,
+    });
+  }
+
+  function handleExitContextMenu(e: React.MouseEvent, exitId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu(null);
+    const bounds = designerRef.current?.getBoundingClientRect();
+    setExitContextMenu({
+      x: e.clientX - (bounds?.left ?? 0),
+      y: e.clientY - (bounds?.top ?? 0),
+      exitId,
     });
   }
 
@@ -728,12 +757,16 @@ export default function ZoneDesigner({
 
   // Close context menu on Escape or click outside
   useEffect(() => {
-    if (!contextMenu) return;
+    if (!contextMenu && !exitContextMenu) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setContextMenu(null);
+      if (e.key === "Escape") {
+        setContextMenu(null);
+        setExitContextMenu(null);
+      }
     }
     function onClick() {
       setContextMenu(null);
+      setExitContextMenu(null);
     }
     window.addEventListener("keydown", onKey);
     window.addEventListener("mousedown", onClick);
@@ -741,7 +774,7 @@ export default function ZoneDesigner({
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("mousedown", onClick);
     };
-  }, [contextMenu]);
+  }, [contextMenu, exitContextMenu]);
 
   // ─── Room CRUD ──────────────────────────────────────────
   function openAddRoom() {
@@ -843,9 +876,11 @@ export default function ZoneDesigner({
     }
   }
 
-  function handleDeleteExit() {
-    if (!selectedExit) return;
-    const exit = exits.find((e) => e.id === selectedExit);
+  function handleDeleteExit(exitIdOverride?: string) {
+    const targetId = exitIdOverride ?? selectedExit;
+    if (!targetId) return;
+    if (exitIdOverride) setSelectedExit(exitIdOverride);
+    const exit = exits.find((e) => e.id === targetId);
     if (!exit) return;
     // Check if there's a reverse exit
     const reverseExit = exits.find((e) =>
@@ -984,6 +1019,98 @@ export default function ZoneDesigner({
       onZoneChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete reverse exit");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ─── Insert room on exit ────────────────────────────────
+  function requestInsertRoomOnExit(exitId: string) {
+    setInsertRoomTarget(exitId);
+  }
+
+  async function executeInsertRoomOnExit() {
+    const targetExitId = insertRoomTarget;
+    if (!targetExitId || !zoneId) return;
+
+    const pair = exitPairs.find(
+      (p) => p.forward.id === targetExitId || p.reverse?.id === targetExitId,
+    );
+    const exit = pair?.forward ?? exits.find((e) => e.id === targetExitId);
+    if (!exit || exit.targetZoneSlug) return;
+
+    const fromSlug = exit.fromRoomSlug;
+    const toSlug = exit.toRoomSlug;
+    const direction = exit.direction;
+    const reverseDir = OPPOSITE[direction];
+    if (!reverseDir) return;
+
+    const timestamp = Date.now();
+    const newSlug = `inserted-room-${timestamp}`;
+
+    try {
+      setBusy(true);
+      setError(null);
+      setInsertRoomTarget(null);
+
+      // 1. Create the new room
+      await createRoom(zoneId, {
+        slug: newSlug,
+        name: "New Room",
+        description: "",
+        type: "corridor",
+        properties: [],
+        lootContainers: [],
+        hazards: [],
+        npcs: [],
+      } as Partial<ZoneRoomDefinition>);
+
+      // 2. Delete the original exit(s)
+      await deleteExit(exit.id);
+      if (pair?.reverse) {
+        await deleteExit(pair.reverse.id);
+      }
+
+      // 3. Create fromRoom → newRoom exit
+      await createExit(zoneId, {
+        fromRoomSlug: fromSlug,
+        direction,
+        toRoomSlug: newSlug,
+        locked: false,
+        hidden: false,
+      } as Partial<ZoneExitDefinition>);
+      // Reverse: newRoom → fromRoom
+      await createExit(zoneId, {
+        fromRoomSlug: newSlug,
+        direction: reverseDir,
+        toRoomSlug: fromSlug,
+        locked: false,
+        hidden: false,
+      } as Partial<ZoneExitDefinition>);
+
+      // 4. Create newRoom → toRoom exit
+      await createExit(zoneId, {
+        fromRoomSlug: newSlug,
+        direction,
+        toRoomSlug: toSlug,
+        locked: false,
+        hidden: false,
+      } as Partial<ZoneExitDefinition>);
+      // Reverse: toRoom → newRoom
+      await createExit(zoneId, {
+        fromRoomSlug: toSlug,
+        direction: reverseDir,
+        toRoomSlug: newSlug,
+        locked: false,
+        hidden: false,
+      } as Partial<ZoneExitDefinition>);
+
+      setSelectedExit(null);
+      onZoneChanged?.();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to insert room on exit",
+      );
     } finally {
       setBusy(false);
     }
@@ -1155,7 +1282,7 @@ export default function ZoneDesigner({
   const canvasCursor = mode === "connect" ? "crosshair" : isPanning ? "grabbing" : "grab";
 
   return (
-    <div ref={designerRef} className="bg-[#12131A] border border-[#2A2B35] rounded-lg h-full flex flex-col" style={{ position: "relative" }}>
+    <div ref={designerRef} className="bg-[#12131A] border border-[#2A2B35] rounded-lg h-full flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_select]:select-text [&_[contenteditable]]:select-text" style={{ position: "relative" }}>
       {/* ─── Error banner ─────────────────────────────────── */}
       {error && (
         <div className="px-4 py-2 bg-[#8B2500]/30 border-b border-[#8B2500] flex items-center justify-between">
@@ -1404,6 +1531,7 @@ export default function ZoneDesigner({
                   <g
                     key={pair.forward.id}
                     onClick={(e) => { e.stopPropagation(); handleExitClick(pair.forward.id); }}
+                    onContextMenu={(e) => handleExitContextMenu(e, pair.forward.id)}
                     style={{ cursor: "pointer" }}
                   >
                     <line
@@ -1458,6 +1586,7 @@ export default function ZoneDesigner({
                   <g
                     key={exit.id}
                     onClick={(e) => { e.stopPropagation(); handleExitClick(exit.id); }}
+                    onContextMenu={(e) => handleExitContextMenu(e, exit.id)}
                     style={{ cursor: "pointer" }}
                   >
                     <line
@@ -1646,6 +1775,7 @@ export default function ZoneDesigner({
                       return (
                         <g
                           onClick={(e) => { e.stopPropagation(); handleExitClick(upExits[0].id); }}
+                          onContextMenu={(e) => handleExitContextMenu(e, upExits[0].id)}
                           onDoubleClick={(e) => { e.stopPropagation(); if (targetZ != null) setCurrentFloor(targetZ); }}
                           style={{ cursor: "pointer" }}
                         >
@@ -1670,6 +1800,7 @@ export default function ZoneDesigner({
                       return (
                         <g
                           onClick={(e) => { e.stopPropagation(); handleExitClick(downExits[0].id); }}
+                          onContextMenu={(e) => handleExitContextMenu(e, downExits[0].id)}
                           onDoubleClick={(e) => { e.stopPropagation(); if (targetZ != null) setCurrentFloor(targetZ); }}
                           style={{ cursor: "pointer" }}
                         >
@@ -1694,6 +1825,7 @@ export default function ZoneDesigner({
                     {portalExits.map((pe, i) => (
                       <g key={pe.id}
                         onClick={(e) => { e.stopPropagation(); handleExitClick(pe.id); }}
+                        onContextMenu={(e) => handleExitContextMenu(e, pe.id)}
                         style={{ cursor: "pointer" }}
                       >
                         <circle
@@ -2920,6 +3052,151 @@ export default function ZoneDesigner({
         );
       })()}
 
+      {/* ─── Exit context menu overlay ─────────────────────────── */}
+      {exitContextMenu && (() => {
+        const cmExit = exits.find((e) => e.id === exitContextMenu.exitId);
+        if (!cmExit) return null;
+        const cmPair = exitPairs.find(
+          (p) => p.forward.id === exitContextMenu.exitId || p.reverse?.id === exitContextMenu.exitId,
+        );
+        const fromRoom = roomMap.get(cmExit.fromRoomSlug);
+        const toRoom = roomMap.get(cmExit.toRoomSlug);
+        const isPortal = !!cmExit.targetZoneSlug;
+
+        return (
+          <div
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              position: "absolute",
+              top: exitContextMenu.y,
+              left: exitContextMenu.x,
+              zIndex: 100,
+              background: "#1C1D27",
+              border: "1px solid #2A2B35",
+              borderRadius: 6,
+              padding: "4px 0",
+              minWidth: 200,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+              fontFamily: "var(--font-sans)",
+              fontSize: 12,
+              color: "#E0E0E0",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Exit label header */}
+            <div style={{
+              padding: "4px 12px 4px",
+              color: "#C9A84C",
+              fontSize: 13,
+              fontWeight: 600,
+              borderBottom: "1px solid #2A2B35",
+              marginBottom: 4,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}>
+              {fromRoom?.name ?? cmExit.fromRoomSlug} → {isPortal ? `${cmExit.targetZoneSlug}/${cmExit.targetRoomSlug}` : (toRoom?.name ?? cmExit.toRoomSlug)}
+            </div>
+
+            {/* Insert Room — only for non-portal exits */}
+            {!isPortal && (
+              <button
+                disabled={busy}
+                onClick={() => {
+                  setExitContextMenu(null);
+                  requestInsertRoomOnExit(exitContextMenu.exitId);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  width: "100%",
+                  padding: "6px 12px",
+                  background: "transparent",
+                  border: "none",
+                  color: busy ? "#4A4B55" : "#7B4FA0",
+                  cursor: busy ? "default" : "pointer",
+                  fontFamily: "var(--font-sans)",
+                  fontSize: 12,
+                  textAlign: "left",
+                }}
+                onMouseEnter={(e) => {
+                  if (!busy) (e.currentTarget as HTMLButtonElement).style.background = "#2A2B35";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                }}
+              >
+                <span style={{ width: 14, textAlign: "center" }}>⑂</span>
+                Insert Room on Exit
+              </button>
+            )}
+
+            {/* Divider */}
+            <div style={{ height: 1, background: "#2A2B35", margin: "4px 0" }} />
+
+            {/* Edit Exit */}
+            <button
+              onClick={() => {
+                setExitContextMenu(null);
+                handleExitClick(exitContextMenu.exitId);
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: "100%",
+                padding: "6px 12px",
+                background: "transparent",
+                border: "none",
+                color: "#E0E0E0",
+                cursor: "pointer",
+                fontFamily: "var(--font-sans)",
+                fontSize: 12,
+                textAlign: "left",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#2A2B35"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+            >
+              <span style={{ width: 14, textAlign: "center" }}>✎</span>
+              Edit Exit
+            </button>
+
+            {/* Divider */}
+            <div style={{ height: 1, background: "#2A2B35", margin: "4px 0" }} />
+
+            {/* Delete Exit */}
+            <button
+              disabled={busy}
+              onClick={() => {
+                const eid = exitContextMenu.exitId;
+                setExitContextMenu(null);
+                handleDeleteExit(eid);
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: "100%",
+                padding: "6px 12px",
+                background: "transparent",
+                border: "none",
+                color: "#8B2500",
+                cursor: busy ? "default" : "pointer",
+                fontFamily: "var(--font-sans)",
+                fontSize: 12,
+                textAlign: "left",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#2A2B35"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+            >
+              <span style={{ width: 14, textAlign: "center" }}>🗑</span>
+              Delete Exit
+            </button>
+          </div>
+        );
+      })()}
+
       {/* ─── Copy notification toast ──────────────────────────── */}
       {copyNotification && (
         <div
@@ -3234,6 +3511,35 @@ export default function ZoneDesigner({
           </div>
         </div>
       )}
+
+      {/* ─── Insert Room Confirm Dialog ──────────────────────── */}
+      {(() => {
+        const targetExit = insertRoomTarget
+          ? (exitPairs.find((p) => p.forward.id === insertRoomTarget || p.reverse?.id === insertRoomTarget)?.forward
+            ?? exits.find((e) => e.id === insertRoomTarget))
+          : null;
+        const fromName = targetExit ? (roomMap.get(targetExit.fromRoomSlug)?.name ?? targetExit.fromRoomSlug) : "";
+        const toName = targetExit ? (roomMap.get(targetExit.toRoomSlug)?.name ?? targetExit.toRoomSlug) : "";
+
+        return (
+          <AlertDialog open={!!insertRoomTarget} onOpenChange={(open) => { if (!open) setInsertRoomTarget(null); }}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Insert Room on Exit</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will create a new corridor room between <strong>{fromName}</strong> and <strong>{toName}</strong>, replacing the current exit with two new bidirectional connections through the inserted room.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => void executeInsertRoomOnExit()}>
+                  Insert Room
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        );
+      })()}
 
       {/* ─── Delete Exit Modal ──────────────────────────────── */}
       {showDeleteExitModal && selectedExit && (() => {

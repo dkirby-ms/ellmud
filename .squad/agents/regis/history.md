@@ -887,3 +887,21 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 ## 2026-04-01: Agent Work Summary
 
 **Task completed:** Version Display in Admin & Game UI. Indicators placed in admin top bar (muted text, right side) and game sidebar (mt-auto flex bottom, opacity hover effect). Shared `useVersion()` hook with safe fallbacks. No tooltip library needed — native title attribute. Awaits Drizzt's Vite config; UI works with fallbacks in the meantime. Decision and orchestration logs created.
+
+### Issue #252 — Insert Room on Exit (PR pending)
+- Added `handleInsertRoomOnExit()` function to `ZoneDesigner.tsx`
+- Creates a new corridor room between two connected rooms, rewires exits as bidirectional pairs
+- Button appears in both exit-pair panel and single-exit panel, hidden for portal exits
+- Uses `Split` icon from lucide-react (purple dashed border, matching feature-room accent)
+- Follows existing patterns: `handleAddRoomInDirection()` for room+exit creation, `confirmDeleteExit()` for exit deletion
+- New room gets slug `inserted-room-{timestamp}` and type `corridor` by default
+- BFS layout engine (`computeLayout`) automatically positions the new room on the grid between the originals
+
+### 2026-04-04: PR Review — Approval (Minsc)
+
+**Sprint 4 PR Review:** Minsc reviewed #262 (regis PR) and approved with minor note.
+
+**Minor Note:** Straggler export name inconsistency flagged; approved pending author cleanup (non-blocking).
+
+**Status:** PR cleared for merge with minor outstanding note.
+

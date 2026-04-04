@@ -36,7 +36,7 @@ import { wait } from './helpers/index.js';
 /** Seed a zone with two connected rooms for movement testing. */
 async function seedZone(
   slug: string,
-  category: 'hub' | 'dungeon' | 'wilderness' | 'social' = 'hub',
+  category: 'hub' | 'dev' | 'dungeon' | 'wilderness' | 'social' = 'hub',
 ): Promise<ZoneData> {
   const repo = getZoneRepository();
 

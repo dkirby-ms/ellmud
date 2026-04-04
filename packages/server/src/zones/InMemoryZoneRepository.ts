@@ -32,6 +32,14 @@ export class InMemoryZoneRepository implements ZoneRepository {
     return this.buildBundle(zone);
   }
 
+  async getZoneByFactionSlug(factionSlug: string): Promise<ZoneData | null> {
+    const zone = [...this.zones.values()].find(
+      (z) => z.category === 'faction_hub' && z.factionSlug === factionSlug,
+    );
+    if (!zone) return null;
+    return this.buildBundle(zone);
+  }
+
   async getZoneById(id: string): Promise<ZoneData | null> {
     const zone = this.zones.get(id);
     if (!zone) return null;
