@@ -50,3 +50,12 @@ export type {
 } from './ZoneRepository.js';
 export { PgZoneRepository } from './PgZoneRepository.js';
 export { InMemoryZoneRepository } from './InMemoryZoneRepository.js';
+export {
+  FACTION_SLUGS,
+  DEFAULT_HUB_SLUG,
+  getStrongholdSlugForFaction,
+  resolvePlayerHubSlug,
+  resolvePlayerHubTarget,
+  getStrongholdForFaction,
+} from './stronghold.js';
+export type { FactionSlug } from './stronghold.js';

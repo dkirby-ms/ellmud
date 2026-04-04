@@ -59,7 +59,7 @@ export interface ExplorationRepository {
 // ─── Composite key helper ───────────────────────────────────────────────────
 
 function compositeKey(characterId: string, zoneSlug: string | null, roomId: string): string {
-  return `${characterId}::${zoneSlug ?? '__shard__'}::${roomId}`;
+  return `${characterId}::${zoneSlug ?? '__instance__'}::${roomId}`;
 }
 
 // ─── In-Memory Implementation ───────────────────────────────────────────────
@@ -123,7 +123,7 @@ export class InMemoryExplorationRepository implements ExplorationRepository {
       if (room.characterId === characterId) {
         totalRooms += 1;
         totalVisits += room.visitCount;
-        zoneSet.add(room.zoneSlug ?? '__shard__');
+        zoneSet.add(room.zoneSlug ?? '__instance__');
       }
     }
 

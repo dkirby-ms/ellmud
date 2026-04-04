@@ -21,7 +21,9 @@ import { handleWhisper } from './handlers/whisper.js';
 import { handleEmote } from './handlers/emote.js';
 import { handleStabilize } from './handlers/stabilize.js';
 import { handlePeaceful } from './handlers/peaceful.js';
+import { handleLoot } from './handlers/loot.js';
 import type { DowningSystem } from '../systems/DowningSystem.js';
+import type { CorpseSystem } from '../systems/CorpseSystem.js';
 import type { StashService } from '../stash/StashService.js';
 import type { LoadoutService } from '../loadout/LoadoutService.js';
 import { handleBoard, handleEnter } from './handlers/board.js';
@@ -88,6 +90,8 @@ export interface CommandContext {
   zoneName?: string;
   /** Current zone slug identifier (e.g. "refuge"). */
   zoneSlug?: string;
+  /** Corpse system reference for loot command (GDD §6.8). */
+  corpseSystem?: CorpseSystem;
 }
 
 export type CommandHandler = (ctx: CommandContext) => CommandResult;
@@ -131,6 +135,7 @@ handlers.set('whisper', handleWhisper);
 handlers.set('emote', handleEmote);
 handlers.set('stabilize', handleStabilize);
 handlers.set('peaceful', handlePeaceful);
+handlers.set('loot', handleLoot);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(

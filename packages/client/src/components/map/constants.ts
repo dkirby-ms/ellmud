@@ -22,6 +22,8 @@ export const ROOM_TYPE_COLORS: Record<string, string> = {
   feature_training: '#2dd4bf',
   feature_contracts: '#2dd4bf',
   feature_infirmary: '#2dd4bf',
+  feature_armoury: '#2dd4bf',
+  feature_war_room: '#2dd4bf',
 };
 
 export const DEFAULT_ROOM_COLOR = '#6b7280';

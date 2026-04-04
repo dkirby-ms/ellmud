@@ -54,6 +54,9 @@ export interface ZoneRepository {
   /** Fetch a full zone bundle by ID. */
   getZoneById(id: string): Promise<ZoneData | null>;
 
+  /** Fetch the faction stronghold zone for a given faction slug. */
+  getZoneByFactionSlug(factionSlug: string): Promise<ZoneData | null>;
+
   /** Create a new zone (returns the definition without rooms/exits). */
   createZone(zone: Omit<ZoneDefinition, 'id' | 'createdAt' | 'updatedAt'>): Promise<ZoneDefinition>;
 

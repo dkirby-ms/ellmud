@@ -36,7 +36,9 @@ export type RoomType =
   | 'feature_crafting'
   | 'feature_training'
   | 'feature_contracts'
-  | 'feature_infirmary';
+  | 'feature_infirmary'
+  | 'feature_armoury'
+  | 'feature_war_room';
 
 /** Union of all feature room types (those prefixed with `feature_`). */
 export type FeatureRoomType = Extract<RoomType, `feature_${string}`>;

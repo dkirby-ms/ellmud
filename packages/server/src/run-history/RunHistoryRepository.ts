@@ -17,8 +17,8 @@ export interface RunRecord {
   playerId: string;
   zoneTier: ZoneTier;
   durationSec: number;
-  extracted: boolean;
-  extractedItems: unknown[];
+  survived: boolean;
+  itemsCarriedOut: unknown[];
   xpGained: number;
 }
 

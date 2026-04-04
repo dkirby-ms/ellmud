@@ -47,6 +47,9 @@ export interface ServerConfig {
 
   /** Enable procedural zone generation (GDD §10 — future complement to hand-crafted zones). */
   enableProceduralGeneration: boolean;
+
+  /** Corpse persistence duration in seconds. GDD §6.8. */
+  corpseTTLSeconds: number;
 }
 
 /**
@@ -139,6 +142,7 @@ export function loadConfig(): ServerConfig {
     reconnectDeathBehavior: (envStr('RECONNECT_DEATH_BEHAVIOR', 'kill') === 'safe-room' ? 'safe-room' : 'kill') as 'kill' | 'safe-room',
     devModeEnabled: envBool('DEV_MODE_ENABLED', false),
     enableProceduralGeneration: envBool('ENABLE_PROCEDURAL_GENERATION', false),
+    corpseTTLSeconds: envInt('CORPSE_TTL_SECONDS', 600), // 10 minutes default
   };
 }
 

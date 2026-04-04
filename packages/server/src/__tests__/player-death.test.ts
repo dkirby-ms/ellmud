@@ -4,7 +4,7 @@
  * Verifies that when a player is defeated in combat (HP=0):
  * 1. The combat system generates a 'defeated' event with the player's sessionId
  * 2. The server sends OVERLAY_STATE with state='death' to the defeated player
- * 3. Player inventory is dropped to the room floor
+ * 3. Non-soulbound inventory items are placed in a lootable corpse (GDD §6.8)
  * 4. After a delay, ROOM_SWITCH sends the player back to refuge
  * 5. Player is cleaned up from combat and zone state
  */
@@ -18,6 +18,7 @@ import type { OverlayMessage } from '@ellmud/shared';
 import { bootTestServer, wait } from './helpers/index.js';
 import type { PlayerState } from '../state/PlayerState.js';
 import type { Room, Item } from '../generator/RoomGraph.js';
+import type { CorpseSystem } from '../systems/CorpseSystem.js';
 
 // ─── Unit Tests: Combat System Defeat Detection ─────────────────────────────
 
@@ -200,7 +201,7 @@ describe('Player Death Flow (ZoneRoom Integration)', () => {
     await client.leave();
   }, 25_000);
 
-  it('should drop player inventory items to the room floor on death', async () => {
+  it('should drop player inventory items into a lootable corpse on death', async () => {
     const room = await colyseus.createRoom('zone', { useTestGraph: true, openDelayMs: 0 });
     const client = await colyseus.connectTo(room);
 
@@ -212,6 +213,7 @@ describe('Player Death Flow (ZoneRoom Integration)', () => {
       players: Map<string, PlayerState>;
       combatSystem: CombatSystem;
       roomGraph: { rooms: Map<string, Room> };
+      corpseSystem: CorpseSystem;
     };
 
     const sessionId = client.sessionId;
@@ -250,19 +252,24 @@ describe('Player Death Flow (ZoneRoom Integration)', () => {
     roomInstance.combatSystem.initiateCombat('creature-test-brute', sessionId);
 
     // Wait for combat tick to resolve defeat + downing bleed-out + death
-    // With downing system: 1 tick to down, 10 ticks to bleed out, 3s death delay
     await wait(15_000);
 
-    // Player inventory must be empty after death
+    // Player inventory must be empty after death (non-soulbound items moved to corpse)
     expect(player!.inventory.size).toBe(0);
 
-    // Room items must now contain the dropped items
-    const droppedItems = currentRoom!.items.slice(initialItemCount);
-    expect(droppedItems).toHaveLength(3); // 1 sword + 2 potions
+    // Room floor should NOT have the items (they go into corpse now, not floor)
+    const floorItems = currentRoom!.items.slice(initialItemCount);
+    expect(floorItems).toHaveLength(0);
 
-    const droppedNames = droppedItems.map(i => i.name);
-    expect(droppedNames).toContain('Test Sword');
-    expect(droppedNames.filter(n => n === 'Test Potion')).toHaveLength(2);
+    // Corpse must contain the dropped items
+    const corpses = roomInstance.corpseSystem.getCorpsesInRoom(currentRoomId);
+    expect(corpses.length).toBeGreaterThanOrEqual(1);
+
+    const corpse = corpses[0]!;
+    expect(corpse.items).toHaveLength(3); // 1 sword + 2 potions
+    const corpseItemNames = corpse.items.map(i => i.name);
+    expect(corpseItemNames).toContain('Test Sword');
+    expect(corpseItemNames.filter(n => n === 'Test Potion')).toHaveLength(2);
 
     await client.leave();
   }, 25_000);

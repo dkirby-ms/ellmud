@@ -38,6 +38,18 @@ export class PgFactionRepository implements FactionRepository {
     }));
   }
 
+  async getPlayerFactionSlug(playerId: string): Promise<string | null> {
+    const result = await query<{ slug: string }>(
+      `SELECT f.slug
+       FROM faction_membership fm
+       JOIN factions f ON f.id = fm.faction_id
+       WHERE fm.player_id = $1
+       LIMIT 1`,
+      [playerId],
+    );
+    return result.rows.length > 0 ? result.rows[0].slug : null;
+  }
+
   async updateFaction(
     playerId: string,
     factionId: string,
