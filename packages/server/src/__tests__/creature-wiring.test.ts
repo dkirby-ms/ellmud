@@ -10,14 +10,14 @@ import { DROWNED_REVENANT } from '../creatures/templates/drowned-revenant.js';
 import type { CreatureWorldState } from '../creatures/behavior.js';
 import { CombatSystem } from '../combat/CombatSystem.js';
 import { createCombatant } from '../combat/CombatState.js';
-import { createPRNG } from '../zone/prng.js';
-import { generateZoneGraph } from '../zone/generator.js';
-import { adaptRoomGraph } from '../zone/graph-adapter.js';
+import { createPRNG } from '../generator/prng.js';
+import { generateZoneGraph } from '../generator/generator.js';
+import { adaptRoomGraph } from '../generator/graph-adapter.js';
 import { handleLook } from '../commands/handlers/look.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { handleGo } from '../commands/handlers/go.js';
 import { PlayerState } from '../state/PlayerState.js';
-import type { RoomGraph as LocalRoomGraph } from '../zone/RoomGraph.js';
+import type { RoomGraph as LocalRoomGraph } from '../generator/RoomGraph.js';
 
 // ─── Test Helpers ─────────────────────────────────────────────────────────────
 

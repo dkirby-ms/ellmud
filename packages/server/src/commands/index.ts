@@ -6,7 +6,7 @@
  */
 
 import type { NarrationType } from '@ellmud/shared';
-import type { Room } from '../zone/RoomGraph.js';
+import type { Room } from '../generator/RoomGraph.js';
 import type { PlayerState } from '../state/PlayerState.js';
 import type { CombatSystem } from '../combat/CombatSystem.js';
 import { handleGo } from './handlers/go.js';

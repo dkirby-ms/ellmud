@@ -10,7 +10,7 @@ import { handleCommand, type CommandContext } from '../commands/index.js';
 import { CombatSystem } from '../combat/CombatSystem.js';
 import { createCombatant } from '../combat/CombatState.js';
 import { PlayerState } from '../state/PlayerState.js';
-import { createTestRoomGraph } from '../zone/RoomGraph.js';
+import { createTestRoomGraph } from '../generator/RoomGraph.js';
 
 const TEST_ROOM = 'entry';
 
