@@ -1191,3 +1191,27 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 - React component library now includes interactive graph widgets
 
 **Orchestration log:** `.squad/orchestration-log/2026-04-04T22-25-regis-phase3.md`
+
+---
+
+## Phase 6: Cleanup & Deprecation (#273) — PR #288
+
+### Date: 2026-04-05
+
+### Changes
+- **Removed ~280 lines** of legacy hand-rolled SVG code from `ZoneDesigner.tsx`
+- Deleted: `roomCenter`, `clipToRect`, `edgeLabelPos`, `renderRoomShape` SVG helpers
+- Deleted: manual zoom state (`zoom`, `MIN_ZOOM`, `MAX_ZOOM`), pan state (`panX`, `panY`, `isPanning`), `svgRef`
+- Deleted: wheel zoom handler, keyboard zoom/pan shortcuts, pan mouse handlers
+- Deleted: viewBox computation block, zoom toolbar buttons, BFS/ELK toggle
+- Deleted: `computeLayout` import (BFS fallback removed)
+- **ELK is now the sole layout engine** for the zone designer
+- **Deprecated `computeLayout.ts`** with `@deprecated` JSDoc — retained for player minimap (`useExplorationMap`)
+- Updated `elkLayout.ts` header to reflect Phase 6 completion
+- Updated GDD with ReactFlow + ELK architecture reference
+
+### Learnings
+- `inferDirection()` is still actively used for connect-mode direction inference — not legacy SVG code
+- `computeLayout.ts` cannot be deleted yet: `useExplorationMap.ts` + 6 other components import its `RoomPosition` type
+- ReactFlow's built-in Controls component replaces all manual zoom/pan UI — no custom toolbar needed
+- Keeping `canvasRef` on the container div is still useful for click-through handling even with ReactFlow

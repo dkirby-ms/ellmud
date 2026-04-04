@@ -1,13 +1,13 @@
 /**
  * ELK Layout Adapter — computes room positions using elkjs hierarchical layout.
  *
- * This module will eventually replace the BFS layout engine (computeLayout.ts ~2700 lines).
- * ELK uses constraint-based hierarchical layout with better handling of complex graphs.
+ * This is the primary layout engine for the admin zone designer (Phase 6+).
+ * The legacy BFS engine (computeLayout.ts) is deprecated for new work but
+ * retained for the player minimap which requires synchronous layout.
  *
  * Coordinate system mapping:
- * - computeLayout uses a 100×100 grid with 50×50 room nodes
- * - ELK uses pixel coordinates (we'll normalize to the same grid system)
- * - Z-axis (floors) are handled via layerConstraint or separate ELK graphs
+ * - ELK uses pixel coordinates; we normalize to a 100×100 grid
+ * - Z-axis (floors) are handled via separate ELK graphs per floor
  */
 
 import ELK, { type ElkNode, type ElkExtendedEdge, type LayoutOptions } from 'elkjs/lib/elk.bundled.js';

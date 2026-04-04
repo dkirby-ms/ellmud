@@ -1,8 +1,13 @@
 /**
+ * @deprecated Use `elkLayout.ts` (`computeElkLayout`) for new layout work.
+ *
  * BFS Layout Engine — computes (x, y, z) positions for a room graph.
  *
- * Pure function. No React, no side effects. Used by both the player
- * minimap and the admin zone designer.
+ * This module is retained because the player minimap (`useExplorationMap`)
+ * still depends on it for synchronous, client-side layout. Once the minimap
+ * migrates to ELK or a lighter alternative, this file can be removed entirely.
+ *
+ * Pure function. No React, no side effects.
  *
  * Grid-aware: detects rectangular grid structures (rooms where
  * perpendicular paths converge on the same diagonal room) and places

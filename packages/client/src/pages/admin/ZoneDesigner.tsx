@@ -1,8 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, ZoomIn, ZoomOut, Maximize2, HelpCircle } from "lucide-react";
-import { computeLayout } from "../../map/computeLayout.js";
-import type { LayoutRoom } from "../../map/computeLayout.js";
-import { computeElkLayout } from "../../map/elkLayout.js";
+import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, HelpCircle } from "lucide-react";
+import { computeElkLayout, type LayoutRoom } from "../../map/elkLayout.js";
 import { FloorSelector } from "../../components/map/FloorSelector.js";
 import { computeFloorBounds } from "../../components/map/useFloorFilter.js";
 import { ZoneDesignerFlow } from "../../components/map/ZoneDesignerFlow.js";
@@ -84,15 +82,7 @@ function roomColor(type: string): { fill: string; stroke: string } {
   return ROOM_TYPE_COLORS[type] ?? DEFAULT_COLOR;
 }
 
-// ─── Layout constants ────────────────────────────────────────────────────────
-
-const CELL_W = 100;
-const CELL_H = 100;
-const NODE_W = 50;
-const NODE_H = 50;
-const PADDING = 60;
-
-// ─── Helper: convert zone data → computeLayout input ─────────────────────────
+// ─── Helper: convert zone data → layout input ───────────────────────────────
 
 export function zoneToLayoutInput(
   rooms: ZoneRoomDefinition[],
@@ -118,54 +108,9 @@ export function zoneToLayoutInput(
   return { rooms: map, entryRoomSlug };
 }
 
-// ─── Arrow helpers ───────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function roomCenter(x: number, y: number): { cx: number; cy: number } {
-  return {
-    cx: x * CELL_W + NODE_W / 2,
-    cy: y * CELL_H + NODE_H / 2,
-  };
-}
-
-function clipToRect(
-  sx: number, sy: number, tx: number, ty: number,
-): { x1: number; y1: number; x2: number; y2: number } {
-  const dx = tx - sx;
-  const dy = ty - sy;
-  const len = Math.sqrt(dx * dx + dy * dy);
-  if (len === 0) return { x1: sx, y1: sy, x2: tx, y2: ty };
-
-  const nx = dx / len;
-  const ny = dy / len;
-  const hw = NODE_W / 2;
-  const hh = NODE_H / 2;
-
-  const scaleStart =
-    Math.abs(nx) * hh > Math.abs(ny) * hw
-      ? hw / Math.abs(nx)
-      : hh / Math.abs(ny);
-  const scaleEnd = scaleStart;
-
-  return {
-    x1: sx + nx * scaleStart,
-    y1: sy + ny * scaleStart,
-    x2: tx - nx * scaleEnd,
-    y2: ty - ny * scaleEnd,
-  };
-}
-
-function edgeLabelPos(
-  x1: number, y1: number, x2: number, y2: number,
-): { lx: number; ly: number } {
-  const mx = (x1 + x2) / 2;
-  const my = (y1 + y2) / 2;
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const len = Math.sqrt(dx * dx + dy * dy);
-  if (len === 0) return { lx: mx, ly: my };
-  return { lx: mx - (dy / len) * 10, ly: my + (dx / len) * 10 };
-}
-
+/** Infer compass direction from layout positions (used in connect mode). */
 function inferDirection(
   fromPos: { x: number; y: number },
   toPos: { x: number; y: number },
@@ -174,55 +119,6 @@ function inferDirection(
   const dy = toPos.y - fromPos.y;
   if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? "east" : "west";
   return dy > 0 ? "south" : "north";
-}
-
-// Generate SVG shape element based on room type
-function renderRoomShape(
-  type: string,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  fill: string,
-  stroke: string,
-  strokeWidth: number,
-  strokeDasharray?: string,
-  filter?: string,
-): React.ReactElement {
-  const cx = x + w / 2;
-  const cy = y + h / 2;
-
-  if (type === "entry") {
-    // Shield/badge shape
-    const path = `M ${cx} ${y} L ${x + w} ${y + h * 0.3} L ${x + w} ${y + h * 0.7} L ${cx} ${y + h} L ${x} ${y + h * 0.7} L ${x} ${y + h * 0.3} Z`;
-    return <path d={path} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} filter={filter} />;
-  } else if (type === "boss") {
-    // Diamond (rotated square with red-orange fill)
-    const bossColor = { fill: "#3A1A1A", stroke: "#DC2626" };
-    const path = `M ${cx} ${y} L ${x + w} ${cy} L ${cx} ${y + h} L ${x} ${cy} Z`;
-    return <path d={path} fill={bossColor.fill} stroke={bossColor.stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} filter={filter} />;
-  } else if (type.startsWith("feature_")) {
-    // Pentagon (angular, purple tint)
-    const angle = (Math.PI * 2) / 5;
-    const r = w / 2;
-    const points = Array.from({ length: 5 }, (_, i) => {
-      const a = angle * i - Math.PI / 2;
-      return `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`;
-    }).join(" ");
-    return <polygon points={points} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} filter={filter} />;
-  } else if (type === "junction") {
-    // Hexagon
-    const angle = (Math.PI * 2) / 6;
-    const r = w / 2;
-    const points = Array.from({ length: 6 }, (_, i) => {
-      const a = angle * i;
-      return `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`;
-    }).join(" ");
-    return <polygon points={points} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} filter={filter} />;
-  } else {
-    // Default: rounded rectangle for corridor, dead_end, etc.
-    return <rect x={x} y={y} width={w} height={h} rx={6} ry={6} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} filter={filter} />;
-  }
 }
 
 // ─── ReactFlow Conversion ────────────────────────────────────────────────────
@@ -397,24 +293,10 @@ export default function ZoneDesigner({
   // Floor switching
   const [currentFloor, setCurrentFloor] = useState(0);
 
-  // Zoom
-  const [zoom, setZoom] = useState(1.0);
-  const MIN_ZOOM = 0.25;
-  const MAX_ZOOM = 3.0;
-
-  // Layout engine toggle
-  const [useElkLayout, setUseElkLayout] = useState(true);
-  const [elkLayoutError, setElkLayoutError] = useState<string | null>(null);
-  
-  // Layout results (computed asynchronously for ELK, sync for BFS)
+  // Layout results (computed asynchronously via ELK)
   const [positions, setPositions] = useState<Map<string, { x: number; y: number; z: number }>>(new Map());
   const [layoutLoading, setLayoutLoading] = useState(false);
-
-  // Pan
-  const [panX, setPanX] = useState(0);
-  const [panY, setPanY] = useState(0);
-  const [isPanning, setIsPanning] = useState(false);
-  const panStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const [elkLayoutError, setElkLayoutError] = useState<string | null>(null);
 
   // Exit edit form
   const [exitEditForm, setExitEditForm] = useState({
@@ -440,7 +322,6 @@ export default function ZoneDesigner({
   const [insertRoomTarget, setInsertRoomTarget] = useState<string | null>(null);
   const designerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
 
   // Property clipboard
   const [copiedRoomProps, setCopiedRoomProps] = useState<{
@@ -499,20 +380,7 @@ export default function ZoneDesigner({
     })();
   }, []);
 
-  // Wheel zoom — native listener to allow preventDefault on non-passive event
-  useEffect(() => {
-    const el = canvasRef.current;
-    if (!el) return;
-    function onWheel(e: WheelEvent) {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setZoom((z) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z + delta)));
-    }
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, []);
-
-  // Escape key clears selection, +/- for zoom
+  // Escape key clears selection
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -520,64 +388,9 @@ export default function ZoneDesigner({
         setSelectedExit(null);
         setConnectTarget(null);
       }
-      if (designerRef.current && designerRef.current.contains(document.activeElement)) {
-        if (e.key === "+" || e.key === "=") {
-          e.preventDefault();
-          setZoom((z) => Math.min(MAX_ZOOM, z + 0.1));
-        } else if (e.key === "-") {
-          e.preventDefault();
-          setZoom((z) => Math.max(MIN_ZOOM, z - 0.1));
-        } else if (e.key === "0") {
-          e.preventDefault();
-          setZoom(1.0);
-          setPanX(0);
-          setPanY(0);
-        }
-      }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
-  // Reset pan when floor changes
-  useEffect(() => {
-    setPanX(0);
-    setPanY(0);
-  }, [currentFloor]);
-
-  // Pan mouse handlers on SVG
-  const handlePanMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    // Only start pan on SVG background, not on room/exit elements
-    if (e.target !== e.currentTarget) return;
-    // Only left button
-    if (e.button !== 0) return;
-    e.preventDefault(); // Prevent text selection during drag
-    setIsPanning(true);
-    panStartRef.current = { x: e.clientX, y: e.clientY, panX, panY };
-  }, [panX, panY]);
-
-  const handlePanMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if (!isPanning || !panStartRef.current || !svgRef.current) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    // We need zoomedW/zoomedH for coordinate conversion, but those are computed
-    // in the render section. Parse from the current viewBox attribute.
-    const vb = svgRef.current.getAttribute("viewBox");
-    if (!vb) return;
-    const parts = vb.split(/\s+/).map(Number);
-    const vbWidth = parts[2];
-    const vbHeight = parts[3];
-    const scaleX = vbWidth / rect.width;
-    const scaleY = vbHeight / rect.height;
-    // Pan opposite to mouse direction
-    const dx = (e.clientX - panStartRef.current.x) * scaleX;
-    const dy = (e.clientY - panStartRef.current.y) * scaleY;
-    setPanX(panStartRef.current.panX - dx);
-    setPanY(panStartRef.current.panY - dy);
-  }, [isPanning]);
-
-  const handlePanMouseUp = useCallback(() => {
-    setIsPanning(false);
-    panStartRef.current = null;
   }, []);
 
   // Sync exit edit form when exit selection changes
@@ -605,7 +418,7 @@ export default function ZoneDesigner({
     }
   }, [selectedExit, exits]);
 
-  // ─── Layout computation (async for ELK, sync for BFS) ──────────────────────
+  // ─── Layout computation (ELK hierarchical layout) ──────────────────────────
   useEffect(() => {
     if (rooms.length === 0) {
       setPositions(new Map());
@@ -614,30 +427,19 @@ export default function ZoneDesigner({
 
     const { rooms: layoutInput, entryRoomSlug } = zoneToLayoutInput(rooms, exits);
 
-    if (useElkLayout) {
-      // Async ELK layout
-      setLayoutLoading(true);
-      setElkLayoutError(null);
-      computeElkLayout(layoutInput, entryRoomSlug)
-        .then((pos) => {
-          setPositions(pos);
-          setLayoutLoading(false);
-        })
-        .catch((err) => {
-          console.warn('ELK layout failed, falling back to BFS:', err);
-          setElkLayoutError(err.message || 'ELK layout failed');
-          // Fallback to BFS
-          const pos = computeLayout(layoutInput, entryRoomSlug);
-          setPositions(pos);
-          setLayoutLoading(false);
-        });
-    } else {
-      // Sync BFS layout
-      setElkLayoutError(null);
-      const pos = computeLayout(layoutInput, entryRoomSlug);
-      setPositions(pos);
-    }
-  }, [rooms, exits, useElkLayout]);
+    setLayoutLoading(true);
+    setElkLayoutError(null);
+    computeElkLayout(layoutInput, entryRoomSlug)
+      .then((pos) => {
+        setPositions(pos);
+        setLayoutLoading(false);
+      })
+      .catch((err) => {
+        console.error('[ZoneDesigner] ELK layout failed:', err);
+        setElkLayoutError(err.message || 'ELK layout failed');
+        setLayoutLoading(false);
+      });
+  }, [rooms, exits]);
 
   // ─── Derived layout data ────────────────────────────────────────────────────
   const { roomMap, interZoneExits, intraZoneExits } = useMemo(() => {
@@ -1462,40 +1264,6 @@ export default function ZoneDesigner({
     );
   }
 
-  // Compute viewBox from visible rooms on the current floor only
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  const viewBoxPositions = new Map(floorPositions);
-  if (viewBoxPositions.size > 0) {
-    for (const pos of viewBoxPositions.values()) {
-      const left = pos.x * CELL_W;
-      const top = pos.y * CELL_H;
-      if (left < minX) minX = left;
-      if (top < minY) minY = top;
-      if (left + NODE_W > maxX) maxX = left + NODE_W;
-      if (top + NODE_H > maxY) maxY = top + NODE_H;
-    }
-  } else {
-    minX = 0; minY = 0; maxX = 400; maxY = 200;
-  }
-
-  const vbX = minX - PADDING;
-  const vbY = minY - PADDING;
-  const vbW = maxX - minX + PADDING * 2;
-  const vbH = maxY - minY + PADDING * 2;
-
-  // Apply zoom to viewBox
-  const zoomedW = vbW / zoom;
-  const zoomedH = vbH / zoom;
-  const zoomedX = vbX + (vbW - zoomedW) / 2;
-  const zoomedY = vbY + (vbH - zoomedH) / 2;
-
-  // Apply pan offset
-  const finalX = zoomedX + panX;
-  const finalY = zoomedY + panY;
-
-  // Cursor style based on mode
-  const canvasCursor = mode === "connect" ? "crosshair" : isPanning ? "grabbing" : "grab";
-
   return (
     <div ref={designerRef} className="bg-[#12131A] border border-[#2A2B35] rounded-lg h-full flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_select]:select-text [&_[contenteditable]]:select-text" style={{ position: "relative" }}>
       {/* ─── Error banner ─────────────────────────────────── */}
@@ -1590,20 +1358,15 @@ export default function ZoneDesigner({
 
         <div className="flex-1" />
 
-        {/* Layout engine toggle */}
+        {/* Layout status */}
         <div className="flex items-center gap-1 border-l border-[#2A2B35] pl-2">
-          <button
-            onClick={() => setUseElkLayout(!useElkLayout)}
-            className={`px-2 py-1.5 border text-xs rounded transition-colors ${
-              useElkLayout
-                ? "border-[#7B4FA0] text-[#C9A84C] bg-[#2A1A3A]"
-                : "border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:border-[#3A3B45]"
-            }`}
+          <span
+            className="px-2 py-1.5 border border-[#7B4FA0] text-[#C9A84C] bg-[#2A1A3A] text-xs rounded"
             style={{ fontFamily: "var(--font-sans)" }}
-            title={`Layout: ${useElkLayout ? 'ELK (hierarchical)' : 'BFS (legacy)'} - Click to toggle`}
+            title="ELK hierarchical layout engine"
           >
-            {useElkLayout ? "ELK" : "BFS"}
-          </button>
+            ELK
+          </span>
           {layoutLoading && (
             <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
               ⏳
@@ -1615,55 +1378,6 @@ export default function ZoneDesigner({
             </span>
           )}
         </div>
-
-        {/* Zoom controls */}
-        <div className="flex items-center gap-1 border-l border-[#2A2B35] pl-2">
-          <button
-            onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 0.1))}
-            disabled={zoom <= MIN_ZOOM}
-            className="px-2 py-1.5 border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:border-[#3A3B45] rounded text-xs disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            style={{ fontFamily: "var(--font-sans)" }}
-            title="Zoom out (-)"
-          >
-            <ZoomOut className="w-3 h-3" />
-          </button>
-          <span
-            className="px-2 text-[#8A8B95] text-xs tabular-nums min-w-[3rem] text-center"
-            style={{ fontFamily: "var(--font-sans)" }}
-          >
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 0.1))}
-            disabled={zoom >= MAX_ZOOM}
-            className="px-2 py-1.5 border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:border-[#3A3B45] rounded text-xs disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            style={{ fontFamily: "var(--font-sans)" }}
-            title="Zoom in (+)"
-          >
-            <ZoomIn className="w-3 h-3" />
-          </button>
-          <button
-            onClick={() => { setZoom(1.0); setPanX(0); setPanY(0); }}
-            disabled={zoom === 1.0 && panX === 0 && panY === 0}
-            className="px-2 py-1.5 border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:border-[#3A3B45] rounded text-xs disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            style={{ fontFamily: "var(--font-sans)" }}
-            title="Reset zoom & pan (0)"
-          >
-            <Maximize2 className="w-3 h-3" />
-          </button>
-        </div>
-
-        {/* Pan indicator */}
-        {(panX !== 0 || panY !== 0) && (
-          <button
-            onClick={() => { setPanX(0); setPanY(0); }}
-            className="px-2 py-1 text-[#8A8B95] hover:text-[#E8E0D0] text-xs transition-colors"
-            style={{ fontFamily: "var(--font-sans)" }}
-            title="Reset pan"
-          >
-            📍 Panned
-          </button>
-        )}
 
         {mode === "connect" && (
           <span className="text-[#C9A84C] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
