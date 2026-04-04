@@ -8,13 +8,13 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CorpseSystem, resetCorpseIdCounter, type Corpse } from '../systems/CorpseSystem.js';
+import { CorpseSystem, resetCorpseIdCounter } from '../systems/CorpseSystem.js';
 import { PlayerState } from '../state/PlayerState.js';
 import { handleLoot } from '../commands/handlers/loot.js';
 import { handleLook } from '../commands/handlers/look.js';
 import { parseCommand } from '../commands/parser.js';
 import type { CommandContext } from '../commands/index.js';
-import type { Room, Item } from '../zone/RoomGraph.js';
+import type { Room, Item } from '../generator/RoomGraph.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

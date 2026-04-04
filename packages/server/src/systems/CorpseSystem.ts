@@ -11,7 +11,7 @@
  * GDD §6.5, §6.8 — Death & Corpse System
  */
 
-import type { Item } from '../zone/RoomGraph.js';
+import type { Item } from '../generator/RoomGraph.js';
 
 export interface Corpse {
   id: string;
