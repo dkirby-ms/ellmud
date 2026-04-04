@@ -2795,3 +2795,12 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 
 **Status:** Three PRs cleared for merge. No blockers.
 
+
+
+### 2026-04-04: Fix PR #260 — Add Migration for Refuge Repurpose
+
+**Context:** Jarlaxle's PR #260 (branch `squad/239-repurpose-refuge`) changed the Refuge zone category from `hub` to `dev` in seed file `003_seed_zones.sql`, but Elminster correctly flagged that seed changes only affect fresh installs — existing databases need a migration.
+
+**Fix:** Added `packages/server/src/db/migrations/014_repurpose_refuge.sql` with an UPDATE on the `zones` table (`category='dev'`, updated description) keyed on `slug='the-refuge'`.
+
+**Learning:** Seed files are one-shot — any change to already-applied seed data requires a corresponding numbered migration file. Always pair seed edits with migrations for existing environments.
