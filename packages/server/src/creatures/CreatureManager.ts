@@ -10,7 +10,7 @@
  */
 
 import type { RoomGraph, Room, ZoneData } from '@ellmud/shared';
-import type { PRNG } from '../zone/prng.js';
+import type { PRNG } from '../generator/prng.js';
 import type { Creature, CreatureTemplate, CreatureAction } from './types.js';
 import { updateCreature, type CreatureWorldState } from './behavior.js';
 import { generateLoot, type LootItem } from './loot.js';
