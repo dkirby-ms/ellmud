@@ -938,3 +938,111 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 4. **d3-force augmentation** — moderate effort, good for organic layouts but less MUD-appropriate
 5. **ReactFlow adoption** — high effort full rewrite, best long-term DX but loses MUD aesthetic control
 6. **Visual polish (non-layout)** — low effort incremental improvements to the existing SVG renderer
+
+### 2026-04-04: Phase 0 — elkjs + ReactFlow Foundation
+
+**Request:** Implement Phase 0 of the Zone Designer migration (Issue #267) — install dependencies and create adapter skeletons.
+
+**Changes completed:**
+- ✅ Installed `elkjs@0.11.1` for hierarchical graph layout with constraint-based positioning
+- ✅ Installed `@xyflow/react@12.10.2` for interactive node/edge visualization
+- ✅ Created `packages/client/src/map/elkLayout.ts` — ELK layout adapter skeleton:
+  - Converts rooms → ELK nodes with compass-direction ports (NORTH/SOUTH/EAST/WEST/UP/DOWN)
+  - Converts exits → ELK edges connecting ports via `sources`/`targets` arrays
+  - Async `computeElkLayout(rooms, entryRoomSlug, options?)` using ELK's WASM worker
+  - Maps ELK pixel coordinates back to 100×100 grid system
+  - Z-axis handling stubbed at 0 (multi-floor support deferred to Phase 1+)
+  - Default config: `elk.algorithm='layered'`, direction='RIGHT', edgeRouting='ORTHOGONAL', 100px spacing
+- ✅ Created `packages/client/src/components/map/ZoneDesignerFlow.tsx` — ReactFlow wrapper skeleton:
+  - Renders `<ReactFlow>` with Background grid (100px), Controls, MiniMap
+  - Custom `RoomNode` component with basic MUD-style theming
+  - Props: nodes, edges, onNodeClick, onEdgeClick, onConnect, selectedNodeId, selectedEdgeId, floor
+  - Floor indicator overlay (placeholder for multi-floor UI)
+  - **Not yet integrated into ZoneDesigner.tsx** — standalone component for Phase 1
+- ✅ Verified: shared build, client typecheck, client tests, full build all pass
+
+**Key learnings:**
+- **@types/elkjs doesn't exist** — elkjs ships with built-in TypeScript types
+- **ElkPort uses `layoutOptions`, not `properties`** for port configuration like `'port.side': 'NORTH'`
+- **@xyflow/react BackgroundVariant is an enum**, not a string literal — must import and use `BackgroundVariant.Lines`
+- **ELK coordinate system mismatch:** ELK uses pixel coordinates, computeLayout uses a 100×100 grid. The adapter divides by 100 (CELL_SIZE) to normalize.
+- **ELK ports map to compass directions:** Each node gets 6 ports (N/S/E/W/Up/Down). Edges connect via port IDs like `${roomId}_NORTH` → `${targetId}_SOUTH`.
+- **ReactFlow selection is controlled** — nodes/edges get `selected: true/false` via prop mapping, not internal state
+
+**Files created:**
+- `packages/client/src/map/elkLayout.ts` (282 lines)
+- `packages/client/src/components/map/ZoneDesignerFlow.tsx` (213 lines)
+
+**PR:** https://github.com/dkirby-ms/ellmud/pull/274  
+**Branch:** `squad/267-phase0-foundation`  
+**Status:** Ready for review
+
+**Next steps (Phase 1):**
+- Wire up `ZoneDesignerFlow` as optional toggle in `ZoneDesigner.tsx`
+- Convert zone rooms/exits → ReactFlow nodes/edges
+- Implement room type styling (colors, icons)
+- Add compass-direction port handles to RoomNode
+- Support drag-to-reposition
+- Custom edge rendering for portals/one-way/inter-floor exits
+---
+
+### 2026-04-04: Zone Designer Phase 2 — ELK Layout Engine Integration (#269)
+
+**Scope:** Complete the elkLayout adapter and integrate it into ZoneDesigner.tsx with a toggle UI
+
+**Context:**
+- Phase 0 created the skeleton elkLayout.ts with basic ELK graph construction
+- Phase 1 (#268) is being worked on simultaneously on a separate branch (exit rendering visuals)
+- Phase 2 focuses on layout computation only — no changes to SVG rendering
+
+**Work completed:**
+- ✅ **elkLayout.ts — Multi-floor support:**
+  - Added `assignFloors()` function: BFS traversal assigns z-levels based on up/down exit paths
+  - Entry room starts at z=0, each 'up' increments z, 'down' decrements z
+  - Handles disconnected subgraphs (uses first room if entry missing)
+- ✅ **elkLayout.ts — Per-floor layout:**
+  - Groups rooms by floor via floor assignments
+  - Runs ELK separately on each floor with only cardinal exits (filters up/down)
+  - Filters portal exits (inter-zone targets not in current floor's room set)
+- ✅ **elkLayout.ts — Coordinate mapping:**
+  - Updated `extractPositions()` to accept floor parameter
+  - Maps ELK pixel output → 100×100 grid cells (÷ CELL_SIZE)
+  - Assigns z-value from floor assignment, not hardcoded 0
+- ✅ **ZoneDesigner.tsx — Async layout integration:**
+  - Added `useElkLayout` state (default: true)
+  - Added `elkLayoutError` state for error tracking
+  - Added `positions` state and `layoutLoading` state
+  - Refactored layout from useMemo → useEffect for async ELK computation
+  - Separated roomMap/exit categorization into separate useMemo
+  - Fallback to BFS on ELK error with console.warn
+- ✅ **ZoneDesigner.tsx — Toggle UI:**
+  - Added layout engine toggle button before zoom controls
+  - Button shows "ELK" (purple accent when active) or "BFS" (gray when inactive)
+  - Loading spinner (⏳) displayed during async layout
+  - Error badge (⚠️) with tooltip on ELK failure
+  - Keyboard shortcut: click to toggle between engines for comparison
+- ✅ **Testing:**
+  - All 146 tests pass
+  - TypeScript compiles clean
+  - Both packages (shared, client) build successfully
+
+**Key learnings:**
+- **ELK is async (WASM)** — requires useEffect instead of useMemo for layout computation
+- **Filter exits carefully** — up/down must be excluded from ELK edges (z-axis handled separately), portal exits must be filtered per-floor
+- **Floor assignment via BFS** — traversing up/down exits in BFS order ensures consistent z-level assignment
+- **Fallback gracefully** — catching ELK errors and falling back to BFS provides robustness during development/debugging
+- **Loading states matter** — async layout needs visual feedback (loading spinner) to avoid UI confusion during recomputation
+
+**Files modified:**
+- `packages/client/src/map/elkLayout.ts` (+47 lines floor logic, ~299 lines total)
+- `packages/client/src/pages/admin/ZoneDesigner.tsx` (+28 lines toggle UI, refactored layout computation)
+
+**PR:** https://github.com/dkirby-ms/ellmud/pull/275  
+**Branch:** `squad/269-phase2-elk-layout`  
+**Status:** Ready for review
+
+**Next steps (Phase 3):**
+- Manual verification: load production zones, compare ELK vs BFS crossing counts
+- Performance profiling on large graphs (100+ rooms)
+- Consider incremental layout updates (preserve positions on edit)
+- Optimize ELK parameters (node spacing, layer spacing, edge routing strategy)

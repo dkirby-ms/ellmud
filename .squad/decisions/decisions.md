@@ -5307,3 +5307,116 @@ All existing features remain intact:
 3. Phase 2 demonstrates crossing reduction without breaking multi-floor zones
 4. Phase 3 includes comprehensive testing before production rollout
 
+
+---
+
+## Triage Action Mislabeling — Root Causes & Fixes
+
+**By:** Elminster (Lead)  
+**Date:** 2026-04-05  
+**Issue:** Squad triage GitHub Action applies incorrect labels
+
+### Summary
+
+The `squad-triage.yml` workflow applies member labels correctly when issues contain domain-specific keywords (e.g., "frontend" → squad:regis), but has **three critical mislabeling patterns:**
+
+1. **Unconditional `go:needs-research` label** — applied to *every* triaged issue, regardless of readiness
+2. **No epic/tracking issue detection** — epics and multi-phase tracking issues get member labels when they should remain unassigned
+3. **Multiple label conflicts** — both the Lead and a domain member get labeled (e.g., squad:elminster + squad:regis + squad:minsc), creating ambiguous ownership
+
+### Root Cause Analysis
+
+**1. Unconditional `go:needs-research` Application**
+
+File: `.github/workflows/squad-triage.yml`, lines 202–208
+
+Every issue gets `go:needs-research` immediately upon triage, regardless of whether it's:
+- A well-scoped Phase implementation (like #267, #268 — already implementation-ready)
+- An epic tracking issue (like #266 — is a parent decomposition, not work-in-progress)
+- A design decision (like #273 — cleanup phase, ready for Minsc's testing work)
+
+**Impact:** Workflows downstream (CI, PR routing) may skip issues labeled "needs-research" or deprioritize them. Blocks clear signal of "ready to implement now" (should be `go:yes`).
+
+**2. No Epic/Tracking Issue Detection**
+
+File: `.github/workflows/squad-triage.yml`, lines 70–89 (member parsing) + 119–189 (routing logic)
+
+The triage logic has no concept of issue *type*. It only keyword-matches against titles and bodies to find domain roles. There is no check for:
+- Issue labels (`type:epic`, `type:spike`)
+- Issue title patterns ("[EPIC]", "[TRACKING]", "[META]")
+- Multi-issue decomposition (parent with numbered sub-issues #267, #268, etc.)
+
+**Consequence:** 
+- Epic trackers receive domain labels (squad:regis + squad:minsc for #266) when they should route only to the Lead (squad:elminster) for architectural oversight
+- Tracking issues become indistinguishable from implementation work
+- Prevents clear parent-child work hierarchies
+
+**3. Multiple Member Labels (Ambiguous Ownership)**
+
+File: `.github/workflows/squad-triage.yml`, lines 194–200 (single label) + manual label editing post-triage
+
+The triage script only adds **one** member label (lines 194–200), but post-triage **editing allows manual label stacking**. There's no guard against multiple member labels on a single issue.
+
+**Failure mode:** When an issue can logically involve multiple people, the workflow allows all three labels to coexist, creating:
+- Ambiguous "who owns this?" when there's no single assignee
+- No DRI (Directly Responsible Individual) signal
+- Coordination overhead — which member kicks off work first?
+
+### Specific Fixes Required
+
+**Fix 1: Smart `go:*` Label Assignment (NOT Unconditional `go:needs-research`)**
+
+File: `.github/workflows/squad-triage.yml`  
+Lines to modify: 202–208
+
+Change: Add logic to determine if issue is a tracking/epic or a phase with clear acceptance criteria. If so, mark `go:yes`; otherwise default to `go:needs-research`.
+
+**Rationale:** 
+- Epics are orchestration issues for the Lead — they're inherently "go:yes" (parent decision framework)
+- Phased features with acceptance criteria are ready to implement
+- Default to "needs-research" for everything else
+
+**Fix 2: Epic/Tracking Issue Detection & Lead-Only Routing**
+
+File: `.github/workflows/squad-triage.yml`  
+Lines to modify: 119–189 (routing logic)
+
+Change: Add epic/tracking detection before role-based keyword matching. If epic detected, route to Lead only.
+
+**Consequence:** 
+- #266 would receive *only* `squad:elminster` (not squad:minsc or squad:regis)
+- Lead orchestrates the phases; sub-issues (#267–#273) route to individual members
+- Clear parent-child hierarchy: parent → Lead, children → domain experts
+
+**Fix 3: Guard Against Multiple Member Labels**
+
+File: `.github/workflows/squad-triage.yml` OR `.github/workflows/squad-label-enforce.yml`
+
+Change: Add validation logic to ensure only **one** `squad:{member}` label per issue. If multiple detected, warn via issue comment and require manual review.
+
+### Recommendations
+
+**Immediate (today):**
+1. Implement Fix 1 (smart `go:*` verdict) — 15 minutes, no risk
+2. Implement Fix 2 (epic detection) — 20 minutes, blocks ambiguous routing
+3. Manually reassign #266 to `squad:elminster` only (remove minsc, regis)
+
+**Short-term (this week):**
+4. Implement Fix 3 (label enforcement) in squad-label-enforce.yml
+5. Document epic/phase issue naming conventions
+6. Retriage recent issues that received go:needs-research incorrectly
+
+**Testing:**
+- Triage an epic → verify it receives squad:elminster + go:yes, not domain labels
+- Triage a phase with acceptance criteria → verify squad:{expert} + go:yes
+- Verify no issue can have multiple squad:{member} labels
+
+### Root Cause Summary
+
+The triage action was built for **domain routing** (finding the right expert), not for **issue type handling** (distinguishing epics from implementations). It applies the same keyword-matching logic to both, leading to:
+
+1. **Type blindness:** Can't tell epics from features → treats all as implementation work
+2. **Verdict rigidity:** Assumes all new issues are research spikes → applies `go:needs-research` unconditionally
+3. **No ownership guard:** Allows multiple member labels → creates coordination ambiguity
+
+All three are fixable in the triage workflow with ~40 lines of added logic. No database changes, no schema updates, no breaking changes.

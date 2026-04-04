@@ -80,19 +80,12 @@ const DEFAULT_ELK_OPTIONS: LayoutOptions = {
  * @param options - Optional ELK layout configuration
  * @returns Map of room IDs to (x, y, z) positions
  *
- * NOTE: This is a SKELETON implementation for Phase 0.
- * Current behavior:
- * - Converts rooms → ELK nodes with compass-direction ports
- * - Converts exits → ELK edges connecting ports
- * - Calls elk.layout() to compute positions
- * - Maps ELK output back to grid coordinates
- * - Z-axis handling is stubbed (always returns z=0)
- *
- * Future phases will:
- * - Handle multi-floor layouts (z-axis via layerConstraint or separate graphs)
- * - Optimize port placement for better visual alignment
- * - Add collision detection and overlap resolution
- * - Support incremental layout updates (preserve positions on edit)
+ * Phase 2 implementation:
+ * - Separates floors (z-levels) based on up/down exit traversal
+ * - Runs ELK layout per-floor for 2D positioning
+ * - Filters out portal exits (inter-zone) before layout
+ * - Maps ELK pixel coordinates to 100×100 grid cells
+ * - Handles disconnected subgraphs per floor
  */
 export async function computeElkLayout(
   rooms: Map<string, LayoutRoom>,
@@ -101,16 +94,105 @@ export async function computeElkLayout(
 ): Promise<Map<string, RoomPosition>> {
   const elk = new ELK();
   
-  // Build ELK graph structure
-  const elkGraph = buildElkGraph(rooms, options);
+  // Step 1: Assign floors via BFS traversal of up/down exits
+  const floorAssignments = assignFloors(rooms, entryRoomSlug);
   
-  // Run ELK layout (async WASM worker)
-  const layoutedGraph = await elk.layout(elkGraph);
+  // Step 2: Group rooms by floor
+  const floorGroups = new Map<number, Set<string>>();
+  for (const [roomId, floor] of floorAssignments) {
+    if (!floorGroups.has(floor)) floorGroups.set(floor, new Set());
+    floorGroups.get(floor)!.add(roomId);
+  }
   
-  // Convert ELK output → room positions
-  const positions = extractPositions(layoutedGraph);
+  // Step 3: Run ELK layout per floor
+  const positions = new Map<string, RoomPosition>();
+  
+  for (const [floor, roomIds] of floorGroups) {
+    // Build subgraph for this floor (cardinal exits only, no up/down)
+    const floorRooms = new Map<string, LayoutRoom>();
+    for (const roomId of roomIds) {
+      const room = rooms.get(roomId);
+      if (!room) continue;
+      
+      // Filter out up/down exits and portal exits (targets not in this floor)
+      const cardinalExits = new Map<string, string>();
+      for (const [dir, target] of room.exits) {
+        // Skip up/down (z-axis)
+        if (dir === 'up' || dir === 'down') continue;
+        // Skip portal exits (targets not in roomIds set)
+        if (!roomIds.has(target)) continue;
+        cardinalExits.set(dir, target);
+      }
+      
+      floorRooms.set(roomId, { exits: cardinalExits });
+    }
+    
+    // Skip empty floors
+    if (floorRooms.size === 0) continue;
+    
+    // Build ELK graph for this floor
+    const elkGraph = buildElkGraph(floorRooms, options);
+    
+    // Run ELK layout
+    const layoutedGraph = await elk.layout(elkGraph);
+    
+    // Extract positions and assign z-level
+    const floorPositions = extractPositions(layoutedGraph, floor);
+    for (const [roomId, pos] of floorPositions) {
+      positions.set(roomId, pos);
+    }
+  }
   
   return positions;
+}
+
+// ─── Floor Assignment (Z-axis) ──────────────────────────────────────────────
+
+/**
+ * Assign floor numbers (z-levels) via BFS traversal of up/down exits.
+ * Entry room starts at z=0. Each 'up' exit increments z, each 'down' decrements z.
+ */
+function assignFloors(
+  rooms: Map<string, LayoutRoom>,
+  entryRoomSlug: string,
+): Map<string, number> {
+  const floors = new Map<string, number>();
+  const queue: Array<{ roomId: string; floor: number }> = [];
+  
+  // Start at entry room, floor 0
+  if (!rooms.has(entryRoomSlug)) {
+    // Fallback: if entry room doesn't exist, use first room
+    const firstRoom = rooms.keys().next().value;
+    if (firstRoom) {
+      queue.push({ roomId: firstRoom, floor: 0 });
+      floors.set(firstRoom, 0);
+    }
+  } else {
+    queue.push({ roomId: entryRoomSlug, floor: 0 });
+    floors.set(entryRoomSlug, 0);
+  }
+  
+  // BFS traversal
+  while (queue.length > 0) {
+    const { roomId, floor } = queue.shift()!;
+    const room = rooms.get(roomId);
+    if (!room) continue;
+    
+    for (const [direction, targetId] of room.exits) {
+      // Skip if already visited
+      if (floors.has(targetId)) continue;
+      
+      // Calculate target floor based on direction
+      let targetFloor = floor;
+      if (direction === 'up') targetFloor = floor + 1;
+      else if (direction === 'down') targetFloor = floor - 1;
+      
+      floors.set(targetId, targetFloor);
+      queue.push({ roomId: targetId, floor: targetFloor });
+    }
+  }
+  
+  return floors;
 }
 
 // ─── Graph Construction ────────────────────────────────────────────────────
@@ -211,9 +293,9 @@ function mergeLayoutOptions(options?: ElkLayoutOptions): LayoutOptions {
  * Extract room positions from ELK layout output.
  *
  * Converts ELK pixel coordinates → grid coordinates (÷ CELL_SIZE).
- * Z-axis is stubbed at 0 for Phase 0 (multi-floor support in future phases).
+ * Assigns the provided floor number (z) to all positions.
  */
-function extractPositions(graph: ElkNode): Map<string, RoomPosition> {
+function extractPositions(graph: ElkNode, floor: number): Map<string, RoomPosition> {
   const positions = new Map<string, RoomPosition>();
   
   if (!graph.children) return positions;
@@ -227,7 +309,7 @@ function extractPositions(graph: ElkNode): Map<string, RoomPosition> {
     
     const x = Math.round((node.x ?? 0) / CELL_SIZE);
     const y = Math.round((node.y ?? 0) / CELL_SIZE);
-    const z = 0; // TODO: Multi-floor support (phase 1+)
+    const z = floor;
     
     positions.set(node.id, { x, y, z });
   }
