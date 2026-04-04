@@ -1803,3 +1803,9 @@ All 8 issues now have correct squad labels aligned with work scope. Epic (#266) 
 - **Regis outcome:** PR #276 merged (+2004/-516). Zone designer refactored to ReactFlow with custom ZoneRoomNode, ZoneExitEdge, ZoneDesignerFlow. All 146 tests passing.
 - **Minsc outcome:** 94 test cases across zone designer components. All pending .todo() activation. Ready for component merge validation.
 - **Session log:** `.squad/sessions/2026-04-04T22-25-combat-audit-phase3.md`
+
+### 2026-04-04: GDD §6.7 Updated — DowningSystem Documented
+- **Task:** Update GDD §6.7 (Meaningful Death) to match the DowningSystem implementation (closes alignment issue from combat audit #286).
+- **Changes:** Replaced the 5-line "instant death at 0 HP" section with full documentation of the downing/bleedout/stabilization flow: downed state, 10-tick bleed-out timer, `stabilize` command (2-tick channel, bandage required, interruptible), finishing blow mechanic, stabilized state protection, and attribution tracking.
+- **Cross-references updated:** §8.3 (PvP combat flow) and §8.5 (group zone entry death rules) now reference the downing system.
+- **Design decision preserved:** Solo players still have no safety net; the rescue window rewards group coordination without reducing risk for lone wolves.
