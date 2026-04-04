@@ -1657,3 +1657,100 @@ CREATE TABLE zone_definitions (
 
 ---
 
+
+### 2026-04-04: Zone Designer Migration — Squad Label Triage Review
+**By:** Elminster (Lead)  
+**Reviewed:** Issues #266–#273 (Epic + 7 phases)  
+
+## Triage Decisions
+
+**Issue #266 — Epic (Tracking)**
+- **Label:** `squad`, `squad:elminster`, `squad:minsc`, `squad:regis`
+- **Rationale:** Epic is a tracking issue; all three squad members involved across phases. Elminster (added): architectural oversight of entire migration. Minsc (existing): testing in Phases 3 & 6. Regis (existing): primary implementer across all phases.
+- **Removed:** `go:needs-research` — detailed plan exists; research complete.
+
+**Issue #267 — Phase 0: Dependencies**
+- **Label:** `squad`, `squad:regis`
+- **Rationale:** Simple scaffolding work. Regis implements (npm install, wrapper stubs). No architecture review needed. Removed Elminster tag (not needed for routine setup).
+- **Removed:** `go:needs-research`
+
+**Issue #268 — Phase 1: Visual Polish**
+- **Label:** `squad`, `squad:regis`
+- **Rationale:** CSS/SVG work (Bezier curves, coloring, shapes, glow). Design is isolated from core layout/rendering architecture. Regis implements independently.
+- **Removed:** `go:needs-research`, `squad:elminster` (not needed; no architecture decisions)
+
+**Issue #269 — Phase 2: Layout Engine Swap (elkjs)**
+- **Label:** `squad`, `squad:elminster`, `squad:regis`
+- **Rationale:** Major architectural change (BFS → ELK). Regis implements; Elminster reviews layout adapter, Z-axis mapping, fallback strategy, and visual correctness vs. BFS. Added `squad:elminster`.
+- **Removed:** `go:needs-research`
+
+**Issue #270 — Phase 3: ReactFlow Integration**
+- **Label:** `squad`, `squad:elminster`, `squad:minsc`, `squad:regis`
+- **Rationale:** Most complex phase (full rendering refactor, interaction layer, pan/zoom/minimap). Regis implements. Elminster reviews architecture (decoupling, event handlers, state management). Minsc tests 16-point checklist (node/edge interaction, context menus, floor switching, validation, minimap). Added `squad:elminster` and `squad:minsc`.
+- **Removed:** `go:needs-research`
+
+**Issue #271 — Phase 4: Visual Enhancements**
+- **Label:** `squad`, `squad:regis`
+- **Rationale:** Leverages ReactFlow capabilities (curves, shapes, animations). Regis implements; no architecture decisions.
+- **Removed:** `go:needs-research`
+
+**Issue #272 — Phase 5: Advanced Features (Optional)**
+- **Label:** `squad`, `squad:regis`
+- **Rationale:** Optional scope (undo/redo, search, copy/paste). Regis if prioritized. No review needed unless blocking.
+- **Removed:** `go:needs-research`
+
+**Issue #273 — Phase 6: Cleanup & Deprecation**
+- **Label:** `squad`, `squad:minsc`, `squad:regis`
+- **Rationale:** Final cleanup (remove old code, update tests/docs). Regis implements; Minsc verifies nothing broke (regression test suite).
+- **Removed:** `go:needs-research`
+
+## Pattern: `go:needs-research` Removal
+
+All 8 issues had `go:needs-research` labels despite a **detailed 20KB plan with 6-phase breakdown, risk matrix, feature preservation matrix, and success criteria already written**. Research is complete; work is implementation-ready. Removed from all issues.
+
+## Assignment Rationale
+
+**Regis (Primary):** Frontend dev, zone designer domain expert. Implements all phases.
+
+**Elminster (Review):** Architecture decisions occur in Phases 2 & 3 (layout engine swap, rendering refactor, integration). Reviews to ensure:
+- ELK adapter correctly maps compass directions to port constraints
+- Z-axis handling preserves multi-floor correctness
+- ReactFlow integration properly decouples layout from rendering
+- Event handler architecture is sound (context menus, node/edge clicks)
+- State management doesn't regress on existing CRUD operations
+
+**Minsc (Testing):** Phases 3 & 6 include comprehensive testing (16-point checklist in Phase 3, regression suite in Phase 6). Minsc verifies:
+- Node/edge interaction correctness
+- Floor switching preserves state
+- Validation warnings display correctly
+- Performance on large zones (100+ rooms)
+- No regressions to existing CRUD
+
+## Outcome
+
+All 8 issues now have correct squad labels aligned with work scope. Epic (#266) clearly owns the tracking and team alignment. Phases with architecture decisions (2, 3) include Elminster review. Phases with testing scope (3, 6) include Minsc QA. Regis owns implementation across all phases.
+
+### 2026-04-05: Triage Action Mislabeling Investigation
+
+**Reported issue:** Squad triage GitHub Action "seems to mislabel things often."
+
+**Analysis completed:** Reviewed `.github/workflows/squad-triage.yml` and related workflows (squad-issue-assign.yml, sync-squad-labels.yml) to identify root causes.
+
+**Root causes identified:**
+1. **Unconditional `go:needs-research` verdict** — All triaged issues receive this label, even implementation-ready phases and epic trackers that should be `go:yes`. Lines 202–208 apply verdict without checking issue type or scope clarity.
+2. **Type blindness:** Workflow has no epic/tracking issue detection. Can't distinguish parent decompositions from implementation work. Keywords match against roles (frontend, backend) but not against issue structure (EPIC, PHASE, sub-issues). Results in epics receiving domain member labels (squad:regis, squad:minsc) when they should route to Lead only.
+3. **Multiple member labels allowed:** Workflow adds one label correctly, but post-triage manual editing permits label stacking (squad:elminster + squad:regis + squad:minsc on same issue). No guard against ambiguous ownership.
+
+**Evidence from zone-designer migration (#266–#273):**
+- #266 (EPIC tracker): Received squad:elminster + squad:minsc + squad:regis (ambiguous DRI)
+- #267–#272 (Phases 0–5): Marked go:needs-research but have detailed acceptance criteria (should be go:yes)
+- #273 (Phase 6 cleanup): Also received multiple labels + wrong verdict
+
+**Fixes recommended (see full decision in `.squad/decisions/inbox/elminster-triage-action-review.md`):**
+1. Smart verdict logic: check issue type (epic/phase) and scope clarity → assign go:yes or go:needs-research conditionally
+2. Epic detection: route epics to Lead-only (squad:elminster), not to domain members
+3. Label enforcement: add guard to prevent multiple squad:{member} labels per issue
+4. All fixes are low-risk config/logic changes; no schema or architectural changes needed
+
+**Next steps:** Fixes are outlined with file paths and line numbers in decision document. Implementation ~40 lines of added logic across two workflows.
+
