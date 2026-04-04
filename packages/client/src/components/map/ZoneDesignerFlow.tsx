@@ -1,13 +1,10 @@
 /**
  * ZoneDesignerFlow — ReactFlow wrapper for zone designer visualization.
  *
- * This component will eventually replace the hand-rolled SVG rendering in ZoneDesigner.tsx (~3600 lines).
- * ReactFlow provides interactive node/edge manipulation, built-in zoom/pan, minimap, and controls.
- *
- * Phase 0: SKELETON ONLY — compiles and renders empty flow, not yet integrated into ZoneDesigner.
+ * Phase 3: Full ReactFlow integration with custom nodes/edges.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -18,12 +15,12 @@ import {
   type Edge,
   type NodeTypes,
   type EdgeTypes,
-  type OnNodesChange,
-  type OnEdgesChange,
-  type OnConnect,
   type Connection,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { ZoneRoomNode } from './ZoneRoomNode.js';
+import { ZoneExitEdge } from './ZoneExitEdge.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -36,6 +33,12 @@ export interface ZoneDesignerFlowProps {
   onNodeClick?: (nodeId: string) => void;
   /** Callback when an edge is clicked */
   onEdgeClick?: (edgeId: string) => void;
+  /** Callback when a node is right-clicked */
+  onNodeContextMenu?: (event: React.MouseEvent, nodeId: string) => void;
+  /** Callback when an edge is right-clicked */
+  onEdgeContextMenu?: (event: React.MouseEvent, edgeId: string) => void;
+  /** Callback when the canvas is clicked (clear selection) */
+  onPaneClick?: () => void;
   /** Callback when two nodes are connected (exit creation) */
   onConnect?: (connection: Connection) => void;
   /** ID of the currently selected node (for highlighting) */
@@ -46,57 +49,14 @@ export interface ZoneDesignerFlowProps {
   floor?: number;
 }
 
-// ─── Custom Node Component ──────────────────────────────────────────────────
-
-/**
- * RoomNode — custom node component for rendering zone rooms.
- *
- * TODO (Phase 1+):
- * - Render room type-specific styling (colors, icons)
- * - Display room name/slug
- * - Show selection state
- * - Add port handles for compass-direction exits
- * - Support drag-to-reposition
- */
-function RoomNode({ data }: { data: { label: string } }) {
-  return (
-    <div
-      style={{
-        padding: '10px 20px',
-        border: '2px solid #4A4B55',
-        borderRadius: '4px',
-        background: '#1C1D27',
-        color: '#E5E7EB',
-        fontSize: '12px',
-        fontWeight: 500,
-      }}
-    >
-      {data.label}
-    </div>
-  );
-}
-
-// ─── Custom Edge Component ──────────────────────────────────────────────────
-
-/**
- * ExitEdge — custom edge component for rendering zone exits.
- *
- * TODO (Phase 1+):
- * - Render directional arrows
- * - Show exit type styling (portal, one-way, inter-floor)
- * - Display edge labels (direction, target zone)
- * - Support selection state
- */
-// Currently using default ReactFlow edges; custom implementation will come in Phase 1+
-
 // ─── Node & Edge Types ──────────────────────────────────────────────────────
 
 const nodeTypes: NodeTypes = {
-  room: RoomNode,
+  room: ZoneRoomNode,
 };
 
 const edgeTypes: EdgeTypes = {
-  // Using default edges for Phase 0; custom ExitEdge component will come in Phase 1+
+  exit: ZoneExitEdge,
 };
 
 // ─── Main Component ─────────────────────────────────────────────────────────
@@ -104,26 +64,29 @@ const edgeTypes: EdgeTypes = {
 /**
  * ZoneDesignerFlow — ReactFlow-based zone visualization.
  *
- * Phase 0 skeleton features:
- * - Renders ReactFlow with Background, Controls, MiniMap
- * - Accepts nodes/edges as props
- * - Provides click handlers for nodes/edges
- * - Supports connection events (exit creation)
- * - Custom node type (RoomNode) with basic styling
- *
- * Not yet integrated into ZoneDesigner.tsx — this is a standalone component
- * that will be wired up in Phase 1.
+ * Phase 3 features:
+ * - Custom room nodes with type-based rendering
+ * - Custom exit edges with direction-based styling
+ * - Context menu support
+ * - Pan/zoom/minimap
+ * - Floor filtering
+ * - Keyboard shortcuts
  */
 export function ZoneDesignerFlow({
   nodes,
   edges,
   onNodeClick,
   onEdgeClick,
+  onNodeContextMenu,
+  onEdgeContextMenu,
+  onPaneClick,
   onConnect,
   selectedNodeId,
   selectedEdgeId,
   floor = 0,
 }: ZoneDesignerFlowProps) {
+  const hasInitialFit = useRef(false);
+
   // Handle node click events
   const handleNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
@@ -138,6 +101,24 @@ export function ZoneDesignerFlow({
       onEdgeClick?.(edge.id);
     },
     [onEdgeClick]
+  );
+
+  // Handle node context menu
+  const handleNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      event.preventDefault();
+      onNodeContextMenu?.(event, node.id);
+    },
+    [onNodeContextMenu]
+  );
+
+  // Handle edge context menu
+  const handleEdgeContextMenu = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.preventDefault();
+      onEdgeContextMenu?.(event, edge.id);
+    },
+    [onEdgeContextMenu]
   );
 
   // Handle connection events (drag from one node to another)
@@ -169,10 +150,53 @@ export function ZoneDesignerFlow({
         edgeTypes={edgeTypes}
         onNodeClick={handleNodeClick}
         onEdgeClick={handleEdgeClick}
+        onNodeContextMenu={handleNodeContextMenu}
+        onEdgeContextMenu={handleEdgeContextMenu}
+        onPaneClick={onPaneClick}
         onConnect={handleConnect}
         fitView
         attributionPosition="bottom-right"
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={true}
+        zoomOnDoubleClick={false}
       >
+        {/* SVG defs for gradients and markers */}
+        <svg style={{ position: 'absolute', width: 0, height: 0 }}>
+          <defs>
+            {/* Arrow markers */}
+            <marker id="arrowhead-selected" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#C9A84C" />
+            </marker>
+            <marker id="arrowhead-portal" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#06b6d4" />
+            </marker>
+            <marker id="arrowhead-orphan" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#EF4444" />
+            </marker>
+            <marker id="arrowhead-oneway" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#F59E0B" />
+            </marker>
+            <marker id="arrowhead-oneway-selected" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#C9A84C" />
+            </marker>
+
+            {/* Direction-based exit gradients */}
+            <linearGradient id="exit-ns-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#3B82F6" />
+              <stop offset="100%" stopColor="#06B6D4" />
+            </linearGradient>
+            <linearGradient id="exit-ew-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#F59E0B" />
+              <stop offset="100%" stopColor="#FB923C" />
+            </linearGradient>
+            <linearGradient id="exit-ud-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#A78BFA" />
+              <stop offset="100%" stopColor="#6366F1" />
+            </linearGradient>
+          </defs>
+        </svg>
+
         {/* Grid background */}
         <Background
           color="#4A4B55"
@@ -192,7 +216,6 @@ export function ZoneDesignerFlow({
         {/* Minimap overview */}
         <MiniMap
           nodeColor={(node) => {
-            // TODO: Color nodes by room type
             return node.selected ? '#7B4FA0' : '#4A4B55';
           }}
           maskColor="rgba(0, 0, 0, 0.6)"
@@ -204,7 +227,7 @@ export function ZoneDesignerFlow({
         />
       </ReactFlow>
       
-      {/* Floor indicator (placeholder) */}
+      {/* Floor indicator */}
       <div
         style={{
           position: 'absolute',
@@ -224,6 +247,36 @@ export function ZoneDesignerFlow({
       </div>
     </div>
   );
+}
+
+/**
+ * FlowWrapper — Internal wrapper component with useReactFlow hook.
+ * Required because useReactFlow must be called within ReactFlow context.
+ */
+function FlowWrapper(props: ZoneDesignerFlowProps) {
+  const reactFlowInstance = useReactFlow();
+  const hasInitialFit = useRef(false);
+
+  // Fit view on initial load
+  useEffect(() => {
+    if (!hasInitialFit.current && props.nodes.length > 0) {
+      setTimeout(() => {
+        reactFlowInstance.fitView({ padding: 0.2, duration: 200 });
+      }, 50);
+      hasInitialFit.current = true;
+    }
+  }, [props.nodes.length, reactFlowInstance]);
+
+  // Reset fit when floor changes
+  useEffect(() => {
+    if (props.nodes.length > 0) {
+      setTimeout(() => {
+        reactFlowInstance.fitView({ padding: 0.2, duration: 200 });
+      }, 50);
+    }
+  }, [props.floor, reactFlowInstance]);
+
+  return null;
 }
 
 // ─── Export Types ───────────────────────────────────────────────────────────

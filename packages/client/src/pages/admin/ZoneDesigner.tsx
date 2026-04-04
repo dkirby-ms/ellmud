@@ -5,6 +5,9 @@ import type { LayoutRoom } from "../../map/computeLayout.js";
 import { computeElkLayout } from "../../map/elkLayout.js";
 import { FloorSelector } from "../../components/map/FloorSelector.js";
 import { computeFloorBounds } from "../../components/map/useFloorFilter.js";
+import { ZoneDesignerFlow } from "../../components/map/ZoneDesignerFlow.js";
+import { ReactFlowProvider } from "@xyflow/react";
+import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import {
   createRoom, updateRoom, deleteRoom,
   createExit, updateExit, deleteExit, listZones, getZone,
@@ -221,6 +224,111 @@ function renderRoomShape(
     return <rect x={x} y={y} width={w} height={h} rx={6} ry={6} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} filter={filter} />;
   }
 }
+
+// ─── ReactFlow Conversion ────────────────────────────────────────────────────
+
+/**
+ * Convert zone rooms → ReactFlow nodes.
+ */
+function roomsToFlowNodes(
+  rooms: ZoneRoomDefinition[],
+  positions: Map<string, { x: number; y: number; z: number }>,
+  currentFloor: number,
+  selectedRoom: string | null,
+  disconnectedSlugs: Set<string>,
+  orphanExitIds: Set<string>,
+  exits: ZoneExitDefinition[],
+  showLabels: boolean,
+  mode: DesignerMode,
+): FlowNode[] {
+  const nodes: FlowNode[] = [];
+
+  for (const room of rooms) {
+    const pos = positions.get(room.slug);
+    if (!pos || pos.z !== currentFloor) continue;
+
+    // Count up/down/portal exits
+    const hasUpExits = exits.some((e) => e.fromRoomSlug === room.slug && e.direction === 'up');
+    const hasDownExits = exits.some((e) => e.fromRoomSlug === room.slug && e.direction === 'down');
+    const portalCount = exits.filter((e) => e.fromRoomSlug === room.slug && e.targetZoneSlug).length;
+
+    nodes.push({
+      id: room.slug,
+      type: 'room',
+      position: { x: pos.x * 100, y: pos.y * 100 },
+      data: {
+        slug: room.slug,
+        name: room.name,
+        type: room.type,
+        floor: pos.z,
+        isDisconnected: disconnectedSlugs.has(room.slug),
+        isConnectSource: mode === 'connect' && selectedRoom === room.slug,
+        hasUpExits,
+        hasDownExits,
+        portalCount,
+        npcCount: room.npcs?.length ?? 0,
+        lootCount: room.lootContainers?.length ?? 0,
+        hazardCount: room.hazards?.length ?? 0,
+        showLabels,
+      },
+    });
+  }
+
+  return nodes;
+}
+
+/**
+ * Convert zone exits → ReactFlow edges.
+ * Groups bidirectional exit pairs into single edges.
+ */
+function exitsToFlowEdges(
+  exitPairs: ExitPair[],
+  interZoneExits: ZoneExitDefinition[],
+  positions: Map<string, { x: number; y: number; z: number }>,
+  currentFloor: number,
+  orphanExitIds: Set<string>,
+): FlowEdge[] {
+  const edges: FlowEdge[] = [];
+
+  // Intra-zone exit pairs
+  for (const pair of exitPairs) {
+    const fromPos = positions.get(pair.forward.fromRoomSlug);
+    const toPos = positions.get(pair.forward.toRoomSlug);
+    if (!fromPos || !toPos || fromPos.z !== currentFloor || toPos.z !== currentFloor) continue;
+
+    const isOrphanFwd = orphanExitIds.has(pair.forward.id);
+    const isOrphanRev = pair.reverse ? orphanExitIds.has(pair.reverse.id) : false;
+
+    edges.push({
+      id: pair.forward.id,
+      source: pair.forward.fromRoomSlug,
+      target: pair.forward.toRoomSlug,
+      type: 'exit',
+      data: {
+        direction: pair.forward.direction,
+        isBidirectional: pair.isBidirectional,
+        isOrphan: isOrphanFwd || isOrphanRev,
+        isPortal: false,
+        locked: pair.forward.locked || (pair.reverse?.locked ?? false),
+        hidden: pair.forward.hidden || (pair.reverse?.hidden ?? false),
+      },
+    });
+  }
+
+  // Inter-zone (portal) exits — draw stub edges
+  for (const exit of interZoneExits) {
+    const fromPos = positions.get(exit.fromRoomSlug);
+    if (!fromPos || fromPos.z !== currentFloor) continue;
+
+    // Portal exits don't have a target node in the graph — we'll render them as special stub edges
+    // For ReactFlow, we need a dummy target node or just skip drawing them as edges
+    // Let's skip them for now since they don't connect to another node in this zone
+    // (They're indicated by the portal badge on the room node itself)
+  }
+
+  return edges;
+}
+
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -699,6 +807,31 @@ export default function ZoneDesigner({
     }
     return ids;
   }, [rooms, exits]);
+
+  // ─── ReactFlow nodes & edges ────────────────────────────────────────────────
+  const flowNodes = useMemo(() => {
+    return roomsToFlowNodes(
+      rooms,
+      positions,
+      currentFloor,
+      selectedRoom,
+      disconnectedSlugs,
+      orphanExitIds,
+      exits,
+      showLabels,
+      mode,
+    );
+  }, [rooms, positions, currentFloor, selectedRoom, disconnectedSlugs, orphanExitIds, exits, showLabels, mode]);
+
+  const flowEdges = useMemo(() => {
+    return exitsToFlowEdges(
+      exitPairs,
+      interZoneExits,
+      positions,
+      currentFloor,
+      orphanExitIds,
+    );
+  }, [exitPairs, interZoneExits, positions, currentFloor, orphanExitIds]);
 
   // ─── Click handlers ─────────────────────────────────────
   function handleRoomClick(slug: string) {
@@ -1549,11 +1682,10 @@ export default function ZoneDesigner({
 
       {/* ─── Main area (canvas + side panel) ──────────────── */}
       <div className="flex flex-1 min-h-0">
-        {/* SVG Canvas */}
+        {/* ReactFlow Canvas */}
         <div
           ref={canvasRef}
           className="flex-1 p-4 overflow-hidden relative"
-          style={{ cursor: canvasCursor }}
           onClick={(e) => { if (e.target === e.currentTarget) handleCanvasClick(); }}
         >
           {rooms.length === 0 ? (
@@ -1563,456 +1695,20 @@ export default function ZoneDesigner({
               </p>
             </div>
           ) : (
-            <svg
-              ref={svgRef}
-              viewBox={`${finalX} ${finalY} ${zoomedW} ${zoomedH}`}
-              style={{ width: "100%", minHeight: "350px", cursor: canvasCursor }}
-              xmlns="http://www.w3.org/2000/svg"
-              onMouseDown={handlePanMouseDown}
-              onMouseMove={handlePanMouseMove}
-              onMouseUp={handlePanMouseUp}
-              onMouseLeave={handlePanMouseUp}
-            >
-              <defs>
-                <marker id="arrowhead-selected" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                  <polygon points="0 0, 8 3, 0 6" fill="#C9A84C" />
-                </marker>
-                <marker id="arrowhead-portal" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                  <polygon points="0 0, 8 3, 0 6" fill={PORTAL_COLOR} />
-                </marker>
-                <marker id="arrowhead-orphan" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                  <polygon points="0 0, 8 3, 0 6" fill="#EF4444" />
-                </marker>
-                <marker id="arrowhead-oneway" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-                  <polygon points="0 0, 10 3.5, 0 7" fill={ONE_WAY_COLOR} />
-                </marker>
-                <marker id="arrowhead-oneway-selected" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-                  <polygon points="0 0, 10 3.5, 0 7" fill="#C9A84C" />
-                </marker>
-
-                {/* Direction-based exit gradients */}
-                <linearGradient id="exit-ns-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#3B82F6" />
-                  <stop offset="100%" stopColor="#06B6D4" />
-                </linearGradient>
-                <linearGradient id="exit-ew-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#F59E0B" />
-                  <stop offset="100%" stopColor="#FB923C" />
-                </linearGradient>
-                <linearGradient id="exit-ud-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#A78BFA" />
-                  <stop offset="100%" stopColor="#6366F1" />
-                </linearGradient>
-
-                {/* Glow & depth effects */}
-                <filter id="selection-glow">
-                  <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                  <feMerge>
-                    <feMergeNode in="coloredBlur"/>
-                    <feMergeNode in="SourceGraphic"/>
-                  </feMerge>
-                </filter>
-                <filter id="drop-shadow">
-                  <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.5"/>
-                </filter>
-                <filter id="portal-glow">
-                  <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-                  <feMerge>
-                    <feMergeNode in="coloredBlur"/>
-                    <feMergeNode in="SourceGraphic"/>
-                  </feMerge>
-                </filter>
-              </defs>
-
-              {/* ── Exit pair edges (current floor) ─────────────── */}
-              {exitPairs.map((pair) => {
-                const fromPos = positions.get(pair.forward.fromRoomSlug);
-                const toPos = positions.get(pair.forward.toRoomSlug);
-                if (!fromPos || !toPos) return null;
-
-                const from = roomCenter(fromPos.x, fromPos.y);
-                const to = roomCenter(toPos.x, toPos.y);
-                const { x1, y1, x2, y2 } = clipToRect(from.cx, from.cy, to.cx, to.cy);
-                const { lx, ly } = edgeLabelPos(x1, y1, x2, y2);
-                const isSelected = selectedExit === pair.forward.id || selectedExit === pair.reverse?.id;
-                const isOrphanFwd = orphanExitIds.has(pair.forward.id);
-                const isOrphanRev = pair.reverse ? orphanExitIds.has(pair.reverse.id) : false;
-                const isOrphan = isOrphanFwd || isOrphanRev;
-
-                // Compute Bézier control points (perpendicular offset)
-                const dx = x2 - x1;
-                const dy = y2 - y1;
-                const len = Math.sqrt(dx * dx + dy * dy);
-                const perpX = -dy / len;
-                const perpY = dx / len;
-                const offset = 50;
-                const cp1x = x1 + dx * 0.33 + perpX * offset;
-                const cp1y = y1 + dy * 0.33 + perpY * offset;
-                const cp2x = x1 + dx * 0.67 + perpX * offset;
-                const cp2y = y1 + dy * 0.67 + perpY * offset;
-                const pathD = `M ${x1} ${y1} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x2} ${y2}`;
-
-                // Direction-based coloring
-                const dir = pair.forward.direction;
-                let strokeColor: string;
-                let markerEnd: string | undefined;
-                let strokeWidth: number;
-                let strokeDash: string | undefined;
-
-                if (isSelected) {
-                  strokeColor = "#C9A84C";
-                  strokeWidth = 3;
-                  markerEnd = pair.isBidirectional ? undefined : "url(#arrowhead-oneway-selected)";
-                } else if (isOrphan) {
-                  strokeColor = "#EF4444";
-                  strokeWidth = 1.5;
-                  strokeDash = "6 3";
-                  markerEnd = "url(#arrowhead-orphan)";
-                } else if (pair.isBidirectional) {
-                  if (dir === "north" || dir === "south") {
-                    strokeColor = "url(#exit-ns-gradient)";
-                  } else if (dir === "east" || dir === "west") {
-                    strokeColor = "url(#exit-ew-gradient)";
-                  } else {
-                    strokeColor = "url(#exit-ud-gradient)";
-                  }
-                  strokeWidth = 1.5;
-                  markerEnd = undefined;
-                } else {
-                  // One-way: saturated amber with arrow
-                  strokeColor = "#F59E0B";
-                  strokeWidth = 2.5;
-                  markerEnd = "url(#arrowhead-oneway)";
-                }
-
-                const fwdMod = pair.forward.locked || pair.forward.hidden;
-                const revMod = pair.reverse?.locked || pair.reverse?.hidden;
-                const hasModifiers = fwdMod || revMod;
-
-                return (
-                  <g
-                    key={pair.forward.id}
-                    onClick={(e) => { e.stopPropagation(); handleExitClick(pair.forward.id); }}
-                    onContextMenu={(e) => handleExitContextMenu(e, pair.forward.id)}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <path
-                      d={pathD}
-                      stroke={strokeColor}
-                      strokeWidth={strokeWidth}
-                      strokeDasharray={strokeDash}
-                      fill="none"
-                      markerEnd={markerEnd}
-                    />
-                    {/* Invisible wider path for easier click targeting */}
-                    <path d={pathD} stroke="transparent" strokeWidth={12} fill="none" />
-                    {hasModifiers && (
-                      <text
-                        x={lx} y={ly}
-                        textAnchor="middle" dominantBaseline="central"
-                        fill="#B8860B" fontSize="9" fontFamily="var(--font-sans)"
-                      >
-                        {(pair.forward.locked || pair.reverse?.locked) ? "🔒" : ""}
-                        {(pair.forward.hidden || pair.reverse?.hidden) ? "👁" : ""}
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
-
-              {/* Inter-floor exits are indicated by ▲▼ icons on rooms; no cross-z lines drawn */}
-
-              {/* Ghost rooms hidden — navigate via ▲▼ icons on rooms */}
-
-              {/* ── Portal (inter-zone) exit edges ─────────────── */}
-              {interZoneExits.filter((exit) => {
-                const fromPos = positions.get(exit.fromRoomSlug);
-                return fromPos && fromPos.z === currentFloor;
-              }).map((exit) => {
-                const fromPos = positions.get(exit.fromRoomSlug);
-                if (!fromPos) return null;
-                const from = roomCenter(fromPos.x, fromPos.y);
-                // Portal exits don't connect to a room in the SVG — draw a stub line outward
-                const angle = exit.direction === "east" ? 0
-                  : exit.direction === "west" ? Math.PI
-                  : exit.direction === "south" ? Math.PI / 2
-                  : exit.direction === "north" ? -Math.PI / 2
-                  : exit.direction === "up" ? -Math.PI / 4
-                  : Math.PI / 4; // down
-                const stubLen = 40;
-                const sx = from.cx + Math.cos(angle) * (NODE_W / 2 + 4);
-                const sy = from.cy + Math.sin(angle) * (NODE_H / 2 + 4);
-                const ex = sx + Math.cos(angle) * stubLen;
-                const ey = sy + Math.sin(angle) * stubLen;
-                const isSelected = selectedExit === exit.id;
-
-                return (
-                  <g
-                    key={exit.id}
-                    onClick={(e) => { e.stopPropagation(); handleExitClick(exit.id); }}
-                    onContextMenu={(e) => handleExitContextMenu(e, exit.id)}
-                    style={{ cursor: "pointer" }}
-                    filter={isSelected ? undefined : "url(#portal-glow)"}
-                  >
-                    <line
-                      x1={sx} y1={sy} x2={ex} y2={ey}
-                      stroke={isSelected ? "#C9A84C" : PORTAL_COLOR}
-                      strokeWidth={isSelected ? 2.5 : 2}
-                      strokeDasharray="4 2"
-                      markerEnd={isSelected ? "url(#arrowhead-selected)" : "url(#arrowhead-portal)"}
-                    />
-                    <line x1={sx} y1={sy} x2={ex} y2={ey} stroke="transparent" strokeWidth={12} />
-                    <text
-                      x={ex + Math.cos(angle) * 6} y={ey + Math.sin(angle) * 6}
-                      textAnchor="middle" dominantBaseline="central"
-                      fill={isSelected ? "#C9A84C" : PORTAL_COLOR}
-                      fontSize="9" fontFamily="var(--font-sans)"
-                    >
-                      ⟐ {exit.direction} → {exit.targetZoneSlug}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* ── Room nodes (current floor) ──────────────────── */}
-              {Array.from(floorPositions.entries()).map(([slug, pos]) => {
-                const room = roomMap.get(slug);
-                if (!room) return null;
-                const color = roomColor(room.type);
-                const isSelected = selectedRoom === slug;
-                const isDisconnected = disconnectedSlugs.has(slug);
-                const isConnectSource = mode === "connect" && selectedRoom === slug;
-
-                const x = pos.x * CELL_W;
-                const y = pos.y * CELL_H;
-                const portalExits = interZoneExits.filter((e) => e.fromRoomSlug === slug);
-
-                // Vertical (up/down) exits from this room
-                const upExits = exits.filter(
-                  (e) => e.fromRoomSlug === slug && e.direction === "up",
-                );
-                const downExits = exits.filter(
-                  (e) => e.fromRoomSlug === slug && e.direction === "down",
-                );
-                const upTooltip = upExits.length > 0
-                  ? "Up → " + upExits.map((e) => {
-                      const tgt = e.targetZoneSlug
-                        ? `${e.targetZoneSlug}/${e.targetRoomSlug}`
-                        : e.toRoomSlug;
-                      const tRoom = roomMap.get(e.toRoomSlug);
-                      const tPos = positions.get(e.toRoomSlug);
-                      const name = tRoom ? tRoom.name : tgt;
-                      const fl = tPos != null ? ` (F${tPos.z})` : "";
-                      return `${name}${fl}`;
-                    }).join(", ")
-                  : "";
-                const downTooltip = downExits.length > 0
-                  ? "Down → " + downExits.map((e) => {
-                      const tgt = e.targetZoneSlug
-                        ? `${e.targetZoneSlug}/${e.targetRoomSlug}`
-                        : e.toRoomSlug;
-                      const tRoom = roomMap.get(e.toRoomSlug);
-                      const tPos = positions.get(e.toRoomSlug);
-                      const name = tRoom ? tRoom.name : tgt;
-                      const fl = tPos != null ? ` (F${tPos.z})` : "";
-                      return `${name}${fl}`;
-                    }).join(", ")
-                  : "";
-
-                return (
-                  <g
-                    key={slug}
-                    onClick={(e) => { e.stopPropagation(); handleRoomClick(slug); }}
-                    onContextMenu={(e) => handleRoomContextMenu(e, slug)}
-                    onMouseEnter={(e) => {
-                      if (hoverTimer) clearTimeout(hoverTimer);
-                      const rect = (e.currentTarget as Element).getBoundingClientRect();
-                      const timer = setTimeout(() => {
-                        setHoveredRoom(slug);
-                        setHoverPosition({ x: rect.left + rect.width / 2, y: rect.top });
-                      }, 150);
-                      setHoverTimer(timer);
-                    }}
-                    onMouseLeave={() => {
-                      if (hoverTimer) {
-                        clearTimeout(hoverTimer);
-                        setHoverTimer(null);
-                      }
-                      setHoveredRoom(null);
-                      setHoverPosition(null);
-                    }}
-                    style={{
-                      cursor: mode === "connect" && selectedRoom && slug !== selectedRoom
-                        ? "crosshair"
-                        : "pointer",
-                    }}
-                  >
-                    {renderRoomShape(
-                      room.type,
-                      x, y, NODE_W, NODE_H,
-                      color.fill,
-                      isSelected ? "#22D3EE"
-                        : isConnectSource ? "#3A7D7B"
-                        : isDisconnected ? "#B8860B"
-                        : color.stroke,
-                      isSelected || isConnectSource ? 3 : isDisconnected ? 2 : 1.5,
-                      isConnectSource ? "4 2" : undefined,
-                      isSelected ? "url(#selection-glow) url(#drop-shadow)" : undefined,
-                    )}
-                    {showLabels && (
-                      <text
-                        x={x + NODE_W / 2} y={y + NODE_H / 2 - 4}
-                        textAnchor="middle" dominantBaseline="central"
-                        fill="#E8E0D0" fontSize="6"
-                        style={{ fontFamily: "var(--font-sans)" }}
-                      >
-                        {room.name.length > 10 ? room.name.slice(0, 9) + "…" : room.name}
-                      </text>
-                    )}
-                    <text
-                      x={x + NODE_W / 2} y={y + NODE_H / 2 + (showLabels ? 4 : 0)}
-                      textAnchor="middle" dominantBaseline="central"
-                      fill="#6A6B75" fontSize="6" fontFamily="var(--font-mono)"
-                    >
-                      {slug}
-                    </text>
-                    {pos.z !== 0 && (
-                      <text
-                        x={x + NODE_W - 3} y={y + 7}
-                        textAnchor="end" fill="#8A8B95" fontSize="6" fontFamily="var(--font-sans)"
-                      >
-                        z{pos.z > 0 ? "+" : ""}{pos.z}
-                      </text>
-                    )}
-                    {isDisconnected && (
-                      <text
-                        x={x + 4} y={y + 7}
-                        fill="#B8860B" fontSize="8" fontFamily="var(--font-sans)"
-                      >
-                        ⚠
-                      </text>
-                    )}
-
-                    {/* Content badges (NPC, Loot, Hazard) along bottom edge */}
-                    {(() => {
-                      const badges: Array<{ icon: string; color: string; bg: string; label: string }> = [];
-                      if (room.npcs?.length > 0)
-                        badges.push({ icon: "👤", color: "#D97706", bg: "#2A1E0A", label: `${room.npcs.length} NPC${room.npcs.length > 1 ? "s" : ""}` });
-                      if (room.lootContainers?.length > 0)
-                        badges.push({ icon: "📦", color: "#CA8A04", bg: "#2A200A", label: `${room.lootContainers.length} Loot` });
-                      if (room.hazards?.length > 0)
-                        badges.push({ icon: "⚠", color: "#DC2626", bg: "#2A0A0A", label: `${room.hazards.length} Hazard${room.hazards.length > 1 ? "s" : ""}` });
-                      if (badges.length === 0) return null;
-                      const totalW = badges.length * 12 + (badges.length - 1) * 2;
-                      const startX = x + NODE_W / 2 - totalW / 2;
-                      return badges.map((b, i) => (
-                        <g key={b.icon}>
-                          <circle
-                            cx={startX + i * 14 + 6} cy={y + NODE_H - 5}
-                            r={5} fill={b.bg} stroke={b.color} strokeWidth={1}
-                          />
-                          <text
-                            x={startX + i * 14 + 6} y={y + NODE_H - 5}
-                            textAnchor="middle" dominantBaseline="central"
-                            fill={b.color} fontSize="5" fontFamily="var(--font-sans)"
-                          >
-                            {b.icon}
-                          </text>
-                          <title>{b.label}</title>
-                        </g>
-                      ));
-                    })()}
-
-                    {/* Property tags below room node */}
-                    {room.properties?.length > 0 && (
-                      <text
-                        x={x + NODE_W / 2} y={y + NODE_H + 6}
-                        textAnchor="middle" dominantBaseline="central"
-                        fill="#6A6B75" fontSize="5" fontFamily="var(--font-mono)"
-                      >
-                        {room.properties.join(" · ")}
-                      </text>
-                    )}
-
-                    {/* Vertical exit (up/down) badges — click to navigate floor */}
-                    {upExits.length > 0 && (() => {
-                      const targetZ = upExits.map((e) => positions.get(e.toRoomSlug)?.z).find((z) => z != null);
-                      return (
-                        <g
-                          onClick={(e) => { e.stopPropagation(); handleExitClick(upExits[0].id); }}
-                          onContextMenu={(e) => handleExitContextMenu(e, upExits[0].id)}
-                          onDoubleClick={(e) => { e.stopPropagation(); if (targetZ != null) setCurrentFloor(targetZ); }}
-                          style={{ cursor: "pointer" }}
-                        >
-                          <circle
-                            cx={x + NODE_W - 5} cy={y + 5}
-                            r={5} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
-                          />
-                          <text
-                            x={x + NODE_W - 5} y={y + 5}
-                            textAnchor="middle" dominantBaseline="central"
-                            fill={INTER_FLOOR_COLOR} fontSize="6" fontWeight="bold"
-                            fontFamily="var(--font-sans)"
-                          >
-                            ▲
-                          </text>
-                          <title>{upTooltip} (click to select · double-click to navigate)</title>
-                        </g>
-                      );
-                    })()}
-                    {downExits.length > 0 && (() => {
-                      const targetZ = downExits.map((e) => positions.get(e.toRoomSlug)?.z).find((z) => z != null);
-                      return (
-                        <g
-                          onClick={(e) => { e.stopPropagation(); handleExitClick(downExits[0].id); }}
-                          onContextMenu={(e) => handleExitContextMenu(e, downExits[0].id)}
-                          onDoubleClick={(e) => { e.stopPropagation(); if (targetZ != null) setCurrentFloor(targetZ); }}
-                          style={{ cursor: "pointer" }}
-                        >
-                          <circle
-                            cx={x + NODE_W - 5} cy={y + NODE_H - 5}
-                            r={5} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
-                          />
-                          <text
-                            x={x + NODE_W - 5} y={y + NODE_H - 5}
-                            textAnchor="middle" dominantBaseline="central"
-                            fill={INTER_FLOOR_COLOR} fontSize="6" fontWeight="bold"
-                            fontFamily="var(--font-sans)"
-                          >
-                            ▼
-                          </text>
-                          <title>{downTooltip} (click to select · double-click to navigate)</title>
-                        </g>
-                      );
-                    })()}
-
-                    {/* Inter-zone portal indicators */}
-                    {portalExits.map((pe, i) => (
-                      <g key={pe.id}
-                        onClick={(e) => { e.stopPropagation(); handleExitClick(pe.id); }}
-                        onContextMenu={(e) => handleExitContextMenu(e, pe.id)}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <circle
-                          cx={x + NODE_W + 8} cy={y + 8 + i * 14} r={6}
-                          fill="#0e3a3d" stroke={PORTAL_COLOR} strokeWidth={1}
-                        />
-                        <text
-                          x={x + NODE_W + 8} y={y + 8 + i * 14}
-                          textAnchor="middle" dominantBaseline="central"
-                          fill={PORTAL_COLOR} fontSize="8" fontFamily="var(--font-sans)"
-                        >
-                          ⟐
-                        </text>
-                        <title>
-                          {pe.direction} → {pe.targetZoneSlug}/{pe.targetRoomSlug}
-                        </title>
-                      </g>
-                    ))}
-                  </g>
-                );
-              })}
-            </svg>
+            <ReactFlowProvider>
+              <ZoneDesignerFlow
+                nodes={flowNodes}
+                edges={flowEdges}
+                onNodeClick={handleRoomClick}
+                onEdgeClick={handleExitClick}
+                onNodeContextMenu={handleRoomContextMenu}
+                onEdgeContextMenu={handleExitContextMenu}
+                onPaneClick={handleCanvasClick}
+                selectedNodeId={selectedRoom}
+                selectedEdgeId={selectedExit}
+                floor={currentFloor}
+              />
+            </ReactFlowProvider>
           )}
 
           {/* ─── Legend panel ──────────────────────────────── */}

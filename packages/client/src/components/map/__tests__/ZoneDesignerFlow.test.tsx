@@ -280,7 +280,7 @@ describe('ZoneDesignerFlow', () => {
     renderFlow();
     
     const minimap = screen.getByTestId('minimap');
-    await user.click(minimap, { clientX: 50, clientY: 50 });
+    await user.click(minimap);
     
     // Canvas should pan to clicked position
     const viewport = screen.getByTestId('reactflow-wrapper').getAttribute('data-viewport');
