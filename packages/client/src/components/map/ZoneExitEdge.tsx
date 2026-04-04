@@ -12,6 +12,8 @@ export interface ExitEdgeData {
   locked: boolean;
   hidden: boolean;
   targetZoneSlug?: string;
+  /** True when a search/filter is active and this edge should be dimmed */
+  dimmed?: boolean;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -125,6 +127,7 @@ export function ZoneExitEdge(props: EdgeProps) {
   const showLabel = selected || hovered;
   const dirEmoji = DIRECTION_EMOJI[edgeData.direction] ?? '';
   const glowFilter = selected ? 'drop-shadow(0 0 4px rgba(201,168,76,0.6))' : undefined;
+  const dimOpacity = edgeData.dimmed ? 0.15 : 1;
 
   return (
     <>
@@ -141,7 +144,8 @@ export function ZoneExitEdge(props: EdgeProps) {
         style={{
           cursor: 'pointer',
           filter: glowFilter,
-          transition: 'stroke 0.15s ease, stroke-width 0.15s ease, filter 0.15s ease',
+          opacity: dimOpacity,
+          transition: 'stroke 0.15s ease, stroke-width 0.15s ease, filter 0.15s ease, opacity 0.2s ease',
         }}
       />
 
