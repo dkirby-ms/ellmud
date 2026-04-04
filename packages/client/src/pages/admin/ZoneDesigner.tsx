@@ -1,7 +1,8 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, ZoomIn, ZoomOut, Maximize2, HelpCircle } from "lucide-react";
 import { computeLayout } from "../../map/computeLayout.js";
 import type { LayoutRoom } from "../../map/computeLayout.js";
+import { computeElkLayout } from "../../map/elkLayout.js";
 import { FloorSelector } from "../../components/map/FloorSelector.js";
 import { computeFloorBounds } from "../../components/map/useFloorFilter.js";
 import {
@@ -172,6 +173,55 @@ function inferDirection(
   return dy > 0 ? "south" : "north";
 }
 
+// Generate SVG shape element based on room type
+function renderRoomShape(
+  type: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  fill: string,
+  stroke: string,
+  strokeWidth: number,
+  strokeDasharray?: string,
+  filter?: string,
+): React.ReactElement {
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+
+  if (type === "entry") {
+    // Shield/badge shape
+    const path = `M ${cx} ${y} L ${x + w} ${y + h * 0.3} L ${x + w} ${y + h * 0.7} L ${cx} ${y + h} L ${x} ${y + h * 0.7} L ${x} ${y + h * 0.3} Z`;
+    return <path d={path} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} filter={filter} />;
+  } else if (type === "boss") {
+    // Diamond (rotated square with red-orange fill)
+    const bossColor = { fill: "#3A1A1A", stroke: "#DC2626" };
+    const path = `M ${cx} ${y} L ${x + w} ${cy} L ${cx} ${y + h} L ${x} ${cy} Z`;
+    return <path d={path} fill={bossColor.fill} stroke={bossColor.stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} filter={filter} />;
+  } else if (type.startsWith("feature_")) {
+    // Pentagon (angular, purple tint)
+    const angle = (Math.PI * 2) / 5;
+    const r = w / 2;
+    const points = Array.from({ length: 5 }, (_, i) => {
+      const a = angle * i - Math.PI / 2;
+      return `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`;
+    }).join(" ");
+    return <polygon points={points} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} filter={filter} />;
+  } else if (type === "junction") {
+    // Hexagon
+    const angle = (Math.PI * 2) / 6;
+    const r = w / 2;
+    const points = Array.from({ length: 6 }, (_, i) => {
+      const a = angle * i;
+      return `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`;
+    }).join(" ");
+    return <polygon points={points} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} filter={filter} />;
+  } else {
+    // Default: rounded rectangle for corridor, dead_end, etc.
+    return <rect x={x} y={y} width={w} height={h} rx={6} ry={6} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={strokeDasharray} filter={filter} />;
+  }
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ZoneDesigner({
@@ -242,6 +292,14 @@ export default function ZoneDesigner({
   const [zoom, setZoom] = useState(1.0);
   const MIN_ZOOM = 0.25;
   const MAX_ZOOM = 3.0;
+
+  // Layout engine toggle
+  const [useElkLayout, setUseElkLayout] = useState(true);
+  const [elkLayoutError, setElkLayoutError] = useState<string | null>(null);
+  
+  // Layout results (computed asynchronously for ELK, sync for BFS)
+  const [positions, setPositions] = useState<Map<string, { x: number; y: number; z: number }>>(new Map());
+  const [layoutLoading, setLayoutLoading] = useState(false);
 
   // Pan
   const [panX, setPanX] = useState(0);
@@ -438,20 +496,42 @@ export default function ZoneDesigner({
     }
   }, [selectedExit, exits]);
 
-  // ─── Layout computation ─────────────────────────────────
-  const { positions, roomMap, interZoneExits, intraZoneExits } = useMemo(() => {
+  // ─── Layout computation (async for ELK, sync for BFS) ──────────────────────
+  useEffect(() => {
     if (rooms.length === 0) {
-      return {
-        positions: new Map<string, { x: number; y: number; z: number }>(),
-        roomMap: new Map<string, ZoneRoomDefinition>(),
-        interZoneExits: [] as ZoneExitDefinition[],
-        intraZoneExits: [] as ZoneExitDefinition[],
-      };
+      setPositions(new Map());
+      return;
     }
 
     const { rooms: layoutInput, entryRoomSlug } = zoneToLayoutInput(rooms, exits);
-    const pos = computeLayout(layoutInput, entryRoomSlug);
 
+    if (useElkLayout) {
+      // Async ELK layout
+      setLayoutLoading(true);
+      setElkLayoutError(null);
+      computeElkLayout(layoutInput, entryRoomSlug)
+        .then((pos) => {
+          setPositions(pos);
+          setLayoutLoading(false);
+        })
+        .catch((err) => {
+          console.warn('ELK layout failed, falling back to BFS:', err);
+          setElkLayoutError(err.message || 'ELK layout failed');
+          // Fallback to BFS
+          const pos = computeLayout(layoutInput, entryRoomSlug);
+          setPositions(pos);
+          setLayoutLoading(false);
+        });
+    } else {
+      // Sync BFS layout
+      setElkLayoutError(null);
+      const pos = computeLayout(layoutInput, entryRoomSlug);
+      setPositions(pos);
+    }
+  }, [rooms, exits, useElkLayout]);
+
+  // ─── Derived layout data ────────────────────────────────────────────────────
+  const { roomMap, interZoneExits, intraZoneExits } = useMemo(() => {
     const rMap = new Map<string, ZoneRoomDefinition>();
     for (const room of rooms) rMap.set(room.slug, room);
 
@@ -462,8 +542,9 @@ export default function ZoneDesigner({
       else intra.push(exit);
     }
 
-    return { positions: pos, roomMap: rMap, interZoneExits: inter, intraZoneExits: intra };
+    return { roomMap: rMap, interZoneExits: inter, intraZoneExits: intra };
   }, [rooms, exits]);
+
 
   // ─── Floor bounds ───────────────────────────────────────
   const floorBounds = useMemo(() => computeFloorBounds(positions), [positions]);
@@ -1375,6 +1456,32 @@ export default function ZoneDesigner({
 
         <div className="flex-1" />
 
+        {/* Layout engine toggle */}
+        <div className="flex items-center gap-1 border-l border-[#2A2B35] pl-2">
+          <button
+            onClick={() => setUseElkLayout(!useElkLayout)}
+            className={`px-2 py-1.5 border text-xs rounded transition-colors ${
+              useElkLayout
+                ? "border-[#7B4FA0] text-[#C9A84C] bg-[#2A1A3A]"
+                : "border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:border-[#3A3B45]"
+            }`}
+            style={{ fontFamily: "var(--font-sans)" }}
+            title={`Layout: ${useElkLayout ? 'ELK (hierarchical)' : 'BFS (legacy)'} - Click to toggle`}
+          >
+            {useElkLayout ? "ELK" : "BFS"}
+          </button>
+          {layoutLoading && (
+            <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
+              ⏳
+            </span>
+          )}
+          {elkLayoutError && (
+            <span className="text-[#F59E0B] text-xs" style={{ fontFamily: "var(--font-sans)" }} title={elkLayoutError}>
+              ⚠️
+            </span>
+          )}
+        </div>
+
         {/* Zoom controls */}
         <div className="flex items-center gap-1 border-l border-[#2A2B35] pl-2">
           <button
@@ -1482,6 +1589,39 @@ export default function ZoneDesigner({
                 <marker id="arrowhead-oneway-selected" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
                   <polygon points="0 0, 10 3.5, 0 7" fill="#C9A84C" />
                 </marker>
+
+                {/* Direction-based exit gradients */}
+                <linearGradient id="exit-ns-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#3B82F6" />
+                  <stop offset="100%" stopColor="#06B6D4" />
+                </linearGradient>
+                <linearGradient id="exit-ew-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#F59E0B" />
+                  <stop offset="100%" stopColor="#FB923C" />
+                </linearGradient>
+                <linearGradient id="exit-ud-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#A78BFA" />
+                  <stop offset="100%" stopColor="#6366F1" />
+                </linearGradient>
+
+                {/* Glow & depth effects */}
+                <filter id="selection-glow">
+                  <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                  <feMerge>
+                    <feMergeNode in="coloredBlur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+                <filter id="drop-shadow">
+                  <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.5"/>
+                </filter>
+                <filter id="portal-glow">
+                  <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                  <feMerge>
+                    <feMergeNode in="coloredBlur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
               </defs>
 
               {/* ── Exit pair edges (current floor) ─────────────── */}
@@ -1499,6 +1639,21 @@ export default function ZoneDesigner({
                 const isOrphanRev = pair.reverse ? orphanExitIds.has(pair.reverse.id) : false;
                 const isOrphan = isOrphanFwd || isOrphanRev;
 
+                // Compute Bézier control points (perpendicular offset)
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                const perpX = -dy / len;
+                const perpY = dx / len;
+                const offset = 50;
+                const cp1x = x1 + dx * 0.33 + perpX * offset;
+                const cp1y = y1 + dy * 0.33 + perpY * offset;
+                const cp2x = x1 + dx * 0.67 + perpX * offset;
+                const cp2y = y1 + dy * 0.67 + perpY * offset;
+                const pathD = `M ${x1} ${y1} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x2} ${y2}`;
+
+                // Direction-based coloring
+                const dir = pair.forward.direction;
                 let strokeColor: string;
                 let markerEnd: string | undefined;
                 let strokeWidth: number;
@@ -1506,7 +1661,7 @@ export default function ZoneDesigner({
 
                 if (isSelected) {
                   strokeColor = "#C9A84C";
-                  strokeWidth = 2.5;
+                  strokeWidth = 3;
                   markerEnd = pair.isBidirectional ? undefined : "url(#arrowhead-oneway-selected)";
                 } else if (isOrphan) {
                   strokeColor = "#EF4444";
@@ -1514,12 +1669,19 @@ export default function ZoneDesigner({
                   strokeDash = "6 3";
                   markerEnd = "url(#arrowhead-orphan)";
                 } else if (pair.isBidirectional) {
-                  strokeColor = "#4A4B55";
+                  if (dir === "north" || dir === "south") {
+                    strokeColor = "url(#exit-ns-gradient)";
+                  } else if (dir === "east" || dir === "west") {
+                    strokeColor = "url(#exit-ew-gradient)";
+                  } else {
+                    strokeColor = "url(#exit-ud-gradient)";
+                  }
                   strokeWidth = 1.5;
                   markerEnd = undefined;
                 } else {
-                  strokeColor = ONE_WAY_COLOR;
-                  strokeWidth = 2;
+                  // One-way: saturated amber with arrow
+                  strokeColor = "#F59E0B";
+                  strokeWidth = 2.5;
                   markerEnd = "url(#arrowhead-oneway)";
                 }
 
@@ -1534,14 +1696,16 @@ export default function ZoneDesigner({
                     onContextMenu={(e) => handleExitContextMenu(e, pair.forward.id)}
                     style={{ cursor: "pointer" }}
                   >
-                    <line
-                      x1={x1} y1={y1} x2={x2} y2={y2}
+                    <path
+                      d={pathD}
                       stroke={strokeColor}
                       strokeWidth={strokeWidth}
                       strokeDasharray={strokeDash}
+                      fill="none"
                       markerEnd={markerEnd}
                     />
-                    <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={12} />
+                    {/* Invisible wider path for easier click targeting */}
+                    <path d={pathD} stroke="transparent" strokeWidth={12} fill="none" />
                     {hasModifiers && (
                       <text
                         x={lx} y={ly}
@@ -1588,6 +1752,7 @@ export default function ZoneDesigner({
                     onClick={(e) => { e.stopPropagation(); handleExitClick(exit.id); }}
                     onContextMenu={(e) => handleExitContextMenu(e, exit.id)}
                     style={{ cursor: "pointer" }}
+                    filter={isSelected ? undefined : "url(#portal-glow)"}
                   >
                     <line
                       x1={sx} y1={sy} x2={ex} y2={ey}
@@ -1682,18 +1847,18 @@ export default function ZoneDesigner({
                         : "pointer",
                     }}
                   >
-                    <rect
-                      x={x} y={y} width={NODE_W} height={NODE_H} rx={6} ry={6}
-                      fill={color.fill}
-                      stroke={
-                        isSelected ? "#22D3EE"
-                          : isConnectSource ? "#3A7D7B"
-                          : isDisconnected ? "#B8860B"
-                          : color.stroke
-                      }
-                      strokeWidth={isSelected || isConnectSource ? 3 : isDisconnected ? 2 : 1.5}
-                      strokeDasharray={isConnectSource ? "4 2" : undefined}
-                    />
+                    {renderRoomShape(
+                      room.type,
+                      x, y, NODE_W, NODE_H,
+                      color.fill,
+                      isSelected ? "#22D3EE"
+                        : isConnectSource ? "#3A7D7B"
+                        : isDisconnected ? "#B8860B"
+                        : color.stroke,
+                      isSelected || isConnectSource ? 3 : isDisconnected ? 2 : 1.5,
+                      isConnectSource ? "4 2" : undefined,
+                      isSelected ? "url(#selection-glow) url(#drop-shadow)" : undefined,
+                    )}
                     {showLabels && (
                       <text
                         x={x + NODE_W / 2} y={y + NODE_H / 2 - 4}
