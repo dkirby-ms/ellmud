@@ -2072,3 +2072,16 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 
 **Key design decision:** `dev` category added to `isNonCombatZone` so the debug hub behaves like hub/social zones (no collapse timer, no creature AI, no combat). This is correct — designers shouldn't worry about getting killed while testing.
 
+
+### 2026-04-04: PR Review — #260 Rejection (Elminster)
+
+**Sprint 3 PR Review:** Elminster reviewed #260 (Repurpose Refuge) and flagged a blocking issue.
+
+**Finding:** PR #260 modified the seed migration file (003_seed_zones.sql) to change Refuge category from `hub` → `dev`. However, this change will not apply to existing databases where the migration has already run. The migration runner tracks applied files by filename — once applied, seed files are never re-executed.
+
+**Decision:** Data modifications to existing rows must use a **new numbered migration file** (e.g., `014_repurpose_refuge.sql`) with UPDATE statements. Modifying seed files is acceptable only for fresh installations (both seed update AND new migration required).
+
+**Action:** PR #260 needs `014_repurpose_refuge.sql` migration before merge. This is now a documented team rule per the "Migration Discipline" decision.
+
+**Status:** Rejection filed to decisions.md. PR author (Jarlaxle #239 work) to add migration and push revision.
+

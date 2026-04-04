@@ -2786,3 +2786,12 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 
 **No action required** — stronghold architecture is compatible with corpse system TTL and item looting workflow. Death handler can route corpses to any zone type.
 
+
+### 2026-04-04: PR Review — Approvals (Elminster & Minsc)
+
+**Sprint 3 PR Review:** Elminster reviewed #258 and #261 (drizzt PRs) and approved both.
+
+**Sprint 4 PR Review:** Minsc reviewed #263 (drizzt PR) and approved.
+
+**Status:** Three PRs cleared for merge. No blockers.
+
