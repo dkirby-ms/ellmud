@@ -270,6 +270,7 @@ function roomsToFlowNodes(
         lootCount: room.lootContainers?.length ?? 0,
         hazardCount: room.hazards?.length ?? 0,
         showLabels,
+        properties: Array.isArray(room.properties) ? room.properties : [],
       },
     });
   }

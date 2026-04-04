@@ -213,10 +213,16 @@ export function ZoneDesignerFlow({
           position="top-right"
         />
         
-        {/* Minimap overview */}
+        {/* Minimap overview — type-based coloring (4.4) */}
         <MiniMap
           nodeColor={(node) => {
-            return node.selected ? '#7B4FA0' : '#4A4B55';
+            if (node.selected) return '#22D3EE';
+            const nodeType = (node.data as Record<string, unknown>)?.type as string | undefined;
+            if (nodeType === 'entry') return '#2D6B4F';
+            if (nodeType === 'boss') return '#DC2626';
+            if (nodeType?.startsWith('feature_')) return '#7B4FA0';
+            if (nodeType === 'junction') return '#3A7D7B';
+            return '#4A4B55';
           }}
           maskColor="rgba(0, 0, 0, 0.6)"
           position="bottom-left"
@@ -227,7 +233,7 @@ export function ZoneDesignerFlow({
         />
       </ReactFlow>
       
-      {/* Floor indicator */}
+      {/* Floor indicator (4.4) */}
       <div
         style={{
           position: 'absolute',
@@ -241,9 +247,10 @@ export function ZoneDesignerFlow({
           fontSize: '14px',
           fontWeight: 500,
           pointerEvents: 'none',
+          fontFamily: 'var(--font-mono)',
         }}
       >
-        Floor: {floor}
+        {floor === 0 ? 'F0' : floor > 0 ? `F+${floor}` : `F${floor}`}
       </div>
     </div>
   );

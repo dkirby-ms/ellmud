@@ -20,6 +20,7 @@ export interface RoomNodeData {
   lootCount: number;
   hazardCount: number;
   showLabels: boolean;
+  properties: string[];
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -36,6 +37,12 @@ const FEATURE_COLOR = { fill: '#2A1A3A', stroke: '#7B4FA0' };
 const DEFAULT_COLOR = { fill: '#1C1D27', stroke: '#4A4B55' };
 const NODE_W = 50;
 const NODE_H = 50;
+
+const PROPERTY_ICONS: Record<string, string> = {
+  heavy_door: '🚪',
+  cavern: '🕳',
+  water: '💧',
+};
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -92,7 +99,7 @@ export function ZoneRoomNode(props: { data: RoomNodeData; selected?: boolean }) 
   if (selected) {
     strokeColor = '#22D3EE'; // cyan selection
     strokeWidth = 3;
-    filter = 'drop-shadow(0 0 6px #22D3EE)';
+    filter = 'drop-shadow(0 0 8px rgba(34,211,238,0.7)) drop-shadow(0 2px 4px rgba(0,0,0,0.5))';
   } else if (data.isConnectSource) {
     strokeColor = '#3A7D7B'; // teal connect mode
     strokeWidth = 3;
@@ -304,6 +311,41 @@ export function ZoneRoomNode(props: { data: RoomNodeData; selected?: boolean }) 
         >
           ⟐
         </span>
+      )}
+
+      {/* Property tags (4.6) */}
+      {data.properties && data.properties.length > 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: `${NODE_H + 2}px`,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            gap: '2px',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+          }}
+        >
+          {data.properties.map((prop) => (
+            <span
+              key={prop}
+              style={{
+                background: 'rgba(28, 29, 39, 0.85)',
+                color: '#8A8B95',
+                padding: '0 2px',
+                borderRadius: '2px',
+                fontSize: '6px',
+                fontFamily: 'var(--font-mono)',
+                border: '1px solid #3A3B45',
+                lineHeight: '1.2',
+              }}
+              title={prop}
+            >
+              {PROPERTY_ICONS[prop] ?? '•'} {prop}
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );
