@@ -16,6 +16,7 @@
 
 ## Learnings
 
+- **Phase 4 visual enhancements (2026-04-11):** PR #287 for issue #271. Phase 3 already delivered Bézier curves, direction gradients, type-based shapes, and basic selection glow. Phase 4 adds: edge hover brightening (useState + CSS transitions), enhanced glow (drop-shadow filters), type-based MiniMap coloring (entry=green, boss=red, feature=purple), direction emoji labels (↑↓→←▲▼) with fade-in on hover/selection, and room property tags (heavy_door/cavern/water) rendered below nodes. Properties are passed from ZoneDesigner via the node data interface.
 - **Zone Designer migration issues created (2026-04-04):** Tracking issue #266 (elkjs + ReactFlow Migration epic). Phase issues: #267 (Phase 0: Foundation), #268 (Phase 1: Visual Polish), #269 (Phase 2: elkjs Layout Swap), #270 (Phase 3: ReactFlow Integration), #271 (Phase 4: Visual Enhancements), #272 (Phase 5: Advanced Features), #273 (Phase 6: Cleanup). All labeled `enhancement` in `dkirby-ms/ellmud`.
 - **Zone API uses a separate base path:** Zones use `/admin/api/zones/*` not the generic `/admin/api/content/{type}` path. Created `zone-api.ts` wrapping `adminFetch` for zone/room/exit CRUD.
 - **`adminFetch` was not exported:** Had to add `export` to the function declaration in `admin-api.ts` so `zone-api.ts` could import it.
