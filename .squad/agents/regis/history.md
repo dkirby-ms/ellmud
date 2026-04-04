@@ -1215,6 +1215,9 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 - `computeLayout.ts` cannot be deleted yet: `useExplorationMap.ts` + 6 other components import its `RoomPosition` type
 - ReactFlow's built-in Controls component replaces all manual zoom/pan UI — no custom toolbar needed
 - Keeping `canvasRef` on the container div is still useful for click-through handling even with ReactFlow
+- Search/filter state lives in ZoneDesigner.tsx and applies via node/edge data fields (`searchMatch`, `dimmed`), not ReactFlow visibility — keeps all nodes in the graph for spatial context
+- Direction filtering uses edge data's `direction` field grouped as ns/ew/ud — matches the existing gradient color scheme
+- Ctrl+F keyboard shortcut needs `e.preventDefault()` to suppress browser's native find dialog
 
 ---
 
