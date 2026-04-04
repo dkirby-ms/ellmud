@@ -938,3 +938,49 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 4. **d3-force augmentation** — moderate effort, good for organic layouts but less MUD-appropriate
 5. **ReactFlow adoption** — high effort full rewrite, best long-term DX but loses MUD aesthetic control
 6. **Visual polish (non-layout)** — low effort incremental improvements to the existing SVG renderer
+
+### 2026-04-04: Phase 0 — elkjs + ReactFlow Foundation
+
+**Request:** Implement Phase 0 of the Zone Designer migration (Issue #267) — install dependencies and create adapter skeletons.
+
+**Changes completed:**
+- ✅ Installed `elkjs@0.11.1` for hierarchical graph layout with constraint-based positioning
+- ✅ Installed `@xyflow/react@12.10.2` for interactive node/edge visualization
+- ✅ Created `packages/client/src/map/elkLayout.ts` — ELK layout adapter skeleton:
+  - Converts rooms → ELK nodes with compass-direction ports (NORTH/SOUTH/EAST/WEST/UP/DOWN)
+  - Converts exits → ELK edges connecting ports via `sources`/`targets` arrays
+  - Async `computeElkLayout(rooms, entryRoomSlug, options?)` using ELK's WASM worker
+  - Maps ELK pixel coordinates back to 100×100 grid system
+  - Z-axis handling stubbed at 0 (multi-floor support deferred to Phase 1+)
+  - Default config: `elk.algorithm='layered'`, direction='RIGHT', edgeRouting='ORTHOGONAL', 100px spacing
+- ✅ Created `packages/client/src/components/map/ZoneDesignerFlow.tsx` — ReactFlow wrapper skeleton:
+  - Renders `<ReactFlow>` with Background grid (100px), Controls, MiniMap
+  - Custom `RoomNode` component with basic MUD-style theming
+  - Props: nodes, edges, onNodeClick, onEdgeClick, onConnect, selectedNodeId, selectedEdgeId, floor
+  - Floor indicator overlay (placeholder for multi-floor UI)
+  - **Not yet integrated into ZoneDesigner.tsx** — standalone component for Phase 1
+- ✅ Verified: shared build, client typecheck, client tests, full build all pass
+
+**Key learnings:**
+- **@types/elkjs doesn't exist** — elkjs ships with built-in TypeScript types
+- **ElkPort uses `layoutOptions`, not `properties`** for port configuration like `'port.side': 'NORTH'`
+- **@xyflow/react BackgroundVariant is an enum**, not a string literal — must import and use `BackgroundVariant.Lines`
+- **ELK coordinate system mismatch:** ELK uses pixel coordinates, computeLayout uses a 100×100 grid. The adapter divides by 100 (CELL_SIZE) to normalize.
+- **ELK ports map to compass directions:** Each node gets 6 ports (N/S/E/W/Up/Down). Edges connect via port IDs like `${roomId}_NORTH` → `${targetId}_SOUTH`.
+- **ReactFlow selection is controlled** — nodes/edges get `selected: true/false` via prop mapping, not internal state
+
+**Files created:**
+- `packages/client/src/map/elkLayout.ts` (282 lines)
+- `packages/client/src/components/map/ZoneDesignerFlow.tsx` (213 lines)
+
+**PR:** https://github.com/dkirby-ms/ellmud/pull/274  
+**Branch:** `squad/267-phase0-foundation`  
+**Status:** Ready for review
+
+**Next steps (Phase 1):**
+- Wire up `ZoneDesignerFlow` as optional toggle in `ZoneDesigner.tsx`
+- Convert zone rooms/exits → ReactFlow nodes/edges
+- Implement room type styling (colors, icons)
+- Add compass-direction port handles to RoomNode
+- Support drag-to-reposition
+- Custom edge rendering for portals/one-way/inter-floor exits
