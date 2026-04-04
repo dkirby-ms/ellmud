@@ -984,3 +984,65 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - Add compass-direction port handles to RoomNode
 - Support drag-to-reposition
 - Custom edge rendering for portals/one-way/inter-floor exits
+---
+
+### 2026-04-04: Zone Designer Phase 2 — ELK Layout Engine Integration (#269)
+
+**Scope:** Complete the elkLayout adapter and integrate it into ZoneDesigner.tsx with a toggle UI
+
+**Context:**
+- Phase 0 created the skeleton elkLayout.ts with basic ELK graph construction
+- Phase 1 (#268) is being worked on simultaneously on a separate branch (exit rendering visuals)
+- Phase 2 focuses on layout computation only — no changes to SVG rendering
+
+**Work completed:**
+- ✅ **elkLayout.ts — Multi-floor support:**
+  - Added `assignFloors()` function: BFS traversal assigns z-levels based on up/down exit paths
+  - Entry room starts at z=0, each 'up' increments z, 'down' decrements z
+  - Handles disconnected subgraphs (uses first room if entry missing)
+- ✅ **elkLayout.ts — Per-floor layout:**
+  - Groups rooms by floor via floor assignments
+  - Runs ELK separately on each floor with only cardinal exits (filters up/down)
+  - Filters portal exits (inter-zone targets not in current floor's room set)
+- ✅ **elkLayout.ts — Coordinate mapping:**
+  - Updated `extractPositions()` to accept floor parameter
+  - Maps ELK pixel output → 100×100 grid cells (÷ CELL_SIZE)
+  - Assigns z-value from floor assignment, not hardcoded 0
+- ✅ **ZoneDesigner.tsx — Async layout integration:**
+  - Added `useElkLayout` state (default: true)
+  - Added `elkLayoutError` state for error tracking
+  - Added `positions` state and `layoutLoading` state
+  - Refactored layout from useMemo → useEffect for async ELK computation
+  - Separated roomMap/exit categorization into separate useMemo
+  - Fallback to BFS on ELK error with console.warn
+- ✅ **ZoneDesigner.tsx — Toggle UI:**
+  - Added layout engine toggle button before zoom controls
+  - Button shows "ELK" (purple accent when active) or "BFS" (gray when inactive)
+  - Loading spinner (⏳) displayed during async layout
+  - Error badge (⚠️) with tooltip on ELK failure
+  - Keyboard shortcut: click to toggle between engines for comparison
+- ✅ **Testing:**
+  - All 146 tests pass
+  - TypeScript compiles clean
+  - Both packages (shared, client) build successfully
+
+**Key learnings:**
+- **ELK is async (WASM)** — requires useEffect instead of useMemo for layout computation
+- **Filter exits carefully** — up/down must be excluded from ELK edges (z-axis handled separately), portal exits must be filtered per-floor
+- **Floor assignment via BFS** — traversing up/down exits in BFS order ensures consistent z-level assignment
+- **Fallback gracefully** — catching ELK errors and falling back to BFS provides robustness during development/debugging
+- **Loading states matter** — async layout needs visual feedback (loading spinner) to avoid UI confusion during recomputation
+
+**Files modified:**
+- `packages/client/src/map/elkLayout.ts` (+47 lines floor logic, ~299 lines total)
+- `packages/client/src/pages/admin/ZoneDesigner.tsx` (+28 lines toggle UI, refactored layout computation)
+
+**PR:** https://github.com/dkirby-ms/ellmud/pull/275  
+**Branch:** `squad/269-phase2-elk-layout`  
+**Status:** Ready for review
+
+**Next steps (Phase 3):**
+- Manual verification: load production zones, compare ELK vs BFS crossing counts
+- Performance profiling on large graphs (100+ rooms)
+- Consider incremental layout updates (preserve positions on edit)
+- Optimize ELK parameters (node spacing, layer spacing, edge routing strategy)
