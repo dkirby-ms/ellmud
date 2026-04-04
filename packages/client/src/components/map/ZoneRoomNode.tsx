@@ -21,6 +21,10 @@ export interface RoomNodeData {
   hazardCount: number;
   showLabels: boolean;
   properties: string[];
+  /** True when this node matches the active search query */
+  searchMatch?: boolean;
+  /** True when a search is active but this node does NOT match */
+  dimmed?: boolean;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -100,6 +104,10 @@ export function ZoneRoomNode(props: { data: RoomNodeData; selected?: boolean }) 
     strokeColor = '#22D3EE'; // cyan selection
     strokeWidth = 3;
     filter = 'drop-shadow(0 0 8px rgba(34,211,238,0.7)) drop-shadow(0 2px 4px rgba(0,0,0,0.5))';
+  } else if (data.searchMatch) {
+    strokeColor = '#22D3EE';
+    strokeWidth = 2.5;
+    filter = 'drop-shadow(0 0 6px rgba(34,211,238,0.5))';
   } else if (data.isConnectSource) {
     strokeColor = '#3A7D7B'; // teal connect mode
     strokeWidth = 3;
@@ -124,6 +132,8 @@ export function ZoneRoomNode(props: { data: RoomNodeData; selected?: boolean }) 
         height: `${NODE_H}px`,
         position: 'relative',
         cursor: 'pointer',
+        opacity: data.dimmed ? 0.25 : 1,
+        transition: 'opacity 0.2s ease',
       }}
     >
       <svg width={NODE_W} height={NODE_H} xmlns="http://www.w3.org/2000/svg">

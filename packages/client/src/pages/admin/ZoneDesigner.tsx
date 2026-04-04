@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, HelpCircle } from "lucide-react";
+import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, HelpCircle, Search, Filter } from "lucide-react";
 import { computeElkLayout, type LayoutRoom } from "../../map/elkLayout.js";
 import { FloorSelector } from "../../components/map/FloorSelector.js";
 import { computeFloorBounds } from "../../components/map/useFloorFilter.js";
@@ -337,6 +337,12 @@ export default function ZoneDesigner({
   // Legend panel
   const [showLegend, setShowLegend] = useState(false);
 
+  // Search & filter (5.2)
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearchBar, setShowSearchBar] = useState(false);
+  const [directionFilter, setDirectionFilter] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   // Resizable panel
   const [panelWidth, setPanelWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
@@ -380,18 +386,29 @@ export default function ZoneDesigner({
     })();
   }, []);
 
-  // Escape key clears selection
+  // Escape key clears selection; Ctrl/Cmd+F focuses search (5.2)
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        setSelectedRoom(null);
-        setSelectedExit(null);
-        setConnectTarget(null);
+        if (showSearchBar) {
+          setShowSearchBar(false);
+          setSearchQuery("");
+          setDirectionFilter(null);
+        } else {
+          setSelectedRoom(null);
+          setSelectedExit(null);
+          setConnectTarget(null);
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault();
+        setShowSearchBar(true);
+        setTimeout(() => searchInputRef.current?.focus(), 0);
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [showSearchBar]);
 
   // Sync exit edit form when exit selection changes
   useEffect(() => {
@@ -611,9 +628,26 @@ export default function ZoneDesigner({
     return ids;
   }, [rooms, exits]);
 
+  // ─── Search match set (5.2) ──────────────────────────────────────────────────
+  const searchMatchSlugs = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return null; // null = no active search
+    const matched = new Set<string>();
+    for (const room of rooms) {
+      if (
+        room.name.toLowerCase().includes(q) ||
+        room.slug.toLowerCase().includes(q) ||
+        room.type.toLowerCase().includes(q)
+      ) {
+        matched.add(room.slug);
+      }
+    }
+    return matched;
+  }, [searchQuery, rooms]);
+
   // ─── ReactFlow nodes & edges ────────────────────────────────────────────────
   const flowNodes = useMemo(() => {
-    return roomsToFlowNodes(
+    const nodes = roomsToFlowNodes(
       rooms,
       positions,
       currentFloor,
@@ -624,17 +658,46 @@ export default function ZoneDesigner({
       showLabels,
       mode,
     );
-  }, [rooms, positions, currentFloor, selectedRoom, disconnectedSlugs, orphanExitIds, exits, showLabels, mode]);
+    // Apply search match/dim styling
+    if (searchMatchSlugs !== null) {
+      for (const node of nodes) {
+        const isMatch = searchMatchSlugs.has(node.id);
+        (node.data as Record<string, unknown>).searchMatch = isMatch;
+        (node.data as Record<string, unknown>).dimmed = !isMatch;
+      }
+    }
+    return nodes;
+  }, [rooms, positions, currentFloor, selectedRoom, disconnectedSlugs, orphanExitIds, exits, showLabels, mode, searchMatchSlugs]);
 
   const flowEdges = useMemo(() => {
-    return exitsToFlowEdges(
+    let edges = exitsToFlowEdges(
       exitPairs,
       interZoneExits,
       positions,
       currentFloor,
       orphanExitIds,
     );
-  }, [exitPairs, interZoneExits, positions, currentFloor, orphanExitIds]);
+    // Apply direction filter (5.2): hide edges that don't match the selected direction group
+    if (directionFilter) {
+      const allowedDirs = directionFilter === "ns" ? ["north", "south"]
+        : directionFilter === "ew" ? ["east", "west"]
+        : directionFilter === "ud" ? ["up", "down"]
+        : [];
+      edges = edges.filter((e) => {
+        const dir = (e.data as Record<string, unknown>)?.direction as string | undefined;
+        return dir ? allowedDirs.includes(dir) : true;
+      });
+    }
+    // Apply search dim to edges: dim edges not connecting matched rooms
+    if (searchMatchSlugs !== null) {
+      for (const edge of edges) {
+        const srcMatch = searchMatchSlugs.has(edge.source);
+        const tgtMatch = searchMatchSlugs.has(edge.target);
+        (edge.data as Record<string, unknown>).dimmed = !(srcMatch || tgtMatch);
+      }
+    }
+    return edges;
+  }, [exitPairs, interZoneExits, positions, currentFloor, orphanExitIds, directionFilter, searchMatchSlugs]);
 
   // ─── Click handlers ─────────────────────────────────────
   function handleRoomClick(slug: string) {
@@ -1393,7 +1456,88 @@ export default function ZoneDesigner({
             Cancel
           </button>
         )}
+
+        {/* Search toggle (5.2) */}
+        <button
+          onClick={() => {
+            setShowSearchBar(!showSearchBar);
+            if (!showSearchBar) setTimeout(() => searchInputRef.current?.focus(), 0);
+          }}
+          className={`px-2 py-1.5 rounded text-xs flex items-center gap-1 transition-colors ${
+            showSearchBar || searchQuery || directionFilter
+              ? "bg-[#22D3EE]/20 text-[#22D3EE] border border-[#22D3EE]/40"
+              : "border border-[#4A4B55] text-[#8A8B95] hover:bg-[#1C1D27]"
+          }`}
+          style={{ fontFamily: "var(--font-sans)" }}
+          title="Search & Filter (Ctrl+F)"
+        >
+          <Search className="w-3 h-3" />
+        </button>
       </div>
+
+      {/* ─── Search & filter bar (5.2) ────────────────────── */}
+      {showSearchBar && (
+        <div className="px-4 py-2 border-b border-[#2A2B35] flex items-center gap-3 bg-[#1C1D27]/60" style={{ fontFamily: "var(--font-sans)" }}>
+          {/* Room search input */}
+          <div className="flex items-center gap-1.5 flex-1 max-w-xs">
+            <Search className="w-3 h-3 text-[#8A8B95] shrink-0" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search rooms by name, slug, or type…"
+              className="flex-1 bg-transparent border-b border-[#4A4B55] text-[#E8E0D0] text-xs py-1 px-1 focus:border-[#22D3EE] focus:outline-none placeholder:text-[#6A6B75]"
+              style={{ fontFamily: "var(--font-mono)" }}
+            />
+            {searchQuery && (
+              <span className="text-[#8A8B95] text-[10px] whitespace-nowrap">
+                {searchMatchSlugs?.size ?? 0} match{(searchMatchSlugs?.size ?? 0) !== 1 ? "es" : ""}
+              </span>
+            )}
+          </div>
+
+          {/* Direction filter toggles */}
+          <div className="flex items-center gap-1">
+            <Filter className="w-3 h-3 text-[#8A8B95] shrink-0" />
+            {[
+              { key: "ns", label: "N/S", colors: "border-[#3B82F6] text-[#3B82F6]", active: "bg-[#3B82F6]/20" },
+              { key: "ew", label: "E/W", colors: "border-[#F59E0B] text-[#F59E0B]", active: "bg-[#F59E0B]/20" },
+              { key: "ud", label: "U/D", colors: "border-[#A78BFA] text-[#A78BFA]", active: "bg-[#A78BFA]/20" },
+            ].map(({ key, label, colors, active }) => (
+              <button
+                key={key}
+                onClick={() => setDirectionFilter(directionFilter === key ? null : key)}
+                className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${
+                  directionFilter === key
+                    ? `${colors} ${active}`
+                    : "border-[#3A3B45] text-[#6A6B75] hover:text-[#8A8B95]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Clear all filters */}
+          {(searchQuery || directionFilter) && (
+            <button
+              onClick={() => { setSearchQuery(""); setDirectionFilter(null); }}
+              className="px-2 py-0.5 text-[#8A8B95] hover:text-[#E8E0D0] text-[10px] border border-[#3A3B45] rounded transition-colors"
+            >
+              Clear
+            </button>
+          )}
+
+          {/* Close search bar */}
+          <button
+            onClick={() => { setShowSearchBar(false); setSearchQuery(""); setDirectionFilter(null); }}
+            className="text-[#8A8B95] hover:text-[#E8E0D0]"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
 
       {/* ─── Main area (canvas + side panel) ──────────────── */}
       <div className="flex flex-1 min-h-0">
