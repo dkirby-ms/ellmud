@@ -1550,3 +1550,110 @@ CREATE TABLE zone_definitions (
 - Identified cross-PR architecture observations (client hub detection fragile, faction cache acceptable, stronghold theme diversity deferred)
 - Approved all 7 PRs once corrections applied (PR #260 fix by Drizzt)
 - Verified zero regressions post-merge
+
+---
+
+## 2026-04-04: Zone Designer Migration Architecture
+**Scope:** Long-term strategic redesign of zone designer from hand-rolled BFS + SVG to elkjs + ReactFlow
+
+### Analysis Completed
+- **Current architecture review:**
+  - Layout: `computeLayout.ts` (~2700 lines, 8-phase BFS pipeline, no crossing penalty)
+  - Rendering: `ZoneDesigner.tsx` (~3600 lines, hand-rolled SVG, <line> elements, no routing)
+  - Grid: 100×100 cells with 50×50 room nodes
+  - Features: Room CRUD, exit pairing, floor switching, orphan detection, context menus, insert-room-on-exit
+  
+- **Pain points identified:**
+  - Exit crossings (15–30% unnecessary) make topology hard to trace
+  - No pan/zoom/minimap for large zones (100+ rooms)
+  - No edge routing; straight lines cross visually even when topologically valid
+  - Visual polish ceiling (curves, glow, shape variety require manual SVG work)
+  - Tight coupling of layout + rendering logic
+
+### Decision Approved
+**Strategic direction:** 6-phase migration to elkjs + ReactFlow with visual improvements
+- **Why elkjs:** Proven crossing minimization (Sugiyama algorithm), direction-aware port constraints, Z-axis support, fast (~100–300ms for typical MUD zones)
+- **Why ReactFlow:** Complete pan/zoom/minimap/routing built-in, component-based rendering (decouples UI from graph logic), active maintenance, React-friendly
+- **Why phased:** Each phase delivers standalone value; no big-bang rewrite; parallel work possible; reversible
+
+### Phased Breakdown
+1. **Phase 0 (2–3d):** Dependencies, wrapper modules, verification (no behavior change)
+2. **Phase 1 (1–2w):** Visual polish—Bezier curves, direction coloring, room shapes, glow (isolated SVG work, immediate user value)
+3. **Phase 2 (1–2w):** Layout engine swap to ELK (crossing reduction, coordinate mapping)
+4. **Phase 3 (2–3w):** ReactFlow migration (pan/zoom/minimap, full rendering refactor, major testing)
+5. **Phase 4 (1–2w):** Post-migration polish (curved edges, shape variety leverage ReactFlow, animations)
+6. **Phase 5 (1–2w):** Optional advanced features (undo/redo, search/filter, copy/paste rooms, templates)
+7. **Phase 6 (1w):** Cleanup & deprecation (remove hand-rolled code, update tests, documentation)
+
+### Architecture Decisions Recorded
+- **File:** `.squad/decisions/inbox/elminster-zone-designer-migration-plan.md`
+- **Key points:**
+  - All existing CRUD operations preserved identically across all phases
+  - Portal (inter-zone) exit logic separates from main layout (fallback to BFS if needed)
+  - Z-axis (multi-floor) mapped as ELK layer constraints; verified in Phase 2 & 3
+  - Floor switching pans reset on phase 3; pan position preserved within floor
+  - Comprehensive testing checklist included (Phase 3)
+  - Risk assessment: ELK visual diffs, ReactFlow accessibility, performance regression, Z-axis breakage—all mitigated
+
+### Implementation Pattern
+- **Codebase organization:**
+  - `packages/client/src/map/elkLayout.ts` (NEW; ELK adapter)
+  - `packages/client/src/components/map/ZoneDesignerFlow.tsx` (NEW; ReactFlow wrapper)
+  - `packages/client/src/components/map/nodes/ZoneRoomNode.tsx` (NEW; room card)
+  - `packages/client/src/components/map/edges/ZoneExitEdge.tsx` (NEW; exit line)
+  - `packages/client/src/pages/admin/ZoneDesigner.tsx` (MODIFY; integrate ReactFlow)
+  - `packages/client/src/map/computeLayout.ts` (KEEP; deprecate, used by player minimap)
+
+- **Feature preservation matrix:** All room/exit CRUD, validation, floor switching, context menus, orphan detection, insert-room-on-exit—intact
+  
+- **New capabilities:** Exit crossing minimization (ELK), minimap (ReactFlow), Bezier curves & direction coloring & room shapes (Phase 1 & 4)
+
+### Key Files
+- **Plan:** `/home/saitcho/.copilot/session-state/f6a3b783-2d96-47f3-a91f-4e2737117cc2/plan.md` (20.5 KB, detailed 6-phase breakdown with risk matrix, timeline, success criteria)
+- **Decision:** `.squad/decisions/inbox/elminster-zone-designer-migration-plan.md` (8 KB, architectural decision summary)
+- **Source:** 
+  - `packages/client/src/pages/admin/ZoneDesigner.tsx` (3625 lines)
+  - `packages/client/src/map/computeLayout.ts` (2700+ lines, read first ~100 lines)
+
+### Learnings & Patterns for Future Work
+1. **Phased UI migrations:** Decompose big rewrites into 6–8 week phases where phases 1-2 can run in parallel, phases 3+ depend on prior. Early phases deliver user value (visual polish) while infrastructure (layout engine) is being built.
+
+2. **Rendering + layout decoupling:** Hand-rolled SVG tightly couples layout computation (BFS order, coordinate transformation) with rendering (line drawing, text labels). Separating these into layers (layout adapter → coordinate map → rendering component) makes it easier to swap engines (BFS → ELK) without cascading UI changes.
+
+3. **Compass direction constraints:** Game UIs with directional semantics (north/south/east/west exits) map cleanly to ELK's port-side constraints (NORTH/SOUTH/EAST/WEST), reducing impedance mismatch and making layouts more "correct" (respecting player mental models).
+
+4. **Z-axis as layer assignment:** For multi-floor zones, treating vertical depth (up/down exits) as layer rank constraints (not spatial offsets) preserves 2D layout while encoding floor relationships—cleaner than forcing Z into spatial coordinates.
+
+5. **Feature preservation audit:** Comprehensive feature matrix (CRUD, validation, interactions, new capabilities) essential for phased migrations. Ensures no silent regressions during refactor phases.
+
+6. **Testing as architecture:** Phase 3 includes 16-item testing checklist (node click, edge click, context menu, floor switch, minimap, validation, content badges, etc.). This checklist is part of the architecture plan—not an afterthought.
+
+---
+
+## Learnings
+
+### Architecture Patterns
+- **Phased UI migration pattern:** Long-running UI refactors benefit from 6–8 week phase decomposition with early user-visible value (visual polish) running in parallel with infrastructure work (layout engine). Each phase is independently shippable; later phases depend on prior. Parallelization reduces wall-clock time.
+- **Rendering + layout decoupling:** Separating layout computation from rendering (via an adapter layer) reduces coupling and makes swaps like BFS → ELK less disruptive. Component-based rendering (ReactFlow) vs. hand-rolled SVG further decouples concerns.
+- **Compass direction constraints:** Game UIs with directional semantics map direction strings (north/south/east/west) directly to graph layout engine constraints (ELK port sides), respecting player mental models and improving layout quality.
+- **Z-axis in graph layout:** Multi-floor zones encode vertical relationships as layer rank constraints (not spatial offsets), preserving 2D layout while capturing floor structure.
+- **Feature preservation matrix:** Comprehensive table of CRUD/validation/interactions vs. phases ensures regressions are caught early. Serves as architecture spec + testing guide.
+
+### User Preferences (Inferred from Requirements)
+- **Visual polish matters:** User requested Bezier curves, direction coloring, room shapes, glow—suggests designers spend substantial time in zone designer, value aesthetic clarity
+- **Topology clarity is blocking issue:** 15–30% unnecessary exit crossings mentioned as pain point—suggests current designer makes some zones hard to navigate visually
+- **No breaking changes acceptable:** All existing CRUD operations must work identically; feature parity required across migration
+- **Incremental delivery preferred:** User accepted 6–8 week timeline over 2-week big-bang, indicating preference for steady progress with early wins (Phase 1 visual polish available week 1–3)
+
+### Zone Designer Feature Scope (Verified)
+- **Room operations:** Create, rename, edit type/properties/description, assign NPCs/loot/hazards, delete (all with side panel editing)
+- **Exit operations:** Create bidirectional or one-way exits, edit direction/modifiers (locked/hidden), create portal exits (cross-zone), delete, insert room on exit
+- **Floor switching:** Multi-level zones supported; Z-axis computed from up/down exit graph structure; floor selector shows room counts per floor
+- **Validation:** Entry room required, disconnected room detection, one-way exit warnings (computed in useMemo, displayed in bottom banner)
+- **Context menus:** Room menu (add in 6 directions, edit, copy/paste properties, connect, delete), exit menu (insert room, edit, delete), canvas menu (clear selection)
+- **Orphan management:** Detect exits pointing to non-existent rooms, bulk cleanup or selective removal
+- **Visualization:** Room type colors, portal/floor-exit badges, disconnected room warnings, NPC/loot/hazard content badges, property tags
+- **Interaction:** Select rooms/exits (side panel), hover tooltips, zoom (+ / - / 0 keyboard shortcuts, mouse wheel), pan (drag canvas), legend toggle
+
+---
+
