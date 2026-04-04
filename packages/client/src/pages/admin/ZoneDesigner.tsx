@@ -85,7 +85,7 @@ function roomColor(type: string): { fill: string; stroke: string } {
 
 // ─── Helper: convert zone data → layout input ───────────────────────────────
 
-export function zoneToLayoutInput(
+function zoneToLayoutInput(
   rooms: ZoneRoomDefinition[],
   exits: ZoneExitDefinition[],
 ): { rooms: Map<string, LayoutRoom>; entryRoomSlug: string } {
