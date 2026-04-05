@@ -934,10 +934,13 @@ export class CombatSystem {
     }
 
     // 5. Dodge events (for combatants not striking, fleeing, or repositioning)
-    for (const c of combatants) {
-      const qa = actions.get(c.id)!;
-      if (qa.action === 'dodge' && !qa.newPosition) {
-        events.push(resolveDodge(c));
+    // Suppress during post-combat cooldown — no opponents remain, narration is noise.
+    if (encounter.postCombatCooldown === 0) {
+      for (const c of combatants) {
+        const qa = actions.get(c.id)!;
+        if (qa.action === 'dodge' && !qa.newPosition) {
+          events.push(resolveDodge(c));
+        }
       }
     }
 
