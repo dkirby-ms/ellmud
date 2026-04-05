@@ -15,6 +15,7 @@ import {
   type SwapItemMessage,
   type LoadoutUpdateMessage,
   type PlayerStateMessage,
+  type TelegraphMessage,
   type ZoneTransferMessage,
   type ExploredRoomData,
   type ExplorationDataMessage,
@@ -1084,6 +1085,30 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Track which players need HP updates
     const playersNeedingUpdate = new Set<string>();
 
+    // Send telegraph messages (GDD §6.5)
+    if (tickResult.telegraphs && tickResult.telegraphs.length > 0) {
+      for (const telegraph of tickResult.telegraphs) {
+        // Broadcast telegraph to all players in the encounter
+        this.broadcast(MessageTypes.TELEGRAPH, {
+          creatureId: telegraph.creatureId,
+          creatureName: telegraph.creatureName,
+          abilityName: telegraph.abilityName,
+          remainingTicks: telegraph.remainingTicks,
+          targetId: telegraph.targetId,
+          telegraphText: telegraph.telegraphText,
+        } satisfies TelegraphMessage);
+
+        // Also send a narration for the initial wind-up
+        if (telegraph.remainingTicks === (telegraph.remainingTicks)) {
+          this.broadcast(MessageTypes.NARRATE, {
+            text: telegraph.telegraphText,
+            type: 'combat',
+            timestamp: Date.now(),
+          } satisfies NarrateMessage);
+        }
+      }
+    }
+
     // Send combat event narrations to all clients in relevant rooms
     for (const event of tickResult.events) {
       this.broadcast(MessageTypes.NARRATE, {
@@ -1358,6 +1383,45 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         } else if (action.targetCombatantId) {
           this.combatSystem.submitAction(creature.id, 'strike', action.targetCombatantId);
         }
+        break;
+      }
+      case 'combat_telegraph': {
+        // Handle telegraphed ability (GDD §6.5)
+        if (!action.targetCombatantId || !action.abilityId) break;
+        
+        // Skip against peaceful players
+        const targetPlayer = this.players.get(action.targetCombatantId);
+        if (targetPlayer?.peaceful) break;
+
+        // Find the ability definition from creature template
+        const ability = creature.abilities?.find(a => a.id === action.abilityId);
+        if (!ability) {
+          console.warn(`[ZoneRoom] Creature ${creature.id} tried to telegraph unknown ability ${action.abilityId}`);
+          break;
+        }
+
+        // Register creature as combatant if needed
+        if (!this.combatSystem.getCombatant(creature.id)) {
+          this.combatSystem.registerCombatant(this.creatureManager.toCombatant(creature));
+        }
+        // Register target player as combatant if needed
+        if (!this.combatSystem.getCombatant(action.targetCombatantId)) {
+          const player = this.players.get(action.targetCombatantId);
+          if (player) {
+            const displayName = this.characterNames.get(player.sessionId) ?? player.sessionId;
+            this.combatSystem.registerCombatant(
+              createCombatant(player.sessionId, displayName, player.currentRoomId, true),
+            );
+          }
+        }
+
+        // Initiate combat if not already in combat
+        if (!this.combatSystem.isInCombat(creature.id)) {
+          this.combatSystem.initiateCombat(creature.id, action.targetCombatantId);
+        }
+
+        // Queue the telegraphed ability
+        this.combatSystem.queueTelegraph(creature.id, action.targetCombatantId, ability);
         break;
       }
       case 'combat_dodge': {
