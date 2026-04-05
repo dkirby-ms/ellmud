@@ -482,13 +482,18 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig())} players)`);
 
-    // Send initial system narration using NarrationService
-    const entryNarration = await this.generateNarration('event', playerId, startRoom, 'You step through the rift into a fragment of the dying world...');
-    this.sendNarrate(client, {
-      text: entryNarration,
-      type: 'system',
-      timestamp: Date.now(),
-    });
+    // Send initial system narration using NarrationService (async, don't block join)
+    this.generateNarration('event', playerId, startRoom, 'You step through the rift into a fragment of the dying world...')
+      .then((text) => {
+        this.sendNarrate(client, {
+          text,
+          type: 'system',
+          timestamp: Date.now(),
+        });
+      })
+      .catch((err) => {
+        this.log(`Entry narration error: ${err}`);
+      });
 
     // Send initial room look
     const lookResult = handleLook(this.buildCommandContext(playerState, []));
@@ -1896,7 +1901,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
    * Falls back to the provided fallback text if LLM is unavailable or errors.
    */
   private async generateNarration(
-    narratonType: import('@ellmud/shared').LLMNarrationType,
+    narrativeType: import('@ellmud/shared').LLMNarrationType,
     playerId: string,
     roomId: string,
     fallbackText: string,
@@ -1908,7 +1913,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
       // Build narration context
       const context: import('@ellmud/shared').NarrationContext = {
-        narration_type: narratonType,
+        narration_type: narrativeType,
         room: {
           id: room.id,
           light_level: 1.0, // TODO: implement lighting system

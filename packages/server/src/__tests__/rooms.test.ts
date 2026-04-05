@@ -147,10 +147,13 @@ describe('Zone ZoneRoom (the-refuge)', () => {
       messages.push(data);
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Wait for async narration to arrive
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     expect(messages.length).toBeGreaterThan(0);
-    expect(messages[0]!.type).toBe('system');
+    // Entry narration is now async, so it may arrive after room description
+    const systemNarration = messages.find((msg) => msg.type === 'system');
+    expect(systemNarration).toBeDefined();
 
     await client.leave();
   });
