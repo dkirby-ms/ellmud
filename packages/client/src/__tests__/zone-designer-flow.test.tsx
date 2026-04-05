@@ -301,7 +301,7 @@ describe('ZoneDesignerFlow — minimap', () => {
     );
     const nodeColorFn = MockMiniMap.mock.calls[0][0].nodeColor as (node: Node) => string;
     const color = nodeColorFn({ id: 'x', selected: false, data: { type: 'entry' } } as unknown as Node);
-    expect(color).toBe('#2D6B4F');
+    expect(color).toBe('#4ADE80');
   });
 
   it('minimap nodeColor returns red for boss nodes', () => {
@@ -310,7 +310,7 @@ describe('ZoneDesignerFlow — minimap', () => {
     );
     const nodeColorFn = MockMiniMap.mock.calls[0][0].nodeColor as (node: Node) => string;
     const color = nodeColorFn({ id: 'x', selected: false, data: { type: 'boss' } } as unknown as Node);
-    expect(color).toBe('#DC2626');
+    expect(color).toBe('#EF4444');
   });
 
   it('minimap nodeColor returns purple for feature nodes', () => {
@@ -319,7 +319,7 @@ describe('ZoneDesignerFlow — minimap', () => {
     );
     const nodeColorFn = MockMiniMap.mock.calls[0][0].nodeColor as (node: Node) => string;
     const color = nodeColorFn({ id: 'x', selected: false, data: { type: 'feature_trap' } } as unknown as Node);
-    expect(color).toBe('#7B4FA0');
+    expect(color).toBe('#A78BFA');
   });
 
   it('minimap nodeColor returns teal for junction nodes', () => {
@@ -328,7 +328,7 @@ describe('ZoneDesignerFlow — minimap', () => {
     );
     const nodeColorFn = MockMiniMap.mock.calls[0][0].nodeColor as (node: Node) => string;
     const color = nodeColorFn({ id: 'x', selected: false, data: { type: 'junction' } } as unknown as Node);
-    expect(color).toBe('#3A7D7B');
+    expect(color).toBe('#5EEAD4');
   });
 
   it('minimap nodeColor returns grey for unselected nodes', () => {
@@ -337,7 +337,7 @@ describe('ZoneDesignerFlow — minimap', () => {
     );
     const nodeColorFn = MockMiniMap.mock.calls[0][0].nodeColor as (node: Node) => string;
     const color = nodeColorFn({ id: 'x', selected: false } as Node);
-    expect(color).toBe('#4A4B55');
+    expect(color).toBe('#8A8B95');
   });
 
   it('minimap has dark background and border styling', () => {

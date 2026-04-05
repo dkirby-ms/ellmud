@@ -233,12 +233,14 @@ export function ZoneDesignerFlow({
           nodeColor={(node) => {
             if (node.selected) return '#22D3EE';
             const nodeType = (node.data as Record<string, unknown>)?.type as string | undefined;
-            if (nodeType === 'entry') return '#2D6B4F';
-            if (nodeType === 'boss') return '#DC2626';
-            if (nodeType?.startsWith('feature_')) return '#7B4FA0';
-            if (nodeType === 'junction') return '#3A7D7B';
-            return '#4A4B55';
+            if (nodeType === 'entry') return '#4ADE80';
+            if (nodeType === 'boss') return '#EF4444';
+            if (nodeType?.startsWith('feature_')) return '#A78BFA';
+            if (nodeType === 'junction') return '#5EEAD4';
+            return '#8A8B95';
           }}
+          nodeStrokeColor="#4A4B55"
+          nodeStrokeWidth={1}
           maskColor="rgba(0, 0, 0, 0.6)"
           position="bottom-left"
           style={{

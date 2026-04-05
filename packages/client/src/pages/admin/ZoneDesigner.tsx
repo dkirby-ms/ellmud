@@ -792,14 +792,16 @@ export default function ZoneDesigner({
 
   function handleRoomMouseEnter(e: React.MouseEvent, slug: string) {
     if (hoverTimer) clearTimeout(hoverTimer);
+    // Capture coordinates immediately — React synthetic events are pooled
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const canvasBounds = canvasRef.current?.getBoundingClientRect();
+    if (!canvasBounds) return;
+    const x = rect.left + rect.width / 2 - canvasBounds.left;
+    const y = rect.top - canvasBounds.top;
     const timer = setTimeout(() => {
-      const canvasBounds = canvasRef.current?.getBoundingClientRect();
-      if (!canvasBounds) return;
       setHoveredRoom(slug);
-      setHoverPosition({
-        x: e.clientX - canvasBounds.left,
-        y: e.clientY - canvasBounds.top,
-      });
+      setHoverPosition({ x, y });
     }, 150);
     setHoverTimer(timer);
   }
