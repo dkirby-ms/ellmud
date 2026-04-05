@@ -351,3 +351,32 @@ Rejected because it overweights early damage. Better to keep threat linear and m
 
 **Player-visible threat bar:**  
 Considered for future (UI shows "creature is focusing on you at 75%"). Deferred to Phase 2 because it adds frontend complexity and isn't critical for Phase 1 PvPvE gameplay.
+
+---
+
+### Round 6 — Room Positioning + Combat HUD
+
+**Decision: Threat+reachability must be wired in tick resolution (not just defined)**
+- Context: PR #301 defined `pickCreatureTarget()` and `canReachTarget()` but never called them
+- Resolution: Wired both into `resolveEncounterTick()` — creatures re-evaluate targets each tick, strikes validate range
+- Rationale: Dead code breaks the tactical purpose of positioning (tanks can't hold aggro)
+
+**Decision: Cooldown decrement skips the reposition tick**
+- Context: `positionCooldown` was set to 3 then immediately decremented to 2 in same tick
+- Resolution: Use else-if — if repositioning happened this tick, don't decrement
+- Rationale: Cooldown should last the full 3 ticks per GDD §6.11
+
+**Decision: Flanking bonus is post-damage-calc multiplier**
+- Context: +15% from Flank needs to be applied after armour reduction
+- Resolution: `Math.ceil(finalDamage * 1.15)` after `calculateDamage()`
+- Rationale: Applies to effective damage, not raw attack
+
+**Decision: Rear melee restriction applies to ALL melee combatants**
+- Context: `canReachTarget()` blocks strikes from Rear position and strikes targeting Rear from Front/Flank
+- Resolution: Both player-to-creature AND creature-to-player melee are position-restricted
+- Rationale: GDD §6.11 is symmetric — position rules aren't creature-only
+
+**Decision: 26 pre-existing test failures are from prior PRs**
+- Context: abilities.test.ts (15), auto-attack.test.ts (3), phase2-qa.test.ts (5), etc.
+- Resolution: Not addressed in positioning PR — separate issue
+- Rationale: heavy_strike action isn't handled in strike resolution (`qa.action !== 'strike'` skips it)
