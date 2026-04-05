@@ -67,6 +67,7 @@ export interface AppState {
   token: string | null;
   playerId: string | null;
   email: string | null;
+  username: string | null;
   activeCharacter: CharacterSummary | null;
   room: Room | null;
   messages: TerminalMessage[];
@@ -101,6 +102,7 @@ export const initialState: AppState = {
   token: null,
   playerId: null,
   email: null,
+  username: null,
   activeCharacter: null,
   room: null,
   messages: [],
@@ -132,7 +134,7 @@ export const initialState: AppState = {
 const MAX_SOUND_CUES = 20;
 
 export type AppAction =
-  | { type: 'LOGIN_SUCCESS'; token: string; playerId: string; email?: string }
+  | { type: 'LOGIN_SUCCESS'; token: string; playerId: string; email?: string; username?: string }
   | { type: 'LOGOUT' }
   | { type: 'SET_ROOM'; room: Room }
   | { type: 'ADD_MESSAGE'; message: TerminalMessage }
@@ -161,7 +163,7 @@ const MAX_MESSAGES = 500;
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'LOGIN_SUCCESS':
-      return { ...state, authenticated: true, token: action.token, playerId: action.playerId, email: action.email ?? null, error: null };
+      return { ...state, authenticated: true, token: action.token, playerId: action.playerId, email: action.email ?? null, username: action.username ?? null, error: null };
     case 'LOGOUT':
       return { ...initialState };
     case 'SET_ROOM':

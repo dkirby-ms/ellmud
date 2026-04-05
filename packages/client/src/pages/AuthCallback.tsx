@@ -15,10 +15,11 @@ export default function AuthCallback() {
     const token = searchParams.get("token");
     const playerId = searchParams.get("playerId");
     const email = searchParams.get("email");
+    const username = searchParams.get("username");
 
     if (token && playerId) {
       // Authenticate with OAuth token
-      dispatch({ type: "LOGIN_SUCCESS", token, playerId, email: email ?? undefined });
+      dispatch({ type: "LOGIN_SUCCESS", token, playerId, email: email ?? undefined, username: username ?? undefined });
       navigate("/characters", { replace: true });
     } else {
       // No token in URL — redirect to login

@@ -10,6 +10,7 @@ import {
   Settings,
   Send,
   Wrench,
+  LogOut,
 } from "lucide-react";
 import { useAppContext, type TerminalMessage } from "../store";
 import CompassControl from "../components/CompassControl";
@@ -309,7 +310,7 @@ export default function Refuge() {
           </h1>
           <div className="flex items-center gap-2">
             <span className="text-text-secondary text-sm font-sans">
-              {state.playerId ?? "Unknown"}
+              {state.username ?? state.email ?? "Unknown"}
             </span>
             <span className="text-text-disabled">|</span>
             <div className="flex items-center gap-2">
@@ -345,14 +346,16 @@ export default function Refuge() {
           <button
             onClick={() => navigate("/settings")}
             className="text-text-secondary hover:text-accent-gold transition-colors"
+            title="Settings"
           >
             <Settings className="w-5 h-5" />
           </button>
           <button
             onClick={handleLogout}
-            className="text-text-secondary hover:text-danger transition-colors text-sm font-sans"
+            className="text-text-secondary hover:text-danger transition-colors"
+            title="Sign out"
           >
-            Logout
+            <LogOut className="w-5 h-5" />
           </button>
         </div>
       </div>

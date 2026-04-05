@@ -21,6 +21,40 @@ describe('appReducer', () => {
     expect(state.playerId).toBe('p1');
   });
 
+  it('LOGIN_SUCCESS stores username when provided', () => {
+    const state = appReducer(initialState, {
+      type: 'LOGIN_SUCCESS',
+      token: 'tok',
+      playerId: 'p1',
+      username: 'TestHero',
+    });
+    expect(state.authenticated).toBe(true);
+    expect(state.token).toBe('tok');
+    expect(state.playerId).toBe('p1');
+    expect(state.username).toBe('TestHero');
+  });
+
+  it('LOGIN_SUCCESS sets username to null when not provided', () => {
+    const state = appReducer(initialState, {
+      type: 'LOGIN_SUCCESS',
+      token: 'tok',
+      playerId: 'p1',
+    });
+    expect(state.username).toBeNull();
+  });
+
+  it('LOGIN_SUCCESS with email and username stores both', () => {
+    const state = appReducer(initialState, {
+      type: 'LOGIN_SUCCESS',
+      token: 'tok',
+      playerId: 'p1',
+      email: 'hero@example.com',
+      username: 'TestHero',
+    });
+    expect(state.email).toBe('hero@example.com');
+    expect(state.username).toBe('TestHero');
+  });
+
   it('LOGOUT resets to initial state', () => {
     const loggedIn = appReducer(initialState, {
       type: 'LOGIN_SUCCESS',
@@ -29,6 +63,21 @@ describe('appReducer', () => {
     });
     const state = appReducer(loggedIn, { type: 'LOGOUT' });
     expect(state).toEqual(initialState);
+  });
+
+  it('LOGOUT clears username', () => {
+    const loggedIn = appReducer(initialState, {
+      type: 'LOGIN_SUCCESS',
+      token: 'tok',
+      playerId: 'p1',
+      username: 'TestHero',
+      email: 'hero@example.com',
+    });
+    const state = appReducer(loggedIn, { type: 'LOGOUT' });
+    expect(state.username).toBeNull();
+    expect(state.email).toBeNull();
+    expect(state.token).toBeNull();
+    expect(state.authenticated).toBe(false);
   });
 
   it('ADD_MESSAGE appends message', () => {
