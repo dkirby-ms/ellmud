@@ -37,7 +37,7 @@ export interface ElkLayoutOptions {
   layerSpacing?: number;
   /** Edge routing algorithm (default: 'ORTHOGONAL') */
   edgeRouting?: 'POLYLINE' | 'ORTHOGONAL' | 'SPLINES';
-  /** Direction of layout (default: 'RIGHT') */
+  /** Direction of layout (default: 'DOWN') */
   direction?: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
   /** Enable crossing minimization (default: true) */
   crossingMinimization?: boolean;
@@ -62,9 +62,9 @@ const NODE_HEIGHT = 50;
 /** Default ELK layout options. */
 const DEFAULT_ELK_OPTIONS: LayoutOptions = {
   'elk.algorithm': 'layered',
-  'elk.direction': 'RIGHT',
-  'elk.spacing.nodeNode': '100',
-  'elk.layered.spacing.nodeNodeBetweenLayers': '100',
+  'elk.direction': 'DOWN',
+  'elk.spacing.nodeNode': '120',
+  'elk.layered.spacing.nodeNodeBetweenLayers': '150',
   'elk.edgeRouting': 'ORTHOGONAL',
   'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
   'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
@@ -206,13 +206,16 @@ function buildElkGraph(
 ): ElkNode {
   const nodes: ElkNode[] = [];
   const edges: ElkExtendedEdge[] = [];
+  // Track seen room pairs to deduplicate bidirectional edges
+  const seenPairs = new Set<string>();
   
-  // Create ELK nodes with compass-direction ports
+  // Create ELK nodes with compass-direction ports and FIXED_SIDE constraints
   for (const [roomId, room] of rooms) {
     const elkNode: ElkNode = {
       id: roomId,
       width: NODE_WIDTH,
       height: NODE_HEIGHT,
+      layoutOptions: { 'elk.portConstraints': 'FIXED_SIDE' },
       ports: [
         { id: `${roomId}_NORTH`, layoutOptions: { 'port.side': 'NORTH' } },
         { id: `${roomId}_SOUTH`, layoutOptions: { 'port.side': 'SOUTH' } },
@@ -224,10 +227,15 @@ function buildElkGraph(
     };
     nodes.push(elkNode);
     
-    // Create edges for each exit (connecting room ports)
+    // Create edges for each exit, deduplicating bidirectional pairs
     for (const [direction, targetId] of room.exits) {
       const portId = DIRECTION_TO_PORT[direction as CompassDirection];
       if (!portId) continue; // skip invalid directions
+      
+      // Deduplicate: only keep one edge per room pair
+      const pairKey = [roomId, targetId].sort().join('_');
+      if (seenPairs.has(pairKey)) continue;
+      seenPairs.add(pairKey);
       
       edges.push({
         id: `${roomId}_${direction}_${targetId}`,
@@ -319,15 +327,15 @@ function extractPositions(graph: ElkNode, floor: number): Map<string, RoomPositi
  * Default ELK configuration for zone designer layouts.
  *
  * Algorithm: 'layered' (hierarchical layout with layer assignment + crossing minimization)
- * Direction: 'RIGHT' (flows left-to-right, matches typical dungeon progression)
- * Spacing: 100px between nodes (matches current grid)
+ * Direction: 'DOWN' (flows top-to-bottom, north=up matching dungeon compass conventions)
+ * Spacing: 120px between nodes, 150px between layers
  * Edge routing: 'ORTHOGONAL' (Manhattan routing for compass-aligned exits)
  * Crossing minimization: 'LAYER_SWEEP' (reduces edge crossings)
  */
 export const DEFAULT_CONFIG: ElkLayoutOptions = {
-  nodeSpacing: 100,
-  layerSpacing: 100,
+  nodeSpacing: 120,
+  layerSpacing: 150,
   edgeRouting: 'ORTHOGONAL',
-  direction: 'RIGHT',
+  direction: 'DOWN',
   crossingMinimization: true,
 };
