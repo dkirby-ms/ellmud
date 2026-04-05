@@ -90,6 +90,21 @@
 - **Background enrichment verified:** When primary LLM call times out, `backgroundEnrich()` fires a new LLM call with its own AbortController bound to hard_limit. Invalid output in background is silently rejected (template stays in cache). Hard limit cancels the background call.
 - **Test count:** 846 total (was 726), all passing. 0 lint errors.
 
+### 2026-04-05: NarrationService Wired into ZoneRoom Runtime (Issue #277, Jarlaxle)
+- **Impact to your domain:** NarrationService now has a runtime instantiation pattern in ZoneRoom via factory function
+- **Factory pattern:** `createNarrationService()` conditionally creates LLMClient based on Azure AI env vars (graceful degradation in dev/test)
+- **Entry narration integrated:** Room entry now generates LLM prose via `generateNarration()` helper with rich NarrationContext
+- **What this means for you:**
+  - Your pipeline (LLMClient, cache, validation, fallback) is now **operational at room runtime** — entry narration is the proof-of-concept
+  - Next expansion points are ready: room descriptions (`look`), combat actions, movement events, sound/trace — each requires building appropriate NarrationContext
+  - Cache is wired; telemetry is flowing; template fallback is active
+  - Minsc/Regis can check `config.azureAI` to determine LLM availability in client UI settings
+- **Architecture note:** Factory approach is clean and testable — config reading happens once at instantiation, not per-call. Redis cache can be wired similarly.
+- **Tests:** 7 integration tests passing (Azure config, no-config, LLM available, LLM unavailable, context building, timeout fallback, cache tracking)
+- **PR #292 status:** Ready for review
+
+---
+
 ## Wave 3 Complete — LLM Pipeline Acceptance Audit (2026-03-20T20:21:36Z)
 
 ### Wave 3 Completion Status
