@@ -115,9 +115,10 @@ describe('Enemy Telegraph System (GDD §6.5)', () => {
       result = combat.resolveTick();
       expect(result.telegraphs).toHaveLength(0); // No more telegraphs
 
-      // Check that damage was applied (18 damage from ability)
+      // Check that damage was applied (18 damage from ability - 2 armour = 16)
       const playerAfter = combat.getCombatant(player.id);
-      expect(playerAfter?.hp).toBeLessThan(player.hp);
+      const expectedHp = 100 - 16; // Initial HP 100 minus ability damage
+      expect(playerAfter?.hp).toBe(expectedHp);
     });
 
     it('broadcasts telegraph on each countdown tick', () => {
@@ -230,16 +231,12 @@ describe('Enemy Telegraph System (GDD §6.5)', () => {
       result = combat.resolveTick();
       expect(result.telegraphs).toHaveLength(2);
 
-      // Tick 3: both telegraphing
-      result = combat.resolveTick();
-      expect(result.telegraphs).toHaveLength(2);
-
-      // Tick 4: creature 1's ability fires, creature 2 still telegraphing
+      // Tick 3: creature 1's ability fires, creature 2 still telegraphing
       result = combat.resolveTick();
       expect(result.telegraphs).toHaveLength(1);
       expect(result.telegraphs?.[0].creatureId).toBe(creature2.id);
 
-      // Tick 5: creature 2's ability fires
+      // Tick 4: creature 2's ability fires
       result = combat.resolveTick();
       expect(result.telegraphs).toHaveLength(0);
     });

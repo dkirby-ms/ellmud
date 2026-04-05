@@ -400,7 +400,8 @@ export class CombatSystem {
     // 1. Default unsubmitted actions to auto-attack current target (GDD §6.1, §6.2)
     for (const c of combatants) {
       // Combatants winding up don't queue actions — they're committed to the telegraph
-      if (c.windUp) {
+      // UNLESS their wind-up just expired this tick (they're in windUpExpired list)
+      if (c.windUp && !windUpExpired.includes(c)) {
         // Queue a dodge placeholder so resolution logic doesn't crash
         this.queuedActions.set(c.id, { action: 'dodge' });
         continue;
