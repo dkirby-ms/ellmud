@@ -259,7 +259,8 @@ export default function ZoneDesigner({
   const [showLabels, setShowLabels] = useState(false);
   const [hoveredRoom, setHoveredRoom] = useState<string | null>(null);
   const [hoverPosition, setHoverPosition] = useState<{ x: number; y: number } | null>(null);
-  const [hoverTimer, setHoverTimer] = useState<NodeJS.Timeout | null>(null);
+  const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const leaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [selectedExit, setSelectedExit] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -791,7 +792,12 @@ export default function ZoneDesigner({
   }
 
   function handleRoomMouseEnter(e: React.MouseEvent, slug: string) {
-    if (hoverTimer) clearTimeout(hoverTimer);
+    // Cancel any pending leave — mouse moved to another node
+    if (leaveTimerRef.current) {
+      clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = null;
+    }
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     // Capture coordinates immediately — React synthetic events are pooled
     const target = e.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
@@ -799,20 +805,25 @@ export default function ZoneDesigner({
     if (!canvasBounds) return;
     const x = rect.left + rect.width / 2 - canvasBounds.left;
     const y = rect.top - canvasBounds.top;
-    const timer = setTimeout(() => {
+    hoverTimerRef.current = setTimeout(() => {
+      hoverTimerRef.current = null;
       setHoveredRoom(slug);
       setHoverPosition({ x, y });
     }, 150);
-    setHoverTimer(timer);
   }
 
   function handleRoomMouseLeave(_e: React.MouseEvent, _slug: string) {
-    if (hoverTimer) {
-      clearTimeout(hoverTimer);
-      setHoverTimer(null);
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
     }
-    setHoveredRoom(null);
-    setHoverPosition(null);
+    // Short delay before hiding — prevents flicker when moving between nodes
+    // or when ReactFlow fires spurious leave events during re-renders
+    leaveTimerRef.current = setTimeout(() => {
+      leaveTimerRef.current = null;
+      setHoveredRoom(null);
+      setHoverPosition(null);
+    }, 100);
   }
 
   async function handleAddRoomInDirection(fromSlug: string, direction: string) {
