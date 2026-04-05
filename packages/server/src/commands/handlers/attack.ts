@@ -58,12 +58,14 @@ export function handleAttack(ctx: CommandContext): CommandResult {
     );
   }
   if (!combatSystem.getCombatant(targetId)) {
-    // Creature combatants are registered by the ZoneRoom creature tick,
-    // but if a player attacks first, register a placeholder for initiation.
-    // The ZoneRoom will sync the full creature combatant on the next tick.
-    const targetDisplayName = creaturesInRoom?.find(c => c.id === targetId)?.name ?? targetId;
+    // Register creature with real stats from the CreatureRef if available.
+    const creature = creaturesInRoom?.find(c => c.id === targetId);
+    const targetDisplayName = creature?.name ?? targetId;
+    const stats = creature?.maxHp != null
+      ? { maxHp: creature.maxHp, attack: creature.attack ?? 1, defence: creature.defence ?? 0, armour: creature.armour ?? 0, agility: creature.agility ?? 0 }
+      : undefined;
     combatSystem.registerCombatant(
-      createCombatant(targetId, targetDisplayName, player.currentRoomId, !isCreatureId(targetId)),
+      createCombatant(targetId, targetDisplayName, player.currentRoomId, !isCreatureId(targetId), stats, creature?.dodgeSkillRank),
     );
   }
 

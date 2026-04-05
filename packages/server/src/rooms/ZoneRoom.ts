@@ -990,7 +990,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
 
     const creaturesInRoom = this.creatureManager.getCreaturesInRoom(player.currentRoomId)
-      .map(c => ({ id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription }));
+      .map(c => ({
+        id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription,
+        hp: c.hp, maxHp: c.maxHp, attack: c.attack, defence: c.defence,
+        armour: c.armour, agility: c.agility, dodgeSkillRank: c.dodgeSkillRank,
+      }));
 
     return {
       player,
@@ -1005,7 +1009,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       creaturesInRoom,
       resolveCreaturesInRoom: (roomId: string) =>
         this.creatureManager.getCreaturesInRoom(roomId)
-          .map(c => ({ id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription })),
+          .map(c => ({
+            id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription,
+            hp: c.hp, maxHp: c.maxHp, attack: c.attack, defence: c.defence,
+            armour: c.armour, agility: c.agility, dodgeSkillRank: c.dodgeSkillRank,
+          })),
       corpseSystem: this.corpseSystem,
     };
   }

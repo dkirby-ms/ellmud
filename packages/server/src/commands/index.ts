@@ -58,6 +58,14 @@ export interface CreatureRef {
   name: string;
   type?: string;
   roomDescription?: string;
+  /** Combat stats — passed through so the attack handler can register with real values. */
+  hp?: number;
+  maxHp?: number;
+  attack?: number;
+  defence?: number;
+  armour?: number;
+  agility?: number;
+  dodgeSkillRank?: number;
 }
 
 export interface CommandContext {

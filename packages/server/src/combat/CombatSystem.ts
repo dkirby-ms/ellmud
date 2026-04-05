@@ -906,7 +906,7 @@ export class CombatSystem {
         const defeated = target.hp <= 0;
         evt.narration = defeated
           ? `${evt.actorName} strikes ${evt.targetName} for ${evt.damage} damage — ${evt.targetName} is defeated!`
-          : `${evt.actorName} strikes ${evt.targetName} for ${evt.damage} damage. [${target.hp}/${target.maxHp} HP]`;
+          : `${evt.actorName} strikes ${evt.targetName} for ${evt.damage} damage. [${evt.targetName}: ${target.hp}/${target.maxHp} HP]`;
       }
     }
     events.push(...strikeEvents);
