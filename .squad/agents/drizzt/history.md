@@ -3071,3 +3071,14 @@ Threat tables are stored per-encounter, mapped by creature ID. Each creature mai
 - The `LLMTransport` type abstraction makes adding new providers trivial — just implement `(LLMRequest, AbortSignal) => Promise<LLMResponse>`.
 - OpenAI-compatible API is the de facto standard — model goes in request body (not URL like Azure deployments).
 - Factory priority pattern (Azure > OpenAI > template) keeps backward compat clean.
+
+### OpenAI-Compatible LLM Transport (Issue #310) — Task Completed 2026-04-05T19:20Z
+**Agent:** Drizzt  
+**Status:** ✅ Complete — committed  
+**Test Coverage:** All tests passing; new OpenAI factory, Azure priority, env var validation  
+**Output Artifacts:** orchestration-log/2026-04-05T19-20-drizzt.md
+
+**Delivered:** `createOpenAITransport()` factory supporting OpenAI, LM Studio, Ollama, Mistral. Azure takes priority in provider chain. New env vars: `OPENAI_LLM_ENDPOINT`, `OPENAI_LLM_KEY`, `OPENAI_LLM_MODEL` (defaults `gpt-4o`).
+
+**Integration:** Backward compatible — Azure deployments unaffected. `LLMClient` and `NarrationService` remain provider-agnostic. Regis (frontend) and Volo/Jarlaxle (narration) require no changes.
+

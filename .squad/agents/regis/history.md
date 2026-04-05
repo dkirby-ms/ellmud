@@ -1282,3 +1282,16 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 - **Zone Designer edge/position fix (2026-04-12):** Fixed two critical bugs. (1) ZoneRoomNode was missing `<Handle>` components from `@xyflow/react` — edges couldn't attach, causing "source handle id: null" errors. Added 8 invisible handles (4 source + 4 target at compass positions) with `HANDLE_STYLE` constant. Edges now specify `sourceHandle`/`targetHandle` using direction-based IDs (e.g., `east-source`, `west-target`). (2) `extractPositions()` in `elkLayout.ts` was dividing ELK pixel coords by 100 and rounding, then `roomsToFlowNodes()` multiplied back by 100 — lossy round-trip. Removed both: ELK pixel coords now pass straight through to ReactFlow. Updated tests to match.
 - **ELK layout quality fix (2026-04-12):** Four changes to `elkLayout.ts` that dramatically improve zone designer room positioning. (1) Added `'elk.portConstraints': 'FIXED_SIDE'` to every ELK node — without this, ELK ignores port side assignments and places ports wherever it wants, breaking compass-direction semantics. (2) Deduplicated bidirectional edges using a `seenPairs` Set with sorted room-ID keys — the layered algorithm is designed for DAGs, and duplicate reverse edges create cycles that degrade layout quality. (3) Changed `'elk.direction'` from `'RIGHT'` to `'DOWN'` so the layout flows top-to-bottom matching dungeon north=up convention. (4) Bumped spacing to 120px node-node and 150px between layers for readability. Tests updated for new `DEFAULT_CONFIG` values.
 - **Death overlay preserves log (#307) + zone timer display fix (#306) (2026-07-21):** Two small fixes in `useZoneConnection.ts`. (1) `onRoomSwitch` handler now checks `overlayRef.current.status !== 'death'` before dispatching `CLEAR_MESSAGES` — when a player dies and gets hub-switched, the narrative log is preserved so they can read their death narrative. The overlay reset already had this guard; the message clear was the gap. (2) Zone state console message now only shows the collapse timer during `active` or `destabilising` states — during `open` state the timer value is meaningless since it isn't counting down, so `[Zone: open — 1200s remaining]` is suppressed to just `[Zone: open]`.
+
+### Issue #309: Player UX — Entering the Game (Faction Entry Refactor) — Completed 2026-04-05T19:20Z
+**Agent:** Regis  
+**Status:** ✅ Complete — committed  
+**Test Coverage:** 2533 tests passing; mocks updated with `fetchSpawnZone()`  
+**Output Artifacts:** orchestration-log/2026-04-05T19-20-regis.md
+
+**Delivered:** Replaced `/refuge` hardcoded entry with `/zone` hub. Added `fetchSpawnZone()` API call to resolve faction strongholds dynamically. Room name now `zone:the-foundry` (or Counting House/Cartographium) instead of `zone:the-refuge`. Button text "Enter Refuge" → "Enter World". `useZoneConnection` guard: skips connection during async spawn-zone resolution.
+
+**Files:** CharacterSelect, ZoneExploration, Settings, Leaderboard, ErrorFallback, AdminLayout, useZoneConnection — all updated. Fallback to `zone:the-refuge` if API fails.
+
+**Integration:** No server changes needed — `/api/spawn-zone` pre-existed (Drizzt's work). Drizzt's LLM transport (#310) independent; no conflicts.
+
