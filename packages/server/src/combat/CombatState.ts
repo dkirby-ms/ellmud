@@ -151,8 +151,6 @@ export interface TickResult {
   endedEncounterIds: string[];
   telegraphs?: TelegraphBroadcast[];
 }
-  endedEncounterIds: string[];
-}
 
 /** No-op tick result when there's no active combat. */
 export const EMPTY_TICK_RESULT: TickResult = {

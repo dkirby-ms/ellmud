@@ -399,8 +399,12 @@ export class CombatSystem {
 
     // 1. Default unsubmitted actions to auto-attack current target (GDD §6.1, §6.2)
     for (const c of combatants) {
-      // Skip defaulting if creature is winding up
-      if (c.windUp) continue;
+      // Combatants winding up don't queue actions — they're committed to the telegraph
+      if (c.windUp) {
+        // Queue a dodge placeholder so resolution logic doesn't crash
+        this.queuedActions.set(c.id, { action: 'dodge' });
+        continue;
+      }
 
       if (!this.queuedActions.has(c.id)) {
         // Auto-attack if we have a valid target
@@ -609,7 +613,7 @@ export class CombatSystem {
       this.queuedActions.delete(c.id);
     }
 
-    return { events, fleeResults, ended };
+    return { events, fleeResults, ended, telegraphs };
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
