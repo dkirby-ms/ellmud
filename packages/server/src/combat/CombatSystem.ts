@@ -18,6 +18,8 @@ import {
   type FleeResult,
   type QueuedAction,
   type TickResult,
+  type TelegraphBroadcast,
+  type WindUpState,
   COMBAT_TIMEOUT_TICKS,
   EMPTY_TICK_RESULT,
 } from './CombatState.js';
@@ -162,14 +164,54 @@ export class CombatSystem {
    * Queue an action for the next tick resolution.
    * Returns false if combatant is not in combat.
    */
-  submitAction(combatantId: string, action: CombatAction, targetId?: string, fleeRoomId?: string): boolean {
+  submitAction(combatantId: string, action: CombatAction, targetId?: string, fleeRoomId?: string, abilityId?: string): boolean {
     if (!this.isInCombat(combatantId)) {
       this.debug(`submitAction rejected: ${combatantId} not in combat`);
       return false;
     }
 
-    this.queuedActions.set(combatantId, { action, targetId, fleeRoomId });
-    this.debug(`Action queued: ${combatantId} → ${action}${targetId ? ` @ ${targetId}` : ''}`);
+    this.queuedActions.set(combatantId, { action, targetId, fleeRoomId, abilityId });
+    this.debug(`Action queued: ${combatantId} → ${action}${targetId ? ` @ ${targetId}` : ''}${abilityId ? ` (${abilityId})` : ''}`);
+    return true;
+  }
+
+  /**
+   * Queue a telegraphed ability (GDD §6.5).
+   * Initiates wind-up state on the combatant.
+   * Returns false if combatant is not in combat or already winding up.
+   */
+  queueTelegraph(
+    combatantId: string,
+    targetId: string,
+    ability: { id: string; name: string; damage: number; windUpTicks: number; telegraphText: string },
+  ): boolean {
+    const combatant = this.combatants.get(combatantId);
+    if (!combatant) {
+      this.debug(`queueTelegraph rejected: combatant ${combatantId} not found`);
+      return false;
+    }
+
+    if (!this.isInCombat(combatantId)) {
+      this.debug(`queueTelegraph rejected: ${combatantId} not in combat`);
+      return false;
+    }
+
+    if (combatant.windUp) {
+      this.debug(`queueTelegraph rejected: ${combatant.name} already winding up`);
+      return false;
+    }
+
+    // Initiate wind-up state
+    combatant.windUp = {
+      abilityId: ability.id,
+      abilityName: ability.name,
+      damage: ability.damage,
+      remainingTicks: ability.windUpTicks,
+      targetId,
+      telegraphText: ability.telegraphText,
+    };
+
+    this.debug(`Telegraph queued: ${combatant.name} begins ${ability.name} (${ability.windUpTicks} ticks)`);
     return true;
   }
 
@@ -288,11 +330,15 @@ export class CombatSystem {
     const allEvents: CombatEvent[] = [];
     const allFlees: FleeResult[] = [];
     const endedEncounterIds: string[] = [];
+    const allTelegraphs: TelegraphBroadcast[] = [];
 
     for (const [encId, encounter] of this.encounters) {
       const result = this.resolveEncounterTick(encounter);
       allEvents.push(...result.events);
       allFlees.push(...result.fleeResults);
+      if (result.telegraphs) {
+        allTelegraphs.push(...result.telegraphs);
+      }
       if (result.ended) {
         endedEncounterIds.push(encId);
       }
@@ -303,17 +349,19 @@ export class CombatSystem {
       this.cleanupEncounter(encId);
     }
 
-    return { events: allEvents, fleeResults: allFlees, endedEncounterIds };
+    return { events: allEvents, fleeResults: allFlees, endedEncounterIds, telegraphs: allTelegraphs };
   }
 
   private resolveEncounterTick(encounter: CombatEncounter): {
     events: CombatEvent[];
     fleeResults: FleeResult[];
     ended: boolean;
+    telegraphs?: TelegraphBroadcast[];
   } {
     encounter.tickCount++;
     const events: CombatEvent[] = [];
     const fleeResults: FleeResult[] = [];
+    const telegraphs: TelegraphBroadcast[] = [];
 
     // Collect living combatants in this encounter
     const combatants: Combatant[] = [];
@@ -324,11 +372,36 @@ export class CombatSystem {
 
     if (combatants.length <= 1) {
       events.push(resolveCombatEnd('last_standing'));
-      return { events, fleeResults, ended: true };
+      return { events, fleeResults, ended: true, telegraphs };
+    }
+
+    // 0. Process wind-up countdowns (GDD §6.5)
+    const windUpExpired: Combatant[] = [];
+    for (const c of combatants) {
+      if (c.windUp) {
+        c.windUp.remainingTicks--;
+        if (c.windUp.remainingTicks > 0) {
+          // Still winding up — broadcast telegraph
+          telegraphs.push({
+            creatureId: c.id,
+            creatureName: c.name,
+            abilityName: c.windUp.abilityName,
+            remainingTicks: c.windUp.remainingTicks,
+            targetId: c.windUp.targetId,
+            telegraphText: c.windUp.telegraphText,
+          });
+        } else {
+          // Wind-up expired — execute ability this tick
+          windUpExpired.push(c);
+        }
+      }
     }
 
     // 1. Default unsubmitted actions to auto-attack current target (GDD §6.1, §6.2)
     for (const c of combatants) {
+      // Skip defaulting if creature is winding up
+      if (c.windUp) continue;
+
       if (!this.queuedActions.has(c.id)) {
         // Auto-attack if we have a valid target
         if (c.currentTarget) {
@@ -357,6 +430,18 @@ export class CombatSystem {
     let hasStrike = false;
 
     for (const c of combatants) {
+      // Check for expired wind-ups — convert to immediate strike action
+      if (windUpExpired.includes(c) && c.windUp) {
+        const windUp = c.windUp;
+        // Override queued action with telegraphed ability execution
+        this.queuedActions.set(c.id, {
+          action: 'strike',
+          targetId: windUp.targetId,
+          abilityId: windUp.abilityId,
+        });
+        this.debug(`Wind-up expired: ${c.name} executes ${windUp.abilityName} on ${windUp.targetId}`);
+      }
+
       const qa = this.queuedActions.get(c.id)!;
       actions.set(c.id, qa);
       if (qa.action === 'strike') hasStrike = true;
@@ -371,6 +456,16 @@ export class CombatSystem {
       const qa = actions.get(c.id)!;
       if (qa.action !== 'strike') continue;
 
+      // Check if this is a telegraphed ability execution (abilityId present)
+      let attackDamage = c.attack;
+      if (qa.abilityId && c.windUp && c.windUp.abilityId === qa.abilityId) {
+        // Use ability damage instead of base attack
+        attackDamage = c.windUp.damage;
+        this.debug(`Telegraphed ability: ${c.name} uses ${c.windUp.abilityName} for ${attackDamage} damage`);
+        // Clear wind-up state after execution
+        c.windUp = undefined;
+      }
+
       // Resolve target
       const targetId = qa.targetId ?? this.pickDefaultTarget(c.id, combatants);
       if (!targetId) continue;
@@ -380,7 +475,9 @@ export class CombatSystem {
 
       const defenderAction = actions.get(targetId)?.action ?? 'dodge';
       const dodgeRoll = defenderAction === 'dodge' ? this.roll() : undefined;
-      const dmg = calculateDamage(c.attack, target.armour, 'strike', defenderAction, {
+      
+      // Block should mitigate telegraphed abilities (GDD §6.5)
+      const dmg = calculateDamage(attackDamage, target.armour, 'strike', defenderAction, {
         defenderAgility: target.agility,
         defenderDodgeSkillRank: target.dodgeSkillRank,
         dodgeRoll,

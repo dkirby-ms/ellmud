@@ -136,9 +136,21 @@ export interface FleeResult {
   toRoomId: string;
 }
 
+export interface TelegraphBroadcast {
+  creatureId: string;
+  creatureName: string;
+  abilityName: string;
+  remainingTicks: number;
+  targetId: string;
+  telegraphText: string;
+}
+
 export interface TickResult {
   events: CombatEvent[];
   fleeResults: FleeResult[];
+  endedEncounterIds: string[];
+  telegraphs?: TelegraphBroadcast[];
+}
   endedEncounterIds: string[];
 }
 
@@ -147,6 +159,7 @@ export const EMPTY_TICK_RESULT: TickResult = {
   events: [],
   fleeResults: [],
   endedEncounterIds: [],
+  telegraphs: [],
 };
 
 /** Timeout in ticks (seconds) before combat ends with no strikes. */
