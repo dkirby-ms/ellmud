@@ -100,6 +100,14 @@ export type CombatAction =
   | 'flee'
   | 'observe';
 
+// ─── Room Positioning (GDD §6.11) ──────────────────────────────────────────
+
+/** Spatial position zones in combat (GDD §6.11). */
+export type PositionZone = 'front' | 'flank' | 'rear';
+
+/** Creature position behavior types (GDD §6.11). */
+export type CreaturePositionType = 'melee' | 'ranged' | 'skirmisher' | 'boss';
+
 // ─── Gear & Loot (GDD §9) ───────────────────────────────────────────────────
 
 /** Gear quality tiers, ascending. */

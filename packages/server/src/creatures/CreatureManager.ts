@@ -15,8 +15,10 @@ import type { Creature, CreatureTemplate, CreatureAction } from './types.js';
 import { updateCreature, type CreatureWorldState } from './behavior.js';
 import { generateLoot, type LootItem } from './loot.js';
 import type { Combatant } from '../combat/CombatState.js';
+import { createCombatant } from '../combat/CombatState.js';
 import { DROWNED_REVENANT } from './templates/drowned-revenant.js';
 import { getContentRegistry } from '../content/index.js';
+import type { CreaturePositionType } from '@ellmud/shared';
 
 /** Hardcoded fallback — used when ContentRegistry is not initialized. */
 const FALLBACK_TEMPLATES = new Map<string, CreatureTemplate>([
@@ -49,6 +51,8 @@ export class CreatureManager {
   private nextCreatureId = 0;
   /** Zone creature records for repop tracking. */
   private zoneCreatureRecords: ZoneCreatureRecord[] = [];
+  /** Maps creature ID to its template for position type lookup. */
+  private creatureTemplates = new Map<string, CreatureTemplate>();
 
   // ─── Spawning ──────────────────────────────────────────────────────────────
 
@@ -103,6 +107,9 @@ export class CreatureManager {
     const id = `creature-${this.nextCreatureId++}`;
     const idleTarget = prng.nextInt(template.idleTicksMin, template.idleTicksMax);
 
+    // Track template for position type lookup
+    this.creatureTemplates.set(id, template);
+
     return {
       id,
       type: template.type,
@@ -121,6 +128,7 @@ export class CreatureManager {
       isAlive: true,
       aggressive: template.aggressive,
       roomDescription: template.roomDescription,
+      positionType: template.positionType,
     };
   }
 
@@ -133,6 +141,9 @@ export class CreatureManager {
     const idleTarget = Math.floor(
       (template.idleTicksMin + template.idleTicksMax) / 2
     );
+
+    // Track template for position type lookup
+    this.creatureTemplates.set(id, template);
 
     const creature: Creature = {
       id,
@@ -152,6 +163,7 @@ export class CreatureManager {
       isAlive: true,
       aggressive: template.aggressive,
       roomDescription: template.roomDescription,
+      positionType: template.positionType,
     };
 
     this.creatures.set(creature.id, creature);
@@ -326,19 +338,36 @@ export class CreatureManager {
    * Creatures use the same combat resolution as players.
    */
   toCombatant(creature: Creature): Combatant {
-    return {
-      id: creature.id,
-      name: creature.name,
-      hp: creature.hp,
-      maxHp: creature.maxHp,
-      attack: creature.attack,
-      defence: creature.defence,
-      armour: creature.armour,
-      agility: creature.agility ?? 0,
-      dodgeSkillRank: creature.dodgeSkillRank ?? 0,
-      roomId: creature.currentRoomId,
-      isPlayer: false,
-    };
+    // Use createCombatant to get default position fields
+    const combatant = createCombatant(
+      creature.id,
+      creature.name,
+      creature.currentRoomId,
+      false, // isPlayer
+      {
+        maxHp: creature.maxHp,
+        attack: creature.attack,
+        defence: creature.defence,
+        armour: creature.armour,
+        agility: creature.agility ?? 0,
+      },
+      creature.dodgeSkillRank ?? 0,
+      0, // evasionSkillRank
+      1, // level
+    );
+    
+    // Override with current HP
+    combatant.hp = creature.hp;
+    
+    return combatant;
+  }
+
+  /**
+   * Get the position type for a creature (for combat system registration).
+   */
+  getCreaturePositionType(creatureId: string): CreaturePositionType | undefined {
+    const template = this.creatureTemplates.get(creatureId);
+    return template?.positionType ?? 'melee'; // Default to melee if not specified
   }
 
   /**

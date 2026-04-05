@@ -3,11 +3,14 @@
  *
  * Formula:
  *   modified_dmg  = raw_dmg × stance_multiplier - armour - block
- *   final_damage  = max(1, modified_dmg) × dodge_reduction
+ *   final_damage  = max(1, modified_dmg) × dodge_reduction × flanking_bonus
  *
  * Dodge grants a % chance to fully avoid an attack
  * based on AGI stat + dodge skill rank.
  * When a PRNG roll is provided, dodge can reduce final_damage to 0.
+ *
+ * Flanking bonus applies when attacker is at Flank position
+ * and target is focused on a Front position combatant (GDD §6.11).
  */
 
 import type { CombatAction } from '@ellmud/shared';
@@ -33,6 +36,8 @@ export interface DamageOptions {
   damageMultiplier?: number;
   /** Flat damage reduction for block ability (GDD §6.3). */
   blockReduction?: number;
+  /** Flanking bonus multiplier (GDD §6.11). */
+  flankingBonus?: number;
 }
 
 /** Base dodge chance (20%). */
@@ -104,7 +109,11 @@ export function calculateDamage(
   const blockReduction = defenderAction === 'block' ? (options?.blockReduction ?? 5) : 0;
   const totalReduction = defenderArmour + blockReduction;
   
-  const baseDamage = Math.max(1, Math.floor(afterMultiplier - totalReduction));
+  const baseDamage = Math.max(1, afterMultiplier - totalReduction);
+
+  // Apply flanking bonus (GDD §6.11)
+  const flankingBonus = options?.flankingBonus ?? 1.0;
+  const damageWithFlanking = Math.floor(baseDamage * flankingBonus);
 
   // GDD §6.4: Dodge grants a % chance to fully avoid an attack
   if (
@@ -128,6 +137,6 @@ export function calculateDamage(
     rawDamage,
     multiplier,
     armourReduction: totalReduction,
-    finalDamage: baseDamage,
+    finalDamage: damageWithFlanking,
   };
 }
