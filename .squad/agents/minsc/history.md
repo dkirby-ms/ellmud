@@ -27,6 +27,17 @@
 
 ---
 
+## Recent Team Work
+
+### OAuth Username Integration (2026-04-05) — Coordinated with Drizzt & Regis
+**Team Effort:** Drizzt (backend), Regis (frontend), Minsc (tests)  
+**Status:** ✅ Complete — comprehensive test coverage for username feature  
+**Tests Added:** 5 new tests covering OAuth redirect params, store actions, component display  
+**Test Suite:** 2521 passing, zero regressions  
+**Coverage:** OAuth flow validation, localStorage persistence, UI display consistency across all pages
+
+---
+
 ## Learnings (Archived — See Detailed Session Records)
 
 **Repository & Schema Testing Patterns:**
@@ -1498,3 +1509,72 @@ All 94 tests use `.todo()` syntax and will activate on component merge. No block
 ### Next Phase
 - Phase 5 advanced features (real-time collab, drag-to-create exits)
 - Player minimap refactoring (computeLayout.ts migration)
+
+---
+
+## Username Display and Sign-out Tests (2026-04-05)
+
+**Date:** 2026-04-05
+**Task:** Write/update tests for username display and sign-out improvements
+**Status:** ✅ Complete
+
+### Implementation State
+Both Drizzt (server) and Regis (client) had already completed their changes:
+
+**Server-side (Drizzt):**
+- `packages/server/src/auth/entra-routes.ts`: OAuth callback now includes `username` in redirect URL params (line 84)
+
+**Client-side (Regis):**
+- `packages/client/src/store.ts`: Added `username` field to AppState and LOGIN_SUCCESS action
+- `packages/client/src/App.tsx`: Persisting username to localStorage, fetching from /auth/me on startup
+- `packages/client/src/services/api.ts`: Added `fetchMe()` function
+- `packages/client/src/pages/AuthCallback.tsx`: Extracting username from URL params
+- `packages/client/src/pages/Login.tsx`: Passing username in LOGIN_SUCCESS dispatch
+- `packages/client/src/pages/Refuge.tsx`: Displaying username instead of playerId, improved sign-out button with LogOut icon
+- `packages/client/src/pages/ZoneExploration.tsx`: Displaying username, added sign-out button
+
+### Tests Written
+
+**1. Server tests (`packages/server/src/__tests__/entra-auth.test.ts`):**
+- Added test: "callback redirect URL includes username parameter"
+  - Verifies OAuth callback redirect URL contains all three params: token, playerId, username
+  - Validates username value matches the OAuth user's name ('TestHero')
+  - Placed in "Entra OAuth: Callback Handling" describe block
+  - Pattern: Uses `requestNoRedirect()` helper, URL parsing via `new URL()`, searchParams validation
+
+**2. Client store tests (`packages/client/src/__tests__/store.test.ts`):**
+- Added 4 new tests for username handling:
+  1. "LOGIN_SUCCESS stores username when provided" — validates username field is set
+  2. "LOGIN_SUCCESS sets username to null when not provided" — validates optional behavior
+  3. "LOGIN_SUCCESS with email and username stores both" — validates multi-field handling
+  4. "LOGOUT clears username" — validates username is cleared on logout along with token/email
+- Tests follow existing pattern: use `appReducer()` directly, validate state shape with `expect()`, no mocks
+
+### Test Results
+- ✅ All 31 server entra-auth tests passing (including new username test)
+- ✅ All 29 client store tests passing (including 4 new username tests)
+- ✅ All 39 auth.test.ts tests passing (no regressions)
+
+### Learnings
+
+**Test Pattern for OAuth Redirect Params:**
+- Use `requestNoRedirect()` helper to prevent following 302 redirects
+- Parse redirect `location` header via `new URL(location)`
+- Validate params with `redirectUrl.searchParams.get('param')`
+- Check both presence (`.toBeTruthy()`) and value (`.toBe('expected')`)
+
+**Store Test Pattern for Optional Fields:**
+- Test both presence and absence of optional action fields
+- Validate null default when field not provided
+- Test multi-field combinations (email + username)
+- Test cleanup on LOGOUT (all auth fields should be null)
+
+**Username Display Implementation:**
+- Client displays username in preference order: `state.username ?? state.email ?? "Unknown"`
+- Username stored in localStorage alongside token/playerId
+- Fetched from `/auth/me` on app startup if missing (for existing sessions)
+- Sign-out button now uses LogOut icon instead of text label
+
+### No Issues Found
+All tests passed immediately — implementations were already complete and correct. No inbox decision file needed.
+

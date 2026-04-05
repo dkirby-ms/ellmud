@@ -31,6 +31,7 @@
 - **ANSI/MUD styling classes:** `tailwind.css` defines `.ansi-*` (16 terminal colors), `.mud-*` semantic classes (damage, healing, dodge, speech, exits, etc.), and `.narrative-terminal` with CRT scanline overlay. Map styling should use these same color values.
 - **CompassControl.tsx:** 3×3 grid of cardinal/ordinal buttons + Up/Down. Reads exits from `state.roomHeader?.exits`. Will be superseded by MinimapWidget once map is built.
 - **Zone room naming convention (Phase C3):** Colyseus room names use `zone:<slug>` format (e.g. `"zone:the-refuge"`). Client routes (`/refuge`, `/shard/live`) are unchanged. ChatPanel context labels (`"shard"` | `"refuge"`) are UI concepts, not room names. Admin `isShard` check now covers both `"shard"` and `zone:` prefixed rooms. The `switchRoom` target for extraction completion is `"zone:the-refuge"`.
+- **OAuth username integration (2026-04-05):** Coordinated with Drizzt & Minsc — added username field to AppState, localStorage persistence, fetchMe() API integration, sign-out button on Login/AuthCallback/ZoneExploration/Refuge/Settings pages. Test suite 2521 passing, +5 new tests. User identity now persistent and visible across sessions.
 
 ## 2026-03-27T15:39Z — Phase C3 Complete
 
@@ -48,6 +49,36 @@
 **Dependency:** Drizzt's Phase C (zone registration) — now satisfied.
 
 - **useShardConnection accepts roomName param:** The hook now takes an optional `roomName` string (default `'shard'`). ShardExploration derives the room name from `useLocation().pathname` — `/refuge` maps to `zone:the-refuge`, everything else defaults to `shard`. This means ShardExploration is reusable for any zone-mode room.
+
+## 2026-04-12T19:30Z — Username Display & Sign-out UX
+
+**Fixed:** Username display (showing GUID instead of username) and improved sign-out UX  
+**Files Modified:** 8
+
+### Issue 1: Username Display
+The app was showing player IDs (GUIDs) everywhere instead of usernames. Server returns `username` on auth but client never stored it.
+
+**Changes:**
+- `store.ts` — Added `username: string | null` to AppState, initialState, and LOGIN_SUCCESS action
+- `api.ts` — Added `fetchMe(token)` function to call `/auth/me` endpoint
+- `App.tsx` — Added USERNAME_KEY localStorage persistence, fetches username from `/auth/me` on mount if missing (for existing sessions)
+- `AuthCallback.tsx` — Extracts `username` from OAuth URL params
+- `Login.tsx` — Passes `username` in LOGIN_SUCCESS dispatch (from login/register response)
+- `Refuge.tsx` — Changed top bar display from `playerId` to `username ?? email ?? "Unknown"`
+- `ZoneExploration.tsx` — Changed top bar display from `email ?? playerId` to `username ?? email ?? "Unknown"`
+- `Settings.tsx` — Added "Username" field above Player ID in Account section (Player ID now smaller, monospace, muted)
+
+### Issue 2: Sign-out UX
+Inconsistent logout buttons across pages — some plain text, some missing entirely.
+
+**Changes:**
+- `Refuge.tsx` — Changed plain text "Logout" button to icon button using `<LogOut>` from lucide-react, matching Settings pattern
+- `ZoneExploration.tsx` — Added `handleLogout` callback and sign-out button to top bar (was missing), imports `logout as apiLogout`
+
+**Design:** All sign-out buttons now use `LogOut` icon at `w-5 h-5`, `text-text-secondary hover:text-danger`, with `title="Sign out"` tooltip.
+
+**Build:** ✅ TypeScript clean
+
 - **Zone mode hides shard-specific UI:** When `isZone` is true, the "Back to Refuge" button, Shard Stability bar, and Collapse Timer sidebar section are hidden. ChatPanel context switches to `"refuge"`. CombinedStashLoadout gets `inShard={false}`.
 
 ## 2026-03-27T16:20Z — Refuge Unified Exploration UI

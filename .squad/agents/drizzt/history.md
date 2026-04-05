@@ -33,6 +33,16 @@
 
 ---
 
+## Recent Team Work
+
+### OAuth Username Integration (2026-04-05) — Coordinated with Regis & Minsc
+**Team Effort:** Drizzt (backend), Regis (frontend), Minsc (tests)  
+**Status:** ✅ Complete — username display and sign-out feature shipped  
+**Impact:** Login UX improved — username now visible instead of GUID, sign-out button on all protected pages  
+**Tests:** 2521 passing, +5 new tests for OAuth username callback and store actions
+
+---
+
 ## Recent Work
 
 ### Threat/Aggro System for Creature Target Selection (Issue #281) — PR #297
@@ -3029,3 +3039,18 @@ Threat tables are stored per-encounter, mapped by creature ID. Each creature mai
 2. Integrate threat tables with cleanup on player disconnect/leave
 3. Wire up ZoneRoom to pass threat resolver to creature behavior
 4. Add threat display to admin/debug UI
+
+
+### 2026-04-08: OAuth Redirect Username Fix
+**Task:** Fix OAuth callback redirect to include `username` in query params sent to client.
+**Status:** ✅ Complete
+
+**Problem:** The `authService.loginOAuth()` method returns `AuthResult` which includes `username`, but the Entra callback redirect at line 84 only destructured `playerId` and `token`, not `username`. This caused the client to display player GUIDs instead of usernames after OAuth login.
+
+**Solution:** Updated `/packages/server/src/auth/entra-routes.ts`:
+1. Changed destructuring at line 75 to include `username`: `const { playerId, token, username } = await authService.loginOAuth(...)`
+2. Added `username` to URLSearchParams at line 84: `const params = new URLSearchParams({ token, playerId, username });`
+
+**Result:** Client now receives all three values in the `/auth/callback?token=...&playerId=...&username=...` redirect URL, enabling proper username display.
+
+**Files Modified:** `packages/server/src/auth/entra-routes.ts` (2 lines changed)
