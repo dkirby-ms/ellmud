@@ -106,6 +106,7 @@ All environment variables have sensible defaults for local development. No `.env
 | `AZURE_API_KEY` | *(none)* | Azure AI Foundry API key |
 | `AZURE_DEPLOYMENT_NAME` | `gpt-4o-mini` | Azure AI Foundry model deployment |
 | `AZURE_API_VERSION` | `2024-10-01` | Azure AI Foundry API version |
+| `ENABLE_LLM_NARRATION` | `true` | Enable/disable LLM narration (true/false). When false, uses template-only mode even if Azure credentials are configured. |
 | `LOG_LEVEL` | `info` | Logging level (debug, info, warn, error) |
 | `ADMIN_TOKEN` | *(random UUID)* | Admin API secret token for protected endpoints |
 
