@@ -6,7 +6,7 @@
  * AI actions are resolved the same way as player actions.
  */
 
-import type { Creature, CreatureAction, BehaviorState, CreatureAbility } from './types.js';
+import type { Creature, CreatureAction, BehaviorState } from './types.js';
 
 // ─── World State (subset needed for AI decisions) ────────────────────────────
 

@@ -9,7 +9,7 @@
  * - Group frames with role indicators
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CombatHUD } from '../components/CombatHUD.js';

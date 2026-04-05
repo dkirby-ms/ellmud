@@ -3,7 +3,7 @@
  * Issue #277 — Verify LLM client is instantiated and called for narrations.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { createNarrationService } from '../narrative/factory.js';
 import type { LLMTransport, LLMResponse } from '../narrative/llm-client.js';
 import { LLMClient } from '../narrative/llm-client.js';
@@ -13,7 +13,7 @@ import { resetConfig, getConfig } from '../config.js';
 // Mock transport that tracks calls
 function createMockTransport(response: string = 'A dark chamber with water pooling at your feet.'): LLMTransport {
   const transport: LLMTransport & { callCount: number } = Object.assign(
-    async (_request: any, _signal: AbortSignal): Promise<LLMResponse> => {
+    async (_request: Record<string, unknown>, _signal: AbortSignal): Promise<LLMResponse> => {
       transport.callCount++;
       return { choices: [{ message: { content: response } }] };
     },
@@ -85,6 +85,7 @@ describe('NarrationService factory integration', () => {
     const service = createNarrationService(cache);
     
     // Manually inject the mock client (for testing)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (service as any).llmClient = llmClient;
     
     const context: import('@ellmud/shared').NarrationContext = {
@@ -118,6 +119,7 @@ describe('NarrationService factory integration', () => {
     const result = await service.narrate(context);
     
     expect(result).toBe('Test LLM response.');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((mockTransport as any).callCount).toBe(1);
   });
 
@@ -126,6 +128,7 @@ describe('NarrationService factory integration', () => {
     const service = createNarrationService(cache);
     
     // Ensure no LLM client is set
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (service as any).llmClient = null;
     
     const context: import('@ellmud/shared').NarrationContext = {
@@ -184,6 +187,7 @@ describe('NarrationService factory integration', () => {
     const service = createNarrationService();
     
     // Service should be created without LLM client (null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((service as any).llmClient).toBeNull();
   });
 
@@ -203,6 +207,7 @@ describe('NarrationService factory integration', () => {
     const service = createNarrationService();
     
     // Service should be created with LLM client
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((service as any).llmClient).toBeDefined();
   });
 
@@ -220,6 +225,7 @@ describe('NarrationService factory integration', () => {
     
     const service = createNarrationService();
     
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((service as any).llmClient).toBeDefined();
   });
 });

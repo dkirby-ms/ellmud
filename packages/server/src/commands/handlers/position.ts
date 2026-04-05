@@ -30,7 +30,7 @@ export function handlePosition(ctx: CommandContext): CommandResult {
 
   // Parse position argument
   const arg = args[0].toLowerCase();
-  let newPosition: PositionZone | null = null;
+  let newPosition: PositionZone;
 
   switch (arg) {
     case 'front':

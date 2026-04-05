@@ -5,7 +5,6 @@ import {
   DEFAULT_PLAYER_STATS,
   type Combatant,
   type CombatStats,
-  type WindUpState,
 } from '../combat/CombatState.js';
 import type { CreatureAbility } from '../creatures/types.js';
 

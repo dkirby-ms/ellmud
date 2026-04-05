@@ -19,7 +19,6 @@ import {
   type QueuedAction,
   type TickResult,
   type TelegraphBroadcast,
-  type WindUpState,
   COMBAT_TIMEOUT_TICKS,
   EMPTY_TICK_RESULT,
   POST_COMBAT_COOLDOWN_TICKS,
@@ -151,9 +150,11 @@ export class CombatSystem {
 
     // Set attacker's current target (GDD §6.2: auto-attack target)
     attacker.currentTarget = targetId;
-    // Set target's current target to attacker (GDD §6.2: auto-target on aggro)
-    // This applies to both creatures and PvP
-    target.currentTarget = attackerId;
+    // Set target's current target to attacker only if they don't already have one
+    // (GDD §6.2: auto-target on aggro, but don't override existing target)
+    if (!target.currentTarget) {
+      target.currentTarget = attackerId;
+    }
 
     // Auto-queue attacker's first action as strike against target
     this.queuedActions.set(attackerId, { action: 'strike', targetId });
@@ -641,6 +642,13 @@ export class CombatSystem {
         continue;
       }
 
+      // Disconnected players always default to dodge (GDD §6.3)
+      if (c.disconnected) {
+        this.queuedActions.set(c.id, { action: 'dodge' });
+        this.debug(`Default dodge for ${c.name} (disconnected)`);
+        continue;
+      }
+
       if (!this.queuedActions.has(c.id)) {
         // Auto-attack if we have a valid target
         if (c.currentTarget) {
@@ -661,6 +669,95 @@ export class CombatSystem {
           const reason = c.disconnected ? '(disconnected)' : '(no target)';
           this.debug(`Default dodge for ${c.name} ${reason}`);
         }
+      }
+    }
+
+    // 1a. Decrement ability cooldowns at start of tick (GDD §6.3)
+    for (const c of combatants) {
+      if (!c.abilityCooldowns) continue;
+      for (const [abilityId, remaining] of c.abilityCooldowns) {
+        if (remaining > 1) {
+          c.abilityCooldowns.set(abilityId, remaining - 1);
+        } else {
+          c.abilityCooldowns.delete(abilityId);
+        }
+      }
+    }
+
+    // 1b. Resolve ability actions — validate resources and convert to base actions (GDD §6.3)
+    for (const c of combatants) {
+      const qa = this.queuedActions.get(c.id);
+      if (!qa) continue;
+
+      const abilityAction = qa.action;
+      // Only process ability actions (not base combat actions)
+      if (abilityAction === 'strike' || abilityAction === 'dodge' || abilityAction === 'flee') continue;
+
+      const ability = getAbilityDefinition(abilityAction);
+      if (!ability) {
+        // Unknown ability — fall back to dodge
+        this.queuedActions.set(c.id, { action: 'dodge' });
+        continue;
+      }
+
+      // Validate stamina and cooldown
+      const hasStaminaForAbility = c.stamina === undefined || c.stamina >= ability.staminaCost;
+      const cooldown = c.abilityCooldowns?.get(abilityAction) ?? 0;
+      const offCooldown = cooldown === 0;
+
+      if (!hasStaminaForAbility || !offCooldown) {
+        // Can't use ability — fall back to auto-attack or dodge
+        if (c.currentTarget) {
+          const target = this.combatants.get(c.currentTarget);
+          if (target && target.hp > 0 && this.combatantEncounter.has(c.id)) {
+            this.queuedActions.set(c.id, { action: 'strike', targetId: c.currentTarget });
+            this.debug(`Ability ${abilityAction} failed validation — fallback to auto-attack for ${c.name}`);
+          } else {
+            this.queuedActions.set(c.id, { action: 'dodge' });
+          }
+        } else {
+          this.queuedActions.set(c.id, { action: 'dodge' });
+        }
+        continue;
+      }
+
+      // Consume stamina
+      if (c.stamina !== undefined) {
+        c.stamina -= ability.staminaCost;
+      }
+      // Set cooldown (only if > 0)
+      if (ability.cooldownTicks > 0 && c.abilityCooldowns) {
+        c.abilityCooldowns.set(abilityAction, ability.cooldownTicks);
+      }
+
+      // Convert action based on ability type
+      if (ability.type === 'attack') {
+        // Attack ability → convert to strike with abilityId for damage multiplier
+        const targetId = qa.targetId ?? c.currentTarget;
+        this.queuedActions.set(c.id, { action: 'strike', targetId, abilityId: abilityAction });
+        this.debug(`${c.name} uses ${ability.name}`);
+      } else if (ability.type === 'defence') {
+        // Defence ability (block) → keep as 'block', handled by calculateDamage
+        events.push({
+          type: 'dodge',
+          actorId: c.id,
+          actorName: c.name,
+          narration: `${c.name} is blocking.`,
+        });
+      } else if (ability.type === 'utility') {
+        // Utility ability (observe) → reveal target stats
+        const targetId = qa.targetId ?? c.currentTarget;
+        const target = targetId ? this.combatants.get(targetId) : undefined;
+        if (target) {
+          events.push({
+            type: 'dodge',
+            actorId: c.id,
+            actorName: c.name,
+            narration: `${c.name} observes ${target.name}: ${target.hp}/${target.maxHp} HP, Attack: ${target.attack}, Armour: ${target.armour}`,
+          });
+        }
+        this.queuedActions.set(c.id, { action: 'dodge' });
+        this.debug(`${c.name} uses ${ability.name} on ${target?.name ?? 'unknown'}`);
       }
     }
 
@@ -697,12 +794,20 @@ export class CombatSystem {
 
       // Check if this is a telegraphed ability execution (abilityId present)
       let attackDamage = c.attack;
+      let abilityDamageMultiplier = 1.0;
       if (qa.abilityId && c.windUp && c.windUp.abilityId === qa.abilityId) {
         // Use ability damage instead of base attack
         attackDamage = c.windUp.damage;
         this.debug(`Telegraphed ability: ${c.name} uses ${c.windUp.abilityName} for ${attackDamage} damage`);
         // Clear wind-up state after execution
         c.windUp = undefined;
+      } else if (qa.abilityId) {
+        // Instant ability (e.g., Heavy Strike) — look up damage multiplier
+        const ability = getAbilityDefinition(qa.abilityId);
+        const damageEffect = ability?.effects.find(e => e.type === 'damage');
+        if (damageEffect?.damageMultiplier) {
+          abilityDamageMultiplier = damageEffect.damageMultiplier;
+        }
       }
 
       // Resolve target
@@ -726,6 +831,7 @@ export class CombatSystem {
         defenderAgility: target.agility,
         defenderDodgeSkillRank: target.dodgeSkillRank,
         dodgeRoll,
+        damageMultiplier: abilityDamageMultiplier,
       });
 
       // Apply flanking bonus: +15% from Flank when target's threat focus is at Front (GDD §6.11)
@@ -910,13 +1016,22 @@ export class CombatSystem {
     );
 
     let ended = false;
-    if (aliveInEncounter.length <= 1) {
-      // Only one side remains alive — start/continue post-combat cooldown (GDD §6.2)
-      if (encounter.postCombatCooldown === 0) {
+    if (aliveInEncounter.length === 0) {
+      // No combatants remain (all fled or all defeated) — immediate end
+      events.push(resolveCombatEnd('last_standing'));
+      ended = true;
+    } else if (aliveInEncounter.length <= 1) {
+      // Check if any player survived (post-combat cooldown is for looting)
+      const hasPlayer = aliveInEncounter.some(id => this.combatants.get(id)?.isPlayer);
+
+      if (!hasPlayer) {
+        // Only creatures remain (player fled) — immediate end
+        events.push(resolveCombatEnd('last_standing'));
+        ended = true;
+      } else if (encounter.postCombatCooldown === 0) {
         // First tick after last enemy defeated — start cooldown (don't end combat yet)
         encounter.postCombatCooldown = POST_COMBAT_COOLDOWN_TICKS;
         this.debug(`Post-combat cooldown started: ${POST_COMBAT_COOLDOWN_TICKS} ticks`);
-        // Don't check for end this tick - we just started the cooldown
       } else {
         // Cooldown in progress — decrement
         encounter.postCombatCooldown--;

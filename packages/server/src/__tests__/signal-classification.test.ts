@@ -8,7 +8,6 @@ import {
   classifyEvent,
   getEventIcon,
   COMBAT_ICONS,
-  type SignalClass,
 } from '../combat/signal-classification.js';
 import type { CombatEvent } from '../combat/CombatState.js';
 

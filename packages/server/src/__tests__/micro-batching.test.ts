@@ -11,7 +11,6 @@ import {
 } from '../combat/micro-batching.js';
 import { classifyEvent, COMBAT_ICONS } from '../combat/signal-classification.js';
 import type { CombatEvent } from '../combat/CombatState.js';
-import type { ClassifiedCombatEvent } from '../combat/signal-classification.js';
 
 describe('Temporal Micro-Batching (GDD §6.6)', () => {
   describe('batchCombatEvents', () => {

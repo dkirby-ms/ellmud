@@ -45,7 +45,7 @@ export const COMBAT_ICONS = {
 export function classifyCombatEvent(
   event: CombatEvent,
   isPlayerActor: boolean,
-  isPlayerTarget: boolean,
+  _isPlayerTarget: boolean,
 ): SignalClass {
   // System events: combat_end
   if (event.type === 'combat_end') {

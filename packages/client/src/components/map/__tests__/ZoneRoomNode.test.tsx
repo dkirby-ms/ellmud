@@ -48,7 +48,7 @@ const mockRoomData = {
  * Wraps the component in ReactFlowProvider for testing.
  * ReactFlow nodes must be rendered within a ReactFlowProvider.
  */
-function renderNode(props: any) {
+function renderNode(_props: Record<string, unknown>) {
   return render(
     <ReactFlowProvider>
       {/* <ZoneRoomNode {...props} /> */}

@@ -10,9 +10,6 @@ import { CombatSystem, type ExitResolver } from '../combat/CombatSystem.js';
 import {
   createCombatant,
   DEFAULT_PLAYER_STATS,
-  BASE_FLEE_CHANCE,
-  FLEE_EVASION_BONUS_PER_RANK,
-  FLEE_LEVEL_PENALTY,
   POST_COMBAT_COOLDOWN_TICKS,
 } from '../combat/CombatState.js';
 
@@ -314,7 +311,7 @@ describe('Post-Combat Cooldown (GDD §6.2)', () => {
     // Continue cooldown
     system.resolveTick();
     system.resolveTick();
-    const result4 = system.resolveTick();
+    system.resolveTick();
 
     // Combat should end after cooldown
     expect(system.hasActiveEncounters()).toBe(false);

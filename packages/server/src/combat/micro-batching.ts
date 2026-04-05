@@ -130,7 +130,7 @@ function batchByClass(
  */
 function batchByActor(
   events: ClassifiedCombatEvent[],
-  rules: BatchingRules,
+  _rules: BatchingRules,
 ): BatchedEvent[] {
   const batched: BatchedEvent[] = [];
   const grouped = new Map<string, ClassifiedCombatEvent[]>();
