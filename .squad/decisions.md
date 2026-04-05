@@ -43,6 +43,56 @@ Each expansion requires:
 - Building a `NarrationContext` object with appropriate game state
 - Calling `await narrationService.narrate(context)`
 - Using the returned prose in place of template text
+### 2026-04-05: Fire-and-Forget Pattern for Async Narration in Colyseus Hooks
+**By:** Elminster (Lead/Architect) & Volo (Narrative Developer)
+**Issues:** #292, #277
+
+## Decision
+
+LLM narration calls on critical path (player join, command response, state transitions) MUST use the **fire-and-forget pattern** instead of awaiting:
+
+```typescript
+// ✅ FIRE-AND-FORGET (correct)
+this.generateNarration('event', playerId, roomId, fallback)
+  .then((text) => {
+    this.sendNarrate(client, { text, type: 'system', timestamp: Date.now() });
+  })
+  .catch((err) => {
+    this.log(`Narration error: ${err}`);
+  });
+```
+
+## Rationale
+
+- **GDD §4.5 enforcement:** LLM never blocks critical path
+- **Colyseus lifecycle:** `onJoin()` awaiting LLM calls adds 0-2000ms latency to player connection
+- **UX impact:** Player sees "connecting..." spinner for 2+ seconds on first zone entry (cache miss)
+- **Not critical:** Narration is optional enrichment. Game state (HP, items, position) is what matters
+- **Client protocol:** Async narration already supported — client displays narration whenever it arrives
+- **Fallback ready:** NarrationService has 2000ms timeout and template fallback — service handles errors gracefully
+
+## When to Use
+
+| Call Site | Critical? | Pattern |
+|-----------|----------|---------|
+| Entry narration (`onJoin`) | No | Fire-and-forget ✅ |
+| Room description (`look` command) | Yes (user requested) | Await with timeout ✅ |
+| Combat action narration | No | Fire-and-forget ✅ |
+| Movement narration | No | Fire-and-forget ✅ |
+| Sound/trace narration | No | Fire-and-forget ✅ |
+
+**Key Principle:** "Await only when the user or game state depends on the result. Narration is flavor. Game state is truth. Never block truth waiting for flavor."
+
+## Implementation Notes
+
+- Always use `.catch()` to log errors — never swallow promise rejections
+- Tests expecting narration: await 1000ms+ and search message arrays (order-independent)
+- Exception: `look` command SHOULD await (user explicitly requested), but respect 2000ms timeout from NarrationService
+
+## Team Impact
+
+- **All:** When integrating async services into Colyseus rooms, ask: "Does this need to complete before the player can proceed?" If no → fire-and-forget
+- **Drizzt/Jarlaxle:** When adding narration to other lifecycle events (death, zone collapse), use fire-and-forget for non-critical narration
 
 ---
 

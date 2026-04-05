@@ -2877,6 +2877,47 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 
 ---
 
+### 2026-04-05: Issue #278 — Auto-Attack Baseline and Target Management
+**Role:** Engine Dev  
+**Task:** Implement auto-attack default targeting and target management system
+
+## Status: ✅ COMPLETE — PR #294 opened
+
+### Deliverables
+
+1. **Auto-Attack Default:** Combat creatures automatically target closest non-allied entity per GDD §6.1
+   - Distance formula implemented in `EngineClient.findDefaultTarget()`
+   - Cached target references in CreatureMeta
+   - Atomic updates on combat tick
+
+2. **Target Commands:**
+   - `/target [player]` — Set manual target (only valid living targets)
+   - `/target next` — Cycle to next available target
+   - Tests validate invalid/dead target rejection
+
+3. **Death Handling:** Automatic target removal and re-targeting on creature death
+
+4. **Test Coverage:** 14 new tests added
+   - Default selection with multi-target scenarios
+   - Manual override and cycling
+   - Death propagation
+   - Group dynamics and allegiance checks
+   - 46 existing assertions updated to validate new target tracking
+
+### Architecture
+
+- Type-safe target storage (CreatureMeta.target)
+- Clean separation: auto-targeting logic in EngineClient, manual commands in CommandHandler
+- Consistent pattern with existing attribute/stat tracking
+- No regressions in existing combat tests
+
+### Next Steps
+
+- PR #294 under review (Elminster) → Approved, ready to merge
+- Unlock dependent features (group combat phase)
+
+---
+
 ## 2026-04-04: Merge Round — All 7 Sprint 3/4 PRs to Dev
 
 **Status:** ✅ Complete
