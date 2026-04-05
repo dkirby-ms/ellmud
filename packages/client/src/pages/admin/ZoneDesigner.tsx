@@ -1,9 +1,12 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, ZoomIn, ZoomOut, Maximize2, HelpCircle } from "lucide-react";
-import { computeLayout } from "../../map/computeLayout.js";
-import type { LayoutRoom } from "../../map/computeLayout.js";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, HelpCircle, Search, Filter, Undo2, Redo2 } from "lucide-react";
+import { useUndoRedo } from "../../hooks/useUndoRedo.js";
+import { computeElkLayout, type LayoutRoom } from "../../map/elkLayout.js";
 import { FloorSelector } from "../../components/map/FloorSelector.js";
 import { computeFloorBounds } from "../../components/map/useFloorFilter.js";
+import { ZoneDesignerFlow } from "../../components/map/ZoneDesignerFlow.js";
+import { ReactFlowProvider } from "@xyflow/react";
+import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import {
   createRoom, updateRoom, deleteRoom,
   createExit, updateExit, deleteExit, listZones, getZone,
@@ -80,17 +83,9 @@ function roomColor(type: string): { fill: string; stroke: string } {
   return ROOM_TYPE_COLORS[type] ?? DEFAULT_COLOR;
 }
 
-// ─── Layout constants ────────────────────────────────────────────────────────
+// ─── Helper: convert zone data → layout input ───────────────────────────────
 
-const CELL_W = 100;
-const CELL_H = 100;
-const NODE_W = 50;
-const NODE_H = 50;
-const PADDING = 60;
-
-// ─── Helper: convert zone data → computeLayout input ─────────────────────────
-
-export function zoneToLayoutInput(
+function zoneToLayoutInput(
   rooms: ZoneRoomDefinition[],
   exits: ZoneExitDefinition[],
 ): { rooms: Map<string, LayoutRoom>; entryRoomSlug: string } {
@@ -114,54 +109,9 @@ export function zoneToLayoutInput(
   return { rooms: map, entryRoomSlug };
 }
 
-// ─── Arrow helpers ───────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function roomCenter(x: number, y: number): { cx: number; cy: number } {
-  return {
-    cx: x * CELL_W + NODE_W / 2,
-    cy: y * CELL_H + NODE_H / 2,
-  };
-}
-
-function clipToRect(
-  sx: number, sy: number, tx: number, ty: number,
-): { x1: number; y1: number; x2: number; y2: number } {
-  const dx = tx - sx;
-  const dy = ty - sy;
-  const len = Math.sqrt(dx * dx + dy * dy);
-  if (len === 0) return { x1: sx, y1: sy, x2: tx, y2: ty };
-
-  const nx = dx / len;
-  const ny = dy / len;
-  const hw = NODE_W / 2;
-  const hh = NODE_H / 2;
-
-  const scaleStart =
-    Math.abs(nx) * hh > Math.abs(ny) * hw
-      ? hw / Math.abs(nx)
-      : hh / Math.abs(ny);
-  const scaleEnd = scaleStart;
-
-  return {
-    x1: sx + nx * scaleStart,
-    y1: sy + ny * scaleStart,
-    x2: tx - nx * scaleEnd,
-    y2: ty - ny * scaleEnd,
-  };
-}
-
-function edgeLabelPos(
-  x1: number, y1: number, x2: number, y2: number,
-): { lx: number; ly: number } {
-  const mx = (x1 + x2) / 2;
-  const my = (y1 + y2) / 2;
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const len = Math.sqrt(dx * dx + dy * dy);
-  if (len === 0) return { lx: mx, ly: my };
-  return { lx: mx - (dy / len) * 10, ly: my + (dx / len) * 10 };
-}
-
+/** Infer compass direction from layout positions (used in connect mode). */
 function inferDirection(
   fromPos: { x: number; y: number },
   toPos: { x: number; y: number },
@@ -171,6 +121,127 @@ function inferDirection(
   if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? "east" : "west";
   return dy > 0 ? "south" : "north";
 }
+
+// ─── ReactFlow Conversion ────────────────────────────────────────────────────
+
+/**
+ * Convert zone rooms → ReactFlow nodes.
+ */
+function roomsToFlowNodes(
+  rooms: ZoneRoomDefinition[],
+  positions: Map<string, { x: number; y: number; z: number }>,
+  currentFloor: number,
+  selectedRoom: string | null,
+  disconnectedSlugs: Set<string>,
+  orphanExitIds: Set<string>,
+  exits: ZoneExitDefinition[],
+  showLabels: boolean,
+  mode: DesignerMode,
+): FlowNode[] {
+  const nodes: FlowNode[] = [];
+
+  for (const room of rooms) {
+    const pos = positions.get(room.slug);
+    if (!pos || pos.z !== currentFloor) continue;
+
+    // Count up/down/portal exits
+    const hasUpExits = exits.some((e) => e.fromRoomSlug === room.slug && e.direction === 'up');
+    const hasDownExits = exits.some((e) => e.fromRoomSlug === room.slug && e.direction === 'down');
+    const portalCount = exits.filter((e) => e.fromRoomSlug === room.slug && e.targetZoneSlug).length;
+
+    nodes.push({
+      id: room.slug,
+      type: 'room',
+      position: { x: pos.x, y: pos.y },
+      data: {
+        slug: room.slug,
+        name: room.name,
+        type: room.type,
+        floor: pos.z,
+        isDisconnected: disconnectedSlugs.has(room.slug),
+        isConnectSource: mode === 'connect' && selectedRoom === room.slug,
+        hasUpExits,
+        hasDownExits,
+        portalCount,
+        npcCount: room.npcs?.length ?? 0,
+        lootCount: room.lootContainers?.length ?? 0,
+        hazardCount: room.hazards?.length ?? 0,
+        showLabels,
+        properties: Array.isArray(room.properties) ? room.properties : [],
+      },
+    });
+  }
+
+  return nodes;
+}
+
+/** Map exit direction to the opposite compass direction (for target handles). */
+const OPPOSITE_DIRECTION: Record<string, string> = {
+  north: 'south',
+  south: 'north',
+  east: 'west',
+  west: 'east',
+  up: 'north',
+  down: 'south',
+};
+
+/**
+ * Convert zone exits → ReactFlow edges.
+ * Groups bidirectional exit pairs into single edges.
+ */
+function exitsToFlowEdges(
+  exitPairs: ExitPair[],
+  interZoneExits: ZoneExitDefinition[],
+  positions: Map<string, { x: number; y: number; z: number }>,
+  currentFloor: number,
+  orphanExitIds: Set<string>,
+): FlowEdge[] {
+  const edges: FlowEdge[] = [];
+
+  // Intra-zone exit pairs
+  for (const pair of exitPairs) {
+    const fromPos = positions.get(pair.forward.fromRoomSlug);
+    const toPos = positions.get(pair.forward.toRoomSlug);
+    if (!fromPos || !toPos || fromPos.z !== currentFloor || toPos.z !== currentFloor) continue;
+
+    const isOrphanFwd = orphanExitIds.has(pair.forward.id);
+    const isOrphanRev = pair.reverse ? orphanExitIds.has(pair.reverse.id) : false;
+
+    const dir = pair.forward.direction;
+    const oppositeDir = OPPOSITE_DIRECTION[dir] ?? 'north';
+
+    edges.push({
+      id: pair.forward.id,
+      source: pair.forward.fromRoomSlug,
+      target: pair.forward.toRoomSlug,
+      sourceHandle: `${dir}-source`,
+      targetHandle: `${oppositeDir}-target`,
+      type: 'exit',
+      data: {
+        direction: pair.forward.direction,
+        isBidirectional: pair.isBidirectional,
+        isOrphan: isOrphanFwd || isOrphanRev,
+        isPortal: false,
+        locked: pair.forward.locked || (pair.reverse?.locked ?? false),
+        hidden: pair.forward.hidden || (pair.reverse?.hidden ?? false),
+      },
+    });
+  }
+
+  // Inter-zone (portal) exits — draw stub edges
+  for (const exit of interZoneExits) {
+    const fromPos = positions.get(exit.fromRoomSlug);
+    if (!fromPos || fromPos.z !== currentFloor) continue;
+
+    // Portal exits don't have a target node in the graph — we'll render them as special stub edges
+    // For ReactFlow, we need a dummy target node or just skip drawing them as edges
+    // Let's skip them for now since they don't connect to another node in this zone
+    // (They're indicated by the portal badge on the room node itself)
+  }
+
+  return edges;
+}
+
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -188,7 +259,8 @@ export default function ZoneDesigner({
   const [showLabels, setShowLabels] = useState(false);
   const [hoveredRoom, setHoveredRoom] = useState<string | null>(null);
   const [hoverPosition, setHoverPosition] = useState<{ x: number; y: number } | null>(null);
-  const [hoverTimer, setHoverTimer] = useState<NodeJS.Timeout | null>(null);
+  const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const leaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [selectedExit, setSelectedExit] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -238,16 +310,10 @@ export default function ZoneDesigner({
   // Floor switching
   const [currentFloor, setCurrentFloor] = useState(0);
 
-  // Zoom
-  const [zoom, setZoom] = useState(1.0);
-  const MIN_ZOOM = 0.25;
-  const MAX_ZOOM = 3.0;
-
-  // Pan
-  const [panX, setPanX] = useState(0);
-  const [panY, setPanY] = useState(0);
-  const [isPanning, setIsPanning] = useState(false);
-  const panStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  // Layout results (computed asynchronously via ELK)
+  const [positions, setPositions] = useState<Map<string, { x: number; y: number; z: number }>>(new Map());
+  const [layoutLoading, setLayoutLoading] = useState(false);
+  const [elkLayoutError, setElkLayoutError] = useState<string | null>(null);
 
   // Exit edit form
   const [exitEditForm, setExitEditForm] = useState({
@@ -273,7 +339,6 @@ export default function ZoneDesigner({
   const [insertRoomTarget, setInsertRoomTarget] = useState<string | null>(null);
   const designerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
 
   // Property clipboard
   const [copiedRoomProps, setCopiedRoomProps] = useState<{
@@ -289,6 +354,12 @@ export default function ZoneDesigner({
   // Legend panel
   const [showLegend, setShowLegend] = useState(false);
 
+  // Search & filter (5.2)
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearchBar, setShowSearchBar] = useState(false);
+  const [directionFilter, setDirectionFilter] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   // Resizable panel
   const [panelWidth, setPanelWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
@@ -297,6 +368,18 @@ export default function ZoneDesigner({
   // Creature and item lists for NPC/loot management
   const [creatures, setCreatures] = useState<Array<{ type: string; name: string }>>([]);
   const [items, setItems] = useState<Array<{ id: string; name: string }>>([]);
+
+  // Undo/redo operation stack (5.1)
+  const {
+    pushOperation,
+    handleUndo,
+    handleRedo,
+    undoRedoBusy,
+    canUndo,
+    canRedo,
+    undoLabel,
+    redoLabel,
+  } = useUndoRedo(onZoneChanged);
 
   // Sync edit form when selection changes
   useEffect(() => {
@@ -332,86 +415,29 @@ export default function ZoneDesigner({
     })();
   }, []);
 
-  // Wheel zoom — native listener to allow preventDefault on non-passive event
-  useEffect(() => {
-    const el = canvasRef.current;
-    if (!el) return;
-    function onWheel(e: WheelEvent) {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setZoom((z) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z + delta)));
-    }
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, []);
-
-  // Escape key clears selection, +/- for zoom
+  // Escape key clears selection; Ctrl/Cmd+F focuses search (5.2)
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        setSelectedRoom(null);
-        setSelectedExit(null);
-        setConnectTarget(null);
-      }
-      if (designerRef.current && designerRef.current.contains(document.activeElement)) {
-        if (e.key === "+" || e.key === "=") {
-          e.preventDefault();
-          setZoom((z) => Math.min(MAX_ZOOM, z + 0.1));
-        } else if (e.key === "-") {
-          e.preventDefault();
-          setZoom((z) => Math.max(MIN_ZOOM, z - 0.1));
-        } else if (e.key === "0") {
-          e.preventDefault();
-          setZoom(1.0);
-          setPanX(0);
-          setPanY(0);
+        if (showSearchBar) {
+          setShowSearchBar(false);
+          setSearchQuery("");
+          setDirectionFilter(null);
+        } else {
+          setSelectedRoom(null);
+          setSelectedExit(null);
+          setConnectTarget(null);
         }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault();
+        setShowSearchBar(true);
+        setTimeout(() => searchInputRef.current?.focus(), 0);
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
-  // Reset pan when floor changes
-  useEffect(() => {
-    setPanX(0);
-    setPanY(0);
-  }, [currentFloor]);
-
-  // Pan mouse handlers on SVG
-  const handlePanMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    // Only start pan on SVG background, not on room/exit elements
-    if (e.target !== e.currentTarget) return;
-    // Only left button
-    if (e.button !== 0) return;
-    e.preventDefault(); // Prevent text selection during drag
-    setIsPanning(true);
-    panStartRef.current = { x: e.clientX, y: e.clientY, panX, panY };
-  }, [panX, panY]);
-
-  const handlePanMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if (!isPanning || !panStartRef.current || !svgRef.current) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    // We need zoomedW/zoomedH for coordinate conversion, but those are computed
-    // in the render section. Parse from the current viewBox attribute.
-    const vb = svgRef.current.getAttribute("viewBox");
-    if (!vb) return;
-    const parts = vb.split(/\s+/).map(Number);
-    const vbWidth = parts[2];
-    const vbHeight = parts[3];
-    const scaleX = vbWidth / rect.width;
-    const scaleY = vbHeight / rect.height;
-    // Pan opposite to mouse direction
-    const dx = (e.clientX - panStartRef.current.x) * scaleX;
-    const dy = (e.clientY - panStartRef.current.y) * scaleY;
-    setPanX(panStartRef.current.panX - dx);
-    setPanY(panStartRef.current.panY - dy);
-  }, [isPanning]);
-
-  const handlePanMouseUp = useCallback(() => {
-    setIsPanning(false);
-    panStartRef.current = null;
-  }, []);
+  }, [showSearchBar]);
 
   // Sync exit edit form when exit selection changes
   useEffect(() => {
@@ -438,20 +464,31 @@ export default function ZoneDesigner({
     }
   }, [selectedExit, exits]);
 
-  // ─── Layout computation ─────────────────────────────────
-  const { positions, roomMap, interZoneExits, intraZoneExits } = useMemo(() => {
+  // ─── Layout computation (ELK hierarchical layout) ──────────────────────────
+  useEffect(() => {
     if (rooms.length === 0) {
-      return {
-        positions: new Map<string, { x: number; y: number; z: number }>(),
-        roomMap: new Map<string, ZoneRoomDefinition>(),
-        interZoneExits: [] as ZoneExitDefinition[],
-        intraZoneExits: [] as ZoneExitDefinition[],
-      };
+      setPositions(new Map());
+      return;
     }
 
     const { rooms: layoutInput, entryRoomSlug } = zoneToLayoutInput(rooms, exits);
-    const pos = computeLayout(layoutInput, entryRoomSlug);
 
+    setLayoutLoading(true);
+    setElkLayoutError(null);
+    computeElkLayout(layoutInput, entryRoomSlug)
+      .then((pos) => {
+        setPositions(pos);
+        setLayoutLoading(false);
+      })
+      .catch((err) => {
+        console.error('[ZoneDesigner] ELK layout failed:', err);
+        setElkLayoutError(err.message || 'ELK layout failed');
+        setLayoutLoading(false);
+      });
+  }, [rooms, exits]);
+
+  // ─── Derived layout data ────────────────────────────────────────────────────
+  const { roomMap, interZoneExits, intraZoneExits } = useMemo(() => {
     const rMap = new Map<string, ZoneRoomDefinition>();
     for (const room of rooms) rMap.set(room.slug, room);
 
@@ -462,8 +499,9 @@ export default function ZoneDesigner({
       else intra.push(exit);
     }
 
-    return { positions: pos, roomMap: rMap, interZoneExits: inter, intraZoneExits: intra };
+    return { roomMap: rMap, interZoneExits: inter, intraZoneExits: intra };
   }, [rooms, exits]);
+
 
   // ─── Floor bounds ───────────────────────────────────────
   const floorBounds = useMemo(() => computeFloorBounds(positions), [positions]);
@@ -619,6 +657,77 @@ export default function ZoneDesigner({
     return ids;
   }, [rooms, exits]);
 
+  // ─── Search match set (5.2) ──────────────────────────────────────────────────
+  const searchMatchSlugs = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return null; // null = no active search
+    const matched = new Set<string>();
+    for (const room of rooms) {
+      if (
+        room.name.toLowerCase().includes(q) ||
+        room.slug.toLowerCase().includes(q) ||
+        room.type.toLowerCase().includes(q)
+      ) {
+        matched.add(room.slug);
+      }
+    }
+    return matched;
+  }, [searchQuery, rooms]);
+
+  // ─── ReactFlow nodes & edges ────────────────────────────────────────────────
+  const flowNodes = useMemo(() => {
+    const nodes = roomsToFlowNodes(
+      rooms,
+      positions,
+      currentFloor,
+      selectedRoom,
+      disconnectedSlugs,
+      orphanExitIds,
+      exits,
+      showLabels,
+      mode,
+    );
+    // Apply search match/dim styling
+    if (searchMatchSlugs !== null) {
+      for (const node of nodes) {
+        const isMatch = searchMatchSlugs.has(node.id);
+        (node.data as Record<string, unknown>).searchMatch = isMatch;
+        (node.data as Record<string, unknown>).dimmed = !isMatch;
+      }
+    }
+    return nodes;
+  }, [rooms, positions, currentFloor, selectedRoom, disconnectedSlugs, orphanExitIds, exits, showLabels, mode, searchMatchSlugs]);
+
+  const flowEdges = useMemo(() => {
+    let edges = exitsToFlowEdges(
+      exitPairs,
+      interZoneExits,
+      positions,
+      currentFloor,
+      orphanExitIds,
+    );
+    // Apply direction filter (5.2): hide edges that don't match the selected direction group
+    if (directionFilter) {
+      const allowedDirs = directionFilter === "ns" ? ["north", "south"]
+        : directionFilter === "ew" ? ["east", "west"]
+        : directionFilter === "ud" ? ["up", "down"]
+        : [];
+      edges = edges.filter((e) => {
+        const dir = (e.data as Record<string, unknown>)?.direction as string | undefined;
+        return dir ? allowedDirs.includes(dir) : true;
+      });
+    }
+    // Apply search dim to edges: dim edges not connecting matched rooms
+    if (searchMatchSlugs !== null) {
+      for (const edge of edges) {
+        const srcMatch = searchMatchSlugs.has(edge.source);
+        const tgtMatch = searchMatchSlugs.has(edge.target);
+        (edge.data as Record<string, unknown>).dimmed = !(srcMatch || tgtMatch);
+      }
+    }
+    return edges;
+  }, [exitPairs, interZoneExits, positions, currentFloor, orphanExitIds, directionFilter, searchMatchSlugs]);
+
   // ─── Click handlers ─────────────────────────────────────
   function handleRoomClick(slug: string) {
     if (mode === "connect" && selectedRoom && slug !== selectedRoom) {
@@ -680,6 +789,41 @@ export default function ZoneDesigner({
       y: e.clientY - (bounds?.top ?? 0),
       exitId,
     });
+  }
+
+  function handleRoomMouseEnter(e: React.MouseEvent, slug: string) {
+    // Cancel any pending leave — mouse moved to another node
+    if (leaveTimerRef.current) {
+      clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = null;
+    }
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    // Capture coordinates immediately — React synthetic events are pooled
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const canvasBounds = canvasRef.current?.getBoundingClientRect();
+    if (!canvasBounds) return;
+    const x = rect.left + rect.width / 2 - canvasBounds.left;
+    const y = rect.top - canvasBounds.top;
+    hoverTimerRef.current = setTimeout(() => {
+      hoverTimerRef.current = null;
+      setHoveredRoom(slug);
+      setHoverPosition({ x, y });
+    }, 150);
+  }
+
+  function handleRoomMouseLeave(_e: React.MouseEvent, _slug: string) {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    // Short delay before hiding — prevents flicker when moving between nodes
+    // or when ReactFlow fires spurious leave events during re-renders
+    leaveTimerRef.current = setTimeout(() => {
+      leaveTimerRef.current = null;
+      setHoveredRoom(null);
+      setHoverPosition(null);
+    }, 100);
   }
 
   async function handleAddRoomInDirection(fromSlug: string, direction: string) {
@@ -791,7 +935,15 @@ export default function ZoneDesigner({
       setBusy(true);
       setError(null);
       if (zoneId) {
-        await createRoom(zoneId, roomForm);
+        const created = await createRoom(zoneId, roomForm);
+        const savedForm = { ...roomForm };
+        const savedZoneId = zoneId;
+        pushOperation({
+          type: 'createRoom',
+          label: `Create room '${savedForm.name}'`,
+          undo: async () => { await deleteRoom(created.id); },
+          redo: async () => { await createRoom(savedZoneId, savedForm); },
+        });
       }
       setShowRoomForm(false);
       onZoneChanged?.();
@@ -808,13 +960,29 @@ export default function ZoneDesigner({
     try {
       setBusy(true);
       setError(null);
-      await updateRoom(room.id, {
+      const previousData = {
+        name: room.name,
+        description: room.description,
+        type: room.type,
+        properties: Array.isArray(room.properties) ? [...room.properties] : [],
+        npcs: Array.isArray(room.npcs) ? [...room.npcs] : [],
+        lootContainers: Array.isArray(room.lootContainers) ? [...room.lootContainers] : [],
+      };
+      const newData = {
         name: editForm.name,
         description: editForm.description,
         type: editForm.type,
         properties: editForm.properties,
         npcs: editForm.npcs,
         lootContainers: editForm.lootContainers,
+      };
+      await updateRoom(room.id, newData);
+      const savedRoomId = room.id;
+      pushOperation({
+        type: 'updateRoom',
+        label: `Update room '${room.name}'`,
+        undo: async () => { await updateRoom(savedRoomId, previousData); },
+        redo: async () => { await updateRoom(savedRoomId, newData); },
       });
       onZoneChanged?.();
     } catch (err) {
@@ -830,7 +998,33 @@ export default function ZoneDesigner({
     try {
       setBusy(true);
       setError(null);
+      // Snapshot room data for undo restoration
+      const savedRoom = { ...room };
+      const savedZoneId = zoneId;
       await deleteRoom(room.id);
+      if (savedZoneId) {
+        pushOperation({
+          type: 'deleteRoom',
+          label: `Delete room '${savedRoom.name}'`,
+          undo: async () => {
+            await createRoom(savedZoneId, {
+              slug: savedRoom.slug,
+              name: savedRoom.name,
+              description: savedRoom.description,
+              type: savedRoom.type,
+              properties: savedRoom.properties,
+              lootContainers: savedRoom.lootContainers,
+              hazards: savedRoom.hazards,
+              npcs: savedRoom.npcs,
+            });
+          },
+          redo: async () => {
+            // Find the re-created room by slug to get its new ID
+            const refreshed = rooms.find((r) => r.slug === savedRoom.slug);
+            if (refreshed) await deleteRoom(refreshed.id);
+          },
+        });
+      }
       setSelectedRoom(null);
       onZoneChanged?.();
     } catch (err) {
@@ -853,8 +1047,9 @@ export default function ZoneDesigner({
         locked: false,
         hidden: false,
       };
-      await createExit(zoneId, exitData as Partial<ZoneExitDefinition>);
+      const created = await createExit(zoneId, exitData as Partial<ZoneExitDefinition>);
 
+      let createdReverse: ZoneExitDefinition | null = null;
       if (connectBidirectional && OPPOSITE[connectDirection]) {
         const reverseData: Record<string, unknown> = {
           fromRoomSlug: connectTarget,
@@ -863,8 +1058,34 @@ export default function ZoneDesigner({
           locked: false,
           hidden: false,
         };
-        await createExit(zoneId, reverseData as Partial<ZoneExitDefinition>);
+        createdReverse = await createExit(zoneId, reverseData as Partial<ZoneExitDefinition>);
       }
+
+      const savedZoneId = zoneId;
+      const savedExitData = { ...exitData } as Partial<ZoneExitDefinition>;
+      const savedReverseData = createdReverse
+        ? ({ fromRoomSlug: connectTarget, direction: OPPOSITE[connectDirection], toRoomSlug: selectedRoom, locked: false, hidden: false } as Partial<ZoneExitDefinition>)
+        : null;
+      const fromName = rooms.find(r => r.slug === selectedRoom)?.name ?? selectedRoom;
+      const toName = rooms.find(r => r.slug === connectTarget)?.name ?? connectTarget;
+
+      pushOperation({
+        type: 'createExit',
+        label: `Connect '${fromName}' → '${toName}'`,
+        undo: async () => {
+          await deleteExit(created.id);
+          if (createdReverse) await deleteExit(createdReverse.id);
+        },
+        redo: async () => {
+          const re = await createExit(savedZoneId, savedExitData);
+          // Update closure reference for future undo
+          created.id = re.id;
+          if (savedReverseData) {
+            const reRev = await createExit(savedZoneId, savedReverseData);
+            if (createdReverse) createdReverse.id = reRev.id;
+          }
+        },
+      });
 
       setConnectTarget(null);
       setMode("select");
@@ -901,6 +1122,11 @@ export default function ZoneDesigner({
       setBusy(true);
       setError(null);
       
+      // Snapshot exit data for undo
+      const savedExit = { ...exit };
+      const savedZoneId = exit.zoneId;
+      let savedReverseExit: ZoneExitDefinition | null = null;
+      
       // Delete the selected exit
       await deleteExit(selectedExit);
       
@@ -912,9 +1138,44 @@ export default function ZoneDesigner({
           e.direction === OPPOSITE[exit.direction]
         );
         if (reverseExit?.id) {
+          savedReverseExit = { ...reverseExit };
           await deleteExit(reverseExit.id);
         }
       }
+
+      const fromName = rooms.find(r => r.slug === savedExit.fromRoomSlug)?.name ?? savedExit.fromRoomSlug;
+      const toName = rooms.find(r => r.slug === savedExit.toRoomSlug)?.name ?? savedExit.toRoomSlug;
+
+      pushOperation({
+        type: 'deleteExit',
+        label: `Delete exit '${fromName}' → '${toName}'`,
+        undo: async () => {
+          const re = await createExit(savedZoneId, {
+            fromRoomSlug: savedExit.fromRoomSlug,
+            direction: savedExit.direction,
+            toRoomSlug: savedExit.toRoomSlug,
+            locked: savedExit.locked,
+            hidden: savedExit.hidden,
+            targetZoneSlug: savedExit.targetZoneSlug,
+            targetRoomSlug: savedExit.targetRoomSlug,
+          });
+          savedExit.id = re.id;
+          if (savedReverseExit) {
+            const reRev = await createExit(savedZoneId, {
+              fromRoomSlug: savedReverseExit.fromRoomSlug,
+              direction: savedReverseExit.direction,
+              toRoomSlug: savedReverseExit.toRoomSlug,
+              locked: savedReverseExit.locked,
+              hidden: savedReverseExit.hidden,
+            });
+            savedReverseExit.id = reRev.id;
+          }
+        },
+        redo: async () => {
+          await deleteExit(savedExit.id);
+          if (savedReverseExit) await deleteExit(savedReverseExit.id);
+        },
+      });
       
       setSelectedExit(null);
       setShowDeleteExitModal(false);
@@ -931,6 +1192,11 @@ export default function ZoneDesigner({
     try {
       setBusy(true);
       setError(null);
+      const exit = exits.find((e) => e.id === selectedExit);
+      // Snapshot previous data for undo
+      const previousData: Partial<ZoneExitDefinition> = exit
+        ? { direction: exit.direction, toRoomSlug: exit.toRoomSlug, locked: exit.locked, hidden: exit.hidden, targetZoneSlug: exit.targetZoneSlug, targetRoomSlug: exit.targetRoomSlug }
+        : {};
       const data: Record<string, unknown> = {
         direction: exitEditForm.direction,
         toRoomSlug: exitEditForm.toRoomSlug,
@@ -944,7 +1210,17 @@ export default function ZoneDesigner({
         data.targetZoneSlug = null;
         data.targetRoomSlug = null;
       }
+      const savedExitId = selectedExit;
+      const newData = { ...data } as Partial<ZoneExitDefinition>;
       await updateExit(selectedExit, data as Partial<ZoneExitDefinition>);
+
+      const fromName = exit ? (rooms.find(r => r.slug === exit.fromRoomSlug)?.name ?? exit.fromRoomSlug) : selectedExit;
+      pushOperation({
+        type: 'updateExit',
+        label: `Update exit from '${fromName}'`,
+        undo: async () => { await updateExit(savedExitId, previousData); },
+        redo: async () => { await updateExit(savedExitId, newData); },
+      });
       onZoneChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update exit");
@@ -1247,40 +1523,6 @@ export default function ZoneDesigner({
     );
   }
 
-  // Compute viewBox from visible rooms on the current floor only
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  const viewBoxPositions = new Map(floorPositions);
-  if (viewBoxPositions.size > 0) {
-    for (const pos of viewBoxPositions.values()) {
-      const left = pos.x * CELL_W;
-      const top = pos.y * CELL_H;
-      if (left < minX) minX = left;
-      if (top < minY) minY = top;
-      if (left + NODE_W > maxX) maxX = left + NODE_W;
-      if (top + NODE_H > maxY) maxY = top + NODE_H;
-    }
-  } else {
-    minX = 0; minY = 0; maxX = 400; maxY = 200;
-  }
-
-  const vbX = minX - PADDING;
-  const vbY = minY - PADDING;
-  const vbW = maxX - minX + PADDING * 2;
-  const vbH = maxY - minY + PADDING * 2;
-
-  // Apply zoom to viewBox
-  const zoomedW = vbW / zoom;
-  const zoomedH = vbH / zoom;
-  const zoomedX = vbX + (vbW - zoomedW) / 2;
-  const zoomedY = vbY + (vbH - zoomedH) / 2;
-
-  // Apply pan offset
-  const finalX = zoomedX + panX;
-  const finalY = zoomedY + panY;
-
-  // Cursor style based on mode
-  const canvasCursor = mode === "connect" ? "crosshair" : isPanning ? "grabbing" : "grab";
-
   return (
     <div ref={designerRef} className="bg-[#12131A] border border-[#2A2B35] rounded-lg h-full flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_select]:select-text [&_[contenteditable]]:select-text" style={{ position: "relative" }}>
       {/* ─── Error banner ─────────────────────────────────── */}
@@ -1373,56 +1615,50 @@ export default function ZoneDesigner({
           />
         )}
 
-        <div className="flex-1" />
-
-        {/* Zoom controls */}
+        {/* Undo / Redo (5.1) */}
         <div className="flex items-center gap-1 border-l border-[#2A2B35] pl-2">
           <button
-            onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 0.1))}
-            disabled={zoom <= MIN_ZOOM}
-            className="px-2 py-1.5 border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:border-[#3A3B45] rounded text-xs disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            onClick={() => void handleUndo()}
+            disabled={!canUndo || busy || undoRedoBusy}
+            className="px-2 py-1.5 border border-[#4A4B55] text-[#8A8B95] hover:text-[#E8E0D0] hover:bg-[#1C1D27] rounded text-xs flex items-center gap-1 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#8A8B95] transition-colors"
             style={{ fontFamily: "var(--font-sans)" }}
-            title="Zoom out (-)"
+            title={undoLabel ? `Undo: ${undoLabel}` : "Nothing to undo"}
           >
-            <ZoomOut className="w-3 h-3" />
-          </button>
-          <span
-            className="px-2 text-[#8A8B95] text-xs tabular-nums min-w-[3rem] text-center"
-            style={{ fontFamily: "var(--font-sans)" }}
-          >
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 0.1))}
-            disabled={zoom >= MAX_ZOOM}
-            className="px-2 py-1.5 border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:border-[#3A3B45] rounded text-xs disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            style={{ fontFamily: "var(--font-sans)" }}
-            title="Zoom in (+)"
-          >
-            <ZoomIn className="w-3 h-3" />
+            <Undo2 className="w-3 h-3" />
           </button>
           <button
-            onClick={() => { setZoom(1.0); setPanX(0); setPanY(0); }}
-            disabled={zoom === 1.0 && panX === 0 && panY === 0}
-            className="px-2 py-1.5 border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:border-[#3A3B45] rounded text-xs disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            onClick={() => void handleRedo()}
+            disabled={!canRedo || busy || undoRedoBusy}
+            className="px-2 py-1.5 border border-[#4A4B55] text-[#8A8B95] hover:text-[#E8E0D0] hover:bg-[#1C1D27] rounded text-xs flex items-center gap-1 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#8A8B95] transition-colors"
             style={{ fontFamily: "var(--font-sans)" }}
-            title="Reset zoom & pan (0)"
+            title={redoLabel ? `Redo: ${redoLabel}` : "Nothing to redo"}
           >
-            <Maximize2 className="w-3 h-3" />
+            <Redo2 className="w-3 h-3" />
           </button>
         </div>
 
-        {/* Pan indicator */}
-        {(panX !== 0 || panY !== 0) && (
-          <button
-            onClick={() => { setPanX(0); setPanY(0); }}
-            className="px-2 py-1 text-[#8A8B95] hover:text-[#E8E0D0] text-xs transition-colors"
+        <div className="flex-1" />
+
+        {/* Layout status */}
+        <div className="flex items-center gap-1 border-l border-[#2A2B35] pl-2">
+          <span
+            className="px-2 py-1.5 border border-[#7B4FA0] text-[#C9A84C] bg-[#2A1A3A] text-xs rounded"
             style={{ fontFamily: "var(--font-sans)" }}
-            title="Reset pan"
+            title="ELK hierarchical layout engine"
           >
-            📍 Panned
-          </button>
-        )}
+            ELK
+          </span>
+          {layoutLoading && (
+            <span className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
+              ⏳
+            </span>
+          )}
+          {elkLayoutError && (
+            <span className="text-[#F59E0B] text-xs" style={{ fontFamily: "var(--font-sans)" }} title={elkLayoutError}>
+              ⚠️
+            </span>
+          )}
+        </div>
 
         {mode === "connect" && (
           <span className="text-[#C9A84C] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
@@ -1438,15 +1674,95 @@ export default function ZoneDesigner({
             Cancel
           </button>
         )}
+
+        {/* Search toggle (5.2) */}
+        <button
+          onClick={() => {
+            setShowSearchBar(!showSearchBar);
+            if (!showSearchBar) setTimeout(() => searchInputRef.current?.focus(), 0);
+          }}
+          className={`px-2 py-1.5 rounded text-xs flex items-center gap-1 transition-colors ${
+            showSearchBar || searchQuery || directionFilter
+              ? "bg-[#22D3EE]/20 text-[#22D3EE] border border-[#22D3EE]/40"
+              : "border border-[#4A4B55] text-[#8A8B95] hover:bg-[#1C1D27]"
+          }`}
+          style={{ fontFamily: "var(--font-sans)" }}
+          title="Search & Filter (Ctrl+F)"
+        >
+          <Search className="w-3 h-3" />
+        </button>
       </div>
+
+      {/* ─── Search & filter bar (5.2) ────────────────────── */}
+      {showSearchBar && (
+        <div className="px-4 py-2 border-b border-[#2A2B35] flex items-center gap-3 bg-[#1C1D27]/60" style={{ fontFamily: "var(--font-sans)" }}>
+          {/* Room search input */}
+          <div className="flex items-center gap-1.5 flex-1 max-w-xs">
+            <Search className="w-3 h-3 text-[#8A8B95] shrink-0" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search rooms by name, slug, or type…"
+              className="flex-1 bg-transparent border-b border-[#4A4B55] text-[#E8E0D0] text-xs py-1 px-1 focus:border-[#22D3EE] focus:outline-none placeholder:text-[#6A6B75]"
+              style={{ fontFamily: "var(--font-mono)" }}
+            />
+            {searchQuery && (
+              <span className="text-[#8A8B95] text-[10px] whitespace-nowrap">
+                {searchMatchSlugs?.size ?? 0} match{(searchMatchSlugs?.size ?? 0) !== 1 ? "es" : ""}
+              </span>
+            )}
+          </div>
+
+          {/* Direction filter toggles */}
+          <div className="flex items-center gap-1">
+            <Filter className="w-3 h-3 text-[#8A8B95] shrink-0" />
+            {[
+              { key: "ns", label: "N/S", colors: "border-[#3B82F6] text-[#3B82F6]", active: "bg-[#3B82F6]/20" },
+              { key: "ew", label: "E/W", colors: "border-[#F59E0B] text-[#F59E0B]", active: "bg-[#F59E0B]/20" },
+              { key: "ud", label: "U/D", colors: "border-[#A78BFA] text-[#A78BFA]", active: "bg-[#A78BFA]/20" },
+            ].map(({ key, label, colors, active }) => (
+              <button
+                key={key}
+                onClick={() => setDirectionFilter(directionFilter === key ? null : key)}
+                className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${
+                  directionFilter === key
+                    ? `${colors} ${active}`
+                    : "border-[#3A3B45] text-[#6A6B75] hover:text-[#8A8B95]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Clear all filters */}
+          {(searchQuery || directionFilter) && (
+            <button
+              onClick={() => { setSearchQuery(""); setDirectionFilter(null); }}
+              className="px-2 py-0.5 text-[#8A8B95] hover:text-[#E8E0D0] text-[10px] border border-[#3A3B45] rounded transition-colors"
+            >
+              Clear
+            </button>
+          )}
+
+          {/* Close search bar */}
+          <button
+            onClick={() => { setShowSearchBar(false); setSearchQuery(""); setDirectionFilter(null); }}
+            className="text-[#8A8B95] hover:text-[#E8E0D0]"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
 
       {/* ─── Main area (canvas + side panel) ──────────────── */}
       <div className="flex flex-1 min-h-0">
-        {/* SVG Canvas */}
+        {/* ReactFlow Canvas */}
         <div
           ref={canvasRef}
           className="flex-1 p-4 overflow-hidden relative"
-          style={{ cursor: canvasCursor }}
           onClick={(e) => { if (e.target === e.currentTarget) handleCanvasClick(); }}
         >
           {rooms.length === 0 ? (
@@ -1456,398 +1772,22 @@ export default function ZoneDesigner({
               </p>
             </div>
           ) : (
-            <svg
-              ref={svgRef}
-              viewBox={`${finalX} ${finalY} ${zoomedW} ${zoomedH}`}
-              style={{ width: "100%", minHeight: "350px", cursor: canvasCursor }}
-              xmlns="http://www.w3.org/2000/svg"
-              onMouseDown={handlePanMouseDown}
-              onMouseMove={handlePanMouseMove}
-              onMouseUp={handlePanMouseUp}
-              onMouseLeave={handlePanMouseUp}
-            >
-              <defs>
-                <marker id="arrowhead-selected" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                  <polygon points="0 0, 8 3, 0 6" fill="#C9A84C" />
-                </marker>
-                <marker id="arrowhead-portal" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                  <polygon points="0 0, 8 3, 0 6" fill={PORTAL_COLOR} />
-                </marker>
-                <marker id="arrowhead-orphan" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                  <polygon points="0 0, 8 3, 0 6" fill="#EF4444" />
-                </marker>
-                <marker id="arrowhead-oneway" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-                  <polygon points="0 0, 10 3.5, 0 7" fill={ONE_WAY_COLOR} />
-                </marker>
-                <marker id="arrowhead-oneway-selected" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-                  <polygon points="0 0, 10 3.5, 0 7" fill="#C9A84C" />
-                </marker>
-              </defs>
-
-              {/* ── Exit pair edges (current floor) ─────────────── */}
-              {exitPairs.map((pair) => {
-                const fromPos = positions.get(pair.forward.fromRoomSlug);
-                const toPos = positions.get(pair.forward.toRoomSlug);
-                if (!fromPos || !toPos) return null;
-
-                const from = roomCenter(fromPos.x, fromPos.y);
-                const to = roomCenter(toPos.x, toPos.y);
-                const { x1, y1, x2, y2 } = clipToRect(from.cx, from.cy, to.cx, to.cy);
-                const { lx, ly } = edgeLabelPos(x1, y1, x2, y2);
-                const isSelected = selectedExit === pair.forward.id || selectedExit === pair.reverse?.id;
-                const isOrphanFwd = orphanExitIds.has(pair.forward.id);
-                const isOrphanRev = pair.reverse ? orphanExitIds.has(pair.reverse.id) : false;
-                const isOrphan = isOrphanFwd || isOrphanRev;
-
-                let strokeColor: string;
-                let markerEnd: string | undefined;
-                let strokeWidth: number;
-                let strokeDash: string | undefined;
-
-                if (isSelected) {
-                  strokeColor = "#C9A84C";
-                  strokeWidth = 2.5;
-                  markerEnd = pair.isBidirectional ? undefined : "url(#arrowhead-oneway-selected)";
-                } else if (isOrphan) {
-                  strokeColor = "#EF4444";
-                  strokeWidth = 1.5;
-                  strokeDash = "6 3";
-                  markerEnd = "url(#arrowhead-orphan)";
-                } else if (pair.isBidirectional) {
-                  strokeColor = "#4A4B55";
-                  strokeWidth = 1.5;
-                  markerEnd = undefined;
-                } else {
-                  strokeColor = ONE_WAY_COLOR;
-                  strokeWidth = 2;
-                  markerEnd = "url(#arrowhead-oneway)";
-                }
-
-                const fwdMod = pair.forward.locked || pair.forward.hidden;
-                const revMod = pair.reverse?.locked || pair.reverse?.hidden;
-                const hasModifiers = fwdMod || revMod;
-
-                return (
-                  <g
-                    key={pair.forward.id}
-                    onClick={(e) => { e.stopPropagation(); handleExitClick(pair.forward.id); }}
-                    onContextMenu={(e) => handleExitContextMenu(e, pair.forward.id)}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <line
-                      x1={x1} y1={y1} x2={x2} y2={y2}
-                      stroke={strokeColor}
-                      strokeWidth={strokeWidth}
-                      strokeDasharray={strokeDash}
-                      markerEnd={markerEnd}
-                    />
-                    <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={12} />
-                    {hasModifiers && (
-                      <text
-                        x={lx} y={ly}
-                        textAnchor="middle" dominantBaseline="central"
-                        fill="#B8860B" fontSize="9" fontFamily="var(--font-sans)"
-                      >
-                        {(pair.forward.locked || pair.reverse?.locked) ? "🔒" : ""}
-                        {(pair.forward.hidden || pair.reverse?.hidden) ? "👁" : ""}
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
-
-              {/* Inter-floor exits are indicated by ▲▼ icons on rooms; no cross-z lines drawn */}
-
-              {/* Ghost rooms hidden — navigate via ▲▼ icons on rooms */}
-
-              {/* ── Portal (inter-zone) exit edges ─────────────── */}
-              {interZoneExits.filter((exit) => {
-                const fromPos = positions.get(exit.fromRoomSlug);
-                return fromPos && fromPos.z === currentFloor;
-              }).map((exit) => {
-                const fromPos = positions.get(exit.fromRoomSlug);
-                if (!fromPos) return null;
-                const from = roomCenter(fromPos.x, fromPos.y);
-                // Portal exits don't connect to a room in the SVG — draw a stub line outward
-                const angle = exit.direction === "east" ? 0
-                  : exit.direction === "west" ? Math.PI
-                  : exit.direction === "south" ? Math.PI / 2
-                  : exit.direction === "north" ? -Math.PI / 2
-                  : exit.direction === "up" ? -Math.PI / 4
-                  : Math.PI / 4; // down
-                const stubLen = 40;
-                const sx = from.cx + Math.cos(angle) * (NODE_W / 2 + 4);
-                const sy = from.cy + Math.sin(angle) * (NODE_H / 2 + 4);
-                const ex = sx + Math.cos(angle) * stubLen;
-                const ey = sy + Math.sin(angle) * stubLen;
-                const isSelected = selectedExit === exit.id;
-
-                return (
-                  <g
-                    key={exit.id}
-                    onClick={(e) => { e.stopPropagation(); handleExitClick(exit.id); }}
-                    onContextMenu={(e) => handleExitContextMenu(e, exit.id)}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <line
-                      x1={sx} y1={sy} x2={ex} y2={ey}
-                      stroke={isSelected ? "#C9A84C" : PORTAL_COLOR}
-                      strokeWidth={isSelected ? 2.5 : 2}
-                      strokeDasharray="4 2"
-                      markerEnd={isSelected ? "url(#arrowhead-selected)" : "url(#arrowhead-portal)"}
-                    />
-                    <line x1={sx} y1={sy} x2={ex} y2={ey} stroke="transparent" strokeWidth={12} />
-                    <text
-                      x={ex + Math.cos(angle) * 6} y={ey + Math.sin(angle) * 6}
-                      textAnchor="middle" dominantBaseline="central"
-                      fill={isSelected ? "#C9A84C" : PORTAL_COLOR}
-                      fontSize="9" fontFamily="var(--font-sans)"
-                    >
-                      ⟐ {exit.direction} → {exit.targetZoneSlug}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* ── Room nodes (current floor) ──────────────────── */}
-              {Array.from(floorPositions.entries()).map(([slug, pos]) => {
-                const room = roomMap.get(slug);
-                if (!room) return null;
-                const color = roomColor(room.type);
-                const isSelected = selectedRoom === slug;
-                const isDisconnected = disconnectedSlugs.has(slug);
-                const isConnectSource = mode === "connect" && selectedRoom === slug;
-
-                const x = pos.x * CELL_W;
-                const y = pos.y * CELL_H;
-                const portalExits = interZoneExits.filter((e) => e.fromRoomSlug === slug);
-
-                // Vertical (up/down) exits from this room
-                const upExits = exits.filter(
-                  (e) => e.fromRoomSlug === slug && e.direction === "up",
-                );
-                const downExits = exits.filter(
-                  (e) => e.fromRoomSlug === slug && e.direction === "down",
-                );
-                const upTooltip = upExits.length > 0
-                  ? "Up → " + upExits.map((e) => {
-                      const tgt = e.targetZoneSlug
-                        ? `${e.targetZoneSlug}/${e.targetRoomSlug}`
-                        : e.toRoomSlug;
-                      const tRoom = roomMap.get(e.toRoomSlug);
-                      const tPos = positions.get(e.toRoomSlug);
-                      const name = tRoom ? tRoom.name : tgt;
-                      const fl = tPos != null ? ` (F${tPos.z})` : "";
-                      return `${name}${fl}`;
-                    }).join(", ")
-                  : "";
-                const downTooltip = downExits.length > 0
-                  ? "Down → " + downExits.map((e) => {
-                      const tgt = e.targetZoneSlug
-                        ? `${e.targetZoneSlug}/${e.targetRoomSlug}`
-                        : e.toRoomSlug;
-                      const tRoom = roomMap.get(e.toRoomSlug);
-                      const tPos = positions.get(e.toRoomSlug);
-                      const name = tRoom ? tRoom.name : tgt;
-                      const fl = tPos != null ? ` (F${tPos.z})` : "";
-                      return `${name}${fl}`;
-                    }).join(", ")
-                  : "";
-
-                return (
-                  <g
-                    key={slug}
-                    onClick={(e) => { e.stopPropagation(); handleRoomClick(slug); }}
-                    onContextMenu={(e) => handleRoomContextMenu(e, slug)}
-                    onMouseEnter={(e) => {
-                      if (hoverTimer) clearTimeout(hoverTimer);
-                      const rect = (e.currentTarget as Element).getBoundingClientRect();
-                      const timer = setTimeout(() => {
-                        setHoveredRoom(slug);
-                        setHoverPosition({ x: rect.left + rect.width / 2, y: rect.top });
-                      }, 150);
-                      setHoverTimer(timer);
-                    }}
-                    onMouseLeave={() => {
-                      if (hoverTimer) {
-                        clearTimeout(hoverTimer);
-                        setHoverTimer(null);
-                      }
-                      setHoveredRoom(null);
-                      setHoverPosition(null);
-                    }}
-                    style={{
-                      cursor: mode === "connect" && selectedRoom && slug !== selectedRoom
-                        ? "crosshair"
-                        : "pointer",
-                    }}
-                  >
-                    <rect
-                      x={x} y={y} width={NODE_W} height={NODE_H} rx={6} ry={6}
-                      fill={color.fill}
-                      stroke={
-                        isSelected ? "#22D3EE"
-                          : isConnectSource ? "#3A7D7B"
-                          : isDisconnected ? "#B8860B"
-                          : color.stroke
-                      }
-                      strokeWidth={isSelected || isConnectSource ? 3 : isDisconnected ? 2 : 1.5}
-                      strokeDasharray={isConnectSource ? "4 2" : undefined}
-                    />
-                    {showLabels && (
-                      <text
-                        x={x + NODE_W / 2} y={y + NODE_H / 2 - 4}
-                        textAnchor="middle" dominantBaseline="central"
-                        fill="#E8E0D0" fontSize="6"
-                        style={{ fontFamily: "var(--font-sans)" }}
-                      >
-                        {room.name.length > 10 ? room.name.slice(0, 9) + "…" : room.name}
-                      </text>
-                    )}
-                    <text
-                      x={x + NODE_W / 2} y={y + NODE_H / 2 + (showLabels ? 4 : 0)}
-                      textAnchor="middle" dominantBaseline="central"
-                      fill="#6A6B75" fontSize="6" fontFamily="var(--font-mono)"
-                    >
-                      {slug}
-                    </text>
-                    {pos.z !== 0 && (
-                      <text
-                        x={x + NODE_W - 3} y={y + 7}
-                        textAnchor="end" fill="#8A8B95" fontSize="6" fontFamily="var(--font-sans)"
-                      >
-                        z{pos.z > 0 ? "+" : ""}{pos.z}
-                      </text>
-                    )}
-                    {isDisconnected && (
-                      <text
-                        x={x + 4} y={y + 7}
-                        fill="#B8860B" fontSize="8" fontFamily="var(--font-sans)"
-                      >
-                        ⚠
-                      </text>
-                    )}
-
-                    {/* Content badges (NPC, Loot, Hazard) along bottom edge */}
-                    {(() => {
-                      const badges: Array<{ icon: string; color: string; bg: string; label: string }> = [];
-                      if (room.npcs?.length > 0)
-                        badges.push({ icon: "👤", color: "#D97706", bg: "#2A1E0A", label: `${room.npcs.length} NPC${room.npcs.length > 1 ? "s" : ""}` });
-                      if (room.lootContainers?.length > 0)
-                        badges.push({ icon: "📦", color: "#CA8A04", bg: "#2A200A", label: `${room.lootContainers.length} Loot` });
-                      if (room.hazards?.length > 0)
-                        badges.push({ icon: "⚠", color: "#DC2626", bg: "#2A0A0A", label: `${room.hazards.length} Hazard${room.hazards.length > 1 ? "s" : ""}` });
-                      if (badges.length === 0) return null;
-                      const totalW = badges.length * 12 + (badges.length - 1) * 2;
-                      const startX = x + NODE_W / 2 - totalW / 2;
-                      return badges.map((b, i) => (
-                        <g key={b.icon}>
-                          <circle
-                            cx={startX + i * 14 + 6} cy={y + NODE_H - 5}
-                            r={5} fill={b.bg} stroke={b.color} strokeWidth={1}
-                          />
-                          <text
-                            x={startX + i * 14 + 6} y={y + NODE_H - 5}
-                            textAnchor="middle" dominantBaseline="central"
-                            fill={b.color} fontSize="5" fontFamily="var(--font-sans)"
-                          >
-                            {b.icon}
-                          </text>
-                          <title>{b.label}</title>
-                        </g>
-                      ));
-                    })()}
-
-                    {/* Property tags below room node */}
-                    {room.properties?.length > 0 && (
-                      <text
-                        x={x + NODE_W / 2} y={y + NODE_H + 6}
-                        textAnchor="middle" dominantBaseline="central"
-                        fill="#6A6B75" fontSize="5" fontFamily="var(--font-mono)"
-                      >
-                        {room.properties.join(" · ")}
-                      </text>
-                    )}
-
-                    {/* Vertical exit (up/down) badges — click to navigate floor */}
-                    {upExits.length > 0 && (() => {
-                      const targetZ = upExits.map((e) => positions.get(e.toRoomSlug)?.z).find((z) => z != null);
-                      return (
-                        <g
-                          onClick={(e) => { e.stopPropagation(); handleExitClick(upExits[0].id); }}
-                          onContextMenu={(e) => handleExitContextMenu(e, upExits[0].id)}
-                          onDoubleClick={(e) => { e.stopPropagation(); if (targetZ != null) setCurrentFloor(targetZ); }}
-                          style={{ cursor: "pointer" }}
-                        >
-                          <circle
-                            cx={x + NODE_W - 5} cy={y + 5}
-                            r={5} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
-                          />
-                          <text
-                            x={x + NODE_W - 5} y={y + 5}
-                            textAnchor="middle" dominantBaseline="central"
-                            fill={INTER_FLOOR_COLOR} fontSize="6" fontWeight="bold"
-                            fontFamily="var(--font-sans)"
-                          >
-                            ▲
-                          </text>
-                          <title>{upTooltip} (click to select · double-click to navigate)</title>
-                        </g>
-                      );
-                    })()}
-                    {downExits.length > 0 && (() => {
-                      const targetZ = downExits.map((e) => positions.get(e.toRoomSlug)?.z).find((z) => z != null);
-                      return (
-                        <g
-                          onClick={(e) => { e.stopPropagation(); handleExitClick(downExits[0].id); }}
-                          onContextMenu={(e) => handleExitContextMenu(e, downExits[0].id)}
-                          onDoubleClick={(e) => { e.stopPropagation(); if (targetZ != null) setCurrentFloor(targetZ); }}
-                          style={{ cursor: "pointer" }}
-                        >
-                          <circle
-                            cx={x + NODE_W - 5} cy={y + NODE_H - 5}
-                            r={5} fill="#1a1033" stroke={INTER_FLOOR_COLOR} strokeWidth={1}
-                          />
-                          <text
-                            x={x + NODE_W - 5} y={y + NODE_H - 5}
-                            textAnchor="middle" dominantBaseline="central"
-                            fill={INTER_FLOOR_COLOR} fontSize="6" fontWeight="bold"
-                            fontFamily="var(--font-sans)"
-                          >
-                            ▼
-                          </text>
-                          <title>{downTooltip} (click to select · double-click to navigate)</title>
-                        </g>
-                      );
-                    })()}
-
-                    {/* Inter-zone portal indicators */}
-                    {portalExits.map((pe, i) => (
-                      <g key={pe.id}
-                        onClick={(e) => { e.stopPropagation(); handleExitClick(pe.id); }}
-                        onContextMenu={(e) => handleExitContextMenu(e, pe.id)}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <circle
-                          cx={x + NODE_W + 8} cy={y + 8 + i * 14} r={6}
-                          fill="#0e3a3d" stroke={PORTAL_COLOR} strokeWidth={1}
-                        />
-                        <text
-                          x={x + NODE_W + 8} y={y + 8 + i * 14}
-                          textAnchor="middle" dominantBaseline="central"
-                          fill={PORTAL_COLOR} fontSize="8" fontFamily="var(--font-sans)"
-                        >
-                          ⟐
-                        </text>
-                        <title>
-                          {pe.direction} → {pe.targetZoneSlug}/{pe.targetRoomSlug}
-                        </title>
-                      </g>
-                    ))}
-                  </g>
-                );
-              })}
-            </svg>
+            <ReactFlowProvider>
+              <ZoneDesignerFlow
+                nodes={flowNodes}
+                edges={flowEdges}
+                onNodeClick={handleRoomClick}
+                onEdgeClick={handleExitClick}
+                onNodeContextMenu={handleRoomContextMenu}
+                onNodeMouseEnter={handleRoomMouseEnter}
+                onNodeMouseLeave={handleRoomMouseLeave}
+                onEdgeContextMenu={handleExitContextMenu}
+                onPaneClick={handleCanvasClick}
+                selectedNodeId={selectedRoom}
+                selectedEdgeId={selectedExit}
+                floor={currentFloor}
+              />
+            </ReactFlowProvider>
           )}
 
           {/* ─── Legend panel ──────────────────────────────── */}

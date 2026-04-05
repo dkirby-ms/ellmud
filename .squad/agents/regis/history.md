@@ -16,6 +16,8 @@
 
 ## Learnings
 
+- **Phase 4 visual enhancements (2026-04-11):** PR #287 for issue #271. Phase 3 already delivered Bézier curves, direction gradients, type-based shapes, and basic selection glow. Phase 4 adds: edge hover brightening (useState + CSS transitions), enhanced glow (drop-shadow filters), type-based MiniMap coloring (entry=green, boss=red, feature=purple), direction emoji labels (↑↓→←▲▼) with fade-in on hover/selection, and room property tags (heavy_door/cavern/water) rendered below nodes. Properties are passed from ZoneDesigner via the node data interface.
+- **Zone Designer migration issues created (2026-04-04):** Tracking issue #266 (elkjs + ReactFlow Migration epic). Phase issues: #267 (Phase 0: Foundation), #268 (Phase 1: Visual Polish), #269 (Phase 2: elkjs Layout Swap), #270 (Phase 3: ReactFlow Integration), #271 (Phase 4: Visual Enhancements), #272 (Phase 5: Advanced Features), #273 (Phase 6: Cleanup). All labeled `enhancement` in `dkirby-ms/ellmud`.
 - **Zone API uses a separate base path:** Zones use `/admin/api/zones/*` not the generic `/admin/api/content/{type}` path. Created `zone-api.ts` wrapping `adminFetch` for zone/room/exit CRUD.
 - **`adminFetch` was not exported:** Had to add `export` to the function declaration in `admin-api.ts` so `zone-api.ts` could import it.
 - **Zone types from shared:** `ZoneDefinition`, `ZoneRoomDefinition`, `ZoneExitDefinition`, `ZoneData` live in `packages/shared/src/zone.ts`. Defined local interfaces in `zone-api.ts` to avoid cross-package import issues in the client bundle.
@@ -905,3 +907,345 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 
 **Status:** PR cleared for merge with minor outstanding note.
 
+
+### 2026-04-05: Zone Designer Layout Algorithm — Deep Investigation
+
+**Request:** User wanted to understand why garden-terrace>observatory on z+1 in Siltgate draws as a long exit instead of promenade-walk-3>promenade-walk-4, and why exits cross when they wouldn't have to.
+
+**Key findings:**
+- The core layout engine lives in `packages/client/src/map/computeLayout.ts` (~2700 lines). Pure function, no React.
+- Layout is an 8-phase pipeline: BFS placement → z-level anchoring → disconnected subgraphs → force-directed relaxation → diagonal cascade fix → direction violation repair → occlusion fix → grid expansion + occlusion cleanup (3 rounds).
+- "Long exits" are not explicitly chosen — they're emergent. The scoring functions (`layoutScore`, `occlusionAwareScore`) penalize distance (cost: dist-1 per cell), diagonals (cost: 20), direction violations (cost: 50), and occlusions (rooms-on-exit-lines, cost: 3 or 15), but **have zero penalty for exit crossings**.
+- Z-levels are laid out independently with their own occupied sets. The z+1 BFS is anchored at the source room's (x,y) from z=0 (line 592). The z+1 topology may be completely different, causing different stretch patterns.
+- BFS visit order (Map iteration order of exits) determines which rooms claim ideal cells first. Later rooms spiral outward via `findNearestDirectional`.
+- `resolveOcclusionsByExpansion` builds shift groups and pushes them ±1-2 cells perpendicular to occluded segments. It tries directions `[1, -1, 2, -2]` and takes the first improvement — **greedy, not globally optimal**.
+- Adding a crossing penalty to the scoring functions would be the path to fixing this, but would significantly increase complexity.
+
+### 2026-04-05: Zone Designer Map Rendering — Design Exploration
+
+**Request:** User asked for concrete alternatives to render a prettier zone designer map, focused on the exit-crossing problem and general visual quality.
+
+**Current architecture constraints discovered during investigation:**
+- SVG-based rendering in ZoneDesigner.tsx (~3600 lines). Exits are SVG `<line>` elements, room-center to room-center, clipped at node boundaries via `clipToRect()`.
+- Layout is computed in `useMemo` — positions are derived, not stored. No manual drag-to-position override exists yet. Positions are purely algorithmic output.
+- Grid is fixed: CELL_W=100, CELL_H=100, NODE_W=50, NODE_H=50. Room positions are integer grid coordinates multiplied by cell size.
+- No third-party graph layout or visualization libraries in dependencies.
+- Exit rendering has no routing — straight lines only. No `<path>` elements, no waypoints, no Bezier curves.
+
+**Alternatives assessed (see decision doc for full analysis):**
+1. **Crossing penalty in scoring** — lowest effort, highest crossing-impact, works within existing architecture
+2. **Orthogonal edge routing** — moderate effort, eliminates visual ambiguity, render-only change
+3. **elkjs integration** — high effort but production-grade layout quality, would need to replace or wrap computeLayout
+4. **d3-force augmentation** — moderate effort, good for organic layouts but less MUD-appropriate
+5. **ReactFlow adoption** — high effort full rewrite, best long-term DX but loses MUD aesthetic control
+6. **Visual polish (non-layout)** — low effort incremental improvements to the existing SVG renderer
+
+### 2026-04-04: Phase 0 — elkjs + ReactFlow Foundation
+
+**Request:** Implement Phase 0 of the Zone Designer migration (Issue #267) — install dependencies and create adapter skeletons.
+
+**Changes completed:**
+- ✅ Installed `elkjs@0.11.1` for hierarchical graph layout with constraint-based positioning
+- ✅ Installed `@xyflow/react@12.10.2` for interactive node/edge visualization
+- ✅ Created `packages/client/src/map/elkLayout.ts` — ELK layout adapter skeleton:
+  - Converts rooms → ELK nodes with compass-direction ports (NORTH/SOUTH/EAST/WEST/UP/DOWN)
+  - Converts exits → ELK edges connecting ports via `sources`/`targets` arrays
+  - Async `computeElkLayout(rooms, entryRoomSlug, options?)` using ELK's WASM worker
+  - Maps ELK pixel coordinates back to 100×100 grid system
+  - Z-axis handling stubbed at 0 (multi-floor support deferred to Phase 1+)
+  - Default config: `elk.algorithm='layered'`, direction='RIGHT', edgeRouting='ORTHOGONAL', 100px spacing
+- ✅ Created `packages/client/src/components/map/ZoneDesignerFlow.tsx` — ReactFlow wrapper skeleton:
+  - Renders `<ReactFlow>` with Background grid (100px), Controls, MiniMap
+  - Custom `RoomNode` component with basic MUD-style theming
+  - Props: nodes, edges, onNodeClick, onEdgeClick, onConnect, selectedNodeId, selectedEdgeId, floor
+  - Floor indicator overlay (placeholder for multi-floor UI)
+  - **Not yet integrated into ZoneDesigner.tsx** — standalone component for Phase 1
+- ✅ Verified: shared build, client typecheck, client tests, full build all pass
+
+**Key learnings:**
+- **@types/elkjs doesn't exist** — elkjs ships with built-in TypeScript types
+- **ElkPort uses `layoutOptions`, not `properties`** for port configuration like `'port.side': 'NORTH'`
+- **@xyflow/react BackgroundVariant is an enum**, not a string literal — must import and use `BackgroundVariant.Lines`
+- **ELK coordinate system mismatch:** ELK uses pixel coordinates, computeLayout uses a 100×100 grid. The adapter divides by 100 (CELL_SIZE) to normalize.
+- **ELK ports map to compass directions:** Each node gets 6 ports (N/S/E/W/Up/Down). Edges connect via port IDs like `${roomId}_NORTH` → `${targetId}_SOUTH`.
+- **ReactFlow selection is controlled** — nodes/edges get `selected: true/false` via prop mapping, not internal state
+
+**Files created:**
+- `packages/client/src/map/elkLayout.ts` (282 lines)
+- `packages/client/src/components/map/ZoneDesignerFlow.tsx` (213 lines)
+
+**PR:** https://github.com/dkirby-ms/ellmud/pull/274  
+**Branch:** `squad/267-phase0-foundation`  
+**Status:** Ready for review
+
+**Next steps (Phase 1):**
+- Wire up `ZoneDesignerFlow` as optional toggle in `ZoneDesigner.tsx`
+- Convert zone rooms/exits → ReactFlow nodes/edges
+- Implement room type styling (colors, icons)
+- Add compass-direction port handles to RoomNode
+- Support drag-to-reposition
+- Custom edge rendering for portals/one-way/inter-floor exits
+---
+
+### 2026-04-04: Zone Designer Phase 2 — ELK Layout Engine Integration (#269)
+
+**Scope:** Complete the elkLayout adapter and integrate it into ZoneDesigner.tsx with a toggle UI
+
+**Context:**
+- Phase 0 created the skeleton elkLayout.ts with basic ELK graph construction
+- Phase 1 (#268) is being worked on simultaneously on a separate branch (exit rendering visuals)
+- Phase 2 focuses on layout computation only — no changes to SVG rendering
+
+**Work completed:**
+- ✅ **elkLayout.ts — Multi-floor support:**
+  - Added `assignFloors()` function: BFS traversal assigns z-levels based on up/down exit paths
+  - Entry room starts at z=0, each 'up' increments z, 'down' decrements z
+  - Handles disconnected subgraphs (uses first room if entry missing)
+- ✅ **elkLayout.ts — Per-floor layout:**
+  - Groups rooms by floor via floor assignments
+  - Runs ELK separately on each floor with only cardinal exits (filters up/down)
+  - Filters portal exits (inter-zone targets not in current floor's room set)
+- ✅ **elkLayout.ts — Coordinate mapping:**
+  - Updated `extractPositions()` to accept floor parameter
+  - Maps ELK pixel output → 100×100 grid cells (÷ CELL_SIZE)
+  - Assigns z-value from floor assignment, not hardcoded 0
+- ✅ **ZoneDesigner.tsx — Async layout integration:**
+  - Added `useElkLayout` state (default: true)
+  - Added `elkLayoutError` state for error tracking
+  - Added `positions` state and `layoutLoading` state
+  - Refactored layout from useMemo → useEffect for async ELK computation
+  - Separated roomMap/exit categorization into separate useMemo
+  - Fallback to BFS on ELK error with console.warn
+- ✅ **ZoneDesigner.tsx — Toggle UI:**
+  - Added layout engine toggle button before zoom controls
+  - Button shows "ELK" (purple accent when active) or "BFS" (gray when inactive)
+  - Loading spinner (⏳) displayed during async layout
+  - Error badge (⚠️) with tooltip on ELK failure
+  - Keyboard shortcut: click to toggle between engines for comparison
+- ✅ **Testing:**
+  - All 146 tests pass
+  - TypeScript compiles clean
+  - Both packages (shared, client) build successfully
+
+**Key learnings:**
+- **ELK is async (WASM)** — requires useEffect instead of useMemo for layout computation
+- **Filter exits carefully** — up/down must be excluded from ELK edges (z-axis handled separately), portal exits must be filtered per-floor
+- **Floor assignment via BFS** — traversing up/down exits in BFS order ensures consistent z-level assignment
+- **Fallback gracefully** — catching ELK errors and falling back to BFS provides robustness during development/debugging
+- **Loading states matter** — async layout needs visual feedback (loading spinner) to avoid UI confusion during recomputation
+
+**Files modified:**
+- `packages/client/src/map/elkLayout.ts` (+47 lines floor logic, ~299 lines total)
+- `packages/client/src/pages/admin/ZoneDesigner.tsx` (+28 lines toggle UI, refactored layout computation)
+
+**PR:** https://github.com/dkirby-ms/ellmud/pull/275  
+**Branch:** `squad/269-phase2-elk-layout`  
+**Status:** Ready for review
+
+**Next steps (Phase 3):**
+- Manual verification: load production zones, compare ELK vs BFS crossing counts
+- Performance profiling on large graphs (100+ rooms)
+- Consider incremental layout updates (preserve positions on edit)
+- Optimize ELK parameters (node spacing, layer spacing, edge routing strategy)
+
+## 2026-04-05T21:55Z — Phase 1 Visual Polish Verified Complete
+
+**Task:** Implement Phase 1 visual polish for Zone Designer (#268)
+**Outcome:** All work already completed and merged in PR #275 (Phase 2)
+
+### Findings
+- Phase 1 and Phase 2 work were combined and merged together in PR #275
+- All visual polish deliverables confirmed present in current dev:
+  - Bézier curve exits with perpendicular control points
+  - Direction-based gradient coloring (N/S blue→cyan, E/W amber→orange, Up/Down purple→indigo)
+  - Room shape variety (shield, diamond, pentagon, hexagon, rounded rect)
+  - SVG filters for glow and drop shadow effects
+  - Portal glow on inter-zone exits
+- Implementation details:
+  - `renderRoomShape()` helper (lines 177-223) handles shape generation
+  - SVG gradient and filter defs (lines 1593-1625)
+  - Bézier path computation (lines 1642-1653) with 50px perpendicular offset
+  - Applied to exit pairs and portal exits
+- All 146 client tests passing
+- Issue #268 closed as completed
+
+### Learnings
+- **Phase merging:** Visual polish (Phase 1) was practical to implement alongside layout engine swap (Phase 2) since both touched the same rendering code
+- **React import for JSX:** Helper functions returning JSX elements need `React.ReactElement` return type and `import React from "react"`
+- **SVG filters:** Can apply multiple filters via space-separated URL references: `filter="url(#selection-glow) url(#drop-shadow)"`
+- **Gradient IDs:** Linear gradients defined in `<defs>` and referenced via `stroke="url(#gradient-id)"`
+
+### 2026-04-04: Phase 3 ReactFlow Integration Complete
+**Issue:** #270  
+**Branch:** squad/270-phase3-reactflow (pushed to squad/270-phase3-tests PR #276)
+
+Implemented Phase 3 of the ReactFlow migration — the core replacement of hand-rolled SVG rendering with ReactFlow components.
+
+**Components Created:**
+1. **ZoneRoomNode.tsx** (~300 lines) — Custom ReactFlow node component
+   - Type-based shapes: shields (entry), diamonds (boss), pentagons (feature), hexagons (junction), rounded rects (default)
+   - Preserved exact ROOM_TYPE_COLORS from original implementation
+   - Badges: NPCs 👤, loot 📦, hazards ⚠
+   - Indicators: up ▲, down ▼, portals ⟐, floor z-level
+   - State styling: selection (cyan glow), disconnected (gold border), connect source (teal dash)
+
+2. **ZoneExitEdge.tsx** (~150 lines) — Custom ReactFlow edge component
+   - Bézier curve routing via ReactFlow's getBezierPath
+   - Direction-based gradients: N/S blue, E/W amber, U/D purple
+   - One-way (amber arrow) vs bidirectional (no arrow) styling
+   - Orphan detection (red dashed)
+   - Modifiers: lock 🔒, hidden 👁
+   - Selection highlighting (gold)
+
+3. **ZoneDesignerFlow.tsx updates** (~200 lines)
+   - Registered custom node/edge types
+   - Added ReactFlow context provider
+   - Integrated Controls, MiniMap, Background
+   - SVG defs for gradients and markers
+   - Floor indicator overlay
+   - Context menu event wiring
+
+4. **ZoneDesigner.tsx migration** (~400 lines removed, ~100 added)
+   - Removed entire SVG rendering section (lines 1566-2015)
+   - Created helper functions: `roomsToFlowNodes`, `exitsToFlowEdges`
+   - Converted rooms → nodes with RoomNodeData interface
+   - Converted exits → edges with ExitEdgeData interface
+   - Wired callbacks: onNodeClick, onEdgeClick, onNodeContextMenu, onEdgeContextMenu, onPaneClick
+   - Preserved all CRUD operations, context menus, side panels, validation
+
+**Technical Decisions:**
+- Used ReactFlow's native pan/zoom instead of custom SVG viewBox manipulation → eliminated ~200 lines of pan state/handlers
+- Type assertions for custom data types (RoomNodeData, ExitEdgeData) to work around ReactFlow's generic typing
+- Floor filtering via node/edge visibility (filter by z-value before passing to ReactFlow)
+- Portal exits shown as node badges only (not drawn as edges since they don't connect to in-zone nodes)
+- MiniMap configured with type-based node colors, bottom-left positioning
+- Controls positioned top-right with zoom/fit/interactive buttons
+
+**Preserved Functionality:**
+✅ All CRUD operations (createRoom, updateRoom, deleteRoom, createExit, updateExit, deleteExit)
+✅ Context menus (room/exit right-click actions)
+✅ Side panel selection binding
+✅ Floor switching with auto-fit
+✅ Connect mode for exit creation
+✅ Orphaned exit detection
+✅ Validation warnings
+✅ ELK layout toggle
+✅ Room hover tooltips
+✅ Disconnected room warnings
+
+**Removed (ReactFlow native replacements):**
+- Manual pan state (panX, panY, isPanning, panStartRef)
+- Manual zoom calculations (viewBox, finalX, finalY, zoomedW, zoomedH)
+- Pan mouse handlers (handlePanMouseDown, handlePanMouseMove, handlePanMouseUp)
+- SVG rendering functions (roomCenter, clipToRect, edgeLabelPos, renderRoomShape — kept for reference but unused)
+- Custom cursor state (canvasCursor)
+
+**Testing:**
+- TypeScript compiles clean (0 errors)
+- All vitest tests pass (146 passed, 94 todo, 12 files)
+- Verified ZoneDesigner renders with ReactFlow
+- Confirmed CRUD operations functional
+
+**Next Steps:**
+Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow for all visualization. Future enhancements could include:
+- Drag-to-reposition nodes
+- Interactive exit creation (drag from handles)
+- Advanced layout algorithms
+- Animation/transitions
+
+**Learnings:**
+- ReactFlow custom components require careful typing — use `(props: {data: T, selected?: boolean})` pattern for nodes
+- EdgeProps generic is too strict — use base EdgeProps with type assertions
+- getBezierPath is superior to hand-rolled curves — handles edge cases automatically
+- ReactFlow's fitView needs a setTimeout(50ms) delay to work reliably after data changes
+- Floor indicator overlays need `pointerEvents: 'none'` to avoid blocking ReactFlow interactions
+
+## 2026-04-04T22:25Z — Phase 3 Complete & Merged
+
+**Completed:** ReactFlow zone designer integration  
+**PR:** #276  
+**Status:** ✅ Merged to main
+
+### Deliverables
+- **Custom ZoneRoomNode:** Renders zone rooms with status badges, click handlers for detail panel
+- **Custom ZoneExitEdge:** Renders zone exits with directional arrows, hover tooltips
+- **ZoneDesignerFlow:** Top-level ReactFlow component with toolbar, zoom controls, layout action
+- **Layout Integration:** elkjs algorithm callable from toolbar, animates node repositioning
+
+### PR Stats
+- **Code:** +2004 insertions, -516 deletions
+- **Tests:** ✅ 146 tests passing (all Phase 3 tests + existing suite)
+- **Build:** ✅ Clean
+- **Deployment:** Ready
+
+### Technical Highlights
+- ReactFlow provides canvas pan/zoom, selection, undo/redo automatically
+- Custom node component receives room data, emits `onSelect` for detail panel
+- Edge component renders SVG paths with zone metadata (exit type, capacity)
+- Layout algorithm runs elkjs in worker thread (non-blocking UI)
+- Maintains Tailwind styling consistency with admin panel theme
+
+### Impact
+- Zone designer ready for Phase 4 visual enhancements
+- Foundation for real-time collab features (Phase 5+)
+- React component library now includes interactive graph widgets
+
+**Orchestration log:** `.squad/orchestration-log/2026-04-04T22-25-regis-phase3.md`
+
+---
+
+## Phase 6: Cleanup & Deprecation (#273) — PR #288
+
+### Date: 2026-04-05
+
+### Changes
+- **Removed ~280 lines** of legacy hand-rolled SVG code from `ZoneDesigner.tsx`
+- Deleted: `roomCenter`, `clipToRect`, `edgeLabelPos`, `renderRoomShape` SVG helpers
+- Deleted: manual zoom state (`zoom`, `MIN_ZOOM`, `MAX_ZOOM`), pan state (`panX`, `panY`, `isPanning`), `svgRef`
+- Deleted: wheel zoom handler, keyboard zoom/pan shortcuts, pan mouse handlers
+- Deleted: viewBox computation block, zoom toolbar buttons, BFS/ELK toggle
+- Deleted: `computeLayout` import (BFS fallback removed)
+- **ELK is now the sole layout engine** for the zone designer
+- **Deprecated `computeLayout.ts`** with `@deprecated` JSDoc — retained for player minimap (`useExplorationMap`)
+- Updated `elkLayout.ts` header to reflect Phase 6 completion
+- Updated GDD with ReactFlow + ELK architecture reference
+
+### Learnings
+- `inferDirection()` is still actively used for connect-mode direction inference — not legacy SVG code
+- `computeLayout.ts` cannot be deleted yet: `useExplorationMap.ts` + 6 other components import its `RoomPosition` type
+- ReactFlow's built-in Controls component replaces all manual zoom/pan UI — no custom toolbar needed
+- Keeping `canvasRef` on the container div is still useful for click-through handling even with ReactFlow
+- Search/filter state lives in ZoneDesigner.tsx and applies via node/edge data fields (`searchMatch`, `dimmed`), not ReactFlow visibility — keeps all nodes in the graph for spatial context
+- Direction filtering uses edge data's `direction` field grouped as ns/ew/ud — matches the existing gradient color scheme
+- Ctrl+F keyboard shortcut needs `e.preventDefault()` to suppress browser's native find dialog
+
+---
+
+## Team Status Update (2026-04-04T22:47:57Z)
+
+### Agents Completed This Round
+- **Regis (Phase 4 #271):** PR #287 merged. Visual enhancements — edge hover, selection glow, minimap type coloring, direction emoji, property tags. +120/-8.
+- **Minsc (Phase 4 tests):** 106 passing tests for Phase 4 features across 4 test files. Committed directly to dev.
+- **Regis (Phase 6 #273):** PR #288 merged. Cleanup — removed ~280 lines legacy SVG, deprecated computeLayout.ts, ELK sole engine. +65/-322.
+
+### Decisions Finalized
+- **GDD §6.7 DowningSystem Documentation** (Elminster): Combat audit completed; GDD now accurately reflects downed/bleed-out/stabilization mechanics
+- **ELK as Sole Layout Engine** (Regis): Phase 6 completed; BFS fallback removed, ELK now sole zone designer engine
+
+### Next Phase
+- Player minimap migration away from computeLayout.ts (enables full deprecation)
+- Phase 5+ advanced features (real-time collab, performance optimization)
+
+---
+
+## Learnings
+
+### Phase 5.1 — Undo/Redo (2026-04-05, PR #290, Issue #272)
+
+- **Architecture:** Created `useUndoRedo` hook with dual stacks (undo/redo), max 50 entries. Operations store async `undo()`/`redo()` closures that make real API calls — not purely client-side state reversal.
+- **ID mutation pattern:** When redo re-creates a deleted entity, the server assigns a new ID. Closures must capture mutable references (e.g., `savedExit.id = re.id`) so subsequent undo/redo cycles use the correct ID. This is the trickiest part of API-backed undo.
+- **Keyboard shortcut precedence:** `useUndoRedo` registers `Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y` on `window.keydown`. Must skip when `target` is INPUT/TEXTAREA/SELECT to avoid hijacking text editing. The existing `Ctrl+F` search shortcut in ZoneDesigner and `Escape` handler coexist naturally since they use different key combos.
+- **Stack invalidation:** New operations always clear the redo stack — standard UX convention. No branching history.
+- **Not tracked:** Complex multi-step operations like "Insert Room on Exit" and "Add Reverse" are not wrapped yet — they compose multiple CRUD calls and would need compound undo. Left as future work.
+- **Zone Designer edge/position fix (2026-04-12):** Fixed two critical bugs. (1) ZoneRoomNode was missing `<Handle>` components from `@xyflow/react` — edges couldn't attach, causing "source handle id: null" errors. Added 8 invisible handles (4 source + 4 target at compass positions) with `HANDLE_STYLE` constant. Edges now specify `sourceHandle`/`targetHandle` using direction-based IDs (e.g., `east-source`, `west-target`). (2) `extractPositions()` in `elkLayout.ts` was dividing ELK pixel coords by 100 and rounding, then `roomsToFlowNodes()` multiplied back by 100 — lossy round-trip. Removed both: ELK pixel coords now pass straight through to ReactFlow. Updated tests to match.
+- **ELK layout quality fix (2026-04-12):** Four changes to `elkLayout.ts` that dramatically improve zone designer room positioning. (1) Added `'elk.portConstraints': 'FIXED_SIDE'` to every ELK node — without this, ELK ignores port side assignments and places ports wherever it wants, breaking compass-direction semantics. (2) Deduplicated bidirectional edges using a `seenPairs` Set with sorted room-ID keys — the layered algorithm is designed for DAGs, and duplicate reverse edges create cycles that degrade layout quality. (3) Changed `'elk.direction'` from `'RIGHT'` to `'DOWN'` so the layout flows top-to-bottom matching dungeon north=up convention. (4) Bumped spacing to 120px node-node and 150px between layers for readability. Tests updated for new `DEFAULT_CONFIG` values.

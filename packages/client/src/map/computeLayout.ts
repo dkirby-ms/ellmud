@@ -1,8 +1,12 @@
 /**
  * BFS Layout Engine — computes (x, y, z) positions for a room graph.
  *
- * Pure function. No React, no side effects. Used by both the player
- * minimap and the admin zone designer.
+ * Used by the ELK adapter (elkLayout.ts) as the compass-aware seed
+ * position engine — ELK's INTERACTIVE mode respects these seeds for
+ * correct north/south/east/west room placement. Also used by the
+ * player minimap (`useExplorationMap`) for synchronous client-side layout.
+ *
+ * Pure function. No React, no side effects.
  *
  * Grid-aware: detects rectangular grid structures (rooms where
  * perpendicular paths converge on the same diagonal room) and places

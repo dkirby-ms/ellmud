@@ -592,18 +592,53 @@ Compact icons prefix narration lines for quick visual scanning:
 
 Icons are supplementary — the narration text is always self-sufficient without them.
 
-## 6.7 Meaningful Death
+## 6.7 Meaningful Death — Downing & Bleed-Out *(Implemented)*
 
-Death in combat triggers the full **death and corpse system** defined in §6.8. Combat death is the primary way players lose gear, and the threat of death is what gives every combat encounter weight.
+Death in combat triggers the **downing system** before escalating to the full **death and corpse system** (§6.8). Players reaching 0 HP are not killed instantly — they enter a downed state with a finite window for squadmates to intervene. Combat death is the primary way players lose gear, and the threat of death is what gives every combat encounter weight.
+
+### Downing State
 
 **On reaching 0 HP:**
-1. The player dies immediately. There is no "downed" state in the base system.
-2. A lootable corpse is created in the room containing all non-soulbound equipped gear (§6.8).
-3. The player respawns at their faction stronghold with soulbound items only.
-4. A death penalty debuff is applied (§6.8).
-5. The combat narration delivers a final death message with appropriate gravity.
+1. The player enters the **downed** state. They collapse and are incapacitated — they cannot issue commands, use abilities, or auto-attack.
+2. The player is immediately removed from the combat system (they generate no threat and cannot be targeted by abilities that require an active combatant).
+3. A **10-tick bleed-out timer** begins counting down (10 seconds at the standard 1-second combat tick).
+4. The downed player's client receives an overlay state notification: *"You collapse, gravely wounded. Your vision darkens at the edges…"*
+5. Other players in the room are notified via combat narration: *"[Player] collapses to the ground, bleeding out."*
 
-**Design intent:** Every combat encounter is a risk calculation. The auto-attack baseline means even routine fights drain HP and resources. Pushing deeper into a zone with low HP and expended abilities is a deliberate gamble — the tension between "one more room" and "extract now" is the core emotional loop.
+### Stabilization
+
+Squadmates can prevent a downed player from bleeding out by channeling the `stabilize` command:
+
+- **Command:** `stabilize [player]`
+- **Channel time:** 2 ticks (2 seconds). The stabilizer must maintain the channel without interruption.
+- **Requires:** A `bandage` item in inventory (consumed on use).
+- **Restrictions:**
+  - You **cannot stabilize yourself** — survival depends on your group.
+  - You cannot channel two stabilizations simultaneously.
+  - Taking damage or repositioning **interrupts** the channel — the stabilizer must restart.
+
+On successful stabilization, the downed player enters the **stabilized** state. The bleed-out timer **stops** — a stabilized player no longer bleeds out. They remain downed and incapacitated, but they will not die from the timer alone.
+
+### Death Triggers
+
+A downed player dies (triggering the full death and corpse system in §6.8) when either of the following occurs:
+
+1. **Bleed-out.** The 10-tick timer expires while the player is in the `downed` (not `stabilized`) state.
+2. **Killing blow.** Any hostile strike occurs in the room where a downed (not stabilized) player lies. Active combat in the room finishes off helpless players — enemies do not ignore a fallen foe. The narration delivers: *"An enemy strikes you while you lie helpless. The final blow lands…"*
+
+**Note:** Killing blows are evaluated *before* newly downed players are processed each tick, so a player downed on tick N is not instantly killed by the same tick's combat — they get at least one tick of bleed-out window.
+
+Stabilized players are **not** subject to killing blows. They are protected until the encounter resolves or a revive mechanic is implemented.
+
+### Kill Attribution
+
+The downing system tracks which combatants dealt the lethal damage (`killerIds`). This data flows through to the death and corpse system (§6.8) for PvP kill attribution and death tracking analytics.
+
+### Design Intent
+
+The downing system adds a **rescue window** to every lethal encounter without removing the sting of death. It rewards group play — a coordinated squad that carries bandages can recover from a bad pull. Solo players have no safety net: reaching 0 HP alone means bleeding out with no one to stabilize you.
+
+Every combat encounter remains a risk calculation. The auto-attack baseline means even routine fights drain HP and resources. Pushing deeper into a zone with low HP and expended abilities is a deliberate gamble — but now, a well-prepared group can turn a near-wipe into a survival story. The tension between "one more room" and "extract now" is preserved; the downing system simply raises the skill ceiling for groups that coordinate under pressure.
 
 ## 6.8 Death & Corpse System *(Planned — Foundation Exists)*
 
@@ -884,7 +919,7 @@ While there is no PvP opt-out, faction affiliation creates **soft social frictio
 1. **Detection.** Players become aware of each other through sound, traces, or direct room entry. The awareness and stealth skills determine who knows what and when (§5.3).
 2. **Engagement.** One player initiates combat. Both players enter combat mode with auto-attack and the full ability bar. Both players default to Front position.
 3. **Resolution.** Standard combat resolution (§6.2). Auto-attack ticks, abilities, telegraphs, and status effects work identically to PvE. **Positioning (§6.11) applies** — players can reposition mid-fight (e.g., a ranged player falls back to Rear to force a melee opponent to spend a tick repositioning). Position zones are less impactful in 1v1 (no group to protect) but become significant in group-vs-group PvP.
-4. **Death.** The losing player drops a lootable corpse with all non-soulbound gear (§6.8). The victor can loot immediately.
+4. **Downing / Death.** The losing player is downed (§6.7). In 1v1 PvP, the victor can deliver a killing blow to the downed player (active combat in the room triggers it automatically). The resulting corpse contains all non-soulbound gear (§6.8) and can be looted immediately.
 5. **Disengagement.** Either player can attempt to flee (§6.2). PvP flee success factors in both players' relevant skills (the attacker's awareness vs. the defender's evasion).
 
 ## 8.4 Anti-Griefing Measures
@@ -931,7 +966,7 @@ The group leader selects a loot distribution mode before entering a zone. Mode i
 ### Group Zone Entry
 - Groups enter zones together from the Expedition Board. All members must be in the Expedition Board room. The group leader initiates entry; all members are transported to the same entry room.
 - Group members can split up within the zone (move to different rooms). They remain in the group but fight independently. Group frames (§6.4) show out-of-room members as greyed out.
-- If a group member dies, standard death rules apply (§6.7, §6.8). The dead player respawns at their faction stronghold and is removed from the active zone instance. They remain in the group and can re-enter the zone if it is persistent.
+- If a group member reaches 0 HP, the downing system applies (§6.7). Squadmates can stabilize the downed player before bleed-out or a killing blow triggers full death (§6.8). On death, the player respawns at their faction stronghold and is removed from the active zone instance. They remain in the group and can re-enter the zone if it is persistent.
 
 - **Temporary truce** — a social mechanic, not a system mechanic. Players can communicate via `say` and choose not to fight. There is no mechanical enforcement of truces.
 - **Trading** between players in the same room is supported via the trade system (§9.3).
@@ -1421,7 +1456,7 @@ The **Zone Manager** view allows designers to:
 - Connect rooms with directional exits (north, south, east, west, up, down)
 - Set inter-zone exits (target_zone_slug + target_room_slug)
 - Configure locked/hidden exits
-- Preview zone topology
+- Preview zone topology (ReactFlow canvas with ELK hierarchical layout)
 
 ### Audit & Deployment
 - **Audit Log**: All admin CRUD actions are logged to `audit_log` table (action, entity_type, entity_id, actor, timestamp)
