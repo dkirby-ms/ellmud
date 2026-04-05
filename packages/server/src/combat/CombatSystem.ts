@@ -22,6 +22,10 @@ import {
   type WindUpState,
   COMBAT_TIMEOUT_TICKS,
   EMPTY_TICK_RESULT,
+  POST_COMBAT_COOLDOWN_TICKS,
+  BASE_FLEE_CHANCE,
+  FLEE_EVASION_BONUS_PER_RANK,
+  FLEE_LEVEL_PENALTY,
 } from './CombatState.js';
 import { calculateDamage } from './damage.js';
 import {
@@ -31,6 +35,29 @@ import {
   resolveCombatEnd,
 } from './actions.js';
 import { getAbilityDefinition } from './abilities.js';
+
+/**
+ * Calculate flee success probability for a combatant.
+ * Base 50% + Evasion skill scaling - creature level penalty (GDD §6.2).
+ *
+ * @param fleeing - The combatant attempting to flee
+ * @param hostiles - All hostile combatants in the encounter
+ * @returns Probability of success (0.0-1.0)
+ */
+function calculateFleeChance(fleeing: Combatant, hostiles: Combatant[]): number {
+  let chance = BASE_FLEE_CHANCE;
+
+  // Evasion skill bonus
+  chance += fleeing.evasionSkillRank * FLEE_EVASION_BONUS_PER_RANK;
+
+  // Level penalty from highest-level hostile creature
+  const maxHostileLevel = Math.max(...hostiles.map(h => h.level), 0);
+  const levelDiff = Math.max(0, maxHostileLevel - fleeing.level);
+  chance -= levelDiff * FLEE_LEVEL_PENALTY;
+
+  // Clamp to [0, 1]
+  return Math.max(0, Math.min(1, chance));
+}
 
 export type ExitResolver = (roomId: string) => string[];
 
@@ -104,6 +131,7 @@ export class CombatSystem {
         combatantIds: new Set([attackerId, targetId]),
         tickCount: 0,
         ticksSinceLastStrike: 0,
+        postCombatCooldown: 0,
       };
       this.encounters.set(encId, encounter);
       this.combatantEncounter.set(attackerId, encId);
@@ -543,7 +571,7 @@ export class CombatSystem {
       }
     }
 
-    // 6. Handle flee
+    // 6. Handle flee — skill check based on Evasion vs creature level (GDD §6.2)
     for (const c of combatants) {
       const qa = actions.get(c.id)!;
       if (qa.action !== 'flee') continue;
@@ -555,7 +583,21 @@ export class CombatSystem {
       if (toRoomId && !exits.includes(toRoomId)) toRoomId = undefined;
       if (!toRoomId && exits.length > 0) toRoomId = exits[0];
 
-      if (toRoomId) {
+      if (!toRoomId) {
+        // No exits available — flee fails
+        events.push(resolveFlee(c, false));
+        continue;
+      }
+
+      // Calculate flee success chance (GDD §6.2)
+      const hostiles = combatants.filter(
+        (other) => other.id !== c.id && other.hp > 0 && c.isPlayer !== other.isPlayer,
+      );
+      const fleeChance = calculateFleeChance(c, hostiles);
+      const fleeRoll = this.roll();
+      const fleeSuccess = fleeRoll < fleeChance;
+
+      if (fleeSuccess) {
         events.push(resolveFlee(c, true, toRoomId));
         fleeResults.push({
           combatantId: c.id,
@@ -568,7 +610,10 @@ export class CombatSystem {
         this.combatantEncounter.delete(c.id);
         this.queuedActions.delete(c.id);
         c.roomId = toRoomId;
+        // Reset cooldown if fleeing player was keeping combat alive
+        encounter.postCombatCooldown = 0;
       } else {
+        // Flee failed — lose action for this tick (GDD §6.2)
         events.push(resolveFlee(c, false));
       }
     }
@@ -595,16 +640,38 @@ export class CombatSystem {
       encounter.ticksSinceLastStrike++;
     }
 
-    // 9. Check combat-end conditions
+    // 9. Check combat-end conditions (GDD §6.2)
     const aliveInEncounter = [...encounter.combatantIds].filter(
       (id) => (this.combatants.get(id)?.hp ?? 0) > 0,
     );
 
     let ended = false;
     if (aliveInEncounter.length <= 1) {
-      events.push(resolveCombatEnd('last_standing'));
-      ended = true;
-    } else if (encounter.ticksSinceLastStrike >= COMBAT_TIMEOUT_TICKS) {
+      // Only one side remains alive — start post-combat cooldown (GDD §6.2)
+      if (encounter.postCombatCooldown === 0) {
+        // First tick after last enemy defeated — start cooldown
+        encounter.postCombatCooldown = POST_COMBAT_COOLDOWN_TICKS;
+        this.debug(`Post-combat cooldown started: ${POST_COMBAT_COOLDOWN_TICKS} ticks`);
+      } else {
+        // Cooldown in progress — decrement
+        encounter.postCombatCooldown--;
+        this.debug(`Post-combat cooldown: ${encounter.postCombatCooldown} ticks remaining`);
+      }
+
+      // Combat ends when cooldown expires
+      if (encounter.postCombatCooldown === 0) {
+        events.push(resolveCombatEnd('last_standing'));
+        ended = true;
+      }
+    } else {
+      // Multiple combatants still alive — reset cooldown if it was running
+      if (encounter.postCombatCooldown > 0) {
+        this.debug(`Post-combat cooldown interrupted — new threats detected`);
+        encounter.postCombatCooldown = 0;
+      }
+    }
+
+    if (!ended && encounter.ticksSinceLastStrike >= COMBAT_TIMEOUT_TICKS) {
       events.push(resolveCombatEnd('timeout'));
       ended = true;
     }
