@@ -1900,3 +1900,53 @@ The PR successfully ports the zone designer to ReactFlow with a hybrid BFS+ELK l
 - **Changes:** Replaced the 5-line "instant death at 0 HP" section with full documentation of the downing/bleedout/stabilization flow: downed state, 10-tick bleed-out timer, `stabilize` command (2-tick channel, bandage required, interruptible), finishing blow mechanic, stabilized state protection, and attribution tracking.
 - **Cross-references updated:** §8.3 (PvP combat flow) and §8.5 (group zone entry death rules) now reference the downing system.
 - **Design decision preserved:** Solo players still have no safety net; the rescue window rewards group coordination without reducing risk for lone wolves.
+
+### 2026-04-08: PR #292 Review — NarrationService LLM Wiring (BLOCKED)
+- **Author:** dkirby-ms (attributed to Jarlaxle in task)
+- **Scope:** Wire NarrationService + Azure AI Foundry LLM client into ZoneRoom runtime
+- **Files:** 6 files (+406/-6): config.ts, factory.ts (new), ZoneRoom.ts, narration-wiring.test.ts (new), KNOWN_ISSUES.md, elminster/history.md
+- **Status:** BLOCKED — critical async latency issue in onJoin flow, requires fix before merge
+
+**Architecture Review:**
+
+✅ **Strengths:**
+1. **Factory Pattern:** `createNarrationService()` is a clean pure function with environment-based instantiation. Conditionally creates LLMClient when `AZURE_AI_ENDPOINT` and `AZURE_AI_KEY` are present, falls back to template-only mode when not configured.
+2. **Config Safety:** `azureAI?: { endpoint, apiKey, deploymentName, apiVersion }` typed as optional. No secrets logged. Defaults (`gpt-4o-mini`, `2024-08-01-preview`) align with Bicep infrastructure.
+3. **Lifecycle Timing:** `onCreate()` instantiation is correct — after system init, before player connections. One-time setup, shared across room.
+4. **Graceful Fallback:** NarrationService handles `llmClient: null` via template-only mode. No additional error handling needed at factory level.
+5. **Test Coverage:** 6 integration tests covering factory instantiation, config loading, defaults, mock transport, and fallback. All pass.
+6. **KNOWN_ISSUES Update:** Issue #2 accurately reframed from bug to feature gap. Next steps (room descriptions, combat narration) correctly documented.
+
+🚨 **BLOCKING ISSUE — onJoin Async Latency:**
+
+**File:** `ZoneRoom.ts:486`  
+**Problem:** `await this.generateNarration('event', playerId, startRoom, ...)` in `onJoin()` blocks player join until narration completes (up to 2000ms on cache miss + LLM timeout).
+
+**Impact:**
+- Player connection hangs 0-2000ms before receiving game state
+- Colyseus `onJoin` blocks room state updates while awaiting
+- Poor UX: "connecting..." spinner for 2 seconds on first zone entry
+- **Violates GDD §4.5 core principle: "LLM never blocks critical path"**
+
+**Required Fix:** Fire-and-forget pattern — don't await narration in `onJoin()`. Send player state immediately, narration arrives asynchronously 0-2000ms later. Client protocol already handles async narration delivery.
+
+Alternative: Send fallback text synchronously, fire background enrichment for cache.
+
+**Minor Issue:** Typo at line 1898: `narratonType` → should be `narrativeType`
+
+**Decision Alignment:**  
+Reviewed against `.squad/decisions.md` (2026-04-05 NarrationService factory decision):
+- ✅ Factory creates NarrationService with Azure LLMClient when env vars present
+- ✅ Environment-based configuration (static at startup, not dynamic per-call)
+- ✅ Graceful degradation to template-only mode
+- ✅ Config reading happens once at factory call
+- ✅ ZoneRoom instantiates in `onCreate()`
+- ✅ Initial wiring uses entry narration as proof-of-concept
+
+The implementation correctly executes the decision. The async latency issue is an implementation detail not covered by the decision doc (which focused on factory pattern, not call-site integration).
+
+**Verdict:** Architecture is sound. Factory pattern is correct. Fallback logic is correct. Config handling is correct. The only blocking issue is the `onJoin` await behavior. Once fixed, this is ready to merge.
+
+**Review posted:** https://github.com/dkirby-ms/ellmud/pull/292#issuecomment-4188065623
+
+**Key Learning:** When integrating async services into Colyseus lifecycle hooks (`onJoin`, `onLeave`), avoid awaiting non-critical operations. The narration is optional enrichment, not required for player state initialization. Fire-and-forget is the right pattern for async narration in join flow.

@@ -66,7 +66,7 @@ export class CombatSystem {
   /**
    * Initiate combat between attacker and target.
    * Creates a new encounter or joins existing one in the same room.
-   * Auto-queues attacker's first action as strike.
+   * Auto-queues attacker's first action as strike and sets current target.
    * Returns the encounter ID, or null if initiation failed.
    */
   initiateCombat(attackerId: string, targetId: string): string | null {
@@ -107,6 +107,12 @@ export class CombatSystem {
       this.combatantEncounter.set(targetId, encId);
     }
 
+    // Set attacker's current target (GDD §6.2: auto-attack target)
+    attacker.currentTarget = targetId;
+    // Set target's current target to attacker (GDD §6.2: auto-target on aggro)
+    // This applies to both creatures and PvP
+    target.currentTarget = attackerId;
+
     // Auto-queue attacker's first action as strike against target
     this.queuedActions.set(attackerId, { action: 'strike', targetId });
 
@@ -115,6 +121,41 @@ export class CombatSystem {
   }
 
   // ─── Action Submission ────────────────────────────────────────────────────
+
+  /**
+   * Set a combatant's current target for auto-attack.
+   * Returns false if target is invalid or not in the same encounter.
+   */
+  setTarget(combatantId: string, targetId: string): boolean {
+    const combatant = this.combatants.get(combatantId);
+    const target = this.combatants.get(targetId);
+
+    if (!combatant || !target) {
+      this.debug(`setTarget failed: missing combatant or target`);
+      return false;
+    }
+
+    if (combatant.roomId !== target.roomId) {
+      this.debug(`setTarget failed: not in same room`);
+      return false;
+    }
+
+    const encId = this.combatantEncounter.get(combatantId);
+    if (!encId) {
+      this.debug(`setTarget failed: combatant not in combat`);
+      return false;
+    }
+
+    const encounter = this.encounters.get(encId);
+    if (!encounter || !encounter.combatantIds.has(targetId)) {
+      this.debug(`setTarget failed: target not in same encounter`);
+      return false;
+    }
+
+    combatant.currentTarget = targetId;
+    this.debug(`${combatant.name} targets ${target.name}`);
+    return true;
+  }
 
   /**
    * Queue an action for the next tick resolution.
@@ -140,6 +181,77 @@ export class CombatSystem {
   getEncounterForCombatant(combatantId: string): CombatEncounter | undefined {
     const encId = this.combatantEncounter.get(combatantId);
     return encId ? this.encounters.get(encId) : undefined;
+  }
+
+  /**
+   * Get all hostile combatants for a given combatant in their encounter.
+   * Players see creatures as hostile. Creatures see players as hostile.
+   */
+  getHostilesInEncounter(combatantId: string): Combatant[] {
+    const combatant = this.combatants.get(combatantId);
+    if (!combatant) return [];
+
+    const encId = this.combatantEncounter.get(combatantId);
+    if (!encId) return [];
+
+    const encounter = this.encounters.get(encId);
+    if (!encounter) return [];
+
+    const hostiles: Combatant[] = [];
+    for (const cid of encounter.combatantIds) {
+      if (cid === combatantId) continue;
+      const c = this.combatants.get(cid);
+      if (!c || c.hp <= 0) continue;
+      // Players see creatures as hostile, creatures see players as hostile
+      if (combatant.isPlayer !== c.isPlayer) {
+        hostiles.push(c);
+      }
+    }
+    return hostiles;
+  }
+
+  /**
+   * Cycle to the next hostile target in encounter (tab-targeting).
+   * Returns the new target ID, or undefined if no valid targets.
+   */
+  cycleTarget(combatantId: string): string | undefined {
+    const combatant = this.combatants.get(combatantId);
+    if (!combatant) return undefined;
+
+    const hostiles = this.getHostilesInEncounter(combatantId);
+    if (hostiles.length === 0) return undefined;
+
+    // If no current target or target is dead, pick the first hostile
+    if (!combatant.currentTarget) {
+      const firstHostile = hostiles[0];
+      if (firstHostile) {
+        combatant.currentTarget = firstHostile.id;
+        return firstHostile.id;
+      }
+      return undefined;
+    }
+
+    // Find current target in hostiles list
+    const currentIndex = hostiles.findIndex(h => h.id === combatant.currentTarget);
+    if (currentIndex === -1) {
+      // Current target no longer valid, pick first hostile
+      const firstHostile = hostiles[0];
+      if (firstHostile) {
+        combatant.currentTarget = firstHostile.id;
+        return firstHostile.id;
+      }
+      return undefined;
+    }
+
+    // Cycle to next
+    const nextIndex = (currentIndex + 1) % hostiles.length;
+    const nextTarget = hostiles[nextIndex];
+    if (nextTarget) {
+      combatant.currentTarget = nextTarget.id;
+      return nextTarget.id;
+    }
+
+    return undefined;
   }
 
   hasActiveEncounters(): boolean {
@@ -214,12 +326,28 @@ export class CombatSystem {
       return { events, fleeResults, ended: true };
     }
 
-    // 1. Default unsubmitted actions to dodge
+    // 1. Default unsubmitted actions to auto-attack current target (GDD §6.1, §6.2)
     for (const c of combatants) {
       if (!this.queuedActions.has(c.id)) {
-        this.queuedActions.set(c.id, { action: 'dodge' });
-        const reason = c.disconnected ? '(disconnected)' : '(no input)';
-        this.debug(`Default dodge for ${c.name} ${reason}`);
+        // Auto-attack if we have a valid target
+        if (c.currentTarget) {
+          const target = this.combatants.get(c.currentTarget);
+          if (target && target.hp > 0 && encounter.combatantIds.has(c.currentTarget)) {
+            this.queuedActions.set(c.id, { action: 'strike', targetId: c.currentTarget });
+            const reason = c.disconnected ? '(disconnected)' : '(no input)';
+            this.debug(`Auto-attack for ${c.name} → ${target.name} ${reason}`);
+          } else {
+            // Target is dead/missing — pause auto-attack, default to dodge
+            this.queuedActions.set(c.id, { action: 'dodge' });
+            const reason = c.disconnected ? '(disconnected)' : '(no target)';
+            this.debug(`Default dodge for ${c.name} ${reason}`);
+          }
+        } else {
+          // No target set — default to dodge
+          this.queuedActions.set(c.id, { action: 'dodge' });
+          const reason = c.disconnected ? '(disconnected)' : '(no target)';
+          this.debug(`Default dodge for ${c.name} ${reason}`);
+        }
       }
     }
 

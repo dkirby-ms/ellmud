@@ -43,6 +43,8 @@ export interface Combatant {
   roomId: string;
   isPlayer: boolean;
   disconnected?: boolean;
+  /** Current auto-attack target (GDD §6.1, §6.2). */
+  currentTarget?: string;
 }
 
 export function createCombatant(
