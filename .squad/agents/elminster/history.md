@@ -1796,6 +1796,97 @@ All 8 issues now have correct squad labels aligned with work scope. Epic (#266) 
 - **Architectural strength:** CombatSystem.resolveTick() is well-structured for extension. Simultaneous damage resolution is correct and matches GDD determinism requirement.
 - **Critical gap:** Creature AI targeting—creatures targeting `playersHere[0]` makes group combat meaningless. Threat tables (#281) should be high priority.
 - **Priority order:** #278 (auto-attack) → #279 (abilities) → #281 (threat) → #280 (telegraphs) → #285 (flee) → #283 (signals) → #284 (HUD) → #282 (positioning) → #286 (GDD update).
+
+### 2026-04-08: PR #291 — Zone Designer Layout Port to elkjs and ReactFlow
+- **Author:** dkirby-ms
+- **Scope:** Major architectural port from canvas-based rendering to ReactFlow + elkjs layout engine
+- **Files:** 29 files changed (+6031/-639), including new test suite (1548 lines)
+- **Status:** REVIEWED — comprehensive architectural review posted, ready to merge (author cannot self-approve)
+
+**Architecture Review:**
+
+The PR successfully ports the zone designer to ReactFlow with a hybrid BFS+ELK layout strategy. Key architectural decisions:
+
+1. **Hybrid Layout Pattern:**
+   - BFS (computeLayout.ts) seeds compass-correct positions (north=up, east=right)
+   - ELK's 'fixed' algorithm preserves BFS positions while handling disconnected components
+   - ReactFlow's getBezierPath() handles edge routing (Bézier curves)
+   - Clean separation of concerns: BFS (compass semantics) + ELK (validation) + ReactFlow (rendering)
+
+2. **Floor Separation:**
+   - Multi-floor zones split by z-level
+   - Each floor gets its own ELK layout pass
+   - Cardinal exits only (up/down exits filtered out for 2D layout)
+   - Floor selector UI for layer switching
+
+3. **Custom ReactFlow Components:**
+   - ZoneRoomNode: Type-based shapes (shield, diamond, pentagon, hexagon), badge overlays (portals, NPCs, loot), property icons
+   - ZoneExitEdge: Direction-based gradients, hover/selection states, orphan/portal/oneway markers, lock/hidden indicators
+   - ZoneDesignerFlow: Controlled selection, SVG markers/gradients, floor indicator overlay
+
+4. **State Management:**
+   - Layout computation in useEffect with rooms/exits dependency
+   - Async ELK layout with loading state
+   - Floor-filtered ReactFlow nodes/edges
+   - Selection state owned by parent (ZoneDesigner.tsx)
+
+5. **Test Coverage:**
+   - 5 new test files (1548 lines total)
+   - elk-layout.test.ts: Floor assignment, multi-floor separation, exit filtering
+   - useUndoRedo.test.ts: Operation stack, keyboard shortcuts, API integration
+   - zone-designer-flow.test.tsx: Node/edge rendering, selection, hover handlers
+   - zone-exit-edge.test.tsx: Edge styling, markers, hover states
+   - zone-room-node.test.tsx: Type-based shapes, badges, search/dimmed states
+   - All tests pass, no regressions
+
+**Feature Preservation:**
+- ✅ Search/Filter (Phase 5.2): searchQuery, directionFilter, Ctrl+F shortcut
+- ✅ Undo/Redo (Phase 5.1): useUndoRedo hook, keyboard shortcuts (Ctrl+Z, Ctrl+Shift+Z)
+- ✅ Floor navigation: Multi-floor layout, floor selector, floor indicator
+- ✅ Context menus: Room/exit right-click menus
+- ✅ Connect mode: Source/target selection, direction inference
+- ✅ Orphan detection: getOrphanedExits API, red highlighting
+- ✅ Portal exits: Inter-zone badges, cyan coloring
+- ⚠️ Minimap: Disabled per user request (ReactFlow component available for re-enable)
+
+**Decision Alignment:**
+- ✅ Implements "ELK as Sole Layout Engine" decision (2026-04-05)
+- ⚠️ **Clarification needed:** elkLayout.ts uses computeLayout.ts for BFS seeding (line 107), not as a fallback. This is a valid use case — BFS provides compass-aware positions that ELK preserves. The decision doc should be updated to note elkLayout.ts also uses it for seeding.
+
+**Code Quality:**
+- Clean separation of concerns (layout → conversion → rendering)
+- Type-safe interfaces, no `any` types in core logic
+- Declarative ReactFlow node/edge construction
+- Error handling for layout failures
+- Inline comments explaining non-obvious decisions
+
+**Dependency Audit:**
+- New: `@xyflow/react` ^12.10.2 (successor to deprecated react-flow-renderer)
+- New: `elkjs` ^0.11.1 (Eclipse Layout Kernel JS port)
+- Both well-maintained, large user bases, ~150KB gzipped combined
+- Acceptable bundle size for admin tool
+
+**Non-Blocking Recommendations:**
+1. Update decision record to clarify computeLayout.ts seeding use case
+2. Consider layout caching for large zones (100+ rooms)
+3. Document minimap disable reason in ZoneDesignerFlow.tsx
+4. Split ZoneDesigner.tsx (~1400 lines) into sub-components when it exceeds 2000 lines
+
+**Key Files:**
+- packages/client/src/map/elkLayout.ts (new layout engine)
+- packages/client/src/components/map/ZoneDesignerFlow.tsx (ReactFlow wrapper)
+- packages/client/src/components/map/ZoneRoomNode.tsx (custom node component)
+- packages/client/src/components/map/ZoneExitEdge.tsx (custom edge component)
+- packages/client/src/pages/admin/ZoneDesigner.tsx (main integration)
+- packages/client/src/hooks/useUndoRedo.ts (undo/redo stack)
+
+**Patterns Learned:**
+- Hybrid BFS+ELK layout is the right pattern for compass-aware graph layout (BFS seeds, ELK validates)
+- ELK's 'fixed' algorithm preserves seed positions while handling disconnected components
+- Floor separation via z-level grouping enables 3D dungeon visualization in 2D
+- Controlled ReactFlow selection (parent owns state, Flow is pure presentation)
+- Custom node/edge types registered once (no runtime type resolution)
+- Declarative node/edge conversion from zone data (clean separation from rendering)
 - **Orchestration log:** `.squad/orchestration-log/2026-04-04T22-25-elminster-combat-audit.md`
 
 ### 2026-04-04: Phase 3 Completion Coordinated
