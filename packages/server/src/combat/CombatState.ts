@@ -128,6 +128,8 @@ export interface CombatEncounter {
   ticksSinceLastStrike: number;
   /** Post-combat cooldown in ticks — counts down after last enemy defeated (GDD §6.2). */
   postCombatCooldown: number;
+  /** Threat tables per creature — map of creature ID to ThreatTable (GDD §6.10). */
+  threatTables?: Map<string, import('./ThreatTable.js').ThreatTable>;
 }
 
 // ─── Combat Events (output of tick resolution) ─────────────────────────────

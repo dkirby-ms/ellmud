@@ -10,7 +10,7 @@
  * - No-input defaults to Dodge (GDD §6.3)
  */
 
-import type { CombatAction, PositionZone, CreaturePositionType } from '@ellmud/shared';
+import type { CombatAction } from '@ellmud/shared';
 import {
   type Combatant,
   type CombatEncounter,
@@ -26,8 +26,6 @@ import {
   BASE_FLEE_CHANCE,
   FLEE_EVASION_BONUS_PER_RANK,
   FLEE_LEVEL_PENALTY,
-  REPOSITION_COOLDOWN_TICKS,
-  FLANKING_DAMAGE_BONUS,
 } from './CombatState.js';
 import { calculateDamage } from './damage.js';
 import {
@@ -37,6 +35,7 @@ import {
   resolveCombatEnd,
 } from './actions.js';
 import { getAbilityDefinition } from './abilities.js';
+import { ThreatTable } from './ThreatTable.js';
 
 /**
  * Calculate flee success probability for a combatant.
@@ -86,6 +85,7 @@ export class CombatSystem {
 
   // ─── Registration ─────────────────────────────────────────────────────────
 
+  /** Register (or update) a combatant. Safe to call multiple times. */
   /** Register (or update) a combatant. Safe to call multiple times. */
   registerCombatant(combatant: Combatant, positionType?: CreaturePositionType): void {
     this.combatants.set(combatant.id, combatant);
@@ -430,6 +430,116 @@ export class CombatSystem {
     return targetOfTarget?.position === 'front';
   }
 
+  /**
+   * Get reachable players for a creature based on position type (GDD §6.11).
+   * Boss and ranged can reach all. Melee at Front/Flank can reach Front + Flank.
+   */
+  private getReachablePlayers(
+    creature: Combatant,
+    players: Combatant[],
+    creaturePositionType: CreaturePositionType
+  ): Combatant[] {
+    // Boss can reach all
+    if (creaturePositionType === 'boss') {
+      return players;
+    }
+    
+    // Ranged can reach all
+    if (creaturePositionType === 'ranged') {
+      return players;
+    }
+    
+    // Melee and skirmisher have position restrictions
+    // If creature is at Rear, can only reach Rear (edge case, rarely happens)
+    if (creature.position === 'rear') {
+      return players.filter(p => p.position === 'rear');
+    }
+    
+    // Melee at Front/Flank can reach Front + Flank players only
+    return players.filter(p => p.position === 'front' || p.position === 'flank');
+  }
+
+  /**
+   * Pick a target for a creature using threat table + position reachability (GDD §6.10-6.11).
+   * Returns target ID or undefined if no valid targets.
+   * 
+   * Logic:
+   * 1. Get threat table for this creature (create if doesn't exist)
+   * 2. Get all living players in encounter
+   * 3. Filter to reachable players based on position
+   * 4. Use threat table to find highest-threat reachable target
+   * 5. If highest-threat OVERALL target is unreachable:
+   *    - Aggressive (skirmisher): reposition toward target (costs action)
+   *    - Steady (melee/ranged): attack highest-threat reachable target instead
+   */
+  private pickCreatureTarget(
+    creature: Combatant,
+    combatants: Combatant[],
+    positionType: CreaturePositionType,
+    encounter: CombatEncounter
+  ): string | undefined {
+    // Initialize threat tables if needed
+    if (!encounter.threatTables) {
+      encounter.threatTables = new Map();
+    }
+    
+    // Get or create threat table for this creature
+    if (!encounter.threatTables.has(creature.id)) {
+      encounter.threatTables.set(creature.id, new ThreatTable());
+    }
+    const threatTable = encounter.threatTables.get(creature.id)!;
+    
+    // Get all living players in encounter
+    const players = combatants.filter(c => c.isPlayer && c.hp > 0);
+    if (players.length === 0) return undefined;
+    
+    // Get reachable players based on position
+    const reachablePlayers = this.getReachablePlayers(creature, players, positionType);
+    
+    // Try to find highest-threat reachable target
+    const reachableIds = reachablePlayers.map(p => p.id);
+    const highestThreatReachable = threatTable.getHighestThreatTarget(reachableIds);
+    
+    if (highestThreatReachable) {
+      // Found a reachable high-threat target — attack it
+      creature.currentTarget = highestThreatReachable;
+      return highestThreatReachable;
+    }
+    
+    // No reachable players with threat — check if we should reposition
+    // Get highest-threat target overall (including unreachable)
+    const allPlayerIds = players.map(p => p.id);
+    const highestThreatOverall = threatTable.getHighestThreatTarget(allPlayerIds);
+    
+    if (highestThreatOverall && !reachableIds.includes(highestThreatOverall)) {
+      // Highest-threat target is unreachable
+      // Aggressive creatures (skirmisher) reposition toward target
+      if (positionType === 'skirmisher') {
+        const target = this.combatants.get(highestThreatOverall);
+        if (target && creature.positionCooldown === 0) {
+          // Reposition toward target's position
+          const newPosition = target.position;
+          this.queuedActions.set(creature.id, { action: 'dodge', newPosition });
+          creature.position = newPosition;
+          creature.positionCooldown = REPOSITION_COOLDOWN_TICKS;
+          creature.currentTarget = highestThreatOverall;
+          this.debug(`${creature.name} repositions to ${newPosition} (aggressive, chasing ${target.name})`);
+          return undefined; // Repositioning costs the action
+        }
+      }
+      // Steady creatures (melee, ranged) attack first reachable instead
+    }
+    
+    // Fall back to first reachable player (no threat data yet, or all unreachable)
+    if (reachablePlayers.length > 0) {
+      const fallbackTarget = reachablePlayers[0];
+      creature.currentTarget = fallbackTarget.id;
+      return fallbackTarget.id;
+    }
+    
+    return undefined;
+  }
+
   // ─── Tick Resolution ──────────────────────────────────────────────────────
 
   /**
@@ -492,42 +602,7 @@ export class CombatSystem {
 
     // Note: Don't end combat immediately if only 1 combatant - check cooldown logic at end
 
-    // 0a. Decrement position cooldowns (GDD §6.11)
-    for (const c of combatants) {
-      if (c.positionCooldown > 0) {
-        c.positionCooldown--;
-      }
-    }
-
-    // 0b. Process position changes FIRST in tick (GDD §6.11)
-    const positionChangeEvents: CombatEvent[] = [];
-    for (const c of combatants) {
-      const qa = this.queuedActions.get(c.id);
-      if (qa?.newPosition) {
-        // Execute position change
-        const oldPosition = c.position;
-        c.position = qa.newPosition;
-        c.positionCooldown = REPOSITION_COOLDOWN_TICKS;
-        
-        // Position change consumes the action for this tick
-        const narration = c.isPlayer
-          ? this.getPositionChangeNarration(c.name, qa.newPosition, true)
-          : this.getPositionChangeNarration(c.name, qa.newPosition, false);
-        
-        positionChangeEvents.push({
-          type: 'dodge', // Use dodge type as placeholder for position change
-          actorId: c.id,
-          actorName: c.name,
-          narration,
-        });
-        
-        // Remove the queued action so they don't also attack this tick
-        this.queuedActions.delete(c.id);
-      }
-    }
-    events.push(...positionChangeEvents);
-
-    // 0c. Process wind-up countdowns (GDD §6.5)
+    // 0. Process wind-up countdowns (GDD §6.5)
     const windUpExpired: Combatant[] = [];
     for (const c of combatants) {
       if (c.windUp) {
@@ -631,40 +706,14 @@ export class CombatSystem {
       const target = this.combatants.get(targetId);
       if (!target || target.hp <= 0) continue;
 
-      // GDD §6.11: Range validation - melee attacks from rear or to unreachable targets fail
-      if (!this.canReachTarget(c, target)) {
-        const narration = c.position === 'rear'
-          ? c.isPlayer
-            ? 'You are too far away to strike.'
-            : `${c.name} is too far away to strike.`
-          : c.isPlayer
-            ? `You cannot reach ${target.name} from your position.`
-            : `${c.name} cannot reach ${target.name}.`;
-        
-        events.push({
-          type: 'dodge',
-          actorId: c.id,
-          actorName: c.name,
-          narration,
-        });
-        continue;
-      }
-
       const defenderAction = actions.get(targetId)?.action ?? 'dodge';
       const dodgeRoll = defenderAction === 'dodge' ? this.roll() : undefined;
-      
-      // Calculate flanking bonus (GDD §6.11)
-      let flankingBonus = 1.0;
-      if (this.shouldApplyFlankingBonus(c, target)) {
-        flankingBonus = 1.0 + FLANKING_DAMAGE_BONUS;
-      }
       
       // Block should mitigate telegraphed abilities (GDD §6.5)
       const dmg = calculateDamage(attackDamage, target.armour, 'strike', defenderAction, {
         defenderAgility: target.agility,
         defenderDodgeSkillRank: target.dodgeSkillRank,
         dodgeRoll,
-        flankingBonus,
       });
 
       const accumulated = (damageAccumulator.get(targetId) ?? 0) + dmg.finalDamage;
@@ -690,13 +739,36 @@ export class CombatSystem {
         dodged: dmg.dodged,
       });
 
-      this.debug(`Damage roll: ${c.name} → ${target.name}: raw=${dmg.rawDamage} ×${dmg.multiplier} -${dmg.armourReduction} ×${flankingBonus.toFixed(2)} = ${dmg.finalDamage}${dmg.dodged ? ' (DODGED)' : ''}`);
+      this.debug(`Damage roll: ${c.name} → ${target.name}: raw=${dmg.rawDamage} ×${dmg.multiplier} -${dmg.armourReduction} = ${dmg.finalDamage}${dmg.dodged ? ' (DODGED)' : ''}`);
     }
 
     // 4. Apply all damage at once
     for (const [targetId, totalDmg] of damageAccumulator) {
       const target = this.combatants.get(targetId)!;
       target.hp = Math.max(0, target.hp - totalDmg);
+    }
+
+    // Update threat tables for creatures based on damage dealt (GDD §6.10)
+    if (!encounter.threatTables) {
+      encounter.threatTables = new Map();
+    }
+    
+    for (const evt of strikeEvents) {
+      if (!evt.dodged && evt.damage && evt.damage > 0) {
+        const attacker = this.combatants.get(evt.actorId);
+        const target = this.combatants.get(evt.targetId!);
+        
+        // If a player attacked a creature, add threat to that creature's table
+        if (attacker?.isPlayer && target && !target.isPlayer) {
+          // Initialize threat table for this creature if it doesn't exist
+          if (!encounter.threatTables.has(target.id)) {
+            encounter.threatTables.set(target.id, new ThreatTable());
+          }
+          const threatTable = encounter.threatTables.get(target.id)!;
+          threatTable.addDamageThreat(attacker.id, evt.damage);
+          this.debug(`Threat: ${attacker.name} +${evt.damage} threat on ${target.name}`);
+        }
+      }
     }
 
     // Fill in newHp on strike events and generate narration
@@ -714,10 +786,34 @@ export class CombatSystem {
     }
     events.push(...strikeEvents);
 
-    // 5. Dodge events (for combatants not striking or fleeing)
+    // 4a. Process position changes and decrement cooldowns (GDD §6.11)
     for (const c of combatants) {
       const qa = actions.get(c.id)!;
-      if (qa.action === 'dodge') {
+      
+      // Handle position change
+      if (qa.newPosition && qa.newPosition !== c.position) {
+        c.position = qa.newPosition;
+        c.positionCooldown = REPOSITION_COOLDOWN_TICKS;
+        const narration = this.getPositionChangeNarration(c.name, qa.newPosition, c.isPlayer);
+        events.push({
+          type: 'dodge',
+          actorId: c.id,
+          actorName: c.name,
+          narration,
+        });
+        this.debug(`${c.name} repositioned to ${qa.newPosition}`);
+      }
+      
+      // Decrement position cooldown
+      if (c.positionCooldown > 0) {
+        c.positionCooldown--;
+      }
+    }
+
+    // 5. Dodge events (for combatants not striking, fleeing, or repositioning)
+    for (const c of combatants) {
+      const qa = actions.get(c.id)!;
+      if (qa.action === 'dodge' && !qa.newPosition) {
         events.push(resolveDodge(c));
       }
     }

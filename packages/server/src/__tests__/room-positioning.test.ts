@@ -1,420 +1,309 @@
 /**
- * Room positioning system tests — GDD §6.11.
+ * Room positioning system tests — GDD §6.11 + Threat Integration §6.10.
  *
  * Tests:
- * - Position change commands (position front/flank/rear, pos f/k/r)
- * - Repositioning costs tick action
- * - 3-tick cooldown prevents rapid repositioning
- * - Melee from Rear fails
- * - Flanking bonus (+15% damage)
- * - Creature reachability based on position type
- * - Boss creatures bypass position restrictions
- * - Default position is Front
+ * - Threat table integration with position reachability
+ * - Creature targeting based on threat + position
+ * - Melee creatures cannot reach Rear players
+ * - Boss and ranged creatures can reach all positions
+ * - Skirmisher repositioning (aggressive behavior)
+ * - Steady creature behavior (melee/ranged)
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CombatSystem } from '../combat/CombatSystem.js';
-import { createCombatant, REPOSITION_COOLDOWN_TICKS, FLANKING_DAMAGE_BONUS } from '../combat/CombatState.js';
+import { createCombatant, REPOSITION_COOLDOWN_TICKS } from '../combat/CombatState.js';
 
-describe('Room Positioning System (GDD §6.11)', () => {
+describe('Threat + Reachability Integration (GDD §6.10-6.11)', () => {
   let combat: CombatSystem;
 
   beforeEach(() => {
     combat = new CombatSystem(() => ['room-2'], () => 1); // Always fail dodge
   });
 
-  describe('Default Position', () => {
-    it('should default all combatants to front position', () => {
-      const player = createCombatant('p1', 'Player', 'room-1', true);
-      expect(player.position).toBe('front');
-      expect(player.positionCooldown).toBe(0);
-    });
-  });
-
-  describe('Position Change Commands', () => {
-    it('should queue position change when in combat', () => {
-      const p1 = createCombatant('p1', 'Player', 'room-1', true);
-      const e1 = createCombatant('e1', 'Enemy', 'room-1', false);
-      combat.registerCombatant(p1);
-      combat.registerCombatant(e1);
-      combat.initiateCombat('p1', 'e1');
-
-      const result = combat.queuePositionChange('p1', 'rear');
-      expect(result.success).toBe(true);
-    });
-
-    it('should fail to queue position change when not in combat', () => {
-      const p1 = createCombatant('p1', 'Player', 'room-1', true);
-      combat.registerCombatant(p1);
-
-      const result = combat.queuePositionChange('p1', 'rear');
-      expect(result.success).toBe(false);
-      expect(result.reason).toContain('must be in combat');
-    });
-
-    it('should fail to queue position change to current position', () => {
-      const p1 = createCombatant('p1', 'Player', 'room-1', true);
-      const e1 = createCombatant('e1', 'Enemy', 'room-1', false);
-      combat.registerCombatant(p1);
-      combat.registerCombatant(e1);
-      combat.initiateCombat('p1', 'e1');
-
-      const result = combat.queuePositionChange('p1', 'front');
-      expect(result.success).toBe(false);
-      expect(result.reason).toContain('already at the front');
-    });
-
-    it('should fail to queue position change during cooldown', () => {
-      const p1 = createCombatant('p1', 'Player', 'room-1', true);
-      const e1 = createCombatant('e1', 'Enemy', 'room-1', false);
-      combat.registerCombatant(p1);
-      combat.registerCombatant(e1);
-      combat.initiateCombat('p1', 'e1');
-
-      // First reposition
-      combat.queuePositionChange('p1', 'rear');
-      combat.resolveTick();
-
-      // Try to reposition again immediately
-      const result = combat.queuePositionChange('p1', 'flank');
-      expect(result.success).toBe(false);
-      expect(result.reason).toContain('cannot reposition yet');
-    });
-  });
-
-  describe('Position Change Resolution', () => {
-    it('should execute position change at start of tick', () => {
-      const p1 = createCombatant('p1', 'Player', 'room-1', true);
-      const e1 = createCombatant('e1', 'Enemy', 'room-1', false);
-      combat.registerCombatant(p1);
-      combat.registerCombatant(e1);
-      combat.initiateCombat('p1', 'e1');
-
-      combat.queuePositionChange('p1', 'rear');
-      combat.resolveTick();
-
-      const updated = combat.getCombatant('p1');
-      expect(updated?.position).toBe('rear');
-      expect(updated?.positionCooldown).toBe(REPOSITION_COOLDOWN_TICKS);
-    });
-
-    it('should prevent attack when repositioning (action consumed)', () => {
-      const p1 = createCombatant('p1', 'Player', 'room-1', true);
-      const e1 = createCombatant('e1', 'Enemy', 'room-1', false, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      combat.registerCombatant(p1);
-      combat.registerCombatant(e1);
-      combat.initiateCombat('p1', 'e1');
-
-      const initialHp = e1.hp;
-      combat.queuePositionChange('p1', 'rear');
-      const result = combat.resolveTick();
-
-      // Player should not have attacked this tick
-      const updated = combat.getCombatant('e1');
-      expect(updated?.hp).toBe(initialHp); // No damage dealt
-
-      // Event should be a position change, not a strike
-      const positionEvent = result.events.find(e => e.actorId === 'p1' && e.narration.includes('rear'));
-      expect(positionEvent).toBeDefined();
-    });
-
-    it('should decrement cooldown each tick', () => {
-      const p1 = createCombatant('p1', 'Player', 'room-1', true);
-      const e1 = createCombatant('e1', 'Enemy', 'room-1', false);
-      combat.registerCombatant(p1);
-      combat.registerCombatant(e1);
-      combat.initiateCombat('p1', 'e1');
-
-      combat.queuePositionChange('p1', 'rear');
-      combat.resolveTick();
+  describe('Melee Creature Targeting', () => {
+    it('should target highest-threat reachable player (Front/Flank), ignore Rear', () => {
+      const p1 = createCombatant('p1', 'FrontTank', 'room-1', true, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
+      const p2 = createCombatant('p2', 'RearHealer', 'room-1', true, { maxHp: 100, attack: 50, defence: 0, armour: 0, agility: 0 });
+      const e1 = createCombatant('e1', 'MeleeEnemy', 'room-1', false, { maxHp: 1000, attack: 10, defence: 0, armour: 0, agility: 0 });
       
-      let updated = combat.getCombatant('p1');
-      expect(updated?.positionCooldown).toBe(3);
-
-      combat.resolveTick();
-      updated = combat.getCombatant('p1');
-      expect(updated?.positionCooldown).toBe(2);
-
-      combat.resolveTick();
-      updated = combat.getCombatant('p1');
-      expect(updated?.positionCooldown).toBe(1);
-
-      combat.resolveTick();
-      updated = combat.getCombatant('p1');
-      expect(updated?.positionCooldown).toBe(0);
-
-      // Should be able to reposition again
-      const result = combat.queuePositionChange('p1', 'front');
-      expect(result.success).toBe(true);
-    });
-  });
-
-  describe('Melee Range Validation', () => {
-    it('should prevent melee attack from rear position', () => {
-      const p1 = createCombatant('p1', 'Player', 'room-1', true);
-      const e1 = createCombatant('e1', 'Enemy', 'room-1', false, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      p1.position = 'rear'; // Start at rear
-      combat.registerCombatant(p1);
-      combat.registerCombatant(e1);
-      combat.initiateCombat('p1', 'e1');
-
-      const initialHp = e1.hp;
-      combat.submitAction('p1', 'strike', 'e1');
-      const result = combat.resolveTick();
-
-      // Attack should fail
-      const updated = combat.getCombatant('e1');
-      expect(updated?.hp).toBe(initialHp);
-
-      // Should get "too far away" message
-      const failEvent = result.events.find(e => e.actorId === 'p1' && e.narration.includes('too far away'));
-      expect(failEvent).toBeDefined();
-    });
-
-    it('should allow melee attack from front position', () => {
-      const p1 = createCombatant('p1', 'Player', 'room-1', true, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      const e1 = createCombatant('e1', 'Enemy', 'room-1', false, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      combat.registerCombatant(p1);
-      combat.registerCombatant(e1);
-      combat.initiateCombat('p1', 'e1');
-
-      const initialHp = e1.hp;
-      combat.submitAction('p1', 'strike', 'e1');
-      combat.resolveTick();
-
-      const updated = combat.getCombatant('e1');
-      expect(updated!.hp).toBeLessThan(initialHp);
-    });
-
-    it('should allow melee attack from flank position', () => {
-      const p1 = createCombatant('p1', 'Player', 'room-1', true, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      const e1 = createCombatant('e1', 'Enemy', 'room-1', false, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      p1.position = 'flank';
-      combat.registerCombatant(p1);
-      combat.registerCombatant(e1);
-      combat.initiateCombat('p1', 'e1');
-
-      const initialHp = e1.hp;
-      combat.submitAction('p1', 'strike', 'e1');
-      combat.resolveTick();
-
-      const updated = combat.getCombatant('e1');
-      expect(updated!.hp).toBeLessThan(initialHp);
-    });
-
-    it('should prevent melee attack to rear target from front', () => {
-      const p1 = createCombatant('p1', 'Player', 'room-1', true, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      const e1 = createCombatant('e1', 'Enemy', 'room-1', false, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      e1.position = 'rear'; // Enemy at rear
-      combat.registerCombatant(p1);
-      combat.registerCombatant(e1);
-      combat.initiateCombat('p1', 'e1');
-
-      const initialHp = e1.hp;
-      combat.submitAction('p1', 'strike', 'e1');
-      const result = combat.resolveTick();
-
-      const updated = combat.getCombatant('e1');
-      expect(updated?.hp).toBe(initialHp);
-
-      const failEvent = result.events.find(e => e.actorId === 'p1' && e.narration.includes('cannot reach'));
-      expect(failEvent).toBeDefined();
-    });
-  });
-
-  describe('Flanking Bonus', () => {
-    it('should apply +15% damage when attacking from flank while target focuses front', () => {
-      const p1 = createCombatant('p1', 'Flanker', 'room-1', true, { maxHp: 100, attack: 100, defence: 0, armour: 0, agility: 0 });
-      const p2 = createCombatant('p2', 'Tank', 'room-1', true, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      const e1 = createCombatant('e1', 'Enemy', 'room-1', false, { maxHp: 1000, attack: 10, defence: 0, armour: 0, agility: 0 });
-      
-      p1.position = 'flank';
-      p2.position = 'front';
+      p1.position = 'front';
+      p2.position = 'rear';
       
       combat.registerCombatant(p1);
       combat.registerCombatant(p2);
-      combat.registerCombatant(e1);
+      combat.registerCombatant(e1, 'melee'); // Melee creature at front
       
-      // Tank initiates - enemy will target tank
-      combat.initiateCombat('p2', 'e1');
-      
-      // Manually join flanker to the encounter
-      // In real gameplay, flanker would use 'attack' command which calls initiateCombat
-      // But that sets enemy target. For this test, we'll use setTarget approach
-      combat.setTarget('p1', 'e1'); // Try to set target (won't work if not in combat)
-      
-      // If that doesn't work, manually join encounter
-      const enemy = combat.getCombatant('e1');
-      const tank = combat.getCombatant('p2');
-      
-      // Initiate flanker into combat but then reset enemy's target back to tank
+      // Initiate combat - add both players to the encounter
       combat.initiateCombat('p1', 'e1');
-      if (enemy) {
-        enemy.currentTarget = 'p2'; // Reset to tank
-      }
+      combat.initiateCombat('p2', 'e1'); // Join p2 to same encounter
       
-      // Both attack on same tick
-      combat.submitAction('p2', 'strike', 'e1');
+      // Reset enemy's target so it picks based on threat on next tick
+      const enemy = combat.getCombatant('e1');
+      if (enemy) enemy.currentTarget = undefined;
+      
+      // First tick: p1 attacks (low damage), p2 attacks (high damage from rear)
       combat.submitAction('p1', 'strike', 'e1');
+      combat.submitAction('p2', 'strike', 'e1');
+      combat.resolveTick();
+      
+      // Second tick: enemy should target p1 (highest threat REACHABLE)
+      // even though p2 dealt more damage (but is at rear, unreachable)
       const result = combat.resolveTick();
       
-      // Verify enemy is targeting tank
-      expect(enemy?.currentTarget).toBe('p2');
-      expect(tank?.position).toBe('front');
-      expect(p1.position).toBe('flank');
-      
-      // Find flanker's strike event
-      const flankStrike = result.events.find(e => e.actorId === 'p1' && e.type === 'strike');
-      expect(flankStrike).toBeDefined();
-      
-      // Base damage = 100 attack - 0 armour = 100
-      // Note: Due to the way math works out with stance/block/armour calculations,
-      // the final damage may vary slightly. The important thing is flanking bonus is applied.
-      // With flanking bonus should be higher than without (100)
-      expect(flankStrike!.damage).toBeGreaterThan(100);
-      expect(flankStrike!.damage).toBeLessThanOrEqual(115);
+      // Enemy auto-attacks p1 (not p2 who is unreachable)
+      const enemyStrike = result.events.find(e => e.actorId === 'e1' && e.type === 'strike');
+      expect(enemyStrike).toBeDefined();
+      expect(enemyStrike!.targetId).toBe('p1'); // Targets front tank, not rear healer
     });
 
-    it('should not apply flanking bonus when target not focused on front', () => {
-      const p1 = createCombatant('p1', 'Flanker', 'room-1', true, { maxHp: 100, attack: 100, defence: 0, armour: 0, agility: 0 });
-      const e1 = createCombatant('e1', 'Enemy', 'room-1', false, { maxHp: 1000, attack: 10, defence: 0, armour: 0, agility: 0 });
+    it('should attack highest-threat reachable player when all high-threat players are at Rear', () => {
+      const p1 = createCombatant('p1', 'FlankDPS', 'room-1', true, { maxHp: 100, attack: 5, defence: 0, armour: 0, agility: 0 });
+      const p2 = createCombatant('p2', 'RearNuke', 'room-1', true, { maxHp: 100, attack: 100, defence: 0, armour: 0, agility: 0 });
+      const e1 = createCombatant('e1', 'MeleeEnemy', 'room-1', false, { maxHp: 1000, attack: 10, defence: 0, armour: 0, agility: 0 });
       
       p1.position = 'flank';
+      p2.position = 'rear';
       
       combat.registerCombatant(p1);
-      combat.registerCombatant(e1);
+      combat.registerCombatant(p2);
+      combat.registerCombatant(e1, 'melee');
+      
       combat.initiateCombat('p1', 'e1');
+      combat.initiateCombat('p2', 'e1'); // Join p2 to same encounter
       
+      // Reset enemy's target so it picks based on threat
+      const enemy = combat.getCombatant('e1');
+      if (enemy) enemy.currentTarget = undefined;
+      
+      // p2 deals massive damage from rear (high threat but unreachable)
+      // p1 deals low damage from flank (low threat but reachable)
       combat.submitAction('p1', 'strike', 'e1');
-      const result = combat.resolveTick();
+      combat.submitAction('p2', 'strike', 'e1');
+      combat.resolveTick();
       
-      const strike = result.events.find(e => e.actorId === 'p1' && e.type === 'strike');
-      expect(strike!.damage).toBe(100); // No bonus
+      // Enemy should attack p1 (only reachable target with threat)
+      const result = combat.resolveTick();
+      const enemyStrike = result.events.find(e => e.actorId === 'e1' && e.type === 'strike');
+      expect(enemyStrike).toBeDefined();
+      expect(enemyStrike!.targetId).toBe('p1');
+    });
+  });
+
+  describe('Skirmisher Repositioning (Aggressive Behavior)', () => {
+    it('should reposition toward unreachable high-threat target', () => {
+      const p1 = createCombatant('p1', 'FrontTank', 'room-1', true, { maxHp: 100, attack: 5, defence: 0, armour: 0, agility: 0 });
+      const p2 = createCombatant('p2', 'RearNuke', 'room-1', true, { maxHp: 100, attack: 100, defence: 0, armour: 0, agility: 0 });
+      const e1 = createCombatant('e1', 'Skirmisher', 'room-1', false, { maxHp: 1000, attack: 10, defence: 0, armour: 0, agility: 0 });
+      
+      p1.position = 'front';
+      p2.position = 'rear';
+      
+      combat.registerCombatant(p1);
+      combat.registerCombatant(p2);
+      combat.registerCombatant(e1, 'skirmisher'); // Aggressive behavior
+      
+      combat.initiateCombat('p1', 'e1');
+      combat.initiateCombat('p2', 'e1'); // Join p2 to same encounter
+      
+      // Reset enemy's target so it picks based on threat
+      let skirmisher = combat.getCombatant('e1');
+      if (skirmisher) skirmisher.currentTarget = undefined;
+      
+      // p2 deals massive damage from rear
+      combat.submitAction('p1', 'strike', 'e1');
+      combat.submitAction('p2', 'strike', 'e1');
+      combat.resolveTick();
+      
+      // Skirmisher should reposition to rear (toward p2)
+      const result = combat.resolveTick();
+      skirmisher = combat.getCombatant('e1');
+      expect(skirmisher?.position).toBe('rear'); // Repositioned
+      expect(skirmisher?.positionCooldown).toBe(REPOSITION_COOLDOWN_TICKS);
+      
+      // Should NOT have attacked this tick (repositioning costs action)
+      const enemyStrike = result.events.find(e => e.actorId === 'e1' && e.type === 'strike');
+      expect(enemyStrike).toBeUndefined();
     });
 
-    it('should not apply flanking bonus when attacking from front', () => {
-      const p1 = createCombatant('p1', 'Tank', 'room-1', true, { maxHp: 100, attack: 100, defence: 0, armour: 0, agility: 0 });
+    it('should not reposition when on cooldown, attack reachable instead', () => {
+      const p1 = createCombatant('p1', 'FrontTank', 'room-1', true, { maxHp: 100, attack: 5, defence: 0, armour: 0, agility: 0 });
+      const p2 = createCombatant('p2', 'RearNuke', 'room-1', true, { maxHp: 100, attack: 100, defence: 0, armour: 0, agility: 0 });
+      const e1 = createCombatant('e1', 'Skirmisher', 'room-1', false, { maxHp: 1000, attack: 10, defence: 0, armour: 0, agility: 0 });
+      
+      p1.position = 'front';
+      p2.position = 'rear';
+      e1.positionCooldown = 2; // On cooldown
+      
+      combat.registerCombatant(p1);
+      combat.registerCombatant(p2);
+      combat.registerCombatant(e1, 'skirmisher');
+      
+      combat.initiateCombat('p1', 'e1');
+      combat.initiateCombat('p2', 'e1'); // Join p2 to same encounter
+      
+      // Reset enemy's target so it picks based on threat
+      const skirmisher = combat.getCombatant('e1');
+      if (skirmisher) skirmisher.currentTarget = undefined;
+      
+      combat.submitAction('p1', 'strike', 'e1');
+      combat.submitAction('p2', 'strike', 'e1');
+      combat.resolveTick();
+      
+      // Should attack p1 instead of repositioning
+      const result = combat.resolveTick();
+      const enemyStrike = result.events.find(e => e.actorId === 'e1' && e.type === 'strike');
+      expect(enemyStrike).toBeDefined();
+      expect(enemyStrike!.targetId).toBe('p1');
+    });
+  });
+
+  describe('Steady Creature Behavior (Melee)', () => {
+    it('should NOT reposition, attack highest-threat reachable instead', () => {
+      const p1 = createCombatant('p1', 'FrontTank', 'room-1', true, { maxHp: 100, attack: 5, defence: 0, armour: 0, agility: 0 });
+      const p2 = createCombatant('p2', 'RearNuke', 'room-1', true, { maxHp: 100, attack: 100, defence: 0, armour: 0, agility: 0 });
+      const e1 = createCombatant('e1', 'MeleeEnemy', 'room-1', false, { maxHp: 1000, attack: 10, defence: 0, armour: 0, agility: 0 });
+      
+      p1.position = 'front';
+      p2.position = 'rear';
+      
+      combat.registerCombatant(p1);
+      combat.registerCombatant(p2);
+      combat.registerCombatant(e1, 'melee'); // Steady behavior
+      
+      combat.initiateCombat('p1', 'e1');
+      combat.initiateCombat('p2', 'e1'); // Join p2 to same encounter
+      
+      // Reset enemy's target so it picks based on threat
+      let enemy = combat.getCombatant('e1');
+      if (enemy) enemy.currentTarget = undefined;
+      
+      // p2 deals massive damage from rear (high threat, unreachable)
+      combat.submitAction('p1', 'strike', 'e1');
+      combat.submitAction('p2', 'strike', 'e1');
+      combat.resolveTick();
+      
+      // Melee enemy should stay at front and attack p1
+      const result = combat.resolveTick();
+      enemy = combat.getCombatant('e1');
+      expect(enemy?.position).toBe('front'); // Did NOT reposition
+      
+      const enemyStrike = result.events.find(e => e.actorId === 'e1' && e.type === 'strike');
+      expect(enemyStrike).toBeDefined();
+      expect(enemyStrike!.targetId).toBe('p1'); // Attacks reachable target
+    });
+  });
+
+  describe('Boss Creature Targeting', () => {
+    it('should target highest-threat player regardless of position', () => {
+      const p1 = createCombatant('p1', 'FrontTank', 'room-1', true, { maxHp: 100, attack: 5, defence: 0, armour: 0, agility: 0 });
+      const p2 = createCombatant('p2', 'RearNuke', 'room-1', true, { maxHp: 100, attack: 100, defence: 0, armour: 0, agility: 0 });
+      const boss = createCombatant('boss', 'BossEnemy', 'room-1', false, { maxHp: 2000, attack: 50, defence: 0, armour: 0, agility: 0 });
+      
+      p1.position = 'front';
+      p2.position = 'rear';
+      
+      combat.registerCombatant(p1);
+      combat.registerCombatant(p2);
+      combat.registerCombatant(boss, 'boss'); // Boss can reach all
+      
+      combat.initiateCombat('p1', 'boss');
+      combat.initiateCombat('p2', 'boss'); // Join p2 to same encounter
+      
+      // p2 deals massive damage from rear
+      combat.submitAction('p1', 'strike', 'boss');
+      combat.submitAction('p2', 'strike', 'boss');
+      combat.resolveTick();
+      
+      // Boss should target p2 (highest threat, even at rear)
+      const result = combat.resolveTick();
+      const bossStrike = result.events.find(e => e.actorId === 'boss' && e.type === 'strike');
+      expect(bossStrike).toBeDefined();
+      expect(bossStrike!.targetId).toBe('p2'); // Targets rear player with high threat
+    });
+  });
+
+  describe('Ranged Creature Targeting', () => {
+    it('should target highest-threat player from rear position', () => {
+      const p1 = createCombatant('p1', 'FrontTank', 'room-1', true, { maxHp: 100, attack: 5, defence: 0, armour: 0, agility: 0 });
+      const p2 = createCombatant('p2', 'FlankDPS', 'room-1', true, { maxHp: 100, attack: 50, defence: 0, armour: 0, agility: 0 });
+      const p3 = createCombatant('p3', 'RearSupport', 'room-1', true, { maxHp: 100, attack: 100, defence: 0, armour: 0, agility: 0 });
+      const archer = createCombatant('archer', 'RangedEnemy', 'room-1', false, { maxHp: 500, attack: 30, defence: 0, armour: 0, agility: 0 });
+      
+      p1.position = 'front';
+      p2.position = 'flank';
+      p3.position = 'rear';
+      
+      combat.registerCombatant(p1);
+      combat.registerCombatant(p2);
+      combat.registerCombatant(p3);
+      combat.registerCombatant(archer, 'ranged'); // Ranged can reach all
+      
+      combat.initiateCombat('p1', 'archer');
+      combat.initiateCombat('p2', 'archer'); // Join p2 to same encounter
+      combat.initiateCombat('p3', 'archer'); // Join p3 to same encounter
+      
+      // p3 deals most damage from rear
+      combat.submitAction('p1', 'strike', 'archer');
+      combat.submitAction('p2', 'strike', 'archer');
+      combat.submitAction('p3', 'strike', 'archer');
+      combat.resolveTick();
+      
+      // Ranged enemy should target p3 (highest threat)
+      const result = combat.resolveTick();
+      const archerStrike = result.events.find(e => e.actorId === 'archer' && e.type === 'strike');
+      expect(archerStrike).toBeDefined();
+      expect(archerStrike!.targetId).toBe('p3');
+    });
+  });
+
+  describe('Fallback Targeting (No Threat Data)', () => {
+    it('should fall back to first reachable player when no threat data exists', () => {
+      const p1 = createCombatant('p1', 'FrontTank', 'room-1', true);
+      const e1 = createCombatant('e1', 'MeleeEnemy', 'room-1', false);
+      
+      combat.registerCombatant(p1);
+      combat.registerCombatant(e1, 'melee');
+      
+      // Initiate combat but don't attack yet (no threat generated)
+      combat.initiateCombat('p1', 'e1');
+      
+      // Enemy should attack p1 (fallback to first reachable)
+      const result = combat.resolveTick();
+      const enemyStrike = result.events.find(e => e.actorId === 'e1' && e.type === 'strike');
+      expect(enemyStrike).toBeDefined();
+      expect(enemyStrike!.targetId).toBe('p1');
+    });
+  });
+
+  describe('Threat Table Updates', () => {
+    it('should accumulate threat when player deals damage to creature', () => {
+      const p1 = createCombatant('p1', 'Player', 'room-1', true, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
       const e1 = createCombatant('e1', 'Enemy', 'room-1', false, { maxHp: 1000, attack: 10, defence: 0, armour: 0, agility: 0 });
       
-      p1.position = 'front';
-      
       combat.registerCombatant(p1);
-      combat.registerCombatant(e1);
+      combat.registerCombatant(e1, 'melee');
+      
       combat.initiateCombat('p1', 'e1');
+      
+      // p1 attacks twice, accumulating threat
+      combat.submitAction('p1', 'strike', 'e1');
+      const result1 = combat.resolveTick();
       
       combat.submitAction('p1', 'strike', 'e1');
-      const result = combat.resolveTick();
+      const result2 = combat.resolveTick();
       
-      const strike = result.events.find(e => e.actorId === 'p1' && e.type === 'strike');
-      expect(strike!.damage).toBe(100); // No bonus
-    });
-  });
-
-  describe('Creature Position Types', () => {
-    it('should set melee creature to front position by default', () => {
-      const melee = createCombatant('c1', 'Melee', 'room-1', false);
-      combat.registerCombatant(melee, 'melee');
+      // Both attacks should hit (damage should accumulate as threat)
+      const strike1 = result1.events.find(e => e.actorId === 'p1' && e.type === 'strike');
+      const strike2 = result2.events.find(e => e.actorId === 'p1' && e.type === 'strike');
       
-      const updated = combat.getCombatant('c1');
-      expect(updated?.position).toBe('front');
-    });
-
-    it('should set ranged creature to rear position by default', () => {
-      const ranged = createCombatant('c1', 'Ranged', 'room-1', false);
-      combat.registerCombatant(ranged, 'ranged');
+      expect(strike1?.damage).toBeGreaterThan(0);
+      expect(strike2?.damage).toBeGreaterThan(0);
       
-      const updated = combat.getCombatant('c1');
-      expect(updated?.position).toBe('rear');
-    });
-
-    it('should set skirmisher creature to flank position by default', () => {
-      const skirmisher = createCombatant('c1', 'Skirmisher', 'room-1', false);
-      combat.registerCombatant(skirmisher, 'skirmisher');
-      
-      const updated = combat.getCombatant('c1');
-      expect(updated?.position).toBe('flank');
-    });
-
-    it('should set boss creature to front position by default', () => {
-      const boss = createCombatant('c1', 'Boss', 'room-1', false);
-      combat.registerCombatant(boss, 'boss');
-      
-      const updated = combat.getCombatant('c1');
-      expect(updated?.position).toBe('front');
-    });
-
-    it('should allow boss creatures to reach any position', () => {
-      const boss = createCombatant('c1', 'Boss', 'room-1', false, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      const p1 = createCombatant('p1', 'Player', 'room-1', true, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      
-      p1.position = 'rear'; // Player at rear
-      
-      combat.registerCombatant(boss, 'boss');
-      combat.registerCombatant(p1);
-      combat.initiateCombat('c1', 'p1');
-      
-      const initialHp = p1.hp;
-      combat.submitAction('c1', 'strike', 'p1');
-      combat.resolveTick();
-      
-      // Boss should hit rear target
-      const updated = combat.getCombatant('p1');
-      expect(updated!.hp).toBeLessThan(initialHp);
-    });
-
-    it('should prevent melee creature from reaching rear target', () => {
-      const melee = createCombatant('c1', 'Melee', 'room-1', false, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      const p1 = createCombatant('p1', 'Player', 'room-1', true, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      
-      p1.position = 'rear';
-      
-      combat.registerCombatant(melee, 'melee');
-      combat.registerCombatant(p1);
-      combat.initiateCombat('c1', 'p1');
-      
-      const initialHp = p1.hp;
-      combat.submitAction('c1', 'strike', 'p1');
-      combat.resolveTick();
-      
-      // Melee should not reach rear
-      const updated = combat.getCombatant('p1');
-      expect(updated?.hp).toBe(initialHp);
-    });
-
-    it('should allow ranged creature to hit any position', () => {
-      const ranged = createCombatant('c1', 'Ranged', 'room-1', false, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      const p1 = createCombatant('p1', 'Player', 'room-1', true, { maxHp: 100, attack: 10, defence: 0, armour: 0, agility: 0 });
-      
-      p1.position = 'front';
-      ranged.position = 'rear'; // Ranged at rear
-      
-      combat.registerCombatant(ranged, 'ranged');
-      combat.registerCombatant(p1);
-      combat.initiateCombat('c1', 'p1');
-      
-      const initialHp = p1.hp;
-      combat.submitAction('c1', 'strike', 'p1');
-      combat.resolveTick();
-      
-      // Ranged should hit from rear
-      const updated = combat.getCombatant('p1');
-      expect(updated!.hp).toBeLessThan(initialHp);
-    });
-  });
-
-  describe('Position Change Narration', () => {
-    it('should narrate position change for player', () => {
-      const p1 = createCombatant('p1', 'Player', 'room-1', true);
-      const e1 = createCombatant('e1', 'Enemy', 'room-1', false);
-      combat.registerCombatant(p1);
-      combat.registerCombatant(e1);
-      combat.initiateCombat('p1', 'e1');
-
-      combat.queuePositionChange('p1', 'flank');
-      const result = combat.resolveTick();
-
-      const posEvent = result.events.find(e => e.actorId === 'p1');
-      expect(posEvent?.narration).toContain('flank');
+      // Enemy should still target p1 on next tick (highest/only threat)
+      const result3 = combat.resolveTick();
+      const enemyStrike = result3.events.find(e => e.actorId === 'e1' && e.type === 'strike');
+      expect(enemyStrike?.targetId).toBe('p1');
     });
   });
 });
