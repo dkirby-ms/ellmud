@@ -8,7 +8,7 @@
  * - Group frames (placeholder for future group system)
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Sword, Shield, Heart, Target } from 'lucide-react';
 import type { EnemyStatus } from '../store.js';
 
