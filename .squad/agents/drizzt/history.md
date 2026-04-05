@@ -2911,3 +2911,25 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 - Authored PR #261 (Death/Spawn Routing)
 - Fixed PR #260 by adding migration `014_repurpose_refuge.sql` (Reviewer Rejection Lockout pattern)
 - No Drizzt PRs had merge conflicts; base branch changes flowed cleanly into dependent work
+
+
+### 2026-04-08: Issue #278 — Auto-Attack Baseline Implementation
+**Context:** GDD §6.1 and §6.2 specify that players auto-attack their current target every tick once in combat, with the player's role being tactical (abilities, positioning, flee) rather than repetitive striking. The existing CombatSystem defaulted to dodge when no action was submitted, which inverted the GDD intent.
+
+**Implementation:**
+- Changed default action from dodge to auto-attack when combatant has a valid, living target
+- Added `currentTarget` field to `Combatant` interface for per-combatant target tracking
+- Auto-set target on combat initiation for both attacker and defender (creature aggro pattern)
+- Added `setTarget()`, `cycleTarget()`, `getHostilesInEncounter()` methods to CombatSystem
+- Implemented `target <entity>` and `target next` command handlers
+- Updated `attack` command to also set `currentTarget` when switching targets mid-combat
+- When target dies or is missing, auto-attack pauses and defaults to dodge (explicit player choice)
+
+**Testing:** Added 14 new tests for auto-attack and target management. Updated existing combat tests that assumed dodge as default — tests were correct for old behavior but needed updates for new GDD-compliant behavior.
+
+**Key Design Decision:** Both PvP combatants auto-target each other on initiation (not just creatures). This makes PvP combat feel natural and avoids the defender being at a disadvantage by requiring manual targeting while taking damage.
+
+**Branch:** squad/278-auto-attack-baseline  
+**PR:** #294  
+**Status:** Opened, awaiting review
+
