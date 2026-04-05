@@ -6,7 +6,7 @@
  * AI actions are resolved the same way as player actions.
  */
 
-import type { Creature, CreatureAction, BehaviorState } from './types.js';
+import type { Creature, CreatureAction, BehaviorState, CreatureAbility } from './types.js';
 
 // ─── World State (subset needed for AI decisions) ────────────────────────────
 
@@ -17,6 +17,8 @@ export interface CreatureWorldState {
   roomExits: Map<string, string[]>;
   /** Rooms where sound was recently generated (e.g., combat, loud actions). */
   noisyRooms: Set<string>;
+  /** Combatants currently in combat (used to check if creature is in wind-up). */
+  combatantsInCombat: Set<string>;
 }
 
 // ─── Behavior Transitions ────────────────────────────────────────────────────
@@ -193,10 +195,30 @@ function handleHostile(
     return { type: 'idle', creatureId: creature.id };
   }
 
-  // Berserker archetype: always strike. Target first player in room (deterministic).
+  // Target first player in room (deterministic)
   const targetId = playersHere[0];
 
-  // If HP is low (but above flee threshold), still strike — flee threshold handles transition
+  // Telegraph decision logic (GDD §6.5):
+  // - Decide between telegraphed ability vs basic attack
+  // - Use simple tick-based determinism: use ability every N ticks
+  // - Don't telegraph if already winding up (checked in combat system)
+  if (creature.abilities && creature.abilities.length > 0) {
+    // Deterministic ability usage: use ability every 5 ticks based on creature ID hash
+    const tickModulo = (creature.idleTicks + simpleHash(creature.id)) % 5;
+    if (tickModulo === 0) {
+      // Select ability deterministically (rotate through available abilities)
+      const abilityIndex = Math.floor(creature.idleTicks / 5) % creature.abilities.length;
+      const ability = creature.abilities[abilityIndex];
+      return {
+        type: 'combat_telegraph',
+        creatureId: creature.id,
+        targetCombatantId: targetId,
+        abilityId: ability.id,
+      };
+    }
+  }
+
+  // Default: basic strike
   return { type: 'combat_strike', creatureId: creature.id, targetCombatantId: targetId };
 }
 

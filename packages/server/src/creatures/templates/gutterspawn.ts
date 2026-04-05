@@ -48,4 +48,13 @@ export const GUTTERSPAWN: CreatureTemplate = {
   idleTicksMax: 60,
   fleeThreshold: 0.3,
   aggressive: true,
+  abilities: [
+    {
+      id: 'frenzied_leap',
+      name: 'Frenzied Leap',
+      damage: 10,
+      windUpTicks: 4,
+      telegraphText: 'The gutterspawn crouches low, muscles coiling beneath its bloated hide...',
+    },
+  ],
 };

@@ -51,6 +51,19 @@ export interface Combatant {
   maxStamina?: number;
   /** Ability cooldowns — maps ability ID to remaining ticks (GDD §6.3). */
   abilityCooldowns?: Map<string, number>;
+  /** Active telegraphed ability wind-up state (GDD §6.5). */
+  windUp?: WindUpState;
+}
+
+// ─── Wind-Up State (GDD §6.5) ───────────────────────────────────────────────
+
+export interface WindUpState {
+  abilityId: string;
+  abilityName: string;
+  damage: number;
+  remainingTicks: number;
+  targetId: string;
+  telegraphText: string;
 }
 
 export function createCombatant(
@@ -123,10 +136,20 @@ export interface FleeResult {
   toRoomId: string;
 }
 
+export interface TelegraphBroadcast {
+  creatureId: string;
+  creatureName: string;
+  abilityName: string;
+  remainingTicks: number;
+  targetId: string;
+  telegraphText: string;
+}
+
 export interface TickResult {
   events: CombatEvent[];
   fleeResults: FleeResult[];
   endedEncounterIds: string[];
+  telegraphs?: TelegraphBroadcast[];
 }
 
 /** No-op tick result when there's no active combat. */
@@ -134,6 +157,7 @@ export const EMPTY_TICK_RESULT: TickResult = {
   events: [],
   fleeResults: [],
   endedEncounterIds: [],
+  telegraphs: [],
 };
 
 /** Timeout in ticks (seconds) before combat ends with no strikes. */

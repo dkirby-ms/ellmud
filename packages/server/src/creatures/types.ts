@@ -23,6 +23,17 @@ export type CreatureType =
 
 export type BehaviorState = 'idle' | 'alert' | 'hostile' | 'fleeing';
 
+// ─── Creature Abilities (GDD §6.5) ──────────────────────────────────────────
+
+/** Telegraphed ability definition for creatures. */
+export interface CreatureAbility {
+  id: string;
+  name: string;
+  damage: number;
+  windUpTicks: number;
+  telegraphText: string;
+}
+
 // ─── Loot Table ──────────────────────────────────────────────────────────────
 
 export interface LootEntry {
@@ -62,6 +73,8 @@ export interface CreatureTemplate {
   aggressive: boolean;
   /** Short atmospheric description shown when the creature is in a room. */
   roomDescription?: string;
+  /** Telegraphed abilities available to this creature (GDD §6.5). */
+  abilities?: CreatureAbility[];
 }
 
 // ─── Creature Instance ───────────────────────────────────────────────────────
@@ -93,11 +106,13 @@ export interface Creature {
   aggressive: boolean;
   /** Short atmospheric description shown when the creature is in a room. */
   roomDescription?: string;
+  /** Telegraphed abilities available to this creature (GDD §6.5). */
+  abilities?: CreatureAbility[];
 }
 
 // ─── Creature Action Output ──────────────────────────────────────────────────
 
-export type CreatureActionType = 'patrol_move' | 'alert_move' | 'combat_strike' | 'combat_dodge' | 'combat_flee' | 'idle';
+export type CreatureActionType = 'patrol_move' | 'alert_move' | 'combat_strike' | 'combat_dodge' | 'combat_flee' | 'combat_telegraph' | 'idle';
 
 export interface CreatureAction {
   type: CreatureActionType;
@@ -108,4 +123,6 @@ export interface CreatureAction {
   sourceRoomId?: string;
   /** Target combatant for combat actions. */
   targetCombatantId?: string;
+  /** Ability ID for telegraph actions (GDD §6.5). */
+  abilityId?: string;
 }

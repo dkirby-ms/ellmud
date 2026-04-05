@@ -140,6 +140,16 @@ export interface PlayerStateMessage {
   statusEffects: Array<{ id: string; name: string; remainingTicks: number }>;
 }
 
+/** Server → Client: Enemy telegraph broadcast (GDD §6.5). */
+export interface TelegraphMessage {
+  creatureId: string;
+  creatureName: string;
+  abilityName: string;
+  remainingTicks: number;
+  targetId: string;
+  telegraphText: string;
+}
+
 // ─── Character Types (GDD §7.1) ──────────────────────────────────────────────
 
 /** Summary of a character for list/select screens. */
@@ -238,6 +248,7 @@ export const MessageTypes = {
   ZONE_STATE: 'zone_state',
   COMBAT_RESULT: 'combat_result',
   PLAYER_STATE: 'player_state',
+  TELEGRAPH: 'telegraph',
   OVERLAY_STATE: 'overlay_state',
   STASH_UPDATE: 'stash_update',
   LOADOUT_UPDATE: 'loadout_update',
