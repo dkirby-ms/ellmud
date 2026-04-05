@@ -68,19 +68,13 @@ const GRID_SPACING = 150;
 
 /**
  * Default ELK layout options.
- * Uses INTERACTIVE strategies so ELK respects BFS-seeded compass positions.
+ * Uses 'fixed' algorithm to preserve BFS-seeded compass positions exactly.
+ * ReactFlow handles edge routing (getBezierPath) — ELK is not needed for that.
+ * The 'fixed' algorithm keeps nodes at their specified coordinates and only
+ * adjusts disconnected component placement.
  */
 const DEFAULT_ELK_OPTIONS: LayoutOptions = {
-  'elk.algorithm': 'layered',
-  'elk.direction': 'RIGHT',
-  'elk.spacing.nodeNode': '100',
-  'elk.layered.spacing.nodeNodeBetweenLayers': '100',
-  'elk.edgeRouting': 'ORTHOGONAL',
-  // INTERACTIVE strategies tell ELK to use seed positions as reference
-  'elk.layered.cycleBreaking.strategy': 'INTERACTIVE',
-  'elk.layered.layering.strategy': 'INTERACTIVE',
-  'elk.layered.crossingMinimization.strategy': 'INTERACTIVE',
-  'elk.layered.nodePlacement.strategy': 'INTERACTIVE',
+  'elk.algorithm': 'fixed',
 };
 
 // ─── Main Layout Function ───────────────────────────────────────────────────
@@ -263,24 +257,13 @@ function getOppositePort(portId: string): string {
 
 /**
  * Merge user options with defaults.
+ * Currently uses 'fixed' algorithm — layered-specific options are stored
+ * in the config but only take effect if the algorithm is changed back.
  */
 function mergeLayoutOptions(options?: ElkLayoutOptions): LayoutOptions {
   const merged = { ...DEFAULT_ELK_OPTIONS };
   
   if (!options) return merged;
-  
-  if (options.nodeSpacing !== undefined) {
-    merged['elk.spacing.nodeNode'] = options.nodeSpacing.toString();
-  }
-  if (options.layerSpacing !== undefined) {
-    merged['elk.layered.spacing.nodeNodeBetweenLayers'] = options.layerSpacing.toString();
-  }
-  if (options.edgeRouting !== undefined) {
-    merged['elk.edgeRouting'] = options.edgeRouting;
-  }
-  if (options.direction !== undefined) {
-    merged['elk.direction'] = options.direction;
-  }
   
   return merged;
 }
@@ -316,11 +299,13 @@ function extractPositions(graph: ElkNode, floor: number): Map<string, RoomPositi
 /**
  * Default ELK configuration for zone designer layouts.
  *
- * Algorithm: 'layered' with INTERACTIVE strategies (respects BFS seed positions)
- * Direction: 'RIGHT' (layer assignment uses x-coordinates from BFS seeds)
- * Spacing: 100px between nodes and layers
- * Edge routing: 'ORTHOGONAL' (Manhattan routing for compass-aligned exits)
- * Crossing minimization: INTERACTIVE (respects seed ordering)
+ * Algorithm: 'fixed' — preserves BFS compass-correct positions exactly.
+ * BFS seeds handle compass semantics (north=up, east=right, etc.).
+ * ELK handles disconnected component placement and graph validation.
+ * ReactFlow handles edge routing (Bézier paths via ZoneExitEdge).
+ *
+ * These layered-specific options are retained in the config type for
+ * future use if/when ELK's layered algorithm adds compass constraints.
  */
 export const DEFAULT_CONFIG: ElkLayoutOptions = {
   nodeSpacing: 100,
