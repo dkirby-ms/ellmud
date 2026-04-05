@@ -398,10 +398,7 @@ export class CombatSystem {
       if (c && c.hp > 0) combatants.push(c);
     }
 
-    if (combatants.length <= 1) {
-      events.push(resolveCombatEnd('last_standing'));
-      return { events, fleeResults, ended: true, telegraphs };
-    }
+    // Note: Don't end combat immediately if only 1 combatant - check cooldown logic at end
 
     // 0. Process wind-up countdowns (GDD §6.5)
     const windUpExpired: Combatant[] = [];
@@ -424,6 +421,7 @@ export class CombatSystem {
         }
       }
     }
+
 
     // 1. Default unsubmitted actions to auto-attack current target (GDD §6.1, §6.2)
     for (const c of combatants) {
@@ -647,21 +645,22 @@ export class CombatSystem {
 
     let ended = false;
     if (aliveInEncounter.length <= 1) {
-      // Only one side remains alive — start post-combat cooldown (GDD §6.2)
+      // Only one side remains alive — start/continue post-combat cooldown (GDD §6.2)
       if (encounter.postCombatCooldown === 0) {
-        // First tick after last enemy defeated — start cooldown
+        // First tick after last enemy defeated — start cooldown (don't end combat yet)
         encounter.postCombatCooldown = POST_COMBAT_COOLDOWN_TICKS;
         this.debug(`Post-combat cooldown started: ${POST_COMBAT_COOLDOWN_TICKS} ticks`);
+        // Don't check for end this tick - we just started the cooldown
       } else {
         // Cooldown in progress — decrement
         encounter.postCombatCooldown--;
         this.debug(`Post-combat cooldown: ${encounter.postCombatCooldown} ticks remaining`);
-      }
 
-      // Combat ends when cooldown expires
-      if (encounter.postCombatCooldown === 0) {
-        events.push(resolveCombatEnd('last_standing'));
-        ended = true;
+        // Combat ends when cooldown reaches 0
+        if (encounter.postCombatCooldown === 0) {
+          events.push(resolveCombatEnd('last_standing'));
+          ended = true;
+        }
       }
     } else {
       // Multiple combatants still alive — reset cooldown if it was running
