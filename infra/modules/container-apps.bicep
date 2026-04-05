@@ -67,6 +67,29 @@ param allowLocalAuth string = 'false'
 @description('Client app URL for OAuth redirects (e.g. https://ellmud-test.kirbytoso.xyz)')
 param clientUrl string = ''
 
+@description('Azure AI Foundry endpoint URL')
+param azureAiEndpoint string = ''
+
+@secure()
+@description('Azure AI Foundry API key')
+param azureAiKey string = ''
+
+@description('Azure AI deployment name')
+param azureAiDeployment string = 'gpt-4o-mini'
+
+@description('Azure AI API version')
+param azureAiApiVersion string = '2024-08-01-preview'
+
+@description('Enable LLM narration (false = template-only mode)')
+param enableLlmNarration string = 'true'
+
+@secure()
+@description('Admin API bearer token (fail-closed when unset)')
+param adminToken string = ''
+
+@description('Require authentication to join rooms')
+param authRequired string = 'true'
+
 var createEnvironment = existingEnvironmentId == ''
 
 // Bootstrap placeholder — replaced by real image after first CI/CD deploy.
@@ -165,7 +188,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             { name: 'REDIS_CACHE_ENABLED', value: 'true' }
             { name: 'REDIS_PRESENCE_ENABLED', value: 'true' }
             { name: 'REDIS_DRIVER_ENABLED', value: 'true' }
-            { name: 'MAX_PLAYERS_PER_SHARD', value: '4' }
+            { name: 'MAX_PLAYERS_PER_ZONE', value: '4' }
             { name: 'MAX_REPLICAS', value: '4' }
             { name: 'ENTRA_CLIENT_ID', value: entraClientId }
             { name: 'ENTRA_CLIENT_SECRET', value: entraClientSecret }
@@ -174,6 +197,13 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             { name: 'ENTRA_REDIRECT_URI', value: entraRedirectUri }
             { name: 'ALLOW_LOCAL_AUTH', value: allowLocalAuth }
             { name: 'CLIENT_URL', value: clientUrl }
+            { name: 'AUTH_REQUIRED', value: authRequired }
+            { name: 'AZURE_AI_ENDPOINT', value: azureAiEndpoint }
+            { name: 'AZURE_AI_KEY', value: azureAiKey }
+            { name: 'AZURE_AI_DEPLOYMENT', value: azureAiDeployment }
+            { name: 'AZURE_AI_API_VERSION', value: azureAiApiVersion }
+            { name: 'ENABLE_LLM_NARRATION', value: enableLlmNarration }
+            { name: 'ADMIN_TOKEN', value: adminToken }
           ]
         }
       ]

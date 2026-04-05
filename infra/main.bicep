@@ -50,6 +50,29 @@ param allowLocalAuth string = 'false'
 @description('Client app URL for OAuth redirects')
 param clientUrl string = ''
 
+@description('Azure AI Foundry endpoint URL')
+param azureAiEndpoint string = ''
+
+@secure()
+@description('Azure AI Foundry API key')
+param azureAiKey string = ''
+
+@description('Azure AI deployment name')
+param azureAiDeployment string = 'gpt-4o-mini'
+
+@description('Azure AI API version')
+param azureAiApiVersion string = '2024-08-01-preview'
+
+@description('Enable LLM narration (false = template-only mode)')
+param enableLlmNarration string = 'true'
+
+@secure()
+@description('Admin API bearer token (fail-closed when unset)')
+param adminToken string = ''
+
+@description('Require authentication to join rooms (true for production)')
+param authRequired string = 'true'
+
 // ─── Variables ──────────────────────────────────────────────────────────────
 
 var resourcePrefix = 'ellmud-${environmentName}'
@@ -133,6 +156,13 @@ module containerAppsApp 'modules/container-apps.bicep' = {
     entraRedirectUri: entraRedirectUri
     allowLocalAuth: allowLocalAuth
     clientUrl: clientUrl
+    azureAiEndpoint: azureAiEndpoint
+    azureAiKey: azureAiKey
+    azureAiDeployment: azureAiDeployment
+    azureAiApiVersion: azureAiApiVersion
+    enableLlmNarration: enableLlmNarration
+    adminToken: adminToken
+    authRequired: authRequired
   }
 }
 
