@@ -790,6 +790,29 @@ export default function ZoneDesigner({
     });
   }
 
+  function handleRoomMouseEnter(e: React.MouseEvent, slug: string) {
+    if (hoverTimer) clearTimeout(hoverTimer);
+    const timer = setTimeout(() => {
+      const canvasBounds = canvasRef.current?.getBoundingClientRect();
+      if (!canvasBounds) return;
+      setHoveredRoom(slug);
+      setHoverPosition({
+        x: e.clientX - canvasBounds.left,
+        y: e.clientY - canvasBounds.top,
+      });
+    }, 150);
+    setHoverTimer(timer);
+  }
+
+  function handleRoomMouseLeave(_e: React.MouseEvent, _slug: string) {
+    if (hoverTimer) {
+      clearTimeout(hoverTimer);
+      setHoverTimer(null);
+    }
+    setHoveredRoom(null);
+    setHoverPosition(null);
+  }
+
   async function handleAddRoomInDirection(fromSlug: string, direction: string) {
     if (!zoneId) return;
     const timestamp = Date.now();
@@ -1743,6 +1766,8 @@ export default function ZoneDesigner({
                 onNodeClick={handleRoomClick}
                 onEdgeClick={handleExitClick}
                 onNodeContextMenu={handleRoomContextMenu}
+                onNodeMouseEnter={handleRoomMouseEnter}
+                onNodeMouseLeave={handleRoomMouseLeave}
                 onEdgeContextMenu={handleExitContextMenu}
                 onPaneClick={handleCanvasClick}
                 selectedNodeId={selectedRoom}
