@@ -1803,8 +1803,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     });
 
     // Apply death penalty (increment death count, record time)
-    void this.deathPenaltyStore.incrementDeathCount(playerId).then((newCount: number) => {
-      void this.deathPenaltyStore.setLastDeathTime(playerId, Date.now());
+    const deathDbId = this.dbPlayerId(playerId);
+    void this.deathPenaltyStore.incrementDeathCount(deathDbId).then((newCount: number) => {
+      void this.deathPenaltyStore.setLastDeathTime(deathDbId, Date.now());
       this.log(`Death penalty: ${this.playerTag(playerId)} death count now ${newCount}`);
     });
 
