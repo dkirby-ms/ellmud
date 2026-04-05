@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ThreatTable } from '../combat/ThreatTable';
+import { ThreatTable } from '../combat/ThreatTable.js';
 
 describe('ThreatTable', () => {
   let table: ThreatTable;

@@ -1382,7 +1382,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     const noisyRooms = new Set<string>(this.combatSystem.getActiveEncounterRoomIds());
 
-    return { playersInRoom, roomExits, noisyRooms };
+    const combatantsInCombat = new Set<string>();
+    return { playersInRoom, roomExits, noisyRooms, combatantsInCombat };
   }
 
   private processCreatureAction(action: CreatureAction): void {
@@ -2024,7 +2025,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           features: [], // TODO: extract from room properties
           items_visible: room.items.map((item) => ({
             id: item.id,
-            type: item.type ?? 'item',
+            type: 'item',
             name: item.name,
             quality: 1.0,
           })),
@@ -2038,16 +2039,18 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           hazards: [],
           traces: this.traceSystem.getTracesInRoom(roomId).map((t) => ({
             type: t.type,
-            age_seconds: t.expiresAt ? Math.max(0, (t.expiresAt - Date.now()) / 1000) : undefined,
+            age_seconds: Math.max(0, ((t.createdAt + t.ttl) - Date.now()) / 1000),
             direction: t.direction,
-            source: t.actorName,
-            description: t.description,
+            source: t.metadata.actorName,
+            description: t.metadata.description,
             intensity: 1.0,
           })),
           zone_stability: this.state.stability,
         },
         player: {
-          hp_pct: player.hp / player.maxHp,
+          hp_pct: this.combatSystem.getCombatant(playerId)
+            ? this.combatSystem.getCombatant(playerId)!.hp / this.combatSystem.getCombatant(playerId)!.maxHp
+            : 1.0,
           statuses: [], // TODO: track player statuses
           stance: this.combatSystem.isInCombat(playerId) ? 'combat' : 'exploring',
           awareness_level: 0.5, // TODO: calculate from skills

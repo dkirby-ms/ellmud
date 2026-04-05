@@ -58,7 +58,7 @@ function buildWorldState(
 
   const noisyRooms = new Set<string>(combatSystem.getActiveEncounterRoomIds());
 
-  return { playersInRoom, roomExits, noisyRooms };
+  return { playersInRoom, roomExits, noisyRooms, combatantsInCombat: new Set<string>() };
 }
 
 function buildCtx(
@@ -485,7 +485,7 @@ describe('Creature Movement Actions', () => {
       roomExits.set(id, Array.from(room.exits.values()));
     }
 
-    const world: CreatureWorldState = { playersInRoom, roomExits, noisyRooms };
+    const world: CreatureWorldState = { playersInRoom, roomExits, noisyRooms, combatantsInCombat: new Set<string>() };
     const actions = creatureManager.updateAll(world);
 
     const alertAction = actions.find(

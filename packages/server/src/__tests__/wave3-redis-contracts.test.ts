@@ -129,6 +129,7 @@ function makeServerConfig(overrides: Partial<ServerConfig['redis']> = {}): Serve
     devModeEnabled: false,
     enableProceduralGeneration: false,
     corpseTTLSeconds: 600,
+    enableLLMNarration: false,
   };
 }
 

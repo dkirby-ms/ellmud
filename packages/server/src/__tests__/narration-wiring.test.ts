@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createNarrationService } from '../narrative/factory.js';
-import type { LLMTransport, LLMResponse } from '../narrative/llm-client.js';
+import type { LLMTransport, LLMResponse, LLMRequest } from '../narrative/llm-client.js';
 import { LLMClient } from '../narrative/llm-client.js';
 import { InMemoryNarrationCache } from '../narrative/cache.js';
 import { resetConfig, getConfig } from '../config.js';
@@ -13,7 +13,7 @@ import { resetConfig, getConfig } from '../config.js';
 // Mock transport that tracks calls
 function createMockTransport(response: string = 'A dark chamber with water pooling at your feet.'): LLMTransport {
   const transport: LLMTransport & { callCount: number } = Object.assign(
-    async (_request: Record<string, unknown>, _signal: AbortSignal): Promise<LLMResponse> => {
+    async (_request: LLMRequest, _signal: AbortSignal): Promise<LLMResponse> => {
       transport.callCount++;
       return { choices: [{ message: { content: response } }] };
     },
