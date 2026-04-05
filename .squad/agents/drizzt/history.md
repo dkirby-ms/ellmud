@@ -3054,3 +3054,20 @@ Threat tables are stored per-encounter, mapped by creature ID. Each creature mai
 **Result:** Client now receives all three values in the `/auth/callback?token=...&playerId=...&username=...` redirect URL, enabling proper username display.
 
 **Files Modified:** `packages/server/src/auth/entra-routes.ts` (2 lines changed)
+
+### OpenAI-Compatible LLM Transport (Issue #310)
+**Task:** Allow admins to configure non-Azure LLM endpoints for in-game narration.
+**Status:** ✅ Complete
+
+**Changes:**
+1. **Config** (`config.ts`) — Added `openaiLLM?: { endpoint, apiKey, model }` to ServerConfig. Loaded from `OPENAI_LLM_ENDPOINT`, `OPENAI_LLM_KEY`, `OPENAI_LLM_MODEL` (default: gpt-4o). Both endpoint and key required for activation.
+2. **Transport** (`llm-client.ts`) — Added `createOpenAITransport()` with `/v1/chat/completions` URL, `Authorization: Bearer` header, and `model` in request body. Same error handling pattern as Azure transport.
+3. **Factory** (`factory.ts`) — Priority chain: Azure > OpenAI-compatible > template-only. Backward compatible — existing Azure deployments unaffected.
+4. **Tests** — 12 new tests in `openai-llm-transport.test.ts`: structure, URL construction, Bearer auth, model in body, error handling (401/403/429/500), AbortSignal.
+
+**All 2533 tests passing, zero regressions.**
+
+## Learnings
+- The `LLMTransport` type abstraction makes adding new providers trivial — just implement `(LLMRequest, AbortSignal) => Promise<LLMResponse>`.
+- OpenAI-compatible API is the de facto standard — model goes in request body (not URL like Azure deployments).
+- Factory priority pattern (Azure > OpenAI > template) keeps backward compat clean.

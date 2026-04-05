@@ -228,6 +228,46 @@ export function createAzureTransport(config: LLMClientConfig): LLMTransport {
   };
 }
 
+// ─── OpenAI-Compatible Transport ─────────────────────────────────────────────
+
+/** Configuration for an OpenAI-compatible LLM endpoint. */
+export interface OpenAITransportConfig {
+  endpoint: string;
+  apiKey: string;
+  model: string;
+}
+
+/**
+ * Create a transport function that calls any OpenAI-compatible endpoint.
+ * Works with OpenAI, LM Studio, Ollama, Mistral, and other compatible APIs.
+ */
+export function createOpenAITransport(config: OpenAITransportConfig): LLMTransport {
+  const url = `${config.endpoint}/v1/chat/completions`;
+
+  return async (request: LLMRequest, signal: AbortSignal): Promise<LLMResponse> => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: request.messages,
+        max_tokens: request.max_tokens,
+        temperature: request.temperature,
+      }),
+      signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI-compatible LLM error: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json() as Promise<LLMResponse>;
+  };
+}
+
 // ─── LLM Client ──────────────────────────────────────────────────────────────
 
 export class LLMClient {
