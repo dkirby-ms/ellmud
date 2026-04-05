@@ -10,6 +10,16 @@
 
 ## Learnings
 
+### 2026-04-05: Fire-and-Forget Narration Pattern (PR #292 Revision)
+- **Task:** Fixed blocking narration call in ZoneRoom.onJoin() per Elminster's review feedback
+- **Problem:** `await this.generateNarration()` blocked player connections for up to 2 seconds (cache miss + LLM timeout)
+- **Solution:** Changed to fire-and-forget pattern — removed await, added `.then()` for delivery and `.catch()` for error logging
+- **Impact:** Player join now completes immediately, narration arrives asynchronously 0-2000ms later
+- **Core principle validated:** GDD §4.5 — "LLM never blocks critical path"
+- **Test fix:** Updated `rooms.test.ts` to wait 1000ms and find system narration in message array (order no longer guaranteed)
+- **Minor fix:** Corrected typo `narratonType` → `narrativeType` in parameter naming
+- **Team lesson:** When integrating LLM calls, always check if the call is on a critical path (join, command response, state update). If yes, use fire-and-forget with proper error handling. The fallback text serves as immediate feedback; LLM enrichment arrives when ready.
+
 ### 2026-03-19: Figma AI Design Prompt Created
 - Created a comprehensive Figma Make/AI prompt for the Ellmud client UI prototype
 - **Screens defined (11 total):** Login/Register, Character Select, Refuge Hub, Shardboard, Shard Exploration (main gameplay), Combat Mode, Inventory/Loadout, Extraction Ritual, Chat/Social Panel, Leaderboard/Contracts, Settings
@@ -89,6 +99,21 @@
 - **Key pattern: forbidden directive validation** — The `forbidden` array in narrative_directives is a runtime-configurable guardrail. Validation checks are additive (each directive adds a check), so new forbidden rules can be added without modifying the validator function's core structure.
 - **Background enrichment verified:** When primary LLM call times out, `backgroundEnrich()` fires a new LLM call with its own AbortController bound to hard_limit. Invalid output in background is silently rejected (template stays in cache). Hard limit cancels the background call.
 - **Test count:** 846 total (was 726), all passing. 0 lint errors.
+
+### 2026-04-05: NarrationService Wired into ZoneRoom Runtime (Issue #277, Jarlaxle)
+- **Impact to your domain:** NarrationService now has a runtime instantiation pattern in ZoneRoom via factory function
+- **Factory pattern:** `createNarrationService()` conditionally creates LLMClient based on Azure AI env vars (graceful degradation in dev/test)
+- **Entry narration integrated:** Room entry now generates LLM prose via `generateNarration()` helper with rich NarrationContext
+- **What this means for you:**
+  - Your pipeline (LLMClient, cache, validation, fallback) is now **operational at room runtime** — entry narration is the proof-of-concept
+  - Next expansion points are ready: room descriptions (`look`), combat actions, movement events, sound/trace — each requires building appropriate NarrationContext
+  - Cache is wired; telemetry is flowing; template fallback is active
+  - Minsc/Regis can check `config.azureAI` to determine LLM availability in client UI settings
+- **Architecture note:** Factory approach is clean and testable — config reading happens once at instantiation, not per-call. Redis cache can be wired similarly.
+- **Tests:** 7 integration tests passing (Azure config, no-config, LLM available, LLM unavailable, context building, timeout fallback, cache tracking)
+- **PR #292 status:** Ready for review
+
+---
 
 ## Wave 3 Complete — LLM Pipeline Acceptance Audit (2026-03-20T20:21:36Z)
 

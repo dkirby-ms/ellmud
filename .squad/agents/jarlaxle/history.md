@@ -2176,3 +2176,37 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - Authored PR #263 (Generator Cleanup) — resolved 3 merge conflicts after base branch shift
 - PR #259 merged cleanly. PR #263 had 3 merge conflicts due to base branch changes after #258, #262, #264 landed.
 - Learned: Migration discipline is an engine-team responsibility; Drizzt applied the #260 fix (adding migration 014)
+
+### 2026-04-05: NarrationService + LLM Client Wiring (Issue #277)
+- **PR:** #292 (`squad/277-wire-narration-service`)
+- **Acceptance:** Wired Azure AI Foundry LLM narration pipeline into ZoneRoom runtime with graceful fallback to template-only mode.
+
+**Architecture:**
+- `config.ts`: Added optional `azureAI` config block (`AZURE_AI_ENDPOINT`, `AZURE_AI_KEY`, `AZURE_AI_DEPLOYMENT`, `AZURE_AI_API_VERSION` env vars)
+- `narrative/factory.ts`: Factory function that creates NarrationService with LLMClient when Azure config is present, or template-only mode when not
+- `ZoneRoom`: Added `narrationService` field, initialized in `onCreate()` via factory
+- `generateNarration()`: Helper method that builds `NarrationContext` from game state (player HP, room contents, creatures, traces, zone stability) and calls `narrationService.narrate()`
+- Initial entry narration now uses LLM pipeline (proof-of-concept)
+
+**Testing:**
+- `narration-wiring.test.ts`: Integration tests for factory, config loading, mock transport, and fallback behavior
+- All 6 tests pass: config detection, default values, mock LLM call, template fallback
+
+**Key Patterns:**
+- **Factory pattern for dependency injection:** `createNarrationService()` reads config and conditionally instantiates LLMClient
+- **Graceful degradation:** When Azure config is missing, NarrationService falls back to templates (existing behavior)
+- **Async narration with timeout:** NarrationService already handles timeout internally (cache/LLM/template within budget), so `await narrationService.narrate()` is safe to call from `onJoin()`
+- **NarrationContext building:** Maps PlayerState + RoomGraph + systems (CreatureManager, TraceSystem, etc.) to the structured schema expected by LLM client
+- **Future expansion:** Room descriptions (from `look`), combat actions, movement events can call `generateNarration()` with richer context
+
+**File Paths:**
+- `packages/server/src/config.ts` — Azure AI config block
+- `packages/server/src/narrative/factory.ts` — NarrationService factory
+- `packages/server/src/rooms/ZoneRoom.ts` — Integration point (line ~303 onCreate, line ~483 generateNarration helper, line ~486 first usage)
+- `packages/server/src/__tests__/narration-wiring.test.ts` — Integration tests
+- `KNOWN_ISSUES.md` — Updated #2 to reflect wiring completion
+
+**Decisions:**
+- Entry narration is the first LLM-enhanced call (low-frequency, high-value)
+- Full integration (room descriptions, combat, movement) deferred to future work — infrastructure is now in place
+- No telemetry for background enrichment failures yet (existing KNOWN_ISSUE retained)

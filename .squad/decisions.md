@@ -1,3 +1,51 @@
+### 2026-04-05: NarrationService Factory Pattern for LLM Integration
+**By:** Jarlaxle (Systems Dev)  
+**Date:** 2026-04-05  
+**Issue:** #277  
+**PR:** #292
+
+## Decision
+
+The NarrationService is instantiated via a factory function (`createNarrationService()`) that conditionally creates an LLMClient based on Azure AI environment variables. When `AZURE_AI_ENDPOINT` and `AZURE_AI_KEY` are set, the factory wires in a real Azure AI Foundry transport. When not set, the service operates in template-only mode.
+
+## Rationale
+
+This pattern provides:
+1. **Graceful degradation**: Local dev and tests work without Azure credentials
+2. **Environment-based configuration**: Production gets LLM narration, dev gets fast templates
+3. **Testability**: Mock transports can be injected for integration tests
+4. **Single source of truth**: Config reading happens once at factory instantiation
+
+Alternative considered: Lazy initialization (check config on every narrate() call). Rejected because it adds overhead and makes the LLM availability decision dynamic rather than static at startup.
+
+## Architecture Impact
+
+- **ZoneRoom**: Calls `createNarrationService()` in `onCreate()` — no config reading at room level
+- **Config.ts**: Azure AI config is optional (`azureAI?: {...}`) — type system enforces null checks
+- **Factory**: Pure function — no side effects, easy to test
+- **NarrationService**: Unchanged — still accepts optional `llmClient` in constructor
+
+## Team Impact
+
+- **Minsc/Regis**: If building UI for narration settings, check `config.azureAI` to determine if LLM is available
+- **Drizzt**: When adding new narration call sites (combat, movement), use `generateNarration()` helper and build rich NarrationContext
+- **Future**: Redis-backed cache can be wired through factory similarly (already has cache parameter)
+
+## Future Expansion
+
+The initial wiring uses `generateNarration()` only for entry narration (proof-of-concept). Next steps:
+1. Room descriptions (from `look` command) — highest value, moderate frequency
+2. Combat actions — high frequency, needs careful context building
+3. Movement events — medium frequency, low context complexity
+4. Sound/trace narrations — already have system-level context available
+
+Each expansion requires:
+- Building a `NarrationContext` object with appropriate game state
+- Calling `await narrationService.narrate(context)`
+- Using the returned prose in place of template text
+
+---
+
 ### 2026-04-05: ELK as Sole Zone Designer Layout Engine
 **By:** Regis (Frontend Dev)
 **Issue:** #273

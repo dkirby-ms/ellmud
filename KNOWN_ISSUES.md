@@ -22,11 +22,11 @@ Documented during Phase 1 QA. Fixed items removed; remaining items are low-to-me
 **Impact:** Slow test feedback for lifecycle and tick-related changes.  
 **Recommendation:** Extract tick logic into a testable `ShardTickProcessor` class that takes dependencies as constructor args.
 
-### 2. Background enrichment errors are silently swallowed
+### 2. LLM narration wiring complete — enhancement opportunities remain
 **Systems:** Narration  
-**Description:** In `NarrationService.backgroundEnrich()`, errors from the LLM call are caught and ignored (`.catch(() => {})`). While this is intentional (template is already served), there's no logging or telemetry for background failures.  
-**Impact:** Persistent LLM failures go unnoticed in production.  
-**Recommendation:** Add a `recordBackgroundEnrichmentFailure()` telemetry counter.
+**Description:** The NarrationService and LLM client are now wired into ZoneRoom runtime. When `AZURE_AI_ENDPOINT` and `AZURE_AI_KEY` environment variables are set, the narration pipeline uses Azure AI Foundry GPT-4o-mini for enhanced prose. When not configured, it falls back gracefully to template-only mode. Currently, only entry narrations use the LLM pipeline; room descriptions from `look` commands and combat events still use hardcoded templates. The infrastructure is in place for full integration.  
+**Impact:** LLM narration is available but not yet used for all narration types.  
+**Recommendation:** Extend `generateNarration()` usage to room descriptions (from `look` command), combat actions, and movement events. This requires building richer NarrationContext objects with full game state at each call site.
 
 ---
 
