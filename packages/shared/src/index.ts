@@ -27,6 +27,14 @@ export type NarrationType =
   | 'awareness'  // Stealth detection, player presence cues
   | 'ambient';   // Ambient world events (weather, NPCs, faction)
 
+/** Combat signal classification (GDD §6.6). */
+export type SignalClass =
+  | 'player_action'
+  | 'enemy_action'
+  | 'environmental'
+  | 'status_effect'
+  | 'system';
+
 /** Server → Client: Narrated prose output. */
 export interface NarrateMessage {
   text: string;
@@ -37,6 +45,10 @@ export interface NarrateMessage {
     eventType: 'strike' | 'dodge' | 'flee' | 'defeated' | 'combat_end';
     actorId?: string;
     targetId?: string;
+    /** Signal class for visual treatment (GDD §6.6) */
+    signalClass?: SignalClass;
+    /** Optional inline icon prefix (GDD §6.6) */
+    icon?: string;
   };
 }
 

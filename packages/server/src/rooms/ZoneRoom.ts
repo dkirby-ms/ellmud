@@ -33,7 +33,15 @@ import { createTestRoomGraph, type RoomGraph, type Direction } from '../generato
 import { generateZoneGraph } from '../generator/generator.js';
 import { adaptRoomGraph } from '../generator/graph-adapter.js';
 import { handleLook } from '../commands/handlers/look.js';
-import { CombatSystem, type TickResult, createCombatant } from '../combat/index.js';
+import {
+  CombatSystem,
+  type TickResult,
+  createCombatant,
+  classifyEvent,
+  batchCombatEvents,
+  narrateBatchedEvent,
+  DEFAULT_BATCHING_RULES,
+} from '../combat/index.js';
 import { SoundSystem } from '../sound/index.js';
 import { TraceSystem } from '../systems/index.js';
 import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
@@ -1109,20 +1117,37 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
     }
 
-    // Send combat event narrations to all clients in relevant rooms
-    for (const event of tickResult.events) {
+    // Classify and batch events per GDD §6.6
+    const classifiedEvents = tickResult.events.map(event => {
+      const isPlayerActor = this.players.has(event.actorId);
+      const isPlayerTarget = event.targetId ? this.players.has(event.targetId) : false;
+      
+      return classifyEvent(event, isPlayerActor, isPlayerTarget);
+    });
+
+    // Apply temporal micro-batching (single tick = 50-150ms temporal window)
+    const batchedEvents = batchCombatEvents(classifiedEvents, DEFAULT_BATCHING_RULES);
+
+    // Send batched combat narrations to all clients
+    for (const batched of batchedEvents) {
+      const narrationText = narrateBatchedEvent(batched);
+      
       this.broadcast(MessageTypes.NARRATE, {
-        text: event.narration,
+        text: narrationText,
         type: 'combat',
         timestamp: Date.now(),
         combatEvent: {
-          eventType: event.type,
-          actorId: event.actorId,
-          targetId: event.targetId,
+          eventType: batched.event.type,
+          actorId: batched.event.actorId,
+          targetId: batched.event.targetId,
+          signalClass: batched.event.signalClass,
+          icon: batched.event.icon,
         },
       } satisfies NarrateMessage);
+    }
 
-      // Track players who took damage
+    // Track players who took damage (from original events, not batched)
+    for (const event of tickResult.events) {
       if (event.type === 'strike' && event.targetId && this.players.has(event.targetId)) {
         playersNeedingUpdate.add(event.targetId);
       }
@@ -1385,18 +1410,21 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         }
         break;
       }
+
       case 'combat_telegraph': {
         // Handle telegraphed ability (GDD §6.5)
-        if (!action.targetCombatantId || !action.abilityId) break;
+        const targetId = action.targetCombatantId;
+        const abilityId = action.abilityId;
+        if (!targetId || !abilityId) break;
         
-        // Skip against peaceful players
-        const targetPlayer = this.players.get(action.targetCombatantId);
+        // Skip combat initiation against peaceful players
+        const targetPlayer = this.players.get(targetId);
         if (targetPlayer?.peaceful) break;
 
         // Find the ability definition from creature template
-        const ability = creature.abilities?.find(a => a.id === action.abilityId);
+        const ability = creature.abilities?.find(a => a.id === abilityId);
         if (!ability) {
-          console.warn(`[ZoneRoom] Creature ${creature.id} tried to telegraph unknown ability ${action.abilityId}`);
+          console.warn(`[ZoneRoom] Creature ${creature.id} tried to telegraph unknown ability ${abilityId}`);
           break;
         }
 
@@ -1405,8 +1433,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           this.combatSystem.registerCombatant(this.creatureManager.toCombatant(creature));
         }
         // Register target player as combatant if needed
-        if (!this.combatSystem.getCombatant(action.targetCombatantId)) {
-          const player = this.players.get(action.targetCombatantId);
+        if (!this.combatSystem.getCombatant(targetId)) {
+          const player = this.players.get(targetId);
           if (player) {
             const displayName = this.characterNames.get(player.sessionId) ?? player.sessionId;
             this.combatSystem.registerCombatant(
@@ -1417,11 +1445,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
         // Initiate combat if not already in combat
         if (!this.combatSystem.isInCombat(creature.id)) {
-          this.combatSystem.initiateCombat(creature.id, action.targetCombatantId);
+          this.combatSystem.initiateCombat(creature.id, targetId);
         }
 
         // Queue the telegraphed ability
-        this.combatSystem.queueTelegraph(creature.id, action.targetCombatantId, ability);
+        this.combatSystem.queueTelegraph(creature.id, targetId, ability);
         break;
       }
       case 'combat_dodge': {
