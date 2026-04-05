@@ -33,3 +33,14 @@ export {
   resolveDefeated,
   resolveCombatEnd,
 } from './actions.js';
+export {
+  type AbilityDefinition,
+  type AbilityEffect,
+  type AbilityType,
+  type AbilitySlots,
+  getAbilityDefinition,
+  DEFAULT_ABILITIES,
+  HEAVY_STRIKE,
+  BLOCK,
+  OBSERVE,
+} from './abilities.js';

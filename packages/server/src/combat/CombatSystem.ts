@@ -28,6 +28,7 @@ import {
   resolveDefeated,
   resolveCombatEnd,
 } from './actions.js';
+import { getAbilityDefinition } from './abilities.js';
 
 export type ExitResolver = (roomId: string) => string[];
 

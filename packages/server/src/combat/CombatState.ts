@@ -45,6 +45,12 @@ export interface Combatant {
   disconnected?: boolean;
   /** Current auto-attack target (GDD §6.1, §6.2). */
   currentTarget?: string;
+  /** Stamina — consumed by abilities (GDD §6.3). */
+  stamina?: number;
+  /** Maximum stamina. */
+  maxStamina?: number;
+  /** Ability cooldowns — maps ability ID to remaining ticks (GDD §6.3). */
+  abilityCooldowns?: Map<string, number>;
 }
 
 export function createCombatant(
@@ -67,6 +73,9 @@ export function createCombatant(
     dodgeSkillRank,
     roomId,
     isPlayer,
+    stamina: isPlayer ? 100 : undefined,
+    maxStamina: isPlayer ? 100 : undefined,
+    abilityCooldowns: isPlayer ? new Map() : undefined,
   };
 }
 
@@ -76,6 +85,8 @@ export interface QueuedAction {
   action: CombatAction;
   targetId?: string;
   fleeRoomId?: string;
+  /** Ability ID for 'skill' actions (GDD §6.3). */
+  abilityId?: string;
 }
 
 // ─── Combat Encounter ───────────────────────────────────────────────────────
