@@ -58,6 +58,9 @@ export interface ServerConfig {
     deploymentName: string;
     apiVersion: string;
   };
+
+  /** Explicit toggle for LLM narration. When false, template-only mode is used even if Azure credentials are configured. */
+  enableLLMNarration: boolean;
 }
 
 /**
@@ -162,6 +165,7 @@ export function loadConfig(): ServerConfig {
       deploymentName: azureDeployment,
       apiVersion: azureApiVersion,
     } : undefined,
+    enableLLMNarration: envBool('ENABLE_LLM_NARRATION', true),
   };
 }
 

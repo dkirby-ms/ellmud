@@ -164,4 +164,62 @@ describe('NarrationService factory integration', () => {
     const stats = service.telemetry.getTelemetry();
     expect(stats.fallback_uses).toBe(1);
   });
+
+  it('disables LLM narration when ENABLE_LLM_NARRATION=false even with Azure credentials', () => {
+    // Set Azure credentials
+    process.env.AZURE_AI_ENDPOINT = 'https://test.openai.azure.com';
+    process.env.AZURE_AI_KEY = 'test-api-key';
+    process.env.AZURE_AI_DEPLOYMENT = 'gpt-4o-mini';
+    // Explicitly disable LLM narration
+    process.env.ENABLE_LLM_NARRATION = 'false';
+    
+    resetConfig();
+    const config = getConfig();
+    
+    // Azure credentials should be present
+    expect(config.azureAI).toBeDefined();
+    // But LLM narration toggle should be disabled
+    expect(config.enableLLMNarration).toBe(false);
+    
+    const service = createNarrationService();
+    
+    // Service should be created without LLM client (null)
+    expect((service as any).llmClient).toBeNull();
+  });
+
+  it('enables LLM narration by default when Azure credentials are present', () => {
+    // Set Azure credentials
+    process.env.AZURE_AI_ENDPOINT = 'https://test.openai.azure.com';
+    process.env.AZURE_AI_KEY = 'test-api-key';
+    // Do not set ENABLE_LLM_NARRATION — should default to true
+    delete process.env.ENABLE_LLM_NARRATION;
+    
+    resetConfig();
+    const config = getConfig();
+    
+    expect(config.azureAI).toBeDefined();
+    expect(config.enableLLMNarration).toBe(true);
+    
+    const service = createNarrationService();
+    
+    // Service should be created with LLM client
+    expect((service as any).llmClient).toBeDefined();
+  });
+
+  it('respects ENABLE_LLM_NARRATION=true explicitly', () => {
+    // Set Azure credentials and explicitly enable
+    process.env.AZURE_AI_ENDPOINT = 'https://test.openai.azure.com';
+    process.env.AZURE_AI_KEY = 'test-api-key';
+    process.env.ENABLE_LLM_NARRATION = 'true';
+    
+    resetConfig();
+    const config = getConfig();
+    
+    expect(config.azureAI).toBeDefined();
+    expect(config.enableLLMNarration).toBe(true);
+    
+    const service = createNarrationService();
+    
+    expect((service as any).llmClient).toBeDefined();
+  });
 });

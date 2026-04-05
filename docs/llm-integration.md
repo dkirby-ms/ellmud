@@ -6,6 +6,28 @@ Ellmud uses Azure AI Foundry (GPT-4o-mini) to generate atmospheric narrative pro
 
 All narration flows through a pipeline: **hash → cache → LLM race → template fallback**. The LLM is never on the critical path.
 
+## Configuration
+
+The narration service supports two modes:
+
+1. **LLM-enhanced mode** (default when Azure credentials are configured)
+2. **Template-only mode** (when credentials are absent OR `ENABLE_LLM_NARRATION=false`)
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `AZURE_AI_ENDPOINT` | No | *(none)* | Azure AI Foundry endpoint URL |
+| `AZURE_AI_KEY` | No | *(none)* | Azure AI Foundry API key |
+| `AZURE_AI_DEPLOYMENT` | No | `gpt-4o-mini` | Azure AI model deployment name |
+| `AZURE_AI_API_VERSION` | No | `2024-08-01-preview` | Azure AI API version |
+| `ENABLE_LLM_NARRATION` | No | `true` | Enable/disable LLM narration. When `false`, uses template-only mode even if Azure credentials are configured. |
+
+**Use cases for `ENABLE_LLM_NARRATION=false`:**
+- **A/B testing:** Compare LLM vs template narration quality without removing credentials
+- **Incident response:** Quickly disable LLM during Azure service degradation
+- **Cost control:** Run template-only to reduce Azure AI spend without removing secrets
+
 ## Architecture
 
 ```

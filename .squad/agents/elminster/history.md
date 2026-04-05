@@ -1950,3 +1950,93 @@ The implementation correctly executes the decision. The async latency issue is a
 **Review posted:** https://github.com/dkirby-ms/ellmud/pull/292#issuecomment-4188065623
 
 **Key Learning:** When integrating async services into Colyseus lifecycle hooks (`onJoin`, `onLeave`), avoid awaiting non-critical operations. The narration is optional enrichment, not required for player state initialization. Fire-and-forget is the right pattern for async narration in join flow.
+### 2026-04-05: PR #294 Review — Auto-Attack Baseline (GDD §6.1–§6.2)
+**By:** Elminster (Lead / Architect)  
+**PR:** #294 (Drizzt)  
+**Issue:** #278  
+
+## Decision
+Approved PR #294 implementing auto-attack baseline and target management per GDD §6.1-§6.2. This is the foundational combat system change that flips the default action from dodge to auto-attack when a combatant has a valid, living target.
+
+## Implementation Quality
+**✅ GDD Compliance:**
+- Default action changed from dodge to auto-attack when target is valid and alive
+- Dodge is now an explicit player action, not a passive default
+- Target tracking per-combatant (`currentTarget` field in CombatState)
+- Auto-targeting on combat initiation (both attacker and defender, including PvP)
+- `target <entity>` and `target next` command handlers
+- Target death pauses auto-attack (falls back to dodge)
+- Attack command integration (sets `currentTarget` when switching targets mid-combat)
+
+**✅ Architecture:**
+- Clean separation of concerns: `setTarget()`, `cycleTarget()`, `getHostilesInEncounter()` methods
+- Proper validation: target must be in same encounter, alive, and hostile
+- Single source of truth: `currentTarget` field drives the auto-attack tick logic in `resolveTick()`
+
+**✅ Tests:**
+- 14 new tests in `auto-attack.test.ts` covering all auto-attack and target management behavior
+- All existing combat tests updated to reflect auto-attack baseline (46 assertions changed)
+- Edge cases covered: dead target, no target, explicit dodge override, target cycling, hostile filtering
+
+## Rationale
+This is load-bearing combat system work. The auto-attack baseline is the foundation for abilities, positioning, and group combat (GDD §6.3, §6.11, §6.2). Drizzt executed this correctly — surgical changes, comprehensive tests, no unnecessary complexity.
+
+The implementation follows the existing combat system patterns and maintains server-authoritative state. The `currentTarget` field is the single source of truth for auto-attack behavior, and the tick resolution logic correctly handles all edge cases (dead target, missing target, explicit action override).
+
+## Team Impact
+- **Minsc/Regis:** Combat UI will need to display current target and support target cycling (Tab key or `target next` command)
+- **Future work:** Ability system (GDD §6.3) can now assume auto-attack baseline — abilities replace auto-attack on the tick, not dodge
+- **Position system (GDD §6.11):** Will integrate with `currentTarget` for melee range validation
+
+## Key Files
+- `packages/server/src/combat/CombatState.ts` — Added `currentTarget?: string` field to Combatant
+- `packages/server/src/combat/CombatSystem.ts` — Auto-attack tick logic, setTarget/cycleTarget methods
+- `packages/server/src/commands/handlers/target.ts` — New command handler
+- `packages/server/src/__tests__/auto-attack.test.ts` — 14 new tests
+
+---
+
+### 2026-04-05: PR #292 Review — Async Narration in Colyseus Hooks
+**Role:** Lead / Architect  
+**Task:** Review NarrationService wiring into ZoneRoom lifecycle hooks
+
+## Outcome: BLOCKED — Requested changes
+
+### Key Finding
+
+PR #292 wires NarrationService + LLM client into ZoneRoom lifecycle hooks with proper factory pattern and fallback logic. However, `onJoin()` awaits `generateNarration()` call (line 486), blocking player join flow for 0-2000ms (LLM latency + cache miss).
+
+**Violation:** GDD §4.5 — "LLM never blocks critical path"
+
+### Blocking Issue Details
+
+- **Impact:** Player sees "connecting..." spinner during join phase while LLM completes
+- **UX:** First zone entry with cache miss = 0-2s latency spike
+- **Scale:** 50 concurrent players/min × 2s = 100s aggregate blocking time/min
+- **Solution:** Fire-and-forget pattern
+
+### Approved Elements
+
+- ✅ Factory pattern for NarrationService injection
+- ✅ Fallback logic and timeout handling (2000ms)
+- ✅ Test structure and coverage approach
+- ✅ Type safety in service wiring
+
+### Decision Documented
+
+Created comprehensive decision document (`.squad/decisions/async-narration-pattern.md`) establishing fire-and-forget pattern for non-critical LLM calls:
+- Entry narration, combat actions, movement → fire-and-forget
+- Room descriptions (`look` command) → await with timeout (user requested)
+- Key principle: "Await only when user or game state depends on result"
+
+---
+
+### 2026-04-05: PR #294 Review — Auto-Attack Baseline
+**Role:** Lead / Architect  
+**Task:** Review auto-attack targeting and target management implementation
+
+## Outcome: APPROVED — Ready to merge
+
+PR #294 implements auto-attack default targeting and target management per GDD §6.1-§6.2. All requirements met. 14 new tests, 46 updated assertions, all passing. No regressions.
+
+---

@@ -10,7 +10,7 @@ import type { NarrationConfig } from '@ellmud/shared';
 
 /**
  * Create a NarrationService with Azure AI Foundry LLM client when configured.
- * Falls back to template-only mode when no Azure endpoint is available.
+ * Falls back to template-only mode when no Azure endpoint is available or when ENABLE_LLM_NARRATION=false.
  */
 export function createNarrationService(
   cache?: NarrationCache,
@@ -20,7 +20,7 @@ export function createNarrationService(
   
   let llmClient: LLMClient | undefined;
   
-  if (serverConfig.azureAI) {
+  if (serverConfig.azureAI && serverConfig.enableLLMNarration) {
     const transport = createAzureTransport({
       endpoint: serverConfig.azureAI.endpoint,
       apiKey: serverConfig.azureAI.apiKey,
