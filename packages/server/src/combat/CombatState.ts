@@ -5,7 +5,7 @@
  * CombatEncounter groups combatants in a room-scoped fight.
  */
 
-import type { CombatAction } from '@ellmud/shared';
+import type { CombatAction, PositionZone } from '@ellmud/shared';
 
 // ─── Combat Stats ───────────────────────────────────────────────────────────
 
@@ -57,6 +57,10 @@ export interface Combatant {
   abilityCooldowns?: Map<string, number>;
   /** Active telegraphed ability wind-up state (GDD §6.5). */
   windUp?: WindUpState;
+  /** Spatial position in combat (GDD §6.11). */
+  position: PositionZone;
+  /** Reposition cooldown — ticks remaining before can reposition again (GDD §6.11). */
+  positionCooldown: number;
 }
 
 // ─── Wind-Up State (GDD §6.5) ───────────────────────────────────────────────
@@ -97,6 +101,8 @@ export function createCombatant(
     stamina: isPlayer ? 100 : undefined,
     maxStamina: isPlayer ? 100 : undefined,
     abilityCooldowns: isPlayer ? new Map() : undefined,
+    position: 'front',
+    positionCooldown: 0,
   };
 }
 
@@ -108,6 +114,8 @@ export interface QueuedAction {
   fleeRoomId?: string;
   /** Ability ID for 'skill' actions (GDD §6.3). */
   abilityId?: string;
+  /** Position change for repositioning actions (GDD §6.11). */
+  newPosition?: PositionZone;
 }
 
 // ─── Combat Encounter ───────────────────────────────────────────────────────
@@ -184,3 +192,9 @@ export const FLEE_EVASION_BONUS_PER_RANK = 0.05;
 
 /** Flee success penalty per creature level above player (GDD §6.2). */
 export const FLEE_LEVEL_PENALTY = 0.05;
+
+/** Repositioning cooldown in ticks (GDD §6.11). */
+export const REPOSITION_COOLDOWN_TICKS = 3;
+
+/** Flanking damage bonus when attacking from flank (GDD §6.11). */
+export const FLANKING_DAMAGE_BONUS = 0.15;

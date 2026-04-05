@@ -1390,7 +1390,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         }
         // Register creature as combatant if needed
         if (!this.combatSystem.getCombatant(creature.id)) {
-          this.combatSystem.registerCombatant(this.creatureManager.toCombatant(creature));
+          const positionType = this.creatureManager.getCreaturePositionType(creature.id);
+          this.combatSystem.registerCombatant(this.creatureManager.toCombatant(creature), positionType);
         }
         // Register target player as combatant if needed
         if (action.targetCombatantId && !this.combatSystem.getCombatant(action.targetCombatantId)) {
@@ -1430,7 +1431,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
         // Register creature as combatant if needed
         if (!this.combatSystem.getCombatant(creature.id)) {
-          this.combatSystem.registerCombatant(this.creatureManager.toCombatant(creature));
+          const positionType = this.creatureManager.getCreaturePositionType(creature.id);
+          this.combatSystem.registerCombatant(this.creatureManager.toCombatant(creature), positionType);
         }
         // Register target player as combatant if needed
         if (!this.combatSystem.getCombatant(targetId)) {

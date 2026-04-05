@@ -10,7 +10,7 @@
  * - No-input defaults to Dodge (GDD §6.3)
  */
 
-import type { CombatAction } from '@ellmud/shared';
+import type { CombatAction, PositionZone, CreaturePositionType } from '@ellmud/shared';
 import {
   type Combatant,
   type CombatEncounter,
@@ -26,6 +26,8 @@ import {
   BASE_FLEE_CHANCE,
   FLEE_EVASION_BONUS_PER_RANK,
   FLEE_LEVEL_PENALTY,
+  REPOSITION_COOLDOWN_TICKS,
+  FLANKING_DAMAGE_BONUS,
 } from './CombatState.js';
 import { calculateDamage } from './damage.js';
 import {
@@ -70,6 +72,8 @@ export class CombatSystem {
   private queuedActions = new Map<string, QueuedAction>();
   /** Maps combatant ID → encounter ID for fast lookup. */
   private combatantEncounter = new Map<string, string>();
+  /** Maps creature combatant ID → position type for reachability (GDD §6.11). */
+  private creaturePositionTypes = new Map<string, CreaturePositionType>();
   private nextEncounterId = 0;
   private resolveExits: ExitResolver;
   private roll: RollFn;
@@ -83,8 +87,14 @@ export class CombatSystem {
   // ─── Registration ─────────────────────────────────────────────────────────
 
   /** Register (or update) a combatant. Safe to call multiple times. */
-  registerCombatant(combatant: Combatant): void {
+  registerCombatant(combatant: Combatant, positionType?: CreaturePositionType): void {
     this.combatants.set(combatant.id, combatant);
+    if (!combatant.isPlayer && positionType) {
+      this.creaturePositionTypes.set(combatant.id, positionType);
+      // Set creature's initial position based on type (GDD §6.11)
+      const defaultPosition = this.getDefaultPositionForType(positionType);
+      combatant.position = defaultPosition;
+    }
   }
 
   getCombatant(id: string): Combatant | undefined {
@@ -338,6 +348,88 @@ export class CombatSystem {
     return roomIds;
   }
 
+  // ─── Position System (GDD §6.11) ──────────────────────────────────────────
+
+  /**
+   * Queue a position change for the next tick.
+   * Returns false if combatant is not in combat or on cooldown.
+   */
+  queuePositionChange(combatantId: string, newPosition: PositionZone): { success: boolean; reason?: string } {
+    const combatant = this.combatants.get(combatantId);
+    if (!combatant) {
+      return { success: false, reason: 'Combatant not found' };
+    }
+
+    if (!this.isInCombat(combatantId)) {
+      return { success: false, reason: 'You must be in combat to reposition.' };
+    }
+
+    if (combatant.position === newPosition) {
+      return { success: false, reason: `You are already at the ${newPosition} position.` };
+    }
+
+    if (combatant.positionCooldown > 0) {
+      return { success: false, reason: `You cannot reposition yet. (${combatant.positionCooldown} ticks remaining)` };
+    }
+
+    // Queue the position change as this tick's action
+    this.queuedActions.set(combatantId, { action: 'dodge', newPosition });
+    return { success: true };
+  }
+
+  /**
+   * Get default position for a creature position type (GDD §6.11).
+   */
+  private getDefaultPositionForType(type: CreaturePositionType): PositionZone {
+    switch (type) {
+      case 'melee': return 'front';
+      case 'ranged': return 'rear';
+      case 'skirmisher': return 'flank';
+      case 'boss': return 'front'; // Boss can reach all but starts front
+    }
+  }
+
+  /**
+   * Check if attacker can reach target based on positions (GDD §6.11).
+   */
+  private canReachTarget(attacker: Combatant, target: Combatant): boolean {
+    const attackerPosType = this.creaturePositionTypes.get(attacker.id);
+    
+    // Boss creatures can reach any position
+    if (attackerPosType === 'boss') return true;
+    
+    // Ranged creatures/players can reach any position
+    if (attackerPosType === 'ranged') return true;
+    
+    // For melee combatants (players and melee/skirmisher creatures):
+    // Rear attackers can't melee at all
+    if (attacker.position === 'rear') return false;
+    
+    // Front/Flank attackers can reach Front and Flank targets
+    if (target.position === 'front' || target.position === 'flank') return true;
+    
+    // Cannot reach Rear targets with melee
+    return false;
+  }
+
+  /**
+   * Check if flanking bonus applies (GDD §6.11).
+   * Attacker at Flank attacking a creature whose current target is at Front.
+   */
+  private shouldApplyFlankingBonus(attacker: Combatant, target: Combatant): boolean {
+    // Only applies to player attacking from flank
+    if (!attacker.isPlayer || attacker.position !== 'flank') return false;
+    
+    // Only applies when target is a creature
+    if (target.isPlayer) return false;
+    
+    // Check if creature's current target is at Front position
+    if (!target.currentTarget) return false;
+    
+    const targetOfTarget = this.combatants.get(target.currentTarget);
+    return targetOfTarget?.position === 'front';
+  }
+
   // ─── Tick Resolution ──────────────────────────────────────────────────────
 
   /**
@@ -400,7 +492,42 @@ export class CombatSystem {
 
     // Note: Don't end combat immediately if only 1 combatant - check cooldown logic at end
 
-    // 0. Process wind-up countdowns (GDD §6.5)
+    // 0a. Decrement position cooldowns (GDD §6.11)
+    for (const c of combatants) {
+      if (c.positionCooldown > 0) {
+        c.positionCooldown--;
+      }
+    }
+
+    // 0b. Process position changes FIRST in tick (GDD §6.11)
+    const positionChangeEvents: CombatEvent[] = [];
+    for (const c of combatants) {
+      const qa = this.queuedActions.get(c.id);
+      if (qa?.newPosition) {
+        // Execute position change
+        const oldPosition = c.position;
+        c.position = qa.newPosition;
+        c.positionCooldown = REPOSITION_COOLDOWN_TICKS;
+        
+        // Position change consumes the action for this tick
+        const narration = c.isPlayer
+          ? this.getPositionChangeNarration(c.name, qa.newPosition, true)
+          : this.getPositionChangeNarration(c.name, qa.newPosition, false);
+        
+        positionChangeEvents.push({
+          type: 'dodge', // Use dodge type as placeholder for position change
+          actorId: c.id,
+          actorName: c.name,
+          narration,
+        });
+        
+        // Remove the queued action so they don't also attack this tick
+        this.queuedActions.delete(c.id);
+      }
+    }
+    events.push(...positionChangeEvents);
+
+    // 0c. Process wind-up countdowns (GDD §6.5)
     const windUpExpired: Combatant[] = [];
     for (const c of combatants) {
       if (c.windUp) {
@@ -504,14 +631,40 @@ export class CombatSystem {
       const target = this.combatants.get(targetId);
       if (!target || target.hp <= 0) continue;
 
+      // GDD §6.11: Range validation - melee attacks from rear or to unreachable targets fail
+      if (!this.canReachTarget(c, target)) {
+        const narration = c.position === 'rear'
+          ? c.isPlayer
+            ? 'You are too far away to strike.'
+            : `${c.name} is too far away to strike.`
+          : c.isPlayer
+            ? `You cannot reach ${target.name} from your position.`
+            : `${c.name} cannot reach ${target.name}.`;
+        
+        events.push({
+          type: 'dodge',
+          actorId: c.id,
+          actorName: c.name,
+          narration,
+        });
+        continue;
+      }
+
       const defenderAction = actions.get(targetId)?.action ?? 'dodge';
       const dodgeRoll = defenderAction === 'dodge' ? this.roll() : undefined;
+      
+      // Calculate flanking bonus (GDD §6.11)
+      let flankingBonus = 1.0;
+      if (this.shouldApplyFlankingBonus(c, target)) {
+        flankingBonus = 1.0 + FLANKING_DAMAGE_BONUS;
+      }
       
       // Block should mitigate telegraphed abilities (GDD §6.5)
       const dmg = calculateDamage(attackDamage, target.armour, 'strike', defenderAction, {
         defenderAgility: target.agility,
         defenderDodgeSkillRank: target.dodgeSkillRank,
         dodgeRoll,
+        flankingBonus,
       });
 
       const accumulated = (damageAccumulator.get(targetId) ?? 0) + dmg.finalDamage;
@@ -537,7 +690,7 @@ export class CombatSystem {
         dodged: dmg.dodged,
       });
 
-      this.debug(`Damage roll: ${c.name} → ${target.name}: raw=${dmg.rawDamage} ×${dmg.multiplier} -${dmg.armourReduction} = ${dmg.finalDamage}${dmg.dodged ? ' (DODGED)' : ''}`);
+      this.debug(`Damage roll: ${c.name} → ${target.name}: raw=${dmg.rawDamage} ×${dmg.multiplier} -${dmg.armourReduction} ×${flankingBonus.toFixed(2)} = ${dmg.finalDamage}${dmg.dodged ? ' (DODGED)' : ''}`);
     }
 
     // 4. Apply all damage at once
@@ -684,6 +837,25 @@ export class CombatSystem {
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
+
+  /**
+   * Generate narration for position changes (GDD §6.11).
+   */
+  private getPositionChangeNarration(name: string, position: PositionZone, isPlayer: boolean): string {
+    if (isPlayer) {
+      switch (position) {
+        case 'front': return 'You push forward to the front line.';
+        case 'flank': return 'You maneuver to the flank.';
+        case 'rear': return 'You fall back to the rear line.';
+      }
+    } else {
+      switch (position) {
+        case 'front': return `${name} pushes forward to the front.`;
+        case 'flank': return `${name} maneuvers to the flank.`;
+        case 'rear': return `${name} falls back to the rear.`;
+      }
+    }
+  }
 
   private findEncounterInRoom(roomId: string): CombatEncounter | undefined {
     for (const enc of this.encounters.values()) {

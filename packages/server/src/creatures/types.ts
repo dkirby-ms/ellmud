@@ -6,6 +6,7 @@
  */
 
 import type { CombatStats } from '../combat/CombatState.js';
+import type { CreaturePositionType } from '@ellmud/shared';
 
 // ─── Creature Types ──────────────────────────────────────────────────────────
 
@@ -75,6 +76,8 @@ export interface CreatureTemplate {
   roomDescription?: string;
   /** Telegraphed abilities available to this creature (GDD §6.5). */
   abilities?: CreatureAbility[];
+  /** Position type for combat reachability (GDD §6.11). */
+  positionType?: CreaturePositionType;
 }
 
 // ─── Creature Instance ───────────────────────────────────────────────────────
@@ -108,6 +111,8 @@ export interface Creature {
   roomDescription?: string;
   /** Telegraphed abilities available to this creature (GDD §6.5). */
   abilities?: CreatureAbility[];
+  /** Position type for combat reachability (GDD §6.11). */
+  positionType?: CreaturePositionType;
 }
 
 // ─── Creature Action Output ──────────────────────────────────────────────────

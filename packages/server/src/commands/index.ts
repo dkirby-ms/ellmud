@@ -23,6 +23,7 @@ import { handleEmote } from './handlers/emote.js';
 import { handleStabilize } from './handlers/stabilize.js';
 import { handlePeaceful } from './handlers/peaceful.js';
 import { handleLoot } from './handlers/loot.js';
+import { handlePosition } from './handlers/position.js';
 import type { DowningSystem } from '../systems/DowningSystem.js';
 import type { CorpseSystem } from '../systems/CorpseSystem.js';
 import type { StashService } from '../stash/StashService.js';
@@ -138,6 +139,8 @@ handlers.set('emote', handleEmote);
 handlers.set('stabilize', handleStabilize);
 handlers.set('peaceful', handlePeaceful);
 handlers.set('loot', handleLoot);
+handlers.set('position', handlePosition);
+handlers.set('pos', handlePosition); // Shorthand alias
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(
