@@ -1,11 +1,10 @@
 /**
- * @deprecated Use `elkLayout.ts` (`computeElkLayout`) for new layout work.
- *
  * BFS Layout Engine — computes (x, y, z) positions for a room graph.
  *
- * This module is retained because the player minimap (`useExplorationMap`)
- * still depends on it for synchronous, client-side layout. Once the minimap
- * migrates to ELK or a lighter alternative, this file can be removed entirely.
+ * Used by the ELK adapter (elkLayout.ts) as the compass-aware seed
+ * position engine — ELK's INTERACTIVE mode respects these seeds for
+ * correct north/south/east/west room placement. Also used by the
+ * player minimap (`useExplorationMap`) for synchronous client-side layout.
  *
  * Pure function. No React, no side effects.
  *

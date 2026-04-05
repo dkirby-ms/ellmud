@@ -244,20 +244,20 @@ describe('elkLayout — entry room fallback', () => {
 // ─── Default Configuration ──────────────────────────────────────────────────
 
 describe('elkLayout — DEFAULT_CONFIG export', () => {
-  it('exports default node spacing of 120', () => {
-    expect(DEFAULT_CONFIG.nodeSpacing).toBe(120);
+  it('exports default node spacing of 100', () => {
+    expect(DEFAULT_CONFIG.nodeSpacing).toBe(100);
   });
 
-  it('exports default layer spacing of 150', () => {
-    expect(DEFAULT_CONFIG.layerSpacing).toBe(150);
+  it('exports default layer spacing of 100', () => {
+    expect(DEFAULT_CONFIG.layerSpacing).toBe(100);
   });
 
   it('exports ORTHOGONAL edge routing', () => {
     expect(DEFAULT_CONFIG.edgeRouting).toBe('ORTHOGONAL');
   });
 
-  it('exports DOWN direction', () => {
-    expect(DEFAULT_CONFIG.direction).toBe('DOWN');
+  it('exports RIGHT direction', () => {
+    expect(DEFAULT_CONFIG.direction).toBe('RIGHT');
   });
 
   it('exports crossing minimization enabled', () => {

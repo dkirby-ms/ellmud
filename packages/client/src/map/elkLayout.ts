@@ -2,15 +2,19 @@
  * ELK Layout Adapter — computes room positions using elkjs hierarchical layout.
  *
  * This is the primary layout engine for the admin zone designer (Phase 6+).
- * The legacy BFS engine (computeLayout.ts) is deprecated for new work but
- * retained for the player minimap which requires synchronous layout.
+ * The legacy BFS engine (computeLayout.ts) is used to seed compass-correct
+ * initial positions, then ELK refines the layout with its INTERACTIVE mode
+ * which respects the seed positions while applying crossing minimization
+ * and orthogonal edge routing.
  *
  * Coordinate system:
- * - ELK outputs pixel coordinates which are passed directly to ReactFlow
+ * - BFS outputs grid coordinates → scaled to pixels for ELK seeds
+ * - ELK outputs final pixel coordinates passed directly to ReactFlow
  * - Z-axis (floors) are handled via separate ELK graphs per floor
  */
 
 import ELK, { type ElkNode, type ElkExtendedEdge, type LayoutOptions } from 'elkjs/lib/elk.bundled.js';
+import { computeLayout } from './computeLayout.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -59,15 +63,24 @@ const DIRECTION_TO_PORT: Record<CompassDirection, string> = {
 const NODE_WIDTH = 50;
 const NODE_HEIGHT = 50;
 
-/** Default ELK layout options. */
+/** Pixel spacing between grid cells for BFS → ELK coordinate conversion. */
+const GRID_SPACING = 150;
+
+/**
+ * Default ELK layout options.
+ * Uses INTERACTIVE strategies so ELK respects BFS-seeded compass positions.
+ */
 const DEFAULT_ELK_OPTIONS: LayoutOptions = {
   'elk.algorithm': 'layered',
-  'elk.direction': 'DOWN',
-  'elk.spacing.nodeNode': '120',
-  'elk.layered.spacing.nodeNodeBetweenLayers': '150',
+  'elk.direction': 'RIGHT',
+  'elk.spacing.nodeNode': '100',
+  'elk.layered.spacing.nodeNodeBetweenLayers': '100',
   'elk.edgeRouting': 'ORTHOGONAL',
-  'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-  'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+  // INTERACTIVE strategies tell ELK to use seed positions as reference
+  'elk.layered.cycleBreaking.strategy': 'INTERACTIVE',
+  'elk.layered.layering.strategy': 'INTERACTIVE',
+  'elk.layered.crossingMinimization.strategy': 'INTERACTIVE',
+  'elk.layered.nodePlacement.strategy': 'INTERACTIVE',
 };
 
 // ─── Main Layout Function ───────────────────────────────────────────────────
@@ -94,17 +107,28 @@ export async function computeElkLayout(
 ): Promise<Map<string, RoomPosition>> {
   const elk = new ELK();
   
-  // Step 1: Assign floors via BFS traversal of up/down exits
-  const floorAssignments = assignFloors(rooms, entryRoomSlug);
+  // Step 1: Compute compass-aware BFS positions as seeds for ELK.
+  // This gives us correct relative placement (north=up, east=right, etc.)
+  // that ELK's INTERACTIVE mode will respect.
+  const bfsPositions = computeLayout(rooms, entryRoomSlug);
   
-  // Step 2: Group rooms by floor
+  // Step 2: Group rooms by floor (using BFS z-levels)
   const floorGroups = new Map<number, Set<string>>();
-  for (const [roomId, floor] of floorAssignments) {
+  for (const [roomId, pos] of bfsPositions) {
+    const floor = pos.z;
     if (!floorGroups.has(floor)) floorGroups.set(floor, new Set());
     floorGroups.get(floor)!.add(roomId);
   }
   
-  // Step 3: Run ELK layout per floor
+  // Also add any rooms BFS couldn't reach (disconnected subgraphs)
+  for (const roomId of rooms.keys()) {
+    if (!bfsPositions.has(roomId)) {
+      if (!floorGroups.has(0)) floorGroups.set(0, new Set());
+      floorGroups.get(0)!.add(roomId);
+    }
+  }
+  
+  // Step 3: Run ELK layout per floor with BFS-seeded positions
   const positions = new Map<string, RoomPosition>();
   
   for (const [floor, roomIds] of floorGroups) {
@@ -117,9 +141,7 @@ export async function computeElkLayout(
       // Filter out up/down exits and portal exits (targets not in this floor)
       const cardinalExits = new Map<string, string>();
       for (const [dir, target] of room.exits) {
-        // Skip up/down (z-axis)
         if (dir === 'up' || dir === 'down') continue;
-        // Skip portal exits (targets not in roomIds set)
         if (!roomIds.has(target)) continue;
         cardinalExits.set(dir, target);
       }
@@ -127,13 +149,24 @@ export async function computeElkLayout(
       floorRooms.set(roomId, { exits: cardinalExits });
     }
     
-    // Skip empty floors
     if (floorRooms.size === 0) continue;
     
-    // Build ELK graph for this floor
-    const elkGraph = buildElkGraph(floorRooms, options);
+    // Build BFS seed position map for this floor (scaled to pixels)
+    const seedPositions = new Map<string, { x: number; y: number }>();
+    for (const roomId of roomIds) {
+      const bfsPos = bfsPositions.get(roomId);
+      if (bfsPos) {
+        seedPositions.set(roomId, {
+          x: bfsPos.x * GRID_SPACING,
+          y: bfsPos.y * GRID_SPACING,
+        });
+      }
+    }
     
-    // Run ELK layout
+    // Build ELK graph with BFS-seeded positions
+    const elkGraph = buildElkGraph(floorRooms, seedPositions, options);
+    
+    // Run ELK layout (INTERACTIVE mode respects seed positions)
     const layoutedGraph = await elk.layout(elkGraph);
     
     // Extract positions and assign z-level
@@ -146,62 +179,15 @@ export async function computeElkLayout(
   return positions;
 }
 
-// ─── Floor Assignment (Z-axis) ──────────────────────────────────────────────
-
-/**
- * Assign floor numbers (z-levels) via BFS traversal of up/down exits.
- * Entry room starts at z=0. Each 'up' exit increments z, each 'down' decrements z.
- */
-function assignFloors(
-  rooms: Map<string, LayoutRoom>,
-  entryRoomSlug: string,
-): Map<string, number> {
-  const floors = new Map<string, number>();
-  const queue: Array<{ roomId: string; floor: number }> = [];
-  
-  // Start at entry room, floor 0
-  if (!rooms.has(entryRoomSlug)) {
-    // Fallback: if entry room doesn't exist, use first room
-    const firstRoom = rooms.keys().next().value;
-    if (firstRoom) {
-      queue.push({ roomId: firstRoom, floor: 0 });
-      floors.set(firstRoom, 0);
-    }
-  } else {
-    queue.push({ roomId: entryRoomSlug, floor: 0 });
-    floors.set(entryRoomSlug, 0);
-  }
-  
-  // BFS traversal
-  while (queue.length > 0) {
-    const { roomId, floor } = queue.shift()!;
-    const room = rooms.get(roomId);
-    if (!room) continue;
-    
-    for (const [direction, targetId] of room.exits) {
-      // Skip if already visited
-      if (floors.has(targetId)) continue;
-      
-      // Calculate target floor based on direction
-      let targetFloor = floor;
-      if (direction === 'up') targetFloor = floor + 1;
-      else if (direction === 'down') targetFloor = floor - 1;
-      
-      floors.set(targetId, targetFloor);
-      queue.push({ roomId: targetId, floor: targetFloor });
-    }
-  }
-  
-  return floors;
-}
-
 // ─── Graph Construction ────────────────────────────────────────────────────
 
 /**
  * Convert room graph → ELK graph with nodes, edges, and ports.
+ * Seed positions from BFS are set on nodes so INTERACTIVE mode respects them.
  */
 function buildElkGraph(
   rooms: Map<string, LayoutRoom>,
+  seedPositions: Map<string, { x: number; y: number }>,
   options?: ElkLayoutOptions,
 ): ElkNode {
   const nodes: ElkNode[] = [];
@@ -209,12 +195,16 @@ function buildElkGraph(
   // Track seen room pairs to deduplicate bidirectional edges
   const seenPairs = new Set<string>();
   
-  // Create ELK nodes with compass-direction ports and FIXED_SIDE constraints
+  // Create ELK nodes with compass-direction ports, FIXED_SIDE constraints,
+  // and BFS-seeded positions for INTERACTIVE mode
   for (const [roomId, room] of rooms) {
+    const seed = seedPositions.get(roomId);
     const elkNode: ElkNode = {
       id: roomId,
       width: NODE_WIDTH,
       height: NODE_HEIGHT,
+      // Seed position from BFS — INTERACTIVE mode uses this as reference
+      ...(seed ? { x: seed.x, y: seed.y } : {}),
       layoutOptions: { 'elk.portConstraints': 'FIXED_SIDE' },
       ports: [
         { id: `${roomId}_NORTH`, layoutOptions: { 'port.side': 'NORTH' } },
@@ -326,16 +316,16 @@ function extractPositions(graph: ElkNode, floor: number): Map<string, RoomPositi
 /**
  * Default ELK configuration for zone designer layouts.
  *
- * Algorithm: 'layered' (hierarchical layout with layer assignment + crossing minimization)
- * Direction: 'DOWN' (flows top-to-bottom, north=up matching dungeon compass conventions)
- * Spacing: 120px between nodes, 150px between layers
+ * Algorithm: 'layered' with INTERACTIVE strategies (respects BFS seed positions)
+ * Direction: 'RIGHT' (layer assignment uses x-coordinates from BFS seeds)
+ * Spacing: 100px between nodes and layers
  * Edge routing: 'ORTHOGONAL' (Manhattan routing for compass-aligned exits)
- * Crossing minimization: 'LAYER_SWEEP' (reduces edge crossings)
+ * Crossing minimization: INTERACTIVE (respects seed ordering)
  */
 export const DEFAULT_CONFIG: ElkLayoutOptions = {
-  nodeSpacing: 120,
-  layerSpacing: 150,
+  nodeSpacing: 100,
+  layerSpacing: 100,
   edgeRouting: 'ORTHOGONAL',
-  direction: 'DOWN',
+  direction: 'RIGHT',
   crossingMinimization: true,
 };
