@@ -14,6 +14,7 @@ import { MinimapWidget } from "../components/map/MinimapWidget.js";
 import { FullMapOverlay } from "../components/map/FullMapOverlay.js";
 import { EquipmentSilhouette } from "../components/EquipmentSilhouette.js";
 import { RoomOccupants } from "../components/RoomOccupants.js";
+import { CombatHUD } from "../components/CombatHUD.js";
 import "../components/map/map.css";
 import MudPrompt from "../components/MudPrompt.js";
 import { useAppContext, type StatusEffect } from "../store.js";
@@ -504,60 +505,22 @@ export default function ZoneExploration() {
             </div>
           </div>
 
-          {/* Enemy Status (during combat) */}
-          {enemyStatus && (
+          {/* Combat HUD (during combat) */}
+          {state.inCombat && (
             <div className="p-4 border-b border-border-muted">
-              <h3
-                className="text-danger text-xs mb-3 font-sans"
-              >
-                ENEMY
-              </h3>
-              <div className="space-y-2">
-                <p className="text-text-primary text-sm font-serif">
-                  {enemyStatus.name}
-                </p>
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <span
-                      className="text-text-disabled text-xs font-sans"
-                    >
-                      Health
-                    </span>
-                    <span
-                      className="text-xs font-mono"
-                      style={{
-                        color:
-                          enemyStatus.hpTier === "Near Death"
-                            ? "var(--color-danger)"
-                            : enemyStatus.hpTier === "Badly Wounded"
-                            ? "var(--color-warning)"
-                            : enemyStatus.hpTier === "Wounded"
-                            ? "var(--color-warning)"
-                            : "var(--color-success)",
-                      }}
-                    >
-                      {enemyStatus.hpTier}
-                    </span>
-                  </div>
-                  <div className="h-2 bg-bg-elevated rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-danger to-success transition-all"
-                      style={{
-                        width: enemyStatus.maxHp > 0
-                          ? `${(enemyStatus.hp / enemyStatus.maxHp) * 100}%`
-                          : "0%",
-                      }}
-                    ></div>
-                  </div>
-                </div>
-                {enemyStatus.telegraphedAction && (
-                  <p
-                    className="text-warning text-xs italic font-serif"
-                  >
-                    Telegraphing: {enemyStatus.telegraphedAction}
-                  </p>
-                )}
-              </div>
+              <CombatHUD
+                enemyStatus={enemyStatus}
+                availableTargets={
+                  state.roomOccupants.creatures
+                    .filter((c) => c.aggressive)
+                    .map((c) => ({
+                      id: c.id,
+                      name: c.name,
+                      hp: 100,
+                      maxHp: 100,
+                    }))
+                }
+              />
             </div>
           )}
 

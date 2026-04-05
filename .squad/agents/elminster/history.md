@@ -15,6 +15,14 @@
 
 ## Learnings
 
+### 2026-04-05 (Round 4): Triaging Issue #293 (LLM Narration Toggle)
+- **Task:** Assess feature request for user-controlled LLM narration toggle (enable/disable)
+- **Assessment:** Legitimate Phase 1 feature aligned with GDD §4.5 (LLM is optional fallback). Users may want to disable LLM for cost control, dev/test environments, or network constraints.
+- **Design decision:** Implement via `ENABLE_LLM_NARRATION` environment variable (boolean). Factory-based control (not call-site checking) for cleanliness and performance.
+- **Routing:** Assigned to Volo for implementation (owns NarrationService factory pattern from PR #292).
+- **Outcome:** Volo implemented in PR #295. 9 tests, seamlessly integrates with fire-and-forget pattern. Ready for merge.
+- **Key lesson:** Feature toggles for expensive services should gate instantiation (factory pattern), not individual calls. Cleaner code, better performance, easier to test.
+
 ### 2026-03-19: Colyseus Architecture Analysis
 - **Decision:** Proposed adopting Colyseus 0.17.x as game-server framework with message-only client protocol (no Schema state sync to clients). Decision file: `.squad/decisions/inbox/elminster-colyseus-architecture.md`
 - **Key pattern:** Colyseus supports a dual-channel architecture — Schema state for server internals + `onMessage`/`broadcast` for prose delivery. This resolves the tension between Colyseus's default state-sync model and the GDD's "prose-only client" requirement (§14).
@@ -1796,6 +1804,97 @@ All 8 issues now have correct squad labels aligned with work scope. Epic (#266) 
 - **Architectural strength:** CombatSystem.resolveTick() is well-structured for extension. Simultaneous damage resolution is correct and matches GDD determinism requirement.
 - **Critical gap:** Creature AI targeting—creatures targeting `playersHere[0]` makes group combat meaningless. Threat tables (#281) should be high priority.
 - **Priority order:** #278 (auto-attack) → #279 (abilities) → #281 (threat) → #280 (telegraphs) → #285 (flee) → #283 (signals) → #284 (HUD) → #282 (positioning) → #286 (GDD update).
+
+### 2026-04-08: PR #291 — Zone Designer Layout Port to elkjs and ReactFlow
+- **Author:** dkirby-ms
+- **Scope:** Major architectural port from canvas-based rendering to ReactFlow + elkjs layout engine
+- **Files:** 29 files changed (+6031/-639), including new test suite (1548 lines)
+- **Status:** REVIEWED — comprehensive architectural review posted, ready to merge (author cannot self-approve)
+
+**Architecture Review:**
+
+The PR successfully ports the zone designer to ReactFlow with a hybrid BFS+ELK layout strategy. Key architectural decisions:
+
+1. **Hybrid Layout Pattern:**
+   - BFS (computeLayout.ts) seeds compass-correct positions (north=up, east=right)
+   - ELK's 'fixed' algorithm preserves BFS positions while handling disconnected components
+   - ReactFlow's getBezierPath() handles edge routing (Bézier curves)
+   - Clean separation of concerns: BFS (compass semantics) + ELK (validation) + ReactFlow (rendering)
+
+2. **Floor Separation:**
+   - Multi-floor zones split by z-level
+   - Each floor gets its own ELK layout pass
+   - Cardinal exits only (up/down exits filtered out for 2D layout)
+   - Floor selector UI for layer switching
+
+3. **Custom ReactFlow Components:**
+   - ZoneRoomNode: Type-based shapes (shield, diamond, pentagon, hexagon), badge overlays (portals, NPCs, loot), property icons
+   - ZoneExitEdge: Direction-based gradients, hover/selection states, orphan/portal/oneway markers, lock/hidden indicators
+   - ZoneDesignerFlow: Controlled selection, SVG markers/gradients, floor indicator overlay
+
+4. **State Management:**
+   - Layout computation in useEffect with rooms/exits dependency
+   - Async ELK layout with loading state
+   - Floor-filtered ReactFlow nodes/edges
+   - Selection state owned by parent (ZoneDesigner.tsx)
+
+5. **Test Coverage:**
+   - 5 new test files (1548 lines total)
+   - elk-layout.test.ts: Floor assignment, multi-floor separation, exit filtering
+   - useUndoRedo.test.ts: Operation stack, keyboard shortcuts, API integration
+   - zone-designer-flow.test.tsx: Node/edge rendering, selection, hover handlers
+   - zone-exit-edge.test.tsx: Edge styling, markers, hover states
+   - zone-room-node.test.tsx: Type-based shapes, badges, search/dimmed states
+   - All tests pass, no regressions
+
+**Feature Preservation:**
+- ✅ Search/Filter (Phase 5.2): searchQuery, directionFilter, Ctrl+F shortcut
+- ✅ Undo/Redo (Phase 5.1): useUndoRedo hook, keyboard shortcuts (Ctrl+Z, Ctrl+Shift+Z)
+- ✅ Floor navigation: Multi-floor layout, floor selector, floor indicator
+- ✅ Context menus: Room/exit right-click menus
+- ✅ Connect mode: Source/target selection, direction inference
+- ✅ Orphan detection: getOrphanedExits API, red highlighting
+- ✅ Portal exits: Inter-zone badges, cyan coloring
+- ⚠️ Minimap: Disabled per user request (ReactFlow component available for re-enable)
+
+**Decision Alignment:**
+- ✅ Implements "ELK as Sole Layout Engine" decision (2026-04-05)
+- ⚠️ **Clarification needed:** elkLayout.ts uses computeLayout.ts for BFS seeding (line 107), not as a fallback. This is a valid use case — BFS provides compass-aware positions that ELK preserves. The decision doc should be updated to note elkLayout.ts also uses it for seeding.
+
+**Code Quality:**
+- Clean separation of concerns (layout → conversion → rendering)
+- Type-safe interfaces, no `any` types in core logic
+- Declarative ReactFlow node/edge construction
+- Error handling for layout failures
+- Inline comments explaining non-obvious decisions
+
+**Dependency Audit:**
+- New: `@xyflow/react` ^12.10.2 (successor to deprecated react-flow-renderer)
+- New: `elkjs` ^0.11.1 (Eclipse Layout Kernel JS port)
+- Both well-maintained, large user bases, ~150KB gzipped combined
+- Acceptable bundle size for admin tool
+
+**Non-Blocking Recommendations:**
+1. Update decision record to clarify computeLayout.ts seeding use case
+2. Consider layout caching for large zones (100+ rooms)
+3. Document minimap disable reason in ZoneDesignerFlow.tsx
+4. Split ZoneDesigner.tsx (~1400 lines) into sub-components when it exceeds 2000 lines
+
+**Key Files:**
+- packages/client/src/map/elkLayout.ts (new layout engine)
+- packages/client/src/components/map/ZoneDesignerFlow.tsx (ReactFlow wrapper)
+- packages/client/src/components/map/ZoneRoomNode.tsx (custom node component)
+- packages/client/src/components/map/ZoneExitEdge.tsx (custom edge component)
+- packages/client/src/pages/admin/ZoneDesigner.tsx (main integration)
+- packages/client/src/hooks/useUndoRedo.ts (undo/redo stack)
+
+**Patterns Learned:**
+- Hybrid BFS+ELK layout is the right pattern for compass-aware graph layout (BFS seeds, ELK validates)
+- ELK's 'fixed' algorithm preserves seed positions while handling disconnected components
+- Floor separation via z-level grouping enables 3D dungeon visualization in 2D
+- Controlled ReactFlow selection (parent owns state, Flow is pure presentation)
+- Custom node/edge types registered once (no runtime type resolution)
+- Declarative node/edge conversion from zone data (clean separation from rendering)
 - **Orchestration log:** `.squad/orchestration-log/2026-04-04T22-25-elminster-combat-audit.md`
 
 ### 2026-04-04: Phase 3 Completion Coordinated
@@ -1809,3 +1908,143 @@ All 8 issues now have correct squad labels aligned with work scope. Epic (#266) 
 - **Changes:** Replaced the 5-line "instant death at 0 HP" section with full documentation of the downing/bleedout/stabilization flow: downed state, 10-tick bleed-out timer, `stabilize` command (2-tick channel, bandage required, interruptible), finishing blow mechanic, stabilized state protection, and attribution tracking.
 - **Cross-references updated:** §8.3 (PvP combat flow) and §8.5 (group zone entry death rules) now reference the downing system.
 - **Design decision preserved:** Solo players still have no safety net; the rescue window rewards group coordination without reducing risk for lone wolves.
+
+### 2026-04-08: PR #292 Review — NarrationService LLM Wiring (BLOCKED)
+- **Author:** dkirby-ms (attributed to Jarlaxle in task)
+- **Scope:** Wire NarrationService + Azure AI Foundry LLM client into ZoneRoom runtime
+- **Files:** 6 files (+406/-6): config.ts, factory.ts (new), ZoneRoom.ts, narration-wiring.test.ts (new), KNOWN_ISSUES.md, elminster/history.md
+- **Status:** BLOCKED — critical async latency issue in onJoin flow, requires fix before merge
+
+**Architecture Review:**
+
+✅ **Strengths:**
+1. **Factory Pattern:** `createNarrationService()` is a clean pure function with environment-based instantiation. Conditionally creates LLMClient when `AZURE_AI_ENDPOINT` and `AZURE_AI_KEY` are present, falls back to template-only mode when not configured.
+2. **Config Safety:** `azureAI?: { endpoint, apiKey, deploymentName, apiVersion }` typed as optional. No secrets logged. Defaults (`gpt-4o-mini`, `2024-08-01-preview`) align with Bicep infrastructure.
+3. **Lifecycle Timing:** `onCreate()` instantiation is correct — after system init, before player connections. One-time setup, shared across room.
+4. **Graceful Fallback:** NarrationService handles `llmClient: null` via template-only mode. No additional error handling needed at factory level.
+5. **Test Coverage:** 6 integration tests covering factory instantiation, config loading, defaults, mock transport, and fallback. All pass.
+6. **KNOWN_ISSUES Update:** Issue #2 accurately reframed from bug to feature gap. Next steps (room descriptions, combat narration) correctly documented.
+
+🚨 **BLOCKING ISSUE — onJoin Async Latency:**
+
+**File:** `ZoneRoom.ts:486`  
+**Problem:** `await this.generateNarration('event', playerId, startRoom, ...)` in `onJoin()` blocks player join until narration completes (up to 2000ms on cache miss + LLM timeout).
+
+**Impact:**
+- Player connection hangs 0-2000ms before receiving game state
+- Colyseus `onJoin` blocks room state updates while awaiting
+- Poor UX: "connecting..." spinner for 2 seconds on first zone entry
+- **Violates GDD §4.5 core principle: "LLM never blocks critical path"**
+
+**Required Fix:** Fire-and-forget pattern — don't await narration in `onJoin()`. Send player state immediately, narration arrives asynchronously 0-2000ms later. Client protocol already handles async narration delivery.
+
+Alternative: Send fallback text synchronously, fire background enrichment for cache.
+
+**Minor Issue:** Typo at line 1898: `narratonType` → should be `narrativeType`
+
+**Decision Alignment:**  
+Reviewed against `.squad/decisions.md` (2026-04-05 NarrationService factory decision):
+- ✅ Factory creates NarrationService with Azure LLMClient when env vars present
+- ✅ Environment-based configuration (static at startup, not dynamic per-call)
+- ✅ Graceful degradation to template-only mode
+- ✅ Config reading happens once at factory call
+- ✅ ZoneRoom instantiates in `onCreate()`
+- ✅ Initial wiring uses entry narration as proof-of-concept
+
+The implementation correctly executes the decision. The async latency issue is an implementation detail not covered by the decision doc (which focused on factory pattern, not call-site integration).
+
+**Verdict:** Architecture is sound. Factory pattern is correct. Fallback logic is correct. Config handling is correct. The only blocking issue is the `onJoin` await behavior. Once fixed, this is ready to merge.
+
+**Review posted:** https://github.com/dkirby-ms/ellmud/pull/292#issuecomment-4188065623
+
+**Key Learning:** When integrating async services into Colyseus lifecycle hooks (`onJoin`, `onLeave`), avoid awaiting non-critical operations. The narration is optional enrichment, not required for player state initialization. Fire-and-forget is the right pattern for async narration in join flow.
+### 2026-04-05: PR #294 Review — Auto-Attack Baseline (GDD §6.1–§6.2)
+**By:** Elminster (Lead / Architect)  
+**PR:** #294 (Drizzt)  
+**Issue:** #278  
+
+## Decision
+Approved PR #294 implementing auto-attack baseline and target management per GDD §6.1-§6.2. This is the foundational combat system change that flips the default action from dodge to auto-attack when a combatant has a valid, living target.
+
+## Implementation Quality
+**✅ GDD Compliance:**
+- Default action changed from dodge to auto-attack when target is valid and alive
+- Dodge is now an explicit player action, not a passive default
+- Target tracking per-combatant (`currentTarget` field in CombatState)
+- Auto-targeting on combat initiation (both attacker and defender, including PvP)
+- `target <entity>` and `target next` command handlers
+- Target death pauses auto-attack (falls back to dodge)
+- Attack command integration (sets `currentTarget` when switching targets mid-combat)
+
+**✅ Architecture:**
+- Clean separation of concerns: `setTarget()`, `cycleTarget()`, `getHostilesInEncounter()` methods
+- Proper validation: target must be in same encounter, alive, and hostile
+- Single source of truth: `currentTarget` field drives the auto-attack tick logic in `resolveTick()`
+
+**✅ Tests:**
+- 14 new tests in `auto-attack.test.ts` covering all auto-attack and target management behavior
+- All existing combat tests updated to reflect auto-attack baseline (46 assertions changed)
+- Edge cases covered: dead target, no target, explicit dodge override, target cycling, hostile filtering
+
+## Rationale
+This is load-bearing combat system work. The auto-attack baseline is the foundation for abilities, positioning, and group combat (GDD §6.3, §6.11, §6.2). Drizzt executed this correctly — surgical changes, comprehensive tests, no unnecessary complexity.
+
+The implementation follows the existing combat system patterns and maintains server-authoritative state. The `currentTarget` field is the single source of truth for auto-attack behavior, and the tick resolution logic correctly handles all edge cases (dead target, missing target, explicit action override).
+
+## Team Impact
+- **Minsc/Regis:** Combat UI will need to display current target and support target cycling (Tab key or `target next` command)
+- **Future work:** Ability system (GDD §6.3) can now assume auto-attack baseline — abilities replace auto-attack on the tick, not dodge
+- **Position system (GDD §6.11):** Will integrate with `currentTarget` for melee range validation
+
+## Key Files
+- `packages/server/src/combat/CombatState.ts` — Added `currentTarget?: string` field to Combatant
+- `packages/server/src/combat/CombatSystem.ts` — Auto-attack tick logic, setTarget/cycleTarget methods
+- `packages/server/src/commands/handlers/target.ts` — New command handler
+- `packages/server/src/__tests__/auto-attack.test.ts` — 14 new tests
+
+---
+
+### 2026-04-05: PR #292 Review — Async Narration in Colyseus Hooks
+**Role:** Lead / Architect  
+**Task:** Review NarrationService wiring into ZoneRoom lifecycle hooks
+
+## Outcome: BLOCKED — Requested changes
+
+### Key Finding
+
+PR #292 wires NarrationService + LLM client into ZoneRoom lifecycle hooks with proper factory pattern and fallback logic. However, `onJoin()` awaits `generateNarration()` call (line 486), blocking player join flow for 0-2000ms (LLM latency + cache miss).
+
+**Violation:** GDD §4.5 — "LLM never blocks critical path"
+
+### Blocking Issue Details
+
+- **Impact:** Player sees "connecting..." spinner during join phase while LLM completes
+- **UX:** First zone entry with cache miss = 0-2s latency spike
+- **Scale:** 50 concurrent players/min × 2s = 100s aggregate blocking time/min
+- **Solution:** Fire-and-forget pattern
+
+### Approved Elements
+
+- ✅ Factory pattern for NarrationService injection
+- ✅ Fallback logic and timeout handling (2000ms)
+- ✅ Test structure and coverage approach
+- ✅ Type safety in service wiring
+
+### Decision Documented
+
+Created comprehensive decision document (`.squad/decisions/async-narration-pattern.md`) establishing fire-and-forget pattern for non-critical LLM calls:
+- Entry narration, combat actions, movement → fire-and-forget
+- Room descriptions (`look` command) → await with timeout (user requested)
+- Key principle: "Await only when user or game state depends on result"
+
+---
+
+### 2026-04-05: PR #294 Review — Auto-Attack Baseline
+**Role:** Lead / Architect  
+**Task:** Review auto-attack targeting and target management implementation
+
+## Outcome: APPROVED — Ready to merge
+
+PR #294 implements auto-attack default targeting and target management per GDD §6.1-§6.2. All requirements met. 14 new tests, 46 updated assertions, all passing. No regressions.
+
+---

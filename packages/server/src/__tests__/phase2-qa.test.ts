@@ -319,15 +319,15 @@ describe('Phase 2 QA — PvP Conflict', () => {
 
     combat.initiateCombat('p1', 'p2');
     combat.submitAction('p1', 'strike', 'p2');
-    // p2 does nothing → auto-dodge
+    // p2 does nothing → auto-attacks p1 (GDD §6.2 auto-attack default)
 
     const result = combat.resolveTick();
     const strike = result.events.find(e => e.type === 'strike' && e.actorId === 'p1');
 
     expect(strike).toBeDefined();
-    // p2 dodged, so damage should be 0 or reduced
-    const dodge = result.events.find(e => e.type === 'dodge' && e.actorId === 'p2');
-    expect(dodge).toBeDefined();
+    // p2 auto-attacks p1 (has target from initiateCombat)
+    const p2Strike = result.events.find(e => e.type === 'strike' && e.actorId === 'p2');
+    expect(p2Strike).toBeDefined();
   });
 
   it('mutual strikes deal damage to both players', () => {
@@ -886,7 +886,8 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
 
     it('flee moves combatant to adjacent room and ends combat', () => {
       const rooms = buildSoundTestRooms();
-      const combat = new CombatSystem(buildExitResolver(rooms));
+      // Use roll=0 to guarantee flee success
+      const combat = new CombatSystem(buildExitResolver(rooms), () => 0);
 
       const player = makePlayer('hero', ROOMS.ENTRY);
       const creature = makeCreature('creature-wolf', ROOMS.ENTRY);
@@ -902,7 +903,7 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
       const fleeEvent = result.events.find(e => e.type === 'flee' && e.actorId === 'hero');
       expect(fleeEvent).toBeDefined();
 
-      // Combat should end (only creature left)
+      // Combat should end (only creature left → immediate end)
       expect(result.endedEncounterIds.length).toBeGreaterThan(0);
     });
 
@@ -1232,8 +1233,10 @@ describe('Phase 2 QA — Edge Cases', () => {
     expect(defeated).toBeDefined();
     expect(p2.hp).toBeLessThanOrEqual(0);
 
-    // Encounter should have ended
-    expect(result1.endedEncounterIds.length).toBeGreaterThan(0);
+    // Defeated combatant should not generate events in subsequent ticks
+    const result2 = combat.resolveTick();
+    const p2Events = result2.events.filter(e => e.actorId === 'p2');
+    expect(p2Events.length).toBe(0);
   });
 
   it('trace system handles rapid additions and decay simultaneously', () => {

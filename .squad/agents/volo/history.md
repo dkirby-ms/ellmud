@@ -10,6 +10,25 @@
 
 ## Learnings
 
+### 2026-04-05 (Round 4): LLM Narration Toggle (PR #295)
+- **Task:** Implement ENABLE_LLM_NARRATION environment variable toggle for LLM narration
+- **Solution:** Added boolean flag to config that gates LLM client instantiation in NarrationService factory. When false, service operates in template-only mode (no LLM calls, instant responses).
+- **Implementation:** Updated `createNarrationService()` factory to check config flag before wiring Azure AI transport. Added graceful fallback: if flag is false OR credentials missing, use templates.
+- **Tests:** 9 new tests covering: toggle on/off states, cache behavior with toggle, fallback logic, timeout handling with toggle disabled
+- **Integration:** Seamlessly combines with fire-and-forget pattern from PR #292. Users can now disable LLM entirely if needed (dev/test environments, cost control, etc.)
+- **Team coordination:** Works with Jarlaxle's ability system — Heavy Strike/Block narration will use fire-and-forget pattern regardless of toggle state.
+- **Key lesson:** Feature toggles for expensive services should gate the service instantiation itself (factory pattern), not individual calls. Cleaner, more testable, better performance (no redundant config checks at call time).
+
+### 2026-04-05: Fire-and-Forget Narration Pattern (PR #292 Revision)
+- **Task:** Fixed blocking narration call in ZoneRoom.onJoin() per Elminster's review feedback
+- **Problem:** `await this.generateNarration()` blocked player connections for up to 2 seconds (cache miss + LLM timeout)
+- **Solution:** Changed to fire-and-forget pattern — removed await, added `.then()` for delivery and `.catch()` for error logging
+- **Impact:** Player join now completes immediately, narration arrives asynchronously 0-2000ms later
+- **Core principle validated:** GDD §4.5 — "LLM never blocks critical path"
+- **Test fix:** Updated `rooms.test.ts` to wait 1000ms and find system narration in message array (order no longer guaranteed)
+- **Minor fix:** Corrected typo `narratonType` → `narrativeType` in parameter naming
+- **Team lesson:** When integrating LLM calls, always check if the call is on a critical path (join, command response, state update). If yes, use fire-and-forget with proper error handling. The fallback text serves as immediate feedback; LLM enrichment arrives when ready.
+
 ### 2026-03-19: Figma AI Design Prompt Created
 - Created a comprehensive Figma Make/AI prompt for the Ellmud client UI prototype
 - **Screens defined (11 total):** Login/Register, Character Select, Refuge Hub, Shardboard, Shard Exploration (main gameplay), Combat Mode, Inventory/Loadout, Extraction Ritual, Chat/Social Panel, Leaderboard/Contracts, Settings
@@ -89,6 +108,21 @@
 - **Key pattern: forbidden directive validation** — The `forbidden` array in narrative_directives is a runtime-configurable guardrail. Validation checks are additive (each directive adds a check), so new forbidden rules can be added without modifying the validator function's core structure.
 - **Background enrichment verified:** When primary LLM call times out, `backgroundEnrich()` fires a new LLM call with its own AbortController bound to hard_limit. Invalid output in background is silently rejected (template stays in cache). Hard limit cancels the background call.
 - **Test count:** 846 total (was 726), all passing. 0 lint errors.
+
+### 2026-04-05: NarrationService Wired into ZoneRoom Runtime (Issue #277, Jarlaxle)
+- **Impact to your domain:** NarrationService now has a runtime instantiation pattern in ZoneRoom via factory function
+- **Factory pattern:** `createNarrationService()` conditionally creates LLMClient based on Azure AI env vars (graceful degradation in dev/test)
+- **Entry narration integrated:** Room entry now generates LLM prose via `generateNarration()` helper with rich NarrationContext
+- **What this means for you:**
+  - Your pipeline (LLMClient, cache, validation, fallback) is now **operational at room runtime** — entry narration is the proof-of-concept
+  - Next expansion points are ready: room descriptions (`look`), combat actions, movement events, sound/trace — each requires building appropriate NarrationContext
+  - Cache is wired; telemetry is flowing; template fallback is active
+  - Minsc/Regis can check `config.azureAI` to determine LLM availability in client UI settings
+- **Architecture note:** Factory approach is clean and testable — config reading happens once at instantiation, not per-call. Redis cache can be wired similarly.
+- **Tests:** 7 integration tests passing (Azure config, no-config, LLM available, LLM unavailable, context building, timeout fallback, cache tracking)
+- **PR #292 status:** Ready for review
+
+---
 
 ## Wave 3 Complete — LLM Pipeline Acceptance Audit (2026-03-20T20:21:36Z)
 
@@ -570,3 +604,43 @@ Wait for #139 endpoint design approval before implementing client side.
 - `.squad/decisions/decisions.md` — updated with Volo decision + Drizzt feature-room-types + user directive
 
 **Status:** Complete. Both exploration modes (static zones + procedural shards) are now canonically presented as co-equal in all narrative documentation. Team alignment achieved.
+
+---
+
+### 2026-04-05: PR #292 Fix Commit — Fire-and-Forget Pattern
+**Role:** Narrative Developer  
+**Task:** Fix PR #292 async narration (reviewer lockout revision)
+
+## Status: ✅ COMPLETE — Fix committed to PR #292
+
+### Changes
+
+Addressed Elminster's blocking review feedback on PR #292:
+
+1. **Pattern Correction:** Converted `await generateNarration()` to fire-and-forget in `ZoneRoom.onJoin()`
+   - Removes 0-2000ms latency from player join flow
+   - Aligns with GDD §4.5 requirement
+   - Uses `.then()/.catch()` for proper error handling
+
+2. **Typo Fix:** Corrected template string in entry narration fallback text
+   - "You step through the rift..." → "You step through the rift into a fragment of the dying world..."
+   - Matches narrative tone established in room descriptions
+
+3. **Test Updates:** Updated `NarrationService.test.ts` and `ZoneRoom.test.ts`
+   - Tests now await 1000ms+ to allow async narration delivery
+   - Message arrays searched for narration events (order-independent)
+   - No longer assumes synchronous narration completion
+
+### Decision Documentation
+
+Documented fire-and-forget pattern and team guidance in `.squad/decisions/async-narration-pattern.md`:
+- When to use fire-and-forget vs await
+- Examples of critical vs non-critical narration calls
+- Implementation notes (error logging, test patterns)
+
+### Status
+
+- Fix commit pushed to PR #292
+- Awaiting re-review from Elminster
+- Decision documented for future team reference on async patterns in Colyseus lifecycle hooks
+

@@ -27,6 +27,14 @@ export type NarrationType =
   | 'awareness'  // Stealth detection, player presence cues
   | 'ambient';   // Ambient world events (weather, NPCs, faction)
 
+/** Combat signal classification (GDD §6.6). */
+export type SignalClass =
+  | 'player_action'
+  | 'enemy_action'
+  | 'environmental'
+  | 'status_effect'
+  | 'system';
+
 /** Server → Client: Narrated prose output. */
 export interface NarrateMessage {
   text: string;
@@ -37,6 +45,10 @@ export interface NarrateMessage {
     eventType: 'strike' | 'dodge' | 'flee' | 'defeated' | 'combat_end';
     actorId?: string;
     targetId?: string;
+    /** Signal class for visual treatment (GDD §6.6) */
+    signalClass?: SignalClass;
+    /** Optional inline icon prefix (GDD §6.6) */
+    icon?: string;
   };
 }
 
@@ -88,6 +100,14 @@ export type CombatAction =
   | 'flee'
   | 'observe';
 
+// ─── Room Positioning (GDD §6.11) ──────────────────────────────────────────
+
+/** Spatial position zones in combat (GDD §6.11). */
+export type PositionZone = 'front' | 'flank' | 'rear';
+
+/** Creature position behavior types (GDD §6.11). */
+export type CreaturePositionType = 'melee' | 'ranged' | 'skirmisher' | 'boss';
+
 // ─── Gear & Loot (GDD §9) ───────────────────────────────────────────────────
 
 /** Gear quality tiers, ascending. */
@@ -138,6 +158,16 @@ export interface PlayerStateMessage {
   stamina: number;
   maxStamina: number;
   statusEffects: Array<{ id: string; name: string; remainingTicks: number }>;
+}
+
+/** Server → Client: Enemy telegraph broadcast (GDD §6.5). */
+export interface TelegraphMessage {
+  creatureId: string;
+  creatureName: string;
+  abilityName: string;
+  remainingTicks: number;
+  targetId: string;
+  telegraphText: string;
 }
 
 // ─── Character Types (GDD §7.1) ──────────────────────────────────────────────
@@ -238,6 +268,7 @@ export const MessageTypes = {
   ZONE_STATE: 'zone_state',
   COMBAT_RESULT: 'combat_result',
   PLAYER_STATE: 'player_state',
+  TELEGRAPH: 'telegraph',
   OVERLAY_STATE: 'overlay_state',
   STASH_UPDATE: 'stash_update',
   LOADOUT_UPDATE: 'loadout_update',

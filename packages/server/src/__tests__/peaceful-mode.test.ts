@@ -40,6 +40,7 @@ function makeWorldState(overrides: Partial<CreatureWorldState> = {}): CreatureWo
     playersInRoom: new Map(),
     roomExits: new Map([['room-a', ['room-b']], ['room-b', ['room-a']]]),
     noisyRooms: new Set(),
+    combatantsInCombat: new Set<string>(),
     ...overrides,
   };
 }

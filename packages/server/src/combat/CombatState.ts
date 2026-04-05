@@ -5,7 +5,7 @@
  * CombatEncounter groups combatants in a room-scoped fight.
  */
 
-import type { CombatAction } from '@ellmud/shared';
+import type { CombatAction, PositionZone } from '@ellmud/shared';
 
 // ─── Combat Stats ───────────────────────────────────────────────────────────
 
@@ -40,9 +40,38 @@ export interface Combatant {
   agility: number;
   /** Dodge skill rank — scales dodge chance (GDD §6.4). */
   dodgeSkillRank: number;
+  /** Evasion skill rank — scales flee success chance (GDD §6.2). */
+  evasionSkillRank: number;
+  /** Creature level — affects flee difficulty for players (GDD §6.2). */
+  level: number;
   roomId: string;
   isPlayer: boolean;
   disconnected?: boolean;
+  /** Current auto-attack target (GDD §6.1, §6.2). */
+  currentTarget?: string;
+  /** Stamina — consumed by abilities (GDD §6.3). */
+  stamina?: number;
+  /** Maximum stamina. */
+  maxStamina?: number;
+  /** Ability cooldowns — maps ability ID to remaining ticks (GDD §6.3). */
+  abilityCooldowns?: Map<string, number>;
+  /** Active telegraphed ability wind-up state (GDD §6.5). */
+  windUp?: WindUpState;
+  /** Spatial position in combat (GDD §6.11). */
+  position: PositionZone;
+  /** Reposition cooldown — ticks remaining before can reposition again (GDD §6.11). */
+  positionCooldown: number;
+}
+
+// ─── Wind-Up State (GDD §6.5) ───────────────────────────────────────────────
+
+export interface WindUpState {
+  abilityId: string;
+  abilityName: string;
+  damage: number;
+  remainingTicks: number;
+  targetId: string;
+  telegraphText: string;
 }
 
 export function createCombatant(
@@ -52,6 +81,8 @@ export function createCombatant(
   isPlayer: boolean,
   stats: CombatStats = DEFAULT_PLAYER_STATS,
   dodgeSkillRank = 0,
+  evasionSkillRank = 0,
+  level = 1,
 ): Combatant {
   return {
     id,
@@ -63,8 +94,15 @@ export function createCombatant(
     armour: stats.armour,
     agility: stats.agility,
     dodgeSkillRank,
+    evasionSkillRank,
+    level,
     roomId,
     isPlayer,
+    stamina: isPlayer ? 100 : undefined,
+    maxStamina: isPlayer ? 100 : undefined,
+    abilityCooldowns: isPlayer ? new Map() : undefined,
+    position: 'front',
+    positionCooldown: 0,
   };
 }
 
@@ -74,6 +112,10 @@ export interface QueuedAction {
   action: CombatAction;
   targetId?: string;
   fleeRoomId?: string;
+  /** Ability ID for 'skill' actions (GDD §6.3). */
+  abilityId?: string;
+  /** Position change for repositioning actions (GDD §6.11). */
+  newPosition?: PositionZone;
 }
 
 // ─── Combat Encounter ───────────────────────────────────────────────────────
@@ -84,6 +126,10 @@ export interface CombatEncounter {
   combatantIds: Set<string>;
   tickCount: number;
   ticksSinceLastStrike: number;
+  /** Post-combat cooldown in ticks — counts down after last enemy defeated (GDD §6.2). */
+  postCombatCooldown: number;
+  /** Threat tables per creature — map of creature ID to ThreatTable (GDD §6.10). */
+  threatTables?: Map<string, import('./ThreatTable.js').ThreatTable>;
 }
 
 // ─── Combat Events (output of tick resolution) ─────────────────────────────
@@ -110,10 +156,20 @@ export interface FleeResult {
   toRoomId: string;
 }
 
+export interface TelegraphBroadcast {
+  creatureId: string;
+  creatureName: string;
+  abilityName: string;
+  remainingTicks: number;
+  targetId: string;
+  telegraphText: string;
+}
+
 export interface TickResult {
   events: CombatEvent[];
   fleeResults: FleeResult[];
   endedEncounterIds: string[];
+  telegraphs?: TelegraphBroadcast[];
 }
 
 /** No-op tick result when there's no active combat. */
@@ -121,7 +177,26 @@ export const EMPTY_TICK_RESULT: TickResult = {
   events: [],
   fleeResults: [],
   endedEncounterIds: [],
+  telegraphs: [],
 };
 
 /** Timeout in ticks (seconds) before combat ends with no strikes. */
 export const COMBAT_TIMEOUT_TICKS = 10;
+
+/** Post-combat cooldown in ticks before combat mode ends after last enemy defeated (GDD §6.2). */
+export const POST_COMBAT_COOLDOWN_TICKS = 3;
+
+/** Base flee success chance (0.0-1.0) before skill/level modifiers (GDD §6.2). */
+export const BASE_FLEE_CHANCE = 0.5;
+
+/** Flee success bonus per Evasion skill rank (GDD §6.2). */
+export const FLEE_EVASION_BONUS_PER_RANK = 0.05;
+
+/** Flee success penalty per creature level above player (GDD §6.2). */
+export const FLEE_LEVEL_PENALTY = 0.05;
+
+/** Repositioning cooldown in ticks (GDD §6.11). */
+export const REPOSITION_COOLDOWN_TICKS = 3;
+
+/** Flanking damage bonus when attacking from flank (GDD §6.11). */
+export const FLANKING_DAMAGE_BONUS = 0.15;

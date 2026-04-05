@@ -2,12 +2,15 @@
  * Damage model — GDD §6.4.
  *
  * Formula:
- *   modified_dmg  = raw_dmg × stance_multiplier - armour
- *   final_damage  = max(1, modified_dmg) × dodge_reduction
+ *   modified_dmg  = raw_dmg × stance_multiplier - armour - block
+ *   final_damage  = max(1, modified_dmg) × dodge_reduction × flanking_bonus
  *
  * Dodge grants a % chance to fully avoid an attack
  * based on AGI stat + dodge skill rank.
  * When a PRNG roll is provided, dodge can reduce final_damage to 0.
+ *
+ * Flanking bonus applies when attacker is at Flank position
+ * and target is focused on a Front position combatant (GDD §6.11).
  */
 
 import type { CombatAction } from '@ellmud/shared';
@@ -29,6 +32,12 @@ export interface DamageOptions {
   defenderDodgeSkillRank?: number;
   /** A PRNG roll in [0, 1) to determine dodge success. */
   dodgeRoll?: number;
+  /** Damage multiplier for abilities (e.g., 1.5 for Heavy Strike) (GDD §6.3). */
+  damageMultiplier?: number;
+  /** Flat damage reduction for block ability (GDD §6.3). */
+  blockReduction?: number;
+  /** Flanking bonus multiplier (GDD §6.11). */
+  flankingBonus?: number;
 }
 
 /** Base dodge chance (20%). */
@@ -56,11 +65,14 @@ export function getDodgeChance(agility: number, dodgeSkillRank = 0): number {
  * Only strikes deal damage; the multiplier scales based on what the defender is doing.
  */
 function getStanceMultiplier(attackerAction: CombatAction, defenderAction: CombatAction): number {
-  if (attackerAction !== 'strike') return 0;
+  if (attackerAction !== 'strike' && attackerAction !== 'heavy_strike') return 0;
 
   switch (defenderAction) {
-    case 'strike': return 1.0;   // both aggressive — full damage
+    case 'strike': 
+    case 'heavy_strike':
+      return 1.0;   // both aggressive — full damage
     case 'dodge':  return 0.5;   // dodging halves incoming damage
+    case 'block':  return 1.0;   // block uses flat reduction, not multiplier
     case 'flee':   return 1.0;   // fleeing provides no defence
     default:       return 1.0;
   }
@@ -73,7 +85,7 @@ function getStanceMultiplier(attackerAction: CombatAction, defenderAction: Comba
  * @param defenderArmour  - Defender's armour value
  * @param attackerAction  - What the attacker chose this tick
  * @param defenderAction  - What the defender chose this tick
- * @param options         - Optional dodge roll and defence stat for dodge chance
+ * @param options         - Optional dodge roll, defence stat, damage multiplier, block reduction
  */
 export function calculateDamage(
   attackerAttack: number,
@@ -88,9 +100,20 @@ export function calculateDamage(
     return { rawDamage: 0, multiplier: 0, armourReduction: 0, finalDamage: 0 };
   }
 
-  const rawDamage = attackerAttack;
+  // Apply ability damage multiplier (e.g., Heavy Strike)
+  const abilityMultiplier = options?.damageMultiplier ?? 1.0;
+  const rawDamage = attackerAttack * abilityMultiplier;
   const afterMultiplier = rawDamage * multiplier;
-  const baseDamage = Math.max(1, Math.floor(afterMultiplier - defenderArmour));
+  
+  // Apply block damage reduction if defender is blocking
+  const blockReduction = defenderAction === 'block' ? (options?.blockReduction ?? 5) : 0;
+  const totalReduction = defenderArmour + blockReduction;
+  
+  const baseDamage = Math.max(1, afterMultiplier - totalReduction);
+
+  // Apply flanking bonus (GDD §6.11)
+  const flankingBonus = options?.flankingBonus ?? 1.0;
+  const damageWithFlanking = Math.floor(baseDamage * flankingBonus);
 
   // GDD §6.4: Dodge grants a % chance to fully avoid an attack
   if (
@@ -113,7 +136,7 @@ export function calculateDamage(
   return {
     rawDamage,
     multiplier,
-    armourReduction: defenderArmour,
-    finalDamage: baseDamage,
+    armourReduction: totalReduction,
+    finalDamage: damageWithFlanking,
   };
 }

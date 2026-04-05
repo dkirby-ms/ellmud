@@ -76,17 +76,19 @@ describe('Combat System Edge Cases', () => {
   });
 
   it('two combatants fleeing simultaneously ends encounter', () => {
+    // Use roll=0 to guarantee flee success
+    const fleeCombat = new CombatSystem(testExitResolver, () => 0);
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2');
-    combat.registerCombatant(p1);
-    combat.registerCombatant(p2);
-    combat.initiateCombat('p1', 'p2');
+    fleeCombat.registerCombatant(p1);
+    fleeCombat.registerCombatant(p2);
+    fleeCombat.initiateCombat('p1', 'p2');
 
     // Both submit flee
-    combat.submitAction('p1', 'flee');
-    combat.submitAction('p2', 'flee');
+    fleeCombat.submitAction('p1', 'flee');
+    fleeCombat.submitAction('p2', 'flee');
 
-    const result = combat.resolveTick();
+    const result = fleeCombat.resolveTick();
 
     // Both should have fled
     const fleeEvents = result.events.filter((e) => e.type === 'flee');
@@ -164,23 +166,19 @@ describe('Combat System Edge Cases', () => {
 
   it('combat with a creature that has exactly 0 HP remaining is already defeated', () => {
     const player = makePlayer('p1');
-    const creature = makeCreature('c1', TEST_ROOM, { maxHp: 8, armour: 0 });
+    // Creature HP exactly matches one auto-attack hit: attack=10 - armour=0 = 10
+    const creature = makeCreature('c1', TEST_ROOM, { maxHp: 10, armour: 0 });
     combat.registerCombatant(player);
     combat.registerCombatant(creature);
     combat.initiateCombat('p1', 'c1');
 
-    // First tick: strike deals damage (creature defaults to dodge)
-    // 10 * 0.5 - 0 = 5 damage, creature: 8 - 5 = 3 HP
-    combat.resolveTick();
-    expect(creature.hp).toBe(3);
-
-    // Next tick: p1 strikes again
-    combat.submitAction('p1', 'strike', 'c1');
-    const tick2 = combat.resolveTick();
+    // First tick: both auto-attack (GDD §6.2). Player deals 10 - 0 = 10 damage.
+    // Creature: 10 - 10 = 0 HP → defeated
+    const result = combat.resolveTick();
     expect(creature.hp).toBe(0);
 
     // Creature should be defeated
-    const defeated = tick2.events.filter((e) => e.type === 'defeated');
+    const defeated = result.events.filter((e) => e.type === 'defeated');
     expect(defeated.length).toBe(1);
   });
 });

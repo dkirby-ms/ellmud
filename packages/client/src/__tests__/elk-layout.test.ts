@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { LayoutRoom, ElkLayoutOptions } from '../map/elkLayout.js';
+import type { LayoutRoom } from '../map/elkLayout.js';
 
 // ─── Mock elkjs ─────────────────────────────────────────────────────────────
 // ELK runs a WASM/JS engine; mock it to return predictable node positions.

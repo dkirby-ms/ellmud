@@ -49,4 +49,13 @@ export const DROWNED_REVENANT: CreatureTemplate = {
   idleTicksMax: 50,
   fleeThreshold: 0.25,
   aggressive: true,
+  abilities: [
+    {
+      id: 'crushing_blow',
+      name: 'Crushing Blow',
+      damage: 18,
+      windUpTicks: 3,
+      telegraphText: 'The revenant raises its corroded blade overhead, water streaming from the rusted metal...',
+    },
+  ],
 };

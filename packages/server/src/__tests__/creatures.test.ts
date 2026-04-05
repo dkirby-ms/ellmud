@@ -84,6 +84,7 @@ function makeWorldState(overrides: Partial<CreatureWorldState> = {}): CreatureWo
       ['dead-end-2', ['boss-1']],
     ]),
     noisyRooms: new Set(),
+    combatantsInCombat: new Set<string>(),
     ...overrides,
   };
 }

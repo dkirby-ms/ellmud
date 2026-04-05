@@ -23,7 +23,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 // Component to be tested (implementation TBD by Regis)
@@ -92,8 +92,8 @@ const mockEdges = [
 
 // ─── Helper ─────────────────────────────────────────────────────────────────
 
-function renderFlow(props: any = {}) {
-  const defaultProps = {
+function renderFlow(_props: Record<string, unknown> = {}) {
+  const _defaultProps = {
     nodes: mockNodes,
     edges: mockEdges,
     onNodeClick: vi.fn(),
@@ -420,7 +420,7 @@ describe('ZoneDesignerFlow', () => {
     await user.click(screen.getByText(/add room.*north/i));
     
     // Simulate new room added to props
-    const newNodes = [
+    const _newNodes = [
       ...mockNodes,
       {
         id: 'room-004',
@@ -447,7 +447,7 @@ describe('ZoneDesignerFlow', () => {
     await user.click(screen.getByText(/confirm/i));
     
     // Simulate room removed from props
-    const remainingNodes = mockNodes.filter(n => n.id !== 'room-002');
+    const _remainingNodes = mockNodes.filter(n => n.id !== 'room-002');
     rerender(<div data-testid="placeholder">Room deleted</div>);
     
     expect(screen.queryByText('North Chamber')).toBeNull();
@@ -464,7 +464,7 @@ describe('ZoneDesignerFlow', () => {
     // Confirm deletion
     await user.click(screen.getByText(/confirm/i));
     
-    const remainingEdges = mockEdges.filter(e => e.id !== 'edge-001');
+    const _remainingEdges = mockEdges.filter(e => e.id !== 'edge-001');
     rerender(<div data-testid="placeholder">Edge deleted</div>);
     
     expect(screen.getAllByTestId('exit-edge')).toHaveLength(1);

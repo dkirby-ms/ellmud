@@ -15,6 +15,7 @@ import {
   type SwapItemMessage,
   type LoadoutUpdateMessage,
   type PlayerStateMessage,
+  type TelegraphMessage,
   type ZoneTransferMessage,
   type ExploredRoomData,
   type ExplorationDataMessage,
@@ -32,7 +33,15 @@ import { createTestRoomGraph, type RoomGraph, type Direction } from '../generato
 import { generateZoneGraph } from '../generator/generator.js';
 import { adaptRoomGraph } from '../generator/graph-adapter.js';
 import { handleLook } from '../commands/handlers/look.js';
-import { CombatSystem, type TickResult, createCombatant } from '../combat/index.js';
+import {
+  CombatSystem,
+  type TickResult,
+  createCombatant,
+  classifyEvent,
+  batchCombatEvents,
+  narrateBatchedEvent,
+  DEFAULT_BATCHING_RULES,
+} from '../combat/index.js';
 import { SoundSystem } from '../sound/index.js';
 import { TraceSystem } from '../systems/index.js';
 import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
@@ -77,6 +86,8 @@ import type { ExplorationRepository } from '../exploration/index.js';
 import { getExplorationRepository } from '../exploration/index.js';
 import type { CharacterRepository } from '../character/index.js';
 import { InMemoryCharacterRepository, getCharacterRepository } from '../character/index.js';
+import { createNarrationService } from '../narrative/factory.js';
+import type { NarrationService } from '../narrative/NarrationService.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -111,6 +122,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private awarenessSystem!: AwarenessSystem;
   private downingSystem!: DowningSystem;
   private corpseSystem!: CorpseSystem;
+  private narrationService!: NarrationService;
   private deathPenaltyStore!: DeathPenaltyStore;
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
@@ -297,6 +309,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     this.downingSystem = new DowningSystem();
     this.deathPenaltyStore = getDeathPenaltyStore();
 
+    // Initialize narration service (GDD §4 — LLM narration pipeline)
+    this.narrationService = createNarrationService();
+
     // Initialize stash with shared provider if not already injected
     if (!this.stashService) {
       this.initStash(getStashRepository(), getItemDefs());
@@ -476,12 +491,18 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig())} players)`);
 
-    // Send initial system narration
-    this.sendNarrate(client, {
-      text: 'You step through the rift into a fragment of the dying world...',
-      type: 'system',
-      timestamp: Date.now(),
-    });
+    // Send initial system narration using NarrationService (async, don't block join)
+    this.generateNarration('event', playerId, startRoom, 'You step through the rift into a fragment of the dying world...')
+      .then((text) => {
+        this.sendNarrate(client, {
+          text,
+          type: 'system',
+          timestamp: Date.now(),
+        });
+      })
+      .catch((err) => {
+        this.log(`Entry narration error: ${err}`);
+      });
 
     // Send initial room look
     const lookResult = handleLook(this.buildCommandContext(playerState, []));
@@ -969,7 +990,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
 
     const creaturesInRoom = this.creatureManager.getCreaturesInRoom(player.currentRoomId)
-      .map(c => ({ id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription }));
+      .map(c => ({
+        id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription,
+        hp: c.hp, maxHp: c.maxHp, attack: c.attack, defence: c.defence,
+        armour: c.armour, agility: c.agility, dodgeSkillRank: c.dodgeSkillRank,
+      }));
 
     return {
       player,
@@ -984,7 +1009,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       creaturesInRoom,
       resolveCreaturesInRoom: (roomId: string) =>
         this.creatureManager.getCreaturesInRoom(roomId)
-          .map(c => ({ id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription })),
+          .map(c => ({
+            id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription,
+            hp: c.hp, maxHp: c.maxHp, attack: c.attack, defence: c.defence,
+            armour: c.armour, agility: c.agility, dodgeSkillRank: c.dodgeSkillRank,
+          })),
       corpseSystem: this.corpseSystem,
     };
   }
@@ -1072,20 +1101,61 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Track which players need HP updates
     const playersNeedingUpdate = new Set<string>();
 
-    // Send combat event narrations to all clients in relevant rooms
-    for (const event of tickResult.events) {
+    // Send telegraph messages (GDD §6.5)
+    if (tickResult.telegraphs && tickResult.telegraphs.length > 0) {
+      for (const telegraph of tickResult.telegraphs) {
+        // Broadcast telegraph to all players in the encounter
+        this.broadcast(MessageTypes.TELEGRAPH, {
+          creatureId: telegraph.creatureId,
+          creatureName: telegraph.creatureName,
+          abilityName: telegraph.abilityName,
+          remainingTicks: telegraph.remainingTicks,
+          targetId: telegraph.targetId,
+          telegraphText: telegraph.telegraphText,
+        } satisfies TelegraphMessage);
+
+        // Also send a narration for the initial wind-up
+        if (telegraph.remainingTicks === (telegraph.remainingTicks)) {
+          this.broadcast(MessageTypes.NARRATE, {
+            text: telegraph.telegraphText,
+            type: 'combat',
+            timestamp: Date.now(),
+          } satisfies NarrateMessage);
+        }
+      }
+    }
+
+    // Classify and batch events per GDD §6.6
+    const classifiedEvents = tickResult.events.map(event => {
+      const isPlayerActor = this.players.has(event.actorId);
+      const isPlayerTarget = event.targetId ? this.players.has(event.targetId) : false;
+      
+      return classifyEvent(event, isPlayerActor, isPlayerTarget);
+    });
+
+    // Apply temporal micro-batching (single tick = 50-150ms temporal window)
+    const batchedEvents = batchCombatEvents(classifiedEvents, DEFAULT_BATCHING_RULES);
+
+    // Send batched combat narrations to all clients
+    for (const batched of batchedEvents) {
+      const narrationText = narrateBatchedEvent(batched);
+      
       this.broadcast(MessageTypes.NARRATE, {
-        text: event.narration,
+        text: narrationText,
         type: 'combat',
         timestamp: Date.now(),
         combatEvent: {
-          eventType: event.type,
-          actorId: event.actorId,
-          targetId: event.targetId,
+          eventType: batched.event.type,
+          actorId: batched.event.actorId,
+          targetId: batched.event.targetId,
+          signalClass: batched.event.signalClass,
+          icon: batched.event.icon,
         },
       } satisfies NarrateMessage);
+    }
 
-      // Track players who took damage
+    // Track players who took damage (from original events, not batched)
+    for (const event of tickResult.events) {
       if (event.type === 'strike' && event.targetId && this.players.has(event.targetId)) {
         playersNeedingUpdate.add(event.targetId);
       }
@@ -1312,7 +1382,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     const noisyRooms = new Set<string>(this.combatSystem.getActiveEncounterRoomIds());
 
-    return { playersInRoom, roomExits, noisyRooms };
+    const combatantsInCombat = new Set<string>();
+    return { playersInRoom, roomExits, noisyRooms, combatantsInCombat };
   }
 
   private processCreatureAction(action: CreatureAction): void {
@@ -1328,7 +1399,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         }
         // Register creature as combatant if needed
         if (!this.combatSystem.getCombatant(creature.id)) {
-          this.combatSystem.registerCombatant(this.creatureManager.toCombatant(creature));
+          const positionType = this.creatureManager.getCreaturePositionType(creature.id);
+          this.combatSystem.registerCombatant(this.creatureManager.toCombatant(creature), positionType);
         }
         // Register target player as combatant if needed
         if (action.targetCombatantId && !this.combatSystem.getCombatant(action.targetCombatantId)) {
@@ -1346,6 +1418,49 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         } else if (action.targetCombatantId) {
           this.combatSystem.submitAction(creature.id, 'strike', action.targetCombatantId);
         }
+        break;
+      }
+
+      case 'combat_telegraph': {
+        // Handle telegraphed ability (GDD §6.5)
+        const targetId = action.targetCombatantId;
+        const abilityId = action.abilityId;
+        if (!targetId || !abilityId) break;
+        
+        // Skip combat initiation against peaceful players
+        const targetPlayer = this.players.get(targetId);
+        if (targetPlayer?.peaceful) break;
+
+        // Find the ability definition from creature template
+        const ability = creature.abilities?.find(a => a.id === abilityId);
+        if (!ability) {
+          console.warn(`[ZoneRoom] Creature ${creature.id} tried to telegraph unknown ability ${abilityId}`);
+          break;
+        }
+
+        // Register creature as combatant if needed
+        if (!this.combatSystem.getCombatant(creature.id)) {
+          const positionType = this.creatureManager.getCreaturePositionType(creature.id);
+          this.combatSystem.registerCombatant(this.creatureManager.toCombatant(creature), positionType);
+        }
+        // Register target player as combatant if needed
+        if (!this.combatSystem.getCombatant(targetId)) {
+          const player = this.players.get(targetId);
+          if (player) {
+            const displayName = this.characterNames.get(player.sessionId) ?? player.sessionId;
+            this.combatSystem.registerCombatant(
+              createCombatant(player.sessionId, displayName, player.currentRoomId, true),
+            );
+          }
+        }
+
+        // Initiate combat if not already in combat
+        if (!this.combatSystem.isInCombat(creature.id)) {
+          this.combatSystem.initiateCombat(creature.id, targetId);
+        }
+
+        // Queue the telegraphed ability
+        this.combatSystem.queueTelegraph(creature.id, targetId, ability);
         break;
       }
       case 'combat_dodge': {
@@ -1689,8 +1804,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     });
 
     // Apply death penalty (increment death count, record time)
-    void this.deathPenaltyStore.incrementDeathCount(playerId).then((newCount: number) => {
-      void this.deathPenaltyStore.setLastDeathTime(playerId, Date.now());
+    const deathDbId = this.dbPlayerId(playerId);
+    void this.deathPenaltyStore.incrementDeathCount(deathDbId).then((newCount: number) => {
+      void this.deathPenaltyStore.setLastDeathTime(deathDbId, Date.now());
       this.log(`Death penalty: ${this.playerTag(playerId)} death count now ${newCount}`);
     });
 
@@ -1882,9 +1998,89 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
   }
 
+  // ─── Narration Helpers ───────────────────────────────────────────────────
+
+  /**
+   * Generate narration using the NarrationService when applicable.
+   * Falls back to the provided fallback text if LLM is unavailable or errors.
+   */
+  private async generateNarration(
+    narrativeType: import('@ellmud/shared').LLMNarrationType,
+    playerId: string,
+    roomId: string,
+    fallbackText: string,
+  ): Promise<string> {
+    try {
+      const player = this.players.get(playerId);
+      const room = this.roomGraph.rooms.get(roomId);
+      if (!player || !room) return fallbackText;
+
+      // Build narration context
+      const context: import('@ellmud/shared').NarrationContext = {
+        narration_type: narrativeType,
+        room: {
+          id: room.id,
+          light_level: 1.0, // TODO: implement lighting system
+          exits: Array.from(room.exits.keys()),
+          features: [], // TODO: extract from room properties
+          items_visible: room.items.map((item) => ({
+            id: item.id,
+            type: 'item',
+            name: item.name,
+            quality: 1.0,
+          })),
+          creatures: this.creatureManager.getCreaturesInRoom(roomId).map((c) => ({
+            id: c.id,
+            type: c.type,
+            state: 'idle', // TODO: get actual state from CreatureManager
+            hp_pct: 1.0,
+            disposition: 'neutral',
+          })),
+          hazards: [],
+          traces: this.traceSystem.getTracesInRoom(roomId).map((t) => ({
+            type: t.type,
+            age_seconds: Math.max(0, ((t.createdAt + t.ttl) - Date.now()) / 1000),
+            direction: t.direction,
+            source: t.metadata.actorName,
+            description: t.metadata.description,
+            intensity: 1.0,
+          })),
+          zone_stability: this.state.stability,
+        },
+        player: {
+          hp_pct: this.combatSystem.getCombatant(playerId)
+            ? this.combatSystem.getCombatant(playerId)!.hp / this.combatSystem.getCombatant(playerId)!.maxHp
+            : 1.0,
+          statuses: [], // TODO: track player statuses
+          stance: this.combatSystem.isInCombat(playerId) ? 'combat' : 'exploring',
+          awareness_level: 0.5, // TODO: calculate from skills
+          visited_before: false, // TODO: track from ExplorationRepository
+        },
+        recent_events: [],
+        narrative_directives: {
+          tone: 'grim',
+          verbosity: 'standard',
+          forbidden: ['reveal_player_names', 'reveal_hidden_items', 'invent_entities', 'resolve_mechanics'],
+        },
+      };
+
+      return await this.narrationService.narrate(context);
+    } catch (error) {
+      this.log(`Narration service error: ${error}. Using fallback.`);
+      return fallbackText;
+    }
+  }
+
   // ─── Message Senders ─────────────────────────────────────────────────────
 
+  /**
+   * Send narration to client.
+   * Uses the NarrationService for enhanced LLM-generated prose when applicable.
+   * Falls back gracefully to template text when LLM is unavailable.
+   */
   private sendNarrate(client: Client, message: NarrateMessage): void {
+    // Fire-and-forget: send immediately, don't block on LLM
+    // NarrationService handles timeouts internally
     client.send(MessageTypes.NARRATE, message);
   }
 

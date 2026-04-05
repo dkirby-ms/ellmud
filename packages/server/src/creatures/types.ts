@@ -6,6 +6,7 @@
  */
 
 import type { CombatStats } from '../combat/CombatState.js';
+import type { CreaturePositionType } from '@ellmud/shared';
 
 // ─── Creature Types ──────────────────────────────────────────────────────────
 
@@ -22,6 +23,17 @@ export type CreatureType =
 // ─── Behavior States (GDD §6.6) ─────────────────────────────────────────────
 
 export type BehaviorState = 'idle' | 'alert' | 'hostile' | 'fleeing';
+
+// ─── Creature Abilities (GDD §6.5) ──────────────────────────────────────────
+
+/** Telegraphed ability definition for creatures. */
+export interface CreatureAbility {
+  id: string;
+  name: string;
+  damage: number;
+  windUpTicks: number;
+  telegraphText: string;
+}
 
 // ─── Loot Table ──────────────────────────────────────────────────────────────
 
@@ -62,6 +74,10 @@ export interface CreatureTemplate {
   aggressive: boolean;
   /** Short atmospheric description shown when the creature is in a room. */
   roomDescription?: string;
+  /** Telegraphed abilities available to this creature (GDD §6.5). */
+  abilities?: CreatureAbility[];
+  /** Position type for combat reachability (GDD §6.11). */
+  positionType?: CreaturePositionType;
 }
 
 // ─── Creature Instance ───────────────────────────────────────────────────────
@@ -93,11 +109,15 @@ export interface Creature {
   aggressive: boolean;
   /** Short atmospheric description shown when the creature is in a room. */
   roomDescription?: string;
+  /** Telegraphed abilities available to this creature (GDD §6.5). */
+  abilities?: CreatureAbility[];
+  /** Position type for combat reachability (GDD §6.11). */
+  positionType?: CreaturePositionType;
 }
 
 // ─── Creature Action Output ──────────────────────────────────────────────────
 
-export type CreatureActionType = 'patrol_move' | 'alert_move' | 'combat_strike' | 'combat_dodge' | 'combat_flee' | 'idle';
+export type CreatureActionType = 'patrol_move' | 'alert_move' | 'combat_strike' | 'combat_dodge' | 'combat_flee' | 'combat_telegraph' | 'idle';
 
 export interface CreatureAction {
   type: CreatureActionType;
@@ -108,4 +128,6 @@ export interface CreatureAction {
   sourceRoomId?: string;
   /** Target combatant for combat actions. */
   targetCombatantId?: string;
+  /** Ability ID for telegraph actions (GDD §6.5). */
+  abilityId?: string;
 }

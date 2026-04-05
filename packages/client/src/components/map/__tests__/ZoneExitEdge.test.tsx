@@ -45,7 +45,7 @@ const mockEdgeData = {
 
 // ─── Helper ─────────────────────────────────────────────────────────────────
 
-function renderEdge(props: any) {
+function renderEdge(_props: Record<string, unknown>) {
   return render(
     <ReactFlowProvider>
       {/* <ZoneExitEdge {...props} /> */}

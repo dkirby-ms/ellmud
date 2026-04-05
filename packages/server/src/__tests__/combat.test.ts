@@ -144,7 +144,7 @@ describe('Tick Resolution', () => {
     expect(p1.hp).toBe(100);
   });
 
-  it('should default to dodge when no action submitted', () => {
+  it('should default to auto-attack when no action submitted (GDD §6.1)', () => {
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2');
     system.registerCombatant(p1);
@@ -155,27 +155,29 @@ describe('Tick Resolution', () => {
     // We need a new tick — the first tick already has p1's auto-queued strike
     system.resolveTick(); // consume the first tick
 
-    // Now neither has a queued action — both should default to dodge
+    // Now neither has a queued action — both should auto-attack (GDD §6.1)
     const result = system.resolveTick();
-    const dodges = result.events.filter((e) => e.type === 'dodge');
-    expect(dodges).toHaveLength(2);
+    const strikes = result.events.filter((e) => e.type === 'strike');
+    expect(strikes).toHaveLength(2);
 
-    // No damage dealt
-    expect(p1.hp).toBe(100); // p1 was never struck (p2 defaulted to dodge, not strike)
-    expect(p2.hp).toBe(100 - 3); // p1's first-tick strike was 10*0.5-2=3 since p2 defaulted dodge
+    // Both dealt damage (auto-attack)
+    expect(p1.hp).toBeLessThan(100);
+    expect(p2.hp).toBeLessThan(100);
   });
 
   it('should handle flee successfully when exits exist', () => {
+    // Use a roll function that always succeeds (returns 0.0 < base 50% flee chance)
+    const fleeSystem = new CombatSystem(testExitResolver, () => 0.0);
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2');
-    system.registerCombatant(p1);
-    system.registerCombatant(p2);
-    system.initiateCombat('p1', 'p2');
+    fleeSystem.registerCombatant(p1);
+    fleeSystem.registerCombatant(p2);
+    fleeSystem.initiateCombat('p1', 'p2');
 
     // Override p1's auto-queued strike with flee
-    system.submitAction('p1', 'flee');
+    fleeSystem.submitAction('p1', 'flee');
 
-    const result = system.resolveTick();
+    const result = fleeSystem.resolveTick();
 
     // p1 should have fled
     const flees = result.fleeResults;
@@ -184,7 +186,7 @@ describe('Tick Resolution', () => {
     expect(flees[0]!.toRoomId).toBe(ADJACENT_ROOM);
 
     // p1 should no longer be in combat
-    expect(system.isInCombat('p1')).toBe(false);
+    expect(fleeSystem.isInCombat('p1')).toBe(false);
 
     // p1's room should be updated
     expect(p1.roomId).toBe(ADJACENT_ROOM);
@@ -215,7 +217,7 @@ describe('Tick Resolution', () => {
     expect(fleeEvents[0]!.narration).toContain('no escape');
   });
 
-  it('should end combat when one combatant is defeated', () => {
+  it('should end combat after cooldown when one combatant is defeated', () => {
     // Give p2 very low HP
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2', TEST_ROOM, { maxHp: 5 });
@@ -224,21 +226,20 @@ describe('Tick Resolution', () => {
     system.registerCombatant(p2);
     system.initiateCombat('p1', 'p2');
 
-    // p1 strikes (auto-queued), p2 doesn't submit (defaults to dodge)
+    // Tick 1: p1 strikes (auto-queued), p2 dies
+    const result1 = system.resolveTick();
+    expect(p2.hp).toBe(0);
+    // Combat should NOT end yet (cooldown started)
+    expect(result1.events.filter((e) => e.type === 'combat_end')).toHaveLength(0);
+    expect(system.isInCombat('p1')).toBe(true);
+
+    // Tick 2-3: Cooldown ticks
+    system.resolveTick();
     system.resolveTick();
 
-    // p2 took 3 damage (10 * 0.5 - 2 = 3) — still alive at 2 HP
-    expect(p2.hp).toBe(2);
-
-    // Submit another strike
-    system.submitAction('p1', 'strike', 'p2');
-    const result2 = system.resolveTick();
-
-    // p2 should be defeated now (2 - 3 < 0)
-    expect(p2.hp).toBe(0);
-
-    // Combat should have ended
-    const endEvents = result2.events.filter((e) => e.type === 'combat_end');
+    // Tick 4: Cooldown expires, combat ends
+    const result4 = system.resolveTick();
+    const endEvents = result4.events.filter((e) => e.type === 'combat_end');
     expect(endEvents).toHaveLength(1);
     expect(endEvents[0]!.narration).toContain('ended');
 
@@ -257,7 +258,13 @@ describe('Tick Resolution', () => {
     // First tick: p1 auto-strikes, resetting the counter
     system.resolveTick();
 
-    // Now 10 ticks of no strikes (both default to dodge)
+    // Clear targets to prevent auto-attack (GDD §6.2: auto-attack pauses when no target)
+    const p1Combatant = system.getCombatant('p1');
+    const p2Combatant = system.getCombatant('p2');
+    if (p1Combatant) p1Combatant.currentTarget = undefined;
+    if (p2Combatant) p2Combatant.currentTarget = undefined;
+
+    // Now 10 ticks of no strikes (both default to dodge without targets)
     for (let i = 0; i < COMBAT_TIMEOUT_TICKS; i++) {
       const result = system.resolveTick();
       if (i === COMBAT_TIMEOUT_TICKS - 1) {
@@ -280,14 +287,14 @@ describe('Tick Resolution', () => {
     system.registerCombatant(creature);
     system.initiateCombat('p1', 'goblin');
 
-    // Player strikes (auto-queued), creature defaults to dodge
+    // Player strikes (auto-queued), creature auto-attacks back (GDD §6.1: auto-attack on aggro)
     system.resolveTick();
 
-    // Creature took: 10 * 0.5 - 1 = 4 damage
-    expect(creature.hp).toBe(30 - 4);
+    // Player took: 5 * 1.0 - 2 = 3 damage
+    expect(player.hp).toBe(100 - 3);
 
-    // Player took no damage (creature defaulted to dodge = no attack)
-    expect(player.hp).toBe(100);
+    // Creature took: 10 * 1.0 - 1 = 9 damage
+    expect(creature.hp).toBe(30 - 9);
   });
 
   it('should handle multi-combatant fight (3-way)', () => {
@@ -304,17 +311,17 @@ describe('Tick Resolution', () => {
     system.initiateCombat('p3', 'p1');
 
     // p1 strikes p2 (auto from first initiate), p3 strikes p1 (auto from second initiate)
-    // p2 has no action → defaults to dodge
+    // p2 auto-attacks p1 (GDD §6.1: auto-attack on aggro)
 
     system.resolveTick();
 
-    // p2 was struck by p1: 10 * 0.5 - 2 = 3 (p2 dodging)
-    expect(p2.hp).toBe(100 - 3);
+    // p2 was struck by p1: 10 * 1.0 - 2 = 8 (both striking)
+    expect(p2.hp).toBe(100 - 8);
 
-    // p1 was struck by p3: p1 has action=strike, so multiplier=1.0: 10*1.0-2=8
-    expect(p1.hp).toBe(100 - 8);
+    // p1 was struck by both p3 and p2: 2 * (10 * 1.0 - 2) = 16
+    expect(p1.hp).toBe(100 - 16);
 
-    // p3 was not struck by anyone
+    // p3 was not struck by anyone (p1 targeted p2, p2 targeted p1)
     expect(p3.hp).toBe(100);
   });
 
@@ -328,10 +335,10 @@ describe('Tick Resolution', () => {
     // First tick with auto-queued strike
     system.resolveTick();
 
-    // Second tick — no actions submitted, both default to dodge
+    // Second tick — no actions submitted, both auto-attack (GDD §6.1)
     const result = system.resolveTick();
-    const dodges = result.events.filter((e) => e.type === 'dodge');
-    expect(dodges).toHaveLength(2);
+    const strikes = result.events.filter((e) => e.type === 'strike');
+    expect(strikes).toHaveLength(2);
   });
 
   it('should pick default target when strike has no target specified', () => {
@@ -348,8 +355,9 @@ describe('Tick Resolution', () => {
 
     const result = system.resolveTick();
     const strikes = result.events.filter((e) => e.type === 'strike');
-    expect(strikes).toHaveLength(1);
-    expect(strikes[0]!.targetId).toBe('p2');
+    expect(strikes).toHaveLength(2); // Both p1 and p2 strike
+    const p1Strike = strikes.find(s => s.actorId === 'p1');
+    expect(p1Strike?.targetId).toBe('p2'); // p1's strike picked default target
   });
 
   it('should remove combatant on disconnect', () => {
@@ -400,27 +408,26 @@ describe('HP Tracking', () => {
     system.registerCombatant(p2);
     system.initiateCombat('p1', 'p2');
 
-    // Tick 1: p1 strikes p2 (auto). p2 defaults dodge → 3 damage
+    // Tick 1: both auto-attack (GDD §6.1). Both take 8 damage (10*1.0-2=8)
     system.resolveTick();
-    expect(p2.hp).toBe(97);
-
-    // Tick 2: both strike
-    system.submitAction('p1', 'strike', 'p2');
-    system.submitAction('p2', 'strike', 'p1');
-    system.resolveTick();
-
-    // Both take 8 damage (strike vs strike: 10*1.0-2=8)
     expect(p1.hp).toBe(92);
-    expect(p2.hp).toBe(89);
+    expect(p2.hp).toBe(92);
+
+    // Tick 2: both auto-attack again
+    system.resolveTick();
+
+    // Both take another 8 damage
+    expect(p1.hp).toBe(84);
+    expect(p2.hp).toBe(84);
 
     // Tick 3: p1 strikes, p2 dodges
     system.submitAction('p1', 'strike', 'p2');
     system.submitAction('p2', 'dodge');
     system.resolveTick();
 
-    // p2 takes 3 more (strike vs dodge)
-    expect(p2.hp).toBe(86);
-    expect(p1.hp).toBe(92); // unchanged
+    // p2 takes 3 more (strike vs dodge: 10*0.5-2=3)
+    expect(p2.hp).toBe(81);
+    expect(p1.hp).toBe(84); // unchanged
   });
 
   it('should clamp HP at 0 on defeat', () => {
@@ -496,10 +503,12 @@ describe('Combat Initiation', () => {
 // ─── Flee Mechanics Tests ─────────────────────────────────────────────────
 
 describe('Flee Mechanics', () => {
+  // Use a roll function that always succeeds for flee tests
+  const successRoll = () => 0.0;
   let system: CombatSystem;
 
   beforeEach(() => {
-    system = new CombatSystem(testExitResolver);
+    system = new CombatSystem(testExitResolver, successRoll);
   });
 
   it('should move fleeing combatant to specified room', () => {
@@ -534,19 +543,28 @@ describe('Flee Mechanics', () => {
     expect(result.fleeResults).toHaveLength(1);
   });
 
-  it('should end combat when last opponent flees', () => {
+  it('should end combat after cooldown when last opponent flees', () => {
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2');
     system.registerCombatant(p1);
     system.registerCombatant(p2);
     system.initiateCombat('p1', 'p2');
 
+    // Tick 1: p2 flees
     system.submitAction('p2', 'flee');
+    const result1 = system.resolveTick();
+    expect(result1.fleeResults).toHaveLength(1);
+    // Combat should NOT end immediately (cooldown started)
+    expect(result1.endedEncounterIds).toHaveLength(0);
+    expect(system.isInCombat('p1')).toBe(true);
 
-    const result = system.resolveTick();
+    // Tick 2-3: Cooldown ticks
+    system.resolveTick();
+    system.resolveTick();
 
-    // Combat should end (only p1 remains)
-    expect(result.endedEncounterIds).toHaveLength(1);
+    // Tick 4: Cooldown expires, combat ends
+    const result4 = system.resolveTick();
+    expect(result4.endedEncounterIds).toHaveLength(1);
     expect(system.isInCombat('p1')).toBe(false);
   });
 });

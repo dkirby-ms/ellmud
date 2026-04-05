@@ -507,7 +507,7 @@ export default function ZoneDesigner({
   const floorBounds = useMemo(() => computeFloorBounds(positions), [positions]);
 
   // ─── Floor-filtered views ───────────────────────────────
-  const { floorPositions, floorIntraExits, floorInterFloorExits: _floorInterFloorExits, ghostFloorRoomSlugs: _ghostFloorRoomSlugs } = useMemo(() => {
+  const { floorPositions: _floorPositions, floorIntraExits, floorInterFloorExits: _floorInterFloorExits, ghostFloorRoomSlugs: _ghostFloorRoomSlugs } = useMemo(() => {
     if (!floorBounds.isMultiFloor) {
       return {
         floorPositions: positions,
@@ -2996,7 +2996,7 @@ export default function ZoneDesigner({
       {exitContextMenu && (() => {
         const cmExit = exits.find((e) => e.id === exitContextMenu.exitId);
         if (!cmExit) return null;
-        const cmPair = exitPairs.find(
+        const cmPair = exitPairs.find(  // eslint-disable-line @typescript-eslint/no-unused-vars
           (p) => p.forward.id === exitContextMenu.exitId || p.reverse?.id === exitContextMenu.exitId,
         );
         const fromRoom = roomMap.get(cmExit.fromRoomSlug);

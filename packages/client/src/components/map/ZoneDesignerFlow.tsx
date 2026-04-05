@@ -4,7 +4,7 @@
  * Phase 3: Full ReactFlow integration with custom nodes/edges.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -14,7 +14,6 @@ import {
   type NodeTypes,
   type EdgeTypes,
   type Connection,
-  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { ZoneRoomNode } from './ZoneRoomNode.js';
@@ -89,8 +88,6 @@ export function ZoneDesignerFlow({
   selectedEdgeId,
   floor = 0,
 }: ZoneDesignerFlowProps) {
-  const hasInitialFit = useRef(false);
-
   // Handle node click events
   const handleNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
@@ -252,36 +249,6 @@ export function ZoneDesignerFlow({
       </div>
     </div>
   );
-}
-
-/**
- * FlowWrapper — Internal wrapper component with useReactFlow hook.
- * Required because useReactFlow must be called within ReactFlow context.
- */
-function FlowWrapper(props: ZoneDesignerFlowProps) {
-  const reactFlowInstance = useReactFlow();
-  const hasInitialFit = useRef(false);
-
-  // Fit view on initial load
-  useEffect(() => {
-    if (!hasInitialFit.current && props.nodes.length > 0) {
-      setTimeout(() => {
-        reactFlowInstance.fitView({ padding: 0.2, duration: 200 });
-      }, 50);
-      hasInitialFit.current = true;
-    }
-  }, [props.nodes.length, reactFlowInstance]);
-
-  // Reset fit when floor changes
-  useEffect(() => {
-    if (props.nodes.length > 0) {
-      setTimeout(() => {
-        reactFlowInstance.fitView({ padding: 0.2, duration: 200 });
-      }, 50);
-    }
-  }, [props.floor, reactFlowInstance]);
-
-  return null;
 }
 
 // ─── Export Types ───────────────────────────────────────────────────────────

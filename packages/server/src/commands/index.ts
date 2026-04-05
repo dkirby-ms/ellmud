@@ -16,12 +16,14 @@ import { handleDrop } from './handlers/drop.js';
 import { handleInventory } from './handlers/inventory.js';
 import { handleAttack } from './handlers/attack.js';
 import { handleStrike, handleDodge, handleFlee } from './handlers/combat-actions.js';
+import { handleTarget } from './handlers/target.js';
 import { handleSay } from './handlers/say.js';
 import { handleWhisper } from './handlers/whisper.js';
 import { handleEmote } from './handlers/emote.js';
 import { handleStabilize } from './handlers/stabilize.js';
 import { handlePeaceful } from './handlers/peaceful.js';
 import { handleLoot } from './handlers/loot.js';
+import { handlePosition } from './handlers/position.js';
 import type { DowningSystem } from '../systems/DowningSystem.js';
 import type { CorpseSystem } from '../systems/CorpseSystem.js';
 import type { StashService } from '../stash/StashService.js';
@@ -56,6 +58,14 @@ export interface CreatureRef {
   name: string;
   type?: string;
   roomDescription?: string;
+  /** Combat stats — passed through so the attack handler can register with real values. */
+  hp?: number;
+  maxHp?: number;
+  attack?: number;
+  defence?: number;
+  armour?: number;
+  agility?: number;
+  dodgeSkillRank?: number;
 }
 
 export interface CommandContext {
@@ -130,12 +140,15 @@ handlers.set('attack', handleAttack);
 handlers.set('strike', handleStrike);
 handlers.set('dodge', handleDodge);
 handlers.set('flee', handleFlee);
+handlers.set('target', handleTarget);
 handlers.set('say', handleSay);
 handlers.set('whisper', handleWhisper);
 handlers.set('emote', handleEmote);
 handlers.set('stabilize', handleStabilize);
 handlers.set('peaceful', handlePeaceful);
 handlers.set('loot', handleLoot);
+handlers.set('position', handlePosition);
+handlers.set('pos', handlePosition); // Shorthand alias
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(

@@ -33,3 +33,18 @@ export {
   resolveDefeated,
   resolveCombatEnd,
 } from './actions.js';
+export {
+  type AbilityDefinition,
+  type AbilityEffect,
+  type AbilityType,
+  type AbilitySlots,
+  getAbilityDefinition,
+  DEFAULT_ABILITIES,
+  HEAVY_STRIKE,
+  BLOCK,
+  OBSERVE,
+} from './abilities.js';
+export { classifyEvent, classifyCombatEvent, getEventIcon, COMBAT_ICONS } from './signal-classification.js';
+export type { ClassifiedCombatEvent, SignalClass } from './signal-classification.js';
+export { batchCombatEvents, narrateBatchedEvent, DEFAULT_BATCHING_RULES } from './micro-batching.js';
+export type { BatchedEvent, BatchingRules } from './micro-batching.js';
