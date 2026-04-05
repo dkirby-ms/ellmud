@@ -36,10 +36,6 @@ export interface ZoneDesignerFlowProps {
   onEdgeContextMenu?: (event: React.MouseEvent, edgeId: string) => void;
   /** Callback when the canvas is clicked (clear selection) */
   onPaneClick?: () => void;
-  /** Callback when a node is hovered */
-  onNodeMouseEnter?: (event: React.MouseEvent, nodeId: string) => void;
-  /** Callback when a node hover ends */
-  onNodeMouseLeave?: (event: React.MouseEvent, nodeId: string) => void;
   /** Callback when two nodes are connected (exit creation) */
   onConnect?: (connection: Connection) => void;
   /** ID of the currently selected node (for highlighting) */
@@ -81,8 +77,6 @@ export function ZoneDesignerFlow({
   onNodeContextMenu,
   onEdgeContextMenu,
   onPaneClick,
-  onNodeMouseEnter: onNodeMouseEnterProp,
-  onNodeMouseLeave: onNodeMouseLeaveProp,
   onConnect,
   selectedNodeId,
   selectedEdgeId,
@@ -130,21 +124,6 @@ export function ZoneDesignerFlow({
     [onConnect]
   );
 
-  // Handle node mouse enter/leave for hover tooltips
-  const handleNodeMouseEnter = useCallback(
-    (event: React.MouseEvent, node: Node) => {
-      onNodeMouseEnterProp?.(event, node.id);
-    },
-    [onNodeMouseEnterProp]
-  );
-
-  const handleNodeMouseLeave = useCallback(
-    (event: React.MouseEvent, node: Node) => {
-      onNodeMouseLeaveProp?.(event, node.id);
-    },
-    [onNodeMouseLeaveProp]
-  );
-
   // Apply selection styling to nodes
   const nodesWithSelection = nodes.map((node) => ({
     ...node,
@@ -169,8 +148,6 @@ export function ZoneDesignerFlow({
         onNodeContextMenu={handleNodeContextMenu}
         onEdgeContextMenu={handleEdgeContextMenu}
         onPaneClick={onPaneClick}
-        onNodeMouseEnter={handleNodeMouseEnter}
-        onNodeMouseLeave={handleNodeMouseLeave}
         onConnect={handleConnect}
         fitView
         attributionPosition="bottom-right"
