@@ -264,91 +264,9 @@ describe('ZoneDesignerFlow — selection mapping', () => {
   });
 });
 
-// ─── Minimap ────────────────────────────────────────────────────────────────
+// ─── Minimap (disabled) ─────────────────────────────────────────────────────
 
-describe('ZoneDesignerFlow — minimap', () => {
-  beforeEach(() => {
-    MockMiniMap.mockClear();
-  });
-
-  it('renders MiniMap component', () => {
-    render(
-      <ZoneDesignerFlow nodes={makeNodes()} edges={makeEdges()} />,
-    );
-    expect(screen.getByTestId('mock-minimap')).toBeDefined();
-  });
-
-  it('passes a nodeColor function to MiniMap', () => {
-    render(
-      <ZoneDesignerFlow nodes={makeNodes()} edges={makeEdges()} />,
-    );
-    const minimap = screen.getByTestId('mock-minimap');
-    expect(minimap.getAttribute('data-node-color-fn')).toBe('function');
-  });
-
-  it('minimap nodeColor returns cyan for selected nodes', () => {
-    render(
-      <ZoneDesignerFlow nodes={makeNodes()} edges={makeEdges()} />,
-    );
-    const nodeColorFn = MockMiniMap.mock.calls[0][0].nodeColor as (node: Node) => string;
-    const color = nodeColorFn({ id: 'x', selected: true } as Node);
-    expect(color).toBe('#22D3EE');
-  });
-
-  it('minimap nodeColor returns green for entry nodes', () => {
-    render(
-      <ZoneDesignerFlow nodes={makeNodes()} edges={makeEdges()} />,
-    );
-    const nodeColorFn = MockMiniMap.mock.calls[0][0].nodeColor as (node: Node) => string;
-    const color = nodeColorFn({ id: 'x', selected: false, data: { type: 'entry' } } as unknown as Node);
-    expect(color).toBe('#4ADE80');
-  });
-
-  it('minimap nodeColor returns red for boss nodes', () => {
-    render(
-      <ZoneDesignerFlow nodes={makeNodes()} edges={makeEdges()} />,
-    );
-    const nodeColorFn = MockMiniMap.mock.calls[0][0].nodeColor as (node: Node) => string;
-    const color = nodeColorFn({ id: 'x', selected: false, data: { type: 'boss' } } as unknown as Node);
-    expect(color).toBe('#EF4444');
-  });
-
-  it('minimap nodeColor returns purple for feature nodes', () => {
-    render(
-      <ZoneDesignerFlow nodes={makeNodes()} edges={makeEdges()} />,
-    );
-    const nodeColorFn = MockMiniMap.mock.calls[0][0].nodeColor as (node: Node) => string;
-    const color = nodeColorFn({ id: 'x', selected: false, data: { type: 'feature_trap' } } as unknown as Node);
-    expect(color).toBe('#A78BFA');
-  });
-
-  it('minimap nodeColor returns teal for junction nodes', () => {
-    render(
-      <ZoneDesignerFlow nodes={makeNodes()} edges={makeEdges()} />,
-    );
-    const nodeColorFn = MockMiniMap.mock.calls[0][0].nodeColor as (node: Node) => string;
-    const color = nodeColorFn({ id: 'x', selected: false, data: { type: 'junction' } } as unknown as Node);
-    expect(color).toBe('#5EEAD4');
-  });
-
-  it('minimap nodeColor returns grey for unselected nodes', () => {
-    render(
-      <ZoneDesignerFlow nodes={makeNodes()} edges={makeEdges()} />,
-    );
-    const nodeColorFn = MockMiniMap.mock.calls[0][0].nodeColor as (node: Node) => string;
-    const color = nodeColorFn({ id: 'x', selected: false } as Node);
-    expect(color).toBe('#8A8B95');
-  });
-
-  it('minimap has dark background and border styling', () => {
-    render(
-      <ZoneDesignerFlow nodes={makeNodes()} edges={makeEdges()} />,
-    );
-    const style = MockMiniMap.mock.calls[0][0].style as Record<string, string>;
-    expect(style.background).toBe('#1C1D27');
-    expect(style.border).toContain('#4A4B55');
-  });
-});
+// Minimap tests removed — component disabled per user request
 
 // ─── ReactFlow Configuration ────────────────────────────────────────────────
 

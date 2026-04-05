@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Controls,
-  MiniMap,
+
   type Node,
   type Edge,
   type NodeTypes,
@@ -228,26 +228,7 @@ export function ZoneDesignerFlow({
           position="top-right"
         />
         
-        {/* Minimap overview — type-based coloring (4.4) */}
-        <MiniMap
-          nodeColor={(node) => {
-            if (node.selected) return '#22D3EE';
-            const nodeType = (node.data as Record<string, unknown>)?.type as string | undefined;
-            if (nodeType === 'entry') return '#4ADE80';
-            if (nodeType === 'boss') return '#EF4444';
-            if (nodeType?.startsWith('feature_')) return '#A78BFA';
-            if (nodeType === 'junction') return '#5EEAD4';
-            return '#8A8B95';
-          }}
-          nodeStrokeColor="#4A4B55"
-          nodeStrokeWidth={1}
-          maskColor="rgba(0, 0, 0, 0.6)"
-          position="bottom-left"
-          style={{
-            background: '#1C1D27',
-            border: '1px solid #4A4B55',
-          }}
-        />
+        {/* Minimap disabled — re-enable if needed */}
       </ReactFlow>
       
       {/* Floor indicator (4.4) */}
