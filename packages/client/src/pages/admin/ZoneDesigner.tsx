@@ -137,6 +137,7 @@ function roomsToFlowNodes(
   exits: ZoneExitDefinition[],
   showLabels: boolean,
   mode: DesignerMode,
+  creatures: Array<{ type: string; name: string }>,
 ): FlowNode[] {
   const nodes: FlowNode[] = [];
 
@@ -168,6 +169,18 @@ function roomsToFlowNodes(
         hazardCount: room.hazards?.length ?? 0,
         showLabels,
         properties: Array.isArray(room.properties) ? room.properties : [],
+        description: room.description,
+        npcs: room.npcs?.map(npc => ({
+          creatureId: npc.creatureId,
+          spawnCount: npc.spawnCount,
+          displayName: creatures.find(c => c.type === npc.creatureId)?.name,
+        })),
+        lootContainers: room.lootContainers?.map(lc => ({
+          id: lc.id,
+          type: lc.type,
+          itemCount: lc.items?.length ?? 0,
+        })),
+        hazards: room.hazards,
       },
     });
   }
@@ -257,10 +270,6 @@ export default function ZoneDesigner({
   // ─── State ──────────────────────────────────────────────
   const [mode, setMode] = useState<DesignerMode>("select");
   const [showLabels, setShowLabels] = useState(false);
-  const [hoveredRoom, setHoveredRoom] = useState<string | null>(null);
-  const [hoverPosition, setHoverPosition] = useState<{ x: number; y: number } | null>(null);
-  const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const leaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [selectedExit, setSelectedExit] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -686,6 +695,7 @@ export default function ZoneDesigner({
       exits,
       showLabels,
       mode,
+      creatures,
     );
     // Apply search match/dim styling
     if (searchMatchSlugs !== null) {
@@ -696,7 +706,7 @@ export default function ZoneDesigner({
       }
     }
     return nodes;
-  }, [rooms, positions, currentFloor, selectedRoom, disconnectedSlugs, orphanExitIds, exits, showLabels, mode, searchMatchSlugs]);
+  }, [rooms, positions, currentFloor, selectedRoom, disconnectedSlugs, orphanExitIds, exits, showLabels, mode, searchMatchSlugs, creatures]);
 
   const flowEdges = useMemo(() => {
     let edges = exitsToFlowEdges(
@@ -789,41 +799,6 @@ export default function ZoneDesigner({
       y: e.clientY - (bounds?.top ?? 0),
       exitId,
     });
-  }
-
-  function handleRoomMouseEnter(e: React.MouseEvent, slug: string) {
-    // Cancel any pending leave — mouse moved to another node
-    if (leaveTimerRef.current) {
-      clearTimeout(leaveTimerRef.current);
-      leaveTimerRef.current = null;
-    }
-    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-    // Capture coordinates immediately — React synthetic events are pooled
-    const target = e.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    const canvasBounds = canvasRef.current?.getBoundingClientRect();
-    if (!canvasBounds) return;
-    const x = rect.left + rect.width / 2 - canvasBounds.left;
-    const y = rect.top - canvasBounds.top;
-    hoverTimerRef.current = setTimeout(() => {
-      hoverTimerRef.current = null;
-      setHoveredRoom(slug);
-      setHoverPosition({ x, y });
-    }, 150);
-  }
-
-  function handleRoomMouseLeave(_e: React.MouseEvent, _slug: string) {
-    if (hoverTimerRef.current) {
-      clearTimeout(hoverTimerRef.current);
-      hoverTimerRef.current = null;
-    }
-    // Short delay before hiding — prevents flicker when moving between nodes
-    // or when ReactFlow fires spurious leave events during re-renders
-    leaveTimerRef.current = setTimeout(() => {
-      leaveTimerRef.current = null;
-      setHoveredRoom(null);
-      setHoverPosition(null);
-    }, 100);
   }
 
   async function handleAddRoomInDirection(fromSlug: string, direction: string) {
@@ -1779,8 +1754,6 @@ export default function ZoneDesigner({
                 onNodeClick={handleRoomClick}
                 onEdgeClick={handleExitClick}
                 onNodeContextMenu={handleRoomContextMenu}
-                onNodeMouseEnter={handleRoomMouseEnter}
-                onNodeMouseLeave={handleRoomMouseLeave}
                 onEdgeContextMenu={handleExitContextMenu}
                 onPaneClick={handleCanvasClick}
                 selectedNodeId={selectedRoom}
@@ -1976,78 +1949,6 @@ export default function ZoneDesigner({
             </div>
           )}
 
-          {/* ─── Hover tooltip ─────────────────────────────── */}
-          {hoveredRoom && hoverPosition && !showLabels && (() => {
-            const room = roomMap.get(hoveredRoom);
-            if (!room) return null;
-            return (
-              <div
-                style={{
-                  position: "absolute",
-                  left: hoverPosition.x,
-                  top: hoverPosition.y - 10,
-                  transform: "translate(-50%, -100%)",
-                  pointerEvents: "none",
-                  zIndex: 1000,
-                  maxWidth: "300px",
-                }}
-              >
-                <div
-                  className="bg-[#1C1D27] border border-[#2A2B35] rounded-lg p-3 shadow-lg"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
-                  <div className="text-[#C9A84C] font-semibold text-sm mb-1">
-                    {room.name}
-                  </div>
-                  <div className="text-[#6A6B75] text-xs mb-2" style={{ fontFamily: "var(--font-mono)" }}>
-                    {room.slug} · {room.type}
-                  </div>
-                  {room.description && (
-                    <div className="text-[#8A8B95] text-xs mb-2">
-                      {room.description.length > 100
-                        ? room.description.slice(0, 97) + "..."
-                        : room.description}
-                    </div>
-                  )}
-                  {room.properties && room.properties.length > 0 && (
-                    <div className="text-[#6A6B75] text-xs mb-2">
-                      Properties: {room.properties.join(", ")}
-                    </div>
-                  )}
-                  {(room.npcs?.length || room.lootContainers?.length || room.hazards?.length) && (
-                    <div className="text-[#8A8B95] text-xs space-y-0.5">
-                      {room.npcs?.length > 0 && (
-                        <div>
-                          <span className="text-[#D97706]">👤 NPCs:</span>
-                          {room.npcs.map((npc: RoomNPC, i: number) => {
-                            const tpl = creatures.find((c) => c.type === npc.creatureId);
-                            return (
-                              <div key={i} className="ml-3 text-[#A0A0AA]">
-                                {tpl?.name ?? npc.creatureId} ×{npc.spawnCount}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                      {room.lootContainers?.length > 0 && (
-                        <div>
-                          <span className="text-[#CA8A04]">📦 Loot:</span>
-                          {room.lootContainers.map((lc: RoomLootContainer, i: number) => (
-                            <div key={i} className="ml-3 text-[#A0A0AA]">
-                              {lc.id} ({lc.type}) — {lc.items?.length ?? 0} item{(lc.items?.length ?? 0) !== 1 ? "s" : ""}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {room.hazards?.length > 0 && (
-                        <div>⚠ {room.hazards.length} Hazard{room.hazards.length > 1 ? "s" : ""}</div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
         </div>
 
         {/* ─── Side panel ─────────────────────────────────── */}

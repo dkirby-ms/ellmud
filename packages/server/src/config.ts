@@ -59,6 +59,13 @@ export interface ServerConfig {
     apiVersion: string;
   };
 
+  /** OpenAI-compatible LLM endpoint (OpenAI, LM Studio, Ollama, Mistral, etc.). */
+  openaiLLM?: {
+    endpoint: string;
+    apiKey: string;
+    model: string;
+  };
+
   /** Explicit toggle for LLM narration. When false, template-only mode is used even if Azure credentials are configured. */
   enableLLMNarration: boolean;
 }
@@ -131,6 +138,9 @@ export function loadConfig(): ServerConfig {
   const azureDeployment = process.env.AZURE_AI_DEPLOYMENT ?? 'gpt-4o-mini';
   const azureApiVersion = process.env.AZURE_AI_API_VERSION ?? '2024-08-01-preview';
 
+  const openaiEndpoint = process.env.OPENAI_LLM_ENDPOINT;
+  const openaiKey = process.env.OPENAI_LLM_KEY;
+
   return {
     maxPlayersPerZone: envInt('MAX_PLAYERS_PER_ZONE', 4),
     maxReplicas: envInt('MAX_REPLICAS', 4),
@@ -164,6 +174,11 @@ export function loadConfig(): ServerConfig {
       apiKey: azureKey,
       deploymentName: azureDeployment,
       apiVersion: azureApiVersion,
+    } : undefined,
+    openaiLLM: openaiEndpoint && openaiKey ? {
+      endpoint: openaiEndpoint,
+      apiKey: openaiKey,
+      model: process.env.OPENAI_LLM_MODEL ?? 'gpt-4o',
     } : undefined,
     enableLLMNarration: envBool('ENABLE_LLM_NARRATION', true),
   };

@@ -112,7 +112,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
           room.onMessage('overlay_state', overlayHandlerRef.current);
         }
         dispatch({ type: 'SET_ROOM', room });
-        addMessage(roomName.startsWith('zone:') ? 'Reconnected to the Refuge.' : 'Reconnected to the instance.', 'system');
+        addMessage(roomName.startsWith('zone:') ? 'Reconnected to your stronghold.' : 'Reconnected to the instance.', 'system');
         return true;
       } catch {
         return false;
@@ -122,7 +122,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       roomRef.current?.leave();
       roomRef.current = null;
       dispatch({ type: 'CLEAR_MESSAGES' });
-      navigate('/refuge');
+      navigate('/zone');
     },
   });
 
@@ -130,7 +130,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
   reconnectionRef.current = reconnection;
 
   useEffect(() => {
-    if (!state.token) return;
+    if (!state.token || !roomName) return;
 
     let disposed = false;
 
@@ -174,7 +174,8 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       onZoneState: (msg: ZoneStateMessage) => {
         if (disposed) return;
         dispatch({ type: 'SET_ZONE_STATE', state: msg.state, collapseTimer: msg.collapseTimer });
-        addMessage(`[Zone: ${msg.state}${msg.collapseTimer ? ` — ${msg.collapseTimer}s remaining` : ''}]`, 'system');
+        const showTimer = msg.collapseTimer && (msg.state === 'active' || msg.state === 'destabilising');
+        addMessage(`[Zone: ${msg.state}${showTimer ? ` — ${msg.collapseTimer}s remaining` : ''}]`, 'system');
       },
       onCombatResult: (msg: CombatResultMessage) => {
         if (disposed) return;
@@ -238,7 +239,9 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
           || msg.target === 'zone:the-cartographium'
           || msg.target === 'zone:the-counting-house';
         if (switchingToHub) {
-          dispatch({ type: 'CLEAR_MESSAGES' });
+          if (overlayRef.current.status !== 'death') {
+            dispatch({ type: 'CLEAR_MESSAGES' });
+          }
           dispatch({ type: 'SET_ZONE_STATE', state: null as unknown as import('@ellmud/shared').ZoneState });
           dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
           // Don't overwrite death state — the death overlay must stay visible
@@ -256,7 +259,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
               addMessage(`Connected to ${switchingToHub ? 'your stronghold' : 'the instance'}.`, 'system');
               // Navigate after successful room switch to hub
               if (switchingToHub) {
-                navigate('/refuge');
+                navigate('/zone');
               }
             } else {
               newRoom.leave();
@@ -402,7 +405,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       if (!disposed) {
         roomRef.current = room;
         dispatch({ type: 'SET_ROOM', room });
-        addMessage(roomName.startsWith('zone:') ? 'Connected to the Refuge.' : 'Connected to the instance.', 'system');
+        addMessage(roomName.startsWith('zone:') ? 'Connected to your stronghold.' : 'Connected to the instance.', 'system');
         reconnectionRef.current.reportConnected();
         room.onMessage('overlay_state', handleOverlay);
       } else {

@@ -73,7 +73,7 @@ export default function Login() {
     try {
       const authFn = isRegister ? register : login;
       const result = await authFn(username, password);
-      dispatch({ type: "LOGIN_SUCCESS", token: result.token, playerId: result.playerId, email: result.email });
+      dispatch({ type: "LOGIN_SUCCESS", token: result.token, playerId: result.playerId, email: result.email, username: result.username });
       navigate("/characters");
     } catch (err) {
       if (err instanceof ApiError) {

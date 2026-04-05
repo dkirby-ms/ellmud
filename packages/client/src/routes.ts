@@ -55,7 +55,7 @@ export const routes: RouteObject[] = [
         Component: CharacterSelect,
       },
       {
-        path: "/refuge",
+        path: "/zone",
         Component: ZoneExploration,
       },
       {

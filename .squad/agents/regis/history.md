@@ -31,6 +31,8 @@
 - **ANSI/MUD styling classes:** `tailwind.css` defines `.ansi-*` (16 terminal colors), `.mud-*` semantic classes (damage, healing, dodge, speech, exits, etc.), and `.narrative-terminal` with CRT scanline overlay. Map styling should use these same color values.
 - **CompassControl.tsx:** 3×3 grid of cardinal/ordinal buttons + Up/Down. Reads exits from `state.roomHeader?.exits`. Will be superseded by MinimapWidget once map is built.
 - **Zone room naming convention (Phase C3):** Colyseus room names use `zone:<slug>` format (e.g. `"zone:the-refuge"`). Client routes (`/refuge`, `/shard/live`) are unchanged. ChatPanel context labels (`"shard"` | `"refuge"`) are UI concepts, not room names. Admin `isShard` check now covers both `"shard"` and `zone:` prefixed rooms. The `switchRoom` target for extraction completion is `"zone:the-refuge"`.
+- **OAuth username integration (2026-04-05):** Coordinated with Drizzt & Minsc — added username field to AppState, localStorage persistence, fetchMe() API integration, sign-out button on Login/AuthCallback/ZoneExploration/Refuge/Settings pages. Test suite 2521 passing, +5 new tests. User identity now persistent and visible across sessions.
+- **Faction-based entry routing (Issue #309):** Replaced hardcoded `/refuge` route with `/zone`. ZoneExploration hub detection now calls `/api/spawn-zone` to resolve the player's faction stronghold (e.g. `zone:the-foundry`) instead of hardcoding `zone:the-refuge`. Button text changed from "Enter Refuge" to "Enter World". `fetchSpawnZone()` added to `api.ts`. All navigation fallbacks, error links, admin links updated. Test mocks updated with `fetchSpawnZone`. 2533 tests passing.
 
 ## 2026-03-27T15:39Z — Phase C3 Complete
 
@@ -48,6 +50,36 @@
 **Dependency:** Drizzt's Phase C (zone registration) — now satisfied.
 
 - **useShardConnection accepts roomName param:** The hook now takes an optional `roomName` string (default `'shard'`). ShardExploration derives the room name from `useLocation().pathname` — `/refuge` maps to `zone:the-refuge`, everything else defaults to `shard`. This means ShardExploration is reusable for any zone-mode room.
+
+## 2026-04-12T19:30Z — Username Display & Sign-out UX
+
+**Fixed:** Username display (showing GUID instead of username) and improved sign-out UX  
+**Files Modified:** 8
+
+### Issue 1: Username Display
+The app was showing player IDs (GUIDs) everywhere instead of usernames. Server returns `username` on auth but client never stored it.
+
+**Changes:**
+- `store.ts` — Added `username: string | null` to AppState, initialState, and LOGIN_SUCCESS action
+- `api.ts` — Added `fetchMe(token)` function to call `/auth/me` endpoint
+- `App.tsx` — Added USERNAME_KEY localStorage persistence, fetches username from `/auth/me` on mount if missing (for existing sessions)
+- `AuthCallback.tsx` — Extracts `username` from OAuth URL params
+- `Login.tsx` — Passes `username` in LOGIN_SUCCESS dispatch (from login/register response)
+- `Refuge.tsx` — Changed top bar display from `playerId` to `username ?? email ?? "Unknown"`
+- `ZoneExploration.tsx` — Changed top bar display from `email ?? playerId` to `username ?? email ?? "Unknown"`
+- `Settings.tsx` — Added "Username" field above Player ID in Account section (Player ID now smaller, monospace, muted)
+
+### Issue 2: Sign-out UX
+Inconsistent logout buttons across pages — some plain text, some missing entirely.
+
+**Changes:**
+- `Refuge.tsx` — Changed plain text "Logout" button to icon button using `<LogOut>` from lucide-react, matching Settings pattern
+- `ZoneExploration.tsx` — Added `handleLogout` callback and sign-out button to top bar (was missing), imports `logout as apiLogout`
+
+**Design:** All sign-out buttons now use `LogOut` icon at `w-5 h-5`, `text-text-secondary hover:text-danger`, with `title="Sign out"` tooltip.
+
+**Build:** ✅ TypeScript clean
+
 - **Zone mode hides shard-specific UI:** When `isZone` is true, the "Back to Refuge" button, Shard Stability bar, and Collapse Timer sidebar section are hidden. ChatPanel context switches to `"refuge"`. CombinedStashLoadout gets `inShard={false}`.
 
 ## 2026-03-27T16:20Z — Refuge Unified Exploration UI
@@ -1249,3 +1281,17 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 - **Not tracked:** Complex multi-step operations like "Insert Room on Exit" and "Add Reverse" are not wrapped yet — they compose multiple CRUD calls and would need compound undo. Left as future work.
 - **Zone Designer edge/position fix (2026-04-12):** Fixed two critical bugs. (1) ZoneRoomNode was missing `<Handle>` components from `@xyflow/react` — edges couldn't attach, causing "source handle id: null" errors. Added 8 invisible handles (4 source + 4 target at compass positions) with `HANDLE_STYLE` constant. Edges now specify `sourceHandle`/`targetHandle` using direction-based IDs (e.g., `east-source`, `west-target`). (2) `extractPositions()` in `elkLayout.ts` was dividing ELK pixel coords by 100 and rounding, then `roomsToFlowNodes()` multiplied back by 100 — lossy round-trip. Removed both: ELK pixel coords now pass straight through to ReactFlow. Updated tests to match.
 - **ELK layout quality fix (2026-04-12):** Four changes to `elkLayout.ts` that dramatically improve zone designer room positioning. (1) Added `'elk.portConstraints': 'FIXED_SIDE'` to every ELK node — without this, ELK ignores port side assignments and places ports wherever it wants, breaking compass-direction semantics. (2) Deduplicated bidirectional edges using a `seenPairs` Set with sorted room-ID keys — the layered algorithm is designed for DAGs, and duplicate reverse edges create cycles that degrade layout quality. (3) Changed `'elk.direction'` from `'RIGHT'` to `'DOWN'` so the layout flows top-to-bottom matching dungeon north=up convention. (4) Bumped spacing to 120px node-node and 150px between layers for readability. Tests updated for new `DEFAULT_CONFIG` values.
+- **Death overlay preserves log (#307) + zone timer display fix (#306) (2026-07-21):** Two small fixes in `useZoneConnection.ts`. (1) `onRoomSwitch` handler now checks `overlayRef.current.status !== 'death'` before dispatching `CLEAR_MESSAGES` — when a player dies and gets hub-switched, the narrative log is preserved so they can read their death narrative. The overlay reset already had this guard; the message clear was the gap. (2) Zone state console message now only shows the collapse timer during `active` or `destabilising` states — during `open` state the timer value is meaningless since it isn't counting down, so `[Zone: open — 1200s remaining]` is suppressed to just `[Zone: open]`.
+
+### Issue #309: Player UX — Entering the Game (Faction Entry Refactor) — Completed 2026-04-05T19:20Z
+**Agent:** Regis  
+**Status:** ✅ Complete — committed  
+**Test Coverage:** 2533 tests passing; mocks updated with `fetchSpawnZone()`  
+**Output Artifacts:** orchestration-log/2026-04-05T19-20-regis.md
+
+**Delivered:** Replaced `/refuge` hardcoded entry with `/zone` hub. Added `fetchSpawnZone()` API call to resolve faction strongholds dynamically. Room name now `zone:the-foundry` (or Counting House/Cartographium) instead of `zone:the-refuge`. Button text "Enter Refuge" → "Enter World". `useZoneConnection` guard: skips connection during async spawn-zone resolution.
+
+**Files:** CharacterSelect, ZoneExploration, Settings, Leaderboard, ErrorFallback, AdminLayout, useZoneConnection — all updated. Fallback to `zone:the-refuge` if API fails.
+
+**Integration:** No server changes needed — `/api/spawn-zone` pre-existed (Drizzt's work). Drizzt's LLM transport (#310) independent; no conflicts.
+

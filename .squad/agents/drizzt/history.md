@@ -33,6 +33,16 @@
 
 ---
 
+## Recent Team Work
+
+### OAuth Username Integration (2026-04-05) — Coordinated with Regis & Minsc
+**Team Effort:** Drizzt (backend), Regis (frontend), Minsc (tests)  
+**Status:** ✅ Complete — username display and sign-out feature shipped  
+**Impact:** Login UX improved — username now visible instead of GUID, sign-out button on all protected pages  
+**Tests:** 2521 passing, +5 new tests for OAuth username callback and store actions
+
+---
+
 ## Recent Work
 
 ### Threat/Aggro System for Creature Target Selection (Issue #281) — PR #297
@@ -3029,3 +3039,46 @@ Threat tables are stored per-encounter, mapped by creature ID. Each creature mai
 2. Integrate threat tables with cleanup on player disconnect/leave
 3. Wire up ZoneRoom to pass threat resolver to creature behavior
 4. Add threat display to admin/debug UI
+
+
+### 2026-04-08: OAuth Redirect Username Fix
+**Task:** Fix OAuth callback redirect to include `username` in query params sent to client.
+**Status:** ✅ Complete
+
+**Problem:** The `authService.loginOAuth()` method returns `AuthResult` which includes `username`, but the Entra callback redirect at line 84 only destructured `playerId` and `token`, not `username`. This caused the client to display player GUIDs instead of usernames after OAuth login.
+
+**Solution:** Updated `/packages/server/src/auth/entra-routes.ts`:
+1. Changed destructuring at line 75 to include `username`: `const { playerId, token, username } = await authService.loginOAuth(...)`
+2. Added `username` to URLSearchParams at line 84: `const params = new URLSearchParams({ token, playerId, username });`
+
+**Result:** Client now receives all three values in the `/auth/callback?token=...&playerId=...&username=...` redirect URL, enabling proper username display.
+
+**Files Modified:** `packages/server/src/auth/entra-routes.ts` (2 lines changed)
+
+### OpenAI-Compatible LLM Transport (Issue #310)
+**Task:** Allow admins to configure non-Azure LLM endpoints for in-game narration.
+**Status:** ✅ Complete
+
+**Changes:**
+1. **Config** (`config.ts`) — Added `openaiLLM?: { endpoint, apiKey, model }` to ServerConfig. Loaded from `OPENAI_LLM_ENDPOINT`, `OPENAI_LLM_KEY`, `OPENAI_LLM_MODEL` (default: gpt-4o). Both endpoint and key required for activation.
+2. **Transport** (`llm-client.ts`) — Added `createOpenAITransport()` with `/v1/chat/completions` URL, `Authorization: Bearer` header, and `model` in request body. Same error handling pattern as Azure transport.
+3. **Factory** (`factory.ts`) — Priority chain: Azure > OpenAI-compatible > template-only. Backward compatible — existing Azure deployments unaffected.
+4. **Tests** — 12 new tests in `openai-llm-transport.test.ts`: structure, URL construction, Bearer auth, model in body, error handling (401/403/429/500), AbortSignal.
+
+**All 2533 tests passing, zero regressions.**
+
+## Learnings
+- The `LLMTransport` type abstraction makes adding new providers trivial — just implement `(LLMRequest, AbortSignal) => Promise<LLMResponse>`.
+- OpenAI-compatible API is the de facto standard — model goes in request body (not URL like Azure deployments).
+- Factory priority pattern (Azure > OpenAI > template) keeps backward compat clean.
+
+### OpenAI-Compatible LLM Transport (Issue #310) — Task Completed 2026-04-05T19:20Z
+**Agent:** Drizzt  
+**Status:** ✅ Complete — committed  
+**Test Coverage:** All tests passing; new OpenAI factory, Azure priority, env var validation  
+**Output Artifacts:** orchestration-log/2026-04-05T19-20-drizzt.md
+
+**Delivered:** `createOpenAITransport()` factory supporting OpenAI, LM Studio, Ollama, Mistral. Azure takes priority in provider chain. New env vars: `OPENAI_LLM_ENDPOINT`, `OPENAI_LLM_KEY`, `OPENAI_LLM_MODEL` (defaults `gpt-4o`).
+
+**Integration:** Backward compatible — Azure deployments unaffected. `LLMClient` and `NarrationService` remain provider-agnostic. Regis (frontend) and Volo/Jarlaxle (narration) require no changes.
+

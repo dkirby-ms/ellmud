@@ -32,6 +32,7 @@ import ZoneExploration from '../pages/ZoneExploration.js';
 vi.mock('../services/api.js', () => ({
   login: vi.fn(),
   register: vi.fn(),
+  fetchSpawnZone: vi.fn().mockResolvedValue({ target: 'zone:the-refuge', zoneSlug: 'the-refuge', factionSlug: null }),
   ApiError: class ApiError extends Error {
     status: number;
     constructor(message: string, status: number) {

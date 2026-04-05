@@ -207,7 +207,7 @@ export default function AdminLayout() {
               Authenticate
             </button>
           </form>
-          <Link to="/refuge" className="block text-center text-[#8A8B95] hover:text-[#C9A84C] text-xs mt-4 transition-colors">
+          <Link to="/zone" className="block text-center text-[#8A8B95] hover:text-[#C9A84C] text-xs mt-4 transition-colors">
             ← Back to game
           </Link>
         </div>
@@ -219,7 +219,7 @@ export default function AdminLayout() {
     <div className="h-screen bg-[#0A0B0F] flex flex-col">
       <div className="bg-[#12131A] border-b border-[#2A2B35] px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link to="/refuge" className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors flex items-center gap-2" title="Back to Game">
+          <Link to="/zone" className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors flex items-center gap-2" title="Back to Game">
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <h1 className="text-[#C9A84C] text-lg">⚙ Ellmud Content Admin</h1>

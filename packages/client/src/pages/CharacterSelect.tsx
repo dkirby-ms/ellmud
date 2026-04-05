@@ -82,7 +82,7 @@ export default function CharacterSelect() {
     try {
       const selected = await selectCharacter(token, char.id);
       dispatch({ type: "SET_ACTIVE_CHARACTER", character: selected });
-      navigate("/refuge");
+      navigate("/zone");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to select character.");
     } finally {
@@ -184,7 +184,7 @@ export default function CharacterSelect() {
                   disabled={submitting}
                   className="flex-1 bg-accent-gold hover:bg-accent-gold/90 text-bg-primary font-medium py-2 rounded transition-colors disabled:opacity-50 font-sans"
                 >
-                  Enter Refuge
+                  Enter World
                 </button>
                 <button
                   onClick={() => handleDelete(char.id)}

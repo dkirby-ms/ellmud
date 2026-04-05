@@ -33,14 +33,14 @@ export function ErrorFallback() {
         {message}
       </p>
       <a
-        href="/refuge"
+        href="/zone"
         style={{
           color: '#3A7D7B',
           textDecoration: 'underline',
           fontSize: '1.1rem',
         }}
       >
-        Return to Refuge
+        Return to Hub
       </a>
     </div>
   );

@@ -124,10 +124,12 @@ describe('CompassControl', () => {
       roomHeader: { roomName: 'Junction', exits: ['northeast', 'southwest'], stability: 1 },
     });
 
-    await user.click(screen.getByText('NE'));
+    const neBtn = screen.getByTitle('Go northeast');
+    await user.click(neBtn);
     expect(onNavigate).toHaveBeenCalledWith('northeast');
 
-    await user.click(screen.getByText('SW'));
+    const swBtn = screen.getByTitle('Go southwest');
+    await user.click(swBtn);
     expect(onNavigate).toHaveBeenCalledWith('southwest');
   });
 });

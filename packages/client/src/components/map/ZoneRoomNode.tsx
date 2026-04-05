@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
+import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,11 @@ export interface RoomNodeData {
   searchMatch?: boolean;
   /** True when a search is active but this node does NOT match */
   dimmed?: boolean;
+  // Tooltip data (shown on hover when showLabels is false)
+  description?: string;
+  npcs?: Array<{ creatureId: string; spawnCount: number; displayName?: string }>;
+  lootContainers?: Array<{ id: string; type: string; itemCount: number }>;
+  hazards?: Array<{ type: string }>;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -136,248 +142,312 @@ export function ZoneRoomNode(props: { data: RoomNodeData; selected?: boolean }) 
     }
   }
 
+  const hasTooltipContent = !data.showLabels;
+
   return (
-    <div
-      style={{
-        width: `${NODE_W}px`,
-        height: `${NODE_H}px`,
-        position: 'relative',
-        cursor: 'pointer',
-        opacity: data.dimmed ? 0.25 : 1,
-        transition: 'opacity 0.2s ease',
-      }}
-    >
-      <svg width={NODE_W} height={NODE_H} xmlns="http://www.w3.org/2000/svg">
-        {/* Room shape */}
-        {data.type === 'entry' || data.type === 'boss' ? (
-          <path
-            d={shapePath}
-            fill={color.fill}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-            strokeDasharray={strokeDash}
-            filter={filter}
-          />
-        ) : data.type.startsWith('feature_') || data.type === 'junction' ? (
-          <polygon
-            points={shapePath}
-            fill={color.fill}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-            strokeDasharray={strokeDash}
-            filter={filter}
-          />
-        ) : (
-          <rect
-            x={0}
-            y={0}
-            width={NODE_W}
-            height={NODE_H}
-            rx={6}
-            ry={6}
-            fill={color.fill}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-            strokeDasharray={strokeDash}
-            filter={filter}
-          />
-        )}
-
-        {/* Room name (if labels enabled) */}
-        {data.showLabels && (
-          <text
-            x={NODE_W / 2}
-            y={NODE_H / 2 - 4}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill="#E8E0D0"
-            fontSize="6"
-            fontFamily="var(--font-sans)"
+    <TooltipPrimitive.Provider delayDuration={150}>
+      <TooltipPrimitive.Root>
+        <TooltipPrimitive.Trigger asChild>
+          <div
+            style={{
+              width: `${NODE_W}px`,
+              height: `${NODE_H}px`,
+              position: 'relative',
+              cursor: 'pointer',
+              opacity: data.dimmed ? 0.25 : 1,
+              transition: 'opacity 0.2s ease',
+            }}
           >
-            {data.name.length > 10 ? data.name.slice(0, 9) + '…' : data.name}
-          </text>
+            <svg width={NODE_W} height={NODE_H} xmlns="http://www.w3.org/2000/svg">
+              {/* Room shape */}
+              {data.type === 'entry' || data.type === 'boss' ? (
+                <path
+                  d={shapePath}
+                  fill={color.fill}
+                  stroke={strokeColor}
+                  strokeWidth={strokeWidth}
+                  strokeDasharray={strokeDash}
+                  filter={filter}
+                />
+              ) : data.type.startsWith('feature_') || data.type === 'junction' ? (
+                <polygon
+                  points={shapePath}
+                  fill={color.fill}
+                  stroke={strokeColor}
+                  strokeWidth={strokeWidth}
+                  strokeDasharray={strokeDash}
+                  filter={filter}
+                />
+              ) : (
+                <rect
+                  x={0}
+                  y={0}
+                  width={NODE_W}
+                  height={NODE_H}
+                  rx={6}
+                  ry={6}
+                  fill={color.fill}
+                  stroke={strokeColor}
+                  strokeWidth={strokeWidth}
+                  strokeDasharray={strokeDash}
+                  filter={filter}
+                />
+              )}
+
+              {/* Room name (if labels enabled) */}
+              {data.showLabels && (
+                <text
+                  x={NODE_W / 2}
+                  y={NODE_H / 2 - 4}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill="#E8E0D0"
+                  fontSize="6"
+                  fontFamily="var(--font-sans)"
+                >
+                  {data.name.length > 10 ? data.name.slice(0, 9) + '…' : data.name}
+                </text>
+              )}
+
+              {/* Room slug */}
+              <text
+                x={NODE_W / 2}
+                y={NODE_H / 2 + (data.showLabels ? 4 : 0)}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fill="#6A6B75"
+                fontSize="6"
+                fontFamily="var(--font-mono)"
+              >
+                {data.slug}
+              </text>
+
+              {/* Floor indicator (z !== 0) */}
+              {data.floor !== 0 && (
+                <text
+                  x={NODE_W - 3}
+                  y={7}
+                  textAnchor="end"
+                  fill="#8A8B95"
+                  fontSize="6"
+                  fontFamily="var(--font-sans)"
+                >
+                  z{data.floor > 0 ? '+' : ''}{data.floor}
+                </text>
+              )}
+
+              {/* Disconnected warning */}
+              {data.isDisconnected && (
+                <text x={4} y={7} fill="#B8860B" fontSize="8" fontFamily="var(--font-sans)">
+                  ⚠
+                </text>
+              )}
+            </svg>
+
+            {/* Content badges (NPCs, loot, hazards) */}
+            {(data.npcCount > 0 || data.lootCount > 0 || data.hazardCount > 0) && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '2px',
+                  left: '2px',
+                  right: '2px',
+                  display: 'flex',
+                  gap: '2px',
+                  justifyContent: 'center',
+                  fontSize: '7px',
+                }}
+              >
+                {data.npcCount > 0 && (
+                  <span
+                    style={{
+                      background: '#2A1E0A',
+                      color: '#D97706',
+                      padding: '0 2px',
+                      borderRadius: '2px',
+                      fontSize: '7px',
+                    }}
+                    title={`${data.npcCount} NPC${data.npcCount > 1 ? 's' : ''}`}
+                  >
+                    👤
+                  </span>
+                )}
+                {data.lootCount > 0 && (
+                  <span
+                    style={{
+                      background: '#1A2A1A',
+                      color: '#10B981',
+                      padding: '0 2px',
+                      borderRadius: '2px',
+                      fontSize: '7px',
+                    }}
+                    title={`${data.lootCount} loot container${data.lootCount > 1 ? 's' : ''}`}
+                  >
+                    📦
+                  </span>
+                )}
+                {data.hazardCount > 0 && (
+                  <span
+                    style={{
+                      background: '#2A1A1A',
+                      color: '#EF4444',
+                      padding: '0 2px',
+                      borderRadius: '2px',
+                      fontSize: '7px',
+                    }}
+                    title={`${data.hazardCount} hazard${data.hazardCount > 1 ? 's' : ''}`}
+                  >
+                    ⚠
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Vertical exit indicators */}
+            {(data.hasUpExits || data.hasDownExits) && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '2px',
+                  right: '2px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1px',
+                  fontSize: '8px',
+                }}
+              >
+                {data.hasUpExits && (
+                  <span style={{ color: '#A78BFA' }} title="Has up exit">
+                    ▲
+                  </span>
+                )}
+                {data.hasDownExits && (
+                  <span style={{ color: '#A78BFA' }} title="Has down exit">
+                    ▼
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Portal exit badge */}
+            {data.portalCount > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '2px',
+                  left: '2px',
+                  color: '#06b6d4',
+                  fontSize: '8px',
+                }}
+                title={`${data.portalCount} portal exit${data.portalCount > 1 ? 's' : ''}`}
+              >
+                ⟐
+              </span>
+            )}
+
+            {/* Invisible handles for ReactFlow edge connections (4 source + 4 target) */}
+            <Handle type="source" position={Position.Top} id="north-source" style={HANDLE_STYLE} />
+            <Handle type="target" position={Position.Top} id="north-target" style={HANDLE_STYLE} />
+            <Handle type="source" position={Position.Bottom} id="south-source" style={HANDLE_STYLE} />
+            <Handle type="target" position={Position.Bottom} id="south-target" style={HANDLE_STYLE} />
+            <Handle type="source" position={Position.Right} id="east-source" style={HANDLE_STYLE} />
+            <Handle type="target" position={Position.Right} id="east-target" style={HANDLE_STYLE} />
+            <Handle type="source" position={Position.Left} id="west-source" style={HANDLE_STYLE} />
+            <Handle type="target" position={Position.Left} id="west-target" style={HANDLE_STYLE} />
+
+            {/* Property tags (4.6) */}
+            {data.properties && data.properties.length > 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: `${NODE_H + 2}px`,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  display: 'flex',
+                  gap: '2px',
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none',
+                }}
+              >
+                {data.properties.map((prop) => (
+                  <span
+                    key={prop}
+                    style={{
+                      background: 'rgba(28, 29, 39, 0.85)',
+                      color: '#8A8B95',
+                      padding: '0 2px',
+                      borderRadius: '2px',
+                      fontSize: '6px',
+                      fontFamily: 'var(--font-mono)',
+                      border: '1px solid #3A3B45',
+                      lineHeight: '1.2',
+                    }}
+                    title={prop}
+                  >
+                    {PROPERTY_ICONS[prop] ?? '•'} {prop}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </TooltipPrimitive.Trigger>
+        {hasTooltipContent && (
+          <TooltipPrimitive.Portal>
+            <TooltipPrimitive.Content
+              side="top"
+              sideOffset={10}
+              className="bg-[#1C1D27] border border-[#2A2B35] rounded-lg p-3 shadow-lg max-w-[300px] z-[1000]"
+              style={{ fontFamily: 'var(--font-sans)' }}
+            >
+              <div className="text-[#C9A84C] font-semibold text-sm mb-1">
+                {data.name}
+              </div>
+              <div className="text-[#6A6B75] text-xs mb-2" style={{ fontFamily: 'var(--font-mono)' }}>
+                {data.slug} · {data.type}
+              </div>
+              {data.description && (
+                <div className="text-[#8A8B95] text-xs mb-2">
+                  {data.description.length > 100
+                    ? data.description.slice(0, 97) + '...'
+                    : data.description}
+                </div>
+              )}
+              {data.properties && data.properties.length > 0 && (
+                <div className="text-[#6A6B75] text-xs mb-2">
+                  Properties: {data.properties.join(', ')}
+                </div>
+              )}
+              {(data.npcs?.length || data.lootContainers?.length || data.hazards?.length) ? (
+                <div className="text-[#8A8B95] text-xs space-y-0.5">
+                  {data.npcs && data.npcs.length > 0 && (
+                    <div>
+                      <span className="text-[#D97706]">👤 NPCs:</span>
+                      {data.npcs.map((npc, i) => (
+                        <div key={i} className="ml-3 text-[#A0A0AA]">
+                          {npc.displayName ?? npc.creatureId} ×{npc.spawnCount}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {data.lootContainers && data.lootContainers.length > 0 && (
+                    <div>
+                      <span className="text-[#CA8A04]">📦 Loot:</span>
+                      {data.lootContainers.map((lc, i) => (
+                        <div key={i} className="ml-3 text-[#A0A0AA]">
+                          {lc.id} ({lc.type}) — {lc.itemCount} item{lc.itemCount !== 1 ? 's' : ''}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {data.hazards && data.hazards.length > 0 && (
+                    <div>⚠ {data.hazards.length} Hazard{data.hazards.length > 1 ? 's' : ''}</div>
+                  )}
+                </div>
+              ) : null}
+            </TooltipPrimitive.Content>
+          </TooltipPrimitive.Portal>
         )}
-
-        {/* Room slug */}
-        <text
-          x={NODE_W / 2}
-          y={NODE_H / 2 + (data.showLabels ? 4 : 0)}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fill="#6A6B75"
-          fontSize="6"
-          fontFamily="var(--font-mono)"
-        >
-          {data.slug}
-        </text>
-
-        {/* Floor indicator (z !== 0) */}
-        {data.floor !== 0 && (
-          <text
-            x={NODE_W - 3}
-            y={7}
-            textAnchor="end"
-            fill="#8A8B95"
-            fontSize="6"
-            fontFamily="var(--font-sans)"
-          >
-            z{data.floor > 0 ? '+' : ''}{data.floor}
-          </text>
-        )}
-
-        {/* Disconnected warning */}
-        {data.isDisconnected && (
-          <text x={4} y={7} fill="#B8860B" fontSize="8" fontFamily="var(--font-sans)">
-            ⚠
-          </text>
-        )}
-      </svg>
-
-      {/* Content badges (NPCs, loot, hazards) */}
-      {(data.npcCount > 0 || data.lootCount > 0 || data.hazardCount > 0) && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: '2px',
-            left: '2px',
-            right: '2px',
-            display: 'flex',
-            gap: '2px',
-            justifyContent: 'center',
-            fontSize: '7px',
-          }}
-        >
-          {data.npcCount > 0 && (
-            <span
-              style={{
-                background: '#2A1E0A',
-                color: '#D97706',
-                padding: '0 2px',
-                borderRadius: '2px',
-                fontSize: '7px',
-              }}
-              title={`${data.npcCount} NPC${data.npcCount > 1 ? 's' : ''}`}
-            >
-              👤
-            </span>
-          )}
-          {data.lootCount > 0 && (
-            <span
-              style={{
-                background: '#1A2A1A',
-                color: '#10B981',
-                padding: '0 2px',
-                borderRadius: '2px',
-                fontSize: '7px',
-              }}
-              title={`${data.lootCount} loot container${data.lootCount > 1 ? 's' : ''}`}
-            >
-              📦
-            </span>
-          )}
-          {data.hazardCount > 0 && (
-            <span
-              style={{
-                background: '#2A1A1A',
-                color: '#EF4444',
-                padding: '0 2px',
-                borderRadius: '2px',
-                fontSize: '7px',
-              }}
-              title={`${data.hazardCount} hazard${data.hazardCount > 1 ? 's' : ''}`}
-            >
-              ⚠
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Vertical exit indicators */}
-      {(data.hasUpExits || data.hasDownExits) && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '2px',
-            right: '2px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '1px',
-            fontSize: '8px',
-          }}
-        >
-          {data.hasUpExits && (
-            <span style={{ color: '#A78BFA' }} title="Has up exit">
-              ▲
-            </span>
-          )}
-          {data.hasDownExits && (
-            <span style={{ color: '#A78BFA' }} title="Has down exit">
-              ▼
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Portal exit badge */}
-      {data.portalCount > 0 && (
-        <span
-          style={{
-            position: 'absolute',
-            top: '2px',
-            left: '2px',
-            color: '#06b6d4',
-            fontSize: '8px',
-          }}
-          title={`${data.portalCount} portal exit${data.portalCount > 1 ? 's' : ''}`}
-        >
-          ⟐
-        </span>
-      )}
-
-      {/* Invisible handles for ReactFlow edge connections (4 source + 4 target) */}
-      <Handle type="source" position={Position.Top} id="north-source" style={HANDLE_STYLE} />
-      <Handle type="target" position={Position.Top} id="north-target" style={HANDLE_STYLE} />
-      <Handle type="source" position={Position.Bottom} id="south-source" style={HANDLE_STYLE} />
-      <Handle type="target" position={Position.Bottom} id="south-target" style={HANDLE_STYLE} />
-      <Handle type="source" position={Position.Right} id="east-source" style={HANDLE_STYLE} />
-      <Handle type="target" position={Position.Right} id="east-target" style={HANDLE_STYLE} />
-      <Handle type="source" position={Position.Left} id="west-source" style={HANDLE_STYLE} />
-      <Handle type="target" position={Position.Left} id="west-target" style={HANDLE_STYLE} />
-
-      {/* Property tags (4.6) */}
-      {data.properties && data.properties.length > 0 && (
-        <div
-          style={{
-            position: 'absolute',
-            top: `${NODE_H + 2}px`,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            gap: '2px',
-            whiteSpace: 'nowrap',
-            pointerEvents: 'none',
-          }}
-        >
-          {data.properties.map((prop) => (
-            <span
-              key={prop}
-              style={{
-                background: 'rgba(28, 29, 39, 0.85)',
-                color: '#8A8B95',
-                padding: '0 2px',
-                borderRadius: '2px',
-                fontSize: '6px',
-                fontFamily: 'var(--font-mono)',
-                border: '1px solid #3A3B45',
-                lineHeight: '1.2',
-              }}
-              title={prop}
-            >
-              {PROPERTY_ICONS[prop] ?? '•'} {prop}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
+      </TooltipPrimitive.Root>
+    </TooltipPrimitive.Provider>
   );
 }

@@ -1,3 +1,59 @@
+### 2026-04-05: OpenAI-Compatible LLM Transport — Provider Priority Chain
+**By:** Drizzt (Engine Dev)
+**Date:** 2026-04-05
+**Issue:** #310
+
+## Decision
+
+When both Azure AI and OpenAI-compatible LLM configs are present, Azure takes priority. The factory chain is: Azure > OpenAI-compatible > template-only fallback.
+
+## Rationale
+
+Backward compatibility. Existing Azure deployments must not change behavior when new env vars are added. Admins opt into the OpenAI path by *not* setting Azure credentials, or by removing them.
+
+## Config Surface
+
+- `OPENAI_LLM_ENDPOINT` + `OPENAI_LLM_KEY` — both required to activate
+- `OPENAI_LLM_MODEL` — defaults to `gpt-4o`
+- `ENABLE_LLM_NARRATION` — master toggle still respected
+
+## Team Impact
+
+- **Volo/Jarlaxle:** No changes needed — `LLMClient` and `NarrationService` are provider-agnostic
+- **Minsc:** If building admin UI for LLM settings, check both `config.azureAI` and `config.openaiLLM`
+- **Regis:** No client changes — narration protocol is unchanged
+
+---
+
+### 2026-04-05: Player UX — Entering the Game (Issue #309)
+**By:** Regis (Frontend Dev)
+**Date:** 2026-04-05
+**Issue:** #309
+
+## Decision
+
+Replaced the `/refuge` client route with `/zone` as the player hub entry point. ZoneExploration now dynamically resolves the player's faction stronghold via `GET /api/spawn-zone` instead of hardcoding `zone:the-refuge`. The "Enter Refuge" button is now "Enter World".
+
+## Rationale
+
+The GDD updated faction home zones so players spawn at faction-specific strongholds (The Foundry, The Cartographium, The Counting House), not the generic Refuge. The `/refuge` URI was misleading since Refuge is now a devs-only zone. The `/zone` route is generic and works for any faction.
+
+## Key Changes
+
+- **Route:** `/refuge` → `/zone` (hub), `/zone/:zoneId` (specific zones) — both unchanged in structure
+- **Hub detection:** `location.pathname === "/refuge"` → `useParams().zoneId` absence + `/api/spawn-zone` API call
+- **Room name:** Hardcoded `zone:the-refuge` → dynamic from spawn-zone response (e.g. `zone:the-foundry`)
+- **Guard added:** `useZoneConnection` skips connection when `roomName` is empty (during async spawn-zone resolution)
+- **Fallback:** If spawn-zone API fails, defaults to `zone:the-refuge`
+
+## Impact
+
+- **All client navigation** updated: CharacterSelect, ZoneExploration, Settings, Leaderboard, ErrorFallback, AdminLayout, useZoneConnection
+- **Tests:** All 2533 tests passing; test mocks updated with `fetchSpawnZone`
+- **No server changes needed** — `/api/spawn-zone` endpoint already existed (Drizzt's work)
+
+---
+
 ### 2026-04-05: NarrationService Factory Pattern for LLM Integration
 **By:** Jarlaxle (Systems Dev)  
 **Date:** 2026-04-05  

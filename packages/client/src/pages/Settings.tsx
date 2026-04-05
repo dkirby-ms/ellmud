@@ -95,7 +95,7 @@ export default function Settings() {
       <div className="bg-bg-panel border-b border-border-muted px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate("/refuge")}
+            onClick={() => navigate("/zone")}
             className="text-text-secondary hover:text-accent-gold transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -146,13 +146,26 @@ export default function Settings() {
                   <label
                     className="block text-text-secondary text-sm mb-2 font-sans"
                   >
+                    Username
+                  </label>
+                  <input
+                    type="text"
+                    value={state.username ?? "Unknown"}
+                    readOnly
+                    className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-primary font-sans"
+                  />
+                </div>
+                <div>
+                  <label
+                    className="block text-text-secondary text-sm mb-2 font-sans"
+                  >
                     Player ID
                   </label>
                   <input
                     type="text"
                     value={state.playerId ?? "Unknown"}
                     readOnly
-                    className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-disabled font-sans"
+                    className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-disabled font-mono text-xs"
                   />
                 </div>
                 <div>

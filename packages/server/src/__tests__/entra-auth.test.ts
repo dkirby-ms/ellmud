@@ -204,6 +204,26 @@ describe('Entra OAuth: Callback Handling', () => {
     expect(location).toContain('playerId=');
   });
 
+  it('callback redirect URL includes username parameter', async () => {
+    const cookies = 'entra_state=mock-state-123; entra_nonce=mock-nonce-456';
+    const res = await requestNoRedirect(
+      port,
+      '/auth/entra/callback?code=auth-code-xyz&state=mock-state-123',
+      { headers: { Cookie: cookies } },
+    );
+
+    expect(res.status).toBe(302);
+    const location = res.headers.get('location') ?? '';
+    const redirectUrl = new URL(location);
+    
+    // Verify all three params are present
+    expect(redirectUrl.searchParams.get('token')).toBeTruthy();
+    expect(redirectUrl.searchParams.get('playerId')).toBeTruthy();
+    expect(redirectUrl.searchParams.get('username')).toBeTruthy();
+    // Username should match the mock user's name
+    expect(redirectUrl.searchParams.get('username')).toBe('TestHero');
+  });
+
   it('callback without state cookies returns 400 (CSRF protection)', async () => {
     // No cookies at all — CSRF state is missing
     const res = await requestNoRedirect(

@@ -3,8 +3,8 @@
  *
  * Validates:
  * - A route error renders the ErrorFallback component (not a white screen)
- * - ErrorFallback shows a "Return to Refuge" link
- * - The link navigates to /refuge
+ * - ErrorFallback shows a "Return to Hub" link
+ * - The link navigates to /zone
  *
  * These are anticipatory tests: they will FAIL until Volo creates the
  * ErrorFallback component and wires it as errorElement in routes.
@@ -21,6 +21,7 @@ import { ErrorFallback } from '../components/ErrorFallback.js';
 vi.mock('../services/api.js', () => ({
   login: vi.fn(),
   register: vi.fn(),
+  fetchSpawnZone: vi.fn().mockResolvedValue({ target: 'zone:the-refuge', zoneSlug: 'the-refuge', factionSlug: null }),
   ApiError: class ApiError extends Error {
     status: number;
     constructor(message: string, status: number) {
@@ -87,13 +88,13 @@ describe('Error Boundaries', () => {
       await waitFor(() => {
         // The page should have visible content — not an empty/white screen
         expect(document.body.textContent).not.toBe('');
-        expect(screen.getByText(/Return to Refuge/i)).toBeInTheDocument();
+        expect(screen.getByText(/Return to Hub/i)).toBeInTheDocument();
       });
     });
   });
 
   describe('ErrorFallback content', () => {
-    it('shows a "Return to Refuge" link', async () => {
+    it('shows a "Return to Hub" link', async () => {
       const testRoutes = [
         {
           path: '/crash',
@@ -105,12 +106,12 @@ describe('Error Boundaries', () => {
       renderWithRouter('/crash', testRoutes);
 
       await waitFor(() => {
-        const link = screen.getByText(/Return to Refuge/i);
+        const link = screen.getByText(/Return to Hub/i);
         expect(link).toBeInTheDocument();
       });
     });
 
-    it('"Return to Refuge" link points to /refuge', async () => {
+    it('"Return to Hub" link points to /zone', async () => {
       const testRoutes = [
         {
           path: '/crash',
@@ -122,14 +123,14 @@ describe('Error Boundaries', () => {
       renderWithRouter('/crash', testRoutes);
 
       await waitFor(() => {
-        const link = screen.getByText(/Return to Refuge/i).closest('a');
-        expect(link).toHaveAttribute('href', '/refuge');
+        const link = screen.getByText(/Return to Hub/i).closest('a');
+        expect(link).toHaveAttribute('href', '/zone');
       });
     });
   });
 
   describe('ErrorFallback navigation', () => {
-    it('"Return to Refuge" link navigates to /refuge via href', async () => {
+    it('"Return to Hub" link navigates to /zone via href', async () => {
       const testRoutes = [
         {
           path: '/crash',
@@ -141,11 +142,11 @@ describe('Error Boundaries', () => {
       renderWithRouter('/crash', testRoutes);
 
       await waitFor(() => {
-        const link = screen.getByText(/Return to Refuge/i);
+        const link = screen.getByText(/Return to Hub/i);
         expect(link).toBeInTheDocument();
         // ErrorFallback uses a standard <a> for full page navigation out of the
-        // error state — verify href points to /refuge
-        expect(link.closest('a')).toHaveAttribute('href', '/refuge');
+        // error state — verify href points to /zone
+        expect(link.closest('a')).toHaveAttribute('href', '/zone');
         expect(link.tagName).toBe('A');
       });
     });
