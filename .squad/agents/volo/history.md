@@ -10,6 +10,15 @@
 
 ## Learnings
 
+### 2026-04-05 (Round 4): LLM Narration Toggle (PR #295)
+- **Task:** Implement ENABLE_LLM_NARRATION environment variable toggle for LLM narration
+- **Solution:** Added boolean flag to config that gates LLM client instantiation in NarrationService factory. When false, service operates in template-only mode (no LLM calls, instant responses).
+- **Implementation:** Updated `createNarrationService()` factory to check config flag before wiring Azure AI transport. Added graceful fallback: if flag is false OR credentials missing, use templates.
+- **Tests:** 9 new tests covering: toggle on/off states, cache behavior with toggle, fallback logic, timeout handling with toggle disabled
+- **Integration:** Seamlessly combines with fire-and-forget pattern from PR #292. Users can now disable LLM entirely if needed (dev/test environments, cost control, etc.)
+- **Team coordination:** Works with Jarlaxle's ability system — Heavy Strike/Block narration will use fire-and-forget pattern regardless of toggle state.
+- **Key lesson:** Feature toggles for expensive services should gate the service instantiation itself (factory pattern), not individual calls. Cleaner, more testable, better performance (no redundant config checks at call time).
+
 ### 2026-04-05: Fire-and-Forget Narration Pattern (PR #292 Revision)
 - **Task:** Fixed blocking narration call in ZoneRoom.onJoin() per Elminster's review feedback
 - **Problem:** `await this.generateNarration()` blocked player connections for up to 2 seconds (cache miss + LLM timeout)

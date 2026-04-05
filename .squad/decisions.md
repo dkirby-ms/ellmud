@@ -223,3 +223,131 @@ Zone designers frequently need to add intermediate rooms to existing connections
 - Hidden for cross-zone portal exits (portals span zones and shouldn't be split)
 - New rooms default to type `corridor` — designer renames/retypes after insertion
 - Uses purple dashed border styling (matching feature-room accent) to distinguish from Save/Delete actions
+
+---
+
+### 2026-04-05: Ability System Architecture — Cooldowns, Stamina, Damage Model
+**By:** Jarlaxle (Systems Dev)  
+**Issue:** #279  
+**PR:** #296 (pending review)
+
+## Decision
+
+The ability system (GDD §6.3) is implemented as a data-driven layer on top of the existing combat system with minimal invasive changes:
+
+1. **Ability definitions** stored in a registry (Map) with id, type, cooldown ticks, stamina cost, and effects
+2. **Stamina tracking** added to Combatant interface as optional fields (players only)
+3. **Cooldown tracking** via `Map<abilityId, ticksRemaining>` per combatant
+4. **Damage multipliers** passed through DamageOptions (e.g., Heavy Strike: 1.5x)
+5. **Block reduction** implemented as flat armour bonus during stance resolution
+
+## Rationale
+
+**Why optional fields for stamina/cooldowns?**  
+Creatures don't use the ability system in Phase 1 — only players have stamina and ability slots. Making these fields optional avoids memory waste and keeps the Combatant interface clean. Future creature abilities can set these fields when needed.
+
+**Why cooldowns decrement at START of tick?**  
+Cooldown represents "ticks remaining until usable". If set to 3 after use, the ability should be unavailable for the current tick, tick+1, tick+2, then usable at tick+3. Decrementing at start ensures cooldownTicks accurately reflects "how many ticks from now" rather than a confusing mix of "this tick or next tick".
+
+**Why separate damageMultiplier from stance multiplier?**  
+Stance multiplier (strike vs dodge: 0.5x) is a combat interaction rule. Damage multiplier (Heavy Strike: 1.5x) is an ability property. Separating them keeps damage calculation clean: `rawDamage = attack × abilityMult`, then `afterStance = rawDamage × stanceMult`, then `finalDamage = afterStance - (armour + block)`.
+
+**Why Map for cooldowns instead of object?**  
+TypeScript Maps provide cleaner semantics for dynamic ability IDs, better iteration, and no prototype pollution concerns. The cooldown map is never serialized (it's runtime-only combat state), so JSON compat isn't needed.
+
+## Implementation Notes
+
+**Completed in PR #296:**
+- `abilities.ts`: AbilityDefinition, DEFAULT_ABILITIES registry, HEAVY_STRIKE/BLOCK/OBSERVE
+- `CombatState.ts`: Combatant stamina/cooldown fields, QueuedAction.abilityId
+- `damage.ts`: DamageOptions.damageMultiplier, DamageOptions.blockReduction, stance support for heavy_strike/block
+- `index.ts`: Export all ability types and definitions
+- `abilities.test.ts`: 18 tests (cooldown, stamina, fallback, edge cases)
+
+**Pending (next PR after review):**
+- `CombatSystem.validateAbilityAction()`: Check cooldowns/stamina, fallback to auto-attack if validation fails
+- `CombatSystem.updateCooldowns()`: Decrement all cooldowns at tick start
+- `CombatSystem.resolveEncounterTick()`: Integrate validation step, handle heavy_strike/block/observe actions
+- Ability use narration (Heavy Strike messages, Block stance text)
+
+## Team Impact
+
+- **Regis (Frontend):** PlayerStateMessage already has stamina/maxStamina fields — these will be populated once CombatSystem integration is complete. Client can display ability bars with cooldown overlays using the cooldown tick values.
+- **Volo (Narrative Dev):** Ability narration (Heavy Strike critical hit text, Block successful reduction text) integrates with fire-and-forget pattern from PR #292. Narration context should include damage dealt and ability name.
+- **Drizzt (Engine Dev):** Threat generation will scale with ability damage multipliers (Heavy Strike = higher threat). Creature AI will select targets based on highest threat when multiple valid targets exist.
+- **Minsc (Tests):** Existing combat tests continue to pass — ability system is additive. New ability tests are comprehensive but currently waiting on CombatSystem integration.
+
+## Alternatives Considered
+
+**Cooldown as "tick when usable again" (absolute timestamp):**  
+Rejected because it requires tick-count state in every encounter and complicates cooldown display ("3 ticks remaining" is clearer than "usable at tick 47").
+
+**Stamina as separate resource pool (not part of Combatant):**  
+Rejected because stamina is combat state — it needs to be checked during tick resolution. Keeping it on Combatant avoids additional lookups and state synchronization.
+
+**Block as stance multiplier instead of flat reduction:**  
+GDD §6.3 specifies "damage reduction", implying flat. Using flat reduction makes Block distinct from Dodge (which uses multiplier). This also allows Block to synergize with high armour (stacking reductions).
+
+---
+
+### 2026-04-05: Threat/Aggro System for Creature Target Selection
+**By:** Drizzt (Engine Dev)  
+**Issue:** #281  
+**PR:** #297 (pending review)
+
+## Decision
+
+The threat system (GDD §5.4) is implemented as a per-encounter ThreatTable that tracks damage-based threat generation and drives creature target selection:
+
+1. **ThreatTable class** maintains threat scores per target (damage dealt = threat generated)
+2. **Damage-based threat** scales 1:1 with damage inflicted (no multiplier in base system, but abilities can modulate)
+3. **Target selection** picks highest-threat target as primary, with fallback to secondary targets if primary is dead/fled
+4. **Multi-source threat** allows N players attacking = N threat sources (stacking)
+5. **Cleanup on death/flee** automatically removes target from threat table
+
+## Rationale
+
+**Why damage = threat (1:1)?**  
+Simplicity and alignment with GDD §5.4. Creatures prioritize whoever is hurting them most. This creates intuitive gameplay: "I attack the creature, it attacks me back." Secondary mechanics (armor reducing threat, abilities generating variable threat) can be layered later without changing core logic.
+
+**Why ThreatTable is per-encounter?**  
+Threat is local to the encounter. When a creature flees and despawns, its threat table is discarded. When a new creature spawns, it has a fresh table. This keeps state management simple and avoids cross-encounter contamination.
+
+**Why highest threat = primary target (deterministic)?**  
+Creatures should focus fire intelligently. "Whoever hurt me most" is intuitive and leads to emergent PvPvE dynamics (players cluster threat on one target, creature pursues, other players kite). Non-deterministic (random selection) would feel chaotic.
+
+## Implementation Notes
+
+**Completed in PR #297:**
+- `threat.ts`: ThreatTable class with add/get/remove/cleanup methods
+- `CombatState.ts`: Threat table wired into Encounter state (created on encounter start)
+- `damage.ts`: Threat generation triggered after damage resolution
+- `threat.test.ts`: 27 tests (basic threat, multi-source, cleanup, edge cases)
+
+**Known issues (pending refinement):**
+- Threat reset on flee: Should threat persist if creature re-engages? Current behavior clears on flee.
+- Decay over time: Long encounters (10+ ticks) may need threat decay to prevent early players from being permanently focused.
+
+**Pending (next PR after review):**
+- `CombatSystem.resolveEncounterTick()`: Integrate ThreatTable into target selection
+- Creature AI decision tree: Query highest threat at tick start, pursue primary target
+- Integration with Jarlaxle's ability system: Heavy Strike generates 2x threat (configurable)
+- Narration: "Creature focuses on {target}!" when threat shift detected
+
+## Team Impact
+
+- **Jarlaxle (Ability System):** Heavy Strike and other high-damage abilities can generate more threat (configurable per ability). Block reduces threat (defensive stance). Coordinate cooldown timing with threat focus shifts.
+- **Volo (Narration):** Threat shifts ("The creature turns its gaze to you!") are high-drama moments worth narrating. Integrate with fire-and-forget pattern.
+- **Regis (Frontend):** Threat values don't need to be exposed to client initially (creature focus is visible in combat messaging). Future: threat bar showing "how much threat do I have?" would be useful for PvPvE strategy.
+- **Minsc (Tests):** Multi-creature encounters will inherit ThreatTable naturally. Tests should verify threat stacking across creature groups.
+
+## Alternatives Considered
+
+**Round-robin target selection:**  
+Rejected because it ignores game state. Creatures would waste time attacking low-damage players instead of focusing pressure on the actual threat.
+
+**Threat as exponential (damage^2, etc.):**  
+Rejected because it overweights early damage. Better to keep threat linear and modulate via abilities (Heavy Strike = 2x threat multiplier).
+
+**Player-visible threat bar:**  
+Considered for future (UI shows "creature is focusing on you at 75%"). Deferred to Phase 2 because it adds frontend complexity and isn't critical for Phase 1 PvPvE gameplay.

@@ -15,6 +15,14 @@
 
 ## Learnings
 
+### 2026-04-05 (Round 4): Triaging Issue #293 (LLM Narration Toggle)
+- **Task:** Assess feature request for user-controlled LLM narration toggle (enable/disable)
+- **Assessment:** Legitimate Phase 1 feature aligned with GDD §4.5 (LLM is optional fallback). Users may want to disable LLM for cost control, dev/test environments, or network constraints.
+- **Design decision:** Implement via `ENABLE_LLM_NARRATION` environment variable (boolean). Factory-based control (not call-site checking) for cleanliness and performance.
+- **Routing:** Assigned to Volo for implementation (owns NarrationService factory pattern from PR #292).
+- **Outcome:** Volo implemented in PR #295. 9 tests, seamlessly integrates with fire-and-forget pattern. Ready for merge.
+- **Key lesson:** Feature toggles for expensive services should gate instantiation (factory pattern), not individual calls. Cleaner code, better performance, easier to test.
+
 ### 2026-03-19: Colyseus Architecture Analysis
 - **Decision:** Proposed adopting Colyseus 0.17.x as game-server framework with message-only client protocol (no Schema state sync to clients). Decision file: `.squad/decisions/inbox/elminster-colyseus-architecture.md`
 - **Key pattern:** Colyseus supports a dual-channel architecture — Schema state for server internals + `onMessage`/`broadcast` for prose delivery. This resolves the tension between Colyseus's default state-sync model and the GDD's "prose-only client" requirement (§14).

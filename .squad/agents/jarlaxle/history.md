@@ -27,6 +27,21 @@
 
 ---
 
+## Learnings
+
+### 2026-04-05 (Round 4): Ability System — Cooldowns, Stamina, Damage Model (PR #296)
+- **Task:** Implement Phase 1 ability system per GDD §6.3 (Heavy Strike, Block, Observe)
+- **Architecture:** Data-driven layer on top of existing combat — minimal invasive changes to CombatState/DamageOptions
+- **Key decisions:**
+  - **Stamina/cooldown as optional Combatant fields** — Only players use abilities in Phase 1. Optional fields avoid memory waste, keep interface clean. Future: creature abilities set these fields when needed.
+  - **Cooldown = "ticks remaining until usable"** — Decrements at tick START (not end). Semantics: if set to 3, ability unavailable for current tick, tick+1, tick+2, usable at tick+3. Cleaner than "tick when usable again" model.
+  - **Damage multiplier separate from stance multiplier** — Ability damage (Heavy Strike: 1.5x) is ability property. Stance interaction (Strike vs Dodge: 0.5x) is combat rule. Separating them gives clean damage formula: `rawDmg = attack × abilityMult` → `afterStance = rawDmg × stanceMult` → `finalDmg = afterStance - (armour + block)`.
+  - **Map for cooldowns, not object** — Better semantics for dynamic ability IDs, no prototype pollution. Cooldown map is runtime-only combat state (never serialized), so JSON compat not needed.
+- **Implementation:** 18 tests covering cooldown logic (decrement, reset on use), stamina validation (enough mana to cast), fallback to auto-attack on invalid action, edge cases (negative ticks, simultaneous cooldown/stamina checks).
+- **Files:** `abilities.ts` (registry + definitions), `CombatState.ts` (stamina/cooldown fields), `damage.ts` (multiplier support), `abilities.test.ts` (18 tests)
+- **Pending integration:** CombatSystem.validateAbilityAction(), CombatSystem.updateCooldowns(), CombatSystem.resolveEncounterTick() update. Coordinated with Drizzt on threat system (High-damage abilities = higher threat).
+- **Key lesson:** Optional interface fields are OK when they're truly optional in Phase 1. Type system enforces null checks, avoids pollution. Mark clearly in TSDoc which systems consume which fields.
+
 ## Learnings (Archived — See Detailed Session Records)
 
 ### 2026-03-19: PostgreSQL schema (Issue #3)
