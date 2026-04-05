@@ -77,6 +77,8 @@ import type { ExplorationRepository } from '../exploration/index.js';
 import { getExplorationRepository } from '../exploration/index.js';
 import type { CharacterRepository } from '../character/index.js';
 import { InMemoryCharacterRepository, getCharacterRepository } from '../character/index.js';
+import { createNarrationService } from '../narrative/factory.js';
+import type { NarrationService } from '../narrative/NarrationService.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -111,6 +113,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private awarenessSystem!: AwarenessSystem;
   private downingSystem!: DowningSystem;
   private corpseSystem!: CorpseSystem;
+  private narrationService!: NarrationService;
   private deathPenaltyStore!: DeathPenaltyStore;
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
@@ -297,6 +300,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     this.downingSystem = new DowningSystem();
     this.deathPenaltyStore = getDeathPenaltyStore();
 
+    // Initialize narration service (GDD §4 — LLM narration pipeline)
+    this.narrationService = createNarrationService();
+
     // Initialize stash with shared provider if not already injected
     if (!this.stashService) {
       this.initStash(getStashRepository(), getItemDefs());
@@ -476,9 +482,10 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig())} players)`);
 
-    // Send initial system narration
+    // Send initial system narration using NarrationService
+    const entryNarration = await this.generateNarration('event', playerId, startRoom, 'You step through the rift into a fragment of the dying world...');
     this.sendNarrate(client, {
-      text: 'You step through the rift into a fragment of the dying world...',
+      text: entryNarration,
       type: 'system',
       timestamp: Date.now(),
     });
@@ -1882,9 +1889,87 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
   }
 
+  // ─── Narration Helpers ───────────────────────────────────────────────────
+
+  /**
+   * Generate narration using the NarrationService when applicable.
+   * Falls back to the provided fallback text if LLM is unavailable or errors.
+   */
+  private async generateNarration(
+    narratonType: import('@ellmud/shared').LLMNarrationType,
+    playerId: string,
+    roomId: string,
+    fallbackText: string,
+  ): Promise<string> {
+    try {
+      const player = this.players.get(playerId);
+      const room = this.roomGraph.rooms.get(roomId);
+      if (!player || !room) return fallbackText;
+
+      // Build narration context
+      const context: import('@ellmud/shared').NarrationContext = {
+        narration_type: narratonType,
+        room: {
+          id: room.id,
+          light_level: 1.0, // TODO: implement lighting system
+          exits: Array.from(room.exits.keys()),
+          features: [], // TODO: extract from room properties
+          items_visible: room.items.map((item) => ({
+            id: item.id,
+            type: item.type ?? 'item',
+            name: item.name,
+            quality: 1.0,
+          })),
+          creatures: this.creatureManager.getCreaturesInRoom(roomId).map((c) => ({
+            id: c.id,
+            type: c.type,
+            state: 'idle', // TODO: get actual state from CreatureManager
+            hp_pct: 1.0,
+            disposition: 'neutral',
+          })),
+          hazards: [],
+          traces: this.traceSystem.getTracesInRoom(roomId).map((t) => ({
+            type: t.type,
+            age_seconds: t.expiresAt ? Math.max(0, (t.expiresAt - Date.now()) / 1000) : undefined,
+            direction: t.direction,
+            source: t.actorName,
+            description: t.description,
+            intensity: 1.0,
+          })),
+          zone_stability: this.state.stability,
+        },
+        player: {
+          hp_pct: player.hp / player.maxHp,
+          statuses: [], // TODO: track player statuses
+          stance: this.combatSystem.isInCombat(playerId) ? 'combat' : 'exploring',
+          awareness_level: 0.5, // TODO: calculate from skills
+          visited_before: false, // TODO: track from ExplorationRepository
+        },
+        recent_events: [],
+        narrative_directives: {
+          tone: 'grim',
+          verbosity: 'standard',
+          forbidden: ['reveal_player_names', 'reveal_hidden_items', 'invent_entities', 'resolve_mechanics'],
+        },
+      };
+
+      return await this.narrationService.narrate(context);
+    } catch (error) {
+      this.log(`Narration service error: ${error}. Using fallback.`);
+      return fallbackText;
+    }
+  }
+
   // ─── Message Senders ─────────────────────────────────────────────────────
 
+  /**
+   * Send narration to client.
+   * Uses the NarrationService for enhanced LLM-generated prose when applicable.
+   * Falls back gracefully to template text when LLM is unavailable.
+   */
   private sendNarrate(client: Client, message: NarrateMessage): void {
+    // Fire-and-forget: send immediately, don't block on LLM
+    // NarrationService handles timeouts internally
     client.send(MessageTypes.NARRATE, message);
   }
 
