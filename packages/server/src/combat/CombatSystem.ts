@@ -10,7 +10,7 @@
  * - No-input defaults to Dodge (GDD §6.3)
  */
 
-import type { CombatAction } from '@ellmud/shared';
+import type { CombatAction, PositionZone, CreaturePositionType } from '@ellmud/shared';
 import {
   type Combatant,
   type CombatEncounter,
@@ -26,6 +26,7 @@ import {
   BASE_FLEE_CHANCE,
   FLEE_EVASION_BONUS_PER_RANK,
   FLEE_LEVEL_PENALTY,
+  REPOSITION_COOLDOWN_TICKS,
 } from './CombatState.js';
 import { calculateDamage } from './damage.js';
 import {
@@ -500,34 +501,27 @@ export class CombatSystem {
     const reachableIds = reachablePlayers.map(p => p.id);
     const highestThreatReachable = threatTable.getHighestThreatTarget(reachableIds);
     
-    if (highestThreatReachable) {
-      // Found a reachable high-threat target — attack it
-      creature.currentTarget = highestThreatReachable;
-      return highestThreatReachable;
-    }
-    
-    // No reachable players with threat — check if we should reposition
-    // Get highest-threat target overall (including unreachable)
+    // Also get the overall highest-threat target (including unreachable)
     const allPlayerIds = players.map(p => p.id);
     const highestThreatOverall = threatTable.getHighestThreatTarget(allPlayerIds);
     
-    if (highestThreatOverall && !reachableIds.includes(highestThreatOverall)) {
-      // Highest-threat target is unreachable
-      // Aggressive creatures (skirmisher) reposition toward target
-      if (positionType === 'skirmisher') {
-        const target = this.combatants.get(highestThreatOverall);
-        if (target && creature.positionCooldown === 0) {
-          // Reposition toward target's position
-          const newPosition = target.position;
-          this.queuedActions.set(creature.id, { action: 'dodge', newPosition });
-          creature.position = newPosition;
-          creature.positionCooldown = REPOSITION_COOLDOWN_TICKS;
-          creature.currentTarget = highestThreatOverall;
-          this.debug(`${creature.name} repositions to ${newPosition} (aggressive, chasing ${target.name})`);
-          return undefined; // Repositioning costs the action
-        }
+    // For aggressive creatures (skirmisher): check if overall highest is unreachable
+    // If so, reposition toward them instead of settling for a reachable target
+    if (positionType === 'skirmisher' && highestThreatOverall && !reachableIds.includes(highestThreatOverall)) {
+      const target = this.combatants.get(highestThreatOverall);
+      if (target && creature.positionCooldown === 0) {
+        const newPosition = target.position;
+        this.queuedActions.set(creature.id, { action: 'dodge', newPosition });
+        creature.currentTarget = highestThreatOverall;
+        this.debug(`${creature.name} repositions to ${newPosition} (aggressive, chasing ${target.name})`);
+        return undefined; // Repositioning costs the action
       }
-      // Steady creatures (melee, ranged) attack first reachable instead
+      // On cooldown — fall through to attack reachable target
+    }
+    
+    if (highestThreatReachable) {
+      creature.currentTarget = highestThreatReachable;
+      return highestThreatReachable;
     }
     
     // Fall back to first reachable player (no threat data yet, or all unreachable)
@@ -625,6 +619,18 @@ export class CombatSystem {
     }
 
 
+    // 0. Creature threat-based targeting (GDD §6.10-6.11)
+    // Re-evaluate creature targets each tick using threat tables + reachability
+    for (const c of combatants) {
+      if (c.isPlayer || c.hp <= 0) continue;
+      const posType = this.creaturePositionTypes.get(c.id) ?? 'melee';
+      const picked = this.pickCreatureTarget(c, combatants, posType, encounter);
+      if (picked === undefined && this.queuedActions.has(c.id)) {
+        // pickCreatureTarget queued a reposition — skip auto-attack for this creature
+        continue;
+      }
+    }
+
     // 1. Default unsubmitted actions to auto-attack current target (GDD §6.1, §6.2)
     for (const c of combatants) {
       // Combatants winding up don't queue actions — they're committed to the telegraph
@@ -706,6 +712,12 @@ export class CombatSystem {
       const target = this.combatants.get(targetId);
       if (!target || target.hp <= 0) continue;
 
+      // Position-based range check (GDD §6.11)
+      if (!this.canReachTarget(c, target)) {
+        this.debug(`${c.name} cannot reach ${target.name} (position: ${c.position} → ${target.position})`);
+        continue;
+      }
+
       const defenderAction = actions.get(targetId)?.action ?? 'dodge';
       const dodgeRoll = defenderAction === 'dodge' ? this.roll() : undefined;
       
@@ -716,12 +728,19 @@ export class CombatSystem {
         dodgeRoll,
       });
 
-      const accumulated = (damageAccumulator.get(targetId) ?? 0) + dmg.finalDamage;
+      // Apply flanking bonus: +15% from Flank when target's threat focus is at Front (GDD §6.11)
+      let finalDamage = dmg.finalDamage;
+      if (this.shouldApplyFlankingBonus(c, target)) {
+        finalDamage = Math.ceil(finalDamage * 1.15);
+        this.debug(`Flanking bonus: ${c.name} deals +15% damage to ${target.name}`);
+      }
+
+      const accumulated = (damageAccumulator.get(targetId) ?? 0) + finalDamage;
       damageAccumulator.set(targetId, accumulated);
 
       // Track who contributed damage for kill attribution
       if (!damageContributors.has(targetId)) damageContributors.set(targetId, new Set());
-      if (dmg.finalDamage > 0) {
+      if (finalDamage > 0) {
         damageContributors.get(targetId)!.add(c.id);
       }
 
@@ -732,7 +751,7 @@ export class CombatSystem {
         actorName: c.name,
         targetId: target.id,
         targetName: target.name,
-        damage: dmg.finalDamage,
+        damage: finalDamage,
         newHp: 0, // placeholder, filled below
         maxHp: target.maxHp,
         narration: '', // placeholder
@@ -802,10 +821,8 @@ export class CombatSystem {
           narration,
         });
         this.debug(`${c.name} repositioned to ${qa.newPosition}`);
-      }
-      
-      // Decrement position cooldown
-      if (c.positionCooldown > 0) {
+      } else if (c.positionCooldown > 0) {
+        // Decrement cooldown only if we didn't just reposition this tick
         c.positionCooldown--;
       }
     }
