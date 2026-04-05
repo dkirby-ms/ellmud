@@ -166,16 +166,18 @@ describe('Tick Resolution', () => {
   });
 
   it('should handle flee successfully when exits exist', () => {
+    // Use a roll function that always succeeds (returns 0.0 < base 50% flee chance)
+    const fleeSystem = new CombatSystem(testExitResolver, () => 0.0);
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2');
-    system.registerCombatant(p1);
-    system.registerCombatant(p2);
-    system.initiateCombat('p1', 'p2');
+    fleeSystem.registerCombatant(p1);
+    fleeSystem.registerCombatant(p2);
+    fleeSystem.initiateCombat('p1', 'p2');
 
     // Override p1's auto-queued strike with flee
-    system.submitAction('p1', 'flee');
+    fleeSystem.submitAction('p1', 'flee');
 
-    const result = system.resolveTick();
+    const result = fleeSystem.resolveTick();
 
     // p1 should have fled
     const flees = result.fleeResults;
@@ -184,7 +186,7 @@ describe('Tick Resolution', () => {
     expect(flees[0]!.toRoomId).toBe(ADJACENT_ROOM);
 
     // p1 should no longer be in combat
-    expect(system.isInCombat('p1')).toBe(false);
+    expect(fleeSystem.isInCombat('p1')).toBe(false);
 
     // p1's room should be updated
     expect(p1.roomId).toBe(ADJACENT_ROOM);
@@ -215,7 +217,7 @@ describe('Tick Resolution', () => {
     expect(fleeEvents[0]!.narration).toContain('no escape');
   });
 
-  it('should end combat when one combatant is defeated', () => {
+  it('should end combat after cooldown when one combatant is defeated', () => {
     // Give p2 very low HP
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2', TEST_ROOM, { maxHp: 5 });
@@ -224,15 +226,20 @@ describe('Tick Resolution', () => {
     system.registerCombatant(p2);
     system.initiateCombat('p1', 'p2');
 
-    // p1 strikes (auto-queued), p2 auto-attacks back (GDD §6.1)
-    // p2 takes: 10 * 1.0 - 2 = 8 damage, dies immediately (5 - 8 = -3)
-    const result = system.resolveTick();
-
-    // p2 should be defeated
+    // Tick 1: p1 strikes (auto-queued), p2 dies
+    const result1 = system.resolveTick();
     expect(p2.hp).toBe(0);
+    // Combat should NOT end yet (cooldown started)
+    expect(result1.events.filter((e) => e.type === 'combat_end')).toHaveLength(0);
+    expect(system.isInCombat('p1')).toBe(true);
 
-    // Combat should have ended
-    const endEvents = result.events.filter((e) => e.type === 'combat_end');
+    // Tick 2-3: Cooldown ticks
+    system.resolveTick();
+    system.resolveTick();
+
+    // Tick 4: Cooldown expires, combat ends
+    const result4 = system.resolveTick();
+    const endEvents = result4.events.filter((e) => e.type === 'combat_end');
     expect(endEvents).toHaveLength(1);
     expect(endEvents[0]!.narration).toContain('ended');
 
@@ -496,10 +503,12 @@ describe('Combat Initiation', () => {
 // ─── Flee Mechanics Tests ─────────────────────────────────────────────────
 
 describe('Flee Mechanics', () => {
+  // Use a roll function that always succeeds for flee tests
+  const successRoll = () => 0.0;
   let system: CombatSystem;
 
   beforeEach(() => {
-    system = new CombatSystem(testExitResolver);
+    system = new CombatSystem(testExitResolver, successRoll);
   });
 
   it('should move fleeing combatant to specified room', () => {
@@ -534,19 +543,28 @@ describe('Flee Mechanics', () => {
     expect(result.fleeResults).toHaveLength(1);
   });
 
-  it('should end combat when last opponent flees', () => {
+  it('should end combat after cooldown when last opponent flees', () => {
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2');
     system.registerCombatant(p1);
     system.registerCombatant(p2);
     system.initiateCombat('p1', 'p2');
 
+    // Tick 1: p2 flees
     system.submitAction('p2', 'flee');
+    const result1 = system.resolveTick();
+    expect(result1.fleeResults).toHaveLength(1);
+    // Combat should NOT end immediately (cooldown started)
+    expect(result1.endedEncounterIds).toHaveLength(0);
+    expect(system.isInCombat('p1')).toBe(true);
 
-    const result = system.resolveTick();
+    // Tick 2-3: Cooldown ticks
+    system.resolveTick();
+    system.resolveTick();
 
-    // Combat should end (only p1 remains)
-    expect(result.endedEncounterIds).toHaveLength(1);
+    // Tick 4: Cooldown expires, combat ends
+    const result4 = system.resolveTick();
+    expect(result4.endedEncounterIds).toHaveLength(1);
     expect(system.isInCombat('p1')).toBe(false);
   });
 });

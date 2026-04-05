@@ -40,6 +40,10 @@ export interface Combatant {
   agility: number;
   /** Dodge skill rank — scales dodge chance (GDD §6.4). */
   dodgeSkillRank: number;
+  /** Evasion skill rank — scales flee success chance (GDD §6.2). */
+  evasionSkillRank: number;
+  /** Creature level — affects flee difficulty for players (GDD §6.2). */
+  level: number;
   roomId: string;
   isPlayer: boolean;
   disconnected?: boolean;
@@ -73,6 +77,8 @@ export function createCombatant(
   isPlayer: boolean,
   stats: CombatStats = DEFAULT_PLAYER_STATS,
   dodgeSkillRank = 0,
+  evasionSkillRank = 0,
+  level = 1,
 ): Combatant {
   return {
     id,
@@ -84,6 +90,8 @@ export function createCombatant(
     armour: stats.armour,
     agility: stats.agility,
     dodgeSkillRank,
+    evasionSkillRank,
+    level,
     roomId,
     isPlayer,
     stamina: isPlayer ? 100 : undefined,
@@ -110,6 +118,8 @@ export interface CombatEncounter {
   combatantIds: Set<string>;
   tickCount: number;
   ticksSinceLastStrike: number;
+  /** Post-combat cooldown in ticks — counts down after last enemy defeated (GDD §6.2). */
+  postCombatCooldown: number;
 }
 
 // ─── Combat Events (output of tick resolution) ─────────────────────────────
@@ -162,3 +172,15 @@ export const EMPTY_TICK_RESULT: TickResult = {
 
 /** Timeout in ticks (seconds) before combat ends with no strikes. */
 export const COMBAT_TIMEOUT_TICKS = 10;
+
+/** Post-combat cooldown in ticks before combat mode ends after last enemy defeated (GDD §6.2). */
+export const POST_COMBAT_COOLDOWN_TICKS = 3;
+
+/** Base flee success chance (0.0-1.0) before skill/level modifiers (GDD §6.2). */
+export const BASE_FLEE_CHANCE = 0.5;
+
+/** Flee success bonus per Evasion skill rank (GDD §6.2). */
+export const FLEE_EVASION_BONUS_PER_RANK = 0.05;
+
+/** Flee success penalty per creature level above player (GDD §6.2). */
+export const FLEE_LEVEL_PENALTY = 0.05;
