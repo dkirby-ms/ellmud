@@ -10,6 +10,16 @@
 
 ## Learnings
 
+### 2026-04-05: Fire-and-Forget Narration Pattern (PR #292 Revision)
+- **Task:** Fixed blocking narration call in ZoneRoom.onJoin() per Elminster's review feedback
+- **Problem:** `await this.generateNarration()` blocked player connections for up to 2 seconds (cache miss + LLM timeout)
+- **Solution:** Changed to fire-and-forget pattern — removed await, added `.then()` for delivery and `.catch()` for error logging
+- **Impact:** Player join now completes immediately, narration arrives asynchronously 0-2000ms later
+- **Core principle validated:** GDD §4.5 — "LLM never blocks critical path"
+- **Test fix:** Updated `rooms.test.ts` to wait 1000ms and find system narration in message array (order no longer guaranteed)
+- **Minor fix:** Corrected typo `narratonType` → `narrativeType` in parameter naming
+- **Team lesson:** When integrating LLM calls, always check if the call is on a critical path (join, command response, state update). If yes, use fire-and-forget with proper error handling. The fallback text serves as immediate feedback; LLM enrichment arrives when ready.
+
 ### 2026-03-19: Figma AI Design Prompt Created
 - Created a comprehensive Figma Make/AI prompt for the Ellmud client UI prototype
 - **Screens defined (11 total):** Login/Register, Character Select, Refuge Hub, Shardboard, Shard Exploration (main gameplay), Combat Mode, Inventory/Loadout, Extraction Ritual, Chat/Social Panel, Leaderboard/Contracts, Settings
