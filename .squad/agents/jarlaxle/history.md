@@ -27,6 +27,21 @@
 
 ---
 
+## Learnings
+
+### 2026-04-05 (Round 4): Ability System — Cooldowns, Stamina, Damage Model (PR #296)
+- **Task:** Implement Phase 1 ability system per GDD §6.3 (Heavy Strike, Block, Observe)
+- **Architecture:** Data-driven layer on top of existing combat — minimal invasive changes to CombatState/DamageOptions
+- **Key decisions:**
+  - **Stamina/cooldown as optional Combatant fields** — Only players use abilities in Phase 1. Optional fields avoid memory waste, keep interface clean. Future: creature abilities set these fields when needed.
+  - **Cooldown = "ticks remaining until usable"** — Decrements at tick START (not end). Semantics: if set to 3, ability unavailable for current tick, tick+1, tick+2, usable at tick+3. Cleaner than "tick when usable again" model.
+  - **Damage multiplier separate from stance multiplier** — Ability damage (Heavy Strike: 1.5x) is ability property. Stance interaction (Strike vs Dodge: 0.5x) is combat rule. Separating them gives clean damage formula: `rawDmg = attack × abilityMult` → `afterStance = rawDmg × stanceMult` → `finalDmg = afterStance - (armour + block)`.
+  - **Map for cooldowns, not object** — Better semantics for dynamic ability IDs, no prototype pollution. Cooldown map is runtime-only combat state (never serialized), so JSON compat not needed.
+- **Implementation:** 18 tests covering cooldown logic (decrement, reset on use), stamina validation (enough mana to cast), fallback to auto-attack on invalid action, edge cases (negative ticks, simultaneous cooldown/stamina checks).
+- **Files:** `abilities.ts` (registry + definitions), `CombatState.ts` (stamina/cooldown fields), `damage.ts` (multiplier support), `abilities.test.ts` (18 tests)
+- **Pending integration:** CombatSystem.validateAbilityAction(), CombatSystem.updateCooldowns(), CombatSystem.resolveEncounterTick() update. Coordinated with Drizzt on threat system (High-damage abilities = higher threat).
+- **Key lesson:** Optional interface fields are OK when they're truly optional in Phase 1. Type system enforces null checks, avoids pollution. Mark clearly in TSDoc which systems consume which fields.
+
 ## Learnings (Archived — See Detailed Session Records)
 
 ### 2026-03-19: PostgreSQL schema (Issue #3)
@@ -2210,3 +2225,18 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - Entry narration is the first LLM-enhanced call (low-frequency, high-value)
 - Full integration (room descriptions, combat, movement) deferred to future work — infrastructure is now in place
 - No telemetry for background enrichment failures yet (existing KNOWN_ISSUE retained)
+
+### 2026-04-05: Ability & Cooldown System Foundation (Issue #279)
+- Implemented the ability system data model and damage mechanics per GDD §6.3
+- **Ability definitions:** Created AbilityDefinition interface with id, name, type, cooldownTicks, staminaCost, effects
+- **Default abilities:** Heavy Strike (1.5x damage, 3-tick cooldown, 15 stamina), Block (5 damage reduction, 2-tick cooldown, 10 stamina), Observe (reveals stats, 0 cooldown, 5 stamina)
+- **Combatant changes:** Added stamina (100/100 for players), maxStamina, and abilityCooldowns Map to track cooldown ticks remaining
+- **Damage model updates:** DamageOptions now supports damageMultiplier and blockReduction; getStanceMultiplier handles heavy_strike and block actions
+- **Test suite:** 18 comprehensive tests covering all ability mechanics (cooldowns, stamina consumption, fallbacks, edge cases)
+- **Architecture notes:**
+  - Stamina tracked only for players (creatures have undefined stamina/cooldowns)
+  - Cooldowns decremented at START of tick (not end) so cooldownTicks represents "ticks until usable"
+  - Block applies flat reduction on top of armour (totalReduction = armour + block)
+  - QueuedAction.abilityId added for future skill action routing
+- **Next steps:** CombatSystem integration needed - validateAbilityAction(), updateCooldowns(), and resolveEncounterTick() modifications to handle ability actions and fallback to auto-attack when cooldown/stamina checks fail
+- **Outcome:** Foundation complete, tests written but skipped pending CombatSystem integration (squad/279-ability-cooldown-system branch, commit 495d3ce)
