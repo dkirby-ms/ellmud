@@ -353,13 +353,18 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
         if (!disposed && !switchingRef.current) {
           dispatch({ type: 'SET_CONNECTION_STATUS', status: 'disconnected' });
           roomRef.current = null;
-          // Don't show death screen on generic disconnect — only when server sends explicit death overlay state
-          if (code >= 4000) {
+          if (code === 4000) {
+            // Rent: consented leave — return to character select
+            addMessage('You retire to the inn. Rest well, adventurer...', 'system');
+            dispatch({ type: 'SET_ROOM', room: null });
+            navigate('/characters');
+          } else if (code >= 4000) {
             addMessage(`Disconnected (code ${code}). You may need to log in again.`, 'system');
+            reconnectionRef.current.reportDisconnect();
           } else {
             addMessage('Connection lost. Attempting to reconnect...', 'system');
+            reconnectionRef.current.reportDisconnect();
           }
-          reconnectionRef.current.reportDisconnect();
         }
       },
     };

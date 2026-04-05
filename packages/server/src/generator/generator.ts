@@ -40,6 +40,7 @@ export const ROOM_NAMES: Record<RoomType, readonly string[]> = {
   feature_infirmary: ['Damp Infirmary'],
   feature_armoury: ['Rusted Armoury'],
   feature_war_room: ['Sunken War Chamber'],
+  feature_inn: ['Rented Room', 'Waterlogged Bunkhouse'],
 };
 
 const ROOM_DESCRIPTIONS: Record<RoomType, readonly string[]> = {
@@ -75,6 +76,7 @@ const ROOM_DESCRIPTIONS: Record<RoomType, readonly string[]> = {
   feature_infirmary: ['Stone cots line the walls. A faint herbal scent lingers beneath the ever-present damp.'],
   feature_armoury: ['Racks of corroded weapons and battered armour line the damp walls of this low chamber.'],
   feature_war_room: ['A sealed chamber with a scarred stone table. Maps and markers lie scattered in the gloom.'],
+  feature_inn: ['A quiet room with a narrow bed and a writing desk. A ledger sits open for settling accounts.'],
 };
 
 interface LootEntry {

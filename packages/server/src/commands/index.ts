@@ -31,6 +31,7 @@ import type { LoadoutService } from '../loadout/LoadoutService.js';
 import { handleBoard, handleEnter } from './handlers/board.js';
 import { handleStashView, handleStore } from './handlers/stash-command.js';
 import { handleLoadoutView } from './handlers/loadout-command.js';
+import { handleRent } from './handlers/rent.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,8 @@ export interface CommandResult {
   roomHeader?: RoomHeaderEntry;
   /** When set, the player should be transferred to another zone. */
   zoneTransfer?: { targetZoneSlug: string; targetRoomSlug: string };
+  /** When set, triggers a special post-command action in ZoneRoom. */
+  action?: 'rent';
 }
 
 export interface CreatureRef {
@@ -126,6 +129,7 @@ featureHandlers.set('zoneboard', { handler: handleBoard, requiredRoomType: 'feat
 featureHandlers.set('stash', { handler: handleStashView, requiredRoomType: 'feature_stash' });
 featureHandlers.set('store', { handler: handleStore, requiredRoomType: 'feature_stash' });
 featureHandlers.set('loadout', { handler: handleLoadoutView, requiredRoomType: 'feature_stash' });
+featureHandlers.set('rent', { handler: handleRent, requiredRoomType: 'feature_inn' });
 
 // ─── Registry ───────────────────────────────────────────────────────────────
 

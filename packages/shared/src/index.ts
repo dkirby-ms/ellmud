@@ -316,6 +316,7 @@ export interface RoomOccupantsMessage {
   players: Array<{
     id: string;
     name: string;
+    disconnected?: boolean;
   }>;
 }
 

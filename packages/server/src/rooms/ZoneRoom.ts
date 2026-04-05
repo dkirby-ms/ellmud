@@ -471,7 +471,17 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       if (typeof targetRoom === 'string' && this.roomGraph.rooms.has(targetRoom)) {
         startRoom = targetRoom;
       } else {
-        startRoom = this.roomGraph.startRoomId;
+        // Check for last inn location in this zone
+        let innRoom: string | undefined;
+        try {
+          const lastInn = await this.characterRepo.getLastInn(playerId);
+          if (lastInn && lastInn.zoneSlug === this.zoneSlug && this.roomGraph.rooms.has(lastInn.roomSlug)) {
+            innRoom = lastInn.roomSlug;
+          }
+        } catch (err) {
+          this.log(`Failed to load last inn for ${this.playerTag(playerId)}: ${err}`);
+        }
+        startRoom = innRoom ?? this.roomGraph.startRoomId;
       }
     } else {
       // Procedural: distribute players across entry points for spatial separation
@@ -545,6 +555,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       // Mark player as disconnected
       if (playerState) {
         playerState.disconnected = true;
+        // Notify other players in the room about disconnect status change
+        this.broadcastRoomOccupantsUpdate(playerState.currentRoomId);
       }
       if (isInCombat) {
         this.combatSystem.markDisconnected(playerId);
@@ -561,6 +573,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         // Clear disconnected flags
         if (playerState) {
           playerState.disconnected = false;
+          // Notify other players in the room about reconnection
+          this.broadcastRoomOccupantsUpdate(playerState.currentRoomId);
         }
         if (isInCombat) {
           this.combatSystem.clearDisconnected(playerId);
@@ -927,6 +941,18 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         targetZoneSlug: result.zoneTransfer.targetZoneSlug,
         targetRoomSlug: result.zoneTransfer.targetRoomSlug,
       } satisfies ZoneTransferMessage);
+      return;
+    }
+
+    // Inn rent: persist last inn location and trigger consented leave
+    if (result.action === 'rent') {
+      this.deliverResult(client, result);
+      if (this.zoneSlug) {
+        this.saveLastInn(playerId, this.zoneSlug, player.currentRoomId).catch((err) => {
+          this.log(`Failed to save last inn for ${this.playerTag(playerId)}: ${err}`);
+        });
+      }
+      client.leave(4000);
       return;
     }
 
@@ -2171,11 +2197,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       aggressive: c.behaviorState === 'hostile',
     }));
 
-    const players: Array<{ id: string; name: string }> = [];
+    const players: Array<{ id: string; name: string; disconnected?: boolean }> = [];
     for (const [sid, ps] of this.players) {
       if (ps.currentRoomId === roomId && sid !== playerId) {
         const displayName = this.characterNames.get(sid) ?? sid;
-        players.push({ id: sid, name: displayName });
+        players.push({ id: sid, name: displayName, ...(ps.disconnected ? { disconnected: true } : {}) });
       }
     }
 
@@ -2213,6 +2239,15 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       await this.profileRepo.save(this.dbPlayerId(playerId), profile);
     } catch (err) {
       this.log(`Failed to save profile for ${this.playerTag(playerId)}: ${err}`);
+    }
+  }
+
+  /** Persist last inn location so the player respawns there on next join. */
+  private async saveLastInn(playerId: string, zoneSlug: string, roomSlug: string): Promise<void> {
+    try {
+      await this.characterRepo.saveLastInn(playerId, zoneSlug, roomSlug);
+    } catch (err) {
+      this.log(`Failed to save last inn for ${this.playerTag(playerId)}: ${err}`);
     }
   }
 
