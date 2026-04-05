@@ -944,7 +944,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       return;
     }
 
-    // Inn rent: persist last inn location and trigger consented leave
+    // Inn rent: persist last inn location and trigger consented leave after brief delay
     if (result.action === 'rent') {
       this.deliverResult(client, result);
       if (this.zoneSlug) {
@@ -952,7 +952,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           this.log(`Failed to save last inn for ${this.playerTag(playerId)}: ${err}`);
         });
       }
-      client.leave(4000);
+      setTimeout(() => client.leave(4000), 3000);
       return;
     }
 
