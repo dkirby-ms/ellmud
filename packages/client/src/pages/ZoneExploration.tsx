@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router";
+import { useNavigate, useLocation, useParams } from "react-router";
 import {
   Eye,
   Volume2,
   Sword,
   ArrowLeft,
+  LogOut,
 } from "lucide-react";
 import CombinedStashLoadout from "../components/CombinedStashLoadout";
 import ChatPanel from "../components/ChatPanel";
@@ -23,6 +24,7 @@ import { useAutoScroll } from "../hooks/useAutoScroll.js";
 import { useExplorationMap } from "../hooks/useExplorationMap.js";
 import { useMapToggle } from "../hooks/useMapToggle.js";
 import { useVersion } from "../hooks/useVersion.js";
+import { logout as apiLogout, fetchSpawnZone } from "../services/api.js";
 import type { CombatAction } from "@ellmud/shared";
 
 // ─── Status Effect Classifier ────────────────────────────────────────────────
@@ -40,12 +42,23 @@ function getEffectType(effect: StatusEffect): 'buff' | 'debuff' | 'neutral' {
 export default function ZoneExploration() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { state } = useAppContext();
+  const { zoneId } = useParams<{ zoneId?: string }>();
+  const { state, dispatch } = useAppContext();
   const version = useVersion();
 
-  // Derive zone mode from route path
-  const isZone = location.pathname === "/refuge";
-  const roomName = isZone ? "zone:the-refuge" : "zone";
+  // Derive zone mode: /zone (hub) vs /zone/:zoneId (specific zone)
+  const isHub = !zoneId;
+  const [spawnTarget, setSpawnTarget] = useState<string | null>(null);
+
+  // Resolve the player's faction hub via /api/spawn-zone
+  useEffect(() => {
+    if (!isHub || !state.token) return;
+    fetchSpawnZone(state.token)
+      .then(res => setSpawnTarget(res.target))
+      .catch(() => setSpawnTarget('zone:the-refuge'));
+  }, [isHub, state.token]);
+
+  const roomName = isHub ? (spawnTarget ?? '') : 'zone';
 
   const {
     handleCommand: sendCommand,
@@ -76,6 +89,20 @@ export default function ZoneExploration() {
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [state.connectionStatus]);
+
+  // Logout handler
+  const handleLogout = useCallback(async () => {
+    if (state.token) {
+      try {
+        await apiLogout(state.token);
+      } catch {
+        /* best effort */
+      }
+    }
+    roomRef.current?.leave();
+    dispatch({ type: "LOGOUT" });
+    navigate("/");
+  }, [state.token, dispatch, navigate, roomRef]);
 
   // Derive room info from server state
   const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
@@ -206,29 +233,25 @@ export default function ZoneExploration() {
       {/* Top bar */}
       <div className="bg-bg-panel border-b border-border-muted px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          {!isZone && (
+          {!isHub && (
             <button
-              onClick={() => navigate("/refuge")}
+              onClick={() => navigate("/zone")}
               className="text-text-secondary hover:text-accent-gold transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
           <span className="text-text-secondary text-sm font-sans">
-            {state.email ?? state.playerId ?? "Unknown"}
+            {state.username ?? state.email ?? "Unknown"}
           </span>
+          <button
+            onClick={handleLogout}
+            className="text-text-secondary hover:text-danger transition-colors"
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
           <span className="text-text-disabled">|</span>
-          <div className="flex items-center gap-2">
-            <div className="w-20 h-2 bg-bg-elevated rounded-full overflow-hidden">
-              <div
-                className={`h-full ${healthState.barColor}`}
-                style={{ width: `${hpPercent * 100}%` }}
-              ></div>
-            </div>
-            <span className={`${healthState.color} text-xs font-mono`}>
-              {Math.round(hpPercent * 100)}%
-            </span>
-          </div>
           {connectionIndicator()}
         </div>
       </div>
@@ -550,11 +573,10 @@ export default function ZoneExploration() {
             </div>
           </div>
 
-          {/* Compass Navigation */}
-          <CompassControl onNavigate={handleExitClick} />
-
-          {/* Minimap */}
-          <div className="px-4 py-2 flex justify-center">
+          {/* Compass + Minimap */}
+          <div className="flex items-center justify-center gap-4 px-4 py-2">
+            <CompassControl onNavigate={handleExitClick} />
+            <div className="h-16 border-l border-border-muted" />
             <MinimapWidget
               visitedRooms={mapState.visitedRooms}
               ghostRooms={mapState.ghostRooms}
@@ -664,7 +686,7 @@ export default function ZoneExploration() {
             placeholder={
               state.connectionStatus === "connected"
                 ? "Type a command..."
-                : isZone ? "Connecting to the Refuge..." : "Connecting to instance..."
+                : isHub ? "Connecting to stronghold..." : "Connecting to instance..."
             }
             disabled={state.connectionStatus !== "connected"}
             className="flex-1 bg-transparent text-text-primary placeholder:text-text-disabled focus:outline-none disabled:opacity-50 font-mono"
@@ -692,7 +714,7 @@ export default function ZoneExploration() {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <CombinedStashLoadout room={roomRef.current} inZone={!isZone} />
+              <CombinedStashLoadout room={roomRef.current} inZone={!isHub} />
             </div>
           </div>
         </div>
@@ -716,11 +738,11 @@ export default function ZoneExploration() {
             <button
               onClick={() => {
                 dismissOverlay();
-                navigate('/refuge');
+                navigate('/zone');
               }}
               className="px-4 py-2 bg-bg-elevated text-text-primary rounded hover:bg-bg-surface"
             >
-              Return to Refuge
+              Return to Hub
             </button>
           </div>
         </div>
@@ -730,7 +752,7 @@ export default function ZoneExploration() {
       <ChatPanel
         isOpen={chatOpen}
         onClose={() => setChatOpen(false)}
-        context={isZone ? "refuge" : "zone"}
+        context={isHub ? "refuge" : "zone"}
         onSendMessage={sendChatMessage}
       />
 

@@ -126,3 +126,25 @@ export async function deleteCharacter(token: string, characterId: string): Promi
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+export async function fetchMe(token: string): Promise<{ playerId: string; username: string }> {
+  return request<{ playerId: string; username: string }>('/auth/me', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// ─── Spawn Zone API ───────────────────────────────────────────────────────────
+
+export interface SpawnZoneResponse {
+  target: string;
+  zoneSlug: string;
+  factionSlug: string | null;
+}
+
+export async function fetchSpawnZone(token: string): Promise<SpawnZoneResponse> {
+  return request<SpawnZoneResponse>('/api/spawn-zone', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}

@@ -5,7 +5,7 @@
  * - Unauthenticated users see the Login page at /
  * - Protected routes redirect unauthenticated users to /
  * - Authenticated users can access protected routes
- * - Login page redirects authenticated users to /refuge
+ * - Login page redirects authenticated users to /characters
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -19,6 +19,7 @@ import { routes } from '../routes.js';
 vi.mock('../services/api.js', () => ({
   login: vi.fn(),
   register: vi.fn(),
+  fetchSpawnZone: vi.fn().mockResolvedValue({ target: 'zone:the-refuge', zoneSlug: 'the-refuge', factionSlug: null }),
   ApiError: class ApiError extends Error {
     status: number;
     constructor(message: string, status: number) {
@@ -74,8 +75,8 @@ describe('Routing', () => {
       expect(screen.getByText('Sign in or sign up')).toBeInTheDocument();
     });
 
-    it('redirects /refuge to / when not authenticated', async () => {
-      renderWithRouter('/refuge');
+    it('redirects /zone to / when not authenticated', async () => {
+      renderWithRouter('/zone');
       await waitFor(() => {
         expect(screen.getByText('ELLMUD')).toBeInTheDocument();
       });
@@ -110,20 +111,19 @@ describe('Routing', () => {
       playerId: 'player-1',
     };
 
-    it('Login page redirects to /refuge when already authenticated', async () => {
+    it('Login page redirects to /characters when already authenticated', async () => {
       renderWithRouter('/', authedState);
-      // Login.tsx does <Navigate to="/refuge" replace /> when authenticated
-      // Refuge renders instead — it has a header bar with player info, no login form
+      // Login.tsx does <Navigate to="/characters" replace /> when authenticated
       await waitFor(() => {
         expect(screen.queryByLabelText('Username')).not.toBeInTheDocument();
       });
       expect(screen.queryByText('Enter the Refuge')).not.toBeInTheDocument();
     });
 
-    it('renders Refuge page for authenticated user at /refuge', async () => {
-      renderWithRouter('/refuge', authedState);
+    it('renders zone page for authenticated user at /zone', async () => {
+      renderWithRouter('/zone', authedState);
       await waitFor(() => {
-        // Refuge page should render — check for something specific to Refuge
+        // Zone page should render — check for something specific to ZoneExploration
         expect(screen.queryByLabelText('Username')).not.toBeInTheDocument();
       });
     });

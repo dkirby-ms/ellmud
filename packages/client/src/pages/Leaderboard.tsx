@@ -58,7 +58,7 @@ export default function Leaderboard() {
       <div className="bg-[#12131A] border-b border-[#2A2B35] px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate("/refuge")}
+            onClick={() => navigate("/zone")}
             className="text-[#8A8B95] hover:text-[#C9A84C] transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
