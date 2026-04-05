@@ -34,6 +34,8 @@ export function handleAttack(ctx: CommandContext): CommandResult {
         narrations: [{ text: `You don't see "${args.join(' ')}" here to attack.`, type: 'system' }],
       };
     }
+    // Set current target and queue strike (GDD §6.2: auto-attack immediately redirects)
+    combatSystem.setTarget(player.sessionId, targetId);
     combatSystem.submitAction(player.sessionId, 'strike', targetId);
     return {
       narrations: [{ text: `You shift your attack to ${targetId}.`, type: 'combat' }],
