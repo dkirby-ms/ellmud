@@ -7,10 +7,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
-  Background,
   Controls,
   MiniMap,
-  BackgroundVariant,
   type Node,
   type Edge,
   type NodeTypes,
@@ -197,13 +195,7 @@ export function ZoneDesignerFlow({
           </defs>
         </svg>
 
-        {/* Grid background */}
-        <Background
-          color="#4A4B55"
-          gap={100}
-          size={1}
-          variant={BackgroundVariant.Lines}
-        />
+        {/* Grid background removed per user request */}
         
         {/* Zoom/pan controls */}
         <Controls
