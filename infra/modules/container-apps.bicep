@@ -67,18 +67,15 @@ param allowLocalAuth string = 'false'
 @description('Client app URL for OAuth redirects (e.g. https://ellmud-test.kirbytoso.xyz)')
 param clientUrl string = ''
 
-@description('Azure AI Foundry endpoint URL')
-param azureAiEndpoint string = ''
+@description('OpenAI-compatible LLM endpoint URL (OpenAI, Azure OpenAI, LM Studio, etc.)')
+param openaiLlmEndpoint string = ''
 
 @secure()
-@description('Azure AI Foundry API key')
-param azureAiKey string = ''
+@description('OpenAI-compatible LLM API key')
+param openaiLlmKey string = ''
 
-@description('Azure AI deployment name')
-param azureAiDeployment string = 'gpt-4o-mini'
-
-@description('Azure AI API version')
-param azureAiApiVersion string = '2024-08-01-preview'
+@description('OpenAI-compatible LLM model name')
+param openaiLlmModel string = 'gpt-4o'
 
 @description('Enable LLM narration (false = template-only mode)')
 param enableLlmNarration string = 'true'
@@ -198,10 +195,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             { name: 'ALLOW_LOCAL_AUTH', value: allowLocalAuth }
             { name: 'CLIENT_URL', value: clientUrl }
             { name: 'AUTH_REQUIRED', value: authRequired }
-            { name: 'AZURE_AI_ENDPOINT', value: azureAiEndpoint }
-            { name: 'AZURE_AI_KEY', value: azureAiKey }
-            { name: 'AZURE_AI_DEPLOYMENT', value: azureAiDeployment }
-            { name: 'AZURE_AI_API_VERSION', value: azureAiApiVersion }
+            { name: 'OPENAI_LLM_ENDPOINT', value: openaiLlmEndpoint }
+            { name: 'OPENAI_LLM_KEY', value: openaiLlmKey }
+            { name: 'OPENAI_LLM_MODEL', value: openaiLlmModel }
             { name: 'ENABLE_LLM_NARRATION', value: enableLlmNarration }
             { name: 'ADMIN_TOKEN', value: adminToken }
           ]

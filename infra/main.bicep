@@ -50,18 +50,15 @@ param allowLocalAuth string = 'false'
 @description('Client app URL for OAuth redirects')
 param clientUrl string = ''
 
-@description('Azure AI Foundry endpoint URL')
-param azureAiEndpoint string = ''
+@description('OpenAI-compatible LLM endpoint URL (OpenAI, Azure OpenAI, LM Studio, etc.)')
+param openaiLlmEndpoint string = ''
 
 @secure()
-@description('Azure AI Foundry API key')
-param azureAiKey string = ''
+@description('OpenAI-compatible LLM API key')
+param openaiLlmKey string = ''
 
-@description('Azure AI deployment name')
-param azureAiDeployment string = 'gpt-4o-mini'
-
-@description('Azure AI API version')
-param azureAiApiVersion string = '2024-08-01-preview'
+@description('OpenAI-compatible LLM model name')
+param openaiLlmModel string = 'gpt-4o'
 
 @description('Enable LLM narration (false = template-only mode)')
 param enableLlmNarration string = 'true'
@@ -156,10 +153,9 @@ module containerAppsApp 'modules/container-apps.bicep' = {
     entraRedirectUri: entraRedirectUri
     allowLocalAuth: allowLocalAuth
     clientUrl: clientUrl
-    azureAiEndpoint: azureAiEndpoint
-    azureAiKey: azureAiKey
-    azureAiDeployment: azureAiDeployment
-    azureAiApiVersion: azureAiApiVersion
+    openaiLlmEndpoint: openaiLlmEndpoint
+    openaiLlmKey: openaiLlmKey
+    openaiLlmModel: openaiLlmModel
     enableLlmNarration: enableLlmNarration
     adminToken: adminToken
     authRequired: authRequired

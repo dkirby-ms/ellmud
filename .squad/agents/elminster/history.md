@@ -2048,3 +2048,20 @@ Created comprehensive decision document (`.squad/decisions/async-narration-patte
 PR #294 implements auto-attack default targeting and target management per GDD §6.1-§6.2. All requirements met. 14 new tests, 46 updated assertions, all passing. No regressions.
 
 ---
+
+### 2025-04-05: Decomposing Issue #312 (Exiting the Game Outside of Combat)
+- **Task:** Research and decompose #312 — inn rooms, rent command, disconnect limbo visibility
+- **Key findings:**
+  - Feature rooms use a type-gated command dispatch system (`featureHandlers` map in `commands/index.ts`). Adding `feature_inn` + `rent` follows the exact same pattern as `feature_stash`/`stash` and `feature_expedition_board`/`board`.
+  - `RoomType` union in `packages/shared/src/room-graph.ts` is the single source of truth for room types. All `feature_*` types auto-detected by `isFeatureRoomType()`.
+  - Zone entry points defined by `entry_room_slugs` TEXT[] in `zones` table. Changing spawn to inn = updating this array in migration.
+  - Faction strongholds seeded in migration `013_faction_strongholds.sql`. Each has 8 feature rooms + commons entry. Inn rooms will be migration ~017.
+  - Disconnect already uses `playerState.disconnected = true` flag with 30s reconnection grace (`RECONNECTION_TIMEOUT_S` config, default 30). Players auto-dodge in combat while disconnected. Currently included in room occupants but flag not sent to clients.
+  - Consented leave = close code 4000. `rent` should trigger this server-side after persisting state.
+  - Client uses `navigate('/characters')` pattern for returning to character select (see `ZoneExploration.tsx` logout flow).
+  - `RoomOccupantsMessage` currently sends `{ id, name }` per player. Adding `disconnected?: boolean` is non-breaking.
+- **Decomposition:** 8 work items across Drizzt (4), Regis (2), Minsc (2). Critical path: WI-1→WI-2→WI-3→WI-5. Parallel track: WI-4→WI-6.
+- **Decision file:** `.squad/decisions/inbox/elminster-312-decomposition.md`
+- **GitHub comment:** Posted architecture summary on issue #312.
+
+---

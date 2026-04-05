@@ -191,7 +191,7 @@ describe('AC: Cache hit returns stored prose immediately', () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// AC: Cache miss → call Azure AI Foundry GPT-4o-mini
+// AC: Cache miss → call OpenAI-compatible LLM
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('AC: Cache miss calls LLM and caches result', () => {

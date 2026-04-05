@@ -11,11 +11,10 @@ param postgresAdminPassword = readEnvironmentVariable('POSTGRES_ADMIN_PASSWORD')
 
 param postgresDatabaseName = 'ellmud'
 
-// Azure AI Foundry — LLM narration (optional, degrades to templates when unset)
-// param azureAiEndpoint = 'https://<your-ai-services>.cognitiveservices.azure.com'
-// param azureAiKey = readEnvironmentVariable('AZURE_AI_KEY')
-// param azureAiDeployment = 'gpt-4o-mini'
-// param azureAiApiVersion = '2024-08-01-preview'
+// OpenAI-compatible LLM — narration (optional, degrades to templates when unset)
+// param openaiLlmEndpoint = 'https://api.openai.com'
+// param openaiLlmKey = readEnvironmentVariable('OPENAI_LLM_KEY')
+// param openaiLlmModel = 'gpt-4o'
 // param enableLlmNarration = 'true'
 
 // Admin API token — required for admin dashboard access (fail-closed when unset)

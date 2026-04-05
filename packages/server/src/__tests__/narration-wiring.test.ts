@@ -27,10 +27,9 @@ describe('NarrationService factory integration', () => {
     resetConfig();
   });
 
-  it('creates NarrationService without LLM when Azure config is missing', () => {
-    // No AZURE_AI_ENDPOINT env var
-    delete process.env.AZURE_AI_ENDPOINT;
-    delete process.env.AZURE_AI_KEY;
+  it('creates NarrationService without LLM when OpenAI config is missing', () => {
+    delete process.env.OPENAI_LLM_ENDPOINT;
+    delete process.env.OPENAI_LLM_KEY;
     
     const service = createNarrationService();
     
@@ -38,44 +37,32 @@ describe('NarrationService factory integration', () => {
     expect(service.telemetry).toBeDefined();
   });
 
-  it('creates NarrationService with LLM client when Azure config is present', () => {
-    // Set Azure config env vars
-    process.env.AZURE_AI_ENDPOINT = 'https://test.openai.azure.com';
-    process.env.AZURE_AI_KEY = 'test-api-key';
-    process.env.AZURE_AI_DEPLOYMENT = 'gpt-4o-mini';
+  it('creates NarrationService with LLM client when OpenAI config is present', () => {
+    process.env.OPENAI_LLM_ENDPOINT = 'https://api.openai.com';
+    process.env.OPENAI_LLM_KEY = 'test-api-key';
+    process.env.OPENAI_LLM_MODEL = 'gpt-4o';
     
     resetConfig(); // reload config
     const config = getConfig();
     
-    expect(config.azureAI).toBeDefined();
-    expect(config.azureAI?.endpoint).toBe('https://test.openai.azure.com');
-    expect(config.azureAI?.apiKey).toBe('test-api-key');
-    expect(config.azureAI?.deploymentName).toBe('gpt-4o-mini');
+    expect(config.openaiLLM).toBeDefined();
+    expect(config.openaiLLM?.endpoint).toBe('https://api.openai.com');
+    expect(config.openaiLLM?.apiKey).toBe('test-api-key');
+    expect(config.openaiLLM?.model).toBe('gpt-4o');
     
     const service = createNarrationService();
     expect(service).toBeDefined();
   });
 
-  it('uses default deployment name when not specified', () => {
-    process.env.AZURE_AI_ENDPOINT = 'https://test.openai.azure.com';
-    process.env.AZURE_AI_KEY = 'test-api-key';
-    delete process.env.AZURE_AI_DEPLOYMENT;
+  it('uses default model when not specified', () => {
+    process.env.OPENAI_LLM_ENDPOINT = 'https://api.openai.com';
+    process.env.OPENAI_LLM_KEY = 'test-api-key';
+    delete process.env.OPENAI_LLM_MODEL;
     
     resetConfig();
     const config = getConfig();
     
-    expect(config.azureAI?.deploymentName).toBe('gpt-4o-mini');
-  });
-
-  it('uses default API version when not specified', () => {
-    process.env.AZURE_AI_ENDPOINT = 'https://test.openai.azure.com';
-    process.env.AZURE_AI_KEY = 'test-api-key';
-    delete process.env.AZURE_AI_API_VERSION;
-    
-    resetConfig();
-    const config = getConfig();
-    
-    expect(config.azureAI?.apiVersion).toBe('2024-08-01-preview');
+    expect(config.openaiLLM?.model).toBe('gpt-4o');
   });
 
   it('narrates with mock LLM transport', async () => {
@@ -168,19 +155,18 @@ describe('NarrationService factory integration', () => {
     expect(stats.fallback_uses).toBe(1);
   });
 
-  it('disables LLM narration when ENABLE_LLM_NARRATION=false even with Azure credentials', () => {
-    // Set Azure credentials
-    process.env.AZURE_AI_ENDPOINT = 'https://test.openai.azure.com';
-    process.env.AZURE_AI_KEY = 'test-api-key';
-    process.env.AZURE_AI_DEPLOYMENT = 'gpt-4o-mini';
+  it('disables LLM narration when ENABLE_LLM_NARRATION=false even with OpenAI credentials', () => {
+    process.env.OPENAI_LLM_ENDPOINT = 'https://api.openai.com';
+    process.env.OPENAI_LLM_KEY = 'test-api-key';
+    process.env.OPENAI_LLM_MODEL = 'gpt-4o';
     // Explicitly disable LLM narration
     process.env.ENABLE_LLM_NARRATION = 'false';
     
     resetConfig();
     const config = getConfig();
     
-    // Azure credentials should be present
-    expect(config.azureAI).toBeDefined();
+    // OpenAI credentials should be present
+    expect(config.openaiLLM).toBeDefined();
     // But LLM narration toggle should be disabled
     expect(config.enableLLMNarration).toBe(false);
     
@@ -191,17 +177,16 @@ describe('NarrationService factory integration', () => {
     expect((service as any).llmClient).toBeNull();
   });
 
-  it('enables LLM narration by default when Azure credentials are present', () => {
-    // Set Azure credentials
-    process.env.AZURE_AI_ENDPOINT = 'https://test.openai.azure.com';
-    process.env.AZURE_AI_KEY = 'test-api-key';
+  it('enables LLM narration by default when OpenAI credentials are present', () => {
+    process.env.OPENAI_LLM_ENDPOINT = 'https://api.openai.com';
+    process.env.OPENAI_LLM_KEY = 'test-api-key';
     // Do not set ENABLE_LLM_NARRATION — should default to true
     delete process.env.ENABLE_LLM_NARRATION;
     
     resetConfig();
     const config = getConfig();
     
-    expect(config.azureAI).toBeDefined();
+    expect(config.openaiLLM).toBeDefined();
     expect(config.enableLLMNarration).toBe(true);
     
     const service = createNarrationService();
@@ -212,15 +197,14 @@ describe('NarrationService factory integration', () => {
   });
 
   it('respects ENABLE_LLM_NARRATION=true explicitly', () => {
-    // Set Azure credentials and explicitly enable
-    process.env.AZURE_AI_ENDPOINT = 'https://test.openai.azure.com';
-    process.env.AZURE_AI_KEY = 'test-api-key';
+    process.env.OPENAI_LLM_ENDPOINT = 'https://api.openai.com';
+    process.env.OPENAI_LLM_KEY = 'test-api-key';
     process.env.ENABLE_LLM_NARRATION = 'true';
     
     resetConfig();
     const config = getConfig();
     
-    expect(config.azureAI).toBeDefined();
+    expect(config.openaiLLM).toBeDefined();
     expect(config.enableLLMNarration).toBe(true);
     
     const service = createNarrationService();

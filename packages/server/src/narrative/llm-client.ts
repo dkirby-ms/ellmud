@@ -1,5 +1,5 @@
 /**
- * LLM Client — wraps Azure AI Foundry GPT-4o-mini for narration.
+ * LLM Client — wraps OpenAI-compatible endpoints for narration.
  *
  * Enforces timeout via AbortController, validates output contract (GDD §4.4),
  * and constructs structured prompts from NarrationContext.
@@ -11,14 +11,14 @@ import type { NarrationContext, NarrationModelConfig } from '@ellmud/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-/** The shape of a chat completion request sent to Azure AI Foundry. */
+/** The shape of a chat completion request sent to an OpenAI-compatible endpoint. */
 export interface LLMRequest {
   messages: Array<{ role: 'system' | 'user'; content: string }>;
   max_tokens: number;
   temperature: number;
 }
 
-/** Minimal response shape from the Azure completions endpoint. */
+/** Minimal response shape from the chat completions endpoint. */
 export interface LLMResponse {
   choices: Array<{ message: { content: string } }>;
 }
@@ -32,13 +32,6 @@ export type LLMTransport = (
   signal: AbortSignal,
 ) => Promise<LLMResponse>;
 
-/** Configuration for the LLM client. */
-export interface LLMClientConfig {
-  endpoint: string;
-  apiKey: string;
-  deploymentName: string;
-  apiVersion: string;
-}
 
 // ─── Output Validation (GDD §4.4) ───────────────────────────────────────────
 
@@ -194,38 +187,6 @@ function getSystemPrompt(narrationtype: string): string {
   if (narrationtype === 'trace_narration') return TRACE_SYSTEM_PROMPT;
   if (narrationtype === 'awareness_narration') return AWARENESS_SYSTEM_PROMPT;
   return SYSTEM_PROMPT;
-}
-
-// ─── Default Transport (Azure AI Foundry) ────────────────────────────────────
-
-/**
- * Create a transport function that calls Azure AI Foundry.
- * Uses plain fetch — no SDK dependency needed.
- */
-export function createAzureTransport(config: LLMClientConfig): LLMTransport {
-  const url = `${config.endpoint}/openai/deployments/${config.deploymentName}/chat/completions?api-version=${config.apiVersion}`;
-
-  return async (request: LLMRequest, signal: AbortSignal): Promise<LLMResponse> => {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'api-key': config.apiKey,
-      },
-      body: JSON.stringify({
-        messages: request.messages,
-        max_tokens: request.max_tokens,
-        temperature: request.temperature,
-      }),
-      signal,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Azure AI Foundry error: ${response.status} ${response.statusText}`);
-    }
-
-    return response.json() as Promise<LLMResponse>;
-  };
 }
 
 // ─── OpenAI-Compatible Transport ─────────────────────────────────────────────
