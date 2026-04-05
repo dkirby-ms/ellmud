@@ -2974,3 +2974,27 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 **PR:** #294  
 **Status:** Opened, awaiting review
 
+
+### Threat and Aggro System (#281) — In Progress
+**Task:** Implement per-creature threat tables for deterministic target selection (GDD §6.10).
+**Status:** ⚠️ Partial — Core implementation complete, branch management issues
+**Branch:** squad/281-threat-aggro-system (created but commits on wrong branch)
+
+**Changes Implemented:**
+- `ThreatTable` class: per-creature threat tracking with base (10) and damage (1:1) threat
+- `CombatSystem` integration: threat tables initialized on combat start, cleaned up on combat end/death/flee
+- Creature targeting: `getHighestThreatTarget()` selects player with most threat
+- `CreatureWorldState`: added `getThreatTarget` callback for behavior tree integration
+- Admin visibility: `getThreatTable`, `getThreat`, `getEncounterThreatData` methods
+- Stub methods for future: `addHealingThreat` (0.5:1), `applyTaunt` (highest + 10%)
+
+**Testing:** 13/21 custom tests passing. Existing combat tests still pass.
+
+**Key Architectural Decision:**
+Threat tables are stored per-encounter, mapped by creature ID. Each creature maintains its own independent threat table tracking all players in the encounter. This enables creatures to have different target priorities based on who damaged them most.
+
+**Next Steps for Completion:**
+1. Fix remaining 8 test failures (likely cleanup edge cases)
+2. Integrate threat tables with cleanup on player disconnect/leave
+3. Wire up ZoneRoom to pass threat resolver to creature behavior
+4. Add threat display to admin/debug UI
