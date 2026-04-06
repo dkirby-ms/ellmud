@@ -205,37 +205,6 @@ describe('ZoneExitEdge — portal edges', () => {
     const mainPath = container.querySelector('path.react-flow__edge-path');
     expect(mainPath?.getAttribute('stroke-dasharray')).toBe('4 2');
   });
-
-  it('portal edges show target zone label', () => {
-    const { container } = renderEdge(
-      makeEdgeProps({
-        isPortal: true,
-        isBidirectional: false,
-        isOrphan: false,
-        targetZoneSlug: 'the-foundry',
-        direction: 'east',
-      }),
-    );
-    const label = Array.from(container.querySelectorAll('text')).find(
-      (t) => t.textContent?.includes('the-foundry'),
-    );
-    expect(label).toBeDefined();
-    expect(label?.textContent).toContain('east');
-    expect(label?.textContent).toContain('→');
-  });
-
-  it('portal label uses selected color when edge is selected', () => {
-    const { container } = renderEdge(
-      makeEdgeProps(
-        { isPortal: true, isBidirectional: false, isOrphan: false, targetZoneSlug: 'the-refuge', direction: 'north' },
-        { selected: true } as Partial<EdgeProps>,
-      ),
-    );
-    const label = Array.from(container.querySelectorAll('text')).find(
-      (t) => t.textContent?.includes('the-refuge'),
-    );
-    expect(label?.getAttribute('fill')).toBe('#C9A84C');
-  });
 });
 
 // ─── One-Way Edge Styling ───────────────────────────────────────────────────

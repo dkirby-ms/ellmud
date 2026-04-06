@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router";
 import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, HelpCircle, Search, Filter, Undo2, Redo2 } from "lucide-react";
 import { useUndoRedo } from "../../hooks/useUndoRedo.js";
 import { computeElkLayout, type LayoutRoom } from "../../map/elkLayout.js";
@@ -138,6 +139,7 @@ function roomsToFlowNodes(
   showLabels: boolean,
   mode: DesignerMode,
   creatures: Array<{ type: string; name: string }>,
+  onPortalClick?: (targetZoneSlug: string) => void,
 ): FlowNode[] {
   const nodes: FlowNode[] = [];
 
@@ -148,7 +150,13 @@ function roomsToFlowNodes(
     // Count up/down/portal exits
     const hasUpExits = exits.some((e) => e.fromRoomSlug === room.slug && e.direction === 'up');
     const hasDownExits = exits.some((e) => e.fromRoomSlug === room.slug && e.direction === 'down');
-    const portalCount = exits.filter((e) => e.fromRoomSlug === room.slug && e.targetZoneSlug).length;
+    const portalExits = exits
+      .filter((e) => e.fromRoomSlug === room.slug && e.targetZoneSlug)
+      .map((e) => ({
+        direction: e.direction,
+        targetZoneSlug: e.targetZoneSlug!,
+        targetRoomSlug: e.targetRoomSlug,
+      }));
 
     nodes.push({
       id: room.slug,
@@ -163,7 +171,9 @@ function roomsToFlowNodes(
         isConnectSource: mode === 'connect' && selectedRoom === room.slug,
         hasUpExits,
         hasDownExits,
-        portalCount,
+        portalCount: portalExits.length,
+        portalExits,
+        onPortalClick,
         npcCount: room.npcs?.length ?? 0,
         lootCount: room.lootContainers?.length ?? 0,
         hazardCount: room.hazards?.length ?? 0,
@@ -196,6 +206,14 @@ const OPPOSITE_DIRECTION: Record<string, string> = {
   west: 'east',
   up: 'north',
   down: 'south',
+};
+
+/** Position offset for portal stub phantom nodes relative to the source room. */
+const PORTAL_STUB_OFFSET: Record<string, { x: number; y: number }> = {
+  north: { x: 5, y: -45 },
+  south: { x: 5, y: 80 },
+  east: { x: 80, y: 18 },
+  west: { x: -55, y: 18 },
 };
 
 /**
@@ -241,15 +259,33 @@ function exitsToFlowEdges(
     });
   }
 
-  // Inter-zone (portal) exits — draw stub edges
+  // Inter-zone (portal) exits — stub edges to phantom target nodes
   for (const exit of interZoneExits) {
     const fromPos = positions.get(exit.fromRoomSlug);
     if (!fromPos || fromPos.z !== currentFloor) continue;
+    // Skip up/down — they use ▲▼ indicators, no horizontal handles
+    if (exit.direction === 'up' || exit.direction === 'down') continue;
 
-    // Portal exits don't have a target node in the graph — we'll render them as special stub edges
-    // For ReactFlow, we need a dummy target node or just skip drawing them as edges
-    // Let's skip them for now since they don't connect to another node in this zone
-    // (They're indicated by the portal badge on the room node itself)
+    const dir = exit.direction;
+    const oppositeDir = OPPOSITE_DIRECTION[dir] ?? 'north';
+
+    edges.push({
+      id: exit.id,
+      source: exit.fromRoomSlug,
+      target: `portal-${exit.id}`,
+      sourceHandle: `${dir}-source`,
+      targetHandle: `${oppositeDir}-target`,
+      type: 'exit',
+      data: {
+        direction: exit.direction,
+        isBidirectional: false,
+        isOrphan: false,
+        isPortal: true,
+        locked: exit.locked,
+        hidden: exit.hidden,
+        targetZoneSlug: exit.targetZoneSlug,
+      },
+    });
   }
 
   return edges;
@@ -267,6 +303,7 @@ export default function ZoneDesigner({
   onRoomSelect,
   onExitSelect,
 }: ZoneDesignerProps) {
+  const navigate = useNavigate();
   // ─── State ──────────────────────────────────────────────
   const [mode, setMode] = useState<DesignerMode>("select");
   const [showLabels, setShowLabels] = useState(false);
@@ -683,6 +720,10 @@ export default function ZoneDesigner({
     return matched;
   }, [searchQuery, rooms]);
 
+  const handlePortalClick = useCallback((targetZoneSlug: string) => {
+    navigate(`/admin/zones/${targetZoneSlug}`);
+  }, [navigate]);
+
   // ─── ReactFlow nodes & edges ────────────────────────────────────────────────
   const flowNodes = useMemo(() => {
     const nodes = roomsToFlowNodes(
@@ -696,6 +737,7 @@ export default function ZoneDesigner({
       showLabels,
       mode,
       creatures,
+      handlePortalClick,
     );
     // Apply search match/dim styling
     if (searchMatchSlugs !== null) {
@@ -705,8 +747,30 @@ export default function ZoneDesigner({
         (node.data as Record<string, unknown>).dimmed = !isMatch;
       }
     }
+    // Add phantom portal target nodes for inter-zone exits
+    for (const exit of interZoneExits) {
+      const fromPos = positions.get(exit.fromRoomSlug);
+      if (!fromPos || fromPos.z !== currentFloor) continue;
+      if (exit.direction === 'up' || exit.direction === 'down') continue;
+
+      const offset = PORTAL_STUB_OFFSET[exit.direction];
+      if (!offset) continue;
+
+      nodes.push({
+        id: `portal-${exit.id}`,
+        type: 'portalTarget',
+        position: { x: fromPos.x + offset.x, y: fromPos.y + offset.y },
+        data: {
+          targetZoneSlug: exit.targetZoneSlug,
+          direction: exit.direction,
+          onPortalClick: handlePortalClick,
+        },
+        selectable: false,
+        draggable: false,
+      });
+    }
     return nodes;
-  }, [rooms, positions, currentFloor, selectedRoom, disconnectedSlugs, orphanExitIds, exits, showLabels, mode, searchMatchSlugs, creatures]);
+  }, [rooms, positions, currentFloor, selectedRoom, disconnectedSlugs, orphanExitIds, exits, showLabels, mode, searchMatchSlugs, creatures, handlePortalClick, interZoneExits]);
 
   const flowEdges = useMemo(() => {
     let edges = exitsToFlowEdges(

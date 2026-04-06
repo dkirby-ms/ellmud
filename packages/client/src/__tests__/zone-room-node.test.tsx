@@ -40,10 +40,12 @@ function makeNodeData(overrides: Partial<RoomNodeData> = {}): RoomNodeData {
     hasUpExits: false,
     hasDownExits: false,
     portalCount: 0,
+    portalExits: [],
     npcCount: 0,
     lootCount: 0,
     hazardCount: 0,
     showLabels: false,
+    properties: [],
     ...overrides,
   };
 }
@@ -249,18 +251,16 @@ describe('ZoneRoomNode — labels and floor indicator', () => {
         data={makeNodeData({ name: 'Hall', showLabels: true })}
       />,
     );
-    const texts = Array.from(container.querySelectorAll('text'));
-    expect(texts.some((t) => t.textContent === 'Hall')).toBe(true);
+    expect(container.textContent).toContain('Hall');
   });
 
-  it('truncates long room names to 9 chars + ellipsis', () => {
+  it('shows full room name (text wraps instead of truncating)', () => {
     const { container } = render(
       <ZoneRoomNode
         data={makeNodeData({ name: 'The Grand Hallway of Doom', showLabels: true })}
       />,
     );
-    const texts = Array.from(container.querySelectorAll('text'));
-    expect(texts.some((t) => t.textContent === 'The Grand…')).toBe(true);
+    expect(container.textContent).toContain('The Grand Hallway of Doom');
   });
 
   it('hides room name when showLabels is false', () => {
@@ -269,16 +269,19 @@ describe('ZoneRoomNode — labels and floor indicator', () => {
         data={makeNodeData({ name: 'Hidden Room', showLabels: false })}
       />,
     );
-    const texts = Array.from(container.querySelectorAll('text'));
-    expect(texts.some((t) => t.textContent === 'Hidden Room')).toBe(false);
+    // Room name should not be present when labels are off
+    const foreignObjects = container.querySelectorAll('foreignObject');
+    const hasNameLabel = Array.from(foreignObjects).some(
+      (fo) => fo.textContent?.includes('Hidden Room') && fo.querySelector('div[style*="font-weight"]'),
+    );
+    expect(hasNameLabel).toBe(false);
   });
 
   it('always renders slug text', () => {
     const { container } = render(
       <ZoneRoomNode data={makeNodeData({ slug: 'grand-hall' })} />,
     );
-    const texts = Array.from(container.querySelectorAll('text'));
-    expect(texts.some((t) => t.textContent === 'grand-hall')).toBe(true);
+    expect(container.textContent).toContain('grand-hall');
   });
 
   it('shows positive floor indicator (z+1)', () => {
@@ -401,7 +404,10 @@ describe('ZoneRoomNode — vertical exit indicators', () => {
 describe('ZoneRoomNode — portal badge', () => {
   it('shows ⟐ badge when portalCount > 0', () => {
     const { container } = render(
-      <ZoneRoomNode data={makeNodeData({ portalCount: 2 })} />,
+      <ZoneRoomNode data={makeNodeData({ portalCount: 2, portalExits: [
+        { direction: 'north', targetZoneSlug: 'siltgate' },
+        { direction: 'east', targetZoneSlug: 'warrens' },
+      ] })} />,
     );
     const portal = container.querySelector('[title="2 portal exits"]');
     expect(portal).not.toBeNull();
