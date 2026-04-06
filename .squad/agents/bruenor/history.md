@@ -111,3 +111,32 @@
 - **Room mapping:** Each stronghold has 10 rooms (8 original features + 2 inn rooms from migration 016). Room descriptions pulled from thematic direction doc sections 1.1, 1.2, 1.3.
 - **Pattern notes:** Migration uses UPDATE statements to preserve row IDs and foreign key relationships. All room slug references in zone_exits updated after room slug changes. Entry room slugs updated to point to new inn room slugs.
 - **Build verification:** TypeScript compilation successful — all imports and type references updated correctly.
+
+### Gold to Water Currency Rename (2026-03-31)
+- **Migration:** `018_gold_to_water.sql`
+- **Source:** Thematic realignment — post-apocalyptic Gulf Coast water economy (`docs/thematic-direction.md` §8)
+- **Database changes:**
+  - `characters.gold` → `characters.water` (potable water as currency, units called "draws")
+  - Migration added after 017_faction_renames, uses simple ALTER TABLE RENAME COLUMN
+- **Code updates:**
+  - `llm-client.ts`: Updated FORBIDDEN_PATTERNS regex to catch `water` and `draws` numbers (kept `gold|coins` for LLM hallucination protection)
+  - `wave3-narration-contracts.test.ts`: Updated test description and added water/draws test case
+- **Pattern notes:** Simple column rename migration following BEGIN/COMMIT wrap pattern
+- **Build verification:** TypeScript compilation successful — no type errors after changes
+- **Economy context:** Clean drinking water ("draws") replaces generic gold coins as the post-apocalyptic currency. Aligns with Gulf Coast flooding/survival setting.
+
+### Room Flavor Rewrite Migration 019 (2026-04-06)
+- **Migration:** `019_room_flavor_rewrite.sql`
+- **Source:** Laeral's complete room description document revision 2.0 (`.squad/decisions/inbox/laeral-room-descriptions.md`)
+- **Purpose:** Complete rewrite of ALL Siltgate and Warrens room names and descriptions to align with dystopian Gulf Coast setting (year 3000, ruins of New Orleans)
+- **Changes applied:**
+  - Zone descriptions: Updated both Siltgate and Warrens zone descriptions (from `docs/thematic-direction.md` §2.1 and §2.2)
+  - Siltgate rooms: 137 UPDATE statements (136 original + 1 topology fix: rubble-passage-1)
+  - Warrens rooms: 75 UPDATE statements (65 original + 9 topology fixes: gutter-sewer + 8 sewer-* rooms + shattered-gate)
+  - Total: 212 room updates + 2 zone description updates = 214 UPDATE statements
+- **Critical fix:** Laeral's document had "ashgate" listed twice under Siltgate section — second entry (Type: warrens) was actually shattered-gate in Warrens zone. Corrected in migration to update slug='shattered-gate' in warrens zone.
+- **Setting elements:** Mississippi shifted west to Atchafalaya, Gulf creeping inland, flooded streets, drone debris, spanish moss, kudzu, mutant wildlife (dog-sized rats, giant roaches, mutant snakes), brackish water, rusted pre-extinction infrastructure, Creole/Cajun architecture, oppressive humidity
+- **SQL pattern:** Each UPDATE uses subquery for zone_id to avoid cross-zone collisions: `WHERE slug = '{room-slug}' AND zone_id = (SELECT id FROM zones WHERE slug = '{zone-slug}')`
+- **Escaping:** All single quotes doubled in descriptions (e.g., `it's` → `it''s`), em-dashes preserved
+- **Transaction:** Full BEGIN/COMMIT wrap for atomicity
+- **Documentation:** All topology fix rooms from migrations 005 and 007 included and updated with thematic descriptions

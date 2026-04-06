@@ -213,3 +213,58 @@ Siltgate revision finalized and merged into team decisions archive.
 - **Algae influence as story vector:** This lore hook should inform NPC dialogue (too-reverent statements about bloom, eerie consensus), faction quests (missions that seem scientific but serve algae propagation), player observations (Tenders being "too calm," "too synchronized"), and future story arcs (what happens when the truth is discovered?).
 - Decision document: `.squad/decisions/inbox/laeral-faction-names-v2.md`
 - **Team impact:** Bruenor (database faction names), Regis (UI labels), Volo/Jarlaxle (faction logic/dialogue), all writers (use new canonical names).
+
+## Learnings
+
+### 2025-01-03: Siltgate & Warrens Room Descriptions — Dystopian Gulf Coast Realignment
+
+**Task:** Rewrote all 202 room descriptions (137 Siltgate + 65 Warrens) for thematic realignment from generic fantasy to dystopian post-apocalyptic Gulf Coast setting (year 3000, New Orleans ruins).
+
+**Approach:**
+- Read thematic direction document thoroughly to understand the setting: flooded New Orleans 1000 years after drone apocalypse, Mississippi shifted to Atchafalaya, silted delta, brackish water, mutant wildlife (dog-sized rats, giant roaches, mutant snakes), rusted drone debris, kudzu/spanish moss/mangrove overgrowth, oppressive humidity, green algae light
+- Parsed 202 rooms from source data files
+- Preserved all slugs and types exactly (critical for game functionality)
+- Renamed rooms where appropriate to fit setting
+- Rewrote all descriptions (1-3 sentences, evocative, Louisiana gothic atmosphere)
+
+**Key thematic elements incorporated:**
+- **Water everywhere:** flooded streets, brackish pools, standing water, seepage, humidity
+- **Vegetation:** kudzu, spanish moss, mangroves, wild growth reclaiming ruins
+- **Wildlife:** mutant rats (dog-sized), giant roaches, mutant snakes, mosquito swarms, alligators
+- **Drone debris:** rusted combat drones as landmarks, salvage sites, mechanical graveyards
+- **Architecture:** Hurricane-damaged Creole/Cajun buildings, Garden District mansions, shipping container causeways, tilting townhouses
+- **Sensory details:** smell of saltwater/rust/rot, green algae light, oppressive humidity, constant dripping
+- **Louisiana flavor:** Jackson Square, Superdome, streetcars, oak trees with moss, bayou transitions
+- **Tone:** Eerie but alive, overgrown, nature won, humanity is the intruder (NOT grimdark)
+
+**Spatial/functional preservation:**
+- Market Square → Jackson Ruins Market (still central hub/entry)
+- Silver Arcade → Garden District Colonnade (still merchant district)
+- Highwind Estates → Overgrown Garden District (still wealthy quarter)
+- Dockward → Container Causeway (still waterfront/salvage)
+- Beggar's Span → Silt Flats (still poor/flooded quarter)
+- Ashgate Wastes → Drone Graveyard (still ruins/debris field)
+- Drowned Veins → Flooded Service Passages (still sewer/underground)
+- Warrens → Pre-extinction infrastructure (storm drains, maintenance tunnels, rat kingdoms)
+
+**Output location:** `.squad/decisions/inbox/laeral-room-descriptions.md`
+
+**Learnings for future content work:**
+- Louisiana gothic atmosphere requires specific sensory details: brackish water, spanish moss, humidity, green algae light, saltwater smell
+- Mutant wildlife should feel dangerous but natural — not evil, just adapted and indifferent to humans
+- Drone debris serves as both narrative flavor and salvage economy driver
+- Room descriptions need to balance evocative atmosphere with functional game information (what you see, what threatens you, where exits might be)
+- Preserve spatial logic even when rethemes — markets are still markets, sewers still sewers, entry points still entries
+- Single quote escaping for SQL: `it''s` not `it's` in descriptions
+
+**Ready for implementation:** All 202 rooms have complete rewrites ready for database update.
+
+### 2025-07-24: Creature & Item Retheme — Gulf Coast Alignment
+- Rethemed 8 creatures and 12 items from fantasy/generic to dystopian Gulf Coast post-apocalypse.
+- **Creature retheme strategy:** Mapped mutant human descendant archetypes from thematic-direction.md §6.2 onto existing humanoid enemy slots (alley_thug → Render-Kin Stalker, dockside_smuggler → Bone-Tithe Hoarder, plague_bearer → Fester-Thrall, the_harbourmaster → The Graftlord). Mapped Gulf Coast fauna from §3.2 onto wildlife slots (city_dog → Silt Roach, pigeon_flock → Mosquito Swarm, feral_dog → Feral Hog).
+- **Item retheme strategy:** Replaced medieval weapons with improvised/scavenged equivalents (iron_sword → Rebar Machete, corroded_halberd → Corroded Fire Axe, iron_chainmail → Scrap-Weave Vest). Replaced fantasy materials with drone salvage and algae-based materials. Removed all currency references (copper coins → circuit boards, "alchemists pay copper" → Bloom Tenders study).
+- **Preservation principle:** All creature and item IDs unchanged — room spawn references and loot table references remain valid. Stats unchanged. Only names, descriptions, and room_descriptions updated.
+- **Faction integration:** Items now reference specific factions as buyers/users (Kindari for tech salvage, Bloom Tenders for biological materials, Krewe Calliope for ritual items). This creates faction economy hooks for future quest design.
+- **Key design decision — drone reactor alloy:** The anomalous-tier weapon (voidforged_blade → Drone-Core Blade) uses "unknown alloy from drone reactor housing" as its mystery element. This replaces inter-planar fantasy with technology-grounded mystery — the alloy doesn't match pre-extinction databases, which the Kindari find deeply troubling. Leaves room for future lore expansion about the drones' origins.
+- Design document: `.squad/decisions/inbox/laeral-creature-item-retheme.md`
+
