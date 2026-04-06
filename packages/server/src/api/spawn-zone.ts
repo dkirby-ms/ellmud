@@ -4,7 +4,7 @@
  * GET /api/spawn-zone — Returns the zone target where the player should
  * connect on login, based on their faction membership.
  *
- * - Faction members → their faction's stronghold (e.g. zone:the-foundry)
+ * - Faction members → their faction's stronghold (e.g. zone:the-reliquary)
  * - Unaffiliated players → the Refuge (zone:the-refuge)
  *
  * GDD §6.5 — Players respawn at faction strongholds.

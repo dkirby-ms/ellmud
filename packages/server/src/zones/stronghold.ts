@@ -9,24 +9,24 @@
 import type { ZoneRepository } from './ZoneRepository.js';
 
 /** Well-known faction slugs (from 002_seed_content.sql). */
-export const FACTION_SLUGS = ['ironwright', 'veil', 'scarlet'] as const;
+export const FACTION_SLUGS = ['kindari', 'bloom-tenders', 'krewe-calliope'] as const;
 export type FactionSlug = (typeof FACTION_SLUGS)[number];
 
 /** Static mapping from faction slug → stronghold zone slug. */
-const FACTION_STRONGHOLD_MAP: Record<FactionSlug, string> = {
-  ironwright: 'the-foundry',
-  veil: 'the-cartographium',
-  scarlet: 'the-counting-house',
+export const FACTION_STRONGHOLD_MAP: Record<FactionSlug, string> = {
+  kindari: 'the-reliquary',
+  'bloom-tenders': 'the-bloom-observatory',
+  'krewe-calliope': 'the-carrion-court',
 };
 
 /** Fallback zone slug when player has no faction (designer/debug hub). */
 export const DEFAULT_HUB_SLUG = 'the-refuge';
 
 /** Display names for hub zones (used in death narration). */
-const HUB_DISPLAY_NAMES: Record<string, string> = {
-  'the-foundry': 'The Foundry',
-  'the-cartographium': 'The Cartographium',
-  'the-counting-house': 'The Counting House',
+export const HUB_DISPLAY_NAMES: Record<string, string> = {
+  'the-reliquary': 'The Reliquary',
+  'the-bloom-observatory': 'The Bloom Observatory',
+  'the-carrion-court': 'The Carrion Court',
   'the-refuge': 'The Refuge',
 };
 
@@ -52,7 +52,7 @@ export function resolvePlayerHubSlug(factionSlug: string | undefined): string {
 }
 
 /**
- * Resolve the Colyseus room target string (e.g. 'zone:the-foundry') for a
+ * Resolve the Colyseus room target string (e.g. 'zone:the-reliquary') for a
  * player's faction. Used in ROOM_SWITCH messages on death/login.
  */
 export function resolvePlayerHubTarget(factionSlug: string | undefined): string {
@@ -60,7 +60,7 @@ export function resolvePlayerHubTarget(factionSlug: string | undefined): string 
 }
 
 /**
- * Resolve the display name for a player's hub zone (e.g. 'The Foundry').
+ * Resolve the display name for a player's hub zone (e.g. 'The Reliquary').
  * Used in death narration to tell the player where they're respawning.
  */
 export function resolvePlayerHubName(factionSlug: string | undefined): string {

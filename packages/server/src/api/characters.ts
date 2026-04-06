@@ -72,7 +72,7 @@ export function createCharacterRouter(authService: AuthService, usePg: boolean):
       }
 
       // Validate faction slug
-      const validFactions = ['ironwright', 'veil', 'scarlet'];
+      const validFactions = ['kindari', 'bloom-tenders', 'krewe-calliope'];
       if (!validFactions.includes(factionSlug)) {
         res.status(400).json({ error: `Invalid faction. Choose from: ${validFactions.join(', ')}` });
         return;

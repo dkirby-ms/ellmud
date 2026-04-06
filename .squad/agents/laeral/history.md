@@ -173,3 +173,43 @@ Siltgate revision finalized and merged into team decisions archive.
 - **Writing guidelines:** Louisiana gothic tone, grounded survival language, sensory water descriptions, real Gulf Coast water problems as reference, no fantasy currency vocabulary.
 - Decision document: `.squad/decisions/inbox/laeral-water-currency.md`
 
+
+### 2026-04-06: Faction Reputation System & Faction Renames
+
+- Implemented major faction redesign per user directive (dkirby-ms):
+  - **Reputation-based faction system:** Players no longer choose a faction at character creation. Instead, they choose a STARTING ZONE (stronghold), beginning with neutral standing in their home city and distrusted elsewhere. Faction allegiance is earned through actions (missions, trade, helping faction members), not declared at creation.
+  - **Multi-faction possibility:** Players can build standing with multiple factions, or commit to one, or remain freelance. High standing unlocks better prices, gear access, exclusive missions, and faction leadership recognition.
+  - **Standing tiers:** Distrusted → Neutral → Accepted → Trusted → Honored, with escalating benefits (services, prices, stash/cistern access, NPC attitudes).
+- **Faction renames with full rethemes:**
+  1. **Urnkeepers → The Brined** — Emphasizes the pickling brine that saved them. Expanded lore around Saitcho Kindar cult of personality (reverence for the mythical brine inventor). Name is punchy Louisiana slang that sounds natural when spoken.
+  2. **Tidereaders → The Bloom Watch** — Reflects their role as observers and interpreters of the mutant algae ecology. "Watch" has Gulf Coast fishing culture resonance. Shorter, more grounded than "Tidereaders."
+  3. **Silt Traders → Krewe Calliope** (COMPLETE RETHEME) — Transformed from commerce/merchant faction into **dark carnival krewe culture**. New identity: preservation of post-apocalyptic Mardi Gras traditions — masks, music, ritual, spectacle twisted through 1000 years into something between carnival and cult. They control the MORALE ECONOMY (hope, meaning, culture) rather than logistics. Stronghold moved from French Quarter to the Superdome (now "The Carrion Court"). Authentic New Orleans krewe terminology (K-R-E-W-E spelling).
+- **Krewe Calliope design details:**
+  - Identity: Ritual, spectacle, cultural preservation — "The parade must go on."
+  - Stronghold: The Carrion Court (collapsed Superdome converted to ritual performance space)
+  - Room names: Procession Gate, Wardrobe Vault, Dance Floor, Call Board, Curiosity Bazaar, Green Room, Bunk Tiers, Inner Sanctum
+  - Economic role: Morale keepers — they provide festivals, blessings, funerals, parades, and meaning. People need more than water to survive; they need hope. Krewe charges in water, favors, participation, or loyalty.
+  - Faction traditions: Masks (worn in public, identity-defining), parades (torchlit processions through ruins), rites (blessings, funerals, induction ceremonies ranging from joyful to dark).
+- **Document-wide updates:**
+  - Section 1: Added reputation system explanation and faction name proposals with rationales
+  - Section 4.2-4.4: Rewrote "First Contact" and "Why Join a Faction" as reputation-based system with starting zone selection
+  - Section 5: Updated language choices with new faction names and krewe spelling convention
+  - Section 7: Updated NPC dialogue and expedition board hooks with new faction names
+  - Section 8: Updated water economy faction roles — Brined (producers), Bloom Watch (prospectors), Krewe Calliope (morale keepers). Expanded corruption questions to cover all three factions.
+- **Key design principle:** Character creation shifts from "pick your ideology" to "pick your starting city." Identity emerges through play. The stronghold you start in shapes early experience but doesn't lock you into allegiance.
+- **Writing tone:** Louisiana gothic maintained throughout. Krewe Calliope sections emphasize dark carnival atmosphere — masks, drums, torchlight, ritual, spectacle with an undercurrent of danger and obsession.
+- Decision document: `.squad/decisions/inbox/laeral-faction-retheme.md`
+
+### 2026-04-05: Faction Naming Revision 2 — The Kindari and The Bloom Tenders
+- Revised faction names based on user feedback rejecting "The Brined" (sounds lame) and "The Bloom Watch" (doesn't address new algae-influence lore hook).
+- **NEW LORE HOOK:** The Bloom Tenders faction is unknowingly under the discreet influence of the mutant algae itself. The algae subtly manipulates them — guiding decisions, drawing them to locations, making them protective of the bloom, steering their "scientific observations" toward conclusions that serve the algae's interests. They don't know they're being influenced.
+- **FACTION 1 SELECTED: The Kindari** — Puts Kindar's name directly in the faction name (cult-of-personality identity). Louisiana/Creole -ari suffix (like "Rastafari"). Sounds like a religious/cultural designation. Spoken naturally in NPC dialogue. Implies a PEOPLE, not just a job.
+- **FACTION 2 SELECTED: The Bloom Tenders** — DOUBLE MEANING: surface = "we tend the bloom (cultivation)"; sinister = "the bloom tends US (we are cultivated)." Nautical legitimacy (tender = ship servicing offshore platform). Botanical legitimacy (tending = gardening/caretaking). Perfect for a faction that doesn't realize they're being manipulated — they chose the name thinking it meant stewardship, but it's actually describing their relationship to the algae.
+- **Other Faction 1 options considered:** The Preservation (too abstract), Kindar's Covenant (too biblical), The Urnborn (doesn't center Kindar), The Relic Guild (good Louisiana flavor but less religious), Sons of the Brine (gendered).
+- **Other Faction 2 options considered:** The Verdant (good creep factor with "going verdant" slang, but loses nautical flavor), The Bloom Shepherds (religious pastoral but less Gulf authentic), The Tide-Turned (Louisiana flavor, creepy "turned" meaning, but less clear), The Bloom Witnesses (religious Jehovah's Witnesses vibe, unsettling, but awkward spoken), The Cultivated (dramatic irony works but too on-the-nose).
+- Updated all ~48 instances of "The Brined" → "The Kindari" and "The Bloom Watch"/"Bloom Watch" → "The Bloom Tenders"/"Bloom Tenders" throughout docs/thematic-direction.md (668 lines).
+- Updated sections: faction identity/philosophy (§1.1, §1.2), stronghold room descriptions, NPC first contact dialogue, player origin/starting zone text, economy section (faction water relationships), language guidelines, settlement references.
+- **Design principle learned:** Faction names should work on multiple levels. The Kindari name centers their cult-of-personality identity around Kindar. The Bloom Tenders name has a surface meaning (what they think they are) and a sinister meaning (what they actually are) — perfect for a faction unknowingly under external influence.
+- **Algae influence as story vector:** This lore hook should inform NPC dialogue (too-reverent statements about bloom, eerie consensus), faction quests (missions that seem scientific but serve algae propagation), player observations (Tenders being "too calm," "too synchronized"), and future story arcs (what happens when the truth is discovered?).
+- Decision document: `.squad/decisions/inbox/laeral-faction-names-v2.md`
+- **Team impact:** Bruenor (database faction names), Regis (UI labels), Volo/Jarlaxle (faction logic/dialogue), all writers (use new canonical names).

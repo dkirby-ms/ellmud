@@ -95,9 +95,9 @@ export class InMemoryCharacterRepository implements CharacterRepository {
 
   private toSummary(row: CharacterRow): CharacterSummary {
     const factionNames: Record<string, string> = {
-      ironwright: 'Ironwright Compact',
-      veil: 'Veil Cartographers',
-      scarlet: 'Scarlet Ledger',
+      kindari: 'The Kindari',
+      'bloom-tenders': 'The Bloom Tenders',
+      'krewe-calliope': 'Krewe Calliope',
     };
     return {
       id: row.id,

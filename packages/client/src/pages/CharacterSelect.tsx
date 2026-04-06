@@ -11,9 +11,9 @@ import {
 import type { CharacterSummary } from "@ellmud/shared";
 
 const FACTIONS = [
-  { slug: "ironwright", name: "Ironwright Compact", desc: "Master smiths and engineers." },
-  { slug: "veil", name: "Veil Cartographers", desc: "Scholars who map the unknown." },
-  { slug: "scarlet", name: "Scarlet Ledger", desc: "Resourceful brokers and survivors." },
+  { slug: "kindari", name: "The Kindari", desc: "Craft, preservation, and the legacy of Saitcho Kindar." },
+  { slug: "bloom-tenders", name: "The Bloom Tenders", desc: "Ecologists who study the mutant algae that woke the urns." },
+  { slug: "krewe-calliope", name: "Krewe Calliope", desc: "Dark carnival keepers of ritual, music, and meaning." },
 ];
 
 function sanitizeName(raw: string): string {

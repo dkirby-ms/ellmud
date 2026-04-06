@@ -25,7 +25,7 @@ const mockLeaderboard: LeaderboardEntry[] = [
   {
     rank: 2,
     name: "Ironforge",
-    faction: "Ironwright Compact",
+    faction: "The Kindari",
     zonesCompleted: 139,
     itemsExtracted: 612,
     pvpSurvived: 28,
@@ -41,7 +41,7 @@ const mockLeaderboard: LeaderboardEntry[] = [
   {
     rank: 47,
     name: "Kael Darkwater",
-    faction: "Ironwright Compact",
+    faction: "The Kindari",
     zonesCompleted: 23,
     itemsExtracted: 87,
     pvpSurvived: 5,

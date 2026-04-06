@@ -26,27 +26,56 @@ We will need to update the zone flavor text (room names/descriptions) to match t
 
 The three factions emerge from distinct survival strategies among the newly awakened. Each represents a different response to the question: *How do we survive in a world that erased us?*
 
-### 1.1 THE URNKEEPERS (formerly Ironwright Compact)
+**FACTION REPUTATION SYSTEM:**
 
-**Identity:** Craft, preservation, and restoration. The Urnkeepers believe the old world's technology — properly understood and repaired — is the key to reclaiming the future. They scavenge drone components, restore mechanical systems, and venerate the pickling urns that saved humanity.
+Players do NOT choose a faction at character creation. Instead, they choose a **starting zone** — a stronghold controlled by one of the three factions. This choice determines where you wake up, who finds you first, and what early-game content you experience. But it does not lock you into faction allegiance.
 
-**Philosophy:** "We were preserved for a reason. The past is a blueprint."
+**Neutral Start:** You begin with neutral standing in your home stronghold. You're not a member. You're not an enemy. You're just a recently awakened Sleeper who wandered in. The faction tolerates you — for now.
 
-**Survival Strategy:** Technology salvage and repair. The Urnkeepers strip rusted drones for parts, restore old infrastructure, and create tools from pre-extinction machinery. They are makers, tinkerers, and engineers.
+**Distrusted Elsewhere:** In the other two faction strongholds, you are distrusted. Limited services, higher prices, suspicious NPCs. You're an outsider. You haven't earned anything here.
+
+**Reputation Through Action:** Faction standing rises and falls based on what you DO:
+- Complete missions for a faction → reputation increases
+- Trade with faction merchants → slight reputation increase
+- Help faction members in the field (healing, sharing loot, protecting during combat) → reputation increase
+- Attack or kill faction members → massive reputation decrease
+- Work for rival factions → may cause slight decrease with others (or may not — factions are pragmatic; they'll use a mercenary if the job gets done)
+
+**Multi-Faction Possibility:** You CAN earn standing with multiple factions. You're not locked to one. A skilled scavenger might be Trusted by the Kindari (for tech salvage), Accepted by the Bloom Tenders (for mapping work), and Neutral with Krewe Calliope (because you haven't attended the rites). But high standing with one faction might naturally conflict with another if their interests diverge — choose your work carefully.
+
+**Consequences of Standing:**
+- **Despised:** Zero services, actively hostile, no feature access. Guards attack or arrest on site depending on ruleset.
+- **Distrusted:** Minimal services. Higher prices. No inn access (or expensive inn rates). No stash access. Merchants refuse some transactions. Guards watch you.
+- **Neutral:** Basic services available. Standard prices. Limited stash access. Inn access at normal rates. NPCs are professional but cold.
+- **Accepted:** Full services. Discounted prices. Full stash access. Free (or cheap) inn stays. NPCs are friendly. Faction-specific missions available.
+- **Trusted:** Best prices. Priority access to rare gear. Exclusive missions. Faction leadership acknowledges you by name. You're one of them now.
+- **Honored:** You are a legend here. The faction offers you leadership roles, asks your opinion on major decisions, and defends you against rival factions.
+
+**Design Note:** Character creation becomes "pick your starting city" instead of "pick your ideology." The stronghold shapes your early experience (what you see first, who you meet, what quests are available) but doesn't define your character's identity. That emerges through play.
+
+---
+
+### 1.1 THE KINDARI (formerly Urnkeepers)
+
+**Identity:** Craft, preservation, and restoration. The Kindari believe the old world's technology — properly understood and repaired — is the key to reclaiming the future. They scavenge drone components, restore mechanical systems, and venerate the pickling urns that saved humanity. Above all, they revere **Saitcho Kindar** — the anonymous inventor of the brine, whose identity is lost but whose legacy preserved them all. They take their name from him: to be Kindari is to follow Kindar's way.
+
+**Philosophy:** "We were preserved for a reason. The past is a blueprint. Kindar showed us the way."
+
+**Survival Strategy:** Technology salvage and repair. The Kindari strip rusted drones for parts, restore old infrastructure, and create tools from pre-extinction machinery. They are makers, tinkerers, and engineers — but also devotees of a half-forgotten saint.
 
 **Stronghold:** **The Reliquary** (formerly The Foundry)
-- **Location:** A converted water treatment plant on the edge of Siltgate. The massive concrete structure still has functional filtration systems, and the Urnkeepers have turned it into a workshop complex.
+- **Location:** A converted water treatment plant on the edge of Siltgate. The massive concrete structure still has functional filtration systems, and the Brined have turned it into a workshop complex.
 - **Architecture:** Industrial brutalist concrete with rusted catwalks, massive filtration tanks repurposed as storage, and the central chamber dominated by a shrine to Saitcho Kindar — a preserved pickling urn surrounded by scavenged drone components.
 - **Atmosphere:** The smell of machine oil and brackish water. The constant drip of condensation. The ring of hammers on salvaged steel.
 
 **Stronghold Room Names:**
-- **Entry:** The Preservation Hall — "You stand in a cavernous chamber where concrete pillars rise into shadow. At the center, a glass-walled shrine holds an intact pickling urn — the icon of survival. Urnkeepers cluster around workbenches scattered throughout the hall, disassembling drone parts with reverent precision."
+- **Entry:** The Preservation Hall — "You stand in a cavernous chamber where concrete pillars rise into shadow. At the center, a glass-walled shrine holds an intact pickling urn — the icon of survival, the vessel of Kindar's miracle. The Kindari cluster around workbenches scattered throughout the hall, disassembling drone parts with reverent precision."
 - **Stash:** The Archive Cistern — "A drained water tank with numbered alcoves carved into its walls. Your gear rests here among coils of cable, vacuum-sealed tool kits, and salvaged battery cores. The air is dry and sterile."
 - **Training:** The Pressure Chamber — "A reinforced test room where machinery is stress-tested and combat drills run beneath flickering sodium lights. Hydraulic rams line one wall, their pistons hissing in timed rhythm."
 - **Expedition Board:** The Salvage Wall — "A metal wall covered in magnetic tags, each representing a drone swarm site, infrastructure ruin, or suspected cache of pre-extinction tech. Coordinates are scratched into steel plates."
 - **Market:** The Component Exchange — "A warehouse floor where salvage is sorted, valued, and traded. Drone optics, solar panels, circuit boards — everything has a price calculated in utility and rarity."
-- **Commons:** The Waterworks — "A gathering space built around a functioning filtration pool. Urnkeepers sit on the concrete rim, sharing ration packs and swapping repair techniques. The water is clear — a small miracle."
-- **Inn/Quarters:** The Sleeper Cells — "Rows of narrow bunks built into what were once filtration chambers. Each bunk has a locker and a lamp. The Urnkeepers call them 'cells' — a reminder of the urns."
+- **Commons:** The Waterworks — "A gathering space built around a functioning filtration pool. The Kindari sit on the concrete rim, sharing ration packs and swapping repair techniques. The water is clear — a small miracle."
+- **Inn/Quarters:** The Sleeper Cells — "Rows of narrow bunks built into what were once filtration chambers. Each bunk has a locker and a lamp. The Kindari call them 'cells' — a reminder of the urns."
 - **War Room:** The Schematic Vault — "A locked room lined with salvaged blueprints, technical manuals, and hand-drawn diagrams of pre-extinction infrastructure. A map of Siltgate's buried power grid covers the central table."
 
 **Faction Flavor:**
@@ -57,65 +86,96 @@ The three factions emerge from distinct survival strategies among the newly awak
 
 ---
 
-### 1.2 THE TIDEREADERS (formerly Veil Cartographers)
+### 1.2 THE BLOOM TENDERS (formerly Tidereaders)
 
-**Identity:** Knowledge, adaptation, and navigation. The Tidereaders believe survival depends on understanding the new world — its ecology, its mutant wildlife, its chemical signals. They are explorers, naturalists, and biosignal interpreters.
+**Identity:** Knowledge, adaptation, and navigation. The Bloom Tenders believe survival depends on understanding the new world — its ecology, its mutant wildlife, its chemical signals. They are explorers, naturalists, and biosignal interpreters. They study the mutant algae that woke the urns, cultivating samples and tracking its spread across the Gulf. They believe the bloom was no accident — it carries meaning, patterns, perhaps even intent. What they don't know is that the relationship runs both ways: they tend the bloom, but the bloom also tends *them*, guiding their curiosity toward purposes they don't yet understand.
 
-**Philosophy:** "The world ended for humanity, but the world didn't end. Learn it or die."
+**Philosophy:** "The world ended for humanity, but the world didn't end. Learn it or die. The bloom woke us — we owe it our attention."
 
-**Survival Strategy:** Ecological mapping and biomonitoring. The Tidereaders track mutant algae blooms, decode wildlife migration patterns, and map safe paths through the rewilded landscape. They believe the chemical plume that woke the urns was no accident — and they're determined to understand it.
+**Survival Strategy:** Ecological mapping and biomonitoring. The Bloom Tenders track mutant algae blooms, decode wildlife migration patterns, and map safe paths through the rewilded landscape. They believe the chemical plume that woke the urns carries meaning — and they're determined to understand it. They cultivate algae samples on the platform, study its chemical emissions, and share their findings with those willing to pay for knowledge.
 
 **Stronghold:** **The Bloom Observatory** (formerly The Cartographium)
 - **Location:** A repurposed offshore oil platform, partially submerged but stable, connected to Siltgate via a corroded causeway. The structure rises from the brackish Gulf like a rusted lighthouse.
-- **Architecture:** Open-air decks, salvaged telescope mounts, glass-walled observation chambers, and algae cultivation tanks. The platform is covered in crawling green growth — the Tidereaders *cultivate* the mutant algae.
+- **Architecture:** Open-air decks, salvaged telescope mounts, glass-walled observation chambers, and algae cultivation tanks. The platform is covered in crawling green growth — the Bloom Tenders *cultivate* the mutant algae, studying its behavior and chemical emissions.
 - **Atmosphere:** The smell of saltwater and fermenting biomass. The cry of seabirds. The constant creak of metal settling in the tide.
 
 **Stronghold Room Names:**
-- **Entry:** The Tide Deck — "You emerge onto an open platform slick with spray. Algae-stained railings ring the deck, and beyond them the Gulf stretches to the horizon — green, alive, and unknowable. Tidereaders crouch over cultivation trays, logging bloom patterns."
+- **Entry:** The Tide Deck — "You emerge onto an open platform slick with spray. Algae-stained railings ring the deck, and beyond them the Gulf stretches to the horizon — green, alive, and unknowable. Members of the Bloom Tenders crouch over cultivation trays, logging bloom patterns with quiet focus."
 - **Stash:** The Specimen Hold — "A climate-controlled vault below deck, its shelves lined with sample jars, field kits, and personal effects sealed in waterproof cases. The air is cool and faintly chemical."
-- **Training:** The Weather Deck — "An exposed upper platform where Tidereaders learn to read wind, water, and the telltale shimmer of chemical plumes. Navigational instruments salvaged from ships are bolted to the deck."
+- **Training:** The Weather Deck — "An exposed upper platform where the Bloom Tenders learn to read wind, water, and the telltale shimmer of chemical plumes. Navigational instruments salvaged from ships are bolted to the deck."
 - **Expedition Board:** The Chart Room — "A sealed interior chamber with walls covered in hand-drawn maps — coastline shifts, algae bloom zones, drone debris fields. Expedition routes are plotted with colored thread."
-- **Market:** The Barter Net — "A sheltered corner of the platform where Tidereaders trade ecological data, biosamples, and navigation charts. Information is currency here."
-- **Commons:** The Spillway — "A communal gathering space built around a recirculating seawater pool. Tidereaders sit with feet in the water, sharing observations and brewing algae tea from cultivated strains."
+- **Market:** The Barter Net — "A sheltered corner of the platform where the Bloom Tenders trade ecological data, biosamples, and navigation charts. Information is currency here."
+- **Commons:** The Spillway — "A communal gathering space built around a recirculating seawater pool. Members sit with feet in the water, sharing observations and brewing algae tea from cultivated strains. The tea tastes faintly sweet, faintly chemical. You've heard some people drink it every day."
 - **Inn/Quarters:** The Bunks — "Hammocks strung in a former control room, swaying with the platform's subtle motion. Portholes look out over endless water. Sleep here is never silent — the Gulf is always talking."
-- **War Room:** The Signal Archive — "A locked data room where biomonitoring logs, chemical signatures, and rival faction movements are tracked on salvaged whiteboards. The Tidereaders hoard patterns like treasure."
+- **War Room:** The Signal Archive — "A locked data room where biomonitoring logs, chemical signatures, and rival faction movements are tracked on salvaged whiteboards. The Bloom Tenders hoard patterns like treasure."
 
 **Faction Flavor:**
 - Observant, curious, and adaptive
 - Speak in ecological terms ("The bloom's migrating north," "Chemical signature matches the awakening plume")
 - Value awareness over control — they don't fight the new world, they learn it
 - See the planet's recovery as an opportunity, not a threat
+- Sometimes too calm, too certain, too synchronized in their thinking — outsiders notice
 
 ---
 
-### 1.3 THE SILT TRADERS (formerly Scarlet Ledger)
+### 1.3 KREWE CALLIOPE (formerly Silt Traders)
 
-**Identity:** Commerce, cunning, and survival brokerage. The Silt Traders believe the only constant is scarcity, and scarcity creates value. They control trade routes, broker deals, and know everyone's secrets.
+**FACTION NAME OPTIONS:**
+1. **Krewe Calliope** — Named for Calliope Street in New Orleans; "krewe" is authentic Mardi Gras terminology. Sounds mysterious, slightly ominous, distinctly Louisiana.
+2. **The Revelers** — Too light, doesn't convey the darkness.
+3. **Masque Noire** — French for "Black Mask," but might feel try-hard / too on-the-nose.
+4. **The Pageant** — Interesting, but loses the krewe culture specificity.
 
-**Philosophy:** "The world doesn't owe you survival. Trade for it."
+**RECOMMENDED: Krewe Calliope** — It's authentic New Orleans terminology, sounds natural when spoken ("Krewe Calliope runs the Superdome"), and evokes mystery without being generic. The word "krewe" immediately signals Mardi Gras culture to anyone familiar with New Orleans, and "Calliope" (the street, the circus instrument) adds a twisted carnival flavor. Plus, it's what the user suggested — and it's genuinely good.
 
-**Survival Strategy:** Information brokerage and resource control. The Silt Traders operate the only reliable market in Siltgate, mediate disputes, and run a network of informants. They know where the drone swarms are, who's hoarding supplies, and which ruins are worth looting.
+---
 
-**Stronghold:** **The Exchange** (formerly The Counting House)
-- **Location:** A fortified section of the old French Quarter, where pre-extinction townhouses have been reinforced with scrap metal and connected via rooftop bridges. The district is known as "The Ledges."
-- **Architecture:** Crumbling brick facades with reinforced doors, interior courtyards converted to market stalls, and hidden passages between buildings. Balconies draped with tarps and signal flags.
-- **Atmosphere:** The smell of cooking food, mildew, and trade — salt fish, rusted metal, fermented grain. The constant murmur of haggling voices.
+**Identity:** Ritual, spectacle, and cultural preservation. Krewe Calliope emerged from the corrupted remnants of New Orleans Mardi Gras krewe culture — the secret societies that once threw parades, held masked balls, and guarded their traditions with obsessive secrecy. A thousand years later, the Krewe preserves what it means to be *human* — not through technology (that's the Kindari) or ecology (that's the Bloom Tenders), but through **ritual, music, art, and spectacle**. They are the keepers of culture in a world that forgot what culture was.
+
+But this is not whimsical. This is dark. The Krewe's traditions have been twisted through centuries of apocalypse into something between carnival and cult — masks that never come off, parades through ruins, rites performed under flickering torchlight. They offer hope and meaning in a brutal world, but the price of membership is participation in rituals that blur the line between celebration and sacrifice.
+
+**Philosophy:** "Humanity is not what we build or what we know. Humanity is what we *perform*. The parade must go on."
+
+**Survival Strategy:** Cultural preservation and morale economy. Krewe Calliope controls the *meaning* people need to survive. They throw festivals, perform music, create art, hold rituals that bind the community together. In a world of scarcity and danger, they provide what water and salvage cannot: **hope, joy, belonging, and catharsis**. But they also control access to those things. Want to attend the Rites of the Bloom? You'd better be in good standing. Need a blessing before your extraction run? The Krewe offers one — for a price.
+
+They are part carnival troupe, part secret society, part death cult. They wear masks. They keep secrets. They *perform* humanity, even when they're not sure what that means anymore.
+
+**Stronghold:** **The Carrion Court** (formerly The Exchange)
+- **Location:** The half-collapsed New Orleans Superdome, its roof caved in and overgrown with vines, its interior transformed into a vast, echoing performance space. Krewe Calliope has claimed the ruin and turned it into their ritual ground — part theater, part market, part temple.
+- **Architecture:** The Dome's bowl is open to the sky now, rainwater pooling on the old field level. Tiers of seating rise into shadow, some sections collapsed into rubble. The Krewe has built scaffolding stages, strung lanterns from the rusted girders, and painted murals on the concrete — twisted, beautiful, eerie. The walls are covered in masks, banners, and ceremonial props from a thousand forgotten parades.
+- **Atmosphere:** The smell of incense, torch smoke, and damp concrete. The sound of drums echoing through the bowl, always faint, always present. Laughter and music drifting from hidden alcoves. Masks *everywhere* — hanging from rafters, stacked in alcoves, worn by Krewe members who never take them off in public. The light is dim, flickering, theatrical. You are always being watched. You are always performing.
 
 **Stronghold Room Names:**
-- **Entry:** The Ledges Courtyard — "You step into a walled courtyard open to the sky, its flagstones cracked by roots. Market stalls cluster beneath salvaged awnings, and Silt Traders move through the crowd like sharks — watching, listening, calculating."
-- **Stash:** The Lockboxes — "A narrow room lined with individual safes bolted to the walls. Each has a combination lock and a warning stencil: 'The Traders see everything.' Your belongings are secure — for a price."
-- **Training:** The Rooftop Run — "A network of connected rooftops where Traders practice agility, stealth, and improvised combat. Clotheslines and signal flags snap in the wind. Below, the streets are a maze."
-- **Expedition Board:** The Job Wall — "A bulletin board in a sheltered alcove, covered in handwritten contracts, bounty notices, and trade route maps. The most lucrative jobs are pinned highest — literally out of reach for newcomers."
-- **Market:** The Bazaar — "The beating heart of the Exchange. Anything can be bought here — food, tools, information, favors. Traders work the crowd with quick hands and quicker words. Trust nothing you don't verify."
-- **Commons:** The Canteen — "A communal mess hall in a converted townhouse parlor. Long tables, mismatched chairs, and a constantly simmering pot of fish stew. Silt Traders eat, gossip, and make deals over bowls."
-- **Inn/Quarters:** The Tenements — "Cramped rooms above the market, each barely large enough for a cot and a trunk. Thin walls mean everyone hears everything — privacy is a luxury the Traders don't sell."
-- **War Room:** The Ledger — "A locked back room where the Traders keep their real records — debts owed, alliances charted, rival movements tracked. A bound book sits on the central desk, its pages filled with ciphered notes."
+- **Entry:** The Procession Gate — "You pass beneath a crumbling archway into the bowl of the Superdome. The roof is gone, replaced by open sky and tangled vines. The field level is a shallow lake reflecting torchlight. Scaffolding stages rise from the water, and masked figures move through the space like actors on an endless set. Drums echo. Someone is always drumming."
+- **Stash:** The Wardrobe Vault — "A backstage storage room lined with costume racks, prop trunks, and ceremonial regalia. Your belongings rest among feathered masks, tarnished instruments, and bolts of faded silk. Everything here is both gear and performance."
+- **Training:** The Dance Floor — "An open platform built above the waterline, its boards scarred by countless feet. Krewe members practice combat here — but it's choreographed, ritualized, performed. Every strike is a step. Every block is a flourish. Fighting is theater."
+- **Expedition Board:** The Call Board — "A bulletin wall backstage, covered in handwritten contracts, parade routes, and ritual schedules. The Krewe's missions read like performance programs: 'Blessing Needed — Ashgate Ruins,' 'Procession Escort — Dockward,' 'Relic Recovery — The Drowned Veins (with music).'"
+- **Market:** The Curiosity Bazaar — "A sprawling market built on the old concourse level. Vendors sell scavenged goods, but also art, instruments, masks, festival tokens, and stranger things — blessings, fortunes, ritual participation. Everything is negotiable. Everything is theater."
+- **Commons:** The Green Room — "A communal lounge tucked behind the main stage. Krewe members gather here between performances, shedding masks, sharing drinks brewed from fermented algae, and swapping stories. The walls are covered in photos, playbills, and faded Mardi Gras beads."
+- **Inn/Quarters:** The Bunk Tiers — "Hammocks and cots strung in the old stadium seating, rising into the shadowed upper decks. Each tier has a different atmosphere — some quiet, some rowdy, some dedicated to specific Krewe sub-factions. Privacy is a curtain. Community is mandatory."
+- **War Room:** The Inner Sanctum — "A locked chamber deep beneath the Dome, accessible only to Krewe leadership. The walls are lined with ceremonial masks representing past Krewe captains. A central table holds maps, faction intelligence, and the Krewe's true ledger — who owes what, who knows what, who's watching whom. The masks watch you back."
 
 **Faction Flavor:**
-- Sharp, opportunistic, and social
-- Speak in trade terms ("What's it worth to you?" "I know a guy," "Everything's negotiable")
-- Value connections over ideology — they'll deal with anyone
-- See survival as a transaction — nothing is free, but everything has a price
+- Theatrical, secretive, and intense
+- Speak in performance terms ("The show must go on," "Every exit is an entrance," "Know your role")
+- Value meaning over material — rituals, stories, symbols, and spectacle matter as much as food and water
+- See survival as *performance* — you perform hope, you perform joy, you perform humanity until it becomes real again
+- Never fully trustworthy — are they sincere believers or cynical manipulators? Both? Does it matter if the parade makes people feel alive?
+
+**Krewe Traditions (Design Notes):**
+- **The Masks:** Krewe members wear masks in public. The masks are identity — social, factional, ritual. Removing your mask in the Carrion Court is a breach of etiquette (unless you're in the Green Room or your quarters). Some members *never* remove their masks, even alone.
+- **The Parades:** Krewe Calliope holds irregular processions through Siltgate's ruins — torchlit, musical, eerie. The parades mark seasonal shifts, honor the dead, celebrate successful extractions, or simply remind people that beauty and joy still exist. Participation is open to all, but leading a parade is a Krewe privilege.
+- **The Rites:** The Krewe performs rituals — blessings before dangerous expeditions, funerals for the lost, induction ceremonies for new members. Some rites are joyful (music, dancing, feasting). Some are dark (blood offerings, symbolic sacrifices, oaths sworn under masks). The line between celebration and sacrifice is thin.
+- **The Morale Economy:** People need more than water to survive. They need hope. They need meaning. They need to feel *human*. Krewe Calliope provides that — festivals, music, art, ritual. But access is controlled. Attendance at major rites requires standing with the Krewe. Blessings cost favors. The Krewe doesn't trade in water or salvage — they trade in *what you're willing to do to feel alive again*.
+
+**Economic Role (replaces commerce/trade):**
+Krewe Calliope controls the **morale economy**. They don't produce water (the Kindari do that). They don't find springs (the Bloom Tenders do that). They don't even move goods efficiently. What they provide is **culture, meaning, and psychological survival**.
+
+In a post-apocalyptic world, despair kills as surely as dehydration. The Krewe fights despair with spectacle. They throw parties in the ruins. They create art from salvage. They perform music that reminds people what it felt like to be human. And they charge for it — not always in water, but in favors, participation, loyalty, secrets.
+
+A scavenger who's lost their entire crew in the Warrens might pay the Krewe to perform a funeral rite — not because it brings the dead back, but because it makes the survivor feel like their friends' deaths *meant something*. A merchant might sponsor a parade to boost morale in their district (and improve business). A faction leader might commission a blessing ritual before a dangerous expedition (and gain the Krewe's tacit political support).
+
+The Krewe's power is soft, cultural, and psychological — but no less real for it.
 
 ---
 
@@ -195,7 +255,7 @@ The combat drones that ended humanity are everywhere now — scattered across th
 - Aquatic drones rest in silted shallows, their propellers wrapped in algae
 - Some are small (handheld size); others are massive (car-sized walkers)
 
-The drones are **lootable** but dangerous — corroded battery cores can leak toxins, and some are booby-trapped (failsafes triggered by tampering). The Urnkeepers strip them for parts. The Tidereaders study their decay patterns. The Silt Traders sell drone-maps to scavengers.
+The drones are **lootable** but dangerous — corroded battery cores can leak toxins, and some are booby-trapped (failsafes triggered by tampering). The Kindari strip them for parts. The Bloom Tenders study their decay patterns. Scavengers sell drone-maps and component locations for water.
 
 ### 3.2 Mutant Wildlife
 
@@ -279,26 +339,49 @@ You wake alone, disoriented, in a world that has moved on without you.
 
 The factions find you (or you find them). Each faction scouts the ruins for newly awakened "Sleepers" — some are altruistic, some are opportunistic. You are weak, confused, and vulnerable. The faction that finds you first will shape your understanding of this new world.
 
-**Urnkeepers:** "You're lucky we found you before the rats did. Can you walk? Good. We'll get you to the Reliquary. You're going to want to see this."
+But **finding you is not the same as recruiting you**. You are not joining the faction. You are being *brought to safety* — or at least, to shelter. What happens after that is up to you.
 
-**Tidereaders:** "Easy. You've been out a long time. The world's... different now. We'll explain. First, drink this." (Hands you algae tea.)
+**The Kindari:** "You're lucky we found you before the rats did. Can you walk? Good. We'll get you to the Reliquary. You're going to want to see this — Kindar's work saved you. Least you can do is understand it."
 
-**Silt Traders:** "Well, look at that. Fresh meat. You owe us for the rescue, friend. Don't worry — we'll work something out."
+**The Bloom Tenders:** "Easy. You've been out a long time. The world's... different now. We'll explain. First, drink this." (Hands you algae tea.) "It's safe. We cultivated the strain ourselves. Come on — the Observatory's not far."
 
-### 4.3 Why Join a Faction?
+**Krewe Calliope:** "Well, well. A fresh sleeper. You look half-dead, friend. Lucky for you, we know how to wake the dead." (Offers a hand, pulls you up.) "Come. The Carrion Court's got food, fire, and a show tonight. You'll want to see what's left of the world — and what we've made of it."
 
-**Survival.** Alone, you are prey. The factions offer:
-- **Shelter** (a bed, a place to store gear)
-- **Knowledge** (maps, creature intel, survival techniques)
-- **Community** (people who understand what you've lost)
-- **Purpose** (missions, goals, a reason to keep going)
+### 4.3 Choosing a Starting Zone (Character Creation)
 
-But factions are not charities. They expect contribution — scavenging runs, guard duty, trade missions. You are part of something now, and that means responsibility.
+At character creation, you do NOT choose a faction. You choose a **starting zone** — the stronghold where you wake up, are found, and begin your journey.
+
+**Starting Zone Options:**
+1. **The Reliquary** (The Kindari) — You wake near the old water treatment plant and are brought to the Kindari stronghold. Your early game is shaped by tech salvage culture, Kindar reverence, and the pragmatic engineering mindset. You start NEUTRAL with the Kindari, DISTRUSTED with the Bloom Tenders and Krewe Calliope.
+
+2. **The Bloom Observatory** (The Bloom Tenders) — You wake near the causeway and are escorted to the offshore platform. Your early game is shaped by ecological research, algae cultivation, and the adaptive philosophy of learning the new world. You start NEUTRAL with the Bloom Tenders, DISTRUSTED with the Kindari and Krewe Calliope.
+
+3. **The Carrion Court** (Krewe Calliope) — You wake near the Superdome and are brought into the Krewe's performance space. Your early game is shaped by ritual, masks, music, and the eerie spectacle of post-apocalyptic carnival culture. You start NEUTRAL with Krewe Calliope, DISTRUSTED with the Kindari and Bloom Tenders.
+
+**What This Means:**
+- Your starting zone determines your **first faction contact**, your **early-game quests**, and the **NPCs you meet first**.
+- You have basic access to your home stronghold's services — you can use the inn (at standard rates), buy from the market (at standard prices), and store limited gear in the stash.
+- You are an **outsider** in the other two strongholds until you earn reputation through action.
+- Over time, you can build standing with all three factions, or commit deeply to one, or remain a freelance mercenary working for whoever pays best.
+
+**Design Philosophy:** The choice is "where do you start?" not "who are you?" Your character's identity emerges through play — through the missions you take, the factions you help, and the reputation you build. Some players will align with one faction ideologically. Others will play all sides. Both are valid.
+
+### 4.4 Why Earn Faction Standing?
+
+**Survival.** Higher faction standing offers tangible benefits:
+- **Shelter** (cheaper inn rates, eventually free lodging for Trusted+ members)
+- **Storage** (better stash access, higher item limits, cistern access for water currency)
+- **Knowledge** (maps, creature intel, survival techniques, faction-specific training)
+- **Gear** (access to better equipment, discounted prices, faction-exclusive items at high standing)
+- **Community** (people who will help you, trust you, and remember your name)
+- **Purpose** (missions, goals, a reason to keep going beyond simple survival)
+
+But factions are not charities. They expect contribution — scavenging runs, guard duty, trade missions, ritual participation (for Krewe Calliope). You earn standing through action, and you lose it through betrayal.
 
 **What draws you to each faction?**
-- **Urnkeepers:** You believe in the old world. You want to rebuild, restore, *fix* things.
-- **Tidereaders:** You are curious. You want to understand this new world, adapt to it, learn it.
-- **Silt Traders:** You are pragmatic. Survival is a transaction, and you're willing to deal.
+- **The Kindari:** You believe in the old world. You want to rebuild, restore, *fix* things. You see Kindar's brine as a miracle worth honoring.
+- **The Bloom Tenders:** You are curious. You want to understand this new world, adapt to it, learn it. You see the bloom as a message worth decoding.
+- **Krewe Calliope:** You need *meaning*. You need to feel human again — to perform, to celebrate, to participate in something larger than survival. You see the parade as the thing worth preserving.
 
 ---
 
@@ -314,14 +397,16 @@ But factions are not charities. They expect contribution — scavenging runs, gu
 - Use "the Collapse" for the drone apocalypse (faction term for the extinction event)
 - Use "the Gulf" for the body of water (locals never say "the Gulf of Mexico")
 - Use "pre-extinction" for old-world tech (avoids the word "ancient" which feels fantasy)
+- **Faction names:** "The Kindari" (never "Urnkeepers" or "The Brined"), "The Bloom Tenders" (never "Tidereaders" or "Bloom Watch"), "Krewe Calliope" (with the 'K', never "Crew")
+- Use "krewe" (K-R-E-W-E) for any references to Mardi Gras-style secret societies — it's authentic New Orleans spelling
 
 **Resolved Design Decisions:**
 
 **No other surviving homo sapiens.** All humans either died during the Collapse or entered pickling urns. However, mutant descendants of humans — organisms that evolved from human stock over ~1000 years but are no longer homo sapiens — exist as enemies and NPCs throughout the world. They betray their human ancestry in the worst ways: corruption, ugliness, gluttony, greed, murder, lust. (See Section 6: Mutant Human Descendants.)
 
-**Saitcho Kindar is a mythic figure.** Like Satoshi Nakamoto, no one knows who he really was. The factions have theories, legends, and conspiracy theories about him, but his true identity is lost. The name itself may be a pseudonym. He is revered by some (Urnkeepers), blamed by others, and mysterious to all. Players will never meet him — he is a name that echoes through faction lore, not a character.
+**Saitcho Kindar is a mythic figure.** Like Satoshi Nakamoto, no one knows who he really was. The factions have theories, legends, and conspiracy theories about him, but his true identity is lost. The name itself may be a pseudonym. He is revered by some (especially the Brined), blamed by others, and mysterious to all. Players will never meet him — he is a name that echoes through faction lore, not a character.
 
-**Siltgate is one settlement among others.** More settlements exist along the Gulf Coast and will be introduced over time — first along the coast, eventually inland. Other settlements are referenced in NPC dialogue, trade routes, expedition board postings, and Tidereader charts showing other awakening zones. For now, Siltgate is the only playable settlement, but the world extends beyond it.
+**Siltgate is one settlement among others.** More settlements exist along the Gulf Coast and will be introduced over time — first along the coast, eventually inland. Other settlements are referenced in NPC dialogue, trade routes, expedition board postings, and Bloom Tenders charts showing other awakening zones. For now, Siltgate is the only playable settlement, but the world extends beyond it.
 
 **Drones remain fully inactive.** They are scenery, lootable salvage, and environmental storytelling — NOT a combat threat. Drones are dead machines, their energy stores exhausted centuries ago. This may change in future content.
 
@@ -411,16 +496,16 @@ These are not fantasy monsters. They are what we became when civilization fell a
 Siltgate is not alone. Other settlements exist along the Gulf Coast, each built around clusters of awakened urns or scavenged resources. Players will hear references to these places in dialogue, on expedition boards, and in faction lore — but for now, they remain distant.
 
 **What NPCs might say:**
-- "Heard the Silt Traders run a route up to Rust Harbor. Three days north along the coast road."
-- "Tidereaders got a sister outpost on the barrier islands. Smaller than the Bloom, but closer to the deep-water blooms."
-- "Some Urnkeepers split off, headed inland. Said they found a cache of pre-extinction machinery upriver. Haven't heard from them since."
+- "Heard Krewe Calliope's planning a procession up to Rust Harbor. Three days north along the coast road, masks and drums the whole way."
+- "The Bloom Tenders got a sister outpost on the barrier islands. Smaller than the Observatory, but closer to the deep-water blooms."
+- "Some of the Kindari split off, headed inland. Said they found a cache of pre-extinction machinery upriver. Haven't heard from them since."
 
 **Expedition Board Hooks:**
-- "WANTED: Escort to Shalepoint. Caravan departs in two days. Silt Traders paying in provisions."
-- "MAPPING CONTRACT: Chart the coast road between Siltgate and the Barrier Settlements. Tidereader commission."
-- "SALVAGE RUMOR: Drone field spotted west of Mud Flats. Unconfirmed. Investigate and report."
+- "WANTED: Escort to Shalepoint. Caravan departs in two days. Krewe Calliope paying in ritual tokens (convertible to water at the Curiosity Bazaar)."
+- "MAPPING CONTRACT: Chart the coast road between Siltgate and the Barrier Settlements. Bloom Tenders commission. Pays in draws and biosamples."
+- "SALVAGE RUMOR: Drone field spotted west of Mud Flats. Unconfirmed. Investigate and report. The Kindari paying double for intact optics."
 
-**Tidereader Charts:**
+**Bloom Tenders Charts:**
 - Maps showing other "awakening zones" — locations where algae blooms triggered mass urn openings
 - Abandoned outposts, rumored settlements, unexplored ruins
 - Trade routes connecting coastal enclaves
@@ -444,7 +529,7 @@ This is survival economics, not fantasy gold. Inspired by *Caves of Qud*'s dram-
 
 The Mississippi shifted west. The Gulf crept inland. Siltgate's streets are flooded. The bayous are swollen. Rain falls. Algae blooms spread green across every standing pool. Water is *everywhere* — brackish, contaminated, salty, or laced with chemical runoff from a thousand years of unchecked mutation and decay.
 
-But potable water — clean, filtered, safe to swallow without retching — is the scarcest resource in the settlement. Desalination infrastructure collapsed with the old world. Filtration requires working machinery that only the Urnkeepers can maintain. Natural freshwater springs are rare, hidden, and fiercely guarded.
+But potable water — clean, filtered, safe to swallow without retching — is the scarcest resource in the settlement. Desalination infrastructure collapsed with the old world. Filtration requires working machinery that only the Brined can maintain. Natural freshwater springs are rare, hidden, and fiercely guarded.
 
 **Why it works as currency:**
 
@@ -455,7 +540,7 @@ But potable water — clean, filtered, safe to swallow without retching — is t
 
 ### 8.2 UNIT OF MEASUREMENT: DRAWS
 
-The unit of potable water is the **draw** (plural: *draws*). One draw is roughly a cup's worth — enough to wet your throat, not enough to quench real thirst. The word comes from the act of drawing water from a well or cistern, corrupted over time into trade slang by the Silt Traders who standardized the measurement for commerce.
+The unit of potable water is the **draw** (plural: *draws*). One draw is roughly a cup's worth — enough to wet your throat, not enough to quench real thirst. The word comes from the act of drawing water from a well or cistern, corrupted over time into trade slang.
 
 - **1 draw** — a swallow, a sip, a taste of survival
 - **10 draws** — enough for a day's hydration in the Gulf heat
@@ -473,7 +558,7 @@ Water is heavy. One draw weighs approximately what you'd expect a cup of water t
 - A player carrying 100 draws back from a lucrative trade is *loaded down*. Movement slows. Combat suffers. Extraction becomes a race against encumbrance.
 - A player carrying 200+ draws is a target — visibly wealthy, visibly slow, visibly vulnerable.
 
-**Rich players are literally heavier.** This is intentional. Wealth has physical consequences. The Silt Traders who move large volumes of water use pack animals, carts, and armed caravans — not because of bandits (though those exist), but because the cargo itself is a burden.
+**Rich players are literally heavier.** This is intentional. Wealth has physical consequences. Those who move large volumes of water use pack animals, carts, and armed caravans — not because of bandits (though those exist), but because the cargo itself is a burden.
 
 This creates meaningful decisions at every level:
 - Do I carry extra water into the shard, or travel light and fast?
@@ -484,29 +569,30 @@ This creates meaningful decisions at every level:
 
 Each faction stronghold maintains a **cistern** — a communal water storage facility where members can deposit and withdraw draws. This is the stash equivalent for currency.
 
-- **The Reliquary Cistern** (Urnkeepers) — Repurposed filtration tanks, still functional. The cleanest water storage in Siltgate. Urnkeepers trust their engineering.
-- **The Bloom Reservoir** (Tidereaders) — Sealed tanks on the oil platform, fed by rainwater collection and algae-filtered purification. Smaller capacity, but the water tastes faintly of salt and seaweed.
-- **The Ledger Vault** (Silt Traders) — Locked storage in the Exchange basement. Every draw deposited and withdrawn is recorded in the Traders' cipher-books. They charge a storage fee, naturally.
+- **The Reliquary Cistern** (The Kindari) — Repurposed filtration tanks, still functional. The cleanest water storage in Siltgate. The Kindari trust their engineering.
+- **The Bloom Observatory Reservoir** (The Bloom Tenders) — Sealed tanks on the oil platform, fed by rainwater collection and algae-filtered purification. Smaller capacity, but the water tastes faintly of salt and seaweed.
+- **The Carrion Court Vaults** (Krewe Calliope) — Locked cisterns beneath the Superdome, accessible through the backstage area. Every draw deposited and withdrawn is recorded in the Krewe's ritual ledgers — part accounting, part ceremony. Some members swear the water tastes different after a successful parade.
 
-Cisterns are **safe storage** — water deposited here is not lost on death. But cisterns are faction-locked: you can only use your own faction's cistern. Neutral players (the recently awakened, the factionless) have no safe storage. Another reason to join up.
+Cisterns are **safe storage** — water deposited here is not lost on death. But cisterns are faction-locked: you can only use a cistern once you've reached at least NEUTRAL standing with that faction. Distrusted players have no safe water storage — another reason to earn reputation.
 
 ### 8.5 EARNING WATER
 
 Draws enter player hands through several channels:
 
 - **Scavenging purification supplies** — Salvaged water filters, chemical purification tablets, and intact sealed bottles found in pre-extinction ruins can be traded to faction quartermasters for draws, or used directly to purify brackish sources.
-- **Completing missions** — Faction expedition boards pay in draws. Escort a caravan? 30 draws. Clear a Warrens section? 15 draws plus salvage rights. Map a new route? The Tidereaders pay well for data.
+- **Completing missions** — Faction expedition boards pay in draws. Escort a caravan? 30 draws. Clear a Warrens section? 15 draws plus salvage rights. Map a new route for the Bloom Tenders? They pay well for data.
 - **Trading materials** — Drone components, wildlife materials (spider silk, alligator hide, snake venom), and crafting supplies all have water-equivalent values at faction markets.
 - **Finding clean springs** — Rare, hidden freshwater sources exist in the ruins and the wild bayou. A player who discovers one can fill containers directly — free water, if you can carry it out alive.
-- **Faction production** — The Urnkeepers' filtration systems produce a steady supply of clean water. Working for the Urnkeepers means working near the source.
+- **Faction production** — The Kindari filtration systems produce a steady supply of clean water. Working for the Kindari means working near the source.
+- **Cultural services** — Krewe Calliope pays in water (or ritual tokens convertible to water) for performers, artists, and those willing to participate in their rites. A musician who plays for a parade, an actor who performs in a ritual, or a scout who helps plan a procession route can earn draws through cultural contribution.
 
 ### 8.6 SPENDING WATER
 
 Draws leave player hands through:
 
-- **Inn stays** — Resting at an inn costs water. Faction members rest at their stronghold inn for free (or reduced rate). Non-faction members and visitors pay full price — the current 10-gold inn cost for non-natives becomes **10 draws** for non-faction guests. This is not cheap. Ten draws is a day's hydration.
+- **Inn stays** — Resting at an inn costs water. Faction members rest at their stronghold inn for free (or reduced rate, depending on standing). Non-faction members and visitors pay full price — **10 draws** for non-faction guests at any stronghold. This is not cheap. Ten draws is a day's hydration.
 - **Supplies and equipment** — Weapons, armor, tools, rations, containers — everything at faction markets is priced in draws.
-- **Faction services** — Training, repairs, medical attention, information brokerage. The Silt Traders charge for everything. The Urnkeepers charge for repairs. The Tidereaders charge for maps and ecological data.
+- **Faction services** — Training, repairs, medical attention, information brokerage. The Kindari charge for complex repairs. The Bloom Tenders charge for maps and ecological data. Krewe Calliope charges for blessings, ritual participation, and access to certain performances.
 - **NPC transactions** — Independent merchants, wandering traders, and neutral NPCs all accept draws. Some demand them.
 - **Drinking** — The desperation mechanic. You can consume your own water supply to restore hydration (and potentially health) in the field. Every draw you drink is a draw you can't spend. Survival and commerce are the same resource.
 
@@ -514,27 +600,31 @@ Draws leave player hands through:
 
 Each faction has a distinct relationship to the water economy, creating natural economic tension:
 
-**The Urnkeepers — The Producers**
-The Urnkeepers control working filtration systems at the Reliquary. They can *produce* clean water from brackish sources. This makes them the most economically powerful faction in raw output — they sit on the means of production. Their leverage: "You need water? We make water. Work with us, or pay our price."
+**The Kindari — The Producers**
+The Kindari control working filtration systems at the Reliquary. They can *produce* clean water from brackish sources. This makes them the most economically powerful faction in raw output — they sit on the means of production. Their leverage: "You need water? We make water. Work with us, or pay our price."
 
-But production requires maintenance. Filtration parts wear out. Salvage runs for replacement components are constant. The Urnkeepers' wealth depends on infrastructure that is always one mechanical failure from collapse.
+But production requires maintenance. Filtration parts wear out. Salvage runs for replacement components are constant. The Kindari's wealth depends on infrastructure that is always one mechanical failure from collapse.
 
-**The Tidereaders — The Prospectors**
-The Tidereaders study the mutant algae, water chemistry, and ecological patterns of the Gulf Coast. They know where the clean springs are. They understand which algae strains purify water and which contaminate it. They can identify safe water sources that others would walk past.
+**The Bloom Tenders — The Prospectors**
+The Bloom Tenders study the mutant algae, water chemistry, and ecological patterns of the Gulf Coast. They know where the clean springs are. They understand which algae strains purify water and which contaminate it. They can identify safe water sources that others would walk past.
 
-Their leverage is *knowledge*. They don't produce water at scale, but they know where it hides. A Tidereader guide can lead a scavenging party to a hidden spring worth a hundred draws. Their charts and biomonitoring data are worth water to anyone who needs to find clean sources.
+Their leverage is *knowledge*. They don't produce water at scale, but they know where it hides. A Bloom Tenders guide can lead a scavenging party to a hidden spring worth a hundred draws. Their charts and biomonitoring data are worth water to anyone who needs to find clean sources.
 
-**The Silt Traders — The Distributors**
-The Silt Traders don't produce water and they don't find it. They *move* it. They control trade routes between Siltgate and other settlements. They broker bulk water deals. They run the only neutral marketplace where all factions can trade.
+**Krewe Calliope — The Morale Keepers**
+Krewe Calliope doesn't produce water and they don't find it. They control something else entirely: **meaning, hope, and culture**. In a world defined by scarcity and danger, people need more than hydration to survive — they need reasons to *want* to survive.
 
-Their leverage is logistics and access. Need water moved from the Reliquary to the docks? Silt Traders. Need to buy water without faction affiliation? Silt Traders. Need to convert salvage into draws quickly? Silt Traders take a cut, but the deal gets done.
+The Krewe provides festivals, music, art, and ritual. They offer blessings before dangerous expeditions (psychological comfort that might save your life by keeping you focused). They perform funerals that give death meaning. They throw parades that remind people joy still exists. And they charge for it — sometimes in water, sometimes in favors, participation, or loyalty.
 
-**The tension:** The Urnkeepers produce. The Tidereaders discover. The Silt Traders distribute. No faction controls the entire supply chain. This creates interdependence — and the friction that comes with it.
+Their leverage is *morale*. A settlement without hope collapses from within, even if the cisterns are full. The Krewe doesn't sell water — they sell the will to keep going. And in a broken world, that's priceless.
 
-- Do the Silt Traders charge fair transport fees, or are they price-gouging?
-- Are the Urnkeepers selling water at cost, or leveraging their monopoly on filtration?
-- Are the Tidereaders sharing spring locations, or hoarding them as bargaining chips?
+**The tension:** The Kindari produce. The Bloom Tenders discover. Krewe Calliope sustains the spirit. No faction controls the entire survival equation — water, knowledge, and meaning are all necessary, and all controlled by different groups. This creates interdependence, and the friction that comes with it.
+
+- Do the Kindari charge fair rates for water, or are they leveraging their monopoly on filtration?
+- Are the Bloom Tenders sharing spring locations, or hoarding them as bargaining chips?
+- Does Krewe Calliope genuinely provide psychological survival, or are they cynical manipulators using spectacle to extract favors and loyalty?
 - What happens when a filtration system breaks down and production drops? Who gets rationed first?
+- What happens when a major bloom shifts and the springs dry up?
+- What happens when a settlement loses hope — when the parades stop and people give up? Can the Kindari's water and the Bloom Tenders' knowledge keep a society alive if no one *wants* to live anymore?
 
 ### 8.8 THEMATIC NOTES FOR WRITERS
 
@@ -556,11 +646,11 @@ A wealthy scavenger doesn't jingle with coins — they slosh. Their pack is heav
 
 - *"The Trader's pack clinks with every step — sealed bottles, tightly stoppered, each one worth a desperate person's day. She walks slowly. She can afford to — for now."*
 
-**The corruption question hangs over the Silt Traders.**
+**The corruption question hangs over all three factions.**
 
-Are the Silt Traders serving the settlement or exploiting it? They control distribution. They set market prices. They take a cut of every transaction. Are they middlemen or profiteers? This is not a question with a canonical answer — it's a source of tension that NPC dialogue, faction quests, and player experience should explore.
+Are the Kindari serving the settlement or exploiting their control of water production? Are the Bloom Tenders hoarding knowledge for leverage? Is Krewe Calliope genuinely preserving humanity's spirit, or manipulating people through spectacle and ritual? These are not questions with canonical answers — they're sources of tension that NPC dialogue, faction quests, and player experience should explore. Each faction believes they're doing necessary work. Whether they're right is up to the player to decide.
 
-- *"Fifteen draws for a canteen of clean water? That's robbery." The Trader shrugs. "That's logistics. You want it cheaper, go filter your own."*
+- *"Fifteen draws for a canteen of clean water? That's robbery." The merchant shrugs. "That's the going rate when the Kindari filtration system is down for repairs. You want it cheaper, go find your own spring — or wait three days for the fix."*
 
 ### 8.9 WRITING GUIDELINES
 

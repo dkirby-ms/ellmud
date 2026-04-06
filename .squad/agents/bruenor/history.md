@@ -91,3 +91,23 @@
 - **Critical slug note:** Warrens zone slug is `warrens`, NOT `the-warrens` — verified from 003_seed_zones.sql
 - **Pattern notes:** Matched 005_siltgate_topology_fixes.sql structure — BEGIN/COMMIT, sectioned comments, cross-join VALUES for rooms/exits, individual DELETEs with subquery zone_id
 - **Transaction:** Full BEGIN/COMMIT wrap for atomicity
+
+### Faction and Stronghold Rename (2026-03-31)
+- **Migration:** `017_faction_renames.sql`
+- **Source:** Thematic realignment document (`docs/thematic-direction.md`)
+- **Faction changes:**
+  - `ironwright` → `kindari` (The Ironwright Compact → The Kindari)
+  - `veil` → `bloom-tenders` (The Veil Cartographers → The Bloom Tenders)
+  - `scarlet` → `krewe-calliope` (The Scarlet Ledger → Krewe Calliope)
+- **Stronghold zone changes:**
+  - `the-foundry` → `the-reliquary` (The Foundry → The Reliquary)
+  - `the-cartographium` → `the-bloom-observatory` (The Cartographium → The Bloom Observatory)
+  - `the-counting-house` → `the-carrion-court` (The Counting House → The Carrion Court)
+- **Database updates:** Factions table (slug, name, description), zones table (slug, name, description, faction_slug, entry_room_slugs), zone_rooms (slugs, names, descriptions for all 30 stronghold rooms), zone_exits (room slug references), characters table (faction_slug, last_inn references)
+- **Code updates:**
+  - Server: `zones/stronghold.ts` (FACTION_SLUGS, FACTION_STRONGHOLD_MAP, HUB_DISPLAY_NAMES), `db/types.ts` (FactionSlugs enum), `api/characters.ts` (validFactions array), `character/InMemoryCharacterRepository.ts` (faction name mapping)
+  - Client: `pages/CharacterSelect.tsx` (FACTIONS array), `hooks/useZoneConnection.ts` (hub zone checks), `pages/Leaderboard.tsx` (placeholder faction names)
+  - Tests: `death-spawn-routing.test.ts`, `faction-repository.test.ts`, `faction-strongholds.test.ts`, `character-repository.test.ts`, `pg-character-repository.test.ts` (all faction slug references)
+- **Room mapping:** Each stronghold has 10 rooms (8 original features + 2 inn rooms from migration 016). Room descriptions pulled from thematic direction doc sections 1.1, 1.2, 1.3.
+- **Pattern notes:** Migration uses UPDATE statements to preserve row IDs and foreign key relationships. All room slug references in zone_exits updated after room slug changes. Entry room slugs updated to point to new inn room slugs.
+- **Build verification:** TypeScript compilation successful — all imports and type references updated correctly.

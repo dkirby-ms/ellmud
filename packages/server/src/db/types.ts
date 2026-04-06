@@ -121,9 +121,9 @@ export interface RunHistory {
 // ─── Canonical Faction Slugs ─────────────────────────────────────────────────
 
 export const FactionSlugs = {
-  IRONWRIGHT: 'ironwright',
-  VEIL: 'veil',
-  SCARLET: 'scarlet',
+  KINDARI: 'kindari',
+  BLOOM_TENDERS: 'bloom-tenders',
+  KREWE_CALLIOPE: 'krewe-calliope',
 } as const;
 
 export type FactionSlug = typeof FactionSlugs[keyof typeof FactionSlugs];
