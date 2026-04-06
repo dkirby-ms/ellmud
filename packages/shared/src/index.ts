@@ -176,8 +176,10 @@ export interface TelegraphMessage {
 export interface CharacterSummary {
   id: string;
   name: string;
-  factionSlug: string;
-  factionName: string;
+  startingZoneSlug: string;
+  startingZoneName: string;
+  factionSlug: string | null;
+  factionName: string | null;
   isActive: boolean;
   createdAt: string;
   lastPlayedAt: string | null;
@@ -188,7 +190,7 @@ export interface CharacterSummary {
 /** Client → Server: Create a new character. */
 export interface CreateCharacterRequest {
   name: string;
-  factionSlug: string;
+  startingZoneSlug: string;
 }
 
 /** Client → Server: Select an existing character. */
@@ -767,8 +769,10 @@ export interface StashUpdateMessage {
 export interface CharacterSummary {
   id: string;
   name: string;
-  factionSlug: string;
-  factionName: string;
+  startingZoneSlug: string;
+  startingZoneName: string;
+  factionSlug: string | null;
+  factionName: string | null;
   isActive: boolean;
   createdAt: string;
   lastPlayedAt: string | null;
@@ -779,7 +783,7 @@ export interface CharacterSummary {
 /** Client → Server: Create a new character. */
 export interface CreateCharacterRequest {
   name: string;
-  factionSlug: string;
+  startingZoneSlug: string;
 }
 
 /** Client → Server: Select a character. */

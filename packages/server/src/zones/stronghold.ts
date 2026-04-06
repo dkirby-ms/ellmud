@@ -1,7 +1,8 @@
 /**
- * Faction stronghold routing — maps faction membership to hub zone slugs.
+ * Faction stronghold routing — maps faction membership and starting zones to hub zone slugs.
  *
  * Used for login spawning and death respawn:
+ * - Characters with a starting zone spawn at that zone's stronghold
  * - Players with a faction spawn in their faction's stronghold
  * - Players without a faction fall back to the Refuge (designer/debug hub)
  */
@@ -9,24 +10,28 @@
 import type { ZoneRepository } from './ZoneRepository.js';
 
 /** Well-known faction slugs (from 002_seed_content.sql). */
-export const FACTION_SLUGS = ['ironwright', 'veil', 'scarlet'] as const;
+export const FACTION_SLUGS = ['kindari', 'bloom-tenders', 'krewe-calliope'] as const;
 export type FactionSlug = (typeof FACTION_SLUGS)[number];
 
+/** Valid starting zones (the three faction strongholds). */
+export const VALID_STARTING_ZONES = ['the-reliquary', 'the-bloom-observatory', 'the-carrion-court'] as const;
+export type StartingZoneSlug = (typeof VALID_STARTING_ZONES)[number];
+
 /** Static mapping from faction slug → stronghold zone slug. */
-const FACTION_STRONGHOLD_MAP: Record<FactionSlug, string> = {
-  ironwright: 'the-foundry',
-  veil: 'the-cartographium',
-  scarlet: 'the-counting-house',
+export const FACTION_STRONGHOLD_MAP: Record<FactionSlug, string> = {
+  kindari: 'the-reliquary',
+  'bloom-tenders': 'the-bloom-observatory',
+  'krewe-calliope': 'the-carrion-court',
 };
 
 /** Fallback zone slug when player has no faction (designer/debug hub). */
 export const DEFAULT_HUB_SLUG = 'the-refuge';
 
-/** Display names for hub zones (used in death narration). */
-const HUB_DISPLAY_NAMES: Record<string, string> = {
-  'the-foundry': 'The Foundry',
-  'the-cartographium': 'The Cartographium',
-  'the-counting-house': 'The Counting House',
+/** Display names for hub zones (used in death narration and starting zone display). */
+export const HUB_DISPLAY_NAMES: Record<string, string> = {
+  'the-reliquary': 'The Reliquary',
+  'the-bloom-observatory': 'The Bloom Observatory',
+  'the-carrion-court': 'The Carrion Court',
   'the-refuge': 'The Refuge',
 };
 
@@ -52,7 +57,7 @@ export function resolvePlayerHubSlug(factionSlug: string | undefined): string {
 }
 
 /**
- * Resolve the Colyseus room target string (e.g. 'zone:the-foundry') for a
+ * Resolve the Colyseus room target string (e.g. 'zone:the-reliquary') for a
  * player's faction. Used in ROOM_SWITCH messages on death/login.
  */
 export function resolvePlayerHubTarget(factionSlug: string | undefined): string {
@@ -60,7 +65,7 @@ export function resolvePlayerHubTarget(factionSlug: string | undefined): string 
 }
 
 /**
- * Resolve the display name for a player's hub zone (e.g. 'The Foundry').
+ * Resolve the display name for a player's hub zone (e.g. 'The Reliquary').
  * Used in death narration to tell the player where they're respawning.
  */
 export function resolvePlayerHubName(factionSlug: string | undefined): string {
@@ -84,4 +89,24 @@ export async function getStrongholdForFaction(
   // Fallback to Refuge
   const refugeData = await zoneRepo.getZoneBySlug(DEFAULT_HUB_SLUG);
   return { zoneSlug: DEFAULT_HUB_SLUG, zoneData: refugeData };
+}
+
+/**
+ * Resolve the Colyseus room target string for a starting zone slug.
+ * Starting zones are the faction strongholds, so this is a direct mapping.
+ * Falls back to the Refuge if the slug is unrecognised.
+ */
+export function resolveStartingZoneTarget(startingZoneSlug: string): string {
+  const validSlugs: readonly string[] = VALID_STARTING_ZONES;
+  if (validSlugs.includes(startingZoneSlug)) {
+    return `zone:${startingZoneSlug}`;
+  }
+  return `zone:${DEFAULT_HUB_SLUG}`;
+}
+
+/**
+ * Get the display name for a starting zone slug.
+ */
+export function getStartingZoneDisplayName(startingZoneSlug: string): string {
+  return HUB_DISPLAY_NAMES[startingZoneSlug] ?? startingZoneSlug;
 }

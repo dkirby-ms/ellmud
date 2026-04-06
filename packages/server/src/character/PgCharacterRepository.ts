@@ -10,7 +10,8 @@ interface DbCharacterRow {
   id: string;
   player_id: string;
   name: string;
-  faction_slug: string;
+  starting_zone_slug: string;
+  faction_slug: string | null;
   is_active: boolean;
   created_at: Date;
   last_played_at: Date | null;
@@ -36,6 +37,7 @@ function mapRow(row: DbCharacterRow): CharacterRow {
     id: row.id,
     playerId: row.player_id,
     name: row.name,
+    startingZoneSlug: row.starting_zone_slug,
     factionSlug: row.faction_slug,
     isActive: row.is_active,
     createdAt: row.created_at,
@@ -47,7 +49,7 @@ function mapRow(row: DbCharacterRow): CharacterRow {
 export class PgCharacterRepository implements CharacterRepository {
   async list(playerId: string): Promise<CharacterSummary[]> {
     const result = await query<DbCharacterRow>(
-      `SELECT id, player_id, name, faction_slug, is_active, created_at, last_played_at, deleted_at
+      `SELECT id, player_id, name, starting_zone_slug, faction_slug, is_active, created_at, last_played_at, deleted_at
        FROM characters
        WHERE player_id = $1 AND deleted_at IS NULL
        ORDER BY created_at ASC`,
@@ -62,6 +64,12 @@ export class PgCharacterRepository implements CharacterRepository {
     for (const f of factionResult.rows) {
       factionMap.set(f.slug, f.name);
     }
+
+    const zoneDisplayNames: Record<string, string> = {
+      'the-reliquary': 'The Reliquary',
+      'the-bloom-observatory': 'The Bloom Observatory',
+      'the-carrion-court': 'The Carrion Court',
+    };
 
     const summaries: CharacterSummary[] = [];
     for (const row of result.rows) {
@@ -83,8 +91,10 @@ export class PgCharacterRepository implements CharacterRepository {
       summaries.push({
         id: row.id,
         name: row.name,
+        startingZoneSlug: row.starting_zone_slug,
+        startingZoneName: zoneDisplayNames[row.starting_zone_slug] ?? row.starting_zone_slug,
         factionSlug: row.faction_slug,
-        factionName: factionMap.get(row.faction_slug) ?? row.faction_slug,
+        factionName: row.faction_slug ? (factionMap.get(row.faction_slug) ?? row.faction_slug) : null,
         isActive: row.is_active,
         createdAt: row.created_at.toISOString(),
         lastPlayedAt: row.last_played_at?.toISOString() ?? null,
@@ -96,19 +106,19 @@ export class PgCharacterRepository implements CharacterRepository {
     return summaries;
   }
 
-  async create(playerId: string, name: string, factionSlug: string): Promise<CharacterRow> {
+  async create(playerId: string, name: string, startingZoneSlug: string): Promise<CharacterRow> {
     const result = await query<DbCharacterRow>(
-      `INSERT INTO characters (player_id, name, faction_slug)
+      `INSERT INTO characters (player_id, name, starting_zone_slug)
        VALUES ($1, $2, $3)
-       RETURNING id, player_id, name, faction_slug, is_active, created_at, last_played_at, deleted_at`,
-      [playerId, name, factionSlug],
+       RETURNING id, player_id, name, starting_zone_slug, faction_slug, is_active, created_at, last_played_at, deleted_at`,
+      [playerId, name, startingZoneSlug],
     );
     return mapRow(result.rows[0]);
   }
 
   async getById(id: string): Promise<CharacterRow | null> {
     const result = await query<DbCharacterRow>(
-      `SELECT id, player_id, name, faction_slug, is_active, created_at, last_played_at, deleted_at
+      `SELECT id, player_id, name, starting_zone_slug, faction_slug, is_active, created_at, last_played_at, deleted_at
        FROM characters
        WHERE id = $1 AND deleted_at IS NULL`,
       [id],
@@ -162,7 +172,7 @@ export class PgCharacterRepository implements CharacterRepository {
 
   async getActive(playerId: string): Promise<CharacterRow | null> {
     const result = await query<DbCharacterRow>(
-      `SELECT id, player_id, name, faction_slug, is_active, created_at, last_played_at, deleted_at
+      `SELECT id, player_id, name, starting_zone_slug, faction_slug, is_active, created_at, last_played_at, deleted_at
        FROM characters
        WHERE player_id = $1 AND is_active = true AND deleted_at IS NULL`,
       [playerId],

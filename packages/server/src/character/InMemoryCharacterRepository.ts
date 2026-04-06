@@ -20,7 +20,7 @@ export class InMemoryCharacterRepository implements CharacterRepository {
     return chars;
   }
 
-  async create(playerId: string, name: string, factionSlug: string): Promise<CharacterRow> {
+  async create(playerId: string, name: string, startingZoneSlug: string): Promise<CharacterRow> {
     // Check uniqueness among non-deleted characters
     for (const row of this.characters.values()) {
       if (
@@ -36,7 +36,8 @@ export class InMemoryCharacterRepository implements CharacterRepository {
       id: crypto.randomUUID(),
       playerId,
       name,
-      factionSlug,
+      startingZoneSlug,
+      factionSlug: null,
       isActive: false,
       createdAt: new Date(),
       lastPlayedAt: null,
@@ -95,15 +96,22 @@ export class InMemoryCharacterRepository implements CharacterRepository {
 
   private toSummary(row: CharacterRow): CharacterSummary {
     const factionNames: Record<string, string> = {
-      ironwright: 'Ironwright Compact',
-      veil: 'Veil Cartographers',
-      scarlet: 'Scarlet Ledger',
+      kindari: 'The Kindari',
+      'bloom-tenders': 'The Bloom Tenders',
+      'krewe-calliope': 'Krewe Calliope',
+    };
+    const zoneDisplayNames: Record<string, string> = {
+      'the-reliquary': 'The Reliquary',
+      'the-bloom-observatory': 'The Bloom Observatory',
+      'the-carrion-court': 'The Carrion Court',
     };
     return {
       id: row.id,
       name: row.name,
+      startingZoneSlug: row.startingZoneSlug,
+      startingZoneName: zoneDisplayNames[row.startingZoneSlug] ?? row.startingZoneSlug,
       factionSlug: row.factionSlug,
-      factionName: factionNames[row.factionSlug] ?? row.factionSlug,
+      factionName: row.factionSlug ? (factionNames[row.factionSlug] ?? row.factionSlug) : null,
       isActive: row.isActive,
       createdAt: row.createdAt.toISOString(),
       lastPlayedAt: row.lastPlayedAt?.toISOString() ?? null,

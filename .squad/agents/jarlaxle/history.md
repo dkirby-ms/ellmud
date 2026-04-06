@@ -42,6 +42,19 @@
 - **Pending integration:** CombatSystem.validateAbilityAction(), CombatSystem.updateCooldowns(), CombatSystem.resolveEncounterTick() update. Coordinated with Drizzt on threat system (High-damage abilities = higher threat).
 - **Key lesson:** Optional interface fields are OK when they're truly optional in Phase 1. Type system enforces null checks, avoids pollution. Mark clearly in TSDoc which systems consume which fields.
 
+### 2026-04-06: Reputation System — Starting Zone Refactor (Migration 021)
+- **Task:** Refactor character creation from faction-based to starting-zone-based; add reputation schema
+- **Architecture:** Players now pick a starting zone (one of three faction strongholds) instead of a faction. Faction affiliation is earned through gameplay.
+- **Key decisions:**
+  - **`starting_zone_slug` on characters table** — New NOT NULL column with default `'the-reliquary'`. Existing characters backfilled from their faction_slug using CASE mapping.
+  - **`faction_slug` made nullable** — Kept for future gameplay-earned faction standing. New characters get `faction_slug = NULL`. No data loss for existing characters.
+  - **`character_reputation` table** — Per-character, per-faction reputation integer with UNIQUE(character_id, faction_slug). Reputation tiers: Despised (<-500), Distrusted (-500 to -100), Neutral (-100 to 100), Trusted (100 to 500), Honored (>500).
+  - **No faction_membership row on create** — Removed the POST /api/characters faction membership insert. Players start neutral.
+  - **Spawn-zone resolves from starting_zone_slug** — GET /api/spawn-zone now reads active character's starting_zone_slug first, falls back to faction membership for backward compat.
+  - **`resolveStartingZoneTarget()` in stronghold.ts** — Direct slug→target mapping for starting zones (they ARE the strongholds). VALID_STARTING_ZONES const exported.
+- **Files changed:** Migration 021, shared/src/index.ts (both CharacterSummary duplicates), CharacterRepository.ts, PgCharacterRepository.ts, InMemoryCharacterRepository.ts, api/characters.ts, api/spawn-zone.ts, zones/stronghold.ts, CharacterSelect.tsx, character-repository.test.ts, pg-character-repository.test.ts
+- **All 2555 tests passing, zero regressions.**
+
 ## Learnings (Archived — See Detailed Session Records)
 
 ### 2026-03-19: PostgreSQL schema (Issue #3)

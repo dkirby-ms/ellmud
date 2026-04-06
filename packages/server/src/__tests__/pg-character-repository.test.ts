@@ -40,7 +40,8 @@ describe('PgCharacterRepository', () => {
           id: 'char-1',
           player_id: 'player-1',
           name: 'Drizzt',
-          faction_slug: 'veil',
+          starting_zone_slug: 'the-bloom-observatory',
+          faction_slug: null,
           is_active: false,
           created_at: now,
           last_played_at: null,
@@ -52,16 +53,17 @@ describe('PgCharacterRepository', () => {
         fields: [],
       });
 
-      const result = await repo.create('player-1', 'Drizzt', 'veil');
+      const result = await repo.create('player-1', 'Drizzt', 'the-bloom-observatory');
 
       expect(result.id).toBe('char-1');
       expect(result.name).toBe('Drizzt');
-      expect(result.factionSlug).toBe('veil');
+      expect(result.startingZoneSlug).toBe('the-bloom-observatory');
+      expect(result.factionSlug).toBeNull();
       expect(result.playerId).toBe('player-1');
       expect(result.isActive).toBe(false);
       expect(queryMock).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO characters'),
-        ['player-1', 'Drizzt', 'veil'],
+        ['player-1', 'Drizzt', 'the-bloom-observatory'],
       );
     });
   });
@@ -76,7 +78,8 @@ describe('PgCharacterRepository', () => {
           id: 'char-1',
           player_id: 'player-1',
           name: 'Drizzt',
-          faction_slug: 'veil',
+          starting_zone_slug: 'the-bloom-observatory',
+          faction_slug: null,
           is_active: true,
           created_at: now,
           last_played_at: null,
@@ -183,7 +186,8 @@ describe('PgCharacterRepository', () => {
           id: 'char-1',
           player_id: 'player-1',
           name: 'Drizzt',
-          faction_slug: 'veil',
+          starting_zone_slug: 'the-bloom-observatory',
+          faction_slug: null,
           is_active: true,
           created_at: now,
           last_played_at: null,
@@ -226,7 +230,8 @@ describe('PgCharacterRepository', () => {
           id: 'char-1',
           player_id: 'player-1',
           name: 'Drizzt',
-          faction_slug: 'veil',
+          starting_zone_slug: 'the-bloom-observatory',
+          faction_slug: 'bloom-tenders',
           is_active: true,
           created_at: now,
           last_played_at: null,
@@ -241,8 +246,8 @@ describe('PgCharacterRepository', () => {
       // Factions query
       queryMock.mockResolvedValueOnce({
         rows: [
-          { slug: 'veil', name: 'The Veil Cartographers' },
-          { slug: 'ironwright', name: 'The Ironwright Compact' },
+          { slug: 'bloom-tenders', name: 'The Bloom Tenders' },
+          { slug: 'kindari', name: 'The Kindari' },
         ],
         command: 'SELECT',
         rowCount: 2,
@@ -272,7 +277,7 @@ describe('PgCharacterRepository', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe('Drizzt');
-      expect(result[0].factionName).toBe('The Veil Cartographers');
+      expect(result[0].factionName).toBe('The Bloom Tenders');
       expect(result[0].topSkills).toEqual([{ name: 'stealth', level: 15 }]);
       expect(result[0].totalRuns).toBe(7);
     });

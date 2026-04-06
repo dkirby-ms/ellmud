@@ -43,7 +43,7 @@ const FORBIDDEN_PATTERNS = [
   /\b\d+\s*(?:HP|hp|Hp|damage|dmg|hit points)\b/,
   /\b(?:damage|heal|health|mana):\s*\d+/i,
   /\b\d+%/,
-  /\b\d+\s*(?:gold|coins|XP|experience)\b/i,
+  /\b\d+\s*(?:gold|coins|water|draws|XP|experience)\b/i,
   /\b(?:level|lvl)\s*\d+/i,
 ];
 

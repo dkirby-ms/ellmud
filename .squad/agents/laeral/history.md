@@ -111,3 +111,189 @@ Siltgate revision finalized and merged into team decisions archive.
 - **Intermediate room insertion technique:** For Fix A-2, inserting 1 room between south-tunnel and west-conduit (changing W to W→S) adjusted the running offset enough that only 3 more rooms were needed between west-conduit and cistern. Splitting the problem at an intermediate junction reduced total rooms from 5 to 4.
 - **BFS simulation is essential:** Ran full BFS topology verification in Python before and after changes. Confirmed 0 conflicts and consistent grid positions for all 109 rooms. Never trust cycle math alone — always simulate.
 - Design document: `.squad/decisions/inbox/laeral-warrens-topology-fixes.md`
+
+### 2026-03-29: Thematic Realignment — Faction and Zone Redesign
+- Expanded `docs/thematic-direction.md` with comprehensive faction and zone redesigns for dystopian Gulf Coast setting (year 3000, post-human Earth).
+- **Faction redesigns:** Transformed three factions from generic fantasy to setting-specific survival factions:
+  - Ironwright Compact → **The Urnkeepers** (technology salvage, drone scavenging, reverence for preservation tech)
+  - Veil Cartographers → **The Tidereaders** (ecological mapping, biomonitoring, mutant algae research)
+  - Scarlet Ledger → **The Silt Traders** (commerce, information brokerage, trade route control)
+- **Stronghold redesigns:** Each faction stronghold reimagined with Louisiana setting flavor:
+  - The Foundry → **The Reliquary** (converted water treatment plant)
+  - The Cartographium → **The Bloom Observatory** (offshore oil platform with algae cultivation)
+  - The Counting House → **The Exchange** (fortified French Quarter townhouses)
+- Designed 8 room names for each stronghold (entry, stash, training, expedition board, market, commons, inn, war room) with dystopian Gulf Coast theming.
+- **Zone re-themes:** Updated Siltgate (post-apocalyptic New Orleans, Mississippi shifted west) and The Warrens (service tunnels beneath ruins, rat-infested infrastructure).
+- **World texture:** Defined drone swarm debris (lootable, dangerous), mutant wildlife (rats, roaches, snakes, mosquitoes, alligators), and recognizable New Orleans landmarks (Superdome, interstate overpasses, Bourbon Street flooded).
+- **Player origin narrative:** Expanded "waking from pickling urns" experience — what characters remember, how factions recruit them, why they join.
+- **Tone guidelines:** Louisiana gothic (brackish water, humidity, spanish moss, rust, overgrowth), gritty but not grimdark, eerie but hopeful.
+- Marked 5 open questions for user review (surviving non-Sleeper humans, Saitcho Kindar's lore role, faction competition, partially-active drones, symbiotic wildlife).
+- **Key design principle:** Second-person room descriptions (2-4 sentences), atmospheric but concise for terminal display. Gulf Coast flavor is non-negotiable — this is New Orleans, not generic ruins.
+- Document status: Draft for iteration. No database changes yet — this is design iteration material.
+
+### 2026-03-29: Mutant Human Descendants & World Expansion
+- Resolved all 5 open questions from previous thematic direction draft:
+  - **No other surviving humans** — only mutant descendants that evolved from human stock over ~1000 years
+  - **Saitcho Kindar is mythic** — Satoshi Nakamoto-like anonymous figure, never met, only referenced in lore
+  - **Multiple settlements exist** — Siltgate is one of several Gulf Coast settlements, others referenced but not yet defined
+  - **Drones stay inactive** — dead machines, salvage only, NOT combat threats
+  - **Wildlife is useful** — materials like spider silk, alligator hide, bioluminescent algae, but NOT friendly/tameable
+- Designed comprehensive **Mutant Human Descendant** system (new Section 6):
+  - 6 archetypes embodying "worst of humanity": Graftlords (corruption), Maw-Kin (gluttony), Bone-Tithes (greed), Render-Kin (violence), Fester-Thralls (ugliness/body horror), Rut-Callers (lust/obsession)
+  - Each archetype has distinct appearance, behavior, habitat, and design notes
+  - **Core design principle:** Uncanny valley horror — they're *almost* human, which makes them deeply unsettling
+  - NOT zombies — they are alive, evolved, territorial organisms that don't recognize Sleepers as kin
+  - Naming convention: corrupted bayou creole, local slang (e.g., "the Crowned," "Vault-Wraiths," "the Rotted")
+  - Habitat: ruins, swamps, tunnels, flooded buildings — wherever humans once lived
+- Added **Section 7: The Wider World** — hooks for other settlements:
+  - NPC dialogue references to "Rust Harbor," "Barrier Settlements," "Shalepoint," "Mud Flats"
+  - Expedition board contracts for escorts, mapping runs, salvage rumors
+  - Tidereader charts showing other "awakening zones" along the coast
+  - Design guideline: Leave hooks, don't define settlements yet — world should feel larger than what's visible
+- Expanded **wildlife section** with useful materials:
+  - Giant spider silk (crafting), bioluminescent algae (light sources), alligator hide (armor), snake venom (alchemy), rat meat/bones (sustenance/tools), mosquito chitin (armor), feral hog tusks (weapons/trade)
+  - Wildlife behaviors can be exploited tactically (chemical scents, baiting, luring) but NOT tamed
+  - Nature is indifferent, not friendly — ecosystem as resource, not companion
+- **Tone refinement:** Mutant descendants are the most disturbing element in the game because they show what humanity became without civilization. Visual design targets body horror + recognition: "You see the shape of a human skull beneath the tumorous growths."
+- **Key writing guidelines for mutant descriptions:**
+  - Focus on distortion (proportions wrong, movements unnatural)
+  - Emphasize recognition (almost human, but not)
+  - Use sensory horror (smell, sound, movement)
+- Document status: Second draft complete. All open questions resolved. Ready for content implementation.
+
+### 2025-07-25: Potable Water Economy — Section 8
+- Added comprehensive Section 8 (ECONOMY: POTABLE WATER) to `docs/thematic-direction.md` per dkirby-ms directive.
+- **Core design decision:** Game currency is potable water, not gold. Inspired by Caves of Qud's dram-based water economy. Water is heavy, consumable, and universally needed — survival economics, not fantasy coinage.
+- **Unit of measurement:** "draws" — corrupted slang from "drawing water." 1 draw ≈ 1 cup. 10 draws = a day's hydration. Thematic Gulf Coast vocabulary.
+- **Weight-mobility tension:** Carrying wealth = carrying physical mass. Rich players are slower, more encumbered, more visible as targets. Creates strategic decisions about how much currency to carry vs. stash.
+- **Faction economic roles:** Urnkeepers produce (filtration systems), Tidereaders discover (spring locations, water chemistry), Silt Traders distribute (trade routes, brokerage). No faction controls the full supply chain — interdependence creates natural tension.
+- **Desperation mechanic:** Players can drink their own currency. Spending water = spending survival. "Water poor" is genuine desperation, not just "can't afford gear."
+- **Faction cisterns:** Stash equivalent for currency at each stronghold. Faction-locked — factionless players have no safe storage.
+- **Inn cost alignment:** Current 10-gold inn stay for non-faction guests becomes 10 draws. Backend note flagged for Bruenor/Drizzt to rename `gold` column from migration 016.
+- **Writing guidelines:** Louisiana gothic tone, grounded survival language, sensory water descriptions, real Gulf Coast water problems as reference, no fantasy currency vocabulary.
+- Decision document: `.squad/decisions/inbox/laeral-water-currency.md`
+
+
+### 2026-04-06: Faction Reputation System & Faction Renames
+
+- Implemented major faction redesign per user directive (dkirby-ms):
+  - **Reputation-based faction system:** Players no longer choose a faction at character creation. Instead, they choose a STARTING ZONE (stronghold), beginning with neutral standing in their home city and distrusted elsewhere. Faction allegiance is earned through actions (missions, trade, helping faction members), not declared at creation.
+  - **Multi-faction possibility:** Players can build standing with multiple factions, or commit to one, or remain freelance. High standing unlocks better prices, gear access, exclusive missions, and faction leadership recognition.
+  - **Standing tiers:** Distrusted → Neutral → Accepted → Trusted → Honored, with escalating benefits (services, prices, stash/cistern access, NPC attitudes).
+- **Faction renames with full rethemes:**
+  1. **Urnkeepers → The Brined** — Emphasizes the pickling brine that saved them. Expanded lore around Saitcho Kindar cult of personality (reverence for the mythical brine inventor). Name is punchy Louisiana slang that sounds natural when spoken.
+  2. **Tidereaders → The Bloom Watch** — Reflects their role as observers and interpreters of the mutant algae ecology. "Watch" has Gulf Coast fishing culture resonance. Shorter, more grounded than "Tidereaders."
+  3. **Silt Traders → Krewe Calliope** (COMPLETE RETHEME) — Transformed from commerce/merchant faction into **dark carnival krewe culture**. New identity: preservation of post-apocalyptic Mardi Gras traditions — masks, music, ritual, spectacle twisted through 1000 years into something between carnival and cult. They control the MORALE ECONOMY (hope, meaning, culture) rather than logistics. Stronghold moved from French Quarter to the Superdome (now "The Carrion Court"). Authentic New Orleans krewe terminology (K-R-E-W-E spelling).
+- **Krewe Calliope design details:**
+  - Identity: Ritual, spectacle, cultural preservation — "The parade must go on."
+  - Stronghold: The Carrion Court (collapsed Superdome converted to ritual performance space)
+  - Room names: Procession Gate, Wardrobe Vault, Dance Floor, Call Board, Curiosity Bazaar, Green Room, Bunk Tiers, Inner Sanctum
+  - Economic role: Morale keepers — they provide festivals, blessings, funerals, parades, and meaning. People need more than water to survive; they need hope. Krewe charges in water, favors, participation, or loyalty.
+  - Faction traditions: Masks (worn in public, identity-defining), parades (torchlit processions through ruins), rites (blessings, funerals, induction ceremonies ranging from joyful to dark).
+- **Document-wide updates:**
+  - Section 1: Added reputation system explanation and faction name proposals with rationales
+  - Section 4.2-4.4: Rewrote "First Contact" and "Why Join a Faction" as reputation-based system with starting zone selection
+  - Section 5: Updated language choices with new faction names and krewe spelling convention
+  - Section 7: Updated NPC dialogue and expedition board hooks with new faction names
+  - Section 8: Updated water economy faction roles — Brined (producers), Bloom Watch (prospectors), Krewe Calliope (morale keepers). Expanded corruption questions to cover all three factions.
+- **Key design principle:** Character creation shifts from "pick your ideology" to "pick your starting city." Identity emerges through play. The stronghold you start in shapes early experience but doesn't lock you into allegiance.
+- **Writing tone:** Louisiana gothic maintained throughout. Krewe Calliope sections emphasize dark carnival atmosphere — masks, drums, torchlight, ritual, spectacle with an undercurrent of danger and obsession.
+- Decision document: `.squad/decisions/inbox/laeral-faction-retheme.md`
+
+### 2026-04-05: Faction Naming Revision 2 — The Kindari and The Bloom Tenders
+- Revised faction names based on user feedback rejecting "The Brined" (sounds lame) and "The Bloom Watch" (doesn't address new algae-influence lore hook).
+- **NEW LORE HOOK:** The Bloom Tenders faction is unknowingly under the discreet influence of the mutant algae itself. The algae subtly manipulates them — guiding decisions, drawing them to locations, making them protective of the bloom, steering their "scientific observations" toward conclusions that serve the algae's interests. They don't know they're being influenced.
+- **FACTION 1 SELECTED: The Kindari** — Puts Kindar's name directly in the faction name (cult-of-personality identity). Louisiana/Creole -ari suffix (like "Rastafari"). Sounds like a religious/cultural designation. Spoken naturally in NPC dialogue. Implies a PEOPLE, not just a job.
+- **FACTION 2 SELECTED: The Bloom Tenders** — DOUBLE MEANING: surface = "we tend the bloom (cultivation)"; sinister = "the bloom tends US (we are cultivated)." Nautical legitimacy (tender = ship servicing offshore platform). Botanical legitimacy (tending = gardening/caretaking). Perfect for a faction that doesn't realize they're being manipulated — they chose the name thinking it meant stewardship, but it's actually describing their relationship to the algae.
+- **Other Faction 1 options considered:** The Preservation (too abstract), Kindar's Covenant (too biblical), The Urnborn (doesn't center Kindar), The Relic Guild (good Louisiana flavor but less religious), Sons of the Brine (gendered).
+- **Other Faction 2 options considered:** The Verdant (good creep factor with "going verdant" slang, but loses nautical flavor), The Bloom Shepherds (religious pastoral but less Gulf authentic), The Tide-Turned (Louisiana flavor, creepy "turned" meaning, but less clear), The Bloom Witnesses (religious Jehovah's Witnesses vibe, unsettling, but awkward spoken), The Cultivated (dramatic irony works but too on-the-nose).
+- Updated all ~48 instances of "The Brined" → "The Kindari" and "The Bloom Watch"/"Bloom Watch" → "The Bloom Tenders"/"Bloom Tenders" throughout docs/thematic-direction.md (668 lines).
+- Updated sections: faction identity/philosophy (§1.1, §1.2), stronghold room descriptions, NPC first contact dialogue, player origin/starting zone text, economy section (faction water relationships), language guidelines, settlement references.
+- **Design principle learned:** Faction names should work on multiple levels. The Kindari name centers their cult-of-personality identity around Kindar. The Bloom Tenders name has a surface meaning (what they think they are) and a sinister meaning (what they actually are) — perfect for a faction unknowingly under external influence.
+- **Algae influence as story vector:** This lore hook should inform NPC dialogue (too-reverent statements about bloom, eerie consensus), faction quests (missions that seem scientific but serve algae propagation), player observations (Tenders being "too calm," "too synchronized"), and future story arcs (what happens when the truth is discovered?).
+- Decision document: `.squad/decisions/inbox/laeral-faction-names-v2.md`
+- **Team impact:** Bruenor (database faction names), Regis (UI labels), Volo/Jarlaxle (faction logic/dialogue), all writers (use new canonical names).
+
+## Learnings
+
+### 2025-01-03: Siltgate & Warrens Room Descriptions — Dystopian Gulf Coast Realignment
+
+**Task:** Rewrote all 202 room descriptions (137 Siltgate + 65 Warrens) for thematic realignment from generic fantasy to dystopian post-apocalyptic Gulf Coast setting (year 3000, New Orleans ruins).
+
+**Approach:**
+- Read thematic direction document thoroughly to understand the setting: flooded New Orleans 1000 years after drone apocalypse, Mississippi shifted to Atchafalaya, silted delta, brackish water, mutant wildlife (dog-sized rats, giant roaches, mutant snakes), rusted drone debris, kudzu/spanish moss/mangrove overgrowth, oppressive humidity, green algae light
+- Parsed 202 rooms from source data files
+- Preserved all slugs and types exactly (critical for game functionality)
+- Renamed rooms where appropriate to fit setting
+- Rewrote all descriptions (1-3 sentences, evocative, Louisiana gothic atmosphere)
+
+**Key thematic elements incorporated:**
+- **Water everywhere:** flooded streets, brackish pools, standing water, seepage, humidity
+- **Vegetation:** kudzu, spanish moss, mangroves, wild growth reclaiming ruins
+- **Wildlife:** mutant rats (dog-sized), giant roaches, mutant snakes, mosquito swarms, alligators
+- **Drone debris:** rusted combat drones as landmarks, salvage sites, mechanical graveyards
+- **Architecture:** Hurricane-damaged Creole/Cajun buildings, Garden District mansions, shipping container causeways, tilting townhouses
+- **Sensory details:** smell of saltwater/rust/rot, green algae light, oppressive humidity, constant dripping
+- **Louisiana flavor:** Jackson Square, Superdome, streetcars, oak trees with moss, bayou transitions
+- **Tone:** Eerie but alive, overgrown, nature won, humanity is the intruder (NOT grimdark)
+
+**Spatial/functional preservation:**
+- Market Square → Jackson Ruins Market (still central hub/entry)
+- Silver Arcade → Garden District Colonnade (still merchant district)
+- Highwind Estates → Overgrown Garden District (still wealthy quarter)
+- Dockward → Container Causeway (still waterfront/salvage)
+- Beggar's Span → Silt Flats (still poor/flooded quarter)
+- Ashgate Wastes → Drone Graveyard (still ruins/debris field)
+- Drowned Veins → Flooded Service Passages (still sewer/underground)
+- Warrens → Pre-extinction infrastructure (storm drains, maintenance tunnels, rat kingdoms)
+
+**Output location:** `.squad/decisions/inbox/laeral-room-descriptions.md`
+
+**Learnings for future content work:**
+- Louisiana gothic atmosphere requires specific sensory details: brackish water, spanish moss, humidity, green algae light, saltwater smell
+- Mutant wildlife should feel dangerous but natural — not evil, just adapted and indifferent to humans
+- Drone debris serves as both narrative flavor and salvage economy driver
+- Room descriptions need to balance evocative atmosphere with functional game information (what you see, what threatens you, where exits might be)
+- Preserve spatial logic even when rethemes — markets are still markets, sewers still sewers, entry points still entries
+- Single quote escaping for SQL: `it''s` not `it's` in descriptions
+
+**Ready for implementation:** All 202 rooms have complete rewrites ready for database update.
+
+### 2025-07-24: Creature & Item Retheme — Gulf Coast Alignment
+- Rethemed 8 creatures and 12 items from fantasy/generic to dystopian Gulf Coast post-apocalypse.
+- **Creature retheme strategy:** Mapped mutant human descendant archetypes from thematic-direction.md §6.2 onto existing humanoid enemy slots (alley_thug → Render-Kin Stalker, dockside_smuggler → Bone-Tithe Hoarder, plague_bearer → Fester-Thrall, the_harbourmaster → The Graftlord). Mapped Gulf Coast fauna from §3.2 onto wildlife slots (city_dog → Silt Roach, pigeon_flock → Mosquito Swarm, feral_dog → Feral Hog).
+- **Item retheme strategy:** Replaced medieval weapons with improvised/scavenged equivalents (iron_sword → Rebar Machete, corroded_halberd → Corroded Fire Axe, iron_chainmail → Scrap-Weave Vest). Replaced fantasy materials with drone salvage and algae-based materials. Removed all currency references (copper coins → circuit boards, "alchemists pay copper" → Bloom Tenders study).
+- **Preservation principle:** All creature and item IDs unchanged — room spawn references and loot table references remain valid. Stats unchanged. Only names, descriptions, and room_descriptions updated.
+- **Faction integration:** Items now reference specific factions as buyers/users (Kindari for tech salvage, Bloom Tenders for biological materials, Krewe Calliope for ritual items). This creates faction economy hooks for future quest design.
+- **Key design decision — drone reactor alloy:** The anomalous-tier weapon (voidforged_blade → Drone-Core Blade) uses "unknown alloy from drone reactor housing" as its mystery element. This replaces inter-planar fantasy with technology-grounded mystery — the alloy doesn't match pre-extinction databases, which the Kindari find deeply troubling. Leaves room for future lore expansion about the drones' origins.
+- Design document: `.squad/decisions/inbox/laeral-creature-item-retheme.md`
+
+
+## 2026-04-06T16:30Z — Creature & Item Retheme Design
+
+**Completed:** Comprehensive thematic retheme for dystopian Gulf Coast alignment  
+**Status:** ✅ Design approved, merged to decisions.md  
+**Deliverable:** Thematic direction narrative, item/creature mapping, implementation notes for Bruenor
+
+**Scope:** 8 creatures, 12 items, 20 items already aligned (no change needed)
+- **Creatures:** city_dog→Silt Roach, pigeon_flock→Mosquito Swarm, feral_dog→Feral Hog, alley_thug→Render-Kin Stalker, dockside_smuggler→Bone-Tithe Hoarder, plague_bearer→Fester-Thrall, the_harbourmaster→The Graftlord
+- **Items:** alley_thugs_coin→Scavenged Circuit Board, noble_signet_ring→Pre-Extinction Signet Ring, city_map→Salvaged City Map, silk_scarf→Bloom-Stained Cloth, healing_draught→Algae Salve, iron_sword→Rebar Machete, iron_chainmail→Scrap-Weave Vest, voidforged_blade→Drone-Core Blade, shardsteel_sabre→Honed Drone Blade, shardsteel_shard→Drone Alloy Shard, corroded_halberd→Corroded Fire Axe, rat_tail (description update only)
+
+**Key Design Principles:**
+- No ID changes (all loot tables remain valid)
+- No stat changes (cosmetic/narrative only)
+- All names tied to setting lore (post-apocalyptic Gulf Coast, year 3000, ruins of New Orleans)
+- Creatures grounded in Gulf Coast fauna/mutations per thematic-direction.md §3.2 and §6.2
+- Items sourced from pre-extinction salvage, drone debris, or ecological features (mutant algae bloom)
+- Passive behavior flags preserved (city_dog, pigeon_flock)
+
+**Setting Alignment:**
+- Creature names reflect Gulf Coast ecosystem: oversized insects (roaches, mosquitoes), feral livestock (hogs), mutant humans (Render-Kin, Bone-Tithe Hoarders per §6.2)
+- Boss creatures (Graftlord, Fester-Thrall) tied to faction archetypes: Corruption (Graftlords), Ugliness/Body Horror (Fester-Thralls)
+- Items reflect salvage economy: drone parts (circuit boards, alloy shards), pre-extinction artifacts (signet rings, city maps), ecological mutations (bloom-stained cloth)
+- Water currency removes fantasy coinage references
+- Rebar/sheet metal/drone cable replace medieval materials with post-apocalyptic construction scraps
+
+**Files:** Merged from `.squad/decisions/inbox/laeral-creature-item-retheme.md` → `.squad/decisions.md` (comprehensive decision section with 20+ items already-aligned analysis, 7 creature retheme details, 12 item retheme details, implementation notes)
+
+**Handoff:** Full migration details provided to Bruenor (migration 020 structure, SQL patterns, loot table preservation)

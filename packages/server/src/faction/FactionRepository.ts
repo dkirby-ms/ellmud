@@ -15,7 +15,7 @@ export interface FactionRepository {
   /** Load the player's faction membership. Returns null if unaffiliated. */
   getPlayerFactions(playerId: string): Promise<FactionMembership[]>;
 
-  /** Get the faction slug for a player (e.g. 'ironwright'). Returns null if unaffiliated. */
+  /** Get the faction slug for a player (e.g. 'kindari'). Returns null if unaffiliated. */
   getPlayerFactionSlug(playerId: string): Promise<string | null>;
 
   /** Set or update a player's faction standing (reputation/rank). */

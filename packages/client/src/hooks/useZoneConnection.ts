@@ -235,9 +235,9 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connecting' });
 
         const switchingToHub = msg.target === 'zone:the-refuge'
-          || msg.target === 'zone:the-foundry'
-          || msg.target === 'zone:the-cartographium'
-          || msg.target === 'zone:the-counting-house';
+          || msg.target === 'zone:the-reliquary'
+          || msg.target === 'zone:the-bloom-observatory'
+          || msg.target === 'zone:the-carrion-court';
         if (switchingToHub) {
           if (overlayRef.current.status !== 'death') {
             dispatch({ type: 'CLEAR_MESSAGES' });

@@ -23,29 +23,26 @@ import {
   resolvePlayerHubTarget,
   resolvePlayerHubName,
   resolvePlayerHubSlug,
+  FACTION_SLUGS,
+  FACTION_STRONGHOLD_MAP,
+  HUB_DISPLAY_NAMES,
+  DEFAULT_HUB_SLUG,
 } from '../zones/stronghold.js';
 
 // ─── Unit Tests: resolvePlayerHubName ────────────────────────────────────────
 
 describe('resolvePlayerHubName', () => {
-  it('returns The Foundry for ironwright', () => {
-    expect(resolvePlayerHubName('ironwright')).toBe('The Foundry');
+  it.each(FACTION_SLUGS)('returns correct display name for %s', (slug) => {
+    const expectedSlug = FACTION_STRONGHOLD_MAP[slug];
+    expect(resolvePlayerHubName(slug)).toBe(HUB_DISPLAY_NAMES[expectedSlug]);
   });
 
-  it('returns The Cartographium for veil', () => {
-    expect(resolvePlayerHubName('veil')).toBe('The Cartographium');
+  it('returns Refuge display name for undefined faction', () => {
+    expect(resolvePlayerHubName(undefined)).toBe(HUB_DISPLAY_NAMES[DEFAULT_HUB_SLUG]);
   });
 
-  it('returns The Counting House for scarlet', () => {
-    expect(resolvePlayerHubName('scarlet')).toBe('The Counting House');
-  });
-
-  it('returns The Refuge for undefined faction', () => {
-    expect(resolvePlayerHubName(undefined)).toBe('The Refuge');
-  });
-
-  it('returns The Refuge for unknown faction', () => {
-    expect(resolvePlayerHubName('unknown-faction')).toBe('The Refuge');
+  it('returns Refuge display name for unknown faction', () => {
+    expect(resolvePlayerHubName('unknown-faction')).toBe(HUB_DISPLAY_NAMES[DEFAULT_HUB_SLUG]);
   });
 });
 
@@ -62,7 +59,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     await colyseus.shutdown();
   });
 
-  it('player with ironwright faction routes to zone:the-foundry on death', async () => {
+  it('player with kindari faction routes to zone:the-reliquary on death', async () => {
     const room = await colyseus.createRoom('zone', { useTestGraph: true, openDelayMs: 0 });
     const client = await colyseus.connectTo(room);
 
@@ -78,7 +75,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
 
     await wait(2000);
 
-    // Inject faction data: player belongs to ironwright
+    // Inject faction data: player belongs to kindari
     const roomInstance = room as unknown as {
       players: Map<string, PlayerState>;
       combatSystem: CombatSystem;
@@ -86,7 +83,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     };
 
     const sessionId = client.sessionId;
-    roomInstance.playerFactionSlugs.set(sessionId, 'ironwright');
+    roomInstance.playerFactionSlugs.set(sessionId, 'kindari');
 
     // Register combatants and trigger death
     const player = roomInstance.players.get(sessionId);
@@ -109,20 +106,20 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     // Wait for defeat → downed → bleed-out → death → 3s delay for ROOM_SWITCH
     await wait(16_000);
 
-    // Verify ROOM_SWITCH targets the ironwright stronghold
+    // Verify ROOM_SWITCH targets the kindari stronghold
     const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
     expect(deathSwitches.length).toBeGreaterThanOrEqual(1);
-    expect(deathSwitches[0]!.target).toBe('zone:the-foundry');
+    expect(deathSwitches[0]!.target).toBe(resolvePlayerHubTarget('kindari'));
 
-    // Verify narration mentions The Foundry
+    // Verify narration mentions the hub display name
     const deathOverlays = overlayMessages.filter(m => m.state === 'death');
     expect(deathOverlays.length).toBeGreaterThanOrEqual(1);
-    expect(deathOverlays[0]!.narration).toContain('The Foundry');
+    expect(deathOverlays[0]!.narration).toContain(resolvePlayerHubName('kindari'));
 
     await client.leave();
   }, 25_000);
 
-  it('player with veil faction routes to zone:the-cartographium on death', async () => {
+  it('player with veil faction routes to zone:the-bloom-observatory on death', async () => {
     const room = await colyseus.createRoom('zone', { useTestGraph: true, openDelayMs: 0 });
     const client = await colyseus.connectTo(room);
 
@@ -140,7 +137,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     };
 
     const sessionId = client.sessionId;
-    roomInstance.playerFactionSlugs.set(sessionId, 'veil');
+    roomInstance.playerFactionSlugs.set(sessionId, 'bloom-tenders');
 
     const player = roomInstance.players.get(sessionId);
     expect(player).toBeDefined();
@@ -163,7 +160,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
 
     const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
     expect(deathSwitches.length).toBeGreaterThanOrEqual(1);
-    expect(deathSwitches[0]!.target).toBe('zone:the-cartographium');
+    expect(deathSwitches[0]!.target).toBe(resolvePlayerHubTarget('bloom-tenders'));
 
     await client.leave();
   }, 25_000);
@@ -215,12 +212,12 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     // Verify fallback to Refuge
     const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
     expect(deathSwitches.length).toBeGreaterThanOrEqual(1);
-    expect(deathSwitches[0]!.target).toBe('zone:the-refuge');
+    expect(deathSwitches[0]!.target).toBe(resolvePlayerHubTarget(undefined));
 
     // Verify narration mentions The Refuge
     const deathOverlays = overlayMessages.filter(m => m.state === 'death');
     expect(deathOverlays.length).toBeGreaterThanOrEqual(1);
-    expect(deathOverlays[0]!.narration).toContain('The Refuge');
+    expect(deathOverlays[0]!.narration).toContain(resolvePlayerHubName(undefined));
 
     await client.leave();
   }, 25_000);
@@ -273,7 +270,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     await client.leave();
   }, 25_000);
 
-  it('scarlet faction routes to zone:the-counting-house on death', async () => {
+  it('scarlet faction routes to zone:the-carrion-court on death', async () => {
     const room = await colyseus.createRoom('zone', { useTestGraph: true, openDelayMs: 0 });
     const client = await colyseus.connectTo(room);
 
@@ -291,7 +288,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     };
 
     const sessionId = client.sessionId;
-    roomInstance.playerFactionSlugs.set(sessionId, 'scarlet');
+    roomInstance.playerFactionSlugs.set(sessionId, 'krewe-calliope');
 
     const player = roomInstance.players.get(sessionId);
     expect(player).toBeDefined();
@@ -314,7 +311,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
 
     const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
     expect(deathSwitches.length).toBeGreaterThanOrEqual(1);
-    expect(deathSwitches[0]!.target).toBe('zone:the-counting-house');
+    expect(deathSwitches[0]!.target).toBe(resolvePlayerHubTarget('krewe-calliope'));
 
     await client.leave();
   }, 25_000);
@@ -323,26 +320,22 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
 // ─── Unit Tests: Spawn Zone Resolution ───────────────────────────────────────
 
 describe('Spawn Zone Resolution (unit)', () => {
-  it('resolves each faction to the correct hub target', () => {
-    expect(resolvePlayerHubTarget('ironwright')).toBe('zone:the-foundry');
-    expect(resolvePlayerHubTarget('veil')).toBe('zone:the-cartographium');
-    expect(resolvePlayerHubTarget('scarlet')).toBe('zone:the-counting-house');
+  it.each(FACTION_SLUGS)('resolves %s to correct hub target', (slug) => {
+    expect(resolvePlayerHubTarget(slug)).toBe(`zone:${FACTION_STRONGHOLD_MAP[slug]}`);
   });
 
-  it('resolves each faction to the correct hub slug', () => {
-    expect(resolvePlayerHubSlug('ironwright')).toBe('the-foundry');
-    expect(resolvePlayerHubSlug('veil')).toBe('the-cartographium');
-    expect(resolvePlayerHubSlug('scarlet')).toBe('the-counting-house');
+  it.each(FACTION_SLUGS)('resolves %s to correct hub slug', (slug) => {
+    expect(resolvePlayerHubSlug(slug)).toBe(FACTION_STRONGHOLD_MAP[slug]);
   });
 
   it('falls back to the-refuge when faction is undefined', () => {
-    expect(resolvePlayerHubTarget(undefined)).toBe('zone:the-refuge');
-    expect(resolvePlayerHubSlug(undefined)).toBe('the-refuge');
+    expect(resolvePlayerHubTarget(undefined)).toBe(`zone:${DEFAULT_HUB_SLUG}`);
+    expect(resolvePlayerHubSlug(undefined)).toBe(DEFAULT_HUB_SLUG);
   });
 
   it('falls back to the-refuge when faction is unknown', () => {
-    expect(resolvePlayerHubTarget('nonexistent')).toBe('zone:the-refuge');
-    expect(resolvePlayerHubSlug('nonexistent')).toBe('the-refuge');
+    expect(resolvePlayerHubTarget('nonexistent')).toBe(`zone:${DEFAULT_HUB_SLUG}`);
+    expect(resolvePlayerHubSlug('nonexistent')).toBe(DEFAULT_HUB_SLUG);
   });
 });
 
@@ -355,32 +348,32 @@ describe('Faction Repository → Death Routing Pipeline', () => {
     factionRepo = new InMemoryFactionRepository();
   });
 
-  it('player with ironwright faction resolves to the-foundry hub target', async () => {
-    factionRepo.registerFaction('faction-1', 'ironwright');
+  it('player with kindari faction resolves to correct hub target', async () => {
+    factionRepo.registerFaction('faction-1', 'kindari');
     await factionRepo.updateFaction('player-1', 'faction-1', { reputation: 100, rank: 1 });
 
     const slug = await factionRepo.getPlayerFactionSlug('player-1');
-    expect(slug).toBe('ironwright');
-    expect(resolvePlayerHubTarget(slug ?? undefined)).toBe('zone:the-foundry');
-    expect(resolvePlayerHubName(slug ?? undefined)).toBe('The Foundry');
+    expect(slug).toBe('kindari');
+    expect(resolvePlayerHubTarget(slug ?? undefined)).toBe(resolvePlayerHubTarget('kindari'));
+    expect(resolvePlayerHubName(slug ?? undefined)).toBe(resolvePlayerHubName('kindari'));
   });
 
-  it('player with no faction resolves to the-refuge hub target', async () => {
+  it('player with no faction resolves to Refuge hub target', async () => {
     const slug = await factionRepo.getPlayerFactionSlug('player-2');
     expect(slug).toBeNull();
-    expect(resolvePlayerHubTarget(slug ?? undefined)).toBe('zone:the-refuge');
-    expect(resolvePlayerHubName(slug ?? undefined)).toBe('The Refuge');
+    expect(resolvePlayerHubTarget(slug ?? undefined)).toBe(`zone:${DEFAULT_HUB_SLUG}`);
+    expect(resolvePlayerHubName(slug ?? undefined)).toBe(HUB_DISPLAY_NAMES[DEFAULT_HUB_SLUG]);
   });
 
   it('full pipeline: register faction, update membership, resolve hub', async () => {
-    factionRepo.registerFaction('veil-id', 'veil');
+    factionRepo.registerFaction('veil-id', 'bloom-tenders');
     await factionRepo.updateFaction('player-3', 'veil-id', { reputation: 50, rank: 2 });
 
     const slug = await factionRepo.getPlayerFactionSlug('player-3');
     const target = resolvePlayerHubTarget(slug ?? undefined);
     const name = resolvePlayerHubName(slug ?? undefined);
 
-    expect(target).toBe('zone:the-cartographium');
-    expect(name).toBe('The Cartographium');
+    expect(target).toBe(resolvePlayerHubTarget('bloom-tenders'));
+    expect(name).toBe(resolvePlayerHubName('bloom-tenders'));
   });
 });

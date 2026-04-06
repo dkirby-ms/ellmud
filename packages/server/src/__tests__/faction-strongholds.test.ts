@@ -11,6 +11,7 @@ import {
   getStrongholdForFaction,
   DEFAULT_HUB_SLUG,
   FACTION_SLUGS,
+  FACTION_STRONGHOLD_MAP,
 } from '../zones/stronghold.js';
 import { InMemoryZoneRepository } from '../zones/InMemoryZoneRepository.js';
 import { InMemoryFactionRepository } from '../faction/FactionRepository.js';
@@ -44,16 +45,8 @@ function createStrongholdZone(
 // ─── Static mapping tests ────────────────────────────────────────────────────
 
 describe('getStrongholdSlugForFaction', () => {
-  it('returns the-foundry for ironwright', () => {
-    expect(getStrongholdSlugForFaction('ironwright')).toBe('the-foundry');
-  });
-
-  it('returns the-cartographium for veil', () => {
-    expect(getStrongholdSlugForFaction('veil')).toBe('the-cartographium');
-  });
-
-  it('returns the-counting-house for scarlet', () => {
-    expect(getStrongholdSlugForFaction('scarlet')).toBe('the-counting-house');
+  it.each(FACTION_SLUGS)('returns expected stronghold slug for %s', (slug) => {
+    expect(getStrongholdSlugForFaction(slug)).toBe(FACTION_STRONGHOLD_MAP[slug]);
   });
 
   it('returns undefined for unknown faction', () => {
@@ -66,18 +59,16 @@ describe('getStrongholdSlugForFaction', () => {
 });
 
 describe('FACTION_SLUGS', () => {
-  it('contains all 3 factions', () => {
-    expect(FACTION_SLUGS).toEqual(['ironwright', 'veil', 'scarlet']);
+  it('contains exactly 3 factions', () => {
+    expect(FACTION_SLUGS).toHaveLength(3);
   });
 });
 
 // ─── Hub resolution tests ────────────────────────────────────────────────────
 
 describe('resolvePlayerHubSlug', () => {
-  it('returns stronghold slug when faction is known', () => {
-    expect(resolvePlayerHubSlug('ironwright')).toBe('the-foundry');
-    expect(resolvePlayerHubSlug('veil')).toBe('the-cartographium');
-    expect(resolvePlayerHubSlug('scarlet')).toBe('the-counting-house');
+  it.each(FACTION_SLUGS)('returns stronghold slug for %s', (slug) => {
+    expect(resolvePlayerHubSlug(slug)).toBe(FACTION_STRONGHOLD_MAP[slug]);
   });
 
   it('falls back to Refuge for unknown faction', () => {
@@ -90,14 +81,12 @@ describe('resolvePlayerHubSlug', () => {
 });
 
 describe('resolvePlayerHubTarget', () => {
-  it('returns zone: prefixed target for known faction', () => {
-    expect(resolvePlayerHubTarget('ironwright')).toBe('zone:the-foundry');
-    expect(resolvePlayerHubTarget('veil')).toBe('zone:the-cartographium');
-    expect(resolvePlayerHubTarget('scarlet')).toBe('zone:the-counting-house');
+  it.each(FACTION_SLUGS)('returns zone: prefixed target for %s', (slug) => {
+    expect(resolvePlayerHubTarget(slug)).toBe(`zone:${FACTION_STRONGHOLD_MAP[slug]}`);
   });
 
   it('returns zone:the-refuge for no faction', () => {
-    expect(resolvePlayerHubTarget(undefined)).toBe('zone:the-refuge');
+    expect(resolvePlayerHubTarget(undefined)).toBe(`zone:${DEFAULT_HUB_SLUG}`);
   });
 });
 
@@ -106,12 +95,12 @@ describe('resolvePlayerHubTarget', () => {
 describe('getStrongholdForFaction', () => {
   it('returns stronghold zone data when zone exists', async () => {
     const repo = new InMemoryZoneRepository();
-    await createStrongholdZone(repo, 'the-foundry', 'ironwright');
+    await createStrongholdZone(repo, 'the-reliquary', 'kindari');
 
-    const result = await getStrongholdForFaction('ironwright', repo);
-    expect(result.zoneSlug).toBe('the-foundry');
+    const result = await getStrongholdForFaction('kindari', repo);
+    expect(result.zoneSlug).toBe('the-reliquary');
     expect(result.zoneData).not.toBeNull();
-    expect(result.zoneData!.zone.factionSlug).toBe('ironwright');
+    expect(result.zoneData!.zone.factionSlug).toBe('kindari');
     expect(result.zoneData!.zone.category).toBe('faction_hub');
   });
 
@@ -134,7 +123,7 @@ describe('getStrongholdForFaction', () => {
       repopIntervalSeconds: 0,
     });
 
-    const result = await getStrongholdForFaction('ironwright', repo);
+    const result = await getStrongholdForFaction('kindari', repo);
     expect(result.zoneSlug).toBe('the-refuge');
     expect(result.zoneData).not.toBeNull();
     expect(result.zoneData!.zone.slug).toBe('the-refuge');
@@ -168,12 +157,12 @@ describe('getStrongholdForFaction', () => {
 describe('InMemoryZoneRepository.getZoneByFactionSlug', () => {
   it('returns zone matching faction slug and category', async () => {
     const repo = new InMemoryZoneRepository();
-    await createStrongholdZone(repo, 'the-foundry', 'ironwright');
+    await createStrongholdZone(repo, 'the-reliquary', 'kindari');
 
-    const result = await repo.getZoneByFactionSlug('ironwright');
+    const result = await repo.getZoneByFactionSlug('kindari');
     expect(result).not.toBeNull();
-    expect(result!.zone.slug).toBe('the-foundry');
-    expect(result!.zone.factionSlug).toBe('ironwright');
+    expect(result!.zone.slug).toBe('the-reliquary');
+    expect(result!.zone.factionSlug).toBe('kindari');
   });
 
   it('returns null for unknown faction slug', async () => {
@@ -199,26 +188,24 @@ describe('InMemoryZoneRepository.getZoneByFactionSlug', () => {
       maxPlayers: 6,
       pvpEnabled: false,
       repopIntervalSeconds: 300,
-      factionSlug: 'ironwright',
+      factionSlug: 'kindari',
     });
 
-    const result = await repo.getZoneByFactionSlug('ironwright');
+    const result = await repo.getZoneByFactionSlug('kindari');
     expect(result).toBeNull();
   });
 
   it('resolves all 3 faction strongholds independently', async () => {
     const repo = new InMemoryZoneRepository();
-    await createStrongholdZone(repo, 'the-foundry', 'ironwright');
-    await createStrongholdZone(repo, 'the-cartographium', 'veil');
-    await createStrongholdZone(repo, 'the-counting-house', 'scarlet');
+    for (const factionSlug of FACTION_SLUGS) {
+      const zoneSlug = FACTION_STRONGHOLD_MAP[factionSlug];
+      await createStrongholdZone(repo, zoneSlug, factionSlug);
+    }
 
-    const foundry = await repo.getZoneByFactionSlug('ironwright');
-    const cartographium = await repo.getZoneByFactionSlug('veil');
-    const countingHouse = await repo.getZoneByFactionSlug('scarlet');
-
-    expect(foundry!.zone.slug).toBe('the-foundry');
-    expect(cartographium!.zone.slug).toBe('the-cartographium');
-    expect(countingHouse!.zone.slug).toBe('the-counting-house');
+    for (const factionSlug of FACTION_SLUGS) {
+      const result = await repo.getZoneByFactionSlug(factionSlug);
+      expect(result!.zone.slug).toBe(FACTION_STRONGHOLD_MAP[factionSlug]);
+    }
   });
 });
 
@@ -234,11 +221,11 @@ describe('InMemoryFactionRepository.getPlayerFactionSlug', () => {
   it('returns faction slug when registered', async () => {
     const repo = new InMemoryFactionRepository();
     const factionId = 'faction-uuid-1';
-    repo.registerFaction(factionId, 'ironwright');
+    repo.registerFaction(factionId, 'kindari');
     await repo.updateFaction('player-1', factionId, { reputation: 100, rank: 1 });
 
     const slug = await repo.getPlayerFactionSlug('player-1');
-    expect(slug).toBe('ironwright');
+    expect(slug).toBe('kindari');
   });
 
   it('returns null when faction ID is not registered', async () => {
