@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router";
 import { Plus, X, Trash2, Link2, Globe, AlertTriangle, Save, Zap, HelpCircle, Search, Filter, Undo2, Redo2 } from "lucide-react";
 import { useUndoRedo } from "../../hooks/useUndoRedo.js";
 import { computeElkLayout, type LayoutRoom } from "../../map/elkLayout.js";
@@ -138,6 +139,7 @@ function roomsToFlowNodes(
   showLabels: boolean,
   mode: DesignerMode,
   creatures: Array<{ type: string; name: string }>,
+  onPortalClick?: (targetZoneSlug: string) => void,
 ): FlowNode[] {
   const nodes: FlowNode[] = [];
 
@@ -148,7 +150,13 @@ function roomsToFlowNodes(
     // Count up/down/portal exits
     const hasUpExits = exits.some((e) => e.fromRoomSlug === room.slug && e.direction === 'up');
     const hasDownExits = exits.some((e) => e.fromRoomSlug === room.slug && e.direction === 'down');
-    const portalCount = exits.filter((e) => e.fromRoomSlug === room.slug && e.targetZoneSlug).length;
+    const portalExits = exits
+      .filter((e) => e.fromRoomSlug === room.slug && e.targetZoneSlug)
+      .map((e) => ({
+        direction: e.direction,
+        targetZoneSlug: e.targetZoneSlug!,
+        targetRoomSlug: e.targetRoomSlug,
+      }));
 
     nodes.push({
       id: room.slug,
@@ -163,7 +171,9 @@ function roomsToFlowNodes(
         isConnectSource: mode === 'connect' && selectedRoom === room.slug,
         hasUpExits,
         hasDownExits,
-        portalCount,
+        portalCount: portalExits.length,
+        portalExits,
+        onPortalClick,
         npcCount: room.npcs?.length ?? 0,
         lootCount: room.lootContainers?.length ?? 0,
         hazardCount: room.hazards?.length ?? 0,
@@ -267,6 +277,7 @@ export default function ZoneDesigner({
   onRoomSelect,
   onExitSelect,
 }: ZoneDesignerProps) {
+  const navigate = useNavigate();
   // ─── State ──────────────────────────────────────────────
   const [mode, setMode] = useState<DesignerMode>("select");
   const [showLabels, setShowLabels] = useState(false);
@@ -683,6 +694,10 @@ export default function ZoneDesigner({
     return matched;
   }, [searchQuery, rooms]);
 
+  const handlePortalClick = useCallback((targetZoneSlug: string) => {
+    navigate(`/admin/zones/${targetZoneSlug}`);
+  }, [navigate]);
+
   // ─── ReactFlow nodes & edges ────────────────────────────────────────────────
   const flowNodes = useMemo(() => {
     const nodes = roomsToFlowNodes(
@@ -696,6 +711,7 @@ export default function ZoneDesigner({
       showLabels,
       mode,
       creatures,
+      handlePortalClick,
     );
     // Apply search match/dim styling
     if (searchMatchSlugs !== null) {
@@ -706,7 +722,7 @@ export default function ZoneDesigner({
       }
     }
     return nodes;
-  }, [rooms, positions, currentFloor, selectedRoom, disconnectedSlugs, orphanExitIds, exits, showLabels, mode, searchMatchSlugs, creatures]);
+  }, [rooms, positions, currentFloor, selectedRoom, disconnectedSlugs, orphanExitIds, exits, showLabels, mode, searchMatchSlugs, creatures, handlePortalClick]);
 
   const flowEdges = useMemo(() => {
     let edges = exitsToFlowEdges(

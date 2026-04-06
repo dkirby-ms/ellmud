@@ -8,6 +8,12 @@ import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
+export interface PortalExitInfo {
+  direction: string;
+  targetZoneSlug: string;
+  targetRoomSlug?: string;
+}
+
 export interface RoomNodeData {
   slug: string;
   name: string;
@@ -18,6 +24,8 @@ export interface RoomNodeData {
   hasUpExits: boolean;
   hasDownExits: boolean;
   portalCount: number;
+  portalExits: PortalExitInfo[];
+  onPortalClick?: (targetZoneSlug: string) => void;
   npcCount: number;
   lootCount: number;
   hazardCount: number;
@@ -53,6 +61,15 @@ const PROPERTY_ICONS: Record<string, string> = {
   heavy_door: '🚪',
   cavern: '🕳',
   water: '💧',
+};
+
+const DIRECTION_ARROWS: Record<string, string> = {
+  north: '↑',
+  south: '↓',
+  east: '→',
+  west: '←',
+  up: '↑',
+  down: '↓',
 };
 
 const HANDLE_STYLE: React.CSSProperties = {
@@ -354,7 +371,7 @@ export function ZoneRoomNode(props: { data: RoomNodeData; selected?: boolean }) 
               </div>
             )}
 
-            {/* Portal exit badge */}
+            {/* Portal exit badge — icon on node */}
             {data.portalCount > 0 && (
               <span
                 style={{
@@ -368,6 +385,48 @@ export function ZoneRoomNode(props: { data: RoomNodeData; selected?: boolean }) 
               >
                 ⟐
               </span>
+            )}
+
+            {/* Portal exit detail tags — below the node */}
+            {data.portalExits && data.portalExits.length > 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: `${NODE_H + (data.properties && data.properties.length > 0 ? 14 : 2)}px`,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '1px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {data.portalExits.map((pe, i) => (
+                  <span
+                    key={`${pe.direction}-${pe.targetZoneSlug}-${i}`}
+                    style={{
+                      background: 'rgba(6, 182, 212, 0.15)',
+                      color: '#06b6d4',
+                      padding: '0 3px',
+                      borderRadius: '2px',
+                      fontSize: '6px',
+                      fontFamily: 'var(--font-mono)',
+                      border: '1px solid rgba(6, 182, 212, 0.3)',
+                      lineHeight: '1.3',
+                      cursor: data.onPortalClick ? 'pointer' : 'default',
+                      pointerEvents: 'auto',
+                    }}
+                    title={`${pe.direction} → ${pe.targetZoneSlug}${pe.targetRoomSlug ? ` (${pe.targetRoomSlug})` : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      data.onPortalClick?.(pe.targetZoneSlug);
+                    }}
+                  >
+                    {DIRECTION_ARROWS[pe.direction] ?? '?'} {pe.targetZoneSlug}
+                  </span>
+                ))}
+              </div>
             )}
 
             {/* Invisible handles for ReactFlow edge connections (4 source + 4 target) */}
