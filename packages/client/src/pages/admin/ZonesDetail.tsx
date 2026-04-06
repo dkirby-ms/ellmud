@@ -71,7 +71,7 @@ export default function ZonesDetail() {
   const { slug } = useParams();
   const navigate = useNavigate();
   const isNew = slug === "new";
-  const [activeTab, setActiveTab] = useState<Tab>("general");
+  const [activeTab, setActiveTab] = useState<Tab>("designer");
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -340,9 +340,9 @@ export default function ZonesDetail() {
 
   const tabs = [
     { id: "general" as Tab, label: "General" },
+    { id: "designer" as Tab, label: "Designer" },
     { id: "rooms" as Tab, label: `Rooms (${rooms.length})` },
     { id: "exits" as Tab, label: `Exits (${exits.length})` },
-    { id: "designer" as Tab, label: "Designer" },
   ];
 
   if (loading) {
