@@ -1846,3 +1846,219 @@ WI-4 (limbo visibility - server)  [parallel track]
 **Name:** Belvedere
 
 (Note: laeral-room-descriptions.md is 1104 lines and is referenced in decisions but full content is maintained separately in inbox for reference)
+
+---
+
+# Stronghold → World Zone Connections
+
+## Design (Laeral)
+
+**Status:** Design Complete — Ready for Implementation  
+**Date:** 2026-04-06
+
+### Executive Summary
+
+Design establishes physical connections between the three faction strongholds and the main world zones (Siltgate and Warrens). Prioritizes thematic coherence, narrative logic, and environmental storytelling.
+
+**Core Assignments:**
+- **The Carrion Court** (Krewe Calliope) → **Siltgate** (Dockward)
+- **The Reliquary** (Kindari) → **Siltgate** (Ashgate Wastes)
+- **The Bloom Observatory** (Bloom Tenders) → **Warrens** (eastern wastes)
+
+### Stronghold → Zone Assignments
+
+#### 1. The Carrion Court → Siltgate (Dockward)
+- **Rationale:** Krewe Calliope is the New Orleans krewe faction — ritual, spectacle, cultural preservation. The Carrion Court is the half-collapsed Superdome. Geographically, must be in Siltgate (flooded New Orleans ruins). Player flow: Spawn in Court, access Siltgate's harbor/market.
+- **Entry Room:** `carrion-court-inn` (The Bunk Tiers)
+- **Connection Route:** carrion-court-inn → superdome-breach → flooded-concourse → dock-street-1
+
+#### 2. The Reliquary → Siltgate (Ashgate Wastes)
+- **Rationale:** Reliquary is a converted water treatment plant on the "edge of Siltgate." Kindari revere tech and infrastructure. Industrial-edge location perfect for Ashgate Wastes transitional zone. Player flow: Access Siltgate markets but positioned at dangerous eastern edge.
+- **Entry Room:** `reliquary-inn` (The Sleeper Cells)
+- **Connection Route:** reliquary-inn → filtration-annex → pipe-bridge → ashgate-chapel
+
+#### 3. The Bloom Observatory → Warrens
+- **Rationale:** Repurposed offshore oil platform reaches toward hostile eastern terrain. Bloom Tenders study mutant ecology — Warrens (eastern wastes, craters, collapsed infrastructure) is perfect habitat. Positions Bloom Tenders as frontier scouts.
+- **Entry Room:** `bloom-observatory-inn` (The Watchtower Bunk)
+- **Connection Route:** bloom-observatory-inn → platform-descent → causeway-terminus → shattered-gate
+
+### Connection Design & Transitional Rooms
+
+#### Carrion Court → Siltgate Connection
+
+**New Room 1: Superdome Breach**
+- **Slug:** `superdome-breach`
+- **Type:** `corridor`
+- **Zone:** `the-carrion-court`
+- **Description:** "A jagged rent in the Superdome's outer wall allows passage between the Krewe's domain and the streets beyond. Vines thread through the gap, and rainwater pools on cracked concrete. Krewe banners hang from the rusted girders above, visible from the street — a territorial marker and an invitation."
+
+**New Room 2: Flooded Concourse**
+- **Slug:** `flooded-concourse`
+- **Type:** `corridor`
+- **Zone:** `the-siltgate`
+- **Properties:** `{water}`
+- **Description:** "The approach to the Superdome wades through ankle-deep brackish water, the street submerged where drainage has failed. Carnival debris floats on the surface — plastic beads, torn masks, waterlogged feathers. The drum-echo from within the Dome is audible even here."
+
+**Exit Mapping:**
+- `carrion-court-inn` ↔ `superdome-breach` (south/north)
+- `superdome-breach` ↔ `flooded-concourse` (south/north)
+- `flooded-concourse` ↔ `dock-street-1` (south/north)
+
+#### Reliquary → Siltgate Connection
+
+**New Room 1: Filtration Annex**
+- **Slug:** `filtration-annex`
+- **Type:** `corridor`
+- **Zone:** `the-reliquary`
+- **Properties:** `{heavy_door}`
+- **Description:** "A narrow maintenance corridor extending from the Reliquary's main structure, its walls lined with rusted piping and gauge dials. The Kindari have reinforced this passage with welded iron plates. A heavy security door at the far end leads to the wasteland beyond."
+
+**New Room 2: Pipe Bridge**
+- **Slug:** `pipe-bridge`
+- **Type:** `entrance`
+- **Zone:** `the-siltgate`
+- **Description:** "A suspended walkway built atop massive water mains that cross a blast crater. The pipes groan underfoot, and gaps in the grating offer vertiginous views of rubble far below. The Reliquary's concrete bulk looms behind; ahead, the burned chapel marks the edge of Ashgate."
+
+**Exit Mapping:**
+- `reliquary-inn` ↔ `filtration-annex` (east/west)
+- `filtration-annex` ↔ `pipe-bridge` (east/west)
+- `pipe-bridge` ↔ `ashgate-chapel` (east/west)
+
+#### Bloom Observatory → Warrens Connection
+
+**New Room 1: Platform Descent**
+- **Slug:** `platform-descent`
+- **Type:** `corridor`
+- **Zone:** `the-bloom-observatory`
+- **Description:** "An external staircase of rusted grating spirals down the platform's leg, exposed to salt wind and spray. Algae slicks coat every surface, making footing treacherous. Below, the causeway extends eastward across brackish shallows toward the wasteland horizon."
+
+**New Room 2: Causeway Terminus**
+- **Slug:** `causeway-terminus`
+- **Type:** `entrance`
+- **Zone:** `warrens`
+- **Description:** "The corroded causeway meets solid ground at the edge of the eastern wastes. The transition is abrupt — behind you, the green-slicked platform rises from the water; ahead, blast-scarred earth and the shattered archway of the Warrens. The Bloom Tenders call this the 'Threshold.' Few cross it lightly."
+
+**Exit Mapping:**
+- `bloom-observatory-inn` ↔ `platform-descent` (down/up)
+- `platform-descent` ↔ `causeway-terminus` (east/west)
+- `causeway-terminus` ↔ `shattered-gate` (east/west)
+
+### Design Rationale
+
+1. **Krewe Calliope MUST be in Siltgate** — they're the New Orleans krewe faction, and the Carrion Court is the Superdome. No other placement makes narrative sense.
+
+2. **Kindari positioned at Ashgate Wastes** — their water treatment plant is "on the edge of Siltgate," and Ashgate is the transitional zone to the Warrens. Perfect thematic and geographic fit.
+
+3. **Bloom Tenders at the Warrens edge** — their offshore platform reaches toward the eastern wastes. Positions them as frontier scouts, fitting their exploratory/ecological identity.
+
+4. **Two transitional rooms per connection** — creates a buffer zone, allows for pacing, and provides environmental storytelling space. One room = too abrupt. Three rooms = padding.
+
+5. **Exit directions chosen for spatial logic:**
+   - Carrion Court: **south** (out of Superdome toward harbor)
+   - Reliquary: **east** (toward the wastes/Ashgate)
+   - Bloom Observatory: **down then east** (descending platform, crossing causeway toward wastes)
+
+---
+
+## Implementation (Bruenor)
+
+**Status:** Complete  
+**Date:** 2026-04-06  
+**Migration:** `022_stronghold_connections.sql`
+
+### Implementation Summary
+
+Implemented Laeral's design for connecting the three faction strongholds to the main world zones. Created 6 transitional rooms and established 24 bidirectional exits (3 inter-zone connections).
+
+### Key Implementation Decisions
+
+#### 1. Transitional Room Ownership
+
+Placed transitional rooms in the zone that "owns" them narratively:
+
+- `superdome-breach` → `the-carrion-court` (part of Superdome structure)
+- `flooded-concourse` → `the-siltgate` (the street approach)
+- `filtration-annex` → `the-reliquary` (part of water plant)
+- `pipe-bridge` → `the-siltgate` (the Ashgate approach)
+- `platform-descent` → `the-bloom-observatory` (on the platform)
+- `causeway-terminus` → `warrens` (where causeway meets wastes)
+
+This pattern follows the existing Siltgate↔Warrens connection model where inter-zone portals sit at the zone boundary, with "approach" rooms in the destination zone.
+
+#### 2. Exit Direction Conflict Resolution
+
+Three existing rooms had occupied exit directions. Resolved as follows:
+
+**dock-street-1** (Siltgate):
+- Occupied: north→tavern-row, south→dock-street-2, east→fish-market
+- **Solution:** Used WEST for flooded-concourse connection
+- **Narrative fit:** Flooded Concourse is "west" of the docks, spatially coherent
+
+**ashgate-chapel** (Siltgate):
+- Occupied: north→dust-bowl
+- **Solution:** Used WEST for pipe-bridge connection
+- **Narrative fit:** Pipe Bridge leads "back" toward the Reliquary (west)
+
+**shattered-gate** (Warrens):
+- Occupied: west→the-refuge, east→rubble-boulevard, south→the-siltgate
+- **Solution:** Used NORTH for causeway-terminus connection
+- **Narrative fit:** Causeway approaches from the "north" (offshore direction)
+
+All direction choices maintain spatial coherence and narrative logic.
+
+#### 3. Inter-Zone Exit Pattern
+
+Followed the established pattern from `004_seed_siltgate.sql` (lines 1450-1475):
+
+```
+-- Inter-zone portal exit (from_room_slug = to_room_slug)
+('superdome-breach', 'south', 'superdome-breach', 'the-siltgate', 'flooded-concourse', false, false)
+```
+
+This "portal" pattern keeps the zone exit record in the source zone while targeting the destination zone and room. The `to_room_slug = from_room_slug` convention indicates this is a zone boundary crossing, not a simple room-to-room exit.
+
+#### 4. Room Properties
+
+Added properties to rooms where thematically appropriate:
+
+- `flooded-concourse`: `{water}` — ankle-deep brackish water
+- `filtration-annex`: `{heavy_door}` — Kindari security door
+- Other rooms: empty properties `{}`
+
+### Migration Structure
+
+**6 new rooms:**
+- 2 in stronghold zones (breach/descent rooms)
+- 4 in world zones (2 in Siltgate, 1 in Warrens)
+
+**24 new exits (12 bidirectional pairs):**
+- 18 intra-zone exits (within same zone)
+- 6 inter-zone exits (crossing zone boundaries)
+
+Each connection route has:
+- 2 intra-zone pairs in the stronghold (inn → transitional room)
+- 1 inter-zone pair (stronghold → world zone)
+- 2 intra-zone pairs in the world zone (transitional room → existing room)
+
+### Zone Totals After Migration
+
+| Zone | Rooms (before → after) | Exits (before → after) |
+|------|---|---|
+| the-carrion-court | 10 → 11 | 12 → 15 |
+| the-reliquary | 10 → 11 | 12 → 15 |
+| the-bloom-observatory | 10 → 11 | 12 → 15 |
+| the-siltgate | 138 → 140 | 284 → 292 |
+| warrens | 109 → 110 | 218 → 222 |
+
+### Verification Checklist
+
+✅ All 6 rooms created in correct zones  
+✅ All 24 exits are bidirectional (12 pairs)  
+✅ All inter-zone exits use portal pattern (to_room_slug = from_room_slug)  
+✅ No direction conflicts with existing exits  
+✅ All room slugs referenced in exits exist  
+✅ Migration is atomic (BEGIN/COMMIT wrap)  
+✅ Follows established SQL patterns from migrations 004, 005, 016, 017  
+✅ NULLIF used for empty target_zone/target_room strings  
+
+---
