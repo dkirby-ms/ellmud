@@ -1318,3 +1318,11 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 **Pattern:** `deleteRoomTarget` state (stores `ZoneRoomDefinition | null`) controls modal visibility. Two remaining `confirm()` calls (reverse exit delete, orphan removal) are out of scope.
 
 **Files:** `packages/client/src/pages/admin/ZoneDesigner.tsx`
+
+### Connect to Zone — Context Menu (#317, 2026-01-19)
+
+**Delivered:** Added "Connect to Zone…" (🌐) button to the right-click context menu in ZoneDesigner, right after "Connect Exit…". Clicking it sets the selected room and opens the existing portal dialog (zone picker → room picker → direction picker). Also added direction conflict warning (amber ⚠️) when the chosen direction already has any exit, and a "No rooms in this zone yet" italic hint for empty target zones.
+
+**Approach:** Reused the existing portal dialog and state (`showPortalDialog`, `portalTargetZone`, etc.) rather than extracting a separate component. Added an optional `roomSlugOverride` param to `openPortalDialog()` to handle React state batching — the context menu needs to pass the room slug directly since `setSelectedRoom` hasn't committed yet when the async function runs.
+
+**Files:** `packages/client/src/pages/admin/ZoneDesigner.tsx`
