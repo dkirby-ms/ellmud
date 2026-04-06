@@ -194,33 +194,58 @@ export function ZoneRoomNode(props: { data: RoomNodeData; selected?: boolean }) 
                 />
               )}
 
-              {/* Room name (if labels enabled) */}
+              {/* Room name (if labels enabled) — foreignObject for text wrapping */}
               {data.showLabels && (
-                <text
-                  x={NODE_W / 2}
-                  y={NODE_H / 2 - 4}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fill="#E8E0D0"
-                  fontSize="6"
-                  fontFamily="var(--font-sans)"
-                >
-                  {data.name.length > 10 ? data.name.slice(0, 9) + '…' : data.name}
-                </text>
+                <foreignObject x={2} y={2} width={NODE_W - 4} height={NODE_H / 2 - 2}>
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#E8E0D0',
+                      fontSize: '6px',
+                      fontFamily: 'var(--font-sans)',
+                      textAlign: 'center',
+                      lineHeight: 1.2,
+                      overflow: 'hidden',
+                      wordBreak: 'break-word',
+                      padding: '1px',
+                    }}
+                  >
+                    {data.name}
+                  </div>
+                </foreignObject>
               )}
 
-              {/* Room slug */}
-              <text
-                x={NODE_W / 2}
-                y={NODE_H / 2 + (data.showLabels ? 4 : 0)}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill="#6A6B75"
-                fontSize="6"
-                fontFamily="var(--font-mono)"
+              {/* Room slug — foreignObject for text wrapping */}
+              <foreignObject
+                x={2}
+                y={data.showLabels ? NODE_H / 2 : 2}
+                width={NODE_W - 4}
+                height={data.showLabels ? NODE_H / 2 - 2 : NODE_H - 4}
               >
-                {data.slug}
-              </text>
+                <div
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#6A6B75',
+                    fontSize: '6px',
+                    fontFamily: 'var(--font-mono)',
+                    textAlign: 'center',
+                    lineHeight: 1.2,
+                    overflow: 'hidden',
+                    wordBreak: 'break-word',
+                    padding: '1px',
+                  }}
+                >
+                  {data.slug}
+                </div>
+              </foreignObject>
 
               {/* Floor indicator (z !== 0) */}
               {data.floor !== 0 && (
