@@ -229,3 +229,9 @@
 **Status:** Migration created and tested. Coordinator fixed 2 direction conflicts during implementation.
 
 **Orchestration Log:** `.squad/orchestration-log/2026-04-06T19:20:15Z-bruenor.md`
+
+### Stronghold Redesign Implementation (2026-04-08)
+- **Scope:** Rebuilt all three faction strongholds in `003_seed_zones.sql` from Elminster''s redesign (Reliquary 22 rooms, Bloom Observatory 23 rooms, Carrion Court 24 rooms).
+- **Topology:** New corridor-heavy layouts with updated inter-zone exits; portal targets updated for pipe-bridge, flooded-concourse, and causeway-terminus.
+- **Creatures:** Added 15 non-aggressive stronghold NPCs to `002_seed_content.sql` with ambient stats and preferred room lists.
+- **Slug decision:** Adopted short room prefixes (`reliquary-*`, `bloom-*`, `carrion-*`) and updated entry room slugs accordingly.
