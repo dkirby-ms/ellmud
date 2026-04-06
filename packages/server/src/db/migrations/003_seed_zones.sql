@@ -2884,8 +2884,8 @@ FROM zones z, (VALUES
   ('reliquary-inn', 'east', 'reliquary-training', '', '', false, false),
   ('reliquary-inn', 'up', 'reliquary-inn-upper', '', '', false, false),
   ('reliquary-inn-upper', 'down', 'reliquary-inn', '', '', false, false),
-  ('reliquary-inn', 'south', 'filtration-annex', '', '', false, false),
-  ('filtration-annex', 'north', 'reliquary-inn', '', '', false, false),
+  ('reliquary-training', 'north', 'filtration-annex', '', '', false, false),
+  ('filtration-annex', 'south', 'reliquary-training', '', '', false, false),
   ('filtration-annex', 'east', 'filtration-annex', 'the-siltgate', 'pipe-bridge', false, false)
 ) AS v(from_slug, direction, to_slug, target_zone, target_room, is_locked, is_hidden)
 WHERE z.slug = 'the-reliquary'
