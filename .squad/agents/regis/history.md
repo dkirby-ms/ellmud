@@ -1307,3 +1307,14 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 
 **Integration:** No server changes needed — `/api/spawn-zone` pre-existed (Drizzt's work). Drizzt's LLM transport (#310) independent; no conflicts.
 
+
+### Issue #316: Delete Room Styled Modal (2026-07-23)
+**Agent:** Regis  
+**Status:** ✅ Complete — committed  
+**Test Coverage:** 21 zone-designer-flow tests passing  
+
+**Delivered:** Replaced native `window.confirm()` for room deletion with a styled modal matching the existing delete exit modal pattern. Dark theme colors: `#1C1D27` bg, `#C9A84C` gold title, `#8B2500` destructive button. Both toolbar and context menu delete paths now go through a shared `confirmDeleteRoom()` handler — the context menu path gained undo/redo support as a bonus.
+
+**Pattern:** `deleteRoomTarget` state (stores `ZoneRoomDefinition | null`) controls modal visibility. Two remaining `confirm()` calls (reverse exit delete, orphan removal) are out of scope.
+
+**Files:** `packages/client/src/pages/admin/ZoneDesigner.tsx`

@@ -1501,8 +1501,8 @@ export default function ZoneDesigner({
   }
 
   // ─── Portal CRUD ────────────────────────────────────────
-  async function openPortalDialog() {
-    if (!selectedRoom) return;
+  async function openPortalDialog(roomSlugOverride?: string) {
+    if (!roomSlugOverride && !selectedRoom) return;
     try {
       const zones = await listZones();
       setAllZones(zones.filter((z) => z.slug !== zone.slug));
@@ -2928,6 +2928,34 @@ export default function ZoneDesigner({
               Connect Exit…
             </button>
 
+            <button
+              onClick={() => {
+                const roomSlug = contextMenu.roomSlug;
+                setContextMenu(null);
+                setSelectedRoom(roomSlug);
+                void openPortalDialog(roomSlug);
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: "100%",
+                padding: "6px 12px",
+                background: "transparent",
+                border: "none",
+                color: "#E0E0E0",
+                cursor: "pointer",
+                fontFamily: "var(--font-sans)",
+                fontSize: 12,
+                textAlign: "left",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#2A2B35"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+            >
+              <span style={{ width: 14, textAlign: "center" }}>🌐</span>
+              Connect to Zone…
+            </button>
+
             {/* Divider */}
             <div style={{ height: 1, background: "#2A2B35", margin: "4px 0" }} />
 
@@ -3301,6 +3329,11 @@ export default function ZoneDesigner({
                 >
                   {DIRECTION_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
                 </select>
+                {selectedRoom && exits.some((e) => e.fromRoomSlug === selectedRoom && e.direction === portalDirection) && (
+                  <div style={{ color: "#F59E0B", fontSize: 12, marginTop: 4, fontFamily: "var(--font-sans)" }}>
+                    ⚠️ Direction {portalDirection} already has an exit. This will create a conflicting exit.
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
@@ -3334,6 +3367,11 @@ export default function ZoneDesigner({
                     <option key={r.slug} value={r.slug}>{r.name} ({r.slug})</option>
                   ))}
                 </select>
+                {portalTargetZone && portalTargetRooms.length === 0 && (
+                  <div style={{ color: "#8A8B95", fontSize: 12, fontStyle: "italic", marginTop: 4, fontFamily: "var(--font-sans)" }}>
+                    No rooms in this zone yet
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button

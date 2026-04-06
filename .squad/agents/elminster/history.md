@@ -15,6 +15,28 @@
 
 ## Learnings
 
+### 2026-01-19: Issue #317 — "Connect to Zone" Context Menu Design
+- **Task:** Design spec for adding inter-zone portal creation to zone designer right-click menu
+- **Research findings:**
+  - Context menu currently offers 6 directional "Add Room" buttons, Edit Room, Copy/Paste Properties, Connect Exit, and Delete Room
+  - Existing "Create Portal" button workflow already demonstrates the full UX pattern: zone picker → room picker → direction picker → API call
+  - Portal exits use `target_zone_slug` + `target_room_slug` fields; `toRoomSlug` is set to `fromRoomSlug` (convention for portal exits)
+  - Phantom portal target nodes already render in graph for horizontal-direction portal exits (cyan-colored, non-interactive)
+  - API endpoint `POST /admin/api/zones/:zoneId/exits` accepts portal exit structure; no server-side validation of target zone/room existence
+- **Design decisions:**
+  - Extract existing portal dialog code to reusable `PortalDialog` component (eliminates duplication between button and context menu)
+  - Add "Connect to Zone..." menu item with 🌐 icon after "Connect Exit..." option
+  - Show non-blocking warning if direction already has exit (conflict detection) — admin may intentionally create overlapping exits for conditional logic
+  - Skip undo/redo for MVP (existing portal button doesn't integrate with undo stack either — defer to future iteration)
+- **Edge cases documented:**
+  - Target zone with no rooms → disable Create button, show "No rooms in this zone yet" message
+  - Direction conflicts with existing exit → show warning, allow creation (non-blocking)
+  - Invalid target room slug → orphan exit created, handled by existing orphan cleanup tool
+- **Reuse opportunities:** Portal dialog logic, direction conflict detection, zone filtering
+- **Key lesson:** When adding context menu features, look for existing button workflows to reuse — the UX pattern and API calls are already proven. Extraction to shared components reduces duplication and makes future enhancements benefit all call sites.
+- **Deliverable:** Design spec written to `.squad/decisions/inbox/elminster-connect-to-zone-design.md` (comprehensive spec with API details, UI flow, edge cases, code snippets, testing checklist)
+- **Next:** Regis to review design, implement feature
+
 ### 2026-04-05 (Round 4): Triaging Issue #293 (LLM Narration Toggle)
 - **Task:** Assess feature request for user-controlled LLM narration toggle (enable/disable)
 - **Assessment:** Legitimate Phase 1 feature aligned with GDD §4.5 (LLM is optional fallback). Users may want to disable LLM for cost control, dev/test environments, or network constraints.

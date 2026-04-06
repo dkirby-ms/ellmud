@@ -1,0 +1,60 @@
+Stronghold Connections Migration Verification
+==============================================
+
+ROOMS CREATED (6 total):
+1. superdome-breach (the-carrion-court) - Superdome Breach
+2. flooded-concourse (the-siltgate) - Flooded Concourse
+3. filtration-annex (the-reliquary) - Filtration Annex
+4. pipe-bridge (the-siltgate) - Pipe Bridge
+5. platform-descent (the-bloom-observatory) - Platform Descent
+6. causeway-terminus (warrens) - Causeway Terminus
+
+EXIT CHAINS (24 exits = 12 bidirectional pairs):
+
+Connection 1: Carrion Court → Siltgate
+- carrion-court-inn south → superdome-breach (intra-zone)
+- superdome-breach north → carrion-court-inn (intra-zone)
+- superdome-breach south → flooded-concourse (INTER-ZONE: the-carrion-court → the-siltgate)
+- flooded-concourse north → superdome-breach (INTER-ZONE: the-siltgate → the-carrion-court)
+- flooded-concourse east → dock-street-1 (intra-zone)
+- dock-street-1 west → flooded-concourse (intra-zone)
+Total: 6 exits (3 bidirectional pairs, 1 inter-zone)
+
+Connection 2: Reliquary → Siltgate
+- reliquary-inn east → filtration-annex (intra-zone)
+- filtration-annex west → reliquary-inn (intra-zone)
+- filtration-annex east → pipe-bridge (INTER-ZONE: the-reliquary → the-siltgate)
+- pipe-bridge west → filtration-annex (INTER-ZONE: the-siltgate → the-reliquary)
+- pipe-bridge east → ashgate-chapel (intra-zone)
+- ashgate-chapel west → pipe-bridge (intra-zone)
+Total: 6 exits (3 bidirectional pairs, 1 inter-zone)
+
+Connection 3: Bloom Observatory → Warrens
+- bloom-observatory-inn down → platform-descent (intra-zone)
+- platform-descent up → bloom-observatory-inn (intra-zone)
+- platform-descent east → causeway-terminus (INTER-ZONE: the-bloom-observatory → warrens)
+- causeway-terminus west → platform-descent (INTER-ZONE: warrens → the-bloom-observatory)
+- causeway-terminus north → shattered-gate (intra-zone)
+- shattered-gate north → causeway-terminus (intra-zone)
+Total: 6 exits (3 bidirectional pairs, 1 inter-zone)
+
+DIRECTION CONFLICT RESOLUTION:
+✓ dock-street-1: Used WEST (north/south/east were occupied)
+✓ ashgate-chapel: Used WEST (north was occupied, south/east/west were free)
+✓ shattered-gate: Used NORTH (west/east/south were occupied)
+
+INTER-ZONE EXIT PATTERN:
+All inter-zone exits follow the established pattern from 004_seed_siltgate.sql:
+- to_room_slug = from_room_slug (portal pattern)
+- target_zone_slug and target_room_slug are filled
+- NULLIF used for empty strings in SQL
+
+ZONES AFFECTED:
+- the-carrion-court (1 new room, 3 new exits)
+- the-reliquary (1 new room, 3 new exits)
+- the-bloom-observatory (1 new room, 3 new exits)
+- the-siltgate (2 new rooms, 8 new exits)
+- warrens (1 new room, 4 new exits)
+
+All exits are bidirectional. All rooms referenced exist.
+Migration is atomic (wrapped in BEGIN/COMMIT).
