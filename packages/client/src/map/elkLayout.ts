@@ -64,7 +64,7 @@ const NODE_WIDTH = 50;
 const NODE_HEIGHT = 50;
 
 /** Pixel spacing between grid cells for BFS → ELK coordinate conversion. */
-const GRID_SPACING = 150;
+const GRID_SPACING = 100;
 
 /**
  * Default ELK layout options.
