@@ -27,6 +27,15 @@
 
 ## Learnings
 
+### 2026-04-06: Migration Consolidation Design (001–022 → 4 files)
+- **Task:** Design a consolidation plan to collapse 22 migration files into ~4 clean files for fresh-DB creation.
+- **Analysis:** Read all 22 migrations end-to-end. Tracked every schema change, column rename, data insert, data update, topology fix, and inter-zone connection across the full migration history.
+- **Key insight:** Migrations 011–020 are almost entirely renames and rewrites of data/columns created in 001–004. The consolidated version just uses final names/values, eliminating all ALTER/RENAME/UPDATE-after-INSERT patterns.
+- **Proposed structure:** 001_schema.sql (27 tables, final column names), 002_seed_content.sql (factions, items, creatures with final names/stats), 003_seed_zones.sql (6 zones, 291 rooms, all exits), 004_reputation.sql (optional, could fold into 001).
+- **Tricky spots documented:** Siltgate slug inconsistency (the-siltgate vs siltgate in 016), room description appends vs rewrites (019 overwrites all), idle tick multiplication (10x from 010), stronghold slug chains (013→016→017→022).
+- **Deliverable:** `.squad/decisions/inbox/elminster-migration-consolidation.md`
+- **Key lesson:** When consolidating migration histories, work backwards from the final state — track what each column/value IS, not what it WAS. Renames and updates become no-ops when you just use the final name from the start.
+
 ### 2026-01-19: Issue #317 — "Connect to Zone" Context Menu Design
 - **Task:** Design spec for adding inter-zone portal creation to zone designer right-click menu
 - **Research findings:**

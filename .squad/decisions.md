@@ -2654,3 +2654,442 @@ Each connection route has:
 ✅ NULLIF used for empty target_zone/target_room strings  
 
 ---
+# Design: Migration Consolidation (001–022 → 4 files)
+
+**Author:** Elminster (Lead/Architect)  
+**Date:** 2026-04-06  
+**Requested by:** dkirby-ms  
+**Implementer:** Drizzt (Engine Dev)
+
+---
+
+## Summary
+
+Consolidate 22 migration files into 4 clean files that produce the **exact same final database state** from scratch. Since we can destroy and recreate the DB, every rename, column addition, data update, and topology fix is folded into the final-state representation. No ALTER, no UPDATE-after-INSERT, no DROP — just the end result.
+
+---
+
+## Consolidated File Structure
+
+| File | Purpose | Original Migrations Folded In |
+|------|---------|-------------------------------|
+| `001_schema.sql` | All CREATE TABLE, indexes, constraints | 001, 008 (aggressive col), 009 (room_description col), 011 (drop biome system), 012 (table rename), 013 (faction_slug col on zones), 014 (column renames), 016 (characters columns), 018 (column rename), 021 (starting_zone_slug, character_reputation table) |
+| `002_seed_content.sql` | Factions, items, creatures (final names/descriptions) | 002, 004 (Siltgate items/creatures), 008 (aggressive flags), 009 (room_descriptions), 010 (idle tick values), 017 (faction renames), 020 (creature/item rethemes) |
+| `003_seed_zones.sql` | All zones, rooms, and exits (final topology, final text) | 003, 004, 005, 006, 007, 013 (strongholds), 015 (refuge repurpose), 016 (inn rooms), 017 (stronghold renames), 019 (room flavor rewrites), 022 (stronghold connections) |
+| `004_reputation.sql` | Reputation system table + indexes | 021 (character_reputation table only — schema part already in 001) |
+
+> **Note on 004:** This file exists solely because `character_reputation` references `characters(id)`, which is a Tier 2 table. It could alternatively be merged into `001_schema.sql` if placed after the `characters` CREATE TABLE. Drizzt may choose to fold it into 001 and eliminate this file entirely. If so, 3 files suffice.
+
+---
+
+## File 1: `001_schema.sql` — Final Schema
+
+### What changes vs. current 001
+
+The consolidated schema must reflect the **final column state** after all 22 migrations. Every column that was added-then-renamed, or table that was renamed, uses only the final name. Every column that was added in later migrations (008, 009, 013, 016, 021) is included from the start.
+
+### Tables to CREATE (final state)
+
+Listed in dependency order. Key differences from original 001 are marked with ⚠️.
+
+#### Independent tables (no FK dependencies)
+
+1. **player_identities** — unchanged from 001
+2. **item_definitions** — unchanged from 001
+3. **factions** — unchanged from 001
+4. ~~**biome_definitions**~~ — ⚠️ **DROP.** Removed by 011. Do not create.
+5. **modifier_definitions** — unchanged from 001
+6. **narrative_template_definitions** — ⚠️ Remove `biome` column (dropped by 011)
+7. **loot_table_definitions** — unchanged from 001
+8. **room_definitions** — unchanged from 001
+9. **skill_definitions** — unchanged from 001
+10. **creature_definitions** — ⚠️ Modifications:
+    - Remove `biome_affinity` column (dropped by 011)
+    - Add `aggressive BOOLEAN NOT NULL DEFAULT true` (added by 008)
+    - Add `room_description TEXT` (added by 009)
+11. **zones** — ⚠️ Modifications:
+    - Rename `biome` → `theme` (011): column should be `theme TEXT NOT NULL DEFAULT 'flooded_crypt'`
+    - Add `faction_slug TEXT` (added by 013)
+12. **deploy_history** — unchanged from 001
+13. **audit_log** — unchanged from 001
+
+#### Tier 1 (depends on player_identities)
+
+14. **players** — unchanged from 001
+
+#### Tier 2 (depends on players)
+
+15. **characters** — ⚠️ Modifications:
+    - Add `water INTEGER NOT NULL DEFAULT 0` (added as `gold` in 016, renamed to `water` in 018)
+    - Add `last_inn_zone_slug TEXT` (added by 016)
+    - Add `last_inn_room_slug TEXT` (added by 016)
+    - Add `starting_zone_slug TEXT NOT NULL DEFAULT 'the-reliquary'` (added by 021)
+    - Make `faction_slug` nullable: `faction_slug TEXT` (was `TEXT NOT NULL`, changed by 021)
+16. **auth_tokens** — unchanged from 001
+
+#### Tier 3 (depends on players, characters, etc.)
+
+17. **faction_membership** — unchanged from 001
+18. **player_skills** — unchanged from 001
+19. **player_stash** — unchanged from 001
+20. **player_stash_capacity** — unchanged from 001
+21. **player_death_penalty** — ⚠️ Was `player_shard_sickness` in 001, renamed by 012
+22. **player_loadout** — unchanged from 001
+23. **player_profile** — unchanged from 001
+24. **run_history** — ⚠️ Modifications:
+    - Rename `shard_tier` → `zone_tier` (014)
+    - Rename `extracted` → `survived` (014)
+    - Rename `extracted_items` → `items_carried_out` (014)
+    - Remove `biome` column (dropped by 011)
+25. **character_reputation** — ⚠️ New table from 021:
+    ```
+    id UUID PK, character_id UUID FK→characters, faction_slug TEXT NOT NULL,
+    reputation INTEGER NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(character_id, faction_slug)
+    ```
+
+#### Zone child tables
+
+26. **zone_rooms** — unchanged from 001
+27. **zone_exits** — unchanged from 001
+28. **character_explored_rooms** — ⚠️ Modifications:
+    - Remove `biome` column (dropped by 011)
+    - Rename `shard_tier` → `zone_tier` (014)
+
+### Indexes (final state)
+
+All indexes from 001, **plus** these changes:
+
+- ⚠️ Remove `idx_shard_sickness_character` → replace with `idx_death_penalty_character ON player_death_penalty(character_id)` (012)
+- ⚠️ Replace unique index `uq_character_zone_room` with `uq_explored_character_zone_room ON character_explored_rooms(character_id, COALESCE(zone_slug, '__instance__'), room_id)` — note `__instance__` sentinel, not `__shard__` (014)
+- ⚠️ Add `idx_character_reputation_char ON character_reputation(character_id)` (021)
+
+---
+
+## File 2: `002_seed_content.sql` — Factions, Items, Creatures
+
+### Factions (final values from 017)
+
+Insert 3 factions with their **final** slugs, names, and descriptions:
+
+| Slug | Name | Source |
+|------|------|--------|
+| `kindari` | The Kindari | Was `ironwright` / "The Ironwright Compact" in 002, renamed 017 |
+| `bloom-tenders` | The Bloom Tenders | Was `veil` / "The Veil Cartographers" in 002, renamed 017 |
+| `krewe-calliope` | Krewe Calliope | Was `scarlet` / "The Scarlet Ledger" in 002, renamed 017 |
+
+Use the full description text from migration 017 (not the original 002 text).
+
+### Item definitions (final values from 002 + 004 + 020)
+
+Merge all items from 002 and 004 into a single INSERT. For items rethemed in 020, use the **final** name and description:
+
+| Item ID | Final Name | Changed by |
+|---------|-----------|------------|
+| `alley_thugs_coin` | Scavenged Circuit Board | 020 |
+| `noble_signet_ring` | Pre-Extinction Signet Ring | 020 |
+| `city_map` | Salvaged City Map | 020 |
+| `silk_scarf` | Bloom-Stained Cloth | 020 |
+| `healing_draught` | Algae Salve | 020 |
+| `iron_sword` | Rebar Machete | 020 |
+| `iron_chainmail` | Scrap-Weave Vest | 020 |
+| `voidforged_blade` | Drone-Core Blade | 020 |
+| `shardsteel_sabre` | Honed Drone Blade | 020 |
+| `shardsteel_shard` | Drone Alloy Shard | 020 |
+| `corroded_halberd` | Corroded Fire Axe | 020 |
+| `rat_tail` | Rat Tail (name unchanged, description updated) | 020 |
+
+All other items retain their original names/descriptions from 002/004.
+
+### Creature definitions (final values from 002 + 004 + 008 + 009 + 010 + 020)
+
+Merge all creatures from 002 and 004 into a single INSERT. Apply these cumulative changes:
+
+1. **idle_ticks_min/max** — use the **10x multiplied** values from 010 (e.g., original 30/50 → 300/500)
+2. **aggressive** column — include in INSERT. Set `false` for `city_dog` and `pigeon_flock`; `true` for all others (008)
+3. **room_description** — include the column. Use final text from 020 where rethemed, otherwise 009 text
+4. **name, description** — use the final rethemed values from 020 where applicable:
+
+| Creature type | Final Name | Changed by |
+|--------------|-----------|------------|
+| `city_dog` | Silt Roach | 020 |
+| `pigeon_flock` | Mosquito Swarm | 020 |
+| `feral_dog` | Feral Hog | 020 |
+| `alley_thug` | Render-Kin Stalker | 020 |
+| `dockside_smuggler` | Bone-Tithe Hoarder | 020 |
+| `plague_bearer` | Fester-Thrall | 020 |
+| `the_harbourmaster` | The Graftlord | 020 |
+
+Creatures NOT rethemed (keep 002/004 originals): `drowned_revenant`, `gutterspawn`, `rubble_scavenger`, `hollow_stalker`, `the_collapsed_one`, `slum_rat`, `sewer_lurker`, `feral_dog` (wait — feral_dog IS rethemed), `silt_serpent`.
+
+**Idle tick values to use** (final = original × 10):
+
+| Creature | idle_ticks_min | idle_ticks_max |
+|----------|---------------|---------------|
+| drowned_revenant | 300 | 500 |
+| gutterspawn | 300 | 600 |
+| rubble_scavenger | 400 | 800 |
+| hollow_stalker | 500 | 1200 |
+| the_collapsed_one | 800 | 1500 |
+| slum_rat | 200 | 400 |
+| sewer_lurker | 400 | 800 |
+| city_dog (→Silt Roach) | 300 | 600 |
+| pigeon_flock (→Mosquito Swarm) | 200 | 400 |
+| feral_dog (→Feral Hog) | 300 | 600 |
+| alley_thug (→Render-Kin Stalker) | 400 | 800 |
+| dockside_smuggler (→Bone-Tithe Hoarder) | 500 | 1000 |
+| silt_serpent | 400 | 800 |
+| plague_bearer (→Fester-Thrall) | 600 | 1200 |
+| the_harbourmaster (→The Graftlord) | 800 | 1500 |
+
+---
+
+## File 3: `003_seed_zones.sql` — Zones, Rooms, Exits
+
+This is the largest and most complex file. It must produce the final topology with all rooms, exits, and descriptions in their post-019/020/022 state.
+
+### Zones to create (6 total, final state)
+
+| Slug | Name | Key changes folded in |
+|------|------|-----------------------|
+| `the-refuge` | The Refuge | 003 (created), 015 (category→dev, description update) |
+| `warrens` | The Warrens | 003 (created), 007 (+8 bridge rooms), 019 (description rewrite), 022 (+causeway-terminus room) |
+| `the-siltgate` | The Siltgate | 004 (created), 005 (+2 bridge rooms, topology fixes), 006 (diagonal fix), 016 (+merchant-inn-upper), 019 (description rewrite), 022 (+flooded-concourse, +pipe-bridge rooms) |
+| `the-reliquary` | The Reliquary | Was `the-foundry` in 013, renamed 017. Inn added 016, descriptions from 017 |
+| `the-bloom-observatory` | The Bloom Observatory | Was `the-cartographium` in 013, renamed 017. Inn added 016, descriptions from 017, 022 (+platform-descent) |
+| `the-carrion-court` | The Carrion Court | Was `the-counting-house` in 013, renamed 017. Inn added 016, descriptions from 017, 022 (+superdome-breach) |
+
+**All zones must use `theme` column** (not `biome`). Include `faction_slug` column.
+
+### Zone details
+
+#### The Refuge
+- **category:** `dev` (from 015, not the original hub)
+- **description:** Use the 015 text ("A pocket dimension maintained by the designers…")
+- **theme:** `flooded_crypt`
+- **7 rooms** from 003 (hearth, stash-alcove, training-grounds, expedition-board, market, infirmary, war-room)
+- **12 exits** from 003 — all unchanged
+- Note: Refuge was NOT rewritten by 019. Descriptions stay as original 003.
+
+#### The Warrens
+- **description:** Use the 019 text ("Beneath Siltgate's ruins lies a network…")
+- **theme:** `flooded_crypt`
+- **Rooms:** 101 rooms from 003 + 8 bridge rooms from 007 + 1 causeway-terminus from 022 = **110 rooms total**
+- **Room descriptions:** Use 019 final text for all Warrens rooms. For rooms added by 007, check if 019 rewrites them (it does — 019 explicitly covers topology fix rooms).
+- **Exits:** Use final topology after 007 fixes and 022 additions. The 007 migration removed shortcuts and inserted bridge chains — the consolidated version should have the corrected exits only (never the removed shortcuts).
+- The `broken-sanctuary` description was appended-to in 007 — use the 019 rewrite as the final version (019 replaces all Warrens room descriptions completely).
+
+#### The Siltgate
+- **description:** Use the 019 text ("The ruins of New Orleans, transformed…")
+- **theme:** `urban`
+- **Rooms:** 136 rooms from 004 + 2 bridge rooms from 005 + 1 merchant-inn-upper from 016 + 2 rooms from 022 (flooded-concourse, pipe-bridge) = **141 rooms total**
+- **Room descriptions:** Use 019 final text for all original rooms. For rooms added by 005 (rubble-passage-1, gutter-sewer), 019 covers rubble-passage-1; gutter-sewer keeps its 005 description. For 016 (merchant-inn-upper), keep 016 description. For 022 rooms (flooded-concourse, pipe-bridge), keep 022 descriptions.
+- **Exits:** Final topology after 005 fixes, 006 diagonal fix, 016 merchant-inn stairs, and 022 inter-zone connections. Never include the removed shortcuts from 005.
+- The `sewer-junction-2` and `sewer-tunnel-4` descriptions were appended-to in 005 — 019 provides full rewrites for these rooms; use the 019 text.
+- The `collapsed-building-1` type changed from `dead_end` to `corridor` in 005; use `corridor`.
+
+#### The Reliquary (Kindari stronghold)
+- **slug:** `the-reliquary` (final, from 017)
+- **faction_slug:** `kindari`
+- **entry_room_slugs:** `{reliquary-inn}` (from 016+017)
+- **10 rooms** with final slugs/names/descriptions from 017:
+  - `reliquary-commons` "The Preservation Hall"
+  - `reliquary-stash` "The Archive Cistern"
+  - `reliquary-armoury` "The Assembly Bay"
+  - `reliquary-expedition-board` "The Salvage Wall"
+  - `reliquary-market` "The Component Exchange"
+  - `reliquary-training` "The Pressure Chamber"
+  - `reliquary-infirmary` "The Waterworks"
+  - `reliquary-war-room` "The Schematic Vault"
+  - `reliquary-inn` "The Sleeper Cells"
+  - `reliquary-inn-upper` "The Sleeper Cells — Private Room"
+- Plus from 022: `filtration-annex` "Filtration Annex" = **11 rooms**
+- **Exits:** Use final slugs (reliquary-*, not foundry-*). Include inn connections from 016, plus 022 inter-zone exits.
+
+#### The Bloom Observatory (Bloom Tenders stronghold)
+- **slug:** `the-bloom-observatory` (final, from 017)
+- **faction_slug:** `bloom-tenders`
+- **entry_room_slugs:** `{bloom-observatory-inn}` (from 016+017)
+- **10 rooms** with final slugs/names/descriptions from 017 + 1 from 022:
+  - `bloom-observatory-commons` "The Tide Deck"
+  - `bloom-observatory-stash` "The Specimen Hold"
+  - `bloom-observatory-armoury` "The Navigation Station"
+  - `bloom-observatory-expedition-board` "The Chart Room"
+  - `bloom-observatory-market` "The Barter Net"
+  - `bloom-observatory-training` "The Weather Deck"
+  - `bloom-observatory-infirmary` "The Spillway"
+  - `bloom-observatory-war-room` "The Signal Archive"
+  - `bloom-observatory-inn` "The Bunks"
+  - `bloom-observatory-inn-upper` "The Bunks — Private Room"
+  - `platform-descent` "Platform Descent" (022)
+- **11 rooms total**
+- **Exits:** Use bloom-observatory-* slugs. Include inn connections and 022 inter-zone exits.
+
+#### The Carrion Court (Krewe Calliope stronghold)
+- **slug:** `the-carrion-court` (final, from 017)
+- **faction_slug:** `krewe-calliope`
+- **entry_room_slugs:** `{carrion-court-inn}` (from 016+017)
+- **10 rooms** with final slugs/names/descriptions from 017 + 1 from 022:
+  - `carrion-court-commons` "The Procession Gate"
+  - `carrion-court-stash` "The Wardrobe Vault"
+  - `carrion-court-armoury` "The Costume Workshop"
+  - `carrion-court-expedition-board` "The Call Board"
+  - `carrion-court-market` "The Curiosity Bazaar"
+  - `carrion-court-training` "The Dance Floor"
+  - `carrion-court-infirmary` "The Green Room"
+  - `carrion-court-war-room` "The Inner Sanctum"
+  - `carrion-court-inn` "The Bunk Tiers"
+  - `carrion-court-inn-upper` "The Bunk Tiers — Private Alcove"
+  - `superdome-breach` "Superdome Breach" (022)
+- **11 rooms total**
+- **Exits:** Use carrion-court-* slugs. Include inn connections and 022 inter-zone exits.
+
+### Ordering within 003_seed_zones.sql
+
+**Critical dependency order:**
+1. Insert zones FIRST (zone_rooms and zone_exits FK to zones)
+2. Insert zone_rooms SECOND (zone_exits reference room slugs)
+3. Insert zone_exits LAST
+
+**Recommended section order:**
+1. Refuge zone → rooms → exits
+2. Warrens zone → rooms → exits
+3. Siltgate zone → rooms → exits
+4. Reliquary zone → rooms → exits
+5. Bloom Observatory zone → rooms → exits
+6. Carrion Court zone → rooms → exits
+
+---
+
+## File 4: `004_reputation.sql` — Reputation System
+
+This file creates only the `character_reputation` table and its index. Alternatively, this can be folded into `001_schema.sql` (placed after `characters` table creation). Drizzt's call.
+
+**Contents from 021 (schema portion only):**
+- CREATE TABLE character_reputation (...)
+- CREATE INDEX idx_character_reputation_char
+
+Note: The `characters` table changes from 021 (adding `starting_zone_slug`, making `faction_slug` nullable) are already folded into `001_schema.sql`.
+
+---
+
+## Key Renames Cheat Sheet
+
+These are columns/tables/values that were added under one name and later renamed. The consolidated version uses ONLY the final name.
+
+| What | Original | Final | Migration |
+|------|----------|-------|-----------|
+| **Column** zones.biome | `biome` | `theme` | 011 |
+| **Table** player_shard_sickness | `player_shard_sickness` | `player_death_penalty` | 012 |
+| **Column** run_history.shard_tier | `shard_tier` | `zone_tier` | 014 |
+| **Column** run_history.extracted | `extracted` | `survived` | 014 |
+| **Column** run_history.extracted_items | `extracted_items` | `items_carried_out` | 014 |
+| **Column** character_explored_rooms.shard_tier | `shard_tier` | `zone_tier` | 014 |
+| **Sentinel** `__shard__` | `__shard__` | `__instance__` | 014 |
+| **Column** characters.gold | `gold` | `water` | 016→018 |
+| **Faction slug** ironwright | `ironwright` | `kindari` | 017 |
+| **Faction slug** veil | `veil` | `bloom-tenders` | 017 |
+| **Faction slug** scarlet | `scarlet` | `krewe-calliope` | 017 |
+| **Zone slug** the-foundry | `the-foundry` | `the-reliquary` | 017 |
+| **Zone slug** the-cartographium | `the-cartographium` | `the-bloom-observatory` | 017 |
+| **Zone slug** the-counting-house | `the-counting-house` | `the-carrion-court` | 017 |
+
+## Dropped Columns/Tables
+
+| What | Removed by |
+|------|-----------|
+| `biome_definitions` table | 011 |
+| `narrative_template_definitions.biome` column | 011 |
+| `creature_definitions.biome_affinity` column | 011 |
+| `run_history.biome` column | 011 |
+| `character_explored_rooms.biome` column | 011 |
+
+## Data That Was Inserted Then Updated
+
+These are seed data rows where later migrations changed the values. The consolidated version should use the FINAL value only.
+
+| Entity | Original Value | Final Value | Changed by |
+|--------|---------------|-------------|-----------|
+| Refuge zone category | `hub` | `dev` | 015 |
+| Refuge zone description | (original 003 text) | 015 text ("A pocket dimension maintained…") | 015 |
+| Warrens zone description | (original 003 text) | 019 text ("Beneath Siltgate's ruins…") | 019 |
+| Siltgate zone description | (original 004 text) | 019 text ("The ruins of New Orleans…") | 019 |
+| All Siltgate room names/descriptions | (original 004 text) | 019 text | 019 |
+| All Warrens room names/descriptions | (original 003 text) | 019 text | 019 |
+| 7 creature names/descriptions | (original 002/004 text) | 020 rethemed text | 020 |
+| 12 item names/descriptions | (original 002 text) | 020 rethemed text | 020 |
+| All creature idle_ticks | (original values) | 10× original values | 010 |
+| 2 creature aggressive flags | `true` (default) | `false` | 008 |
+| All creature room_descriptions | (none) | Text from 009 or 020 | 009, 020 |
+| Stronghold room names/descriptions | (013 text) | 017 text | 017 |
+| Stronghold entry_room_slugs | `{*-commons}` → `{*-inn}` | `{*-inn}` (final slug) | 016, 017 |
+| Faction names/slugs/descriptions | (002 text) | 017 text | 017 |
+| Stronghold zone slugs/names/descriptions | (013 text) | 017 text | 017 |
+
+---
+
+## Tricky Spots for the Implementer
+
+1. **Siltgate slug inconsistency.** Migration 004 creates the zone as `the-siltgate`, but 016 references it as `siltgate` (when adding merchant-inn-upper). Check which slug the codebase actually uses. The zone was created with `the-siltgate` in 004 — use that consistently.
+
+2. **Room descriptions with appended text.** Migrations 005 and 007 appended text to existing room descriptions using `description || ' ...'`. Migration 019 completely rewrites all these rooms, so use the 019 text and ignore the append operations. However, verify that 019 covers `gutter-sewer` (added by 005) — it may not, since 019 says "137 Siltgate rooms (136 original + 1 topology fix: rubble-passage-1)". If `gutter-sewer` is not in 019, keep the 005 description.
+
+3. **Bridge rooms from 005 and 007.** These rooms were added to fix topology. They must appear in the consolidated zone room INSERTs. Their final descriptions come from 019 if covered, otherwise from the original 005/007 migration.
+
+4. **Stronghold exit slugs.** Migration 013 created exits using `foundry-*`, `cartographium-*`, `counting-house-*` slugs. Migration 017 renamed them all. Migration 016 added inn exits using old names. Migration 022 added inter-zone exits using final names. The consolidated version must use only the final `reliquary-*`, `bloom-observatory-*`, `carrion-court-*` slugs.
+
+5. **ON CONFLICT clauses.** The original migrations used `ON CONFLICT (id) DO NOTHING` and `ON CONFLICT (type) DO NOTHING`. In a fresh-DB consolidation, conflicts shouldn't occur, but retaining the clauses is harmless and provides safety for re-runs.
+
+6. **Inter-zone portal exits in 022.** These exits use the pattern where `to_room_slug = from_room_slug` and `target_zone_slug` + `target_room_slug` specify the actual destination. Preserve this pattern exactly.
+
+7. **Warrens entry_room_slugs still include shattered-gate from 003.** After 022, shattered-gate also connects north to causeway-terminus. The entry point hasn't changed.
+
+8. **010's idle tick multiplication was applied to ALL creatures at that point**, which was 7 from 002 + 8 from 004 = 15 creatures total. The consolidated version should just use the pre-computed final values listed in this document.
+
+---
+
+## Verification Checklist
+
+After consolidation, verify the final DB state matches by:
+
+1. **Table count:** 27 tables (original 28 minus `biome_definitions`)
+2. **Faction count:** 3 (kindari, bloom-tenders, krewe-calliope)
+3. **Item count:** 002 items (27) + 004 items (17) = **44 items**
+4. **Creature count:** 002 creatures (7) + 004 creatures (8) = **15 creatures**
+5. **Zone count:** 6 (the-refuge, warrens, the-siltgate, the-reliquary, the-bloom-observatory, the-carrion-court)
+6. **Room counts:**
+   - The Refuge: 7
+   - The Warrens: 110 (101 from 003 + 8 from 007 + 1 from 022)
+   - The Siltgate: 141 (136 from 004 + 2 from 005 + 1 from 016 + 2 from 022)
+   - The Reliquary: 11 (8 from 013 + 2 from 016 + 1 from 022)
+   - The Bloom Observatory: 11 (8 from 013 + 2 from 016 + 1 from 022)
+   - The Carrion Court: 11 (8 from 013 + 2 from 016 + 1 from 022)
+   - **Total: 291 rooms**
+7. **Column spot checks:**
+   - `zones.theme` exists (not `biome`)
+   - `zones.faction_slug` exists
+   - `characters.water` exists (not `gold`)
+   - `characters.starting_zone_slug` exists, NOT NULL, DEFAULT 'the-reliquary'
+   - `characters.faction_slug` is nullable
+   - `run_history.zone_tier` exists (not `shard_tier`)
+   - `run_history.survived` exists (not `extracted`)
+   - `creature_definitions.aggressive` exists
+   - `creature_definitions.room_description` exists
+   - No `biome` column on any table
+   - `player_death_penalty` table exists (not `player_shard_sickness`)
+   - `character_reputation` table exists
+8. **Index spot checks:**
+   - `uq_explored_character_zone_room` uses `__instance__` sentinel
+   - `idx_death_penalty_character` exists on `player_death_penalty`
+   - `idx_character_reputation_char` exists
+
+---
+
+## Migration Runner Considerations
+
+The existing migration runner (check `packages/server/src/db/` for the runner implementation) likely tracks applied migrations by filename or number. Drizzt should:
+
+1. Verify the runner's tracking mechanism (migration table? filename check?)
+2. For the fresh-DB scenario: wipe the tracking table along with the DB
+3. Consider whether to update the runner to handle the new 001–004 numbering
+4. Remove the old 001–022 files after consolidation (or archive them in a `migrations/archive/` folder)

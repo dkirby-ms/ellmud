@@ -3105,3 +3105,22 @@ Threat tables are stored per-encounter, mapped by creature ID. Each creature mai
 - `AZURE_AI_KEY` and `ADMIN_TOKEN` must use `@secure()` in Bicep params. Azure AI vars default to empty strings (LLM narration degrades gracefully to templates).
 - `ADMIN_TOKEN` is fail-closed in `admin/middleware.ts` — if unset, all admin requests are rejected (403). Must be explicitly set in prod for the admin dashboard to function.
 
+
+---
+
+## Migration Consolidation (Session: 003_seed_zones consolidation)
+
+### Task
+Consolidated 22 incremental SQL migration files into 3 clean files per Elminster's design doc (`.squad/decisions/inbox/elminster-migration-consolidation.md`).
+
+### Output
+- `packages/server/src/db/migrations-new/001_schema.sql` (468 lines) — all 27 CREATE TABLE + indexes, final column names
+- `packages/server/src/db/migrations-new/002_seed_content.sql` (173 lines) — 3 factions, 47 items, 15 creatures
+- `packages/server/src/db/migrations-new/003_seed_zones.sql` (3167 lines) — 6 zones, 291 rooms, 663 exits
+
+### Key Learnings
+- Original 002 has 30 items (not 27 as the design doc assumed); the real total is 47 items
+- 007 bridge room slugs are descriptive (`sewer-drip-tunnel`, `sewer-cracked-conduit`, etc.), not generic (`sewer-link-1`)
+- 019 room_flavor_rewrite covers ALL Siltgate and Warrens rooms including topology-fix bridge rooms from 005/007
+- `character_reputation` table was folded into 001_schema.sql (eliminating need for a 4th file, as design doc suggested)
+- The migration runner reads from a configurable directory; new files are in `migrations-new/` to coexist with originals during testing
