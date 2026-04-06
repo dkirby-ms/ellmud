@@ -154,6 +154,8 @@ export function ZoneDesignerFlow({
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={true}
+        minZoom={0.1}
+        maxZoom={8}
         zoomOnDoubleClick={false}
       >
         {/* SVG defs for gradients and markers */}
