@@ -41,7 +41,7 @@ ON CONFLICT (type) DO NOTHING;
 -- ═══════════════════════════════════════════════════════════════
 -- Zone record
 -- ═══════════════════════════════════════════════════════════════
-INSERT INTO zones (id, slug, name, description, level_min, level_max, tier, theme, entry_room_slugs, lifecycle, category, max_players, pvp_enabled, repop_interval_seconds)
+INSERT INTO zones (id, slug, name, description, level_min, level_max, tier, biome, entry_room_slugs, lifecycle, category, max_players, pvp_enabled, repop_interval_seconds)
 VALUES (gen_random_uuid(), 'the-siltgate', 'The Siltgate',
   'A sprawling port city built on the ruins of something older. Salt wind, tar smoke, and the clamor of commerce fill the air. Social strata are evident from the gleaming promenades above to the drowned sewers below.',
   1, 100, 1, 'urban', '{market-square}', 'persistent', 'city', 0, false, 0);

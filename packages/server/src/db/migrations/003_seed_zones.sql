@@ -4,7 +4,7 @@
 -- The Refuge — designer/debug hub (fallback for unaffiliated players)
 -- ============================================================================
 
-INSERT INTO zones (id, slug, name, description, level_min, level_max, tier, theme, entry_room_slugs, lifecycle, category, max_players, pvp_enabled, repop_interval_seconds)
+INSERT INTO zones (id, slug, name, description, level_min, level_max, tier, biome, entry_room_slugs, lifecycle, category, max_players, pvp_enabled, repop_interval_seconds)
 VALUES (gen_random_uuid(), 'the-refuge', 'The Refuge',
   'A pocket dimension maintained by the designers. Test dummies, debug consoles, and prototype systems fill the crumbling halls. Unaffiliated shardwalkers awaken here.',
   1, 100, 1, 'flooded_crypt', '{hearth}', 'persistent', 'dev', 0, false, 0);
@@ -50,7 +50,7 @@ WHERE z.slug = 'the-refuge';
 -- The Warrens — expanded 100+ room zone
 -- ============================================================================
 
-INSERT INTO zones (id, slug, name, description, level_min, level_max, tier, theme, entry_room_slugs, lifecycle, category, max_players, pvp_enabled, repop_interval_seconds)
+INSERT INTO zones (id, slug, name, description, level_min, level_max, tier, biome, entry_room_slugs, lifecycle, category, max_players, pvp_enabled, repop_interval_seconds)
 VALUES (gen_random_uuid(), 'warrens', 'The Warrens',
   'A vast, decaying ruined city stretching far beyond its shattered gate. Winding streets of crumbling tenements give way to a dense slum quarter where desperate creatures claw out survival among the refuse. Beneath the surface, flooded sewers hide worse things still. The sounds of skittering claws and collapsing masonry echo endlessly across the cracked pavement.',
   1, 100, 1, 'flooded_crypt', '{shattered-gate}', 'persistent', 'dungeon', 6, false, 300);
