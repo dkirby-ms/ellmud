@@ -34,4 +34,10 @@ export interface CharacterRepository {
 
   /** Get the currently active character for a player. */
   getActive(playerId: string): Promise<CharacterRow | null>;
+
+  /** Persist the last inn location for respawn. */
+  saveLastInn(characterId: string, zoneSlug: string, roomSlug: string): Promise<void>;
+
+  /** Get the last inn location for a character. */
+  getLastInn(characterId: string): Promise<{ zoneSlug: string; roomSlug: string } | null>;
 }

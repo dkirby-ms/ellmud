@@ -67,6 +67,26 @@ param allowLocalAuth string = 'false'
 @description('Client app URL for OAuth redirects (e.g. https://ellmud-test.kirbytoso.xyz)')
 param clientUrl string = ''
 
+@description('OpenAI-compatible LLM endpoint URL (OpenAI, Azure OpenAI, LM Studio, etc.)')
+param openaiLlmEndpoint string = ''
+
+@secure()
+@description('OpenAI-compatible LLM API key')
+param openaiLlmKey string = ''
+
+@description('OpenAI-compatible LLM model name')
+param openaiLlmModel string = 'gpt-4o'
+
+@description('Enable LLM narration (false = template-only mode)')
+param enableLlmNarration string = 'true'
+
+@secure()
+@description('Admin API bearer token (fail-closed when unset)')
+param adminToken string = ''
+
+@description('Require authentication to join rooms')
+param authRequired string = 'true'
+
 var createEnvironment = existingEnvironmentId == ''
 
 // Bootstrap placeholder — replaced by real image after first CI/CD deploy.
@@ -165,7 +185,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             { name: 'REDIS_CACHE_ENABLED', value: 'true' }
             { name: 'REDIS_PRESENCE_ENABLED', value: 'true' }
             { name: 'REDIS_DRIVER_ENABLED', value: 'true' }
-            { name: 'MAX_PLAYERS_PER_SHARD', value: '4' }
+            { name: 'MAX_PLAYERS_PER_ZONE', value: '4' }
             { name: 'MAX_REPLICAS', value: '4' }
             { name: 'ENTRA_CLIENT_ID', value: entraClientId }
             { name: 'ENTRA_CLIENT_SECRET', value: entraClientSecret }
@@ -174,6 +194,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) 
             { name: 'ENTRA_REDIRECT_URI', value: entraRedirectUri }
             { name: 'ALLOW_LOCAL_AUTH', value: allowLocalAuth }
             { name: 'CLIENT_URL', value: clientUrl }
+            { name: 'AUTH_REQUIRED', value: authRequired }
+            { name: 'OPENAI_LLM_ENDPOINT', value: openaiLlmEndpoint }
+            { name: 'OPENAI_LLM_KEY', value: openaiLlmKey }
+            { name: 'OPENAI_LLM_MODEL', value: openaiLlmModel }
+            { name: 'ENABLE_LLM_NARRATION', value: enableLlmNarration }
+            { name: 'ADMIN_TOKEN', value: adminToken }
           ]
         }
       ]

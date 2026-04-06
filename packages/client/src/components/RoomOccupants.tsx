@@ -13,6 +13,7 @@ interface Creature {
 interface Player {
   id: string;
   name: string;
+  disconnected?: boolean;
 }
 
 interface RoomOccupantsProps {
@@ -75,11 +76,14 @@ export function RoomOccupants({ creatures, players }: RoomOccupantsProps) {
           {players.map((player) => (
             <button
               key={player.id}
-              className="w-full text-left text-sm px-2 py-1 rounded hover:bg-gray-800/50 transition-colors cursor-pointer flex items-center gap-2"
+              className={`w-full text-left text-sm px-2 py-1 rounded hover:bg-gray-800/50 transition-colors cursor-pointer flex items-center gap-2 ${player.disconnected ? 'opacity-50' : ''}`}
               onClick={() => {}}
             >
-              <span className="text-blue-400">👤</span>
-              <span className="text-gray-300">{player.name}</span>
+              <span className="text-blue-400">{player.disconnected ? '💤' : '👤'}</span>
+              <span className="text-gray-300">
+                {player.name}
+                {player.disconnected && <span className="text-amber-500/70 text-xs ml-1">(linkdead)</span>}
+              </span>
             </button>
           ))}
         </div>

@@ -1,9 +1,9 @@
 /**
- * Azure LLM Transport — Integration Tests
+ * OpenAI-Compatible LLM Transport — Integration Tests
  *
- * Gated behind AZURE_AI_TEST=true environment variable.
+ * Gated behind OPENAI_LLM_TEST=true environment variable.
  * When enabled, tests verify:
- *   - createAzureTransport() returns a callable transport function
+ *   - createOpenAITransport() returns a callable transport function
  *   - URL and header construction is correct
  *   - Error handling for invalid credentials returns a clear error
  *
@@ -11,18 +11,17 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { createAzureTransport } from '../narrative/llm-client.js';
-import type { LLMClientConfig, LLMTransport, LLMRequest } from '../narrative/llm-client.js';
+import { createOpenAITransport } from '../narrative/llm-client.js';
+import type { OpenAITransportConfig, LLMTransport, LLMRequest } from '../narrative/llm-client.js';
 
-const AZURE_AI_TEST = process.env.AZURE_AI_TEST === 'true';
+const OPENAI_LLM_TEST = process.env.OPENAI_LLM_TEST === 'true';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
-const TEST_CONFIG: LLMClientConfig = {
-  endpoint: process.env.AZURE_AI_ENDPOINT || 'https://test-endpoint.openai.azure.com',
-  apiKey: process.env.AZURE_AI_KEY || 'test-api-key-not-real',
-  deploymentName: process.env.AZURE_AI_DEPLOYMENT || 'gpt-4o-mini',
-  apiVersion: process.env.AZURE_AI_API_VERSION || '2024-02-15-preview',
+const TEST_CONFIG: OpenAITransportConfig = {
+  endpoint: process.env.OPENAI_LLM_ENDPOINT || 'https://api.openai.com',
+  apiKey: process.env.OPENAI_LLM_KEY || 'test-api-key-not-real',
+  model: process.env.OPENAI_LLM_MODEL || 'gpt-4o',
 };
 
 const MINIMAL_REQUEST: LLMRequest = {
@@ -36,19 +35,18 @@ const MINIMAL_REQUEST: LLMRequest = {
 
 // ─── Always-run tests (transport shape & construction) ───────────────────────
 
-describe('createAzureTransport — structure', () => {
+describe('createOpenAITransport — structure', () => {
   it('should return a function', () => {
-    const transport = createAzureTransport(TEST_CONFIG);
+    const transport = createOpenAITransport(TEST_CONFIG);
     expect(typeof transport).toBe('function');
   });
 
   it('should return a function that accepts (request, signal) parameters', () => {
-    const transport = createAzureTransport(TEST_CONFIG);
+    const transport = createOpenAITransport(TEST_CONFIG);
     expect(transport.length).toBe(2);
   });
 
   it('should construct correct URL from config', async () => {
-    // Intercept the fetch call to verify URL construction
     let capturedUrl = '';
     let capturedHeaders: Record<string, string> = {};
 
@@ -63,17 +61,15 @@ describe('createAzureTransport — structure', () => {
     };
 
     try {
-      const transport = createAzureTransport(TEST_CONFIG);
+      const transport = createOpenAITransport(TEST_CONFIG);
       const controller = new AbortController();
       await transport(MINIMAL_REQUEST, controller.signal);
 
-      // Verify URL structure
-      const expectedUrl = `${TEST_CONFIG.endpoint}/openai/deployments/${TEST_CONFIG.deploymentName}/chat/completions?api-version=${TEST_CONFIG.apiVersion}`;
+      const expectedUrl = `${TEST_CONFIG.endpoint}/v1/chat/completions`;
       expect(capturedUrl).toBe(expectedUrl);
 
-      // Verify headers
       expect(capturedHeaders['Content-Type']).toBe('application/json');
-      expect(capturedHeaders['api-key']).toBe(TEST_CONFIG.apiKey);
+      expect(capturedHeaders['Authorization']).toBe(`Bearer ${TEST_CONFIG.apiKey}`);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -86,11 +82,11 @@ describe('createAzureTransport — structure', () => {
     };
 
     try {
-      const transport = createAzureTransport(TEST_CONFIG);
+      const transport = createOpenAITransport(TEST_CONFIG);
       const controller = new AbortController();
 
       await expect(transport(MINIMAL_REQUEST, controller.signal))
-        .rejects.toThrow('Azure AI Foundry error: 401 Unauthorized');
+        .rejects.toThrow('OpenAI-compatible LLM error: 401 Unauthorized');
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -103,14 +99,14 @@ describe('createAzureTransport — structure', () => {
     };
 
     try {
-      const transport = createAzureTransport({
+      const transport = createOpenAITransport({
         ...TEST_CONFIG,
         apiKey: 'invalid-key',
       });
       const controller = new AbortController();
 
       await expect(transport(MINIMAL_REQUEST, controller.signal))
-        .rejects.toThrow('Azure AI Foundry error: 403');
+        .rejects.toThrow('OpenAI-compatible LLM error: 403');
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -119,7 +115,6 @@ describe('createAzureTransport — structure', () => {
   it('should respect AbortSignal', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (_input: string | URL | Request, init?: RequestInit) => {
-      // Simulate a slow request that checks signal
       return new Promise<Response>((_resolve, reject) => {
         const signal = init?.signal;
         if (signal?.aborted) {
@@ -133,7 +128,7 @@ describe('createAzureTransport — structure', () => {
     };
 
     try {
-      const transport = createAzureTransport(TEST_CONFIG);
+      const transport = createOpenAITransport(TEST_CONFIG);
       const controller = new AbortController();
 
       const promise = transport(MINIMAL_REQUEST, controller.signal);
@@ -145,7 +140,7 @@ describe('createAzureTransport — structure', () => {
     }
   });
 
-  it('should send request body with correct shape', async () => {
+  it('should send request body with correct shape including model', async () => {
     let capturedBody: Record<string, unknown> = {};
 
     const originalFetch = globalThis.fetch;
@@ -157,11 +152,12 @@ describe('createAzureTransport — structure', () => {
     };
 
     try {
-      const transport = createAzureTransport(TEST_CONFIG);
+      const transport = createOpenAITransport(TEST_CONFIG);
       const controller = new AbortController();
       await transport(MINIMAL_REQUEST, controller.signal);
 
       expect(capturedBody).toEqual({
+        model: TEST_CONFIG.model,
         messages: MINIMAL_REQUEST.messages,
         max_tokens: MINIMAL_REQUEST.max_tokens,
         temperature: MINIMAL_REQUEST.temperature,
@@ -172,13 +168,13 @@ describe('createAzureTransport — structure', () => {
   });
 });
 
-// ─── Live integration (only when AZURE_AI_TEST=true) ─────────────────────────
+// ─── Live integration (only when OPENAI_LLM_TEST=true) ──────────────────────
 
-describe.skipIf(!AZURE_AI_TEST)('createAzureTransport — live integration', () => {
+describe.skipIf(!OPENAI_LLM_TEST)('createOpenAITransport — live integration', () => {
   let transport: LLMTransport;
 
-  it('should make a successful health-check call to Azure', async () => {
-    transport = createAzureTransport(TEST_CONFIG);
+  it('should make a successful call to the LLM endpoint', async () => {
+    transport = createOpenAITransport(TEST_CONFIG);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
 
@@ -194,7 +190,7 @@ describe.skipIf(!AZURE_AI_TEST)('createAzureTransport — live integration', () 
   }, 20_000);
 
   it('should reject invalid credentials against the real endpoint', async () => {
-    const badTransport = createAzureTransport({
+    const badTransport = createOpenAITransport({
       ...TEST_CONFIG,
       apiKey: 'invalid-api-key-for-testing',
     });
@@ -203,7 +199,7 @@ describe.skipIf(!AZURE_AI_TEST)('createAzureTransport — live integration', () 
 
     try {
       await expect(badTransport(MINIMAL_REQUEST, controller.signal))
-        .rejects.toThrow('Azure AI Foundry error');
+        .rejects.toThrow('OpenAI-compatible LLM error');
     } finally {
       clearTimeout(timeout);
     }

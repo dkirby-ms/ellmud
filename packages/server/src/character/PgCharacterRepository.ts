@@ -170,4 +170,23 @@ export class PgCharacterRepository implements CharacterRepository {
     if (result.rows.length === 0) return null;
     return mapRow(result.rows[0]);
   }
+
+  async saveLastInn(characterId: string, zoneSlug: string, roomSlug: string): Promise<void> {
+    await query(
+      `UPDATE characters SET last_inn_zone_slug = $1, last_inn_room_slug = $2
+       WHERE id = $3 AND deleted_at IS NULL`,
+      [zoneSlug, roomSlug, characterId],
+    );
+  }
+
+  async getLastInn(characterId: string): Promise<{ zoneSlug: string; roomSlug: string } | null> {
+    const result = await query<{ last_inn_zone_slug: string | null; last_inn_room_slug: string | null }>(
+      `SELECT last_inn_zone_slug, last_inn_room_slug FROM characters
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [characterId],
+    );
+    const row = result.rows[0];
+    if (!row?.last_inn_zone_slug || !row?.last_inn_room_slug) return null;
+    return { zoneSlug: row.last_inn_zone_slug, roomSlug: row.last_inn_room_slug };
+  }
 }

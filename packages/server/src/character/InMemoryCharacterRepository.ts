@@ -8,6 +8,7 @@ import crypto from 'crypto';
 
 export class InMemoryCharacterRepository implements CharacterRepository {
   private characters = new Map<string, CharacterRow>();
+  private lastInns = new Map<string, { zoneSlug: string; roomSlug: string }>();
 
   async list(playerId: string): Promise<CharacterSummary[]> {
     const chars: CharacterSummary[] = [];
@@ -82,6 +83,14 @@ export class InMemoryCharacterRepository implements CharacterRepository {
       }
     }
     return null;
+  }
+
+  async saveLastInn(characterId: string, zoneSlug: string, roomSlug: string): Promise<void> {
+    this.lastInns.set(characterId, { zoneSlug, roomSlug });
+  }
+
+  async getLastInn(characterId: string): Promise<{ zoneSlug: string; roomSlug: string } | null> {
+    return this.lastInns.get(characterId) ?? null;
   }
 
   private toSummary(row: CharacterRow): CharacterSummary {

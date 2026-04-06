@@ -3082,3 +3082,26 @@ Threat tables are stored per-encounter, mapped by creature ID. Each creature mai
 
 **Integration:** Backward compatible — Azure deployments unaffected. `LLMClient` and `NarrationService` remain provider-agnostic. Regis (frontend) and Volo/Jarlaxle (narration) require no changes.
 
+---
+
+### Fix: Spawn-Zone Faction Lookup & Starter-Kit Column Mismatch — 2026-04-05
+**Agent:** Drizzt
+**Status:** ✅ Complete — committed
+
+**Bug 1 — Faction membership missing on character creation:**
+`POST /api/characters` saved `faction_slug` on the character row but never created a `faction_membership` row. The spawn-zone API reads from `faction_membership` → always returned null → fell back to `zone:the-refuge`. Fix: after creating the character, look up the faction UUID and call `factionRepo.updateFaction()` to insert the membership row.
+
+**Bug 2 — Starter kit referencing non-existent `stats` column:**
+`starter-kit.ts` queried `SELECT ... stats FROM item_definitions` but the schema has `base_durability` (INTEGER) and `base_stats` (JSONB) — no `stats` column. Fix: query `base_durability` directly, update interface and usage.
+
+**Files changed:** `characters.ts`, `starter-kit.ts`, `character-starter-kit.test.ts`
+
+## Learnings
+- `faction_membership` has a UNIQUE constraint on `player_id` — one faction per player. `updateFaction()` uses INSERT ON CONFLICT so it's idempotent.
+- `item_definitions` schema: `base_stats` (JSONB) vs `base_durability` (INTEGER) — they are separate columns, not nested.
+- Character creation is the right place to seed faction membership since the faction slug is already validated there.
+- `getFactionRepository()` and `query()` from `db/index.js` are the standard patterns for accessing faction data and running raw SQL in API routes.
+- Bicep env var names must exactly match what `config.ts` reads via `process.env`. Migration 013 renamed `MAX_PLAYERS_PER_SHARD` → `MAX_PLAYERS_PER_ZONE` but the Bicep template was never updated — the var was injected but silently ignored.
+- `AZURE_AI_KEY` and `ADMIN_TOKEN` must use `@secure()` in Bicep params. Azure AI vars default to empty strings (LLM narration degrades gracefully to templates).
+- `ADMIN_TOKEN` is fail-closed in `admin/middleware.ts` — if unset, all admin requests are rejected (403). Must be explicitly set in prod for the admin dashboard to function.
+

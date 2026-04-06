@@ -51,22 +51,14 @@ export interface ServerConfig {
   /** Corpse persistence duration in seconds. GDD §6.8. */
   corpseTTLSeconds: number;
 
-  /** Azure AI Foundry configuration for LLM narration. */
-  azureAI?: {
-    endpoint: string;
-    apiKey: string;
-    deploymentName: string;
-    apiVersion: string;
-  };
-
-  /** OpenAI-compatible LLM endpoint (OpenAI, LM Studio, Ollama, Mistral, etc.). */
+  /** OpenAI-compatible LLM endpoint for narration (OpenAI, Azure OpenAI, LM Studio, Ollama, etc.). */
   openaiLLM?: {
     endpoint: string;
     apiKey: string;
     model: string;
   };
 
-  /** Explicit toggle for LLM narration. When false, template-only mode is used even if Azure credentials are configured. */
+  /** Explicit toggle for LLM narration. When false, template-only mode is used even if LLM credentials are configured. */
   enableLLMNarration: boolean;
 }
 
@@ -133,11 +125,6 @@ function envStr(key: string, fallback: string): string {
 }
 
 export function loadConfig(): ServerConfig {
-  const azureEndpoint = process.env.AZURE_AI_ENDPOINT;
-  const azureKey = process.env.AZURE_AI_KEY;
-  const azureDeployment = process.env.AZURE_AI_DEPLOYMENT ?? 'gpt-4o-mini';
-  const azureApiVersion = process.env.AZURE_AI_API_VERSION ?? '2024-08-01-preview';
-
   const openaiEndpoint = process.env.OPENAI_LLM_ENDPOINT;
   const openaiKey = process.env.OPENAI_LLM_KEY;
 
@@ -169,12 +156,6 @@ export function loadConfig(): ServerConfig {
     devModeEnabled: envBool('DEV_MODE_ENABLED', false),
     enableProceduralGeneration: envBool('ENABLE_PROCEDURAL_GENERATION', false),
     corpseTTLSeconds: envInt('CORPSE_TTL_SECONDS', 600), // 10 minutes default
-    azureAI: azureEndpoint && azureKey ? {
-      endpoint: azureEndpoint,
-      apiKey: azureKey,
-      deploymentName: azureDeployment,
-      apiVersion: azureApiVersion,
-    } : undefined,
     openaiLLM: openaiEndpoint && openaiKey ? {
       endpoint: openaiEndpoint,
       apiKey: openaiKey,

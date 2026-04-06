@@ -93,7 +93,7 @@ export interface AppState {
   pendingEquipAction: boolean;
   roomOccupants: {
     creatures: Array<{ id: string; name: string; type: string; aggressive: boolean }>;
-    players: Array<{ id: string; name: string }>;
+    players: Array<{ id: string; name: string; disconnected?: boolean }>;
   };
 }
 
@@ -136,7 +136,7 @@ const MAX_SOUND_CUES = 20;
 export type AppAction =
   | { type: 'LOGIN_SUCCESS'; token: string; playerId: string; email?: string; username?: string }
   | { type: 'LOGOUT' }
-  | { type: 'SET_ROOM'; room: Room }
+  | { type: 'SET_ROOM'; room: Room | null }
   | { type: 'ADD_MESSAGE'; message: TerminalMessage }
   | { type: 'SET_ROOM_HEADER'; header: RoomHeaderMessage }
   | { type: 'SET_ZONE_STATE'; state: ZoneState; collapseTimer?: number }
@@ -167,7 +167,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'LOGOUT':
       return { ...initialState };
     case 'SET_ROOM':
-      return { ...state, room: action.room, connectionStatus: 'connected' };
+      return action.room
+        ? { ...state, room: action.room, connectionStatus: 'connected' }
+        : { ...state, room: null, connectionStatus: 'disconnected', roomHeader: null, roomOccupants: { creatures: [], players: [] } };
     case 'ADD_MESSAGE': {
       const messages = [...state.messages, action.message];
       return { ...state, messages: messages.length > MAX_MESSAGES ? messages.slice(messages.length - MAX_MESSAGES) : messages };

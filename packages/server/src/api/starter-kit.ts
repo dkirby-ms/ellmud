@@ -11,7 +11,7 @@ interface ItemDefRow {
   id: string;
   name: string;
   type: string;
-  stats: { baseDurability?: number | null; weight?: number };
+  base_durability: number | null;
 }
 
 const STARTER_ITEM_NAMES = ['Rusty Blade', 'Tattered Leather', 'Waterlogged Potion'];
@@ -24,7 +24,7 @@ export async function grantStarterKit(playerId: string, characterId: string, use
   if (!usePg) return 0;
 
   const result = await query<ItemDefRow>(
-    `SELECT id, name, type, stats FROM item_definitions
+    `SELECT id, name, type, base_durability FROM item_definitions
      WHERE name = ANY($1)`,
     [STARTER_ITEM_NAMES],
   );
@@ -33,7 +33,7 @@ export async function grantStarterKit(playerId: string, characterId: string, use
 
   let granted = 0;
   for (const item of result.rows) {
-    const durability = item.stats?.baseDurability ?? null;
+    const durability = item.base_durability ?? null;
     const metadata = durability != null ? JSON.stringify({ maxDurability: durability }) : '{}';
 
     await query(

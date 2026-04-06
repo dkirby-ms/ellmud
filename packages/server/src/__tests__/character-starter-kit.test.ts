@@ -45,9 +45,9 @@ describe('grantStarterKit', () => {
     // Lookup query returns 3 items
     queryMock.mockResolvedValueOnce({
       rows: [
-        { id: 'uuid-blade', name: 'Rusty Blade', type: 'weapon', stats: { baseDurability: 30, weight: 5 } },
-        { id: 'uuid-leather', name: 'Tattered Leather', type: 'armour', stats: { baseDurability: 25, weight: 8 } },
-        { id: 'uuid-potion', name: 'Waterlogged Potion', type: 'consumable', stats: { baseDurability: null, weight: 1 } },
+        { id: 'uuid-blade', name: 'Rusty Blade', type: 'weapon', base_durability: 30 },
+        { id: 'uuid-leather', name: 'Tattered Leather', type: 'armour', base_durability: 25 },
+        { id: 'uuid-potion', name: 'Waterlogged Potion', type: 'consumable', base_durability: null },
       ],
       command: 'SELECT',
       rowCount: 3,
@@ -80,7 +80,7 @@ describe('grantStarterKit', () => {
   it('handles items without durability correctly', async () => {
     queryMock.mockResolvedValueOnce({
       rows: [
-        { id: 'uuid-potion', name: 'Waterlogged Potion', type: 'consumable', stats: { weight: 1 } },
+        { id: 'uuid-potion', name: 'Waterlogged Potion', type: 'consumable', base_durability: null },
       ],
       command: 'SELECT',
       rowCount: 1,

@@ -50,6 +50,26 @@ param allowLocalAuth string = 'false'
 @description('Client app URL for OAuth redirects')
 param clientUrl string = ''
 
+@description('OpenAI-compatible LLM endpoint URL (OpenAI, Azure OpenAI, LM Studio, etc.)')
+param openaiLlmEndpoint string = ''
+
+@secure()
+@description('OpenAI-compatible LLM API key')
+param openaiLlmKey string = ''
+
+@description('OpenAI-compatible LLM model name')
+param openaiLlmModel string = 'gpt-4o'
+
+@description('Enable LLM narration (false = template-only mode)')
+param enableLlmNarration string = 'true'
+
+@secure()
+@description('Admin API bearer token (fail-closed when unset)')
+param adminToken string = ''
+
+@description('Require authentication to join rooms (true for production)')
+param authRequired string = 'true'
+
 // ─── Variables ──────────────────────────────────────────────────────────────
 
 var resourcePrefix = 'ellmud-${environmentName}'
@@ -133,6 +153,12 @@ module containerAppsApp 'modules/container-apps.bicep' = {
     entraRedirectUri: entraRedirectUri
     allowLocalAuth: allowLocalAuth
     clientUrl: clientUrl
+    openaiLlmEndpoint: openaiLlmEndpoint
+    openaiLlmKey: openaiLlmKey
+    openaiLlmModel: openaiLlmModel
+    enableLlmNarration: enableLlmNarration
+    adminToken: adminToken
+    authRequired: authRequired
   }
 }
 
