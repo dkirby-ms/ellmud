@@ -14,6 +14,17 @@
 - **Hooks:** `useAutoScroll` for scrollable panes, `useShardConnection` for game room connections.
 - **Compass nav:** `CompassControl.tsx` in sidebar. Exit data via `state.roomHeader.exits`.
 
+## Team Updates
+
+### 2026-04-06: Issues #316 & #317 — Zone Designer Context Menu Enhancements
+- **Issue #316:** Implemented styled delete confirmation modal (dark theme pattern) replacing browser confirm()
+- **Issue #317:** Implemented "Connect to Zone..." context menu option; integrated direction conflict warnings
+- **Commits:** 62bb849 (delete modal), 30ba579 (context menu)
+- **Pattern decision:** Reused existing portal dialog state/handlers rather than extracting new component; justified by single additional call site
+- **Team impact:** No API changes; same portal exit patterns; direction warnings now shown for all callers
+
+---
+
 ## Learnings
 
 - **Phase 4 visual enhancements (2026-04-11):** PR #287 for issue #271. Phase 3 already delivered Bézier curves, direction gradients, type-based shapes, and basic selection glow. Phase 4 adds: edge hover brightening (useState + CSS transitions), enhanced glow (drop-shadow filters), type-based MiniMap coloring (entry=green, boss=red, feature=purple), direction emoji labels (↑↓→←▲▼) with fade-in on hover/selection, and room property tags (heavy_door/cavern/water) rendered below nodes. Properties are passed from ZoneDesigner via the node data interface.

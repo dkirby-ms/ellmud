@@ -1,3 +1,595 @@
+# Design Spec: "Connect to Zone..." Context Menu Feature
+
+**Issue:** #317  
+**Author:** Elminster (Lead/Architect)  
+**Date:** 2026-01-19  
+**Assignee:** Regis (Frontend Dev)  
+
+---
+
+## Summary
+
+Add a "Connect to Zone..." option to the zone designer's right-click room context menu, enabling admins to create inter-zone portal exits directly from the graph UI. This leverages existing portal infrastructure (phantom target nodes, portal rendering) and API patterns already proven in the "Create Portal" button workflow.
+
+---
+
+## Current State Analysis
+
+### 1. Right-Click Context Menu Structure
+
+**Location:** `packages/client/src/pages/admin/ZoneDesigner.tsx:2696-2963`
+
+The context menu currently offers:
+- **Room name header** (shows room name/slug)
+- **6 directional "Add Room" buttons** (north, south, east, west, up, down) — disabled if direction already has an intra-zone exit
+- **Edit Room** — opens room edit panel
+- **Copy Properties** — copies room props to clipboard state
+- **Paste Properties** (conditional, if clipboard has data) — pastes props to target room
+- **Connect Exit...** — enters "connect mode" for manual exit drawing
+- **Delete Room** — triggers delete confirmation modal
+
+The menu is rendered as an absolutely-positioned overlay at `contextMenu.x, contextMenu.y` with custom styling (no component library). Each menu item is a `<button>` with inline styles and hover effects.
+
+### 2. Existing Portal Creation Flow
+
+**"Create Portal" button workflow** (`handleCreatePortal`, lines 1531-1554):
+
+1. Admin clicks "Create Portal" button in right panel (requires room selection)
+2. Opens modal dialog with:
+   - **Zone picker dropdown** — fetches all zones via `listZones()` API, filters out current zone
+   - **Room picker dropdown** — fetches target zone's rooms via `getZone(zoneSlug)` when zone selected
+   - **Direction picker** — standard 6-direction dropdown
+3. Calls `createExit(zoneId, { fromRoomSlug, direction, toRoomSlug: fromRoomSlug, targetZoneSlug, targetRoomSlug, locked: false, hidden: false })`
+4. Refreshes zone data via `onZoneChanged?.()`
+
+**Note:** Portal exits set `toRoomSlug` to the same value as `fromRoomSlug` (the exit's source room). The actual target is specified by `targetZoneSlug` + `targetRoomSlug` fields.
+
+### 3. Exit Creation API
+
+**Endpoint:** `POST /admin/api/zones/:zoneId/exits`
+
+**Payload shape** (from `zone-api.ts:124-128` and `zone-routes.ts:389-427`):
+```typescript
+{
+  fromRoomSlug: string,      // source room in current zone
+  direction: string,          // "north" | "south" | "east" | "west" | "up" | "down"
+  toRoomSlug: string,         // for portals, set to fromRoomSlug
+  targetZoneSlug?: string,    // optional — presence makes this a portal exit
+  targetRoomSlug?: string,    // optional — required if targetZoneSlug present
+  locked: boolean,
+  hidden: boolean
+}
+```
+
+**Server validation** (from `zone-routes.ts:102-119`):
+- `direction` must be one of `ALL_DIRECTIONS`
+- `fromRoomSlug` must exist in zone's room set
+- `toRoomSlug` is required (but for portals, it's just a placeholder — set to `fromRoomSlug`)
+- No validation enforced on `targetZoneSlug` or `targetRoomSlug` (assumes admin knows what they're doing)
+
+**Response:** Returns created `ZoneExitDefinition` with server-generated `id`
+
+### 4. Zone/Room Listing APIs
+
+**List all zones:**  
+`GET /admin/api/zones` → `ZoneDefinition[]`  
+(Returns id, slug, name, description, tier, lifecycle, category, etc.)
+
+**Get zone bundle:**  
+`GET /admin/api/zones/:slug` → `{ zone: ZoneDefinition, rooms: ZoneRoomDefinition[], exits: ZoneExitDefinition[] }`  
+(Returns full zone data including room list)
+
+**Client wrapper:** `listZones()` and `getZone(slug)` in `zone-api.ts:72-78`
+
+### 5. Portal Rendering (Already Implemented)
+
+**Phantom target nodes** (lines 753-774): For inter-zone exits with horizontal directions (not up/down), the graph renders a small "phantom" node offset from the source room, labeled with the target zone slug. These are non-interactive, cyan-colored "portalTarget" nodes.
+
+**Portal stub edges** (rendered via `exitsToFlowEdges`): Connect source room to phantom node with cyan styling.
+
+**Portal click handler:** Clicking phantom nodes navigates to target zone (`handlePortalClick` at line 726).
+
+---
+
+## Design: "Connect to Zone..." Menu Option
+
+### UI Flow
+
+1. **User right-clicks room** → context menu opens
+2. **User clicks "Connect to Zone..."** → modal dialog opens (similar to existing portal dialog)
+3. **Modal contents:**
+   - **Title:** "Connect to Another Zone"
+   - **Zone picker dropdown** — shows all zones except current one (name + slug, sorted alphabetically)
+   - **Room picker dropdown** — dynamically populated when zone selected; shows room name + slug
+   - **Direction picker** — standard 6 directions (north, south, east, west, up, down)
+   - **Conflict warning** (conditional) — if direction already used by an exit from this room, show warning: "⚠️ Direction {dir} already has an exit. This will create a conflicting exit." (non-blocking)
+   - **Cancel / Create buttons**
+4. **On "Create":**
+   - Call `createExit(zoneId, payload)` with portal exit structure
+   - Close modal, close context menu, refresh zone data
+   - Phantom portal node appears in graph
+
+### Implementation Details
+
+#### 1. Modal Component Reuse
+
+**Decision:** Create a **shared portal dialog component** instead of duplicating the existing portal dialog code.
+
+**Why:** The "Create Portal" button (lines 1504-1554) and new context menu option will share identical UI/logic. Extracting to a component eliminates duplication and ensures consistent UX.
+
+**Component interface:**
+```typescript
+interface PortalDialogProps {
+  show: boolean;
+  onClose: () => void;
+  currentZoneSlug: string;
+  fromRoomSlug: string;
+  onConfirm: (targetZoneSlug: string, targetRoomSlug: string, direction: string) => Promise<void>;
+}
+```
+
+**Placement:** `packages/client/src/components/admin/PortalDialog.tsx`
+
+**State management:** Dialog manages its own zone list, target room list, and form inputs. Parent provides `onConfirm` callback for exit creation.
+
+#### 2. Context Menu Changes
+
+**Add new menu item** after "Connect Exit..." (line ~2929), before the divider:
+
+```typescript
+<button
+  onClick={() => {
+    setContextMenu(null);
+    void handleOpenPortalFromContextMenu(contextMenu.roomSlug);
+  }}
+  style={{ /* same styling as other menu items */ }}
+>
+  <span style={{ width: 14, textAlign: "center" }}>🌐</span>
+  Connect to Zone...
+</button>
+```
+
+**Handler:**
+```typescript
+async function handleOpenPortalFromContextMenu(roomSlug: string) {
+  setSelectedRoom(roomSlug); // ensure room is selected
+  await openPortalDialog(); // reuse existing portal dialog logic (to be refactored into component)
+}
+```
+
+#### 3. Direction Conflict Detection
+
+**Issue:** User might create a portal exit on a direction that already has an intra-zone exit. This is allowed by the API but creates ambiguity in game logic (which exit wins?).
+
+**Solution:** Show non-blocking warning in modal if direction already used:
+
+```typescript
+const usedDirections = exits
+  .filter(e => e.fromRoomSlug === selectedRoom && !e.targetZoneSlug)
+  .map(e => e.direction);
+
+const hasConflict = usedDirections.includes(selectedDirection);
+```
+
+Display warning:
+```tsx
+{hasConflict && (
+  <div style={{ color: "#F59E0B", fontSize: 12, marginTop: 4 }}>
+    ⚠️ Direction {selectedDirection} already has an exit. This will create a conflicting exit.
+  </div>
+)}
+```
+
+**Note:** This is a warning, not a blocker. Some admins may intentionally create overlapping exits for conditional routing logic (e.g., exit behavior changes based on player state).
+
+#### 4. API Call Sequence
+
+```typescript
+async function handleCreatePortalFromContextMenu(
+  fromRoomSlug: string,
+  targetZoneSlug: string,
+  targetRoomSlug: string,
+  direction: string
+) {
+  if (!zoneId) return;
+  setBusy(true);
+  setError(null);
+  try {
+    await createExit(zoneId, {
+      fromRoomSlug,
+      direction,
+      toRoomSlug: fromRoomSlug, // portal pattern: toRoomSlug = fromRoomSlug
+      targetZoneSlug,
+      targetRoomSlug,
+      locked: false,
+      hidden: false,
+    });
+    onZoneChanged?.(); // triggers zone data refetch
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Failed to create portal");
+  } finally {
+    setBusy(false);
+  }
+}
+```
+
+#### 5. Undo/Redo Support
+
+**Decision:** Skip undo/redo for portal exits in MVP.
+
+**Rationale:** Existing "Create Portal" button flow (lines 1531-1554) does not integrate with undo/redo stack. Portal exits are less frequently created/deleted than intra-zone exits. Adding undo support requires tracking created exit ID and handling async deletion — this is a polish feature for future iteration.
+
+**Future work:** Tag issue #317 follow-up: "Add undo support for portal exit creation"
+
+---
+
+## Edge Cases
+
+### 1. Target zone has no rooms yet
+**Scenario:** Admin selects a zone, but `getZone(slug)` returns `rooms: []`
+
+**Behavior:** Room picker shows "No rooms in this zone" message, "Create" button disabled until room selected
+
+**Implementation:**
+```tsx
+{targetRooms.length === 0 && targetZone && (
+  <div style={{ color: "#8A8B95", fontSize: 12, fontStyle: "italic" }}>
+    No rooms in this zone yet
+  </div>
+)}
+```
+
+### 2. Direction already has intra-zone exit
+**Scenario:** Room already has a "north" exit to another room in the same zone. User tries to create a "north" portal exit.
+
+**Behavior:** Warning shown (see section 3 above), creation allowed. Server creates the exit. Game engine precedence is undefined (not a design concern — document only).
+
+**Note for GDD update:** Portal exits and intra-zone exits on the same direction create ambiguous routing. Recommend admin convention: use portals on unused directions, or document intended behavior in zone design notes.
+
+### 3. Portal target room doesn't exist (typo in slug)
+**Scenario:** Admin selects room from dropdown, but room is deleted before "Create" clicked (race condition).
+
+**Behavior:** `createExit` API call succeeds (no server-side validation of `targetRoomSlug`). Orphaned portal exit created. Existing "Orphaned Exits" cleanup tool will detect it later.
+
+**Mitigation:** None needed — orphan cleanup is a separate workflow. Admin can delete bad portal manually or wait for next cleanup scan.
+
+### 4. Direction conflicts with existing portal exit
+**Scenario:** Room already has a "north" portal to Zone A. User tries to add another "north" portal to Zone B.
+
+**Behavior:** Same as edge case #2 — warning shown, creation allowed. Results in two exits from same room in same direction. Server doesn't enforce uniqueness.
+
+**Recommendation for Regis:** Consider fetching ALL exits (including portals) when computing `usedDirections`, not just intra-zone exits:
+```typescript
+const usedDirections = exits
+  .filter(e => e.fromRoomSlug === selectedRoom) // include portals
+  .map(e => e.direction);
+```
+This makes the conflict warning more accurate.
+
+---
+
+## Data Model Reference
+
+**Portal exit structure in database** (`zone_exits` table):
+
+| Field | Value for Portal Exit |
+|-------|----------------------|
+| `id` | UUID (server-generated) |
+| `zone_id` | Current zone's UUID |
+| `from_room_slug` | Source room slug |
+| `direction` | "north" \| "south" \| "east" \| "west" \| "up" \| "down" |
+| `to_room_slug` | **Same as `from_room_slug`** (portal pattern) |
+| `target_zone_slug` | Target zone slug (e.g., "siltgate") |
+| `target_room_slug` | Target room slug in target zone (e.g., "west-gate") |
+| `locked` | `false` (default) |
+| `hidden` | `false` (default) |
+| `condition` | `NULL` (not used in UI) |
+
+**Example:**
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "zoneId": "current-zone-uuid",
+  "fromRoomSlug": "throne-room",
+  "direction": "east",
+  "toRoomSlug": "throne-room",
+  "targetZoneSlug": "siltgate",
+  "targetRoomSlug": "west-gate",
+  "locked": false,
+  "hidden": false
+}
+```
+
+---
+
+## Code Reuse Opportunities
+
+### 1. Portal Dialog Logic
+**Current duplication:** Lines 1504-1554 (`openPortalDialog`, `handlePortalZoneChange`, `handleCreatePortal`) can be extracted to:
+- Shared `PortalDialog` component (owns zone/room pickers, direction picker, form state)
+- Shared `usePortalDialog` hook (manages API calls for zone/room list fetching)
+
+**Benefits:**
+- Context menu feature reuses component without copy-paste
+- Future portal UI improvements (e.g., search filter in zone picker) benefit both call sites
+- Easier to test in isolation
+
+### 2. Direction Conflict Detection
+**Opportunity:** Extract direction validation logic to a helper:
+```typescript
+function getUsedDirections(
+  exits: ZoneExitDefinition[],
+  roomSlug: string,
+  includePortals: boolean = false
+): Set<string> {
+  return new Set(
+    exits
+      .filter(e => e.fromRoomSlug === roomSlug && (includePortals || !e.targetZoneSlug))
+      .map(e => e.direction)
+  );
+}
+```
+
+**Call site:** Context menu "Add Room" buttons (line 2698), portal dialog, and new context menu option all use this.
+
+### 3. Zone Filtering
+**Current pattern:** `allZones.filter((z) => z.slug !== zone.slug)` (line 1508)
+
+**Recommendation:** Centralize zone filtering in `openPortalDialog` so all consumers get same behavior (exclude current zone, sort alphabetically by name).
+
+---
+
+## Testing Recommendations
+
+### Manual Testing Checklist (for Regis)
+
+1. **Happy path:**
+   - Right-click room → "Connect to Zone..." → select zone → select room → select direction → create
+   - Verify phantom portal node appears in graph
+   - Verify exit appears in right panel's exit list
+   - Verify clicking phantom node navigates to target zone
+
+2. **Direction conflicts:**
+   - Create intra-zone exit on "north"
+   - Right-click same room → "Connect to Zone..." → select "north" again
+   - Verify warning appears in dialog
+   - Verify creation still succeeds (non-blocking)
+
+3. **Empty target zone:**
+   - Create a new zone with no rooms
+   - Right-click room → "Connect to Zone..." → select empty zone
+   - Verify "No rooms in this zone yet" message shows
+   - Verify "Create" button disabled
+
+4. **Cancel flows:**
+   - Open dialog → Cancel → verify modal closes, no API calls made
+   - Open dialog → close context menu via click-outside → verify state cleaned up
+
+5. **Multi-floor:**
+   - Create portal from room on floor 0 with direction "up"
+   - Switch to floor 1 → verify no phantom node (up/down portals don't render phantoms)
+   - Verify exit still listed in right panel
+
+6. **Undo/redo (out of scope):**
+   - Create portal via context menu → verify undo stack NOT updated (expected behavior for MVP)
+
+### Automated Testing (Future Work)
+
+- **Unit test:** `PortalDialog` component (zone fetching, room fetching, form validation)
+- **Integration test:** Context menu interaction → modal open → API call sequence → graph update
+- **E2E test:** Full workflow from right-click to navigation to target zone
+
+**Recommendation:** Defer automated tests until after Regis confirms manual testing passes. The context menu is complex (3583 lines) and heavily styled — integration tests are brittle here.
+
+---
+
+## Implementation Steps (Recommended Order)
+
+1. **Extract portal dialog to component** (`PortalDialog.tsx`)
+   - Move zone/room picker logic from lines 1504-1554
+   - Add conflict warning UI
+   - Test with existing "Create Portal" button
+
+2. **Add context menu item** ("Connect to Zone...")
+   - Wire up click handler to open portal dialog
+   - Ensure `selectedRoom` state syncs correctly
+
+3. **Test edge cases** (see checklist above)
+
+4. **Update `.squad/agents/regis/history.md`** with implementation notes
+
+5. **Close issue #317**
+
+---
+
+## Team Impact
+
+- **Regis (Frontend Dev):** Primary implementer. Estimated effort: 4-6 hours (includes component extraction + testing).
+- **Minsc (Admin Tooling):** No impact — API unchanged.
+- **Drizzt (Engine Dev):** No impact — portal exit logic unchanged (engine already handles `targetZoneSlug` routing).
+- **Volo (Content):** Quality-of-life improvement — reduces clicks for inter-zone connections (previously required selecting room, scrolling to "Create Portal" button, filling modal).
+
+---
+
+## Future Enhancements (Not in Scope)
+
+1. **Undo/redo support for portal exits** — track created exit ID, enable async deletion on undo
+2. **"Quick portal" mode** — shift-click room in target zone's graph to create portal (cross-tab state management required)
+3. **Portal exit previews** — hover over phantom node → show tooltip with target room name
+4. **Bidirectional portal creation** — checkbox to auto-create reverse portal in target zone (requires multi-zone write transaction)
+5. **Direction conflict enforcement** — make conflict warning blocking (policy decision, not technical limitation)
+
+---
+
+## Open Questions
+
+**Q1:** Should direction conflicts be blocking (prevent creation) or warnings (allow creation)?  
+**A1:** Non-blocking for MVP. Some admins may want conditional exits (e.g., locked door vs. portal on same direction). Let admins decide via warning message.
+
+**Q2:** Should we validate `targetRoomSlug` exists in target zone before creating exit?  
+**A2:** No. Server doesn't validate this today, and orphan cleanup tool handles bad references. Adding validation requires `getZone()` call on every creation — slows down fast workflows. Document that orphan cleanup detects bad portals.
+
+**Q3:** Should portal exits integrate with undo/redo stack?  
+**A3:** Not in MVP. Existing "Create Portal" button doesn't use undo/redo. Add in future iteration if user feedback requests it.
+
+---
+
+## Approval
+
+**Status:** Draft — awaiting Regis review  
+**Next Steps:**
+1. Regis: Review design, flag any concerns or missing details
+2. Elminster: Address feedback, mark as "Approved"
+3. Regis: Begin implementation
+
+---
+
+## Appendix: Code Snippets
+
+### A. Context Menu Addition (Pseudocode)
+
+```tsx
+// Add after line 2929 (after "Connect Exit..." button)
+<button
+  onClick={() => {
+    setContextMenu(null);
+    setSelectedRoom(contextMenu.roomSlug);
+    void openPortalDialog(); // reuse existing handler (to be refactored)
+  }}
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    padding: "6px 12px",
+    background: "transparent",
+    border: "none",
+    color: "#E0E0E0",
+    cursor: "pointer",
+    fontFamily: "var(--font-sans)",
+    fontSize: 12,
+    textAlign: "left",
+  }}
+  onMouseEnter={(e) => { e.currentTarget.style.background = "#2A2B35"; }}
+  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+>
+  <span style={{ width: 14, textAlign: "center" }}>🌐</span>
+  Connect to Zone...
+</button>
+```
+
+### B. Portal Dialog Component (Interface)
+
+```typescript
+// packages/client/src/components/admin/PortalDialog.tsx
+interface PortalDialogProps {
+  show: boolean;
+  onClose: () => void;
+  currentZoneSlug: string;
+  fromRoomSlug: string;
+  onConfirm: (targetZoneSlug: string, targetRoomSlug: string, direction: string) => Promise<void>;
+  usedDirections?: Set<string>; // for conflict warning
+}
+
+export function PortalDialog({
+  show,
+  onClose,
+  currentZoneSlug,
+  fromRoomSlug,
+  onConfirm,
+  usedDirections = new Set(),
+}: PortalDialogProps) {
+  const [zones, setZones] = useState<ZoneDefinition[]>([]);
+  const [targetZone, setTargetZone] = useState("");
+  const [targetRooms, setTargetRooms] = useState<ZoneRoomDefinition[]>([]);
+  const [targetRoom, setTargetRoom] = useState("");
+  const [direction, setDirection] = useState("north");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // ... implementation
+}
+```
+
+### C. Updated `openPortalDialog` Handler
+
+```typescript
+async function openPortalDialog() {
+  if (!selectedRoom) return;
+  try {
+    const zones = await listZones();
+    const usedDirs = new Set(
+      exits
+        .filter(e => e.fromRoomSlug === selectedRoom)
+        .map(e => e.direction)
+    );
+    
+    setAllZones(zones.filter((z) => z.slug !== zone.slug));
+    setUsedDirectionsForPortal(usedDirs); // new state
+    setShowPortalDialog(true);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Failed to load zones");
+  }
+}
+```
+
+---
+
+**End of Design Spec**
+---
+### Connect to Zone — Context Menu Implementation
+**By:** Regis (Frontend Dev)
+**Date:** 2026-01-19
+**Issue:** #317
+
+## Decision
+
+Added "Connect to Zone…" to the zone designer right-click context menu by reusing the existing portal dialog state and handlers, rather than extracting a new `PortalDialog` component.
+
+## Rationale
+
+Elminster's design spec suggested extracting a shared `PortalDialog.tsx` component. I opted against that for this PR because:
+- The portal dialog is tightly coupled to 6 state variables already in `ZoneDesigner.tsx`
+- Extracting would touch ~80 lines of state wiring for one additional call site
+- The context menu trigger only needs a 27-line button + 1 small change to `openPortalDialog`'s signature
+
+If a third caller appears (e.g., drag-to-create-portal), extraction becomes worthwhile.
+
+## Key Detail
+
+`openPortalDialog` now accepts an optional `roomSlugOverride` parameter. This is needed because React batches `setSelectedRoom()` — the async function would see stale state without the override. The existing "Create Portal" button call site is unaffected (no args).
+
+## Team Impact
+
+- **No API changes.** Same `createExit` payload as existing portal flow.
+- **Direction conflict warning** now shown in the portal dialog for all callers (button + context menu). Checks all exits including portals, non-blocking.
+---
+# Decision: Styled Confirm Modal Pattern for Zone Designer
+
+**Author:** Regis  
+**Date:** 2026-07-23  
+**Issue:** #316  
+
+## Context
+
+The zone designer used native `window.confirm()` for room deletion — this is unstyled and jarring.
+
+## Decision
+
+Rather than using the existing Radix `AlertDialog` component (which uses shadcn/ui default styling), I followed the **custom modal pattern** already established by the delete exit modal in the same file. This keeps the zone designer's dark theme (`#1C1D27` / `#2A2B35` / `#C9A84C` / `#8B2500`) consistent across all confirmation dialogs within the designer.
+
+## Pattern
+
+- State-driven: `deleteRoomTarget: ZoneRoomDefinition | null` controls open/close
+- Overlay: `fixed inset-0 bg-black/50` with click-to-dismiss
+- Confirm action: shared `confirmDeleteRoom()` with undo/redo support
+
+## Note for Team
+
+Two `confirm()` calls remain in ZoneDesigner (reverse exit delete, orphan removal). These should follow the same pattern when addressed.
+
+---
+
 ### 2026-04-06: Character Creation — Starting Zones Replace Factions
 **By:** Jarlaxle (Systems Dev)
 **Date:** 2026-04-06

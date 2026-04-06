@@ -13,6 +13,18 @@
 - **User:** dkirby-ms
 - **GDD:** GDD.md (comprehensive design document covering all game systems)
 
+## Team Updates
+
+### 2026-04-06: Stronghold-Zone Connection Orchestration
+- **Session orchestration coordinated** across design (Elminster), implementation (Regis x2), content (Bruenor, Laeral)
+- **Issue #316 (Regis):** Delete modal replaced browser confirm() with styled dark-theme pattern
+- **Issue #317 (Regis):** Context menu implementation deployed; direction conflict warnings included
+- **Migration 022 (Bruenor):** Faction strongholds connected to world zones (6 rooms, 24 exits)
+- **Route design (Laeral):** Stronghold-to-zone connection routes finalized
+- **Decisions merged:** Design specs, implementation notes, UI patterns filed to squad decisions
+
+---
+
 ## Learnings
 
 ### 2026-01-19: Issue #317 — "Connect to Zone" Context Menu Design

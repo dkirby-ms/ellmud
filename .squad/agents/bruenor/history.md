@@ -19,6 +19,18 @@
 - All content is live immediately (no staging/promotion system)
 - DB schema defined in `packages/server/src/db/migrations/`
 
+## Team Updates
+
+### 2026-04-06: Migration 022 — Faction Stronghold-to-Zone Connections
+- **Scope:** 6 new rooms (2 per stronghold zone), 24 new exits (12 bidirectional pairs)
+- **Content:** Connected faction strongholds (the-reliquary, the-bloom-observatory, the-carrion-court) to world zones (the-siltgate, warrens)
+- **Exits:** 18 intra-zone, 6 inter-zone portal-pattern exits
+- **Commit:** c683882
+- **Zone totals:** Each stronghold +1 room; Siltgate +2 rooms, Warrens +1 room
+- **Coordination:** Per Laeral's route design doc; all direction conflicts verified
+
+---
+
 ## Learnings
 
 ### The Siltgate City Zone Build (2026-03-29)
