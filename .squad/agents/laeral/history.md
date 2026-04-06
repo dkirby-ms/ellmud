@@ -111,3 +111,65 @@ Siltgate revision finalized and merged into team decisions archive.
 - **Intermediate room insertion technique:** For Fix A-2, inserting 1 room between south-tunnel and west-conduit (changing W to W→S) adjusted the running offset enough that only 3 more rooms were needed between west-conduit and cistern. Splitting the problem at an intermediate junction reduced total rooms from 5 to 4.
 - **BFS simulation is essential:** Ran full BFS topology verification in Python before and after changes. Confirmed 0 conflicts and consistent grid positions for all 109 rooms. Never trust cycle math alone — always simulate.
 - Design document: `.squad/decisions/inbox/laeral-warrens-topology-fixes.md`
+
+### 2026-03-29: Thematic Realignment — Faction and Zone Redesign
+- Expanded `docs/thematic-direction.md` with comprehensive faction and zone redesigns for dystopian Gulf Coast setting (year 3000, post-human Earth).
+- **Faction redesigns:** Transformed three factions from generic fantasy to setting-specific survival factions:
+  - Ironwright Compact → **The Urnkeepers** (technology salvage, drone scavenging, reverence for preservation tech)
+  - Veil Cartographers → **The Tidereaders** (ecological mapping, biomonitoring, mutant algae research)
+  - Scarlet Ledger → **The Silt Traders** (commerce, information brokerage, trade route control)
+- **Stronghold redesigns:** Each faction stronghold reimagined with Louisiana setting flavor:
+  - The Foundry → **The Reliquary** (converted water treatment plant)
+  - The Cartographium → **The Bloom Observatory** (offshore oil platform with algae cultivation)
+  - The Counting House → **The Exchange** (fortified French Quarter townhouses)
+- Designed 8 room names for each stronghold (entry, stash, training, expedition board, market, commons, inn, war room) with dystopian Gulf Coast theming.
+- **Zone re-themes:** Updated Siltgate (post-apocalyptic New Orleans, Mississippi shifted west) and The Warrens (service tunnels beneath ruins, rat-infested infrastructure).
+- **World texture:** Defined drone swarm debris (lootable, dangerous), mutant wildlife (rats, roaches, snakes, mosquitoes, alligators), and recognizable New Orleans landmarks (Superdome, interstate overpasses, Bourbon Street flooded).
+- **Player origin narrative:** Expanded "waking from pickling urns" experience — what characters remember, how factions recruit them, why they join.
+- **Tone guidelines:** Louisiana gothic (brackish water, humidity, spanish moss, rust, overgrowth), gritty but not grimdark, eerie but hopeful.
+- Marked 5 open questions for user review (surviving non-Sleeper humans, Saitcho Kindar's lore role, faction competition, partially-active drones, symbiotic wildlife).
+- **Key design principle:** Second-person room descriptions (2-4 sentences), atmospheric but concise for terminal display. Gulf Coast flavor is non-negotiable — this is New Orleans, not generic ruins.
+- Document status: Draft for iteration. No database changes yet — this is design iteration material.
+
+### 2026-03-29: Mutant Human Descendants & World Expansion
+- Resolved all 5 open questions from previous thematic direction draft:
+  - **No other surviving humans** — only mutant descendants that evolved from human stock over ~1000 years
+  - **Saitcho Kindar is mythic** — Satoshi Nakamoto-like anonymous figure, never met, only referenced in lore
+  - **Multiple settlements exist** — Siltgate is one of several Gulf Coast settlements, others referenced but not yet defined
+  - **Drones stay inactive** — dead machines, salvage only, NOT combat threats
+  - **Wildlife is useful** — materials like spider silk, alligator hide, bioluminescent algae, but NOT friendly/tameable
+- Designed comprehensive **Mutant Human Descendant** system (new Section 6):
+  - 6 archetypes embodying "worst of humanity": Graftlords (corruption), Maw-Kin (gluttony), Bone-Tithes (greed), Render-Kin (violence), Fester-Thralls (ugliness/body horror), Rut-Callers (lust/obsession)
+  - Each archetype has distinct appearance, behavior, habitat, and design notes
+  - **Core design principle:** Uncanny valley horror — they're *almost* human, which makes them deeply unsettling
+  - NOT zombies — they are alive, evolved, territorial organisms that don't recognize Sleepers as kin
+  - Naming convention: corrupted bayou creole, local slang (e.g., "the Crowned," "Vault-Wraiths," "the Rotted")
+  - Habitat: ruins, swamps, tunnels, flooded buildings — wherever humans once lived
+- Added **Section 7: The Wider World** — hooks for other settlements:
+  - NPC dialogue references to "Rust Harbor," "Barrier Settlements," "Shalepoint," "Mud Flats"
+  - Expedition board contracts for escorts, mapping runs, salvage rumors
+  - Tidereader charts showing other "awakening zones" along the coast
+  - Design guideline: Leave hooks, don't define settlements yet — world should feel larger than what's visible
+- Expanded **wildlife section** with useful materials:
+  - Giant spider silk (crafting), bioluminescent algae (light sources), alligator hide (armor), snake venom (alchemy), rat meat/bones (sustenance/tools), mosquito chitin (armor), feral hog tusks (weapons/trade)
+  - Wildlife behaviors can be exploited tactically (chemical scents, baiting, luring) but NOT tamed
+  - Nature is indifferent, not friendly — ecosystem as resource, not companion
+- **Tone refinement:** Mutant descendants are the most disturbing element in the game because they show what humanity became without civilization. Visual design targets body horror + recognition: "You see the shape of a human skull beneath the tumorous growths."
+- **Key writing guidelines for mutant descriptions:**
+  - Focus on distortion (proportions wrong, movements unnatural)
+  - Emphasize recognition (almost human, but not)
+  - Use sensory horror (smell, sound, movement)
+- Document status: Second draft complete. All open questions resolved. Ready for content implementation.
+
+### 2025-07-25: Potable Water Economy — Section 8
+- Added comprehensive Section 8 (ECONOMY: POTABLE WATER) to `docs/thematic-direction.md` per dkirby-ms directive.
+- **Core design decision:** Game currency is potable water, not gold. Inspired by Caves of Qud's dram-based water economy. Water is heavy, consumable, and universally needed — survival economics, not fantasy coinage.
+- **Unit of measurement:** "draws" — corrupted slang from "drawing water." 1 draw ≈ 1 cup. 10 draws = a day's hydration. Thematic Gulf Coast vocabulary.
+- **Weight-mobility tension:** Carrying wealth = carrying physical mass. Rich players are slower, more encumbered, more visible as targets. Creates strategic decisions about how much currency to carry vs. stash.
+- **Faction economic roles:** Urnkeepers produce (filtration systems), Tidereaders discover (spring locations, water chemistry), Silt Traders distribute (trade routes, brokerage). No faction controls the full supply chain — interdependence creates natural tension.
+- **Desperation mechanic:** Players can drink their own currency. Spending water = spending survival. "Water poor" is genuine desperation, not just "can't afford gear."
+- **Faction cisterns:** Stash equivalent for currency at each stronghold. Faction-locked — factionless players have no safe storage.
+- **Inn cost alignment:** Current 10-gold inn stay for non-faction guests becomes 10 draws. Backend note flagged for Bruenor/Drizzt to rename `gold` column from migration 016.
+- **Writing guidelines:** Louisiana gothic tone, grounded survival language, sensory water descriptions, real Gulf Coast water problems as reference, no fantasy currency vocabulary.
+- Decision document: `.squad/decisions/inbox/laeral-water-currency.md`
+
