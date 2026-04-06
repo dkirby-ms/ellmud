@@ -140,3 +140,18 @@
 - **Escaping:** All single quotes doubled in descriptions (e.g., `it's` → `it''s`), em-dashes preserved
 - **Transaction:** Full BEGIN/COMMIT wrap for atomicity
 - **Documentation:** All topology fix rooms from migrations 005 and 007 included and updated with thematic descriptions
+
+### Creature & Item Retheme (2026-04-06)
+- **Migration:** `020_retheme_creatures_items.sql`
+- **Source:** Laeral's creature & item retheme design document (merged to decisions.md)
+- **Creature rethemes (8):** city_dog→Silt Roach, pigeon_flock→Mosquito Swarm, feral_dog→Feral Hog, alley_thug→Render-Kin Stalker, dockside_smuggler→Bone-Tithe Hoarder, plague_bearer→Fester-Thrall, the_harbourmaster→The Graftlord
+- **Item rethemes (12):** alley_thugs_coin→Scavenged Circuit Board, noble_signet_ring→Pre-Extinction Signet Ring, city_map→Salvaged City Map, silk_scarf→Bloom-Stained Cloth, healing_draught→Algae Salve, iron_sword→Rebar Machete, iron_chainmail→Scrap-Weave Vest, voidforged_blade→Drone-Core Blade, shardsteel_sabre→Honed Drone Blade, shardsteel_shard→Drone Alloy Shard, corroded_halberd→Corroded Fire Axe, rat_tail (description only)
+- **Scope:** Cosmetic/narrative only — names, descriptions, room_descriptions. No ID changes, no stat changes, no loot table changes, no schema changes.
+- **TS templates check:** Confirmed no Siltgate creatures have hardcoded TS template files (all 5 templates are Warrens creatures: drowned-revenant, gutterspawn, hollow-stalker, rubble-scavenger, the-collapsed-one). No code changes needed.
+- **SQL pattern:** UPDATE by `type` for creatures, UPDATE by `id` for items. All apostrophes pre-escaped in Laeral's design doc.
+- **Transaction:** Full BEGIN/COMMIT wrap for atomicity
+- **Build verification:** TypeScript compilation clean, all 2555 tests pass (128 test files)
+
+---
+
+

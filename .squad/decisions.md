@@ -1,3 +1,120 @@
+### 2026-04-06: Character Creation — Starting Zones Replace Factions
+**By:** Jarlaxle (Systems Dev)
+**Date:** 2026-04-06
+
+## Decision
+
+Character creation now asks for a **starting zone** instead of a faction. Players start neutral with all factions. Faction reputation is earned through gameplay, not assigned at creation.
+
+## Rationale
+
+Per docs/thematic-direction.md §1, the game is shifting from "pick your team at character creation" to a more organic faction reputation system. Players wake up in a stronghold but aren't sworn to anyone yet — allegiance is earned.
+
+## Schema Changes (Migration 021)
+
+- `characters.starting_zone_slug` — new NOT NULL column (backfilled from existing `faction_slug`)
+- `characters.faction_slug` — now nullable (existing data preserved)
+- `character_reputation` — new table: `(character_id, faction_slug, reputation)` with UNIQUE constraint
+- Reputation tiers: Despised (<-500), Distrusted, Neutral (-100 to 100), Trusted, Honored (>500)
+
+## API Contract Changes
+
+- `POST /api/characters` — now accepts `{ name, startingZoneSlug }` instead of `{ name, factionSlug }`
+- Valid starting zones: `the-reliquary`, `the-bloom-observatory`, `the-carrion-court`
+- No faction_membership row is created on character creation
+- `GET /api/spawn-zone` — resolves from active character's `starting_zone_slug` (falls back to faction membership for legacy)
+
+## Shared Types
+
+- `CharacterSummary` — added `startingZoneSlug`, `startingZoneName`; `factionSlug` and `factionName` now nullable
+- `CreateCharacterRequest` — `startingZoneSlug` replaces `factionSlug`
+- NOTE: CharacterSummary is duplicated at two locations in shared/src/index.ts — both updated
+
+## Team Impact
+
+- **Regis:** CharacterSelect.tsx already updated with starting zone picker UI. `factionName` in character list now nullable — show `startingZoneName` as primary label.
+- **Drizzt:** Spawn-zone API now reads from character repo instead of faction repo as primary path. Death routing still uses faction membership (unchanged).
+- **Minsc:** If building admin tools, character data now has `startingZoneSlug` field. `factionSlug` may be null for new characters.
+- **Laeral:** No impact — creature/item systems don't touch character creation.
+
+---
+
+### 2026-04-06: Starting Zone Picker Replaces Faction Picker (UI)
+**By:** Regis (Frontend Dev)
+**Date:** 2026-04-06
+
+## Decision
+
+Character creation no longer asks players to choose a faction. Instead, players choose a **starting zone** — a location where they wake up. Factions are earned through gameplay, not chosen at creation.
+
+## Key Changes
+
+- **CharacterSelect.tsx:** `FACTIONS` → `STARTING_ZONES` (the-reliquary, the-bloom-observatory, the-carrion-court). Label changed from "Choose Your Faction" to "Where Do You Wake Up?"
+- **Shared types (both occurrences in `packages/shared/src/index.ts`):**
+  - `CharacterSummary`: added `startingZoneSlug` and `startingZoneName`; `factionSlug` and `factionName` are now `string | null`
+  - `CreateCharacterRequest`: `factionSlug` → `startingZoneSlug`
+- **API call:** `createCharacter` sends `{ name, startingZoneSlug }` instead of `{ name, factionSlug }`
+- **Character cards:** Show starting zone name (📍); faction only shown if non-null (earned later)
+
+## Team Impact
+
+- **Jarlaxle/Drizzt (Server):** `InMemoryCharacterRepository.create()` already accepts `startingZoneSlug` as 3rd param and sets `factionSlug: null`. Server test updated to match.
+- **Minsc (Admin):** If admin pages display character faction info, check for null before rendering.
+- **Volo (Content):** Zone descriptions in STARTING_ZONES are hardcoded in the client — coordinate if lore text changes.
+
+---
+
+### 2026-04-06: Creature & Item Retheme — Dystopian Gulf Coast Alignment
+**By:** Laeral (Content Designer)
+**Date:** 2026-04-06
+
+## Decision
+
+Comprehensive thematic retheme of creatures and items for the dystopian Gulf Coast setting (Siltgate/Warrens). All existing creatures and items reviewed for thematic alignment; those already aligned are unchanged. Eight creatures and twelve items rethemed for narrative consistency with the post-apocalyptic lore.
+
+## Scope
+
+### No Change Needed (Already Aligned)
+
+**Creatures:** drowned_revenant, gutterspawn, rubble_scavenger, hollow_stalker, the_collapsed_one, slum_rat, sewer_lurker, silt_serpent
+
+**Items:** smugglers_dagger, smugglers_cloak, leather_jerkin, dockworker_hook, brass_compass, harbor_manifest, plague_mask, silt_venom_sac, serpent_scale, sewer_moss, waterlogged_bone, bent_rebar, corroded_pipe, scavenger_shiv, tarnished_medallion, stamina_tonic
+
+### Creature Rethemes (8)
+
+1. **city_dog → Silt Roach** — plate-sized cockroach scavenging debris. Per setting doc (§3.2), cockroaches are "plate-sized, armored, nearly impossible to kill."
+2. **pigeon_flock → Mosquito Swarm** — grotesquely swollen, thumb-sized mosquitoes in dense clouds. Per setting doc (§3.2), swarms are "thick enough to obscure vision, carry disease."
+3. **feral_dog → Feral Hog** — bristle-backed, tusked, scavenging hog. Gulf Coast hazard per setting doc (§3.2).
+4. **alley_thug → Render-Kin Stalker** — lean, scarred, predatory mutant with elongated limbs and claw-tipped fingers. Per setting doc (§6.2), Render-Kin embody "Murder/Violence."
+5. **dockside_smuggler → Bone-Tithe Hoarder** — gaunt, skeletal figure compulsively hoarding salvage. Per setting doc (§6.2), Bone-Tithes embody "Greed."
+6. **plague_bearer → Fester-Thrall** — misshapen, sore-covered mutant whose presence spreads algae bloom growth. Per setting doc (§6.2), Fester-Thralls embody "Ugliness/Body Horror."
+7. **harbourmaster → The Graftlord** — bloated, territorial creature wearing the trappings of authority. Per setting doc (§6.2), Graftlords embody "Corruption" and "claim sections of ruins as kingdoms."
+
+### Item Rethemes (12)
+
+1. **alley_thugs_coin → Scavenged Circuit Board** — cracked drone part used as vendor trash. Currency is now potable water (draws); coins don't exist in this setting.
+2. **noble_signet_ring → Pre-Extinction Signet Ring** — tarnished ring from a bloodline extinct 1000 years. Removes fantasy "Highwind" reference; value is in craftsmanship and material.
+3. **city_map → Salvaged City Map** — laminated pre-extinction street map of New Orleans, water-stained and annotated by scavengers.
+4. **silk_scarf → Bloom-Stained Cloth** — fabric discolored by mutant algae bloom exposure. Ties to setting's central ecological feature and Krewe Calliope rituals.
+5. **healing_draught → Algae Salve** — thick green paste brewed by Bloom Tenders from cultivated algae. Avoids fantasy potion language.
+6. **iron_sword → Rebar Machete** — length of construction rebar with wrapped grip and hammered edge. Rebar is the most abundant melee weapon material in ruins.
+7. **iron_chainmail → Scrap-Weave Vest** — vest stitched from overlapping salvaged sheet metal and drone cabling. Post-apocalyptic equivalent of medieval chainmail.
+8. **voidforged_blade → Drone-Core Blade** — blade forged from military drone reactor core alloy with blue-black sheen. Removes fantasy "void" language; grounds in setting's technology.
+9. **shardsteel_sabre → Honed Drone Blade** — single-edged blade from military drone wing strut. Replaces vague "forged from metal" with specific, plausible origin.
+10. **shardsteel_shard → Drone Alloy Shard** — jagged fragment of drone structural alloy. Crafting material tied to the drone debris littering the setting.
+11. **corroded_halberd → Corroded Fire Axe** — pre-extinction fire axe with pitted rust and waterlogged leather handle. Perfect post-apocalyptic equivalent to medieval halberd.
+12. **rat_tail → Rat Tail** — name and concept unchanged. Updated description: Bloom Tenders buy these for biological study (tracking mutation rates), not "alchemists" for fantasy coinage.
+
+## Implementation Notes
+
+- **No ID changes** — all room spawn references and loot table references remain valid
+- **No stat changes** — retheme is cosmetic/narrative only
+- **Passive behavior flags preserved** — city_dog and pigeon_flock retain passive behavior from migration 008
+- **Single migration approach** — UPDATE statements for names, descriptions, room_descriptions; no schema changes needed
+- **Loot tables unchanged** — same item IDs, same drop weights
+
+---
+
 ### 2026-04-05: OpenAI-Compatible LLM Transport — Provider Priority Chain
 **By:** Drizzt (Engine Dev)
 **Date:** 2026-04-05

@@ -268,3 +268,32 @@ Siltgate revision finalized and merged into team decisions archive.
 - **Key design decision — drone reactor alloy:** The anomalous-tier weapon (voidforged_blade → Drone-Core Blade) uses "unknown alloy from drone reactor housing" as its mystery element. This replaces inter-planar fantasy with technology-grounded mystery — the alloy doesn't match pre-extinction databases, which the Kindari find deeply troubling. Leaves room for future lore expansion about the drones' origins.
 - Design document: `.squad/decisions/inbox/laeral-creature-item-retheme.md`
 
+
+## 2026-04-06T16:30Z — Creature & Item Retheme Design
+
+**Completed:** Comprehensive thematic retheme for dystopian Gulf Coast alignment  
+**Status:** ✅ Design approved, merged to decisions.md  
+**Deliverable:** Thematic direction narrative, item/creature mapping, implementation notes for Bruenor
+
+**Scope:** 8 creatures, 12 items, 20 items already aligned (no change needed)
+- **Creatures:** city_dog→Silt Roach, pigeon_flock→Mosquito Swarm, feral_dog→Feral Hog, alley_thug→Render-Kin Stalker, dockside_smuggler→Bone-Tithe Hoarder, plague_bearer→Fester-Thrall, the_harbourmaster→The Graftlord
+- **Items:** alley_thugs_coin→Scavenged Circuit Board, noble_signet_ring→Pre-Extinction Signet Ring, city_map→Salvaged City Map, silk_scarf→Bloom-Stained Cloth, healing_draught→Algae Salve, iron_sword→Rebar Machete, iron_chainmail→Scrap-Weave Vest, voidforged_blade→Drone-Core Blade, shardsteel_sabre→Honed Drone Blade, shardsteel_shard→Drone Alloy Shard, corroded_halberd→Corroded Fire Axe, rat_tail (description update only)
+
+**Key Design Principles:**
+- No ID changes (all loot tables remain valid)
+- No stat changes (cosmetic/narrative only)
+- All names tied to setting lore (post-apocalyptic Gulf Coast, year 3000, ruins of New Orleans)
+- Creatures grounded in Gulf Coast fauna/mutations per thematic-direction.md §3.2 and §6.2
+- Items sourced from pre-extinction salvage, drone debris, or ecological features (mutant algae bloom)
+- Passive behavior flags preserved (city_dog, pigeon_flock)
+
+**Setting Alignment:**
+- Creature names reflect Gulf Coast ecosystem: oversized insects (roaches, mosquitoes), feral livestock (hogs), mutant humans (Render-Kin, Bone-Tithe Hoarders per §6.2)
+- Boss creatures (Graftlord, Fester-Thrall) tied to faction archetypes: Corruption (Graftlords), Ugliness/Body Horror (Fester-Thralls)
+- Items reflect salvage economy: drone parts (circuit boards, alloy shards), pre-extinction artifacts (signet rings, city maps), ecological mutations (bloom-stained cloth)
+- Water currency removes fantasy coinage references
+- Rebar/sheet metal/drone cable replace medieval materials with post-apocalyptic construction scraps
+
+**Files:** Merged from `.squad/decisions/inbox/laeral-creature-item-retheme.md` → `.squad/decisions.md` (comprehensive decision section with 20+ items already-aligned analysis, 7 creature retheme details, 12 item retheme details, implementation notes)
+
+**Handoff:** Full migration details provided to Bruenor (migration 020 structure, SQL patterns, loot table preservation)
