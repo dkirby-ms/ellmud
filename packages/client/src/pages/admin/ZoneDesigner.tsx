@@ -208,6 +208,14 @@ const OPPOSITE_DIRECTION: Record<string, string> = {
   down: 'south',
 };
 
+/** Position offset for portal stub phantom nodes relative to the source room. */
+const PORTAL_STUB_OFFSET: Record<string, { x: number; y: number }> = {
+  north: { x: 5, y: -45 },
+  south: { x: 5, y: 80 },
+  east: { x: 80, y: 18 },
+  west: { x: -55, y: 18 },
+};
+
 /**
  * Convert zone exits → ReactFlow edges.
  * Groups bidirectional exit pairs into single edges.
@@ -251,15 +259,33 @@ function exitsToFlowEdges(
     });
   }
 
-  // Inter-zone (portal) exits — draw stub edges
+  // Inter-zone (portal) exits — stub edges to phantom target nodes
   for (const exit of interZoneExits) {
     const fromPos = positions.get(exit.fromRoomSlug);
     if (!fromPos || fromPos.z !== currentFloor) continue;
+    // Skip up/down — they use ▲▼ indicators, no horizontal handles
+    if (exit.direction === 'up' || exit.direction === 'down') continue;
 
-    // Portal exits don't have a target node in the graph — we'll render them as special stub edges
-    // For ReactFlow, we need a dummy target node or just skip drawing them as edges
-    // Let's skip them for now since they don't connect to another node in this zone
-    // (They're indicated by the portal badge on the room node itself)
+    const dir = exit.direction;
+    const oppositeDir = OPPOSITE_DIRECTION[dir] ?? 'north';
+
+    edges.push({
+      id: exit.id,
+      source: exit.fromRoomSlug,
+      target: `portal-${exit.id}`,
+      sourceHandle: `${dir}-source`,
+      targetHandle: `${oppositeDir}-target`,
+      type: 'exit',
+      data: {
+        direction: exit.direction,
+        isBidirectional: false,
+        isOrphan: false,
+        isPortal: true,
+        locked: exit.locked,
+        hidden: exit.hidden,
+        targetZoneSlug: exit.targetZoneSlug,
+      },
+    });
   }
 
   return edges;
@@ -721,8 +747,30 @@ export default function ZoneDesigner({
         (node.data as Record<string, unknown>).dimmed = !isMatch;
       }
     }
+    // Add phantom portal target nodes for inter-zone exits
+    for (const exit of interZoneExits) {
+      const fromPos = positions.get(exit.fromRoomSlug);
+      if (!fromPos || fromPos.z !== currentFloor) continue;
+      if (exit.direction === 'up' || exit.direction === 'down') continue;
+
+      const offset = PORTAL_STUB_OFFSET[exit.direction];
+      if (!offset) continue;
+
+      nodes.push({
+        id: `portal-${exit.id}`,
+        type: 'portalTarget',
+        position: { x: fromPos.x + offset.x, y: fromPos.y + offset.y },
+        data: {
+          targetZoneSlug: exit.targetZoneSlug,
+          direction: exit.direction,
+          onPortalClick: handlePortalClick,
+        },
+        selectable: false,
+        draggable: false,
+      });
+    }
     return nodes;
-  }, [rooms, positions, currentFloor, selectedRoom, disconnectedSlugs, orphanExitIds, exits, showLabels, mode, searchMatchSlugs, creatures, handlePortalClick]);
+  }, [rooms, positions, currentFloor, selectedRoom, disconnectedSlugs, orphanExitIds, exits, showLabels, mode, searchMatchSlugs, creatures, handlePortalClick, interZoneExits]);
 
   const flowEdges = useMemo(() => {
     let edges = exitsToFlowEdges(

@@ -18,6 +18,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { ZoneRoomNode } from './ZoneRoomNode.js';
 import { ZoneExitEdge } from './ZoneExitEdge.js';
+import { PortalTargetNode } from './PortalTargetNode.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -50,6 +51,7 @@ export interface ZoneDesignerFlowProps {
 
 const nodeTypes: NodeTypes = {
   room: ZoneRoomNode,
+  portalTarget: PortalTargetNode,
 };
 
 const edgeTypes: EdgeTypes = {
