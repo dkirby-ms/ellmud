@@ -353,6 +353,9 @@ export default function ZoneDesigner({
   const [showDeleteExitModal, setShowDeleteExitModal] = useState(false);
   const [deleteAlsoReverse, setDeleteAlsoReverse] = useState(true);
 
+  // Delete room confirm dialog
+  const [deleteRoomTarget, setDeleteRoomTarget] = useState<ZoneRoomDefinition | null>(null);
+
   // Floor switching
   const [currentFloor, setCurrentFloor] = useState(0);
 
@@ -1031,9 +1034,16 @@ export default function ZoneDesigner({
     }
   }
 
-  async function handleDeleteRoom() {
+  function handleDeleteRoom() {
     const room = rooms.find((r) => r.slug === selectedRoom);
-    if (!room || !confirm(`Delete room "${room.name}"?`)) return;
+    if (!room) return;
+    setDeleteRoomTarget(room);
+  }
+
+  async function confirmDeleteRoom() {
+    const room = deleteRoomTarget;
+    if (!room) return;
+    setDeleteRoomTarget(null);
     try {
       setBusy(true);
       setError(null);
@@ -2924,14 +2934,9 @@ export default function ZoneDesigner({
             <button
               disabled={busy}
               onClick={() => {
+                if (!cmRoom) return;
                 setContextMenu(null);
-                if (!cmRoom || !confirm(`Delete room "${cmRoom.name}"?`)) return;
-                setBusy(true);
-                setError(null);
-                deleteRoom(cmRoom.id)
-                  .then(() => { setSelectedRoom(null); onZoneChanged?.(); })
-                  .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed to delete room"))
-                  .finally(() => setBusy(false));
+                setDeleteRoomTarget(cmRoom);
               }}
               style={{
                 display: "flex",
@@ -3525,6 +3530,54 @@ export default function ZoneDesigner({
           </div>
         );
       })()}
+
+      {/* ─── Delete Room Confirm Modal ──────────────────────── */}
+      {deleteRoomTarget && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setDeleteRoomTarget(null)}
+        >
+          <div
+            className="bg-[#1C1D27] border border-[#2A2B35] rounded-lg p-6 w-96"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-[#C9A84C] text-sm mb-4" style={{ fontFamily: "var(--font-sans)" }}>
+              Delete Room
+            </h3>
+
+            <div className="space-y-3 mb-4">
+              <p className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
+                Are you sure you want to delete this room? This action cannot be easily undone.
+              </p>
+
+              <div className="bg-[#12131A] border border-[#2A2B35] rounded p-3">
+                <div className="text-[#E8E0D0] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+                  {deleteRoomTarget.name} <span className="text-[#8A8B95]">({deleteRoomTarget.slug})</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteRoomTarget(null)}
+                disabled={busy}
+                className="px-3 py-1.5 border border-[#2A2B35] text-[#8A8B95] rounded text-sm hover:bg-[#12131A] disabled:opacity-40"
+                style={{ fontFamily: "var(--font-sans)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void confirmDeleteRoom()}
+                disabled={busy}
+                className="px-3 py-1.5 bg-[#8B2500] hover:bg-[#A03000] text-[#E8E0D0] rounded text-sm disabled:opacity-40"
+                style={{ fontFamily: "var(--font-sans)" }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
