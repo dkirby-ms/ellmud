@@ -1,4 +1,4 @@
--- 001_schema.sql — Full database schema for Ellmud.
+-- 001_schema.sql — Consolidated database schema for Ellmud (final state).
 -- gen_random_uuid() is built-in since PostgreSQL 13 — no extension needed.
 
 -- ============================================================================
@@ -50,19 +50,7 @@ CREATE TABLE factions (
   CONSTRAINT uq_faction_slug UNIQUE (slug)
 );
 
--- Biome templates for procedural generation
-CREATE TABLE biome_definitions (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  slug            TEXT NOT NULL UNIQUE,
-  name            TEXT NOT NULL,
-  description     TEXT NOT NULL DEFAULT '',
-  tier            INTEGER NOT NULL DEFAULT 1,
-  features        TEXT[] NOT NULL DEFAULT '{}',
-  hazard_types    TEXT[] NOT NULL DEFAULT '{}',
-  room_properties TEXT[] NOT NULL DEFAULT '{}',
-  narration_hints TEXT[] NOT NULL DEFAULT '{}',
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- NO biome_definitions table (removed by migration 011)
 
 -- Room-level modifiers (buffs/debuffs)
 CREATE TABLE modifier_definitions (
@@ -76,13 +64,12 @@ CREATE TABLE modifier_definitions (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Narrative templates for LLM narration
+-- Narrative templates for LLM narration (biome column removed by 011)
 CREATE TABLE narrative_template_definitions (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   slug           TEXT NOT NULL UNIQUE,
   name           TEXT NOT NULL,
   narrative_type TEXT NOT NULL DEFAULT 'lore',
-  biome          TEXT,
   template       TEXT NOT NULL DEFAULT '',
   tone           TEXT,
   verbosity      TEXT,
@@ -132,7 +119,7 @@ CREATE TABLE skill_definitions (
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Creature blueprints (id UUID, slug + type are human-readable)
+-- Creature blueprints (biome_affinity removed by 011, aggressive added by 008, room_description added by 009)
 CREATE TABLE creature_definitions (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   type            TEXT NOT NULL UNIQUE,
@@ -151,7 +138,8 @@ CREATE TABLE creature_definitions (
   idle_ticks_min  INTEGER NOT NULL DEFAULT 3,
   idle_ticks_max  INTEGER NOT NULL DEFAULT 5,
   flee_threshold  REAL NOT NULL DEFAULT 0.25,
-  biome_affinity  TEXT[],
+  aggressive      BOOLEAN NOT NULL DEFAULT true,
+  room_description TEXT,
   tier_min        INTEGER,
   tier_max        INTEGER,
   status          TEXT NOT NULL DEFAULT 'published',
@@ -161,7 +149,7 @@ CREATE TABLE creature_definitions (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Persistent zone definitions
+-- Persistent zone definitions (biome→theme by 011, faction_slug added by 013)
 CREATE TABLE zones (
   id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   slug                    TEXT NOT NULL UNIQUE,
@@ -170,13 +158,14 @@ CREATE TABLE zones (
   level_min               INTEGER NOT NULL DEFAULT 1,
   level_max               INTEGER NOT NULL DEFAULT 100,
   tier                    INTEGER NOT NULL DEFAULT 1,
-  biome                   TEXT NOT NULL DEFAULT 'flooded_crypt',
+  theme                   TEXT NOT NULL DEFAULT 'flooded_crypt',
   entry_room_slugs        TEXT[] NOT NULL DEFAULT '{}',
   lifecycle               TEXT NOT NULL DEFAULT 'persistent',
   category                TEXT NOT NULL DEFAULT 'dungeon',
   max_players             INTEGER NOT NULL DEFAULT 0,
   pvp_enabled             BOOLEAN NOT NULL DEFAULT false,
   repop_interval_seconds  INTEGER NOT NULL DEFAULT 300,
+  faction_slug            TEXT,
   created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -225,15 +214,20 @@ CREATE TABLE players (
 -- Tier 2 (depends on players)
 -- ============================================================================
 
+-- Characters (water from 016+018, inn columns from 016, starting_zone from 021, nullable faction from 021)
 CREATE TABLE characters (
-  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  player_id      UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-  name           TEXT NOT NULL,
-  faction_slug   TEXT NOT NULL,
-  is_active      BOOLEAN NOT NULL DEFAULT false,
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  last_played_at TIMESTAMPTZ,
-  deleted_at     TIMESTAMPTZ,
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  player_id          UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  name               TEXT NOT NULL,
+  faction_slug       TEXT,
+  is_active          BOOLEAN NOT NULL DEFAULT false,
+  water              INTEGER NOT NULL DEFAULT 0,
+  last_inn_zone_slug TEXT,
+  last_inn_room_slug TEXT,
+  starting_zone_slug TEXT NOT NULL DEFAULT 'the-reliquary',
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_played_at     TIMESTAMPTZ,
+  deleted_at         TIMESTAMPTZ,
   CONSTRAINT chk_character_name_length CHECK (char_length(name) >= 2 AND char_length(name) <= 24)
 );
 
@@ -243,6 +237,16 @@ CREATE TABLE auth_tokens (
   username   TEXT NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Character reputation (from 021)
+CREATE TABLE character_reputation (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  character_id  UUID NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  faction_slug  TEXT NOT NULL,
+  reputation    INTEGER NOT NULL DEFAULT 0,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(character_id, faction_slug)
 );
 
 -- ============================================================================
@@ -290,7 +294,8 @@ CREATE TABLE player_stash_capacity (
   max_weight   INTEGER NOT NULL DEFAULT 200 CHECK (max_weight > 0)
 );
 
-CREATE TABLE player_shard_sickness (
+-- Death penalty (was player_shard_sickness, renamed by 012)
+CREATE TABLE player_death_penalty (
   player_id    UUID PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
   character_id UUID REFERENCES characters(id) ON DELETE CASCADE,
   death_count  INTEGER NOT NULL DEFAULT 0,
@@ -316,18 +321,18 @@ CREATE TABLE player_profile (
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Run history (shard_tier→zone_tier, extracted→survived, extracted_items→items_carried_out, biome removed)
 CREATE TABLE run_history (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  player_id       UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-  character_id    UUID REFERENCES characters(id) ON DELETE CASCADE,
-  run_id          TEXT NOT NULL,
-  shard_tier      INT NOT NULL CHECK (shard_tier BETWEEN 1 AND 3),
-  biome           TEXT,
-  duration_sec    INT NOT NULL DEFAULT 0 CHECK (duration_sec >= 0),
-  extracted       BOOLEAN NOT NULL DEFAULT false,
-  extracted_items JSONB NOT NULL DEFAULT '[]',
-  xp_gained       INT NOT NULL DEFAULT 0 CHECK (xp_gained >= 0),
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  player_id        UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  character_id     UUID REFERENCES characters(id) ON DELETE CASCADE,
+  run_id           TEXT NOT NULL,
+  zone_tier        INT NOT NULL CHECK (zone_tier BETWEEN 1 AND 3),
+  duration_sec     INT NOT NULL DEFAULT 0 CHECK (duration_sec >= 0),
+  survived         BOOLEAN NOT NULL DEFAULT false,
+  items_carried_out JSONB NOT NULL DEFAULT '[]',
+  xp_gained        INT NOT NULL DEFAULT 0 CHECK (xp_gained >= 0),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ============================================================================
@@ -365,7 +370,7 @@ CREATE TABLE zone_exits (
   CONSTRAINT uq_zone_exit_direction UNIQUE (zone_id, from_room_slug, direction)
 );
 
--- Character exploration tracking (character_id is TEXT, not UUID FK)
+-- Character exploration tracking (biome removed, shard_tier→zone_tier)
 CREATE TABLE character_explored_rooms (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   character_id  TEXT NOT NULL,
@@ -373,8 +378,7 @@ CREATE TABLE character_explored_rooms (
   room_id       TEXT NOT NULL,
   room_type     TEXT NOT NULL,
   room_name     TEXT NOT NULL,
-  shard_tier    SMALLINT,
-  biome         TEXT,
+  zone_tier     SMALLINT,
   first_visited TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_visited  TIMESTAMPTZ NOT NULL DEFAULT now(),
   visit_count   INTEGER NOT NULL DEFAULT 1
@@ -421,8 +425,8 @@ CREATE INDEX idx_stash_character ON player_stash(character_id);
 -- player_stash_capacity
 CREATE INDEX idx_stash_cap_character ON player_stash_capacity(character_id);
 
--- player_shard_sickness
-CREATE INDEX idx_shard_sickness_character ON player_shard_sickness(character_id);
+-- player_death_penalty (was idx_shard_sickness_character)
+CREATE INDEX idx_death_penalty_character ON player_death_penalty(character_id);
 
 -- player_loadout
 CREATE INDEX idx_loadout_player ON player_loadout(player_id);
@@ -431,10 +435,10 @@ CREATE INDEX idx_loadout_character ON player_loadout(character_id);
 -- player_profile
 CREATE INDEX idx_profile_character ON player_profile(character_id);
 
--- run_history
+-- run_history (zone_tier replaces shard_tier)
 CREATE INDEX idx_runs_player ON run_history(player_id);
 CREATE INDEX idx_runs_character ON run_history(character_id);
-CREATE INDEX idx_runs_leaderboard ON run_history(shard_tier, xp_gained DESC);
+CREATE INDEX idx_runs_leaderboard ON run_history(zone_tier, xp_gained DESC);
 CREATE INDEX idx_runs_created ON run_history(created_at DESC);
 CREATE INDEX idx_runs_xp ON run_history(xp_gained DESC);
 
@@ -448,10 +452,10 @@ CREATE INDEX idx_audit_log_actor ON audit_log(actor);
 CREATE INDEX idx_audit_log_entity_type ON audit_log(entity_type);
 CREATE INDEX idx_audit_log_created_at ON audit_log(created_at DESC);
 
--- character_explored_rooms
+-- character_explored_rooms (__instance__ sentinel, not __shard__)
 CREATE INDEX idx_explored_rooms_character ON character_explored_rooms(character_id);
 CREATE INDEX idx_explored_rooms_character_zone ON character_explored_rooms(character_id, zone_slug);
-CREATE UNIQUE INDEX uq_character_zone_room ON character_explored_rooms(character_id, COALESCE(zone_slug, '__shard__'), room_id);
+CREATE UNIQUE INDEX uq_explored_character_zone_room ON character_explored_rooms(character_id, COALESCE(zone_slug, '__instance__'), room_id);
 
 -- zone_rooms
 CREATE INDEX idx_zone_rooms_zone_id ON zone_rooms(zone_id);
@@ -459,3 +463,6 @@ CREATE INDEX idx_zone_rooms_zone_id ON zone_rooms(zone_id);
 -- zone_exits
 CREATE INDEX idx_zone_exits_zone_id ON zone_exits(zone_id);
 CREATE INDEX idx_zone_exits_from ON zone_exits(zone_id, from_room_slug);
+
+-- character_reputation
+CREATE INDEX idx_character_reputation_char ON character_reputation(character_id);
