@@ -40,7 +40,8 @@ describe('PgCharacterRepository', () => {
           id: 'char-1',
           player_id: 'player-1',
           name: 'Drizzt',
-          faction_slug: 'bloom-tenders',
+          starting_zone_slug: 'the-bloom-observatory',
+          faction_slug: null,
           is_active: false,
           created_at: now,
           last_played_at: null,
@@ -52,16 +53,17 @@ describe('PgCharacterRepository', () => {
         fields: [],
       });
 
-      const result = await repo.create('player-1', 'Drizzt', 'bloom-tenders');
+      const result = await repo.create('player-1', 'Drizzt', 'the-bloom-observatory');
 
       expect(result.id).toBe('char-1');
       expect(result.name).toBe('Drizzt');
-      expect(result.factionSlug).toBe('bloom-tenders');
+      expect(result.startingZoneSlug).toBe('the-bloom-observatory');
+      expect(result.factionSlug).toBeNull();
       expect(result.playerId).toBe('player-1');
       expect(result.isActive).toBe(false);
       expect(queryMock).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO characters'),
-        ['player-1', 'Drizzt', 'bloom-tenders'],
+        ['player-1', 'Drizzt', 'the-bloom-observatory'],
       );
     });
   });
@@ -76,7 +78,8 @@ describe('PgCharacterRepository', () => {
           id: 'char-1',
           player_id: 'player-1',
           name: 'Drizzt',
-          faction_slug: 'bloom-tenders',
+          starting_zone_slug: 'the-bloom-observatory',
+          faction_slug: null,
           is_active: true,
           created_at: now,
           last_played_at: null,
@@ -183,7 +186,8 @@ describe('PgCharacterRepository', () => {
           id: 'char-1',
           player_id: 'player-1',
           name: 'Drizzt',
-          faction_slug: 'bloom-tenders',
+          starting_zone_slug: 'the-bloom-observatory',
+          faction_slug: null,
           is_active: true,
           created_at: now,
           last_played_at: null,
@@ -226,6 +230,7 @@ describe('PgCharacterRepository', () => {
           id: 'char-1',
           player_id: 'player-1',
           name: 'Drizzt',
+          starting_zone_slug: 'the-bloom-observatory',
           faction_slug: 'bloom-tenders',
           is_active: true,
           created_at: now,

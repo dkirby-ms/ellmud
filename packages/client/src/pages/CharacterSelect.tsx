@@ -10,10 +10,25 @@ import {
 } from "../services/api";
 import type { CharacterSummary } from "@ellmud/shared";
 
-const FACTIONS = [
-  { slug: "kindari", name: "The Kindari", desc: "Craft, preservation, and the legacy of Saitcho Kindar." },
-  { slug: "bloom-tenders", name: "The Bloom Tenders", desc: "Ecologists who study the mutant algae that woke the urns." },
-  { slug: "krewe-calliope", name: "Krewe Calliope", desc: "Dark carnival keepers of ritual, music, and meaning." },
+const STARTING_ZONES = [
+  {
+    slug: "the-reliquary",
+    name: "The Reliquary",
+    faction: "Kindari",
+    desc: "Wake among the preservers. The Kindari guard the memory of Saitcho Kindar in vaulted halls of salvaged tech and carefully maintained urns.",
+  },
+  {
+    slug: "the-bloom-observatory",
+    name: "The Bloom Observatory",
+    faction: "Bloom Tenders",
+    desc: "Wake among the watchers. The Bloom Tenders study the mutant algae that freed you, reading its patterns from observation towers above the flooded streets.",
+  },
+  {
+    slug: "the-carrion-court",
+    name: "The Carrion Court",
+    faction: "Krewe Calliope",
+    desc: "Wake among the revelers. Krewe Calliope keeps the old carnival traditions alive with dark processions through the ruins.",
+  },
 ];
 
 function sanitizeName(raw: string): string {
@@ -31,7 +46,7 @@ export default function CharacterSelect() {
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newCharName, setNewCharName] = useState("");
-  const [selectedFaction, setSelectedFaction] = useState("");
+  const [selectedZone, setSelectedZone] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -57,17 +72,17 @@ export default function CharacterSelect() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = sanitizeName(newCharName);
-    if (name.length < 2 || !selectedFaction) return;
+    if (name.length < 2 || !selectedZone) return;
 
     setSubmitting(true);
     setError(null);
     try {
-      await createCharacter(token, { name, factionSlug: selectedFaction });
-      // Reload full list to get complete character data (topSkills, factionName, etc.)
+      await createCharacter(token, { name, startingZoneSlug: selectedZone });
+      // Reload full list to get complete character data (topSkills, startingZoneName, etc.)
       const chars = await fetchCharacters(token);
       setCharacters(chars);
       setNewCharName("");
-      setSelectedFaction("");
+      setSelectedZone("");
       setIsCreating(false);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create character.");
@@ -156,8 +171,13 @@ export default function CharacterSelect() {
                 {char.name}
               </h3>
               <p className="text-text-secondary text-sm font-sans mb-1">
-                {char.factionName}
+                📍 {char.startingZoneName}
               </p>
+              {char.factionName && (
+                <p className="text-text-disabled text-xs font-sans mb-1">
+                  {char.factionName}
+                </p>
+              )}
 
               {(char.topSkills?.length ?? 0) > 0 && (
                 <div className="flex gap-2 mb-2 flex-wrap">
@@ -249,16 +269,15 @@ export default function CharacterSelect() {
 
               <div>
                 <label className="block text-text-secondary text-sm mb-4 font-sans">
-                  Choose Your Faction{" "}
-                  <span className="text-text-disabled">(optional)</span>
+                  Where Do You Wake Up?
                 </label>
                 <div className="grid gap-4">
-                  {FACTIONS.map((f) => (
+                  {STARTING_ZONES.map((z) => (
                     <div
-                      key={f.slug}
-                      onClick={() => !submitting && setSelectedFaction(f.slug)}
+                      key={z.slug}
+                      onClick={() => !submitting && setSelectedZone(z.slug)}
                       className={`bg-bg-elevated border rounded-lg p-4 cursor-pointer transition-colors ${
-                        selectedFaction === f.slug
+                        selectedZone === z.slug
                           ? "border-accent-gold"
                           : "border-border-muted hover:border-interactive"
                       }`}
@@ -267,10 +286,13 @@ export default function CharacterSelect() {
                         className="text-text-primary mb-1 font-serif"
                         style={{ fontSize: "1.125rem" }}
                       >
-                        {f.name}
+                        🧭 {z.name}
                       </h3>
+                      <p className="text-text-disabled text-xs font-sans mb-1">
+                        {z.faction}
+                      </p>
                       <p className="text-text-secondary text-sm font-sans">
-                        {f.desc}
+                        {z.desc}
                       </p>
                     </div>
                   ))}
@@ -289,7 +311,7 @@ export default function CharacterSelect() {
                 )}
                 <button
                   type="submit"
-                  disabled={newCharName.length < 2 || !selectedFaction || submitting}
+                  disabled={newCharName.length < 2 || !selectedZone || submitting}
                   className="flex-1 bg-accent-gold hover:bg-accent-gold/90 text-bg-primary font-medium py-3 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-sans"
                 >
                   {submitting ? "Creating..." : "Create"}

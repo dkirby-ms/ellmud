@@ -11,8 +11,6 @@ import { Router, type Request, type Response } from 'express';
 import { validateCharacterName } from '@ellmud/shared';
 import type { AuthService } from '../auth/AuthService.js';
 import { getCharacterRepository } from '../character/index.js';
-import { getFactionRepository } from '../faction/index.js';
-import { query } from '../db/index.js';
 import { grantStarterKit } from './starter-kit.js';
 
 export function createCharacterRouter(authService: AuthService, usePg: boolean): Router {
@@ -57,10 +55,10 @@ export function createCharacterRouter(authService: AuthService, usePg: boolean):
       const playerId = await authenticate(req, res);
       if (!playerId) return;
 
-      const { name, factionSlug } = req.body as { name?: string; factionSlug?: string };
+      const { name, startingZoneSlug } = req.body as { name?: string; startingZoneSlug?: string };
 
-      if (!name || !factionSlug) {
-        res.status(400).json({ error: 'name and factionSlug are required' });
+      if (!name || !startingZoneSlug) {
+        res.status(400).json({ error: 'name and startingZoneSlug are required' });
         return;
       }
 
@@ -71,34 +69,15 @@ export function createCharacterRouter(authService: AuthService, usePg: boolean):
         return;
       }
 
-      // Validate faction slug
-      const validFactions = ['kindari', 'bloom-tenders', 'krewe-calliope'];
-      if (!validFactions.includes(factionSlug)) {
-        res.status(400).json({ error: `Invalid faction. Choose from: ${validFactions.join(', ')}` });
+      // Validate starting zone slug
+      const validStartingZones = ['the-reliquary', 'the-bloom-observatory', 'the-carrion-court'];
+      if (!validStartingZones.includes(startingZoneSlug)) {
+        res.status(400).json({ error: `Invalid starting zone. Choose from: ${validStartingZones.join(', ')}` });
         return;
       }
 
       const repo = getCharacterRepository();
-      const character = await repo.create(playerId, name, factionSlug);
-
-      // Insert faction membership so spawn-zone resolves to the correct stronghold
-      if (usePg) {
-        try {
-          const factionResult = await query<{ id: string }>(
-            `SELECT id FROM factions WHERE slug = $1`,
-            [factionSlug],
-          );
-          if (factionResult.rows.length > 0) {
-            const factionRepo = getFactionRepository();
-            await factionRepo.updateFaction(playerId, factionResult.rows[0].id, {
-              reputation: 0,
-              rank: 1,
-            });
-          }
-        } catch (factionErr) {
-          console.warn('[Characters] Faction membership insert failed (non-fatal):', factionErr);
-        }
-      }
+      const character = await repo.create(playerId, name, startingZoneSlug);
 
       // Grant starter kit (weapon + armour + consumable)
       try {

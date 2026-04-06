@@ -9,7 +9,8 @@ export interface CharacterRow {
   id: string;
   playerId: string;
   name: string;
-  factionSlug: string;
+  startingZoneSlug: string;
+  factionSlug: string | null;
   isActive: boolean;
   createdAt: Date;
   lastPlayedAt: Date | null;
@@ -21,7 +22,7 @@ export interface CharacterRepository {
   list(playerId: string): Promise<CharacterSummary[]>;
 
   /** Create a new character. Returns the new character row. */
-  create(playerId: string, name: string, factionSlug: string): Promise<CharacterRow>;
+  create(playerId: string, name: string, startingZoneSlug: string): Promise<CharacterRow>;
 
   /** Get a character by ID (returns null if not found or soft-deleted). */
   getById(id: string): Promise<CharacterRow | null>;
