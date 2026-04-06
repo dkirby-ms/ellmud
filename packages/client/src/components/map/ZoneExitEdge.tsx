@@ -197,21 +197,6 @@ export function ZoneExitEdge(props: EdgeProps) {
         </text>
       )}
 
-      {/* Portal target label */}
-      {edgeData.isPortal && edgeData.targetZoneSlug && (
-        <text
-          x={labelX}
-          y={labelY + (hasModifiers ? 10 : 0)}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fill={selected ? SELECTED_COLOR : PORTAL_COLOR}
-          fontSize="9"
-          fontFamily="var(--font-sans)"
-          style={{ pointerEvents: 'none' }}
-        >
-          ⟐ {edgeData.direction} → {edgeData.targetZoneSlug}
-        </text>
-      )}
     </>
   );
 }
