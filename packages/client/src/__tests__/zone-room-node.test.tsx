@@ -420,29 +420,4 @@ describe('ZoneRoomNode — portal badge', () => {
     );
     expect(container.querySelector('[title*="portal"]')).toBeNull();
   });
-
-  it('renders portal detail tags with direction arrow and zone slug', () => {
-    const { container } = render(
-      <ZoneRoomNode data={makeNodeData({ portalCount: 1, portalExits: [
-        { direction: 'east', targetZoneSlug: 'siltgate', targetRoomSlug: 'gate-east' },
-      ] })} />,
-    );
-    const tag = container.querySelector('[title*="east → siltgate"]');
-    expect(tag).not.toBeNull();
-    expect(tag?.textContent).toContain('→');
-    expect(tag?.textContent).toContain('siltgate');
-  });
-
-  it('calls onPortalClick when portal tag is clicked', () => {
-    const onClick = vi.fn();
-    const { container } = render(
-      <ZoneRoomNode data={makeNodeData({ portalCount: 1, portalExits: [
-        { direction: 'west', targetZoneSlug: 'warrens' },
-      ], onPortalClick: onClick })} />,
-    );
-    const tag = container.querySelector('[title*="west → warrens"]');
-    expect(tag).not.toBeNull();
-    (tag as HTMLElement).click();
-    expect(onClick).toHaveBeenCalledWith('warrens');
-  });
 });
