@@ -442,8 +442,9 @@ describe('Output Contract Validation — Forbidden Content (Issue #9)', () => {
     expect(validateLLMOutput('You gain 100 XP from the fight.', ctx)).not.toBeNull();
   });
 
-  it('rejects text with gold numbers', () => {
+  it('rejects text with gold or water numbers', () => {
     expect(validateLLMOutput('You find 50 gold coins.', ctx)).not.toBeNull();
+    expect(validateLLMOutput('You collect 30 draws of water.', ctx)).not.toBeNull();
   });
 
   it('accepts clean atmospheric prose', () => {
