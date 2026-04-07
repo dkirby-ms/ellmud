@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save } from "lucide-react";
 import { useAdminEntity } from "../../hooks/useAdminEntity.js";
+import AnsiPreview from "../../components/admin/AnsiPreview.js";
 
 interface ModifierData {
   id: string;
@@ -210,6 +211,7 @@ export default function ModifiersDetail() {
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
                    
                   />
+                  <AnsiPreview value={formData.description} />
                 </div>
                 <div>
                   <label

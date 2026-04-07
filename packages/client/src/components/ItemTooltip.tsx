@@ -8,6 +8,7 @@
 
 import type { DisplayItem, GearTier } from '@ellmud/shared';
 import { useEffect, useRef, useState } from 'react';
+import AnsiText from './AnsiText.js';
 
 // ─── Tier → Color Mapping ───────────────────────────────────────────────────
 
@@ -147,7 +148,7 @@ export function ItemTooltip({ item, mouseX, mouseY }: ItemTooltipProps) {
           className="text-xs italic font-serif text-text-secondary pt-2 mt-2"
           style={{ borderTop: '1px solid var(--border-muted)' }}
         >
-          {item.description}
+          <AnsiText text={item.description} />
         </div>
       )}
     </div>

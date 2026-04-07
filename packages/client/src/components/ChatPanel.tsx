@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { X, Send } from "lucide-react";
+import AnsiText from "./AnsiText.js";
 
 interface ChatPanelProps {
   isOpen: boolean;
@@ -177,7 +178,7 @@ export default function ChatPanel({
 
               {msg.type === "emote" && (
                 <p className="ansi-dim ansi-italic">
-                  {msg.message}
+                  <AnsiText text={msg.message} />
                 </p>
               )}
 
