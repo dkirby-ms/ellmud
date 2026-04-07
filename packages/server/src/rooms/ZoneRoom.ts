@@ -149,6 +149,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private repopTimer?: ReturnType<typeof setInterval>;
   /** Room IDs with feature_sandbox_arena type — get combat ticks even in dev zones. */
   private sandboxRoomIds = new Set<string>();
+  /** Cached zone slugs for fast synchronous lookups (dev tools: goto validation). */
+  private knownZoneSlugs = new Set<string>();
 
   /**
    * Inject profile repository. Called before room lifecycle if provided.
@@ -351,6 +353,13 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     if (this.characterRepo instanceof InMemoryCharacterRepository) {
       this.characterRepo = getCharacterRepository();
     }
+
+    // Cache known zone slugs for synchronous goto validation (best-effort, non-blocking)
+    getZoneRepository().getAllZones().then((zones) => {
+      for (const z of zones) this.knownZoneSlugs.add(z.slug);
+    }).catch((err) => {
+      this.log(`Failed to cache zone slugs: ${err}`);
+    });
 
     // Register message handlers
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
@@ -954,6 +963,15 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Inter-zone exit: send transfer message to client instead of moving locally
     if (result.zoneTransfer) {
+      // Defensive: verify target zone is known before sending transfer (prevents disconnect on bad slug)
+      if (!this.knownZoneSlugs.has(result.zoneTransfer.targetZoneSlug)) {
+        this.sendNarrate(client, {
+          text: `No such zone: '${result.zoneTransfer.targetZoneSlug}'.`,
+          type: 'system',
+          timestamp: Date.now(),
+        });
+        return;
+      }
       this.deliverResult(client, result);
       client.send(MessageTypes.ZONE_TRANSFER, {
         targetZoneSlug: result.zoneTransfer.targetZoneSlug,
@@ -1074,6 +1092,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           })),
       corpseSystem: this.corpseSystem,
       creatureManager: this.creatureManager,
+      resolveZoneExists: (slug: string) => this.knownZoneSlugs.has(slug),
       resolvePlayerByName: (name: string) => {
         const lower = name.toLowerCase();
         for (const [sid, ps] of this.players) {

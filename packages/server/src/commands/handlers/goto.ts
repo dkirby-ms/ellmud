@@ -42,6 +42,12 @@ export function handleGoto(ctx: CommandContext): CommandResult {
 
     // If the target zone is the current zone, fall through to same-zone logic
     if (targetZoneSlug !== ctx.zoneSlug) {
+      // Validate target zone exists before issuing transfer
+      if (ctx.resolveZoneExists && !ctx.resolveZoneExists(targetZoneSlug)) {
+        return {
+          narrations: [{ text: `No such zone: '${targetZoneSlug}'.`, type: 'system' }],
+        };
+      }
       return {
         narrations: [{ text: `Teleporting to ${targetRoomSlug} in zone ${targetZoneSlug}...`, type: 'room' }],
         zoneTransfer: { targetZoneSlug, targetRoomSlug },
