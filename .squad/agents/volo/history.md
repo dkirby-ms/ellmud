@@ -10,6 +10,14 @@
 
 ## Learnings
 
+### 2026-04-06: Name Proposal — Saitcho Kindar Replacement
+- **Task:** Propose Gulf Coast–themed replacement names for Saitcho Kindar (Kindari faction founder/brine inventor)
+- **Research:** Located all references (CharacterSelect.tsx, migrations 002 and 003). Kindar is venerated as anonymous inventor of preservation brine; the name anchors Kindari identity and appears in Reliquary shrine description.
+- **Naming approach:** Prioritized Cajun/Creole surnames (Broussard, Guidry, Thibodeaux, Fournier) over generic Southern names. Combined with practical first names (Levi, Ezra, Margot) to convey "survivor-engineer" not "distant hero."
+- **Key constraint:** Name must work in lore passages like "revere [Name]" and "shrine to [Name]" — needed dignity + authenticity, not whimsy.
+- **Delivered:** 5 proposals to `.squad/decisions/inbox/volo-kindar-rename.md` with rationales. Top picks: **Levi Broussard** (punchy, craft-focused) and **Delacroix Fournier** (mythic but grounded).
+- **Team decision:** Deferred to saitcho for pick. Once chosen, squad will execute replacements across 3 files (client/server migrations + GDD if needed).
+
 ### 2026-04-05 (Round 4): LLM Narration Toggle (PR #295)
 - **Task:** Implement ENABLE_LLM_NARRATION environment variable toggle for LLM narration
 - **Solution:** Added boolean flag to config that gates LLM client instantiation in NarrationService factory. When false, service operates in template-only mode (no LLM calls, instant responses).

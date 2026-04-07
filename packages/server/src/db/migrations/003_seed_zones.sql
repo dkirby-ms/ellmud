@@ -97,8 +97,7 @@ FROM zones z, (VALUES
   ('market', 'east', 'infirmary', '', '', false, false),
   ('infirmary', 'west', 'market', '', '', false, false),
   ('training-grounds', 'east', 'war-room', '', '', false, false),
-  ('war-room', 'west', 'training-grounds', '', '', false, false),
-  ('market', 'south', 'market', 'the-siltgate', 'city-gate', false, false)
+  ('war-room', 'west', 'training-grounds', '', '', false, false)
 ) AS v(from_slug, direction, to_slug, target_zone, target_room, is_locked, is_hidden)
 WHERE z.slug = 'the-refuge'
 ON CONFLICT (zone_id, from_room_slug, direction) DO NOTHING;
@@ -1007,7 +1006,6 @@ SELECT z.id, v.from_slug, v.direction, v.to_slug,
        NULLIF(v.target_zone, ''), NULLIF(v.target_room, ''),
        v.is_locked, v.is_hidden
 FROM zones z, (VALUES
-  ('shattered-gate', 'west', 'shattered-gate', 'the-refuge', 'hearth', false, false),
   ('shattered-gate', 'east', 'rubble-boulevard', '', '', false, false),
   ('rubble-boulevard', 'west', 'shattered-gate', '', '', false, false),
   ('rubble-boulevard', 'east', 'collapsed-overpass', '', '', false, false),
@@ -2730,7 +2728,6 @@ FROM zones z, (VALUES
   ('drowned-shrine', 'west', 'plague-bearers-lair', '', '', false, false),
   ('drain-grate-2', 'east', 'collapsed-sewer', '', '', false, false),
   ('collapsed-sewer', 'west', 'drain-grate-2', '', '', false, false),
-  ('city-gate', 'west', 'city-gate', 'the-refuge', 'market', false, false),
   ('ashgate', 'east', 'ashgate', 'warrens', 'shattered-gate', false, false),
   ('collapsed-building-1', 'south', 'rubble-passage-1', '', '', false, false),
   ('rubble-passage-1', 'north', 'collapsed-building-1', '', '', false, false),
@@ -2761,7 +2758,7 @@ ON CONFLICT (zone_id, from_room_slug, direction) DO NOTHING;
 
 INSERT INTO zones (id, slug, name, description, level_min, level_max, tier, theme, entry_room_slugs, lifecycle, category, max_players, pvp_enabled, repop_interval_seconds, faction_slug)
 VALUES (gen_random_uuid(), 'the-reliquary', 'The Reliquary',
-  'A converted water treatment plant on the edge of Siltgate. The massive concrete structure still has functional filtration systems, and the Kindari have turned it into a workshop complex. Industrial brutalist concrete with rusted catwalks, massive filtration tanks repurposed as storage, and the central chamber dominated by a shrine to Saitcho Kindar — a preserved pickling urn surrounded by scavenged drone components.',
+  'A converted water treatment plant on the edge of Siltgate. The massive concrete structure still has functional filtration systems, and the Kindari have turned it into a workshop complex. Industrial brutalist concrete with rusted catwalks, massive filtration tanks repurposed as storage, and the central chamber dominated by a shrine to Antoine Fournier — a preserved pickling urn surrounded by scavenged drone components.',
   1, 100, 1, 'flooded_crypt', '{reliquary-inn}', 'persistent', 'faction_hub', 0, false, 0, 'kindari')
 ON CONFLICT (slug) DO NOTHING;
 

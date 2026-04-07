@@ -1337,3 +1337,5 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 **Approach:** Reused the existing portal dialog and state (`showPortalDialog`, `portalTargetZone`, etc.) rather than extracting a separate component. Added an optional `roomSlugOverride` param to `openPortalDialog()` to handle React state batching — the context menu needs to pass the room slug directly since `setSelectedRoom` hasn't committed yet when the async function runs.
 
 **Files:** `packages/client/src/pages/admin/ZoneDesigner.tsx`
+
+- **Zone detail default tab change (2026-07-22):** Made Designer tab the default when navigating to a zone detail page (`ZonesDetail.tsx`). Also reordered tabs so Designer appears immediately after General (order: General, Designer, Rooms, Exits). Commit ce60625. Simple two-line change in `ZonesDetail.tsx` — `useState<Tab>("designer")` and tab array reorder.
