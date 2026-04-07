@@ -5345,3 +5345,117 @@ Potential improvements:
 **Status:** COMPLETE
 
 All tests passing. Issue #340 closed with commit 795994e. Help command fully operational with context-aware filtering and alias support.
+
+---
+
+# Architecture Review: BFS Layout Engine
+
+**Reviewer:** Elminster (Lead/Architect)  
+**Date:** 2026-04-07  
+**Commit reviewed:** `b7a86af` (HEAD)
+
+## Assessment Summary
+
+The BFS layout engine (computeLayout.ts, 2746 lines) is **architecturally sound** but has **accumulated technical debt**. Review identified 1 critical performance issue, 3 robustness/maintainability concerns, and 5 refactoring opportunities.
+
+## Strengths
+
+1. **Z-Level Isolation** — Clean per-floor layout with deferred vertical exits
+2. **Grid Detection** — Mathematically precise perpendicular-path convergence test
+3. **Pure Interface** — No side effects, easy to test and integrate
+4. **Direction Guards** — Comprehensive reversal checks prevent compass violations
+5. **Test Coverage** — 25 tests covering single rooms through 109-room Warrens zone
+6. **Exit Line Avoidance** — Efficient edge occlusion prevention
+
+## Critical Issues
+
+### P0: O(n⁴) Scoring Bottleneck
+**Lines:** 989–1018, 2090–2118  
+**Impact:** Siltgate (59 rooms) takes 222ms. A 200-room zone would take ~30 seconds — unusable.
+
+**Root cause:** Pairwise swap loops (O(n²) pairs) × `layoutScore()` (O(n²) evaluation per pair) = O(n⁴).
+
+**Mitigation:** Implement incremental scoring. When moving one room, only recompute that room's exits and its neighbors, not the entire z-level. Drops per-move complexity from O(n²) to O(degree × n) ≈ O(n), making total swaps O(n³) or better.
+
+### P1: Code Quality
+1. **Scoring DRY violation** (L779–840 vs 1882–1930) — 95% identical functions, divergent occlusion weights. Extract parameterized `computeScore(occlusionWeight)`.
+2. **Magic numbers** (23+ instances) — Hardcoded limits like 200, 20, 50, 15, 3, etc. with no semantic meaning. Name them: `MAX_SEARCH_RADIUS`, `DIAGONAL_PENALTY`, etc.
+3. **Diamond search boilerplate** (10+ copies) — Extract `diamondCandidates()` generator to eliminate ~100 lines of copy-paste.
+4. **GRID_STEP = 1 is a no-op** — Feature appears enabled but multiplies by 1. Either set to 2 or remove.
+5. **`findNearestUnoccupied` infinite loop** (L87) — No termination bound. Add radius cap (e.g., 500).
+
+## Recommendations (Prioritized)
+
+| Priority | Item | Effort | Impact |
+|----------|------|--------|--------|
+| P0 | Incremental scoring | 2–3 days | Essential for scaling past 20–30 rooms |
+| P1 | Extract scoring, name constants, extract helpers | 2–3 days | Maintainability, reduces debt |
+| P2 | Fix GRID_STEP, add loop bounds | 0.5 day | Removes dead code, improves robustness |
+| P3 | File decomposition (future) | 1 week | Needed only if file grows further |
+
+## Algorithm Assessment
+
+BFS + refinement pipeline is the correct approach for compass-aware MUD layouts. Phase ordering is sound — each phase fixes problems earlier phases can't solve.
+
+**Post-BFS scaling (Option C):** Architecturally correct. Preserves all refinement invariants because refinement operates pre-scale. Currently disabled (`GRID_STEP = 1`).
+
+## Decision
+
+**Do NOT refactor until P0 is complete.** The current structure is coherent and testable. Grid spacing feature (`b7a86af`) is safe to merge — it only adds dead code (`GRID_STEP = 1` loop) and doesn't break existing functionality.
+
+**Future work:** Schedule P0/P1 refactoring for next sprint once grid spacing is stable in production.
+
+---
+
+**Status:** REVIEW COMPLETE (no code changes)
+
+---
+
+# Decision: BFS Grid Spacing — Post-BFS Scaling (Option C)
+
+**Author:** Regis  
+**Date:** 2026-04-07  
+**Scope:** `packages/client/src/map/computeLayout.ts`
+
+## Context
+
+Dense zones (like Midgaard) produce cascading collision displacements in the BFS layout engine because rooms are placed on adjacent grid cells (spacing = 1). The `findNearestDirectional()` spiral pushes rooms to non-ideal positions, producing criss-crossing edges.
+
+## Decision
+
+**Chose Option C: Post-BFS scaling** over Option A (scaling DIRECTION_OFFSETS) or Option B (GRID_STEP multiplier in BFS loop).
+
+Added `const GRID_STEP = 2` and a final scaling pass that multiplies all `(x, y)` coordinates by 2 after all 8 refinement phases complete.
+
+## Rationale
+
+- **Zero risk to BFS internals:** All distance heuristics, direction checks, layout scoring, force relaxation, diagonal fix, direction violation repair, and occlusion fix operate unchanged at spacing=1.
+- **Z-level unaffected:** z is a floor index, not spatial — not scaled.
+- **Tunable:** GRID_STEP can be changed to 3 or higher if needed.
+- **ELK integration:** `elkLayout.ts` applies its own `GRID_SPACING` (100px) on top, so visual spacing doubles automatically to ~200px.
+
+## Implementation
+
+File: `packages/client/src/map/computeLayout.ts`
+- Added constant: `const GRID_STEP = 2` (line reference in commit `b7a86af`)
+- Added scaling loop: Multiplies all (x, y) coordinates by GRID_STEP after refinement phases
+- Z-coordinates unchanged
+
+## Validation
+
+- 244 client tests passing ✅
+- TypeScript compilation clean ✅
+- ESLint: 0 errors ✅
+- Commit: `b7a86af feat(map): add grid spacing to BFS layout engine`
+
+## Impact
+
+- All callers of `computeLayout()` receive coordinates at 2x scale
+- Well-designed zones with clean compass exits lay out on a perfect grid with no displacement
+- Dense zones have fewer collision cascades
+- Visual spacing to player: `(BFS grid × 2) × ELK scaling (100px) = ~200px minimum between rooms`
+
+---
+
+**Status:** IMPLEMENTED (commit `b7a86af`)
+

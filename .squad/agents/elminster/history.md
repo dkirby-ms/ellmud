@@ -27,6 +27,20 @@
 
 ## Learnings
 
+### 2026-04-07: BFS Layout Engine Architecture Review
+- **Task:** Full architecture review of `packages/client/src/map/computeLayout.ts` (2746 lines, BFS + 8 refinement phases).
+- **Architecture:** BFS compass-aware placement → force-directed relaxation → diagonal cascade fix → direction violation repair → occlusion fix → iterative expansion + occlusion cleanup → final grid scaling. Pure function, no side effects.
+- **Key strength:** Z-level isolation is excellent — each floor gets its own occupied set, sub-levels are anchored at entry points and expand independently. Grid cluster detection (perpendicular-path-convergence test) is mathematically sound.
+- **Critical concern — scoring function duplication:** `layoutScore()` (L779) and `occlusionAwareScore()` (L1882) are ~95% identical, differing only in the occlusion penalty weight (3 vs 15). This is a DRY violation and a maintenance hazard — any future scoring change must be applied in two places.
+- **Critical concern — O(n²) scoring on every candidate:** Every trial move in relaxation/occlusion phases calls `layoutScore(z)` which iterates all rooms × all exits × all rooms (for occlusion check). With pairwise swaps (O(n²) pairs), this is effectively O(n⁴) per iteration. The Siltgate test (59 rooms) takes 222ms — at 100+ rooms this will become a bottleneck.
+- **Critical concern — diamond-search boilerplate:** The Manhattan-distance ring search pattern is copy-pasted 10+ times with varying radii. Should be extracted to a `generateDiamondCandidates(cx, cy, maxRadius)` generator.
+- **Concern — magic numbers:** 23+ hardcoded limits (radius caps of 200, pass limits of 40/50/60/100, group size caps of 40/60/90, scoring weights 3/15/20/50) with no named constants or documented rationale.
+- **Concern — GRID_STEP = 1:** The constant exists (L66) but is set to 1 (no-op multiplication). Commit `b7a86af` claims "add grid spacing" but the feature is effectively disabled. Either use it (set to 2) or remove the dead scaling loop at L766-768.
+- **Good — test coverage:** 25 tests covering single rooms, corridors, grids, cycles, z-levels, collisions, disconnected subgraphs, direction correctness, and a real 59-room zone. Comprehensive.
+- **Good — interface:** Clean `Map<string, LayoutRoom> → Map<string, RoomPosition>` contract. ELK adapter consumes it correctly, multiplying by GRID_SPACING for pixel coordinates.
+- **Recommendation:** Decompose into ~5 files (types, helpers, BFS core, refinement phases, scoring). Extract the candidate-generation diamond pattern. Parameterize `layoutScore` with occlusion weight. Add named constants for all magic numbers.
+- **Deliverable:** Full review written to `.squad/decisions/inbox/elminster-bfs-review.md`.
+
 ### 2026-04-07: Combat Sandbox Architecture Design
 - **Task:** Design architecture for a combat sandbox dev tool inside the Refuge hub zone.
 - **Analysis:** Read CombatSystem (tick-based encounter orchestrator), CreatureManager (template-based spawning), feature-room pattern (command gating by RoomType), Refuge zone structure (7-room hub-and-spoke from hearth), existing dev commands (goto, teleport, peaceful), RoomType dual-definition (shared + server packages), damage model (stance multipliers, dodge rolls, flanking, armour).
