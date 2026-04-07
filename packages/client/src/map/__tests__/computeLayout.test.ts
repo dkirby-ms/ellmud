@@ -1267,4 +1267,45 @@ describe('computeLayout', () => {
     }
     expect(misaligned).toEqual([]);
   });
+
+  // ── 27. Cardinal alignment is entry-point-independent ───────────────────
+  it('aligns E/W-connected rooms regardless of BFS entry point', () => {
+    // Minimal reproduction: a horizontal main-street row with a south branch.
+    // When BFS starts from the south branch side, the gate room historically
+    // ended up on a different row than main-street.
+    const rooms = makeRooms({
+      'outside-gate':   [['east', 'gate']],
+      'gate':           [['east', 'street-1'], ['south', 'wall-rd'], ['west', 'outside-gate']],
+      'street-1':       [['east', 'street-2'], ['west', 'gate'], ['north', 'shop-a'], ['south', 'guild-a']],
+      'street-2':       [['east', 'square'], ['west', 'street-1'], ['north', 'shop-b'], ['south', 'guild-b']],
+      'square':         [['north', 'temple'], ['east', 'street-3'], ['south', 'alley'], ['west', 'street-2']],
+      'street-3':       [['east', 'east-gate'], ['west', 'square'], ['north', 'shop-c']],
+      'east-gate':      [['west', 'street-3']],
+      'shop-a':         [['south', 'street-1']],
+      'shop-b':         [['south', 'street-2']],
+      'shop-c':         [['south', 'street-3']],
+      'guild-a':        [['north', 'street-1']],
+      'guild-b':        [['north', 'street-2']],
+      'temple':         [['south', 'square'], ['east', 'inn'], ['west', 'chapel']],
+      'inn':            [['west', 'temple']],
+      'chapel':         [['east', 'temple']],
+      'alley':          [['north', 'square']],
+      'wall-rd':        [['north', 'gate'], ['south', 'wall-rd-2']],
+      'wall-rd-2':      [['north', 'wall-rd']],
+    });
+
+    const streetRow = ['outside-gate', 'gate', 'street-1', 'street-2', 'square', 'street-3', 'east-gate'];
+    const entries = ['outside-gate', 'temple', 'square', 'guild-a', 'wall-rd-2'];
+
+    for (const entry of entries) {
+      const layout = computeLayout(rooms, entry);
+      const ys = streetRow.map(id => pos(layout, id).y);
+      const streetY = ys[0];
+      const off = streetRow.filter((_, i) => ys[i] !== streetY);
+      if (off.length > 0) {
+        console.log(`entry=${entry}: ${streetRow.map((id, i) => `${id}.y=${ys[i]}`).join(', ')}`);
+      }
+      expect(off).toEqual([]);
+    }
+  });
 });

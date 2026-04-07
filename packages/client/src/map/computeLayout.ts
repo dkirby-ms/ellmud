@@ -138,6 +138,9 @@ const MAX_VIOLATION_GROUP_SIZE = 60;
 /** Max rooms in an expansion shift group. */
 const MAX_EXPANSION_GROUP_SIZE = 90;
 
+/** Max cardinal alignment iterations per axis. */
+const CARDINAL_ALIGNMENT_ITERATIONS = 30;
+
 /** Gap between disconnected subgraphs. */
 const DISCONNECTED_SUBGRAPH_GAP = 3;
 
@@ -866,6 +869,17 @@ export function computeLayout(
   //   2. Swapping with occupants of ideal cells
   //   3. Shifting groups of rooms to create space ("add space to accommodate")
   fixDirectionViolations();
+
+  // ── Phase 5c: Cardinal alignment ───────────────────────────────────────
+  // After BFS + relaxation + diagonal fix + direction repair, east/west
+  // connected rooms may still sit at different y values (and north/south
+  // connected rooms at different x values). This happens when the BFS entry
+  // point causes two rooms to be reached via different paths that land on
+  // different rows/columns. The fix: for each E/W alignment group (rooms
+  // connected by east/west exits), pick the majority y and cascade-shift
+  // outlier rooms plus their north/south subtrees to match. Symmetric
+  // treatment for N/S groups and x coordinates.
+  fixCardinalAlignment();
 
   // ── Phase 6: Occlusion fix ────────────────────────────────────────────
   // After all placement/relaxation phases, rooms may still sit on the
@@ -2065,6 +2079,218 @@ export function computeLayout(
 
         if (!fixed) break;
       }
+    }
+  }
+
+  // ── Cardinal alignment ────────────────────────────────────────────────────
+
+  /**
+   * Post-BFS cardinal alignment pass.
+   *
+   * East/west connected rooms must share the same y coordinate; north/south
+   * connected rooms must share the same x coordinate.  BFS visit order can
+   * violate this when the entry room reaches two E/W-connected rooms via
+   * different paths that land on different rows.
+   *
+   * Algorithm:
+   *   1. Build alignment groups using union-find on the relevant axis
+   *      (E/W exits → same-y group, N/S exits → same-x group).
+   *   2. For each group with mixed coordinates, pick the target value
+   *      (mode — the coordinate used by the most members).
+   *   3. For each outlier room, collect its perpendicular subtree
+   *      (N/S chain for E/W groups, E/W chain for N/S groups) and
+   *      cascade-shift the whole chain by the delta.
+   *   4. Accept the shift only if it reduces the global layout score.
+   */
+  function fixCardinalAlignment(): void {
+    for (const [z, occupied] of occupiedByZ) {
+      alignAxis(z, occupied, 'ew');
+      alignAxis(z, occupied, 'ns');
+    }
+  }
+
+  /**
+   * Align one axis: 'ew' aligns east/west groups on shared y,
+   *                  'ns' aligns north/south groups on shared x.
+   */
+  function alignAxis(
+    z: number,
+    occupied: Set<string>,
+    axis: 'ew' | 'ns',
+  ): void {
+    const groupDirs = axis === 'ew' ? ['east', 'west'] : ['north', 'south'];
+    const perpDirs = axis === 'ew' ? ['north', 'south'] : ['east', 'west'];
+
+    // ── union-find ──────────────────────────────────────────────────────
+    const ufParent = new Map<string, string>();
+    for (const [id, pos] of result) {
+      if (pos.z === z) ufParent.set(id, id);
+    }
+    function ufFind(x: string): string {
+      let root = x;
+      while (ufParent.get(root) !== root) root = ufParent.get(root)!;
+      let cur = x;
+      while (cur !== root) {
+        const n = ufParent.get(cur)!;
+        ufParent.set(cur, root);
+        cur = n;
+      }
+      return root;
+    }
+    function ufUnion(a: string, b: string): void {
+      const ra = ufFind(a), rb = ufFind(b);
+      if (ra !== rb) ufParent.set(ra, rb);
+    }
+
+    for (const [roomId, room] of rooms) {
+      const pos = result.get(roomId);
+      if (!pos || pos.z !== z) continue;
+      for (const [dir, targetId] of room.exits) {
+        if (!groupDirs.includes(dir)) continue;
+        const tp = result.get(targetId);
+        if (!tp || tp.z !== z) continue;
+        ufUnion(roomId, targetId);
+      }
+    }
+
+    // ── group by root ───────────────────────────────────────────────────
+    const groups = new Map<string, string[]>();
+    for (const id of ufParent.keys()) {
+      const root = ufFind(id);
+      let arr = groups.get(root);
+      if (!arr) { arr = []; groups.set(root, arr); }
+      arr.push(id);
+    }
+
+    // ── align each group ────────────────────────────────────────────────
+    for (let iter = 0; iter < CARDINAL_ALIGNMENT_ITERATIONS; iter++) {
+      let anyShift = false;
+
+      for (const [, group] of groups) {
+        if (group.length <= 1) continue;
+
+        const coordOf = (id: string): number => {
+          const p = result.get(id)!;
+          return axis === 'ew' ? p.y : p.x;
+        };
+
+        const freq = new Map<number, number>();
+        for (const id of group) {
+          const c = coordOf(id);
+          freq.set(c, (freq.get(c) ?? 0) + 1);
+        }
+        if (freq.size <= 1) continue; // already aligned
+
+        // Target = mode (most common coordinate)
+        let targetCoord = 0;
+        let maxCount = 0;
+        for (const [c, count] of freq) {
+          if (count > maxCount) { maxCount = count; targetCoord = c; }
+        }
+
+        // Batch all outlier cascades: collect every room that needs to
+        // shift, along with its perpendicular subtree, in one pass.
+        // Each room gets the delta of its originating outlier.
+        const batchRooms = new Map<string, number>(); // roomId → delta
+
+        for (const mobileId of group) {
+          if (coordOf(mobileId) === targetCoord) continue;
+          if (batchRooms.has(mobileId)) continue;
+          const delta = targetCoord - coordOf(mobileId);
+
+          // BFS perpendicular cascade from this outlier
+          const cascade = new Set<string>();
+          cascade.add(mobileId);
+          const bfsQ: string[] = [mobileId];
+
+          while (bfsQ.length > 0) {
+            const curId = bfsQ.shift()!;
+            const curRoom = rooms.get(curId);
+            if (curRoom) {
+              for (const [dir, nid] of curRoom.exits) {
+                if (!perpDirs.includes(dir)) continue;
+                if (cascade.has(nid)) continue;
+                const np = result.get(nid);
+                if (!np || np.z !== z) continue;
+                // Stop at rooms in the same alignment group
+                if (ufFind(nid) === ufFind(mobileId)) continue;
+                cascade.add(nid);
+                bfsQ.push(nid);
+              }
+            }
+            const revArr = reverseExits.get(curId);
+            if (revArr) {
+              for (const { fromId, dir } of revArr) {
+                if (!perpDirs.includes(dir)) continue;
+                if (cascade.has(fromId)) continue;
+                const fp = result.get(fromId);
+                if (!fp || fp.z !== z) continue;
+                if (ufFind(fromId) === ufFind(mobileId)) continue;
+                cascade.add(fromId);
+                bfsQ.push(fromId);
+              }
+            }
+          }
+
+          for (const id of cascade) {
+            if (!batchRooms.has(id)) batchRooms.set(id, delta);
+          }
+        }
+
+        if (batchRooms.size === 0) continue;
+
+        // Save old positions for rollback
+        const oldPos = new Map<string, { x: number; y: number }>();
+        for (const [id] of batchRooms) {
+          const p = result.get(id)!;
+          oldPos.set(id, { x: p.x, y: p.y });
+        }
+
+        const scoreBefore = layoutScore(z);
+
+        // Remove all batch rooms from occupied
+        for (const [id] of batchRooms) {
+          const p = result.get(id)!;
+          occupied.delete(cellKey(p.x, p.y));
+        }
+
+        // Shift all batch rooms
+        for (const [id, delta] of batchRooms) {
+          const old = oldPos.get(id)!;
+          const nx = axis === 'ew' ? old.x : old.x + delta;
+          const ny = axis === 'ew' ? old.y + delta : old.y;
+          result.set(id, { x: nx, y: ny, z });
+        }
+
+        // Re-add to occupied; handle collisions with non-batch rooms
+        for (const [id] of batchRooms) {
+          const p = result.get(id)!;
+          if (occupied.has(cellKey(p.x, p.y))) {
+            const free = findNearestUnoccupied(p.x, p.y, occupied);
+            result.set(id, { x: free.x, y: free.y, z });
+          }
+          const rp = result.get(id)!;
+          occupied.add(cellKey(rp.x, rp.y));
+        }
+
+        const scoreAfter = layoutScore(z);
+
+        if (scoreAfter > scoreBefore) {
+          // Rollback — batch made things worse
+          for (const [id] of batchRooms) {
+            const rp = result.get(id)!;
+            occupied.delete(cellKey(rp.x, rp.y));
+          }
+          for (const [id, old] of oldPos) {
+            result.set(id, { x: old.x, y: old.y, z });
+            occupied.add(cellKey(old.x, old.y));
+          }
+        } else {
+          anyShift = true;
+        }
+      }
+
+      if (!anyShift) break;
     }
   }
 
