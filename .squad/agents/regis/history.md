@@ -1375,3 +1375,24 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 **Tileset:** DCSS tiles are CC0 (public domain equivalent), 32×32px standard, organized in sprite sheets. Alternative: Kenney Roguelike Pack (CC0, 16×16), Oryx Design Lab (CC BY 3.0), or custom tiles. Recommendation: Start with DCSS CC0 tiles.
 
 **Open questions:** Grid size (fixed 20×20 vs variable), FOV/fog-of-war (full visibility vs line-of-sight), multi-floor combat (out of scope for MVP).
+
+### 2026-04-13: Zone Designer Edge Routing Investigation & Smooth Step Migration
+- **Issue:** Dramatic curved edges in zone designer due to BFS layout collisions causing port misalignment
+- **Root cause analysis:** 
+  - BFS layout (`computeLayout.ts`) uses `findNearestDirectional()` spiral search when ideal cell is occupied
+  - Dot product scoring allows vertical/horizontal drift while respecting directional constraints
+  - When room B placed northwest of room A (collision displacement), edge from A's west-source to B's east-target creates dramatic Bézier curve
+  - Dense zones like Midgaard stress the layout with many collisions
+  - Post-BFS refinement phases (4-8) reduce but can't eliminate all misalignments due to topology constraints
+- **Solution:** Migrated from Bézier curves to smooth step (right-angle) connectors
+  - Changed `ZoneExitEdge.tsx` from `getBezierPath` to `getSmoothStepPath`
+  - Added `borderRadius: 8` for rounded corners (not harsh 90°)
+  - Added `offset: 20` for padding from nodes
+  - Updated test mock and documentation
+- **Rationale:** Right-angle connectors are:
+  - More forgiving of minor position drift
+  - Semantically correct for orthogonal movement (N/S/E/W/U/D)
+  - Still visually distinct with direction gradients and modifiers
+- **Files modified:** `ZoneExitEdge.tsx`, `zone-exit-edge.test.tsx`
+- **Tests:** All 25 edge tests passing, eslint clean
+- **Pattern:** BFS layout is sophisticated but inherently has placement trade-offs; UI should accommodate imperfect layouts gracefully

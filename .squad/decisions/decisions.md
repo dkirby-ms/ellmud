@@ -6041,3 +6041,37 @@ if (!allowed.includes(ctx.room.type as string)) { ... }
 **Layout:** 3 rooms — sandbox-lobby (feature_sandbox), sandbox-arena (feature_sandbox_arena), sandbox-stats-lab (feature_sandbox_stats). Connected north from training-grounds. Can expand later.
 
 **Rationale:** User decision resolving the Elminster/Drizzt architecture split and Elminster/Laeral room layout split.
+
+---
+
+## 2026-04-13: Smooth Step (Right-Angle) Edge Connectors for Zone Designer
+
+**By:** Regis (Frontend Dev)  
+**Scope:** Zone Designer UI — Edge Rendering
+
+**Decision:** Migrated from Bézier curves to smooth step (right-angle) connectors in `ZoneExitEdge.tsx`.
+
+**Implementation:**
+- Replaced `getBezierPath` with `getSmoothStepPath`
+- Added `borderRadius: 8` for rounded corners (not harsh 90° angles)
+- Added `offset: 20` for padding from nodes
+- Updated test mocks and documentation
+
+**Why:**
+1. **Semantic correctness:** Movement in the MUD is orthogonal (N/S/E/W/U/D). Right-angle connectors visually match this.
+2. **Layout tolerance:** Smooth step paths forgive minor position drift from BFS collisions.
+3. **Visual consistency:** Direction gradients, arrowheads, and modifiers preserved.
+4. **Cleaner visuals:** Eliminates dramatic arcs while maintaining clear directional flow.
+
+**Context:** BFS layout places rooms on a 2D grid. When the ideal cell is occupied, `findNearestDirectional()` searches for alternatives. This can cause edge misalignment (e.g., an edge from A's west handle to B's east handle). Smooth step paths accommodate these inherent placement trade-offs gracefully.
+
+**Impact:**
+- User experience: Clearer, more predictable edge routing
+- Code: Minimal change (2-line update + test mocks)
+- Performance: No impact
+- Tests: All 25 edge tests passing with updated mock
+
+**Files Modified:**
+- `packages/client/src/components/map/ZoneExitEdge.tsx`
+- `packages/client/src/__tests__/zone-exit-edge.test.tsx`
+
