@@ -55,6 +55,25 @@
 - **Files changed:** Migration 021, shared/src/index.ts (both CharacterSummary duplicates), CharacterRepository.ts, PgCharacterRepository.ts, InMemoryCharacterRepository.ts, api/characters.ts, api/spawn-zone.ts, zones/stronghold.ts, CharacterSelect.tsx, character-repository.test.ts, pg-character-repository.test.ts
 - **All 2555 tests passing, zero regressions.**
 
+### 2026-07-25: Sandbox Combat Mechanics Proposal
+- **Task:** Research and propose combat-side mechanics for a sandbox arena in Refuge
+- **Deliverable:** `docs/design/sandbox-combat-mechanics.md` — comprehensive design doc
+- **Key findings from combat system analysis:**
+  - CombatSystem is ~1170 lines, tick-based simultaneous resolution, room-scoped encounters
+  - Damage pipeline: `rawDmg × abilityMult × stanceMult - armour - block`, min 1, then dodge roll
+  - `CreatureManager.spawnSingleCreature()` already supports runtime admin spawning (no PRNG needed)
+  - `RollFn` injection on CombatSystem constructor makes RNG control trivial
+  - Existing dev tools (`/peaceful`, `/goto`, `/teleport`) are gated by `devModeEnabled` config flag
+  - No XP system exists yet (Phase 1), but loot generation and corpse system need sandbox exclusion
+- **Key design decisions:**
+  - Separate `CombatSystem` instance per sandbox player (isolation without polluting core combat loop)
+  - `sandbox: true` flag on creature instances (cheaper than separate CreatureManager)
+  - Player state snapshot/restore on sandbox enter/exit
+  - Sandbox creature IDs prefixed `sandbox-creature-` for clean filtering
+  - Separate tick timer for speed control (avoids contaminating zone tick loop)
+- **Proposed commands:** `spawn`, `set`, `log`, `reset`, `replay`, `speed`, `pause/step/resume`, `roll`, `list`
+- **Open questions:** Multi-player sandbox, production training dummies, creature AI modes, snapshot persistence
+
 ## Learnings (Archived — See Detailed Session Records)
 
 ### 2026-03-19: PostgreSQL schema (Issue #3)

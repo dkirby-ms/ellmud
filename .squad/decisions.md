@@ -4955,3 +4955,291 @@ The name should evoke:
 5. **Ezra Guidry** — Ezra carries both biblical solidity and a frontier feel. Guidry is an Acadian surname common in South Louisiana. Together they suggest someone weathered, practiced, methodical—exactly what you'd want in an inventor tasked with saving humanity through chemistry.
 
 **Recommendation**: **Levi Broussard** or **Delacroix Fournier** best match the tone. Levi is punchy and practical; Delacroix feels more mythic while staying grounded in Gulf Coast identity.
+
+---
+
+# Decision: Combat Sandbox Architecture
+
+**Author:** Elminster  
+**Date:** 2026-04-07  
+**Status:** Proposed  
+**Impacts:** All agents (new RoomTypes, new command pattern, new service)
+
+---
+
+## Decision
+
+The combat sandbox is implemented as **three feature rooms inside the Refuge zone**, not a new zone or Colyseus Room type. This follows the established feature-room pattern.
+
+## Key Points
+
+1. **Three new RoomTypes:** `feature_sandbox`, `feature_sandbox_arena`, `feature_sandbox_stats` — added to BOTH `packages/shared/src/room-graph.ts` AND `packages/server/src/generator/RoomGraph.ts` (they must stay in sync).
+
+2. **State isolation is mandatory.** Sandbox fights produce NO loot, NO XP, NO death penalty, NO run history records. Player HP resets on leaving the arena. The `sandboxMode` flag on `CommandContext` gates all side-effects.
+
+3. **Same CombatSystem, different lifecycle.** The arena uses a real `CombatSystem` instance with the real damage formula. Only the lifecycle (spawn/reset) and side-effects (loot/XP/death) are sandbox-controlled. This ensures sandbox results reflect actual combat behavior.
+
+4. **Dev-gated.** All sandbox commands check `getConfig().devModeEnabled` — same pattern as `peaceful` command. Rooms exist in the Refuge but commands return "not available" on production.
+
+5. **New service: `SandboxService`** in `packages/server/src/sandbox/` — manages creature spawning, stat overrides, combat logging. Wired into ZoneRoom for sandbox room types only.
+
+6. **Phased delivery:** Phase 1 (spawn/fight/reset/log), Phase 2 (stat tuning), Phase 3 (scenario save/load/replay). Phase 1 is the implementation target.
+
+## Constraints for Implementers
+
+- The RoomType union in shared and server packages MUST be updated in lockstep.
+- Sandbox creatures are spawned via `CreatureManager` using existing `CreatureTemplate` infrastructure — no new creature format.
+- The `CombatLogger` is a sandbox-only component. Do NOT add logging overhead to the production CombatSystem tick path.
+- Hard cap of 5 creatures per spawn command to protect tick budget.
+
+## Design Doc
+
+Full spec: `docs/design/sandbox-combat-arena.md`
+
+---
+
+# Decision: Sandbox Arena — Combat Isolation via Separate CombatSystem
+
+**Author:** Jarlaxle (Systems Dev)  
+**Date:** 2026-04-07  
+**Status:** Proposed  
+**Scope:** Combat, Creatures, Dev Tools
+
+## Decision
+
+The sandbox combat arena should use a **separate `CombatSystem` instance per player**, not flags on the existing zone combat system.
+
+## Context
+
+We need a sandbox for rapid combat iteration in Refuge. The CombatSystem manages room-scoped encounters for all players. Adding sandbox-awareness to every method (damage calc, flee, encounter cleanup) would pollute the core loop.
+
+## Implications
+
+- Sandbox creatures tagged `sandbox: true` on the `Creature` instance — excluded from loot, XP, repop, corpse system
+- Player state snapshotted on sandbox entry, restored on reset/exit
+- Sandbox tick timer is independent of zone tick (enables speed/pause/step)
+- All sandbox commands gated behind `devModeEnabled` (same as `/peaceful`, `/goto`)
+- Full design: `docs/design/sandbox-combat-mechanics.md`
+
+## Needs Input From
+
+- **Elminster**: Architecture review — is per-player CombatSystem acceptable memory-wise? Any concerns with the ZoneRoom wiring?
+- **Laeral**: How does sandbox mode interact with sandbox UI/arena zone design on the frontend side?
+- **Regis**: Frontend combat log rendering — verbose sandbox output needs distinct styling
+
+---
+
+# Decision: Combat Sandbox Server Infrastructure
+
+**Author:** Drizzt  
+**Date:** 2026-04-07  
+**Status:** Proposed  
+**Scope:** Server — command system, feature rooms, combat tick, creature spawning
+
+## Decision
+
+The combat sandbox will be implemented as a **feature room type** (`feature_sandbox`) inside persistent zones like The Refuge, not as a separate Colyseus room type. Commands are feature-gated via the existing `featureHandlers` map and double-gated with `devModeEnabled`.
+
+## Key Choices
+
+1. **Room type, not room class** — `feature_sandbox` follows the stash/board/inn pattern. No new Colyseus room type needed.
+2. **Shared CombatSystem with selective ticking** — Sandbox rooms opt in to combat ticking even in non-combat zones (dev/hub). The `isNonCombatZone` guard in `ZoneRoom.update()` will check for sandbox room activity.
+3. **On-demand creature spawning** — New `CreatureManager.spawnCreatureInRoom()` method for runtime spawning. Existing `spawnCreatures()` is seeding-time only.
+4. **Double access gate** — Feature room gate + devModeEnabled. Production-safe by default.
+5. **No death penalty in sandbox** — `sandboxRoomIds.has(roomId)` bypass for death penalty, stash loss, and run-history.
+
+## Team Impact
+
+- **Jarlaxle:** RoomType union change in shared package (`feature_sandbox`). Generator unaffected — sandbox rooms are hand-placed in zones.
+- **Regis:** No client changes for Phase 1. Commands are text-based, results are narrations.
+- **Minsc:** Test coverage needed for sandbox command dispatch, selective combat ticking, and creature spawn/despawn.
+- **All:** Review `docs/design/sandbox-server-infrastructure.md` for full proposal.
+
+## Risks
+
+- Selective combat ticking adds complexity to the update loop. Must ensure non-sandbox rooms in dev zones remain combat-free.
+- CreatureManager runtime spawning bypasses PRNG determinism — acceptable for sandbox but should not leak into production spawn paths.
+
+---
+
+# Decision: Sandbox Arena Content Design for The Refuge
+
+**Date:** 2026-04-07  
+**Author:** Laeral, Content Designer  
+**Requestor:** dkirby-ms  
+**Status:** DESIGN COMPLETE — Ready for Bruenor (Server Implementation)
+
+---
+
+## Decision Summary
+
+**The Refuge will be extended with a dedicated sandbox combat testing facility** consisting of 4 new rooms (Proving Hall, Test Arena, Armory, Control Sanctum) and a roster of 15 pre-built test creatures across 5 combat archetypes and 4 difficulty tiers.
+
+The sandbox provides **consequence-free combat testing** for designers and developers to validate combat mechanics, creature balance, and encounter design without affecting live zone populations.
+
+---
+
+## What Was Requested
+
+From dkirby-ms on 2026-04-07:
+
+> TASK: Design the **content and layout** for sandbox combat arena rooms within Refuge. Specifically:
+> 1. Analyze current Refuge layout
+> 2. Design sandbox rooms (Arena, Armory, Control room)
+> 3. Design sandbox creature roster
+> 4. Write design to `docs/design/sandbox-arena-content.md`
+
+---
+
+## What Was Designed
+
+### Physical Layout
+- **4 new rooms** forming a thematic training complex north of the Hearth
+- **Proving Hall:** Connecting corridor (entry point from Hearth)
+- **Test Arena:** Large circular chamber with chalk zones and observation galleries
+- **Armory:** Equipment staging room with training gear rack
+- **Control Sanctum:** Planning hub with observation mirror and reference materials
+
+### Room Theming & Aesthetic
+All rooms emphasize the "designer pocket dimension" feel from GDD.md§2.1, treating The Refuge as an internal tool space:
+- Proving Hall: Study of violence, diagrams and notations
+- Test Arena: Ancient training ground, bloodstains, chains, observation galleries
+- Armory: Craftsperson's maintenance space, non-lethal equipment, tracked logbook
+- Control Sanctum: Planning workspace with observation mirror
+
+### Creature Roster
+**15 test creatures** organized by archetype and tier:
+
+**Melee Tank Archetype** (durability/armor focus)
+- Training Construct (T1) — baseline tank test, 50 HP
+- Training Sentinel (T2) — intermediate tank, 120 HP
+- Training Colossus (T3) — extreme durability, 250 HP
+
+**Ranged Archetype** (distance/mobility)
+- Training Archer (T1) — baseline ranged, 30 HP, high agility
+- Training Sniper (T2) — intermediate ranged, 60 HP
+- Training Marksman (T3) — extreme ranged pressure, 100 HP
+
+**Dodger Archetype** (evasion/precision)
+- Training Wisp (T1) — trivial evasion swarm, 15 HP
+- Training Phantom (T2) — intermediate evasion, 40 HP
+- Training Shade (T3) — extreme evasion test, 70 HP, agility 10
+
+**AoE Archetype** (area effects/positioning)
+- Training Caster (T1) — basic positioning test, 35 HP
+- Training Warlock (T2) — intermediate AoE, 70 HP
+- Training Sorcerer (T3) — extreme area damage, 120 HP
+
+**Swarm Archetype** (crowd control)
+- Training Minion (T0) — trivial cleave test, 5 HP, spawns 5-10
+- Training Grunt (T1) — standard CC test, 20 HP, spawns 3-6
+- Training Brute (T2) — sustained group pressure, 50 HP, spawns 2-4
+
+### Naming Convention
+All sandbox creatures use the `training_` slug prefix and follow pattern `Training {Archetype} (T{Tier})` for clarity and distinct identity from live zone creatures.
+
+### Safety Features
+- Test Arena marked with `safe_container = true` flag
+- Deaths incur no corpse drop, no debuffs, no consequence
+- Players respawn in-arena after death
+- All gear is preserved
+
+### Encounter Building Framework
+Designers can mix creatures from the roster to build custom test encounters:
+- **1v1 duels** (single creature)
+- **Small groups** (3-4 creatures, mixed archetypes)
+- **Boss encounters** (single T3 creature)
+- **Crowd control tests** (5-10 minions/grunts)
+- Custom combinations at designer discretion
+
+### No Preset Encounters
+The design deliberately avoids locked encounter templates. Designers improvise combinations based on what they need to test. The roster provides enough variety to build nearly any encounter pattern.
+
+---
+
+## Key Design Decisions
+
+### 1. Five Core Archetypes (Not Four, Not Six)
+**Rationale:** Mirrors the archetypal roles found in live zone populations and campaign content. Covers all major combat playstyles: durability, distance, evasion, crowd effects, and overwhelming numbers.
+
+### 2. Flat Tiers (T0-T3), Not Scaling to Live Zone Tiers
+**Rationale:** Sandbox creatures are testing tools, not live content. T3 creatures are not "monsters that would fit in an endgame zone"—they are designed specifically for sandbox stress testing. This prevents confusion and allows balanced testing across the entire difficulty spectrum.
+
+### 3. Simplified Loot Tables (Training Items Only)
+**Rationale:** Testing should focus on mechanics, not economics. All sandbox creatures drop generic training items (scrap metal, spell crystals) that are immediately recognizable as test loot, not aspirational rewards.
+
+### 4. Control Sanctum as Planning, Not Combat
+**Rationale:** The Control Sanctum is a room where designers *prepare* encounters, not where they occur. This keeps encounter spaces contained to the Test Arena and allows future expansion for UI/interactive features without cluttering the combat space.
+
+### 5. Safety Container Flag Over Special Respawn Logic
+**Rationale:** Using the existing `safe_container` database flag leverages existing infrastructure rather than introducing new mechanic. Consequence-free deaths are already understood by the combat system.
+
+### 6. Armory Separate from Arena
+**Rationale:** Designers may want to test with or without equipment changes. Having a dedicated armory room prevents pre-combat loadout decisions from affecting encounter focus.
+
+---
+
+## Migration Path
+
+Implementation requires:
+
+1. **002_seed_content.sql** — Insert 15 creature definitions into `creature_definitions` table
+2. **003_seed_zones.sql** — Insert 4 room definitions into `zone_rooms` (zone_slug = 'the-refuge'), insert 4 exit definitions into `zone_exits`, update 'the-refuge' entry_room_slugs to include 'proving-hall'
+
+**No client changes required** — Rooms are pure DB content; creatures use existing combat system.
+
+---
+
+## Testing & Validation
+
+Once implemented, verify:
+- [ ] All 4 rooms are accessible from The Hearth via "north" (Proving Hall)
+- [ ] Creature spawns appear in Test Arena on zone load
+- [ ] Deaths in Test Arena do not drop corpses or apply debuffs
+- [ ] Player respawns in Test Arena after death, not at faction stronghold
+- [ ] Creatures have correct HP/stats matching design spec
+- [ ] Loot drops match design (training items only, no rare loot)
+
+---
+
+## Future Expansions (Not This Phase)
+
+**Phase 2 — Interactive Control Sanctum:**
+- Admin UI for on-demand creature spawning
+- Encounter preset dropdown
+- Real-time stat adjustments
+
+**Phase 3 — Extended Arenas:**
+- Additional arena rooms for multi-group testing
+- Environmental hazard zones
+
+**Phase 4 — Spectator Gallery:**
+- Observation rooms with logging/replay system
+
+---
+
+## Deliverables
+
+- [x] Design document: `docs/design/sandbox-arena-content.md` (comprehensive, ready for reference)
+- [x] Room descriptions (4 rooms, themed, with property flags and exit maps)
+- [x] Creature definitions (15 creatures, complete stat blocks, loot tables)
+- [x] Encounter templates (1v1, group, boss, swarm examples)
+- [x] Implementation notes (DB integration, migration path, testing checklist)
+- [x] Design rationale (why these choices, references to GDD)
+- [x] Team decision artifact (this document)
+
+---
+
+## References
+
+- **GDD.md§2.1-2.2:** Refuge definition, feature rooms, zone lifecycle
+- **GDD.md§6:** Combat system (stats, tiers, mechanics)
+- **Laeral History:** Creature archetype patterns from The Warrens and Siltgate designs
+- **Existing creature definitions:** Drowned Revenant (baseline melee, 50 HP), Gutterspawn (swarm), Hollow Stalker (durability/defense)
+- **Database schema:** `creature_definitions`, `zone_rooms`, `zone_exits`, safe_container flag
+
+---
+
+**Status:** READY FOR IMPLEMENTATION
+
+Next step: Bruenor executes migration scripts to seed sandbox content into database.

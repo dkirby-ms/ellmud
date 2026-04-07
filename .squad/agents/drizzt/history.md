@@ -3157,3 +3157,34 @@ Consolidated 22 incremental SQL migration files into 3 clean files per Elminster
 - ZoneRoom `this.clients` is an array (uses `.find()`), not a Map — use `.find(c => c.sessionId === id)` for lookup
 - `resolvePlayerByName` iterates `this.players` + `this.characterNames` for case-insensitive name matching
 - Full suite: 2213 tests passing, 108 files, zero regressions
+
+---
+
+### Combat Sandbox Server Infrastructure — Research & Proposal (2025-07-24)
+**Task:** Research and propose server infrastructure for a combat sandbox feature in Refuge.
+**Status:** ✅ Complete — Design doc written to `docs/design/sandbox-server-infrastructure.md`
+**Requested by:** dkirby-ms
+
+**Key findings:**
+- Feature-gated commands (`featureHandlers` map) are the correct extension point — `feature_sandbox` room type + `sandbox` verb
+- The Refuge is category `'dev'` which skips combat ticking zone-wide — sandbox needs selective per-room combat opt-in
+- `CreatureManager` needs `spawnCreatureInRoom()` and `clearCreaturesInRoom()` for on-demand spawning (currently only zone-seeding-time spawning exists)
+- Double access gate: `featureHandlers` room-type check + `devModeEnabled` config check inside handler
+- Sandbox runs on the zone's existing 1s tick loop — no separate CombatSystem needed, just selective ticking for sandbox rooms
+- Death penalty, stash loss, and run-history should be bypassed for sandbox rooms
+
+**Proposed files:**
+- `packages/server/src/commands/handlers/sandbox.ts` — NEW: sub-command dispatcher (spawn/kill/stats/reset/list/log)
+- `packages/shared/src/room-graph.ts` — Add `'feature_sandbox'` to RoomType union
+- `packages/server/src/commands/parser.ts` — Add `'sandbox'` to KNOWN_VERBS
+- `packages/server/src/commands/index.ts` — Wire featureHandlers entry
+- `packages/server/src/creatures/CreatureManager.ts` — On-demand spawning API
+- `packages/server/src/rooms/ZoneRoom.ts` — sandboxRoomIds tracking, selective combat tick, death penalty bypass
+- `packages/server/src/db/migrations/005_sandbox_arena.sql` — Refuge room seed data
+
+## Learnings
+- `isNonCombatZone` in ZoneRoom.update() is a zone-level flag based on category — any room-level combat opt-in requires modifying this guard
+- featureHandlers pattern: Map<verb, { handler, requiredRoomType }> — clean extension point, no need to touch handleCommand dispatch logic
+- Dev commands (goto, teleport) are in global handlers with in-handler devModeEnabled check — sandbox combines both patterns (feature gate + dev gate)
+- CreatureManager.spawnCreatures() uses PRNG for deterministic placement during seeding — runtime spawning needs a simpler non-PRNG path
+- Zone category 'dev' is used by The Refuge — this disables creature AI, combat, and collapse globally in the zone

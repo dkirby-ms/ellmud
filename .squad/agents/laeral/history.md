@@ -31,6 +31,20 @@
 
 ## Learnings
 
+### 2026-04-07: Sandbox Arena Content Design — The Refuge Combat Testing Facilities
+- Designed a complete sandbox combat system for The Refuge, extending the dev hub with dedicated testing infrastructure.
+- **Physical layout:** 4 new rooms (Proving Hall, Test Arena, Armory, Control Sanctum) connected via north exit from the Hearth, forming a thematic training complex.
+- **Room theming:** Each room reinforces the "designer pocket dimension" aesthetic: Proving Hall as a study of violence, Test Arena as an ancient training ground (chalk circles, bloodstains, chains), Armory as a maintenance logbook, Control Sanctum as a planning hub with observation mirror.
+- **Creature roster:** 15 test creatures across 5 core archetypes (Melee Tank, Ranged, Dodger, AoE, Swarm) spanning 4 tiers (T0-T3) for progression from trivial to boss-level difficulty. All creatures use `training_` slug prefix to distinguish from live content.
+- **Archetype selection:** Mirrors live zone populations (Warrens, Siltgate have melee, ranged, magic users). Each archetype includes 2-3 tiers to allow both baseline and extreme testing.
+- **Stat scaling principles:** Tier progression is steep — T3 creatures are 3-5× more durable/damaging than T1. Agility and armour define archetype feel (Dodgers: high agility/low armour; Tanks: low agility/high armour; Ranged: medium-high both; AoE: medium balanced; Swarm: numerous, weak individually).
+- **Encounter building:** Roster supports templates (1v1, group, boss, swarm) and designer flexibility—just mix archetypes and tiers to build test scenarios. No preset encounters locked in; designers improvise.
+- **Safety features:** Test Arena is marked `safe_container = true` (no corpse drops, no debuffs, respawn in-room). Sandbox deaths are consequence-free for rapid iteration.
+- **Loot simplicity:** All sandbox creatures drop training-grade items only (scrap metal, crystals, minimal gear). Focuses testing on mechanics, not economics.
+- **Implementation ready:** Design includes full DB integration notes, migration script placement, and respawn logic. Creatures follow existing `creature_definitions` schema; rooms follow zone room patterns.
+- **Expansion roadmap:** Phase 2 (interactive Control Sanctum UI), Phase 3 (extended arenas with environmental hazards), Phase 4 (spectator gallery with logging).
+- **Design document filed:** `docs/design/sandbox-arena-content.md` — comprehensive reference for implementation and future design conversations.
+
 ### 2026-04-07: Issue #337 — Grid Combat Visual Design Analysis
 - Designed a complete visual system for DCSS-style grid combat supplementing Ellmud's text-primary MUD experience.
 - **Creature representation:** Silhouettes define creature category; saturation/color depth signals threat level. Size scales with tier (T1 = 1×1, T4+ bosses = 2×2+ cells).

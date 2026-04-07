@@ -27,6 +27,22 @@
 
 ## Learnings
 
+### 2026-04-07: Combat Sandbox Architecture Design
+- **Task:** Design architecture for a combat sandbox dev tool inside the Refuge hub zone.
+- **Analysis:** Read CombatSystem (tick-based encounter orchestrator), CreatureManager (template-based spawning), feature-room pattern (command gating by RoomType), Refuge zone structure (7-room hub-and-spoke from hearth), existing dev commands (goto, teleport, peaceful), RoomType dual-definition (shared + server packages), damage model (stance multipliers, dodge rolls, flanking, armour).
+- **Decision:** Sandbox implemented as 3 feature rooms in the Refuge, not a new zone/Colyseus Room type. Follows the established feature-room pattern identically.
+- **Architecture:**
+  - 3 new RoomTypes: `feature_sandbox`, `feature_sandbox_arena`, `feature_sandbox_stats`
+  - Lobby (browse/configure), Arena (fight), Stats Lab (inspect/tune) — separation enforces clean state boundaries
+  - Same CombatSystem class with isolated instance — sandbox results reflect real combat
+  - State isolation: no loot, no XP, no death penalty, no run history, HP reset on exit
+  - CombatLogger (ring buffer, 200 ticks) for detailed numeric output — the core value proposition
+  - Dev-gated via `getConfig().devModeEnabled` (same as peaceful)
+- **Phased:** Phase 1 (spawn/fight/reset/log), Phase 2 (stat overrides/inspection), Phase 3 (scenario save/load/replay)
+- **Key insight:** Feature rooms + `sandboxMode` flag on CommandContext is the minimal-surface-area approach. The sandbox doesn't need new Colyseus machinery — it needs command gating and side-effect suppression.
+- **Deliverables:** `docs/design/sandbox-combat-arena.md` (full spec), `.squad/decisions/inbox/elminster-sandbox.md` (team decision)
+- **Key lesson:** When designing dev tools for combat iteration, the value is in exposing the numbers the narrative layer hides — raw damage, dodge rolls, armour reduction. The combat resolution code should be shared (not duplicated), with only the lifecycle and side-effects differing.
+
 ### 2026-04-06: Migration Consolidation Design (001–022 → 4 files)
 - **Task:** Design a consolidation plan to collapse 22 migration files into ~4 clean files for fresh-DB creation.
 - **Analysis:** Read all 22 migrations end-to-end. Tracked every schema change, column rename, data insert, data update, topology fix, and inter-zone connection across the full migration history.
