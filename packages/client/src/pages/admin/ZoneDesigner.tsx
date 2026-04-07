@@ -26,6 +26,8 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "../../components/ui/alert-dialog.js";
+import AnsiDescriptionEditor from "../../components/admin/AnsiDescriptionEditor.js";
+import { parseAnsiText } from "../../lib/ansi-parser.js";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -2156,19 +2158,12 @@ export default function ZoneDesigner({
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
-                    Description
-                  </label>
-                  <textarea
-                    value={editForm.description}
-                    onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
-                    rows={8}
-                    className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-2 py-2 text-[#D3D7CF] text-sm leading-relaxed focus:border-[#C9A84C] focus:outline-none resize-y"
-                    style={{ fontFamily: "var(--font-mono)", fontSize: "0.875rem", lineHeight: "1.35" }}
-                    placeholder="Room description as the player will see it…"
-                  />
-                </div>
+                <AnsiDescriptionEditor
+                  value={editForm.description}
+                  onChange={(v) => setEditForm((f) => ({ ...f, description: v }))}
+                  rows={8}
+                  placeholder="Room description as the player will see it…"
+                />
                 {/* Properties checkboxes */}
                 <div>
                   <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
@@ -2402,7 +2397,7 @@ export default function ZoneDesigner({
                       )}
                     </h2>
                     <p style={{ color: "#D3D7CF", maxWidth: "80ch" }}>
-                      {editForm.description || <span style={{ color: "#4A4B55", fontStyle: "italic" }}>No description yet.</span>}
+                      {editForm.description ? parseAnsiText(editForm.description) : <span style={{ color: "#4A4B55", fontStyle: "italic" }}>No description yet.</span>}
                     </p>
                     <div style={{ height: 1, background: "#C9A84C", opacity: 0.1, marginTop: "0.5rem" }} />
                   </div>
@@ -3263,19 +3258,12 @@ export default function ZoneDesigner({
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
-                  Description
-                </label>
-                <textarea
-                  value={roomForm.description}
-                  onChange={(e) => setRoomForm((f) => ({ ...f, description: e.target.value }))}
-                  placeholder="Describe this room..."
-                  rows={2}
-                  className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] text-sm focus:border-[#C9A84C] focus:outline-none resize-none"
-                 
-                />
-              </div>
+              <AnsiDescriptionEditor
+                value={roomForm.description}
+                onChange={(v) => setRoomForm((f) => ({ ...f, description: v }))}
+                rows={2}
+                placeholder="Describe this room..."
+              />
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   onClick={() => setShowRoomForm(false)}
