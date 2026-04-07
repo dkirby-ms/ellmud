@@ -1414,3 +1414,24 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 - **Key insight:** The diamond search pattern (expanding Manhattan distance rings) was the single most duplicated code pattern — 17 instances. The generator approach cleanly handles all variations (different start radii, filtering, early termination).
 - **Behavior preservation:** All 25 computeLayout tests + 13 elk-layout tests pass with identical results. The refactoring was purely structural.
 - **Commits:** 02c3382 (Phase 1), b51a65e (Phase 2)
+
+### Midgaard Room Displacement Fix (2025-01)
+
+**Bug:** In the Midgaard zone, `inside-the-west-gate-of-midgaard` and `main-street` were rendered at different y-coordinates despite being connected by an east/west exit. The displacement was 4 cells (dy=4), making the map confusing.
+
+**Root cause:** BFS (Phases 1–3) placed both rooms correctly at the same y. However, force-directed relaxation (Phase 4) and subsequent refinement phases broke this alignment. The `idealPosition()` function averages all neighbor "wants" equally, so a distant room (wall-road, 4 cells away via wall-road-2→poor-alley) pulled as hard as an adjacent room (main-street, distance 1). The post-cascade relaxation and direction-violation repair then compounded the displacement.
+
+**Fix (two parts):**
+
+1. **`relaxationScore()` — proportional diagonal penalty for relaxation phases only:**
+   Standard `layoutScore()` uses a flat `DIAGONAL_PENALTY=20` per diagonal exit. The new `relaxationScore()` scales the penalty by perpendicular displacement: `DIAGONAL_PENALTY * max(offAxis, 1)`. This makes large off-axis displacements much more expensive during relaxation, preventing the optimizer from dragging aligned rooms off-axis toward distant neighbours. Later phases (diagonal cascade, direction-violation repair) use the flat penalty to remain free to shuffle rooms.
+
+2. **`moveWouldBreakAlignment()` — axis-alignment guard across refinement phases:**
+   A pure guard function that rejects moves breaking axis alignment between adjacent (distance 1) cardinal neighbours. Applied to relaxation, post-cascade relaxation, diagonal cascade (Strategies 1–3), and direction-violation repair (Strategies 1–3). For E/W exits it protects Y alignment; for N/S exits it protects X alignment.
+
+**Result:** inside-the-west-gate and main-street now share the same y through all phases. All 25 existing tests pass. Added a 26th test: full Midgaard zone topology (40 rooms, 84 exits) asserting main-street corridor alignment.
+
+**Key learnings:**
+- The proportional diagonal penalty only works when scoped to the relaxation phase. Applying it globally (to diagonal cascade/direction violation repair) caused 2 Siltgate diagonals because the changed scoring landscape prevented the cascade from fixing certain diagonals.
+- Tracing which phase breaks alignment is essential — the actual culprit was the post-cascade relaxation pass inside `fixDiagonalCascade()`, not the cascade strategies themselves.
+- The alignment guard's distance-1 check is sufficient when combined with proportional scoring, because the relaxation preserves alignment (so rooms remain at distance 1), and the guard prevents all subsequent phases from breaking it.

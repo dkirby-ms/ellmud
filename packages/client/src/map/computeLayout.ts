@@ -768,6 +768,60 @@ export function computeLayout(
     return after > before;
   }
 
+  /**
+   * Reject moves that break axis alignment with already-adjacent neighbors.
+   * If a room is currently at Manhattan distance 1 from a neighbor and both
+   * share an axis (same x or same y), don't move it to a position that
+   * creates a diagonal with that neighbor.
+   */
+  function moveWouldBreakAlignment(
+    rid: string,
+    nx: number,
+    ny: number,
+    z: number,
+  ): boolean {
+    const cur = result.get(rid);
+    if (!cur || cur.z !== z) return false;
+    const room = rooms.get(rid);
+    if (!room) return false;
+
+    for (const [dir, nid] of room.exits) {
+      const offset = DIRECTION_OFFSETS[dir];
+      if (!offset || offset.dz !== 0) continue;
+      const np = result.get(nid);
+      if (!np || np.z !== z) continue;
+      const curDist = Math.abs(cur.x - np.x) + Math.abs(cur.y - np.y);
+      if (curDist !== 1) continue; // only protect adjacent pairs
+      // For E/W exits: protect Y alignment
+      if (offset.dx !== 0 && offset.dy === 0) {
+        if (cur.y === np.y && ny !== np.y) return true;
+      }
+      // For N/S exits: protect X alignment
+      if (offset.dy !== 0 && offset.dx === 0) {
+        if (cur.x === np.x && nx !== np.x) return true;
+      }
+    }
+    // Also check reverse exits (rooms that point at us)
+    const revArr = reverseExits.get(rid);
+    if (revArr) {
+      for (const { fromId, dir } of revArr) {
+        const offset = DIRECTION_OFFSETS[dir];
+        if (!offset || offset.dz !== 0) continue;
+        const fp = result.get(fromId);
+        if (!fp || fp.z !== z) continue;
+        const curDist = Math.abs(cur.x - fp.x) + Math.abs(cur.y - fp.y);
+        if (curDist !== 1) continue;
+        if (offset.dx !== 0 && offset.dy === 0) {
+          if (cur.y === fp.y && ny !== fp.y) return true;
+        }
+        if (offset.dy !== 0 && offset.dx === 0) {
+          if (cur.x === fp.x && nx !== fp.x) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   /** Reject room swaps that would increase direction mismatches. Pure — no side effects. */
   function swapWouldIncreaseMismatches(
     a: string,
@@ -858,7 +912,9 @@ export function computeLayout(
         if (!tp || tp.z !== z) continue;
         const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
         if (dist > 1) score += dist - 1;
-        if (pos.x !== tp.x && pos.y !== tp.y) score += DIAGONAL_PENALTY;
+        if (pos.x !== tp.x && pos.y !== tp.y) {
+          score += DIAGONAL_PENALTY;
+        }
         const dx = tp.x - pos.x;
         const dy = tp.y - pos.y;
         if (
@@ -880,6 +936,69 @@ export function computeLayout(
               const minX = Math.min(pos.x, tp.x);
               const maxX = Math.max(pos.x, tp.x);
               if (other.x > minX && other.x < maxX) score += occlusionWeight;
+            }
+          }
+        }
+      }
+    }
+    return score;
+  }
+
+  /**
+   * Relaxation-specific score: identical to layoutScore but uses a
+   * proportional diagonal penalty that scales with perpendicular displacement.
+   * This prevents the force-directed pass from dragging axis-aligned rooms
+   * off-axis toward distant neighbours (e.g. wall-road pulling
+   * inside-the-west-gate 4 cells off the main-street row in Midgaard).
+   * Later phases (diagonal cascade, direction-violation repair) use the
+   * standard flat penalty so they remain free to shuffle rooms as needed.
+   */
+  function relaxationScore(z: number): number {
+    let score = 0;
+
+    const zPositions: { id: string; x: number; y: number }[] = [];
+    for (const [id, pos] of result) {
+      if (pos.z === z) zPositions.push({ id, x: pos.x, y: pos.y });
+    }
+
+    for (const [roomId, pos] of result) {
+      if (pos.z !== z) continue;
+      const room = rooms.get(roomId);
+      if (!room) continue;
+      for (const [dir, targetId] of room.exits) {
+        const offset = DIRECTION_OFFSETS[dir];
+        if (!offset || offset.dz !== 0) continue;
+        const tp = result.get(targetId);
+        if (!tp || tp.z !== z) continue;
+        const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
+        if (dist > 1) score += dist - 1;
+        if (pos.x !== tp.x && pos.y !== tp.y) {
+          const offAxis = offset.dx !== 0
+            ? Math.abs(tp.y - pos.y)
+            : Math.abs(tp.x - pos.x);
+          score += DIAGONAL_PENALTY * Math.max(offAxis, 1);
+        }
+        const dx = tp.x - pos.x;
+        const dy = tp.y - pos.y;
+        if (
+          (offset.dx > 0 && dx <= 0) ||
+          (offset.dx < 0 && dx >= 0) ||
+          (offset.dy > 0 && dy <= 0) ||
+          (offset.dy < 0 && dy >= 0)
+        ) {
+          score += DIRECTION_MISMATCH_PENALTY;
+        }
+        if (dist >= 2 && (pos.x === tp.x || pos.y === tp.y)) {
+          for (const other of zPositions) {
+            if (other.id === roomId || other.id === targetId) continue;
+            if (pos.x === tp.x && other.x === pos.x) {
+              const minY = Math.min(pos.y, tp.y);
+              const maxY = Math.max(pos.y, tp.y);
+              if (other.y > minY && other.y < maxY) score += OCCLUSION_PENALTY_LIGHT;
+            } else if (pos.y === tp.y && other.y === pos.y) {
+              const minX = Math.min(pos.x, tp.x);
+              const maxX = Math.max(pos.x, tp.x);
+              if (other.x > minX && other.x < maxX) score += OCCLUSION_PENALTY_LIGHT;
             }
           }
         }
@@ -911,7 +1030,9 @@ export function computeLayout(
       if (!tp || tp.z !== z) continue;
       const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
       if (dist > 1) score += dist - 1;
-      if (pos.x !== tp.x && pos.y !== tp.y) score += DIAGONAL_PENALTY;
+      if (pos.x !== tp.x && pos.y !== tp.y) {
+        score += DIAGONAL_PENALTY;
+      }
       const dx = tp.x - pos.x;
       const dy = tp.y - pos.y;
       if (
@@ -1075,6 +1196,7 @@ export function computeLayout(
         const key = cellKey(cand.x, cand.y);
         if (occupied.has(key)) continue;
         if (moveWouldIncreaseMismatches(roomId, cand.x, cand.y, z)) continue;
+        if (moveWouldBreakAlignment(roomId, cand.x, cand.y, z)) continue;
 
         const oldKey = cellKey(pos.x, pos.y);
         occupied.delete(oldKey);
@@ -1117,11 +1239,11 @@ export function computeLayout(
         if (pos.z === z) zRoomIds.push(id);
       }
 
-      let currentScore = layoutScore(z);
+      let currentScore = relaxationScore(z);
       if (currentScore === 0) continue; // Already perfect
 
       for (let iter = 0; iter < FORCE_RELAXATION_ITERATIONS && currentScore > 0; iter++) {
-        const r = relaxRooms(zRoomIds, z, occupied, currentScore, layoutScore);
+        const r = relaxRooms(zRoomIds, z, occupied, currentScore, relaxationScore);
         currentScore = r.score;
         if (!r.improved) break;
       }
@@ -1276,6 +1398,7 @@ export function computeLayout(
             const moverPos = result.get(sm.mover)!;
             if (moverPos.x === sm.newX && moverPos.y === sm.newY) continue;
             if (moveWouldIncreaseMismatches(sm.mover, sm.newX, sm.newY, z)) continue;
+            if (moveWouldBreakAlignment(sm.mover, sm.newX, sm.newY, z)) continue;
 
             const targetKey = cellKey(sm.newX, sm.newY);
 
@@ -1379,6 +1502,8 @@ export function computeLayout(
             if (aFree && bFree && keyA !== keyB) {
               if (moveWouldIncreaseMismatches(roomId, newAx, newAy, z) ||
                   moveWouldIncreaseMismatches(targetId, newBx, newBy, z)) continue;
+              if (moveWouldBreakAlignment(roomId, newAx, newAy, z) ||
+                  moveWouldBreakAlignment(targetId, newBx, newBy, z)) continue;
               occupied.delete(oldKeyA);
               occupied.delete(oldKeyB);
               occupied.add(keyA);
@@ -1519,9 +1644,11 @@ export function computeLayout(
               if (!canMove) continue;
 
               // Guard: reject if any room in the push set would increase mismatches
+              // or break axis alignment with an adjacent cardinal neighbour
               let wouldIncrease = false;
               for (const [pid, m] of moves) {
-                if (moveWouldIncreaseMismatches(pid, m.newX, m.newY, z)) {
+                if (moveWouldIncreaseMismatches(pid, m.newX, m.newY, z) ||
+                    moveWouldBreakAlignment(pid, m.newX, m.newY, z)) {
                   wouldIncrease = true;
                   break;
                 }
@@ -1559,7 +1686,7 @@ export function computeLayout(
 
       // After cascade fixes, run one more pass of single-room relaxation
       // to clean up any remaining non-optimal placements
-      let score = layoutScore(z);
+      let score = relaxationScore(z);
       const zRooms: string[] = [];
       for (const [id, p] of result) {
         if (p.z === z) zRooms.push(id);
@@ -1600,13 +1727,14 @@ export function computeLayout(
             if (tx === rp.x && ty === rp.y) continue;
             if (occupied.has(tk)) continue;
             if (moveWouldIncreaseMismatches(rid, tx, ty, z)) continue;
+            if (moveWouldBreakAlignment(rid, tx, ty, z)) continue;
 
             const oldKey = cellKey(rp.x, rp.y);
             occupied.delete(oldKey);
             occupied.add(tk);
             result.set(rid, { x: tx, y: ty, z });
 
-            const ns = layoutScore(z);
+            const ns = relaxationScore(z);
             if (ns < bestScore) {
               bestScore = ns;
               bestPos = { x: tx, y: ty };
@@ -1729,6 +1857,7 @@ export function computeLayout(
               if (cand.x === moverPos.x && cand.y === moverPos.y) continue;
               const ck = cellKey(cand.x, cand.y);
               if (occupied.has(ck)) continue;
+              if (moveWouldBreakAlignment(mover, cand.x, cand.y, z)) continue;
 
               const beforeM = countMismatchesInvolving(mover, moverPos.x, moverPos.y, z);
               const oldKey = cellKey(moverPos.x, moverPos.y);
@@ -1786,6 +1915,8 @@ export function computeLayout(
               const stPos = result.get(swapTarget)!;
 
               if (swapWouldIncreaseMismatches(mover, moverPos, swapTarget, stPos, z)) continue;
+              if (moveWouldBreakAlignment(mover, stPos.x, stPos.y, z) ||
+                  moveWouldBreakAlignment(swapTarget, moverPos.x, moverPos.y, z)) continue;
 
               // Tentatively swap
               result.set(mover, { x: stPos.x, y: stPos.y, z });
@@ -1897,6 +2028,17 @@ export function computeLayout(
               if (occupied.has(nk) && !oldKeys.has(nk)) { valid = false; break; }
             }
             if (!valid) continue;
+
+            // Reject if any room in the group would break axis alignment
+            // with a neighbour outside the group
+            let wouldBreak = false;
+            for (const [rid, m] of moves) {
+              if (moveWouldBreakAlignment(rid, m.nx, m.ny, z)) {
+                wouldBreak = true;
+                break;
+              }
+            }
+            if (wouldBreak) continue;
 
             // Apply tentatively
             for (const [, m] of moves) occupied.delete(cellKey(m.ox, m.oy));
