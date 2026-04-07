@@ -13,6 +13,7 @@ import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
 import CompassControl from "../components/CompassControl";
 import { MinimapWidget } from "../components/map/MinimapWidget.js";
 import { FullMapOverlay } from "../components/map/FullMapOverlay.js";
+import AnsiText from "../components/AnsiText.js";
 import { EquipmentSilhouette } from "../components/EquipmentSilhouette.js";
 import { RoomOccupants } from "../components/RoomOccupants.js";
 import { CombatHUD } from "../components/CombatHUD.js";
@@ -303,7 +304,7 @@ export default function ZoneExploration() {
                       className="ansi-bright-yellow ansi-bold mb-1"
                       style={{ fontSize: "0.9375rem" }}
                     >
-                      {msg.text}
+                      <AnsiText text={msg.text} />
                     </h3>
                     <div className="h-px bg-accent-gold opacity-20 mt-1"></div>
                   </div>
@@ -312,7 +313,7 @@ export default function ZoneExploration() {
                 {msg.type === "room" && (
                   <div>
                     <p className="mud-room-desc max-w-[80ch]">
-                      {msg.text}
+                      <AnsiText text={msg.text} />
                     </p>
                     <div className="h-px bg-accent-gold opacity-10 mt-1"></div>
                   </div>
@@ -340,7 +341,7 @@ export default function ZoneExploration() {
                     className="ansi-dim pl-4 max-w-[80ch] flex items-start gap-2"
                   >
                     <Eye className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                    <span>{msg.text}</span>
+                    <span><AnsiText text={msg.text} /></span>
                   </p>
                 )}
 
@@ -349,7 +350,7 @@ export default function ZoneExploration() {
                     className="mud-sound pl-4 max-w-[80ch] flex items-start gap-2"
                   >
                     <Volume2 className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                    <span>{msg.text}</span>
+                    <span><AnsiText text={msg.text} /></span>
                   </p>
                 )}
 
@@ -361,13 +362,13 @@ export default function ZoneExploration() {
 
                 {msg.type === "speech" && (
                   <p className="mud-speech max-w-[80ch]">
-                    &ldquo;{msg.text}&rdquo;
+                    &ldquo;<AnsiText text={msg.text} />&rdquo;
                   </p>
                 )}
 
                 {msg.type === "ambient" && (
                   <p className="ansi-dim ansi-italic max-w-[80ch]">
-                    {msg.text}
+                    <AnsiText text={msg.text} />
                   </p>
                 )}
 
@@ -376,7 +377,7 @@ export default function ZoneExploration() {
                     className="ansi-dim pl-4 max-w-[80ch] flex items-start gap-2"
                   >
                     <Eye className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                    <span>{msg.text}</span>
+                    <span><AnsiText text={msg.text} /></span>
                   </p>
                 )}
               </div>

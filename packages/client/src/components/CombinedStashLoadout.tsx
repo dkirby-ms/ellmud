@@ -19,6 +19,7 @@ import {
 } from '@ellmud/shared';
 import { useAppContext, type InventoryItem } from '../store';
 import { sendEquipItem, sendUnequipItem } from '../services/connection';
+import AnsiText from './AnsiText.js';
 
 // ─── Tier → MUD CSS class mapping ───────────────────────────────────────────
 
@@ -352,7 +353,7 @@ export default function CombinedStashLoadout({ room, inZone = false }: CombinedS
               </div>
               {selectedItem.description && (
                 <div className="ansi-white" style={{ fontSize: '0.75rem', fontStyle: 'italic', marginBottom: '0.3rem' }}>
-                  {selectedItem.description}
+                  <AnsiText text={selectedItem.description} />
                 </div>
               )}
               <div className="flex gap-2 mt-1">
