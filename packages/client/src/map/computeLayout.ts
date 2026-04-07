@@ -700,15 +700,15 @@ export function computeLayout(
   }
 
   /**
-   * Count ALL direction mismatches involving room `rid` if it were at (px, py):
-   * 1. rid's exits — does moving rid break the direction to its neighbors?
-   * 2. Reverse exits — do neighbors that exit toward rid see a reversal?
+   * Count ALL direction mismatches involving room `rid` if it were at (px, py).
+   * posOverrides lets callers simulate position changes without mutating result.
    */
   function countMismatchesInvolving(
     rid: string,
     px: number,
     py: number,
     z: number,
+    posOverrides?: Map<string, { x: number; y: number }>,
   ): number {
     let count = 0;
     const room = rooms.get(rid);
@@ -716,7 +716,8 @@ export function computeLayout(
       for (const [dir, nid] of room.exits) {
         const off = DIRECTION_OFFSETS[dir];
         if (!off || off.dz !== 0) continue;
-        const np = result.get(nid);
+        const override = posOverrides?.get(nid);
+        const np = override ? { x: override.x, y: override.y, z } : result.get(nid);
         if (!np || np.z !== z) continue;
         const dx = np.x - px;
         const dy = np.y - py;
@@ -735,7 +736,8 @@ export function computeLayout(
       for (const { fromId, dir } of revArr) {
         const off = DIRECTION_OFFSETS[dir];
         if (!off || off.dz !== 0) continue;
-        const fp = result.get(fromId);
+        const override = posOverrides?.get(fromId);
+        const fp = override ? { x: override.x, y: override.y, z } : result.get(fromId);
         if (!fp || fp.z !== z) continue;
         const dx = px - fp.x;
         const dy = py - fp.y;
@@ -766,7 +768,7 @@ export function computeLayout(
     return after > before;
   }
 
-  /** Reject room swaps that would increase direction mismatches. */
+  /** Reject room swaps that would increase direction mismatches. Pure — no side effects. */
   function swapWouldIncreaseMismatches(
     a: string,
     posA: { x: number; y: number },
@@ -776,12 +778,12 @@ export function computeLayout(
   ): boolean {
     const beforeA = countMismatchesInvolving(a, posA.x, posA.y, z);
     const beforeB = countMismatchesInvolving(b, posB.x, posB.y, z);
-    result.set(a, { x: posB.x, y: posB.y, z });
-    result.set(b, { x: posA.x, y: posA.y, z });
-    const afterA = countMismatchesInvolving(a, posB.x, posB.y, z);
-    const afterB = countMismatchesInvolving(b, posA.x, posA.y, z);
-    result.set(a, { x: posA.x, y: posA.y, z });
-    result.set(b, { x: posB.x, y: posB.y, z });
+    const overrides = new Map<string, { x: number; y: number }>([
+      [a, { x: posB.x, y: posB.y }],
+      [b, { x: posA.x, y: posA.y }],
+    ]);
+    const afterA = countMismatchesInvolving(a, posB.x, posB.y, z, overrides);
+    const afterB = countMismatchesInvolving(b, posA.x, posA.y, z, overrides);
     return (afterA + afterB) > (beforeA + beforeB);
   }
 
@@ -884,6 +886,104 @@ export function computeLayout(
       }
     }
     return score;
+  }
+
+  /**
+   * Compute the score contribution of a single room's exits.
+   * Used for incremental delta scoring during pairwise swaps.
+   */
+  function roomScoreContribution(
+    roomId: string,
+    z: number,
+    zPositions: { id: string; x: number; y: number }[],
+    occlusionWeight: number = OCCLUSION_PENALTY_LIGHT,
+  ): number {
+    let score = 0;
+    const pos = result.get(roomId);
+    if (!pos || pos.z !== z) return 0;
+    const room = rooms.get(roomId);
+    if (!room) return 0;
+
+    for (const [dir, targetId] of room.exits) {
+      const offset = DIRECTION_OFFSETS[dir];
+      if (!offset || offset.dz !== 0) continue;
+      const tp = result.get(targetId);
+      if (!tp || tp.z !== z) continue;
+      const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
+      if (dist > 1) score += dist - 1;
+      if (pos.x !== tp.x && pos.y !== tp.y) score += DIAGONAL_PENALTY;
+      const dx = tp.x - pos.x;
+      const dy = tp.y - pos.y;
+      if (
+        (offset.dx > 0 && dx <= 0) ||
+        (offset.dx < 0 && dx >= 0) ||
+        (offset.dy > 0 && dy <= 0) ||
+        (offset.dy < 0 && dy >= 0)
+      ) {
+        score += DIRECTION_MISMATCH_PENALTY;
+      }
+      if (dist >= 2 && (pos.x === tp.x || pos.y === tp.y)) {
+        for (const other of zPositions) {
+          if (other.id === roomId || other.id === targetId) continue;
+          if (pos.x === tp.x && other.x === pos.x) {
+            const minY = Math.min(pos.y, tp.y);
+            const maxY = Math.max(pos.y, tp.y);
+            if (other.y > minY && other.y < maxY) score += occlusionWeight;
+          } else if (pos.y === tp.y && other.y === pos.y) {
+            const minX = Math.min(pos.x, tp.x);
+            const maxX = Math.max(pos.x, tp.x);
+            if (other.x > minX && other.x < maxX) score += occlusionWeight;
+          }
+        }
+      }
+    }
+    return score;
+  }
+
+  /**
+   * Collect room IDs whose score contribution may change when rooms in
+   * `changedIds` move. This includes the changed rooms themselves plus
+   * any room that shares an exit edge with them (their neighbors).
+   */
+  function affectedRooms(changedIds: string[], z: number): Set<string> {
+    const affected = new Set<string>(changedIds);
+    for (const rid of changedIds) {
+      const room = rooms.get(rid);
+      if (!room) continue;
+      for (const [dir, nid] of room.exits) {
+        const off = DIRECTION_OFFSETS[dir];
+        if (!off || off.dz !== 0) continue;
+        const np = result.get(nid);
+        if (np && np.z === z) affected.add(nid);
+      }
+      const revArr = reverseExits.get(rid);
+      if (revArr) {
+        for (const { fromId, dir } of revArr) {
+          const off = DIRECTION_OFFSETS[dir];
+          if (!off || off.dz !== 0) continue;
+          const fp = result.get(fromId);
+          if (fp && fp.z === z) affected.add(fromId);
+        }
+      }
+    }
+    return affected;
+  }
+
+  /**
+   * Sum the score contributions of a set of rooms. Each exit edge is
+   * counted once from the source room's perspective.
+   */
+  function sumContributions(
+    roomIds: Set<string>,
+    z: number,
+    zPositions: { id: string; x: number; y: number }[],
+    occlusionWeight: number = OCCLUSION_PENALTY_LIGHT,
+  ): number {
+    let total = 0;
+    for (const rid of roomIds) {
+      total += roomScoreContribution(rid, z, zPositions, occlusionWeight);
+    }
+    return total;
   }
 
   /**
@@ -1029,6 +1129,16 @@ export function computeLayout(
       // Phase 2: Try room swaps — explores multi-room rearrangements that
       // single-room moves can't find (e.g., two rooms blocking each other)
       if (currentScore > 0) {
+        // Pre-build z-level positions for delta scoring
+        let zPositions: { id: string; x: number; y: number }[] = [];
+        const refreshZPositions = () => {
+          zPositions = [];
+          for (const [id, pos] of result) {
+            if (pos.z === z) zPositions.push({ id, x: pos.x, y: pos.y });
+          }
+        };
+        refreshZPositions();
+
         for (let swapIter = 0; swapIter < SWAP_ITERATIONS && currentScore > 0; swapIter++) {
           let swapped = false;
 
@@ -1038,34 +1148,50 @@ export function computeLayout(
               const posA = result.get(a)!;
               const posB = result.get(b)!;
 
-              // Hard guard: reject swaps that would increase direction mismatches
               if (swapWouldIncreaseMismatches(a, posA, b, posB, z)) continue;
+
+              // Delta scoring: compute contribution of affected rooms before/after
+              const affected = affectedRooms([a, b], z);
+              const beforeDelta = sumContributions(affected, z, zPositions);
 
               // Tentatively swap
               result.set(a, { x: posB.x, y: posB.y, z });
               result.set(b, { x: posA.x, y: posA.y, z });
 
-              const newScore = layoutScore(z);
+              // Update zPositions for the two swapped rooms
+              for (const zp of zPositions) {
+                if (zp.id === a) { zp.x = posB.x; zp.y = posB.y; }
+                else if (zp.id === b) { zp.x = posA.x; zp.y = posA.y; }
+              }
+
+              const afterDelta = sumContributions(affected, z, zPositions);
+              const newScore = currentScore - beforeDelta + afterDelta;
+
               if (newScore < currentScore) {
-                // Accept (occupied set doesn't change — both cells stay occupied)
                 currentScore = newScore;
                 swapped = true;
               } else {
-                // Undo
+                // Undo swap and zPositions
                 result.set(a, posA);
                 result.set(b, posB);
+                for (const zp of zPositions) {
+                  if (zp.id === a) { zp.x = posA.x; zp.y = posA.y; }
+                  else if (zp.id === b) { zp.x = posB.x; zp.y = posB.y; }
+                }
               }
             }
           }
 
           if (!swapped) break;
 
-          // After a swap, re-run single-room moves to exploit freed opportunities
+          // After a swap round, re-run single-room moves
           for (let moveIter = 0; moveIter < POST_SWAP_MOVE_ITERATIONS && currentScore > 0; moveIter++) {
             const r = relaxRooms(zRoomIds, z, occupied, currentScore, layoutScore);
             currentScore = r.score;
             if (!r.improved) break;
           }
+          // Refresh zPositions after relaxation moves
+          refreshZPositions();
         }
       }
     }
@@ -1084,16 +1210,19 @@ export function computeLayout(
    */
   function fixDiagonalCascade(): void {
     for (const [z, occupied] of occupiedByZ) {
-      // Build reverse lookup: position → roomId
-      function posToRoom(): Map<string, string> {
-        const m = new Map<string, string>();
-        for (const [id, p] of result) {
-          if (p.z === z) m.set(cellKey(p.x, p.y), id);
-        }
-        return m;
+      // Persistent reverse lookup: position → roomId (updated incrementally)
+      const posToRoomMap = new Map<string, string>();
+      for (const [id, p] of result) {
+        if (p.z === z) posToRoomMap.set(cellKey(p.x, p.y), id);
       }
 
       for (let pass = 0; pass < DIAGONAL_CASCADE_PASSES; pass++) {
+        // Refresh reverse lookup at the start of each pass
+        posToRoomMap.clear();
+        for (const [id, p] of result) {
+          if (p.z === z) posToRoomMap.set(cellKey(p.x, p.y), id);
+        }
+
         const diags: Array<{
           roomId: string;
           targetId: string;
@@ -1166,8 +1295,7 @@ export function computeLayout(
               result.set(sm.mover, moverPos);
             } else {
               // Try swap with occupant
-              const pMap = posToRoom();
-              const occupantId = pMap.get(targetKey);
+              const occupantId = posToRoomMap.get(targetKey);
               if (!occupantId || occupantId === roomId || occupantId === targetId)
                 continue;
               const occupantPos = result.get(occupantId)!;
@@ -1314,8 +1442,7 @@ export function computeLayout(
 
                 // If new position is occupied by a non-push room, add it
                 if (occupied.has(pNewKey)) {
-                  const pmap = posToRoom();
-                  const occ = pmap.get(pNewKey);
+                  const occ = posToRoomMap.get(pNewKey);
                   if (occ && !pushSet.has(occ)) {
                     pushSet.add(occ);
                     pushQueue.push(occ);
@@ -1380,8 +1507,7 @@ export function computeLayout(
                 const ny = isVertical ? pp.y : pp.y + shift;
                 const nk = cellKey(nx, ny);
                 if (occupied.has(nk)) {
-                  const pm = posToRoom();
-                  const atCell = pm.get(nk);
+                  const atCell = posToRoomMap.get(nk);
                   if (!atCell || !pushSet.has(atCell)) {
                     canMove = false;
                     break;
@@ -1952,6 +2078,15 @@ export function computeLayout(
 
       // ── Strategy B: Pairwise swaps ──
       if (currentScore > 0) {
+        let occZPositions: { id: string; x: number; y: number }[] = [];
+        const refreshOccZPos = () => {
+          occZPositions = [];
+          for (const [id, pos] of result) {
+            if (pos.z === z) occZPositions.push({ id, x: pos.x, y: pos.y });
+          }
+        };
+        refreshOccZPos();
+
         for (let swapIter = 0; swapIter < SWAP_ITERATIONS && currentScore > 0; swapIter++) {
           let swapped = false;
           for (let i = 0; i < zRoomIds.length && currentScore > 0; i++) {
@@ -1960,26 +2095,39 @@ export function computeLayout(
               const posA = result.get(a)!;
               const posB = result.get(b)!;
 
-              // Quick diagonal pre-check: would the swap create diagonals?
               if (wouldCreateDiag(a, posB.x, posB.y, z)) continue;
               if (wouldCreateDiag(b, posA.x, posA.y, z)) continue;
-              // Direction reversal guard
               if (swapWouldIncreaseMismatches(a, posA, b, posB, z)) continue;
+
+              const affected = affectedRooms([a, b], z);
+              const beforeDelta = sumContributions(affected, z, occZPositions, OCCLUSION_PENALTY_HEAVY);
 
               result.set(a, { x: posB.x, y: posB.y, z });
               result.set(b, { x: posA.x, y: posA.y, z });
 
-              const ns = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
+              for (const zp of occZPositions) {
+                if (zp.id === a) { zp.x = posB.x; zp.y = posB.y; }
+                else if (zp.id === b) { zp.x = posA.x; zp.y = posA.y; }
+              }
+
+              const afterDelta = sumContributions(affected, z, occZPositions, OCCLUSION_PENALTY_HEAVY);
+              const ns = currentScore - beforeDelta + afterDelta;
+
               if (ns < currentScore) {
                 currentScore = ns;
                 swapped = true;
               } else {
                 result.set(a, posA);
                 result.set(b, posB);
+                for (const zp of occZPositions) {
+                  if (zp.id === a) { zp.x = posA.x; zp.y = posA.y; }
+                  else if (zp.id === b) { zp.x = posB.x; zp.y = posB.y; }
+                }
               }
             }
           }
           if (!swapped) break;
+          refreshOccZPos();
         }
       }
 
