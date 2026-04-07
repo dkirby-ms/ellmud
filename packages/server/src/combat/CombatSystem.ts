@@ -651,20 +651,24 @@ export class CombatSystem {
 
       if (!this.queuedActions.has(c.id)) {
         // Auto-attack if we have a valid target
-        if (c.currentTarget) {
-          const target = this.combatants.get(c.currentTarget);
-          if (target && target.hp > 0 && encounter.combatantIds.has(c.currentTarget)) {
-            this.queuedActions.set(c.id, { action: 'strike', targetId: c.currentTarget });
-            const reason = c.disconnected ? '(disconnected)' : '(no input)';
-            this.debug(`Auto-attack for ${c.name} → ${target.name} ${reason}`);
-          } else {
-            // Target is dead/missing — pause auto-attack, default to dodge
-            this.queuedActions.set(c.id, { action: 'dodge' });
-            const reason = c.disconnected ? '(disconnected)' : '(no target)';
-            this.debug(`Default dodge for ${c.name} ${reason}`);
+        let target = c.currentTarget ? this.combatants.get(c.currentTarget) : undefined;
+        const targetValid = target && target.hp > 0 && encounter.combatantIds.has(c.currentTarget!);
+
+        if (!targetValid) {
+          // Current target is dead/missing/unset — try to retarget next hostile
+          const newTargetId = this.cycleTarget(c.id);
+          if (newTargetId) {
+            target = this.combatants.get(newTargetId);
+            this.debug(`Auto-retarget for ${c.name} → ${target?.name ?? newTargetId}`);
           }
+        }
+
+        if (target && target.hp > 0 && encounter.combatantIds.has(target.id)) {
+          this.queuedActions.set(c.id, { action: 'strike', targetId: target.id });
+          const reason = c.disconnected ? '(disconnected)' : '(no input)';
+          this.debug(`Auto-attack for ${c.name} → ${target.name} ${reason}`);
         } else {
-          // No target set — default to dodge
+          // No valid hostiles remain — dodge is correct
           this.queuedActions.set(c.id, { action: 'dodge' });
           const reason = c.disconnected ? '(disconnected)' : '(no target)';
           this.debug(`Default dodge for ${c.name} ${reason}`);
@@ -1003,6 +1007,15 @@ export class CombatSystem {
         encounter.combatantIds.delete(c.id);
         this.combatantEncounter.delete(c.id);
         this.queuedActions.delete(c.id);
+
+        // Clear stale target refs so auto-retarget kicks in next tick
+        for (const remainingId of encounter.combatantIds) {
+          const remaining = this.combatants.get(remainingId);
+          if (remaining && remaining.currentTarget === c.id) {
+            remaining.currentTarget = undefined;
+            this.debug(`Cleared stale target for ${remaining.name} (${c.name} defeated)`);
+          }
+        }
       }
     }
 
