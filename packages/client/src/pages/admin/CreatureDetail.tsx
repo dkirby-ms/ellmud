@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Send, X, Plus, AlertCircle } from "lucide-react";
 import { getCreature, createCreature, updateCreature, listItems, AdminAPIError, simulateCreatureReroll, type CreatureRerollResult } from "../../lib/admin-api";
+import AnsiPreview from "../../components/admin/AnsiPreview.js";
 
 type Status = "draft" | "review" | "published" | "deprecated";
 
@@ -370,6 +371,7 @@ export default function CreatureDetail() {
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
                    
                   />
+                  <AnsiPreview value={formData.description} />
                 </div>
                 <div>
                   <label
@@ -386,6 +388,7 @@ export default function CreatureDetail() {
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
                    
                   />
+                  <AnsiPreview value={formData.roomDescription} />
                   <p
                     className="text-[#4A4B55] text-xs mt-1"
                     style={{ fontFamily: "var(--font-sans)" }}

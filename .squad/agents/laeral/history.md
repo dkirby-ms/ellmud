@@ -18,6 +18,17 @@
 - The extraction loop: enter shard → explore → gather loot → extract (or die and lose items)
 - All admin-authored content is considered live immediately (content promotion deferred)
 
+## Team Updates
+
+### 2026-04-06: Stronghold-Zone Route Design — Faction Stronghold Connections
+- **Design completed:** Thematic routes connecting faction strongholds to Gulf Coast zones
+- **Stronghold access:** All three strongholds (the-reliquary, the-bloom-observatory, the-carrion-court) now connected to adventure zones
+- **Route narrative:** Each stronghold has thematic entry/exit room pairing; connections lead to distinctive entry points in target zones
+- **Coordination:** Design matched to Bruenor's migration 022 execution; all room slugs and directions verified
+- **Documentation:** Design doc filed to squad decisions; no implementation concerns flagged
+
+---
+
 ## Learnings
 
 ### 2025-07-24: The Warrens Zone Design
@@ -297,3 +308,95 @@ Siltgate revision finalized and merged into team decisions archive.
 **Files:** Merged from `.squad/decisions/inbox/laeral-creature-item-retheme.md` → `.squad/decisions.md` (comprehensive decision section with 20+ items already-aligned analysis, 7 creature retheme details, 12 item retheme details, implementation notes)
 
 **Handoff:** Full migration details provided to Bruenor (migration 020 structure, SQL patterns, loot table preservation)
+
+
+## 2026-04-06T19:00Z — Faction Stronghold → World Zone Connections
+
+**Completed:** Physical connection design for 3 faction strongholds to Siltgate and Warrens  
+**Status:** ✅ Design complete — ready for database migration  
+**Deliverable:** `.squad/decisions/inbox/laeral-stronghold-connections.md`
+
+**Task:** Design how to connect three faction strongholds (The Reliquary, The Bloom Observatory, The Carrion Court) to main world zones (Siltgate city zone = 2 connections, Warrens dungeon zone = 1 connection).
+
+**Final Assignments:**
+1. **The Carrion Court** (Krewe Calliope) → **Siltgate Dockward** — thematic necessity (New Orleans krewe in NO ruins, Superdome in city proper)
+2. **The Reliquary** (Kindari) → **Siltgate Ashgate Wastes** — industrial edge positioning (water treatment plant at city boundary)
+3. **The Bloom Observatory** (Bloom Tenders) → **Warrens** — frontier/explorer positioning (offshore platform reaching toward eastern wastes)
+
+**Transitional Room Design:**
+- **2 rooms per connection** — creates environmental storytelling buffer without padding
+- **6 new rooms total:**
+  - Carrion Court: `superdome-breach` (corridor), `flooded-concourse` (corridor)
+  - Reliquary: `filtration-annex` (corridor), `pipe-bridge` (entrance)
+  - Bloom Observatory: `platform-descent` (corridor), `causeway-terminus` (entrance)
+- All rooms have full descriptions, type classifications, properties/hazards where appropriate
+
+**Exit Direction Logic:**
+- **Carrion Court:** south (out of Superdome toward harbor) → `dock-street-1` (Siltgate)
+- **Reliquary:** east (toward wastes) → `ashgate-chapel` (Siltgate Ashgate Wastes)
+- **Bloom Observatory:** down then east (descending platform, crossing causeway) → `shattered-gate` (Warrens entry)
+- All exits bidirectional (return directions: north, west, up+west)
+
+**Key Design Rationale:**
+- **Krewe Calliope must be in Siltgate** — they're the New Orleans krewe faction per migration 017. The Carrion Court is the collapsed Superdome. No other placement makes narrative sense.
+- **Kindari at industrial edge** — migration 017 describes The Reliquary as "a converted water treatment plant on the edge of Siltgate." Ashgate Wastes is the transitional zone between city and dungeon.
+- **Bloom Tenders at frontier** — their offshore platform "connected to Siltgate via corroded causeway" (migration 017) extends toward the wastes, positioning them as frontier scouts/ecologists.
+
+**Architecture & File Paths:**
+- **Faction stronghold definitions:** `/home/saitcho/ellmud/packages/server/src/db/migrations/017_faction_renames.sql`
+- **Siltgate zone (136 rooms):** `/home/saitcho/ellmud/packages/server/src/db/migrations/004_seed_siltgate.sql`
+- **Warrens zone (~100 rooms):** `/home/saitcho/ellmud/packages/server/src/db/migrations/003_seed_zones.sql`
+- **Stronghold structure:** Each has 9 feature rooms (commons, stash, armoury, expedition-board, market, training, infirmary, war-room, inn)
+- **Entry room convention:** All strongholds use `*-inn` rooms as entry points (`carrion-court-inn`, `reliquary-inn`, `bloom-observatory-inn`)
+
+**Implementation Notes:**
+- New migration file needed: `022_stronghold_connections.sql` (or next available number)
+- Insert 6 new `zone_rooms` records (2 per zone: 4 in `the-siltgate`, 2 in `warrens`)
+- Insert 12 new `zone_exits` records (bidirectional for each connection segment)
+- No changes to existing rooms — purely additive
+- Transitional rooms should be creature-free or have only ambient/weak encounters (thresholds, not combat zones)
+
+**Design Principles Applied:**
+- **Thematic coherence over gameplay convenience** — Krewe = NOLA krewe → must be in NOLA ruins
+- **Geographic/narrative logic** — water plant at industrial edge, offshore platform reaching toward wastes
+- **Environmental storytelling via transitions** — each 2-room sequence tells a story about faction's relationship to the world
+- **Faction identity reinforced by positioning:** Krewe (cultural heart), Kindari (infrastructure guardians), Bloom Tenders (frontier explorers)
+
+**Spatial Logic:**
+- **Carrion Court → Dockward:** Superdome breach → flooded approach → harbor street
+- **Reliquary → Ashgate:** Maintenance corridor → pipe bridge over blast crater → burned chapel
+- **Bloom Observatory → Warrens:** External staircase down platform leg → causeway across brackish shallows → shattered gate threshold
+
+**User Preferences Identified:**
+- Strong emphasis on thematic/narrative coherence
+- Environmental storytelling through transitional spaces valued
+- Faction positioning should reinforce identity (cultural vs. industrial vs. frontier)
+- 2-in-Siltgate, 1-in-Warrens split provides balanced hub access + frontier positioning
+
+**Ready for Implementation:** All connection routes fully specified with room details, exit directions, properties, and thematic justifications.
+
+### 2026-04-06: Stronghold → World Zone Connections Design
+
+Designed physical connections for all three faction strongholds to main world zones:
+
+**Assignments:**
+- **The Carrion Court** (Krewe Calliope) → **Siltgate** (Dockward)
+- **The Reliquary** (Kindari) → **Siltgate** (Ashgate Wastes)
+- **The Bloom Observatory** (Bloom Tenders) → **Warrens**
+
+**Deliverables:**
+- Design document specifying 6 transitional rooms (2 per connection)
+- Complete exit mapping for all 24 exits (12 bidirectional pairs)
+- Thematic narratives for each room reflecting faction identities
+- Implementation notes for Bruenor including zone assignments, property guidance, spawn considerations
+
+**Design Rationale:**
+1. Krewe Calliope MUST be in Siltgate (Superdome = iconic New Orleans, flooded city setting)
+2. Kindari at Ashgate Wastes (water treatment plant "on edge of Siltgate," perfect infrastructure positioning)
+3. Bloom Tenders at Warrens edge (offshore platform reaching toward hostile eastern wastes, emphasizes frontier role)
+4. Two transitional rooms per connection (creates buffer, allows pacing, provides environmental storytelling)
+5. Exit directions chosen for spatial logic (south from Superdome, east from Reliquary, down-then-east from platform)
+
+**Status:** Design complete, merged to `.squad/decisions.md` for Bruenor's implementation.
+
+**Orchestration Log:** `.squad/orchestration-log/2026-04-06T19:20:15Z-laeral.md`

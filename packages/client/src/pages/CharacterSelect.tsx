@@ -15,7 +15,7 @@ const STARTING_ZONES = [
     slug: "the-reliquary",
     name: "The Reliquary",
     faction: "Kindari",
-    desc: "Wake among the preservers. The Kindari guard the memory of Saitcho Kindar in vaulted halls of salvaged tech and carefully maintained urns.",
+    desc: "Wake among the preservers. The Kindari guard the memory of Antoine Fournier in vaulted halls of salvaged tech and carefully maintained urns.",
   },
   {
     slug: "the-bloom-observatory",

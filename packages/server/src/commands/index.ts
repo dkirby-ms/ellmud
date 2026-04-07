@@ -22,6 +22,8 @@ import { handleWhisper } from './handlers/whisper.js';
 import { handleEmote } from './handlers/emote.js';
 import { handleStabilize } from './handlers/stabilize.js';
 import { handlePeaceful } from './handlers/peaceful.js';
+import { handleGoto } from './handlers/goto.js';
+import { handleTeleport } from './handlers/teleport.js';
 import { handleLoot } from './handlers/loot.js';
 import { handlePosition } from './handlers/position.js';
 import type { DowningSystem } from '../systems/DowningSystem.js';
@@ -54,6 +56,8 @@ export interface CommandResult {
   zoneTransfer?: { targetZoneSlug: string; targetRoomSlug: string };
   /** When set, triggers a special post-command action in ZoneRoom. */
   action?: 'rent';
+  /** Narrations targeted at a specific player (e.g., teleport notification). */
+  targetNarrations?: { sessionId: string; narrations: NarrationEntry[] };
 }
 
 export interface CreatureRef {
@@ -105,6 +109,8 @@ export interface CommandContext {
   zoneSlug?: string;
   /** Corpse system reference for loot command (GDD §6.8). */
   corpseSystem?: CorpseSystem;
+  /** Resolve a connected player by character name (dev tools). */
+  resolvePlayerByName?: (name: string) => { sessionId: string; player: PlayerState; characterName: string } | undefined;
 }
 
 export type CommandHandler = (ctx: CommandContext) => CommandResult;
@@ -153,6 +159,8 @@ handlers.set('peaceful', handlePeaceful);
 handlers.set('loot', handleLoot);
 handlers.set('position', handlePosition);
 handlers.set('pos', handlePosition); // Shorthand alias
+handlers.set('goto', handleGoto);
+handlers.set('teleport', handleTeleport);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(

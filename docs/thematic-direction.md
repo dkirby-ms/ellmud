@@ -6,7 +6,7 @@ World history: Sometime in 2026, with US currency destablized riots and local re
 
 The oligarchs overestimated their ability to control their cybernetic weapons systems, which eventually led to a runaway positive feedback loop which expended all of the planet's remaining energy stores manufacturing new combat drones and weapons. With no remaining energy available to desalinate water and produce food and medicine, homo sapiens sapiens was quickly culled, with 2 billion alone dying in 2028, and the remaining populations declining rapidly until the last pockets were fully eradicated by the remaining drone swarms. 
 
-Before extinction, a man named Saitcho Kindar developed a new type of pickling brine using brackish water and a never-revealed secret ingredient. This pickling brine allowed a specially outfitted human to preserve themselves indefinitely, effectively suspending themselves until a special enyzme was added to the brine, reversing the original effect. Thousands of wealthy or otherwise craft individuals managed to preserve themselves this way by building or purchasing pickling urns that they would slip into and hibernate until such a time they could be recovered. It was this or certain death, and many opted for the extreme method.
+Before extinction, a man named Antoine Fournier developed a new type of pickling brine using brackish water and a never-revealed secret ingredient. This pickling brine allowed a specially outfitted human to preserve themselves indefinitely, effectively suspending themselves until a special enyzme was added to the brine, reversing the original effect. Thousands of wealthy or otherwise craft individuals managed to preserve themselves this way by building or purchasing pickling urns that they would slip into and hibernate until such a time they could be recovered. It was this or certain death, and many opted for the extreme method.
 
 Hundreds of years layer, in the year 3000, the drone swarms are now quiet, having exhausted their energy stores and shut down, now starting to slowly decay under the sun and encroaching vegetation. The planet teems with life, with the lands and oceans recovering to new levels of fertility and life abundance due to the elimination of human exploitation. On land, plants are dominate, with animal populations also recovering, particularly insects and pests such as rats, snakes, cockroachs, spiders, and other dangerous wildlife. 
 
@@ -57,7 +57,7 @@ Players do NOT choose a faction at character creation. Instead, they choose a **
 
 ### 1.1 THE KINDARI (formerly Urnkeepers)
 
-**Identity:** Craft, preservation, and restoration. The Kindari believe the old world's technology — properly understood and repaired — is the key to reclaiming the future. They scavenge drone components, restore mechanical systems, and venerate the pickling urns that saved humanity. Above all, they revere **Saitcho Kindar** — the anonymous inventor of the brine, whose identity is lost but whose legacy preserved them all. They take their name from him: to be Kindari is to follow Kindar's way.
+**Identity:** Craft, preservation, and restoration. The Kindari believe the old world's technology — properly understood and repaired — is the key to reclaiming the future. They scavenge drone components, restore mechanical systems, and venerate the pickling urns that saved humanity. Above all, they revere **Antoine Fournier** — the anonymous inventor of the brine, whose identity is lost but whose legacy preserved them all. They take their name from him: to be Kindari is to follow Fournier's way.
 
 **Philosophy:** "We were preserved for a reason. The past is a blueprint. Kindar showed us the way."
 
@@ -65,7 +65,7 @@ Players do NOT choose a faction at character creation. Instead, they choose a **
 
 **Stronghold:** **The Reliquary** (formerly The Foundry)
 - **Location:** A converted water treatment plant on the edge of Siltgate. The massive concrete structure still has functional filtration systems, and the Brined have turned it into a workshop complex.
-- **Architecture:** Industrial brutalist concrete with rusted catwalks, massive filtration tanks repurposed as storage, and the central chamber dominated by a shrine to Saitcho Kindar — a preserved pickling urn surrounded by scavenged drone components.
+- **Architecture:** Industrial brutalist concrete with rusted catwalks, massive filtration tanks repurposed as storage, and the central chamber dominated by a shrine to Antoine Fournier — a preserved pickling urn surrounded by scavenged drone components.
 - **Atmosphere:** The smell of machine oil and brackish water. The constant drip of condensation. The ring of hammers on salvaged steel.
 
 **Stronghold Room Names:**
@@ -404,7 +404,7 @@ But factions are not charities. They expect contribution — scavenging runs, gu
 
 **No other surviving homo sapiens.** All humans either died during the Collapse or entered pickling urns. However, mutant descendants of humans — organisms that evolved from human stock over ~1000 years but are no longer homo sapiens — exist as enemies and NPCs throughout the world. They betray their human ancestry in the worst ways: corruption, ugliness, gluttony, greed, murder, lust. (See Section 6: Mutant Human Descendants.)
 
-**Saitcho Kindar is a mythic figure.** Like Satoshi Nakamoto, no one knows who he really was. The factions have theories, legends, and conspiracy theories about him, but his true identity is lost. The name itself may be a pseudonym. He is revered by some (especially the Brined), blamed by others, and mysterious to all. Players will never meet him — he is a name that echoes through faction lore, not a character.
+**Antoine Fournier is a mythic figure.** Like Satoshi Nakamoto, no one knows who he really was. The factions have theories, legends, and conspiracy theories about him, but his true identity is lost. The name itself may be a pseudonym. He is revered by some (especially the Brined), blamed by others, and mysterious to all. Players will never meet him — he is a name that echoes through faction lore, not a character.
 
 **Siltgate is one settlement among others.** More settlements exist along the Gulf Coast and will be introduced over time — first along the coast, eventually inland. Other settlements are referenced in NPC dialogue, trade routes, expedition board postings, and Bloom Tenders charts showing other awakening zones. For now, Siltgate is the only playable settlement, but the world extends beyond it.
 

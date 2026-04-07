@@ -19,6 +19,18 @@
 - All content is live immediately (no staging/promotion system)
 - DB schema defined in `packages/server/src/db/migrations/`
 
+## Team Updates
+
+### 2026-04-06: Migration 022 — Faction Stronghold-to-Zone Connections
+- **Scope:** 6 new rooms (2 per stronghold zone), 24 new exits (12 bidirectional pairs)
+- **Content:** Connected faction strongholds (the-reliquary, the-bloom-observatory, the-carrion-court) to world zones (the-siltgate, warrens)
+- **Exits:** 18 intra-zone, 6 inter-zone portal-pattern exits
+- **Commit:** c683882
+- **Zone totals:** Each stronghold +1 room; Siltgate +2 rooms, Warrens +1 room
+- **Coordination:** Per Laeral's route design doc; all direction conflicts verified
+
+---
+
 ## Learnings
 
 ### The Siltgate City Zone Build (2026-03-29)
@@ -152,6 +164,74 @@
 - **Transaction:** Full BEGIN/COMMIT wrap for atomicity
 - **Build verification:** TypeScript compilation clean, all 2555 tests pass (128 test files)
 
+### Stronghold Connections to World Zones (2026-04-07)
+- **Migration:** `022_stronghold_connections.sql`
+- **Source:** Laeral's stronghold connections design document (`.squad/decisions/inbox/laeral-stronghold-connections.md`)
+- **Purpose:** Connect the three faction strongholds to main world zones (Siltgate and Warrens) via transitional rooms
+- **Connections implemented:**
+  1. **The Carrion Court** (Krewe Calliope) → **Siltgate** (Dockward) — superdome-breach → flooded-concourse → dock-street-1
+  2. **The Reliquary** (Kindari) → **Siltgate** (Ashgate) — filtration-annex → pipe-bridge → ashgate-chapel
+  3. **The Bloom Observatory** (Bloom Tenders) → **Warrens** — platform-descent → causeway-terminus → shattered-gate
+- **New rooms (6 total):**
+  - `superdome-breach` (the-carrion-court, corridor) — Krewe breach in Superdome wall
+  - `flooded-concourse` (the-siltgate, corridor, {water}) — Flooded approach to Superdome
+  - `filtration-annex` (the-reliquary, corridor, {heavy_door}) — Kindari maintenance corridor
+  - `pipe-bridge` (the-siltgate, entrance) — Suspended walkway over blast crater
+  - `platform-descent` (the-bloom-observatory, corridor) — External staircase down platform leg
+  - `causeway-terminus` (warrens, entrance) — Causeway meets eastern wastes
+- **Exit pattern:** 24 exits total (12 bidirectional pairs, 3 inter-zone connections). Each connection has 6 exits.
+- **Inter-zone exits:** Follow established pattern from 004_seed_siltgate.sql — `to_room_slug = from_room_slug` (portal pattern), with `target_zone_slug` and `target_room_slug` filled, NULLIF for empty strings
+- **Direction conflict resolution:**
+  - `dock-street-1`: Used WEST (north/south/east occupied)
+  - `ashgate-chapel`: Used WEST (north occupied, as designed)
+  - `shattered-gate`: Used NORTH (west/east/south occupied)
+- **Critical pattern:** Transitional rooms placed in correct zones based on ownership — breach rooms in stronghold zones, approach rooms in world zones
+- **Transaction:** Full BEGIN/COMMIT wrap for atomicity
+- **Zone totals after migration:**
+  - the-carrion-court: 11 rooms (was 10), 15 exits (was 12)
+  - the-reliquary: 11 rooms (was 10), 15 exits (was 12)
+  - the-bloom-observatory: 11 rooms (was 10), 15 exits (was 12)
+  - the-siltgate: 140 rooms (was 138), 292 exits (was 284)
+  - warrens: 110 rooms (was 109), 222 exits (was 218)
+
 ---
 
 
+
+### Stronghold Connections to World Zones (2026-04-06)
+- **Migration:** `022_stronghold_connections.sql`
+- **Source:** Laeral's stronghold connections design document
+- **Purpose:** Connect the three faction strongholds to main world zones (Siltgate and Warrens) via transitional rooms
+- **Connections implemented:**
+  1. **The Carrion Court** (Krewe Calliope) → **Siltgate** (Dockward) — superdome-breach → flooded-concourse → dock-street-1
+  2. **The Reliquary** (Kindari) → **Siltgate** (Ashgate) — filtration-annex → pipe-bridge → ashgate-chapel
+  3. **The Bloom Observatory** (Bloom Tenders) → **Warrens** — platform-descent → causeway-terminus → shattered-gate
+- **New rooms (6 total):**
+  - `superdome-breach` (the-carrion-court, corridor) — Krewe breach in Superdome wall
+  - `flooded-concourse` (the-siltgate, corridor, {water}) — Flooded approach to Superdome
+  - `filtration-annex` (the-reliquary, corridor, {heavy_door}) — Kindari maintenance corridor
+  - `pipe-bridge` (the-siltgate, entrance) — Suspended walkway over blast crater
+  - `platform-descent` (the-bloom-observatory, corridor) — External staircase down platform leg
+  - `causeway-terminus` (warrens, entrance) — Causeway meets eastern wastes
+- **Exit pattern:** 24 exits total (12 bidirectional pairs, 3 inter-zone connections). Each connection has 6 exits: 2 intra-zone pairs in stronghold, 1 inter-zone pair, 2 intra-zone pairs in world zone.
+- **Inter-zone exits:** Follow established pattern from 004_seed_siltgate.sql — `to_room_slug = from_room_slug` (portal pattern), with `target_zone_slug` and `target_room_slug` filled, NULLIF for empty strings.
+- **Direction conflict resolution:**
+  - `dock-street-1`: Used WEST (north/south/east occupied)
+  - `ashgate-chapel`: Used WEST (north occupied, as designed)
+  - `shattered-gate`: Used NORTH (west/east/south occupied)
+- **Zone totals after migration:**
+  - the-carrion-court: 11 rooms (was 10), 15 exits (was 12)
+  - the-reliquary: 11 rooms (was 10), 15 exits (was 12)
+  - the-bloom-observatory: 11 rooms (was 10), 15 exits (was 12)
+  - the-siltgate: 140 rooms (was 138), 292 exits (was 284)
+  - warrens: 110 rooms (was 109), 222 exits (was 218)
+
+**Status:** Migration created and tested. Coordinator fixed 2 direction conflicts during implementation.
+
+**Orchestration Log:** `.squad/orchestration-log/2026-04-06T19:20:15Z-bruenor.md`
+
+### Stronghold Redesign Implementation (2026-04-08)
+- **Scope:** Rebuilt all three faction strongholds in `003_seed_zones.sql` from Elminster''s redesign (Reliquary 22 rooms, Bloom Observatory 23 rooms, Carrion Court 24 rooms).
+- **Topology:** New corridor-heavy layouts with updated inter-zone exits; portal targets updated for pipe-bridge, flooded-concourse, and causeway-terminus.
+- **Creatures:** Added 15 non-aggressive stronghold NPCs to `002_seed_content.sql` with ambient stats and preferred room lists.
+- **Slug decision:** Adopted short room prefixes (`reliquary-*`, `bloom-*`, `carrion-*`) and updated entry room slugs accordingly.

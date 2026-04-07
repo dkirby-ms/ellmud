@@ -14,8 +14,22 @@
 - **Hooks:** `useAutoScroll` for scrollable panes, `useShardConnection` for game room connections.
 - **Compass nav:** `CompassControl.tsx` in sidebar. Exit data via `state.roomHeader.exits`.
 
+## Team Updates
+
+### 2026-04-06: Issues #316 & #317 — Zone Designer Context Menu Enhancements
+- **Issue #316:** Implemented styled delete confirmation modal (dark theme pattern) replacing browser confirm()
+- **Issue #317:** Implemented "Connect to Zone..." context menu option; integrated direction conflict warnings
+- **Commits:** 62bb849 (delete modal), 30ba579 (context menu)
+- **Pattern decision:** Reused existing portal dialog state/handlers rather than extracting new component; justified by single additional call site
+- **Team impact:** No API changes; same portal exit patterns; direction warnings now shown for all callers
+
+---
+
 ## Learnings
 
+- **Zone Designer side panel scroll fix (Issue #327):** The right-side detail panel in `ZoneDesigner.tsx` lacked `overflow-y: auto`, so content extending past the viewport was inaccessible. The height chain from `ZonesDetail.tsx` (`h-full` → `flex-1 overflow-hidden` → `absolute inset-0`) through ZoneDesigner's root (`h-full flex flex-col`) and main area (`flex flex-1 min-h-0`) was already correct — the panel just needed the overflow class. One-line fix. PR #329.
+- **ANSI colored text system (Issue #318):** Built a full ANSI text pipeline — parser (`ansi-parser.ts`), render component (`AnsiText.tsx`), admin preview (`AnsiPreview.tsx`). Supports hybrid syntax: lightweight tags `[red]text[/red]` and raw ANSI escapes `\x1b[31m`. Both map to existing `.ansi-*` CSS classes. Integrated AnsiPreview into 7 admin detail pages (description textareas) and AnsiText into 4 player-facing components (ZoneExploration, ItemTooltip, ChatPanel, CombinedStashLoadout). Zero-overhead fast path: plain text with no markup returns the raw string without extra DOM. PR #324.
+- **Minimap z-level auto-sync (Issue #319):** `MapRenderer.tsx` used `useState(defaultFloor)` which only sets the initial value — it never updated when the player moved to a different z-level. Added a `useEffect` that syncs `currentFloor` when `currentRoomId` changes, mirroring the pattern already in `FullMapOverlay.tsx`. PR #320. Also confirmed the minimap still uses legacy `computeLayout.ts`, not the elkjs/ReactFlow stack from the zone designer.
 - **Phase 4 visual enhancements (2026-04-11):** PR #287 for issue #271. Phase 3 already delivered Bézier curves, direction gradients, type-based shapes, and basic selection glow. Phase 4 adds: edge hover brightening (useState + CSS transitions), enhanced glow (drop-shadow filters), type-based MiniMap coloring (entry=green, boss=red, feature=purple), direction emoji labels (↑↓→←▲▼) with fade-in on hover/selection, and room property tags (heavy_door/cavern/water) rendered below nodes. Properties are passed from ZoneDesigner via the node data interface.
 - **Zone Designer migration issues created (2026-04-04):** Tracking issue #266 (elkjs + ReactFlow Migration epic). Phase issues: #267 (Phase 0: Foundation), #268 (Phase 1: Visual Polish), #269 (Phase 2: elkjs Layout Swap), #270 (Phase 3: ReactFlow Integration), #271 (Phase 4: Visual Enhancements), #272 (Phase 5: Advanced Features), #273 (Phase 6: Cleanup). All labeled `enhancement` in `dkirby-ms/ellmud`.
 - **Zone API uses a separate base path:** Zones use `/admin/api/zones/*` not the generic `/admin/api/content/{type}` path. Created `zone-api.ts` wrapping `adminFetch` for zone/room/exit CRUD.
@@ -1307,3 +1321,24 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 
 **Integration:** No server changes needed — `/api/spawn-zone` pre-existed (Drizzt's work). Drizzt's LLM transport (#310) independent; no conflicts.
 
+
+### Issue #316: Delete Room Styled Modal (2026-07-23)
+**Agent:** Regis  
+**Status:** ✅ Complete — committed  
+**Test Coverage:** 21 zone-designer-flow tests passing  
+
+**Delivered:** Replaced native `window.confirm()` for room deletion with a styled modal matching the existing delete exit modal pattern. Dark theme colors: `#1C1D27` bg, `#C9A84C` gold title, `#8B2500` destructive button. Both toolbar and context menu delete paths now go through a shared `confirmDeleteRoom()` handler — the context menu path gained undo/redo support as a bonus.
+
+**Pattern:** `deleteRoomTarget` state (stores `ZoneRoomDefinition | null`) controls modal visibility. Two remaining `confirm()` calls (reverse exit delete, orphan removal) are out of scope.
+
+**Files:** `packages/client/src/pages/admin/ZoneDesigner.tsx`
+
+### Connect to Zone — Context Menu (#317, 2026-01-19)
+
+**Delivered:** Added "Connect to Zone…" (🌐) button to the right-click context menu in ZoneDesigner, right after "Connect Exit…". Clicking it sets the selected room and opens the existing portal dialog (zone picker → room picker → direction picker). Also added direction conflict warning (amber ⚠️) when the chosen direction already has any exit, and a "No rooms in this zone yet" italic hint for empty target zones.
+
+**Approach:** Reused the existing portal dialog and state (`showPortalDialog`, `portalTargetZone`, etc.) rather than extracting a separate component. Added an optional `roomSlugOverride` param to `openPortalDialog()` to handle React state batching — the context menu needs to pass the room slug directly since `setSelectedRoom` hasn't committed yet when the async function runs.
+
+**Files:** `packages/client/src/pages/admin/ZoneDesigner.tsx`
+
+- **Zone detail default tab change (2026-07-22):** Made Designer tab the default when navigating to a zone detail page (`ZonesDetail.tsx`). Also reordered tabs so Designer appears immediately after General (order: General, Designer, Rooms, Exits). Commit ce60625. Simple two-line change in `ZonesDetail.tsx` — `useState<Tab>("designer")` and tab array reorder.

@@ -319,7 +319,7 @@ describe('001_schema.sql — Run History', () => {
   });
 
   it('has zone_tier CHECK constraint (1-3)', () => {
-    expect(sql).toMatch(/shard_tier\s+INT\s+NOT NULL\s+CHECK\s*\(shard_tier BETWEEN 1 AND 3\)/i);
+    expect(sql).toMatch(/zone_tier\s+INT\s+NOT NULL\s+CHECK\s*\(zone_tier BETWEEN 1 AND 3\)/i);
   });
 
   it('has duration_sec CHECK constraint (>= 0)', () => {
@@ -331,11 +331,11 @@ describe('001_schema.sql — Run History', () => {
   });
 
   it('has survived boolean default false', () => {
-    expect(sql).toMatch(/extracted\s+BOOLEAN\s+NOT NULL\s+DEFAULT\s+false/i);
+    expect(sql).toMatch(/survived\s+BOOLEAN\s+NOT NULL\s+DEFAULT\s+false/i);
   });
 
   it('has items_carried_out JSONB column', () => {
-    expect(sql).toMatch(/extracted_items\s+JSONB\s+NOT NULL\s+DEFAULT\s+'\[\]'/i);
+    expect(sql).toMatch(/items_carried_out\s+JSONB\s+NOT NULL\s+DEFAULT\s+'\[\]'/i);
   });
 
   it('references players table', () => {

@@ -13,7 +13,50 @@
 - **User:** dkirby-ms
 - **GDD:** GDD.md (comprehensive design document covering all game systems)
 
+## Team Updates
+
+### 2026-04-06: Stronghold-Zone Connection Orchestration
+- **Session orchestration coordinated** across design (Elminster), implementation (Regis x2), content (Bruenor, Laeral)
+- **Issue #316 (Regis):** Delete modal replaced browser confirm() with styled dark-theme pattern
+- **Issue #317 (Regis):** Context menu implementation deployed; direction conflict warnings included
+- **Migration 022 (Bruenor):** Faction strongholds connected to world zones (6 rooms, 24 exits)
+- **Route design (Laeral):** Stronghold-to-zone connection routes finalized
+- **Decisions merged:** Design specs, implementation notes, UI patterns filed to squad decisions
+
+---
+
 ## Learnings
+
+### 2026-04-06: Migration Consolidation Design (001–022 → 4 files)
+- **Task:** Design a consolidation plan to collapse 22 migration files into ~4 clean files for fresh-DB creation.
+- **Analysis:** Read all 22 migrations end-to-end. Tracked every schema change, column rename, data insert, data update, topology fix, and inter-zone connection across the full migration history.
+- **Key insight:** Migrations 011–020 are almost entirely renames and rewrites of data/columns created in 001–004. The consolidated version just uses final names/values, eliminating all ALTER/RENAME/UPDATE-after-INSERT patterns.
+- **Proposed structure:** 001_schema.sql (27 tables, final column names), 002_seed_content.sql (factions, items, creatures with final names/stats), 003_seed_zones.sql (6 zones, 291 rooms, all exits), 004_reputation.sql (optional, could fold into 001).
+- **Tricky spots documented:** Siltgate slug inconsistency (the-siltgate vs siltgate in 016), room description appends vs rewrites (019 overwrites all), idle tick multiplication (10x from 010), stronghold slug chains (013→016→017→022).
+- **Deliverable:** `.squad/decisions/inbox/elminster-migration-consolidation.md`
+- **Key lesson:** When consolidating migration histories, work backwards from the final state — track what each column/value IS, not what it WAS. Renames and updates become no-ops when you just use the final name from the start.
+
+### 2026-01-19: Issue #317 — "Connect to Zone" Context Menu Design
+- **Task:** Design spec for adding inter-zone portal creation to zone designer right-click menu
+- **Research findings:**
+  - Context menu currently offers 6 directional "Add Room" buttons, Edit Room, Copy/Paste Properties, Connect Exit, and Delete Room
+  - Existing "Create Portal" button workflow already demonstrates the full UX pattern: zone picker → room picker → direction picker → API call
+  - Portal exits use `target_zone_slug` + `target_room_slug` fields; `toRoomSlug` is set to `fromRoomSlug` (convention for portal exits)
+  - Phantom portal target nodes already render in graph for horizontal-direction portal exits (cyan-colored, non-interactive)
+  - API endpoint `POST /admin/api/zones/:zoneId/exits` accepts portal exit structure; no server-side validation of target zone/room existence
+- **Design decisions:**
+  - Extract existing portal dialog code to reusable `PortalDialog` component (eliminates duplication between button and context menu)
+  - Add "Connect to Zone..." menu item with 🌐 icon after "Connect Exit..." option
+  - Show non-blocking warning if direction already has exit (conflict detection) — admin may intentionally create overlapping exits for conditional logic
+  - Skip undo/redo for MVP (existing portal button doesn't integrate with undo stack either — defer to future iteration)
+- **Edge cases documented:**
+  - Target zone with no rooms → disable Create button, show "No rooms in this zone yet" message
+  - Direction conflicts with existing exit → show warning, allow creation (non-blocking)
+  - Invalid target room slug → orphan exit created, handled by existing orphan cleanup tool
+- **Reuse opportunities:** Portal dialog logic, direction conflict detection, zone filtering
+- **Key lesson:** When adding context menu features, look for existing button workflows to reuse — the UX pattern and API calls are already proven. Extraction to shared components reduces duplication and makes future enhancements benefit all call sites.
+- **Deliverable:** Design spec written to `.squad/decisions/inbox/elminster-connect-to-zone-design.md` (comprehensive spec with API details, UI flow, edge cases, code snippets, testing checklist)
+- **Next:** Regis to review design, implement feature
 
 ### 2026-04-05 (Round 4): Triaging Issue #293 (LLM Narration Toggle)
 - **Task:** Assess feature request for user-controlled LLM narration toggle (enable/disable)

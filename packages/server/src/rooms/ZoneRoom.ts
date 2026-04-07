@@ -1000,6 +1000,20 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.deliverResult(client, result);
     }
 
+    // Deliver targeted narrations (e.g., teleport notification to the moved player)
+    if (result.targetNarrations) {
+      const targetClient = this.clients.find((c) => c.sessionId === result.targetNarrations!.sessionId);
+      if (targetClient) {
+        for (const narration of result.targetNarrations.narrations) {
+          this.sendNarrate(targetClient, {
+            text: narration.text,
+            type: narration.type,
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
+
     // Trace: send trace narrations on room entry or "look"
     if (movedRoom || verb === 'look') {
       this.sendTraceNarrations(client, player.currentRoomId);
@@ -1041,6 +1055,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             armour: c.armour, agility: c.agility, dodgeSkillRank: c.dodgeSkillRank,
           })),
       corpseSystem: this.corpseSystem,
+      resolvePlayerByName: (name: string) => {
+        const lower = name.toLowerCase();
+        for (const [sid, ps] of this.players) {
+          const charName = this.characterNames.get(sid);
+          if (charName && charName.toLowerCase() === lower) {
+            return { sessionId: sid, player: ps, characterName: charName };
+          }
+        }
+        return undefined;
+      },
     };
   }
 
@@ -1773,7 +1797,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
    *
    * GDD §6.5, §6.8 — Corpse/Loot-on-Death
    */
-  private handlePlayerDeath(playerId: string, playerName: string, roomId: string, killerIds?: string[]): void {
+  private async handlePlayerDeath(playerId: string, playerName: string, roomId: string, killerIds?: string[]): Promise<void> {
     const player = this.players.get(playerId);
     if (!player) return;
 
@@ -1880,21 +1904,38 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Send death state to the defeated player
     const client = this.findClient(playerId);
     if (client) {
-      // Resolve faction-based hub target (stronghold if faction member, Refuge otherwise)
-      const factionSlug = this.playerFactionSlugs.get(playerId);
-      const hubTarget = resolvePlayerHubTarget(factionSlug);
-      const hubName = resolvePlayerHubName(factionSlug);
+      // Resolve respawn location: last rented inn → faction hub → default hub
+      let respawnTarget: string;
+      let respawnName: string;
+      let respawnRoomSlug: string | undefined;
+
+      let lastInn: { zoneSlug: string; roomSlug: string } | null = null;
+      try {
+        lastInn = await this.characterRepo.getLastInn(playerId);
+      } catch (err) {
+        this.log(`Failed to load last inn for ${this.playerTag(playerId)}: ${err}`);
+      }
+
+      if (lastInn) {
+        respawnTarget = `zone:${lastInn.zoneSlug}`;
+        respawnName = 'your rented room';
+        respawnRoomSlug = lastInn.roomSlug;
+      } else {
+        const factionSlug = this.playerFactionSlugs.get(playerId);
+        respawnTarget = resolvePlayerHubTarget(factionSlug);
+        respawnName = resolvePlayerHubName(factionSlug);
+      }
 
       this.sendOverlayState(client, {
         playerId,
         state: 'death',
         narration: isPvPKill
-          ? `A rival adventurer fells you. You awaken in ${hubName}, bearing the death penalty…`
-          : `The darkness claims you. You awaken in ${hubName}, weakened by the death penalty…`,
+          ? `A rival adventurer fells you. You awaken in ${respawnName}, bearing the death penalty…`
+          : `The darkness claims you. You awaken in ${respawnName}, weakened by the death penalty…`,
         timestamp: Date.now(),
       });
 
-      // Schedule return to hub after 3 seconds
+      // Schedule return to respawn location after 3 seconds
       this.clock.setTimeout(async () => {
         if (!this.players.has(playerId)) {
           this.log(`Player ${this.playerTag(playerId)} already left during death delay — skipping cleanup`);
@@ -1906,17 +1947,21 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         // already deleted, and the stale equipment survives in the profile repo.
         await this.savePlayerProfile(playerId, this.players.get(playerId)!);
 
-        client.send(MessageTypes.ROOM_SWITCH, {
-          target: hubTarget,
+        const roomSwitch: RoomSwitchMessage = {
+          target: respawnTarget,
           reason: 'player_death',
-        } satisfies RoomSwitchMessage);
+        };
+        if (respawnRoomSlug) {
+          roomSwitch.options = { targetRoomSlug: respawnRoomSlug };
+        }
+        client.send(MessageTypes.ROOM_SWITCH, roomSwitch);
 
         // Clean up player from zone state
         this.players.delete(playerId);
         this.ownerPlayerIds.delete(playerId);
         this.state.playerCount = Math.max(0, this.state.playerCount - 1);
         this.updateMetadata();
-        this.log(`Player ${this.playerTag(playerId)} died and returned to ${hubTarget}`);
+        this.log(`Player ${this.playerTag(playerId)} died and returned to ${respawnTarget}`);
       }, 3000);
     }
 

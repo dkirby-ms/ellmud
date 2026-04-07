@@ -26,6 +26,8 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "../../components/ui/alert-dialog.js";
+import AnsiDescriptionEditor from "../../components/admin/AnsiDescriptionEditor.js";
+import { parseAnsiText } from "../../lib/ansi-parser.js";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -352,6 +354,9 @@ export default function ZoneDesigner({
   // Delete exit modal
   const [showDeleteExitModal, setShowDeleteExitModal] = useState(false);
   const [deleteAlsoReverse, setDeleteAlsoReverse] = useState(true);
+
+  // Delete room confirm dialog
+  const [deleteRoomTarget, setDeleteRoomTarget] = useState<ZoneRoomDefinition | null>(null);
 
   // Floor switching
   const [currentFloor, setCurrentFloor] = useState(0);
@@ -1031,9 +1036,16 @@ export default function ZoneDesigner({
     }
   }
 
-  async function handleDeleteRoom() {
+  function handleDeleteRoom() {
     const room = rooms.find((r) => r.slug === selectedRoom);
-    if (!room || !confirm(`Delete room "${room.name}"?`)) return;
+    if (!room) return;
+    setDeleteRoomTarget(room);
+  }
+
+  async function confirmDeleteRoom() {
+    const room = deleteRoomTarget;
+    if (!room) return;
+    setDeleteRoomTarget(null);
     try {
       setBusy(true);
       setError(null);
@@ -1491,8 +1503,8 @@ export default function ZoneDesigner({
   }
 
   // ─── Portal CRUD ────────────────────────────────────────
-  async function openPortalDialog() {
-    if (!selectedRoom) return;
+  async function openPortalDialog(roomSlugOverride?: string) {
+    if (!roomSlugOverride && !selectedRoom) return;
     try {
       const zones = await listZones();
       setAllZones(zones.filter((z) => z.slug !== zone.slug));
@@ -2018,7 +2030,7 @@ export default function ZoneDesigner({
         {/* ─── Side panel ─────────────────────────────────── */}
         {(selectedRoomData || selectedExitData || connectTarget) && (
           <div 
-            className="border-l border-[#2A2B35] p-4 space-y-3 flex-shrink-0 relative"
+            className="border-l border-[#2A2B35] p-4 space-y-3 flex-shrink-0 relative overflow-y-auto"
             style={{ width: panelWidth }}
           >
             {/* Drag handle */}
@@ -2146,19 +2158,12 @@ export default function ZoneDesigner({
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
-                    Description
-                  </label>
-                  <textarea
-                    value={editForm.description}
-                    onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
-                    rows={8}
-                    className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-2 py-2 text-[#D3D7CF] text-sm leading-relaxed focus:border-[#C9A84C] focus:outline-none resize-y"
-                    style={{ fontFamily: "var(--font-mono)", fontSize: "0.875rem", lineHeight: "1.35" }}
-                    placeholder="Room description as the player will see it…"
-                  />
-                </div>
+                <AnsiDescriptionEditor
+                  value={editForm.description}
+                  onChange={(v) => setEditForm((f) => ({ ...f, description: v }))}
+                  rows={8}
+                  placeholder="Room description as the player will see it…"
+                />
                 {/* Properties checkboxes */}
                 <div>
                   <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
@@ -2392,7 +2397,7 @@ export default function ZoneDesigner({
                       )}
                     </h2>
                     <p style={{ color: "#D3D7CF", maxWidth: "80ch" }}>
-                      {editForm.description || <span style={{ color: "#4A4B55", fontStyle: "italic" }}>No description yet.</span>}
+                      {editForm.description ? parseAnsiText(editForm.description) : <span style={{ color: "#4A4B55", fontStyle: "italic" }}>No description yet.</span>}
                     </p>
                     <div style={{ height: 1, background: "#C9A84C", opacity: 0.1, marginTop: "0.5rem" }} />
                   </div>
@@ -2918,20 +2923,43 @@ export default function ZoneDesigner({
               Connect Exit…
             </button>
 
+            <button
+              onClick={() => {
+                const roomSlug = contextMenu.roomSlug;
+                setContextMenu(null);
+                setSelectedRoom(roomSlug);
+                void openPortalDialog(roomSlug);
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: "100%",
+                padding: "6px 12px",
+                background: "transparent",
+                border: "none",
+                color: "#E0E0E0",
+                cursor: "pointer",
+                fontFamily: "var(--font-sans)",
+                fontSize: 12,
+                textAlign: "left",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#2A2B35"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+            >
+              <span style={{ width: 14, textAlign: "center" }}>🌐</span>
+              Connect to Zone…
+            </button>
+
             {/* Divider */}
             <div style={{ height: 1, background: "#2A2B35", margin: "4px 0" }} />
 
             <button
               disabled={busy}
               onClick={() => {
+                if (!cmRoom) return;
                 setContextMenu(null);
-                if (!cmRoom || !confirm(`Delete room "${cmRoom.name}"?`)) return;
-                setBusy(true);
-                setError(null);
-                deleteRoom(cmRoom.id)
-                  .then(() => { setSelectedRoom(null); onZoneChanged?.(); })
-                  .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed to delete room"))
-                  .finally(() => setBusy(false));
+                setDeleteRoomTarget(cmRoom);
               }}
               style={{
                 display: "flex",
@@ -3230,19 +3258,12 @@ export default function ZoneDesigner({
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
-                  Description
-                </label>
-                <textarea
-                  value={roomForm.description}
-                  onChange={(e) => setRoomForm((f) => ({ ...f, description: e.target.value }))}
-                  placeholder="Describe this room..."
-                  rows={2}
-                  className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] text-sm focus:border-[#C9A84C] focus:outline-none resize-none"
-                 
-                />
-              </div>
+              <AnsiDescriptionEditor
+                value={roomForm.description}
+                onChange={(v) => setRoomForm((f) => ({ ...f, description: v }))}
+                rows={2}
+                placeholder="Describe this room..."
+              />
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   onClick={() => setShowRoomForm(false)}
@@ -3296,6 +3317,11 @@ export default function ZoneDesigner({
                 >
                   {DIRECTION_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
                 </select>
+                {selectedRoom && exits.some((e) => e.fromRoomSlug === selectedRoom && e.direction === portalDirection) && (
+                  <div style={{ color: "#F59E0B", fontSize: 12, marginTop: 4, fontFamily: "var(--font-sans)" }}>
+                    ⚠️ Direction {portalDirection} already has an exit. This will create a conflicting exit.
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-[#8A8B95] text-xs mb-1" style={{ fontFamily: "var(--font-sans)" }}>
@@ -3329,6 +3355,11 @@ export default function ZoneDesigner({
                     <option key={r.slug} value={r.slug}>{r.name} ({r.slug})</option>
                   ))}
                 </select>
+                {portalTargetZone && portalTargetRooms.length === 0 && (
+                  <div style={{ color: "#8A8B95", fontSize: 12, fontStyle: "italic", marginTop: 4, fontFamily: "var(--font-sans)" }}>
+                    No rooms in this zone yet
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
@@ -3525,6 +3556,54 @@ export default function ZoneDesigner({
           </div>
         );
       })()}
+
+      {/* ─── Delete Room Confirm Modal ──────────────────────── */}
+      {deleteRoomTarget && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setDeleteRoomTarget(null)}
+        >
+          <div
+            className="bg-[#1C1D27] border border-[#2A2B35] rounded-lg p-6 w-96"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-[#C9A84C] text-sm mb-4" style={{ fontFamily: "var(--font-sans)" }}>
+              Delete Room
+            </h3>
+
+            <div className="space-y-3 mb-4">
+              <p className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
+                Are you sure you want to delete this room? This action cannot be easily undone.
+              </p>
+
+              <div className="bg-[#12131A] border border-[#2A2B35] rounded p-3">
+                <div className="text-[#E8E0D0] text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+                  {deleteRoomTarget.name} <span className="text-[#8A8B95]">({deleteRoomTarget.slug})</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteRoomTarget(null)}
+                disabled={busy}
+                className="px-3 py-1.5 border border-[#2A2B35] text-[#8A8B95] rounded text-sm hover:bg-[#12131A] disabled:opacity-40"
+                style={{ fontFamily: "var(--font-sans)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void confirmDeleteRoom()}
+                disabled={busy}
+                className="px-3 py-1.5 bg-[#8B2500] hover:bg-[#A03000] text-[#E8E0D0] rounded text-sm disabled:opacity-40"
+                style={{ fontFamily: "var(--font-sans)" }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

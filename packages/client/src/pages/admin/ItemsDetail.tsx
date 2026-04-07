@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Send, AlertCircle } from "lucide-react";
 import { getItem, createItem, updateItem, AdminAPIError } from "../../lib/admin-api";
+import AnsiPreview from "../../components/admin/AnsiPreview.js";
 
 type ItemType = "weapon" | "armour" | "consumable" | "material" | "tool" | "key" | "blueprint";
 type GearTier = "scrap" | "common" | "sturdy" | "refined" | "masterwork" | "anomalous";
@@ -282,6 +283,7 @@ export default function ItemsDetail() {
                     className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
                    
                   />
+                  <AnsiPreview value={formData.description} />
                 </div>
               </div>
             </div>

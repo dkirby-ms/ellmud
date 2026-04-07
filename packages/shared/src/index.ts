@@ -482,6 +482,8 @@ export interface RoomSwitchOptions {
   roomId?: string;
   /** Optional zone metadata for UI or future matchmaking. */
   tier?: ZoneTier;
+  /** Target a specific room within the zone on join (e.g. inn room on death respawn). */
+  targetRoomSlug?: string;
 }
 
 /** Server → Client: Instruct client to switch rooms. */
