@@ -2253,3 +2253,32 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
   - QueuedAction.abilityId added for future skill action routing
 - **Next steps:** CombatSystem integration needed - validateAbilityAction(), updateCooldowns(), and resolveEncounterTick() modifications to handle ability actions and fallback to auto-attack when cooldown/stamina checks fail
 - **Outcome:** Foundation complete, tests written but skipped pending CombatSystem integration (squad/279-ability-cooldown-system branch, commit 495d3ce)
+
+### 2025-01-04: Combat Grid System Design Analysis (Issue #337)
+- **Task:** Research and write design analysis for DCSS-style grid-based tactical combat
+- **Context:** Issue #337 proposes replacing abstract position zones (Front/Flank/Rear) with x-y grid combat for tactical depth
+- **Key findings:**
+  - **Existing position system is foundational** — `packages/server/src/combat/CombatState.ts` defines `PositionZone` ('front' | 'flank' | 'rear') with position cooldowns (3 ticks). `CombatSystem.ts` validates range via `canReachTarget()`, applies flanking bonus (+15% from Flank when target's focus is Front). GDD §6.11 defines full mechanics.
+  - **Tick-based loop is grid-ready** — 1-second ticks with 6-phase resolution (position → ability → auto-attack → creature actions → status → broadcast). Adding grid movement fits cleanly in Phase 1 (position resolution).
+  - **Creature AI uses position types** — `CreaturePositionType` ('melee' | 'ranged' | 'skirmisher' | 'boss') determines reachability and repositioning behavior. Skirmishers chase high-threat Rear targets (healers). Boss creatures reach all zones. Grid version needs pathfinding (A* on grid graph).
+  - **Range validation is central** — Current logic: melee from Rear fails, ranged hits all zones. Grid logic: Chebyshev distance (max(|Δx|, |Δy|)) + weapon type ranges (melee ≤1 tile, short-range ≤5, long-range ≤10).
+- **Proposal:**
+  - **Grid dimensions:** 8×8 (small), 10×10 (standard), 12×12 (boss arenas). Stored per-room in `zone_rooms` table (`grid_width`, `grid_height`, `obstacles` JSONB).
+  - **Movement cost:** 1 action = 1 tile (orthogonal or diagonal). No multi-tile moves in Phase 1. Queued as `{ action: 'move', gridTarget: {x, y} }`.
+  - **Backward compatibility:** `gridPosition?: GridPosition` on `Combatant`. If present, use grid logic; else fall back to zone logic. Derive `position` (zone) from `gridPosition.y` for existing mechanics.
+  - **Phase 1 (3-4 weeks):** Grid movement, distance-based range validation, basic A* pathfinding for creatures. Text-based coordinates ("You at (5,3). Goblin at (4,1)."). NO LOS, NO cover, NO facing.
+  - **Phase 2 (4-6 weeks):** ASCII grid renderer, line-of-sight (raycasting), cover mechanics, facing/flanking, cone/circle telegraphs.
+  - **Phase 3 (stretch):** DCSS-style tile rendering (canvas/WebGL), animated movement, fog of war.
+- **Risks:**
+  - **Performance:** 20 players + 10 creatures = 900 range checks/tick. Mitigation: cache distance matrix (O(n²) once, O(1) lookups).
+  - **Text-mode rendering:** Can players visualize grid from coordinates alone? Need ASCII grid prototype.
+  - **Content complexity:** Designers must manually place spawn points and obstacles per room. Mitigation: make grid opt-in (boss fights only in Phase 1).
+- **Key files:**
+  - `packages/server/src/combat/CombatState.ts` — `PositionZone`, `Combatant.position`, `REPOSITION_COOLDOWN_TICKS`
+  - `packages/server/src/combat/CombatSystem.ts` — `canReachTarget()`, `getReachablePlayers()`, `pickCreatureTarget()`, position resolution in tick loop
+  - `packages/server/src/combat/damage.ts` — Flanking bonus logic (GDD §6.11)
+  - `packages/server/src/creatures/behavior.ts` — Creature state machine, action selection
+  - `packages/shared/src/index.ts` — `PositionZone`, `CreaturePositionType` type definitions
+  - GDD.md §6.11 — Complete position system specification
+- **Recommendation:** Prototype Phase 1 in feature branch. Go/no-go based on performance (<100ms/tick with 30 entities) and text-mode UX. If successful, grid becomes opt-in for boss fights. If not, defer until graphical client available.
+- **Design doc:** `docs/design/337-combat-grid-systems.md` (27KB, 8 sections: current system analysis, grid mechanics proposal, creature AI pathfinding, integration analysis, risks, phased implementation)

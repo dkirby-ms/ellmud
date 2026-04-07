@@ -1342,3 +1342,36 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 **Files:** `packages/client/src/pages/admin/ZoneDesigner.tsx`
 
 - **Zone detail default tab change (2026-07-22):** Made Designer tab the default when navigating to a zone detail page (`ZonesDetail.tsx`). Also reordered tabs so Designer appears immediately after General (order: General, Designer, Rooms, Exits). Commit ce60625. Simple two-line change in `ZonesDetail.tsx` — `useState<Tab>("designer")` and tab array reorder.
+
+### Combat Grid Frontend Design Analysis — Issue #337 (2026-01-25)
+
+**Delivered:** Comprehensive design document for DCSS-style visual combat grid integration. Research covers tileset licensing (DCSS CC0 tiles via github.com/crawl/tiles), rendering approach (Canvas 2D recommended over WebGL), UI integration strategy (optional overlay coexisting with text combat), and technical implementation roadmap.
+
+**Key architecture decisions:**
+1. **Canvas 2D rendering** (not WebGL/Pixi.js) — simpler, proven in DCSS webtiles, no library overhead
+2. **rot.js for tile engine** (or custom 200-line renderer if rot.js feels heavy)
+3. **Grid as optional enhancement** — toggle button, preserves text-first accessibility
+4. **Grid state via WebSocket** — server-authoritative positions, client renders
+5. **Mobile strategy** — disable on small screens initially, add full-screen overlay if demand exists
+
+**Responsive & accessibility:**
+- Desktop: Grid replaces minimap widget during combat (right panel)
+- Tablet: Full-screen overlay with touch controls
+- Mobile: Disabled by default (text combat works fine)
+- Screen reader: Text parity requirement — all grid events logged as text
+- Keyboard nav: Arrow keys for cursor, Tab for entity cycling
+
+**Performance targets:** 60fps on 2020-era mid-range devices (400 tiles + 20 entities should be trivial for Canvas 2D)
+
+**Implementation phases:**
+- Phase 1 (1-2 weeks): Prototype with hardcoded data, Canvas rendering, click-to-select
+- Phase 2 (2-3 weeks): Server integration (WebSocket protocol, real grid state)
+- Phase 3 (1-2 weeks): Polish (animations, keyboard nav, high contrast mode)
+
+**Files:** `docs/design/337-combat-grid-frontend.md` (33KB design doc)
+
+**Current client analysis:** Text-first DOM rendering (no Canvas/WebGL in game UI). Combat state already tracked in `store.ts` (roomOccupants has creatures/players). CombatHUD and RoomOccupants components show combat info. ZoneExploration layout has right panel with minimap/compass/HUD — grid would slot in here during combat.
+
+**Tileset:** DCSS tiles are CC0 (public domain equivalent), 32×32px standard, organized in sprite sheets. Alternative: Kenney Roguelike Pack (CC0, 16×16), Oryx Design Lab (CC BY 3.0), or custom tiles. Recommendation: Start with DCSS CC0 tiles.
+
+**Open questions:** Grid size (fixed 20×20 vs variable), FOV/fog-of-war (full visibility vs line-of-sight), multi-floor combat (out of scope for MVP).

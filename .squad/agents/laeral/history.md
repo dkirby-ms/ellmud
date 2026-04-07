@@ -31,6 +31,18 @@
 
 ## Learnings
 
+### 2026-04-07: Issue #337 — Grid Combat Visual Design Analysis
+- Designed a complete visual system for DCSS-style grid combat supplementing Ellmud's text-primary MUD experience.
+- **Creature representation:** Silhouettes define creature category; saturation/color depth signals threat level. Size scales with tier (T1 = 1×1, T4+ bosses = 2×2+ cells).
+- **Zone theming on grid:** Each faction stronghold gets a distinct color palette (Kindari = gunmetal/rust, Bloom = sickly green/cyan, Krewe = purple/gold). Terrain tiles and hazard overlays translate narrative themes into mechanical visibility.
+- **Player sprites:** Faction-colored with visible equipment; PvP threats show red glow; group management via proximity clustering and abbreviated names.
+- **Fog of war:** Partial visibility based on existing LOS mechanics; off-screen creatures shown as ghosted outlines or sound radiants. Prevents grid from becoming a "perfect information" cheat.
+- **Design principle:** Grid is *optional and supplementary*, never mandatory. Text-first combat remains fully functional without grid. Accessibility is front-loaded (color-blind modes, mobile support, keyboard-only).
+- **Art direction:** 32×32px high-contrast pixel art (retro, moody, efficient). Recommended references: DCSS (readability), Cogmind (brutalist sci-fi), Caves of Qud (mutation horror), Darkest Dungeon (gothic mood).
+- **Core decision:** Pixel art over drawn/vector/3D because it matches Ellmud's dystopian aesthetic, scales cleanly, and performs well even on low-bandwidth. ASCII-enhanced fallback available for purists.
+- **Implementation phases:** Foundation (tileset framework + core silhouettes) → Creature/hazard art → Client integration → Polish.
+- **Key learnings:** Position-based combat is already in GDD; grid is a transparency layer, not a game changer. Partial visibility preserves extraction-horror tension. Faction-specific color palettes make a 32px tile feel lush and thematic.
+
 ### 2025-07-24: The Warrens Zone Design
 - Designed an 11-room extraction dungeon (tier 1–2, ruins biome) with full room graph, exit map, 4 creature types, and 7 items.
 - Design document saved to `.squad/decisions/inbox/laeral-warrens-design.md` for Bruenor to implement.
