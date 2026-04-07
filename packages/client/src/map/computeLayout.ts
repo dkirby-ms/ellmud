@@ -58,14 +58,114 @@ const PERPENDICULAR_PAIRS: [string, string][] = [
 
 const MIN_GRID_CLUSTER_SIZE = 9; // 3×3 minimum
 
-/**
- * Post-BFS coordinate multiplier. All final (x, y) positions are scaled
- * by this factor, leaving empty cells between rooms for cleaner edge
- * routing and fewer collision-cascade displacements.
- */
-const GRID_STEP = 2;
+// ─── Layout Constants ────────────────────────────────────────────────────────
+
+/** Maximum spiral search radius before giving up. */
+const MAX_SEARCH_RADIUS = 500;
+
+/** Penalty for diagonal exits (connected rooms not axis-aligned). */
+const DIAGONAL_PENALTY = 20;
+
+/** Penalty for direction-violated exits (e.g. east exit with dx ≤ 0). */
+const DIRECTION_MISMATCH_PENALTY = 50;
+
+/** Light occlusion penalty for rooms on exit line segments (early phases). */
+const OCCLUSION_PENALTY_LIGHT = 3;
+
+/** Heavy occlusion penalty for dedicated occlusion fix phase. */
+const OCCLUSION_PENALTY_HEAVY = 15;
+
+/** Max force-relaxation iterations per z-level. */
+const FORCE_RELAXATION_ITERATIONS = 200;
+
+/** Diamond search radius around the ideal position during relaxation. */
+const RELAX_CANDIDATE_RADIUS = 4;
+
+/** Diamond search radius around each neighbor's "want" position. */
+const NEIGHBOR_CANDIDATE_RADIUS = 2;
+
+/** Max pairwise swap iterations. */
+const SWAP_ITERATIONS = 50;
+
+/** Max single-room move iterations after each swap round. */
+const POST_SWAP_MOVE_ITERATIONS = 50;
+
+/** Max diagonal cascade fix passes. */
+const DIAGONAL_CASCADE_PASSES = 60;
+
+/** Search radius when displacing an occupant during diagonal fix. */
+const DIAGONAL_DISPLACE_RADIUS = 5;
+
+/** Max rooms in a push/cascade group before aborting. */
+const MAX_PUSH_GROUP_SIZE = 40;
+
+/** Post-diagonal single-room relaxation iterations. */
+const POST_DIAGONAL_RELAX_ITERATIONS = 100;
+
+/** Diamond search radius in post-diagonal relaxation. */
+const POST_DIAGONAL_CANDIDATE_RADIUS = 3;
+
+/** Max direction violation repair passes. */
+const DIRECTION_VIOLATION_PASSES = 100;
+
+/** Diamond search radius for direction violation candidate moves. */
+const VIOLATION_CANDIDATE_RADIUS = 10;
+
+/** Diamond search radius for direction violation swaps. */
+const VIOLATION_SWAP_RADIUS = 4;
+
+/** Max occlusion fix iterations. */
+const OCCLUSION_FIX_ITERATIONS = 200;
+
+/** Wide diamond search radius for occluder displacement. */
+const OCCLUDER_SEARCH_RADIUS = 8;
+
+/** Diamond search radius for two-move occluder relocation. */
+const TWO_MOVE_OCCLUDER_RADIUS = 6;
+
+/** Diamond search radius for evictee relocation in two-move strategy. */
+const TWO_MOVE_EVICTEE_RADIUS = 4;
+
+/** Diamond search radius for segment compaction. */
+const COMPACTION_CANDIDATE_RADIUS = 2;
+
+/** Max grid expansion passes. */
+const EXPANSION_PASSES = 40;
+
+/** Max rooms in a direction violation shift group. */
+const MAX_VIOLATION_GROUP_SIZE = 60;
+
+/** Max rooms in an expansion shift group. */
+const MAX_EXPANSION_GROUP_SIZE = 90;
+
+/** Gap between disconnected subgraphs. */
+const DISCONNECTED_SUBGRAPH_GAP = 3;
+
+/** Number of expansion + occlusion cleanup rounds. */
+const EXPANSION_OCCLUSION_ROUNDS = 3;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Yield cell coordinates in expanding diamond (Manhattan distance) order.
+ * Each ring at distance r contains all cells exactly r steps from center.
+ */
+function* diamondCandidates(
+  cx: number,
+  cy: number,
+  minRadius: number,
+  maxRadius: number,
+): Generator<{ x: number; y: number }> {
+  for (let r = minRadius; r <= maxRadius; r++) {
+    for (let ddx = -r; ddx <= r; ddx++) {
+      const absRem = r - Math.abs(ddx);
+      const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
+      for (const ddy of dyOpts) {
+        yield { x: cx + ddx, y: cy + ddy };
+      }
+    }
+  }
+}
 
 /** Encode a 2D cell coordinate as a set key. */
 function cellKey(x: number, y: number): string {
@@ -75,7 +175,7 @@ function cellKey(x: number, y: number): string {
 /**
  * Spiral outward from (cx, cy) to find the nearest unoccupied cell.
  * Searches in concentric rings of increasing Manhattan distance.
- * Used for disconnected subgraph placement.
+ * Returns the start position if no free cell is found within MAX_SEARCH_RADIUS.
  */
 function findNearestUnoccupied(
   cx: number,
@@ -84,22 +184,11 @@ function findNearestUnoccupied(
 ): { x: number; y: number } {
   if (!occupied.has(cellKey(cx, cy))) return { x: cx, y: cy };
 
-  for (let radius = 1; ; radius++) {
-    // Walk the ring at this Manhattan distance.
-    // Top edge: y = cy - radius, x from cx - radius to cx + radius
-    for (let dx = -radius; dx <= radius; dx++) {
-      const dy = -(radius - Math.abs(dx));
-      const key = cellKey(cx + dx, cy + dy);
-      if (!occupied.has(key)) return { x: cx + dx, y: cy + dy };
-    }
-    // Bottom edge (skip corners already visited above)
-    for (let dx = -radius; dx <= radius; dx++) {
-      const dy = radius - Math.abs(dx);
-      if (dy === -(radius - Math.abs(dx))) continue; // already checked (only when dy==0 and dx==±radius)
-      const key = cellKey(cx + dx, cy + dy);
-      if (!occupied.has(key)) return { x: cx + dx, y: cy + dy };
-    }
+  for (const c of diamondCandidates(cx, cy, 1, MAX_SEARCH_RADIUS)) {
+    if (!occupied.has(cellKey(c.x, c.y))) return c;
   }
+
+  return { x: cx, y: cy };
 }
 
 /**
@@ -140,41 +229,32 @@ function findNearestDirectional(
     }
   }
 
-  for (let radius = 1; radius < 200; radius++) {
+  for (let radius = 1; radius <= MAX_SEARCH_RADIUS; radius++) {
     let best: { x: number; y: number } | null = null;
     let bestScore = -Infinity;
-    // Fallback: best candidate that IS on an exit line (still better than nothing)
     let bestOnLine: { x: number; y: number } | null = null;
     let bestOnLineScore = -Infinity;
 
-    for (let ddx = -radius; ddx <= radius; ddx++) {
-      const absRemainder = radius - Math.abs(ddx);
-      const dyOptions = absRemainder === 0 ? [0] : [-absRemainder, absRemainder];
+    for (const c of diamondCandidates(idealX, idealY, radius, radius)) {
+      if (occupied.has(cellKey(c.x, c.y))) continue;
+      if (!satisfiesDirection(c.x, c.y)) continue;
 
-      for (const ddy of dyOptions) {
-        const cx = idealX + ddx;
-        const cy = idealY + ddy;
-        if (occupied.has(cellKey(cx, cy))) continue;
-        if (!satisfiesDirection(cx, cy)) continue;
+      const score = (c.x - idealX) * dirDx + (c.y - idealY) * dirDy;
+      const onLine = exitLineCells?.has(cellKey(c.x, c.y));
 
-        const score = ddx * dirDx + ddy * dirDy;
-        const onLine = exitLineCells?.has(cellKey(cx, cy));
-
-        if (onLine) {
-          if (score > bestOnLineScore) {
-            bestOnLineScore = score;
-            bestOnLine = { x: cx, y: cy };
-          }
-        } else {
-          if (score > bestScore) {
-            bestScore = score;
-            best = { x: cx, y: cy };
-          }
+      if (onLine) {
+        if (score > bestOnLineScore) {
+          bestOnLineScore = score;
+          bestOnLine = c;
+        }
+      } else {
+        if (score > bestScore) {
+          bestScore = score;
+          best = c;
         }
       }
     }
 
-    // Prefer off-line candidates; fall back to on-line if necessary
     if (best) return best;
     if (bestOnLine) return bestOnLine;
   }
@@ -378,40 +458,29 @@ export function computeLayout(
     // Find the smallest shift (spiral) that avoids all collisions
     let shiftX = 0;
     let shiftY = 0;
-    outer: for (let radius = 0; radius < 200; radius++) {
-      if (radius === 0) {
-        // Try no shift first
+
+    // Try no shift first
+    let needsShift = false;
+    for (const p of positions) {
+      if (occupied.has(cellKey(anchorX + p.relX, anchorY + p.relY))) {
+        needsShift = true;
+        break;
+      }
+    }
+
+    if (needsShift) {
+      for (const c of diamondCandidates(0, 0, 1, MAX_SEARCH_RADIUS)) {
         let collision = false;
         for (const p of positions) {
-          if (occupied.has(cellKey(anchorX + p.relX, anchorY + p.relY))) {
+          if (occupied.has(cellKey(anchorX + p.relX + c.x, anchorY + p.relY + c.y))) {
             collision = true;
             break;
           }
         }
-        if (!collision) break;
-      } else {
-        // Try all offsets at this Manhattan distance
-        for (let dx = -radius; dx <= radius; dx++) {
-          for (const sign of [-1, 1]) {
-            const dy = sign * (radius - Math.abs(dx));
-            let collision = false;
-            for (const p of positions) {
-              if (
-                occupied.has(
-                  cellKey(anchorX + p.relX + dx, anchorY + p.relY + dy),
-                )
-              ) {
-                collision = true;
-                break;
-              }
-            }
-            if (!collision) {
-              shiftX = dx;
-              shiftY = dy;
-              break outer;
-            }
-            if (dy === 0) break; // avoid checking (dx, 0) twice
-          }
+        if (!collision) {
+          shiftX = c.x;
+          shiftY = c.y;
+          break;
         }
       }
     }
@@ -613,7 +682,7 @@ export function computeLayout(
       if (p.x > maxX) maxX = p.x;
     }
 
-    const offsetX = maxX + 3;
+    const offsetX = maxX + DISCONNECTED_SUBGRAPH_GAP;
     bfs(roomId, offsetX, 0, 0);
   }
 
@@ -754,17 +823,9 @@ export function computeLayout(
   // Alternate between grid expansion (inserting columns/rows by group
   // shifts) and individual-room occlusion fixes. Each round exploits free
   // cells created by the previous round's expansion.
-  for (let round = 0; round < 3; round++) {
+  for (let round = 0; round < EXPANSION_OCCLUSION_ROUNDS; round++) {
     resolveOcclusionsByExpansion();
     fixOcclusions();
-  }
-
-  // ── Final: Scale grid to add spacing between rooms ─────────────────────
-  // Multiply all (x, y) by GRID_STEP so rooms are 2 grid units apart.
-  // This leaves empty cells between rooms for cleaner edge routing.
-  // Z is not scaled — it's a floor index, not a spatial coordinate.
-  for (const [id, pos] of result) {
-    result.set(id, { x: pos.x * GRID_STEP, y: pos.y * GRID_STEP, z: pos.z });
   }
 
   return result;
@@ -776,10 +837,9 @@ export function computeLayout(
    * cardinal exit where distance > 1, plus a penalty for each diagonal,
    * plus a penalty for rooms sitting on exit line segments (occlusions).
    */
-  function layoutScore(z: number): number {
+  function layoutScore(z: number, occlusionWeight: number = OCCLUSION_PENALTY_LIGHT): number {
     let score = 0;
 
-    // Collect z-level room positions for occlusion checks
     const zPositions: { id: string; x: number; y: number }[] = [];
     for (const [id, pos] of result) {
       if (pos.z === z) zPositions.push({ id, x: pos.x, y: pos.y });
@@ -796,16 +856,7 @@ export function computeLayout(
         if (!tp || tp.z !== z) continue;
         const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
         if (dist > 1) score += dist - 1;
-        // Diagonal penalty — heavily penalize directionally wrong exits.
-        // Must be large enough that the relaxation will accept longer but
-        // axis-aligned connections over short diagonal ones.
-        if (pos.x !== tp.x && pos.y !== tp.y) score += 20;
-        // Direction mismatch penalty — penalizes rooms placed opposite to
-        // or perpendicular to their exit direction. Strict: east exits must
-        // have dx > 0, not just dx >= 0. This catches perpendicular placements
-        // (dx=0 for east) that would render as wrong-direction lines.
-        // Weight is dominant (50) to ensure direction correctness is prioritized
-        // over distance compactness or diagonal elimination.
+        if (pos.x !== tp.x && pos.y !== tp.y) score += DIAGONAL_PENALTY;
         const dx = tp.x - pos.x;
         const dy = tp.y - pos.y;
         if (
@@ -814,23 +865,19 @@ export function computeLayout(
           (offset.dy > 0 && dy <= 0) ||
           (offset.dy < 0 && dy >= 0)
         ) {
-          score += 50;
+          score += DIRECTION_MISMATCH_PENALTY;
         }
-        // Line-through-room occlusion penalty — rooms sitting on an exit
-        // line segment between two other connected rooms are visually
-        // confusing. Kept moderate so force-relaxation and diagonal cascade
-        // can converge; the dedicated fixOcclusions phase handles residuals.
         if (dist >= 2 && (pos.x === tp.x || pos.y === tp.y)) {
           for (const other of zPositions) {
             if (other.id === roomId || other.id === targetId) continue;
             if (pos.x === tp.x && other.x === pos.x) {
               const minY = Math.min(pos.y, tp.y);
               const maxY = Math.max(pos.y, tp.y);
-              if (other.y > minY && other.y < maxY) score += 3;
+              if (other.y > minY && other.y < maxY) score += occlusionWeight;
             } else if (pos.y === tp.y && other.y === pos.y) {
               const minX = Math.min(pos.x, tp.x);
               const maxX = Math.max(pos.x, tp.x);
-              if (other.x > minX && other.x < maxX) score += 3;
+              if (other.x > minX && other.x < maxX) score += occlusionWeight;
             }
           }
         }
@@ -871,6 +918,93 @@ export function computeLayout(
   }
 
   /**
+   * One pass of single-room relaxation: try moving each room to reduce the
+   * layout score. Builds candidates near the ideal position and near each
+   * neighbor's preferred position, then commits the best-scoring move.
+   */
+  function relaxRooms(
+    zRoomIds: string[],
+    z: number,
+    occupied: Set<string>,
+    startScore: number,
+    scoreFn: (z: number) => number,
+  ): { score: number; improved: boolean } {
+    let score = startScore;
+    let improved = false;
+
+    for (const roomId of zRoomIds) {
+      const pos = result.get(roomId)!;
+      const ideal = idealPosition(roomId, z);
+      if (!ideal) continue;
+      if (ideal.x === pos.x && ideal.y === pos.y) continue;
+
+      const candidateSet = new Set<string>();
+      const candidates: { x: number; y: number }[] = [];
+      const addCandidate = (x: number, y: number) => {
+        const k = cellKey(x, y);
+        if (!candidateSet.has(k)) {
+          candidateSet.add(k);
+          candidates.push({ x, y });
+        }
+      };
+
+      for (const c of diamondCandidates(ideal.x, ideal.y, 0, RELAX_CANDIDATE_RADIUS)) {
+        addCandidate(c.x, c.y);
+      }
+
+      const room = rooms.get(roomId);
+      if (room) {
+        for (const [dir, neighborId] of room.exits) {
+          const offset = DIRECTION_OFFSETS[dir];
+          if (!offset || offset.dz !== 0) continue;
+          const neighborPos = result.get(neighborId);
+          if (!neighborPos || neighborPos.z !== z) continue;
+          const wantX = neighborPos.x - offset.dx;
+          const wantY = neighborPos.y - offset.dy;
+          for (const c of diamondCandidates(wantX, wantY, 0, NEIGHBOR_CANDIDATE_RADIUS)) {
+            addCandidate(c.x, c.y);
+          }
+        }
+      }
+
+      let bestPos: { x: number; y: number } | null = null;
+      let bestScore = score;
+
+      for (const cand of candidates) {
+        if (cand.x === pos.x && cand.y === pos.y) continue;
+        const key = cellKey(cand.x, cand.y);
+        if (occupied.has(key)) continue;
+        if (moveWouldIncreaseMismatches(roomId, cand.x, cand.y, z)) continue;
+
+        const oldKey = cellKey(pos.x, pos.y);
+        occupied.delete(oldKey);
+        occupied.add(key);
+        result.set(roomId, { x: cand.x, y: cand.y, z });
+
+        const newScore = scoreFn(z);
+        if (newScore < bestScore) {
+          bestScore = newScore;
+          bestPos = cand;
+        }
+
+        occupied.delete(key);
+        occupied.add(oldKey);
+        result.set(roomId, pos);
+      }
+
+      if (bestPos) {
+        occupied.delete(cellKey(pos.x, pos.y));
+        occupied.add(cellKey(bestPos.x, bestPos.y));
+        result.set(roomId, { x: bestPos.x, y: bestPos.y, z });
+        score = bestScore;
+        improved = true;
+      }
+    }
+
+    return { score, improved };
+  }
+
+  /**
    * Iterative force-directed relaxation. Each iteration:
    * 1. For each room, compute where its neighbors "want" it
    * 2. Try moving the room to that ideal position (or nearby)
@@ -886,107 +1020,16 @@ export function computeLayout(
       let currentScore = layoutScore(z);
       if (currentScore === 0) continue; // Already perfect
 
-      for (let iter = 0; iter < 200 && currentScore > 0; iter++) {
-        let improved = false;
-
-        for (const roomId of zRoomIds) {
-          const pos = result.get(roomId)!;
-          const ideal = idealPosition(roomId, z);
-          if (!ideal) continue;
-
-          // Skip if already at ideal
-          if (ideal.x === pos.x && ideal.y === pos.y) continue;
-
-          // Try the ideal position and nearby cells (within radius 4)
-          const candidateSet = new Set<string>();
-          const candidates: { x: number; y: number }[] = [];
-          const addCandidate = (x: number, y: number) => {
-            const k = cellKey(x, y);
-            if (!candidateSet.has(k)) {
-              candidateSet.add(k);
-              candidates.push({ x, y });
-            }
-          };
-
-          // Candidates near the average ideal position
-          for (let r = 0; r <= 4; r++) {
-            for (let ddx = -r; ddx <= r; ddx++) {
-              const absRem = r - Math.abs(ddx);
-              const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-              for (const ddy of dyOpts) {
-                addCandidate(ideal.x + ddx, ideal.y + ddy);
-              }
-            }
-          }
-
-          // Candidates near each neighbor's "wants" position (where each
-          // individual neighbor wants this room, not the average)
-          const room = rooms.get(roomId);
-          if (room) {
-            for (const [dir, neighborId] of room.exits) {
-              const offset = DIRECTION_OFFSETS[dir];
-              if (!offset || offset.dz !== 0) continue;
-              const neighborPos = result.get(neighborId);
-              if (!neighborPos || neighborPos.z !== z) continue;
-              const wantX = neighborPos.x - offset.dx;
-              const wantY = neighborPos.y - offset.dy;
-              for (let r = 0; r <= 2; r++) {
-                for (let ddx = -r; ddx <= r; ddx++) {
-                  const absRem = r - Math.abs(ddx);
-                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                  for (const ddy of dyOpts) {
-                    addCandidate(wantX + ddx, wantY + ddy);
-                  }
-                }
-              }
-            }
-          }
-
-          let bestPos: { x: number; y: number } | null = null;
-          let bestScore = currentScore;
-
-          for (const cand of candidates) {
-            if (cand.x === pos.x && cand.y === pos.y) continue;
-            const key = cellKey(cand.x, cand.y);
-            if (occupied.has(key)) continue;
-            if (moveWouldIncreaseMismatches(roomId, cand.x, cand.y, z)) continue;
-
-            // Tentatively move room
-            const oldKey = cellKey(pos.x, pos.y);
-            occupied.delete(oldKey);
-            occupied.add(key);
-            result.set(roomId, { x: cand.x, y: cand.y, z });
-
-            const newScore = layoutScore(z);
-            if (newScore < bestScore) {
-              bestScore = newScore;
-              bestPos = cand;
-            }
-
-            // Undo
-            occupied.delete(key);
-            occupied.add(oldKey);
-            result.set(roomId, pos);
-          }
-
-          if (bestPos) {
-            // Commit the move
-            occupied.delete(cellKey(pos.x, pos.y));
-            occupied.add(cellKey(bestPos.x, bestPos.y));
-            const newPos = { x: bestPos.x, y: bestPos.y, z };
-            result.set(roomId, newPos);
-            currentScore = bestScore;
-            improved = true;
-          }
-        }
-
-        if (!improved) break;
+      for (let iter = 0; iter < FORCE_RELAXATION_ITERATIONS && currentScore > 0; iter++) {
+        const r = relaxRooms(zRoomIds, z, occupied, currentScore, layoutScore);
+        currentScore = r.score;
+        if (!r.improved) break;
       }
 
       // Phase 2: Try room swaps — explores multi-room rearrangements that
       // single-room moves can't find (e.g., two rooms blocking each other)
       if (currentScore > 0) {
-        for (let swapIter = 0; swapIter < 50 && currentScore > 0; swapIter++) {
+        for (let swapIter = 0; swapIter < SWAP_ITERATIONS && currentScore > 0; swapIter++) {
           let swapped = false;
 
           for (let i = 0; i < zRoomIds.length && currentScore > 0; i++) {
@@ -1018,86 +1061,10 @@ export function computeLayout(
           if (!swapped) break;
 
           // After a swap, re-run single-room moves to exploit freed opportunities
-          for (let moveIter = 0; moveIter < 50 && currentScore > 0; moveIter++) {
-            let moved = false;
-            for (const roomId of zRoomIds) {
-              const pos = result.get(roomId)!;
-              const ideal = idealPosition(roomId, z);
-              if (!ideal) continue;
-              if (ideal.x === pos.x && ideal.y === pos.y) continue;
-
-              const candidateSet2 = new Set<string>();
-              const candidates: { x: number; y: number }[] = [];
-              const addCand = (x: number, y: number) => {
-                const k = cellKey(x, y);
-                if (!candidateSet2.has(k)) {
-                  candidateSet2.add(k);
-                  candidates.push({ x, y });
-                }
-              };
-              for (let r = 0; r <= 4; r++) {
-                for (let ddx = -r; ddx <= r; ddx++) {
-                  const absRem = r - Math.abs(ddx);
-                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                  for (const ddy of dyOpts) {
-                    addCand(ideal.x + ddx, ideal.y + ddy);
-                  }
-                }
-              }
-              const roomDef = rooms.get(roomId);
-              if (roomDef) {
-                for (const [dir2, nId] of roomDef.exits) {
-                  const off = DIRECTION_OFFSETS[dir2];
-                  if (!off || off.dz !== 0) continue;
-                  const np = result.get(nId);
-                  if (!np || np.z !== z) continue;
-                  const wx = np.x - off.dx, wy = np.y - off.dy;
-                  for (let r = 0; r <= 2; r++) {
-                    for (let ddx = -r; ddx <= r; ddx++) {
-                      const absRem = r - Math.abs(ddx);
-                      const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                      for (const ddy of dyOpts) {
-                        addCand(wx + ddx, wy + ddy);
-                      }
-                    }
-                  }
-                }
-              }
-
-              let bestPos: { x: number; y: number } | null = null;
-              let bestScore = currentScore;
-
-              for (const cand of candidates) {
-                if (cand.x === pos.x && cand.y === pos.y) continue;
-                const key = cellKey(cand.x, cand.y);
-                if (occupied.has(key)) continue;
-                if (moveWouldIncreaseMismatches(roomId, cand.x, cand.y, z)) continue;
-
-                const oldKey = cellKey(pos.x, pos.y);
-                occupied.delete(oldKey);
-                occupied.add(key);
-                result.set(roomId, { x: cand.x, y: cand.y, z });
-
-                const newScore = layoutScore(z);
-                if (newScore < bestScore) {
-                  bestScore = newScore;
-                  bestPos = cand;
-                }
-
-                occupied.delete(key);
-                occupied.add(oldKey);
-                result.set(roomId, pos);
-              }
-
-              if (bestPos) {
-                occupied.delete(cellKey(pos.x, pos.y));
-                occupied.add(cellKey(bestPos.x, bestPos.y));
-                result.set(roomId, { x: bestPos.x, y: bestPos.y, z });
-                currentScore = bestScore;
-                moved = true;
-              }
-            }
-            if (!moved) break;
+          for (let moveIter = 0; moveIter < POST_SWAP_MOVE_ITERATIONS && currentScore > 0; moveIter++) {
+            const r = relaxRooms(zRoomIds, z, occupied, currentScore, layoutScore);
+            currentScore = r.score;
+            if (!r.improved) break;
           }
         }
       }
@@ -1126,7 +1093,7 @@ export function computeLayout(
         return m;
       }
 
-      for (let pass = 0; pass < 60; pass++) {
+      for (let pass = 0; pass < DIAGONAL_CASCADE_PASSES; pass++) {
         const diags: Array<{
           roomId: string;
           targetId: string;
@@ -1218,36 +1185,29 @@ export function computeLayout(
 
               // Displace occupant to nearby cell
               const occupantKey = cellKey(occupantPos.x, occupantPos.y);
-              for (let r = 1; r <= 5 && !improved; r++) {
-                for (let ddx = -r; ddx <= r && !improved; ddx++) {
-                  const absRem = r - Math.abs(ddx);
-                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                  for (const ddy of dyOpts) {
-                    const nx = occupantPos.x + ddx;
-                    const ny = occupantPos.y + ddy;
-                    const nk = cellKey(nx, ny);
-                    if (occupied.has(nk)) continue;
+              for (const c of diamondCandidates(occupantPos.x, occupantPos.y, 1, DIAGONAL_DISPLACE_RADIUS)) {
+                if (improved) break;
+                const nk = cellKey(c.x, c.y);
+                if (occupied.has(nk)) continue;
 
-                    occupied.delete(moverOldKey);
-                    occupied.delete(occupantKey);
-                    occupied.add(targetKey);
-                    occupied.add(nk);
-                    result.set(sm.mover, { x: sm.newX, y: sm.newY, z });
-                    result.set(occupantId, { x: nx, y: ny, z });
+                occupied.delete(moverOldKey);
+                occupied.delete(occupantKey);
+                occupied.add(targetKey);
+                occupied.add(nk);
+                result.set(sm.mover, { x: sm.newX, y: sm.newY, z });
+                result.set(occupantId, { x: c.x, y: c.y, z });
 
-                    if (layoutScore(z) < currentScore) {
-                      improved = true;
-                      break;
-                    }
-
-                    occupied.delete(targetKey);
-                    occupied.delete(nk);
-                    occupied.add(moverOldKey);
-                    occupied.add(occupantKey);
-                    result.set(sm.mover, moverPos);
-                    result.set(occupantId, occupantPos);
-                  }
+                if (layoutScore(z) < currentScore) {
+                  improved = true;
+                  break;
                 }
+
+                occupied.delete(targetKey);
+                occupied.delete(nk);
+                occupied.add(moverOldKey);
+                occupied.add(occupantKey);
+                result.set(sm.mover, moverPos);
+                result.set(occupantId, occupantPos);
               }
             }
           }
@@ -1399,7 +1359,7 @@ export function computeLayout(
                   }
                 }
 
-                if (pushSet.size > 40) {
+                if (pushSet.size > MAX_PUSH_GROUP_SIZE) {
                   tooLarge = true;
                   break;
                 }
@@ -1478,7 +1438,7 @@ export function computeLayout(
       for (const [id, p] of result) {
         if (p.z === z) zRooms.push(id);
       }
-      for (let iter = 0; iter < 100 && score > 0; iter++) {
+      for (let iter = 0; iter < POST_DIAGONAL_RELAX_ITERATIONS && score > 0; iter++) {
         let moved = false;
         for (const rid of zRooms) {
           const rp = result.get(rid)!;
@@ -1495,14 +1455,8 @@ export function computeLayout(
             const k = cellKey(x, y);
             if (!targets.has(k)) targets.add(k);
           };
-          for (let r = 0; r <= 3; r++) {
-            for (let ddx = -r; ddx <= r; ddx++) {
-              const absRem = r - Math.abs(ddx);
-              const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-              for (const ddy of dyOpts) {
-                addTarget(ideal.x + ddx, ideal.y + ddy);
-              }
-            }
+          for (const c of diamondCandidates(ideal.x, ideal.y, 0, POST_DIAGONAL_CANDIDATE_RADIUS)) {
+            addTarget(c.x, c.y);
           }
           if (room) {
             for (const [d, nid] of room.exits) {
@@ -1564,7 +1518,7 @@ export function computeLayout(
    */
   function fixDirectionViolations(): void {
     for (const [z, occupied] of occupiedByZ) {
-      for (let pass = 0; pass < 100; pass++) {
+      for (let pass = 0; pass < DIRECTION_VIOLATION_PASSES; pass++) {
         // Find all direction violations on this z-level
         const violations: Array<{
           roomId: string;
@@ -1610,20 +1564,12 @@ export function computeLayout(
           const idealBy = posA.y + offset.dy;
 
           const candidates: Array<{ x: number; y: number }> = [];
-          for (let r = 0; r <= 10; r++) {
-            for (let ddx = -r; ddx <= r; ddx++) {
-              const absRem = r - Math.abs(ddx);
-              const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-              for (const ddy of dyOpts) {
-                const cx = idealBx + ddx;
-                const cy = idealBy + ddy;
-                if (offset.dx > 0 && cx <= posA.x) continue;
-                if (offset.dx < 0 && cx >= posA.x) continue;
-                if (offset.dy > 0 && cy <= posA.y) continue;
-                if (offset.dy < 0 && cy >= posA.y) continue;
-                candidates.push({ x: cx, y: cy });
-              }
-            }
+          for (const c of diamondCandidates(idealBx, idealBy, 0, VIOLATION_CANDIDATE_RADIUS)) {
+            if (offset.dx > 0 && c.x <= posA.x) continue;
+            if (offset.dx < 0 && c.x >= posA.x) continue;
+            if (offset.dy > 0 && c.y <= posA.y) continue;
+            if (offset.dy < 0 && c.y >= posA.y) continue;
+            candidates.push(c);
           }
 
           // Try moving target (B)
@@ -1638,28 +1584,19 @@ export function computeLayout(
             const mCands: Array<{ x: number; y: number }> = [];
             const baseX = isTarget ? anchorPos.x + offset.dx : anchorPos.x - offset.dx;
             const baseY = isTarget ? anchorPos.y + offset.dy : anchorPos.y - offset.dy;
-            for (let r = 0; r <= 10; r++) {
-              for (let ddx = -r; ddx <= r; ddx++) {
-                const absRem = r - Math.abs(ddx);
-                const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                for (const ddy of dyOpts) {
-                  const cx = baseX + ddx;
-                  const cy = baseY + ddy;
-                  if (isTarget) {
-                    if (offset.dx > 0 && cx <= anchorPos.x) continue;
-                    if (offset.dx < 0 && cx >= anchorPos.x) continue;
-                    if (offset.dy > 0 && cy <= anchorPos.y) continue;
-                    if (offset.dy < 0 && cy >= anchorPos.y) continue;
-                  } else {
-                    // Moving source: source must be in the opposite direction
-                    if (offset.dx > 0 && cx >= anchorPos.x) continue;
-                    if (offset.dx < 0 && cx <= anchorPos.x) continue;
-                    if (offset.dy > 0 && cy >= anchorPos.y) continue;
-                    if (offset.dy < 0 && cy <= anchorPos.y) continue;
-                  }
-                  mCands.push({ x: cx, y: cy });
-                }
+            for (const c of diamondCandidates(baseX, baseY, 0, VIOLATION_CANDIDATE_RADIUS)) {
+              if (isTarget) {
+                if (offset.dx > 0 && c.x <= anchorPos.x) continue;
+                if (offset.dx < 0 && c.x >= anchorPos.x) continue;
+                if (offset.dy > 0 && c.y <= anchorPos.y) continue;
+                if (offset.dy < 0 && c.y >= anchorPos.y) continue;
+              } else {
+                if (offset.dx > 0 && c.x >= anchorPos.x) continue;
+                if (offset.dx < 0 && c.x <= anchorPos.x) continue;
+                if (offset.dy > 0 && c.y >= anchorPos.y) continue;
+                if (offset.dy < 0 && c.y <= anchorPos.y) continue;
               }
+              mCands.push(c);
             }
 
             for (const cand of mCands) {
@@ -1704,49 +1641,40 @@ export function computeLayout(
             const swapBaseY = isTarget ? anchorPos.y + offset.dy : anchorPos.y - offset.dy;
 
             // Try swapping with rooms at or near the ideal position
-            for (let sr = 0; sr <= 4; sr++) {
+            for (const c of diamondCandidates(swapBaseX, swapBaseY, 0, VIOLATION_SWAP_RADIUS)) {
               if (fixed) break;
-              for (let ddx = -sr; ddx <= sr; ddx++) {
-                if (fixed) break;
-                const absRem = sr - Math.abs(ddx);
-                const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                for (const ddy of dyOpts) {
-                  const sx = swapBaseX + ddx;
-                  const sy = swapBaseY + ddy;
-                  const sk = cellKey(sx, sy);
-                  if (!occupied.has(sk)) continue;
-                  if (sx === moverPos.x && sy === moverPos.y) continue;
+              const sk = cellKey(c.x, c.y);
+              if (!occupied.has(sk)) continue;
+              if (c.x === moverPos.x && c.y === moverPos.y) continue;
 
-                  // Find who's at this position
-                  let swapTarget: string | null = null;
-                  for (const [rid, rp] of result) {
-                    if (rp.z === z && rp.x === sx && rp.y === sy) {
-                      swapTarget = rid;
-                      break;
-                    }
-                  }
-                  if (!swapTarget || swapTarget === roomId || swapTarget === targetId) continue;
-
-                  const stPos = result.get(swapTarget)!;
-
-                  if (swapWouldIncreaseMismatches(mover, moverPos, swapTarget, stPos, z)) continue;
-
-                  // Tentatively swap
-                  result.set(mover, { x: stPos.x, y: stPos.y, z });
-                  result.set(swapTarget, { x: moverPos.x, y: moverPos.y, z });
-
-                  const newScore = layoutScore(z);
-                  if (newScore < currentScore) {
-                    currentScore = newScore;
-                    fixed = true;
-                    break;
-                  }
-
-                  // Undo
-                  result.set(mover, moverPos);
-                  result.set(swapTarget, stPos);
+              // Find who's at this position
+              let swapTarget: string | null = null;
+              for (const [rid, rp] of result) {
+                if (rp.z === z && rp.x === c.x && rp.y === c.y) {
+                  swapTarget = rid;
+                  break;
                 }
               }
+              if (!swapTarget || swapTarget === roomId || swapTarget === targetId) continue;
+
+              const stPos = result.get(swapTarget)!;
+
+              if (swapWouldIncreaseMismatches(mover, moverPos, swapTarget, stPos, z)) continue;
+
+              // Tentatively swap
+              result.set(mover, { x: stPos.x, y: stPos.y, z });
+              result.set(swapTarget, { x: moverPos.x, y: moverPos.y, z });
+
+              const newScore = layoutScore(z);
+              if (newScore < currentScore) {
+                currentScore = newScore;
+                fixed = true;
+                break;
+              }
+
+              // Undo
+              result.set(mover, moverPos);
+              result.set(swapTarget, stPos);
             }
           }
 
@@ -1815,7 +1743,7 @@ export function computeLayout(
                 }
               }
 
-              if (group.size > 60) { tooLarge = true; break; }
+              if (group.size > MAX_VIOLATION_GROUP_SIZE) { tooLarge = true; break; }
             }
 
             if (tooLarge || group.has(roomId)) continue;
@@ -1873,61 +1801,6 @@ export function computeLayout(
   }
 
   // ── Occlusion fix ──────────────────────────────────────────────────────────
-
-  /**
-   * Scoring function for occlusion resolution. Identical to layoutScore but
-   * with a much heavier occlusion penalty (15 vs 3). Used only by Phase 6
-   * so that earlier phases keep their stable optimization trajectory.
-   */
-  function occlusionAwareScore(z: number): number {
-    let score = 0;
-
-    const zPositions: { id: string; x: number; y: number }[] = [];
-    for (const [id, pos] of result) {
-      if (pos.z === z) zPositions.push({ id, x: pos.x, y: pos.y });
-    }
-
-    for (const [roomId, pos] of result) {
-      if (pos.z !== z) continue;
-      const room = rooms.get(roomId);
-      if (!room) continue;
-      for (const [dir, targetId] of room.exits) {
-        const offset = DIRECTION_OFFSETS[dir];
-        if (!offset || offset.dz !== 0) continue;
-        const tp = result.get(targetId);
-        if (!tp || tp.z !== z) continue;
-        const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
-        if (dist > 1) score += dist - 1;
-        if (pos.x !== tp.x && pos.y !== tp.y) score += 20;
-        const dx = tp.x - pos.x;
-        const dy = tp.y - pos.y;
-        if (
-          (offset.dx > 0 && dx <= 0) ||
-          (offset.dx < 0 && dx >= 0) ||
-          (offset.dy > 0 && dy <= 0) ||
-          (offset.dy < 0 && dy >= 0)
-        ) {
-          score += 50;
-        }
-        // Heavy occlusion penalty — the whole point of this phase
-        if (dist >= 2 && (pos.x === tp.x || pos.y === tp.y)) {
-          for (const other of zPositions) {
-            if (other.id === roomId || other.id === targetId) continue;
-            if (pos.x === tp.x && other.x === pos.x) {
-              const minY = Math.min(pos.y, tp.y);
-              const maxY = Math.max(pos.y, tp.y);
-              if (other.y > minY && other.y < maxY) score += 15;
-            } else if (pos.y === tp.y && other.y === pos.y) {
-              const minX = Math.min(pos.x, tp.x);
-              const maxX = Math.max(pos.x, tp.x);
-              if (other.x > minX && other.x < maxX) score += 15;
-            }
-          }
-        }
-      }
-    }
-    return score;
-  }
 
   /**
    * Detect rooms sitting on straight-line exit segments between two other
@@ -1999,11 +1872,11 @@ export function computeLayout(
         if (p.z === z) zRoomIds.push(id);
       }
 
-      let currentScore = occlusionAwareScore(z);
+      let currentScore = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
       if (currentScore === 0) continue;
 
       // ── Strategy A: Single-room moves with occlusion-aware scoring ──
-      for (let iter = 0; iter < 200 && currentScore > 0; iter++) {
+      for (let iter = 0; iter < OCCLUSION_FIX_ITERATIONS && currentScore > 0; iter++) {
         let improved = false;
 
         for (const roomId of zRoomIds) {
@@ -2021,12 +1894,8 @@ export function computeLayout(
             }
           };
 
-          for (let r = 0; r <= 4; r++) {
-            for (let ddx = -r; ddx <= r; ddx++) {
-              const absRem = r - Math.abs(ddx);
-              const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-              for (const ddy of dyOpts) addCandidate(ideal.x + ddx, ideal.y + ddy);
-            }
+          for (const c of diamondCandidates(ideal.x, ideal.y, 0, RELAX_CANDIDATE_RADIUS)) {
+            addCandidate(c.x, c.y);
           }
           const roomDef = rooms.get(roomId);
           if (roomDef) {
@@ -2036,12 +1905,8 @@ export function computeLayout(
               const np = result.get(nid);
               if (!np || np.z !== z) continue;
               const wantX = np.x - off.dx, wantY = np.y - off.dy;
-              for (let r = 0; r <= 2; r++) {
-                for (let ddx = -r; ddx <= r; ddx++) {
-                  const absRem = r - Math.abs(ddx);
-                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                  for (const ddy of dyOpts) addCandidate(wantX + ddx, wantY + ddy);
-                }
+              for (const c of diamondCandidates(wantX, wantY, 0, NEIGHBOR_CANDIDATE_RADIUS)) {
+                addCandidate(c.x, c.y);
               }
             }
           }
@@ -2062,7 +1927,7 @@ export function computeLayout(
             occupied.add(key);
             result.set(roomId, { x: cand.x, y: cand.y, z });
 
-            const newScore = occlusionAwareScore(z);
+            const newScore = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
             if (newScore < bestScore) {
               bestScore = newScore;
               bestPos = cand;
@@ -2087,7 +1952,7 @@ export function computeLayout(
 
       // ── Strategy B: Pairwise swaps ──
       if (currentScore > 0) {
-        for (let swapIter = 0; swapIter < 50 && currentScore > 0; swapIter++) {
+        for (let swapIter = 0; swapIter < SWAP_ITERATIONS && currentScore > 0; swapIter++) {
           let swapped = false;
           for (let i = 0; i < zRoomIds.length && currentScore > 0; i++) {
             for (let j = i + 1; j < zRoomIds.length; j++) {
@@ -2104,7 +1969,7 @@ export function computeLayout(
               result.set(a, { x: posB.x, y: posB.y, z });
               result.set(b, { x: posA.x, y: posA.y, z });
 
-              const ns = occlusionAwareScore(z);
+              const ns = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
               if (ns < currentScore) {
                 currentScore = ns;
                 swapped = true;
@@ -2178,13 +2043,8 @@ export function computeLayout(
             if (!oCandidateSet.has(k)) { oCandidateSet.add(k); oCandidates.push({ x, y }); }
           };
 
-          // Search a wide diamond (radius 8) around current position
-          for (let r = 1; r <= 8; r++) {
-            for (let ddx = -r; ddx <= r; ddx++) {
-              const absRem = r - Math.abs(ddx);
-              const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-              for (const ddy of dyOpts) oAdd(oPos.x + ddx, oPos.y + ddy);
-            }
+          for (const c of diamondCandidates(oPos.x, oPos.y, 1, OCCLUDER_SEARCH_RADIUS)) {
+            oAdd(c.x, c.y);
           }
           // Also search near each neighbor's ideal placement
           const oRoom = rooms.get(oid);
@@ -2196,18 +2056,14 @@ export function computeLayout(
               if (!np || np.z !== z) continue;
               // Where the neighbor wants this room
               const wx = np.x - off.dx, wy = np.y - off.dy;
-              for (let r = 0; r <= 4; r++) {
-                for (let ddx = -r; ddx <= r; ddx++) {
-                  const absRem = r - Math.abs(ddx);
-                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                  for (const ddy of dyOpts) oAdd(wx + ddx, wy + ddy);
-                }
+              for (const c of diamondCandidates(wx, wy, 0, RELAX_CANDIDATE_RADIUS)) {
+                oAdd(c.x, c.y);
               }
             }
           }
 
           let bestPos: { x: number; y: number } | null = null;
-          let bestScore = occlusionAwareScore(z);
+          let bestScore = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
 
           for (const cand of oCandidates) {
             if (cand.x === oPos.x && cand.y === oPos.y) continue;
@@ -2221,7 +2077,7 @@ export function computeLayout(
             occupied.add(ck);
             result.set(oid, { x: cand.x, y: cand.y, z });
 
-            const ns = occlusionAwareScore(z);
+            const ns = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
             if (ns < bestScore) {
               bestScore = ns;
               bestPos = cand;
@@ -2283,17 +2139,12 @@ export function computeLayout(
 
           // Candidate cells for the occluder (radius 6 around current pos)
           const tgtCells: Array<{ x: number; y: number }> = [];
-          for (let r = 1; r <= 6; r++) {
-            for (let ddx = -r; ddx <= r; ddx++) {
-              const absRem = r - Math.abs(ddx);
-              for (const ddy of absRem === 0 ? [0] : [-absRem, absRem]) {
-                tgtCells.push({ x: oPos.x + ddx, y: oPos.y + ddy });
-              }
-            }
+          for (const c of diamondCandidates(oPos.x, oPos.y, 1, TWO_MOVE_OCCLUDER_RADIUS)) {
+            tgtCells.push(c);
           }
 
           let bestTwoMove: { occluderTo: { x: number; y: number }; evictee: string; evicteeTo: { x: number; y: number } } | null = null;
-          let bestTwoScore = occlusionAwareScore(z);
+          let bestTwoScore = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
 
           for (const tgt of tgtCells) {
             if (tgt.x === oPos.x && tgt.y === oPos.y) continue;
@@ -2312,13 +2163,8 @@ export function computeLayout(
             const evPos = result.get(evictee)!;
             // Try relocating evictee to a nearby free cell
             const evCands: Array<{ x: number; y: number }> = [];
-            for (let r = 1; r <= 4; r++) {
-              for (let ddx = -r; ddx <= r; ddx++) {
-                const absRem = r - Math.abs(ddx);
-                for (const ddy of absRem === 0 ? [0] : [-absRem, absRem]) {
-                  evCands.push({ x: evPos.x + ddx, y: evPos.y + ddy });
-                }
-              }
+            for (const c of diamondCandidates(evPos.x, evPos.y, 1, TWO_MOVE_EVICTEE_RADIUS)) {
+              evCands.push(c);
             }
 
             // Save state
@@ -2338,7 +2184,7 @@ export function computeLayout(
 
               // Check no diags created for evictee
               if (!wouldCreateDiag(evictee, evTgt.x, evTgt.y, z) && !wouldCreateDiag(oid2, tgt.x, tgt.y, z)) {
-                const ns = occlusionAwareScore(z);
+                const ns = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
                 if (ns < bestTwoScore) {
                   bestTwoScore = ns;
                   bestTwoMove = { occluderTo: tgt, evictee, evicteeTo: evTgt };
@@ -2426,17 +2272,11 @@ export function computeLayout(
 
               // Try the adjacent cell and nearby alternatives
               const compactCands: { x: number; y: number }[] = [{ x: adjX, y: adjY }];
-              for (let r = 1; r <= 2; r++) {
-                for (let ddx = -r; ddx <= r; ddx++) {
-                  const absRem = r - Math.abs(ddx);
-                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                  for (const ddy of dyOpts) {
-                    compactCands.push({ x: adjX + ddx, y: adjY + ddy });
-                  }
-                }
+              for (const c of diamondCandidates(adjX, adjY, 1, COMPACTION_CANDIDATE_RADIUS)) {
+                compactCands.push(c);
               }
 
-              const beforeScore = occlusionAwareScore(z);
+              const beforeScore = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
               let bestPos: { x: number; y: number } | null = null;
               let bestScore = beforeScore;
 
@@ -2452,7 +2292,7 @@ export function computeLayout(
                 occupied.add(ck);
                 result.set(mover, { x: cand.x, y: cand.y, z });
 
-                const ns = occlusionAwareScore(z);
+                const ns = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
                 if (ns < bestScore) {
                   bestScore = ns;
                   bestPos = cand;
@@ -2493,10 +2333,10 @@ export function computeLayout(
    */
   function resolveOcclusionsByExpansion(): void {
     for (const [z, occupied] of occupiedByZ) {
-      let currentScore = occlusionAwareScore(z);
+      let currentScore = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
       if (currentScore === 0) continue;
 
-      for (let pass = 0; pass < 40; pass++) {
+      for (let pass = 0; pass < EXPANSION_PASSES; pass++) {
         const zRooms: string[] = [];
         for (const [id, p] of result) {
           if (p.z === z) zRooms.push(id);
@@ -2636,7 +2476,7 @@ export function computeLayout(
                 gQueue.push(collider);
               }
 
-              if (group.size > 90) { tooLarge = true; break; }
+              if (group.size > MAX_EXPANSION_GROUP_SIZE) { tooLarge = true; break; }
             }
 
             if (tooLarge) continue;
@@ -2719,7 +2559,7 @@ export function computeLayout(
               result.set(rid, { x: m.nx, y: m.ny, z });
             }
 
-            const newScore = occlusionAwareScore(z);
+            const newScore = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
             if (newScore < currentScore) {
               currentScore = newScore;
               improved = true;
