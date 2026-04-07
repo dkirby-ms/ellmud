@@ -3304,3 +3304,33 @@ Created comprehensive `help` command handler supporting context-aware command di
 - Context-aware filtering crucial for UX (hiding irrelevant commands)
 - Defensive coding patterns eliminate non-null assertion warnings
 - System narration type provides proper semantic separation from game events
+
+## Learnings
+- Cross-zone `goto` was returning zoneTransfer without validating zone existence → client disconnect
+- Command handlers are synchronous; zone validation requires an optional callback pattern on CommandContext
+- `resolveZoneExists` added as optional sync callback (like resolveRoom, resolvePlayerByName)
+- ZoneRoom caches known zone slugs via `getZoneRepository().getAllZones()` on create (best-effort, non-blocking)
+- Belt-and-suspenders: validate at handler level (goto) AND at ZoneRoom level before sending ZONE_TRANSFER
+- Key files: `commands/handlers/goto.ts`, `commands/index.ts` (CommandContext), `rooms/ZoneRoom.ts`
+
+## Goto Zone Validation Fix (Issue #342, Commit 73bc91e)
+
+**Date:** 2026-04-07
+**Role:** Engine Developer
+**Status:** ✅ Complete
+
+**Root Cause:** `handleGoto` returned a `zoneTransfer` for cross-zone targets without checking if the zone exists. Client received ZONE_TRANSFER for a nonexistent zone, matchmaker failed, player disconnected.
+
+**Fix:**
+- Added `resolveZoneExists?: (slug: string) => boolean` to `CommandContext`
+- `handleGoto` validates zone slug before returning `zoneTransfer`
+- ZoneRoom caches known zone slugs during `onCreate` and wires the callback
+- Defensive check in ZoneRoom's `handleCommandMessage` before sending ZONE_TRANSFER
+
+**Files Modified:**
+- `packages/server/src/commands/index.ts` — Added `resolveZoneExists` to CommandContext
+- `packages/server/src/commands/handlers/goto.ts` — Zone existence check before transfer
+- `packages/server/src/rooms/ZoneRoom.ts` — `knownZoneSlugs` cache, callback wiring, defensive check
+- `packages/server/src/__tests__/goto.test.ts` — 3 new tests (nonexistent zone, valid zone, same-zone colon with bad room)
+
+**Tests:** 10 goto tests pass, 2331 total server tests pass, zero regressions.
