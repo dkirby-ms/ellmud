@@ -31,6 +31,32 @@
 
 ## Learnings
 
+### 2026-04-07: Sandbox Arena Content Design — The Refuge Combat Testing Facilities
+- Designed a complete sandbox combat system for The Refuge, extending the dev hub with dedicated testing infrastructure.
+- **Physical layout:** 4 new rooms (Proving Hall, Test Arena, Armory, Control Sanctum) connected via north exit from the Hearth, forming a thematic training complex.
+- **Room theming:** Each room reinforces the "designer pocket dimension" aesthetic: Proving Hall as a study of violence, Test Arena as an ancient training ground (chalk circles, bloodstains, chains), Armory as a maintenance logbook, Control Sanctum as a planning hub with observation mirror.
+- **Creature roster:** 15 test creatures across 5 core archetypes (Melee Tank, Ranged, Dodger, AoE, Swarm) spanning 4 tiers (T0-T3) for progression from trivial to boss-level difficulty. All creatures use `training_` slug prefix to distinguish from live content.
+- **Archetype selection:** Mirrors live zone populations (Warrens, Siltgate have melee, ranged, magic users). Each archetype includes 2-3 tiers to allow both baseline and extreme testing.
+- **Stat scaling principles:** Tier progression is steep — T3 creatures are 3-5× more durable/damaging than T1. Agility and armour define archetype feel (Dodgers: high agility/low armour; Tanks: low agility/high armour; Ranged: medium-high both; AoE: medium balanced; Swarm: numerous, weak individually).
+- **Encounter building:** Roster supports templates (1v1, group, boss, swarm) and designer flexibility—just mix archetypes and tiers to build test scenarios. No preset encounters locked in; designers improvise.
+- **Safety features:** Test Arena is marked `safe_container = true` (no corpse drops, no debuffs, respawn in-room). Sandbox deaths are consequence-free for rapid iteration.
+- **Loot simplicity:** All sandbox creatures drop training-grade items only (scrap metal, crystals, minimal gear). Focuses testing on mechanics, not economics.
+- **Implementation ready:** Design includes full DB integration notes, migration script placement, and respawn logic. Creatures follow existing `creature_definitions` schema; rooms follow zone room patterns.
+- **Expansion roadmap:** Phase 2 (interactive Control Sanctum UI), Phase 3 (extended arenas with environmental hazards), Phase 4 (spectator gallery with logging).
+- **Design document filed:** `docs/design/sandbox-arena-content.md` — comprehensive reference for implementation and future design conversations.
+
+### 2026-04-07: Issue #337 — Grid Combat Visual Design Analysis
+- Designed a complete visual system for DCSS-style grid combat supplementing Ellmud's text-primary MUD experience.
+- **Creature representation:** Silhouettes define creature category; saturation/color depth signals threat level. Size scales with tier (T1 = 1×1, T4+ bosses = 2×2+ cells).
+- **Zone theming on grid:** Each faction stronghold gets a distinct color palette (Kindari = gunmetal/rust, Bloom = sickly green/cyan, Krewe = purple/gold). Terrain tiles and hazard overlays translate narrative themes into mechanical visibility.
+- **Player sprites:** Faction-colored with visible equipment; PvP threats show red glow; group management via proximity clustering and abbreviated names.
+- **Fog of war:** Partial visibility based on existing LOS mechanics; off-screen creatures shown as ghosted outlines or sound radiants. Prevents grid from becoming a "perfect information" cheat.
+- **Design principle:** Grid is *optional and supplementary*, never mandatory. Text-first combat remains fully functional without grid. Accessibility is front-loaded (color-blind modes, mobile support, keyboard-only).
+- **Art direction:** 32×32px high-contrast pixel art (retro, moody, efficient). Recommended references: DCSS (readability), Cogmind (brutalist sci-fi), Caves of Qud (mutation horror), Darkest Dungeon (gothic mood).
+- **Core decision:** Pixel art over drawn/vector/3D because it matches Ellmud's dystopian aesthetic, scales cleanly, and performs well even on low-bandwidth. ASCII-enhanced fallback available for purists.
+- **Implementation phases:** Foundation (tileset framework + core silhouettes) → Creature/hazard art → Client integration → Polish.
+- **Key learnings:** Position-based combat is already in GDD; grid is a transparency layer, not a game changer. Partial visibility preserves extraction-horror tension. Faction-specific color palettes make a 32px tile feel lush and thematic.
+
 ### 2025-07-24: The Warrens Zone Design
 - Designed an 11-room extraction dungeon (tier 1–2, ruins biome) with full room graph, exit map, 4 creature types, and 7 items.
 - Design document saved to `.squad/decisions/inbox/laeral-warrens-design.md` for Bruenor to implement.

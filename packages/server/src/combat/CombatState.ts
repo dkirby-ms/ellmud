@@ -147,6 +147,8 @@ export interface CombatEvent {
   killerIds?: string[];
   /** True when the target successfully dodged the attack (GDD §6.4). */
   dodged?: boolean;
+  /** Detailed damage pipeline breakdown — populated on strike events for observability. */
+  breakdown?: import('./damage.js').DamageBreakdown;
 }
 
 export interface FleeResult {

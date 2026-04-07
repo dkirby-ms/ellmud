@@ -3093,3 +3093,2155 @@ The existing migration runner (check `packages/server/src/db/` for the runner im
 2. For the fresh-DB scenario: wipe the tracking table along with the DB
 3. Consider whether to update the runner to handle the new 001–004 numbering
 4. Remove the old 001–022 files after consolidation (or archive them in a `migrations/archive/` folder)
+
+---
+
+# Decision: DikuMUD Zone Importer Prototype
+
+**Author:** Bruenor  
+**Date:** 2026-07-25  
+**PR:** #325  
+**Status:** Prototype / Experimental
+
+## Context
+
+Built a converter script (`scripts/import-diku-zone.ts`) that parses classic CircleMUD `.wld` world files and generates Ellmud-compatible SQL migrations. This enables importing rooms and exits from the massive library of existing DikuMUD/CircleMUD content.
+
+## Key Decisions
+
+1. **Room-only scope:** Only `.wld` files (rooms + exits). Items (`.obj`), creatures (`.mob`), and zone resets (`.zon`) are future work.
+
+2. **SQL format matches 003_seed_zones.sql exactly:** Cross-join VALUES, ON CONFLICT guards, NULLIF for inter-zone columns, subquery zone_id. Imported content uses the same patterns as hand-authored zones.
+
+3. **Cross-zone exits are skipped:** Exits pointing to vnums outside the file are logged as warnings but not included in output. Resolving cross-zone exits would require parsing multiple `.wld` files together — future enhancement.
+
+4. **Slug generation:** Room names → kebab-case, auto-deduplicated. This means duplicate names like "The Great Field Of Midgaard" get suffixed (`-2`, `-3`).
+
+5. **Output is NOT a migration:** The sample SQL goes to `scripts/sample-diku-import.sql` for review. It should be manually reviewed and adapted before being used as an actual migration.
+
+## Team Impact
+
+- **Laeral:** Imported zones may need topology review before use (classic MUD layouts can have cycles that challenge the layout algorithm)
+- **Drizzt:** No engine changes needed — output is standard zone SQL
+- **All:** The tbaMUD repo on GitHub (`tbamud/tbamud`) has ~30 stock zone `.wld` files that could be imported for testing or inspiration
+
+---
+
+# Decision: Midgaard Zone Import
+
+**Author:** Bruenor  
+**Date:** 2025-07-25  
+**PR:** #331  
+**Migration:** `004_import_midgaard.sql`
+
+## What
+
+Imported the classic DikuMUD Midgaard zone as a real playable zone (57 rooms, 115 exits) connected to Siltgate via portal exits.
+
+## Key Decisions
+
+1. **Category `dungeon`** — Task requested `adventure` but that's not a valid category. Used `dungeon` (same as Warrens and Siltgate).
+
+2. **Entry room = `outside-the-west-gate-of-midgaard`** — Portal from Siltgate drops players at Midgaard's west gate exterior. This is both the arrival point and the zone entry room.
+
+3. **Siltgate connection via `city-gate` (west)** — Direction `west` was free on both `city-gate` in Siltgate and `outside-the-west-gate-of-midgaard` in Midgaard. Both portals go "west" which makes geographic sense (Midgaard is accessible through Siltgate's city gate).
+
+4. **Excluded `petshop-storeroom`** — DikuMUD builder meta-room containing implementation instructions, not player content. No exits, no connections. 57 rooms instead of 58.
+
+5. **Room descriptions preserved verbatim** — Original DikuMUD text kept as-is. These can be rethemed later (like the Siltgate rewrite in migration 019) but the raw content is the value.
+
+## Impact on Other Agents
+
+- **Laeral:** May want to design a thematic rewrite for Midgaard rooms (Gulf Coast setting), similar to the Siltgate/Warrens rewrite.
+- **Drizzt:** New zone registered — layout engine will process 57 rooms. Watch for topological conflicts.
+- **Siltgate now has 141 rooms** (was 140) counting the new exit from city-gate. Actually no — no new room was added, just a new exit direction from city-gate.
+
+---
+
+# Decision: Use short room slug prefixes for strongholds
+
+**Date:** 2026-04-08
+
+## Decision
+Adopt the short room slug prefixes from the redesign proposal (`reliquary-*`, `bloom-*`, `carrion-*`) for the stronghold rebuild. The zone slugs remain unchanged, while entry room slugs and inter-zone exit targets were updated to match the new room slugs.
+
+## Rationale
+Code references only the stronghold zone slugs, and no application code depends on the legacy room slug prefixes. Using the shorter prefixes keeps the stronghold layout readable and consistent with the proposal while preserving existing zone routing logic.
+
+---
+
+# Decision: Auto-retarget on target death (combat system)
+
+**Author:** Drizzt (Engine Dev)
+**Date:** 2025-07-22
+**PR:** #323
+**Issue:** #321
+
+## Decision
+When a combatant's `currentTarget` dies or becomes invalid, the auto-attack logic now calls `cycleTarget()` to find the next valid hostile instead of defaulting to dodge. Dodge is only the fallback when no hostiles remain.
+
+Additionally, when a combatant is defeated, all remaining combatants in the encounter who targeted them get their `currentTarget` cleared immediately. This ensures clean state for the next tick.
+
+## Rationale
+- Players expect continuous combat flow in multi-creature encounters. Stopping to dodge after each kill breaks combat feel.
+- `cycleTarget()` already existed and handles edge cases (dead targets, wrap-around). Reusing it keeps the logic in one place.
+- Clearing stale targets on defeat is a defense-in-depth measure — even if auto-retarget handles it, we shouldn't let dead IDs linger.
+
+## Impact
+- Applies to both players and creatures (shared auto-attack path in `resolveTick`)
+- Creature AI in `behavior.ts` submits explicit actions and won't hit this code path unless AI fails to submit
+- No behavior change when all enemies are dead (dodge remains correct)
+
+---
+
+# Decision: GOTO command registered as standard handler (not feature-gated)
+
+**Author:** Drizzt  
+**Issue:** #328  
+**PR:** #330  
+**Date:** 2026-04-07
+
+## Context
+The `goto` command is a dev-only teleport. It could have been added to the `featureHandlers` map (requiring a specific room type) or the standard `handlers` map with an internal dev-mode check.
+
+## Decision
+Registered `goto` in the standard `handlers` map with the dev-mode gate inside the handler itself (same pattern as `peaceful`). This means `goto` works from any room type when dev mode is on — which is the correct behavior for a teleport debug tool.
+
+## Rationale
+- Feature-gating would restrict `goto` to specific room types, defeating the purpose of a teleport command
+- Following the existing `peaceful.ts` pattern keeps the codebase consistent
+- The `getConfig().devModeEnabled` check is the established gate for dev-only commands
+
+---
+
+# Decision: targetNarrations pattern for directed player messages
+
+**Author:** Drizzt  
+**Date:** 2025-07-23  
+**PR:** #335  
+
+## Context
+The `teleport` command needs to send feedback to both the admin (command issuer) and the target player. The existing architecture only supports: narrations to the sender, room broadcasts (say/emote), and whisper delivery.
+
+## Decision
+Added `targetNarrations?: { sessionId: string; narrations: NarrationEntry[] }` to `CommandResult`. ZoneRoom delivers these to the specified player after the normal result. This avoids coupling verb names into ZoneRoom's delivery logic (unlike the whisper/say special-casing).
+
+## Impact
+- Any future command that needs to notify a specific player can use `targetNarrations`
+- Currently only supports a single target; could be extended to an array if needed
+- ZoneRoom delivery is a simple `clients.find()` + `sendNarrate()` loop
+
+---
+
+# Decision: Combat Grid System Architecture
+
+**Date:** 2026-01-25  
+**Author:** Elminster (Lead/Architect)  
+**Context:** Issue #337 — DCSS-style grid combat feature proposal  
+**Status:** DROPPED (2026-04-07)
+
+**Closed:** User directive (2026-04-07T15:08:35Z). Grid-based combat is dropped. The team will not pursue DCSS-style grid combat. Text-based tick combat remains the canonical system. Design docs preserved for reference.
+
+---
+
+## Decision
+
+If combat grid system is approved, it will be implemented with the following architectural constraints:
+
+### 1. Grid Is Optional and Supplementary
+- Text-first combat remains fully functional (no grid required)
+- Grid can be completely disabled (user setting + per-room opt-in)
+- All grid events must generate equivalent text narration (text parity requirement)
+- Screen readers must work via combat log alone (grid is visual enhancement only)
+
+**Rationale:** Ellmud's identity is "text-first MUD with optional enhancements." Grid must not break this contract.
+
+### 2. Server-Authoritative Grid State
+- All grid positions tracked server-side
+- Client renders from server messages (no client-side prediction in Phase 1)
+- Movement validation happens server-side (impossible to spoof position)
+- WebSocket protocol: `combat:grid:init`, `combat:grid:move`, `combat:grid:damage`, `combat:grid:remove`
+
+**Rationale:** Server-authoritative state is core to Ellmud's anti-cheat model (see GDD §13).
+
+### 3. Backward Compatibility via Zone Derivation
+- `gridPosition?: GridPosition` added to `Combatant` (optional field)
+- `position: PositionZone` derived from `gridPosition` when present
+- Zone logic: Front = y≤3, Flank = 4-6, Rear = 7+ (for 10-tile grid)
+- Rooms without `grid_width` use existing zone-based combat (no changes)
+
+**Rationale:** Zero breaking changes. Grid rooms coexist with zone rooms. Old clients degrade gracefully.
+
+### 4. Canvas 2D Rendering with DCSS CC0 Tiles
+- Not WebGL (overkill for static/turn-based grid)
+- Not SVG (performance issues with 400+ nodes)
+- Not DOM-based ASCII (sluggish reflows)
+- Use DCSS CC0 tiles from crawl/tiles repository (public domain equivalent)
+- Optional: rot.js for FOV algorithms (15KB, MIT license) — evaluate in SPIKE Phase
+
+**Rationale:** Canvas 2D is proven in DCSS webtiles, lightweight, and sufficient for tile rendering.
+
+### 5. Performance Optimization via Caching
+- **Distance matrix caching:** Compute once per tick (O(n²)), then O(1) lookups
+- **Path caching:** Creatures reuse A* paths for 3-5 ticks (don't recompute every tick)
+- **LOS deferred to Phase 2:** Phase 1 has no raycasting (performance headroom)
+- **Target:** <100ms per tick with 20 players + 10 creatures (900 range checks + 10 pathfinding runs)
+
+**Rationale:** 1s tick budget allows 100ms for grid logic. Caching makes this achievable.
+
+### 6. Phased Implementation with Go/No-Go Gates
+- **SPIKE Phase (1 week):** Validate text rendering + performance + visual aesthetic → Go/No-Go
+- **Phase 1 (3-4 weeks):** Minimal grid on 1-2 boss rooms (no LOS/cover/animations) → Go/No-Go
+- **Phase 2 (4-6 weeks):** Tactical depth (LOS, cover, fog-of-war, ASCII grid)
+- **Phase 3 (8-12 weeks):** Visual polish (animations, accessibility, mobile)
+
+**Gates:**
+- SPIKE fails → defer to post-1.0
+- Phase 1 fails (performance, text parity, or content design) → park feature
+- Phase 1 passes but low priority → defer Phase 2 to post-launch
+
+**Rationale:** Front-load risk. Enable early exit. Don't invest 8-14 weeks without validation.
+
+---
+
+## Constraints for Implementation
+
+All code changes must respect:
+
+1. **Text parity:** Every grid event must generate text narration (combat log remains primary)
+2. **Backward compat:** Non-grid rooms work unchanged (no schema changes to existing rooms)
+3. **Performance budget:** <100ms per tick with 30 entities (profile early, optimize preemptively)
+4. **Accessibility:** Keyboard navigation, high-contrast mode, screen reader support
+5. **Server authority:** Client cannot spoof positions (server validates all movement)
+
+---
+
+## Data Model
+
+**New columns (backward-compatible):**
+```sql
+ALTER TABLE zone_rooms
+  ADD COLUMN grid_width INTEGER DEFAULT NULL,
+  ADD COLUMN grid_height INTEGER DEFAULT NULL,
+  ADD COLUMN obstacles JSONB DEFAULT NULL;
+```
+
+**New interfaces:**
+```typescript
+export interface GridPosition {
+  x: number; // 0-indexed
+  y: number;
+}
+
+export interface Combatant {
+  // ... existing
+  gridPosition?: GridPosition;
+  position: PositionZone; // Derived
+}
+
+export interface GridCombatState {
+  gridWidth: number;
+  gridHeight: number;
+  obstacles: GridPosition[];
+  entityPositions: Map<string, GridPosition>;
+}
+```
+
+**Zone derivation:**
+```typescript
+function deriveZone(pos: GridPosition, height: number): PositionZone {
+  const front = Math.floor(height / 3);
+  const rear = Math.ceil(height * 2 / 3);
+  if (pos.y < front) return 'front';
+  if (pos.y >= rear) return 'rear';
+  return 'flank';
+}
+```
+
+---
+
+## Open Questions (Blocking Implementation)
+
+Before SPIKE Phase can begin, need dkirby-ms input on:
+
+1. **Timeline:** Pre-launch (delay launch by 8-14 weeks) or post-launch (defer to Phase 2)?
+2. **Text tolerance:** Acceptable level of ASCII awkwardness for text-only clients?
+3. **Default state:** Grid opt-in or opt-out? (Default ON with toggle vs Default OFF)
+4. **Art budget:** Use free DCSS tiles or commission custom pixel art (\$500-1500)?
+5. **Success criterion:** What defines "good enough to ship"?
+
+---
+
+## Architectural Principles Established
+
+From this analysis, codify these patterns for future features:
+
+1. **Optional overlays pattern:** New features enhance but don't replace text experience (grid, minimap, ASCII art)
+2. **Backward compatibility via optional fields:** New schema columns are NULL by default (no migration pain)
+3. **Server-authoritative validation:** Client sends intent, server validates and broadcasts result (anti-cheat)
+4. **Phase-gated risk reduction:** SPIKE → Phase 1 → Phase 2 → Phase 3, with go/no-go gates between each
+5. **Performance through caching:** Pre-compute expensive operations (distance, paths), reuse within tick
+6. **Text parity requirement:** All visual state must have text equivalent (accessibility + MUD identity)
+
+---
+
+## References
+
+- **Unified proposal:** `docs/design/337-combat-grid-proposal.md`
+- **Research docs:** `docs/design/337-combat-grid-systems.md`, `-frontend.md`, `-visual-design.md`
+- **GitHub issue:** https://github.com/dkirby-ms/ellmud/issues/337
+- **Integration points:** `packages/server/src/combat/CombatSystem.ts`, `packages/client/src/components/CombatHUD.tsx`
+
+---
+
+**Status:** Awaiting user input on 5 open questions. SPIKE Phase ready to execute once approved.
+
+— Elminster
+
+---
+
+# Stronghold Exit Audit — Full Report
+
+**Author:** Elminster (Lead/Architect)  
+**Date:** 2025-07-17  
+**Requested by:** dkirby-ms  
+**Scope:** All exits in the-reliquary, the-bloom-observatory, the-carrion-court, plus inter-zone connections from the-siltgate and warrens  
+
+---
+
+## Executive Summary
+
+All 63 stronghold exits and all 6 inter-zone portal connections are **structurally correct**. No data anomalies, broken links, one-way traps, or direction mismatches were found. The database matches the migration SQL exactly.
+
+---
+
+## Zones Audited
+
+| Zone | Rooms | Exits (intra-zone) | Portal exits | Total |
+|------|-------|---------------------|-------------|-------|
+| The Reliquary | 11 | 20 | 1 | 21 |
+| The Bloom Observatory | 11 | 20 | 1 | 21 |
+| The Carrion Court | 11 | 20 | 1 | 21 |
+
+All three strongholds share identical topology — they are isomorphic graphs with the same room roles and connection pattern.
+
+---
+
+## Check Results
+
+### ✅ 1. Bidirectionality — PASS
+
+Every exit from room A → room B has a corresponding exit B → A. No one-way exits exist in any stronghold. Verified all 30 intra-zone exit pairs (10 per zone) and all 3 inter-zone portal pairs.
+
+### ✅ 2. Direction Consistency — PASS
+
+Every exit pair uses correct opposite directions:
+- north ↔ south
+- east ↔ west
+- up ↔ down
+
+No mismatches found. Examples verified:
+- `reliquary-inn(south) → filtration-annex` / `filtration-annex(north) → reliquary-inn` ✅
+- `bloom-observatory-inn(down) → platform-descent` / `platform-descent(up) → bloom-observatory-inn` ✅
+- `carrion-court-inn(south) → superdome-breach` / `superdome-breach(north) → carrion-court-inn` ✅
+
+### ✅ 3. Duplicate Directions — PASS
+
+No room in any stronghold has two exits in the same direction. Verified via `GROUP BY … HAVING COUNT(*) > 1` query — zero results.
+
+### ✅ 4. Inter-Zone Portal Exits — PASS
+
+All 6 portal exits (3 outbound from strongholds, 3 inbound from world zones) are correctly configured:
+
+| From Zone | From Room | Dir | To Zone | To Room | Return Dir | Return OK |
+|-----------|-----------|-----|---------|---------|------------|-----------|
+| the-reliquary | filtration-annex | east | the-siltgate | pipe-bridge | west | ✅ |
+| the-siltgate | pipe-bridge | west | the-reliquary | filtration-annex | east | ✅ |
+| the-bloom-observatory | platform-descent | east | warrens | causeway-terminus | west | ✅ |
+| warrens | causeway-terminus | west | the-bloom-observatory | platform-descent | east | ✅ |
+| the-carrion-court | superdome-breach | south | the-siltgate | flooded-concourse | north | ✅ |
+| the-siltgate | flooded-concourse | north | the-carrion-court | superdome-breach | south | ✅ |
+
+Portal pattern verified: `to_room_slug = from_room_slug` for all portal exits, with actual target specified via `target_zone_slug` + `target_room_slug`.
+
+### ✅ 5. Orphan Rooms — PASS
+
+Every room in all three strongholds has at least one exit. No rooms are unreachable.
+
+### ✅ 6. One-Way Reachable Rooms — PASS
+
+Every room that is an exit target also has at least one exit of its own. No dead-trap rooms.
+
+### ✅ 7. Dangling References — PASS
+
+- All `from_room_slug` values reference existing rooms in their zone.
+- All `to_room_slug` values (intra-zone) reference existing rooms in their zone.
+- All `target_zone_slug` + `target_room_slug` combinations resolve to real zones and rooms.
+
+### ✅ 8. Database vs Migration SQL — PASS
+
+Cross-referenced all exits against `003_seed_zones.sql`. The database contains exactly the exits defined in the migration — no extras, no missing entries.
+
+---
+
+## Topology Map (shared by all 3 strongholds)
+
+```
+                    [armoury]
+                        |
+                      north
+                        |
+[expedition-board]—west—[commons]—east—[stash]
+                        |
+                      south
+                        |
+                     [market]
+                        |
+                      south
+                        |
+                   [infirmary]
+
+[inn-upper]
+    |
+   down
+    |
+[war-room]—west—[training]—west—[inn]
+                     |             |
+                   south      south/down
+                     |             |
+                 [commons]   [connection-room]——portal——>[world zone]
+```
+
+Connection rooms per stronghold:
+- **The Reliquary:** `filtration-annex` (inn→south, portal→east to Siltgate:pipe-bridge)
+- **The Bloom Observatory:** `platform-descent` (inn→down, portal→east to Warrens:causeway-terminus)
+- **The Carrion Court:** `superdome-breach` (inn→south, portal→south to Siltgate:flooded-concourse)
+
+---
+
+## ⚠️ Anomalies Found
+
+**None.** All structural checks pass.
+
+---
+
+## Design Observations (not bugs)
+
+These are intentional patterns, not anomalies, but noted for completeness:
+
+1. **Dead-end rooms by design:** armoury, expedition-board, infirmary, inn-upper, and war-room each have exactly 1 exit. This is the intended faction stronghold pattern — private rooms behind chokepoints.
+
+2. **Connection rooms are minimal gateways:** Each connection room (filtration-annex, platform-descent, superdome-breach) has exactly 2 exits — one back into the stronghold, one portal to the world. This creates clear PvP chokepoints at zone boundaries.
+
+3. **All three strongholds are topologically identical:** Same graph structure, same room types, same exit patterns. Only the room name prefixes and connection directions differ. This is presumably intentional for faction balance.
+
+4. **Siltgate/Warrens connection rooms follow the same minimal pattern:** flooded-concourse, pipe-bridge, and causeway-terminus each have exactly 2 exits (1 portal + 1 intra-zone).
+
+---
+
+# Stronghold Redesign Proposal
+
+**Author:** Elminster (Lead/Architect)
+**Status:** PROPOSAL — awaiting review
+**Date:** 2025-07-14
+**Scope:** All 3 faction strongholds — topology, rooms, creatures, connections
+
+---
+
+## Problem Statement
+
+All three faction strongholds are currently isomorphic: 11 rooms each, every feature room hanging directly off a central commons with no connective tissue. The result:
+
+1. **No spatial logic.** The filtration annex branches off the training room. The inn branches off the training room. The war room branches off the training room. Training is a hallway pretending to be a feature room.
+2. **No corridors or paths.** Every feature is one step from commons. There's no sense of walking *through* a place.
+3. **No life.** Zero creatures, guards, or ambient NPCs. The strongholds are empty lobbies.
+4. **Identical topology.** A water treatment plant, an oil platform, and a superdome all share the exact same room graph. The names differ but the experience is the same.
+
+## Design Principles
+
+1. **Feature rooms stay.** All 9 required features (entry/commons, stash, armoury, expedition board, market, infirmary, training, war room, inn) are preserved with identical `type` slugs.
+2. **Corridors create rhythm.** Walking from commons to the war room should feel like a journey through the structure, not a single step.
+3. **Topology reflects architecture.** A water treatment plant has catwalks and pipe corridors. An oil platform has decks and ladders. A superdome has concourses and tunnels.
+4. **Zone exits are boundaries.** The connection to the outside world is at the *edge* of the stronghold, reachable via a clear path, not buried behind a feature room.
+5. **Creatures add atmosphere.** Non-aggressive guards and ambient NPCs populate corridors and key rooms, making the stronghold feel alive.
+6. **Inn has one entrance.** No shortcuts — you enter the inn from one direction and go up to the private room.
+7. **War room is deep.** The strategic heart of the faction should require traversal to reach.
+
+---
+
+## 1. THE RELIQUARY — Kindari (22 rooms)
+
+### Design Rationale
+
+A converted water treatment plant is a **multi-level industrial complex** with a ground floor of tanks and workspaces, catwalks above, and maintenance corridors threading through the infrastructure. The layout is roughly L-shaped: you enter through the main works, cross catwalks to reach the administrative/strategic areas, and the zone exit (filtration annex) sits at the far end of a pipe corridor — a logical boundary where plant infrastructure meets the wasteland beyond. The inn occupies a quiet corner away from the work areas, accessible via a single catwalk.
+
+### ASCII Map
+
+```
+                                                    ┌──────────────┐
+                                                    │ SCHEMATIC    │
+                                                    │ VAULT        │
+                                                    │ (war-room)   │
+                                                    └──────┬───────┘
+                                                           │ south
+                                                           │
+                              ┌──────────────┐     ┌──────┴───────┐
+                              │ PRESSURE     │     │ UPPER        │
+                              │ CHAMBER      │─east│ CATWALK      │
+                              │ (training)   │     │ (corridor)   │
+                              └──────┬───────┘     └──────────────┘
+                                     │ south
+                                     │
+┌──────────────┐              ┌──────┴───────┐
+│ SALVAGE      │              │ CATWALK      │
+│ WALL         │──east────────│ JUNCTION     │
+│ (exp-board)  │              │ (corridor)   │
+└──────────────┘              └──────┬───────┘
+                                     │ south
+                                     │
+┌──────────────┐     ┌──────────────┬┴──────────────┐     ┌──────────────┐
+│ SLEEPER      │     │ SETTLING     │ PRESERVATION  │     │ PIPE         │
+│ CELLS lobby  │     │ POOL         │ HALL          │     │ CORRIDOR     │
+│ (inn)        │     │ (corridor)   │ (entry)       │     │ (corridor)   │
+└──────┬───────┘     └──────┬───────┘└──────┬───────┘     └──────┬───────┘
+       │ up                 │ south         │ south              │ east
+       │                    │               │                    │
+┌──────┴───────┐     ┌──────┴───────┐┌─────┴────────┐    ┌──────┴───────┐
+│ SLEEPER      │     │ WATERWORKS   ││ COMPONENT    │    │ FILTRATION   │
+│ CELLS room   │     │ (infirmary)  ││ EXCHANGE     │    │ ANNEX        │
+│ (inn-upper)  │     │              ││ (market)     │    │ (connection) │
+└──────────────┘     └──────────────┘└──────┬───────┘    └──────┬───────┘
+                                            │ south             │ east
+                                            │                   │
+                                     ┌──────┴───────┐          → SILTGATE
+                                     │ COMPONENT    │            (pipe-bridge)
+                                     │ EXCHANGE     │
+                                     │ BACKROOM     │
+                                     │ (corridor)   │
+                                     └──────┬───────┘
+                                            │ south
+                                            │
+                              ┌──────────────┴──────────────┐
+                              │ ARCHIVE      │ ASSEMBLY     │
+                              │ CISTERN      │ BAY          │
+                              │ (stash)      │ (armoury)    │
+                              └──────────────┴──────────────┘
+```
+
+### Room List
+
+| # | Slug | Name | Type | Description Hint |
+|---|------|------|------|-----------------|
+| 1 | `reliquary-commons` | The Preservation Hall | `entry` | Cavernous chamber with shrine to Kindar, workbenches, drone parts |
+| 2 | `reliquary-settling-pool` | The Settling Pool | `corridor` | Old water settling basin repurposed as a gathering crossroads |
+| 3 | `reliquary-infirmary` | The Waterworks | `feature_infirmary` | Functioning filtration pool used for healing and treatment |
+| 4 | `reliquary-market` | The Component Exchange | `feature_marketplace` | Warehouse floor where salvage is sorted and traded |
+| 5 | `reliquary-market-backroom` | Component Exchange — Backroom | `corridor` | Rear storage area connecting trade floor to equipment bays |
+| 6 | `reliquary-stash` | The Archive Cistern | `feature_stash` | Drained tank with numbered alcoves for personal gear storage |
+| 7 | `reliquary-armoury` | The Assembly Bay | `feature_armoury` | Workshop for repairing and restoring salvaged equipment |
+| 8 | `reliquary-pipe-corridor` | Pipe Corridor | `corridor` | Narrow maintenance passage through massive water pipes |
+| 9 | `reliquary-filtration-annex` | Filtration Annex | `corridor` | Reinforced passage to the wasteland — heavy security door |
+| 10 | `reliquary-catwalk-junction` | Catwalk Junction | `corridor` | Rusted metal catwalk crossing above the main floor |
+| 11 | `reliquary-expedition-board` | The Salvage Wall | `feature_expedition_board` | Metal wall covered in magnetic mission tags |
+| 12 | `reliquary-training` | The Pressure Chamber | `feature_training` | Reinforced test room for combat drills under sodium lights |
+| 13 | `reliquary-upper-catwalk` | Upper Catwalk | `corridor` | High gantry along the treatment plant's ceiling, exposed rivets |
+| 14 | `reliquary-war-room` | The Schematic Vault | `feature_war_room` | Locked room with salvaged blueprints and power grid maps |
+| 15 | `reliquary-inn-lobby` | The Sleeper Cells — Lobby | `corridor` | Ground-floor entrance to the bunkhouse, forge-smoke and stew |
+| 16 | `reliquary-inn` | The Sleeper Cells — Private Room | `feature_inn` | Narrow bunks in filtration chambers, each with locker and lamp |
+| 17 | `reliquary-drone-bay` | Drone Salvage Bay | `corridor` | Open workspace where recovered drones are stripped for parts |
+| 18 | `reliquary-generator-room` | Generator Room | `corridor` | Humming diesel generator, cables snaking across the floor |
+| 19 | `reliquary-cistern-access` | Cistern Access Tunnel | `corridor` | Low concrete tunnel connecting the main works to the cisterns below |
+| 20 | `reliquary-shrine-alcove` | Kindar's Alcove | `corridor` | Quiet alcove off the main hall with offerings and drone fragments |
+| 21 | `reliquary-loading-dock` | Loading Dock | `corridor` | Exterior-facing bay where salvage teams stage departures |
+| 22 | `reliquary-watchpost` | Rooftop Watchpost | `corridor` | Exposed vantage point atop the treatment plant, views of Siltgate |
+
+### Exit Topology
+
+```
+reliquary-commons     →  north: reliquary-catwalk-junction
+                      →  south: reliquary-market
+                      →  east:  reliquary-pipe-corridor
+                      →  west:  reliquary-settling-pool
+
+reliquary-settling-pool → east:  reliquary-commons
+                        → south: reliquary-infirmary
+                        → west:  reliquary-inn-lobby
+
+reliquary-inn-lobby   →  east:  reliquary-settling-pool
+                      →  up:    reliquary-inn
+
+reliquary-inn         →  down:  reliquary-inn-lobby
+
+reliquary-infirmary   →  north: reliquary-settling-pool
+
+reliquary-market      →  north: reliquary-commons
+                      →  south: reliquary-market-backroom
+
+reliquary-market-backroom → north: reliquary-market
+                          → west:  reliquary-stash
+                          → east:  reliquary-armoury
+
+reliquary-stash       →  east:  reliquary-market-backroom
+reliquary-armoury     →  west:  reliquary-market-backroom
+
+reliquary-pipe-corridor → west:  reliquary-commons
+                        → east:  reliquary-filtration-annex
+
+reliquary-filtration-annex → west:  reliquary-pipe-corridor
+                           → east:  → SILTGATE (pipe-bridge)
+
+reliquary-catwalk-junction → south: reliquary-commons
+                           → north: reliquary-training
+                           → west:  reliquary-expedition-board
+                           → east:  reliquary-drone-bay
+
+reliquary-expedition-board → east:  reliquary-catwalk-junction
+
+reliquary-drone-bay   →  west:  reliquary-catwalk-junction
+                      →  north: reliquary-generator-room
+
+reliquary-generator-room → south: reliquary-drone-bay
+
+reliquary-training    →  south: reliquary-catwalk-junction
+                      →  east:  reliquary-upper-catwalk
+                      →  up:    reliquary-watchpost
+
+reliquary-upper-catwalk → west:  reliquary-training
+                        → north: reliquary-war-room
+
+reliquary-war-room    →  south: reliquary-upper-catwalk
+
+reliquary-watchpost   →  down:  reliquary-training
+
+reliquary-shrine-alcove → (accessed from reliquary-commons, direction: up)
+reliquary-commons     →  up:    reliquary-shrine-alcove
+reliquary-shrine-alcove → down:  reliquary-commons
+
+reliquary-loading-dock → (accessed from reliquary-pipe-corridor, direction: south)
+reliquary-pipe-corridor → south: reliquary-loading-dock
+reliquary-loading-dock → north: reliquary-pipe-corridor
+reliquary-loading-dock → south: reliquary-cistern-access
+reliquary-cistern-access → north: reliquary-loading-dock
+reliquary-cistern-access → up:    reliquary-stash
+reliquary-stash       → (also) down: reliquary-cistern-access
+```
+
+Note: Stash has two entrances (from market-backroom and cistern-access) creating a loop. This is intentional — the cistern is physically below the market level, and the stash occupies a drained tank accessible from both.
+
+### Creatures (5)
+
+| Name | Slug | Behavior | Preferred Rooms | Description |
+|------|------|----------|-----------------|-------------|
+| Kindari Sentinel | `kindari-sentinel` | Non-aggressive, patrols corridors slowly | `reliquary-catwalk-junction`, `reliquary-pipe-corridor`, `reliquary-loading-dock` | A Kindari guard in welded-plate armour, tools hanging from their belt, scanning the catwalks with practiced calm. |
+| Drone Scrap Rat | `drone-scrap-rat` | Non-aggressive, ambient fauna, flees if disturbed | `reliquary-drone-bay`, `reliquary-generator-room`, `reliquary-cistern-access` | A fat grey rat with a circuit-board fragment wedged in its teeth, scurrying between machinery. |
+| Preservation Archivist | `preservation-archivist` | Non-aggressive, stationary NPC in shrine | `reliquary-shrine-alcove`, `reliquary-commons` | An elderly Kindari tending the shrine, murmuring inventory counts like prayer. |
+| Pipeline Tech | `pipeline-tech` | Non-aggressive, patrols between work areas | `reliquary-settling-pool`, `reliquary-infirmary`, `reliquary-generator-room` | A Kindari technician checking pipe gauges, wrench in hand, grease on everything. |
+| Catwalk Lookout | `catwalk-lookout` | Non-aggressive, stationary on watchpost | `reliquary-watchpost`, `reliquary-upper-catwalk` | A Kindari lookout with binoculars made from drone optics, watching the Siltgate horizon. |
+
+### Connection Room Placement
+
+**Filtration Annex** (`reliquary-filtration-annex`) sits at the eastern end of the Pipe Corridor, which runs east from the commons. This makes physical sense: the filtration infrastructure extends outward from the main plant, and the pipe-bridge to Siltgate is the natural terminus of that industrial corridor. It's reachable in 3 steps from commons (commons → pipe-corridor → filtration-annex → Siltgate), placing it clearly at the boundary.
+
+---
+
+## 2. THE BLOOM OBSERVATORY — Bloom Tenders (23 rooms)
+
+### Design Rationale
+
+An offshore oil platform is a **vertical structure** with distinct deck levels connected by ladders, stairwells, and gangways. The layout is organized by elevation: the main deck (commons, social areas), the upper observation level (training, war room), and the lower utility level (stash, armoury, causeway exit). The platform descent to the causeway sits at the bottom — the literal boundary between the platform and the mainland. The algae cultivation areas create organic corridors between functional spaces, and the vertical movement (up/down) gives this stronghold a distinctly different feel from the others.
+
+### ASCII Map
+
+```
+                    ┌──────────────┐
+                    │ SIGNAL       │
+                    │ ARCHIVE      │
+                    │ (war-room)   │
+                    └──────┬───────┘
+                           │ down
+                           │
+              ┌────────────┴─────────────┐
+              │ CROW'S      │ LENS       │
+              │ NEST        │ GALLERY    │
+              │ (corridor)  │ (corridor) │
+              └──────┬──────┘────┬───────┘
+                     │ down      │ down
+                     │           │
+                     └─────┬─────┘
+                           │
+              ┌────────────┴─────────────┐
+              │ WEATHER                  │
+              │ DECK                     │
+              │ (training)               │
+              └────────────┬─────────────┘
+                           │ down
+                           │
+              ┌────────────┴─────────────────────────────────┐
+              │                                              │
+       ┌──────┴───────┐     ┌──────────────┐     ┌──────────┴───┐
+       │ CHART        │     │ TIDE DECK    │     │ CULTIVATION  │
+       │ ROOM         │     │ (entry)      │     │ GANGWAY      │
+       │ (exp-board)  │     │              │     │ (corridor)   │
+       └──────────────┘     └──────┬───────┘     └──────────┬───┘
+                                   │                        │
+                            ┌──────┴───────┐         ┌──────┴───────┐
+                            │ MESS DECK    │         │ ALGAE        │
+                            │ (corridor)   │         │ TERRACES     │
+                            │              │         │ (corridor)   │
+                            └──────┬───────┘         └──────┬───────┘
+                                   │                        │
+                      ┌────────────┴──────┐          ┌──────┴───────┐
+                      │                   │          │ BARTER NET   │
+               ┌──────┴───────┐    ┌──────┴──────┐   │ (market)     │
+               │ BUNKS        │    │ SPILLWAY    │   └──────────────┘
+               │ lobby        │    │ (infirmary) │
+               │ (corridor)   │    │             │
+               └──────┬───────┘    └─────────────┘
+                      │ up
+               ┌──────┴───────┐
+               │ BUNKS        │
+               │ room         │
+               │ (inn)        │
+               └──────────────┘
+
+
+    LOWER LEVEL (below main deck):
+
+              ┌──────────────┐     ┌──────────────┐
+              │ SPECIMEN     │     │ NAVIGATION   │
+              │ HOLD         │     │ STATION      │
+              │ (stash)      │     │ (armoury)    │
+              └──────┬───────┘     └──────┬───────┘
+                     │ up                 │ up
+                     └─────────┬──────────┘
+                               │
+                        ┌──────┴───────┐
+                        │ CARGO HATCH  │
+                        │ (corridor)   │
+                        └──────┬───────┘
+                               │ up
+                        ┌──────┴───────┐
+                        │ TIDE DECK    │
+                        │ (entry)      │  ← connects to main deck
+                        └──────┬───────┘
+                               │ down → also:
+                        ┌──────┴───────┐
+                        │ LEG          │
+                        │ STAIRWELL    │
+                        │ (corridor)   │
+                        └──────┬───────┘
+                               │ down
+                        ┌──────┴───────┐
+                        │ PLATFORM     │
+                        │ DESCENT      │
+                        │ (connection) │
+                        └──────┬───────┘
+                               │ east
+                               │
+                               → WARRENS
+                                 (causeway-terminus)
+```
+
+### Room List
+
+| # | Slug | Name | Type | Description Hint |
+|---|------|------|------|-----------------|
+| 1 | `bloom-commons` | The Tide Deck | `entry` | Open platform with algae-stained railings, cultivation trays |
+| 2 | `bloom-cultivation-gangway` | Cultivation Gangway | `corridor` | Narrow walkway between algae growing tanks, green mist |
+| 3 | `bloom-algae-terraces` | Algae Terraces | `corridor` | Tiered cultivation pools cascading down the platform's side |
+| 4 | `bloom-market` | The Barter Net | `feature_marketplace` | Sheltered trading corner for biosamples and data |
+| 5 | `bloom-mess-deck` | Mess Deck | `corridor` | Communal eating area with bolted-down tables and algae tea |
+| 6 | `bloom-infirmary` | The Spillway | `feature_infirmary` | Seawater pool gathering space, healing and decompression |
+| 7 | `bloom-inn-lobby` | The Bunks — Common Area | `corridor` | Crew quarters entrance, salt-stained hammock frames |
+| 8 | `bloom-inn` | The Bunks — Private Room | `feature_inn` | Hammocks in a former control room, portholes over water |
+| 9 | `bloom-expedition-board` | The Chart Room | `feature_expedition_board` | Sealed chamber with hand-drawn expedition maps |
+| 10 | `bloom-training` | The Weather Deck | `feature_training` | Exposed upper platform for navigational and combat training |
+| 11 | `bloom-crows-nest` | Crow's Nest | `corridor` | Small observation platform high above the main deck |
+| 12 | `bloom-lens-gallery` | Lens Gallery | `corridor` | Corridor of salvaged telescope mounts and optical instruments |
+| 13 | `bloom-war-room` | The Signal Archive | `feature_war_room` | Locked data room for biomonitoring logs and faction intel |
+| 14 | `bloom-cargo-hatch` | Cargo Hatch | `corridor` | Open hatch leading down to the platform's storage level |
+| 15 | `bloom-stash` | The Specimen Hold | `feature_stash` | Climate-controlled vault with sample jars and sealed gear |
+| 16 | `bloom-armoury` | The Navigation Station | `feature_armoury` | Outfitting workspace with charts, compasses, protective gear |
+| 17 | `bloom-leg-stairwell` | Leg Stairwell | `corridor` | Rusted spiral staircase down the platform's structural leg |
+| 18 | `bloom-platform-descent` | Platform Descent | `corridor` | External grating staircase, exposed to salt wind, algae-slick |
+| 19 | `bloom-tidal-pool` | Tidal Pool | `corridor` | Shallow pool at the platform base, bioluminescent at night |
+| 20 | `bloom-winch-platform` | Winch Platform | `corridor` | Crane and winch assembly for hauling supplies from boats |
+| 21 | `bloom-kelp-garden` | Kelp Garden | `corridor` | Submerged garden of cultivated seaweed, accessible at low tide |
+| 22 | `bloom-radio-shack` | Radio Shack | `corridor` | Salvaged radio equipment, the Tenders' link to mainland contacts |
+| 23 | `bloom-netting-walk` | Netting Walk | `corridor` | Cargo net strung between platform legs, used as a shortcut |
+
+### Exit Topology
+
+```
+bloom-commons         →  north: bloom-cultivation-gangway
+                      →  south: bloom-mess-deck
+                      →  west:  bloom-expedition-board
+                      →  up:    bloom-training
+                      →  down:  bloom-cargo-hatch
+
+bloom-cultivation-gangway → south: bloom-commons
+                          → north: bloom-algae-terraces
+                          → east:  bloom-radio-shack
+
+bloom-radio-shack     →  west:  bloom-cultivation-gangway
+
+bloom-algae-terraces  →  south: bloom-cultivation-gangway
+                      →  east:  bloom-market
+
+bloom-market          →  west:  bloom-algae-terraces
+
+bloom-mess-deck       →  north: bloom-commons
+                      →  west:  bloom-inn-lobby
+                      →  east:  bloom-infirmary
+
+bloom-infirmary       →  west:  bloom-mess-deck
+
+bloom-inn-lobby       →  east:  bloom-mess-deck
+                      →  up:    bloom-inn
+
+bloom-inn             →  down:  bloom-inn-lobby
+
+bloom-expedition-board → east:  bloom-commons
+
+bloom-training        →  down:  bloom-commons
+                      →  up:    bloom-crows-nest
+                      →  east:  bloom-lens-gallery
+                      →  west:  bloom-winch-platform
+
+bloom-winch-platform  →  east:  bloom-training
+                      →  down:  bloom-netting-walk
+
+bloom-netting-walk    →  up:    bloom-winch-platform
+
+bloom-crows-nest      →  down:  bloom-training
+
+bloom-lens-gallery    →  west:  bloom-training
+                      →  up:    bloom-war-room
+
+bloom-war-room        →  down:  bloom-lens-gallery
+
+bloom-cargo-hatch     →  up:    bloom-commons
+                      →  west:  bloom-stash
+                      →  east:  bloom-armoury
+                      →  down:  bloom-leg-stairwell
+
+bloom-stash           →  east:  bloom-cargo-hatch
+
+bloom-armoury         →  west:  bloom-cargo-hatch
+
+bloom-leg-stairwell   →  up:    bloom-cargo-hatch
+                      →  down:  bloom-platform-descent
+                      →  east:  bloom-tidal-pool
+
+bloom-tidal-pool      →  west:  bloom-leg-stairwell
+                      →  south: bloom-kelp-garden
+
+bloom-kelp-garden     →  north: bloom-tidal-pool
+
+bloom-platform-descent → up:    bloom-leg-stairwell
+                       → east:  → WARRENS (causeway-terminus)
+```
+
+### Creatures (5)
+
+| Name | Slug | Behavior | Preferred Rooms | Description |
+|------|------|----------|-----------------|-------------|
+| Bloom Tender Warden | `bloom-warden` | Non-aggressive, patrols deck areas | `bloom-leg-stairwell`, `bloom-cargo-hatch`, `bloom-platform-descent` | A Bloom Tender in salt-crusted overalls, spear-gun slung across their back, watching the stairwell with patient eyes. |
+| Algae Crawler | `algae-crawler` | Non-aggressive, ambient fauna, slow | `bloom-algae-terraces`, `bloom-kelp-garden`, `bloom-tidal-pool` | A translucent crustacean the size of a cat, feeding on algae scum, its carapace faintly bioluminescent. |
+| Tide Deck Cook | `tide-deck-cook` | Non-aggressive, stationary NPC | `bloom-mess-deck` | A weathered Tender stirring a pot of kelp stew, offering unsolicited opinions about bloom pH levels. |
+| Observatory Cartographer | `observatory-cartographer` | Non-aggressive, stationary NPC | `bloom-expedition-board`, `bloom-lens-gallery` | A gaunt researcher surrounded by rolled charts, muttering coordinates and marking coastline changes. |
+| Nest Spotter | `nest-spotter` | Non-aggressive, stationary lookout | `bloom-crows-nest`, `bloom-radio-shack` | A Tender with a brass telescope, scanning the Gulf for approaching vessels and bloom fronts. |
+
+### Connection Room Placement
+
+**Platform Descent** (`bloom-platform-descent`) is at the very bottom of the vertical structure — you go down through the cargo hatch, down the leg stairwell, and arrive at the external staircase that leads to the causeway. This is exactly where a real oil platform connects to the water level. The causeway to the Warrens extends east. Reaching the exit takes 3–4 steps down from commons, creating a clear sense of descending from safety to the outside world.
+
+---
+
+## 3. THE CARRION COURT — Krewe Calliope (24 rooms)
+
+### Design Rationale
+
+A half-collapsed Superdome is a **radial structure**: a massive central bowl with concourses ringing it, tunnels leading to exterior breaches, and subterranean levels beneath. The layout follows the Dome's architecture — you enter the bowl (commons), and the concourse ring connects the major functional areas. The war room is deep beneath the Dome in the old locker rooms. The inn sits up in the stadium seating, reached by climbing. The zone exit (Superdome Breach) is at the end of a flooded tunnel — a literal hole in the wall where the Dome meets the outside streets. The Krewe's theatrical nature means corridors are decorated, processional, never plain.
+
+### ASCII Map
+
+```
+                              ┌──────────────┐
+                              │ INNER        │
+                              │ SANCTUM      │
+                              │ (war-room)   │
+                              └──────┬───────┘
+                                     │ up
+                              ┌──────┴───────┐
+                              │ TUNNEL OF    │
+                              │ MASKS        │
+                              │ (corridor)   │
+                              └──────┬───────┘
+                                     │ up
+                              ┌──────┴───────┐
+                              │ LOCKER       │
+                              │ PASSAGE      │
+                              │ (corridor)   │
+                              └──────┬───────┘
+                                     │ up
+                                     │
+┌──────────────┐     ┌───────────────┼───────────────┐     ┌──────────────┐
+│ CURIOSITY    │     │ WEST          │ PROCESSION    │     │ EAST         │
+│ BAZAAR       │     │ CONCOURSE     │ GATE          │     │ CONCOURSE    │
+│ (market)     │     │ (corridor)    │ (entry)       │     │ (corridor)   │
+└──────┬───────┘     └──────┬────────┘└──────┬───────┘     └──────┬───────┘
+       │                    │               │                     │
+       │             ┌──────┴───────┐       │              ┌──────┴───────┐
+       │             │ MURAL        │       │              │ LANTERN      │
+       │             │ ARCADE       │       │              │ ROW          │
+       │             │ (corridor)   │       │              │ (corridor)   │
+       │             └──────┬───────┘       │              └──────┬───────┘
+       │                    │               │                     │
+┌──────┴───────┐     ┌──────┴───────┐┌──────┴───────┐     ┌──────┴───────┐
+│ GREEN ROOM   │     │ WARDROBE     ││ CALL BOARD   │     │ DANCE        │
+│ (infirmary)  │     │ VAULT        ││ (exp-board)  │     │ FLOOR        │
+│              │     │ (stash)      ││              │     │ (training)   │
+└──────────────┘     └──────┬───────┘└──────────────┘     └──────┬───────┘
+                            │ east                               │ east
+                     ┌──────┴───────┐                     ┌──────┴───────┐
+                     │ COSTUME      │                     │ DRUM         │
+                     │ WORKSHOP     │                     │ CIRCLE       │
+                     │ (armoury)    │                     │ (corridor)   │
+                     └──────────────┘                     └──────┬───────┘
+                                                                 │ east
+                                                          ┌──────┴───────┐
+                                                          │ VINE         │
+                                                          │ TUNNEL       │
+                                                          │ (corridor)   │
+                                                          └──────┬───────┘
+                                                                 │ east
+                                                          ┌──────┴───────┐
+                                                          │ SUPERDOME    │
+                                                          │ BREACH       │
+                                                          │ (connection) │
+                                                          └──────┬───────┘
+                                                                 │ south
+                                                                 → SILTGATE
+                                                                   (flooded-concourse)
+
+    UPPER LEVELS (stadium seating):
+
+              ┌──────────────┐
+              │ BUNK TIERS   │
+              │ room         │
+              │ (inn)        │
+              └──────┬───────┘
+                     │ down
+              ┌──────┴───────┐
+              │ BUNK TIERS   │
+              │ lobby        │
+              │ (corridor)   │
+              └──────┬───────┘
+                     │ down
+              ┌──────┴───────┐
+              │ UPPER BOWL   │
+              │ SEATING      │
+              │ (corridor)   │
+              └──────┬───────┘
+                     │ down
+              ┌──────┴───────┐
+              │ PROCESSION   │
+              │ GATE (entry) │  ← back to main floor
+              └──────────────┘
+```
+
+### Room List
+
+| # | Slug | Name | Type | Description Hint |
+|---|------|------|------|-----------------|
+| 1 | `carrion-commons` | The Procession Gate | `entry` | Bowl of the Dome, open sky, shallow lake, scaffolding stages |
+| 2 | `carrion-west-concourse` | West Concourse | `corridor` | Vine-choked passage along the Dome's western interior wall |
+| 3 | `carrion-east-concourse` | East Concourse | `corridor` | Lantern-lit passage along the eastern wall, mask displays |
+| 4 | `carrion-mural-arcade` | Mural Arcade | `corridor` | Painted corridor with Krewe history murals on cracked concrete |
+| 5 | `carrion-lantern-row` | Lantern Row | `corridor` | Hanging oil lanterns line this gallery, shadows dancing |
+| 6 | `carrion-stash` | The Wardrobe Vault | `feature_stash` | Backstage storage: costume racks, prop trunks, personal gear |
+| 7 | `carrion-armoury` | The Costume Workshop | `feature_armoury` | Workshop for masks, weapons, and ceremonial armor |
+| 8 | `carrion-expedition-board` | The Call Board | `feature_expedition_board` | Backstage bulletin wall with mission contracts |
+| 9 | `carrion-market` | The Curiosity Bazaar | `feature_marketplace` | Concourse-level market selling salvage, art, and blessings |
+| 10 | `carrion-infirmary` | The Green Room | `feature_infirmary` | Backstage lounge for recovery, masks off, algae drinks |
+| 11 | `carrion-training` | The Dance Floor | `feature_training` | Open combat platform, every fight is choreography |
+| 12 | `carrion-drum-circle` | The Drum Circle | `corridor` | Performance space where rhythm sets the Krewe's heartbeat |
+| 13 | `carrion-vine-tunnel` | Vine Tunnel | `corridor` | Overgrown concrete passage leading toward the outer wall |
+| 14 | `carrion-superdome-breach` | Superdome Breach | `corridor` | Jagged rent in the Dome wall, vines and rainwater, exit to Siltgate |
+| 15 | `carrion-upper-bowl` | Upper Bowl Seating | `corridor` | Ruined stadium tiers, some seats intact, view of the whole bowl |
+| 16 | `carrion-inn-lobby` | The Bunk Tiers — Lobby | `corridor` | Entrance to sleeping quarters in the upper seating |
+| 17 | `carrion-inn` | The Bunk Tiers — Private Alcove | `feature_inn` | Hammocks and cots in the shadowed upper decks |
+| 18 | `carrion-locker-passage` | Locker Passage | `corridor` | Old player tunnel beneath the Dome, graffiti-covered |
+| 19 | `carrion-tunnel-of-masks` | Tunnel of Masks | `corridor` | Ceremonial corridor with masks of past Krewe captains |
+| 20 | `carrion-war-room` | The Inner Sanctum | `feature_war_room` | Deep chamber beneath the Dome, maps and true ledger |
+| 21 | `carrion-prop-graveyard` | Prop Graveyard | `corridor` | Discarded floats, broken puppets, remnants of past parades |
+| 22 | `carrion-rain-stage` | Rain Stage | `corridor` | Open-air performance platform where rainwater collects |
+| 23 | `carrion-incense-hall` | Incense Hall | `corridor` | Smoke-filled passage between the bazaar and the green room |
+| 24 | `carrion-scaffold-bridge` | Scaffold Bridge | `corridor` | Precarious plank walkway across the flooded bowl |
+
+### Exit Topology
+
+```
+carrion-commons       →  west:  carrion-west-concourse
+                      →  east:  carrion-east-concourse
+                      →  south: carrion-expedition-board
+                      →  up:    carrion-upper-bowl
+                      →  down:  carrion-locker-passage
+
+carrion-west-concourse → east:  carrion-commons
+                       → south: carrion-mural-arcade
+                       → west:  carrion-market
+                       → north: carrion-scaffold-bridge
+
+carrion-scaffold-bridge → south: carrion-west-concourse
+                        → east:  carrion-rain-stage
+
+carrion-rain-stage    →  west:  carrion-scaffold-bridge
+
+carrion-east-concourse → west:  carrion-commons
+                       → south: carrion-lantern-row
+                       → east:  carrion-prop-graveyard
+
+carrion-prop-graveyard → west:  carrion-east-concourse
+
+carrion-mural-arcade  →  north: carrion-west-concourse
+                      →  south: carrion-stash
+
+carrion-stash         →  north: carrion-mural-arcade
+                      →  east:  carrion-armoury
+
+carrion-armoury       →  west:  carrion-stash
+
+carrion-lantern-row   →  north: carrion-east-concourse
+                      →  south: carrion-training
+
+carrion-training      →  north: carrion-lantern-row
+                      →  east:  carrion-drum-circle
+
+carrion-drum-circle   →  west:  carrion-training
+                      →  east:  carrion-vine-tunnel
+
+carrion-vine-tunnel   →  west:  carrion-drum-circle
+                      →  east:  carrion-superdome-breach
+
+carrion-superdome-breach → west:  carrion-vine-tunnel
+                         → south: → SILTGATE (flooded-concourse)
+
+carrion-market        →  east:  carrion-west-concourse
+                      →  south: carrion-incense-hall
+
+carrion-incense-hall  →  north: carrion-market
+                      →  south: carrion-infirmary
+
+carrion-infirmary     →  north: carrion-incense-hall
+
+carrion-expedition-board → north: carrion-commons
+
+carrion-upper-bowl    →  down:  carrion-commons
+                      →  up:    carrion-inn-lobby
+
+carrion-inn-lobby     →  down:  carrion-upper-bowl
+                      →  up:    carrion-inn
+
+carrion-inn           →  down:  carrion-inn-lobby
+
+carrion-locker-passage → up:    carrion-commons
+                       → down:  carrion-tunnel-of-masks
+
+carrion-tunnel-of-masks → up:   carrion-locker-passage
+                        → down: carrion-war-room
+
+carrion-war-room      →  up:    carrion-tunnel-of-masks
+```
+
+### Creatures (5)
+
+| Name | Slug | Behavior | Preferred Rooms | Description |
+|------|------|----------|-----------------|-------------|
+| Krewe Sentinel | `krewe-sentinel` | Non-aggressive, patrols concourses in pairs | `carrion-west-concourse`, `carrion-east-concourse`, `carrion-vine-tunnel` | A masked Krewe guard in painted armour, moving with deliberate theatrical grace, spear tapping the floor in rhythm. |
+| Parade Rat | `parade-rat` | Non-aggressive, ambient fauna | `carrion-prop-graveyard`, `carrion-locker-passage`, `carrion-tunnel-of-masks` | A bold rat wearing a tiny scrap of gold fabric, nesting in the debris of old parades. |
+| Incense Keeper | `incense-keeper` | Non-aggressive, stationary NPC | `carrion-incense-hall`, `carrion-infirmary` | A robed Krewe elder tending braziers, smoke curling from resin chips, dispensing cryptic medical advice. |
+| Drum Caller | `drum-caller` | Non-aggressive, stationary NPC | `carrion-drum-circle`, `carrion-rain-stage` | A young Krewe performer beating a rhythm on salvaged steel drums, setting the Dome's pulse. |
+| Scaffold Rigger | `scaffold-rigger` | Non-aggressive, patrols upper areas | `carrion-upper-bowl`, `carrion-scaffold-bridge`, `carrion-rain-stage` | A Krewe worker in harness and paint-stained coveralls, maintaining the Dome's precarious stage infrastructure. |
+
+### Connection Room Placement
+
+**Superdome Breach** (`carrion-superdome-breach`) sits at the end of a path leading east from the training area: Training → Drum Circle → Vine Tunnel → Breach → Siltgate. This traces a route from the Dome's interior, through the performance perimeter, through overgrown infrastructure, to a literal hole in the wall. The breach is the Dome's wound — where the structure failed and the outside world pours in. It's at the edge, reachable in 4 steps from commons, and it *feels* like leaving the Krewe's domain.
+
+---
+
+## Summary Comparison
+
+| Aspect | Reliquary (Kindari) | Bloom Observatory (Tenders) | Carrion Court (Krewe) |
+|--------|--------------------|-----------------------------|----------------------|
+| **Room count** | 22 | 23 | 24 |
+| **Topology shape** | L-shaped industrial complex | Vertical multi-deck tower | Radial bowl with concourses |
+| **Primary movement** | Horizontal (catwalks, corridors) | Vertical (up/down between decks) | Radial (concourse ring) + vertical (bowl depth) |
+| **Steps to zone exit** | 3 (commons → pipe → annex) | 3–4 (commons → hatch → stairwell → descent) | 4 (commons → concourse → drum → vine → breach) |
+| **Steps to war room** | 4 (commons → junction → training → catwalk → vault) | 4 (commons → training → lens → war-room) | 3 (commons → locker → masks → sanctum) |
+| **Steps to inn** | 2 (commons → settling → inn-lobby → up) | 3 (commons → mess → inn-lobby → up) | 3 (commons → upper-bowl → inn-lobby → up) |
+| **Corridor rooms** | 10 | 12 | 12 |
+| **Feature rooms** | 9 | 9 | 9 |
+| **Connection rooms** | 3 (extra exploration loops) | 2 (tidal, kelp) | 3 (prop graveyard, rain stage, scaffold) |
+| **Creature types** | 5 | 5 | 5 |
+
+## Creature Definition Format (for implementation)
+
+All stronghold creatures share these base stats (non-combat NPCs):
+```
+aggressive: false
+max_hp: 1         -- ambient NPCs, not meant to be killed
+attack: 0
+defence: 0
+armour: 0
+agility: 0
+min_count: 1
+max_count: 1      -- singleton NPCs (guards: max_count 2)
+idle_ticks_min: 5
+idle_ticks_max: 10
+flee_threshold: 1.0  -- always flee if attacked
+loot_table: '[]'
+status: 'published'
+```
+
+Guard types (Sentinels, Wardens) get `max_count: 2` and slightly higher idle ticks for slower patrol cycles.
+Ambient fauna (rats, crawlers) get `min_count: 1, max_count: 3` for small groups.
+
+## Slug Naming Convention
+
+All room slugs follow the pattern: `{stronghold-prefix}-{room-name}`
+- Reliquary: `reliquary-*`
+- Bloom Observatory: `bloom-*`
+- Carrion Court: `carrion-*`
+
+This departs from the current convention where some rooms use full stronghold names (e.g., `bloom-observatory-commons`). The shorter prefix is recommended for readability and consistency, but the implementer may preserve the current prefix if migration concerns outweigh the cleanup.
+
+## Open Questions
+
+1. **Should corridors have any mechanical effect?** Currently `corridor` type rooms have no special behavior. Should some corridors slow movement, display ambient text, or trigger atmospheric narration?
+2. **NPC interaction system.** The creatures proposed here are atmospheric — they have `room_description` text but no dialogue or interaction mechanics. When NPC interaction is implemented, these creatures can be upgraded.
+3. **Stash/armoury adjacency.** In all three designs, stash and armoury are near each other (you get gear, then equip it). Is this the right UX, or should they be separated to create more traversal?
+4. **Inn as safe-logout zone.** The current `entry_room_slugs` uses the inn. Should the inn remain the only safe-logout room, or should commons also qualify?
+
+---
+
+*This is a proposal. No code or migration changes are included. Review, revise, then hand off for implementation.*
+
+---
+
+# Decision: Death Respawn Priority — Inn > Faction Hub > Refuge
+
+**Author:** Jarlaxle  
+**Date:** 2026-04-07  
+**Issue:** #322  
+**PR:** #326
+
+## Context
+
+`handlePlayerDeath()` was hardcoded to route through `resolvePlayerHubTarget(factionSlug)`, which falls to `DEFAULT_HUB_SLUG` (Refuge) when faction is undefined. The `saveLastInn()`/`getLastInn()` system existed but was only used for login joins, not death respawns.
+
+## Decision
+
+Death respawn now follows this priority chain:
+1. **Last rented inn room** — `getLastInn()` returns `{ zoneSlug, roomSlug }`
+2. **Faction stronghold** — `resolvePlayerHubTarget(factionSlug)`
+3. **DEFAULT_HUB_SLUG** — Refuge as last resort
+
+The `RoomSwitchMessage` now carries `options.targetRoomSlug` when routing to an inn, so the destination zone's `onJoin()` places the player in the correct room.
+
+## Impact
+
+- `handlePlayerDeath()` is now `async` (callers fire-and-forget — no await needed)
+- `RoomSwitchOptions` in shared types gained `targetRoomSlug?: string`
+- Death narration says "your rented room" for inn respawns
+- Frontend `switchRoom()` already spreads options into joinOptions, so no client changes needed
+
+---
+
+# Decision: ANSI Parser Test Suite Conventions
+
+**Author:** Minsc (Tester)  
+**Date:** 2026-07-15  
+**Status:** Implemented  
+
+## Context
+
+Wrote 62 tests for `packages/client/src/lib/ansi-parser.ts` covering both lightweight tag syntax (`[red]...[/red]`) and raw ANSI escape codes (`\x1b[31m`). Regis's implementation was already in place — all tests pass.
+
+## Decisions
+
+1. **Test file location:** `packages/client/src/__tests__/ansi-parser.test.ts` (`.ts`, not `.tsx`) — uses `createElement` to render React nodes, avoiding JSX dependency.
+
+2. **Export names:** Implementation uses `SUPPORTED_NAMES` (combined array) instead of separate `ANSI_COLORS`/`ANSI_MODIFIERS`. Tests adapted to actual exports.
+
+3. **stripAnsi inconsistency noted:** `stripAnsi` strips ALL `[word]` bracket patterns including unknowns, while `parseAnsiText` preserves unknown tags as literal text. Test documents this behavior. Low priority — unlikely to cause issues in practice.
+
+## Test Coverage
+
+- 62 tests across 7 `describe` blocks
+- Lightweight syntax: 22 tests (happy path + edge cases)
+- Raw ANSI codes: 15 tests (happy path + edge cases)
+- Mixed syntax: 3 tests
+- stripAnsi: 14 tests
+- Performance: 4 tests
+- Exports: 4 tests
+
+---
+
+# Minsc QA Audit — Stronghold Redesign (Directional/Logical Consistency)
+
+Source reviewed: `.squad/decisions/inbox/elminster-stronghold-redesign.md`
+
+This audit checks (1) reverse exits, (2) ASCII map ↔ exit-topology agreement, (3) basic spatial sanity, (4) room list ↔ topology room counts, (5) inter-zone/connection exit formatting.
+
+---
+
+## 1) Reliquary (Kindari)
+
+### 1. DIRECTIONAL CONSISTENCY (reverse exits)
+✅ **PASS (intra-zone exits)** — All stated within-zone exits have matching reverse exits:
+- `reliquary-commons north reliquary-catwalk-junction` ↔ `reliquary-catwalk-junction south reliquary-commons`
+- `reliquary-commons south reliquary-market` ↔ `reliquary-market north reliquary-commons`
+- `reliquary-commons east reliquary-pipe-corridor` ↔ `reliquary-pipe-corridor west reliquary-commons`
+- `reliquary-commons west reliquary-settling-pool` ↔ `reliquary-settling-pool east reliquary-commons`
+- (and all other listed pairs, including verticals like `up/down`)
+
+⚠️ **Note:** The external exit `reliquary-filtration-annex east → SILTGATE` has no reverse exit in this document (expected for inter-zone, but see Check 5).
+
+### 2. ASCII MAP vs EXIT TOPOLOGY
+❌ **FAIL** — The map drawing implies different connections/directions than the Exit Topology.
+
+**Issues:**
+1) **Commons ↔ Pipe Corridor connection missing on map**
+   - Topology: `reliquary-commons → east: reliquary-pipe-corridor` and `reliquary-pipe-corridor → west: reliquary-commons`
+   - ASCII map: shows **Pipe Corridor** as a separate block on the right, but does **not** clearly draw a connection from **Preservation Hall (commons)** to **Pipe Corridor**.
+   - **Should be:** Draw an explicit east/west link between Preservation Hall and Pipe Corridor.
+
+2) **Market Backroom ↔ (Stash/Armoury) orientation mismatch**
+   - Topology: `reliquary-market-backroom → west: reliquary-stash` and `→ east: reliquary-armoury`
+   - ASCII map: depicts **Archive Cistern (stash)** and **Assembly Bay (armoury)** as **south/below** the Backroom, implying a south/north relationship.
+   - **Should be (if topology is correct):** Place `reliquary-stash` west of `reliquary-market-backroom` and `reliquary-armoury` east of it (not south).
+
+3) **Pipe Corridor ↔ Filtration Annex direction ambiguity in map**
+   - Topology: `reliquary-pipe-corridor → east: reliquary-filtration-annex`
+   - ASCII map: Filtration Annex is drawn *below* Pipe Corridor while the label says `east`, creating a compass/layout inconsistency.
+   - **Should be:** If annex is east of pipe-corridor, it should be drawn to the right of it (or the direction label should change to `south` and reverse updated accordingly).
+
+### 3. LOGICAL SPATIAL SENSE
+✅ **PASS (topology)** — The graph is spatially plausible in 2D with vertical elements:
+- Clear main spine (commons → pipe corridor → annex) and catwalk layer (commons → junction → training → upper catwalk → war room).
+- Vertical use is sensible: `commons up shrine-alcove`, `training up watchpost`.
+- The stash loop (`market-backroom` and `cistern-access`) is explicitly justified and does not force an impossible 2D layout.
+
+### 4. ROOM COUNT VERIFICATION
+✅ **PASS**
+- Room list count: **22**
+- Rooms referenced in exit topology (excluding external `SILTGATE`): **22**
+- No orphaned/phantom in-zone rooms detected.
+
+### 5. CONNECTION ROOM EXITS (inter-zone portal pattern)
+❌ **FAIL** — Inter-zone exit is described only as `→ SILTGATE (pipe-bridge)`.
+- Document does **not** specify the required inter-zone portal fields/pattern:
+  - `to_room_slug` equal to `from_room_slug` (self-referential portal in the connection room)
+  - explicit `target_zone_slug` + `target_room_slug`
+- **Affected exit:** `reliquary-filtration-annex east → SILTGATE (pipe-bridge)`
+- **Should be:** Express this as an inter-zone portal on `reliquary-filtration-annex` with explicit target zone+room metadata (and self `to_room_slug`).
+
+---
+
+## 2) Bloom Observatory (Bloom Tenders)
+
+### 1. DIRECTIONAL CONSISTENCY (reverse exits)
+✅ **PASS (intra-zone exits)** — All within-zone exits have matching reverses, including multi-level vertical travel:
+- `bloom-commons up bloom-training` ↔ `bloom-training down bloom-commons`
+- `bloom-commons down bloom-cargo-hatch` ↔ `bloom-cargo-hatch up bloom-commons`
+- `bloom-leg-stairwell down bloom-platform-descent` ↔ `bloom-platform-descent up bloom-leg-stairwell`
+
+⚠️ **Note:** The external exit `bloom-platform-descent east → WARRENS` has no reverse here (see Check 5).
+
+### 2. ASCII MAP vs EXIT TOPOLOGY
+❌ **FAIL** — Multiple compass-direction and adjacency disagreements.
+
+**Issues:**
+1) **Cultivation Gangway direction from commons**
+   - Topology: `bloom-commons → north: bloom-cultivation-gangway`
+   - ASCII map: places **Cultivation Gangway** to the **right/east** of **Tide Deck (commons)**.
+   - **Should be:** If keeping topology, draw Cultivation Gangway *above/north* of Tide Deck, not east.
+
+2) **Algae Terraces relative to Cultivation Gangway**
+   - Topology: `bloom-cultivation-gangway → north: bloom-algae-terraces`
+   - ASCII map: draws **Algae Terraces** *below/south* of Cultivation Gangway.
+   - **Should be:** Terraces should be drawn above/north of the gangway (or topology directions must invert).
+
+3) **War Room access path**
+   - Topology: `bloom-lens-gallery → up: bloom-war-room` and `bloom-crows-nest` is only `up` from `bloom-training`.
+   - ASCII map: depicts **Signal Archive (war-room)** sitting above a combined shape containing **Crow’s Nest** and **Lens Gallery**, implying both connect down from the war-room.
+   - **Should be:** War-room should only be above Lens Gallery; Crow’s Nest should be a separate `up` from Training (no direct war-room adjacency).
+
+4) **Lower-level stash/armoury adjacency to cargo hatch**
+   - Topology: `bloom-cargo-hatch → west: bloom-stash` and `→ east: bloom-armoury`
+   - ASCII map: draws stash/armoury *below* cargo hatch with `up` links, implying vertical relationships.
+   - **Should be:** Draw stash to the left (west) and armoury to the right (east) of cargo hatch.
+
+5) **Map omits several topology rooms** (not inherently wrong, but risks mis-generation)
+   - Present in topology but not shown on map: `bloom-winch-platform`, `bloom-netting-walk`, `bloom-tidal-pool`, `bloom-kelp-garden`, `bloom-radio-shack`.
+   - **Should be:** Either add them to the map or explicitly label the map as intentionally partial.
+
+### 3. LOGICAL SPATIAL SENSE
+✅ **PASS (topology)** — Vertical structure reads cleanly:
+- Main deck hub at commons, with clear up-chain to training and up to crow’s nest/war-room via lens gallery.
+- Clear down-chain to cargo hatch → stairwell → platform descent.
+- No 2D-impossible loops detected.
+
+### 4. ROOM COUNT VERIFICATION
+✅ **PASS**
+- Room list count: **23**
+- Rooms referenced in exit topology (excluding external `WARRENS`): **23**
+- No orphaned/phantom in-zone rooms detected.
+
+### 5. CONNECTION ROOM EXITS (inter-zone portal pattern)
+❌ **FAIL** — Inter-zone exit is only written as `→ WARRENS (causeway-terminus)`.
+- Missing explicit self `to_room_slug == from_room_slug` portal format and required target zone+room fields.
+- **Affected exit:** `bloom-platform-descent east → WARRENS (causeway-terminus)`
+- **Should be:** Express as an inter-zone portal on `bloom-platform-descent` with explicit `target_zone_slug` + `target_room_slug`.
+
+---
+
+## 3) Carrion Court (Krewe Calliope)
+
+### 1. DIRECTIONAL CONSISTENCY (reverse exits)
+✅ **PASS (intra-zone exits)** — All within-zone exits have matching reverses, including vertical layers:
+- `carrion-commons down carrion-locker-passage` ↔ `carrion-locker-passage up carrion-commons`
+- `carrion-upper-bowl up carrion-inn-lobby` ↔ `carrion-inn-lobby down carrion-upper-bowl`
+
+⚠️ **Note:** The external exit `carrion-superdome-breach south → SILTGATE` has no reverse here (see Check 5).
+
+### 2. ASCII MAP vs EXIT TOPOLOGY
+❌ **FAIL** — The underground stack uses opposite vertical directions, and one main-floor chain is compressed.
+
+**Issues:**
+1) **Underground path uses `up` in the ASCII map but `down` in topology**
+   - Topology:
+     - `carrion-commons → down: carrion-locker-passage`
+     - `carrion-locker-passage → down: carrion-tunnel-of-masks`
+     - `carrion-tunnel-of-masks → down: carrion-war-room`
+   - ASCII map: shows `LOCKER PASSAGE` / `TUNNEL OF MASKS` / `INNER SANCTUM (war-room)` *above* the commons with connectors labeled `up`.
+   - **Should be:** Flip these vertical directions in the map (draw them below commons with `down` going deeper), or invert the topology to match the map. Given the rationale (“war room is deep beneath the Dome”), the topology’s `down` chain is the likely correct one.
+
+2) **Market → Infirmary path missing intermediate room on map**
+   - Topology: `carrion-market → south: carrion-incense-hall → south: carrion-infirmary`
+   - ASCII map: shows **Curiosity Bazaar (market)** connected directly down to **Green Room (infirmary)**.
+   - **Should be:** Insert `carrion-incense-hall` between market and infirmary on the map (or remove/incorporate it in topology if direct adjacency is intended).
+
+3) **Map omits several topology rooms** (may be intentional, but it currently conflicts with implied routes)
+   - Not shown: `carrion-prop-graveyard`, `carrion-scaffold-bridge`, `carrion-rain-stage`, `carrion-incense-hall` (though implied by topology).
+   - **Should be:** Either add them or clearly mark the ASCII map as partial.
+
+### 3. LOGICAL SPATIAL SENSE
+✅ **PASS (topology)** — Compass directions can be embedded sensibly:
+- Commons as hub with east/west concourses.
+- Clear eastward route to the zone exit (training → drum → vine → breach).
+- Downward route to war room is consistent with “deep beneath the Dome.”
+
+### 4. ROOM COUNT VERIFICATION
+✅ **PASS**
+- Room list count: **24**
+- Rooms referenced in exit topology (excluding external `SILTGATE`): **24**
+- No orphaned/phantom in-zone rooms detected.
+
+### 5. CONNECTION ROOM EXITS (inter-zone portal pattern)
+❌ **FAIL** — Inter-zone exit is only written as `→ SILTGATE (flooded-concourse)`.
+- Missing explicit self `to_room_slug == from_room_slug` portal format and required target zone+room fields.
+- **Affected exit:** `carrion-superdome-breach south → SILTGATE (flooded-concourse)`
+- **Should be:** Express as an inter-zone portal on `carrion-superdome-breach` with explicit `target_zone_slug` + `target_room_slug`.
+
+---
+
+# Warrens & Siltgate Exit Topology Analysis
+
+**Minsc, Tester/QA**  
+**Date:** Analysis of migration 003_seed_zones.sql  
+**Status:** ❌ BOTH ZONES REQUIRE TOPOLOGY FIXES
+
+---
+
+## EXECUTIVE SUMMARY
+
+Both the **Warrens** and **Siltgate** zones exhibit significant exit topology issues when mapped to a 2D grid. The problems stem primarily from:
+
+1. **Massive Position Collisions**: Multiple disconnected rooms are placed at identical 2D coordinates
+2. **Unreachable Rooms**: Certain rooms are not reachable from the entry point via the normal exit graph
+3. **Bidirectional Exit Failures**: Some exits claim to go to other rooms but lack proper reverse exits
+4. **Exit Crossing Without Connecting Chambers**: The zones appear to mix vertical (up/down) navigation with planar 2D movement in ways that violate a consistent 2D grid topology
+
+**The core issue:** These zones were designed with vertical/sewer navigation overlaid on planar geography, but no intermediate connecting rooms were placed to prevent exits from visually crossing through occupied grid cells.
+
+---
+
+## WARRENS ANALYSIS
+
+### Metrics
+- **Total Rooms:** 110
+- **Entry Room:** shattered-gate
+- **Placed Rooms:** 109
+- **Reachable Rooms:** 109
+- **Unreachable Rooms:** 1
+
+### Issues Found
+
+#### ❌ Position Collisions: 22 DETECTED
+
+Rooms that occupy the same 2D coordinate (crossing exits without connecting chambers):
+
+| Position | Rooms (Type) | Issue |
+|----------|---|---|
+| (1, 0) | rubble-boulevard (corridor) ↔ overwatch-tower (dead_end) | Tower accessed via UP, but placed at same (x,y) as corridor |
+| (4, -1) | collapsed-tenement (dead_end) ↔ gutter-run (corridor) | Tenement accessed WEST from gutter-run, both at same coord |
+| (5, -1) | scavengers-den (combat) ↔ blighted-courtyard (junction) | Den accessed SOUTH, courtyard accessed EAST, same grid cell |
+| (5, -2) | condemned-arch (corridor) ↔ slum-r1c2 (combat) | Arch EAST of condemned-arch, slum SOUTH of gutter-run, collide |
+| (3, -2) | sunken-square (junction) ↔ the-ratways (corridor) | Square accessed via WEST from slum-r1c1, ratways via DOWN from square, both at (3,-2) |
+| (6, -2) | ironmongers-ruin (dead_end) ↔ slum-r1c3 (combat) | Ruin accessed EAST from condemned-arch, slum accessed SOUTH, same position |
+| (4, -4) | slum-r3c1 (combat) ↔ sewer-bone-shelf (dead_end) | Room grid row 3, col 1 vs. bone shelf accessed from sewer system |
+| (4, -5) | slum-r4c1 (combat) ↔ sewer-drain-grate (corridor) | Slum grid row 4 col 1 vs. drain grate from sewer-north-tunnel |
+| (5, -5) | slum-r4c2 (combat) ↔ sewer-overflow-chamber (combat) | Slum row 4 col 2 vs. overflow accessed from sewer-drain-grate EAST |
+| (4, -6) | slum-r5c1 (combat) ↔ sewer-east-conduit (corridor) | Slum row 5 col 1 vs. east conduit from sewer-main-junction EAST |
+| (3, -5) | plague-ward (dead_end) ↔ sewer-north-tunnel (corridor) | Ward accessed WEST from slum-r4c1 vs. tunnel from sewer-main-junction NORTH |
+| (5, -6) | slum-r5c2 (combat) ↔ sewer-pipe-maze (corridor) | Slum row 5 col 2 vs. pipe maze from sewer-east-conduit EAST |
+| (4, -7) | slum-r6c1 (combat) ↔ sewer-blackwater-crossing (junction) | Slum row 6 col 1 vs. crossing from sewer-deep-channel EAST |
+| (3, -6) | sluice-gate (junction) ↔ sewer-main-junction (junction) | Sluice accessed WEST from slum-r5c1 vs. main junction from sewer-north-tunnel SOUTH |
+| (6, -6) | slum-r5c3 (combat) ↔ sewer-gas-pocket (dead_end) | Slum row 5 col 3 vs. gas pocket from sewer-pipe-maze EAST |
+| (4, -8) | slum-r7c1 (combat) ↔ sewer-deep-channel (corridor) | Slum row 7 col 1 vs. deep channel from sewer-blackwater-crossing SOUTH |
+| (5, -8) | slum-r7c2 (combat) ↔ sewer-effluent-pool (combat) | Slum row 7 col 2 vs. pool from sewer-deep-channel EAST |
+| (4, -9) | dyers-vats (combat) ↔ sewer-stagnant-pool (chamber) ↔ sewer-silt-chamber (junction) | **Triple collision** - Slum row 7 col 1 SOUTH vs. stagnant pool from sewer-trickle-passage EAST vs. silt chamber from sewer-deep-channel SOUTH |
+| (5, -9) | cistern-access (junction) ↔ sewer-cistern (combat) | Cistern-access row 7 col 2 SOUTH vs. sewer cistern from stagnant pool EAST |
+| (3, -9) | beggar-kings-throne (dead_end) ↔ sewer-collapsed-drain (dead_end) ↔ sewer-slime-channel (corridor) | **Triple collision** - Throne accessed SOUTH from dyers-vats vs. drain from flooded-vault SOUTH vs. slime channel from slime-channel EAST |
+| (3, -4) | sewer-rat-nest (combat) ↔ sewer-cracked-conduit (corridor) | Rat nest from sewer-north-tunnel NORTH vs. cracked conduit from sewer-drip-tunnel SOUTH |
+| (3, -8) | sewer-flooded-vault (combat) ↔ sewer-trickle-passage (corridor) | Vault from sewer-flooded-vault (accessed SOUTH from south-tunnel) vs. trickle passage from sewer-west-conduit EAST |
+
+**Critical:** These 22 collisions represent exits that **must cross through occupied grid cells** to reach their destinations. In a planar 2D map, this creates visual intersection without a connecting room.
+
+#### ⚠️ Unreachable Rooms: 1
+
+- **causeway-terminus** — Isolated room, not connected via any exit path from the entry graph. Exit from `causeway-terminus` west goes to itself in the Bloom Observatory zone. No entry path exists from shattered-gate.
+
+#### ⚠️ Bidirectional Failures: 4
+
+| From Room | Direction | To Room | Status |
+|-----------|-----------|---------|--------|
+| shattered-gate | west | shattered-gate | ❌ Self-loop to Refuge; no reverse |
+| shattered-gate | south | shattered-gate | ❌ Self-loop to causeway-terminus; no reverse from causeway-terminus |
+| causeway-terminus | west | causeway-terminus | ❌ Self-loop to Bloom Observatory; no reverse |
+| causeway-terminus | south | shattered-gate | ❌ Missing reverse: shattered-gate north → causeway-terminus |
+
+**Note:** Bidirectional failures are acceptable for zone-transition exits (marked with target_zone != NULL). The 4 failures detected are either zone transitions or orphaned room connections.
+
+### Grid Visualization (Partial)
+
+```
+Y=1: [overwatch-tower/rubble-boulevard]
+     
+Y=0: [shattered-gate] - [rubble-boulevard] - [collapsed-overpass] - [hollow-market] - [merchants-row] - [burned-chapel]
+                                                     |
+                                               (COLLISION: multiple slum + sewer rooms below)
+Y=-1: [gutter-run] & [collapsed-tenement]
+      [scavengers-den] & [blighted-courtyard]
+      [condemned-arch] & [slum-r1c2]
+      ...
+
+(Sewer rooms stack vertically, creating collisions at every depth level)
+```
+
+### Root Cause
+
+The Warrens uses a **7x7 slum grid** (slum-r1c1 through slum-r7c7) for the main area, plus a **separate vertical sewer system** (sewer-main-junction, sewer-north-tunnel, etc.). When both systems are placed on a 2D grid:
+
+- Slum rooms are placed by following compass directions (north/south/east/west)
+- Sewer rooms are placed by following a different path (down → north/south/east/west)
+- The two systems converge at multiple points (e.g., sunken-square down → the-ratways, sluice-gate down → sewer-main-junction, cistern-access down → sewer-cistern)
+- When the sewer path expands horizontally (EAST/WEST/NORTH/SOUTH), its rooms occupy the same grid cells as slum rooms above them
+
+**No intermediate connecting chambers or depth layers separate the slum quarter from the sewer, causing all these collisions.**
+
+---
+
+## SILTGATE ANALYSIS
+
+### Metrics
+- **Total Rooms:** 141
+- **Entry Room:** market-square
+- **Placed Rooms:** 138
+- **Reachable Rooms:** 138
+- **Unreachable Rooms:** 3
+
+### Issues Found
+
+#### ❌ Position Collisions: 32 DETECTED
+
+Siltgate has even more collisions than Warrens. Sample:
+
+| Position | Rooms (Type) | Issue |
+|----------|---|---|
+| (0, 1) | fountain-plaza (junction) ↔ estate-gate (entrance) | Plaza NORTH of market, gate UP from plaza, same coord |
+| (1, 0) | bazaar-row-1 (corridor) ↔ narrow-alley-1 (corridor) ↔ flooded-chamber (dead_end) | Bazaar EAST of market, alley SOUTH of arcade-1, chamber from sewer-tunnel-8 SOUTH |
+| (0, 2) | news-board (dead_end) ↔ promenade-walk-1 (corridor) | Board NORTH of plaza, walk NORTH of estate-gate, same grid |
+| (1, 1) | silver-arcade-1 (corridor) ↔ iron-balcony-1 (corridor) ↔ sewer-tunnel-8 (corridor) | Arcade EAST of plaza, balcony SOUTH of promenade-walk-2, sewer room from deep underground |
+| (2, 0) | bazaar-row-2 (corridor) ↔ cobblestone-street-1 (corridor) ↔ fungal-cavern (dead_end) | Bazaar chain, cobblestone chain, sewer-fungal accessed SOUTH from sewer-tunnel-7 |
+
+*(All 32 collisions follow this pattern: planar rooms × vertical sewer rooms occupying the same cells)*
+
+#### ⚠️ Unreachable Rooms: 3
+
+- **pipe-bridge** — Supposed connection point to The Reliquary. Accessed via west from itself. No entry from Siltgate proper.
+- **smugglers-cove** — Hidden passage accessed SOUTH from tide-gate, but tide-gate has no reverse exit south.
+- **thieves-den** — Hidden passage accessed EAST from rat-run-2 (hidden), but rat-run-2 has no exit east.
+
+#### ⚠️ Bidirectional Failures: 7
+
+| From Room | Direction | To Room | Status |
+|-----------|-----------|---------|--------|
+| city-gate | west | city-gate | ❌ Zone transition to Refuge; no reverse |
+| smugglers-cove | north | tide-gate | ❌ Missing: tide-gate south → smugglers-cove (hidden:true exists, but marked hidden!) |
+| thieves-den | west | rat-run-2 | ❌ Missing: rat-run-2 east → thieves-den (hidden:true exists!) |
+| ashgate | east | ashgate | ❌ Zone transition to Warrens; no reverse |
+| flooded-concourse | north | flooded-concourse | ❌ Zone transition to Carrion Court; no reverse |
+| pipe-bridge | west | pipe-bridge | ❌ Zone transition to Reliquary; no reverse |
+| pipe-bridge | east | ashgate-chapel | ❌ Missing: ashgate-chapel west → pipe-bridge |
+
+**Note:** Failures 2 & 3 are marked `hidden:true` — the exits DO exist bidirectionally, but are flagged hidden. This may be intentional (secret passages). Failures 1, 4, 5, 6 are zone transitions.
+
+### Grid Visualization (Partial)
+
+```
+Y=3: [jewelers-lane] [highwind-bridge] [observatory]
+     
+Y=2: [news-board]    [promenade-walk-1] [courtyard-fountain] [noble-residence-1]
+     
+Y=1: [fountain-plaza] [estate-gate]
+     [silver-arcade-1] [iron-balcony-1]
+     [silver-arcade-2] [iron-balcony-2]
+     [silver-arcade-3] [guild-hall]
+     [silver-arcade-4] [silk-road]
+     
+Y=0: [market-square]
+     [bazaar-row-1] [narrow-alley-1]
+     [bazaar-row-2] [cobblestone-street-1]
+     [bazaar-row-3] [cobblestone-street-2]
+     [span-gate] [cobblestone-street-3]
+     
+Y=-1: [tavern-row]
+      [scribe-corner] [apothecary] [dockside-tavern]
+      [money-changers-row] [narrow-alley-2]
+      ...
+
+(Sewer system creates additional collisions at every coordinate below)
+```
+
+### Root Cause
+
+Siltgate has a similar architecture to Warrens:
+
+- **Upper district**: Market, bazaar, silver arcade, estates, promenade, garden terrace, docks
+- **Lower district**: Beggar's Span (Alley system) with rats and thugs
+- **Underground**: Sewers (3 junctions × 8 tunnels) + undercity areas
+
+The **undercity-gate** (at guild-hall DOWN) connects the planar upper world to the sewer system. As the sewer system branches out horizontally, it collides with upper-district coordinates.
+
+**Additionally**, Siltgate has even more zone transitions (Refuge, Warrens, Reliquary, Carrion Court), and some are accessed via rooms (like pipe-bridge east → ashgate-chapel, ashgate east → Warrens) rather than direct zone-to-zone jumps.
+
+---
+
+## DETAILED FINDINGS
+
+### Position Collisions: What They Mean
+
+A **position collision** occurs when two distinct rooms occupy the same 2D grid coordinate. When drawing this as a map:
+
+```
+Example: Position (3, -6) contains both:
+  1. sluice-gate (accessed W from slum-r5c1)
+  2. sewer-main-junction (accessed S from sewer-north-tunnel)
+
+On a 2D map, two exit edges would need to cross to reach both rooms:
+  - Edge from slum-r5c1 west → sluice-gate
+  - Edge from sewer-north-tunnel south → sewer-main-junction
+  
+These edges MUST cross without passing through an intermediate room.
+```
+
+**Result:** Rooms appear to be in the same visual location, or exits appear to pass through solid matter.
+
+### Unreachable Rooms
+
+**Warrens** has 1 unreachable room:
+- `causeway-terminus` — Only entry is from itself (west to bloom-observatory-inn in the-bloom-observatory zone). No path from shattered-gate.
+
+**Siltgate** has 3:
+- `pipe-bridge` — Only entry is from itself (west to filtration-annex in the-reliquary zone)
+- `smugglers-cove` & `thieves-den` — Marked `hidden:true`, so they're reachable but only via hidden exits
+
+The unreachable non-hidden rooms need either:
+1. A new entrance from the main zone exit graph, OR
+2. Removal if they're truly supposed to be zone-transitions-only
+
+### Bidirectional Failures & Hidden Exits
+
+Most bidirectional failures are **zone-transition exits** (going to target_zone != NULL), which legitimately don't have reverse entries. However:
+
+**Siltgate** has two special cases:
+- `tide-gate south → smugglers-cove` exists and has `hidden:true` on the REVERSE (smugglers-cove north → tide-gate)
+- `rat-run-2 east → thieves-den` exists and has `hidden:true` on the REVERSE (thieves-den west → rat-run-2)
+
+These are **intentionally hidden** — they're secret passages. The "failure" is a false positive (both directions exist, one is just marked hidden).
+
+### Loop Consistency Check
+
+**Compass loops should sum to (0,0)**. Examples:
+
+✅ **Pass:** north + south = (0, 0)
+✅ **Pass:** east + west = (0, 0)
+✅ **Pass:** north + east + south + west = (0, 0)
+
+**Warrens slum grid check:**
+- Row 1 is a 7-room E-W chain: slum-r1c1 east-east-east... to slum-r1c7 ✅
+- Column 1 is a 7-room N-S chain: slum-r1c1 south-south-south... to slum-r7c1 ✅
+- **Grid is internally consistent** ✅
+
+**Siltgate upper district check:**
+- Bazaar chain: market-square east → bazaar-row-1 east → bazaar-row-2 east → bazaar-row-3 (with dead-ends) ✅
+- Promenade chain: estate-gate north → promenade-walk-1 east → ... → promenade-walk-4 ✅
+- **Grid is internally consistent** ✅
+
+---
+
+## CONCLUSIONS
+
+### ✅ PASS: Direction Consistency
+
+Both zones maintain **proper bidirectional exits within their planar components**. Every compass exit has a reverse exit (except zone transitions and hidden passages, which are intentional).
+
+### ✅ PASS: Loop Consistency
+
+Both zones' internal grids form consistent loops:
+- Warrens: 7×7 slum grid + individual sewer branches form consistent paths
+- Siltgate: 3×4 upper district + 6×4 lower district + 3 sewer junctions form consistent loops
+
+### ❌ FAIL: Position Collisions
+
+- **Warrens:** 22 position collisions (slum grid × sewer system)
+- **Siltgate:** 32 position collisions (upper/lower districts × sewer system)
+
+Both zones **CANNOT be drawn as planar 2D maps** without exit edges crossing through occupied cells.
+
+### ❌ FAIL: Edge Crossing Without Connecting Chambers
+
+The collisions are caused by **overlaying two topologically incompatible systems**:
+
+1. **Horizontal planar navigation** (cardinal directions in upper world)
+2. **Vertical navigation** (down/up to sewers/undercity)
+
+To fix, need:
+
+**Option A: Depth Layers**
+- Create explicit depth levels (e.g., "Ground", "Undercity Level 1", "Undercity Level 2")
+- Each DOWN exit creates a new layer; rooms at the same XY on different Z don't collide
+
+**Option B: Connecting Chambers**
+- Insert transitional rooms between sewer branches and planar areas
+- Example: Instead of sluice-gate directly connecting to sewer-main-junction, add "Sluice Chamber" and "Sewer Entrance" as intermediate rooms
+
+**Option C: Reroute Sewer System**
+- Redesign sewer paths to occupy only unoccupied grid coordinates
+- Requires moving 40+ sewer rooms in Warrens and 50+ in Siltgate
+
+### ⚠️ NOTE: Unreachable Rooms
+
+- **Warrens:** causeway-terminus is only reachable via zone-transition; may be intentional
+- **Siltgate:** pipe-bridge is only reachable via zone-transition; smugglers-cove & thieves-den are hidden
+
+These require design decision: are they meant to be hidden/zone-only, or should they be integrated into the main exit graph?
+
+---
+
+## RECOMMENDATIONS
+
+### Priority 1: Clarify Design Intent
+
+**Question:** Should Warrens and Siltgate be drawable as **planar 2D maps**?
+
+- If **YES**: Implement depth-layer architecture to separate planar from subterranean
+- If **NO**: Document that these zones use a **multi-layered topology** where sewer exits can cross planar areas without violating game logic
+
+### Priority 2: Fix Unreachable Rooms
+
+- **causeway-terminus** (Warrens): Add a north exit from shattered-gate, OR mark it as zone-transition-only and document
+- **pipe-bridge** (Siltgate): Either integrate into Ashgate district or mark as zone-transition-only
+- **smugglers-cove** & **thieves-den** (Siltgate): Verify hidden exit flags are intentional; document as secret passages
+
+### Priority 3: Document Topology Model
+
+Add comments to 003_seed_zones.sql describing:
+- Which zones use planar topology (The Refuge, estate sections of Siltgate)
+- Which zones use layered topology (Warrens, Siltgate main)
+- How to interpret position collisions in a game context
+
+---
+
+## APPENDIX: Complete Collision List
+
+### Warrens (22 collisions)
+
+1. (1, 0): rubble-boulevard, overwatch-tower
+2. (4, -1): collapsed-tenement, gutter-run
+3. (5, -1): scavengers-den, blighted-courtyard
+4. (5, -2): condemned-arch, slum-r1c2
+5. (3, -2): sunken-square, the-ratways
+6. (6, -2): ironmongers-ruin, slum-r1c3
+7. (4, -4): slum-r3c1, sewer-bone-shelf
+8. (4, -5): slum-r4c1, sewer-drain-grate
+9. (5, -5): slum-r4c2, sewer-overflow-chamber
+10. (4, -6): slum-r5c1, sewer-east-conduit
+11. (3, -5): plague-ward, sewer-north-tunnel
+12. (5, -6): slum-r5c2, sewer-pipe-maze
+13. (4, -7): slum-r6c1, sewer-blackwater-crossing
+14. (3, -6): sluice-gate, sewer-main-junction
+15. (6, -6): slum-r5c3, sewer-gas-pocket
+16. (4, -8): slum-r7c1, sewer-deep-channel
+17. (5, -8): slum-r7c2, sewer-effluent-pool
+18. (4, -9): dyers-vats, sewer-stagnant-pool, sewer-silt-chamber (**3-way**)
+19. (5, -9): cistern-access, sewer-cistern
+20. (3, -9): beggar-kings-throne, sewer-collapsed-drain, sewer-slime-channel (**3-way**)
+21. (3, -4): sewer-rat-nest, sewer-cracked-conduit
+22. (3, -8): sewer-flooded-vault, sewer-trickle-passage
+
+### Siltgate (32 collisions)
+
+1. (0, 1): fountain-plaza, estate-gate
+2. (1, 0): bazaar-row-1, narrow-alley-1, flooded-chamber (**3-way**)
+3. (0, 2): news-board, promenade-walk-1
+4. (1, 1): silver-arcade-1, iron-balcony-1, sewer-tunnel-8 (**3-way**)
+5. (2, 0): bazaar-row-2, cobblestone-street-1, fungal-cavern (**3-way**)
+6. (1, -1): scribe-corner, apothecary, dockside-tavern (**3-way**)
+7. (2, 1): silver-arcade-2, iron-balcony-2, sewer-tunnel-7 (**3-way**)
+8. (3, 0): bazaar-row-3, cobblestone-street-2, sewer-tunnel-3 (**3-way**)
+9. (3, 1): silver-arcade-3, sewer-junction-1 (**2-way**)
+10. (3, -1): money-changers-row, narrow-alley-2, sailmakers-loft, silt-pool (**4-way**)
+11. (4, 0): span-gate, cobblestone-street-3, serpent-den (**3-way**)
+12. (1, -3): warehouse-1, pier-3
+13. (4, 1): silver-arcade-4, sewer-tunnel-1 (**2-way**)
+14. (3, 2): guild-hall, undercity-gate, promenade-walk-4 (**3-way**)
+15. (2, -1): glassblowers-workshop, harbourmasters-office
+16. (5, 0): beggars-lane-1, merchant-inn, merchant-inn-upper (**3-way**)
+17. (3, -2): rope-walk, wine-merchants-cellar
+18. (4, 2): silk-road, cloth-merchants-hall
+19. (3, 3): jewelers-lane, highwind-bridge, observatory (**3-way**)
+20. (6, 0): beggars-lane-2, bone-canal
+21. (6, -1): rat-run-1, blackwater-crossing
+22. (5, -2): narrow-alley-4, scorched-plaza
+23. (0, -7): tide-gate, sewer-junction-3 (**2-way**)
+24. (6, -2): rat-run-2, lean-to-camp, carrion-field, plague-bearers-lair (**4-way**)
+25. (5, -3): narrow-alley-5, crumbling-wall-1
+26. (1, -7): dry-dock, sewer-tunnel-6 (**2-way**)
+27. (6, -3): narrow-alley-6, bone-pit, scavengers-market (**3-way**)
+28. (7, -2): collapsed-building-3, drowned-shrine
+29. (7, -3): narrow-alley-7, blast-crater
+30. (6, -4): gutter-drain, ash-garden, gutter-sewer (**3-way**)
+31. (1, -8): effluent-outflow, collapsed-sewer
+32. (7, -5): broken-bridge, ruined-tenement-2
+
+---
+
+## TEST REPORT CLOSURE
+
+**Tested:** Warrens (110 rooms, 295 exits) and Siltgate (141 rooms, 287 exits)
+
+**Verdict:**
+- ✅ Bidirectional consistency: PASS (zone transitions and hidden exits exempt)
+- ✅ Loop consistency: PASS (internal grids are well-formed)
+- ❌ Planar topology: **FAIL** (22 + 32 = 54 position collisions across both zones)
+- ⚠️ Reachability: PARTIAL (all rooms reachable except zone-transition-only entries)
+
+**Severity:** High — Any 2D map renderer would show impossible crossing exits.
+
+**Next Steps:** Design review required before implementing topology fixes.
+
+---
+
+# Decision: AnsiDescriptionEditor — new component vs. extending AnsiPreview
+
+**Author:** Regis (Frontend Dev)
+**Date:** 2026-04-07
+**PR:** #332
+
+## Context
+
+The zone designer's room description fields were plain textareas with no way to preview or insert ANSI color tags. We already had `AnsiPreview.tsx` — a standalone preview panel with copy-to-clipboard buttons.
+
+## Decision
+
+Created a **new** `AnsiDescriptionEditor.tsx` component rather than extending `AnsiPreview`, because:
+
+1. **Different purpose:** `AnsiPreview` is a passive reference panel (copy tag snippets to clipboard). The editor needs to be an active form control (wrap selection, insert at cursor, replace the textarea).
+2. **Different API:** The editor accepts `value` + `onChange` like a form input. AnsiPreview only takes a `value` for display.
+3. **Single Responsibility:** Keeping them separate avoids bloating AnsiPreview with editor logic that most consumers don't need.
+
+## Impact
+
+- `AnsiPreview.tsx` remains unchanged — any other admin pages using it are unaffected.
+- `AnsiDescriptionEditor.tsx` can be reused anywhere a description textarea needs ANSI editing (creature descriptions, item descriptions, etc.).
+
+---
+
+# Decision: ANSI Colored Text — Hybrid Syntax Approach
+
+**Date:** 2026-04-07  
+**Author:** Regis (Frontend Dev)  
+**Issue:** #318  
+**PR:** #324  
+
+## Decision
+
+Support **both** lightweight tag syntax (`[red]text[/red]`) and raw ANSI escape codes (`\x1b[31m`). The parser normalises ANSI escapes into lightweight tags internally, then renders spans with existing `.ansi-*` CSS classes.
+
+## Rationale
+
+- Lightweight tags are author-friendly for admins editing descriptions in the admin dashboard
+- Raw ANSI codes are familiar to MUD veterans and useful for server-generated text
+- Both map to the same CSS classes, so output is identical regardless of input format
+- No new npm dependencies — the parser is ~200 lines of TypeScript
+
+## Architecture
+
+- `packages/client/src/lib/ansi-parser.ts` — stateless parser, exports `parseAnsiText()`, `stripAnsi()`, `SUPPORTED_NAMES`
+- `packages/client/src/components/AnsiText.tsx` — thin render wrapper
+- `packages/client/src/components/admin/AnsiPreview.tsx` — admin preview panel with color palette
+
+## Team Impact
+
+- **Server team:** Can send ANSI-escaped text in message payloads; client will render it. No server changes required.
+- **Content team:** Can use `[red]...[/red]` syntax in any description field; live preview available in admin forms.
+- **Future work:** `stripAnsi()` is available for plain-text fallback (notifications, search indexing, etc.)
+
+---
+
+## Name replacement for Saitcho Kindar
+
+### Context
+**Saitcho Kindar** is the legendary, anonymous inventor of the preservation brine that saved humanity during the Gulf Coast collapse. The Kindari faction reveres Kindar as their spiritual ancestor and founder of their philosophy. The faction description states: "Above all, they revere Saitcho Kindar — the anonymous inventor of the brine whose legacy preserved them all."
+
+Saitcho Kindar is referenced in two key places in the game world:
+1. **The Reliquary** (Kindari faction hub) features a shrine to Kindar: "the central chamber dominated by a shrine to Saitcho Kindar — a preserved pickling urn surrounded by scavenged drone components"
+2. **Character Select screen** describes The Reliquary as: "Wake among the preservers. The Kindari guard the memory of Saitcho Kindar in vaulted halls of salvaged tech and carefully maintained urns."
+
+The name should evoke:
+- A Gulf Coast / Southern heritage (Cajun, Creole, Louisiana influences)
+- Post-industrial decay and survival
+- Someone who feels like a practical inventor/survivor, not a mythic hero
+- A name that resonates with the Kindari aesthetic of salvage, preservation, and mechanical restoration
+
+### Current References
+- `packages/client/src/pages/CharacterSelect.tsx` — Faction description
+- `packages/server/src/db/migrations/002_seed_content.sql` — Kindari faction lore
+- `packages/server/src/db/migrations/003_seed_zones.sql` — Reliquary shrine description
+
+### Suggestions
+
+1. **Toulouse Marais** — Merges the French Quarter (Toulouse St.) with the Cajun landscape (marais = marsh). Feels like a person's name, evokes New Orleans preservationist heritage, works for someone who might've been tinkering with brine in a swamp workshop.
+
+2. **Delacroix Fournier** — Delacroix is an actual Louisiana parish with a strong fishing/survival heritage. Fournier is an old Cajun surname. Together they suggest someone from the Gulf's working-class survival tradition, not a distant hero. The name has weight and local authenticity.
+
+3. **Levi Broussard** — Short, practical first name (industrial feel); Broussard is a renowned Cajun surname. Sounds like someone who *fixed things*, not theorized about them. Matches the Kindari ethos of craftspeople over philosophers.
+
+4. **Margot Thibodeaux** — A Creole/Cajun classic with gender-neutral flair. Thibodeaux is deeply rooted in South Louisiana. The two-syllable pairing has a rhythm that echoes the real world's Creole naming tradition, and "Margot" was a real person's name, making the legend feel grounded.
+
+5. **Ezra Guidry** — Ezra carries both biblical solidity and a frontier feel. Guidry is an Acadian surname common in South Louisiana. Together they suggest someone weathered, practiced, methodical—exactly what you'd want in an inventor tasked with saving humanity through chemistry.
+
+**Recommendation**: **Levi Broussard** or **Delacroix Fournier** best match the tone. Levi is punchy and practical; Delacroix feels more mythic while staying grounded in Gulf Coast identity.
+
+---
+
+# Decision: Combat Sandbox Architecture
+
+**Author:** Elminster  
+**Date:** 2026-04-07  
+**Status:** Proposed  
+**Impacts:** All agents (new RoomTypes, new command pattern, new service)
+
+---
+
+## Decision
+
+The combat sandbox is implemented as **three feature rooms inside the Refuge zone**, not a new zone or Colyseus Room type. This follows the established feature-room pattern.
+
+## Key Points
+
+1. **Three new RoomTypes:** `feature_sandbox`, `feature_sandbox_arena`, `feature_sandbox_stats` — added to BOTH `packages/shared/src/room-graph.ts` AND `packages/server/src/generator/RoomGraph.ts` (they must stay in sync).
+
+2. **State isolation is mandatory.** Sandbox fights produce NO loot, NO XP, NO death penalty, NO run history records. Player HP resets on leaving the arena. The `sandboxMode` flag on `CommandContext` gates all side-effects.
+
+3. **Same CombatSystem, different lifecycle.** The arena uses a real `CombatSystem` instance with the real damage formula. Only the lifecycle (spawn/reset) and side-effects (loot/XP/death) are sandbox-controlled. This ensures sandbox results reflect actual combat behavior.
+
+4. **Dev-gated.** All sandbox commands check `getConfig().devModeEnabled` — same pattern as `peaceful` command. Rooms exist in the Refuge but commands return "not available" on production.
+
+5. **New service: `SandboxService`** in `packages/server/src/sandbox/` — manages creature spawning, stat overrides, combat logging. Wired into ZoneRoom for sandbox room types only.
+
+6. **Phased delivery:** Phase 1 (spawn/fight/reset/log), Phase 2 (stat tuning), Phase 3 (scenario save/load/replay). Phase 1 is the implementation target.
+
+## Constraints for Implementers
+
+- The RoomType union in shared and server packages MUST be updated in lockstep.
+- Sandbox creatures are spawned via `CreatureManager` using existing `CreatureTemplate` infrastructure — no new creature format.
+- The `CombatLogger` is a sandbox-only component. Do NOT add logging overhead to the production CombatSystem tick path.
+- Hard cap of 5 creatures per spawn command to protect tick budget.
+
+## Design Doc
+
+Full spec: `docs/design/sandbox-combat-arena.md`
+
+---
+
+# Decision: Sandbox Arena — Combat Isolation via Separate CombatSystem
+
+**Author:** Jarlaxle (Systems Dev)  
+**Date:** 2026-04-07  
+**Status:** Proposed  
+**Scope:** Combat, Creatures, Dev Tools
+
+## Decision
+
+The sandbox combat arena should use a **separate `CombatSystem` instance per player**, not flags on the existing zone combat system.
+
+## Context
+
+We need a sandbox for rapid combat iteration in Refuge. The CombatSystem manages room-scoped encounters for all players. Adding sandbox-awareness to every method (damage calc, flee, encounter cleanup) would pollute the core loop.
+
+## Implications
+
+- Sandbox creatures tagged `sandbox: true` on the `Creature` instance — excluded from loot, XP, repop, corpse system
+- Player state snapshotted on sandbox entry, restored on reset/exit
+- Sandbox tick timer is independent of zone tick (enables speed/pause/step)
+- All sandbox commands gated behind `devModeEnabled` (same as `/peaceful`, `/goto`)
+- Full design: `docs/design/sandbox-combat-mechanics.md`
+
+## Needs Input From
+
+- **Elminster**: Architecture review — is per-player CombatSystem acceptable memory-wise? Any concerns with the ZoneRoom wiring?
+- **Laeral**: How does sandbox mode interact with sandbox UI/arena zone design on the frontend side?
+- **Regis**: Frontend combat log rendering — verbose sandbox output needs distinct styling
+
+---
+
+# Decision: Combat Sandbox Server Infrastructure
+
+**Author:** Drizzt  
+**Date:** 2026-04-07  
+**Status:** Proposed  
+**Scope:** Server — command system, feature rooms, combat tick, creature spawning
+
+## Decision
+
+The combat sandbox will be implemented as a **feature room type** (`feature_sandbox`) inside persistent zones like The Refuge, not as a separate Colyseus room type. Commands are feature-gated via the existing `featureHandlers` map and double-gated with `devModeEnabled`.
+
+## Key Choices
+
+1. **Room type, not room class** — `feature_sandbox` follows the stash/board/inn pattern. No new Colyseus room type needed.
+2. **Shared CombatSystem with selective ticking** — Sandbox rooms opt in to combat ticking even in non-combat zones (dev/hub). The `isNonCombatZone` guard in `ZoneRoom.update()` will check for sandbox room activity.
+3. **On-demand creature spawning** — New `CreatureManager.spawnCreatureInRoom()` method for runtime spawning. Existing `spawnCreatures()` is seeding-time only.
+4. **Double access gate** — Feature room gate + devModeEnabled. Production-safe by default.
+5. **No death penalty in sandbox** — `sandboxRoomIds.has(roomId)` bypass for death penalty, stash loss, and run-history.
+
+## Team Impact
+
+- **Jarlaxle:** RoomType union change in shared package (`feature_sandbox`). Generator unaffected — sandbox rooms are hand-placed in zones.
+- **Regis:** No client changes for Phase 1. Commands are text-based, results are narrations.
+- **Minsc:** Test coverage needed for sandbox command dispatch, selective combat ticking, and creature spawn/despawn.
+- **All:** Review `docs/design/sandbox-server-infrastructure.md` for full proposal.
+
+## Risks
+
+- Selective combat ticking adds complexity to the update loop. Must ensure non-sandbox rooms in dev zones remain combat-free.
+- CreatureManager runtime spawning bypasses PRNG determinism — acceptable for sandbox but should not leak into production spawn paths.
+
+---
+
+# Decision: Sandbox Arena Content Design for The Refuge
+
+**Date:** 2026-04-07  
+**Author:** Laeral, Content Designer  
+**Requestor:** dkirby-ms  
+**Status:** DESIGN COMPLETE — Ready for Bruenor (Server Implementation)
+
+---
+
+## Decision Summary
+
+**The Refuge will be extended with a dedicated sandbox combat testing facility** consisting of 4 new rooms (Proving Hall, Test Arena, Armory, Control Sanctum) and a roster of 15 pre-built test creatures across 5 combat archetypes and 4 difficulty tiers.
+
+The sandbox provides **consequence-free combat testing** for designers and developers to validate combat mechanics, creature balance, and encounter design without affecting live zone populations.
+
+---
+
+## What Was Requested
+
+From dkirby-ms on 2026-04-07:
+
+> TASK: Design the **content and layout** for sandbox combat arena rooms within Refuge. Specifically:
+> 1. Analyze current Refuge layout
+> 2. Design sandbox rooms (Arena, Armory, Control room)
+> 3. Design sandbox creature roster
+> 4. Write design to `docs/design/sandbox-arena-content.md`
+
+---
+
+## What Was Designed
+
+### Physical Layout
+- **4 new rooms** forming a thematic training complex north of the Hearth
+- **Proving Hall:** Connecting corridor (entry point from Hearth)
+- **Test Arena:** Large circular chamber with chalk zones and observation galleries
+- **Armory:** Equipment staging room with training gear rack
+- **Control Sanctum:** Planning hub with observation mirror and reference materials
+
+### Room Theming & Aesthetic
+All rooms emphasize the "designer pocket dimension" feel from GDD.md§2.1, treating The Refuge as an internal tool space:
+- Proving Hall: Study of violence, diagrams and notations
+- Test Arena: Ancient training ground, bloodstains, chains, observation galleries
+- Armory: Craftsperson's maintenance space, non-lethal equipment, tracked logbook
+- Control Sanctum: Planning workspace with observation mirror
+
+### Creature Roster
+**15 test creatures** organized by archetype and tier:
+
+**Melee Tank Archetype** (durability/armor focus)
+- Training Construct (T1) — baseline tank test, 50 HP
+- Training Sentinel (T2) — intermediate tank, 120 HP
+- Training Colossus (T3) — extreme durability, 250 HP
+
+**Ranged Archetype** (distance/mobility)
+- Training Archer (T1) — baseline ranged, 30 HP, high agility
+- Training Sniper (T2) — intermediate ranged, 60 HP
+- Training Marksman (T3) — extreme ranged pressure, 100 HP
+
+**Dodger Archetype** (evasion/precision)
+- Training Wisp (T1) — trivial evasion swarm, 15 HP
+- Training Phantom (T2) — intermediate evasion, 40 HP
+- Training Shade (T3) — extreme evasion test, 70 HP, agility 10
+
+**AoE Archetype** (area effects/positioning)
+- Training Caster (T1) — basic positioning test, 35 HP
+- Training Warlock (T2) — intermediate AoE, 70 HP
+- Training Sorcerer (T3) — extreme area damage, 120 HP
+
+**Swarm Archetype** (crowd control)
+- Training Minion (T0) — trivial cleave test, 5 HP, spawns 5-10
+- Training Grunt (T1) — standard CC test, 20 HP, spawns 3-6
+- Training Brute (T2) — sustained group pressure, 50 HP, spawns 2-4
+
+### Naming Convention
+All sandbox creatures use the `training_` slug prefix and follow pattern `Training {Archetype} (T{Tier})` for clarity and distinct identity from live zone creatures.
+
+### Safety Features
+- Test Arena marked with `safe_container = true` flag
+- Deaths incur no corpse drop, no debuffs, no consequence
+- Players respawn in-arena after death
+- All gear is preserved
+
+### Encounter Building Framework
+Designers can mix creatures from the roster to build custom test encounters:
+- **1v1 duels** (single creature)
+- **Small groups** (3-4 creatures, mixed archetypes)
+- **Boss encounters** (single T3 creature)
+- **Crowd control tests** (5-10 minions/grunts)
+- Custom combinations at designer discretion
+
+### No Preset Encounters
+The design deliberately avoids locked encounter templates. Designers improvise combinations based on what they need to test. The roster provides enough variety to build nearly any encounter pattern.
+
+---
+
+## Key Design Decisions
+
+### 1. Five Core Archetypes (Not Four, Not Six)
+**Rationale:** Mirrors the archetypal roles found in live zone populations and campaign content. Covers all major combat playstyles: durability, distance, evasion, crowd effects, and overwhelming numbers.
+
+### 2. Flat Tiers (T0-T3), Not Scaling to Live Zone Tiers
+**Rationale:** Sandbox creatures are testing tools, not live content. T3 creatures are not "monsters that would fit in an endgame zone"—they are designed specifically for sandbox stress testing. This prevents confusion and allows balanced testing across the entire difficulty spectrum.
+
+### 3. Simplified Loot Tables (Training Items Only)
+**Rationale:** Testing should focus on mechanics, not economics. All sandbox creatures drop generic training items (scrap metal, spell crystals) that are immediately recognizable as test loot, not aspirational rewards.
+
+### 4. Control Sanctum as Planning, Not Combat
+**Rationale:** The Control Sanctum is a room where designers *prepare* encounters, not where they occur. This keeps encounter spaces contained to the Test Arena and allows future expansion for UI/interactive features without cluttering the combat space.
+
+### 5. Safety Container Flag Over Special Respawn Logic
+**Rationale:** Using the existing `safe_container` database flag leverages existing infrastructure rather than introducing new mechanic. Consequence-free deaths are already understood by the combat system.
+
+### 6. Armory Separate from Arena
+**Rationale:** Designers may want to test with or without equipment changes. Having a dedicated armory room prevents pre-combat loadout decisions from affecting encounter focus.
+
+---
+
+## Migration Path
+
+Implementation requires:
+
+1. **002_seed_content.sql** — Insert 15 creature definitions into `creature_definitions` table
+2. **003_seed_zones.sql** — Insert 4 room definitions into `zone_rooms` (zone_slug = 'the-refuge'), insert 4 exit definitions into `zone_exits`, update 'the-refuge' entry_room_slugs to include 'proving-hall'
+
+**No client changes required** — Rooms are pure DB content; creatures use existing combat system.
+
+---
+
+## Testing & Validation
+
+Once implemented, verify:
+- [ ] All 4 rooms are accessible from The Hearth via "north" (Proving Hall)
+- [ ] Creature spawns appear in Test Arena on zone load
+- [ ] Deaths in Test Arena do not drop corpses or apply debuffs
+- [ ] Player respawns in Test Arena after death, not at faction stronghold
+- [ ] Creatures have correct HP/stats matching design spec
+- [ ] Loot drops match design (training items only, no rare loot)
+
+---
+
+## Future Expansions (Not This Phase)
+
+**Phase 2 — Interactive Control Sanctum:**
+- Admin UI for on-demand creature spawning
+- Encounter preset dropdown
+- Real-time stat adjustments
+
+**Phase 3 — Extended Arenas:**
+- Additional arena rooms for multi-group testing
+- Environmental hazard zones
+
+**Phase 4 — Spectator Gallery:**
+- Observation rooms with logging/replay system
+
+---
+
+## Deliverables
+
+- [x] Design document: `docs/design/sandbox-arena-content.md` (comprehensive, ready for reference)
+- [x] Room descriptions (4 rooms, themed, with property flags and exit maps)
+- [x] Creature definitions (15 creatures, complete stat blocks, loot tables)
+- [x] Encounter templates (1v1, group, boss, swarm examples)
+- [x] Implementation notes (DB integration, migration path, testing checklist)
+- [x] Design rationale (why these choices, references to GDD)
+- [x] Team decision artifact (this document)
+
+---
+
+## References
+
+- **GDD.md§2.1-2.2:** Refuge definition, feature rooms, zone lifecycle
+- **GDD.md§6:** Combat system (stats, tiers, mechanics)
+- **Laeral History:** Creature archetype patterns from The Warrens and Siltgate designs
+- **Existing creature definitions:** Drowned Revenant (baseline melee, 50 HP), Gutterspawn (swarm), Hollow Stalker (durability/defense)
+- **Database schema:** `creature_definitions`, `zone_rooms`, `zone_exits`, safe_container flag
+
+---
+
+**Status:** READY FOR IMPLEMENTATION
+
+Next step: Bruenor executes migration scripts to seed sandbox content into database.

@@ -27,6 +27,22 @@
 
 ## Learnings
 
+### 2026-04-07: Combat Sandbox Architecture Design
+- **Task:** Design architecture for a combat sandbox dev tool inside the Refuge hub zone.
+- **Analysis:** Read CombatSystem (tick-based encounter orchestrator), CreatureManager (template-based spawning), feature-room pattern (command gating by RoomType), Refuge zone structure (7-room hub-and-spoke from hearth), existing dev commands (goto, teleport, peaceful), RoomType dual-definition (shared + server packages), damage model (stance multipliers, dodge rolls, flanking, armour).
+- **Decision:** Sandbox implemented as 3 feature rooms in the Refuge, not a new zone/Colyseus Room type. Follows the established feature-room pattern identically.
+- **Architecture:**
+  - 3 new RoomTypes: `feature_sandbox`, `feature_sandbox_arena`, `feature_sandbox_stats`
+  - Lobby (browse/configure), Arena (fight), Stats Lab (inspect/tune) — separation enforces clean state boundaries
+  - Same CombatSystem class with isolated instance — sandbox results reflect real combat
+  - State isolation: no loot, no XP, no death penalty, no run history, HP reset on exit
+  - CombatLogger (ring buffer, 200 ticks) for detailed numeric output — the core value proposition
+  - Dev-gated via `getConfig().devModeEnabled` (same as peaceful)
+- **Phased:** Phase 1 (spawn/fight/reset/log), Phase 2 (stat overrides/inspection), Phase 3 (scenario save/load/replay)
+- **Key insight:** Feature rooms + `sandboxMode` flag on CommandContext is the minimal-surface-area approach. The sandbox doesn't need new Colyseus machinery — it needs command gating and side-effect suppression.
+- **Deliverables:** `docs/design/sandbox-combat-arena.md` (full spec), `.squad/decisions/inbox/elminster-sandbox.md` (team decision)
+- **Key lesson:** When designing dev tools for combat iteration, the value is in exposing the numbers the narrative layer hides — raw damage, dodge rolls, armour reduction. The combat resolution code should be shared (not duplicated), with only the lifecycle and side-effects differing.
+
 ### 2026-04-06: Migration Consolidation Design (001–022 → 4 files)
 - **Task:** Design a consolidation plan to collapse 22 migration files into ~4 clean files for fresh-DB creation.
 - **Analysis:** Read all 22 migrations end-to-end. Tracked every schema change, column rename, data insert, data update, topology fix, and inter-zone connection across the full migration history.
@@ -2108,3 +2124,52 @@ PR #294 implements auto-attack default targeting and target management per GDD �
 - **GitHub comment:** Posted architecture summary on issue #312.
 
 ---
+
+### 2026-01-25: Issue #337 — Combat Grid System Unified Proposal
+- **Task:** Synthesize three team research documents (Jarlaxle systems, Regis frontend, Laeral visual design) into unified architectural proposal for DCSS-style grid combat
+- **Research reviewed:**
+  - `docs/design/337-combat-grid-systems.md` (695 lines) — Grid mechanics, tick integration, creature AI, backward compatibility
+  - `docs/design/337-combat-grid-frontend.md` (945 lines) — DCSS tilesets, Canvas 2D rendering, WebSocket sync, accessibility
+  - `docs/design/337-combat-grid-visual-design.md` (572 lines) — Creature representation, faction theming, fog-of-war, pixel art direction
+- **Key finding:** All three analyses converge on technical feasibility BUT identify two critical unknowns:
+  1. Can grid state be comprehensible in text-only mode? (MUD accessibility requirement)
+  2. Will performance hold at 20 players + 10 creatures per 1s tick? (900 range checks + pathfinding)
+- **Architectural synthesis:**
+  - Grid dimensions: 8-12 tiles per room, variable by room type
+  - Movement: 1 tile = 1 action, integrated into existing tick loop
+  - Backward compatibility: Zone derivation from grid coordinates (Front = y≤3, Flank = 4-6, Rear = 7+)
+  - Rendering: Canvas 2D + DCSS CC0 tiles (not WebGL, not SVG, not DOM-based ASCII)
+  - Server-authoritative state with WebSocket sync (no client-side prediction in Phase 1)
+  - Performance optimization: Distance matrix caching (O(n²) → O(1)), path caching (3-5 tick reuse)
+- **Conflict resolution:**
+  - **Text rendering:** Phase 1 includes BOTH text coordinates AND Canvas prototype (validate both approaches)
+  - **LOS/fog-of-war:** Defer to Phase 2 (coupled features, implement together or not at all)
+  - **Mobile support:** Desktop-only Phase 1, evaluate mobile demand before investing in touch UI
+  - **Animations:** Static grid Phase 1, movement tweens Phase 2, polish Phase 3 (ruthlessly minimal at each phase)
+- **Risk assessment:**
+  - Risk 1 (HIGH): Text-mode rendering unreadable → Mitigate with SPIKE Phase validation, ASCII grid fallback
+  - Risk 2 (HIGH): Performance degradation → Mitigate with distance/path caching, defer LOS to Phase 2
+  - Risk 3 (MEDIUM): Content design complexity → Make grid opt-in per room (boss fights only), build editor tooling
+  - Risk 4 (MEDIUM): User rejection → Grid is optional/toggleable, text-first preserved, early playtester feedback
+  - Risk 5 (MEDIUM): Development time underestimated → Strict phase boundaries, tight go/no-go gates
+- **Recommendation:** **SPIKE → GO/NO-GO → PHASE 1 (if approved)**
+  - SPIKE Phase (1 week): ASCII grid prototype, Canvas visual prototype, performance benchmark with 30 entities
+  - Phase 1 (3-4 weeks, if SPIKE passes): Minimal grid on 1-2 boss rooms, no LOS/cover/animations
+  - Phase 2-3 (post-launch): Tactical depth + visual polish
+  - **Priority assessment:** Grid is **optional enhancement, not core requirement**. Recommend post-launch Phase 2 unless dkirby-ms views it as flagship feature.
+- **Open questions for dkirby-ms:**
+  1. Timeline: Pre-launch or post-launch? (8-14 weeks vs defer)
+  2. Text tolerance: Acceptable ASCII awkwardness threshold?
+  3. Default state: Grid opt-in or opt-out?
+  4. Art budget: Free DCSS tiles or custom pixel art (\$500-1500)?
+  5. Success criterion: When is this "good enough to ship"?
+- **Deliverables:**
+  - `docs/design/337-combat-grid-proposal.md` (unified proposal, 400+ lines)
+  - GitHub issue comment with summary + link to proposal
+- **Key lesson:** When synthesizing multi-perspective research, identify **convergence points** (shared conclusions) vs **divergence points** (conflicts requiring architectural decisions). Resolve conflicts with clear rationale based on project constraints (text-first MUD identity, performance targets, phased delivery model). Front-load risk with SPIKE Phase — validate critical unknowns before heavy investment. Use strict go/no-go gates to enable early exit if any phase fails validation criteria.
+- **Architectural patterns:**
+  - **Grid as optional overlay:** Text-first combat remains fully functional, grid supplements but doesn't replace
+  - **Backward compatibility via zone derivation:** New grid systems coexist with existing zone-based logic (no breaking changes)
+  - **Phased risk reduction:** Minimal → Tactical → Polish, with go/no-go gates between each phase
+  - **Performance through caching:** Pre-compute expensive operations (distance matrix, pathfinding), reuse across tick
+- **Key files:** `docs/design/337-combat-grid-*.md` (3 research docs), `docs/design/337-combat-grid-proposal.md` (unified synthesis), `packages/server/src/combat/CombatSystem.ts` (integration point), `packages/client/src/components/CombatHUD.tsx` (client integration point)

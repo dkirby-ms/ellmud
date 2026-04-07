@@ -22,6 +22,38 @@ export interface DamageResult {
   finalDamage: number;
   /** True when a dodge roll fully avoided the attack (GDD §6.4). */
   dodged?: boolean;
+  /** Detailed damage pipeline breakdown — populated for observability (sandbox/logging). */
+  breakdown?: DamageBreakdown;
+}
+
+/**
+ * Detailed intermediate values from the damage pipeline.
+ * Purely informational — does not affect game logic.
+ * Used by sandbox log and tuning tools.
+ */
+export interface DamageBreakdown {
+  /** Base attack stat before any multipliers. */
+  rawDamage: number;
+  /** Ability damage multiplier (e.g. 1.5 for Heavy Strike). */
+  abilityMultiplier: number;
+  /** Stance interaction multiplier (e.g. 0.5 for strike-vs-dodge). */
+  stanceMultiplier: number;
+  /** Damage after ability and stance multipliers applied. */
+  afterStance: number;
+  /** Flat damage absorbed by defender armour. */
+  armourReduction: number;
+  /** Flat damage absorbed by block ability. */
+  blockReduction: number;
+  /** Flanking multiplier (1.0 = no bonus; populated by CombatSystem). */
+  flankingBonus: number;
+  /** The resulting damage dealt. */
+  finalDamage: number;
+  /** Whether the attack was fully dodged. */
+  dodged: boolean;
+  /** Calculated dodge probability before the roll (0 if dodge not applicable). */
+  dodgeChance: number;
+  /** Reserved for future crit system. */
+  criticalHit?: boolean;
 }
 
 /** Options for dodge chance calculation. */
@@ -97,7 +129,19 @@ export function calculateDamage(
   const multiplier = getStanceMultiplier(attackerAction, defenderAction);
 
   if (multiplier === 0) {
-    return { rawDamage: 0, multiplier: 0, armourReduction: 0, finalDamage: 0 };
+    const zeroBreakdown: DamageBreakdown = {
+      rawDamage: attackerAttack,
+      abilityMultiplier: 1.0,
+      stanceMultiplier: 0,
+      afterStance: 0,
+      armourReduction: 0,
+      blockReduction: 0,
+      flankingBonus: 1.0,
+      finalDamage: 0,
+      dodged: false,
+      dodgeChance: 0,
+    };
+    return { rawDamage: 0, multiplier: 0, armourReduction: 0, finalDamage: 0, breakdown: zeroBreakdown };
   }
 
   // Apply ability damage multiplier (e.g., Heavy Strike)
@@ -123,20 +167,56 @@ export function calculateDamage(
   ) {
     const dodgeChance = getDodgeChance(options.defenderAgility, options.defenderDodgeSkillRank);
     if (options.dodgeRoll < dodgeChance) {
+      const dodgedBreakdown: DamageBreakdown = {
+        rawDamage: attackerAttack,
+        abilityMultiplier,
+        stanceMultiplier: multiplier,
+        afterStance: afterMultiplier,
+        armourReduction: defenderArmour,
+        blockReduction,
+        flankingBonus,
+        finalDamage: 0,
+        dodged: true,
+        dodgeChance,
+      };
       return {
         rawDamage,
         multiplier,
         armourReduction: defenderArmour,
         finalDamage: 0,
         dodged: true,
+        breakdown: dodgedBreakdown,
       };
     }
   }
+
+  // Compute dodge chance even when dodge doesn't trigger (for observability)
+  let dodgeChance = 0;
+  if (
+    defenderAction === 'dodge' &&
+    options?.defenderAgility !== undefined
+  ) {
+    dodgeChance = getDodgeChance(options.defenderAgility, options.defenderDodgeSkillRank);
+  }
+
+  const breakdown: DamageBreakdown = {
+    rawDamage: attackerAttack,
+    abilityMultiplier,
+    stanceMultiplier: multiplier,
+    afterStance: afterMultiplier,
+    armourReduction: defenderArmour,
+    blockReduction,
+    flankingBonus,
+    finalDamage: damageWithFlanking,
+    dodged: false,
+    dodgeChance,
+  };
 
   return {
     rawDamage,
     multiplier,
     armourReduction: totalReduction,
     finalDamage: damageWithFlanking,
+    breakdown,
   };
 }

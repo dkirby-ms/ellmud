@@ -41,6 +41,9 @@ export const ROOM_NAMES: Record<RoomType, readonly string[]> = {
   feature_armoury: ['Rusted Armoury'],
   feature_war_room: ['Sunken War Chamber'],
   feature_inn: ['Rented Room', 'Waterlogged Bunkhouse'],
+  feature_sandbox: ['Sandbox Lobby'],
+  feature_sandbox_arena: ['Sandbox Arena'],
+  feature_sandbox_stats: ['Sandbox Stats Lab'],
 };
 
 const ROOM_DESCRIPTIONS: Record<RoomType, readonly string[]> = {
@@ -77,6 +80,9 @@ const ROOM_DESCRIPTIONS: Record<RoomType, readonly string[]> = {
   feature_armoury: ['Racks of corroded weapons and battered armour line the damp walls of this low chamber.'],
   feature_war_room: ['A sealed chamber with a scarred stone table. Maps and markers lie scattered in the gloom.'],
   feature_inn: ['A quiet room with a narrow bed and a writing desk. A ledger sits open for settling accounts.'],
+  feature_sandbox: ['A cavernous testing ground. The air hums with latent energy — nothing here is permanent.'],
+  feature_sandbox_arena: ['A warded arena for combat testing. Creatures spawned here vanish when defeated, leaving no trace.'],
+  feature_sandbox_stats: ['A quiet chamber lined with glowing runes. Combat statistics and creature data are projected onto the walls.'],
 };
 
 interface LootEntry {

@@ -9,6 +9,7 @@ import type { NarrationType } from '@ellmud/shared';
 import type { Room } from '../generator/RoomGraph.js';
 import type { PlayerState } from '../state/PlayerState.js';
 import type { CombatSystem } from '../combat/CombatSystem.js';
+import type { CreatureManager } from '../creatures/CreatureManager.js';
 import { handleGo } from './handlers/go.js';
 import { handleLook } from './handlers/look.js';
 import { handleTake } from './handlers/take.js';
@@ -34,6 +35,7 @@ import { handleBoard, handleEnter } from './handlers/board.js';
 import { handleStashView, handleStore } from './handlers/stash-command.js';
 import { handleLoadoutView } from './handlers/loadout-command.js';
 import { handleRent } from './handlers/rent.js';
+import { handleSandbox } from './handlers/sandbox.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -109,6 +111,10 @@ export interface CommandContext {
   zoneSlug?: string;
   /** Corpse system reference for loot command (GDD §6.8). */
   corpseSystem?: CorpseSystem;
+  /** Creature manager for sandbox spawn/clear operations. */
+  creatureManager?: CreatureManager;
+  /** Override scenario storage directory (dev/testing). */
+  scenarioDir?: string;
   /** Resolve a connected player by character name (dev tools). */
   resolvePlayerByName?: (name: string) => { sessionId: string; player: PlayerState; characterName: string } | undefined;
 }
@@ -127,7 +133,7 @@ export interface ZoneListing {
 
 // ─── Feature-Gated Handlers ────────────────────────────────────────────────
 
-const featureHandlers = new Map<string, { handler: CommandHandler; requiredRoomType: string }>();
+const featureHandlers = new Map<string, { handler: CommandHandler; requiredRoomType: string | string[] }>();
 featureHandlers.set('board', { handler: handleBoard, requiredRoomType: 'feature_expedition_board' });
 featureHandlers.set('enter', { handler: handleEnter, requiredRoomType: 'feature_expedition_board' });
 // Keep legacy alias
@@ -136,6 +142,10 @@ featureHandlers.set('stash', { handler: handleStashView, requiredRoomType: 'feat
 featureHandlers.set('store', { handler: handleStore, requiredRoomType: 'feature_stash' });
 featureHandlers.set('loadout', { handler: handleLoadoutView, requiredRoomType: 'feature_stash' });
 featureHandlers.set('rent', { handler: handleRent, requiredRoomType: 'feature_inn' });
+featureHandlers.set('sandbox', {
+  handler: handleSandbox,
+  requiredRoomType: ['feature_sandbox', 'feature_sandbox_arena', 'feature_sandbox_stats'],
+});
 
 // ─── Registry ───────────────────────────────────────────────────────────────
 
@@ -170,7 +180,10 @@ export function handleCommand(
   // Feature-gate: check if the command requires a specific room type
   const featureCmd = featureHandlers.get(verb);
   if (featureCmd) {
-    if (ctx.room.type !== featureCmd.requiredRoomType) {
+    const allowed = Array.isArray(featureCmd.requiredRoomType)
+      ? featureCmd.requiredRoomType
+      : [featureCmd.requiredRoomType];
+    if (!allowed.includes(ctx.room.type as string)) {
       return {
         narrations: [{ text: `You can't do that here.`, type: 'system' as NarrationType }],
       };

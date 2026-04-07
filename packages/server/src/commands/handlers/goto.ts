@@ -1,5 +1,6 @@
 /**
- * goto <room-slug> — Dev-only teleport to any room in the current zone.
+ * goto <room-slug>        — Dev-only teleport to a room in the current zone.
+ * goto <zone:room-slug>   — Dev-only teleport to a room in another zone.
  *
  * Gated by DEV_MODE_ENABLED config flag — only available on dev servers.
  */
@@ -21,11 +22,34 @@ export function handleGoto(ctx: CommandContext): CommandResult {
 
   if (args.length === 0) {
     return {
-      narrations: [{ text: 'Goto where? Usage: goto <room-slug>', type: 'system' }],
+      narrations: [{ text: 'Goto where? Usage: goto <room-slug> or goto <zone:room-slug>', type: 'system' }],
     };
   }
 
-  const slug = args[0]!.toLowerCase();
+  const raw = args[0].toLowerCase();
+
+  // Cross-zone syntax: goto zone-slug:room-slug
+  if (raw.includes(':')) {
+    const colonIdx = raw.indexOf(':');
+    const targetZoneSlug = raw.slice(0, colonIdx);
+    const targetRoomSlug = raw.slice(colonIdx + 1);
+
+    if (!targetZoneSlug || !targetRoomSlug) {
+      return {
+        narrations: [{ text: 'Invalid format. Usage: goto <zone-slug:room-slug>', type: 'system' }],
+      };
+    }
+
+    // If the target zone is the current zone, fall through to same-zone logic
+    if (targetZoneSlug !== ctx.zoneSlug) {
+      return {
+        narrations: [{ text: `Teleporting to ${targetRoomSlug} in zone ${targetZoneSlug}...`, type: 'room' }],
+        zoneTransfer: { targetZoneSlug, targetRoomSlug },
+      };
+    }
+  }
+
+  const slug = (raw.includes(':') ? raw.slice(raw.indexOf(':') + 1) : raw);
   const targetRoom = resolveRoom(slug);
 
   if (!targetRoom) {

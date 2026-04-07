@@ -28,6 +28,7 @@ import {
 import { ZoneState } from '../state.js';
 import { parseCommand } from '../commands/parser.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
+import { recordSandboxCombatEvents } from '../commands/handlers/sandbox.js';
 import { PlayerState } from '../state/PlayerState.js';
 import { createTestRoomGraph, type RoomGraph, type Direction } from '../generator/RoomGraph.js';
 import { generateZoneGraph } from '../generator/generator.js';
@@ -146,6 +147,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private zoneData?: ZoneData;
   private isZone = false;
   private repopTimer?: ReturnType<typeof setInterval>;
+  /** Room IDs with feature_sandbox_arena type — get combat ticks even in dev zones. */
+  private sandboxRoomIds = new Set<string>();
 
   /**
    * Inject profile repository. Called before room lifecycle if provided.
@@ -281,6 +284,13 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.roomGraph = createTestRoomGraph();
       this.entryRoomIds = [this.roomGraph.startRoomId];
       this.log('Procedural generation disabled (ENABLE_PROCEDURAL_GENERATION=false) — using fallback graph.');
+    }
+
+    // Scan for sandbox arena rooms (get combat ticks even in dev zones)
+    for (const [roomId, room] of this.roomGraph.rooms) {
+      if (room.type === 'feature_sandbox_arena') {
+        this.sandboxRoomIds.add(roomId);
+      }
     }
 
     // Initialize combat system with room exit resolver
@@ -745,6 +755,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     const isNonCombatZone = this.isZone && this.zoneData &&
       (this.zoneData.zone.category === 'hub' || this.zoneData.zone.category === 'faction_hub' || this.zoneData.zone.category === 'social' || this.zoneData.zone.category === 'dev');
 
+    // Sandbox arena rooms in dev zones still need combat/creature ticking
+    const hasSandboxCombat = isNonCombatZone && this.sandboxRoomIds.size > 0;
+
     // Collapse timer countdown (skip for persistent hub/social/dev zones)
     if (!isNonCombatZone && (this.lifecycle === 'active' || this.lifecycle === 'destabilising')) {
       this.state.collapseTimer = Math.max(0, this.state.collapseTimer - 1);
@@ -759,13 +772,18 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
 
     // Creature AI tick — evaluate behavior trees, queue combat actions
-    if (!isNonCombatZone) {
+    if (!isNonCombatZone || hasSandboxCombat) {
       this.tickCreatures();
     }
 
-    // Resolve combat tick (skip for hub/social/dev zones)
-    if (!isNonCombatZone && this.combatSystem.hasActiveEncounters()) {
+    // Resolve combat tick (skip for hub/social/dev zones unless sandbox arena active)
+    if ((!isNonCombatZone || hasSandboxCombat) && this.combatSystem.hasActiveEncounters()) {
       const tickResult = this.combatSystem.resolveTick();
+
+      // Capture combat events for sandbox combat log
+      if (hasSandboxCombat && tickResult.events.length > 0) {
+        recordSandboxCombatEvents(tickResult, this.state.tick);
+      }
 
       // Killing blow: finish off downed (unstabilized) players in rooms with active combat.
       // Runs BEFORE handlePlayerDefeats so newly-downed players aren't instantly killed.
@@ -782,7 +800,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
 
     // Tick downing system — bleed-out timers, stabilize channels
-    if (!isNonCombatZone) {
+    if (!isNonCombatZone || hasSandboxCombat) {
       this.tickDowningSystem();
     }
 
@@ -1055,6 +1073,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             armour: c.armour, agility: c.agility, dodgeSkillRank: c.dodgeSkillRank,
           })),
       corpseSystem: this.corpseSystem,
+      creatureManager: this.creatureManager,
       resolvePlayerByName: (name: string) => {
         const lower = name.toLowerCase();
         for (const [sid, ps] of this.players) {
@@ -1638,10 +1657,15 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Handle creature deaths FIRST — drop loot before syncing marks them dead
     for (const event of tickResult.events) {
       if (event.type === 'defeated' && event.actorId.startsWith('creature-')) {
+        const creature = this.creatureManager.getCreature(event.actorId);
+        const isSandboxCreature = creature?.sandbox === true;
+
         const loot = this.creatureManager.removeCreature(event.actorId);
         const combatant = this.combatSystem.getCombatant(event.actorId);
         const roomId = combatant?.roomId;
-        if (roomId && loot.length > 0) {
+
+        // Sandbox creatures: skip loot drops, XP, run history
+        if (!isSandboxCreature && roomId && loot.length > 0) {
           const room = this.roomGraph.rooms.get(roomId);
           if (room) {
             for (const item of loot) {
@@ -1663,15 +1687,33 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         }
         this.combatSystem.removeCombatant(event.actorId);
 
-        // Trace: creature death creates corpse trace
-        if (roomId) {
+        // Trace: creature death creates corpse trace (skip for sandbox)
+        if (roomId && !isSandboxCreature) {
           this.traceSystem.addTrace(roomId, 'corpse', {
             actorId: event.actorId,
             actorName: event.actorName,
           });
+        }
 
+        if (roomId) {
           // Send updated room occupants to all players in the room
           this.broadcastRoomOccupantsUpdate(roomId);
+
+          // Sandbox: narrate defeat without loot
+          if (isSandboxCreature) {
+            for (const [sid, ps] of this.players) {
+              if (ps.currentRoomId === roomId) {
+                const client = this.findClient(sid);
+                if (client) {
+                  this.sendNarrate(client, {
+                    text: `The ${event.actorName} is defeated. (sandbox — no loot)`,
+                    type: 'combat',
+                    timestamp: Date.now(),
+                  });
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -1691,6 +1733,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   /**
    * Handle player defeat events — enters downed state instead of instant death.
    * The DowningSystem manages the bleed-out timer; actual death happens in tickDowningSystem().
+   * In sandbox arena rooms, skip downed state and auto-revive the player.
    */
   private handlePlayerDefeats(tickResult: TickResult): void {
     for (const event of tickResult.events) {
@@ -1701,6 +1744,28 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       if (!player) continue;
 
       const roomId = player.currentRoomId;
+
+      // Sandbox arena: skip death penalty, auto-revive at 1 HP
+      if (this.sandboxRoomIds.has(roomId)) {
+        this.log(`Sandbox auto-revive: ${this.playerTag(playerId)} in ${roomId}`);
+        this.combatSystem.removeCombatant(playerId);
+
+        // Restore combatant HP to 1 so the player can keep testing
+        const combatant = this.combatSystem.getCombatant(playerId);
+        if (combatant) {
+          combatant.hp = 1;
+        }
+
+        const client = this.findClient(playerId);
+        if (client) {
+          this.sendNarrate(client, {
+            text: 'You fall — but the sandbox catches you. You rise again at 1 HP. Use "sandbox heal" to restore fully.',
+            type: 'system',
+            timestamp: Date.now(),
+          });
+        }
+        continue;
+      }
 
       // Enter downed state instead of dying immediately
       this.downingSystem.downPlayer(playerId, event.actorName, roomId, event.killerIds);
