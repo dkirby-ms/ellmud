@@ -3141,3 +3141,19 @@ Consolidated 22 incremental SQL migration files into 3 clean files per Elminster
 - Dev-gated commands follow a clean pattern: check `getConfig().devModeEnabled` first, reject with generic message
 - The `go.ts` handler is the canonical reference for room transition + room description rendering (exit list, items, creatures)
 - Full suite: 2561 tests passing, 129 files, zero regressions
+
+### Dev-Only TELEPORT Command (Issue #333) — PR #335
+**Task:** Build `teleport <player-name> <room-slug>` command — moves a TARGET player to a room (unlike goto which moves self)  
+**Status:** ✅ Complete — branch `squad/333-teleport-command`, PR #335 opened  
+**Files:**
+- `packages/server/src/commands/handlers/teleport.ts` — new handler (dev-gated, player lookup + room lookup + move + dual feedback)
+- `packages/server/src/commands/parser.ts` — added `'teleport'` to KNOWN_VERBS
+- `packages/server/src/commands/index.ts` — added `resolvePlayerByName` to CommandContext, `targetNarrations` to CommandResult, wired `handleTeleport`
+- `packages/server/src/rooms/ZoneRoom.ts` — wired `resolvePlayerByName` in `buildCommandContext`, delivers `targetNarrations` after normal result
+- `packages/server/src/__tests__/teleport-command.test.ts` — 7 tests (dev gate, success, player not found, room not found, missing args x2, parser)
+
+## Learnings
+- `targetNarrations` on CommandResult is a new pattern for sending directed messages to arbitrary players (not just sender or room broadcast)
+- ZoneRoom `this.clients` is an array (uses `.find()`), not a Map — use `.find(c => c.sessionId === id)` for lookup
+- `resolvePlayerByName` iterates `this.players` + `this.characterNames` for case-insensitive name matching
+- Full suite: 2213 tests passing, 108 files, zero regressions
