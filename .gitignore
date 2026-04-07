@@ -49,3 +49,6 @@ packages/server/data/sandbox-scenarios/*.json
 .squad/sessions/
 # Squad: SubSquad activation file (local to this machine)
 .squad-workstream
+
+# Sandbox test scenario files
+packages/server/data/.test-sandbox-scenarios/

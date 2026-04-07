@@ -16,7 +16,6 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { handleCommand, type CommandContext, type CommandResult } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
@@ -120,6 +119,27 @@ function enableDevMode(): void {
 function disableDevMode(): void {
   process.env.DEV_MODE_ENABLED = 'false';
   resetConfig();
+}
+
+// Test-specific scenario directory — isolated from production data
+const TEST_SCENARIO_DIR = path.join(process.cwd(), 'packages/server/data/.test-sandbox-scenarios');
+
+function cleanTestScenarioDir(): void {
+  if (fs.existsSync(TEST_SCENARIO_DIR)) {
+    fs.rmSync(TEST_SCENARIO_DIR, { recursive: true, force: true });
+  }
+}
+
+/** Build a context with the test scenario directory injected. */
+function buildScenarioCtx(
+  room: Room,
+  args: string[] = [],
+  extras: Partial<CommandContext> = {},
+): CommandContext {
+  return {
+    ...buildCtx(room, args, extras),
+    scenarioDir: TEST_SCENARIO_DIR,
+  } as CommandContext;
 }
 
 // ─── 1. Command Gating ─────────────────────────────────────────────────────
@@ -1390,6 +1410,8 @@ describe('Combat Sandbox', () => {
       _resetSandboxState();
     });
 
+    afterEach(cleanTestScenarioDir);
+
     it('save captures creature types and counts', () => {
       // Spawn 2 drowned_revenants into the arena
       handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant', '2'], {
@@ -1398,7 +1420,7 @@ describe('Combat Sandbox', () => {
       expect(creatureManager.getCreaturesInRoom(ARENA_ROOM_ID)).toHaveLength(2);
 
       // Save scenario
-      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'test-fight'], {
+      const result = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save', 'test-fight'], {
         combatSystem, creatureManager,
       }));
       const text = narrationText(result).toLowerCase();
@@ -1428,7 +1450,7 @@ describe('Combat Sandbox', () => {
       }));
 
       // Save scenario — must succeed without "unknown" error
-      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'override-test'], {
+      const result = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save', 'override-test'], {
         player, combatSystem, creatureManager,
       }));
       const text = narrationText(result).toLowerCase();
@@ -1442,7 +1464,7 @@ describe('Combat Sandbox', () => {
         combatSystem, creatureManager,
       }));
 
-      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'seeded-scenario'], {
+      const result = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save', 'seeded-scenario'], {
         combatSystem, creatureManager,
       }));
       const text = narrationText(result).toLowerCase();
@@ -1455,7 +1477,7 @@ describe('Combat Sandbox', () => {
       handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
         combatSystem, creatureManager,
       }));
-      const save1 = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'dupe'], {
+      const save1 = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save', 'dupe'], {
         combatSystem, creatureManager,
       }));
       expect(narrationText(save1).toLowerCase()).not.toContain('unknown');
@@ -1464,7 +1486,7 @@ describe('Combat Sandbox', () => {
       handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
         combatSystem, creatureManager,
       }));
-      const save2 = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'dupe'], {
+      const save2 = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save', 'dupe'], {
         combatSystem, creatureManager,
       }));
       const text2 = narrationText(save2).toLowerCase();
@@ -1474,7 +1496,7 @@ describe('Combat Sandbox', () => {
 
     it('save with no creatures still saves (empty scenario)', () => {
       // Arena is empty — save should still succeed
-      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'empty-arena'], {
+      const result = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save', 'empty-arena'], {
         combatSystem, creatureManager,
       }));
       const text = narrationText(result).toLowerCase();
@@ -1484,7 +1506,7 @@ describe('Combat Sandbox', () => {
 
     it('save without a name returns usage hint', () => {
       // Missing name argument — should get a usage message, not a crash
-      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save'], {
+      const result = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save'], {
         combatSystem, creatureManager,
       }));
       const text = narrationText(result).toLowerCase();
@@ -1505,12 +1527,14 @@ describe('Combat Sandbox', () => {
       _resetSandboxState();
     });
 
+    afterEach(cleanTestScenarioDir);
+
     it('load spawns the saved creatures', () => {
       // Save a scenario with 2 creatures
       handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant', '2'], {
         combatSystem, creatureManager,
       }));
-      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'two-revenants'], {
+      handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save', 'two-revenants'], {
         combatSystem, creatureManager,
       }));
 
@@ -1521,7 +1545,7 @@ describe('Combat Sandbox', () => {
       expect(creatureManager.getCreaturesInRoom(ARENA_ROOM_ID)).toHaveLength(0);
 
       // Load the scenario
-      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'load', 'two-revenants'], {
+      const result = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'load', 'two-revenants'], {
         combatSystem, creatureManager,
       }));
       const text = narrationText(result).toLowerCase();
@@ -1549,7 +1573,7 @@ describe('Combat Sandbox', () => {
         player, combatSystem, creatureManager,
       }));
 
-      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'override-load'], {
+      handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save', 'override-load'], {
         player, combatSystem, creatureManager,
       }));
 
@@ -1559,7 +1583,7 @@ describe('Combat Sandbox', () => {
       }));
 
       // Load scenario — overrides should be re-applied
-      const loadResult = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'load', 'override-load'], {
+      const loadResult = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'load', 'override-load'], {
         player, combatSystem, creatureManager,
       }));
       const text = narrationText(loadResult).toLowerCase();
@@ -1577,7 +1601,7 @@ describe('Combat Sandbox', () => {
       handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
         combatSystem, creatureManager,
       }));
-      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'one-creature'], {
+      handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save', 'one-creature'], {
         combatSystem, creatureManager,
       }));
 
@@ -1588,14 +1612,14 @@ describe('Combat Sandbox', () => {
       expect(creatureManager.getCreaturesInRoom(ARENA_ROOM_ID)).toHaveLength(4);
 
       // Load the 1-creature scenario — should clear the 4 and restore 1
-      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'load', 'one-creature'], {
+      handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'load', 'one-creature'], {
         combatSystem, creatureManager,
       }));
       expect(creatureManager.getCreaturesInRoom(ARENA_ROOM_ID)).toHaveLength(1);
     });
 
     it('load non-existent scenario returns error', () => {
-      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'load', 'nonexistent'], {
+      const result = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'load', 'nonexistent'], {
         combatSystem, creatureManager,
       }));
       const text = narrationText(result).toLowerCase();
@@ -1612,7 +1636,7 @@ describe('Combat Sandbox', () => {
       handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
         combatSystem, creatureManager,
       }));
-      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'seeded-load'], {
+      handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save', 'seeded-load'], {
         combatSystem, creatureManager,
       }));
 
@@ -1622,7 +1646,7 @@ describe('Combat Sandbox', () => {
       }));
 
       // Load scenario — seed should be restored to 42
-      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'load', 'seeded-load'], {
+      handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'load', 'seeded-load'], {
         combatSystem, creatureManager,
       }));
 
@@ -1648,12 +1672,14 @@ describe('Combat Sandbox', () => {
       _resetSandboxState();
     });
 
+    afterEach(cleanTestScenarioDir);
+
     it('list shows saved scenarios with creature counts', () => {
       // Save two scenarios with different creature counts
       handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant', '2'], {
         combatSystem, creatureManager,
       }));
-      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'battle-duo'], {
+      handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save', 'battle-duo'], {
         combatSystem, creatureManager,
       }));
 
@@ -1663,12 +1689,12 @@ describe('Combat Sandbox', () => {
       handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
         combatSystem, creatureManager,
       }));
-      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'solo-fight'], {
+      handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save', 'solo-fight'], {
         combatSystem, creatureManager,
       }));
 
       // List all scenarios
-      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'list'], {
+      const result = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'list'], {
         combatSystem, creatureManager,
       }));
       const text = narrationText(result).toLowerCase();
@@ -1679,7 +1705,7 @@ describe('Combat Sandbox', () => {
     });
 
     it('list returns appropriate message when no scenarios exist', () => {
-      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'list'], {
+      const result = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'list'], {
         combatSystem, creatureManager,
       }));
       const text = narrationText(result).toLowerCase();
@@ -1703,17 +1729,19 @@ describe('Combat Sandbox', () => {
       _resetSandboxState();
     });
 
+    afterEach(cleanTestScenarioDir);
+
     it('delete removes the scenario file', () => {
       // Save a scenario then delete it
       handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
         combatSystem, creatureManager,
       }));
-      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'doomed'], {
+      handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save', 'doomed'], {
         combatSystem, creatureManager,
       }));
 
       // Delete it
-      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'delete', 'doomed'], {
+      const result = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'delete', 'doomed'], {
         combatSystem, creatureManager,
       }));
       const text = narrationText(result).toLowerCase();
@@ -1721,7 +1749,7 @@ describe('Combat Sandbox', () => {
       expect(text).not.toContain('unknown');
 
       // List should no longer include "doomed"
-      const listResult = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'list'], {
+      const listResult = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'list'], {
         combatSystem, creatureManager,
       }));
       const listText = narrationText(listResult).toLowerCase();
@@ -1729,7 +1757,7 @@ describe('Combat Sandbox', () => {
     });
 
     it('delete non-existent scenario returns error', () => {
-      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'delete', 'ghost-scenario'], {
+      const result = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'delete', 'ghost-scenario'], {
         combatSystem, creatureManager,
       }));
       const text = narrationText(result).toLowerCase();
@@ -2010,6 +2038,8 @@ describe('Combat Sandbox', () => {
       _resetSandboxState();
     });
 
+    afterEach(cleanTestScenarioDir);
+
     it('save scenario with seed → load → replay → verify deterministic output', () => {
       // ── Phase A: Set seed, spawn creatures, save scenario ──
       handleCommand('sandbox', buildCtx(sandboxLobby, ['seed', '314159'], {
@@ -2020,7 +2050,7 @@ describe('Combat Sandbox', () => {
       }));
       expect(creatureManager.getCreaturesInRoom(ARENA_ROOM_ID)).toHaveLength(2);
 
-      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'determinism-test'], {
+      handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'save', 'determinism-test'], {
         combatSystem, creatureManager,
       }));
 
@@ -2030,7 +2060,7 @@ describe('Combat Sandbox', () => {
       }));
       _resetSandboxState();
 
-      const loadResult = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'load', 'determinism-test'], {
+      const loadResult = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'load', 'determinism-test'], {
         combatSystem, creatureManager,
       }));
       expect(narrationText(loadResult).toLowerCase()).toMatch(/loaded|scenario/);
@@ -2063,7 +2093,7 @@ describe('Combat Sandbox', () => {
       const cm2 = new CreatureManager();
       _resetSandboxState();
 
-      const loadResult2 = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'load', 'determinism-test'], {
+      const loadResult2 = handleCommand('sandbox', buildScenarioCtx(sandboxLobby, ['scenario', 'load', 'determinism-test'], {
         combatSystem: cs2, creatureManager: cm2,
       }));
       expect(narrationText(loadResult2).toLowerCase()).toMatch(/loaded|scenario/);

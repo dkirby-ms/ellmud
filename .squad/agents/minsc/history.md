@@ -40,6 +40,18 @@
 
 ## Learnings (Archived — See Detailed Session Records)
 
+**Sandbox Phase 3 Testing Patterns (2026-07):**
+- Phase 3 adds 29 tests (82 total): scenario save/load/list/delete (16), seed (4), replay (4), integration (1), PRNG unit (5 including seededPrng)
+- `handleScenario` dispatches to save/load/list/delete sub-handlers; scenarios stored as JSON in `SCENARIO_DIR`
+- `resolveScenarioDir(ctx)` checks `ctx.scenarioDir` for test injection, falls back to `SCENARIO_DIR` constant
+- For scenario tests: use `buildScenarioCtx()` wrapper that injects `scenarioDir: TEST_SCENARIO_DIR` and `afterEach(cleanTestScenarioDir)` to isolate from production data
+- `_resetSandboxState()` must be called in `beforeEach` for Phase 3 tests — module-level `currentSeed` and `sandboxOverrides` leak between tests
+- `seededPrng(seed)` returns a `() => number` RollFn; `CombatSystem.setRollFn()` swaps it at runtime for deterministic replay
+- Replay auto-initiates combat if player not already engaged; submits 'strike' for all participants each tick
+- Scenario load: spawns fresh creatures (new IDs) and registers combatants with overrides via `creatureManager.toCombatant()`
+- `SandboxScenario` interface: `{name, savedAt, seed?, creatures: [{type, overrides?}], overrides?, playerOverrides?}`
+- Key determinism test: same seed → same `seededPrng` → same RollFn sequence → identical combat damage/dodge rolls
+
 **Sandbox Phase 2 Testing Patterns (2026-07):**
 - `sandbox set` targets resolve as: "player" → player combatant, numeric index → creature by position, string → name-match on arena creatures
 - When no creatures in arena, `set` with a non-player target returns "no creatures in the arena" (not "unknown target")
