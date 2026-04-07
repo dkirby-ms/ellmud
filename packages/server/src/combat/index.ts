@@ -25,6 +25,7 @@ export {
   MAX_DODGE_CHANCE,
   type DamageResult,
   type DamageOptions,
+  type DamageBreakdown,
 } from './damage.js';
 export {
   resolveStrike,

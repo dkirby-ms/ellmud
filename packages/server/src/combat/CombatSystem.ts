@@ -27,7 +27,7 @@ import {
   FLEE_LEVEL_PENALTY,
   REPOSITION_COOLDOWN_TICKS,
 } from './CombatState.js';
-import { calculateDamage } from './damage.js';
+import { calculateDamage, type DamageBreakdown } from './damage.js';
 import {
   resolveDodge,
   resolveFlee,
@@ -840,9 +840,21 @@ export class CombatSystem {
 
       // Apply flanking bonus: +15% from Flank when target's threat focus is at Front (GDD §6.11)
       let finalDamage = dmg.finalDamage;
+      let appliedFlankingBonus = 1.0;
       if (this.shouldApplyFlankingBonus(c, target)) {
-        finalDamage = Math.ceil(finalDamage * 1.15);
+        appliedFlankingBonus = 1.15;
+        finalDamage = Math.ceil(finalDamage * appliedFlankingBonus);
         this.debug(`Flanking bonus: ${c.name} deals +15% damage to ${target.name}`);
+      }
+
+      // Augment breakdown with externally applied flanking bonus
+      let breakdown: DamageBreakdown | undefined;
+      if (dmg.breakdown) {
+        breakdown = {
+          ...dmg.breakdown,
+          flankingBonus: appliedFlankingBonus,
+          finalDamage,
+        };
       }
 
       const accumulated = (damageAccumulator.get(targetId) ?? 0) + finalDamage;
@@ -866,6 +878,7 @@ export class CombatSystem {
         maxHp: target.maxHp,
         narration: '', // placeholder
         dodged: dmg.dodged,
+        breakdown,
       });
 
       this.debug(`Damage roll: ${c.name} → ${target.name}: raw=${dmg.rawDamage} ×${dmg.multiplier} -${dmg.armourReduction} = ${dmg.finalDamage}${dmg.dodged ? ' (DODGED)' : ''}`);
