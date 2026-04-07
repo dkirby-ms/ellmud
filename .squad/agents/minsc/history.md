@@ -40,6 +40,17 @@
 
 ## Learnings (Archived — See Detailed Session Records)
 
+**Sandbox Phase 2 Testing Patterns (2026-07):**
+- `sandbox set` targets resolve as: "player" → player combatant, numeric index → creature by position, string → name-match on arena creatures
+- When no creatures in arena, `set` with a non-player target returns "no creatures in the arena" (not "unknown target")
+- DamageBreakdown already exists on CombatEvent via `breakdown?: DamageBreakdown` field — Jarlaxle's work landed
+- DamageBreakdown includes: rawDamage, abilityMultiplier, stanceMultiplier, armourReduction, blockReduction, flankingBonus, finalDamage, dodged, dodgeChance
+- Dodge avoidance appears as `type: 'strike'` events with `dodged: true` and `damage: 0` — NOT as `type: 'dodge'` events
+- `type: 'dodge'` events are defensive stance notifications (blocking, observing), not dodge roll results
+- To test dodging: must explicitly `submitAction(id, 'dodge')` — default unsubmitted action auto-attacks currentTarget
+- `CombatSystem` constructor accepts optional `RollFn` for deterministic dodge testing: `new CombatSystem(exitResolver, () => 0.0)`
+- `getAllCreatureTemplates()` in test environment uses FALLBACK_TEMPLATES (only drowned_revenant) since ContentRegistry is not initialized
+
 **Sandbox Testing Patterns (2026-07):**
 - Sandbox command handler uses double gating: featureHandlers room-type check + `getConfig().devModeEnabled` inside handler
 - `featureHandlers` now supports `requiredRoomType: string | string[]` for multi-room-type commands (sandbox uses all 3 types)

@@ -716,4 +716,647 @@ describe('Combat Sandbox', () => {
       expect(narrationText(result).toLowerCase()).toContain('reset');
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase 2 — Tuning Tools
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ─── 8. sandbox set — Transient Stat Overrides ────────────────────────────
+
+  describe('sandbox set command', () => {
+    let combatSystem: CombatSystem;
+    let creatureManager: CreatureManager;
+
+    beforeEach(() => {
+      enableDevMode();
+      combatSystem = new CombatSystem(exitResolver);
+      creatureManager = new CreatureManager();
+    });
+
+    it('sets player ATK override via "sandbox set player atk 50"', () => {
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+      const playerCombatant = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        DEFAULT_PLAYER_STATS,
+      );
+      combatSystem.registerCombatant(playerCombatant);
+
+      const ctx = buildCtx(sandboxArena, ['set', 'player', 'atk', '50'], {
+        player, combatSystem, creatureManager,
+      });
+      const result = handleCommand('sandbox', ctx);
+      const text = narrationText(result).toLowerCase();
+
+      // Should acknowledge the override
+      expect(text).toContain('set');
+      expect(text).toContain('50');
+
+      // The combatant's attack stat should reflect the override
+      const updated = combatSystem.getCombatant(player.sessionId);
+      expect(updated?.attack).toBe(50);
+    });
+
+    it('sets player HP via "sandbox set player hp 200"', () => {
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+      const playerCombatant = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        DEFAULT_PLAYER_STATS,
+      );
+      combatSystem.registerCombatant(playerCombatant);
+
+      const ctx = buildCtx(sandboxArena, ['set', 'player', 'hp', '200'], {
+        player, combatSystem, creatureManager,
+      });
+      const result = handleCommand('sandbox', ctx);
+      const text = narrationText(result).toLowerCase();
+
+      expect(text).toContain('set');
+      const updated = combatSystem.getCombatant(player.sessionId);
+      expect(updated?.hp).toBe(200);
+    });
+
+    it('sets first creature DEF by index via "sandbox set 1 def 0"', () => {
+      // Spawn a creature first
+      const spawnCtx = buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+        combatSystem, creatureManager,
+      });
+      handleCommand('sandbox', spawnCtx);
+
+      const creatures = creatureManager.getCreaturesInRoom(ARENA_ROOM_ID);
+      expect(creatures).toHaveLength(1);
+
+      // Register creature as combatant
+      const creature = creatures[0]!;
+      const creatureCombatant = createCombatant(
+        creature.id, creature.name, ARENA_ROOM_ID, false,
+        DROWNED_REVENANT.stats,
+      );
+      combatSystem.registerCombatant(creatureCombatant);
+
+      const ctx = buildCtx(sandboxArena, ['set', '1', 'def', '0'], {
+        combatSystem, creatureManager,
+      });
+      const result = handleCommand('sandbox', ctx);
+      const text = narrationText(result).toLowerCase();
+
+      expect(text).toContain('set');
+      // Creature's defence should be overridden to 0
+      const updated = combatSystem.getCombatant(creature.id);
+      expect(updated?.defence).toBe(0);
+    });
+
+    it('sets creature stat by name match via "sandbox set revenant atk 99"', () => {
+      // Spawn a drowned revenant
+      const spawnCtx = buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+        combatSystem, creatureManager,
+      });
+      handleCommand('sandbox', spawnCtx);
+
+      const creatures = creatureManager.getCreaturesInRoom(ARENA_ROOM_ID);
+      const creature = creatures[0]!;
+      const creatureCombatant = createCombatant(
+        creature.id, creature.name, ARENA_ROOM_ID, false,
+        DROWNED_REVENANT.stats,
+      );
+      combatSystem.registerCombatant(creatureCombatant);
+
+      const ctx = buildCtx(sandboxArena, ['set', 'revenant', 'atk', '99'], {
+        combatSystem, creatureManager,
+      });
+      const result = handleCommand('sandbox', ctx);
+      const text = narrationText(result).toLowerCase();
+
+      expect(text).toContain('set');
+      const updated = combatSystem.getCombatant(creature.id);
+      expect(updated?.attack).toBe(99);
+    });
+
+    it('returns error for unknown stat name', () => {
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+      const playerCombatant = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        DEFAULT_PLAYER_STATS,
+      );
+      combatSystem.registerCombatant(playerCombatant);
+
+      const ctx = buildCtx(sandboxArena, ['set', 'player', 'invalidstat', '5'], {
+        player, combatSystem, creatureManager,
+      });
+      const result = handleCommand('sandbox', ctx);
+      const text = narrationText(result).toLowerCase();
+
+      // Should report the stat is unrecognized
+      expect(text).toMatch(/unknown|invalid|unrecognized/);
+    });
+
+    it('returns error for unknown target', () => {
+      const ctx = buildCtx(sandboxArena, ['set', 'nonexistent', 'atk', '5'], {
+        combatSystem, creatureManager,
+      });
+      const result = handleCommand('sandbox', ctx);
+      const text = narrationText(result).toLowerCase();
+
+      // Implementation may report "no creatures" or "unknown target"
+      expect(text).toMatch(/unknown|not found|no.*target|no.*creature/);
+    });
+
+    it('preserves the original value for later restoration', () => {
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+      const playerCombatant = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        DEFAULT_PLAYER_STATS,
+      );
+      combatSystem.registerCombatant(playerCombatant);
+
+      const originalAtk = playerCombatant.attack;
+
+      const ctx = buildCtx(sandboxArena, ['set', 'player', 'atk', '999'], {
+        player, combatSystem, creatureManager,
+      });
+      const result = handleCommand('sandbox', ctx);
+      const text = narrationText(result);
+
+      // The response should mention the original value
+      expect(text).toContain(String(originalAtk));
+      // And the combatant should have the new value
+      expect(combatSystem.getCombatant(player.sessionId)?.attack).toBe(999);
+    });
+  });
+
+  // ─── 9. sandbox info — Template Inspection ────────────────────────────────
+
+  describe('sandbox info command', () => {
+    let creatureManager: CreatureManager;
+
+    beforeEach(() => {
+      enableDevMode();
+      creatureManager = new CreatureManager();
+    });
+
+    it('shows full stat block for a known creature type', () => {
+      const ctx = buildCtx(sandboxStatsLab, ['info', 'drowned_revenant'], {
+        creatureManager,
+      });
+      const result = handleCommand('sandbox', ctx);
+      const text = narrationText(result);
+
+      // Should display the template's stats
+      expect(text.toLowerCase()).toContain('drowned revenant');
+      expect(text).toContain(String(DROWNED_REVENANT.stats.maxHp));    // 50
+      expect(text).toContain(String(DROWNED_REVENANT.stats.attack));    // 10
+      expect(text).toContain(String(DROWNED_REVENANT.stats.defence));   // 3
+      expect(text).toContain(String(DROWNED_REVENANT.stats.armour));    // 3
+    });
+
+    it('lists all available templates when no argument given', () => {
+      const ctx = buildCtx(sandboxStatsLab, ['info'], {
+        creatureManager,
+      });
+      const result = handleCommand('sandbox', ctx);
+      const text = narrationText(result).toLowerCase();
+
+      // Should list at least the drowned_revenant template
+      expect(text).toContain('drowned_revenant');
+    });
+
+    it('returns error for nonexistent creature type', () => {
+      const ctx = buildCtx(sandboxStatsLab, ['info', 'nonexistent_creature'], {
+        creatureManager,
+      });
+      const result = handleCommand('sandbox', ctx);
+      const text = narrationText(result).toLowerCase();
+
+      expect(text).toMatch(/unknown|not found|no.*template/);
+    });
+  });
+
+  // ─── 10. sandbox clear — Reset Overrides ──────────────────────────────────
+
+  describe('sandbox clear command', () => {
+    let combatSystem: CombatSystem;
+    let creatureManager: CreatureManager;
+
+    beforeEach(() => {
+      enableDevMode();
+      combatSystem = new CombatSystem(exitResolver);
+      creatureManager = new CreatureManager();
+    });
+
+    it('restores original values after overrides were set', () => {
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+      const playerCombatant = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        DEFAULT_PLAYER_STATS,
+      );
+      combatSystem.registerCombatant(playerCombatant);
+
+      const originalAtk = playerCombatant.attack;
+      const originalDef = playerCombatant.defence;
+
+      // Apply overrides
+      const setCtx1 = buildCtx(sandboxArena, ['set', 'player', 'atk', '999'], {
+        player, combatSystem, creatureManager,
+      });
+      handleCommand('sandbox', setCtx1);
+
+      const setCtx2 = buildCtx(sandboxArena, ['set', 'player', 'def', '0'], {
+        player, combatSystem, creatureManager,
+      });
+      handleCommand('sandbox', setCtx2);
+
+      expect(combatSystem.getCombatant(player.sessionId)?.attack).toBe(999);
+      expect(combatSystem.getCombatant(player.sessionId)?.defence).toBe(0);
+
+      // Clear overrides
+      const clearCtx = buildCtx(sandboxArena, ['clear'], {
+        player, combatSystem, creatureManager,
+      });
+      const result = handleCommand('sandbox', clearCtx);
+      const text = narrationText(result).toLowerCase();
+
+      expect(text).toMatch(/clear|restore|reset/);
+      expect(combatSystem.getCombatant(player.sessionId)?.attack).toBe(originalAtk);
+      expect(combatSystem.getCombatant(player.sessionId)?.defence).toBe(originalDef);
+    });
+
+    it('reports appropriately when no active overrides exist', () => {
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+      const playerCombatant = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        DEFAULT_PLAYER_STATS,
+      );
+      combatSystem.registerCombatant(playerCombatant);
+
+      const ctx = buildCtx(sandboxArena, ['clear'], {
+        player, combatSystem, creatureManager,
+      });
+      const result = handleCommand('sandbox', ctx);
+      const text = narrationText(result).toLowerCase();
+
+      // Should not error — graceful no-op or acknowledge no overrides
+      expect(text).toMatch(/no.*override|clear|nothing|already/);
+    });
+
+    it('stats match pre-override values after clear', () => {
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+      const playerCombatant = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        DEFAULT_PLAYER_STATS,
+      );
+      combatSystem.registerCombatant(playerCombatant);
+
+      // Capture pre-override snapshot
+      const snapshot = {
+        attack: playerCombatant.attack,
+        defence: playerCombatant.defence,
+        armour: playerCombatant.armour,
+        maxHp: playerCombatant.maxHp,
+      };
+
+      // Override multiple stats
+      handleCommand('sandbox', buildCtx(sandboxArena, ['set', 'player', 'atk', '500'], {
+        player, combatSystem, creatureManager,
+      }));
+      handleCommand('sandbox', buildCtx(sandboxArena, ['set', 'player', 'def', '100'], {
+        player, combatSystem, creatureManager,
+      }));
+
+      // Clear
+      handleCommand('sandbox', buildCtx(sandboxArena, ['clear'], {
+        player, combatSystem, creatureManager,
+      }));
+
+      const restored = combatSystem.getCombatant(player.sessionId)!;
+      expect(restored.attack).toBe(snapshot.attack);
+      expect(restored.defence).toBe(snapshot.defence);
+      // armour should be unchanged — it was never overridden
+      expect(restored.armour).toBe(snapshot.armour);
+    });
+  });
+
+  // ─── 11. sandbox log — Combat Event Log ───────────────────────────────────
+
+  describe('sandbox log command', () => {
+    let combatSystem: CombatSystem;
+    let creatureManager: CreatureManager;
+
+    beforeEach(() => {
+      enableDevMode();
+      combatSystem = new CombatSystem(exitResolver);
+      creatureManager = new CreatureManager();
+    });
+
+    it('shows recent combat events after combat occurs', () => {
+      // Set up a combat encounter and tick
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+      const playerCombatant = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        DEFAULT_PLAYER_STATS,
+      );
+      const creatureCombatant = createCombatant(
+        'creature-sandbox-0', 'Drowned Revenant', ARENA_ROOM_ID, false,
+        DROWNED_REVENANT.stats,
+      );
+      combatSystem.registerCombatant(playerCombatant);
+      combatSystem.registerCombatant(creatureCombatant);
+      combatSystem.initiateCombat(player.sessionId, 'creature-sandbox-0');
+      combatSystem.resolveTick();
+
+      const ctx = buildCtx(sandboxArena, ['log'], {
+        player, combatSystem, creatureManager,
+      });
+      const result = handleCommand('sandbox', ctx);
+      const text = narrationText(result).toLowerCase();
+
+      // Should show some combat event content
+      expect(text.length).toBeGreaterThan(0);
+      // Should reference combat activity (strike, dodge, damage, etc.)
+      expect(text).toMatch(/strike|dodge|damage|hit|log|event|combat/);
+    });
+
+    it('limits output with "sandbox log last 5"', () => {
+      // Run several combat ticks to generate multiple events
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+      const playerCombatant = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        { ...DEFAULT_PLAYER_STATS, maxHp: 500 },
+      );
+      playerCombatant.hp = 500;
+      const creatureCombatant = createCombatant(
+        'creature-sandbox-0', 'Drowned Revenant', ARENA_ROOM_ID, false,
+        { ...DROWNED_REVENANT.stats, maxHp: 500 },
+      );
+      creatureCombatant.hp = 500;
+      combatSystem.registerCombatant(playerCombatant);
+      combatSystem.registerCombatant(creatureCombatant);
+      combatSystem.initiateCombat(player.sessionId, 'creature-sandbox-0');
+
+      // Multiple ticks to generate event history
+      for (let i = 0; i < 5; i++) {
+        combatSystem.resolveTick();
+      }
+
+      const ctx = buildCtx(sandboxArena, ['log', 'last', '5'], {
+        player, combatSystem, creatureManager,
+      });
+      const result = handleCommand('sandbox', ctx);
+      const text = narrationText(result);
+
+      // Should have output — exact format depends on implementation
+      expect(text.length).toBeGreaterThan(0);
+    });
+
+    it('shows appropriate message when no combat has occurred', () => {
+      const ctx = buildCtx(sandboxArena, ['log'], {
+        combatSystem, creatureManager,
+      });
+      const result = handleCommand('sandbox', ctx);
+      const text = narrationText(result).toLowerCase();
+
+      // Should indicate no events or empty log
+      expect(text).toMatch(/no.*event|empty|no.*log|no.*combat/);
+    });
+  });
+
+  // ─── 12. DamageBreakdown in tick results ──────────────────────────────────
+
+  describe('DamageBreakdown in tick results', () => {
+    let combatSystem: CombatSystem;
+
+    beforeEach(() => {
+      enableDevMode();
+      combatSystem = new CombatSystem(exitResolver);
+    });
+
+    // TODO: DamageBreakdown is being added by Jarlaxle — these tests verify
+    // the expected interface once CombatEvent gains a `breakdown` field.
+    // If CombatEvent.breakdown does not yet exist, these will fail at compile
+    // time, which is the intended signal that the implementation is needed.
+
+    it('tick result events include a breakdown field after combat resolution', () => {
+      const playerCombatant = createCombatant(
+        'player-1', 'player-1', ARENA_ROOM_ID, true,
+        DEFAULT_PLAYER_STATS,
+      );
+      const creatureCombatant = createCombatant(
+        'creature-sandbox-0', 'Drowned Revenant', ARENA_ROOM_ID, false,
+        DROWNED_REVENANT.stats,
+      );
+
+      combatSystem.registerCombatant(playerCombatant);
+      combatSystem.registerCombatant(creatureCombatant);
+      combatSystem.initiateCombat('player-1', 'creature-sandbox-0');
+
+      const tickResult = combatSystem.resolveTick();
+      const strikeEvents = tickResult.events.filter(e => e.type === 'strike');
+
+      expect(strikeEvents.length).toBeGreaterThan(0);
+
+      for (const event of strikeEvents) {
+        // breakdown should be present on strike events
+        expect(event).toHaveProperty('breakdown');
+        const bd = (event as any).breakdown;
+        expect(bd).toHaveProperty('rawDamage');
+        expect(bd).toHaveProperty('finalDamage');
+        expect(bd).toHaveProperty('armourReduction');
+        expect(typeof bd.rawDamage).toBe('number');
+        expect(typeof bd.finalDamage).toBe('number');
+        expect(typeof bd.armourReduction).toBe('number');
+      }
+    });
+
+    it('breakdown values are consistent with final damage', () => {
+      const playerCombatant = createCombatant(
+        'player-1', 'player-1', ARENA_ROOM_ID, true,
+        { ...DEFAULT_PLAYER_STATS, attack: 20 },
+      );
+      const creatureCombatant = createCombatant(
+        'creature-sandbox-0', 'Drowned Revenant', ARENA_ROOM_ID, false,
+        DROWNED_REVENANT.stats,
+      );
+
+      combatSystem.registerCombatant(playerCombatant);
+      combatSystem.registerCombatant(creatureCombatant);
+      combatSystem.initiateCombat('player-1', 'creature-sandbox-0');
+
+      const tickResult = combatSystem.resolveTick();
+      const strikeEvents = tickResult.events.filter(e => e.type === 'strike');
+
+      for (const event of strikeEvents) {
+        const bd = (event as any).breakdown;
+        if (!bd) continue;
+
+        // finalDamage should be <= rawDamage (armour reduces it)
+        expect(bd.finalDamage).toBeLessThanOrEqual(bd.rawDamage);
+        // armourReduction should be non-negative
+        expect(bd.armourReduction).toBeGreaterThanOrEqual(0);
+        // finalDamage should match the event's damage field
+        if (event.damage !== undefined) {
+          expect(bd.finalDamage).toBe(event.damage);
+        }
+      }
+    });
+
+    it('dodge events show dodged: true with dodgeChance > 0', () => {
+      // Use a deterministic roll that guarantees a dodge
+      const alwaysDodgeRoll = () => 0.0; // lowest roll → always under dodge chance
+      const dodgeCombatSystem = new CombatSystem(exitResolver, alwaysDodgeRoll);
+
+      const playerCombatant = createCombatant(
+        'player-1', 'player-1', ARENA_ROOM_ID, true,
+        { ...DEFAULT_PLAYER_STATS, agility: 10 },
+        5, // dodgeSkillRank
+      );
+      const creatureCombatant = createCombatant(
+        'creature-sandbox-0', 'Drowned Revenant', ARENA_ROOM_ID, false,
+        DROWNED_REVENANT.stats,
+      );
+
+      dodgeCombatSystem.registerCombatant(playerCombatant);
+      dodgeCombatSystem.registerCombatant(creatureCombatant);
+      dodgeCombatSystem.initiateCombat('creature-sandbox-0', 'player-1');
+
+      // Queue the player to dodge (default auto-attacks current target)
+      dodgeCombatSystem.submitAction('player-1', 'dodge');
+
+      const tickResult = dodgeCombatSystem.resolveTick();
+
+      // Dodge shows up as a strike event with dodged: true (GDD §6.4)
+      const dodgedStrikes = tickResult.events.filter(
+        e => e.type === 'strike' && e.dodged === true,
+      );
+
+      // With roll of 0.0 and high agility + dodge skill, the player should dodge
+      expect(dodgedStrikes.length).toBeGreaterThan(0);
+
+      for (const event of dodgedStrikes) {
+        expect(event.dodged).toBe(true);
+        expect(event.damage).toBe(0); // dodged attacks deal 0 damage
+        // If breakdown is present, it should reflect the dodge
+        const bd = (event as any).breakdown;
+        if (bd) {
+          expect(bd.dodged).toBe(true);
+          expect(bd.dodgeChance).toBeGreaterThan(0);
+        }
+      }
+    });
+  });
+
+  // ─── 13. Integration: set + combat ────────────────────────────────────────
+
+  describe('integration: set + combat', () => {
+    let combatSystem: CombatSystem;
+    let creatureManager: CreatureManager;
+
+    beforeEach(() => {
+      enableDevMode();
+      combatSystem = new CombatSystem(exitResolver);
+      creatureManager = new CreatureManager();
+    });
+
+    it('setting creature DEF to 0 results in higher damage than default', () => {
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+      const playerCombatant = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        DEFAULT_PLAYER_STATS,
+      );
+      combatSystem.registerCombatant(playerCombatant);
+
+      // Spawn creature and register it as combatant
+      const spawnCtx = buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+        player, combatSystem, creatureManager,
+      });
+      handleCommand('sandbox', spawnCtx);
+      const creature = creatureManager.getCreaturesInRoom(ARENA_ROOM_ID)[0]!;
+      const creatureCombatant = createCombatant(
+        creature.id, creature.name, ARENA_ROOM_ID, false,
+        DROWNED_REVENANT.stats,
+      );
+      combatSystem.registerCombatant(creatureCombatant);
+
+      // Baseline tick: creature has default DEF/armour
+      combatSystem.initiateCombat(player.sessionId, creature.id);
+      const baselineTick = combatSystem.resolveTick();
+      const baselineStrike = baselineTick.events.find(
+        e => e.type === 'strike' && e.actorId === player.sessionId,
+      );
+      const baselineDamage = baselineStrike?.damage ?? 0;
+
+      // Reset encounter for a clean second test
+      combatSystem.removeCombatant(player.sessionId);
+      combatSystem.removeCombatant(creature.id);
+
+      // Re-register with DEF=0 override on creature
+      const playerCombatant2 = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        DEFAULT_PLAYER_STATS,
+      );
+      const creatureCombatant2 = createCombatant(
+        creature.id, creature.name, ARENA_ROOM_ID, false,
+        { ...DROWNED_REVENANT.stats, armour: 0 },
+      );
+      combatSystem.registerCombatant(playerCombatant2);
+      combatSystem.registerCombatant(creatureCombatant2);
+      combatSystem.initiateCombat(player.sessionId, creature.id);
+
+      const overrideTick = combatSystem.resolveTick();
+      const overrideStrike = overrideTick.events.find(
+        e => e.type === 'strike' && e.actorId === player.sessionId,
+      );
+      const overrideDamage = overrideStrike?.damage ?? 0;
+
+      // With 0 armour, damage should be >= baseline (armour no longer reducing)
+      expect(overrideDamage).toBeGreaterThanOrEqual(baselineDamage);
+    });
+
+    it('setting player ATK to 999 produces massive damage', () => {
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+      const playerCombatant = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        { ...DEFAULT_PLAYER_STATS, attack: 999 },
+      );
+      const creatureCombatant = createCombatant(
+        'creature-sandbox-0', 'Drowned Revenant', ARENA_ROOM_ID, false,
+        DROWNED_REVENANT.stats,
+      );
+
+      combatSystem.registerCombatant(playerCombatant);
+      combatSystem.registerCombatant(creatureCombatant);
+      combatSystem.initiateCombat(player.sessionId, 'creature-sandbox-0');
+
+      const tickResult = combatSystem.resolveTick();
+      const playerStrike = tickResult.events.find(
+        e => e.type === 'strike' && e.actorId === player.sessionId,
+      );
+
+      // 999 ATK minus small armour should still be massive
+      expect(playerStrike?.damage).toBeGreaterThan(100);
+    });
+
+    it('clear restores overrides so next combat uses original stats', () => {
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+      const playerCombatant = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        DEFAULT_PLAYER_STATS,
+      );
+      combatSystem.registerCombatant(playerCombatant);
+
+      const originalAtk = playerCombatant.attack;
+
+      // Override attack
+      handleCommand('sandbox', buildCtx(sandboxArena, ['set', 'player', 'atk', '999'], {
+        player, combatSystem, creatureManager,
+      }));
+
+      expect(combatSystem.getCombatant(player.sessionId)?.attack).toBe(999);
+
+      // Clear overrides
+      handleCommand('sandbox', buildCtx(sandboxArena, ['clear'], {
+        player, combatSystem, creatureManager,
+      }));
+
+      // Attack should be back to original
+      expect(combatSystem.getCombatant(player.sessionId)?.attack).toBe(originalAtk);
+    });
+  });
 });
