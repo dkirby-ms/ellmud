@@ -3216,3 +3216,7 @@ Consolidated 22 incremental SQL migration files into 3 clean files per Elminster
 - featureHandlers Map can be extended to support string[] for multi-room-type commands without breaking existing single-string entries
 - Sandbox auto-revive pattern: removeCombatant → reset HP → narrate — avoids engaging the DowningSystem entirely
 - Creature `sandbox` flag enables clean conditional branching in syncCreaturesAfterCombat without modifying the kill/loot pipeline
+- Combatant interface uses `attack`/`defence`/`armour`/`agility` property names — stat alias maps need to bridge user-facing shorthands (atk, def, agi) to these keys
+- Module-level Maps for transient sandbox state (overrides, combat log) work cleanly since sandbox is single-instance per server; reset functions exported for test cleanup
+- Tapping into TickResult in ZoneRoom's update() is the least invasive way to capture combat events — no CombatSystem modifications needed
+- `(combatant as unknown as Record<string, unknown>)` double-cast is required for dynamic property writes on TypeScript interfaces — single `as Record<string, unknown>` fails TS2352

@@ -28,6 +28,7 @@ import {
 import { ZoneState } from '../state.js';
 import { parseCommand } from '../commands/parser.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
+import { recordSandboxCombatEvents } from '../commands/handlers/sandbox.js';
 import { PlayerState } from '../state/PlayerState.js';
 import { createTestRoomGraph, type RoomGraph, type Direction } from '../generator/RoomGraph.js';
 import { generateZoneGraph } from '../generator/generator.js';
@@ -778,6 +779,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Resolve combat tick (skip for hub/social/dev zones unless sandbox arena active)
     if ((!isNonCombatZone || hasSandboxCombat) && this.combatSystem.hasActiveEncounters()) {
       const tickResult = this.combatSystem.resolveTick();
+
+      // Capture combat events for sandbox combat log
+      if (hasSandboxCombat && tickResult.events.length > 0) {
+        recordSandboxCombatEvents(tickResult, this.state.tick);
+      }
 
       // Killing blow: finish off downed (unstabilized) players in rooms with active combat.
       // Runs BEFORE handlePlayerDefeats so newly-downed players aren't instantly killed.
