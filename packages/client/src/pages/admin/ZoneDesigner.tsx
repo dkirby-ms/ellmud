@@ -2028,7 +2028,7 @@ export default function ZoneDesigner({
         {/* ─── Side panel ─────────────────────────────────── */}
         {(selectedRoomData || selectedExitData || connectTarget) && (
           <div 
-            className="border-l border-[#2A2B35] p-4 space-y-3 flex-shrink-0 relative"
+            className="border-l border-[#2A2B35] p-4 space-y-3 flex-shrink-0 relative overflow-y-auto"
             style={{ width: panelWidth }}
           >
             {/* Drag handle */}
