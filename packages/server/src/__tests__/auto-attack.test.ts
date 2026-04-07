@@ -79,7 +79,7 @@ describe('Auto-Attack Baseline (GDD §6.1, §6.2)', () => {
     expect(strikeEvent).toBeTruthy();
   });
 
-  it('defaults to dodge when current target is dead', () => {
+  it('auto-retargets next hostile when current target dies', () => {
     const player = makePlayer('player-1');
     const creature1 = makeCreature('creature-1');
     const creature2 = makeCreature('creature-2');
@@ -99,23 +99,49 @@ describe('Auto-Attack Baseline (GDD §6.1, §6.2)', () => {
       creature1Combatant.hp = 0;
     }
 
-    // Second tick - should dodge since target is dead
+    // Second tick — player should auto-retarget to creature2 and strike
     const result = system.resolveTick();
 
-    // Should have a dodge event from player (target dead, no auto-attack)
+    // Player should auto-attack creature2 (the remaining hostile)
+    const strikeEvent = result.events.find(
+      e => e.type === 'strike' && e.actorId === player.id && e.targetId === creature2.id
+    );
+    expect(strikeEvent).toBeTruthy();
+
+    // Should NOT be dodging — there's still a valid target
     const dodgeEvent = result.events.find(
       e => e.type === 'dodge' && e.actorId === player.id
     );
-    expect(dodgeEvent).toBeTruthy();
+    expect(dodgeEvent).toBeFalsy();
+  });
 
-    // Should NOT have a strike event from player
+  it('defaults to dodge when ALL hostiles are dead (no retarget possible)', () => {
+    const player = makePlayer('player-1');
+    const creature1 = makeCreature('creature-1');
+    system.registerCombatant(player);
+    system.registerCombatant(creature1);
+
+    system.initiateCombat(player.id, creature1.id);
+
+    // First tick
+    system.resolveTick();
+
+    // Kill the only creature
+    const creature1Combatant = system.getCombatant(creature1.id);
+    if (creature1Combatant) {
+      creature1Combatant.hp = 0;
+    }
+
+    // Second tick — no hostiles remain, should dodge
+    const result = system.resolveTick();
+
     const strikeEvent = result.events.find(
       e => e.type === 'strike' && e.actorId === player.id
     );
     expect(strikeEvent).toBeFalsy();
   });
 
-  it('defaults to dodge when no target is set', () => {
+  it('auto-retargets when no target is set but hostiles exist', () => {
     const player = makePlayer('player-1');
     const creature = makeCreature('creature-1');
     system.registerCombatant(player);
@@ -132,14 +158,14 @@ describe('Auto-Attack Baseline (GDD §6.1, §6.2)', () => {
       playerCombatant.currentTarget = undefined;
     }
 
-    // Second tick - should dodge since no target
+    // Second tick - should auto-retarget to the creature and strike
     const result = system.resolveTick();
 
-    // Should have a dodge event from player
-    const dodgeEvent = result.events.find(
-      e => e.type === 'dodge' && e.actorId === player.id
+    // Player should auto-retarget and strike the creature
+    const strikeEvent = result.events.find(
+      e => e.type === 'strike' && e.actorId === player.id && e.targetId === creature.id
     );
-    expect(dodgeEvent).toBeTruthy();
+    expect(strikeEvent).toBeTruthy();
 
     // Creature should still auto-attack (it has a target)
     const creatureStrike = result.events.find(
