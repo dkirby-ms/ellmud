@@ -3124,3 +3124,20 @@ Consolidated 22 incremental SQL migration files into 3 clean files per Elminster
 - 019 room_flavor_rewrite covers ALL Siltgate and Warrens rooms including topology-fix bridge rooms from 005/007
 - `character_reputation` table was folded into 001_schema.sql (eliminating need for a 4th file, as design doc suggested)
 - The migration runner reads from a configurable directory; new files are in `migrations-new/` to coexist with originals during testing
+
+---
+
+### Dev-Only GOTO Command (Issue #328) — PR #330
+**Task:** Build `goto <room-slug>` teleport command, gated by DEV_MODE_ENABLED  
+**Status:** ✅ Complete — branch `squad/328-goto-command`, PR #330 opened  
+**Files:**
+- `packages/server/src/commands/handlers/goto.ts` — new handler (follows peaceful.ts gate + go.ts room transition patterns)
+- `packages/server/src/commands/parser.ts` — added `'goto'` to KNOWN_VERBS
+- `packages/server/src/commands/index.ts` — wired `handleGoto` into registry
+- `packages/server/src/__tests__/goto-command.test.ts` — 5 tests (dev gate, valid teleport, invalid slug, missing arg, parser)
+
+## Learnings
+- Room IDs in the room graph double as slugs — `resolveRoom(slug)` works directly for lookup
+- Dev-gated commands follow a clean pattern: check `getConfig().devModeEnabled` first, reject with generic message
+- The `go.ts` handler is the canonical reference for room transition + room description rendering (exit list, items, creatures)
+- Full suite: 2561 tests passing, 129 files, zero regressions
