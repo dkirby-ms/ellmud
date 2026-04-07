@@ -214,7 +214,7 @@ function handleSpawn(ctx: CommandContext): CommandResult {
   }
 
   return {
-    narrations: [sysMsg(`Spawned ${spawned.length}x ${spawned[0]!.name} in the sandbox arena.`)],
+    narrations: [sysMsg(`Spawned ${spawned.length}x ${spawned[0]?.name ?? 'unknown'} in the sandbox arena.`)],
   };
 }
 
@@ -409,7 +409,10 @@ function handleSet(ctx: CommandContext): CommandResult {
     // Try numeric index first (1-based)
     const idx = parseInt(targetArg, 10);
     if (!isNaN(idx) && idx >= 1 && idx <= creatures.length) {
-      const creature = creatures[idx - 1]!;
+      const creature = creatures[idx - 1];
+      if (!creature) {
+        return { narrations: [sysMsg(`No creature at index ${idx}.`)] };
+      }
       combatant = combatSystem?.getCombatant(creature.id);
       entityLabel = `${creature.name} (#${idx})`;
     } else {
@@ -436,7 +439,10 @@ function handleSet(ctx: CommandContext): CommandResult {
   if (!sandboxOverrides.has(entityId)) {
     sandboxOverrides.set(entityId, new Map());
   }
-  const entityOverrides = sandboxOverrides.get(entityId)!;
+  const entityOverrides = sandboxOverrides.get(entityId);
+  if (!entityOverrides) {
+    return { narrations: [sysMsg(`Failed to track overrides for "${entityLabel}".`)] };
+  }
   const statKey = combatantKey as string;
 
   if (!entityOverrides.has(statKey)) {
@@ -445,13 +451,17 @@ function handleSet(ctx: CommandContext): CommandResult {
       override: value,
     });
   } else {
-    entityOverrides.get(statKey)!.override = value;
+    const existing = entityOverrides.get(statKey);
+    if (existing) {
+      existing.override = value;
+    }
   }
 
   // Apply the override
   (combatant as unknown as Record<string, unknown>)[combatantKey] = value;
 
-  return { narrations: [sysMsg(`${entityLabel!}: ${statArg} set to ${value} (was ${entityOverrides.get(statKey)!.original}).`)] };
+  const appliedOverride = entityOverrides.get(statKey);
+  return { narrations: [sysMsg(`${entityLabel ?? 'unknown'}: ${statArg} set to ${value} (was ${appliedOverride?.original ?? '?'}).`)] };
 }
 
 function handleInfo(ctx: CommandContext): CommandResult {
@@ -657,7 +667,10 @@ function handleReplay(ctx: CommandContext): CommandResult {
 
   // Auto-initiate combat with first creature if player not already in combat
   if (!playerAlreadyInCombat && aliveCreatures.length > 0) {
-    const firstCreature = aliveCreatures[0]!;
+    const firstCreature = aliveCreatures[0];
+    if (!firstCreature) {
+      return { narrations: [sysMsg('No alive creatures found in the arena.')] };
+    }
     const combatant = combatSystem.getCombatant(firstCreature.id);
     if (!combatant) {
       return { narrations: [sysMsg('Arena creatures are not registered as combatants. Try attacking one first.')] };
@@ -920,7 +933,8 @@ function handleScenarioLoad(ctx: CommandContext): CommandResult {
     const spawned = creatureManager.spawnCreatureInRoom(entry.type, arenaRoomId, 1);
     if (spawned.length === 0) continue;
 
-    const creature = spawned[0]!;
+    const creature = spawned[0];
+    if (!creature) continue;
 
     // Apply creature-level stat overrides to the Creature instance
     if (entry.overrides) {
@@ -949,7 +963,8 @@ function handleScenarioLoad(ctx: CommandContext): CommandResult {
           if (!sandboxOverrides.has(player.sessionId)) {
             sandboxOverrides.set(player.sessionId, new Map());
           }
-          sandboxOverrides.get(player.sessionId)!.set(statKey, {
+          const playerOverrides = sandboxOverrides.get(player.sessionId);
+          playerOverrides?.set(statKey, {
             original: combatant[statKey as keyof Combatant] as number,
             override: value,
           });
