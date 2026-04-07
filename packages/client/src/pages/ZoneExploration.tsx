@@ -332,7 +332,7 @@ export default function ZoneExploration() {
                       : 'ansi-white'
                     }`}
                   >
-                    {msg.text}
+                    <AnsiText text={msg.text} />
                   </p>
                 )}
 
@@ -356,7 +356,7 @@ export default function ZoneExploration() {
 
                 {msg.type === "system" && (
                   <p className="mud-system">
-                    {msg.text}
+                    <AnsiText text={msg.text} />
                   </p>
                 )}
 
