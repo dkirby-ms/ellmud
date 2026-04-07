@@ -2173,3 +2173,33 @@ PR #294 implements auto-attack default targeting and target management per GDD �
   - **Phased risk reduction:** Minimal → Tactical → Polish, with go/no-go gates between each phase
   - **Performance through caching:** Pre-compute expensive operations (distance matrix, pathfinding), reuse across tick
 - **Key files:** `docs/design/337-combat-grid-*.md` (3 research docs), `docs/design/337-combat-grid-proposal.md` (unified synthesis), `packages/server/src/combat/CombatSystem.ts` (integration point), `packages/client/src/components/CombatHUD.tsx` (client integration point)
+
+## Help Command Implementation Wave (Issue #340, Commit 795994e)
+
+**Date:** 2026-04-07  
+**Role:** Lead Researcher  
+**Status:** ✅ Complete
+
+**Research Deliverables:**
+- Comprehensive inventory of 37 commands across all handlers
+- Issue #340 requirements analysis and validation
+- GitHub issue coordination (label progression: go:needs-research → go:yes)
+- Unblocked concurrent implementation by Drizzt and Minsc
+
+**Key Research Findings:**
+- 7 command categories identified (Navigation, Items, Communication, Combat, Special Actions, Feature Rooms, Dev Tools)
+- Context-aware filtering requirements: room type matching + dev mode gating
+- Help modes: general listing (no args) + detailed per-command (with args)
+- Alias support essential for UX (`?` → `help`)
+
+**Coordination Impact:**
+- Early research findings enabled parallel development pipeline
+- Spec clarity prevented implementation rework
+- GitHub status updates kept stakeholders informed of progress
+- Team synchronization maintained across 3 concurrent work streams
+
+**Learned Patterns:**
+- Research-first approach unblocks parallel implementation work
+- Static metadata registries provide single source of truth for command documentation
+- Context-aware filtering improves player UX by showing only relevant commands
+- Help is discovery tool → must never be feature-gated

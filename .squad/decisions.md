@@ -5245,3 +5245,103 @@ Once implemented, verify:
 **Status:** READY FOR IMPLEMENTATION
 
 Next step: Bruenor executes migration scripts to seed sandbox content into database.
+
+---
+
+# Decision: Help Command Implementation (Issue #340)
+
+**Date:** 2025-04-08  
+**Author:** Drizzt (Engine Developer)  
+**Status:** Implemented  
+**Commit:** 795994e
+
+## Context
+
+Players need a way to discover available commands and understand how to use them. This is especially important for new players and when commands are context-dependent (feature rooms, dev mode).
+
+## Decision
+
+Implemented a comprehensive `help` command with two modes:
+
+1. **`help` (no args)** — Lists all available commands grouped by category, filtered by:
+   - Current room type (hides feature commands not available in current location)
+   - Dev mode status (hides dev tools when `devModeEnabled` is false)
+
+2. **`help <command>` (with args)** — Shows detailed help for a specific command:
+   - Description
+   - Usage pattern
+   - Aliases (if any)
+   - Works for both primary command names and their aliases
+
+## Implementation
+
+### Files Created/Modified
+
+- **Created:** `packages/server/src/commands/handlers/help.ts`
+  - Static `COMMAND_HELP` registry with metadata for all commands
+  - Context-aware filtering based on room type and dev mode
+  - Alias resolution for detailed help queries
+
+- **Modified:** `packages/server/src/commands/parser.ts`
+  - Added `help` to `KNOWN_VERBS`
+  - Added `?` → `help` alias in `COMMAND_ALIASES`
+
+- **Modified:** `packages/server/src/commands/index.ts`
+  - Imported and registered `handleHelp` in the handlers map
+
+### Command Categories
+
+Commands are organized into logical groups:
+- **Navigation:** go, look
+- **Items:** take, drop, inventory, loot, extract, search
+- **Communication:** say, whisper, emote, listen
+- **Combat:** attack, strike, dodge, flee, target, position
+- **Special Actions:** use, stabilize, peaceful
+- **Feature Rooms (context-gated):**
+  - Expedition Board: board, zoneboard, enter
+  - Stash: stash, store, loadout
+  - Inn: rent
+  - Sandbox: sandbox (also devOnly)
+- **Dev Tools (devOnly):** goto, teleport
+
+### Context Awareness
+
+The help system respects game state:
+- Feature room commands only appear when `ctx.room.type` matches the required type
+- Dev commands only appear when `getConfig().devModeEnabled` is true
+- Follows the established pattern from `handleGoto` and `featureHandlers` map
+
+### Design Choices
+
+1. **Static metadata registry** — All command help is centralized in one place, making it easy to maintain and update
+2. **Category-based organization** — Improves discoverability by grouping related commands
+3. **Alias support** — `help l` works just as well as `help look`
+4. **System narration type** — Help output uses `type: 'system'` to distinguish it from game narrative
+5. **Not feature-gated** — Help is a standard command available everywhere (unlike board/stash/etc.)
+
+## Alternatives Considered
+
+1. **Dynamic help from handler functions** — Would require every handler to export metadata; rejected for being more complex and harder to maintain
+2. **Separate help files** — Would scatter documentation; rejected in favor of single source of truth
+3. **Feature-gate help itself** — Would prevent players from learning about commands; rejected
+
+## Testing
+
+- TypeScript compilation: ✅ Passed
+- ESLint: ✅ No warnings (fixed non-null assertions)
+- Manual validation: Command structure follows established patterns
+- Test suite: 26/26 tests passing (see orchestration log for coverage details)
+
+## Future Enhancements
+
+Potential improvements:
+- Add examples to command help entries
+- Support for `help <category>` to show all commands in a category
+- Mark unimplemented commands (search, listen, extract, use) differently
+- Add help for sub-commands (e.g., `help sandbox spawn`)
+
+---
+
+**Status:** COMPLETE
+
+All tests passing. Issue #340 closed with commit 795994e. Help command fully operational with context-aware filtering and alias support.
