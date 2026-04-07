@@ -5961,3 +5961,83 @@ This document is the canonical reference for squad implementation.
 - **Next steps:** Regis estimates client build complexity; Bruenor assesses content requirements; Squad schedules art production phase
 
 
+
+---
+
+## 2026-01-19: Sandbox Combat Log Captures via ZoneRoom Tick Interception
+
+**By:** Drizzt (Engine Dev)  
+**Scope:** Combat Sandbox Phase 2  
+
+**Decision:** Phase 2 sandbox `log` command captures combat events by intercepting TickResult in ZoneRoom's update loop. After `resolveTick()` returns, we call `recordSandboxCombatEvents(tickResult, tick)` only when `hasSandboxCombat` is true.
+
+**Why:**
+- Requires zero changes to CombatSystem's core resolution logic
+- Scopes logging to sandbox rooms only (no overhead in production combat)
+- Uses a module-level ring buffer (max 100 entries, FIFO) in sandbox.ts
+
+**Implications:**
+- Stat override tracking uses module-level Maps — works because sandbox is single-instance per zone server
+- `_resetSandboxState()` exported for test cleanup between test cases
+- If CombatSystem ever changes its TickResult shape, the log capture will need updating (but it only reads `events[].type/actorName/targetName/damage/dodged` — stable fields)
+
+---
+
+## 2026-01-19: Sandbox Scenario Persistence — File-Based JSON
+
+**By:** Drizzt (Engine Dev)  
+**Scope:** Combat Sandbox Phase 3  
+
+**Decision:** Scenario save/load uses JSON files on disk at `packages/server/data/sandbox-scenarios/`. The `CommandContext` interface gained a `scenarioDir?: string` override so tests can use isolated temp dirs.
+
+**Schema:** Each scenario stores one entry per creature instance (not grouped by type) with optional per-creature stat overrides. Top-level `seed` field stores the PRNG seed, `overrides` aggregates all entity overrides, `playerOverrides` stores player-specific overrides.
+
+**Key Choices:**
+- **Per-instance creature entries** rather than grouped-by-type — enables individual override tracking and simpler round-trip fidelity
+- **`handleSet` now matches creature IDs** alongside name/type partial matching — needed for programmatic targeting
+- **Load registers overridden creatures as combatants** via `creatureManager.toCombatant()` so stat overrides are immediately visible in the combat system
+- **`.gitignore` excludes `*.json` in the scenario dir** but tracks `.gitkeep` — user scenarios don't pollute version control
+
+**Impact:**
+- `CommandContext` interface in `commands/index.ts` has a new optional field `scenarioDir`
+- No changes to CreatureManager, CombatSystem, or any production hot path
+- 82 sandbox tests passing (all Phase 1 + 2 + 3)
+
+---
+
+## 2026-01-20: featureHandlers Multi-Room Type Support
+
+**By:** Drizzt (Engine Dev)  
+**Scope:** Combat Sandbox Phase 1  
+
+**Decision:** Extended the `featureHandlers` map in `commands/index.ts` to support `requiredRoomType: string | string[]`.
+
+The gate logic now normalizes to an array and uses `includes()`:
+```typescript
+const allowed = Array.isArray(featureCmd.requiredRoomType)
+  ? featureCmd.requiredRoomType
+  : [featureCmd.requiredRoomType];
+if (!allowed.includes(ctx.room.type as string)) { ... }
+```
+
+**Rationale:** The sandbox command must work in all 3 sandbox room types (`feature_sandbox`, `feature_sandbox_arena`, `feature_sandbox_stats`). Existing feature handlers use a single string — this change is backward-compatible.
+
+**Impact:**
+- All existing `featureHandlers` entries unchanged (single string still works)
+- New commands can now gate to multiple room types without registering duplicate entries
+- 2213 tests pass, zero regressions
+
+---
+
+## 2026-04-07T15:15:52Z: Sandbox Architecture — Shared CombatSystem
+
+**By:** dkirby-ms (via Copilot)  
+**Scope:** Combat Sandbox Architecture  
+
+**Decision:** Sandbox uses the zone's existing CombatSystem instance (not a separate isolated instance).
+
+**Why:** Avoids divergence between sandbox and real combat resolution.
+
+**Layout:** 3 rooms — sandbox-lobby (feature_sandbox), sandbox-arena (feature_sandbox_arena), sandbox-stats-lab (feature_sandbox_stats). Connected north from training-grounds. Can expand later.
+
+**Rationale:** User decision resolving the Elminster/Drizzt architecture split and Elminster/Laeral room layout split.
