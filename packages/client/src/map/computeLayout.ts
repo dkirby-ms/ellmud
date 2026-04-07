@@ -58,6 +58,13 @@ const PERPENDICULAR_PAIRS: [string, string][] = [
 
 const MIN_GRID_CLUSTER_SIZE = 9; // 3×3 minimum
 
+/**
+ * Post-BFS coordinate multiplier. All final (x, y) positions are scaled
+ * by this factor, leaving empty cells between rooms for cleaner edge
+ * routing and fewer collision-cascade displacements.
+ */
+const GRID_STEP = 2;
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Encode a 2D cell coordinate as a set key. */
@@ -750,6 +757,14 @@ export function computeLayout(
   for (let round = 0; round < 3; round++) {
     resolveOcclusionsByExpansion();
     fixOcclusions();
+  }
+
+  // ── Final: Scale grid to add spacing between rooms ─────────────────────
+  // Multiply all (x, y) by GRID_STEP so rooms are 2 grid units apart.
+  // This leaves empty cells between rooms for cleaner edge routing.
+  // Z is not scaled — it's a floor index, not a spatial coordinate.
+  for (const [id, pos] of result) {
+    result.set(id, { x: pos.x * GRID_STEP, y: pos.y * GRID_STEP, z: pos.z });
   }
 
   return result;
