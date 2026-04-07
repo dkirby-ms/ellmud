@@ -3238,7 +3238,9 @@ Added `targetNarrations?: { sessionId: string; narrations: NarrationEntry[] }` t
 **Date:** 2026-01-25  
 **Author:** Elminster (Lead/Architect)  
 **Context:** Issue #337 — DCSS-style grid combat feature proposal  
-**Status:** AWAITING USER INPUT
+**Status:** DROPPED (2026-04-07)
+
+**Closed:** User directive (2026-04-07T15:08:35Z). Grid-based combat is dropped. The team will not pursue DCSS-style grid combat. Text-based tick combat remains the canonical system. Design docs preserved for reference.
 
 ---
 
