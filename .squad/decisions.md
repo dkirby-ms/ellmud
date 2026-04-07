@@ -5459,3 +5459,38 @@ File: `packages/client/src/map/computeLayout.ts`
 
 **Status:** IMPLEMENTED (commit `b7a86af`)
 
+
+# Decision: BFS Layout Engine Refactoring
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-04-07  
+**Files:** `packages/client/src/map/computeLayout.ts`
+
+## Summary
+
+Refactored computeLayout.ts per Elminster's architecture review. The file went from 2746 lines with 23+ magic numbers, 17 duplicated diamond search patterns, 2 near-identical scoring functions, and a mutation bug — to ~2734 cleaner lines with named constants, a shared generator, parameterized scoring, and pure functions.
+
+## Key Decisions
+
+1. **Diamond candidate generator over inline loops.** Extracted `diamondCandidates(cx, cy, minRadius, maxRadius)` as a generator function. Callers handle filtering/processing; the generator handles iteration order. This reduced 17 copy-pasted patterns to single-line calls.
+
+2. **Parameterized scoring over duplicate functions.** Merged `occlusionAwareScore()` into `layoutScore(z, occlusionWeight?)`. Default weight 3 for early phases, pass 15 for occlusion fix phase. One function, two behaviors.
+
+3. **Position overrides over mutation for swap testing.** `countMismatchesInvolving()` now accepts an optional `posOverrides` Map. `swapWouldIncreaseMismatches()` passes overrides instead of temporarily mutating the shared `result` Map. This eliminates a class of bugs where interrupted/concurrent reads could see inconsistent state.
+
+4. **Delta scoring for swaps.** Added `roomScoreContribution()`, `affectedRooms()`, and `sumContributions()` helpers. Swap evaluation computes only the score change for affected rooms (~constant per swap) instead of the full O(n²) layout score. Measurable speedup on large zones.
+
+5. **Removed GRID_STEP dead code.** The `GRID_STEP=1` constant and its scaling loop were no-ops (multiply by 1). Removed entirely. If grid spacing is needed later, it should be re-implemented properly.
+
+## Impact
+
+- All 25 computeLayout + 13 elk-layout tests pass with identical results
+- ~15% speedup on test suite (249ms vs 293ms)
+- File reduced by ~12 lines despite adding new helper functions
+
+## Commits
+
+- `02c3382` refactor(computeLayout): Phase 1 mechanical cleanup
+- `b51a65e` perf(computeLayout): Phase 2 — fix mutation bug, cache posToRoom, delta scoring
+
+**Status:** IMPLEMENTED

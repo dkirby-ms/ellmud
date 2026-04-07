@@ -1397,3 +1397,20 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 - **Files modified:** `ZoneExitEdge.tsx`, `zone-exit-edge.test.tsx`
 - **Tests:** All 25 edge tests passing, eslint clean
 - **Pattern:** BFS layout is sophisticated but inherently has placement trade-offs; UI should accommodate imperfect layouts gracefully
+
+### 2026-04-27: BFS Layout Engine Refactoring (computeLayout.ts)
+- **Task:** Major refactoring of computeLayout.ts (2746 → ~2580 lines) per Elminster's architecture review
+- **Phase 1 — Mechanical Cleanup:**
+  - Named 30+ magic numbers as semantic constants (MAX_SEARCH_RADIUS, DIAGONAL_PENALTY, DIRECTION_MISMATCH_PENALTY, etc.)
+  - Bounded `findNearestUnoccupied` with MAX_SEARCH_RADIUS=500 to prevent infinite loops
+  - Extracted `diamondCandidates()` generator to replace ~17 copy-pasted diamond search patterns
+  - Merged `occlusionAwareScore()` into `layoutScore(z, occlusionWeight?)` — one function, parameterized
+  - DRY: extracted `relaxRooms()` helper to deduplicate post-swap relaxation (was verbatim copy)
+  - Removed dead `GRID_STEP=1` constant and its no-op scaling loop
+- **Phase 2 — Performance & Bug Fixes:**
+  - Fixed `swapWouldIncreaseMismatches` mutation bug: added `posOverrides` parameter to `countMismatchesInvolving` so swaps can be tested without mutating the shared `result` Map
+  - Cached `posToRoom()` in `fixDiagonalCascade`: persistent Map refreshed per pass instead of O(n) rebuild per call
+  - Incremental delta scoring for pairwise swaps: `roomScoreContribution()` + `affectedRooms()` + `sumContributions()` reduce swap evaluation from O(n⁴) to ~O(n² × avg_degree)
+- **Key insight:** The diamond search pattern (expanding Manhattan distance rings) was the single most duplicated code pattern — 17 instances. The generator approach cleanly handles all variations (different start radii, filtering, early termination).
+- **Behavior preservation:** All 25 computeLayout tests + 13 elk-layout tests pass with identical results. The refactoring was purely structural.
+- **Commits:** 02c3382 (Phase 1), b51a65e (Phase 2)
