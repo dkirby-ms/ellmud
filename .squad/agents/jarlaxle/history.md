@@ -87,6 +87,18 @@
 - **Files:** `damage.ts`, `CombatState.ts`, `CombatSystem.ts`, `index.ts`
 - **All 2244 tests passing, zero regressions.**
 
+### 2026-07-26: Deterministic PRNG Seeding + Replay (Phase 3)
+- **Task:** Add seeded PRNG and combat replay to sandbox for deterministic balance testing
+- **Key decisions:**
+  - **`setRollFn()` on CombatSystem** — Added a simple setter rather than reconstructing the system. Existing constructor `roll` param stays for tests; setter enables runtime swap from sandbox.
+  - **`seededPrng()` in `combat/prng.ts`** — Same mulberry32 algorithm as `generator/prng.ts` but returns a bare `() => number` matching `RollFn` type. No npm deps. 10 lines.
+  - **Module-level `currentSeed`** — Tracks the active seed for display (`sandbox seed`) and re-seeding on replay. Reset on `_resetSandboxState()`.
+  - **Replay uses encounter data for hostiles** — `getHostilesInEncounter()` ensures replay works both when creatures are spawned via CreatureManager AND when combatants are registered directly (test pattern). Submits strike for all parties each tick.
+  - **Replay termination** — Uses `combatSystem.isInCombat()` to detect combat end rather than tracking creature lists manually. Clean and correct regardless of how combatants were registered.
+  - **DamageBreakdown formatting** — Compact `(raw:10 ×1.0 -arm:3 = 7)` format. Shows ability/stance multiplier only when != 1.0. Shows flanking only when active.
+- **Files:** `combat/prng.ts` (new), `combat/CombatSystem.ts` (setRollFn), `combat/index.ts` (export), `commands/handlers/sandbox.ts` (seed + replay handlers)
+- **All 2278 tests passing (12 new Phase 3 tests: 4 seed, 4 replay, 4 PRNG unit). 16 pre-existing scenario persistence test stubs remain failing (not in scope).**
+
 ## Learnings (Archived — See Detailed Session Records)
 
 ### 2026-03-19: PostgreSQL schema (Issue #3)
