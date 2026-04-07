@@ -74,6 +74,19 @@
 - **Proposed commands:** `spawn`, `set`, `log`, `reset`, `replay`, `speed`, `pause/step/resume`, `roll`, `list`
 - **Open questions:** Multi-player sandbox, production training dummies, creature AI modes, snapshot persistence
 
+### 2026-07-26: DamageBreakdown Observability Layer
+- **Task:** Expose detailed damage pipeline breakdown on CombatSystem tick results for sandbox log
+- **Approach:** Pure observability — captured intermediate values as a parallel data path, zero changes to damage calculation logic
+- **Key decisions:**
+  - `DamageBreakdown` interface in `damage.ts` — 11 fields covering the full pipeline (rawDamage, abilityMultiplier, stanceMultiplier, afterStance, armourReduction, blockReduction, flankingBonus, finalDamage, dodged, dodgeChance, criticalHit?)
+  - Optional `breakdown` field on `DamageResult` — populated in `calculateDamage()` from existing intermediate vars
+  - Optional `breakdown` field on `CombatEvent` — attached to strike events in `resolveEncounterTick()`
+  - CombatSystem augments the breakdown with externally-applied flanking bonus (1.15x) since flanking is applied outside `calculateDamage()`
+  - `dodgeChance` is calculated and recorded even when the dodge roll fails — useful for sandbox display
+- **Insight:** CombatSystem applies flanking bonus AFTER `calculateDamage()` returns (lines 841-845), even though `calculateDamage` supports it via `DamageOptions.flankingBonus`. The two paths are decoupled — this is fine, breakdown captures the CombatSystem-level truth.
+- **Files:** `damage.ts`, `CombatState.ts`, `CombatSystem.ts`, `index.ts`
+- **All 2244 tests passing, zero regressions.**
+
 ## Learnings (Archived — See Detailed Session Records)
 
 ### 2026-03-19: PostgreSQL schema (Issue #3)
