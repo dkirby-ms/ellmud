@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { ExploredRoomData } from '@ellmud/shared';
 import type { RoomPosition } from '../../map/computeLayout.js';
 import { CELL_SIZE, GHOST_FLOOR_OPACITY } from './constants.js';
@@ -105,6 +105,16 @@ export function MapRenderer({
   }, [initialFloor, currentRoomId, positions]);
 
   const [currentFloor, setCurrentFloor] = useState(defaultFloor);
+
+  // Sync floor when the player moves to a room on a different z-level
+  useEffect(() => {
+    if (currentRoomId) {
+      const pos = positions.get(currentRoomId);
+      if (pos != null && pos.z !== currentFloor) {
+        setCurrentFloor(pos.z);
+      }
+    }
+  }, [currentRoomId, positions]);
 
   // All edges (unfiltered by floor)
   const allEdges = useMemo(() => collectEdges(visitedRooms, positions), [visitedRooms, positions]);
