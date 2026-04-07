@@ -83,6 +83,11 @@ export class CombatSystem {
     this.roll = roll ?? (() => 1);
   }
 
+  /** Replace the RollFn at runtime (used by sandbox seed for deterministic replay). */
+  setRollFn(fn: RollFn): void {
+    this.roll = fn;
+  }
+
   // ─── Registration ─────────────────────────────────────────────────────────
 
   /** Register (or update) a combatant. Safe to call multiple times. */

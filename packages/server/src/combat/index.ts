@@ -49,3 +49,4 @@ export { classifyEvent, classifyCombatEvent, getEventIcon, COMBAT_ICONS } from '
 export type { ClassifiedCombatEvent, SignalClass } from './signal-classification.js';
 export { batchCombatEvents, narrateBatchedEvent, DEFAULT_BATCHING_RULES } from './micro-batching.js';
 export type { BatchedEvent, BatchingRules } from './micro-batching.js';
+export { seededPrng } from './prng.js';

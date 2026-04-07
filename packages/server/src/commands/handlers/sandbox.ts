@@ -1,17 +1,38 @@
 /**
  * sandbox — Combat sandbox dev tool command handler.
  *
- * Subcommands: spawn, reset, status, kill, heal, set, info, clear, log
+ * Subcommands: spawn, reset, status, kill, heal, set, info, clear, log, seed, replay, scenario
  * Double-gated: featureHandlers room type gate + devModeEnabled config check.
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { CommandContext, CommandResult, NarrationEntry } from '../index.js';
 import type { Combatant, TickResult } from '../../combat/CombatState.js';
+import type { DamageBreakdown } from '../../combat/damage.js';
 import { getConfig } from '../../config.js';
 import { getAllCreatureTemplates } from '../../creatures/CreatureManager.js';
+import { seededPrng } from '../../combat/prng.js';
 
 const MAX_SPAWN_COUNT = 5;
 const SANDBOX_ARENA_ROOM_TYPE = 'feature_sandbox_arena';
+
+/** Resolve scenario storage directory (relative to project root). */
+export const SCENARIO_DIR = path.join(process.cwd(), 'packages/server/data/sandbox-scenarios');
+
+// ─── Scenario Schema ────────────────────────────────────────────────────────
+
+export interface SandboxScenario {
+  name: string;
+  savedAt: string;
+  seed?: number;
+  creatures: Array<{
+    type: string;
+    overrides?: Record<string, number>;
+  }>;
+  overrides?: Record<string, Record<string, number>>;
+  playerOverrides?: Record<string, number>;
+}
 
 // ─── Stat Override Tracking ─────────────────────────────────────────────────
 
@@ -80,6 +101,11 @@ export function clearSandboxCombatLog(): void {
   combatLogBuffer.length = 0;
 }
 
+// ─── PRNG Seed Tracking ────────────────────────────────────────────────────
+
+/** Current sandbox PRNG seed — null means using default (Math.random-like or CombatSystem default). */
+let currentSeed: number | null = null;
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function sysMsg(text: string): NarrationEntry {
@@ -121,7 +147,10 @@ export function handleSandbox(ctx: CommandContext): CommandResult {
         '  sandbox set <target> <stat> <value> — Override a stat\n' +
         '  sandbox info [creature_type] — Inspect creature templates\n' +
         '  sandbox clear — Reset all stat overrides\n' +
-        '  sandbox log [N] — Show recent combat events',
+        '  sandbox log [N] — Show recent combat events\n' +
+        '  sandbox seed [number|random] — Set/show PRNG seed for deterministic combat\n' +
+        '  sandbox replay [ticks] — Auto-run combat for N ticks (default: 10)\n' +
+        '  sandbox scenario save|load|list|delete — Manage saved scenarios',
       )],
     };
   }
@@ -145,6 +174,12 @@ export function handleSandbox(ctx: CommandContext): CommandResult {
       return handleClear(ctx);
     case 'log':
       return handleLog(ctx);
+    case 'seed':
+      return handleSeed(ctx);
+    case 'replay':
+      return handleReplay(ctx);
+    case 'scenario':
+      return handleScenario(ctx);
     default:
       return { narrations: [sysMsg(`Unknown sandbox subcommand: "${subcommand}". Try "sandbox" for help.`)] };
   }
@@ -536,11 +571,470 @@ function handleLog(ctx: CommandContext): CommandResult {
   return { narrations: [sysMsg(lines.join('\n'))] };
 }
 
+// ─── Phase 3: Deterministic PRNG + Replay ──────────────────────────────────
+
+function handleSeed(ctx: CommandContext): CommandResult {
+  const { args, combatSystem } = ctx;
+  const seedArg = args[1];
+
+  // No argument: show current seed
+  if (seedArg === undefined) {
+    const display = currentSeed !== null ? String(currentSeed) : 'random (default)';
+    return { narrations: [sysMsg(`Current PRNG seed: ${display}`)] };
+  }
+
+  // "random" restores default RollFn
+  if (seedArg.toLowerCase() === 'random') {
+    currentSeed = null;
+    if (combatSystem) {
+      combatSystem.setRollFn(() => Math.random());
+    }
+    return { narrations: [sysMsg('PRNG seed cleared. Using Math.random().')] };
+  }
+
+  // Parse numeric seed
+  const seed = parseInt(seedArg, 10);
+  if (isNaN(seed)) {
+    return { narrations: [sysMsg(`Invalid seed: "${seedArg}". Use a number or "random".`)] };
+  }
+
+  currentSeed = seed;
+  if (combatSystem) {
+    combatSystem.setRollFn(seededPrng(seed));
+  }
+
+  return { narrations: [sysMsg(`PRNG seed set to ${seed}. Combat rolls are now deterministic.`)] };
+}
+
+/** Format a DamageBreakdown into compact human-readable text. */
+function formatBreakdown(bd: DamageBreakdown): string {
+  const parts: string[] = [];
+  parts.push(`raw:${bd.rawDamage}`);
+  const totalMult = bd.abilityMultiplier * bd.stanceMultiplier;
+  if (totalMult !== 1.0) {
+    parts.push(`×${totalMult.toFixed(1)}`);
+  }
+  if (bd.armourReduction > 0) {
+    parts.push(`-arm:${bd.armourReduction}`);
+  }
+  if (bd.blockReduction > 0) {
+    parts.push(`-blk:${bd.blockReduction}`);
+  }
+  if (bd.flankingBonus !== 1.0) {
+    parts.push(`flank:×${bd.flankingBonus.toFixed(2)}`);
+  }
+  parts.push(`= ${bd.finalDamage}`);
+  return parts.join(' ');
+}
+
+function handleReplay(ctx: CommandContext): CommandResult {
+  const { args, combatSystem, creatureManager, player } = ctx;
+
+  if (!combatSystem || !creatureManager) {
+    return { narrations: [sysMsg('Combat system or creature manager not available.')] };
+  }
+
+  const arenaRoomId = findArenaRoomId(ctx);
+  if (!arenaRoomId) {
+    return { narrations: [sysMsg('Cannot find the sandbox arena room.')] };
+  }
+
+  const creatures = creatureManager.getCreaturesInRoom(arenaRoomId);
+  const aliveCreatures = creatures.filter(c => c.isAlive);
+  const playerAlreadyInCombat = combatSystem.isInCombat(player.sessionId);
+
+  if (aliveCreatures.length === 0 && !playerAlreadyInCombat) {
+    return { narrations: [sysMsg('No living creatures in the arena. Spawn some first.')] };
+  }
+
+  const maxTicks = Math.min(Math.max(1, parseInt(args[1] ?? '10', 10) || 10), 100);
+
+  // If seed is set, re-seed the PRNG so replay is reproducible from this point
+  if (currentSeed !== null) {
+    combatSystem.setRollFn(seededPrng(currentSeed));
+  }
+
+  // Auto-initiate combat with first creature if player not already in combat
+  if (!playerAlreadyInCombat && aliveCreatures.length > 0) {
+    const firstCreature = aliveCreatures[0]!;
+    const combatant = combatSystem.getCombatant(firstCreature.id);
+    if (!combatant) {
+      return { narrations: [sysMsg('Arena creatures are not registered as combatants. Try attacking one first.')] };
+    }
+    combatSystem.initiateCombat(player.sessionId, firstCreature.id);
+  }
+
+  const lines: string[] = [];
+  if (currentSeed !== null) {
+    lines.push(`── Replay (seed: ${currentSeed}, ${maxTicks} ticks) ──`);
+  } else {
+    lines.push(`── Replay (${maxTicks} ticks) ──`);
+  }
+
+  let combatEnded = false;
+
+  for (let tick = 1; tick <= maxTicks; tick++) {
+    // Submit strike for the player
+    const playerCombatant = combatSystem.getCombatant(player.sessionId);
+    if (playerCombatant && playerCombatant.hp > 0) {
+      combatSystem.submitAction(player.sessionId, 'strike');
+    }
+
+    // Submit strike for creatures tracked by CreatureManager
+    for (const creature of aliveCreatures) {
+      const creatureCombatant = combatSystem.getCombatant(creature.id);
+      if (creatureCombatant && creatureCombatant.hp > 0 && combatSystem.isInCombat(creature.id)) {
+        combatSystem.submitAction(creature.id, 'strike');
+      }
+    }
+
+    // Also submit strike for any hostile combatants from the encounter
+    // (covers cases where combatants are registered directly, not via CreatureManager)
+    const hostiles = combatSystem.getHostilesInEncounter(player.sessionId);
+    for (const hostile of hostiles) {
+      if (hostile.hp > 0 && !aliveCreatures.some(c => c.id === hostile.id)) {
+        combatSystem.submitAction(hostile.id, 'strike');
+      }
+    }
+
+    const tickResult: TickResult = combatSystem.resolveTick();
+
+    for (const event of tickResult.events) {
+      if (event.type === 'strike') {
+        const bd = event.breakdown;
+        const bdStr = bd ? ` (${formatBreakdown(bd)})` : '';
+        const dodgeTag = event.dodged ? ' [DODGED]' : '';
+        lines.push(
+          `[Tick ${tick}] ${event.actorName} → ${event.targetName ?? '?'}: ${event.damage ?? 0} dmg${bdStr}${dodgeTag}`,
+        );
+      } else if (event.type === 'defeated') {
+        lines.push(`[Tick ${tick}] ${event.actorName} defeated!`);
+      } else if (event.type === 'combat_end') {
+        lines.push(`[Tick ${tick}] Combat ended.`);
+        combatEnded = true;
+      }
+    }
+
+    // Record events for the regular combat log as well
+    recordSandboxCombatEvents(tickResult, combatLogTick + tick);
+
+    if (combatEnded) break;
+
+    // Check if combat is still active
+    if (!combatSystem.isInCombat(player.sessionId)) {
+      const pc = combatSystem.getCombatant(player.sessionId);
+      if (pc && pc.hp > 0) {
+        lines.push(`[Result] All enemies defeated after ${tick} ticks. Player HP: ${pc.hp}/${pc.maxHp}.`);
+      } else {
+        lines.push(`[Result] Player defeated after ${tick} ticks.`);
+      }
+      break;
+    }
+  }
+
+  if (!combatEnded && !lines[lines.length - 1]?.startsWith('[Result]')) {
+    const pc = combatSystem.getCombatant(player.sessionId);
+    const remainingHostiles = combatSystem.getHostilesInEncounter(player.sessionId);
+    const creaturesDesc = remainingHostiles
+      .filter(c => c.hp > 0)
+      .map(c => `${c.name} HP:${c.hp}/${c.maxHp}`)
+      .join(', ');
+    lines.push(`[After ${maxTicks} ticks] Player HP: ${pc?.hp ?? 0}/${pc?.maxHp ?? 0}. Creatures: ${creaturesDesc || 'none'}`);
+  }
+
+  return { narrations: [sysMsg(lines.join('\n'))] };
+}
+
+/** Exported for reading the current seed in tests. */
+export function _getCurrentSeed(): number | null {
+  return currentSeed;
+}
+
+// ─── Phase 3: Scenario Save/Load/List/Delete ────────────────────────────────
+
+function handleScenario(ctx: CommandContext): CommandResult {
+  const { args } = ctx;
+  const action = args[1]?.toLowerCase();
+
+  if (!action) {
+    return { narrations: [sysMsg(
+      'Scenario commands:\n' +
+      '  sandbox scenario save <name> — Save current arena state\n' +
+      '  sandbox scenario load <name> — Load a saved scenario\n' +
+      '  sandbox scenario list — List saved scenarios\n' +
+      '  sandbox scenario delete <name> — Delete a saved scenario',
+    )] };
+  }
+
+  switch (action) {
+    case 'save':
+      return handleScenarioSave(ctx);
+    case 'load':
+      return handleScenarioLoad(ctx);
+    case 'list':
+      return handleScenarioList();
+    case 'delete':
+      return handleScenarioDelete(ctx);
+    default:
+      return { narrations: [sysMsg(`Unknown scenario action: "${action}". Use save, load, list, or delete.`)] };
+  }
+}
+
+function handleScenarioSave(ctx: CommandContext): CommandResult {
+  const { args, creatureManager, player } = ctx;
+  const name = args[2];
+
+  if (!name) {
+    return { narrations: [sysMsg('Usage: sandbox scenario save <name>')] };
+  }
+
+  if (!creatureManager) {
+    return { narrations: [sysMsg('Creature manager not available.')] };
+  }
+
+  const arenaRoomId = findArenaRoomId(ctx);
+  if (!arenaRoomId) {
+    return { narrations: [sysMsg('Cannot find the sandbox arena room.')] };
+  }
+
+  // Gather arena creatures and group by (templateId, overrides fingerprint)
+  const creatures = creatureManager.getCreaturesInRoom(arenaRoomId);
+
+  interface CreatureGroup {
+    templateId: string;
+    count: number;
+    overrides?: Record<string, number>;
+  }
+
+  const groupKey = (type: string, ovr: Record<string, number> | undefined): string =>
+    `${type}|${ovr ? JSON.stringify(ovr, Object.keys(ovr).sort()) : ''}`;
+
+  const groups = new Map<string, CreatureGroup>();
+
+  for (const creature of creatures) {
+    // Collect overrides for this creature from sandboxOverrides
+    const entityOverrides = sandboxOverrides.get(creature.id);
+    let overridesRecord: Record<string, number> | undefined;
+    if (entityOverrides && entityOverrides.size > 0) {
+      overridesRecord = {};
+      for (const [statKey, { override }] of entityOverrides) {
+        overridesRecord[statKey] = override;
+      }
+    }
+
+    const key = groupKey(creature.type, overridesRecord);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count++;
+    } else {
+      groups.set(key, {
+        templateId: creature.type,
+        count: 1,
+        overrides: overridesRecord,
+      });
+    }
+  }
+
+  // Gather player overrides
+  const playerEntityOverrides = sandboxOverrides.get(player.sessionId);
+  let playerOverrides: Record<string, number> | undefined;
+  if (playerEntityOverrides && playerEntityOverrides.size > 0) {
+    playerOverrides = {};
+    for (const [statKey, { override }] of playerEntityOverrides) {
+      playerOverrides[statKey] = override;
+    }
+  }
+
+  const scenario: SandboxScenario = {
+    name,
+    savedAt: new Date().toISOString(),
+    creatures: Array.from(groups.values()),
+    ...(currentSeed !== null ? { prngSeed: currentSeed } : {}),
+    ...(playerOverrides ? { playerOverrides } : {}),
+  };
+
+  const totalCreatures = creatures.length;
+  const totalOverrides = (playerOverrides ? Object.keys(playerOverrides).length : 0) +
+    scenario.creatures.reduce((sum, c) => sum + (c.overrides ? Object.keys(c.overrides).length : 0), 0);
+
+  // Ensure directory exists and write
+  try {
+    fs.mkdirSync(SCENARIO_DIR, { recursive: true });
+    const filePath = path.join(SCENARIO_DIR, `${name}.json`);
+    const existed = fs.existsSync(filePath);
+    fs.writeFileSync(filePath, JSON.stringify(scenario, null, 2), 'utf-8');
+
+    const msg = existed
+      ? `Scenario '${name}' overwritten with ${totalCreatures} creature(s) and ${totalOverrides} override(s).`
+      : `Scenario '${name}' saved with ${totalCreatures} creature(s) and ${totalOverrides} override(s).`;
+    return { narrations: [sysMsg(msg)] };
+  } catch (err) {
+    return { narrations: [sysMsg(`Failed to save scenario: ${(err as Error).message}`)] };
+  }
+}
+
+function handleScenarioLoad(ctx: CommandContext): CommandResult {
+  const { args, creatureManager, combatSystem, player } = ctx;
+  const name = args[2];
+
+  if (!name) {
+    return { narrations: [sysMsg('Usage: sandbox scenario load <name>')] };
+  }
+
+  if (!creatureManager) {
+    return { narrations: [sysMsg('Creature manager not available.')] };
+  }
+
+  const filePath = path.join(SCENARIO_DIR, `${name}.json`);
+  if (!fs.existsSync(filePath)) {
+    return { narrations: [sysMsg(`Scenario '${name}' not found.`)] };
+  }
+
+  let scenario: SandboxScenario;
+  try {
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    scenario = JSON.parse(raw) as SandboxScenario;
+  } catch (err) {
+    return { narrations: [sysMsg(`Failed to load scenario: ${(err as Error).message}`)] };
+  }
+
+  // Reset arena — mirrors handleReset logic
+  const arenaRoomId = findArenaRoomId(ctx);
+  if (!arenaRoomId) {
+    return { narrations: [sysMsg('Cannot find the sandbox arena room.')] };
+  }
+
+  const creaturesInArena = creatureManager.getCreaturesInRoom(arenaRoomId);
+  for (const creature of creaturesInArena) {
+    combatSystem?.removeCombatant(creature.id);
+  }
+  creatureManager.clearCreaturesInRoom(arenaRoomId);
+  if (combatSystem?.isInCombat(player.sessionId)) {
+    combatSystem.removeCombatant(player.sessionId);
+  }
+  sandboxOverrides.clear();
+  clearSandboxCombatLog();
+
+  // Restore PRNG seed if present
+  if (scenario.prngSeed !== undefined) {
+    currentSeed = scenario.prngSeed;
+    combatSystem?.setRollFn(seededPrng(scenario.prngSeed));
+  }
+
+  // Spawn creatures from scenario
+  let totalSpawned = 0;
+  for (const entry of scenario.creatures) {
+    const spawned = creatureManager.spawnCreatureInRoom(entry.templateId, arenaRoomId, entry.count);
+    if (spawned.length === 0) continue;
+
+    // Apply creature-level stat overrides directly to Creature instances
+    if (entry.overrides) {
+      for (const creature of spawned) {
+        for (const [statKey, value] of Object.entries(entry.overrides)) {
+          if (statKey in creature) {
+            (creature as unknown as Record<string, unknown>)[statKey] = value;
+          }
+        }
+      }
+    }
+
+    totalSpawned += spawned.length;
+  }
+
+  // Apply player overrides if player is a combatant
+  let overridesApplied = 0;
+  if (scenario.playerOverrides) {
+    const combatant = combatSystem?.getCombatant(player.sessionId);
+    if (combatant) {
+      for (const [statKey, value] of Object.entries(scenario.playerOverrides)) {
+        if (statKey in combatant) {
+          if (!sandboxOverrides.has(player.sessionId)) {
+            sandboxOverrides.set(player.sessionId, new Map());
+          }
+          sandboxOverrides.get(player.sessionId)!.set(statKey, {
+            original: combatant[statKey as keyof Combatant] as number,
+            override: value,
+          });
+          (combatant as unknown as Record<string, unknown>)[statKey] = value;
+          overridesApplied++;
+        }
+      }
+    } else {
+      overridesApplied = Object.keys(scenario.playerOverrides).length;
+    }
+  }
+
+  const parts = [`Scenario '${name}' loaded: ${totalSpawned} creature(s) spawned`];
+  if (overridesApplied > 0) {
+    parts[0] += `, ${overridesApplied} override(s) applied.`;
+  } else {
+    parts[0] += '.';
+  }
+  if (scenario.prngSeed !== undefined) {
+    parts.push(`PRNG seed: ${scenario.prngSeed}`);
+  }
+
+  return { narrations: [sysMsg(parts.join(' '))] };
+}
+
+function handleScenarioList(): CommandResult {
+  try {
+    if (!fs.existsSync(SCENARIO_DIR)) {
+      return { narrations: [sysMsg('No saved scenarios.')] };
+    }
+
+    const files = fs.readdirSync(SCENARIO_DIR).filter(f => f.endsWith('.json'));
+    if (files.length === 0) {
+      return { narrations: [sysMsg('No saved scenarios.')] };
+    }
+
+    const lines: string[] = ['── Saved Scenarios ──'];
+    for (const file of files.sort()) {
+      try {
+        const raw = fs.readFileSync(path.join(SCENARIO_DIR, file), 'utf-8');
+        const scenario = JSON.parse(raw) as SandboxScenario;
+        const creatureCount = scenario.creatures.reduce((sum, c) => sum + c.count, 0);
+        const date = new Date(scenario.savedAt).toLocaleString();
+        lines.push(`  ${scenario.name} — ${creatureCount} creature(s), saved ${date}`);
+      } catch {
+        const name = file.replace('.json', '');
+        lines.push(`  ${name} — (invalid file)`);
+      }
+    }
+
+    return { narrations: [sysMsg(lines.join('\n'))] };
+  } catch (err) {
+    return { narrations: [sysMsg(`Failed to list scenarios: ${(err as Error).message}`)] };
+  }
+}
+
+function handleScenarioDelete(ctx: CommandContext): CommandResult {
+  const { args } = ctx;
+  const name = args[2];
+
+  if (!name) {
+    return { narrations: [sysMsg('Usage: sandbox scenario delete <name>')] };
+  }
+
+  const filePath = path.join(SCENARIO_DIR, `${name}.json`);
+  if (!fs.existsSync(filePath)) {
+    return { narrations: [sysMsg(`Scenario '${name}' not found.`)] };
+  }
+
+  try {
+    fs.unlinkSync(filePath);
+    return { narrations: [sysMsg(`Scenario '${name}' deleted.`)] };
+  } catch (err) {
+    return { narrations: [sysMsg(`Failed to delete scenario: ${(err as Error).message}`)] };
+  }
+}
+
 /** Exported for testing — clear module-level state. */
 export function _resetSandboxState(): void {
   sandboxOverrides.clear();
   combatLogBuffer.length = 0;
   combatLogTick = 0;
+  currentSeed = null;
 }
 
 /** Exported for testing — access the overrides map. */
