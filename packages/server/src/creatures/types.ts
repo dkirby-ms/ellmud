@@ -113,6 +113,8 @@ export interface Creature {
   abilities?: CreatureAbility[];
   /** Position type for combat reachability (GDD §6.11). */
   positionType?: CreaturePositionType;
+  /** Whether this creature was spawned by the combat sandbox. */
+  sandbox?: boolean;
 }
 
 // ─── Creature Action Output ──────────────────────────────────────────────────

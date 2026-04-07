@@ -170,6 +170,42 @@ export class CreatureManager {
     return creature;
   }
 
+  // ─── Sandbox Spawning ──────────────────────────────────────────────────────
+
+  /**
+   * Spawn creature(s) from a template into a specific room at runtime.
+   * Used by the combat sandbox. Creatures are tagged with sandbox: true.
+   */
+  spawnCreatureInRoom(templateId: string, roomId: string, count = 1): Creature[] {
+    const template = resolveCreatureTemplate(templateId);
+    if (!template) return [];
+
+    const spawned: Creature[] = [];
+    for (let i = 0; i < count; i++) {
+      const creature = this.spawnSingleCreature(template, roomId);
+      creature.sandbox = true;
+      spawned.push(creature);
+    }
+    return spawned;
+  }
+
+  /**
+   * Remove all creatures from a specific room. Returns the count removed.
+   * Used by sandbox reset/kill commands.
+   */
+  clearCreaturesInRoom(roomId: string): number {
+    let count = 0;
+    for (const creature of this.creatures.values()) {
+      if (creature.currentRoomId === roomId) {
+        creature.isAlive = false;
+        creature.hp = 0;
+        this.creatures.delete(creature.id);
+        count++;
+      }
+    }
+    return count;
+  }
+
   // ─── Zone-based Spawning ────────────────────────────────────────────────────
 
   /**
