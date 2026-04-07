@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getBezierPath } from '@xyflow/react';
+import { getSmoothStepPath } from '@xyflow/react';
 import type { EdgeProps } from '@xyflow/react';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -51,14 +51,20 @@ export function ZoneExitEdge(props: EdgeProps) {
   
   // Type assertion for our custom data
   const edgeData = (data || {}) as unknown as ExitEdgeData;
-  // Compute Bézier path
-  const [edgePath, labelX, labelY] = getBezierPath({
+  
+  // Use smooth step paths (orthogonal/right-angle connectors) instead of Bezier curves.
+  // This aligns with the grid-based room layout computed by the BFS+ELK fixed algorithm,
+  // where rooms are positioned on compass-aligned grid cells. Smooth step paths maintain
+  // the right-angle aesthetics matching cardinal directions (N/S/E/W).
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     sourcePosition,
     targetX,
     targetY,
     targetPosition,
+    borderRadius: 8,  // Rounded corners for smoother appearance
+    offset: 20,       // Distance from node edges before turning
   });
 
   // Determine stroke color and style

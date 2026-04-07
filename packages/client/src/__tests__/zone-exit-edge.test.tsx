@@ -2,7 +2,7 @@
  * zone-exit-edge.test.tsx — Tests for ZoneExitEdge visual enhancements (Phase 4).
  *
  * Verifies:
- * - Direction-based Bézier curve coloring (N/S = blue gradient, E/W = amber gradient)
+ * - Direction-based smooth step (right-angle) coloring (N/S = blue gradient, E/W = amber gradient)
  * - Up/down = purple gradient
  * - Selected edge styling (gold stroke, wider)
  * - Orphan edge styling (red, dashed)
@@ -21,7 +21,7 @@ import type { EdgeProps, Position } from '@xyflow/react';
 // ─── Mock @xyflow/react ─────────────────────────────────────────────────────
 
 vi.mock('@xyflow/react', () => ({
-  getBezierPath: vi.fn(() => ['M 0 0 C 50 0, 50 100, 100 100', 50, 50]),
+  getSmoothStepPath: vi.fn(() => ['M 0 0 L 50 0 L 50 100 L 100 100', 50, 50]),
 }));
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
