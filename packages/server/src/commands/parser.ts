@@ -61,6 +61,7 @@ const KNOWN_VERBS = new Set([
   'pos',
   'loadout',
   'rent',
+  'goto',
 ]);
 
 export interface ParseResult {

@@ -22,6 +22,7 @@ import { handleWhisper } from './handlers/whisper.js';
 import { handleEmote } from './handlers/emote.js';
 import { handleStabilize } from './handlers/stabilize.js';
 import { handlePeaceful } from './handlers/peaceful.js';
+import { handleGoto } from './handlers/goto.js';
 import { handleLoot } from './handlers/loot.js';
 import { handlePosition } from './handlers/position.js';
 import type { DowningSystem } from '../systems/DowningSystem.js';
@@ -153,6 +154,7 @@ handlers.set('peaceful', handlePeaceful);
 handlers.set('loot', handleLoot);
 handlers.set('position', handlePosition);
 handlers.set('pos', handlePosition); // Shorthand alias
+handlers.set('goto', handleGoto);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(
