@@ -3223,3 +3223,84 @@ Consolidated 22 incremental SQL migration files into 3 clean files per Elminster
 - Scenario persistence uses file-based JSON at `packages/server/data/sandbox-scenarios/` — fs.readFileSync/writeFileSync for dev tool simplicity. `ctx.scenarioDir` override enables test isolation via temp dirs.
 - `creatureManager.toCombatant()` reads from Creature instance stats, so mutating creature.attack before calling toCombatant propagates overrides into combat — no need for separate stat-patching on the Combatant.
 - handleSet target resolution needed creature ID matching (`c.id === targetArg`) alongside name/type matching — tests use raw creature IDs for precise targeting.
+
+### Help Command Implementation (Issue #340)
+**Task:** Implement `help` command for displaying available commands and detailed command help
+**Status:** ✅ Complete — clean build, all lints passing
+
+**Files created:**
+- `packages/server/src/commands/handlers/help.ts` — NEW: Help command handler with context-aware command listing
+
+**Files modified:**
+- `packages/server/src/commands/parser.ts` — Added 'help' to KNOWN_VERBS, added '?' → 'help' alias in COMMAND_ALIASES
+- `packages/server/src/commands/index.ts` — Imported and registered handleHelp in handlers map
+
+**Implementation details:**
+- **Static metadata registry:** `COMMAND_HELP` object contains description, usage, aliases, category, and gating conditions for all commands
+- **Two modes:**
+  1. `help` (no args) — Lists all commands grouped by category (Navigation, Items, Communication, Combat, Special Actions, Feature Rooms, Dev Tools)
+  2. `help <command>` — Shows detailed help including usage, description, and aliases; works with both command names and aliases
+- **Context-aware filtering:**
+  - Feature room commands only shown when `ctx.room.type` matches `requiredRoomType`
+  - Dev commands only shown when `getConfig().devModeEnabled` is true
+  - Follows established patterns from `handleGoto` and `featureHandlers` map
+- **Categories defined:** Navigation, Items, Communication, Combat, Special Actions, Expedition Board, Stash, Inn, Sandbox, Dev Tools
+- **System narration:** Uses `type: 'system'` for all output (not room narrative)
+
+**Key patterns:**
+- Command help metadata centralized in single registry for easy maintenance
+- Alias resolution via linear search through `COMMAND_HELP.aliases` arrays
+- Context filtering respects both room type and dev mode flags
+- Not feature-gated itself — help is always available regardless of location
+- Lint-clean: Avoided non-null assertions by using defensive checks and Map operations
+
+## Learnings
+- Help commands should be standard handlers, not feature-gated — players need discovery tools everywhere
+- Static metadata registries scale better than dynamic handler introspection for command documentation
+- `?` alias for help is idiomatic in MUDs and text interfaces
+- Context-aware help improves UX by hiding irrelevant commands (feature rooms, dev tools)
+- Non-null assertion warnings can be avoided with early returns and safe Map operations (get + check vs get + !)
+
+## Help Command Implementation (Issue #340, Commit 795994e)
+
+**Date:** 2026-04-07  
+**Role:** Engine Developer  
+**Status:** ✅ Complete
+
+**Implementation Summary:**
+Created comprehensive `help` command handler supporting context-aware command discovery and documentation.
+
+**Files Created:**
+- `packages/server/src/commands/handlers/help.ts` — Handler with static `COMMAND_HELP` metadata registry
+
+**Files Modified:**
+- `packages/server/src/commands/parser.ts` — Added 'help' to KNOWN_VERBS, '?' alias in COMMAND_ALIASES
+- `packages/server/src/commands/index.ts` — Imported and registered `handleHelp` in handlers map
+
+**Implementation Highlights:**
+- **Two modes:**
+  1. No args: Lists 37 commands grouped by 7 categories (Navigation, Items, Communication, Combat, Special Actions, Feature Rooms, Dev Tools)
+  2. With command name/alias: Shows detailed help (description, usage, aliases)
+- **Context-aware filtering:**
+  - Feature room commands: Only shown when `ctx.room.type` matches `requiredRoomType`
+  - Dev commands (goto/teleport/sandbox): Only shown when `getConfig().devModeEnabled === true`
+  - Follows established patterns from `handleGoto` and `featureHandlers` map
+- **System narration:** All help output uses `type: 'system'` for clean separation from game narrative
+- **Alias resolution:** `help ?` resolves correctly to help command details
+
+**Code Quality:**
+- TypeScript: Strict type checking, zero errors
+- ESLint: All passing (defensive checks eliminate non-null assertions)
+- Integration: Properly registered in parser and handlers
+- Spec compliance: First-arg-only gating + dev mode visibility verified
+
+**Team Collaboration:**
+- Received research spec from Elminster (37 commands, requirements)
+- Enabled parallel testing work by Minsc (test suite validation)
+- Coordinator verified against spec and fixed 2 edge cases
+
+**Learned Patterns:**
+- Static metadata registries more maintainable than dynamic introspection
+- Context-aware filtering crucial for UX (hiding irrelevant commands)
+- Defensive coding patterns eliminate non-null assertion warnings
+- System narration type provides proper semantic separation from game events
