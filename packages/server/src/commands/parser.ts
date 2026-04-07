@@ -28,6 +28,7 @@ const COMMAND_ALIASES: Record<string, string> = {
   l: 'look',
   i: 'inventory',
   k: 'attack',
+  '?': 'help',
 };
 
 /** All recognised verbs. */
@@ -64,6 +65,7 @@ const KNOWN_VERBS = new Set([
   'goto',
   'teleport',
   'sandbox',
+  'help',
 ]);
 
 export interface ParseResult {

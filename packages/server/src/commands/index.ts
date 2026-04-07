@@ -27,6 +27,7 @@ import { handleGoto } from './handlers/goto.js';
 import { handleTeleport } from './handlers/teleport.js';
 import { handleLoot } from './handlers/loot.js';
 import { handlePosition } from './handlers/position.js';
+import { handleHelp } from './handlers/help.js';
 import type { DowningSystem } from '../systems/DowningSystem.js';
 import type { CorpseSystem } from '../systems/CorpseSystem.js';
 import type { StashService } from '../stash/StashService.js';
@@ -171,6 +172,7 @@ handlers.set('position', handlePosition);
 handlers.set('pos', handlePosition); // Shorthand alias
 handlers.set('goto', handleGoto);
 handlers.set('teleport', handleTeleport);
+handlers.set('help', handleHelp);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(
