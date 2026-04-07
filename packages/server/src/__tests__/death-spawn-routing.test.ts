@@ -19,6 +19,7 @@ import type { PlayerState } from '../state/PlayerState.js';
 import { CombatSystem, createCombatant, DEFAULT_PLAYER_STATS } from '../combat/index.js';
 
 import { InMemoryFactionRepository } from '../faction/FactionRepository.js';
+import type { CharacterRepository } from '../character/index.js';
 import {
   resolvePlayerHubTarget,
   resolvePlayerHubName,
@@ -218,6 +219,116 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     const deathOverlays = overlayMessages.filter(m => m.state === 'death');
     expect(deathOverlays.length).toBeGreaterThanOrEqual(1);
     expect(deathOverlays[0]!.narration).toContain(resolvePlayerHubName(undefined));
+
+    await client.leave();
+  }, 25_000);
+
+  it('player with saved inn respawns at inn zone instead of faction hub', async () => {
+    const room = await colyseus.createRoom('zone', { useTestGraph: true, openDelayMs: 0 });
+    const client = await colyseus.connectTo(room);
+
+    const overlayMessages: OverlayMessage[] = [];
+    const roomSwitchMessages: RoomSwitchMessage[] = [];
+
+    client.onMessage(MessageTypes.OVERLAY_STATE, (data: OverlayMessage) => {
+      overlayMessages.push(data);
+    });
+    client.onMessage(MessageTypes.ROOM_SWITCH, (data: RoomSwitchMessage) => {
+      roomSwitchMessages.push(data);
+    });
+
+    await wait(2000);
+
+    const roomInstance = room as unknown as {
+      players: Map<string, PlayerState>;
+      combatSystem: CombatSystem;
+      playerFactionSlugs: Map<string, string>;
+      characterRepo: CharacterRepository;
+    };
+
+    const sessionId = client.sessionId;
+    roomInstance.playerFactionSlugs.set(sessionId, 'kindari');
+
+    // Save a last inn location — this should take priority over faction hub
+    await roomInstance.characterRepo.saveLastInn(sessionId, 'the-crossroads', 'inn-room-1');
+
+    const player = roomInstance.players.get(sessionId);
+    expect(player).toBeDefined();
+    const roomId = player!.currentRoomId;
+
+    const creature = createCombatant(
+      'creature-inn-test', 'Inn Brute', roomId, false,
+      { ...DEFAULT_PLAYER_STATS, attack: 200 },
+    );
+    roomInstance.combatSystem.registerCombatant(creature);
+
+    const playerCombatant = createCombatant(
+      sessionId, sessionId, roomId, true, DEFAULT_PLAYER_STATS,
+    );
+    playerCombatant.hp = 1;
+    roomInstance.combatSystem.registerCombatant(playerCombatant);
+    roomInstance.combatSystem.initiateCombat('creature-inn-test', sessionId);
+
+    await wait(16_000);
+
+    // Verify ROOM_SWITCH targets the inn zone, NOT the faction stronghold
+    const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
+    expect(deathSwitches.length).toBeGreaterThanOrEqual(1);
+    expect(deathSwitches[0]!.target).toBe('zone:the-crossroads');
+    expect(deathSwitches[0]!.options).toEqual({ targetRoomSlug: 'inn-room-1' });
+
+    // Verify narration mentions "your rented room"
+    const deathOverlays2 = overlayMessages.filter(m => m.state === 'death');
+    expect(deathOverlays2.length).toBeGreaterThanOrEqual(1);
+    expect(deathOverlays2[0]!.narration).toContain('your rented room');
+
+    await client.leave();
+  }, 25_000);
+
+  it('player with no inn and no faction falls back to Refuge on death', async () => {
+    const room = await colyseus.createRoom('zone', { useTestGraph: true, openDelayMs: 0 });
+    const client = await colyseus.connectTo(room);
+
+    const roomSwitchMessages: RoomSwitchMessage[] = [];
+    client.onMessage(MessageTypes.ROOM_SWITCH, (data: RoomSwitchMessage) => {
+      roomSwitchMessages.push(data);
+    });
+
+    await wait(2000);
+
+    const roomInstance = room as unknown as {
+      players: Map<string, PlayerState>;
+      combatSystem: CombatSystem;
+      playerFactionSlugs: Map<string, string>;
+    };
+
+    const sessionId = client.sessionId;
+    // No faction, no inn — should fall back to Refuge
+
+    const player = roomInstance.players.get(sessionId);
+    expect(player).toBeDefined();
+    const roomId = player!.currentRoomId;
+
+    const creature = createCombatant(
+      'creature-fallback-test', 'Fallback Brute', roomId, false,
+      { ...DEFAULT_PLAYER_STATS, attack: 200 },
+    );
+    roomInstance.combatSystem.registerCombatant(creature);
+
+    const playerCombatant = createCombatant(
+      sessionId, sessionId, roomId, true, DEFAULT_PLAYER_STATS,
+    );
+    playerCombatant.hp = 1;
+    roomInstance.combatSystem.registerCombatant(playerCombatant);
+    roomInstance.combatSystem.initiateCombat('creature-fallback-test', sessionId);
+
+    await wait(16_000);
+
+    const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
+    expect(deathSwitches.length).toBeGreaterThanOrEqual(1);
+    expect(deathSwitches[0]!.target).toBe(`zone:${DEFAULT_HUB_SLUG}`);
+    // No targetRoomSlug options when falling back
+    expect(deathSwitches[0]!.options).toBeUndefined();
 
     await client.leave();
   }, 25_000);
