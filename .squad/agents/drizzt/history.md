@@ -3220,3 +3220,6 @@ Consolidated 22 incremental SQL migration files into 3 clean files per Elminster
 - Module-level Maps for transient sandbox state (overrides, combat log) work cleanly since sandbox is single-instance per server; reset functions exported for test cleanup
 - Tapping into TickResult in ZoneRoom's update() is the least invasive way to capture combat events — no CombatSystem modifications needed
 - `(combatant as unknown as Record<string, unknown>)` double-cast is required for dynamic property writes on TypeScript interfaces — single `as Record<string, unknown>` fails TS2352
+- Scenario persistence uses file-based JSON at `packages/server/data/sandbox-scenarios/` — fs.readFileSync/writeFileSync for dev tool simplicity. `ctx.scenarioDir` override enables test isolation via temp dirs.
+- `creatureManager.toCombatant()` reads from Creature instance stats, so mutating creature.attack before calling toCombatant propagates overrides into combat — no need for separate stat-patching on the Combatant.
+- handleSet target resolution needed creature ID matching (`c.id === targetArg`) alongside name/type matching — tests use raw creature IDs for precise targeting.

@@ -39,6 +39,9 @@ coverage/
 .DS_Store
 Thumbs.db
 
+# Sandbox scenario data (user-created; .gitkeep is tracked)
+packages/server/data/sandbox-scenarios/*.json
+
 # Squad: ignore runtime state (logs, inbox, sessions)
 .squad/orchestration-log/
 .squad/log/

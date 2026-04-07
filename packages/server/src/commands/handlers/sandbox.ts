@@ -413,8 +413,9 @@ function handleSet(ctx: CommandContext): CommandResult {
       combatant = combatSystem?.getCombatant(creature.id);
       entityLabel = `${creature.name} (#${idx})`;
     } else {
-      // Try name match (partial, case-insensitive)
+      // Try name or ID match (partial, case-insensitive)
       const match = creatures.find(c =>
+        c.id === targetArg ||
         c.name.toLowerCase().includes(targetArg) || c.type.toLowerCase().includes(targetArg),
       );
       if (match) {
@@ -752,6 +753,11 @@ export function _getCurrentSeed(): number | null {
 
 // ─── Phase 3: Scenario Save/Load/List/Delete ────────────────────────────────
 
+/** Resolve the scenario storage directory — tests can override via ctx.scenarioDir. */
+function resolveScenarioDir(ctx: CommandContext): string {
+  return (ctx as CommandContext & { scenarioDir?: string }).scenarioDir ?? SCENARIO_DIR;
+}
+
 function handleScenario(ctx: CommandContext): CommandResult {
   const { args } = ctx;
   const action = args[1]?.toLowerCase();
@@ -772,7 +778,7 @@ function handleScenario(ctx: CommandContext): CommandResult {
     case 'load':
       return handleScenarioLoad(ctx);
     case 'list':
-      return handleScenarioList();
+      return handleScenarioList(ctx);
     case 'delete':
       return handleScenarioDelete(ctx);
     default:
@@ -797,22 +803,13 @@ function handleScenarioSave(ctx: CommandContext): CommandResult {
     return { narrations: [sysMsg('Cannot find the sandbox arena room.')] };
   }
 
-  // Gather arena creatures and group by (templateId, overrides fingerprint)
   const creatures = creatureManager.getCreaturesInRoom(arenaRoomId);
 
-  interface CreatureGroup {
-    templateId: string;
-    count: number;
-    overrides?: Record<string, number>;
-  }
-
-  const groupKey = (type: string, ovr: Record<string, number> | undefined): string =>
-    `${type}|${ovr ? JSON.stringify(ovr, Object.keys(ovr).sort()) : ''}`;
-
-  const groups = new Map<string, CreatureGroup>();
+  // Build per-creature entries — one entry per instance, with individual overrides
+  const creatureEntries: SandboxScenario['creatures'] = [];
+  const allOverrides: Record<string, Record<string, number>> = {};
 
   for (const creature of creatures) {
-    // Collect overrides for this creature from sandboxOverrides
     const entityOverrides = sandboxOverrides.get(creature.id);
     let overridesRecord: Record<string, number> | undefined;
     if (entityOverrides && entityOverrides.size > 0) {
@@ -820,19 +817,13 @@ function handleScenarioSave(ctx: CommandContext): CommandResult {
       for (const [statKey, { override }] of entityOverrides) {
         overridesRecord[statKey] = override;
       }
+      allOverrides[creature.id] = overridesRecord;
     }
 
-    const key = groupKey(creature.type, overridesRecord);
-    const existing = groups.get(key);
-    if (existing) {
-      existing.count++;
-    } else {
-      groups.set(key, {
-        templateId: creature.type,
-        count: 1,
-        overrides: overridesRecord,
-      });
-    }
+    creatureEntries.push({
+      type: creature.type,
+      ...(overridesRecord ? { overrides: overridesRecord } : {}),
+    });
   }
 
   // Gather player overrides
@@ -843,30 +834,31 @@ function handleScenarioSave(ctx: CommandContext): CommandResult {
     for (const [statKey, { override }] of playerEntityOverrides) {
       playerOverrides[statKey] = override;
     }
+    allOverrides[player.sessionId] = playerOverrides;
   }
 
   const scenario: SandboxScenario = {
     name,
     savedAt: new Date().toISOString(),
-    creatures: Array.from(groups.values()),
-    ...(currentSeed !== null ? { prngSeed: currentSeed } : {}),
+    creatures: creatureEntries,
+    ...(currentSeed !== null ? { seed: currentSeed } : {}),
+    ...(Object.keys(allOverrides).length > 0 ? { overrides: allOverrides } : {}),
     ...(playerOverrides ? { playerOverrides } : {}),
   };
 
-  const totalCreatures = creatures.length;
-  const totalOverrides = (playerOverrides ? Object.keys(playerOverrides).length : 0) +
-    scenario.creatures.reduce((sum, c) => sum + (c.overrides ? Object.keys(c.overrides).length : 0), 0);
+  const totalOverrides = Object.values(allOverrides)
+    .reduce((sum: number, m: Record<string, number>) => sum + Object.keys(m).length, 0);
 
-  // Ensure directory exists and write
+  const scenarioDir = resolveScenarioDir(ctx);
   try {
-    fs.mkdirSync(SCENARIO_DIR, { recursive: true });
-    const filePath = path.join(SCENARIO_DIR, `${name}.json`);
+    fs.mkdirSync(scenarioDir, { recursive: true });
+    const filePath = path.join(scenarioDir, `${name}.json`);
     const existed = fs.existsSync(filePath);
     fs.writeFileSync(filePath, JSON.stringify(scenario, null, 2), 'utf-8');
 
     const msg = existed
-      ? `Scenario '${name}' overwritten with ${totalCreatures} creature(s) and ${totalOverrides} override(s).`
-      : `Scenario '${name}' saved with ${totalCreatures} creature(s) and ${totalOverrides} override(s).`;
+      ? `Scenario '${name}' overwritten with ${creatures.length} creature(s) and ${totalOverrides} override(s).`
+      : `Scenario '${name}' saved with ${creatures.length} creature(s) and ${totalOverrides} override(s).`;
     return { narrations: [sysMsg(msg)] };
   } catch (err) {
     return { narrations: [sysMsg(`Failed to save scenario: ${(err as Error).message}`)] };
@@ -885,7 +877,8 @@ function handleScenarioLoad(ctx: CommandContext): CommandResult {
     return { narrations: [sysMsg('Creature manager not available.')] };
   }
 
-  const filePath = path.join(SCENARIO_DIR, `${name}.json`);
+  const scenarioDir = resolveScenarioDir(ctx);
+  const filePath = path.join(scenarioDir, `${name}.json`);
   if (!fs.existsSync(filePath)) {
     return { narrations: [sysMsg(`Scenario '${name}' not found.`)] };
   }
@@ -916,25 +909,30 @@ function handleScenarioLoad(ctx: CommandContext): CommandResult {
   clearSandboxCombatLog();
 
   // Restore PRNG seed if present
-  if (scenario.prngSeed !== undefined) {
-    currentSeed = scenario.prngSeed;
-    combatSystem?.setRollFn(seededPrng(scenario.prngSeed));
+  if (scenario.seed !== undefined) {
+    currentSeed = scenario.seed;
+    combatSystem?.setRollFn(seededPrng(scenario.seed));
   }
 
-  // Spawn creatures from scenario
+  // Spawn creatures from scenario — one spawn call per entry
   let totalSpawned = 0;
   for (const entry of scenario.creatures) {
-    const spawned = creatureManager.spawnCreatureInRoom(entry.templateId, arenaRoomId, entry.count);
+    const spawned = creatureManager.spawnCreatureInRoom(entry.type, arenaRoomId, 1);
     if (spawned.length === 0) continue;
 
-    // Apply creature-level stat overrides directly to Creature instances
+    const creature = spawned[0]!;
+
+    // Apply creature-level stat overrides to the Creature instance
     if (entry.overrides) {
-      for (const creature of spawned) {
-        for (const [statKey, value] of Object.entries(entry.overrides)) {
-          if (statKey in creature) {
-            (creature as unknown as Record<string, unknown>)[statKey] = value;
-          }
+      for (const [statKey, value] of Object.entries(entry.overrides)) {
+        if (statKey in creature) {
+          (creature as unknown as Record<string, unknown>)[statKey] = value;
         }
+      }
+      // Also register as combatant so overrides are immediately visible
+      if (combatSystem) {
+        const combatant = creatureManager.toCombatant(creature);
+        combatSystem.registerCombatant(combatant);
       }
     }
 
@@ -970,20 +968,21 @@ function handleScenarioLoad(ctx: CommandContext): CommandResult {
   } else {
     parts[0] += '.';
   }
-  if (scenario.prngSeed !== undefined) {
-    parts.push(`PRNG seed: ${scenario.prngSeed}`);
+  if (scenario.seed !== undefined) {
+    parts.push(`PRNG seed: ${scenario.seed}`);
   }
 
   return { narrations: [sysMsg(parts.join(' '))] };
 }
 
-function handleScenarioList(): CommandResult {
+function handleScenarioList(ctx: CommandContext): CommandResult {
+  const scenarioDir = resolveScenarioDir(ctx);
   try {
-    if (!fs.existsSync(SCENARIO_DIR)) {
+    if (!fs.existsSync(scenarioDir)) {
       return { narrations: [sysMsg('No saved scenarios.')] };
     }
 
-    const files = fs.readdirSync(SCENARIO_DIR).filter(f => f.endsWith('.json'));
+    const files = fs.readdirSync(scenarioDir).filter(f => f.endsWith('.json'));
     if (files.length === 0) {
       return { narrations: [sysMsg('No saved scenarios.')] };
     }
@@ -991,9 +990,9 @@ function handleScenarioList(): CommandResult {
     const lines: string[] = ['── Saved Scenarios ──'];
     for (const file of files.sort()) {
       try {
-        const raw = fs.readFileSync(path.join(SCENARIO_DIR, file), 'utf-8');
+        const raw = fs.readFileSync(path.join(scenarioDir, file), 'utf-8');
         const scenario = JSON.parse(raw) as SandboxScenario;
-        const creatureCount = scenario.creatures.reduce((sum, c) => sum + c.count, 0);
+        const creatureCount = scenario.creatures.length;
         const date = new Date(scenario.savedAt).toLocaleString();
         lines.push(`  ${scenario.name} — ${creatureCount} creature(s), saved ${date}`);
       } catch {
@@ -1016,7 +1015,8 @@ function handleScenarioDelete(ctx: CommandContext): CommandResult {
     return { narrations: [sysMsg('Usage: sandbox scenario delete <name>')] };
   }
 
-  const filePath = path.join(SCENARIO_DIR, `${name}.json`);
+  const scenarioDir = resolveScenarioDir(ctx);
+  const filePath = path.join(scenarioDir, `${name}.json`);
   if (!fs.existsSync(filePath)) {
     return { narrations: [sysMsg(`Scenario '${name}' not found.`)] };
   }

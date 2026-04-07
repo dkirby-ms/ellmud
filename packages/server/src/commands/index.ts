@@ -113,6 +113,8 @@ export interface CommandContext {
   corpseSystem?: CorpseSystem;
   /** Creature manager for sandbox spawn/clear operations. */
   creatureManager?: CreatureManager;
+  /** Override scenario storage directory (dev/testing). */
+  scenarioDir?: string;
   /** Resolve a connected player by character name (dev tools). */
   resolvePlayerByName?: (name: string) => { sessionId: string; player: PlayerState; characterName: string } | undefined;
 }

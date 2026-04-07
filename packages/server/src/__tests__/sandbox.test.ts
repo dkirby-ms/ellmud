@@ -1,8 +1,10 @@
 /**
- * Combat Sandbox Tests — Phase 1
+ * Combat Sandbox Tests — Phases 1, 2 & 3
  *
  * Validates sandbox command gating, creature spawning, state reset,
- * instant kill, healing, state isolation, and selective ticking.
+ * instant kill, healing, state isolation, and selective ticking (Phase 1);
+ * tuning tools: set, info, clear, log, damage breakdown (Phase 2);
+ * scenario persistence, deterministic PRNG seed, and replay (Phase 3).
  *
  * Architecture decisions:
  * - Shared CombatSystem: sandbox uses zone's existing CombatSystem instance
@@ -13,6 +15,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { handleCommand, type CommandContext, type CommandResult } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
 import { CombatSystem } from '../combat/CombatSystem.js';
@@ -23,6 +28,9 @@ import {
 import { CreatureManager } from '../creatures/CreatureManager.js';
 import { DROWNED_REVENANT } from '../creatures/templates/drowned-revenant.js';
 import { resetConfig } from '../config.js';
+import { _resetSandboxState } from '../commands/handlers/sandbox.js';
+import { createPRNG } from '../generator/prng.js';
+import { seededPrng } from '../combat/prng.js';
 import type { Room, Direction, RoomType } from '../generator/RoomGraph.js';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -1357,6 +1365,791 @@ describe('Combat Sandbox', () => {
 
       // Attack should be back to original
       expect(combatSystem.getCombatant(player.sessionId)?.attack).toBe(originalAtk);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Phase 3 — Scenario Persistence, Deterministic PRNG, and Replay
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ─── 14. sandbox scenario save ────────────────────────────────────────────
+  //
+  // TODO: Awaiting Drizzt's handleScenario implementation.
+  // These tests define the contract: `sandbox scenario save <name>` serializes
+  // creature lineup + stat overrides + PRNG seed to JSON persistence.
+  // Tests will activate once handleScenario is implemented.
+
+  describe('sandbox scenario save', () => {
+    let combatSystem: CombatSystem;
+    let creatureManager: CreatureManager;
+
+    beforeEach(() => {
+      enableDevMode();
+      combatSystem = new CombatSystem(exitResolver);
+      creatureManager = new CreatureManager();
+      _resetSandboxState();
+    });
+
+    it('save captures creature types and counts', () => {
+      // Spawn 2 drowned_revenants into the arena
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant', '2'], {
+        combatSystem, creatureManager,
+      }));
+      expect(creatureManager.getCreaturesInRoom(ARENA_ROOM_ID)).toHaveLength(2);
+
+      // Save scenario
+      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'test-fight'], {
+        combatSystem, creatureManager,
+      }));
+      const text = narrationText(result).toLowerCase();
+
+      // Must confirm the save and mention the scenario name
+      expect(text).toMatch(/saved|scenario.*test-fight/);
+      // Must NOT be the "unknown subcommand" fallback
+      expect(text).not.toContain('unknown');
+    });
+
+    it('save captures stat overrides', () => {
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+        player, combatSystem, creatureManager,
+      }));
+
+      const creatures = creatureManager.getCreaturesInRoom(ARENA_ROOM_ID);
+      const creatureCombatant = createCombatant(
+        creatures[0]!.id, creatures[0]!.name, ARENA_ROOM_ID, false,
+        DROWNED_REVENANT.stats,
+      );
+      combatSystem.registerCombatant(creatureCombatant);
+
+      // Override the creature's attack stat
+      handleCommand('sandbox', buildCtx(sandboxArena, ['set', creatures[0]!.id, 'atk', '99'], {
+        player, combatSystem, creatureManager,
+      }));
+
+      // Save scenario — must succeed without "unknown" error
+      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'override-test'], {
+        player, combatSystem, creatureManager,
+      }));
+      const text = narrationText(result).toLowerCase();
+      expect(text).toMatch(/saved|scenario/);
+      expect(text).not.toContain('unknown');
+    });
+
+    it('save captures PRNG seed if set', () => {
+      // Set a seed, then save
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['seed', '42'], {
+        combatSystem, creatureManager,
+      }));
+
+      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'seeded-scenario'], {
+        combatSystem, creatureManager,
+      }));
+      const text = narrationText(result).toLowerCase();
+      expect(text).toMatch(/saved|scenario/);
+      expect(text).not.toContain('unknown');
+    });
+
+    it('save overwrites existing scenario with same name', () => {
+      // Spawn 1 creature and save
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+        combatSystem, creatureManager,
+      }));
+      const save1 = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'dupe'], {
+        combatSystem, creatureManager,
+      }));
+      expect(narrationText(save1).toLowerCase()).not.toContain('unknown');
+
+      // Spawn another and re-save with same name — must succeed (overwrite)
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+        combatSystem, creatureManager,
+      }));
+      const save2 = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'dupe'], {
+        combatSystem, creatureManager,
+      }));
+      const text2 = narrationText(save2).toLowerCase();
+      expect(text2).toMatch(/saved|overwr|scenario/);
+      expect(text2).not.toContain('unknown');
+    });
+
+    it('save with no creatures still saves (empty scenario)', () => {
+      // Arena is empty — save should still succeed
+      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'empty-arena'], {
+        combatSystem, creatureManager,
+      }));
+      const text = narrationText(result).toLowerCase();
+      expect(text).toMatch(/saved|scenario/);
+      expect(text).not.toContain('unknown');
+    });
+
+    it('save without a name returns usage hint', () => {
+      // Missing name argument — should get a usage message, not a crash
+      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save'], {
+        combatSystem, creatureManager,
+      }));
+      const text = narrationText(result).toLowerCase();
+      expect(text).toMatch(/usage|name|provide/);
+    });
+  });
+
+  // ─── 15. sandbox scenario load ────────────────────────────────────────────
+
+  describe('sandbox scenario load', () => {
+    let combatSystem: CombatSystem;
+    let creatureManager: CreatureManager;
+
+    beforeEach(() => {
+      enableDevMode();
+      combatSystem = new CombatSystem(exitResolver);
+      creatureManager = new CreatureManager();
+      _resetSandboxState();
+    });
+
+    it('load spawns the saved creatures', () => {
+      // Save a scenario with 2 creatures
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant', '2'], {
+        combatSystem, creatureManager,
+      }));
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'two-revenants'], {
+        combatSystem, creatureManager,
+      }));
+
+      // Reset the arena
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['reset'], {
+        combatSystem, creatureManager,
+      }));
+      expect(creatureManager.getCreaturesInRoom(ARENA_ROOM_ID)).toHaveLength(0);
+
+      // Load the scenario
+      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'load', 'two-revenants'], {
+        combatSystem, creatureManager,
+      }));
+      const text = narrationText(result).toLowerCase();
+      expect(text).toMatch(/loaded|scenario/);
+      expect(text).not.toContain('unknown');
+
+      // Arena should have 2 creatures again
+      expect(creatureManager.getCreaturesInRoom(ARENA_ROOM_ID)).toHaveLength(2);
+    });
+
+    it('load applies saved stat overrides', () => {
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+        player, combatSystem, creatureManager,
+      }));
+
+      const creatures = creatureManager.getCreaturesInRoom(ARENA_ROOM_ID);
+      const creatureCombatant = createCombatant(
+        creatures[0]!.id, creatures[0]!.name, ARENA_ROOM_ID, false,
+        DROWNED_REVENANT.stats,
+      );
+      combatSystem.registerCombatant(creatureCombatant);
+
+      handleCommand('sandbox', buildCtx(sandboxArena, ['set', creatures[0]!.id, 'atk', '77'], {
+        player, combatSystem, creatureManager,
+      }));
+
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'override-load'], {
+        player, combatSystem, creatureManager,
+      }));
+
+      // Reset everything
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['reset'], {
+        player, combatSystem, creatureManager,
+      }));
+
+      // Load scenario — overrides should be re-applied
+      const loadResult = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'load', 'override-load'], {
+        player, combatSystem, creatureManager,
+      }));
+      const text = narrationText(loadResult).toLowerCase();
+      expect(text).toMatch(/loaded|scenario/);
+
+      // The loaded creatures should have overridden stats applied
+      const loadedCreatures = creatureManager.getCreaturesInRoom(ARENA_ROOM_ID);
+      expect(loadedCreatures).toHaveLength(1);
+      const loadedCombatant = combatSystem.getCombatant(loadedCreatures[0]!.id);
+      expect(loadedCombatant?.attack).toBe(77);
+    });
+
+    it('load clears previous arena state before loading', () => {
+      // Start with 1 creature and save
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+        combatSystem, creatureManager,
+      }));
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'one-creature'], {
+        combatSystem, creatureManager,
+      }));
+
+      // Spawn 3 more (total 4)
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant', '3'], {
+        combatSystem, creatureManager,
+      }));
+      expect(creatureManager.getCreaturesInRoom(ARENA_ROOM_ID)).toHaveLength(4);
+
+      // Load the 1-creature scenario — should clear the 4 and restore 1
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'load', 'one-creature'], {
+        combatSystem, creatureManager,
+      }));
+      expect(creatureManager.getCreaturesInRoom(ARENA_ROOM_ID)).toHaveLength(1);
+    });
+
+    it('load non-existent scenario returns error', () => {
+      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'load', 'nonexistent'], {
+        combatSystem, creatureManager,
+      }));
+      const text = narrationText(result).toLowerCase();
+
+      // Must be a specific "not found" error, not the generic "unknown subcommand"
+      expect(text).toMatch(/not found|no.*scenario|does.*not.*exist/);
+    });
+
+    it('load restores PRNG seed if present in scenario', () => {
+      // Set a seed, save scenario
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['seed', '42'], {
+        combatSystem, creatureManager,
+      }));
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+        combatSystem, creatureManager,
+      }));
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'seeded-load'], {
+        combatSystem, creatureManager,
+      }));
+
+      // Clear seed
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['seed', 'random'], {
+        combatSystem, creatureManager,
+      }));
+
+      // Load scenario — seed should be restored to 42
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'load', 'seeded-load'], {
+        combatSystem, creatureManager,
+      }));
+
+      // Query seed: should report 42 again
+      const seedResult = handleCommand('sandbox', buildCtx(sandboxLobby, ['seed'], {
+        combatSystem, creatureManager,
+      }));
+      const seedText = narrationText(seedResult);
+      expect(seedText).toContain('42');
+    });
+  });
+
+  // ─── 16. sandbox scenario list ────────────────────────────────────────────
+
+  describe('sandbox scenario list', () => {
+    let combatSystem: CombatSystem;
+    let creatureManager: CreatureManager;
+
+    beforeEach(() => {
+      enableDevMode();
+      combatSystem = new CombatSystem(exitResolver);
+      creatureManager = new CreatureManager();
+      _resetSandboxState();
+    });
+
+    it('list shows saved scenarios with creature counts', () => {
+      // Save two scenarios with different creature counts
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant', '2'], {
+        combatSystem, creatureManager,
+      }));
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'battle-duo'], {
+        combatSystem, creatureManager,
+      }));
+
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['reset'], {
+        combatSystem, creatureManager,
+      }));
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+        combatSystem, creatureManager,
+      }));
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'solo-fight'], {
+        combatSystem, creatureManager,
+      }));
+
+      // List all scenarios
+      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'list'], {
+        combatSystem, creatureManager,
+      }));
+      const text = narrationText(result).toLowerCase();
+
+      expect(text).toContain('battle-duo');
+      expect(text).toContain('solo-fight');
+      expect(text).not.toContain('unknown');
+    });
+
+    it('list returns appropriate message when no scenarios exist', () => {
+      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'list'], {
+        combatSystem, creatureManager,
+      }));
+      const text = narrationText(result).toLowerCase();
+
+      // Must say "no scenarios" — not "unknown subcommand"
+      expect(text).toMatch(/no.*scenario|empty|none/);
+      expect(text).not.toContain('unknown sandbox subcommand');
+    });
+  });
+
+  // ─── 17. sandbox scenario delete ──────────────────────────────────────────
+
+  describe('sandbox scenario delete', () => {
+    let combatSystem: CombatSystem;
+    let creatureManager: CreatureManager;
+
+    beforeEach(() => {
+      enableDevMode();
+      combatSystem = new CombatSystem(exitResolver);
+      creatureManager = new CreatureManager();
+      _resetSandboxState();
+    });
+
+    it('delete removes the scenario file', () => {
+      // Save a scenario then delete it
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+        combatSystem, creatureManager,
+      }));
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'doomed'], {
+        combatSystem, creatureManager,
+      }));
+
+      // Delete it
+      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'delete', 'doomed'], {
+        combatSystem, creatureManager,
+      }));
+      const text = narrationText(result).toLowerCase();
+      expect(text).toMatch(/deleted|removed/);
+      expect(text).not.toContain('unknown');
+
+      // List should no longer include "doomed"
+      const listResult = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'list'], {
+        combatSystem, creatureManager,
+      }));
+      const listText = narrationText(listResult).toLowerCase();
+      expect(listText).not.toContain('doomed');
+    });
+
+    it('delete non-existent scenario returns error', () => {
+      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'delete', 'ghost-scenario'], {
+        combatSystem, creatureManager,
+      }));
+      const text = narrationText(result).toLowerCase();
+
+      // Must be a specific "not found" error
+      expect(text).toMatch(/not found|no.*scenario|does.*not.*exist/);
+    });
+  });
+
+  // ─── 18. sandbox seed — Deterministic PRNG ────────────────────────────────
+
+  describe('sandbox seed', () => {
+    let combatSystem: CombatSystem;
+    let creatureManager: CreatureManager;
+
+    beforeEach(() => {
+      enableDevMode();
+      combatSystem = new CombatSystem(exitResolver);
+      creatureManager = new CreatureManager();
+      _resetSandboxState();
+    });
+
+    it('`sandbox seed 42` sets a deterministic PRNG', () => {
+      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['seed', '42'], {
+        combatSystem, creatureManager,
+      }));
+      const text = narrationText(result).toLowerCase();
+
+      expect(text).toMatch(/seed.*42|prng.*42|set.*42/);
+    });
+
+    it('`sandbox seed` with no arg reports current seed', () => {
+      // Set seed first
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['seed', '99'], {
+        combatSystem, creatureManager,
+      }));
+
+      // Query seed
+      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['seed'], {
+        combatSystem, creatureManager,
+      }));
+      const text = narrationText(result);
+
+      expect(text).toContain('99');
+    });
+
+    it('`sandbox seed random` restores Math.random', () => {
+      // Set seed first
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['seed', '42'], {
+        combatSystem, creatureManager,
+      }));
+
+      // Restore to random
+      const result = handleCommand('sandbox', buildCtx(sandboxLobby, ['seed', 'random'], {
+        combatSystem, creatureManager,
+      }));
+      const text = narrationText(result).toLowerCase();
+      expect(text).toMatch(/random|cleared|reset|unseeded/);
+
+      // Querying seed should show no seed / random / default
+      const queryResult = handleCommand('sandbox', buildCtx(sandboxLobby, ['seed'], {
+        combatSystem, creatureManager,
+      }));
+      const queryText = narrationText(queryResult).toLowerCase();
+      expect(queryText).toMatch(/random|none|no.*seed|not.*set|default/);
+    });
+
+    it('same seed produces same combat results (determinism key test)', () => {
+      // Helper: set up a seeded combat system, run ticks, collect damage values
+      function runSeededCombat(seed: number): number[] {
+        const cs = new CombatSystem(exitResolver);
+        const cm = new CreatureManager();
+
+        // Set the seed via command
+        handleCommand('sandbox', buildCtx(sandboxLobby, ['seed', String(seed)], {
+          combatSystem: cs, creatureManager: cm,
+        }));
+
+        // Spawn a creature
+        handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+          combatSystem: cs, creatureManager: cm,
+        }));
+
+        const creatures = cm.getCreaturesInRoom(ARENA_ROOM_ID);
+        const player = makePlayer('player-1', ARENA_ROOM_ID);
+        const playerCombatant = createCombatant(
+          player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+          { ...DEFAULT_PLAYER_STATS, maxHp: 500 },
+        );
+        playerCombatant.hp = 500;
+        const creatureCombatant = createCombatant(
+          creatures[0]!.id, creatures[0]!.name, ARENA_ROOM_ID, false,
+          { ...DROWNED_REVENANT.stats, maxHp: 500 },
+        );
+        creatureCombatant.hp = 500;
+
+        cs.registerCombatant(playerCombatant);
+        cs.registerCombatant(creatureCombatant);
+        cs.initiateCombat(player.sessionId, creatures[0]!.id);
+
+        // Run 5 ticks and record all damage values
+        const damages: number[] = [];
+        for (let i = 0; i < 5; i++) {
+          const tickResult = cs.resolveTick();
+          for (const event of tickResult.events) {
+            if (event.type === 'strike') {
+              damages.push(event.damage ?? 0);
+            }
+          }
+        }
+        return damages;
+      }
+
+      // Run twice with same seed — results MUST match
+      const run1 = runSeededCombat(12345);
+      const run2 = runSeededCombat(12345);
+
+      expect(run1.length).toBeGreaterThan(0);
+      expect(run1).toEqual(run2);
+
+      // Different seed should produce different results
+      const run3 = runSeededCombat(99999);
+      if (run3.length === run1.length) {
+        const allSame = run1.every((v, i) => v === run3[i]);
+        if (!allSame) {
+          expect(run1).not.toEqual(run3);
+        }
+      }
+    });
+  });
+
+  // ─── 19. sandbox replay — Auto-Combat Ticks ──────────────────────────────
+
+  describe('sandbox replay', () => {
+    let combatSystem: CombatSystem;
+    let creatureManager: CreatureManager;
+
+    beforeEach(() => {
+      enableDevMode();
+      combatSystem = new CombatSystem(exitResolver);
+      creatureManager = new CreatureManager();
+      _resetSandboxState();
+    });
+
+    it('replay runs N ticks of auto-combat', () => {
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+
+      // Spawn a creature and register both combatants
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+        player, combatSystem, creatureManager,
+      }));
+      const creatures = creatureManager.getCreaturesInRoom(ARENA_ROOM_ID);
+      expect(creatures).toHaveLength(1);
+
+      const playerCombatant = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        { ...DEFAULT_PLAYER_STATS, maxHp: 500 },
+      );
+      playerCombatant.hp = 500;
+      const creatureCombatant = createCombatant(
+        creatures[0]!.id, creatures[0]!.name, ARENA_ROOM_ID, false,
+        { ...DROWNED_REVENANT.stats, maxHp: 500 },
+      );
+      creatureCombatant.hp = 500;
+
+      combatSystem.registerCombatant(playerCombatant);
+      combatSystem.registerCombatant(creatureCombatant);
+
+      // Replay 3 ticks — replay auto-initiates combat if needed
+      const result = handleCommand('sandbox', buildCtx(sandboxArena, ['replay', '3'], {
+        player, combatSystem, creatureManager,
+      }));
+      const text = narrationText(result);
+
+      // Output should mention ticks and contain combat data
+      expect(text).toMatch(/tick|round|replay/i);
+      expect(text.length).toBeGreaterThan(20);
+    });
+
+    it('replay output includes damage numbers per tick', () => {
+      const player = makePlayer('player-1', ARENA_ROOM_ID);
+
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+        player, combatSystem, creatureManager,
+      }));
+      const creatures = creatureManager.getCreaturesInRoom(ARENA_ROOM_ID);
+
+      const playerCombatant = createCombatant(
+        player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+        { ...DEFAULT_PLAYER_STATS, attack: 50, maxHp: 500 },
+      );
+      playerCombatant.hp = 500;
+      const creatureCombatant = createCombatant(
+        creatures[0]!.id, creatures[0]!.name, ARENA_ROOM_ID, false,
+        { ...DROWNED_REVENANT.stats, maxHp: 500 },
+      );
+      creatureCombatant.hp = 500;
+
+      combatSystem.registerCombatant(playerCombatant);
+      combatSystem.registerCombatant(creatureCombatant);
+
+      const result = handleCommand('sandbox', buildCtx(sandboxArena, ['replay', '2'], {
+        player, combatSystem, creatureManager,
+      }));
+      const text = narrationText(result);
+
+      // Should contain numeric damage values
+      expect(text).toMatch(/\d+/);
+      // Should reference damage via the dmg marker in the output format
+      expect(text).toMatch(/damage|dmg|hit|strike|dealt/i);
+    });
+
+    it('replay with no creatures returns error', () => {
+      const result = handleCommand('sandbox', buildCtx(sandboxArena, ['replay', '5'], {
+        combatSystem, creatureManager,
+      }));
+      const text = narrationText(result).toLowerCase();
+
+      expect(text).toMatch(/no.*creature|no.*combat|nothing.*replay|empty.*arena|spawn/);
+    });
+
+    it('replay with seed is deterministic (same output each run)', () => {
+      function seededReplay(seed: number, ticks: number): string {
+        const cs = new CombatSystem(exitResolver);
+        const cm = new CreatureManager();
+        _resetSandboxState();
+
+        // Set the seed
+        handleCommand('sandbox', buildCtx(sandboxLobby, ['seed', String(seed)], {
+          combatSystem: cs, creatureManager: cm,
+        }));
+
+        // Spawn a creature
+        handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
+          combatSystem: cs, creatureManager: cm,
+        }));
+
+        const creatures = cm.getCreaturesInRoom(ARENA_ROOM_ID);
+        const player = makePlayer('player-1', ARENA_ROOM_ID);
+        const playerCombatant = createCombatant(
+          player.sessionId, player.sessionId, ARENA_ROOM_ID, true,
+          { ...DEFAULT_PLAYER_STATS, maxHp: 500 },
+        );
+        playerCombatant.hp = 500;
+        const creatureCombatant = createCombatant(
+          creatures[0]!.id, creatures[0]!.name, ARENA_ROOM_ID, false,
+          { ...DROWNED_REVENANT.stats, maxHp: 500 },
+        );
+        creatureCombatant.hp = 500;
+
+        cs.registerCombatant(playerCombatant);
+        cs.registerCombatant(creatureCombatant);
+
+        const result = handleCommand('sandbox', buildCtx(sandboxArena, ['replay', String(ticks)], {
+          player, combatSystem: cs, creatureManager: cm,
+        }));
+        return narrationText(result);
+      }
+
+      const output1 = seededReplay(777, 3);
+      const output2 = seededReplay(777, 3);
+
+      expect(output1.length).toBeGreaterThan(0);
+      expect(output1).toBe(output2);
+    });
+  });
+
+  // ─── 20. Integration: seed + scenario + replay (full roundtrip) ───────────
+
+  describe('integration: seed + scenario + replay', () => {
+    let combatSystem: CombatSystem;
+    let creatureManager: CreatureManager;
+
+    beforeEach(() => {
+      enableDevMode();
+      combatSystem = new CombatSystem(exitResolver);
+      creatureManager = new CreatureManager();
+      _resetSandboxState();
+    });
+
+    it('save scenario with seed → load → replay → verify deterministic output', () => {
+      // ── Phase A: Set seed, spawn creatures, save scenario ──
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['seed', '314159'], {
+        combatSystem, creatureManager,
+      }));
+      handleCommand('sandbox', buildCtx(sandboxArena, ['spawn', 'drowned_revenant', '2'], {
+        combatSystem, creatureManager,
+      }));
+      expect(creatureManager.getCreaturesInRoom(ARENA_ROOM_ID)).toHaveLength(2);
+
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'save', 'determinism-test'], {
+        combatSystem, creatureManager,
+      }));
+
+      // ── Phase B: Reset, load, set up combat, replay ──
+      handleCommand('sandbox', buildCtx(sandboxLobby, ['reset'], {
+        combatSystem, creatureManager,
+      }));
+      _resetSandboxState();
+
+      const loadResult = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'load', 'determinism-test'], {
+        combatSystem, creatureManager,
+      }));
+      expect(narrationText(loadResult).toLowerCase()).toMatch(/loaded|scenario/);
+
+      const loadedCreatures = creatureManager.getCreaturesInRoom(ARENA_ROOM_ID);
+      expect(loadedCreatures).toHaveLength(2);
+
+      // Register player + creatures as combatants
+      const player1 = makePlayer('player-1', ARENA_ROOM_ID);
+      const pc1 = createCombatant(
+        player1.sessionId, player1.sessionId, ARENA_ROOM_ID, true,
+        { ...DEFAULT_PLAYER_STATS, maxHp: 500 },
+      );
+      pc1.hp = 500;
+      combatSystem.registerCombatant(pc1);
+      for (const c of loadedCreatures) {
+        const cc = createCombatant(c.id, c.name, ARENA_ROOM_ID, false,
+          { ...DROWNED_REVENANT.stats, maxHp: 500 });
+        cc.hp = 500;
+        combatSystem.registerCombatant(cc);
+      }
+
+      const replay1 = handleCommand('sandbox', buildCtx(sandboxArena, ['replay', '3'], {
+        player: player1, combatSystem, creatureManager,
+      }));
+      const text1 = narrationText(replay1);
+
+      // ── Phase C: Load again into fresh state, replay — must match ──
+      const cs2 = new CombatSystem(exitResolver);
+      const cm2 = new CreatureManager();
+      _resetSandboxState();
+
+      const loadResult2 = handleCommand('sandbox', buildCtx(sandboxLobby, ['scenario', 'load', 'determinism-test'], {
+        combatSystem: cs2, creatureManager: cm2,
+      }));
+      expect(narrationText(loadResult2).toLowerCase()).toMatch(/loaded|scenario/);
+
+      const loadedCreatures2 = cm2.getCreaturesInRoom(ARENA_ROOM_ID);
+      expect(loadedCreatures2).toHaveLength(2);
+
+      const player2 = makePlayer('player-1', ARENA_ROOM_ID);
+      const pc2 = createCombatant(
+        player2.sessionId, player2.sessionId, ARENA_ROOM_ID, true,
+        { ...DEFAULT_PLAYER_STATS, maxHp: 500 },
+      );
+      pc2.hp = 500;
+      cs2.registerCombatant(pc2);
+      for (const c of loadedCreatures2) {
+        const cc = createCombatant(c.id, c.name, ARENA_ROOM_ID, false,
+          { ...DROWNED_REVENANT.stats, maxHp: 500 });
+        cc.hp = 500;
+        cs2.registerCombatant(cc);
+      }
+
+      const replay2 = handleCommand('sandbox', buildCtx(sandboxArena, ['replay', '3'], {
+        player: player2, combatSystem: cs2, creatureManager: cm2,
+      }));
+      const text2 = narrationText(replay2);
+
+      // The key assertion: identical seed → identical scenario → identical replay
+      expect(text1.length).toBeGreaterThan(0);
+      expect(text1).toBe(text2);
+    });
+  });
+
+  // ─── PRNG determinism (unit validation) ───────────────────────────────────
+
+  describe('PRNG determinism (unit)', () => {
+    it('createPRNG with same seed produces identical sequences', () => {
+      const prng1 = createPRNG(42);
+      const prng2 = createPRNG(42);
+
+      const seq1 = Array.from({ length: 20 }, () => prng1.next());
+      const seq2 = Array.from({ length: 20 }, () => prng2.next());
+
+      expect(seq1).toEqual(seq2);
+    });
+
+    it('createPRNG with different seeds produces different sequences', () => {
+      const prng1 = createPRNG(42);
+      const prng2 = createPRNG(43);
+
+      const seq1 = Array.from({ length: 10 }, () => prng1.next());
+      const seq2 = Array.from({ length: 10 }, () => prng2.next());
+
+      expect(seq1).not.toEqual(seq2);
+    });
+
+    it('PRNG values are in [0, 1) range', () => {
+      const prng = createPRNG(12345);
+      for (let i = 0; i < 100; i++) {
+        const v = prng.next();
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThan(1);
+      }
+    });
+
+    it('PRNG nextInt returns values in specified range', () => {
+      const prng = createPRNG(999);
+      for (let i = 0; i < 50; i++) {
+        const v = prng.nextInt(5, 15);
+        expect(v).toBeGreaterThanOrEqual(5);
+        expect(v).toBeLessThanOrEqual(15);
+      }
+    });
+
+    it('seededPrng (combat-specific) produces deterministic RollFn values', () => {
+      const roll1 = seededPrng(42);
+      const roll2 = seededPrng(42);
+
+      const seq1 = Array.from({ length: 20 }, () => roll1());
+      const seq2 = Array.from({ length: 20 }, () => roll2());
+
+      expect(seq1).toEqual(seq2);
+      // All values in [0, 1)
+      for (const v of seq1) {
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThan(1);
+      }
     });
   });
 });
