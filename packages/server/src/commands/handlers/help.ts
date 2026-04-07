@@ -203,6 +203,14 @@ const COMMAND_HELP: Record<string, CommandHelp> = {
     category: 'Dev Tools',
     devOnly: true,
   },
+
+  // Meta
+  help: {
+    description: 'Show available commands or detailed help for a specific command.',
+    usage: 'help [command]',
+    aliases: ['?'],
+    category: 'Meta',
+  },
 };
 
 /** Group commands by category based on context */
@@ -297,13 +305,13 @@ export function handleHelp(ctx: CommandContext): CommandResult {
     }
 
     const lines = [
-      `=== help: ${cmd} ===`,
+      `[bold][bright-yellow]═══ ${cmd} ═══[/bright-yellow][/bold]`,
       meta.description,
-      `Usage: ${meta.usage}`,
+      `[dim]Usage:[/dim] [bright-cyan]${meta.usage}[/bright-cyan]`,
     ];
 
     if (meta.aliases && meta.aliases.length > 0) {
-      lines.push(`Aliases: ${meta.aliases.join(', ')}`);
+      lines.push(`[dim]Aliases:[/dim] [cyan]${meta.aliases.join('[/cyan], [cyan]')}[/cyan]`);
     }
 
     return {
@@ -314,7 +322,7 @@ export function handleHelp(ctx: CommandContext): CommandResult {
   // help (no args) — show all available commands grouped by category
   const grouped = getAvailableCommands(ctx);
 
-  const lines = ['=== Available Commands ===', ''];
+  const lines = ['[bold][bright-yellow]═══ Available Commands ═══[/bright-yellow][/bold]', ''];
 
   // Define category display order
   const categoryOrder = [
@@ -336,17 +344,17 @@ export function handleHelp(ctx: CommandContext): CommandResult {
       continue;
     }
 
-    lines.push(`${category}:`);
+    lines.push(`[bold][yellow]${category}[/yellow][/bold]`);
     for (const cmd of commands) {
       const meta = COMMAND_HELP[cmd];
       if (!meta) continue;
       const padding = ' '.repeat(Math.max(1, 16 - cmd.length));
-      lines.push(`  ${cmd}${padding}— ${meta.description}`);
+      lines.push(`  [bright-cyan]${cmd}[/bright-cyan]${padding}[dim]—[/dim] ${meta.description}`);
     }
     lines.push('');
   }
 
-  lines.push('Type "help <command>" for details.');
+  lines.push('[dim]Type [/dim][bright-cyan]help <command>[/bright-cyan][dim] for details.[/dim]');
 
   return {
     narrations: [{ text: lines.join('\n'), type: 'system' }],
