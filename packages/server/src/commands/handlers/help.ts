@@ -184,7 +184,19 @@ const COMMAND_HELP: Record<string, CommandHelp> = {
   // Feature: Sandbox (also devOnly)
   sandbox: {
     description: 'Access sandbox development tools.',
-    usage: 'sandbox <subcommand>',
+    usage: 'sandbox <subcommand>\n' +
+      '  [bright-cyan]spawn[/bright-cyan] <type> [count]  — Spawn creatures in the arena\n' +
+      '  [bright-cyan]reset[/bright-cyan]                 — Clear arena, restore HP/stamina\n' +
+      '  [bright-cyan]status[/bright-cyan]                — Show arena state\n' +
+      '  [bright-cyan]kill[/bright-cyan]                  — Instantly kill all sandbox creatures\n' +
+      '  [bright-cyan]heal[/bright-cyan]                  — Restore your HP/stamina to max\n' +
+      '  [bright-cyan]set[/bright-cyan] <tgt> <stat> <val> — Override a stat\n' +
+      '  [bright-cyan]info[/bright-cyan] [type]            — Inspect creature templates\n' +
+      '  [bright-cyan]clear[/bright-cyan]                 — Reset all stat overrides\n' +
+      '  [bright-cyan]log[/bright-cyan] [N]               — Show recent combat events\n' +
+      '  [bright-cyan]seed[/bright-cyan] [num|random]     — Set/show PRNG seed\n' +
+      '  [bright-cyan]replay[/bright-cyan] [ticks]        — Auto-run combat for N ticks\n' +
+      '  [bright-cyan]scenario[/bright-cyan] save|load|list|delete — Manage saved scenarios',
     category: 'Sandbox',
     requiredRoomType: ['feature_sandbox', 'feature_sandbox_arena', 'feature_sandbox_stats'],
     devOnly: true,
