@@ -3188,3 +3188,31 @@ Consolidated 22 incremental SQL migration files into 3 clean files per Elminster
 - Dev commands (goto, teleport) are in global handlers with in-handler devModeEnabled check — sandbox combines both patterns (feature gate + dev gate)
 - CreatureManager.spawnCreatures() uses PRNG for deterministic placement during seeding — runtime spawning needs a simpler non-PRNG path
 - Zone category 'dev' is used by The Refuge — this disables creature AI, combat, and collapse globally in the zone
+
+### Combat Sandbox Phase 1 — Server Implementation
+**Task:** Implement all server-side TypeScript for the combat sandbox dev tool
+**Status:** ✅ Complete — clean build, 2213 tests passing (0 regressions)
+
+**Files modified:**
+- `packages/shared/src/room-graph.ts` — Added `feature_sandbox`, `feature_sandbox_arena`, `feature_sandbox_stats` to RoomType union
+- `packages/server/src/generator/RoomGraph.ts` — Matching RoomType additions (kept in sync)
+- `packages/server/src/generator/generator.ts` — Added room names/descriptions for 3 sandbox types (required by Record<RoomType> contracts)
+- `packages/server/src/commands/parser.ts` — Added 'sandbox' to KNOWN_VERBS
+- `packages/server/src/commands/handlers/sandbox.ts` — NEW: Full sandbox command handler (spawn, reset, status, kill, heal)
+- `packages/server/src/commands/index.ts` — Registered sandbox in featureHandlers (3 room types), extended featureHandlers gate to support string[], added CreatureManager to CommandContext
+- `packages/server/src/creatures/types.ts` — Added `sandbox?: boolean` flag to Creature interface
+- `packages/server/src/creatures/CreatureManager.ts` — Added `spawnCreatureInRoom()` and `clearCreaturesInRoom()` methods
+- `packages/server/src/rooms/ZoneRoom.ts` — sandboxRoomIds field, sandbox room scanning at init, hasSandboxCombat bypass for dev zones, sandbox creature defeat (no loot/XP), sandbox player defeat (auto-revive at 1 HP), creatureManager in buildCommandContext
+
+**Key decisions:**
+- featureHandlers gate extended to `string | string[]` for requiredRoomType — sandbox needs all 3 room types, existing handlers unaffected
+- Sandbox creatures tagged with `sandbox: true` flag — checked in syncCreaturesAfterCombat to skip loot/XP/traces
+- Player death in sandbox arena: auto-revive at 1 HP, no downed state, no death penalty — player stays in room
+- spawnCreatureInRoom delegates to spawnSingleCreature then tags sandbox — reuses existing spawn path
+- Arena room discovery: handler walks connected exits from current room to find feature_sandbox_arena
+
+## Learnings
+- Record<RoomType, ...> in generator.ts breaks when new room types are added — must update both shared and server RoomType unions AND the generator templates
+- featureHandlers Map can be extended to support string[] for multi-room-type commands without breaking existing single-string entries
+- Sandbox auto-revive pattern: removeCombatant → reset HP → narrate — avoids engaging the DowningSystem entirely
+- Creature `sandbox` flag enables clean conditional branching in syncCreaturesAfterCombat without modifying the kill/loot pipeline

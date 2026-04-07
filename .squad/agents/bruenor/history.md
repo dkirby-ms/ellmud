@@ -235,3 +235,15 @@
 - **Topology:** New corridor-heavy layouts with updated inter-zone exits; portal targets updated for pipe-bridge, flooded-concourse, and causeway-terminus.
 - **Creatures:** Added 15 non-aggressive stronghold NPCs to `002_seed_content.sql` with ambient stats and preferred room lists.
 - **Slug decision:** Adopted short room prefixes (`reliquary-*`, `bloom-*`, `carrion-*`) and updated entry room slugs accordingly.
+
+### Sandbox Rooms in The Refuge (2026-04-09)
+- **Migration:** `005_sandbox_rooms.sql`
+- **Source:** Architecture decision from coordinator — 3 sandbox rooms north of training-grounds
+- **New rooms (3):**
+  - `sandbox-lobby` (feature_sandbox, {safe_container}) — "The Proving Grounds" — warded antechamber, hub for sandbox area
+  - `sandbox-arena` (feature_sandbox_arena, {safe_container, arena}) — "The Arena" — combat testing chamber
+  - `sandbox-stats-lab` (feature_sandbox_stats, {safe_container}) — "The Tuning Forge" — stat/encounter planning room
+- **New exits (6):** 3 bidirectional pairs — training-grounds↔sandbox-lobby (north/south), sandbox-lobby↔sandbox-arena (east/west), sandbox-lobby↔sandbox-stats-lab (west/east)
+- **Direction conflict check:** training-grounds had south (hearth) and east (war-room) — north was free
+- **Pattern:** Matched 003_seed_zones.sql exactly — cross-join VALUES, text[] cast for properties, NULLIF for target columns, ON CONFLICT DO NOTHING for idempotency
+- **Transaction:** Full BEGIN/COMMIT wrap for atomicity

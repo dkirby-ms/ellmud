@@ -40,6 +40,15 @@
 
 ## Learnings (Archived — See Detailed Session Records)
 
+**Sandbox Testing Patterns (2026-07):**
+- Sandbox command handler uses double gating: featureHandlers room-type check + `getConfig().devModeEnabled` inside handler
+- `featureHandlers` now supports `requiredRoomType: string | string[]` for multi-room-type commands (sandbox uses all 3 types)
+- Dev mode toggling in tests: `process.env.DEV_MODE_ENABLED = 'true'; resetConfig();` then clean up in afterEach
+- CreatureManager.spawnCreatureInRoom() tags creatures with `sandbox: true` for state isolation gating
+- CreatureManager.clearCreaturesInRoom() removes all creatures from a room (used by kill/reset)
+- CombatSystem combatant HP/stamina are mutable references — sandbox heal/reset modifies them directly
+- buildCtx pattern: pass `creatureManager` and `combatSystem` via extras for sandbox command tests
+
 **Repository & Schema Testing Patterns:**
 - Contract test pattern: Reusable functions accepting factory (InMemory now, PG later) ensure behavioral parity
 - Migration SQL validation via regex parses for constraints, foreign keys, indexes, cross-migration consistency
