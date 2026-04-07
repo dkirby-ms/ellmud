@@ -62,6 +62,7 @@ const KNOWN_VERBS = new Set([
   'loadout',
   'rent',
   'goto',
+  'teleport',
 ]);
 
 export interface ParseResult {

@@ -1000,6 +1000,20 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.deliverResult(client, result);
     }
 
+    // Deliver targeted narrations (e.g., teleport notification to the moved player)
+    if (result.targetNarrations) {
+      const targetClient = this.clients.find((c) => c.sessionId === result.targetNarrations!.sessionId);
+      if (targetClient) {
+        for (const narration of result.targetNarrations.narrations) {
+          this.sendNarrate(targetClient, {
+            text: narration.text,
+            type: narration.type,
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
+
     // Trace: send trace narrations on room entry or "look"
     if (movedRoom || verb === 'look') {
       this.sendTraceNarrations(client, player.currentRoomId);
@@ -1041,6 +1055,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             armour: c.armour, agility: c.agility, dodgeSkillRank: c.dodgeSkillRank,
           })),
       corpseSystem: this.corpseSystem,
+      resolvePlayerByName: (name: string) => {
+        const lower = name.toLowerCase();
+        for (const [sid, ps] of this.players) {
+          const charName = this.characterNames.get(sid);
+          if (charName && charName.toLowerCase() === lower) {
+            return { sessionId: sid, player: ps, characterName: charName };
+          }
+        }
+        return undefined;
+      },
     };
   }
 
