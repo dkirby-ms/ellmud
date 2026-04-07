@@ -3,7 +3,7 @@
 -- Source: Classic DikuMUD/CircleMUD Midgaard zone (zone 30, tbaMUD stock areas)
 -- Imported via scripts/import-diku-zone.ts, then adapted for production use.
 --
--- 57 rooms, 115 intra-zone exits, 2 cross-zone portal exits (Siltgate ↔ Midgaard)
+-- 57 rooms, 115 intra-zone exits. Standalone — no cross-zone connections.
 -- 1 builder meta-room (petshop-storeroom) excluded — no exits, not player content.
 
 BEGIN;
@@ -14,7 +14,7 @@ BEGIN;
 
 INSERT INTO zones (id, slug, name, description, level_min, level_max, tier, theme, entry_room_slugs, lifecycle, category, max_players, pvp_enabled, repop_interval_seconds)
 VALUES (gen_random_uuid(), 'midgaard', 'Midgaard City',
-  'The drowned remnants of an old-world city district, half-submerged and picked over by scavengers. Pre-extinction streets grid out beneath knee-deep brackish water, their storefronts gutted and colonised by moss and fiddler crabs. Temples and guild halls still stand — too massive to topple — but their grandeur belongs to a dead age. The locals call it Midgaard, though no one remembers why.',
+  'The great city of Midgaard, a bustling metropolis of temples, shops, and guild halls. Streets stretch in all directions from a central square, leading to markets, residential areas, and the surrounding wilderness.',
   1, 10, 1, 'urban', '{outside-the-west-gate-of-midgaard}', 'persistent', 'dungeon', 20, false, 300)
 ON CONFLICT (slug) DO NOTHING;
 
@@ -667,28 +667,5 @@ FROM zones z, (VALUES
 WHERE z.slug = 'midgaard'
 ON CONFLICT (zone_id, from_room_slug, direction) DO NOTHING;
 
--- ── Cross-zone portal: Siltgate ↔ Midgaard ─────────────────
--- Siltgate city-gate (west) → Midgaard outside-the-west-gate-of-midgaard
--- Midgaard outside-the-west-gate-of-midgaard (west) → Siltgate city-gate
-
-INSERT INTO zone_exits (zone_id, from_room_slug, direction, to_room_slug, target_zone_slug, target_room_slug, locked, hidden)
-SELECT z.id, v.from_slug, v.direction, v.to_slug,
-       NULLIF(v.target_zone, ''), NULLIF(v.target_room, ''),
-       v.is_locked, v.is_hidden
-FROM zones z, (VALUES
-  ('city-gate', 'west', 'city-gate', 'midgaard', 'outside-the-west-gate-of-midgaard', false, false)
-) AS v(from_slug, direction, to_slug, target_zone, target_room, is_locked, is_hidden)
-WHERE z.slug = 'the-siltgate'
-ON CONFLICT (zone_id, from_room_slug, direction) DO NOTHING;
-
-INSERT INTO zone_exits (zone_id, from_room_slug, direction, to_room_slug, target_zone_slug, target_room_slug, locked, hidden)
-SELECT z.id, v.from_slug, v.direction, v.to_slug,
-       NULLIF(v.target_zone, ''), NULLIF(v.target_room, ''),
-       v.is_locked, v.is_hidden
-FROM zones z, (VALUES
-  ('outside-the-west-gate-of-midgaard', 'west', 'outside-the-west-gate-of-midgaard', 'the-siltgate', 'city-gate', false, false)
-) AS v(from_slug, direction, to_slug, target_zone, target_room, is_locked, is_hidden)
-WHERE z.slug = 'midgaard'
-ON CONFLICT (zone_id, from_room_slug, direction) DO NOTHING;
 
 COMMIT;
