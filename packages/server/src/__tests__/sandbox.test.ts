@@ -1183,13 +1183,13 @@ describe('Combat Sandbox', () => {
       for (const event of strikeEvents) {
         // breakdown should be present on strike events
         expect(event).toHaveProperty('breakdown');
-        const bd = (event as any).breakdown;
+        const bd = event.breakdown;
         expect(bd).toHaveProperty('rawDamage');
         expect(bd).toHaveProperty('finalDamage');
         expect(bd).toHaveProperty('armourReduction');
-        expect(typeof bd.rawDamage).toBe('number');
-        expect(typeof bd.finalDamage).toBe('number');
-        expect(typeof bd.armourReduction).toBe('number');
+        expect(typeof bd?.rawDamage).toBe('number');
+        expect(typeof bd?.finalDamage).toBe('number');
+        expect(typeof bd?.armourReduction).toBe('number');
       }
     });
 
@@ -1211,7 +1211,7 @@ describe('Combat Sandbox', () => {
       const strikeEvents = tickResult.events.filter(e => e.type === 'strike');
 
       for (const event of strikeEvents) {
-        const bd = (event as any).breakdown;
+        const bd = event.breakdown;
         if (!bd) continue;
 
         // finalDamage should be <= rawDamage (armour reduces it)
@@ -1261,7 +1261,7 @@ describe('Combat Sandbox', () => {
         expect(event.dodged).toBe(true);
         expect(event.damage).toBe(0); // dodged attacks deal 0 damage
         // If breakdown is present, it should reflect the dodge
-        const bd = (event as any).breakdown;
+        const bd = event.breakdown;
         if (bd) {
           expect(bd.dodged).toBe(true);
           expect(bd.dodgeChance).toBeGreaterThan(0);

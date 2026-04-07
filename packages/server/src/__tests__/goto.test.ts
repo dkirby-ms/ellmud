@@ -7,10 +7,10 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { handleGoto } from '../commands/handlers/goto.js';
-import type { CommandContext, CommandResult, CreatureRef } from '../commands/index.js';
+import type { CommandContext, CommandResult } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
 import { resetConfig } from '../config.js';
-import type { Room, Direction, RoomType } from '../generator/RoomGraph.js';
+import type { Room, Direction } from '../generator/RoomGraph.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
