@@ -48,6 +48,11 @@ export interface AdminRouterDeps {
   contentStores?: Map<ContentEntityType, IContentStore<ContentEntity>>;
 }
 
+/** Check if a Colyseus room name is a ZoneRoom instance ('zone' or 'zone:<slug>'). */
+function isZoneRoomName(name: string): boolean {
+  return name === 'zone' || name.startsWith('zone:');
+}
+
 export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
   const router = Router();
 
@@ -81,7 +86,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
       let totalCreatures = 0;
 
       for (const roomCache of rooms) {
-        if (roomCache.name !== 'zone') continue;
+        if (!isZoneRoomName(roomCache.name)) continue;
         const room = safeGetRoom(roomCache.roomId);
         if (!room) continue;
 
@@ -115,11 +120,8 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         return;
       }
 
-      if (room.roomName === 'zone') {
+      if (isZoneRoomName(room.roomName)) {
         const detail = getZoneDetail(room);
-        res.json(detail);
-      } else if (room.roomName === 'refuge') {
-        const detail = getRefugeDetail(room);
         res.json(detail);
       } else {
         res.json({
@@ -141,7 +143,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
       const creatures: Array<AdminCreatureInfo & { zoneRoomId: string }> = [];
 
       for (const roomCache of rooms) {
-        if (roomCache.name !== 'zone') continue;
+        if (!isZoneRoomName(roomCache.name)) continue;
         const room = safeGetRoom(roomCache.roomId);
         if (!room) continue;
 
@@ -415,23 +417,10 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         const room = safeGetRoom(roomCache.roomId);
         if (!room) continue;
 
-        if (room.roomName === 'zone') {
+        if (isZoneRoomName(room.roomName)) {
           const zonePlayers = getZonePlayers(room);
           for (const p of zonePlayers) {
-            players.push({ ...p, roomId: roomCache.roomId, roomName: 'zone' });
-          }
-        } else if (room.roomName === 'refuge') {
-          // Refuge doesn't have PlayerState objects, just session→playerId mapping
-          for (const client of room.clients) {
-            players.push({
-              sessionId: client.sessionId,
-              currentRoomId: 'refuge',
-              inventoryCount: 0,
-              currentWeight: 0,
-              maxCarryWeight: 0,
-              roomId: roomCache.roomId,
-              roomName: 'refuge',
-            });
+            players.push({ ...p, roomId: roomCache.roomId, roomName: room.roomName });
           }
         }
       }

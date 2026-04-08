@@ -200,6 +200,33 @@ describe('GET /admin/api/rooms/live', () => {
     expect(mockRoom.adminGetLiveRooms).toHaveBeenCalledOnce();
   });
 
+  it('includes persistent zone rooms (zone:<slug> names)', async () => {
+    const mockRoom = createMockZoneRoom({
+      liveRooms: [
+        {
+          roomId: 'crypt-room-a',
+          roomName: 'Flooded Chamber',
+          roomType: 'chamber',
+          playerCount: 1,
+          creatureCount: 0,
+          players: [{ sessionId: 'p1', characterName: 'Drizzt' }],
+          creatures: [],
+        },
+      ],
+    });
+    (mockRoom as Record<string, unknown>)._mockName = 'zone:flooded-crypt';
+    mockRooms.set('zone-room-2', mockRoom);
+
+    const app = createTestApp();
+    const res = await request(app, 'get', '/admin/api/rooms/live', { token: TEST_TOKEN });
+
+    expect(res.status).toBe(200);
+    const body = res.body as { rooms: unknown[]; totalPlayers: number; totalCreatures: number };
+    expect(body.rooms).toHaveLength(1);
+    expect(body.totalPlayers).toBe(1);
+    expect(mockRoom.adminGetLiveRooms).toHaveBeenCalledOnce();
+  });
+
   it('skips non-zone rooms', async () => {
     const refugeRoom = { _mockName: 'refuge', roomId: 'refuge-1', state: {}, clock: { running: true }, clients: [] };
     mockRooms.set('refuge-1', refugeRoom);
