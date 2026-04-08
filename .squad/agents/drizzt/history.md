@@ -3395,3 +3395,18 @@ Created comprehensive `help` command handler supporting context-aware command di
 - Express route ordering matters when mixing static and parameterized paths — `/rooms/live` must precede `/rooms/:roomId`
 - ZoneRoom's `broadcastToRoom` and `broadcastPlayerMovement` are private — adding public `admin*` wrappers is the right pattern to avoid `as any` casts from route handlers
 - The shared package must be rebuilt (`rm -rf dist && tsc --build`) before server can see new shared types — incremental builds may skip unchanged-timestamp files
+
+---
+
+## Session: Fix broken test runner and lint errors (2025-07)
+
+### What was done
+- Aligned vitest from mixed v3/v4 (client/shared had ^4.1.0, server had ^3.2.1) to ^3.2.1 across all workspaces
+- Cleaned corrupted local vitest v4 installs from package-lock.json (npm workspace dedup issue)
+- Fixed all 9 ESLint errors: added `**/*.d.ts` to eslint ignores, disabled no-control-regex for ansi-parser, prefixed unused vars/functions with `_`, fixed eslint-disable scope for multi-line any cast
+- Result: `npx vitest run` exits 0, `npx eslint .` reports 0 errors
+
+## Learnings
+- npm workspaces can pin stale versions in package-lock.json even after changing package.json — must remove both node_modules AND lockfile entries for affected packages
+- eslint `eslint-disable-next-line` only covers the single next line; multi-line statements need block `eslint-disable`/`eslint-enable` comments
+- Generated `.d.ts` files should be excluded from ESLint via ignores in eslint.config.mjs (`**/*.d.ts`)

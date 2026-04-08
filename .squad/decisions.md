@@ -6977,3 +6977,31 @@ router.post('/admin/api/rooms/:roomId/teleport', adminAuth, async (req, res) => 
 ---
 
 **End of Proposal**
+
+---
+
+## 11. Decision: Preserve Room Position on Duplicate Join (#355)
+
+**Author:** Minsc (Tester/QA)  
+**Date:** 2026-07-08  
+**Status:** Implemented & pushed to dev
+
+### Context
+
+Issue #355: Browser refresh caused players to reconnect to their spawn room instead of their current room.
+
+### Decision
+
+When `ZoneRoom.onJoin()` detects a duplicate `playerId` (browser refresh / reconnect), preserve the existing player's `currentRoomId` and use it as the start room instead of recomputing from entry points.
+
+### Rationale
+
+- Browser refresh creates a new WebSocket connection (fresh `joinOrCreate()`), NOT a Colyseus `allowReconnection()`. This means the `onJoin()` path always runs.
+- The duplicate-join block correctly displaced old sessions but then always overwrote `PlayerState` with a fresh entry room.
+- Fix is surgical: 1 new variable + 1 new condition. No impact on new player joins or any other path.
+
+### Impact
+
+- `ZoneRoom.ts`: 2 small additions to `onJoin()`
+- New test file: `reconnect-room-position.test.ts` (3 tests)
+- Full server suite passes (2385 tests, 0 failures)
