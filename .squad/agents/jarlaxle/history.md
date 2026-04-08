@@ -2326,3 +2326,17 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
   - GDD.md §6.11 — Complete position system specification
 - **Recommendation:** Prototype Phase 1 in feature branch. Go/no-go based on performance (<100ms/tick with 30 entities) and text-mode UX. If successful, grid becomes opt-in for boss fights. If not, defer until graphical client available.
 - **Design doc:** `docs/design/337-combat-grid-systems.md` (27KB, 8 sections: current system analysis, grid mechanics proposal, creature AI pathfinding, integration analysis, risks, phased implementation)
+
+### 2026-07-28: Admin Spawn→Display Bug Fix (commit a82cf3d)
+- **Task:** Fix bug where creatures spawned via admin UI don't appear in the room list
+- **Root causes found (3 issues):**
+  1. **`handleSpawn` didn't await `loadRoom()`** — Frontend showed success before data refresh completed, leaving stale creature list visible. Fixed by awaiting `loadRoom()` before showing success feedback.
+  2. **`/spawn` endpoint lacked room validation** — Unlike `/spawn-creature` (which uses `ZoneRoom.adminSpawnCreature` with room graph validation), the `/spawn` endpoint accepted any `targetRoomId` string. If the room didn't exist in the zone graph, the creature had a `currentRoomId` that didn't match any room in the frontend's `roomOccupancy` map, making it invisible in the Room Graph tab.
+  3. **`getZoneDetail()` hardcoded `name: 'zone'`** — Persistent zones (e.g., `zone:flooded-crypt`) lost their actual room name in the detail response. Fixed to return `room.roomName`.
+- **Approach:** End-to-end trace of spawn→display pipeline (both endpoints, CreatureManager, frontend React state). Backend confirmed correct via integration tests before examining frontend.
+- **Key architectural learnings:**
+  - Two spawn endpoints exist: `/spawn` (generic, used by frontend) and `/spawn-creature` (zone-specific, uses `adminSpawnCreature`). The `/spawn` endpoint bypasses ZoneRoom's room validation.
+  - Frontend `roomOccupancy` useMemo maps creatures by `currentRoomId` against `zoneData.rooms[].slug`. Both must use same format (zone slugs). For procedural zones (`zoneSlug` undefined), the Room Graph tab shows "Zone data unavailable" — a known limitation.
+  - `contentEntityToCreatureTemplate()` (added in 5f3eb60) converts flat ContentEntity to nested CreatureTemplate shape — critical for the `/spawn` endpoint.
+- **Tests added:** 5 new integration tests in `admin-live-rooms.test.ts` covering spawn→display flow, auto-room-selection, multi-spawn, invalid room rejection, and room name accuracy. All 2385 server tests pass.
+- **Files changed:** `routes.ts` (room validation + name fix), `LiveRoomDetail.tsx` (await loadRoom), `admin-live-rooms.test.ts` (+5 tests)
