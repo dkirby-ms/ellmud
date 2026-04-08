@@ -6075,3 +6075,83 @@ if (!allowed.includes(ctx.room.type as string)) { ... }
 - `packages/client/src/components/map/ZoneExitEdge.tsx`
 - `packages/client/src/__tests__/zone-exit-edge.test.tsx`
 
+
+---
+
+## 2026-04-08T01:25:00Z: No Curved Edges on Map — User Directive
+
+**By:** dkirby-ms (via Copilot)  
+**Scope:** Map Layout — User Experience
+
+**Directive:** No curved or diagonal edges on the map. All connections must be drawn as straight orthogonal lines (horizontal or vertical). If two rooms connected by a cardinal exit aren't on the same axis, fix the layout — don't draw a curve.
+
+**Rationale:** The map should only have straight lines. Curves indicate a layout alignment failure, not a rendering choice.
+
+---
+
+## 2026-04-17: Cardinal Alignment v3 — Group-Aware Cascade + Chain Push
+
+**By:** Regis (Frontend Dev)  
+**Commit:** 117e679  
+**Scope:** Map Layout — Phase 5c Alignment
+
+**Context:**
+Phase 5c cardinal alignment in `computeLayout.ts` had a cascade guard (v2, commit b82ce8e) that was too conservative. It prevented alignment of main-street ↔ inside-the-west-gate-of-midgaard because wall-road-2 (in the poor-alley E/W group) was anchored at its group's majority coordinate. The `layoutScore` rollback also rejected valid alignment shifts (score 214→394 for a 19-room cascade).
+
+**Decision:**
+Replaced the fragile cascade guard + layoutScore rollback with three general-purpose mechanisms:
+
+1. **Group-aware cascade:** When the perpendicular BFS encounters a room in another multi-room alignment group, pull in the ENTIRE group — not just that one room. This preserves their internal E/W (or N/S) alignment during the shift.
+
+2. **Chain-push collision resolution:** Instead of `findNearestUnoccupied` (which displaces rooms sideways, breaking other alignments), push colliding rooms 1 step further in the shift direction (domino style). This preserves relative ordering along the perpendicular axis.
+
+3. **Alignment-specific acceptance:** Use total misaligned-pair count across ALL groups as the acceptance criterion, instead of `layoutScore`. The alignment pass should prioritize cardinal alignment over distance minimization.
+
+**Impact:**
+- All E/W-connected room pairs now share the same y-coordinate
+- All N/S-connected room pairs now share the same x-coordinate
+- No zone-specific logic, no hardcoded room slugs
+- 27 computeLayout tests + 13 elk-layout tests pass
+- Midgaard test now asserts full corridor alignment (9 rooms including both gate pairs)
+- No API or server changes required
+- The alignment pass moves up to ~20 rooms per iteration but converges in 1-2 passes
+- Future zones with similar topology (parallel E/W corridors connected by N/S chains) should work correctly without additional fixes
+
+**Files Modified:**
+- `packages/client/src/map/computeLayout.ts`
+- `packages/client/src/map/__tests__/computeLayout.test.ts`
+
+---
+
+## 2026-04-17: Edge Crossing Elimination — Phase 5d
+
+**By:** Regis (Frontend Dev)  
+**Commit:** 2495643  
+**Scope:** Map Layout — Phase 5d Crossing Detection
+
+**Context:**
+The BFS layout engine could produce layouts where two edge lines visually cross over each other (e.g., a horizontal A→B edge crossing a vertical C→D edge at a grid point that has no room). This made the map confusing — players saw intersecting lines and assumed a room existed there.
+
+**Decision:**
+Added **Phase 5d** to the layout refinement pipeline in `computeLayout.ts`, positioned after cardinal alignment (5c) and before occlusion fix (6).
+
+**Algorithm:**
+- **Detection:** Build all orthogonal edge segments per z-level (skip diagonals, skip distance-1 edges); test all segment pairs for intersection at strictly interior points (excluding shared endpoints)
+- **Resolution:** For each crossing pair, try moving each of the four endpoint rooms (fewest-exits first) to a nearby free cell within CROSSING_CANDIDATE_RADIUS=6
+- **Acceptance:** Crossing decreases AND move passes all guards: no diagonals, no direction mismatches, no alignment breaks
+- **Iteration:** Up to CROSSING_FIX_PASSES=30 times, recomputing segments each pass
+
+**Constraints Preserved:**
+- Cardinal alignment (E/W same y, N/S same x) — guarded by `moveWouldBreakAlignment()`
+- Direction semantics — guarded by `moveWouldIncreaseMismatches()`
+- No diagonals — explicit check against all neighbors
+- No collisions — occupied-set check
+
+**Impact:**
+- No regressions: All 28 layout tests + 13 ELK tests pass, including Midgaard
+- New test (Test 28): Constructs a topology with guaranteed crossing and verifies it's eliminated
+- Performance: O(E² × passes) per z-level, negligible for zones <200 rooms
+
+**Files Modified:**
+- `packages/client/src/map/computeLayout.ts`
+- `packages/client/src/map/__tests__/computeLayout.test.ts`
