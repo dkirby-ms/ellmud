@@ -2239,6 +2239,31 @@ export function computeLayout(
 
         if (batchRooms.size === 0) continue;
 
+        // ── Guard: don't break existing alignments ───────────────────────
+        // If the cascade pulled in a room that already sits at its own
+        // group's majority coordinate, shifting it would destroy an
+        // alignment that earlier phases (or a prior iteration) achieved.
+        // Skip this batch entirely in that case.
+        const groupRoot = ufFind(group[0]);
+        let wouldBreakAlignment = false;
+        for (const [id] of batchRooms) {
+          if (ufFind(id) === groupRoot) continue; // same group — expected
+          const idGroup = groups.get(ufFind(id));
+          if (!idGroup || idGroup.length <= 1) continue;
+          const idCoord = coordOf(id);
+          const gf = new Map<number, number>();
+          for (const gid of idGroup) {
+            const gc = coordOf(gid);
+            gf.set(gc, (gf.get(gc) ?? 0) + 1);
+          }
+          let maj = 0, mx = 0;
+          for (const [c, cnt] of gf) {
+            if (cnt > mx) { mx = cnt; maj = c; }
+          }
+          if (idCoord === maj) { wouldBreakAlignment = true; break; }
+        }
+        if (wouldBreakAlignment) continue;
+
         // Save old positions for rollback
         const oldPos = new Map<string, { x: number; y: number }>();
         for (const [id] of batchRooms) {

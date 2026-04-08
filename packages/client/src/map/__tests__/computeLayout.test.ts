@@ -1151,30 +1151,32 @@ describe('computeLayout', () => {
 
   // ── 26. Midgaard zone — main-street alignment ───────────────────────────
   it('keeps east/west-connected main-street rooms on the same row (Midgaard)', () => {
-    // Full Midgaard zone topology (40 rooms, 84 exits). The wall-road branch
-    // south of inside-the-west-gate historically pulled it off the main-street
-    // row during force-directed relaxation, creating a multi-cell diagonal.
+    // Full Midgaard zone topology (52 rooms, ~107 exits) from the real
+    // migration SQL (004_import_midgaard.sql). The wall-road branch south
+    // of inside-the-west-gate historically pulled wall-road-2 off the
+    // poor-alley row during cardinal alignment cascading.
     const exitData: [string, string, string][] = [
       ['the-reading-room', 'east', 'the-temple-of-midgaard'],
-      ['the-temple-of-midgaard', 'west', 'the-reading-room'],
+      ['the-temple-of-midgaard', 'north', 'by-the-temple-altar'],
+      ['the-temple-of-midgaard', 'east', 'the-midgaard-donation-room'],
       ['the-temple-of-midgaard', 'south', 'the-temple-square'],
-      ['the-temple-of-midgaard', 'east', 'the-clerics-inner-sanctum'],
-      ['the-clerics-inner-sanctum', 'west', 'the-temple-of-midgaard'],
-      ['the-clerics-inner-sanctum', 'south', 'the-bar-of-divination'],
-      ['the-bar-of-divination', 'north', 'the-clerics-inner-sanctum'],
+      ['the-temple-of-midgaard', 'west', 'the-reading-room'],
+      ['the-clerics-inner-sanctum', 'east', 'the-bar-of-divination'],
       ['the-bar-of-divination', 'south', 'the-entrance-to-the-clerics-guild'],
+      ['the-bar-of-divination', 'west', 'the-clerics-inner-sanctum'],
       ['the-entrance-to-the-clerics-guild', 'north', 'the-bar-of-divination'],
-      ['the-entrance-to-the-clerics-guild', 'south', 'the-temple-square'],
+      ['the-entrance-to-the-clerics-guild', 'east', 'the-temple-square'],
       ['the-temple-square', 'north', 'the-temple-of-midgaard'],
-      ['the-temple-square', 'east', 'the-entrance-to-the-clerics-guild'],
-      ['the-temple-square', 'south', 'the-entrance-hall-of-the-grunting-boar-inn'],
-      ['the-temple-square', 'west', 'the-common-square'],
-      ['the-entrance-hall-of-the-grunting-boar-inn', 'north', 'the-temple-square'],
+      ['the-temple-square', 'east', 'the-entrance-hall-of-the-grunting-boar-inn'],
+      ['the-temple-square', 'south', 'market-square'],
+      ['the-temple-square', 'west', 'the-entrance-to-the-clerics-guild'],
+      ['the-entrance-hall-of-the-grunting-boar-inn', 'north', 'the-post-office'],
       ['the-entrance-hall-of-the-grunting-boar-inn', 'east', 'the-grunting-boar'],
-      ['the-entrance-hall-of-the-grunting-boar-inn', 'south', 'market-square'],
+      ['the-entrance-hall-of-the-grunting-boar-inn', 'west', 'the-temple-square'],
+      ['the-entrance-hall-of-the-grunting-boar-inn', 'up', 'the-reception'],
       ['the-grunting-boar', 'west', 'the-entrance-hall-of-the-grunting-boar-inn'],
-      ['the-grunting-boar', 'east', 'the-reception'],
-      ['the-reception', 'west', 'the-grunting-boar'],
+      ['the-reception', 'north', 'the-cryogenic-center'],
+      ['the-reception', 'down', 'the-entrance-hall-of-the-grunting-boar-inn'],
       ['the-bakery', 'south', 'main-street-2'],
       ['the-general-store', 'south', 'main-street-3'],
       ['the-weapon-shop', 'south', 'main-street-4'],
@@ -1186,7 +1188,7 @@ describe('computeLayout', () => {
       ['main-street-2', 'east', 'market-square'],
       ['main-street-2', 'south', 'the-armory'],
       ['main-street-2', 'west', 'main-street'],
-      ['market-square', 'north', 'the-entrance-hall-of-the-grunting-boar-inn'],
+      ['market-square', 'north', 'the-temple-square'],
       ['market-square', 'east', 'main-street-3'],
       ['market-square', 'south', 'the-common-square'],
       ['market-square', 'west', 'main-street-2'],
@@ -1201,44 +1203,63 @@ describe('computeLayout', () => {
       ['the-entrance-to-the-mages-guild', 'north', 'main-street'],
       ['the-entrance-to-the-mages-guild', 'south', 'the-mages-bar'],
       ['the-mages-bar', 'north', 'the-entrance-to-the-mages-guild'],
-      ['the-mages-bar', 'south', 'the-mages-laboratory'],
-      ['the-mages-laboratory', 'north', 'the-mages-bar'],
+      ['the-mages-bar', 'east', 'the-mages-laboratory'],
+      ['the-mages-laboratory', 'west', 'the-mages-bar'],
       ['the-armory', 'north', 'main-street-2'],
       ['the-entrance-hall-to-the-guild-of-swordsmen', 'north', 'main-street-4'],
-      ['the-entrance-hall-to-the-guild-of-swordsmen', 'south', 'the-bar-of-swordsmen'],
-      ['the-bar-of-swordsmen', 'north', 'the-entrance-hall-to-the-guild-of-swordsmen'],
+      ['the-entrance-hall-to-the-guild-of-swordsmen', 'east', 'the-bar-of-swordsmen'],
       ['the-bar-of-swordsmen', 'south', 'the-tournament-and-practice-yard'],
+      ['the-bar-of-swordsmen', 'west', 'the-entrance-hall-to-the-guild-of-swordsmen'],
       ['the-tournament-and-practice-yard', 'north', 'the-bar-of-swordsmen'],
+      ['the-eastern-end-of-poor-alley', 'east', 'the-common-square'],
+      ['the-eastern-end-of-poor-alley', 'south', 'grubby-inn'],
+      ['the-eastern-end-of-poor-alley', 'west', 'poor-alley'],
+      ['the-common-square', 'north', 'market-square'],
+      ['the-common-square', 'east', 'the-dark-alley'],
+      ['the-common-square', 'south', 'the-dump'],
+      ['the-common-square', 'west', 'the-eastern-end-of-poor-alley'],
+      ['the-dark-alley', 'east', 'the-dark-alley-at-the-levee'],
+      ['the-dark-alley', 'south', 'the-entrance-hall-to-the-guild-of-thieves'],
+      ['the-dark-alley', 'west', 'the-common-square'],
+      ['the-entrance-hall-to-the-guild-of-thieves', 'north', 'the-dark-alley'],
+      ['the-entrance-hall-to-the-guild-of-thieves', 'east', 'the-thieves-bar'],
+      ['the-thieves-bar', 'south', 'the-secret-yard'],
+      ['the-thieves-bar', 'west', 'the-entrance-hall-to-the-guild-of-thieves'],
+      ['the-secret-yard', 'north', 'the-thieves-bar'],
+      ['the-dump', 'north', 'the-common-square'],
       ['the-pet-shop', 'north', 'main-street-3'],
       ['the-magic-shop', 'south', 'main-street'],
       ['inside-the-west-gate-of-midgaard', 'east', 'main-street'],
       ['inside-the-west-gate-of-midgaard', 'south', 'wall-road'],
       ['inside-the-west-gate-of-midgaard', 'west', 'outside-the-west-gate-of-midgaard'],
+      ['inside-the-east-gate-of-midgaard', 'east', 'outside-the-east-gate-of-midgaard'],
+      ['inside-the-east-gate-of-midgaard', 'south', 'ye-olde-water-shoppe'],
       ['inside-the-east-gate-of-midgaard', 'west', 'main-street-4'],
       ['wall-road', 'north', 'inside-the-west-gate-of-midgaard'],
       ['wall-road', 'south', 'wall-road-2'],
       ['wall-road-2', 'north', 'wall-road'],
       ['wall-road-2', 'east', 'poor-alley'],
       ['wall-road-2', 'south', 'wall-road-3'],
-      ['poor-alley', 'west', 'wall-road-2'],
       ['poor-alley', 'east', 'the-eastern-end-of-poor-alley'],
-      ['the-eastern-end-of-poor-alley', 'west', 'poor-alley'],
-      ['the-eastern-end-of-poor-alley', 'east', 'the-common-square'],
-      ['the-common-square', 'north', 'market-square'],
-      ['the-common-square', 'east', 'the-temple-square'],
-      ['the-common-square', 'south', 'the-dark-alley'],
-      ['the-common-square', 'west', 'the-eastern-end-of-poor-alley'],
-      ['the-dark-alley', 'north', 'the-common-square'],
-      ['the-dark-alley', 'south', 'the-entrance-hall-to-the-guild-of-thieves'],
-      ['the-entrance-hall-to-the-guild-of-thieves', 'north', 'the-dark-alley'],
-      ['the-entrance-hall-to-the-guild-of-thieves', 'south', 'the-thieves-bar'],
-      ['the-thieves-bar', 'north', 'the-entrance-hall-to-the-guild-of-thieves'],
-      ['the-thieves-bar', 'east', 'the-secret-yard'],
-      ['the-secret-yard', 'west', 'the-thieves-bar'],
+      ['poor-alley', 'west', 'wall-road-2'],
+      ['the-dark-alley-at-the-levee', 'east', 'the-eastern-end-of-the-alley'],
+      ['the-dark-alley-at-the-levee', 'south', 'the-levee'],
+      ['the-dark-alley-at-the-levee', 'west', 'the-dark-alley'],
+      ['the-eastern-end-of-the-alley', 'south', 'the-deserted-warehouse'],
+      ['the-eastern-end-of-the-alley', 'west', 'the-dark-alley-at-the-levee'],
       ['wall-road-3', 'north', 'wall-road-2'],
       ['wall-road-3', 'south', 'on-the-bridge'],
+      ['grubby-inn', 'north', 'the-eastern-end-of-poor-alley'],
+      ['the-levee', 'north', 'the-dark-alley-at-the-levee'],
+      ['the-deserted-warehouse', 'north', 'the-eastern-end-of-the-alley'],
       ['on-the-bridge', 'north', 'wall-road-3'],
       ['outside-the-west-gate-of-midgaard', 'east', 'inside-the-west-gate-of-midgaard'],
+      ['outside-the-east-gate-of-midgaard', 'west', 'inside-the-east-gate-of-midgaard'],
+      ['the-post-office', 'south', 'the-entrance-hall-of-the-grunting-boar-inn'],
+      ['the-cryogenic-center', 'south', 'the-reception'],
+      ['by-the-temple-altar', 'south', 'the-temple-of-midgaard'],
+      ['the-midgaard-donation-room', 'west', 'the-temple-of-midgaard'],
+      ['ye-olde-water-shoppe', 'north', 'inside-the-east-gate-of-midgaard'],
     ];
 
     const rooms = new Map<string, { exits: Map<string, string> }>();
@@ -1250,11 +1271,6 @@ describe('computeLayout', () => {
 
     const layout = computeLayout(rooms, 'the-reading-room');
 
-    // The inside-the-west-gate ↔ main-street east/west pair must share y
-    const wg = pos(layout, 'inside-the-west-gate-of-midgaard');
-    const ms = pos(layout, 'main-street');
-    expect(wg.y).toBe(ms.y);
-
     // The entire main-street corridor (east/west chain) should share y
     const coreStreet = [
       'main-street', 'main-street-2', 'market-square',
@@ -1262,10 +1278,16 @@ describe('computeLayout', () => {
     ];
     const ys = coreStreet.map(id => pos(layout, id).y);
     const misaligned = coreStreet.filter((_, i) => ys[i] !== ys[0]);
-    if (misaligned.length > 0) {
-      console.log(`Street Y values: ${coreStreet.map((id, i) => `${id}=${ys[i]}`).join(', ')}`);
-    }
     expect(misaligned).toEqual([]);
+
+    // wall-road-2 and poor-alley are E/W-connected and must share y
+    const wr2 = pos(layout, 'wall-road-2');
+    const pa = pos(layout, 'poor-alley');
+    expect(wr2.y).toBe(pa.y);
+
+    // mages-guild entrance is south of poor-alley (north exit → poor-alley row)
+    const mg = pos(layout, 'the-entrance-to-the-mages-guild');
+    expect(mg.y).toBeGreaterThan(pa.y);
   });
 
   // ── 27. Cardinal alignment is entry-point-independent ───────────────────

@@ -1437,3 +1437,17 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 - The proportional diagonal penalty only works when scoped to the relaxation phase. Applying it globally (to diagonal cascade/direction violation repair) caused 2 Siltgate diagonals because the changed scoring landscape prevented the cascade from fixing certain diagonals.
 - Tracing which phase breaks alignment is essential — the actual culprit was the post-cascade relaxation pass inside `fixDiagonalCascade()`, not the cascade strategies themselves.
 - The alignment guard's distance-1 check is sufficient when combined with proportional scoring, because the relaxation preserves alignment (so rooms remain at distance 1), and the guard prevents all subsequent phases from breaking it.
+
+### Cardinal Alignment Cascade Guard (2025-01)
+
+**Bug:** In the Midgaard zone (real 52-room topology from migration SQL), `wall-road-2` and `poor-alley` were rendered at different y-coordinates despite being connected by an east/west exit. The mages-guild rooms also appeared too far south.
+
+**Root cause:** Before Phase 5c (cardinal alignment), BFS placed wall-road-2 and poor-alley correctly at the same y. However, the main-street E/W alignment group's cascade shifted gate→wall-road→wall-road-2 by +1 to fix gate alignment, **breaking** the already-correct poor-alley alignment as a side effect. The subsequent poor-alley alignment pass tried to undo this but was rolled back due to score regression.
+
+**Fix:** Added a guard in `alignAxis()` that checks, after building the cascade batch, whether any cascaded room (outside the current alignment group) already sits at its own group's majority coordinate. If so, the batch is skipped entirely — accepting it would destroy an alignment that earlier phases achieved.
+
+**Also fixed:** Updated Midgaard test #26 from incorrect 40-room topology to real 52-room migration data (004_import_midgaard.sql). Added assertions for wall-road-2/poor-alley y-alignment and mages-guild positioning.
+
+**Key learnings:**
+- The alignment pass's cascade can break alignments in OTHER groups by dragging rooms that are already correctly positioned. The guard prevents this by detecting such rooms before applying the batch.
+- Test data must match the real migration SQL — the original test had ~12 missing rooms and several wrong exit directions (e.g., mages-bar→south→lab instead of east).
