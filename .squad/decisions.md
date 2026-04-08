@@ -7005,3 +7005,22 @@ When `ZoneRoom.onJoin()` detects a duplicate `playerId` (browser refresh / recon
 - `ZoneRoom.ts`: 2 small additions to `onJoin()`
 - New test file: `reconnect-room-position.test.ts` (3 tests)
 - Full server suite passes (2385 tests, 0 failures)
+# Decision: Align all workspace packages on vitest ^3.2.x
+
+**Author:** Drizzt (Engine Dev)
+**Date:** 2025-07-24
+
+## Context
+Client and shared packages had vitest ^4.1.0 while server had ^3.2.1. npm installed vitest v4 locally in client/shared but those installs were corrupted (missing dist/). This broke the test runner completely.
+
+## Decision
+- All three workspace packages now use `vitest: "^3.2.1"` and `@vitest/coverage-v8: "^3.2.1"`
+- Root hoisted vitest v3.2.4 serves all workspaces (no local installs)
+- Added `**/*.d.ts` to ESLint ignores in `eslint.config.mjs` — generated declaration files should never be linted
+
+## Rationale
+- v3.2.x is the stable version already working at root; v4.x is too new and npm's workspace dedup can't handle mixed major versions cleanly
+- All team members should keep vitest versions aligned going forward to avoid repeat breakage
+
+---
+
