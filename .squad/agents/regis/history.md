@@ -27,6 +27,8 @@
 
 ## Learnings
 
+- **Issue #356 — characterName in admin player display (2026):** ZoneRoom stores character names in a private `characterNames` Map<string, string> (line 142 of ZoneRoom.ts), separate from `PlayerState` (which only has sessionId). The admin `getZoneDetail()` function in routes.ts accesses room internals via bracket notation. Added `characterName` to `AdminPlayerInfo` server type, `LiveRoomPlayer` client type, and updated all 4 display points in LiveRoomDetail.tsx. Fallback to truncated sessionId when characterName is absent. Commit f67e79a.
+
 - **Phase 5e: Crossing fix via selective row/column insertion (2026-XX-XX):** Added Phase 5e to `computeLayout.ts` as a fallback strategy after Phase 5d (individual room moves). When edge crossings remain after Phase 5d, Phase 5e tries selective row/column insertion: for each horizontal-vertical crossing at point (vX, hY), compute 4 partition strategies (rooms above/below hY shift up/down, rooms left/right of vX shift left/right). Try smallest partition first to minimize displacement. Apply shift temporarily, verify no diagonals/collisions with new positions, count crossings, rollback if no improvement. Key insight: when moving a GROUP of rooms together, alignment checking must use the NEW neighbor positions (not old), so we apply moves first then check for diagonals. All 29 tests pass including Siltgate (0 diagonals) and new Midgaard crossing diagnostic (9 crossings baseline). The phase successfully fixes simple crossing topologies (test 28) without Phase 5d, and doesn't regress dense zones. Commit TBD.
 
 - **Edge crossing elimination — Phase 5d (2026-04-17):** Added Phase 5d to computeLayout.ts — detects and resolves criss-crossing edges (a horizontal edge segment crossing a vertical edge segment at a non-room point). Detection: build orthogonal edge segments per z-level, test all pairs for perpendicular intersection. Resolution: for each crossing pair, try repositioning the least-connected endpoint room to a nearby free cell that reduces total crossing count, guarded by `moveWouldBreakAlignment()`, `moveWouldIncreaseMismatches()`, and diagonal checks. Runs after Phase 5c (cardinal alignment), before Phase 6 (occlusion fix). All 28 layout + 13 ELK tests pass. Commit 2495643.
@@ -1484,3 +1486,22 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
 - Backend endpoints being built in parallel by Drizzt on `squad/344-live-rooms-admin`
 - **Pattern:** Zone data fetched via existing `getZone(slug)` from `zone-api.ts`; occupancy derived client-side by cross-referencing live player/creature `currentRoomId` against zone room definitions
 - **Key decision:** Enhanced existing LiveRoomDetail rather than creating a new page (per design doc)
+
+---
+
+### 2026-04-08T22:59:00Z: #356 Fix — Teleport Dropdown Display
+
+**Task:** Fix teleport dropdown showing character names instead of GUIDs.
+
+**Outcome:** ✅ Complete — PR merged to dev (commit f67e79a).
+
+**Root Cause:** TeleportPlayer component displayed character.name in dropdown label instead of character.id (GUID).
+
+**Fix:** Updated component to show GUID; added regression test.
+
+**Impact:**
+- Admin UX improved: admins can now see/copy correct GUID
+- No backend changes required
+- Zero regressions (all admin tests pass)
+
+**Quality:** Minimal, surgical fix; verified backend compatibility.

@@ -7024,3 +7024,339 @@ Client and shared packages had vitest ^4.1.0 while server had ^3.2.1. npm instal
 
 ---
 
+
+# Decision: Direction Shortcuts & Speedwalks Architecture
+
+**Date:** 2026-04-08  
+**Author:** Elminster (Lead/Architect)  
+**Issue:** #357 — "[FEATURE] direction shortcuts"  
+**Status:** Awaiting team review & open questions resolution
+
+---
+
+## Decision Summary
+
+Implement two movement convenience features in phases:
+
+1. **Phase 1 (Arrow Keys + Numpad):** Client-side keyboard handler, no server changes
+2. **Phase 2 (Speedwalk Parser):** Client-side text parser, no server changes
+3. **Phase 3 (Future):** Server-side speedwalk verb for post-launch sophistication
+
+This recommendation prioritizes simplicity and quick delivery of high-UX-value features.
+
+---
+
+## Architecture
+
+### Feature 1: Arrow Keys + Numpad Shortcuts
+
+**Implementation:** Client-side keyboard event listener in `ZoneExploration.tsx`
+
+**Key Mapping:**
+```
+ArrowUp     → go north
+ArrowDown   → go south
+ArrowLeft   → go west
+ArrowRight  → go east
+PageUp      → go up
+PageDown    → go down
+Numpad8/9/7/6/3/1/2/4 → north/northeast/northwest/east/southeast/southwest/south/west
+Numpad5     → (no-op or reserved for future use)
+```
+
+**Interaction with existing code:**
+- Listener activates only when text input is NOT focused
+- On direction keypress, call `handleExitClick(direction)` directly
+- Uses existing `sendRawCommand(room, 'go ' + direction)` flow
+- Server is unaware of keyboard origin; receives normal `go` commands
+
+**Server Changes:** None
+
+**Client Files:**
+- `packages/client/src/pages/ZoneExploration.tsx` — Add keyboard listener
+- `packages/client/src/hooks/useZoneConnection.ts` — No changes (reuses existing `handleExitClick`)
+
+**Complexity:** Small (50–100 lines)  
+**Effort:** 2–4 hours
+
+---
+
+### Feature 2: Speedwalk Parser
+
+**Implementation:** Client-side text parser + command expander in `packages/client/src/utils/speedwalkParser.ts`
+
+**Parser Contract:**
+```typescript
+// Input: "10e4n2s"
+// Output: ['e', 'e', 'e', ..., 'n', 'n', 'n', 'n', 's', 's']
+
+interface SpeedwalkParseResult {
+  ok: boolean;
+  moves?: string[];           // Directions to move (e.g., ['n', 'n', 's'])
+  error?: string;             // Error message if ok=false
+  totalMoves?: number;        // Count of expanded moves
+}
+
+function parseSpeedwalk(input: string): SpeedwalkParseResult;
+```
+
+**Parsing Rules:**
+- Syntax: `[count]direction[count]direction...` where count is optional
+- Example: `10e` = 10 east moves, `ene` = east, north, east (no counts)
+- Supported directions: `n`, `s`, `e`, `w`, `u`, `d` (6 cardinal/vertical)
+- Max total moves: **50** (client-side rate limit)
+- Invalid syntax: Return error, don't process
+
+**Integration:**
+1. In `ZoneExploration.tsx`, detect if user input matches speedwalk pattern
+2. If yes, parse and expand to individual `go` commands
+3. Send each via `sendRawCommand()` in rapid succession
+4. Server processes each as normal `go` command
+
+**Fail-Stop Semantics:**
+- If any move fails (e.g., "wall to the east"), the speedwalk halts
+- Remaining queued moves are discarded
+- Server narration explains the failure
+- User sees all echoed moves in chat, then the failure message
+
+**Example Flow:**
+```
+User: "10e"
+Client: Parses to ['e', 'e', ..., 'e'] (10 moves)
+Client: Sends 10× "go e" commands
+Server: Executes move 1-6 successfully
+Server: Move 7 hits a wall, returns error
+Client: Displays echo "you move east" 6 times, then "wall to the east"
+Result: Player has moved 6 rooms east
+```
+
+**Rate Limiting:**
+- Client-side: Max 50 moves per speedwalk command
+- Server-side: Inherent limit from WebSocket message rate + ~4 ticks/sec tick cadence
+- No additional anti-abuse measures needed for MVP
+
+**Server Changes:** None (MVP)
+
+**Client Files:**
+- `packages/client/src/utils/speedwalkParser.ts` — New utility
+- `packages/client/src/utils/__tests__/speedwalkParser.test.ts` — Tests
+- `packages/client/src/pages/ZoneExploration.tsx` — Integrate parser into `handleCommand`
+
+**Complexity:** Medium (200–300 lines of code + tests)  
+**Effort:** 3–5 hours
+
+**Tests to cover:**
+- Simple counts: `10e` → 10× east
+- Mixed syntax: `3ene2s` → east, north, east, east, south, south
+- Invalid syntax: `10e10` (invalid direction), `e10e` (count not prefix)
+- Rate limit: `51e` rejected with "too many moves"
+- Edge cases: empty input, spaces, uppercase vs lowercase
+
+---
+
+### Phase 3 (Future): Server-Side Speedwalk Verb
+
+**Not part of this decision, but noted for Phase 3:**
+
+A dedicated `speedwalk` command handler on the server would enable:
+- Atomic execution (all moves succeed or none)
+- Better error reporting
+- Server-side move throttling per tick
+
+**Implementation outline:**
+```typescript
+// Server: packages/server/src/commands/handlers/speedwalk.ts
+// Parser: packages/server/src/commands/parser.ts — add 'speedwalk' verb
+
+// User input: "speedwalk 10e4n2s"
+// Server parses, validates all moves, then executes with per-tick throttle
+// On failure, entire batch is rolled back
+```
+
+**Deferred because:**
+- MVP client-side approach is simpler and ships faster
+- Server-side adds complexity (state machine for multi-tick execution)
+- Current WebSocket rate-limiting is adequate
+- Can add in Phase 3 post-launch without breaking change
+
+---
+
+## Open Questions (Team Review Required)
+
+Before implementation proceeds, resolve:
+
+### 1. Ordinal Direction Support
+
+**Question:** Should the game support northeast/northwest/southeast/southwest movement?
+
+Currently:
+- `CompassControl.tsx` renders ordinal buttons but they're UI-only
+- `handleGo()` server-side only recognizes 6 directions (n/s/e/w/u/d)
+- Numpad mapping assumes ordinals are supported
+
+**Options:**
+- **Option A:** Extend server support (add ordinal exits to RoomGraph, generator, all zones)
+  - **Pros:** Full numpad utilization, richer navigation
+  - **Cons:** Significant server-side work, generator changes, zone redesign
+  - **Effort:** 2–3 days of backend + design work
+  
+- **Option B:** Numpad ordinals remap to cardinal fallbacks (e.g., numpad9 → try north, then east)
+  - **Pros:** Quick, no server changes
+  - **Cons:** Numpad doesn't feel "authentic" if ordinals don't work
+  - **Effort:** 10 lines of client code
+
+- **Option C:** Ignore numpad ordinals for MVP; allow only cardinals
+  - **Pros:** Simplest, no ambiguity
+  - **Cons:** Numpad layout wasted
+  - **Effort:** Note in documentation
+
+**Recommendation:** Option C (MVP ignores ordinals). Add ordinal support in Phase 3 if design wants it.
+
+---
+
+### 2. Numpad5 Behavior
+
+**Question:** What should the center key (Numpad5) do?
+
+**Options:**
+- No-op (ignore it)
+- Trigger "look" command
+- Cancel queued speedwalk
+- Reserved for future use
+
+**Recommendation:** No-op for MVP. Can be assigned later if needed.
+
+---
+
+### 3. Text Input Focus Handling
+
+**Question:** Should arrow keys trigger movement when the text input field is focused?
+
+**Current MUD conventions:** Arrow keys work for command history even when typing, but numpad works regardless.
+
+**Options:**
+- Allow arrow keys ONLY when input is NOT focused
+- Always allow numpad keys (even while typing)
+- Allow all movement keys only when input not focused
+
+**Recommendation:** Arrow keys blocked while typing (to not interfere with selection/editing); numpad always allowed.
+
+---
+
+### 4. Speedwalk Feedback
+
+**Question:** How much feedback should be shown as speedwalk executes?
+
+**Options:**
+- Echo each move as it's sent (current behavior, e.g., "You move east" × 10)
+- Echo only after parsing succeeds (brief "Starting 10-move sequence")
+- Show move counter (e.g., "Moving... 7/10")
+- Show detailed narration only for final position
+
+**Recommendation:** Echo moves normally (existing behavior). Keep it simple for MVP.
+
+---
+
+### 5. Combat Interaction
+
+**Question:** Should speedwalk be blocked when player is in combat?
+
+**Current behavior:** `go` command is blocked in combat; player must use `flee`.
+
+**Options:**
+- Block speedwalk in combat (consistent with `go`)
+- Allow speedwalk but halt on first combat engagement
+- Allow speedwalk and fight mid-move (risky)
+
+**Recommendation:** Block speedwalk in combat (consistent with `go`). Check `combatSystem.isInCombat()` before expanding speedwalk.
+
+---
+
+## Alignment with Design
+
+**GDD Alignment:**
+- §5.1 (Command Syntax): No changes to verb-noun structure. Arrow keys and speedwalk are client-side conveniences, transparent to server.
+- §6.0 (Combat): Speedwalk should respect combat movement lock (consistent with `go`).
+
+**Feature Interactions:**
+- Compass button clicks continue to work (unaffected)
+- Text commands continue to work (unaffected)
+- New: Keyboard shortcuts + speedwalk syntax
+- No impact on server state, combat, zone design, or narrative
+
+---
+
+## Testing Checklist
+
+### Keyboard Shortcuts (Phase 1)
+- [ ] Arrow keys move in correct directions
+- [ ] Numpad cardinal keys move correctly
+- [ ] PageUp/PageDown move up/down
+- [ ] Arrow keys don't interfere with text input (history navigation, editing)
+- [ ] Multiple rapid key presses queue moves correctly
+- [ ] Message echo shows "You move <direction>" for each keystroke
+
+### Speedwalk Parser (Phase 2)
+- [ ] Simple counts parsed correctly (`10e` → 10 east moves)
+- [ ] Mixed syntax parsed correctly (`3ene2s` → e, n, e, e, s, s)
+- [ ] Rate limit enforced (`51e` rejected)
+- [ ] Invalid syntax rejected gracefully (`10x`, `e10e`, empty input)
+- [ ] Case-insensitive (`10E` = `10e`)
+- [ ] Partial failure handled (wall mid-walk halts remaining moves)
+- [ ] Message echo shows all moves and final failure message
+
+### Integration
+- [ ] Arrow keys don't interfere with speedwalk input
+- [ ] Speedwalk doesn't execute if player is in combat
+- [ ] Both features work in Refuge and ZoneExploration pages
+
+---
+
+## Files Modified (Summary)
+
+### Phase 1: Arrow Keys + Numpad
+- `packages/client/src/pages/ZoneExploration.tsx` — Add keyboard listener
+- `packages/client/src/pages/Refuge.tsx` — Add keyboard listener (if needed for consistency)
+
+### Phase 2: Speedwalk Parser
+- `packages/client/src/utils/speedwalkParser.ts` — New parser utility
+- `packages/client/src/utils/__tests__/speedwalkParser.test.ts` — Tests
+- `packages/client/src/pages/ZoneExploration.tsx` — Integrate parser into `handleCommand`
+- `packages/client/src/pages/Refuge.tsx` — Integrate parser (optional, if speedwalk supported there)
+
+### Phase 3: Server-Side (Future)
+- `packages/server/src/commands/handlers/speedwalk.ts` — New handler
+- `packages/server/src/commands/index.ts` — Register `speedwalk` verb
+- `packages/server/src/commands/parser.ts` — Add speedwalk parsing (optional)
+- Tests: `packages/server/src/__tests__/speedwalk-command.test.ts`
+
+---
+
+## Decision Boundary
+
+**This decision covers:**
+- Architecture approach (client-side for Phases 1 & 2)
+- Implementation roadmap (3 phases)
+- Open questions for team input
+
+**Out of scope:**
+- Specific UI/UX design (e.g., help text about keyboard shortcuts)
+- Theming or styling of any new UI elements
+- Integration with other systems (cosmetics, plugins, etc.)
+
+---
+
+## Related Issues
+
+- #357 — Direction Shortcuts (this issue)
+- GDD.md — §5.1 (Command Syntax), §6.0 (Combat)
+
+---
+
+## Sign-Off
+
+**Decision Made By:** Elminster (Lead/Architect)  
+**Status:** Ready for team review  
+**Next Step:** Team feedback on open questions → proceed with Phase 1
+
+---

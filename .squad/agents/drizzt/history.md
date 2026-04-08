@@ -3424,3 +3424,30 @@ Created comprehensive `help` command handler supporting context-aware command di
 - The Room Graph tab depended on a *separate* zone-data API call (`getZone(slug)`) that is completely unrelated to the room detail response; for procedural zones where `zoneSlug` is undefined this always produced null, silently hiding all creature occupancy.
 - When the server already has authoritative data (the room graph), include it in the response rather than forcing the client to fetch it separately — eliminates a class of race/availability bugs.
 - `useMemo` with an early-return on null silently swallows data; prefer fallback chains over early returns when the downstream UI depends on the result.
+
+---
+
+### 2026-04-08T22:59:00Z: Spawn Display Bug Fix — Procedural Zones
+
+**Task:** Fix spawn creature display bug for static zones (roomOccupancy memo issue).
+
+**Outcome:** ✅ Complete — PR merged to dev (commit b0b44c1).
+
+**Root Cause:** roomOccupancy memo fell back to empty map when zone-data fetch returned null (procedural zones have no zoneSlug). Fresh roomGraphRooms[] from server was sent but not used by client.
+
+**Fix (2-part):**
+1. Server: Include roomGraphRooms[] in getZoneDetail() response
+2. Client: Update roomOccupancy fallback chain (zone-data → room-graph → empty)
+
+**Impact:**
+- Admin Zone Room management now fully functional for procedural zones
+- Creatures displayed correctly for both static and procedural zones
+- Eliminates silent data loss
+
+**Tests Added:**
+- 8 new client tests (Room Graph tab occupancy)
+- 2 new server integration tests (roomGraphRooms serialization)
+
+**Quality:** Root-cause-driven; comprehensive test coverage; zero regressions.
+
+**Learnings:** Server should include authoritative data in response rather than force separate fetch; prevents silent failures.

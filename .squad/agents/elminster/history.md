@@ -27,6 +27,17 @@
 
 ## Learnings
 
+### 2026-04-08: Direction Shortcuts & Speedwalks Research
+- **Task:** Research and design proposal for issue #357 — arrow key shortcuts + speedwalk command syntax.
+- **Investigation:** Traced full client-server movement flow: CompassControl button → handleExitClick → sendRawCommand → parseCommand → handleGo. Mapped keyboard event handling in ZoneExploration.tsx, command parser aliasing (n→['go','north']), and server direction validation.
+- **Current state:** Game supports 6 directions (n/s/e/w/u/d); compass renders 8 (ordinals missing from server). Text input currently handles arrow keys for command history (ArrowUp/Down).
+- **Key design decision:** Client-side implementation for both features (zero server complexity). Phase 1: arrow key + numpad listener (50–100 lines, 2–4 hours). Phase 2: speedwalk parser (200–300 lines, 3–5 hours). Phase 3 (future): server-side speedwalk verb for atomic execution.
+- **Feature 1 (Arrow Keys):** Map keyboard to directions; listener activates only when input not focused. Reuses existing `handleExitClick(direction)` flow. Numpad layout includes ordinals but server doesn't support them yet — decided to ignore ordinals in MVP, add in Phase 3 if design wants it.
+- **Feature 2 (Speedwalk):** Parser expands `10e4n2s` to array of ['e','e',...,'n','n','n','n','s','s'], sends each as separate `go` command. Rate limit: 50 moves client-side. Fail-stop semantics: halts on first failure (wall, combat). Zero server changes for MVP.
+- **Open questions identified:** 5 team decisions needed (ordinal support, numpad5 behavior, text focus handling, speedwalk feedback, combat interaction).
+- **Deliverables:** Comprehensive proposal posted to issue #357; decision file `.squad/decisions/inbox/elminster-direction-shortcuts.md` with open questions, code sketches, testing checklist.
+- **Key insight:** Classic MUD features like speedwalks translate beautifully to client-side parsing — no need for server state complexity. The server remains oblivious, processing each move normally. Keyboard shortcuts similarly benefit from client-side interception and existing callback reuse. Both features share the principle: client handles convenience, server handles authority.
+
 ### 2026-04-07: BFS Layout Engine Architecture Review
 - **Task:** Full architecture review of `packages/client/src/map/computeLayout.ts` (2746 lines, BFS + 8 refinement phases).
 - **Architecture:** BFS compass-aware placement → force-directed relaxation → diagonal cascade fix → direction violation repair → occlusion fix → iterative expansion + occlusion cleanup → final grid scaling. Pure function, no side effects.
@@ -2297,3 +2308,21 @@ The `continue-on-error: true` flag allows the workflow to proceed even if `npm r
 - **Deliverable:** Full proposal written to `.squad/decisions/inbox/elminster-room-features-proposal.md` (7800+ words, 24 code examples, migration SQL, TypeScript interfaces, implementation plan, risk analysis, authoring workflow).
 
 ---
+
+---
+
+### 2026-04-08T22:59:00Z: Direction Shortcuts Architecture — Complete
+
+**Task:** Research and document direction shortcuts & speedwalk architecture for #357.
+
+**Outcome:** ✅ Complete — Design proposal posted and approved for team review.
+
+**Decision Deliverables:**
+- Architecture document (400 lines, 3 phases, code sketches, testing checklist)
+- 5 open questions for team: ordinal support, Numpad5 behavior, text input focus, speedwalk feedback, combat interaction
+- Estimated effort breakdown: Phase 1 (2–4 hrs), Phase 2 (3–5 hrs)
+
+**Coordination Impact:**
+- Unblocked Regis/Minsc for Phase 1 implementation
+- All 3 agents (Elminster, Regis, Drizzt) delivered on time
+- Team ready for next round of work
