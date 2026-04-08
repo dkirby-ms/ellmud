@@ -76,6 +76,8 @@ export default function Refuge() {
   const handlersRef = useRef<MessageHandlers | null>(null);
   const { containerRef: chatScrollRef, bottomRef: chatBottomRef } = useAutoScroll(state.messages);
 
+  const chatInputRef = useRef<HTMLInputElement>(null);
+
   const addMessage = useCallback(
     (text: string, type: TerminalMessage["type"]) => {
       dispatch({
@@ -494,7 +496,15 @@ export default function Refuge() {
 
           {/* Chat — real WebSocket messages */}
           <div className="flex-1 flex flex-col min-h-0">
-            <div ref={chatScrollRef} className="flex-1 p-4 overflow-y-auto space-y-1 narrative-scroll narrative-terminal">
+            <div
+              ref={chatScrollRef}
+              onClick={() => {
+                if (!window.getSelection()?.toString()) chatInputRef.current?.focus();
+              }}
+              className="flex-1 p-4 overflow-y-auto space-y-1 narrative-scroll narrative-terminal narrative-clickable"
+              role="log"
+              aria-label="Chat messages"
+            >
               {chatMessages.length === 0 && (
                 <p className="mud-system">
                   {isConnected
@@ -528,10 +538,12 @@ export default function Refuge() {
 
             <form
               onSubmit={handleSendMessage}
-              className="p-4 border-t border-border-muted"
+              className="command-input-line px-4 py-2"
             >
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
+                <span className="text-accent-gold font-mono" aria-hidden="true">&gt;</span>
                 <input
+                  ref={chatInputRef}
                   type="text"
                   value={chatMessage}
                   onChange={(e) => setChatMessage(e.target.value)}
@@ -539,7 +551,9 @@ export default function Refuge() {
                     isConnected ? "Type a command..." : "Connecting..."
                   }
                   disabled={!isConnected}
-                  className="flex-1 bg-bg-elevated border border-border-muted rounded px-3 py-2 text-text-primary text-sm focus:border-interactive focus:outline-none transition-colors placeholder:text-text-disabled disabled:opacity-50 font-mono"
+                  className="flex-1 bg-transparent text-text-primary text-sm focus:outline-none transition-colors placeholder:text-text-disabled disabled:opacity-50 font-mono"
+                  tabIndex={1}
+                  aria-label="Command input"
                 />
                 <button
                   type="submit"

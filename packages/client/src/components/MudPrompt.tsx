@@ -73,9 +73,6 @@ export default function MudPrompt() {
       )}
 
       <span className="mud-prompt-bracket">]</span>
-
-      {/* Blinking cursor */}
-      <span className="mud-prompt-cursor" aria-hidden="true">&gt;</span>
     </div>
   );
 }

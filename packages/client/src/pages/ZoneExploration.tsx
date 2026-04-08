@@ -229,6 +229,12 @@ export default function ZoneExploration() {
     ? KNOWN_COMMANDS.find(cmd => cmd.startsWith(command.trim().toLowerCase())) ?? null
     : null;
 
+  // Click anywhere in the narrative to focus the command input
+  const handleNarrativeClick = useCallback(() => {
+    if (window.getSelection()?.toString()) return;
+    inputRef.current?.focus();
+  }, []);
+
   return (
     <div className="h-screen bg-bg-primary flex flex-col">
       {/* Top bar */}
@@ -294,7 +300,10 @@ export default function ZoneExploration() {
           {/* Narrative text — render from real AppContext messages */}
           <div
             ref={narrativeRef}
-            className="flex-1 overflow-y-auto px-6 py-4 space-y-1 narrative-scroll narrative-terminal"
+            onClick={handleNarrativeClick}
+            className="flex-1 overflow-y-auto px-6 py-4 space-y-1 narrative-scroll narrative-terminal narrative-clickable"
+            role="log"
+            aria-label="Game narrative"
           >
             {state.messages.map((msg) => (
               <div key={msg.id}>
@@ -385,8 +394,41 @@ export default function ZoneExploration() {
             <div ref={bottomRef} aria-hidden="true" />
           </div>
 
-          {/* MUD-style status prompt — positioned below scroll container */}
-          <MudPrompt />
+          {/* MUD-style status prompt + inline command input */}
+          <div className="command-input-line">
+            <MudPrompt />
+            {autoCompleteHint && (
+              <div data-testid="autocomplete-hint" className="text-text-disabled text-xs font-mono px-6 py-0.5">
+                {autoCompleteHint}
+              </div>
+            )}
+            <form onSubmit={handleSubmit} className="flex items-center gap-2 px-6 py-2">
+              <span
+                className="text-accent-gold text-lg font-mono"
+                aria-hidden="true"
+              >
+                &gt;
+              </span>
+              <input
+                ref={inputRef}
+                type="text"
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  state.connectionStatus === "connected"
+                    ? "Type a command..."
+                    : isHub ? "Connecting to stronghold..." : "Connecting to instance..."
+                }
+                disabled={state.connectionStatus !== "connected"}
+                className="flex-1 bg-transparent text-text-primary placeholder:text-text-disabled focus:outline-none disabled:opacity-50 font-mono"
+                style={{ fontSize: "1rem" }}
+                autoFocus
+                tabIndex={1}
+                aria-label="Command input"
+              />
+            </form>
+          </div>
         </div>
 
         {/* Sidebar (30%) */}
@@ -664,38 +706,6 @@ export default function ZoneExploration() {
           </div>
         </div>
       )}
-
-      {/* Command Input */}
-      <div className="bg-bg-panel border-t border-border-muted px-6 py-4">
-        {autoCompleteHint && (
-          <div data-testid="autocomplete-hint" className="text-text-disabled text-xs font-mono mb-1 px-6">
-            {autoCompleteHint}
-          </div>
-        )}
-        <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <span
-            className="text-accent-gold text-lg font-mono"
-          >
-            &gt;
-          </span>
-          <input
-            ref={inputRef}
-            type="text"
-            value={command}
-            onChange={(e) => setCommand(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              state.connectionStatus === "connected"
-                ? "Type a command..."
-                : isHub ? "Connecting to stronghold..." : "Connecting to instance..."
-            }
-            disabled={state.connectionStatus !== "connected"}
-            className="flex-1 bg-transparent text-text-primary placeholder:text-text-disabled focus:outline-none disabled:opacity-50 font-mono"
-            style={{ fontSize: "1rem" }}
-            autoFocus
-          />
-        </form>
-      </div>
 
       {/* Equipment Overlay */}
       {inventoryOpen && (

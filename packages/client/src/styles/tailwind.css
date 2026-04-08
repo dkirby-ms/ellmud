@@ -226,6 +226,29 @@
   50%      { opacity: 0; }
 }
 
+/* ─── Inline Command Input Line — MUD terminal prompt ─────────────── */
+.command-input-line {
+  background: #080910;
+  border-top: 1px solid #1E1F29;
+  position: relative;
+  z-index: 2;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.command-input-line:focus-within {
+  box-shadow: 0 -2px 12px rgba(201, 168, 76, 0.1);
+  border-top-color: rgba(201, 168, 76, 0.3);
+}
+
+.command-input-line input {
+  caret-color: #C9A84C;
+}
+
+/* Click-to-focus affordance for terminal area */
+.narrative-clickable {
+  cursor: text;
+}
+
 @layer base {
   * {
     @apply outline-interactive/50;
