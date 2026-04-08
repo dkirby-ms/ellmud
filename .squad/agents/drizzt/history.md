@@ -3372,3 +3372,26 @@ Created comprehensive `help` command handler supporting context-aware command di
 - Flag-based mode isolation (old behaviour during existing phases, new behaviour in a new phase) avoids cascading regressions
 - Distance-1 edges on integer grids cannot produce orthogonal crossings — safe to always skip
 - ReactFlow smooth-step paths route horizontal-first for east/west exits, vertical-first for north/south
+
+---
+
+### Live Rooms Admin API (Issue #344) — PR #353
+**Task:** Implement server-side APIs for live zone room management
+**Status:** ✅ Complete — PR #353 opened against dev
+**Branch:** `squad/344-live-rooms-admin`
+
+**Changes (4 files, +379 lines):**
+- `admin/routes.ts` — 4 new endpoints: GET /rooms/live, POST broadcast, POST teleport, POST spawn-creature
+- `admin/types.ts` — Added `zoneSlug` field to `AdminZoneDetail`
+- `rooms/ZoneRoom.ts` — 4 public admin methods: `adminBroadcastToRoom()`, `adminTeleportPlayer()`, `adminGetLiveRooms()`, `getZoneSlug()`
+- `shared/src/index.ts` — Admin request/response types for all 4 endpoints
+
+**Key decisions:**
+- **Public admin methods on ZoneRoom** — Rather than reaching into private internals from routes, added well-defined public methods that encapsulate the logic. This keeps the admin API clean and ZoneRoom's internals private.
+- **Route ordering for /rooms/live** — Must be registered BEFORE /rooms/:roomId to avoid Express param capture of "live" as a roomId.
+- **Teleport re-delivers full room state** — Matches the existing reconnect/goto pattern: room header, description, occupants, exploration data.
+
+## Learnings
+- Express route ordering matters when mixing static and parameterized paths — `/rooms/live` must precede `/rooms/:roomId`
+- ZoneRoom's `broadcastToRoom` and `broadcastPlayerMovement` are private — adding public `admin*` wrappers is the right pattern to avoid `as any` casts from route handlers
+- The shared package must be rebuilt (`rm -rf dist && tsc --build`) before server can see new shared types — incremental builds may skip unchanged-timestamp files
