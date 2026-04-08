@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version type (major, minor, patch)'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bump version in package.json
+        run: npm version ${{ github.event.inputs.version }} --no-git-tag-version
+
+      - name: Sync workspace versions
+        run: npm run version:sync
+        continue-on-error: true
+
+      - name: Get new version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Commit version bump
+        run: |
+          git add package.json package-lock.json packages/*/package.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}" || echo "No changes to commit"
+
+      - name: Create tag
+        run: |
+          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
+
+      - name: Push changes and tag
+        run: |
+          git push origin main
+          git push origin "v${{ steps.version.outputs.version }}"
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          # Get commits since last tag
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            COMMIT_RANGE="HEAD"
+          else
+            COMMIT_RANGE="${PREVIOUS_TAG}..HEAD"
+          fi
+          
+          # Generate changelog
+          CHANGELOG=$(git log $COMMIT_RANGE --pretty=format:"- %h: %s" || echo "- Initial release")
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "v${{ steps.version.outputs.version }}"
+          release_name: "Release v${{ steps.version.outputs.version }}"
+          body: |
+            # Release v${{ steps.version.outputs.version }}
+            
+            ## Changes
+            ${{ steps.release_notes.outputs.CHANGELOG }}
+            
+            For detailed changes, see the [commit log](https://github.com/${{ github.repository }}/commits/v${{ steps.version.outputs.version }}).
+          draft: false
+          prerelease: false
+
+      - name: Notify Slack (optional)
+        if: always()
+        run: |
+          echo "Release v${{ steps.version.outputs.version }} complete!"
