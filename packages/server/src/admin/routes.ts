@@ -53,6 +53,41 @@ function isZoneRoomName(name: string): boolean {
   return name === 'zone' || name.startsWith('zone:');
 }
 
+/**
+ * Convert a flat ContentEntity (from the creature content store) into the
+ * nested CreatureTemplate shape that CreatureManager.spawnSingleCreature expects.
+ *
+ * The content store stores stats/spawn-rules as top-level keys (maxHp, attack,
+ * minCount…) while CreatureTemplate nests them under `stats` and `spawnRules`.
+ */
+function contentEntityToCreatureTemplate(entity: ContentEntity): CreatureTemplate {
+  const e = entity as Record<string, unknown>;
+  return {
+    type: (e.type as string) ?? 'unknown',
+    name: (e.name as string) ?? 'Unknown Creature',
+    stats: {
+      maxHp: (e.maxHp as number) ?? 100,
+      attack: (e.attack as number) ?? 10,
+      defence: (e.defence as number) ?? 5,
+      armour: (e.armour as number) ?? 0,
+      agility: (e.agility as number) ?? 0,
+    },
+    lootTable: Array.isArray(e.lootTable) ? (e.lootTable as CreatureTemplate['lootTable']) : [],
+    spawnRules: {
+      minCount: (e.minCount as number) ?? 1,
+      maxCount: (e.maxCount as number) ?? 3,
+      preferredRoomTypes: Array.isArray(e.preferredRooms) ? (e.preferredRooms as string[]) : [],
+      forbiddenRoomTypes: Array.isArray(e.forbiddenRooms) ? (e.forbiddenRooms as string[]) : [],
+    },
+    idleTicksMin: (e.idleTicksMin as number) ?? 3,
+    idleTicksMax: (e.idleTicksMax as number) ?? 8,
+    fleeThreshold: (e.fleeThreshold as number) ?? 0.2,
+    aggressive: (e.aggressive as boolean) ?? true,
+    roomDescription: (e.roomDescription as string) ?? undefined,
+    positionType: (e.positionType as CreatureTemplate['positionType']) ?? undefined,
+  };
+}
+
 export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
   const router = Router();
 
@@ -595,8 +630,8 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
           return;
         }
 
-        // Cast to CreatureTemplate (content store entity has the same shape + id field)
-        const template = templateEntity as unknown as CreatureTemplate;
+        // Convert flat content entity into the nested CreatureTemplate shape
+        const template = contentEntityToCreatureTemplate(templateEntity);
         const creature = cm.spawnSingleCreature(template, spawnRoomId);
 
         // Broadcast spawn notification to players in the room
@@ -750,7 +785,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         return;
       }
 
-      const template = templateEntity as unknown as CreatureTemplate;
+      const template = contentEntityToCreatureTemplate(templateEntity);
       const result = zoneRoom.adminSpawnCreature(template, targetRoomId) as { success: boolean; error?: string; creatureId?: string; creatureName?: string };
       if (!result.success) {
         res.status(400).json({ error: result.error });

@@ -435,13 +435,22 @@ describe('POST /admin/api/rooms/:roomId/teleport', () => {
 // ─── POST /admin/api/rooms/:roomId/spawn-creature ───────────────────────────
 
 describe('POST /admin/api/rooms/:roomId/spawn-creature', () => {
+  // Use the flat ContentEntity shape returned by the real creature content store
+  // (PgCreatureDefinitionsStore / InMemoryContentStore) — stats are top-level.
   const creatureTemplate = {
     id: 'drowned-revenant',
     type: 'drowned_revenant',
     name: 'Drowned Revenant',
-    stats: { maxHp: 50, attack: 8, defence: 4, armour: 2 },
+    maxHp: 50,
+    attack: 8,
+    defence: 4,
+    armour: 2,
+    agility: 0,
     lootTable: [],
-    spawnRules: {},
+    minCount: 1,
+    maxCount: 3,
+    preferredRooms: [],
+    forbiddenRooms: [],
     idleTicksMin: 3,
     idleTicksMax: 6,
     fleeThreshold: 0.2,
