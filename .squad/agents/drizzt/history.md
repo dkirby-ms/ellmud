@@ -3334,3 +3334,41 @@ Created comprehensive `help` command handler supporting context-aware command di
 - `packages/server/src/__tests__/goto.test.ts` — 3 new tests (nonexistent zone, valid zone, same-zone colon with bad room)
 
 **Tests:** 10 goto tests pass, 2331 total server tests pass, zero regressions.
+
+## Visual Crossing Detection & Phase 10 (computeLayout)
+
+**Date:** 2026-07-24
+**Role:** Engine Developer
+**Status:** ✅ Complete
+
+**Problem:** `countCrossings()` only detected crossings between orthogonal edges, ignoring diagonal edges rendered as smooth-step paths in the ZoneDesigner UI. Users could see crossings the algorithm didn't count.
+
+**Root Cause:** `buildEdgeSegments()` skipped diagonal edges entirely. The renderer draws diagonal edges as multi-segment orthogonal smooth-step paths (via ReactFlow's `getSmoothStepPath`), which can cross other edges visually.
+
+**Approach — `visualCrossingMode` flag:**
+- Modifying crossing detection during existing pipeline phases (5d/5e/9) caused butterfly effects — different fix decisions cascaded into different final layouts, introducing regressions (e.g., Siltgate gained 2 diagonals)
+- Solution: a `visualCrossingMode` flag that's `false` during existing phases (preserving exact old behaviour) and `true` only during a new Phase 10
+- Distance-1 edges remain excluded even in visual mode (can't cross on integer grids)
+
+**Key changes:**
+- `EdgeSegment` interface: added `dir` field for exit direction
+- `buildEdgePathSegments()`: models diagonal edges as 1–3 orthogonal segments approximating the smooth-step rendered path (east/west → horizontal-first, north/south → vertical-first)
+- `buildEdgeSegments()`: conditional — old skip logic when `!visualCrossingMode`, multi-segment paths when `true`
+- `edgePairCrosses()` / `findEdgeCrossingPair()`: mode-aware crossing checks using visual path segments
+- `fixEdgeCrossings()` and `fixCrossingsByInsertion()` rechecks: conditional — old single-segment logic vs visual-path logic
+- `fixCrossingsByInsertion()` diagonal guard: broader all-z-level check in visual mode (prevents pipeline from creating new diagonals anywhere, not just within the moved group)
+- Phase 10: after Phase 9, enables visual mode, runs `fixCrossingsByInsertion` + `fixOcclusions` with rollback, then disables visual mode
+
+**Test update:** Midgaard crossing test (test 29) now counts visual crossings using multi-segment smooth-step path modelling, matching the engine's detection.
+
+**Files Modified:**
+- `packages/client/src/map/computeLayout.ts` — All crossing detection and Phase 10 pipeline changes
+- `packages/client/src/map/__tests__/computeLayout.test.ts` — Visual crossing counting in test 29
+
+**Tests:** 29 layout tests pass, Siltgate 0 diagonals, zero regressions.
+
+### Learnings
+- Changing crossing detection mid-pipeline causes butterfly effects — fix algorithms make different decisions that cascade through subsequent phases
+- Flag-based mode isolation (old behaviour during existing phases, new behaviour in a new phase) avoids cascading regressions
+- Distance-1 edges on integer grids cannot produce orthogonal crossings — safe to always skip
+- ReactFlow smooth-step paths route horizontal-first for east/west exits, vertical-first for north/south

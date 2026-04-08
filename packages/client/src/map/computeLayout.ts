@@ -422,6 +422,12 @@ export function computeLayout(
   }
   const pendingZTransitions: ZTransition[] = [];
 
+  // When true, buildEdgeSegments models diagonal edges as multi-segment
+  // smooth-step paths, matching what the user sees in ZoneDesigner.
+  // Disabled during the core pipeline to preserve existing layout stability;
+  // enabled for a dedicated visual-crossing fix pass after Phase 9.
+  let visualCrossingMode = false;
+
   // Pre-detect grid clusters before BFS
   const gridClusters = detectGridClusters(rooms);
   const placedClusters = new Set<number>();
@@ -957,6 +963,39 @@ export function computeLayout(
       }
     }
   }
+
+  // ── Phase 10: Visual crossing elimination ─────────────────────────────
+  // The ZoneDesigner renders diagonal edges as smooth-step paths that can
+  // cross other edges even though the centre-to-centre segment is purely
+  // diagonal. Enable visual-path mode so buildEdgeSegments models these
+  // rendered paths, then run crossing fixes to reduce what the user sees.
+  visualCrossingMode = true;
+  {
+    for (const [z] of occupiedByZ) {
+      for (let iter = 0; iter < INSERTION_FIX_PASSES; iter++) {
+        if (countCrossings(z) === 0) break;
+
+        const snap = new Map<string, { x: number; y: number; z: number }>();
+        for (const [id, p] of result) if (p.z === z) snap.set(id, { ...p });
+        const occSnap = new Set(occupiedByZ.get(z)!);
+        const occBefore = countOcclusions(z);
+
+        const fixed = fixCrossingsByInsertion(1, true);
+        if (fixed === 0) break;
+
+        fixOcclusions();
+
+        if (countOcclusions(z) > occBefore + 2) {
+          for (const [id, p] of snap) result.set(id, p);
+          const occ = occupiedByZ.get(z)!;
+          occ.clear();
+          for (const k of occSnap) occ.add(k);
+          break;
+        }
+      }
+    }
+  }
+  visualCrossingMode = false;
 
   return result;
 
@@ -2433,6 +2472,7 @@ export function computeLayout(
     x1: number; y1: number;
     x2: number; y2: number;
     axis: 'h' | 'v'; // horizontal or vertical
+    dir: string;      // exit direction from source room
   }
 
   /**
@@ -2474,9 +2514,104 @@ export function computeLayout(
   }
 
   /**
-   * Build all orthogonal edge segments for a given z-level.
-   * Only considers edges where both rooms are axis-aligned (same x or same y).
-   * Diagonal edges are skipped — they can't form grid crossings.
+   * Build orthogonal segments that approximate the visual (smooth-step)
+   * path for a single edge.  Orthogonal edges produce one segment;
+   * diagonal edges produce up to three segments forming an L/Z-shape
+   * whose turn point is at the midpoint between the two rooms.
+   */
+  function buildEdgePathSegments(
+    fromId: string, toId: string, dir: string,
+  ): EdgeSegment[] {
+    const rp = result.get(fromId)!;
+    const tp = result.get(toId)!;
+    if (rp.z !== tp.z) return [];
+    if (rp.x === tp.x && rp.y === tp.y) return [];
+
+    const segs: EdgeSegment[] = [];
+
+    if (rp.x === tp.x || rp.y === tp.y) {
+      // Orthogonal — single straight segment
+      segs.push({
+        fromId, toId,
+        x1: rp.x, y1: rp.y, x2: tp.x, y2: tp.y,
+        axis: rp.y === tp.y ? 'h' : 'v',
+        dir,
+      });
+    } else {
+      // Diagonal — model rendered smooth-step path as orthogonal segments.
+      // Exit direction determines the first-leg orientation.
+      const isHorizontalFirst = dir === 'east' || dir === 'west';
+
+      if (isHorizontalFirst) {
+        const midX = (rp.x + tp.x) / 2;
+        if (rp.x !== midX) {
+          segs.push({ fromId, toId, x1: rp.x, y1: rp.y, x2: midX, y2: rp.y, axis: 'h', dir });
+        }
+        if (rp.y !== tp.y) {
+          segs.push({ fromId, toId, x1: midX, y1: rp.y, x2: midX, y2: tp.y, axis: 'v', dir });
+        }
+        if (midX !== tp.x) {
+          segs.push({ fromId, toId, x1: midX, y1: tp.y, x2: tp.x, y2: tp.y, axis: 'h', dir });
+        }
+      } else {
+        const midY = (rp.y + tp.y) / 2;
+        if (rp.y !== midY) {
+          segs.push({ fromId, toId, x1: rp.x, y1: rp.y, x2: rp.x, y2: midY, axis: 'v', dir });
+        }
+        if (rp.x !== tp.x) {
+          segs.push({ fromId, toId, x1: rp.x, y1: midY, x2: tp.x, y2: midY, axis: 'h', dir });
+        }
+        if (midY !== tp.y) {
+          segs.push({ fromId, toId, x1: tp.x, y1: midY, x2: tp.x, y2: tp.y, axis: 'v', dir });
+        }
+      }
+    }
+    return segs;
+  }
+
+  /** Check whether two edges (by their visual paths) still cross. */
+  function edgePairCrosses(
+    fromA: string, toA: string, dirA: string,
+    fromB: string, toB: string, dirB: string,
+  ): boolean {
+    const segsA = buildEdgePathSegments(fromA, toA, dirA);
+    const segsB = buildEdgePathSegments(fromB, toB, dirB);
+    for (const sa of segsA) {
+      for (const sb of segsB) {
+        if (segmentsCross(sa, sb)) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Find a specific pair of crossing sub-segments between two edges,
+   * or null if no crossing exists.  Used by grid-expansion so it can
+   * determine the H/V orientation of the crossing.
+   */
+  function findEdgeCrossingPair(
+    fromA: string, toA: string, dirA: string,
+    fromB: string, toB: string, dirB: string,
+  ): [EdgeSegment, EdgeSegment] | null {
+    const segsA = buildEdgePathSegments(fromA, toA, dirA);
+    const segsB = buildEdgePathSegments(fromB, toB, dirB);
+    for (const sa of segsA) {
+      for (const sb of segsB) {
+        if (segmentsCross(sa, sb)) return [sa, sb];
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Build edge segments for a given z-level.
+   *
+   * In normal mode: only orthogonal edges with distance >= 2 (original
+   * behaviour that earlier phases rely on).
+   *
+   * In visual mode (visualCrossingMode): also includes diagonal edges
+   * modelled as multi-segment smooth-step paths, matching what the user
+   * sees in the ZoneDesigner UI.
    */
   function buildEdgeSegments(z: number): EdgeSegment[] {
     const segments: EdgeSegment[] = [];
@@ -2492,20 +2627,19 @@ export function computeLayout(
         const tp = result.get(targetId);
         if (!tp || tp.z !== z) continue;
 
-        // Only orthogonal segments can cross
-        if (rp.x !== tp.x && rp.y !== tp.y) continue;
-        // Distance-1 segments can't be crossed
+        // Distance-1 segments are too short to visually cross other edges
         if (Math.abs(rp.x - tp.x) + Math.abs(rp.y - tp.y) < 2) continue;
+
+        if (!visualCrossingMode) {
+          // Original mode: skip diagonal edges
+          if (rp.x !== tp.x && rp.y !== tp.y) continue;
+        }
 
         const sk = [roomId, targetId].sort().join('|');
         if (seen.has(sk)) continue;
         seen.add(sk);
 
-        segments.push({
-          fromId: roomId, toId: targetId,
-          x1: rp.x, y1: rp.y, x2: tp.x, y2: tp.y,
-          axis: rp.y === tp.y ? 'h' : 'v',
-        });
+        segments.push(...buildEdgePathSegments(roomId, targetId, dir));
       }
     }
     return segments;
@@ -2552,22 +2686,25 @@ export function computeLayout(
 
         for (const [segA, segB] of crossings) {
           // Recheck — a prior fix in this pass may have resolved this crossing
-          const rpA1 = result.get(segA.fromId)!;
-          const rpA2 = result.get(segA.toId)!;
-          const rpB1 = result.get(segB.fromId)!;
-          const rpB2 = result.get(segB.toId)!;
-          const curA: EdgeSegment = {
-            ...segA, x1: rpA1.x, y1: rpA1.y, x2: rpA2.x, y2: rpA2.y,
-            axis: rpA1.y === rpA2.y ? 'h' : 'v',
-          };
-          const curB: EdgeSegment = {
-            ...segB, x1: rpB1.x, y1: rpB1.y, x2: rpB2.x, y2: rpB2.y,
-            axis: rpB1.y === rpB2.y ? 'h' : 'v',
-          };
-          // Skip if no longer orthogonal (became diagonal from earlier moves)
-          if (rpA1.x !== rpA2.x && rpA1.y !== rpA2.y) continue;
-          if (rpB1.x !== rpB2.x && rpB1.y !== rpB2.y) continue;
-          if (!segmentsCross(curA, curB)) continue;
+          if (visualCrossingMode) {
+            if (!edgePairCrosses(segA.fromId, segA.toId, segA.dir, segB.fromId, segB.toId, segB.dir)) continue;
+          } else {
+            const rpA1 = result.get(segA.fromId)!;
+            const rpA2 = result.get(segA.toId)!;
+            const rpB1 = result.get(segB.fromId)!;
+            const rpB2 = result.get(segB.toId)!;
+            const curA: EdgeSegment = {
+              ...segA, x1: rpA1.x, y1: rpA1.y, x2: rpA2.x, y2: rpA2.y,
+              axis: rpA1.y === rpA2.y ? 'h' : 'v',
+            };
+            const curB: EdgeSegment = {
+              ...segB, x1: rpB1.x, y1: rpB1.y, x2: rpB2.x, y2: rpB2.y,
+              axis: rpB1.y === rpB2.y ? 'h' : 'v',
+            };
+            if (rpA1.x !== rpA2.x && rpA1.y !== rpA2.y) continue;
+            if (rpB1.x !== rpB2.x && rpB1.y !== rpB2.y) continue;
+            if (!segmentsCross(curA, curB)) continue;
+          }
 
           // Collect candidate rooms from both edges, sorted by exit count
           // (fewer exits = easier to move without side effects)
@@ -2768,21 +2905,32 @@ export function computeLayout(
           if (totalFixed >= maxFixes) break;
 
           // Recheck with current positions (earlier fixes may have resolved this)
-          const rpA1 = result.get(segA.fromId)!;
-          const rpA2 = result.get(segA.toId)!;
-          const rpB1 = result.get(segB.fromId)!;
-          const rpB2 = result.get(segB.toId)!;
-          if (rpA1.x !== rpA2.x && rpA1.y !== rpA2.y) continue;
-          if (rpB1.x !== rpB2.x && rpB1.y !== rpB2.y) continue;
-          const curA: EdgeSegment = {
-            ...segA, x1: rpA1.x, y1: rpA1.y, x2: rpA2.x, y2: rpA2.y,
-            axis: rpA1.y === rpA2.y ? 'h' : 'v',
-          };
-          const curB: EdgeSegment = {
-            ...segB, x1: rpB1.x, y1: rpB1.y, x2: rpB2.x, y2: rpB2.y,
-            axis: rpB1.y === rpB2.y ? 'h' : 'v',
-          };
-          if (!segmentsCross(curA, curB)) continue;
+          let curA: EdgeSegment;
+          let curB: EdgeSegment;
+          if (visualCrossingMode) {
+            const pair = findEdgeCrossingPair(
+              segA.fromId, segA.toId, segA.dir,
+              segB.fromId, segB.toId, segB.dir,
+            );
+            if (!pair) continue;
+            [curA, curB] = pair;
+          } else {
+            const rpA1 = result.get(segA.fromId)!;
+            const rpA2 = result.get(segA.toId)!;
+            const rpB1 = result.get(segB.fromId)!;
+            const rpB2 = result.get(segB.toId)!;
+            if (rpA1.x !== rpA2.x && rpA1.y !== rpA2.y) continue;
+            if (rpB1.x !== rpB2.x && rpB1.y !== rpB2.y) continue;
+            curA = {
+              ...segA, x1: rpA1.x, y1: rpA1.y, x2: rpA2.x, y2: rpA2.y,
+              axis: rpA1.y === rpA2.y ? 'h' : 'v',
+            };
+            curB = {
+              ...segB, x1: rpB1.x, y1: rpB1.y, x2: rpB2.x, y2: rpB2.y,
+              axis: rpB1.y === rpB2.y ? 'h' : 'v',
+            };
+            if (!segmentsCross(curA, curB)) continue;
+          }
 
           const hSeg = curA.axis === 'h' ? curA : curB;
           const vSeg = curA.axis === 'h' ? curB : curA;
@@ -2894,31 +3042,55 @@ export function computeLayout(
             }
 
             // Step 3: Quality checks
-            // 3a: No new diagonals for moved group (shifted rooms
-            //     preserve internal alignment so only the group matters)
+            // 3a: No new diagonals.
+            // In visual mode, check ALL z-level rooms (broader guard).
+            // In normal mode, only check moved group (original behaviour).
             let violates = false;
-            for (const id of group) {
-              if (violates) break;
-              const p = result.get(id)!;
-              const room = rooms.get(id);
-              if (room) {
-                for (const [dir, nid] of room.exits) {
-                  const off = DIRECTION_OFFSETS[dir];
-                  if (!off || off.dz !== 0) continue;
-                  const np = result.get(nid);
-                  if (!np || np.z !== z) continue;
-                  if (p.x !== np.x && p.y !== np.y) { violates = true; break; }
-                }
-              }
-              if (!violates) {
-                const revArr = reverseExits.get(id);
-                if (revArr) {
-                  for (const { fromId, dir } of revArr) {
+            if (visualCrossingMode) {
+              for (const [id, p] of result) {
+                if (violates) break;
+                if (p.z !== z) continue;
+                const room = rooms.get(id);
+                if (room) {
+                  for (const [dir, nid] of room.exits) {
                     const off = DIRECTION_OFFSETS[dir];
                     if (!off || off.dz !== 0) continue;
-                    const fp = result.get(fromId);
-                    if (!fp || fp.z !== z) continue;
-                    if (p.x !== fp.x && p.y !== fp.y) { violates = true; break; }
+                    const np = result.get(nid);
+                    if (!np || np.z !== z) continue;
+                    if (p.x !== np.x && p.y !== np.y) {
+                      const oldP = snapshot.get(id);
+                      const oldN = snapshot.get(nid);
+                      if (oldP && oldN && (oldP.x === oldN.x || oldP.y === oldN.y)) {
+                        violates = true; break;
+                      }
+                    }
+                  }
+                }
+              }
+            } else {
+              for (const id of group) {
+                if (violates) break;
+                const p = result.get(id)!;
+                const room = rooms.get(id);
+                if (room) {
+                  for (const [dir, nid] of room.exits) {
+                    const off = DIRECTION_OFFSETS[dir];
+                    if (!off || off.dz !== 0) continue;
+                    const np = result.get(nid);
+                    if (!np || np.z !== z) continue;
+                    if (p.x !== np.x && p.y !== np.y) { violates = true; break; }
+                  }
+                }
+                if (!violates) {
+                  const revArr = reverseExits.get(id);
+                  if (revArr) {
+                    for (const { fromId, dir } of revArr) {
+                      const off = DIRECTION_OFFSETS[dir];
+                      if (!off || off.dz !== 0) continue;
+                      const fp = result.get(fromId);
+                      if (!fp || fp.z !== z) continue;
+                      if (p.x !== fp.x && p.y !== fp.y) { violates = true; break; }
+                    }
                   }
                 }
               }

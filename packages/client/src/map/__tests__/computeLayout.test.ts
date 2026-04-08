@@ -1521,24 +1521,41 @@ describe('computeLayout', () => {
 
     const layout = computeLayout(rooms, 'the-reading-room');
 
-    // Count crossings using the same logic as test 28
+    // Count visual crossings — models diagonal edges as multi-segment
+    // smooth-step paths (matching the ZoneDesigner renderer) to detect
+    // crossings that are visible to users, not just orthogonal-only ones.
     type Seg = { x1: number; y1: number; x2: number; y2: number; axis: 'h' | 'v' };
     const segments: Seg[] = [];
     const seen = new Set<string>();
     for (const [id, room] of rooms) {
       const rp = pos(layout, id);
-      for (const [, tid] of room.exits) {
+      for (const [dir, tid] of room.exits) {
         const tp = pos(layout, tid);
         if (rp.z !== 0 || tp.z !== 0) continue;
-        if (rp.x !== tp.x && rp.y !== tp.y) continue;
         if (Math.abs(rp.x - tp.x) + Math.abs(rp.y - tp.y) < 2) continue;
         const sk = [id, tid].sort().join('|');
         if (seen.has(sk)) continue;
         seen.add(sk);
-        segments.push({
-          x1: rp.x, y1: rp.y, x2: tp.x, y2: tp.y,
-          axis: rp.y === tp.y ? 'h' : 'v',
-        });
+
+        if (rp.x === tp.x || rp.y === tp.y) {
+          // Orthogonal — single segment
+          segments.push({ x1: rp.x, y1: rp.y, x2: tp.x, y2: tp.y, axis: rp.y === tp.y ? 'h' : 'v' });
+        } else {
+          // Diagonal — approximate the smooth-step rendered path:
+          // east/west exits route horizontal-first, north/south vertical-first
+          const isHFirst = dir === 'east' || dir === 'west';
+          if (isHFirst) {
+            const mx = (rp.x + tp.x) / 2;
+            if (rp.x !== mx) segments.push({ x1: rp.x, y1: rp.y, x2: mx, y2: rp.y, axis: 'h' });
+            if (rp.y !== tp.y) segments.push({ x1: mx, y1: rp.y, x2: mx, y2: tp.y, axis: 'v' });
+            if (mx !== tp.x) segments.push({ x1: mx, y1: tp.y, x2: tp.x, y2: tp.y, axis: 'h' });
+          } else {
+            const my = (rp.y + tp.y) / 2;
+            if (rp.y !== my) segments.push({ x1: rp.x, y1: rp.y, x2: rp.x, y2: my, axis: 'v' });
+            if (rp.x !== tp.x) segments.push({ x1: rp.x, y1: my, x2: tp.x, y2: my, axis: 'h' });
+            if (my !== tp.y) segments.push({ x1: tp.x, y1: my, x2: tp.x, y2: tp.y, axis: 'v' });
+          }
+        }
       }
     }
 
@@ -1558,12 +1575,10 @@ describe('computeLayout', () => {
       }
     }
 
-    // Log the crossing count for visibility
     console.log(`Midgaard crossings: ${crossings}`);
 
-    // Phase 9 grid expansion reduces Midgaard from 9 to 3 crossings.
-    // The remaining crossings cannot be fixed without creating more
-    // direction mismatches than crossings eliminated.
+    // Phases 5d/5e/9 reduce orthogonal crossings; Phase 10 additionally
+    // targets visual crossings from diagonal-edge smooth-step paths.
     expect(crossings).toBeLessThanOrEqual(3);
   });
 });
