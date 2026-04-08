@@ -2163,17 +2163,20 @@ export function computeLayout(
     }
 
     // ── align each group ────────────────────────────────────────────────
+    const coordOf = (id: string): number => {
+      const p = result.get(id)!;
+      return axis === 'ew' ? p.y : p.x;
+    };
+
     for (let iter = 0; iter < CARDINAL_ALIGNMENT_ITERATIONS; iter++) {
       let anyShift = false;
 
-      for (const [, group] of groups) {
-        if (group.length <= 1) continue;
+      // Process largest groups first so they win coordinate conflicts.
+      const sortedGroups = [...groups.entries()]
+        .filter(([, g]) => g.length > 1)
+        .sort((a, b) => b[1].length - a[1].length);
 
-        const coordOf = (id: string): number => {
-          const p = result.get(id)!;
-          return axis === 'ew' ? p.y : p.x;
-        };
-
+      for (const [, group] of sortedGroups) {
         const freq = new Map<number, number>();
         for (const id of group) {
           const c = coordOf(id);
@@ -2191,6 +2194,10 @@ export function computeLayout(
         // Batch all outlier cascades: collect every room that needs to
         // shift, along with its perpendicular subtree, in one pass.
         // Each room gets the delta of its originating outlier.
+        //
+        // When the cascade encounters a room that belongs to another
+        // multi-room alignment group, it pulls in that ENTIRE group so
+        // their internal alignment is preserved during the shift.
         const batchRooms = new Map<string, number>(); // roomId → delta
 
         for (const mobileId of group) {
@@ -2216,6 +2223,19 @@ export function computeLayout(
                 if (ufFind(nid) === ufFind(mobileId)) continue;
                 cascade.add(nid);
                 bfsQ.push(nid);
+                // If this room belongs to another multi-room alignment
+                // group, pull in the entire group to preserve their
+                // internal alignment during the shift.
+                const nRoot = ufFind(nid);
+                const nGroup = groups.get(nRoot);
+                if (nGroup && nGroup.length > 1) {
+                  for (const gid of nGroup) {
+                    if (!cascade.has(gid)) {
+                      cascade.add(gid);
+                      bfsQ.push(gid);
+                    }
+                  }
+                }
               }
             }
             const revArr = reverseExits.get(curId);
@@ -2228,6 +2248,16 @@ export function computeLayout(
                 if (ufFind(fromId) === ufFind(mobileId)) continue;
                 cascade.add(fromId);
                 bfsQ.push(fromId);
+                const fRoot = ufFind(fromId);
+                const fGroup = groups.get(fRoot);
+                if (fGroup && fGroup.length > 1) {
+                  for (const gid of fGroup) {
+                    if (!cascade.has(gid)) {
+                      cascade.add(gid);
+                      bfsQ.push(gid);
+                    }
+                  }
+                }
               }
             }
           }
@@ -2239,70 +2269,85 @@ export function computeLayout(
 
         if (batchRooms.size === 0) continue;
 
-        // ── Guard: don't break existing alignments ───────────────────────
-        // If the cascade pulled in a room that already sits at its own
-        // group's majority coordinate, shifting it would destroy an
-        // alignment that earlier phases (or a prior iteration) achieved.
-        // Skip this batch entirely in that case.
-        const groupRoot = ufFind(group[0]);
-        let wouldBreakAlignment = false;
-        for (const [id] of batchRooms) {
-          if (ufFind(id) === groupRoot) continue; // same group — expected
-          const idGroup = groups.get(ufFind(id));
-          if (!idGroup || idGroup.length <= 1) continue;
-          const idCoord = coordOf(id);
-          const gf = new Map<number, number>();
-          for (const gid of idGroup) {
-            const gc = coordOf(gid);
-            gf.set(gc, (gf.get(gc) ?? 0) + 1);
-          }
-          let maj = 0, mx = 0;
-          for (const [c, cnt] of gf) {
-            if (cnt > mx) { mx = cnt; maj = c; }
-          }
-          if (idCoord === maj) { wouldBreakAlignment = true; break; }
-        }
-        if (wouldBreakAlignment) continue;
-
-        // Save old positions for rollback
+        // Save old positions for rollback — includes batch rooms and
+        // any non-batch rooms displaced by the chain push.
         const oldPos = new Map<string, { x: number; y: number }>();
         for (const [id] of batchRooms) {
           const p = result.get(id)!;
           oldPos.set(id, { x: p.x, y: p.y });
         }
 
-        const scoreBefore = layoutScore(z);
+        // Count misaligned pairs in ALL groups before the shift.
+        const countMisaligned = (): number => {
+          let n = 0;
+          for (const [, grp] of groups) {
+            if (grp.length <= 1) continue;
+            const c0 = coordOf(grp[0]);
+            for (let i = 1; i < grp.length; i++) {
+              if (coordOf(grp[i]) !== c0) n++;
+            }
+          }
+          return n;
+        };
 
-        // Remove all batch rooms from occupied
+        const misalignBefore = countMisaligned();
+
+        // Determine shift direction for chain push
+        const firstDelta = [...batchRooms.values()][0];
+        const pushSign = firstDelta > 0 ? 1 : -1;
+
+        // Chain push: move a room to (tx, ty).  If the target is
+        // occupied, push the occupant 1 step further in pushSign
+        // direction (domino style), preserving relative ordering.
+        const chainPush = (rid: string, tx: number, ty: number): void => {
+          const key = cellKey(tx, ty);
+          if (occupied.has(key)) {
+            // Find the occupant
+            for (const [oid, op] of result) {
+              if (op.z === z && op.x === tx && op.y === ty && oid !== rid) {
+                if (!oldPos.has(oid)) {
+                  oldPos.set(oid, { x: op.x, y: op.y });
+                }
+                occupied.delete(key);
+                const ptx = axis === 'ew' ? tx : tx + pushSign;
+                const pty = axis === 'ew' ? ty + pushSign : ty;
+                chainPush(oid, ptx, pty);
+                break;
+              }
+            }
+          }
+          result.set(rid, { x: tx, y: ty, z });
+          occupied.add(key);
+        };
+
+        // Remove all batch rooms from occupied first
         for (const [id] of batchRooms) {
           const p = result.get(id)!;
           occupied.delete(cellKey(p.x, p.y));
         }
 
-        // Shift all batch rooms
-        for (const [id, delta] of batchRooms) {
+        // Sort batch rooms so we place furthest-in-push-direction first
+        // to avoid batch-internal collisions.
+        const sortedBatch = [...batchRooms.entries()].sort((a, b) => {
+          const pa = oldPos.get(a[0])!, pb = oldPos.get(b[0])!;
+          const ca = axis === 'ew' ? pa.y : pa.x;
+          const cb = axis === 'ew' ? pb.y : pb.x;
+          return pushSign > 0 ? cb - ca : ca - cb;
+        });
+
+        for (const [id, delta] of sortedBatch) {
           const old = oldPos.get(id)!;
           const nx = axis === 'ew' ? old.x : old.x + delta;
           const ny = axis === 'ew' ? old.y + delta : old.y;
-          result.set(id, { x: nx, y: ny, z });
+          chainPush(id, nx, ny);
         }
 
-        // Re-add to occupied; handle collisions with non-batch rooms
-        for (const [id] of batchRooms) {
-          const p = result.get(id)!;
-          if (occupied.has(cellKey(p.x, p.y))) {
-            const free = findNearestUnoccupied(p.x, p.y, occupied);
-            result.set(id, { x: free.x, y: free.y, z });
-          }
-          const rp = result.get(id)!;
-          occupied.add(cellKey(rp.x, rp.y));
-        }
+        const misalignAfter = countMisaligned();
 
-        const scoreAfter = layoutScore(z);
-
-        if (scoreAfter > scoreBefore) {
-          // Rollback — batch made things worse
-          for (const [id] of batchRooms) {
+        if (misalignAfter >= misalignBefore) {
+          // Rollback — shift didn't improve alignment
+          // Undo all moves (batch + chain-pushed non-batch rooms)
+          for (const [id] of oldPos) {
             const rp = result.get(id)!;
             occupied.delete(cellKey(rp.x, rp.y));
           }
