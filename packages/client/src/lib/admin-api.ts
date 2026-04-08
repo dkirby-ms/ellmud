@@ -208,6 +208,7 @@ export interface LiveRoomDetail {
   tick?: number;
   playerCount?: number;
   paused: boolean;
+  zoneSlug?: string;
   players?: LiveRoomPlayer[];
   creatures?: LiveRoomCreature[];
 }
@@ -247,6 +248,42 @@ export async function spawnInRoom(
   return adminFetch<SpawnResult>(`/admin/api/rooms/${roomId}/spawn`, {
     method: 'POST',
     body: JSON.stringify({ type, id: templateId, targetRoomId }),
+  });
+}
+
+// ─── Zone Room Management ────────────────────────────────────────────────────
+
+export interface BroadcastResult {
+  success: boolean;
+  message: string;
+}
+
+export async function broadcastToRoom(
+  roomId: string,
+  targetRoomId: string,
+  message: string,
+  type: 'system' | 'admin' = 'system'
+): Promise<BroadcastResult> {
+  return adminFetch<BroadcastResult>(`/admin/api/rooms/${roomId}/broadcast`, {
+    method: 'POST',
+    body: JSON.stringify({ targetRoomId, message, type }),
+  });
+}
+
+export interface TeleportResult {
+  success: boolean;
+  message: string;
+}
+
+export async function teleportPlayer(
+  roomId: string,
+  sessionId: string,
+  targetRoomId: string,
+  notify: boolean = true
+): Promise<TeleportResult> {
+  return adminFetch<TeleportResult>(`/admin/api/rooms/${roomId}/teleport`, {
+    method: 'POST',
+    body: JSON.stringify({ sessionId, targetRoomId, notify }),
   });
 }
 
