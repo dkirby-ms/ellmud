@@ -46,7 +46,6 @@ jobs:
 
       - name: Sync workspace versions
         run: npm run version:sync
-        continue-on-error: true
 
       - name: Get new version
         id: version
@@ -86,12 +85,11 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: "v${{ steps.version.outputs.version }}"
-          release_name: "Release v${{ steps.version.outputs.version }}"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: "v${{ steps.version.outputs.version }}"
+          name: "Release v${{ steps.version.outputs.version }}"
           body: |
             # Release v${{ steps.version.outputs.version }}
             
