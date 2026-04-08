@@ -141,6 +141,12 @@ const MAX_EXPANSION_GROUP_SIZE = 90;
 /** Max cardinal alignment iterations per axis. */
 const CARDINAL_ALIGNMENT_ITERATIONS = 30;
 
+/** Max edge-crossing resolution passes. */
+const CROSSING_FIX_PASSES = 30;
+
+/** Diamond search radius for crossing-fix candidate moves. */
+const CROSSING_CANDIDATE_RADIUS = 6;
+
 /** Gap between disconnected subgraphs. */
 const DISCONNECTED_SUBGRAPH_GAP = 3;
 
@@ -880,6 +886,15 @@ export function computeLayout(
   // outlier rooms plus their north/south subtrees to match. Symmetric
   // treatment for N/S groups and x coordinates.
   fixCardinalAlignment();
+
+  // ── Phase 5d: Edge crossing elimination ──────────────────────────────
+  // After cardinal alignment, some edges may cross each other: a horizontal
+  // segment intersecting a vertical segment at a point that is not a room.
+  // This confuses the map visually. Detect such crossings and resolve them
+  // by repositioning one of the involved rooms (preferring the one with
+  // fewer connections) to an uncrossed cell, without breaking alignment or
+  // direction constraints.
+  fixEdgeCrossings();
 
   // ── Phase 6: Occlusion fix ────────────────────────────────────────────
   // After all placement/relaxation phases, rooms may still sit on the
@@ -2361,6 +2376,233 @@ export function computeLayout(
       }
 
       if (!anyShift) break;
+    }
+  }
+
+  // ── Edge crossing elimination ──────────────────────────────────────────────
+
+  /** Represents a straight orthogonal edge segment between two rooms. */
+  interface EdgeSegment {
+    fromId: string;
+    toId: string;
+    x1: number; y1: number;
+    x2: number; y2: number;
+    axis: 'h' | 'v'; // horizontal or vertical
+  }
+
+  /**
+   * Detect whether two orthogonal edge segments cross.
+   * A crossing occurs when one segment is horizontal and the other vertical,
+   * and they intersect at a point that is NOT a shared room endpoint.
+   * Collinear (parallel) segments cannot cross in this model since edges
+   * are strictly horizontal or vertical.
+   */
+  function segmentsCross(a: EdgeSegment, b: EdgeSegment): boolean {
+    if (a.axis === b.axis) return false; // parallel segments don't cross
+
+    // One must be horizontal, the other vertical
+    const h = a.axis === 'h' ? a : b;
+    const v = a.axis === 'h' ? b : a;
+
+    const hMinX = Math.min(h.x1, h.x2);
+    const hMaxX = Math.max(h.x1, h.x2);
+    const hY = h.y1; // horizontal segment: both endpoints share y
+
+    const vMinY = Math.min(v.y1, v.y2);
+    const vMaxY = Math.max(v.y1, v.y2);
+    const vX = v.x1; // vertical segment: both endpoints share x
+
+    // Check geometric intersection (strict interior for both segments)
+    if (vX <= hMinX || vX >= hMaxX) return false;
+    if (hY <= vMinY || hY >= vMaxY) return false;
+
+    // The intersection point is (vX, hY).
+    // Exclude cases where this is a shared room endpoint.
+    const ix = vX, iy = hY;
+    const endpoints = new Set<string>([
+      cellKey(a.x1, a.y1), cellKey(a.x2, a.y2),
+      cellKey(b.x1, b.y1), cellKey(b.x2, b.y2),
+    ]);
+    if (endpoints.has(cellKey(ix, iy))) return false;
+
+    return true;
+  }
+
+  /**
+   * Build all orthogonal edge segments for a given z-level.
+   * Only considers edges where both rooms are axis-aligned (same x or same y).
+   * Diagonal edges are skipped — they can't form grid crossings.
+   */
+  function buildEdgeSegments(z: number): EdgeSegment[] {
+    const segments: EdgeSegment[] = [];
+    const seen = new Set<string>();
+
+    for (const [roomId, room] of rooms) {
+      const rp = result.get(roomId);
+      if (!rp || rp.z !== z) continue;
+
+      for (const [dir, targetId] of room.exits) {
+        const off = DIRECTION_OFFSETS[dir];
+        if (!off || off.dz !== 0) continue;
+        const tp = result.get(targetId);
+        if (!tp || tp.z !== z) continue;
+
+        // Only orthogonal segments can cross
+        if (rp.x !== tp.x && rp.y !== tp.y) continue;
+        // Distance-1 segments can't be crossed
+        if (Math.abs(rp.x - tp.x) + Math.abs(rp.y - tp.y) < 2) continue;
+
+        const sk = [roomId, targetId].sort().join('|');
+        if (seen.has(sk)) continue;
+        seen.add(sk);
+
+        segments.push({
+          fromId: roomId, toId: targetId,
+          x1: rp.x, y1: rp.y, x2: tp.x, y2: tp.y,
+          axis: rp.y === tp.y ? 'h' : 'v',
+        });
+      }
+    }
+    return segments;
+  }
+
+  /** Count total edge crossings for a z-level. */
+  function countCrossings(z: number): number {
+    const segments = buildEdgeSegments(z);
+    let count = 0;
+    for (let i = 0; i < segments.length; i++) {
+      for (let j = i + 1; j < segments.length; j++) {
+        if (segmentsCross(segments[i], segments[j])) count++;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Phase 5d: Detect and resolve edge crossings.
+   *
+   * Strategy: for each pair of crossing edges, identify the four endpoint
+   * rooms. Try moving each room (preferring fewer-connection rooms) to a
+   * nearby free cell that reduces crossings without creating diagonals,
+   * direction violations, or alignment breaks.
+   */
+  function fixEdgeCrossings(): void {
+    for (const [z, occupied] of occupiedByZ) {
+      for (let pass = 0; pass < CROSSING_FIX_PASSES; pass++) {
+        const segments = buildEdgeSegments(z);
+
+        // Find all crossing pairs
+        const crossings: [EdgeSegment, EdgeSegment][] = [];
+        for (let i = 0; i < segments.length; i++) {
+          for (let j = i + 1; j < segments.length; j++) {
+            if (segmentsCross(segments[i], segments[j])) {
+              crossings.push([segments[i], segments[j]]);
+            }
+          }
+        }
+
+        if (crossings.length === 0) break;
+
+        let anyResolved = false;
+
+        for (const [segA, segB] of crossings) {
+          // Recheck — a prior fix in this pass may have resolved this crossing
+          const rpA1 = result.get(segA.fromId)!;
+          const rpA2 = result.get(segA.toId)!;
+          const rpB1 = result.get(segB.fromId)!;
+          const rpB2 = result.get(segB.toId)!;
+          const curA: EdgeSegment = {
+            ...segA, x1: rpA1.x, y1: rpA1.y, x2: rpA2.x, y2: rpA2.y,
+            axis: rpA1.y === rpA2.y ? 'h' : 'v',
+          };
+          const curB: EdgeSegment = {
+            ...segB, x1: rpB1.x, y1: rpB1.y, x2: rpB2.x, y2: rpB2.y,
+            axis: rpB1.y === rpB2.y ? 'h' : 'v',
+          };
+          // Skip if no longer orthogonal (became diagonal from earlier moves)
+          if (rpA1.x !== rpA2.x && rpA1.y !== rpA2.y) continue;
+          if (rpB1.x !== rpB2.x && rpB1.y !== rpB2.y) continue;
+          if (!segmentsCross(curA, curB)) continue;
+
+          // Collect candidate rooms from both edges, sorted by exit count
+          // (fewer exits = easier to move without side effects)
+          const candidateRooms = [
+            segA.fromId, segA.toId, segB.fromId, segB.toId,
+          ].sort((a, b) => {
+            const exA = rooms.get(a)?.exits.size ?? 0;
+            const exB = rooms.get(b)?.exits.size ?? 0;
+            return exA - exB;
+          });
+
+          const crossingsBefore = countCrossings(z);
+          let resolved = false;
+
+          for (const rid of candidateRooms) {
+            if (resolved) break;
+            const curPos = result.get(rid)!;
+            if (curPos.z !== z) continue;
+
+            // Try nearby candidates
+            for (const cand of diamondCandidates(curPos.x, curPos.y, 1, CROSSING_CANDIDATE_RADIUS)) {
+              const key = cellKey(cand.x, cand.y);
+              if (occupied.has(key)) continue;
+
+              // Guard: no diagonals with neighbors
+              let createsDiag = false;
+              const room = rooms.get(rid);
+              if (room) {
+                for (const [dir, nid] of room.exits) {
+                  const off = DIRECTION_OFFSETS[dir];
+                  if (!off || off.dz !== 0) continue;
+                  const np = result.get(nid);
+                  if (!np || np.z !== z) continue;
+                  if (cand.x !== np.x && cand.y !== np.y) { createsDiag = true; break; }
+                }
+              }
+              if (createsDiag) continue;
+              // Also check reverse exits
+              const revArr = reverseExits.get(rid);
+              if (revArr) {
+                for (const { fromId, dir } of revArr) {
+                  const off = DIRECTION_OFFSETS[dir];
+                  if (!off || off.dz !== 0) continue;
+                  const fp = result.get(fromId);
+                  if (!fp || fp.z !== z) continue;
+                  if (cand.x !== fp.x && cand.y !== fp.y) { createsDiag = true; break; }
+                }
+              }
+              if (createsDiag) continue;
+
+              // Guard: no direction mismatches increase
+              if (moveWouldIncreaseMismatches(rid, cand.x, cand.y, z)) continue;
+              // Guard: no alignment breaks
+              if (moveWouldBreakAlignment(rid, cand.x, cand.y, z)) continue;
+
+              // Trial move
+              const oldKey = cellKey(curPos.x, curPos.y);
+              occupied.delete(oldKey);
+              occupied.add(key);
+              result.set(rid, { x: cand.x, y: cand.y, z });
+
+              const crossingsAfter = countCrossings(z);
+
+              if (crossingsAfter < crossingsBefore) {
+                // Accept
+                resolved = true;
+                anyResolved = true;
+                break;
+              } else {
+                // Rollback
+                occupied.delete(key);
+                occupied.add(oldKey);
+                result.set(rid, curPos);
+              }
+            }
+          }
+        }
+
+        if (!anyResolved) break;
+      }
     }
   }
 

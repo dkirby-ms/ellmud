@@ -1335,4 +1335,67 @@ describe('computeLayout', () => {
       expect(off).toEqual([]);
     }
   });
+
+  // ── 28. Edge crossings are eliminated ──────────────────────────────────
+  it('eliminates criss-crossing edges between orthogonal segments', () => {
+    // Topology designed to produce a crossing:
+    //
+    //   A ──east──> B     (horizontal segment on row 0, cols 0→2)
+    //
+    //   C ──south──> D    (vertical segment on col 1, rows -1→1)
+    //
+    // Without the crossing fix, A(0,0)→B(2,0) and C(1,-1)→D(1,1)
+    // cross at (1,0). The fix should rearrange so no crossing exists.
+    const rooms = makeRooms({
+      'hub':  [['east', 'b'], ['north', 'c'], ['south', 'd']],
+      'b':    [['west', 'hub'], ['east', 'b2']],
+      'b2':   [['west', 'b']],
+      'c':    [['south', 'hub'], ['west', 'c-west']],
+      'd':    [['north', 'hub'], ['west', 'd-west']],
+      'c-west': [['east', 'c']],
+      'd-west': [['east', 'd']],
+    });
+
+    const layout = computeLayout(rooms, 'hub');
+
+    // Collect all orthogonal edge segments on z=0
+    type Seg = { x1: number; y1: number; x2: number; y2: number; axis: 'h' | 'v' };
+    const segments: Seg[] = [];
+    const seen = new Set<string>();
+    for (const [id, room] of rooms) {
+      const rp = pos(layout, id);
+      for (const [, tid] of room.exits) {
+        const tp = pos(layout, tid);
+        if (rp.z !== 0 || tp.z !== 0) continue;
+        if (rp.x !== tp.x && rp.y !== tp.y) continue;
+        if (Math.abs(rp.x - tp.x) + Math.abs(rp.y - tp.y) < 2) continue;
+        const sk = [id, tid].sort().join('|');
+        if (seen.has(sk)) continue;
+        seen.add(sk);
+        segments.push({
+          x1: rp.x, y1: rp.y, x2: tp.x, y2: tp.y,
+          axis: rp.y === tp.y ? 'h' : 'v',
+        });
+      }
+    }
+
+    // Count crossings
+    let crossings = 0;
+    for (let i = 0; i < segments.length; i++) {
+      for (let j = i + 1; j < segments.length; j++) {
+        const a = segments[i], b = segments[j];
+        if (a.axis === b.axis) continue;
+        const h = a.axis === 'h' ? a : b;
+        const v = a.axis === 'h' ? b : a;
+        const hMinX = Math.min(h.x1, h.x2), hMaxX = Math.max(h.x1, h.x2);
+        const vMinY = Math.min(v.y1, v.y2), vMaxY = Math.max(v.y1, v.y2);
+        const vX = v.x1, hY = h.y1;
+        if (vX > hMinX && vX < hMaxX && hY > vMinY && hY < vMaxY) {
+          crossings++;
+        }
+      }
+    }
+
+    expect(crossings).toBe(0);
+  });
 });
