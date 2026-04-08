@@ -745,3 +745,111 @@ describe('Spawn→Display integration (POST /spawn → GET /rooms/:roomId)', () 
     expect(detailRes.body.name).toBe('zone:flooded-crypt');
   });
 });
+
+describe('roomGraphRooms in zone detail response', () => {
+  const flatCreatureEntity = {
+    id: 'drowned-revenant',
+    type: 'drowned_revenant',
+    name: 'Drowned Revenant',
+    maxHp: 50,
+    attack: 8,
+    defence: 4,
+    armour: 2,
+    agility: 0,
+    lootTable: [],
+    minCount: 1,
+    maxCount: 3,
+    preferredRooms: [],
+    forbiddenRooms: [],
+    idleTicksMin: 3,
+    idleTicksMax: 6,
+    fleeThreshold: 0.2,
+    aggressive: true,
+  };
+
+  function createMockZoneRoom(opts?: { zoneSlug?: string; roomName?: string }) {
+    const cm = new CreatureManager();
+    const roomGraph = {
+      rooms: new Map([
+        ['entry', { id: 'entry', name: 'Rift Entry', type: 'entry', exits: new Map(), items: [] }],
+        ['corridor', { id: 'corridor', name: 'Dark Corridor', exits: new Map(), items: [] }],
+      ]),
+      startRoomId: 'entry',
+    };
+    return {
+      _mockName: opts?.roomName ?? 'zone',
+      roomName: opts?.roomName ?? 'zone',
+      roomId: 'zone-room-rg',
+      state: { lifecycle: 'active', stability: 100, collapseTimer: 0, tick: 5, playerCount: 0 },
+      clock: { running: true },
+      clients: [],
+      creatureManager: cm,
+      roomGraph,
+      players: new Map(),
+      getZoneSlug: () => opts?.zoneSlug,
+      broadcast: vi.fn(),
+    };
+  }
+
+  it('includes roomGraphRooms in zone detail response', async () => {
+    const mockRoom = createMockZoneRoom({ zoneSlug: 'test-zone' });
+    mockRooms.set('zone-room-rg', mockRoom);
+
+    const app = createTestApp({});
+    const res = await request(app, 'get', '/admin/api/rooms/zone-room-rg', { token: TEST_TOKEN });
+
+    expect(res.status).toBe(200);
+    expect(res.body.roomGraphRooms).toBeDefined();
+    expect(res.body.roomGraphRooms).toHaveLength(2);
+
+    const ids = res.body.roomGraphRooms.map((r: { id: string }) => r.id).sort();
+    expect(ids).toEqual(['corridor', 'entry']);
+
+    const entry = res.body.roomGraphRooms.find((r: { id: string }) => r.id === 'entry');
+    expect(entry.name).toBe('Rift Entry');
+    expect(entry.type).toBe('entry');
+  });
+
+  it('includes roomGraphRooms even without zoneSlug (procedural zones)', async () => {
+    // Procedural zones have no zoneSlug — client previously showed
+    // "Zone data unavailable" and dropped all creature occupancy.
+    const mockRoom = createMockZoneRoom({ zoneSlug: undefined });
+    mockRooms.set('zone-room-rg', mockRoom);
+
+    const app = createTestApp({});
+    const res = await request(app, 'get', '/admin/api/rooms/zone-room-rg', { token: TEST_TOKEN });
+
+    expect(res.status).toBe(200);
+    expect(res.body.zoneSlug).toBeUndefined();
+    expect(res.body.roomGraphRooms).toHaveLength(2);
+  });
+
+  it('spawned creature currentRoomId matches a roomGraphRooms entry', async () => {
+    const mockRoom = createMockZoneRoom({ zoneSlug: undefined });
+    mockRooms.set('zone-room-rg', mockRoom);
+
+    const contentStores = createMockContentStores([flatCreatureEntity]);
+    const app = createTestApp({ contentStores });
+
+    // Spawn
+    const spawnRes = await request(app, 'post', '/admin/api/rooms/zone-room-rg/spawn', {
+      token: TEST_TOKEN,
+      body: { type: 'creature', id: 'drowned-revenant', targetRoomId: 'entry' },
+    });
+    expect(spawnRes.status).toBe(200);
+
+    // Fetch detail
+    const detailRes = await request(app, 'get', '/admin/api/rooms/zone-room-rg', { token: TEST_TOKEN });
+    expect(detailRes.status).toBe(200);
+
+    const creature = detailRes.body.creatures.find(
+      (c: { id: string }) => c.id === spawnRes.body.spawned.creatureId,
+    );
+    expect(creature).toBeDefined();
+    expect(creature.currentRoomId).toBe('entry');
+
+    // The key assertion: creature.currentRoomId must exist in roomGraphRooms
+    const roomIds = detailRes.body.roomGraphRooms.map((r: { id: string }) => r.id);
+    expect(roomIds).toContain(creature.currentRoomId);
+  });
+});

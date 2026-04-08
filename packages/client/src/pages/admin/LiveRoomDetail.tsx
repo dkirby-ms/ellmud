@@ -30,7 +30,6 @@ import {
 } from "../../lib/admin-api.js";
 import {
   getZone,
-  type ZoneRoomDefinition,
   type ZoneData,
 } from "../../lib/zone-api.js";
 
@@ -148,9 +147,15 @@ export default function LiveRoomDetail() {
       string,
       { players: LiveRoomPlayer[]; creatures: LiveRoomCreature[] }
     > = {};
-    if (!zoneData) return map;
-    for (const zr of zoneData.rooms) {
-      map[zr.slug] = { players: [], creatures: [] };
+    // Use zoneData rooms when available; fall back to the room-graph rooms
+    // included in the room detail response (fixes procedural zones and
+    // zone-data fetch failures).
+    const roomList: { slug?: string; id?: string }[] =
+      zoneData?.rooms ?? (room?.roomGraphRooms?.map((r) => ({ slug: r.id, id: r.id })) ?? []);
+    if (roomList.length === 0) return map;
+    for (const zr of roomList) {
+      const key = (zr as { slug?: string }).slug ?? (zr as { id?: string }).id ?? '';
+      if (key) map[key] = { players: [], creatures: [] };
     }
     for (const p of room?.players ?? []) {
       if (map[p.currentRoomId]) {
@@ -163,7 +168,22 @@ export default function LiveRoomDetail() {
       }
     }
     return map;
-  }, [zoneData, room?.players, room?.creatures]);
+  }, [zoneData, room?.players, room?.creatures, room?.roomGraphRooms]);
+
+  // Normalised room list for the Room Graph tab.
+  // Prefer full zone data; fall back to the lightweight roomGraphRooms
+  // included in every zone room detail response.
+  const displayRooms: { slug: string; name: string; type?: string; properties?: string[]; npcs?: { creatureId: string }[]; lootContainers?: { id: string }[] }[] = useMemo(() => {
+    if (zoneData) return zoneData.rooms;
+    if (room?.roomGraphRooms) {
+      return room.roomGraphRooms.map((r) => ({
+        slug: r.id,
+        name: r.name,
+        type: r.type,
+      }));
+    }
+    return [];
+  }, [zoneData, room?.roomGraphRooms]);
 
   const showFeedback = (type: "success" | "error", message: string) => {
     setActionFeedback({ type, message });
@@ -528,22 +548,14 @@ export default function LiveRoomDetail() {
                   {/* Room Graph Tab */}
                   {activeTab === "room-graph" && (
                     <>
-                      {zoneLoading ? (
+                      {zoneLoading && displayRooms.length === 0 ? (
                         <p
                           className="text-[#8A8B95] text-sm"
                           style={{ fontFamily: "var(--font-sans)" }}
                         >
                           Loading zone rooms…
                         </p>
-                      ) : !zoneData ? (
-                        <p
-                          className="text-[#8A8B95] text-sm"
-                          style={{ fontFamily: "var(--font-sans)" }}
-                        >
-                          Zone data unavailable. The backend may not yet include{" "}
-                          <code className="text-[#C9A84C]">zoneSlug</code> in the room detail response.
-                        </p>
-                      ) : zoneData.rooms.length === 0 ? (
+                      ) : displayRooms.length === 0 ? (
                         <p
                           className="text-[#8A8B95] text-sm"
                           style={{ fontFamily: "var(--font-sans)" }}
@@ -562,7 +574,7 @@ export default function LiveRoomDetail() {
                             <span className="text-center">Creatures</span>
                             <span>Features</span>
                           </div>
-                          {zoneData.rooms.map((zr: ZoneRoomDefinition) => {
+                          {displayRooms.map((zr) => {
                             const occ = roomOccupancy[zr.slug] ?? {
                               players: [],
                               creatures: [],

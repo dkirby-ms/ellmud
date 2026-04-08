@@ -935,6 +935,20 @@ function getZoneDetail(room: import('@colyseus/core').Room): AdminZoneDetail {
     : undefined;
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
+  // Serialise room-graph rooms so the client can map creatures → rooms
+  // without a separate zone-data fetch (fixes procedural zones / fetch failures).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const roomGraph = (room as any)['roomGraph'] as
+    | { rooms: Map<string, { id: string; name: string; type?: string }> }
+    | undefined;
+
+  const roomGraphRooms: Array<{ id: string; name: string; type?: string }> = [];
+  if (roomGraph) {
+    for (const [, r] of roomGraph.rooms) {
+      roomGraphRooms.push({ id: r.id, name: r.name, type: r.type });
+    }
+  }
+
   return {
     roomId: room.roomId,
     name: room.roomName,
@@ -948,6 +962,7 @@ function getZoneDetail(room: import('@colyseus/core').Room): AdminZoneDetail {
     players,
     creatures,
     zoneSlug,
+    roomGraphRooms,
   };
 }
 

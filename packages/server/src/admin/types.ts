@@ -23,6 +23,12 @@ export interface AdminCreatureInfo {
   isAlive: boolean;
 }
 
+export interface AdminRoomGraphEntry {
+  id: string;
+  name: string;
+  type?: string;
+}
+
 export interface AdminZoneDetail {
   roomId: string;
   name: string;
@@ -37,6 +43,9 @@ export interface AdminZoneDetail {
   creatures: AdminCreatureInfo[];
   /** Zone slug identifier, present when room is a hand-crafted zone instance. */
   zoneSlug?: string;
+  /** Serialised room-graph rooms so the client can map creatures to rooms
+   *  without a separate zone-data fetch (fixes procedural zones / fetch failures). */
+  roomGraphRooms: AdminRoomGraphEntry[];
 }
 
 export interface AdminRefugeDetail {

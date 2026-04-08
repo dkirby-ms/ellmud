@@ -211,6 +211,8 @@ export interface LiveRoomDetail {
   zoneSlug?: string;
   players?: LiveRoomPlayer[];
   creatures?: LiveRoomCreature[];
+  /** Rooms from the live room graph — always present for zone rooms. */
+  roomGraphRooms?: { id: string; name: string; type?: string }[];
 }
 
 export interface SpawnResult {
