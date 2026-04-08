@@ -35,6 +35,8 @@ export interface AdminZoneDetail {
   paused: boolean;
   players: AdminPlayerInfo[];
   creatures: AdminCreatureInfo[];
+  /** Zone slug identifier, present when room is a hand-crafted zone instance. */
+  zoneSlug?: string;
 }
 
 export interface AdminRefugeDetail {

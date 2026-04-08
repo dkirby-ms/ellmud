@@ -1474,3 +1474,13 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
 - ✅ 271 total client tests pass
 
 **Impact:** Phase 5c is now fully integrated and documented. The feature safely fixes misaligned cardinal-exit pairs without cascading breaks to other alignment groups.
+
+### Issue #344: Live Rooms Admin Page — Zone Room Management (2026-XX-XX)
+- **PR #352** on branch `squad/344-live-rooms-frontend`
+- Enhanced `LiveRoomDetail.tsx` with tabbed interface (Room Graph | Creatures | Players)
+- Room Graph tab shows all zone rooms with live occupancy, expandable detail rows, and per-room actions (Broadcast, Spawn Here, Teleport Here)
+- Added Quick Actions sidebar card
+- API layer: added `broadcastToRoom()`, `teleportPlayer()` to `admin-api.ts`, plus `zoneSlug` field on `LiveRoomDetail`
+- Backend endpoints being built in parallel by Drizzt on `squad/344-live-rooms-admin`
+- **Pattern:** Zone data fetched via existing `getZone(slug)` from `zone-api.ts`; occupancy derived client-side by cross-referencing live player/creature `currentRoomId` against zone room definitions
+- **Key decision:** Enhanced existing LiveRoomDetail rather than creating a new page (per design doc)
