@@ -67,6 +67,7 @@ function roomInput(
     lootContainers: [],
     hazards: [],
     npcs: [],
+    features: [],
     ...overrides,
   };
 }
@@ -529,6 +530,7 @@ describe('Repop Logic (specification-based)', () => {
         ],
         hazards: [],
         npcs: [],
+    features: [],
       } as SharedZoneRoomDefinition,
     ];
 
@@ -572,6 +574,7 @@ describe('Repop Logic (specification-based)', () => {
         lootContainers: [{ id: 'altar-1', type: 'altar', items: ['rune-stone'] }],
         hazards: [],
         npcs: [],
+    features: [],
       } as SharedZoneRoomDefinition,
     ];
 
@@ -620,6 +623,7 @@ describe('Repop Logic (specification-based)', () => {
         ],
         hazards: [],
         npcs: [],
+    features: [],
       } as SharedZoneRoomDefinition,
     ];
 
@@ -677,6 +681,7 @@ describe('Repop Logic (specification-based)', () => {
         lootContainers: [{ id: 'crate-1', type: 'crate', items: ['rope'] }],
         hazards: [],
         npcs: [],
+    features: [],
       } as SharedZoneRoomDefinition,
     ];
 

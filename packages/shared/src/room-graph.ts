@@ -80,6 +80,24 @@ export interface LootContainer {
 /** Properties that affect sound propagation through a room. */
 export type RoomProperty = 'heavy_door' | 'cavern' | 'water';
 
+// ─── Room Features (Issue #345) ──────────────────────────────────────────────
+
+/** An examinable feature within a room (e.g., a note on the wall, an inscription). */
+export interface RoomFeature {
+  /** Unique ID within the room (e.g., 'wall-note', 'altar-inscription'). */
+  id: string;
+  /** Keywords players can use to target this feature (e.g., ['note', 'parchment']). */
+  keywords: string[];
+  /** Display name shown when listing features. */
+  name: string;
+  /** Full narration when the player examines the feature. */
+  description: string;
+  /** Feature type (e.g., 'readable', 'examinable'). */
+  type: string;
+  /** Optional: quest/contract ID to initiate when examined (future). */
+  questId?: string | null;
+}
+
 // ─── Room ────────────────────────────────────────────────────────────────────
 
 export interface Room {
@@ -92,6 +110,8 @@ export interface Room {
   hazards: HazardPlaceholder[];
   /** Optional properties affecting sound propagation (GDD §12). */
   properties?: RoomProperty[];
+  /** Examinable features in this room (Issue #345). */
+  features?: RoomFeature[];
 }
 
 // ─── Room Graph ──────────────────────────────────────────────────────────────
@@ -115,6 +135,7 @@ export interface SerializedRoom {
   items: LootContainer[];
   hazards: HazardPlaceholder[];
   properties?: RoomProperty[];
+  features?: RoomFeature[];
 }
 
 export interface SerializedRoomGraph {
@@ -138,6 +159,7 @@ export function serializeRoomGraph(graph: RoomGraph): SerializedRoomGraph {
       items: room.items,
       hazards: room.hazards,
       ...(room.properties?.length ? { properties: room.properties } : {}),
+      ...(room.features?.length ? { features: room.features } : {}),
     });
   }
   return {
@@ -162,6 +184,7 @@ export function deserializeRoomGraph(data: SerializedRoomGraph): RoomGraph {
       items: sr.items,
       hazards: sr.hazards,
       ...(sr.properties?.length ? { properties: sr.properties } : {}),
+      ...(sr.features?.length ? { features: sr.features } : {}),
     });
   }
   return {

@@ -24,6 +24,8 @@ export type RoomType =
 
 export type RoomProperty = 'heavy_door' | 'cavern' | 'water';
 
+import type { RoomFeature } from '@ellmud/shared';
+
 export interface Room {
   id: string;
   name: string;
@@ -32,6 +34,8 @@ export interface Room {
   exits: Map<Direction, string>;
   items: Item[];
   properties?: RoomProperty[];
+  /** Examinable features in this room (Issue #345). */
+  features?: RoomFeature[];
 }
 
 export interface RoomGraph {

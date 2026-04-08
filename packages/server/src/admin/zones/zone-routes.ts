@@ -312,6 +312,7 @@ export function createZoneRouter(): Router {
         lootContainers: [],
         hazards: [],
         npcs: [],
+        features: [],
         ...rest,
         zoneId: req.params.id,
       };

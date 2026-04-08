@@ -45,6 +45,7 @@ function makeRoom(
     lootContainers: [],
     hazards: [],
     npcs: [],
+    features: [],
     ...overrides,
   };
 }

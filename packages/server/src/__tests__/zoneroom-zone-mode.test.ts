@@ -57,6 +57,7 @@ async function seedZone(
     lootContainers: [],
     hazards: [],
     npcs: [],
+    features: [],
   });
 
   await repo.createRoom({
@@ -69,6 +70,7 @@ async function seedZone(
     lootContainers: [],
     hazards: [],
     npcs: [],
+    features: [],
   });
 
   await repo.createExit({

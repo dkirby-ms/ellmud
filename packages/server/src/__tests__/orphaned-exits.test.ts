@@ -54,6 +54,7 @@ function roomInput(
     lootContainers: [],
     hazards: [],
     npcs: [],
+    features: [],
   };
 }
 
