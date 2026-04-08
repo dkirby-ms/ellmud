@@ -41,6 +41,7 @@ vi.mock('@colyseus/core', () => ({
 
 // Import createAdminRouter AFTER the mock is set up
 import { createAdminRouter, type AdminRouterDeps } from '../admin/routes.js';
+import { CreatureManager } from '../creatures/CreatureManager.js';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -547,5 +548,200 @@ describe('POST /admin/api/rooms/:roomId/spawn-creature', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/not found in zone graph/i);
+  });
+});
+
+// ─── Spawn→Display Integration: POST /spawn then GET /rooms/:roomId ─────────
+
+describe('Spawn→Display integration (POST /spawn → GET /rooms/:roomId)', () => {
+  const flatCreatureEntity = {
+    id: 'drowned-revenant',
+    type: 'drowned_revenant',
+    name: 'Drowned Revenant',
+    maxHp: 50,
+    attack: 8,
+    defence: 4,
+    armour: 2,
+    agility: 0,
+    lootTable: [],
+    minCount: 1,
+    maxCount: 3,
+    preferredRooms: [],
+    forbiddenRooms: [],
+    idleTicksMin: 3,
+    idleTicksMax: 6,
+    fleeThreshold: 0.2,
+    aggressive: true,
+  };
+
+  /**
+   * Create a mock zone room with a REAL CreatureManager and room graph.
+   * This tests the actual spawn→display pipeline used by the frontend:
+   *   POST /admin/api/rooms/:roomId/spawn → accesses creatureManager directly
+   *   GET  /admin/api/rooms/:roomId       → getZoneDetail reads creatureManager
+   */
+  function createRealisticMockZoneRoom() {
+    const cm = new CreatureManager();
+
+    // Minimal room graph with two rooms
+    const roomGraph = {
+      rooms: new Map([
+        ['entry', { id: 'entry', name: 'Rift Entry', exits: new Map(), items: [] }],
+        ['corridor', { id: 'corridor', name: 'Dark Corridor', exits: new Map(), items: [] }],
+      ]),
+      startRoomId: 'entry',
+    };
+
+    return {
+      _mockName: 'zone',
+      roomName: 'zone',
+      roomId: 'zone-room-1',
+      state: { lifecycle: 'active', stability: 100, collapseTimer: 0, tick: 5, playerCount: 0 },
+      clock: { running: true },
+      clients: [],
+      creatureManager: cm,
+      roomGraph,
+      players: new Map(),
+      getZoneSlug: () => 'test-zone',
+      broadcast: vi.fn(),
+    };
+  }
+
+  it('spawned creature appears in GET room detail response', async () => {
+    const mockRoom = createRealisticMockZoneRoom();
+    mockRooms.set('zone-room-1', mockRoom);
+
+    const contentStores = createMockContentStores([flatCreatureEntity]);
+    const app = createTestApp({ contentStores });
+
+    // Step 1: Spawn a creature via the /spawn endpoint (used by frontend)
+    const spawnRes = await request(app, 'post', '/admin/api/rooms/zone-room-1/spawn', {
+      token: TEST_TOKEN,
+      body: { type: 'creature', id: 'drowned-revenant', targetRoomId: 'entry' },
+    });
+
+    expect(spawnRes.status).toBe(200);
+    expect(spawnRes.body.spawned).toBeDefined();
+    const spawned = spawnRes.body.spawned as { creatureId: string; spawnRoomId: string };
+    expect(spawned.creatureId).toBeDefined();
+    expect(spawned.spawnRoomId).toBe('entry');
+
+    // Step 2: Fetch room detail (same call the frontend makes after spawn)
+    const detailRes = await request(app, 'get', '/admin/api/rooms/zone-room-1', {
+      token: TEST_TOKEN,
+    });
+
+    expect(detailRes.status).toBe(200);
+    const detail = detailRes.body as {
+      creatures: Array<{ id: string; name: string; currentRoomId: string; isAlive: boolean }>;
+    };
+
+    // Step 3: Verify the creature is in the response with correct room ID
+    expect(detail.creatures).toBeDefined();
+    expect(detail.creatures.length).toBeGreaterThanOrEqual(1);
+
+    const spawnedCreature = detail.creatures.find(c => c.id === spawned.creatureId);
+    expect(spawnedCreature).toBeDefined();
+    expect(spawnedCreature!.name).toBe('Drowned Revenant');
+    expect(spawnedCreature!.currentRoomId).toBe('entry');
+    expect(spawnedCreature!.isAlive).toBe(true);
+  });
+
+  it('auto-selects first room when no targetRoomId is provided', async () => {
+    const mockRoom = createRealisticMockZoneRoom();
+    mockRooms.set('zone-room-1', mockRoom);
+
+    const contentStores = createMockContentStores([flatCreatureEntity]);
+    const app = createTestApp({ contentStores });
+
+    // Spawn without targetRoomId — should auto-select first room in graph
+    const spawnRes = await request(app, 'post', '/admin/api/rooms/zone-room-1/spawn', {
+      token: TEST_TOKEN,
+      body: { type: 'creature', id: 'drowned-revenant' },
+    });
+
+    expect(spawnRes.status).toBe(200);
+    const spawned = spawnRes.body.spawned as { creatureId: string; spawnRoomId: string };
+    expect(spawned.spawnRoomId).toBeDefined();
+
+    // Verify creature appears in detail with auto-selected room
+    const detailRes = await request(app, 'get', '/admin/api/rooms/zone-room-1', {
+      token: TEST_TOKEN,
+    });
+
+    const detail = detailRes.body as {
+      creatures: Array<{ id: string; currentRoomId: string }>;
+    };
+
+    const creature = detail.creatures.find(c => c.id === spawned.creatureId);
+    expect(creature).toBeDefined();
+    expect(creature!.currentRoomId).toBe(spawned.spawnRoomId);
+  });
+
+  it('multiple spawns all appear in room detail', async () => {
+    const mockRoom = createRealisticMockZoneRoom();
+    mockRooms.set('zone-room-1', mockRoom);
+
+    const contentStores = createMockContentStores([flatCreatureEntity]);
+    const app = createTestApp({ contentStores });
+
+    // Spawn 3 creatures in different rooms
+    await request(app, 'post', '/admin/api/rooms/zone-room-1/spawn', {
+      token: TEST_TOKEN,
+      body: { type: 'creature', id: 'drowned-revenant', targetRoomId: 'entry' },
+    });
+    await request(app, 'post', '/admin/api/rooms/zone-room-1/spawn', {
+      token: TEST_TOKEN,
+      body: { type: 'creature', id: 'drowned-revenant', targetRoomId: 'corridor' },
+    });
+    await request(app, 'post', '/admin/api/rooms/zone-room-1/spawn', {
+      token: TEST_TOKEN,
+      body: { type: 'creature', id: 'drowned-revenant', targetRoomId: 'entry' },
+    });
+
+    const detailRes = await request(app, 'get', '/admin/api/rooms/zone-room-1', {
+      token: TEST_TOKEN,
+    });
+
+    const detail = detailRes.body as {
+      creatures: Array<{ id: string; currentRoomId: string }>;
+    };
+
+    expect(detail.creatures.length).toBe(3);
+    const inEntry = detail.creatures.filter(c => c.currentRoomId === 'entry');
+    const inCorridor = detail.creatures.filter(c => c.currentRoomId === 'corridor');
+    expect(inEntry.length).toBe(2);
+    expect(inCorridor.length).toBe(1);
+  });
+
+  it('rejects spawn with invalid targetRoomId not in room graph', async () => {
+    const mockRoom = createRealisticMockZoneRoom();
+    mockRooms.set('zone-room-1', mockRoom);
+
+    const contentStores = createMockContentStores([flatCreatureEntity]);
+    const app = createTestApp({ contentStores });
+
+    const spawnRes = await request(app, 'post', '/admin/api/rooms/zone-room-1/spawn', {
+      token: TEST_TOKEN,
+      body: { type: 'creature', id: 'drowned-revenant', targetRoomId: 'nonexistent-room' },
+    });
+
+    expect(spawnRes.status).toBe(400);
+    expect(spawnRes.body.error).toMatch(/not found in zone/i);
+  });
+
+  it('returns room.roomName in zone detail response', async () => {
+    const mockRoom = createRealisticMockZoneRoom();
+    mockRoom._mockName = 'zone:flooded-crypt';
+    mockRoom.roomName = 'zone:flooded-crypt';
+    mockRooms.set('zone-room-1', mockRoom);
+
+    const app = createTestApp({});
+    const detailRes = await request(app, 'get', '/admin/api/rooms/zone-room-1', {
+      token: TEST_TOKEN,
+    });
+
+    expect(detailRes.status).toBe(200);
+    expect(detailRes.body.name).toBe('zone:flooded-crypt');
   });
 });

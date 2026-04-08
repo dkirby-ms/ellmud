@@ -630,6 +630,21 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
           return;
         }
 
+        // Validate that the target room exists in the zone's room graph
+        {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rg = (room as any)['roomGraph'] as
+            | { rooms: Map<string, unknown> }
+            | undefined;
+
+          if (rg && !rg.rooms.has(spawnRoomId)) {
+            res.status(400).json({
+              error: `Target room "${spawnRoomId}" not found in zone's room graph`,
+            });
+            return;
+          }
+        }
+
         // Convert flat content entity into the nested CreatureTemplate shape
         const template = contentEntityToCreatureTemplate(templateEntity);
         const creature = cm.spawnSingleCreature(template, spawnRoomId);
@@ -921,7 +936,7 @@ function getZoneDetail(room: import('@colyseus/core').Room): AdminZoneDetail {
 
   return {
     roomId: room.roomId,
-    name: 'zone',
+    name: room.roomName,
     clients: room.clients.length,
     lifecycle: state.lifecycle ?? 'unknown',
     stability: state.stability ?? 0,

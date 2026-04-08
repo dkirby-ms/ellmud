@@ -216,9 +216,9 @@ export default function LiveRoomDetail() {
         selectedTemplate,
         targetRoomId || undefined
       );
-      showFeedback("success", result.message);
       setShowSpawnModal(false);
-      loadRoom(); // Refresh to see new creature
+      await loadRoom(); // Refresh to see new creature
+      showFeedback("success", result.message);
     } catch (err) {
       showFeedback(
         "error",
