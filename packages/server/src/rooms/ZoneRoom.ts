@@ -416,10 +416,14 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Character ID: passed from client after character selection. Falls back to playerId for backwards compat.
     const playerId = (options['characterId'] as string) || rawPlayerId;
 
-    // Guard against the same playerId joining twice (double-click / client race condition).
+    // Guard against the same playerId joining twice (double-click / client race condition / browser refresh).
     // If the player is already present, displace the old session rather than corrupting state.
+    // Preserve the player's current room so reconnection doesn't reset position (#355).
+    let preservedRoomId: string | undefined;
     if (this.players.has(playerId)) {
-      this.log(`Duplicate join detected: ${this.playerTag(playerId)} (new session=${client.sessionId}). Displacing old session.`);
+      const existingState = this.players.get(playerId)!;
+      preservedRoomId = existingState.currentRoomId;
+      this.log(`Duplicate join detected: ${this.playerTag(playerId)} (new session=${client.sessionId}, room=${preservedRoomId}). Displacing old session.`);
 
       // Remove old session→playerId mapping so its onLeave becomes a cleanup no-op
       for (const [sid, pid] of this.playerIds) {
@@ -484,9 +488,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Track join time for run duration calculation
     this.playerJoinTimes.set(playerId, Date.now());
 
-    // Determine entry room based on zone vs instance
+    // Determine entry room based on zone vs instance.
+    // If this is a reconnecting player (duplicate join), preserve their current room (#355).
     let startRoom: string;
-    if (this.isZone) {
+    if (preservedRoomId && this.roomGraph.rooms.has(preservedRoomId)) {
+      startRoom = preservedRoomId;
+    } else if (this.isZone) {
       const targetRoom = options['targetRoomSlug'];
       if (typeof targetRoom === 'string' && this.roomGraph.rooms.has(targetRoom)) {
         startRoom = targetRoom;
