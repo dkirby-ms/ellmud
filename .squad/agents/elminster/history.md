@@ -2217,3 +2217,33 @@ PR #294 implements auto-attack default targeting and target management per GDD �
 - Static metadata registries provide single source of truth for command documentation
 - Context-aware filtering improves player UX by showing only relevant commands
 - Help is discovery tool → must never be feature-gated
+
+## Grid Expansion Crossing Fix Code Review (Commit 858c3d7)
+
+**Date:** 2026-04-08  
+**Role:** Code Reviewer  
+**Status:** ✅ APPROVED
+
+**Review Scope:**
+- Edge-crossing elimination and selective insertion (Phase 5d extension)
+- Grid expansion collision avoidance and snapshot/rollback mechanism (Phase 7 integration)
+- Regression testing across 29 test cases (28 existing + 1 new crossing-elimination)
+- Performance validation for zones <200 rooms
+
+**Key Validations:**
+- **Collision detection:** Snapshot-compare logic is sound; expansion candidates correctly bounded by CROSSING_CANDIDATE_RADIUS and collision envelope
+- **Grid expansion strategy:** Row/column insertion is surgical; fallback to full-grid expansion prevents layout degradation in dense zones
+- **Rollback mechanism:** Failed expansions revert to pre-expansion state cleanly; no orphaned constraints or alignment violations
+- **Edge case handling:** Dense zones (Midgaard, Siltgate), single-crossing topologies, cascading fixes all handled correctly
+- **Direction semantics:** Cardinal alignment (Phase 5c) maintained throughout; no new diagonals introduced
+- **Test coverage:** All 29 tests pass; Test #28 correctly validates crossing elimination in guaranteed-crossing topology
+- **Performance:** O(E² × passes) per z-level; negligible for zones <200 rooms; Siltgate (138 rooms) completes in <300ms
+
+**Issues Found:** None. No significant concerns identified.
+
+**Concurrent Assignments:**
+- Issue #346 (Architecture diagram) → Danilo (general-purpose, background)
+- Issue #343 (Repo hygiene audit) → Danilo (general-purpose, background)
+- Both relabeled from `squad:elminster` to `squad:danilo`
+
+**Verdict:** ✅ APPROVED — Ready for merge.

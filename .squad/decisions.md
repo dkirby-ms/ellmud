@@ -5597,3 +5597,95 @@ All SQL files follow the established pattern (BEGIN/COMMIT, cross-join VALUES, O
 ---
 
 **Note:** This section merged from .squad/decisions/inbox on 2026-04-08T01:21Z. Deduplicated Regis alignment fixes into single Phase 5c entry.
+
+---
+
+# Test Plan: Edge-Crossing Selective Insertion
+
+**Author:** Minsc  
+**Date:** 2026-01-08  
+**Status:** Test analysis complete, awaiting Regis implementation
+
+## Baseline Test Results
+
+**Current test suite:** 28 tests, all passing
+
+### Key Tests Analyzed:
+
+#### Test #21: Siltgate (138 rooms, 280 exits)
+- **CRITICAL REGRESSION GUARD**: Must maintain 0 diagonals
+- Current output: `=== 0 diagonal exits, 72 non-adjacent ===`
+- Current occlusions: 2 (harbourmasters-office occludes cobblestone-street)
+- **Status:** PASS ✓
+- **Requirement:** Any crossing-fix changes must preserve 0 diagonals
+
+#### Test #26: Midgaard (52 rooms, ~107 exits)
+- Tests E-W alignment of main-street corridor
+- Entry: 'the-reading-room'
+- Asserts: All 9 main-street rooms share same y-coordinate
+- Asserts: wall-road-2 and poor-alley share y-coordinate (E-W connected)
+- **Status:** PASS ✓
+- **Requirement:** Crossing fixes must not break E-W alignment
+
+#### Test #28: Edge crossing elimination
+- **THIS IS THE NEW TEST** — currently checks crossing count = 0
+- Topology: hub with E/W corridor (hub→b→b2) and N/S branches (c, d)
+- Without fix: A(0,0)→B(2,0) crosses C(1,-1)→D(1,1) at (1,0)
+- **Current Status:** PASS ✓ (crossing fix already working)
+- **Issue identified:** Current implementation tries to MOVE rooms, not INSERT rows/columns
+
+## Problem Analysis
+
+**Current crossing-fix strategy (Phase 5d, lines 2489-2610):**
+1. Detects edge crossings between orthogonal segments
+2. Tries to MOVE one of the four endpoint rooms to a nearby free cell
+3. Guards against: diagonals, direction mismatches, alignment breaks
+4. Uses diamond search with `CROSSING_CANDIDATE_RADIUS`
+
+**Limitation:** Only works when there's a nearby free cell. Dense zones like Midgaard have no free cells near crossings — every cell is occupied by the tightly-packed grid.
+
+**Proposed fix (Regis implementing):**
+- **Selective row/column insertion** when moving won't work
+- Insert empty row between crossing segments (for H crossing V)
+- Insert empty column between crossing segments (for V crossing H)
+- Shift affected rooms to make space
+- More surgical than Phase 7 grid expansion (which expands entire rows/cols)
+
+## Test Cases to Implement
+
+### 1. Minimal Crossing Reproduction
+**Purpose:** Verify basic crossing detection and fix
+- **Expected:** Crossing count 0, no diagonals, alignments preserved
+
+### 2. T-Intersection Pattern
+**Purpose:** Test horizontal corridor crossing vertical corridor
+- **Expected:** Crossing count 0, alignment preserved on both axes
+
+### 3. L-Shaped Zone (Negative Test)
+**Purpose:** Verify no false positives
+- **Expected:** Crossing count 0 (naturally), no insertions, compact layout preserved
+
+### 4. Dense 4x4 Grid with Multiple Crossings
+**Purpose:** Test multiple crossing resolution in dense topology
+- **Expected:** All crossings eliminated, grid structure preserved, no diagonals
+
+### 5. Cascading Fix Scenario
+**Purpose:** Test when fixing one crossing might create another
+- **Expected:** All crossings resolved, no new ones introduced
+
+### 6. Edge Case: Row vs Column Insertion Choice
+**Purpose:** Verify algorithm chooses correct insertion direction
+- **Expected:** Should insert ROW for horizontal-dominant segments
+
+## Success Criteria
+
+- [ ] All 28 existing tests pass
+- [ ] Siltgate maintains 0 diagonals
+- [ ] Midgaard crossing count reduced (ideally to 0)
+- [ ] All 6 new test cases implemented and passing
+- [ ] No performance regression (< 500ms for Siltgate)
+- [ ] No new direction violations introduced
+
+---
+
+**Note:** This decision merged from .squad/decisions/inbox on 2026-04-08T13:32Z.

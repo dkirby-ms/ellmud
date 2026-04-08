@@ -1775,3 +1775,51 @@ The tests expect:
 - Comprehensive edge case testing prevents regressions
 - Test-driven development enables confidence in spec compliance
 - Feature filtering patterns can be tested in isolation for maintainability
+
+## 2026-01-08: Edge-Crossing Test Analysis
+
+### Task: Analyzed existing tests and prepared test plan for crossing-fix feature
+
+**Baseline established:**
+- All 28 existing tests pass ✓
+- Siltgate (test #21): 0 diagonals, 72 non-adjacent, 2 occlusions — CRITICAL regression guard
+- Midgaard (test #26): E-W alignment working correctly — must preserve
+- Crossing elimination (test #28): Already present, basic topology passes
+
+**Analysis completed:**
+- Reviewed Phase 5d crossing fix implementation (computeLayout.ts:2489-2610)
+- Current strategy: MOVE rooms to nearby free cells
+- Limitation: Dense zones have no free cells → moves fail
+- Regis implementing: SELECTIVE row/column insertion (surgical, not grid-wide)
+
+**Test cases designed (6 new tests):**
+1. Minimal crossing (2x2 hub with H/V crossing)
+2. T-intersection (long horizontal crossing vertical)
+3. L-shaped zone (negative test — no false positives)
+4. Dense 4x4 grid (multiple crossings)
+5. Cascading fix scenario (fixing one crossing doesn't create another)
+6. Row vs column insertion choice (algorithm picks correct direction)
+
+**Decision document created:**
+- `.squad/decisions/inbox/minsc-crossing-test-plan.md`
+- Includes: baseline, problem analysis, 6 detailed test topologies, helper functions needed
+- Regression strategy: run full suite before/after, verify Siltgate 0 diagonals preserved
+- Open questions for Regis: insertion strategy, multi-crossing handling, alignment preservation
+
+**Key learnings:**
+- Crossing fix is Phase 5d (after alignment Phase 5c, before grid expansion Phase 7)
+- `segmentsCross()` detects H/V edge intersections
+- Guards required: no diagonals, no direction mismatches, no alignment breaks
+- Test #28 already has crossing count logic — can extract as helper function
+
+**Files analyzed:**
+- `packages/client/src/map/__tests__/computeLayout.test.ts` (28 tests, 2100+ lines)
+- `packages/client/src/map/computeLayout.ts` (Phase 5d implementation)
+- `.squad/decisions.md` (context on prior crossing/occlusion issues)
+
+**Next steps:**
+1. Wait for Regis to finish implementation (parallel session)
+2. Re-run baseline tests to verify no regressions
+3. Implement the 6 new test cases
+4. Performance profiling on Siltgate/Midgaard
+

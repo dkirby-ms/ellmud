@@ -259,3 +259,44 @@ Initial setup complete. Scribe orchestration workflow established: create orches
 
 - Coordinate with zone design on additional test zones
 - Monitor map rendering for curved edge elimination
+
+## Session: Crossing Fix Grid Expansion (2026-04-08T02:15Z)
+
+### Tasks Completed
+
+1. ✅ **Orchestration Log Written**
+   - Regis: Crossing Elimination via Grid Expansion (Phase 5e/9) — Commit 858c3d7
+     - Replaced row/column exchange approach with true grid expansion
+     - New `fixCrossingsByInsertion()` shifts grid partition to create gap outside crossing edge span
+     - Alignment group then moves into the gap
+     - Result: Midgaard crossings improved from 9→3 (was 5 with exchange approach)
+     - All 29 layout tests pass
+     - Test assertion tightened: Midgaard crossings ≤3 (was ≤5)
+
+2. ✅ **Technical Implementation**
+   - File: `packages/client/src/map/computeLayout.ts`
+   - Method: `fixCrossingsByInsertion()`
+   - Approach: Grid expansion via blank row/column insertion
+     - Detects crossing edge span
+     - Shifts affected grid partition to create gap outside span
+     - Moves alignment group into newly created gap
+   - Impact: More surgical, cleaner layout with fewer overall crossings
+
+### Key Metrics
+
+- **Midgaard Crossings:** 9 (initial) → 5 (exchange approach) → 3 (grid expansion)
+- **Test Coverage:** All 29 layout tests passing
+- **Test Assertion Update:** Tightened from ≤5 to ≤3
+
+### Impact Summary
+
+- Grid expansion proves superior to row/column exchange for crossing elimination
+- Cleaner, more predictable layout algorithm
+- Foundation for reliable crossing handling in additional zones
+- Better space utilization with targeted gap insertion
+
+### Next Steps
+
+- Monitor additional zones with new grid expansion approach
+- Track crossing metrics across test suite
+- Validate space efficiency improvements
