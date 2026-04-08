@@ -2746,6 +2746,29 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     return result;
   }
 
+  /**
+   * Spawn a creature in a specific zone room from an admin-resolved template.
+   * Called from admin API endpoint POST /admin/api/rooms/:roomId/spawn-creature.
+   * Template resolution stays in routes.ts (needs deps.contentStores); everything
+   * after that is encapsulated here.
+   */
+  adminSpawnCreature(template: import('../creatures/types.js').CreatureTemplate, targetRoomId: string): { success: boolean; error?: string; creatureId?: string; creatureName?: string } {
+    const room = this.roomGraph.rooms.get(targetRoomId);
+    if (!room) {
+      return { success: false, error: `Room "${targetRoomId}" not found in zone graph` };
+    }
+
+    const creature = this.creatureManager.spawnSingleCreature(template, targetRoomId);
+
+    // Broadcast spawn notification to players in the target room
+    this.broadcastToRoom(targetRoomId, {
+      narrations: [{ text: `[SYSTEM] A ${creature.name} materializes from thin air.`, type: 'system' }],
+    });
+
+    this.log(`Admin spawned "${creature.name}" (${creature.id}) in room "${targetRoomId}"`);
+    return { success: true, creatureId: creature.id, creatureName: creature.name };
+  }
+
   /** Expose the zone slug for admin API responses. */
   getZoneSlug(): string | undefined {
     return this.zoneSlug;

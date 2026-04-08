@@ -741,18 +741,14 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         return;
       }
 
-      // Validate target room exists in the zone graph
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const roomGraph = (room as any)['roomGraph'] as
-        | { rooms: Map<string, { id: string; name: string }> }
-        | undefined;
-
-      if (!roomGraph || !roomGraph.rooms.has(targetRoomId)) {
-        res.status(400).json({ error: `Room "${targetRoomId}" not found in zone graph` });
+      const zoneRoom = room as any;
+      if (typeof zoneRoom.adminSpawnCreature !== 'function') {
+        res.status(400).json({ error: 'Room does not support creature spawning' });
         return;
       }
 
-      // Look up creature template from content store
+      // Look up creature template from content store (stays in routes — needs deps)
       const creatureStore = deps.contentStores?.get('creatures');
       if (!creatureStore) {
         res.status(500).json({ error: 'Content store not available — cannot resolve creature template' });
@@ -765,33 +761,19 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         return;
       }
 
-      // Access creature manager
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const cm = (room as any)['creatureManager'] as
-        | import('../creatures/CreatureManager.js').CreatureManager
-        | undefined;
-
-      if (!cm) {
-        res.status(400).json({ error: 'Room does not have a creature manager' });
-        return;
-      }
-
       const template = templateEntity as unknown as CreatureTemplate;
-      const creature = cm.spawnSingleCreature(template, targetRoomId);
-
-      // Broadcast spawn notification to players in the target room
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const zoneRoom = room as any;
-      if (typeof zoneRoom.adminBroadcastToRoom === 'function') {
-        zoneRoom.adminBroadcastToRoom(targetRoomId, `A ${creature.name} materializes from thin air.`, 'system');
+      const result = zoneRoom.adminSpawnCreature(template, targetRoomId) as { success: boolean; error?: string; creatureId?: string; creatureName?: string };
+      if (!result.success) {
+        res.status(400).json({ error: result.error });
+        return;
       }
 
       const response: AdminSpawnCreatureResponse = {
         success: true,
-        creatureId: creature.id,
-        creatureName: creature.name,
+        creatureId: result.creatureId!,
+        creatureName: result.creatureName!,
         spawnRoomId: targetRoomId,
-        message: `Spawned "${creature.name}" (${creature.id}) in room ${targetRoomId}`,
+        message: `Spawned "${result.creatureName}" (${result.creatureId}) in room ${targetRoomId}`,
       };
       res.json(response);
     } catch (err) {
