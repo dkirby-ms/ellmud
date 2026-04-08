@@ -923,6 +923,41 @@ export function computeLayout(
     fixOcclusions();
   }
 
+  // ── Phase 9: Final crossing elimination ──────────────────────────────
+  // Phases 6–8 can reintroduce crossings while resolving occlusions.
+  // Process one crossing fix at a time: shift an alignment group, run
+  // fixOcclusions to clean up, and keep the fix only if net occlusion
+  // count didn't regress. Some crossings are acceptable when the zone
+  // topology makes them unavoidable.
+  {
+    for (const [z] of occupiedByZ) {
+      for (let iter = 0; iter < INSERTION_FIX_PASSES; iter++) {
+        if (countCrossings(z) === 0) break;
+
+        const snap = new Map<string, { x: number; y: number; z: number }>();
+        for (const [id, p] of result) if (p.z === z) snap.set(id, { ...p });
+        const occSnap = new Set(occupiedByZ.get(z)!);
+        const occBefore = countOcclusions(z);
+
+        const fixed = fixCrossingsByInsertion(1, true);
+        if (fixed === 0) break;
+
+        fixOcclusions();
+
+        // Allow a small occlusion increase (fixOcclusions may not clean
+        // up every new occlusion, but a modest increase is acceptable
+        // when it eliminates crossings).
+        if (countOcclusions(z) > occBefore + 2) {
+          for (const [id, p] of snap) result.set(id, p);
+          const occ = occupiedByZ.get(z)!;
+          occ.clear();
+          for (const k of occSnap) occ.add(k);
+          break; // this crossing couldn't be fixed cleanly, stop
+        }
+      }
+    }
+  }
+
   return result;
 
   // ── Force-directed relaxation ──────────────────────────────────────────────
@@ -2617,42 +2652,119 @@ export function computeLayout(
   }
 
   /**
-   * Phase 5e: Fix crossings by selective row/column insertion.
+   * Phase 5e: Fix crossings by selective row/column exchange.
    *
-   * Strategy: For each crossing between a horizontal and vertical edge,
-   * determine the intersection point (vX, hY). Decide whether to split
-   * the horizontal edge's row or the vertical edge's column. Shift the
-   * smaller partition (fewer rooms) by +1 to create a gap, then verify
-   * the crossing is resolved without creating new issues.
+   * For each H×V crossing, swap ALL rooms on the H-edge's row with ALL
+   * rooms on the V-edge's nearest endpoint row. This moves H past V's
+   * endpoint (eliminating the crossing) while V's endpoint moves to H's
+   * old row (shortening V's span). Full-row swaps are collision-free and
+   * preserve E-W/N-S alignment within each row.
+   *
+   * Also tries column exchanges (swap V's column with H's endpoint column).
+   * Prefers adjacent swaps (distance 1) over longer moves.
    */
-  function fixCrossingsByInsertion(): void {
+
+  /**
+   * Build the alignment group reachable from a seed room via the given
+   * exit directions (e.g. ['east','west'] for an E-W group).
+   * Returns the set of room IDs connected through those directions.
+   */
+  function buildAxisGroup(seedId: string, z: number, dirs: string[]): Set<string> {
+    const group = new Set<string>();
+    const queue = [seedId];
+    group.add(seedId);
+    while (queue.length > 0) {
+      const rid = queue.shift()!;
+      const room = rooms.get(rid);
+      if (room) {
+        for (const [dir, nid] of room.exits) {
+          if (!dirs.includes(dir)) continue;
+          if (group.has(nid)) continue;
+          const np = result.get(nid);
+          if (!np || np.z !== z) continue;
+          group.add(nid);
+          queue.push(nid);
+        }
+      }
+      const revArr = reverseExits.get(rid);
+      if (revArr) {
+        for (const { fromId, dir } of revArr) {
+          if (!dirs.includes(dir)) continue;
+          if (group.has(fromId)) continue;
+          const fp = result.get(fromId);
+          if (!fp || fp.z !== z) continue;
+          group.add(fromId);
+          queue.push(fromId);
+        }
+      }
+    }
+    return group;
+  }
+
+  /** Count occlusions (rooms blocking straight-line exits) for a z-level. */
+  function countOcclusions(z: number): number {
+    let count = 0;
+    const zPos = new Map<string, { x: number; y: number }>();
+    for (const [id, p] of result) {
+      if (p.z === z) zPos.set(id, { x: p.x, y: p.y });
+    }
+    for (const [roomId, pos] of zPos) {
+      const room = rooms.get(roomId);
+      if (!room) continue;
+      for (const [dir, targetId] of room.exits) {
+        const off = DIRECTION_OFFSETS[dir];
+        if (!off || off.dz !== 0) continue;
+        const tp = zPos.get(targetId);
+        if (!tp) continue;
+        const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
+        if (dist < 2) continue;
+        if (pos.x === tp.x) {
+          const minY = Math.min(pos.y, tp.y), maxY = Math.max(pos.y, tp.y);
+          for (const [oid, op] of zPos) {
+            if (oid === roomId || oid === targetId) continue;
+            if (op.x === pos.x && op.y > minY && op.y < maxY) count++;
+          }
+        } else if (pos.y === tp.y) {
+          const minX = Math.min(pos.x, tp.x), maxX = Math.max(pos.x, tp.x);
+          for (const [oid, op] of zPos) {
+            if (oid === roomId || oid === targetId) continue;
+            if (op.y === pos.y && op.x > minX && op.x < maxX) count++;
+          }
+        }
+      }
+    }
+    return count;
+  }
+
+  function fixCrossingsByInsertion(maxFixes = Infinity, allowWeightedMismatch = false): number {
+    let totalFixed = 0;
     for (const [z, occupied] of occupiedByZ) {
       for (let pass = 0; pass < INSERTION_FIX_PASSES; pass++) {
-        const initialCrossings = countCrossings(z);
-        if (initialCrossings === 0) break;
+        if (totalFixed >= maxFixes) break;
+        const crossingsBefore = countCrossings(z);
+        if (crossingsBefore === 0) break;
 
         const segments = buildEdgeSegments(z);
-        const crossings: [EdgeSegment, EdgeSegment][] = [];
+        const crossingPairs: [EdgeSegment, EdgeSegment][] = [];
         for (let i = 0; i < segments.length; i++) {
           for (let j = i + 1; j < segments.length; j++) {
             if (segmentsCross(segments[i], segments[j])) {
-              crossings.push([segments[i], segments[j]]);
+              crossingPairs.push([segments[i], segments[j]]);
             }
           }
         }
-
-        if (crossings.length === 0) break;
+        if (crossingPairs.length === 0) break;
 
         let anyFixed = false;
 
-        for (const [segA, segB] of crossings) {
-          // Recheck current positions
+        for (const [segA, segB] of crossingPairs) {
+          if (totalFixed >= maxFixes) break;
+
+          // Recheck current positions (earlier fixes may have resolved this)
           const rpA1 = result.get(segA.fromId)!;
           const rpA2 = result.get(segA.toId)!;
           const rpB1 = result.get(segB.fromId)!;
           const rpB2 = result.get(segB.toId)!;
-
-          // Skip if no longer orthogonal or no longer crossing
           if (rpA1.x !== rpA2.x && rpA1.y !== rpA2.y) continue;
           if (rpB1.x !== rpB2.x && rpB1.y !== rpB2.y) continue;
           const curA: EdgeSegment = {
@@ -2665,157 +2777,179 @@ export function computeLayout(
           };
           if (!segmentsCross(curA, curB)) continue;
 
-          // Identify which is horizontal and which is vertical
           const h = curA.axis === 'h' ? curA : curB;
           const v = curA.axis === 'h' ? curB : curA;
+          const hY = h.y1;
+          const vX = v.x1;
+          const vMinY = Math.min(v.y1, v.y2);
+          const vMaxY = Math.max(v.y1, v.y2);
+          const hMinX = Math.min(h.x1, h.x2);
+          const hMaxX = Math.max(h.x1, h.x2);
 
-          const hY = h.y1; // horizontal segment's y coordinate
-          const vX = v.x1; // vertical segment's x coordinate
-          // The crossing point is (vX, hY)
-
-          // Collect all rooms on this z-level with their positions
-          const zRooms: Array<{ id: string; x: number; y: number }> = [];
-          for (const [id, p] of result) {
-            if (p.z === z) zRooms.push({ id, x: p.x, y: p.y });
+          // Candidate exchanges: swap entire row or column pairs.
+          // Row exchange: swap y=hY <-> y=vEndpoint (moves H past V's edge)
+          // Col exchange: swap x=vX <-> x=hEndpoint (moves V past H's edge)
+          interface ExchangeCandidate {
+            type: 'row' | 'col';
+            coord1: number;
+            coord2: number;
           }
-
-          // Strategy A: Try shifting the horizontal segment's row
-          // Split at the crossing: rooms with y < hY vs y >= hY
-          const roomsAbove = zRooms.filter(r => r.y < hY);
-          const roomsAtOrBelow = zRooms.filter(r => r.y >= hY);
-
-          // Strategy B: Try shifting the vertical segment's column
-          // Split at the crossing: rooms with x < vX vs x >= vX
-          const roomsLeft = zRooms.filter(r => r.x < vX);
-          const roomsAtOrRight = zRooms.filter(r => r.x >= vX);
-
-          // Try the smaller partition first (fewer rooms to move)
-          const strategies: Array<{
-            rooms: Array<{ id: string; x: number; y: number }>;
-            axis: 'y' | 'x';
-            delta: number;
-          }> = [
-            { rooms: roomsAbove, axis: 'y', delta: -1 },
-            { rooms: roomsAtOrBelow, axis: 'y', delta: 1 },
-            { rooms: roomsLeft, axis: 'x', delta: -1 },
-            { rooms: roomsAtOrRight, axis: 'x', delta: 1 },
-          ].sort((a, b) => a.rooms.length - b.rooms.length);
+          const candidates: ExchangeCandidate[] = [];
+          if (vMinY !== hY) candidates.push({ type: 'row', coord1: hY, coord2: vMinY });
+          if (vMaxY !== hY) candidates.push({ type: 'row', coord1: hY, coord2: vMaxY });
+          if (hMinX !== vX) candidates.push({ type: 'col', coord1: vX, coord2: hMinX });
+          if (hMaxX !== vX) candidates.push({ type: 'col', coord1: vX, coord2: hMaxX });
+          // Prefer adjacent exchanges (smallest move)
+          candidates.sort((a, b) =>
+            Math.abs(a.coord1 - a.coord2) - Math.abs(b.coord1 - b.coord2));
 
           let resolved = false;
 
-          for (const strat of strategies) {
+          for (const cand of candidates) {
             if (resolved) break;
+            // Skip very distant exchanges (>3 cells) -- too disruptive
+            if (Math.abs(cand.coord1 - cand.coord2) > 3) continue;
 
-            // Build the shift map
-            const snapshot = new Map<string, RoomPosition>();
+            // Snapshot for rollback
+            const snapshot = new Map<string, { x: number; y: number }>();
             for (const [id, p] of result) {
-              if (p.z === z) snapshot.set(id, { ...p });
+              if (p.z === z) snapshot.set(id, { x: p.x, y: p.y });
+            }
+            const occupiedSnapshot = new Set(occupied);
+
+            // Collect rooms on both rows/columns
+            const set1: string[] = [];
+            const set2: string[] = [];
+            for (const [id, p] of result) {
+              if (p.z !== z) continue;
+              const coord = cand.type === 'row' ? p.y : p.x;
+              if (coord === cand.coord1) set1.push(id);
+              else if (coord === cand.coord2) set2.push(id);
             }
 
-            const toShift = strat.rooms;
-            if (toShift.length === 0) continue;
-
-            // Compute new positions
-            const newPositions = new Map<string, { x: number; y: number }>();
-            for (const r of toShift) {
-              const newX = strat.axis === 'x' ? r.x + strat.delta : r.x;
-              const newY = strat.axis === 'y' ? r.y + strat.delta : r.y;
-              newPositions.set(r.id, { x: newX, y: newY });
+            // Execute exchange: remove all, place at swapped coordinates
+            for (const rid of [...set1, ...set2]) {
+              const p = result.get(rid)!;
+              occupied.delete(cellKey(p.x, p.y));
+            }
+            for (const rid of set1) {
+              const old = snapshot.get(rid)!;
+              const nx = cand.type === 'col' ? cand.coord2 : old.x;
+              const ny = cand.type === 'row' ? cand.coord2 : old.y;
+              result.set(rid, { x: nx, y: ny, z });
+              occupied.add(cellKey(nx, ny));
+            }
+            for (const rid of set2) {
+              const old = snapshot.get(rid)!;
+              const nx = cand.type === 'col' ? cand.coord1 : old.x;
+              const ny = cand.type === 'row' ? cand.coord1 : old.y;
+              result.set(rid, { x: nx, y: ny, z });
+              occupied.add(cellKey(nx, ny));
             }
 
-            // Check for collisions with rooms NOT in the shift set
-            let collision = false;
-            const newOccupied = new Set<string>();
-            for (const r of zRooms) {
-              if (newPositions.has(r.id)) {
-                const np = newPositions.get(r.id)!;
-                const key = cellKey(np.x, np.y);
-                if (newOccupied.has(key)) {
-                  collision = true;
-                  break;
-                }
-                newOccupied.add(key);
-              } else {
-                const key = cellKey(r.x, r.y);
-                if (newOccupied.has(key)) {
-                  collision = true;
-                  break;
-                }
-                newOccupied.add(key);
-              }
-            }
-
-            if (collision) continue;
-
-            // Apply the shift temporarily to check constraints
-            for (const [rid, newPos] of newPositions) {
-              const oldPos = result.get(rid)!;
-              occupied.delete(cellKey(oldPos.x, oldPos.y));
-              occupied.add(cellKey(newPos.x, newPos.y));
-              result.set(rid, { x: newPos.x, y: newPos.y, z });
-            }
-
-            // Check that no moved room creates a diagonal with its neighbors
-            // (including neighbors that were also moved)
-            let violatesConstraints = false;
-            for (const [rid, newPos] of newPositions) {
-              const room = rooms.get(rid);
+            // Verify: no new diagonals for any moved room
+            let violates = false;
+            for (const id of [...set1, ...set2]) {
+              const p = result.get(id)!;
+              const room = rooms.get(id);
               if (room) {
                 for (const [dir, nid] of room.exits) {
                   const off = DIRECTION_OFFSETS[dir];
                   if (!off || off.dz !== 0) continue;
                   const np = result.get(nid);
                   if (!np || np.z !== z) continue;
-                  if (newPos.x !== np.x && newPos.y !== np.y) {
-                    violatesConstraints = true;
-                    break;
-                  }
+                  if (p.x !== np.x && p.y !== np.y) { violates = true; break; }
                 }
-                if (violatesConstraints) break;
+                if (violates) break;
               }
-              // Also check reverse exits
-              const revArr = reverseExits.get(rid);
-              if (revArr) {
-                for (const { fromId } of revArr) {
-                  const fp = result.get(fromId);
-                  if (!fp || fp.z !== z) continue;
-                  if (newPos.x !== fp.x && newPos.y !== fp.y) {
-                    violatesConstraints = true;
-                    break;
+              if (!violates) {
+                const revArr = reverseExits.get(id);
+                if (revArr) {
+                  for (const { fromId, dir } of revArr) {
+                    const off = DIRECTION_OFFSETS[dir];
+                    if (!off || off.dz !== 0) continue;
+                    const fp = result.get(fromId);
+                    if (!fp || fp.z !== z) continue;
+                    if (p.x !== fp.x && p.y !== fp.y) { violates = true; break; }
                   }
                 }
-                if (violatesConstraints) break;
+              }
+              if (violates) break;
+            }
+
+            if (!violates) {
+              const crossingsAfter = countCrossings(z);
+              if (crossingsAfter < crossingsBefore) {
+                // Build the full neighborhood: moved rooms + any room
+                // connected to a moved room. This captures "bystander"
+                // mismatches from rooms between two non-adjacent
+                // exchanged rows.
+                const movedSet = new Set([...set1, ...set2]);
+                const neighborhood = new Set(movedSet);
+                for (const id of movedSet) {
+                  const room = rooms.get(id);
+                  if (room) {
+                    for (const [, nid] of room.exits) {
+                      const np = result.get(nid);
+                      if (np && np.z === z) neighborhood.add(nid);
+                    }
+                  }
+                  const revArr = reverseExits.get(id);
+                  if (revArr) {
+                    for (const { fromId } of revArr) {
+                      const fp = result.get(fromId);
+                      if (fp && fp.z === z) neighborhood.add(fromId);
+                    }
+                  }
+                }
+                const neighborhoodIds = [...neighborhood];
+
+                let mismatchAfter = 0;
+                for (const id of neighborhoodIds) {
+                  const p = result.get(id)!;
+                  mismatchAfter += countMismatchesInvolving(id, p.x, p.y, z);
+                }
+
+                const afterPos = new Map<string, { x: number; y: number }>();
+                for (const id of movedSet) {
+                  const p = result.get(id)!;
+                  afterPos.set(id, { x: p.x, y: p.y });
+                }
+                for (const [id, old] of snapshot) {
+                  result.set(id, { x: old.x, y: old.y, z });
+                }
+                let mismatchBefore = 0;
+                for (const id of neighborhoodIds) {
+                  const old = snapshot.get(id)!;
+                  mismatchBefore += countMismatchesInvolving(id, old.x, old.y, z);
+                }
+                for (const [id, pos] of afterPos) {
+                  result.set(id, { x: pos.x, y: pos.y, z });
+                }
+
+                const crossingsFixed = crossingsBefore - crossingsAfter;
+                const mismatchDelta = mismatchAfter - mismatchBefore;
+                // In weighted mode (Phase 9), accept if crossing benefit
+                // outweighs mismatch cost. In strict mode (Phase 5e),
+                // reject any mismatch increase.
+                const acceptable = mismatchDelta <= 0 ||
+                  (allowWeightedMismatch && crossingsFixed >= mismatchDelta);
+                if (acceptable) {
+                  resolved = true;
+                  anyFixed = true;
+                  totalFixed++;
+                } else {
+                  violates = true;
+                }
+              } else {
+                violates = true;
               }
             }
 
-            if (violatesConstraints) {
-              // Rollback
-              for (const [id, p] of snapshot) {
-                result.set(id, p);
-              }
+            if (violates) {
+              for (const [id, old] of snapshot) result.set(id, { x: old.x, y: old.y, z });
               occupied.clear();
-              for (const [id, p] of snapshot) {
-                occupied.add(cellKey(p.x, p.y));
-              }
-              continue;
-            }
-
-            const afterCrossings = countCrossings(z);
-
-            if (afterCrossings < initialCrossings) {
-              // Accept
-              resolved = true;
-              anyFixed = true;
-              break;
-            } else {
-              // Rollback
-              for (const [id, p] of snapshot) {
-                result.set(id, p);
-              }
-              occupied.clear();
-              for (const [id, p] of snapshot) {
-                occupied.add(cellKey(p.x, p.y));
-              }
+              for (const k of occupiedSnapshot) occupied.add(k);
             }
           }
         }
@@ -2823,7 +2957,9 @@ export function computeLayout(
         if (!anyFixed) break;
       }
     }
+    return totalFixed;
   }
+
 
   // ── Occlusion fix ──────────────────────────────────────────────────────────
 
@@ -2854,41 +2990,6 @@ export function computeLayout(
         if (nx !== np.x && ny !== np.y) return true;
       }
       return false;
-    }
-
-    /** Count occlusions for a z-level. */
-    function countOcclusions(z: number): number {
-      let count = 0;
-      const zPos = new Map<string, { x: number; y: number }>();
-      for (const [id, p] of result) {
-        if (p.z === z) zPos.set(id, { x: p.x, y: p.y });
-      }
-      for (const [roomId, pos] of zPos) {
-        const room = rooms.get(roomId);
-        if (!room) continue;
-        for (const [dir, targetId] of room.exits) {
-          const off = DIRECTION_OFFSETS[dir];
-          if (!off || off.dz !== 0) continue;
-          const tp = zPos.get(targetId);
-          if (!tp) continue;
-          const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
-          if (dist < 2) continue;
-          if (pos.x === tp.x) {
-            const minY = Math.min(pos.y, tp.y), maxY = Math.max(pos.y, tp.y);
-            for (const [oid, op] of zPos) {
-              if (oid === roomId || oid === targetId) continue;
-              if (op.x === pos.x && op.y > minY && op.y < maxY) count++;
-            }
-          } else if (pos.y === tp.y) {
-            const minX = Math.min(pos.x, tp.x), maxX = Math.max(pos.x, tp.x);
-            for (const [oid, op] of zPos) {
-              if (oid === roomId || oid === targetId) continue;
-              if (op.y === pos.y && op.x > minX && op.x < maxX) count++;
-            }
-          }
-        }
-      }
-      return count;
     }
 
     for (const [z, occupied] of occupiedByZ) {

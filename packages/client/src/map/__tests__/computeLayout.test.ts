@@ -1561,10 +1561,9 @@ describe('computeLayout', () => {
     // Log the crossing count for visibility
     console.log(`Midgaard crossings: ${crossings}`);
 
-    // Midgaard has 9 crossings after all phases. This is the baseline
-    // established by the BFS+cardinal-alignment topology — further reduction
-    // would require violating alignment, direction, or diagonal constraints.
-    // This test ensures we don't regress (increase crossings).
-    expect(crossings).toBeLessThanOrEqual(9);
+    // Phase 9 row exchange reduces Midgaard from 9 to 5 crossings.
+    // The remaining 5 cannot be fixed without creating more direction
+    // mismatches than crossings eliminated.
+    expect(crossings).toBeLessThanOrEqual(5);
   });
 });
