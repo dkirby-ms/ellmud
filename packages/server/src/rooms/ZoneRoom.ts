@@ -2629,6 +2629,127 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     };
   }
 
+  // ─── Admin API Methods (Issue #344: Live Rooms) ──────────────────────────
+
+  /**
+   * Broadcast an admin message to all players in a specific zone room.
+   * Called from admin API endpoint POST /admin/api/rooms/:roomId/broadcast.
+   */
+  adminBroadcastToRoom(targetRoomId: string, message: string, type: 'system' | 'admin' = 'system'): { success: boolean; error?: string } {
+    const room = this.roomGraph.rooms.get(targetRoomId);
+    if (!room) {
+      return { success: false, error: `Room "${targetRoomId}" not found in zone graph` };
+    }
+
+    const prefix = type === 'admin' ? '[ADMIN] ' : '[SYSTEM] ';
+    this.broadcastToRoom(targetRoomId, {
+      narrations: [{ text: `${prefix}${message}`, type: 'system' }],
+    });
+
+    this.log(`Admin broadcast to room "${targetRoomId}": ${message}`);
+    return { success: true };
+  }
+
+  /**
+   * Teleport a player to a specific zone room.
+   * Called from admin API endpoint POST /admin/api/rooms/:roomId/teleport.
+   * Sends room description, occupants, and movement broadcasts.
+   */
+  adminTeleportPlayer(sessionId: string, targetRoomId: string, notify = true): { success: boolean; error?: string; roomName?: string } {
+    const player = this.players.get(sessionId);
+    if (!player) {
+      return { success: false, error: `Player "${sessionId}" not found in this zone` };
+    }
+
+    const targetRoom = this.roomGraph.rooms.get(targetRoomId);
+    if (!targetRoom) {
+      return { success: false, error: `Room "${targetRoomId}" not found in zone graph` };
+    }
+
+    const previousRoomId = player.currentRoomId;
+    if (previousRoomId === targetRoomId) {
+      return { success: false, error: `Player is already in room "${targetRoomId}"` };
+    }
+
+    // Move the player
+    player.currentRoomId = targetRoomId;
+
+    // Broadcast departure/arrival to other players
+    this.broadcastPlayerMovement(sessionId, previousRoomId, targetRoomId);
+
+    // Update occupants for both rooms
+    this.broadcastRoomOccupantsUpdate(previousRoomId);
+    this.broadcastRoomOccupantsUpdate(targetRoomId);
+
+    // Send the teleported player their new room info
+    const client = this.findClient(sessionId);
+    if (client) {
+      if (notify) {
+        this.sendNarrate(client, {
+          text: `[ADMIN] You have been teleported to ${targetRoom.name}.`,
+          type: 'system',
+          timestamp: Date.now(),
+        });
+      }
+
+      // Re-deliver room description (same pattern as reconnect/goto)
+      const lookResult = handleLook(this.buildCommandContext(player, []));
+      this.deliverResult(client, lookResult);
+
+      // Send room occupants to the moved player
+      this.sendRoomOccupants(client, sessionId, targetRoomId);
+
+      // Send exploration update for the new room
+      this.sendExplorationUpdate(client, sessionId, targetRoomId);
+    }
+
+    this.log(`Admin teleported ${this.playerTag(sessionId)} from "${previousRoomId}" to "${targetRoomId}"`);
+    return { success: true, roomName: targetRoom.name };
+  }
+
+  /**
+   * Get live zone room data: each room with its current players and creatures.
+   * Called from admin API endpoint GET /admin/api/rooms/live.
+   */
+  adminGetLiveRooms(): import('@ellmud/shared').AdminLiveRoomInfo[] {
+    const result: import('@ellmud/shared').AdminLiveRoomInfo[] = [];
+
+    for (const [roomId, room] of this.roomGraph.rooms) {
+      const players: Array<{ sessionId: string; characterName?: string }> = [];
+      for (const [sid, ps] of this.players) {
+        if (ps.currentRoomId === roomId) {
+          players.push({
+            sessionId: sid,
+            characterName: this.characterNames.get(sid),
+          });
+        }
+      }
+
+      const creatures: Array<{ id: string; name: string; hp: number; maxHp: number }> = [];
+      const creaturesInRoom = this.creatureManager.getCreaturesInRoom(roomId);
+      for (const c of creaturesInRoom) {
+        creatures.push({ id: c.id, name: c.name, hp: c.hp, maxHp: c.maxHp });
+      }
+
+      result.push({
+        roomId,
+        roomName: room.name,
+        roomType: room.type ?? 'corridor',
+        playerCount: players.length,
+        creatureCount: creatures.length,
+        players,
+        creatures,
+      });
+    }
+
+    return result;
+  }
+
+  /** Expose the zone slug for admin API responses. */
+  getZoneSlug(): string | undefined {
+    return this.zoneSlug;
+  }
+
   // ─── Logging ─────────────────────────────────────────────────────────────
 
   /**

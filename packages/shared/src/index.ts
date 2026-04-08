@@ -331,6 +331,7 @@ export type {
   RoomProperty,
   HazardPlaceholder,
   LootContainer,
+  RoomFeature,
   Room,
   RoomGraph,
   SerializedRoom,
@@ -804,4 +805,65 @@ export function validateSlotRestriction(
   itemType: _ItemType,
 ): boolean {
   return SLOT_ACCEPTS[slot].includes(itemType);
+}
+
+// ─── Admin API Types (Issue #344: Live Rooms) ────────────────────────────────
+
+/** Request body for POST /admin/api/rooms/:roomId/broadcast */
+export interface AdminBroadcastRequest {
+  targetRoomId: string;
+  message: string;
+  type?: 'system' | 'admin';
+}
+
+/** Response for POST /admin/api/rooms/:roomId/broadcast */
+export interface AdminBroadcastResponse {
+  success: boolean;
+  message: string;
+}
+
+/** Request body for POST /admin/api/rooms/:roomId/teleport */
+export interface AdminTeleportRequest {
+  sessionId: string;
+  targetRoomId: string;
+  notify?: boolean;
+}
+
+/** Response for POST /admin/api/rooms/:roomId/teleport */
+export interface AdminTeleportResponse {
+  success: boolean;
+  message: string;
+}
+
+/** Request body for POST /admin/api/rooms/:roomId/spawn-creature */
+export interface AdminSpawnCreatureRequest {
+  templateId: string;
+  targetRoomId: string;
+}
+
+/** Response for POST /admin/api/rooms/:roomId/spawn-creature */
+export interface AdminSpawnCreatureResponse {
+  success: boolean;
+  creatureId: string;
+  creatureName: string;
+  spawnRoomId: string;
+  message: string;
+}
+
+/** A single zone room with live occupancy info. */
+export interface AdminLiveRoomInfo {
+  roomId: string;
+  roomName: string;
+  roomType: string;
+  playerCount: number;
+  creatureCount: number;
+  players: Array<{ sessionId: string; characterName?: string }>;
+  creatures: Array<{ id: string; name: string; hp: number; maxHp: number }>;
+}
+
+/** Response for GET /admin/api/rooms/live */
+export interface AdminLiveRoomsResponse {
+  rooms: AdminLiveRoomInfo[];
+  totalPlayers: number;
+  totalCreatures: number;
 }
