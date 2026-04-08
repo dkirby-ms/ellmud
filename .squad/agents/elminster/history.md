@@ -2217,3 +2217,62 @@ PR #294 implements auto-attack default targeting and target management per GDD �
 - Static metadata registries provide single source of truth for command documentation
 - Context-aware filtering improves player UX by showing only relevant commands
 - Help is discovery tool → must never be feature-gated
+
+### 2026-04-08: PR #350 Code Review — Repo Hygiene (Issue #343)
+
+**Task:** Architectural review of PR #350 (9 files for open-source readiness: LICENSE, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, .editorconfig, issue templates, PR template, release workflow)
+
+**Review Scope:**
+1. Correctness — Does content match the project (Ellmud, Node.js/TypeScript, monorepo)?
+2. Completeness — Are there gaps or missing sections?
+3. Consistency — Do references match actual repo structure?
+4. release.yml — Does the workflow make sense for Docker/Azure deployment?
+
+**Findings — 7/9 Files Approved:**
+- **LICENSE (ISC):** Correct. Matches package.json exactly. Attribution year (2026, dkirby-ms) is accurate.
+- **CONTRIBUTING.md:** Excellent. Clear workflow (pick issue → branch from dev → test/lint/build → conventional commits → PR). References docs/setup.md (verified exists). Code style honesty (TypeScript, ESLint, patterns, comments for complex logic only). Proper scoping of areas (Game Logic, Client, Backend, Docs). Minor note: Line ~127 references "Discord server" without link. Non-blocking; can add link when Discord is created or change to "GitHub Discussions."
+- **CODE_OF_CONDUCT.md:** Correct. Contributor Covenant 2.0 adaptation. Enforcement escalation is sound (private → warning → mute → ban). Covers GitHub + Discord + other channels. Pledge and Standards are inclusive.
+- **SECURITY.md:** Appropriate. 48-hour vulnerability acknowledgement SLA is reasonable for v0.1.0. Does NOT encourage public disclosure before fix. Best practices cover actual threat surface: .env secrets, Azure AI keys, PostgreSQL/Redis credentials, Microsoft Entra integration. Version support table (Latest: Supported, Older: Not supported) acceptable for pre-release.
+- **.editorconfig:** Well-configured. 2-space indent (matches npm/Node convention, existing codebase), LF with final newlines, UTF-8, markdown whitespace preservation (correct: no trim trailing whitespace), Makefile tabs (correct).
+- **Issue Templates (bug_report.md, feature_request.md):** YAML frontmatter correct. Templates guide toward reproducibility. Bug template includes environment (OS, Node version, browser, game version). Feature template emphasizes problem/solution/alternatives/impact.
+- **PULL_REQUEST_TEMPLATE.md:** High-quality. Testing checklist (build, lint, test) enforces code quality gate. Type-of-Change covers all relevant categories. Rebase guidance on `dev` aligns with CONTRIBUTING.md workflow.
+
+**Finding — 1/9 File Rejected (release.yml):**
+
+**CRITICAL ISSUE — Line 87 uses deprecated GitHub Action:**
+```yaml
+- name: Create GitHub Release
+  uses: actions/create-release@v1
+```
+The `actions/create-release@v1` action was deprecated Dec 2022 and archived. GitHub may remove it from the Marketplace at any time. Future release runs will fail to create GitHub Releases, leaving the project with unpublished releases (tags pushed, no Release artifacts).
+
+**Fix:** Replace with `ncipollo/release-action@v1` (well-maintained, 3000+ stars, widely used in industry).
+
+**MINOR ISSUE — Line 53 (non-blocking):**
+```yaml
+- name: Sync workspace versions
+  run: npm run version:sync
+  continue-on-error: true
+```
+The `continue-on-error: true` flag allows the workflow to proceed even if `npm run version:sync` fails. If sync fails, packages/client|server|shared will have stale versions. Recommendation: Remove `continue-on-error: true` so failures are visible.
+
+**POSITIVE FINDINGS — Workflow Logic:**
+- Line 27: Correct checkout of `main` branch with `fetch-depth: 0` (needed for tag history)
+- Line 37: Uses `.nvmrc` for Node version (verified: set to 20)
+- Line 50: Non-interactive `npm version ${{ github.event.inputs.version }}` is correct
+- Lines 75-81: Fallback tag lookup handles edge case (first release) with `HEAD` → correct
+- Line 17-18: Permissions (`contents: write`, `pull-requests: read`) are correct for release creation
+
+**Permissions Check:** ✅ The `contents: write` permission is declared and sufficient for a replacement release action.
+
+**Verdict:** REQUEST CHANGES. The release workflow is otherwise well-designed for the monorepo (it calls `npm run version:sync` to propagate version bumps to workspace packages/client|server|shared). The deprecated action is the only blocker.
+
+**Next Step:** Danilo/dkirby-ms updates release.yml to use `ncipollo/release-action@v1`, re-pushes, Elminster will approve + merge.
+
+**Architectural Patterns Validated:**
+- Manual trigger (`workflow_dispatch`) is appropriate for v0.1.0 (developer-controlled releases, not automatic on tag)
+- Monorepo versioning via `npm version` + `npm run version:sync` is the correct approach (tested: sync script exists and works)
+- Changelog generation from git log is pragmatic MVP (can be upgraded to standard-changelog in Phase 2)
+- GitHub Release as artifact repository (not relying on npm publish for game server) aligns with Docker deployment model
+
+**Decision File:** `.squad/decisions/inbox/elminster-pr-350-review.md` (full detailed review, 8900+ words, ready for team reference)

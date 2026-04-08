@@ -5712,3 +5712,201 @@ The README architecture diagram uses **Mermaid** (not ASCII art or external imag
 - The diagram is color-coded by component group — keep colors consistent when adding nodes.
 
 **Status:** Merged
+# PR #350 Architectural Review — Repo Hygiene
+
+**Reviewer:** Elminster (Lead/Architect)  
+**Date:** 2026-04-08  
+**PR:** #350 — chore: repo hygiene improvements (#343)  
+**Author:** Danilo (via dkirby-ms)  
+**Status:** REQUEST CHANGES (Critical fix required before merge)  
+
+---
+
+## Summary
+
+PR #350 adds 9 files to establish open-source readiness: LICENSE, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, .editorconfig, and GitHub templates. **Excellent work on 8/9 files.** However, `release.yml` contains a critical flaw that will break automated release creation.
+
+---
+
+## Detailed Review
+
+### ✅ APPROVED (7/9 files)
+
+#### 1. LICENSE (ISC)
+- **Status:** Correct
+- **Details:** ISC text with proper attribution (2026, dkirby-ms). Matches package.json `"license": "ISC"`.
+- **No issues.**
+
+#### 2. CONTRIBUTING.md
+- **Status:** Approved with minor note
+- **Strengths:**
+  - Clear workflow: Pick issue → Create branch from `dev` → Make changes → Test (build, lint, test) → Commit with Conventional Commits → Open PR
+  - References existing `docs/setup.md` (verified exists)
+  - Code style section is honest: "TypeScript, ESLint, existing patterns, comments only for complex logic"
+  - Testing section enforces checklist discipline
+  - Areas of contribution are well-scoped (Game Logic, Client, Backend, Documentation)
+- **Minor note:** Line ~127 references "Discord community server" without URL. Either add the actual invite link or change to "GitHub Discussions" (exists by default). Non-blocking.
+- **Decision:** Approved as-is. Discord ref can be added in a follow-up if/when Discord server is created.
+
+#### 3. CODE_OF_CONDUCT.md
+- **Status:** Correct
+- **Details:**
+  - Adapted from Contributor Covenant 2.0 (industry standard, good attribution)
+  - Enforcement escalation is sound: private → warning → temporary mute → ban
+  - Scope covers GitHub + Discord + other channels
+  - Pledge and Standards sections are inclusive and clear
+- **No issues.**
+
+#### 4. SECURITY.md
+- **Status:** Correct
+- **Strengths:**
+  - Vulnerability reporting: 48-hour acknowledgement SLA is reasonable for a v0.1.0 game project
+  - Does NOT encourage public disclosure before fix (good)
+  - Security best practices cover the actual threat surface: .env secrets, Azure AI keys, PostgreSQL/Redis credentials, Microsoft Entra integration
+- **Minor note:** Supported Versions table says "Latest: Supported | Older: Not supported" but doesn't enumerate specific versions. Acceptable for a pre-release project (v0.1.0).
+- **Decision:** Approved.
+
+#### 5. .editorconfig
+- **Status:** Correct
+- **Details:**
+  - 2-space indent across all file types (matches npm convention, matches existing codebase)
+  - Unix line endings (LF) with final newline (correct for cross-platform teams)
+  - UTF-8 charset (correct)
+  - Markdown: `trim_trailing_whitespace = false` (good—preserves intentional breaks in markdown)
+  - Makefile: indent_style = tab (correct—makefiles require tabs)
+- **No issues.**
+
+#### 6. .github/ISSUE_TEMPLATE/bug_report.md
+- **Status:** Correct
+- **Details:**
+  - YAML frontmatter with `name`, `labels: bug`, proper title prefix `[BUG]`
+  - Sections: Description, Steps to Reproduce, Expected vs Actual Behavior, Environment (OS, Node version, browser, game version), Screenshots/Logs, Additional Context
+  - Guides users toward reproducibility (good for game bugs with environment variance)
+- **No issues.**
+
+#### 7. .github/ISSUE_TEMPLATE/feature_request.md
+- **Status:** Correct
+- **Details:**
+  - YAML frontmatter with `name`, `labels: enhancement`, title prefix `[FEATURE]`
+  - Sections: Problem, Proposed Solution, Alternatives, Additional Context (including scope: game logic/UI/admin tools, affected systems, priority)
+  - Guides users toward design-first thinking
+- **No issues.**
+
+#### 8. .github/PULL_REQUEST_TEMPLATE.md
+- **Status:** Excellent
+- **Strengths:**
+  - Type-of-Change checklist (bug fix, feature, breaking change, docs, chore)
+  - Testing section with explicit checkboxes: build, lint, test, no linting errors, builds successfully
+  - Checklist discipline reinforces code quality gate
+  - References rebasing on `dev` branch (matches CONTRIBUTING.md workflow)
+  - Screenshots section (good for UI work)
+  - Notes section for context
+- **Decision:** Approved as-is. This is a high-quality PR template.
+
+### 🚫 REJECTED (1/9 files) — release.yml requires revision
+
+#### 9. .github/workflows/release.yml
+- **Status:** REQUEST CHANGES (Critical issue)
+
+**What the workflow does:**
+- Manual trigger (`workflow_dispatch`) with version input (major, minor, patch)
+- Checks out main branch, sets up Node.js, installs deps
+- Bumps version in package.json, syncs workspace versions
+- Creates git tag, pushes commits + tag
+- Generates changelog from commit history
+- **Creates GitHub Release** (the critical step)
+- Optional Slack notification
+
+**CRITICAL ISSUE — Line 87:**
+```yaml
+- name: Create GitHub Release
+  uses: actions/create-release@v1
+```
+
+This action was **deprecated Dec 2022 and archived**. GitHub no longer maintains it, and it may be removed from the Actions Marketplace without warning.
+
+- **Risk:** Future release runs will fail to create the GitHub Release, leaving the project with unpublished releases (tags pushed but no GitHub Release artifacts).
+- **Impact:** Automation silently degrades; users cannot download release artifacts.
+- **Fix:** Replace with a maintained alternative:
+  - **Option A (Recommended):** Use `ncipollo/release-action@v1` (well-maintained, 3K+ stars, widely used)
+    ```yaml
+    - name: Create GitHub Release
+      uses: ncipollo/release-action@v1
+      with:
+        tag: v${{ steps.version.outputs.version }}
+        name: Release v${{ steps.version.outputs.version }}
+        body: |
+          # Release v${{ steps.version.outputs.version }}
+          
+          ## Changes
+          ${{ steps.release_notes.outputs.CHANGELOG }}
+          
+          For detailed changes, see the [commit log](https://github.com/${{ github.repository }}/commits/v${{ steps.version.outputs.version }}).
+        draft: false
+        prerelease: false
+        token: ${{ secrets.GITHUB_TOKEN }}
+    ```
+  - **Option B:** Use GitHub REST API directly (more verbose but zero external dependencies)
+
+**MINOR ISSUE — Line 53:**
+```yaml
+- name: Sync workspace versions
+  run: npm run version:sync
+  continue-on-error: true
+```
+
+The `continue-on-error: true` flag allows the workflow to proceed even if `npm run version:sync` fails. **Consequence:** If workspace version sync fails, the root package.json will have v0.1.1 but packages/client|server|shared will still be v0.1.0. This creates a fragmented release state.
+
+- **Recommendation:** Remove `continue-on-error: true` so failures are visible and require investigation.
+
+**PERMISSIONS — Lines 17-18:**
+```yaml
+permissions:
+  contents: write
+  pull-requests: read
+```
+
+These are correct. The `create-release` action (or replacement) will need `contents: write` to push tags and create releases. ✅
+
+---
+
+## Architectural Decisions Made
+
+1. **release.yml approach is sound:** Manual trigger (workflow_dispatch) is appropriate for a v0.1.0 project. Automatic semantic versioning with `npm version` is clean.
+
+2. **Workspace version sync strategy is correct:** Using `npm run version:sync` to propagate the root version to all workspace packages (client, server, shared) is the right approach for a monorepo using npm workspaces.
+
+3. **Changelog generation is pragmatic:** Git log-based changelog is acceptable for an MVP. As the project matures, consider GitHub Release History API or a dedicated changelog tool (e.g., standard-changelog).
+
+---
+
+## Required Actions Before Merge
+
+- [ ] Replace `actions/create-release@v1` with `ncipollo/release-action@v1` (or equivalent)
+- [ ] (Optional but recommended) Remove `continue-on-error: true` from the version:sync step
+- [ ] Re-test the workflow by triggering a dry-run release (e.g., bump to v0.1.1)
+- [ ] Re-push and request re-review
+
+---
+
+## Outcome
+
+**Verdict:** REQUEST CHANGES
+
+**Reason:** Critical deprecated action will break release automation. Fix is straightforward (2-line change). All other 8 files are approved and ready to merge.
+
+**Path forward:** Danilo/dkirby-ms revises release.yml, re-pushes to the same branch. Elminster will approve and merge.
+
+---
+
+## Appendix: Verification Checklist
+
+- [x] LICENSE: Matches package.json license + copyright year
+- [x] CONTRIBUTING.md: References exist (docs/setup.md), workflow aligns with team practice
+- [x] CODE_OF_CONDUCT.md: Covers reported channels, has enforcement policy
+- [x] SECURITY.md: Covers threat surface (env vars, API keys, dependencies)
+- [x] .editorconfig: Matches npm/Node conventions (2-space, LF, UTF-8)
+- [x] Issue templates: YAML frontmatter correct, label assignment clear
+- [x] PR template: Testing checklist + rebase guidance
+- [x] release.yml: Workflow logic sound, but deprecated action must be replaced
+
