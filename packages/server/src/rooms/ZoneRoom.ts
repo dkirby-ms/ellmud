@@ -21,6 +21,7 @@ import {
   type ExplorationDataMessage,
   type ExplorationUpdateMessage,
   type RoomOccupantsMessage,
+  type AdminLiveRoomInfo,
   DEATH_PENALTY_DEFAULTS,
   OPPOSITE_DIRECTION,
   MessageTypes,
@@ -2711,8 +2712,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
    * Get live zone room data: each room with its current players and creatures.
    * Called from admin API endpoint GET /admin/api/rooms/live.
    */
-  adminGetLiveRooms(): import('@ellmud/shared').AdminLiveRoomInfo[] {
-    const result: import('@ellmud/shared').AdminLiveRoomInfo[] = [];
+  adminGetLiveRooms(): AdminLiveRoomInfo[] {
+    const result: AdminLiveRoomInfo[] = [];
 
     for (const [roomId, room] of this.roomGraph.rooms) {
       const players: Array<{ sessionId: string; characterName?: string }> = [];

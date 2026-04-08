@@ -22,6 +22,16 @@ import type {
 import type { ContentEntity, IContentStore } from './content/ContentStore.js';
 import type { ContentEntityType } from './content/content-types.js';
 import type { CreatureTemplate } from '../creatures/types.js';
+import type {
+  AdminBroadcastRequest,
+  AdminBroadcastResponse,
+  AdminLiveRoomInfo,
+  AdminLiveRoomsResponse,
+  AdminSpawnCreatureRequest,
+  AdminSpawnCreatureResponse,
+  AdminTeleportRequest,
+  AdminTeleportResponse,
+} from '@ellmud/shared';
 
 export interface AdminRouterDeps {
   /** Narration telemetry tracker instance (optional — metrics degrade gracefully). */
@@ -66,7 +76,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
   router.get('/admin/api/rooms/live', adminAuth, async (_req: Request, res: Response) => {
     try {
       const rooms = await safeQueryRooms();
-      const allLiveRooms: import('@ellmud/shared').AdminLiveRoomInfo[] = [];
+      const allLiveRooms: AdminLiveRoomInfo[] = [];
       let totalPlayers = 0;
       let totalCreatures = 0;
 
@@ -79,7 +89,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         const zoneRoom = room as any;
         if (typeof zoneRoom.adminGetLiveRooms !== 'function') continue;
 
-        const liveRooms = zoneRoom.adminGetLiveRooms() as import('@ellmud/shared').AdminLiveRoomInfo[];
+        const liveRooms = zoneRoom.adminGetLiveRooms() as AdminLiveRoomInfo[];
         for (const lr of liveRooms) {
           totalPlayers += lr.playerCount;
           totalCreatures += lr.creatureCount;
@@ -87,7 +97,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         }
       }
 
-      res.json({ rooms: allLiveRooms, totalPlayers, totalCreatures } satisfies import('@ellmud/shared').AdminLiveRoomsResponse);
+      res.json({ rooms: allLiveRooms, totalPlayers, totalCreatures } satisfies AdminLiveRoomsResponse);
     } catch (err) {
       console.error('[Admin] Failed to list live rooms:', err);
       res.status(500).json({ error: 'Failed to list live rooms' });
@@ -645,7 +655,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         return;
       }
 
-      const { targetRoomId, message, type = 'system' } = req.body as import('@ellmud/shared').AdminBroadcastRequest;
+      const { targetRoomId, message, type = 'system' } = req.body as AdminBroadcastRequest;
       if (!targetRoomId || !message) {
         res.status(400).json({ error: 'Missing required fields: targetRoomId, message' });
         return;
@@ -674,7 +684,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         return;
       }
 
-      res.json({ success: true, message: 'Broadcast sent' } satisfies import('@ellmud/shared').AdminBroadcastResponse);
+      res.json({ success: true, message: 'Broadcast sent' } satisfies AdminBroadcastResponse);
     } catch (err) {
       console.error('[Admin] Failed to broadcast:', err);
       res.status(500).json({ error: 'Failed to broadcast message' });
@@ -690,7 +700,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         return;
       }
 
-      const { sessionId, targetRoomId, notify = true } = req.body as import('@ellmud/shared').AdminTeleportRequest;
+      const { sessionId, targetRoomId, notify = true } = req.body as AdminTeleportRequest;
       if (!sessionId || !targetRoomId) {
         res.status(400).json({ error: 'Missing required fields: sessionId, targetRoomId' });
         return;
@@ -709,7 +719,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         return;
       }
 
-      res.json({ success: true, message: `Teleported player to ${result.roomName}` } satisfies import('@ellmud/shared').AdminTeleportResponse);
+      res.json({ success: true, message: `Teleported player to ${result.roomName}` } satisfies AdminTeleportResponse);
     } catch (err) {
       console.error('[Admin] Failed to teleport:', err);
       res.status(500).json({ error: 'Failed to teleport player' });
@@ -725,7 +735,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         return;
       }
 
-      const { templateId, targetRoomId } = req.body as import('@ellmud/shared').AdminSpawnCreatureRequest;
+      const { templateId, targetRoomId } = req.body as AdminSpawnCreatureRequest;
       if (!templateId || !targetRoomId) {
         res.status(400).json({ error: 'Missing required fields: templateId, targetRoomId' });
         return;
@@ -776,7 +786,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         zoneRoom.adminBroadcastToRoom(targetRoomId, `A ${creature.name} materializes from thin air.`, 'system');
       }
 
-      const response: import('@ellmud/shared').AdminSpawnCreatureResponse = {
+      const response: AdminSpawnCreatureResponse = {
         success: true,
         creatureId: creature.id,
         creatureName: creature.name,
