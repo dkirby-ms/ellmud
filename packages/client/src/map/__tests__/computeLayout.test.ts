@@ -1561,9 +1561,9 @@ describe('computeLayout', () => {
     // Log the crossing count for visibility
     console.log(`Midgaard crossings: ${crossings}`);
 
-    // Phase 9 row exchange reduces Midgaard from 9 to 5 crossings.
-    // The remaining 5 cannot be fixed without creating more direction
-    // mismatches than crossings eliminated.
-    expect(crossings).toBeLessThanOrEqual(5);
+    // Phase 9 grid expansion reduces Midgaard from 9 to 3 crossings.
+    // The remaining crossings cannot be fixed without creating more
+    // direction mismatches than crossings eliminated.
+    expect(crossings).toBeLessThanOrEqual(3);
   });
 });
