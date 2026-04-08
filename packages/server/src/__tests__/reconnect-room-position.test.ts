@@ -46,7 +46,7 @@ describe('Reconnect Room Position (#355)', () => {
     const { client: keepAlive } = await connectWithPlayerId(room, 'keepalive');
 
     // Player joins at 'entry' (startRoomId of the test graph)
-    const { client: client1, collector: collector1 } = await connectWithPlayerId(room, 'wanderer');
+    const { client: client1, collector: _collector1 } = await connectWithPlayerId(room, 'wanderer');
 
     const serverRoom = room as unknown as {
       players: Map<string, { currentRoomId: string }>;

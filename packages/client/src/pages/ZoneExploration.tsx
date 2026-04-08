@@ -42,7 +42,7 @@ function getEffectType(effect: StatusEffect): 'buff' | 'debuff' | 'neutral' {
 
 export default function ZoneExploration() {
   const navigate = useNavigate();
-  const location = useLocation();
+  const _location = useLocation();
   const { zoneId } = useParams<{ zoneId?: string }>();
   const { state, dispatch } = useAppContext();
   const version = useVersion();

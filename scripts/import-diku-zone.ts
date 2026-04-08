@@ -396,7 +396,7 @@ function generateSql(
       }
       const toSlug = vnumToSlug.get(exit.toVnum)!;
       // Exit flag 1 = door (EX_ISDOOR), flag 2 = locked (EX_CLOSED + locked)
-      const isDoor = (exit.flags & 1) !== 0;
+      const _isDoor = (exit.flags & 1) !== 0;
       const isLocked = (exit.flags & 2) !== 0;
       // Hidden if flag 4 (EX_HIDDEN) or door with keywords
       const isHidden = (exit.flags & 4) !== 0;

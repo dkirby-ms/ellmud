@@ -929,10 +929,11 @@ function getZoneDetail(room: import('@colyseus/core').Room): AdminZoneDetail {
   }
 
   // Resolve zone slug via public accessor
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  /* eslint-disable @typescript-eslint/no-explicit-any */
   const zoneSlug = typeof (room as any).getZoneSlug === 'function'
     ? (room as any).getZoneSlug() as string | undefined
     : undefined;
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   return {
     roomId: room.roomId,
@@ -950,7 +951,7 @@ function getZoneDetail(room: import('@colyseus/core').Room): AdminZoneDetail {
   };
 }
 
-function getRefugeDetail(room: import('@colyseus/core').Room): AdminRefugeDetail {
+function _getRefugeDetail(room: import('@colyseus/core').Room): AdminRefugeDetail {
   const state = room.state as {
     tick?: number;
     playerCount?: number;
