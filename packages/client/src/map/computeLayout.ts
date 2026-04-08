@@ -147,6 +147,9 @@ const CROSSING_FIX_PASSES = 30;
 /** Diamond search radius for crossing-fix candidate moves. */
 const CROSSING_CANDIDATE_RADIUS = 6;
 
+/** Max insertion-based crossing resolution passes. */
+const INSERTION_FIX_PASSES = 20;
+
 /** Gap between disconnected subgraphs. */
 const DISCONNECTED_SUBGRAPH_GAP = 3;
 
@@ -895,6 +898,13 @@ export function computeLayout(
   // fewer connections) to an uncrossed cell, without breaking alignment or
   // direction constraints.
   fixEdgeCrossings();
+
+  // ── Phase 5e: Crossing fix via selective row/column insertion ──────────
+  // If crossings remain after Phase 5d, this phase uses a different strategy:
+  // instead of moving individual rooms, it selectively inserts gaps by
+  // shifting rows or columns near the crossing point. This resolves dense-zone
+  // crossings where no free adjacent cell exists for the simpler move strategy.
+  fixCrossingsByInsertion();
 
   // ── Phase 6: Occlusion fix ────────────────────────────────────────────
   // After all placement/relaxation phases, rooms may still sit on the
@@ -2602,6 +2612,215 @@ export function computeLayout(
         }
 
         if (!anyResolved) break;
+      }
+    }
+  }
+
+  /**
+   * Phase 5e: Fix crossings by selective row/column insertion.
+   *
+   * Strategy: For each crossing between a horizontal and vertical edge,
+   * determine the intersection point (vX, hY). Decide whether to split
+   * the horizontal edge's row or the vertical edge's column. Shift the
+   * smaller partition (fewer rooms) by +1 to create a gap, then verify
+   * the crossing is resolved without creating new issues.
+   */
+  function fixCrossingsByInsertion(): void {
+    for (const [z, occupied] of occupiedByZ) {
+      for (let pass = 0; pass < INSERTION_FIX_PASSES; pass++) {
+        const initialCrossings = countCrossings(z);
+        if (initialCrossings === 0) break;
+
+        const segments = buildEdgeSegments(z);
+        const crossings: [EdgeSegment, EdgeSegment][] = [];
+        for (let i = 0; i < segments.length; i++) {
+          for (let j = i + 1; j < segments.length; j++) {
+            if (segmentsCross(segments[i], segments[j])) {
+              crossings.push([segments[i], segments[j]]);
+            }
+          }
+        }
+
+        if (crossings.length === 0) break;
+
+        let anyFixed = false;
+
+        for (const [segA, segB] of crossings) {
+          // Recheck current positions
+          const rpA1 = result.get(segA.fromId)!;
+          const rpA2 = result.get(segA.toId)!;
+          const rpB1 = result.get(segB.fromId)!;
+          const rpB2 = result.get(segB.toId)!;
+
+          // Skip if no longer orthogonal or no longer crossing
+          if (rpA1.x !== rpA2.x && rpA1.y !== rpA2.y) continue;
+          if (rpB1.x !== rpB2.x && rpB1.y !== rpB2.y) continue;
+          const curA: EdgeSegment = {
+            ...segA, x1: rpA1.x, y1: rpA1.y, x2: rpA2.x, y2: rpA2.y,
+            axis: rpA1.y === rpA2.y ? 'h' : 'v',
+          };
+          const curB: EdgeSegment = {
+            ...segB, x1: rpB1.x, y1: rpB1.y, x2: rpB2.x, y2: rpB2.y,
+            axis: rpB1.y === rpB2.y ? 'h' : 'v',
+          };
+          if (!segmentsCross(curA, curB)) continue;
+
+          // Identify which is horizontal and which is vertical
+          const h = curA.axis === 'h' ? curA : curB;
+          const v = curA.axis === 'h' ? curB : curA;
+
+          const hY = h.y1; // horizontal segment's y coordinate
+          const vX = v.x1; // vertical segment's x coordinate
+          // The crossing point is (vX, hY)
+
+          // Collect all rooms on this z-level with their positions
+          const zRooms: Array<{ id: string; x: number; y: number }> = [];
+          for (const [id, p] of result) {
+            if (p.z === z) zRooms.push({ id, x: p.x, y: p.y });
+          }
+
+          // Strategy A: Try shifting the horizontal segment's row
+          // Split at the crossing: rooms with y < hY vs y >= hY
+          const roomsAbove = zRooms.filter(r => r.y < hY);
+          const roomsAtOrBelow = zRooms.filter(r => r.y >= hY);
+
+          // Strategy B: Try shifting the vertical segment's column
+          // Split at the crossing: rooms with x < vX vs x >= vX
+          const roomsLeft = zRooms.filter(r => r.x < vX);
+          const roomsAtOrRight = zRooms.filter(r => r.x >= vX);
+
+          // Try the smaller partition first (fewer rooms to move)
+          const strategies: Array<{
+            rooms: Array<{ id: string; x: number; y: number }>;
+            axis: 'y' | 'x';
+            delta: number;
+          }> = [
+            { rooms: roomsAbove, axis: 'y', delta: -1 },
+            { rooms: roomsAtOrBelow, axis: 'y', delta: 1 },
+            { rooms: roomsLeft, axis: 'x', delta: -1 },
+            { rooms: roomsAtOrRight, axis: 'x', delta: 1 },
+          ].sort((a, b) => a.rooms.length - b.rooms.length);
+
+          let resolved = false;
+
+          for (const strat of strategies) {
+            if (resolved) break;
+
+            // Build the shift map
+            const snapshot = new Map<string, RoomPosition>();
+            for (const [id, p] of result) {
+              if (p.z === z) snapshot.set(id, { ...p });
+            }
+
+            const toShift = strat.rooms;
+            if (toShift.length === 0) continue;
+
+            // Compute new positions
+            const newPositions = new Map<string, { x: number; y: number }>();
+            for (const r of toShift) {
+              const newX = strat.axis === 'x' ? r.x + strat.delta : r.x;
+              const newY = strat.axis === 'y' ? r.y + strat.delta : r.y;
+              newPositions.set(r.id, { x: newX, y: newY });
+            }
+
+            // Check for collisions with rooms NOT in the shift set
+            let collision = false;
+            const newOccupied = new Set<string>();
+            for (const r of zRooms) {
+              if (newPositions.has(r.id)) {
+                const np = newPositions.get(r.id)!;
+                const key = cellKey(np.x, np.y);
+                if (newOccupied.has(key)) {
+                  collision = true;
+                  break;
+                }
+                newOccupied.add(key);
+              } else {
+                const key = cellKey(r.x, r.y);
+                if (newOccupied.has(key)) {
+                  collision = true;
+                  break;
+                }
+                newOccupied.add(key);
+              }
+            }
+
+            if (collision) continue;
+
+            // Apply the shift temporarily to check constraints
+            for (const [rid, newPos] of newPositions) {
+              const oldPos = result.get(rid)!;
+              occupied.delete(cellKey(oldPos.x, oldPos.y));
+              occupied.add(cellKey(newPos.x, newPos.y));
+              result.set(rid, { x: newPos.x, y: newPos.y, z });
+            }
+
+            // Check that no moved room creates a diagonal with its neighbors
+            // (including neighbors that were also moved)
+            let violatesConstraints = false;
+            for (const [rid, newPos] of newPositions) {
+              const room = rooms.get(rid);
+              if (room) {
+                for (const [dir, nid] of room.exits) {
+                  const off = DIRECTION_OFFSETS[dir];
+                  if (!off || off.dz !== 0) continue;
+                  const np = result.get(nid);
+                  if (!np || np.z !== z) continue;
+                  if (newPos.x !== np.x && newPos.y !== np.y) {
+                    violatesConstraints = true;
+                    break;
+                  }
+                }
+                if (violatesConstraints) break;
+              }
+              // Also check reverse exits
+              const revArr = reverseExits.get(rid);
+              if (revArr) {
+                for (const { fromId } of revArr) {
+                  const fp = result.get(fromId);
+                  if (!fp || fp.z !== z) continue;
+                  if (newPos.x !== fp.x && newPos.y !== fp.y) {
+                    violatesConstraints = true;
+                    break;
+                  }
+                }
+                if (violatesConstraints) break;
+              }
+            }
+
+            if (violatesConstraints) {
+              // Rollback
+              for (const [id, p] of snapshot) {
+                result.set(id, p);
+              }
+              occupied.clear();
+              for (const [id, p] of snapshot) {
+                occupied.add(cellKey(p.x, p.y));
+              }
+              continue;
+            }
+
+            const afterCrossings = countCrossings(z);
+
+            if (afterCrossings < initialCrossings) {
+              // Accept
+              resolved = true;
+              anyFixed = true;
+              break;
+            } else {
+              // Rollback
+              for (const [id, p] of snapshot) {
+                result.set(id, p);
+              }
+              occupied.clear();
+              for (const [id, p] of snapshot) {
+                occupied.add(cellKey(p.x, p.y));
+              }
+            }
+          }
+        }
+
+        if (!anyFixed) break;
       }
     }
   }
