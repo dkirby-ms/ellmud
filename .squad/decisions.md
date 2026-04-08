@@ -5494,3 +5494,106 @@ Refactored computeLayout.ts per Elminster's architecture review. The file went f
 - `b51a65e` perf(computeLayout): Phase 2 — fix mutation bug, cache posToRoom, delta scoring
 
 **Status:** IMPLEMENTED
+
+---
+
+# Decision: Post-BFS Cardinal Alignment Pass (Phase 5c)
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-04-15  
+**Commit:** b82ce8e  
+
+## Context
+
+The user reported that `inside-the-west-gate-of-midgaard` and `main-street` appeared at different y levels in the zone designer, creating a visual right-angle on what should be a straight E/W corridor.
+
+## Root Cause
+
+Two issues combine:
+
+1. **Data mismatch:** The Midgaard migration uses room type `'entrance'` for `outside-the-west-gate-of-midgaard`, but `ZoneDesigner.tsx` line 109 checks for `'entry'`. No match → falls back to `rooms[0]?.slug` (arbitrary DB order).
+
+2. **BFS entry-point sensitivity:** Different BFS starting rooms produce different visit orders. When BFS reaches main-street via temple-square→market-square (from the north) and inside-the-west-gate via a different path, they end up on different grid rows.
+
+## Decision
+
+Added **Phase 5c: Cardinal Alignment** to `computeLayout.ts`, a general post-BFS correction pass:
+
+- Builds union-find groups for E/W exits (rooms that must share the same y) and N/S exits (same x).
+- For each misaligned group, batch cascade-shifts all outlier rooms + their perpendicular subtrees to the majority coordinate.
+- Accepts shifts only if the global layout score improves (no regressions).
+- Runs after direction violation repair, before occlusion fix.
+
+## Team Impact
+
+- **No API changes.** Pure client-side layout engine change.
+- **ELK adapter unchanged.** `elkLayout.ts` was not the problem — it faithfully passes BFS coordinates through.
+- **Separate fix needed:** The `'entrance'` vs `'entry'` type mismatch in the Midgaard migration should be fixed by whoever owns the DB schema. The cardinal alignment pass is a general safety net, not a Midgaard-specific hack.
+
+## Tests
+
+- 27 BFS layout tests passing (including new entry-point independence test).
+- 13 ELK layout tests passing.
+- 271 total client tests passing.
+
+**Status:** IMPLEMENTED (commit b82ce8e)
+
+---
+
+# Decision: Zone Transfer Validation Pattern
+
+**Author:** Drizzt (Engine Dev)
+**Date:** 2026-04-07
+**Issue:** #342
+
+## Context
+Cross-zone `goto` (and potentially `go` with inter-zone exits) can issue a `zoneTransfer` to a nonexistent zone, causing the client to disconnect when the matchmaker fails.
+
+## Decision
+Zone transfer validation uses a **two-layer pattern**:
+
+1. **Handler level** — `resolveZoneExists` optional callback on `CommandContext` enables synchronous zone validation in command handlers (currently used by `goto`).
+2. **Room level** — `ZoneRoom.handleCommandMessage` checks `knownZoneSlugs` cache before sending any `ZONE_TRANSFER` message as a defensive safety net.
+
+## Rationale
+- Command handlers are synchronous; async zone repo calls can't be added without changing the handler signature.
+- Optional callback pattern is consistent with existing `resolveRoom`, `resolvePlayerByName` on CommandContext.
+- Cached zone slugs are best-effort (loaded on room create); stale cache is acceptable since zone creation is rare and server restarts refresh.
+- Belt-and-suspenders: handler validation catches bad `goto` input early; room-level check catches edge cases from any command that produces `zoneTransfer`.
+
+## Impact
+- Any new command that accepts zone slugs from user input should use `ctx.resolveZoneExists` for validation.
+- The `go` command's inter-zone exits come from authored zone data, so handler-level validation isn't needed there (room-level check covers it).
+
+**Status:** IMPLEMENTED
+
+---
+
+# Decision: Classic CircleMUD Zone Import Numbering
+
+**Date:** 2025-07-25
+**Author:** Bruenor (Content Builder)
+
+## Context
+
+Imported 3 classic CircleMUD zones (Chessboard, High Tower of Magic, Haon-Dor Forest) from tbaMUD stock areas using the existing `scripts/import-diku-zone.ts` importer.
+
+## Decision
+
+Used migration numbers **006, 007, 008** instead of the originally requested 005, 006, 007, because `005_sandbox_rooms.sql` already existed. The importer was not modified — it worked correctly on all three zone topology types (grid, vertical tower, branching wilderness).
+
+## Outcome
+
+| Zone | Migration | Rooms | Exits | Cross-zone Skipped |
+|------|-----------|-------|-------|--------------------|
+| The Chessboard | 006 | 67 | 230 | 1 |
+| The High Tower of Magic | 007 | 100 | 221 | 4 |
+| The Haon-Dor Forest | 008 | 60 | 147 | 3 |
+
+All SQL files follow the established pattern (BEGIN/COMMIT, cross-join VALUES, ON CONFLICT DO NOTHING). These are auto-generated and marked as needing review before production use. Cross-zone exits are expected skips — those rooms live in other .wld files.
+
+**Status:** IMPLEMENTED
+
+---
+
+**Note:** This section merged from .squad/decisions/inbox on 2026-04-08T01:21Z. Deduplicated Regis alignment fixes into single Phase 5c entry.

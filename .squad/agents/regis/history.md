@@ -1451,3 +1451,21 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 **Key learnings:**
 - The alignment pass's cascade can break alignments in OTHER groups by dragging rooms that are already correctly positioned. The guard prevents this by detecting such rooms before applying the batch.
 - Test data must match the real migration SQL — the original test had ~12 missing rooms and several wrong exit directions (e.g., mages-bar→south→lab instead of east).
+
+### Cardinal Alignment Cascade v2 — Alignment Break Prevention (2026-04-08)
+
+**Task:** Fix cardinal alignment cascade guard — wall-road-2/poor-alley alignment (backend orchestration)
+
+**Work Summary:**
+
+Scribe completed orchestration and decision documentation for the Phase 5c Cardinal Alignment implementation. This was an agent task orchestrated in background mode.
+
+**Commits:**
+- b82ce8e: Add Phase 5c Cardinal Alignment cascade guard for axis-aligned exits
+
+**Test Results:**
+- ✅ 27 BFS layout tests pass (including entry-point independence test)
+- ✅ 13 ELK layout tests pass
+- ✅ 271 total client tests pass
+
+**Impact:** Phase 5c is now fully integrated and documented. The feature safely fixes misaligned cardinal-exit pairs without cascading breaks to other alignment groups.
