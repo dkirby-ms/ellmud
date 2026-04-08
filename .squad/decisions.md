@@ -5597,3 +5597,118 @@ All SQL files follow the established pattern (BEGIN/COMMIT, cross-join VALUES, O
 ---
 
 **Note:** This section merged from .squad/decisions/inbox on 2026-04-08T01:21Z. Deduplicated Regis alignment fixes into single Phase 5c entry.
+
+---
+
+# Decision: Repo Hygiene Foundations (#343)
+
+**Date:** 2026-04-08  
+**Decision Maker:** Danilo (Community Relations)  
+**Issue:** #343  
+**Status:** Implemented  
+
+## Summary
+
+Ellmud now has a complete hygiene and QoL foundation for scaling contributor engagement and automating releases.
+
+## What Was Added
+
+| File | Purpose |
+|------|---------|
+| `LICENSE` | ISC (matches package.json) |
+| `CONTRIBUTING.md` | Contribution workflow, setup, code style |
+| `CODE_OF_CONDUCT.md` | Contributor Covenant 2.0 |
+| `SECURITY.md` | Responsible vulnerability disclosure |
+| `.editorconfig` | 2-space indent, Unix line endings, UTF-8 |
+| `.github/ISSUE_TEMPLATE/bug_report.md` | Bug reporting guidance |
+| `.github/ISSUE_TEMPLATE/feature_request.md` | Feature request guidance |
+| `.github/PULL_REQUEST_TEMPLATE.md` | PR checklist and context |
+| `.github/workflows/release.yml` | Automated release (version bump + tag + GitHub release) |
+
+## Key Technical Choices
+
+### Release Workflow
+- **Trigger:** `workflow_dispatch` (manual, via Actions UI)
+- **Input:** version type (major/minor/patch)
+- **Logic:**
+  1. Bumps `package.json` version via `npm version`
+  2. Syncs workspace package.json files via `npm run version:sync`
+  3. Commits version bump
+  4. Creates git tag (`v{version}`)
+  5. Pushes to main + creates GitHub Release with auto-generated changelog
+
+### Issue & PR Templates
+- YAML frontmatter (GitHub standard) for metadata (labels, assignees)
+- Clear sections guiding users to provide actionable information
+- Bug template: steps to reproduce, environment, logs
+- Feature template: problem, solution, alternatives, impact
+- PR template: type of change, testing checklist, code review focus
+
+### Code of Conduct
+- Adopted Contributor Covenant 2.0 (widely recognized, clear enforcement)
+- Enforcement escalation: warning → mute → ban (for serious violations)
+- Direct reporting to maintainers (not public GitHub issues)
+
+## Impact
+
+✅ **For Contributors:**
+- Clear setup instructions (docs/setup.md reference)
+- Explicit code style expectations (TypeScript, ESLint, comments only for complex logic)
+- Template-driven issue/PR creation = better signal-to-noise
+- Standard code of conduct = safe, welcoming community
+
+✅ **For Maintainers:**
+- Automated release pipeline = fewer manual steps, fewer mistakes
+- Consistent editor config = fewer formatting nitpicks in review
+- Issue/PR templates = structured data, easier triage
+- Security disclosure path = responsible handling of vulnerabilities
+
+✅ **For the Project:**
+- Scales contributor onboarding without increasing maintainer load
+- Reduces friction for first-time contributors
+- Professional presentation (LICENSE, CONTRIBUTING visible in repo root)
+
+## Future Enhancements (Out of Scope)
+
+- Add CI/CD integration tests to PR template reminders
+- Add Discord webhook notifications for releases
+- Add automated changelog generation (changelog.md)
+- Add contributor attribution in release notes
+- Add automated dependabot PR template customizations
+
+## References
+
+- Contributor Covenant v2.0: https://www.contributor-covenant.org/version/2_0/code_of_conduct/
+- EditorConfig: https://editorconfig.org/
+- GitHub Issue Templates: https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/
+- GitHub Actions: https://docs.github.com/en/actions
+
+---
+
+# Decision: Architecture Diagram Format
+
+**Author:** Danilo  
+**Date:** 2026-04-08  
+**PR:** #348 (merged as #349)  
+**Status:** Implemented  
+
+## Summary
+
+The README architecture diagram uses **Mermaid** (not ASCII art or external images). This means:
+
+- The diagram is version-controlled as code, not a binary asset.
+- It renders natively on GitHub — no external tool or image hosting needed.
+- Anyone can update the architecture by editing the Mermaid block in `README.md`.
+
+## Rationale
+
+- Mermaid is the most maintainable option: diffs are readable, changes are reviewable.
+- GitHub renders Mermaid in markdown natively — no build step required.
+- The previous ASCII diagram was hard to update and didn't scale as the system grew.
+
+## Impact
+
+- **If you change the architecture** (add a new service, rename a subsystem, add a new data store), update the Mermaid block in `README.md` under `## Architecture`.
+- The diagram is color-coded by component group — keep colors consistent when adding nodes.
+
+**Status:** Merged
