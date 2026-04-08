@@ -59,6 +59,7 @@ export interface AdminRefugeDetail {
 
 export interface AdminPlayerInfo {
   sessionId: string;
+  characterName?: string;
   currentRoomId: string;
   inventoryCount: number;
   currentWeight: number;

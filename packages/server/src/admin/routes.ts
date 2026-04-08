@@ -893,11 +893,15 @@ function getZoneDetail(room: import('@colyseus/core').Room): AdminZoneDetail {
     | Map<string, { sessionId: string; currentRoomId: string; inventory: Map<string, unknown>; currentWeight: number; maxCarryWeight: number }>
     | undefined;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const characterNames = (room as any)['characterNames'] as Map<string, string> | undefined;
+
   const players: AdminPlayerInfo[] = [];
   if (playersMap) {
     for (const [, ps] of playersMap) {
       players.push({
         sessionId: ps.sessionId,
+        characterName: characterNames?.get(ps.sessionId),
         currentRoomId: ps.currentRoomId,
         inventoryCount: ps.inventory.size,
         currentWeight: ps.currentWeight,

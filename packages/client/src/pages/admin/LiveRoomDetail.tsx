@@ -671,7 +671,7 @@ export default function LiveRoomDetail() {
                                               className="text-[#E8E0D0]"
                                               style={{ fontFamily: "var(--font-mono)" }}
                                             >
-                                              {p.sessionId.slice(0, 10)}…
+                                              {p.characterName ?? `${p.sessionId.slice(0, 10)}…`}
                                             </span>
                                             <span
                                               className="text-[#8A8B95] text-xs"
@@ -885,7 +885,7 @@ export default function LiveRoomDetail() {
                                   className="text-[#E8E0D0] text-sm"
                                   style={{ fontFamily: "var(--font-mono)" }}
                                 >
-                                  {p.sessionId.slice(0, 10)}…
+                                  {p.characterName ?? `${p.sessionId.slice(0, 10)}…`}
                                 </span>
                               </div>
                               <div className="flex items-center gap-4">
@@ -1002,7 +1002,7 @@ export default function LiveRoomDetail() {
                           className="text-[#E8E0D0] text-sm"
                           style={{ fontFamily: "var(--font-mono)" }}
                         >
-                          {p.sessionId.slice(0, 10)}…
+                          {p.characterName ?? `${p.sessionId.slice(0, 10)}…`}
                         </span>
                       </div>
                       <div className="flex items-center gap-4">
@@ -1343,7 +1343,7 @@ export default function LiveRoomDetail() {
                   <option value="">Select player…</option>
                   {(room?.players ?? []).map((p) => (
                     <option key={p.sessionId} value={p.sessionId}>
-                      {p.sessionId.slice(0, 16)}… (in {p.currentRoomId})
+                      {p.characterName ?? `${p.sessionId.slice(0, 8)}…`} (in {p.currentRoomId})
                     </option>
                   ))}
                 </select>

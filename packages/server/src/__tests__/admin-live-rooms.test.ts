@@ -853,3 +853,68 @@ describe('roomGraphRooms in zone detail response', () => {
     expect(roomIds).toContain(creature.currentRoomId);
   });
 });
+
+// ─── characterName in zone detail response ──────────────────────────────────
+
+describe('characterName in zone detail player list', () => {
+  function createMockZoneRoomWithPlayers() {
+    const players = new Map<string, { sessionId: string; currentRoomId: string; inventory: Map<string, unknown>; currentWeight: number; maxCarryWeight: number }>();
+    players.set('player-1', {
+      sessionId: 'player-1',
+      currentRoomId: 'entry',
+      inventory: new Map([['sword', { id: 'sword' }]]),
+      currentWeight: 5,
+      maxCarryWeight: 50,
+    });
+    players.set('player-2', {
+      sessionId: 'player-2',
+      currentRoomId: 'corridor',
+      inventory: new Map(),
+      currentWeight: 0,
+      maxCarryWeight: 50,
+    });
+
+    const characterNames = new Map<string, string>();
+    characterNames.set('player-1', 'Drizzt');
+    // player-2 intentionally has no character name
+
+    return {
+      _mockName: 'zone:test',
+      roomName: 'zone:test',
+      roomId: 'zone-room-cn',
+      state: { lifecycle: 'active', stability: 100, collapseTimer: 0, tick: 1, playerCount: 2 },
+      clock: { running: true },
+      clients: [],
+      players,
+      characterNames,
+      roomGraph: {
+        rooms: new Map([
+          ['entry', { id: 'entry', name: 'Rift Entry', type: 'entry', exits: new Map(), items: [] }],
+          ['corridor', { id: 'corridor', name: 'Dark Corridor', exits: new Map(), items: [] }],
+        ]),
+        startRoomId: 'entry',
+      },
+      getZoneSlug: () => 'test-zone',
+    };
+  }
+
+  it('includes characterName for players that have one', async () => {
+    const mockRoom = createMockZoneRoomWithPlayers();
+    mockRooms.set('zone-room-cn', mockRoom);
+
+    const app = createTestApp({});
+    const res = await request(app, 'get', '/admin/api/rooms/zone-room-cn', { token: TEST_TOKEN });
+
+    expect(res.status).toBe(200);
+    const players = res.body.players as Array<{ sessionId: string; characterName?: string }>;
+    expect(players).toHaveLength(2);
+
+    const p1 = players.find(p => p.sessionId === 'player-1');
+    expect(p1).toBeDefined();
+    expect(p1!.characterName).toBe('Drizzt');
+
+    const p2 = players.find(p => p.sessionId === 'player-2');
+    expect(p2).toBeDefined();
+    expect(p2!.characterName).toBeUndefined();
+  });
+});

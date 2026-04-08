@@ -181,6 +181,7 @@ export interface LiveRoomSummary {
 
 export interface LiveRoomPlayer {
   sessionId: string;
+  characterName?: string;
   currentRoomId: string;
   inventoryCount: number;
   currentWeight: number;
