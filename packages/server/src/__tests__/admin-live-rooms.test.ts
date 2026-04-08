@@ -852,6 +852,79 @@ describe('roomGraphRooms in zone detail response', () => {
     const roomIds = detailRes.body.roomGraphRooms.map((r: { id: string }) => r.id);
     expect(roomIds).toContain(creature.currentRoomId);
   });
+
+  it('static zone: spawned creature appears and matches roomGraphRooms', async () => {
+    // Static zones have a zoneSlug — the client fetches zone definitions
+    // separately.  This test verifies the *live* room detail response alone
+    // is sufficient to map creatures to rooms (roomGraphRooms + creatures).
+    const mockRoom = createMockZoneRoom({ zoneSlug: 'flooded-crypt', roomName: 'zone:flooded-crypt' });
+    mockRooms.set('zone-room-rg', mockRoom);
+
+    const contentStores = createMockContentStores([flatCreatureEntity]);
+    const app = createTestApp({ contentStores });
+
+    // Spawn into a specific room
+    const spawnRes = await request(app, 'post', '/admin/api/rooms/zone-room-rg/spawn', {
+      token: TEST_TOKEN,
+      body: { type: 'creature', id: 'drowned-revenant', targetRoomId: 'corridor' },
+    });
+    expect(spawnRes.status).toBe(200);
+    const spawned = spawnRes.body.spawned as { creatureId: string; spawnRoomId: string };
+    expect(spawned.spawnRoomId).toBe('corridor');
+
+    // Fetch room detail
+    const detailRes = await request(app, 'get', '/admin/api/rooms/zone-room-rg', { token: TEST_TOKEN });
+    expect(detailRes.status).toBe(200);
+
+    // Verify zoneSlug is present (static zone)
+    expect(detailRes.body.zoneSlug).toBe('flooded-crypt');
+
+    // Creature must be in the response
+    const creature = (detailRes.body.creatures as Array<{ id: string; currentRoomId: string }>)
+      .find(c => c.id === spawned.creatureId);
+    expect(creature).toBeDefined();
+    expect(creature!.currentRoomId).toBe('corridor');
+
+    // Critical: creature.currentRoomId must match a roomGraphRooms entry
+    const roomGraphIds = (detailRes.body.roomGraphRooms as Array<{ id: string }>).map(r => r.id);
+    expect(roomGraphIds).toContain(creature!.currentRoomId);
+  });
+
+  it('static zone: multiple spawns across rooms all visible via roomGraphRooms', async () => {
+    const mockRoom = createMockZoneRoom({ zoneSlug: 'flooded-crypt', roomName: 'zone:flooded-crypt' });
+    mockRooms.set('zone-room-rg', mockRoom);
+
+    const contentStores = createMockContentStores([flatCreatureEntity]);
+    const app = createTestApp({ contentStores });
+
+    // Spawn in both rooms
+    await request(app, 'post', '/admin/api/rooms/zone-room-rg/spawn', {
+      token: TEST_TOKEN,
+      body: { type: 'creature', id: 'drowned-revenant', targetRoomId: 'entry' },
+    });
+    await request(app, 'post', '/admin/api/rooms/zone-room-rg/spawn', {
+      token: TEST_TOKEN,
+      body: { type: 'creature', id: 'drowned-revenant', targetRoomId: 'corridor' },
+    });
+
+    const detailRes = await request(app, 'get', '/admin/api/rooms/zone-room-rg', { token: TEST_TOKEN });
+    expect(detailRes.status).toBe(200);
+
+    const creatures = detailRes.body.creatures as Array<{ currentRoomId: string }>;
+    const roomGraphIds = (detailRes.body.roomGraphRooms as Array<{ id: string }>).map(r => r.id);
+
+    expect(creatures).toHaveLength(2);
+
+    // Build per-room occupancy using ONLY roomGraphRooms (the client fix)
+    const occupancy: Record<string, number> = {};
+    for (const r of roomGraphIds) occupancy[r] = 0;
+    for (const c of creatures) {
+      expect(roomGraphIds).toContain(c.currentRoomId);
+      occupancy[c.currentRoomId]++;
+    }
+    expect(occupancy['entry']).toBe(1);
+    expect(occupancy['corridor']).toBe(1);
+  });
 });
 
 // ─── characterName in zone detail response ──────────────────────────────────

@@ -141,17 +141,18 @@ export default function LiveRoomDetail() {
     };
   }, [room?.zoneSlug]);
 
-  // Compute per-room occupancy from live player/creature data
+  // Compute per-room occupancy from live player/creature data.
+  // IMPORTANT: Prefer roomGraphRooms (from the same API response as
+  // creatures) over zoneData.rooms (from a separate, possibly stale
+  // zone-definition fetch).  This guarantees room keys always match
+  // creature.currentRoomId values.
   const roomOccupancy = useMemo(() => {
     const map: Record<
       string,
       { players: LiveRoomPlayer[]; creatures: LiveRoomCreature[] }
     > = {};
-    // Use zoneData rooms when available; fall back to the room-graph rooms
-    // included in the room detail response (fixes procedural zones and
-    // zone-data fetch failures).
     const roomList: { slug?: string; id?: string }[] =
-      zoneData?.rooms ?? (room?.roomGraphRooms?.map((r) => ({ slug: r.id, id: r.id })) ?? []);
+      room?.roomGraphRooms?.map((r) => ({ slug: r.id, id: r.id })) ?? zoneData?.rooms ?? [];
     if (roomList.length === 0) return map;
     for (const zr of roomList) {
       const key = (zr as { slug?: string }).slug ?? (zr as { id?: string }).id ?? '';
@@ -163,9 +164,12 @@ export default function LiveRoomDetail() {
       }
     }
     for (const c of room?.creatures ?? []) {
-      if (map[c.currentRoomId]) {
-        map[c.currentRoomId].creatures.push(c);
+      // Auto-create room entry if creature references a room not yet in the
+      // map (defensive: prevents silently dropping creatures).
+      if (!map[c.currentRoomId]) {
+        map[c.currentRoomId] = { players: [], creatures: [] };
       }
+      map[c.currentRoomId].creatures.push(c);
     }
     return map;
   }, [zoneData, room?.players, room?.creatures, room?.roomGraphRooms]);
