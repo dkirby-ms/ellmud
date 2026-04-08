@@ -899,11 +899,11 @@ export function computeLayout(
   // direction constraints.
   fixEdgeCrossings();
 
-  // ── Phase 5e: Crossing fix via selective row/column insertion ──────────
-  // If crossings remain after Phase 5d, this phase uses a different strategy:
-  // instead of moving individual rooms, it selectively inserts gaps by
-  // shifting rows or columns near the crossing point. This resolves dense-zone
-  // crossings where no free adjacent cell exists for the simpler move strategy.
+  // ── Phase 5e: Crossing fix via grid expansion ──────────────────────────
+  // If crossings remain after Phase 5d, this phase expands the grid by
+  // inserting a blank row or column outside the crossing edge's span,
+  // then moves the crossing group into the gap. This adds genuine space
+  // rather than rearranging existing positions.
   fixCrossingsByInsertion();
 
   // ── Phase 6: Occlusion fix ────────────────────────────────────────────
@@ -2652,16 +2652,23 @@ export function computeLayout(
   }
 
   /**
-   * Phase 5e: Fix crossings by selective row/column exchange.
+   * Phase 5e: Fix crossings by selective grid expansion (row/column insertion).
    *
-   * For each H×V crossing, swap ALL rooms on the H-edge's row with ALL
-   * rooms on the V-edge's nearest endpoint row. This moves H past V's
-   * endpoint (eliminating the crossing) while V's endpoint moves to H's
-   * old row (shortening V's span). Full-row swaps are collision-free and
-   * preserve E-W/N-S alignment within each row.
+   * For each H×V crossing, create a blank row (or column) OUTSIDE the
+   * vertical (or horizontal) edge's span by shifting one partition of
+   * the grid, then move the crossing edge's alignment group into the gap.
+   * This genuinely expands the grid at the crossing point rather than
+   * rearranging existing rows.
    *
-   * Also tries column exchanges (swap V's column with H's endpoint column).
-   * Prefers adjacent swaps (distance 1) over longer moves.
+   * Four candidates per crossing:
+   *   Row: shift rooms above V's top by −1, move H to gap (vMinY−1)
+   *   Row: shift rooms below V's bottom by +1, move H to gap (vMaxY+1)
+   *   Col: shift rooms left of H's left by −1, move V to gap (hMinX−1)
+   *   Col: shift rooms right of H's right by +1, move V to gap (hMaxX+1)
+   *
+   * The partition shift is uniform and preserves all internal alignment.
+   * Only the moved group's jump can introduce direction mismatches
+   * (controlled by allowWeightedMismatch).
    */
 
   /**
@@ -2760,7 +2767,7 @@ export function computeLayout(
         for (const [segA, segB] of crossingPairs) {
           if (totalFixed >= maxFixes) break;
 
-          // Recheck current positions (earlier fixes may have resolved this)
+          // Recheck with current positions (earlier fixes may have resolved this)
           const rpA1 = result.get(segA.fromId)!;
           const rpA2 = result.get(segA.toId)!;
           const rpB1 = result.get(segB.fromId)!;
@@ -2777,79 +2784,121 @@ export function computeLayout(
           };
           if (!segmentsCross(curA, curB)) continue;
 
-          const h = curA.axis === 'h' ? curA : curB;
-          const v = curA.axis === 'h' ? curB : curA;
-          const hY = h.y1;
-          const vX = v.x1;
-          const vMinY = Math.min(v.y1, v.y2);
-          const vMaxY = Math.max(v.y1, v.y2);
-          const hMinX = Math.min(h.x1, h.x2);
-          const hMaxX = Math.max(h.x1, h.x2);
+          const hSeg = curA.axis === 'h' ? curA : curB;
+          const vSeg = curA.axis === 'h' ? curB : curA;
+          const hY = hSeg.y1;
+          const vX = vSeg.x1;
+          const vMinY = Math.min(vSeg.y1, vSeg.y2);
+          const vMaxY = Math.max(vSeg.y1, vSeg.y2);
+          const hMinX = Math.min(hSeg.x1, hSeg.x2);
+          const hMaxX = Math.max(hSeg.x1, hSeg.x2);
 
-          // Candidate exchanges: swap entire row or column pairs.
-          // Row exchange: swap y=hY <-> y=vEndpoint (moves H past V's edge)
-          // Col exchange: swap x=vX <-> x=hEndpoint (moves V past H's edge)
-          interface ExchangeCandidate {
-            type: 'row' | 'col';
-            coord1: number;
-            coord2: number;
+          // Grid-expansion candidates: shift a partition to open a blank
+          // row/col OUTSIDE the crossing edge's span, then move the other
+          // edge's alignment group into the gap.
+          interface InsertionCandidate {
+            moveEdge: 'h' | 'v';       // which edge's group to relocate
+            shiftAxis: 'y' | 'x';       // axis of the partition shift
+            shiftOp: 'lt' | 'gt';       // shift rooms < or > boundary
+            shiftBoundary: number;       // boundary coord (strict)
+            shiftDelta: number;          // -1 or +1
+            targetCoord: number;         // gap coordinate for the group
+            jumpDist: number;            // how far the group jumps
           }
-          const candidates: ExchangeCandidate[] = [];
-          if (vMinY !== hY) candidates.push({ type: 'row', coord1: hY, coord2: vMinY });
-          if (vMaxY !== hY) candidates.push({ type: 'row', coord1: hY, coord2: vMaxY });
-          if (hMinX !== vX) candidates.push({ type: 'col', coord1: vX, coord2: hMinX });
-          if (hMaxX !== vX) candidates.push({ type: 'col', coord1: vX, coord2: hMaxX });
-          // Prefer adjacent exchanges (smallest move)
-          candidates.sort((a, b) =>
-            Math.abs(a.coord1 - a.coord2) - Math.abs(b.coord1 - b.coord2));
+          const candidates: InsertionCandidate[] = [];
+
+          // Row insertions: move H's E-W group outside V's y-range
+          // A: Above V — shift rooms at y < vMinY by -1, gap at vMinY-1
+          candidates.push({
+            moveEdge: 'h', shiftAxis: 'y', shiftOp: 'lt', shiftBoundary: vMinY,
+            shiftDelta: -1, targetCoord: vMinY - 1,
+            jumpDist: Math.abs(hY - (vMinY - 1)),
+          });
+          // B: Below V — shift rooms at y > vMaxY by +1, gap at vMaxY+1
+          candidates.push({
+            moveEdge: 'h', shiftAxis: 'y', shiftOp: 'gt', shiftBoundary: vMaxY,
+            shiftDelta: 1, targetCoord: vMaxY + 1,
+            jumpDist: Math.abs(hY - (vMaxY + 1)),
+          });
+          // Column insertions: move V's N-S group outside H's x-range
+          // C: Left of H — shift rooms at x < hMinX by -1, gap at hMinX-1
+          candidates.push({
+            moveEdge: 'v', shiftAxis: 'x', shiftOp: 'lt', shiftBoundary: hMinX,
+            shiftDelta: -1, targetCoord: hMinX - 1,
+            jumpDist: Math.abs(vX - (hMinX - 1)),
+          });
+          // D: Right of H — shift rooms at x > hMaxX by +1, gap at hMaxX+1
+          candidates.push({
+            moveEdge: 'v', shiftAxis: 'x', shiftOp: 'gt', shiftBoundary: hMaxX,
+            shiftDelta: 1, targetCoord: hMaxX + 1,
+            jumpDist: Math.abs(vX - (hMaxX + 1)),
+          });
+
+          // Prefer smallest jump distance (least disruptive)
+          candidates.sort((a, b) => a.jumpDist - b.jumpDist);
 
           let resolved = false;
 
           for (const cand of candidates) {
             if (resolved) break;
-            // Skip very distant exchanges (>3 cells) -- too disruptive
-            if (Math.abs(cand.coord1 - cand.coord2) > 3) continue;
 
-            // Snapshot for rollback
+            // Snapshot all z-level rooms for rollback
             const snapshot = new Map<string, { x: number; y: number }>();
             for (const [id, p] of result) {
               if (p.z === z) snapshot.set(id, { x: p.x, y: p.y });
             }
             const occupiedSnapshot = new Set(occupied);
 
-            // Collect rooms on both rows/columns
-            const set1: string[] = [];
-            const set2: string[] = [];
+            // Step 1: Shift partition to create a blank row/column.
+            // Rooms strictly beyond V's (or H's) endpoint are pushed
+            // away by 1, opening a gap just outside the edge's span.
+            const toShift: string[] = [];
             for (const [id, p] of result) {
               if (p.z !== z) continue;
-              const coord = cand.type === 'row' ? p.y : p.x;
-              if (coord === cand.coord1) set1.push(id);
-              else if (coord === cand.coord2) set2.push(id);
+              const coord = cand.shiftAxis === 'y' ? p.y : p.x;
+              const shouldShift = cand.shiftOp === 'lt'
+                ? coord < cand.shiftBoundary
+                : coord > cand.shiftBoundary;
+              if (shouldShift) toShift.push(id);
+            }
+            // Remove old positions first (avoids key collisions)
+            for (const id of toShift) {
+              const old = snapshot.get(id)!;
+              occupied.delete(cellKey(old.x, old.y));
+            }
+            // Apply shift using snapshot coords
+            for (const id of toShift) {
+              const old = snapshot.get(id)!;
+              const nx = cand.shiftAxis === 'x' ? old.x + cand.shiftDelta : old.x;
+              const ny = cand.shiftAxis === 'y' ? old.y + cand.shiftDelta : old.y;
+              result.set(id, { x: nx, y: ny, z });
+              occupied.add(cellKey(nx, ny));
             }
 
-            // Execute exchange: remove all, place at swapped coordinates
-            for (const rid of [...set1, ...set2]) {
+            // Step 2: Move alignment group into the gap.
+            const seedId = cand.moveEdge === 'h' ? hSeg.fromId : vSeg.fromId;
+            const dirs = cand.moveEdge === 'h' ? ['east', 'west'] : ['north', 'south'];
+            const group = buildAxisGroup(seedId, z, dirs);
+            // Remove group from current positions
+            for (const rid of group) {
               const p = result.get(rid)!;
               occupied.delete(cellKey(p.x, p.y));
             }
-            for (const rid of set1) {
-              const old = snapshot.get(rid)!;
-              const nx = cand.type === 'col' ? cand.coord2 : old.x;
-              const ny = cand.type === 'row' ? cand.coord2 : old.y;
-              result.set(rid, { x: nx, y: ny, z });
-              occupied.add(cellKey(nx, ny));
-            }
-            for (const rid of set2) {
-              const old = snapshot.get(rid)!;
-              const nx = cand.type === 'col' ? cand.coord1 : old.x;
-              const ny = cand.type === 'row' ? cand.coord1 : old.y;
+            // Place group at target coordinate
+            for (const rid of group) {
+              const p = result.get(rid)!;
+              const nx = cand.shiftAxis === 'x' ? cand.targetCoord : p.x;
+              const ny = cand.shiftAxis === 'y' ? cand.targetCoord : p.y;
               result.set(rid, { x: nx, y: ny, z });
               occupied.add(cellKey(nx, ny));
             }
 
-            // Verify: no new diagonals for any moved room
+            // Step 3: Quality checks
+            // 3a: No new diagonals for moved group (shifted rooms
+            //     preserve internal alignment so only the group matters)
             let violates = false;
-            for (const id of [...set1, ...set2]) {
+            for (const id of group) {
+              if (violates) break;
               const p = result.get(id)!;
               const room = rooms.get(id);
               if (room) {
@@ -2860,7 +2909,6 @@ export function computeLayout(
                   if (!np || np.z !== z) continue;
                   if (p.x !== np.x && p.y !== np.y) { violates = true; break; }
                 }
-                if (violates) break;
               }
               if (!violates) {
                 const revArr = reverseExits.get(id);
@@ -2874,17 +2922,16 @@ export function computeLayout(
                   }
                 }
               }
-              if (violates) break;
             }
 
             if (!violates) {
+              // 3b: Crossings must decrease
               const crossingsAfter = countCrossings(z);
               if (crossingsAfter < crossingsBefore) {
-                // Build the full neighborhood: moved rooms + any room
-                // connected to a moved room. This captures "bystander"
-                // mismatches from rooms between two non-adjacent
-                // exchanged rows.
-                const movedSet = new Set([...set1, ...set2]);
+                // 3c: Direction mismatch check (only moved group
+                //     neighborhood — the partition shift is uniform
+                //     and creates no mismatches)
+                const movedSet = new Set(group);
                 const neighborhood = new Set(movedSet);
                 for (const id of movedSet) {
                   const room = rooms.get(id);
@@ -2910,10 +2957,10 @@ export function computeLayout(
                   mismatchAfter += countMismatchesInvolving(id, p.x, p.y, z);
                 }
 
+                // Temporarily restore pre-insertion positions to measure mismatchBefore
                 const afterPos = new Map<string, { x: number; y: number }>();
-                for (const id of movedSet) {
-                  const p = result.get(id)!;
-                  afterPos.set(id, { x: p.x, y: p.y });
+                for (const [id, p] of result) {
+                  if (p.z === z) afterPos.set(id, { x: p.x, y: p.y });
                 }
                 for (const [id, old] of snapshot) {
                   result.set(id, { x: old.x, y: old.y, z });
@@ -2923,6 +2970,7 @@ export function computeLayout(
                   const old = snapshot.get(id)!;
                   mismatchBefore += countMismatchesInvolving(id, old.x, old.y, z);
                 }
+                // Restore after positions
                 for (const [id, pos] of afterPos) {
                   result.set(id, { x: pos.x, y: pos.y, z });
                 }
@@ -2947,6 +2995,7 @@ export function computeLayout(
             }
 
             if (violates) {
+              // Rollback: restore all z-level positions
               for (const [id, old] of snapshot) result.set(id, { x: old.x, y: old.y, z });
               occupied.clear();
               for (const k of occupiedSnapshot) occupied.add(k);
