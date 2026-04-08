@@ -1271,10 +1271,15 @@ describe('computeLayout', () => {
 
     const layout = computeLayout(rooms, 'the-reading-room');
 
-    // The entire main-street corridor (east/west chain) should share y
+    // The entire main-street corridor (east/west chain) should share y,
+    // including gate rooms connected E/W to the corridor ends
     const coreStreet = [
+      'outside-the-west-gate-of-midgaard',
+      'inside-the-west-gate-of-midgaard',
       'main-street', 'main-street-2', 'market-square',
       'main-street-3', 'main-street-4',
+      'inside-the-east-gate-of-midgaard',
+      'outside-the-east-gate-of-midgaard',
     ];
     const ys = coreStreet.map(id => pos(layout, id).y);
     const misaligned = coreStreet.filter((_, i) => ys[i] !== ys[0]);
