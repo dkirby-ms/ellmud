@@ -3410,3 +3410,17 @@ Created comprehensive `help` command handler supporting context-aware command di
 - npm workspaces can pin stale versions in package-lock.json even after changing package.json — must remove both node_modules AND lockfile entries for affected packages
 - eslint `eslint-disable-next-line` only covers the single next line; multi-line statements need block `eslint-disable`/`eslint-enable` comments
 - Generated `.d.ts` files should be excluded from ESLint via ignores in eslint.config.mjs (`**/*.d.ts`)
+
+## Session: Fix spawn→display bug — creatures invisible on Room Graph tab (2025-07)
+
+### What was done
+- Root-caused why spawned creatures didn't appear on the admin Room Graph tab: the client's `roomOccupancy` useMemo returned an empty map when `zoneData` was null (procedural zones have no `zoneSlug`, so the separate zone-data fetch always fails).
+- Added `roomGraphRooms[]` to the `getZoneDetail()` server response — serialises the live room graph rooms so the client can map creatures → rooms without a separate zone-data fetch.
+- Updated client: `roomOccupancy` now falls back to `roomGraphRooms`; new `displayRooms` memo normalises both zone-data and room-graph sources for the tab.
+- Added 3 new integration tests covering roomGraphRooms presence, procedural zone coverage, and creature→room alignment.
+- Commit: `e3d506b` on dev.
+
+### Learnings
+- The Room Graph tab depended on a *separate* zone-data API call (`getZone(slug)`) that is completely unrelated to the room detail response; for procedural zones where `zoneSlug` is undefined this always produced null, silently hiding all creature occupancy.
+- When the server already has authoritative data (the room graph), include it in the response rather than forcing the client to fetch it separately — eliminates a class of race/availability bugs.
+- `useMemo` with an early-return on null silently swallows data; prefer fallback chains over early returns when the downstream UI depends on the result.
