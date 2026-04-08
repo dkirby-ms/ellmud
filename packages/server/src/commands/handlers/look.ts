@@ -1,11 +1,43 @@
 /**
  * look — Describe the current room, its contents, exits, and occupants.
+ * With a target argument, examine a specific room feature.
  */
 
 import type { CommandResult } from '../index.js';
 import type { CommandContext } from '../index.js';
+import type { RoomFeature } from '@ellmud/shared';
 
 export function handleLook(ctx: CommandContext): CommandResult {
+  const { room, args } = ctx;
+
+  // "look" with no target → show full room description (existing behavior)
+  if (args.length === 0) {
+    return showFullRoom(ctx);
+  }
+
+  // "look <target>" → search room features for a keyword match
+  const target = args.join(' ').toLowerCase().trim();
+
+  if (room.features && room.features.length > 0) {
+    const match = room.features.find(f =>
+      f.keywords.some(kw => kw.toLowerCase() === target),
+    );
+
+    if (match) {
+      return examineFeature(match);
+    }
+  }
+
+  // No feature match → fallback
+  return {
+    narrations: [{
+      text: `You don't see that here.`,
+      type: 'system',
+    }],
+  };
+}
+
+function showFullRoom(ctx: CommandContext): CommandResult {
   const { room } = ctx;
   const exitList = Array.from(room.exits.keys()).join(', ') || 'none';
 
@@ -66,5 +98,11 @@ export function handleLook(ctx: CommandContext): CommandResult {
       exits: Array.from(room.exits.keys()),
       stability: ctx.stability,
     },
+  };
+}
+
+function examineFeature(feature: RoomFeature): CommandResult {
+  return {
+    narrations: [{ text: feature.description, type: 'room' }],
   };
 }

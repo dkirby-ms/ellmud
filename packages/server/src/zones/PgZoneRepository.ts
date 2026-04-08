@@ -52,6 +52,7 @@ interface ZoneRoomRow {
   loot_containers: unknown[];
   hazards: unknown[];
   npcs: unknown[];
+  features: unknown[];
   created_at: Date;
   updated_at: Date;
 }
@@ -106,6 +107,7 @@ function roomRowToEntity(row: ZoneRoomRow): ZoneRoomDefinition {
     lootContainers: row.loot_containers as ZoneRoomDefinition['lootContainers'],
     hazards: row.hazards as ZoneRoomDefinition['hazards'],
     npcs: row.npcs as ZoneRoomDefinition['npcs'],
+    features: (row.features ?? []) as ZoneRoomDefinition['features'],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -259,8 +261,8 @@ export class PgZoneRepository implements ZoneRepository {
     const result = await query<ZoneRoomRow>(
       `INSERT INTO zone_rooms (
         zone_id, slug, name, description, type, properties,
-        loot_containers, hazards, npcs
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        loot_containers, hazards, npcs, features
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
       RETURNING *`,
       [
         room.zoneId,
@@ -272,6 +274,7 @@ export class PgZoneRepository implements ZoneRepository {
         JSON.stringify(room.lootContainers ?? []),
         JSON.stringify(room.hazards ?? []),
         JSON.stringify(room.npcs ?? []),
+        JSON.stringify(room.features ?? []),
       ],
     );
     return roomRowToEntity(result.rows[0]);
@@ -295,8 +298,8 @@ export class PgZoneRepository implements ZoneRepository {
     const result = await query<ZoneRoomRow>(
       `UPDATE zone_rooms SET
         slug = $1, name = $2, description = $3, type = $4, properties = $5,
-        loot_containers = $6, hazards = $7, npcs = $8, updated_at = now()
-      WHERE id = $9
+        loot_containers = $6, hazards = $7, npcs = $8, features = $9, updated_at = now()
+      WHERE id = $10
       RETURNING *`,
       [
         merged.slug,
@@ -307,6 +310,7 @@ export class PgZoneRepository implements ZoneRepository {
         JSON.stringify(merged.lootContainers),
         JSON.stringify(merged.hazards),
         JSON.stringify(merged.npcs),
+        JSON.stringify(merged.features ?? []),
         id,
       ],
     );

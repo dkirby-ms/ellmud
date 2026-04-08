@@ -10,6 +10,7 @@ import type {
   RoomProperty,
   LootContainer,
   HazardPlaceholder,
+  RoomFeature,
 } from './room-graph.js';
 
 // ─── Zone Definition ────────────────────────────────────────────────────────
@@ -52,6 +53,8 @@ export interface ZoneRoomDefinition {
     spawnCount: number;
     behavior?: string;
   }>;
+  /** Examinable features in this room (Issue #345). */
+  features: RoomFeature[];
 }
 
 // ─── Zone Exit Definition ───────────────────────────────────────────────────
