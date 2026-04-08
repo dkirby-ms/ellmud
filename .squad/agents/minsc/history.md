@@ -40,6 +40,14 @@
 
 ## Learnings (Archived — See Detailed Session Records)
 
+**Room Features Proactive Testing (2026-07):**
+- Proactive test pattern: define expected interface locally (RoomFeature) when implementation PR is in parallel
+- `handleLook` currently ignores `ctx.args` — all `look <target>` tests fail until feature dispatch is added
+- Room type `Room` in `generator/RoomGraph.ts` does NOT have `features` field yet — use `Room & { features?: RoomFeature[] }` cast
+- `buildCtx` pattern from `commands.test.ts` is the standard for unit-testing command handlers (no Colyseus needed)
+- Design spec says: exact keyword match (case-insensitive), `args.join(' ')` for multi-word, first-match-wins for duplicates
+- 24 tests in `room-features.test.ts`, PR #351, 8 pass (compat/model), 16 pending implementation
+
 **Sandbox Phase 3 Testing Patterns (2026-07):**
 - Phase 3 adds 29 tests (82 total): scenario save/load/list/delete (16), seed (4), replay (4), integration (1), PRNG unit (5 including seededPrng)
 - `handleScenario` dispatches to save/load/list/delete sub-handlers; scenarios stored as JSON in `SCENARIO_DIR`
