@@ -5910,3 +5910,1070 @@ These are correct. The `create-release` action (or replacement) will need `conte
 - [x] PR template: Testing checklist + rebase guidance
 - [x] release.yml: Workflow logic sound, but deprecated action must be replaced
 
+# Design Proposal: Room Features System (Issue #345)
+
+**Author:** Elminster (Lead/Architect)  
+**Date:** 2026-04-08  
+**Issue:** #345 — Room features  
+**Related:** #44 — Contracts/Quest Engine  
+**Status:** Research & Design Complete — Awaiting Implementation Assignment
+
+---
+
+## Executive Summary
+
+This proposal defines the architecture for **room features** — interactive triggers within rooms that players can examine via `look <target>` commands. These features enable richer environmental storytelling, hidden lore, quest initiation, and interactive world-building beyond base room descriptions.
+
+**Key Points:**
+- **Scope:** Generic room feature system supporting arbitrary triggers per room
+- **Use cases:** Notes on walls, inscriptions, murals, environmental details, quest initiation triggers
+- **Command pattern:** `look <target>` dispatches to room feature if target matches; falls back to existing look behavior
+- **Data model:** JSONB column `features` on `zone_rooms` table (no new table needed)
+- **Quest integration:** Features can reference contract/quest IDs for initiation triggers
+- **Implementation effort:** 2-3 days (Drizzt or Jarlaxle), low risk
+
+---
+
+## Current State Analysis
+
+### 1. Room Data Model
+
+**Database schema** (`packages/server/src/db/migrations/001_schema.sql:342-356`):
+```sql
+CREATE TABLE zone_rooms (
+  id              UUID PRIMARY KEY,
+  zone_id         UUID NOT NULL REFERENCES zones(id) ON DELETE CASCADE,
+  slug            TEXT NOT NULL,
+  name            TEXT NOT NULL,
+  description     TEXT NOT NULL,
+  type            TEXT NOT NULL DEFAULT 'corridor',
+  properties      TEXT[] NOT NULL DEFAULT '{}',
+  loot_containers JSONB NOT NULL DEFAULT '[]',
+  hazards         JSONB NOT NULL DEFAULT '[]',
+  npcs            JSONB NOT NULL DEFAULT '[]',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uq_zone_room_slug UNIQUE (zone_id, slug)
+);
+```
+
+**TypeScript types** (`packages/shared/src/zone.ts:40-55`):
+```typescript
+export interface ZoneRoomDefinition {
+  id: string;
+  zoneId: string;
+  slug: string;
+  name: string;
+  description: string;
+  type: RoomType;
+  properties: RoomProperty[];
+  lootContainers: LootContainer[];
+  hazards: HazardPlaceholder[];
+  npcs: Array<{
+    creatureId: string;
+    spawnCount: number;
+    behavior?: string;
+  }>;
+}
+```
+
+**Observations:**
+- Rooms already support structured JSONB data for `loot_containers`, `hazards`, `npcs`
+- Pattern is established: JSONB columns for dynamic, schema-flexible content
+- `zone-adapter.ts` converts `ZoneRoomDefinition` → `Room` (runtime graph format)
+- Rooms are loaded once at zone instantiation, then held in memory as `Map<string, Room>`
+
+### 2. Current Look Command
+
+**Handler** (`packages/server/src/commands/handlers/look.ts`):
+- **No argument handling** — current `look` command ignores `ctx.args`
+- Displays: room description, exits, items, creatures, players, corpses
+- Returns a `CommandResult` with narrations and a room header
+- No logic for examining specific objects or targets
+
+**Parser** (`packages/server/src/commands/parser.ts:28`):
+- `l` alias → `look` (single-letter shorthand)
+- No parsing logic for multi-word targets (e.g., `look wooden sign`)
+- Args are preserved in `CommandMessage.args: string[]`
+
+**Command flow:**
+1. Player types `look` or `look <target>`
+2. `parseCommand()` → `{ verb: 'look', args: ['<target>'] }`
+3. `handleCommand('look', ctx)` calls `handleLook(ctx)`
+4. `handleLook()` currently ignores `ctx.args` entirely
+
+### 3. Feature-Room Pattern (Established Precedent)
+
+**Example: Stash Room** (`packages/server/src/commands/handlers/stash-command.ts`):
+- Feature-gated commands (`stash`, `store`) require `feature_stash` room type
+- Services injected into `CommandContext` (e.g., `ctx.stashService`)
+- Command handlers check context availability before executing
+- Pattern: feature rooms enable specific commands + inject feature-specific context
+
+**Example: Sandbox Room** (`packages/server/src/commands/handlers/sandbox.ts`):
+- Multiple room types (`feature_sandbox`, `feature_sandbox_arena`, `feature_sandbox_stats`)
+- Sub-commands route to different behaviors based on room type and args
+- Pattern: commands with sub-verbs dispatch on args
+
+**Key insight:** Room features need **no new room type** — they extend existing rooms with data, not behavior gates.
+
+### 4. Contract/Quest System (Currently Unimplemented)
+
+**Current state:**
+- `feature_contracts` room type exists in type definitions
+- No database schema for contracts/quests (#44 is marked `go:no`, Phase 4, no implementation)
+- ContractsList.tsx is a placeholder UI showing "PLANNED — PHASE 3"
+- Issue #44 was updated 2 hours ago with new scope: quest engine with multi-step objectives
+
+**Implications for room features:**
+- Room features can be **quest-agnostic** initially (just narration)
+- Schema should **reserve space** for future quest/contract IDs
+- When quest system lands, features can trigger quest initiation without schema migration
+
+---
+
+## Proposed Architecture
+
+### 1. Data Model: Room Features
+
+Add a `features` JSONB column to `zone_rooms`:
+
+**Migration** (`packages/server/src/db/migrations/009_room_features.sql`):
+```sql
+-- Add features column to zone_rooms
+ALTER TABLE zone_rooms
+  ADD COLUMN features JSONB NOT NULL DEFAULT '[]';
+
+-- Example: A note on the wall (narrative only)
+UPDATE zone_rooms SET features = '[
+  {
+    "id": "wall-note",
+    "keywords": ["note", "wall note", "parchment"],
+    "shortDescription": "A torn parchment is pinned to the wall.",
+    "longDescription": "The note reads: \"They watch from the water. Do not trust the reflections.\" The handwriting is erratic.",
+    "questId": null
+  }
+]'::jsonb
+WHERE zone_id = (SELECT id FROM zones WHERE slug = 'the-warrens')
+  AND slug = 'flooded-cellar';
+
+-- Example: An inscription that initiates a quest (future)
+UPDATE zone_rooms SET features = '[
+  {
+    "id": "altar-inscription",
+    "keywords": ["inscription", "altar", "runes"],
+    "shortDescription": "Ancient runes glow faintly on the altar.",
+    "longDescription": "The inscription reads: \"Speak the names of the drowned, and they shall answer.\" A chill runs through you.",
+    "questId": "quest_drowned_covenant"
+  }
+]'::jsonb
+WHERE zone_id = (SELECT id FROM zones WHERE slug = 'the-siltgate')
+  AND slug = 'shrine';
+```
+
+**TypeScript types** (extend `ZoneRoomDefinition` in `packages/shared/src/zone.ts`):
+```typescript
+export interface RoomFeature {
+  /** Unique ID within the room (e.g., 'wall-note', 'altar-inscription') */
+  id: string;
+  /** Keywords players can use to target this feature (e.g., ['note', 'parchment']) */
+  keywords: string[];
+  /** Inline description shown in base room description (optional) */
+  shortDescription?: string;
+  /** Full narration when player examines the feature */
+  longDescription: string;
+  /** Optional: quest/contract ID to initiate when examined (future) */
+  questId?: string | null;
+}
+
+export interface ZoneRoomDefinition {
+  // ... existing fields ...
+  features: RoomFeature[];
+}
+```
+
+**Runtime representation** (extend `Room` in `packages/shared/src/room-graph.ts`):
+```typescript
+export interface Room {
+  // ... existing fields ...
+  features?: RoomFeature[];
+}
+```
+
+**Adapter changes** (`packages/server/src/zones/zone-adapter.ts:45-58`):
+```typescript
+for (const zr of zoneRooms) {
+  const room: Room = {
+    id: zr.slug,
+    name: zr.name,
+    description: zr.description,
+    type: zr.type,
+    exits: new Map<Direction, string>(),
+    items: [...zr.lootContainers],
+    hazards: [...zr.hazards],
+    ...(zr.properties.length > 0 ? { properties: [...zr.properties] } : {}),
+    ...(zr.features?.length > 0 ? { features: [...zr.features] } : {}), // NEW
+  };
+  rooms.set(zr.slug, room);
+  slugToRoom.set(zr.slug, room);
+}
+```
+
+### 2. Command Flow: Enhanced Look Handler
+
+**Updated `handleLook()`** (`packages/server/src/commands/handlers/look.ts`):
+
+```typescript
+export function handleLook(ctx: CommandContext): CommandResult {
+  const { room, args } = ctx;
+
+  // Case 1: "look" with no target → show full room description (existing behavior)
+  if (args.length === 0) {
+    return showFullRoom(ctx);
+  }
+
+  // Case 2: "look <target>" → check room features
+  const target = args.join(' ').toLowerCase().trim();
+
+  if (room.features && room.features.length > 0) {
+    const match = room.features.find(f =>
+      f.keywords.some(kw => kw.toLowerCase() === target)
+    );
+
+    if (match) {
+      return examineFeature(ctx, match);
+    }
+  }
+
+  // Case 3: No feature match → fallback (future: examine items, creatures, players)
+  return {
+    narrations: [{
+      text: `You don't see anything called "${args.join(' ')}" here.`,
+      type: 'system',
+    }],
+  };
+}
+
+function showFullRoom(ctx: CommandContext): CommandResult {
+  const { room } = ctx;
+  const exitList = Array.from(room.exits.keys()).join(', ') || 'none';
+
+  const lines: string[] = [
+    room.description,
+    '',
+    `Exits: ${exitList}`,
+  ];
+
+  // ... existing creature, player, corpse, item logic ...
+
+  return {
+    narrations: [{ text: lines.join('\n'), type: 'room' }],
+    roomHeader: {
+      roomName: room.name,
+      roomSlug: room.id,
+      exits: Array.from(room.exits.keys()),
+      stability: ctx.stability,
+    },
+  };
+}
+
+function examineFeature(ctx: CommandContext, feature: RoomFeature): CommandResult {
+  const narrations: NarrationEntry[] = [
+    { text: feature.longDescription, type: 'room' },
+  ];
+
+  // Future: quest initiation logic
+  if (feature.questId) {
+    // TODO: Check if player has already started this quest
+    // TODO: Call quest system to initiate quest
+    // TODO: Add quest-started narration to result
+    narrations.push({
+      text: `(Quest initiation: ${feature.questId} — not yet implemented)`,
+      type: 'system',
+    });
+  }
+
+  return { narrations };
+}
+```
+
+**Key design decisions:**
+- **No ambiguity resolution:** If keywords overlap, first match wins (authoring responsibility)
+- **Exact keyword match:** `target === keyword` (case-insensitive), no fuzzy matching
+- **Multi-word support:** `args.join(' ')` allows `look wooden sign` to match keyword `"wooden sign"`
+- **Graceful degradation:** Unknown targets return a neutral error, not a parser rejection
+- **Future extensibility:** Fallback case can later dispatch to item/creature/player examination
+
+### 3. Feature Description Integration
+
+**Option A: Explicit in base description** (recommended for Phase 1):
+- Authoring: Add feature hint directly to `zone_rooms.description` field
+- Example: `"You're in a castle cellar. There is a note on the wall."`
+- Pro: Zero code changes, maximum control, works today
+- Con: Authors must manually coordinate description + feature keywords
+
+**Option B: Dynamic injection** (Phase 2+):
+- System: Append `feature.shortDescription` to room description if present
+- Example: Room description + `"\n\nYou notice: A torn parchment pinned to the wall."`
+- Pro: DRY — feature data drives both base description and examine text
+- Con: Requires `handleLook()` refactor to inject feature hints into room narration
+
+**Decision:** Start with Option A. Option B can be added incrementally without breaking changes.
+
+### 4. Quest Integration (Future)
+
+When the quest system lands (Issue #44), room features integrate as follows:
+
+**Quest initiation flow:**
+1. Player examines feature with `questId` set
+2. `examineFeature()` calls `ctx.questService?.tryInitiateQuest(questId, playerId)`
+3. Quest service checks prerequisites, player state, returns result
+4. If initiated: narration appended ("You feel a pull toward the depths…")
+5. If already active: narration reflects status ("You've already accepted this task.")
+6. If ineligible: narration explains ("You lack the reputation to take this contract.")
+
+**Required context injection** (when quest system exists):
+```typescript
+export interface CommandContext {
+  // ... existing fields ...
+  questService?: QuestService; // NEW — injected by ZoneRoom for all rooms
+}
+```
+
+**Schema compatibility:** The `questId` field is already reserved in `RoomFeature` — no migration needed.
+
+---
+
+## Implementation Plan
+
+### Phase 1: Core Feature System (2-3 days)
+
+**Agent:** Drizzt (Engine Dev) or Jarlaxle (Systems Dev)
+
+**Tasks:**
+1. **Migration:** Create `009_room_features.sql` with `ALTER TABLE` + seed examples
+2. **Types:** Add `RoomFeature` interface to `packages/shared/src/zone.ts`, extend `ZoneRoomDefinition` and `Room`
+3. **Adapter:** Update `zone-adapter.ts` to copy `features` from `ZoneRoomDefinition` → `Room`
+4. **Command:** Refactor `handleLook()` to dispatch on `args`, add `examineFeature()` helper
+5. **Tests:** Unit tests for keyword matching, multi-word targets, graceful fallback
+6. **Content:** Seed 3-5 example features across existing zones (Warrens, Siltgate)
+
+**Acceptance criteria:**
+- `look` with no args works as before
+- `look note` examines feature if keywords match
+- `look unknown` returns "You don't see anything called…"
+- Database stores features in JSONB, adapter loads them into runtime rooms
+- No quest initiation yet — just narration
+
+**Risk:** Low. Existing look command is simple, feature matching is deterministic, no cross-system dependencies.
+
+### Phase 2: Quest Initiation Hooks (depends on Issue #44)
+
+**Agent:** TBD (blocked on quest system design)
+
+**Tasks:**
+1. **Context:** Add `questService` to `CommandContext`, inject in `ZoneRoom.buildContext()`
+2. **Logic:** In `examineFeature()`, check `feature.questId`, call `questService.tryInitiateQuest()`
+3. **Narration:** Append quest-initiated messages to result
+4. **Tests:** Integration tests with mock quest service, verify initiation flow
+
+**Acceptance criteria:**
+- Examining feature with `questId` calls quest service
+- Quest service response reflected in narration
+- Players cannot double-initiate quests
+
+**Risk:** Medium. Depends on quest system API contract (not yet designed).
+
+### Phase 3: Enhanced Feature Types (optional, Phase 4+)
+
+**Potential extensions:**
+- **Interactive features:** `use altar`, `activate lever` → trigger room state changes
+- **Conditional features:** Show/hide features based on quest state or faction rep
+- **Multi-stage features:** Examining feature multiple times reveals more info
+- **Clickable UI:** Frontend renders feature keywords as clickable links in room description
+
+**Agent:** TBD (future work, not in scope for #345)
+
+---
+
+## Design Rationale & Alternatives Considered
+
+### Why JSONB column instead of new table?
+
+**Decision:** JSONB column `features` on `zone_rooms`.
+
+**Rationale:**
+- Features are **tightly coupled to rooms** — no reuse across rooms, no need for normalization
+- Existing precedent: `loot_containers`, `hazards`, `npcs` all use JSONB
+- Query pattern: Load entire zone bundle once, hold in memory → no N+1 queries
+- Schema flexibility: Authors can add custom fields (e.g., `"discoverable": true`) without migrations
+
+**Alternative rejected:** Separate `zone_room_features` table with foreign key to `zone_rooms`.
+- Pro: Normalized, easier to query all features across zones
+- Con: Join required on zone load, slower cold start, more complex adapter logic
+- Con: No use case for querying features independently of rooms
+
+### Why exact keyword matching instead of fuzzy/partial?
+
+**Decision:** Exact match (case-insensitive) on full keyword string.
+
+**Rationale:**
+- **Predictability:** Authors control exactly what triggers the feature
+- **No ambiguity:** `look note` matches `"note"`, not `"notebook"` or `"denote"`
+- **Simplicity:** No Levenshtein distance, no substring search, no regex
+- **Consistency:** Aligns with existing command patterns (`attack goblin` requires exact name)
+
+**Alternative rejected:** Fuzzy matching (substring, partial match, did-you-mean).
+- Pro: More forgiving UX
+- Con: Unpredictable for authors, harder to test, prone to unintended matches
+- Example: `look sign` might match both `"wooden sign"` and `"insignia"` → which wins?
+
+**Future extension:** If needed, add `"aliases"` field to `RoomFeature` for common misspellings.
+
+### Why start with narration-only, delay quest integration?
+
+**Decision:** Phase 1 delivers examine-and-read features with no quest logic.
+
+**Rationale:**
+- **Quest system doesn't exist yet** (#44 is Phase 4, currently `go:no`)
+- **Fast delivery:** Core feature system can ship in 2-3 days, unblocked
+- **Prove the pattern:** Validate keyword matching, content authoring, UX before adding complexity
+- **Incremental risk:** Phase 1 is low-risk, Phase 2 (quest hooks) inherits stable foundation
+
+**Alternative rejected:** Wait for quest system, ship both at once.
+- Pro: Fully integrated feature set
+- Con: Delays useful content tool by weeks/months, blocks world-building work
+
+---
+
+## Dependencies & Risks
+
+### Dependencies
+
+**Upstream (blocking this work):**
+- None. Room features are independent of other systems.
+
+**Downstream (blocked by this work):**
+- Issue #44 (Quest Engine) — Quest initiation via room features requires this system
+- Content authoring — Laeral/Bruenor can begin adding interactive lore once Phase 1 lands
+
+### Risks
+
+**Low risk:**
+- Schema change is additive (new column, no data loss)
+- Command flow is simple (no state changes, just narration dispatch)
+- No cross-room interactions, no multiplayer concerns
+- Test coverage straightforward (keyword matching + fallback)
+
+**Medium risk (Phase 2 only):**
+- Quest system API is undefined — integration contract may shift
+- Mitigation: Design `questService` interface now, stub implementation for tests
+
+**No risk:**
+- Performance: Features loaded once per zone, held in memory
+- Backwards compatibility: Existing rooms have `features = []`, no behavior change
+- Migration: `DEFAULT '[]'` makes rollout non-breaking
+
+---
+
+## Content Authoring Workflow
+
+Once Phase 1 lands, content creators (Laeral, Bruenor) can add features via SQL:
+
+**Example: Add a mural in the Siltgate shrine**
+```sql
+UPDATE zone_rooms
+SET features = features || '[
+  {
+    "id": "shrine-mural",
+    "keywords": ["mural", "painting", "fresco"],
+    "shortDescription": "A faded mural depicts a procession of robed figures.",
+    "longDescription": "The mural shows robed figures descending into dark water, their faces serene. At the center, a crowned figure holds a black pearl. The paint is centuries old, but the pearl seems to shimmer."
+  }
+]'::jsonb
+WHERE zone_id = (SELECT id FROM zones WHERE slug = 'the-siltgate')
+  AND slug = 'shrine';
+```
+
+**Example: Update room description to reference the mural**
+```sql
+UPDATE zone_rooms
+SET description = 'An altar rises from black water in the center of a domed chamber. Strange symbols pulse with faint violet light along the walls. A faded mural covers the eastern wall.'
+WHERE zone_id = (SELECT id FROM zones WHERE slug = 'the-siltgate')
+  AND slug = 'shrine';
+```
+
+**Future: Admin UI** (Phase 4+, out of scope for #345):
+- Zone Designer could render features as editable list in room detail panel
+- WYSIWYG editor for `longDescription` with ANSI preview
+- Keyword validation (warn if keywords overlap across features in same room)
+
+---
+
+## Testing Strategy
+
+**Unit tests** (`packages/server/src/__tests__/room-features.test.ts`):
+- Keyword matching: exact match, case-insensitive, multi-word
+- Fallback behavior: unknown target returns error narration
+- No-args behavior: existing `look` works unchanged
+- Edge cases: empty keywords array, duplicate keywords, null descriptions
+
+**Integration tests** (`packages/server/src/__tests__/feature-examine-flow.test.ts`):
+- Load zone with features, player examines feature, verify narration
+- Multiple features in same room, verify correct one returned
+- Feature in one room doesn't leak to adjacent room
+
+**Regression tests:**
+- Existing `look` command tests pass unchanged
+- Zones with no features behave identically to today
+
+**Future (Phase 2):**
+- Quest initiation: Mock quest service, verify `tryInitiateQuest()` called with correct params
+- Quest state: Verify repeated examine reflects quest status (not started / active / completed)
+
+---
+
+## Open Questions
+
+1. **Should features be discoverable or always visible?**
+   - Current proposal: Features mentioned in room description (explicit)
+   - Alternative: Hidden features require `search` command or passive Perception check
+   - Decision: Start explicit, add hidden features in Phase 3 if needed
+
+2. **Should examining a feature consume an action/tick?**
+   - Current proposal: No — `look <target>` is instant, like `look`
+   - Alternative: Interactive features (use/activate) could take a tick
+   - Decision: Narration is free, interactions (future) cost time
+
+3. **Should features support audio cues / LLM narration?**
+   - Current proposal: Static text only (DM voice)
+   - Alternative: Features trigger LLM narration for flavour variation
+   - Decision: Static for Phase 1 (consistent, testable), LLM in Phase 3 if desired
+
+4. **Should the frontend render features as clickable?**
+   - Current proposal: Text-only, players type `look <target>`
+   - Alternative: Parse room narration, render keywords as `<button>` or `<a>`
+   - Decision: Backend-ready, frontend enhancement is Phase 4 polish
+
+---
+
+## Agent Assignment Recommendation
+
+**Phase 1 implementation (2-3 days):**
+
+**Primary candidate:** Jarlaxle (Systems Dev)
+- Owns content pipeline (migrations, zone seeding, zone-adapter)
+- Experience with JSONB schema extensions (npcs, hazards)
+- Can coordinate with Laeral/Bruenor on example content
+
+**Alternative candidate:** Drizzt (Engine Dev)
+- Owns command system (look.ts, parser.ts)
+- Deep knowledge of command flow and context building
+- Can quickly extend `handleLook()` with feature dispatch
+
+**Decision:** Either agent is qualified. Recommend Jarlaxle if content seeding is priority, Drizzt if command polish is priority.
+
+**Phase 2 implementation (quest hooks):**
+- Blocked on Issue #44 quest system design
+- Agent TBD based on who owns quest service implementation
+- Integration risk is low if Phase 1 interface is stable
+
+---
+
+## Summary
+
+Room features are a **high-value, low-risk** addition to the world-building toolkit. The JSONB schema pattern is proven, the command flow is simple, and the system is fully backwards-compatible. Phase 1 delivers immediate content authoring capabilities with no external dependencies. Phase 2 (quest integration) slots in cleanly once the quest system exists.
+
+**Recommendation:** Approve for implementation. Assign to Jarlaxle or Drizzt for 2-3 day sprint.
+
+---
+
+# Live Rooms Admin Page — Research & Design Proposal
+
+**Issue:** #344  
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-01-20  
+**Status:** Research Complete — Awaiting Approval
+
+---
+
+## Executive Summary
+
+Issue #344 requests an admin page for **Live Rooms** (zone room management, NOT Colyseus room management) that allows admins to:
+1. See which zone rooms are currently live/active
+2. Send broadcast messages to a specific room
+3. Spawn new creatures in a specific room
+4. Teleport a player to a specific room
+
+**Current State:** We already have LiveRooms.tsx and LiveRoomDetail.tsx pages that handle Colyseus room instance management (pause/resume, creature spawning). The requested features require **zone-specific room management** (individual rooms within a zone instance), which is a different concern.
+
+**Key Finding:** The request conflates two concepts:
+- **Colyseus rooms** (zone instances, e.g., `zone:the-refuge`) — already managed by LiveRoomDetail.tsx
+- **Zone rooms** (individual rooms within a zone's room graph, e.g., `hearth`, `stash-alcove`) — NOT currently exposed in admin UI
+
+This proposal clarifies the distinction and recommends a design that enhances the existing LiveRoomDetail page rather than creating a separate page.
+
+---
+
+## 1. Current Admin Dashboard Structure
+
+### 1.1 Existing Admin Pages
+
+**Pattern:** List page → Detail page with forms
+
+Examples:
+- `/admin/creatures` → `/admin/creatures/:id` — Content CRUD
+- `/admin/items` → `/admin/items/:id` — Content CRUD
+- `/admin/zones` → `/admin/zones/:slug` → Zone Designer — Zone content editing
+- `/admin/live-rooms` → `/admin/live-rooms/:roomId` — Live Colyseus room management
+
+**AdminLayout.tsx Navigation:**
+- Dashboard
+- **Content** section: Creatures, Items, Modifiers, Loot Tables, Skills, Factions, Rooms, Zones, Narrative, Balance, Contracts, Recipes
+- **System** section: **Live Rooms**, Deploy, Audit Log, Users
+
+**Current Live Rooms pages:**
+- **LiveRooms.tsx** (`/admin/live-rooms`) — Lists all active Colyseus room instances with Room ID, Type, Players, Status, Created timestamp
+- **LiveRoomDetail.tsx** (`/admin/live-rooms/:roomId`) — Shows detailed view of a single Colyseus room instance with:
+  - Room Status (lifecycle, stability, collapse timer, tick, connected clients, player count, paused state)
+  - Creatures list (name, ID, behavior state, HP, current room ID)
+  - Players list (session ID, current room ID, inventory count, weight)
+  - Actions: Pause/Resume, Spawn Creature (with modal for template + target room selection)
+
+### 1.2 API Structure
+
+**Admin API endpoints** (packages/server/src/admin/routes.ts):
+- `GET /admin/api/rooms` — List all Colyseus room instances
+- `GET /admin/api/rooms/:roomId` — Get Colyseus room detail
+- `POST /admin/api/rooms/:roomId/pause` — Pause Colyseus room tick
+- `POST /admin/api/rooms/:roomId/resume` — Resume Colyseus room tick
+- `POST /admin/api/rooms/:roomId/spawn` — Spawn creature in a zone (with optional `targetRoomId` field for zone room targeting)
+
+**Client API wrappers** (packages/client/src/lib/admin-api.ts):
+- `fetchLiveRooms()` → `{ rooms: LiveRoomSummary[] }`
+- `fetchLiveRoomDetail(roomId)` → `LiveRoomDetail`
+- `pauseRoom(roomId)` → `{ roomId, paused }`
+- `resumeRoom(roomId)` → `{ roomId, paused }`
+- `spawnInRoom(roomId, type, templateId, targetRoomId?)` → `SpawnResult`
+
+---
+
+## 2. Zone Room vs Colyseus Room Clarification
+
+**Colyseus Room (Already Managed):**
+- A live server-side room instance (e.g., `zone:the-refuge`, Colyseus room ID `abc-123-xyz`)
+- Managed by ZoneRoom.ts or RefugeRoom.ts
+- Has players connected via WebSocket
+- Has lifecycle state (seeding, open, active, destabilizing, collapse)
+- Can be paused/resumed (stops game tick)
+- Current admin page: LiveRoomDetail.tsx
+
+**Zone Room (NOT Currently in Admin UI):**
+- An individual room within a zone's room graph (e.g., `hearth`, `stash-alcove`, `training-grounds`)
+- Defined in `zone_rooms` table with slug, name, description, features
+- Connected via exits in `zone_exits` table
+- Players navigate between zone rooms using directional commands (`go north`)
+- Creatures occupy specific zone rooms (tracked by `currentRoomId` field)
+- **No direct admin UI for zone room management currently exists**
+
+**Issue #344 Request Analysis:**
+- "See which zone rooms are currently live/active" — Ambiguous: Could mean either Colyseus rooms (already visible) OR zone rooms with players/creatures in them (not currently exposed)
+- "Send broadcast messages to a specific room" — Implies zone room targeting (broadcast to players in `hearth`, not entire zone instance)
+- "Spawn new creatures in a specific room" — Already implemented! `spawnInRoom` accepts `targetRoomId` parameter
+- "Teleport a player to a specific room" — Implies zone room targeting (move player to `stash-alcove` within current zone)
+
+**Interpretation:** The request is for **zone-room-level management within a live Colyseus room instance**. This is an enhancement to LiveRoomDetail.tsx, not a new page.
+
+---
+
+## 3. Proposed Solution: Enhance LiveRoomDetail.tsx
+
+### 3.1 Current LiveRoomDetail Features
+- ✅ View room status (lifecycle, stability, tick, paused state)
+- ✅ View creatures in the zone (with current room ID shown)
+- ✅ View players in the zone (with current room ID shown)
+- ✅ Pause/resume zone tick
+- ✅ Spawn creatures (with optional target room ID)
+
+### 3.2 Missing Features (From Issue #344)
+- ❌ **Explicit zone room list** — No visual representation of the zone's room graph
+- ❌ **Room occupancy view** — Can't easily see "which rooms have players/creatures right now"
+- ❌ **Broadcast to specific room** — No API endpoint or UI for this
+- ❌ **Teleport player to room** — No API endpoint or UI for this
+
+### 3.3 Proposed Enhancements
+
+#### Enhancement 1: Zone Room Graph Visualization
+**Location:** New section in LiveRoomDetail.tsx below "Room Status"
+
+**UI Components:**
+- Tabbed interface: "Room Graph" | "Creatures" | "Players"
+- **Room Graph tab:**
+  - Table view of all zone rooms (fetched from zone definition)
+  - Columns: Room Name, Slug, Players (count), Creatures (count), Features (badges for stash, expedition-board, etc.)
+  - Click row to expand/collapse room detail:
+    - Player list in this room (session ID, inventory)
+    - Creature list in this room (name, HP, behavior)
+    - Actions: "Broadcast to Room", "Spawn Creature Here", "Teleport Player Here"
+
+**Data Source:**
+- Zone definition (rooms + exits) — fetch via `GET /admin/api/zones/:slug`
+- Live room detail (players, creatures) — already fetched via `fetchLiveRoomDetail(roomId)`
+- **Challenge:** Current `LiveRoomDetail` doesn't include zone slug, so we can't fetch the zone definition
+  - **Solution:** Add `zoneSlug` field to `AdminZoneDetail` response in admin/routes.ts
+
+**API Changes Required:**
+- Modify `GET /admin/api/rooms/:roomId` to include `zoneSlug: string` in response for zone rooms
+
+#### Enhancement 2: Broadcast Message to Room
+**UI:** New button in room detail row actions: "Broadcast to Room"
+
+**Modal:**
+- Title: "Broadcast Message to [Room Name]"
+- Text area: Message input (max 500 chars)
+- Checkbox: "Send as system message" (default checked)
+- Buttons: Cancel | Send
+
+**New API Endpoint:**
+```
+POST /admin/api/rooms/:roomId/broadcast
+Body: { targetRoomId: string, message: string, type: 'system' | 'admin' }
+Response: { success: boolean, message: string }
+```
+
+**Server Implementation (admin/routes.ts):**
+```typescript
+router.post('/admin/api/rooms/:roomId/broadcast', adminAuth, async (req, res) => {
+  const room = safeGetRoom(req.params.roomId);
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  
+  const { targetRoomId, message, type = 'system' } = req.body;
+  if (!targetRoomId || !message) {
+    return res.status(400).json({ error: 'Missing targetRoomId or message' });
+  }
+  
+  // Call ZoneRoom method to broadcast to specific room
+  const zoneRoom = room as any; // Cast to ZoneRoom
+  if (typeof zoneRoom.broadcastToRoom === 'function') {
+    zoneRoom.broadcastToRoom(targetRoomId, {
+      narrations: [{ text: `[ADMIN] ${message}`, type }]
+    });
+    res.json({ success: true, message: 'Broadcast sent' });
+  } else {
+    res.status(400).json({ error: 'Room does not support room-specific broadcasts' });
+  }
+});
+```
+
+**ZoneRoom.ts Changes:**
+- `broadcastToRoom()` method already exists! (line 1133)
+- No changes needed — endpoint just needs to call it
+
+#### Enhancement 3: Teleport Player to Room
+**UI:** New button in room detail row actions: "Teleport Player Here"
+
+**Modal:**
+- Title: "Teleport Player to [Room Name]"
+- Dropdown: Select player (shows session ID or character name if available)
+- Checkbox: "Notify player" (default checked)
+- Buttons: Cancel | Teleport
+
+**New API Endpoint:**
+```
+POST /admin/api/rooms/:roomId/teleport
+Body: { sessionId: string, targetRoomId: string, notify: boolean }
+Response: { success: boolean, message: string }
+```
+
+**Server Implementation (admin/routes.ts):**
+```typescript
+router.post('/admin/api/rooms/:roomId/teleport', adminAuth, async (req, res) => {
+  const room = safeGetRoom(req.params.roomId);
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  
+  const { sessionId, targetRoomId, notify = true } = req.body;
+  if (!sessionId || !targetRoomId) {
+    return res.status(400).json({ error: 'Missing sessionId or targetRoomId' });
+  }
+  
+  const zoneRoom = room as any; // Cast to ZoneRoom
+  const player = zoneRoom.players?.get(sessionId);
+  if (!player) {
+    return res.status(404).json({ error: 'Player not found in this room' });
+  }
+  
+  // Validate target room exists
+  const targetRoom = zoneRoom.roomGraph?.rooms?.get(targetRoomId);
+  if (!targetRoom) {
+    return res.status(400).json({ error: 'Target room not found in zone graph' });
+  }
+  
+  // Update player location
+  const previousRoomId = player.currentRoomId;
+  player.currentRoomId = targetRoomId;
+  
+  // Notify player if requested
+  if (notify) {
+    const client = room.clients.find(c => c.sessionId === sessionId);
+    if (client) {
+      const { MessageTypes } = await import('@ellmud/shared');
+      client.send(MessageTypes.NARRATE, {
+        text: `[ADMIN] You have been teleported to ${targetRoom.name}.`,
+        type: 'system',
+        timestamp: Date.now(),
+      });
+    }
+  }
+  
+  // Broadcast movement (reuse existing ZoneRoom logic)
+  if (typeof zoneRoom.broadcastPlayerMovement === 'function') {
+    zoneRoom.broadcastPlayerMovement(sessionId, previousRoomId, targetRoomId, null);
+  }
+  if (typeof zoneRoom.broadcastRoomOccupantsUpdate === 'function') {
+    zoneRoom.broadcastRoomOccupantsUpdate(previousRoomId);
+    zoneRoom.broadcastRoomOccupantsUpdate(targetRoomId);
+  }
+  
+  res.json({ 
+    success: true, 
+    message: `Teleported player to ${targetRoom.name}` 
+  });
+});
+```
+
+**ZoneRoom.ts Changes:**
+- `broadcastPlayerMovement()` method already exists (line 1639) — private, needs to be made accessible
+- **Recommendation:** Add public method `adminTeleportPlayer(sessionId, targetRoomId)` to ZoneRoom.ts that encapsulates the logic above
+
+#### Enhancement 4: Quick Actions Sidebar Improvements
+**Current:** Quick Info card shows Room Type, Full ID, Paused state
+
+**Proposed Addition:**
+- "Quick Actions" card below Quick Info
+- Buttons:
+  - "View Zone Graph" → Opens room graph tab
+  - "Broadcast to All" → Opens broadcast modal (no target room, broadcasts to entire zone)
+  - "Spawn Creature" → Already exists, move to this card for consistency
+
+---
+
+## 4. Work Breakdown
+
+### Frontend Work (Regis)
+1. **LiveRoomDetail.tsx enhancements:**
+   - Add zone slug field to LiveRoomDetail interface
+   - Add "Room Graph" tab with table view of zone rooms
+   - Add room detail expansion with player/creature lists
+   - Add "Broadcast to Room" button + modal
+   - Add "Teleport Player Here" button + modal
+   - Add Quick Actions sidebar card
+2. **admin-api.ts additions:**
+   - Add `broadcastToRoom(roomId, targetRoomId, message, type)` function
+   - Add `teleportPlayer(roomId, sessionId, targetRoomId, notify)` function
+3. **Zone data fetching:**
+   - Add logic to fetch zone definition when room is a zone instance
+   - Handle non-zone rooms gracefully (hide room graph tab)
+
+**Estimated LOC:** +300 lines (mostly UI components, modals, state management)
+
+### Backend Work (Jarlaxle + Drizzt)
+1. **Admin routes (Jarlaxle):**
+   - Add `zoneSlug` field to `AdminZoneDetail` response in `GET /admin/api/rooms/:roomId`
+   - Add `POST /admin/api/rooms/:roomId/broadcast` endpoint
+   - Add `POST /admin/api/rooms/:roomId/teleport` endpoint
+2. **ZoneRoom.ts (Drizzt):**
+   - Add public `adminTeleportPlayer(sessionId, targetRoomId)` method
+   - Consider making `broadcastToRoom()` public (currently private)
+   - Add validation for room existence before teleporting
+
+**Estimated LOC:** +80-100 lines (admin routes + ZoneRoom methods)
+
+### Architecture Work (Elminster)
+**None required** — This enhancement fits within existing patterns:
+- Admin routes already handle room management
+- ZoneRoom already has broadcast and movement logic
+- Client-server contract already established for admin operations
+
+### Testing (Minsc)
+1. Add integration tests for new admin endpoints:
+   - Test broadcast to specific room
+   - Test player teleportation
+   - Test validation (room not found, player not found)
+2. Add client tests for new UI components:
+   - Room graph table rendering
+   - Broadcast modal interaction
+   - Teleport modal interaction
+
+**Estimated LOC:** +150 lines (test cases)
+
+---
+
+## 5. Design Mockup (Wireframe Description)
+
+### LiveRoomDetail.tsx Layout (Enhanced)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ [← Back]  Zone — abc-123…                          [🔄] [⏸️ Pause] │
+├─────────────────────────────────────────────────────────────────┤
+│ ✅ Spawn succeeded                                               │
+├─────────────────────────────────────────────────────────────────┤
+│ ┌──────────────────────────────┐ ┌──────────────────────────┐  │
+│ │ Room Status                  │ │ Quick Info               │  │
+│ │ Lifecycle: active            │ │ Room Type: zone          │  │
+│ │ Stability: 97%               │ │ Full ID: abc-123…        │  │
+│ │ Tick: 1234                   │ │ Paused: No               │  │
+│ └──────────────────────────────┘ └──────────────────────────┘  │
+│                                                                   │
+│ ┌──────────────────────────────┐ ┌──────────────────────────┐  │
+│ │ Room Graph | Creatures | … │ │ Quick Actions            │  │
+│ ├──────────────────────────────┤ │ [View Zone Graph]        │  │
+│ │ Room Name   Players Creatures│ │ [Broadcast to All]       │  │
+│ │ ────────────────────────────│ │ [Spawn Creature]         │  │
+│ │ Hearth          2      0    │ └──────────────────────────┘  │
+│ │ Stash Alcove    1      0    │                               │
+│ │ Training…       0      3    │ ⏸️ Tick halted — resume to    │
+│ │   [Expand ▼]                │  continue simulation          │
+│ │   Players: session-abc…     │                               │
+│ │   Creatures:                │                               │
+│ │     • Goblin (12/15 HP)     │                               │
+│ │     • Orc (28/30 HP)        │                               │
+│ │   Actions:                  │                               │
+│ │     [Broadcast to Room]     │                               │
+│ │     [Spawn Creature Here]   │                               │
+│ │     [Teleport Player Here]  │                               │
+│ │ Market          0      0    │                               │
+│ └──────────────────────────────┘                               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Interaction Flow:**
+1. Admin navigates to `/admin/live-rooms/:roomId`
+2. Page fetches both Colyseus room detail AND zone definition (if zone room)
+3. "Room Graph" tab shows table of zone rooms with live occupancy counts
+4. Admin clicks row to expand → sees players/creatures in that room
+5. Admin clicks "Broadcast to Room" → modal opens, admin types message, click Send
+6. Admin clicks "Teleport Player Here" → modal opens, admin selects player, click Teleport
+7. Feedback toast appears at top of page confirming action
+
+---
+
+## 6. Alternative Approaches Considered
+
+### Alternative 1: Separate "Zone Room Manager" Page
+**Pros:** Clean separation of concerns, dedicated UI for zone room management
+**Cons:** 
+- Duplicates Colyseus room selection (need to pick room first)
+- Adds navigation step (LiveRooms → LiveRoomDetail → Zone Room Manager)
+- Splits related functionality (pause/resume in one page, broadcast in another)
+**Verdict:** Rejected — unnecessary navigation complexity
+
+### Alternative 2: Add Zone Room Management to Zone Designer
+**Pros:** Zone Designer already shows room graph, could add "Live View" toggle
+**Cons:**
+- Zone Designer is for content editing (zones, rooms, exits), not runtime operations
+- Mixes content CRUD with live operations (same issue that led to LiveRooms split)
+- Zone Designer doesn't know which Colyseus room instance to target
+**Verdict:** Rejected — wrong conceptual layer
+
+### Alternative 3: Room-First Navigation (Instead of Colyseus-Room-First)
+**Pros:** Could show all live rooms across all zones in one table
+**Cons:**
+- Loses Colyseus room context (lifecycle, stability, pause/resume)
+- Hard to understand "which zone instance is this room in?"
+- Requires complex filtering UI ("show only rooms in zone X")
+**Verdict:** Rejected — Colyseus room is the right starting point
+
+---
+
+## 7. Open Questions
+
+1. **Should broadcast messages be logged?** Current spawn operations are not logged. Should broadcast/teleport operations be added to audit log?
+   - **Recommendation:** YES — add audit log entries for broadcast and teleport actions
+
+2. **Should zone room graph be cached?** Fetching zone definition on every LiveRoomDetail load might be slow for large zones.
+   - **Recommendation:** Add client-side caching with React Query or SWR (future optimization)
+
+3. **Should we expose room features in the room graph table?** (e.g., show "Stash" badge for stash rooms)
+   - **Recommendation:** YES — helps admins understand room purpose at a glance
+
+4. **Should teleport trigger `look` command?** When player is teleported, should they automatically receive room description?
+   - **Recommendation:** YES — send room header + description via existing `handleLook` logic
+
+5. **Should we support multi-player teleport?** (select multiple players, teleport all to same room)
+   - **Recommendation:** NO for Phase 1 — single-player teleport is sufficient for debugging
+
+---
+
+## 8. Success Criteria
+
+**This enhancement is successful when:**
+1. Admins can view a list of zone rooms within a live Colyseus room instance
+2. Admins can see which players and creatures are in each zone room
+3. Admins can send broadcast messages to a specific zone room
+4. Admins can teleport a player to a specific zone room
+5. All actions provide immediate feedback (success/error toasts)
+6. No new navigation pages are added (enhancement to existing LiveRoomDetail page)
+
+---
+
+## 9. Rollout Plan
+
+### Phase 1: Foundation (Backend + API)
+- Add `zoneSlug` to LiveRoomDetail response
+- Add `POST /admin/api/rooms/:roomId/broadcast` endpoint
+- Add `POST /admin/api/rooms/:roomId/teleport` endpoint
+- Add `adminTeleportPlayer()` method to ZoneRoom.ts
+
+### Phase 2: Frontend UI
+- Add room graph tab to LiveRoomDetail.tsx
+- Add broadcast modal + integration
+- Add teleport modal + integration
+- Add Quick Actions sidebar
+
+### Phase 3: Polish
+- Add audit log entries
+- Add loading states and error handling
+- Add room feature badges
+- Add tests
+
+**Estimated Timeline:**
+- Phase 1: 2-3 days (Jarlaxle + Drizzt)
+- Phase 2: 3-4 days (Regis)
+- Phase 3: 1-2 days (Regis + Minsc)
+- **Total: 6-9 days**
+
+---
+
+## 10. Recommendation
+
+**Proceed with this proposal** — Enhance LiveRoomDetail.tsx with zone room management rather than creating a separate page. This keeps related functionality together, reduces navigation complexity, and leverages existing UI patterns.
+
+**Next Steps:**
+1. Get approval from Elminster (Architecture) and dkirby-ms (Product)
+2. Create backend tickets for Jarlaxle (admin routes) and Drizzt (ZoneRoom methods)
+3. Create frontend ticket for Regis (LiveRoomDetail enhancements)
+4. Update issue #344 with clarified scope and link to this proposal
+
+---
+
+## Appendix A: Existing Code References
+
+**LiveRooms.tsx:** packages/client/src/pages/admin/LiveRooms.tsx (182 lines)  
+**LiveRoomDetail.tsx:** packages/client/src/pages/admin/LiveRoomDetail.tsx (667 lines)  
+**admin-api.ts:** packages/client/src/lib/admin-api.ts (Live room section: lines 172-251)  
+**admin/routes.ts:** packages/server/src/admin/routes.ts (lines 45-604 for room endpoints)  
+**ZoneRoom.ts:** packages/server/src/rooms/ZoneRoom.ts (lines 1133, 1639, 2342 for broadcast methods)  
+**teleport command:** packages/server/src/commands/handlers/teleport.ts (64 lines, dev-mode only)
+
+---
+
+## Appendix B: Related Issues & PRs
+
+- **Issue #137 / PR #147** — Orphan endpoint finalization (pause/resume/spawn implemented)
+- **Issue #309** — Faction-based entry routing (established zone slug patterns)
+- **Issue #317** — Zone designer portal connections (established inter-zone patterns)
+
+---
+
+**End of Proposal**

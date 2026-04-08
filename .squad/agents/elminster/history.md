@@ -2276,3 +2276,24 @@ The `continue-on-error: true` flag allows the workflow to proceed even if `npm r
 - GitHub Release as artifact repository (not relying on npm publish for game server) aligns with Docker deployment model
 
 **Decision File:** `.squad/decisions/inbox/elminster-pr-350-review.md` (full detailed review, 8900+ words, ready for team reference)
+
+### 2026-04-08: Room Features Architecture Proposal (Issue #345)
+- **Task:** Research and design proposal for room features system — interactive triggers in rooms that players can examine via `look <target>` commands.
+- **Analysis scope:** Current room data model (zone_rooms schema, ZoneRoomDefinition types), look command implementation (no arg handling today), feature-room pattern precedent (stash, sandbox, board), contract/quest system status (planned Phase 4, not yet implemented).
+- **Data model decision:** Add JSONB column `features` to `zone_rooms` table. Follows established precedent (loot_containers, hazards, npcs all use JSONB). No new table needed — features are tightly coupled to rooms, no cross-room reuse, loaded once per zone.
+- **Feature schema:** `{ id, keywords[], shortDescription?, longDescription, questId? }`. Keywords enable multi-word matching (`look wooden sign`). `questId` reserves space for future quest initiation without requiring migration.
+- **Command flow decision:** Refactor `handleLook(ctx)` to dispatch on `args.length`. No args → full room (existing behavior). With args → exact keyword match on room features → fallback to "not found" error. Clean separation: `showFullRoom()` + `examineFeature()` helpers.
+- **Keyword matching:** Exact match (case-insensitive), `args.join(' ')` for multi-word, first match wins. No fuzzy matching (predictable for authors, testable, no ambiguity). Rejected alternative: substring/partial matching (prone to unintended overlaps, unpredictable).
+- **Quest integration:** Phase 2 work, blocked on Issue #44 (quest engine, currently `go:no` Phase 4). Schema reserves `questId` field now. When quest system lands, `examineFeature()` calls `ctx.questService?.tryInitiateQuest(questId)` and appends narration. Clean integration point, no rework needed.
+- **Feature description strategy:** Phase 1 uses explicit authoring (add hint to room description: "There is a note on the wall"). Phase 2+ could inject `feature.shortDescription` dynamically. Decision: Start explicit (works today, zero code), add injection later if valuable.
+- **Alternative rejected: Separate table:** `zone_room_features` table with FK to zone_rooms would normalize data but require join on zone load, add complexity to adapter, no query benefit (features only accessed via room).
+- **Alternative rejected: Wait for quest system:** Ship narration-only features now (2-3 days), add quest hooks later. Rationale: Unblock content authoring, prove pattern, incremental risk, quest system is months away.
+- **Risk assessment:** Low. Schema change is additive (DEFAULT '[]'), command flow is simple (no state, no multiplayer concerns), no external dependencies for Phase 1. Medium risk for Phase 2 (quest API undefined), mitigated by interface design now.
+- **Implementation plan:** Phase 1 (2-3 days, Drizzt or Jarlaxle): Migration + types + adapter + command refactor + tests + seed examples. Phase 2 (depends on #44): Quest service integration, context injection, narration logic. Phase 3+ (optional): Hidden features, interactive verbs (use/activate), clickable UI, LLM narration.
+- **Agent recommendation:** Jarlaxle (owns content pipeline, zone-adapter, JSONB precedent) or Drizzt (owns command system, look.ts, context building). Either qualified, recommend Jarlaxle if content seeding is priority.
+- **Content authoring:** SQL updates to add features, coordinate room description changes. Future: Admin UI in Zone Designer (editable feature list, WYSIWYG editor, keyword validation).
+- **Testing strategy:** Unit tests (keyword matching, fallback, edge cases), integration tests (load zone, examine feature, verify narration), regression tests (existing look unchanged). Quest tests in Phase 2 with mock service.
+- **Key learnings:** Established JSONB pattern works for room extensions. Exact keyword matching is simpler and more predictable than fuzzy. Feature-as-narration (Phase 1) + quest-hooks (Phase 2) is clean separation of concerns. Reserving schema fields for future systems avoids migrations.
+- **Deliverable:** Full proposal written to `.squad/decisions/inbox/elminster-room-features-proposal.md` (7800+ words, 24 code examples, migration SQL, TypeScript interfaces, implementation plan, risk analysis, authoring workflow).
+
+---
