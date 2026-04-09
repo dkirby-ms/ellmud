@@ -852,7 +852,7 @@ export default function ZoneExploration() {
       <ChatPanel
         isOpen={chatOpen}
         onClose={() => setChatOpen(false)}
-        context={isHub ? "refuge" : "zone"}
+        context={isHub ? "hub" : "zone"}
         onSendMessage={sendChatMessage}
       />
 

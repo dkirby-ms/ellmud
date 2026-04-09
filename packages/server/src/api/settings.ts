@@ -141,7 +141,7 @@ export function createSettingsRouter({ authService }: { authService: AuthService
         return;
       }
 
-      const settings = await repo().upsertSettings(playerId, result.value);
+      const settings = await repo().upsertSettings(playerId, result.value as Record<string, unknown>);
       res.status(200).json({ config: settings.config });
     } catch (err) {
       console.error('[Settings] PUT error:', err);

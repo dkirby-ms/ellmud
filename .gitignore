@@ -21,6 +21,12 @@ packages/*/src/**/*.js.map
 packages/*/src/**/*.d.ts
 packages/*/src/**/*.d.ts.map
 
+# Compiled scripts
+scripts/**/*.js
+scripts/**/*.js.map
+scripts/**/*.d.ts
+scripts/**/*.d.ts.map
+
 # Environment
 .env
 .env.local
