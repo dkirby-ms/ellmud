@@ -9,6 +9,7 @@
  * commands via the provided onNavigate callback.
  */
 
+import { forwardRef } from 'react';
 import { useAppContext } from '../store.js';
 
 /** All directions the compass can display, in layout order. */
@@ -36,7 +37,7 @@ interface CompassControlProps {
   onNavigate: (direction: string) => void;
 }
 
-export default function CompassControl({ onNavigate }: CompassControlProps) {
+const CompassControl = forwardRef<HTMLDivElement, CompassControlProps>(function CompassControl({ onNavigate }, ref) {
   const { state } = useAppContext();
   const exits = state.roomHeader?.exits ?? [];
   const exitSet = new Set(exits.map((e) => e.toLowerCase()));
@@ -45,7 +46,7 @@ export default function CompassControl({ onNavigate }: CompassControlProps) {
   const hasDown = exitSet.has('down');
 
   return (
-    <div className="p-4 border-b border-border-muted" data-testid="compass-control">
+    <div ref={ref} className="p-4 border-b border-border-muted" data-testid="compass-control">
       <h3 className="text-text-secondary text-xs mb-3 font-sans">COMPASS</h3>
 
       {/* Compass rose — 3×3 grid for cardinal/ordinal directions */}
@@ -115,4 +116,6 @@ export default function CompassControl({ onNavigate }: CompassControlProps) {
       </div>
     </div>
   );
-}
+});
+
+export default CompassControl;

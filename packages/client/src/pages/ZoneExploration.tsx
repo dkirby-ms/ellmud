@@ -84,13 +84,45 @@ export default function ZoneExploration() {
   const [chatOpen, setChatOpen] = useState(false);
   const { containerRef: narrativeRef, bottomRef } = useAutoScroll(state.messages);
 
-  // Re-focus the command input after zone switches (input is disabled while connecting)
+  // ─── Focus persistence across zone transitions ───────────────────────────────
   const inputRef = useRef<HTMLInputElement>(null);
+  const compassRef = useRef<HTMLDivElement>(null);
   const speedwalkAbortRef = useRef(false);
+
+  // Track which UI area had focus before a zone switch so we can restore it.
+  // "compass" = a compass button was focused; "prompt" = the command input.
+  const lastFocusAreaRef = useRef<'compass' | 'prompt'>('prompt');
+
+  useEffect(() => {
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as Node | null;
+      if (compassRef.current?.contains(target)) {
+        lastFocusAreaRef.current = 'compass';
+      } else if (inputRef.current && inputRef.current === target) {
+        lastFocusAreaRef.current = 'prompt';
+      }
+    };
+    document.addEventListener('focusin', handleFocusIn);
+    return () => document.removeEventListener('focusin', handleFocusIn);
+  }, []);
+
+  // Restore focus after zone switches (input is disabled while connecting).
+  // If the compass had focus, re-focus the first available compass button
+  // instead of stealing focus to the prompt.
   useEffect(() => {
     if (state.connectionStatus === "connected") {
-      // Defer focus to next frame so the input is re-enabled first
-      requestAnimationFrame(() => inputRef.current?.focus());
+      requestAnimationFrame(() => {
+        if (lastFocusAreaRef.current === 'compass') {
+          const btn = compassRef.current?.querySelector<HTMLButtonElement>(
+            'button:not([disabled])',
+          );
+          if (btn) {
+            btn.focus();
+            return;
+          }
+        }
+        inputRef.current?.focus();
+      });
     }
   }, [state.connectionStatus]);
 
@@ -687,7 +719,7 @@ export default function ZoneExploration() {
 
           {/* Compass + Minimap */}
           <div className="flex items-center justify-center gap-4 px-4 py-2">
-            <CompassControl onNavigate={handleExitClick} />
+            <CompassControl ref={compassRef} onNavigate={handleExitClick} />
             <div className="h-16 border-l border-border-muted" />
             <MinimapWidget
               visitedRooms={mapState.visitedRooms}
