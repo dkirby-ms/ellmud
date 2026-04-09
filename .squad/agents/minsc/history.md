@@ -40,6 +40,17 @@
 
 ## Learnings (Archived — See Detailed Session Records)
 
+**Starting Gear Bug Fix (2026-07, Issue #377):**
+- Root cause: RefugeRoom→ZoneRoom merge lost `sendLoadoutAndStashUpdate()` call in `onJoin`
+- ZoneRoom.onJoin must send both `LOADOUT_UPDATE` and `STASH_UPDATE` to the client
+- `grantStarterKit()` (api/starter-kit.ts) inserts starter items into `player_stash` correctly — Postgres-only (`usePg` guard)
+- Starter items: 'Rusty Blade', 'Tattered Leather', 'Waterlogged Potion' — defined in migration 002_seed_content.sql
+- `PgStashRepository.loadStash` queries by `player_id` (players-table UUID), not `character_id`
+- `ZoneRoom.dbPlayerId()` maps characterId → players-table UUID for DB operations
+- `MessageCollector` test helper now captures `LOADOUT_UPDATE` and `STASH_UPDATE` messages
+- Test file: `starting-gear-on-join.test.ts` (6 integration tests)
+- Full suite: 2582 passing, zero regressions
+
 **Character Posture System Tests (2026-07, Issue #371):**
 - 63 tests total (57 unit + 6 integration), all passing — Jarlaxle's implementation already landed
 - Posture type (`Posture`) exported from `@ellmud/shared` with 7 values, `PLAYER_SETTABLE_POSTURES` excludes floating/hovering
