@@ -99,6 +99,21 @@
 - **Files:** `combat/prng.ts` (new), `combat/CombatSystem.ts` (setRollFn), `combat/index.ts` (export), `commands/handlers/sandbox.ts` (seed + replay handlers)
 - **All 2278 tests passing (12 new Phase 3 tests: 4 seed, 4 replay, 4 PRNG unit). 16 pre-existing scenario persistence test stubs remain failing (not in scope).**
 
+### 2026-07-28: User Flags Backend (Issue #365)
+- **Task:** Implement server-side backend for optional user flags (anon, rp)
+- **Architecture:** JSONB flags column on character_flags table, singleton provider, pure visibility service
+- **Key decisions:**
+  - **Migration 009** — `character_flags` table with `character_id UUID PRIMARY KEY REFERENCES characters(id)`, `flags JSONB DEFAULT '{}'`. Simpler than a separate row per flag — JSONB allows atomic multi-flag reads and easy extension.
+  - **Shared types in `@ellmud/shared`** — `CharacterFlags` interface, `FLAG_DEFINITIONS` constant, `isValidFlagName()` guard. Both server and client import from same source of truth.
+  - **CharacterFlagsRepository** — Follows `UserSettingsRepository` pattern exactly: interface → Pg implementation → InMemory implementation → singleton provider with `init/get/reset` functions.
+  - **VisibilityService as pure function** — `resolveVisibility(viewer, target)` is stateless. Takes viewer context (roomId, isAdmin) and target context (flags, roomId, characterName). Returns `VisiblePlayerInfo` with displayName, isAnonymous, tags array. No DB calls — caller provides all context.
+  - **[Anon] see-through rules** — Same-room OR admin can see through anon. Same-zone is NOT sufficient (per user directive).
+  - **Fire-and-forget toggle** — `/flag` command toggles asynchronously (same pattern as MetricsService.record). Optimistic feedback to player.
+  - **Command handlers are synchronous** — The `/flag` command with no args shows flag definitions statically. Actual flag state display will be enhanced when integrated with settings UI (Regis's work).
+- **Files:** `db/migrations/009_character_flags.sql`, `db/CharacterFlagsRepository.ts`, `visibility/VisibilityService.ts`, `visibility/index.ts`, `commands/handlers/flag.ts`, `commands/index.ts`, `commands/parser.ts`, `index.ts`, `shared/src/index.ts`
+- **Integration points:** Who list (#366) will use `getAllFlags()` + `resolveVisibility()`. Look command will use `resolveVisibility()` for player names. Settings UI (Regis) will call `setFlag()` via WebSocket message.
+- **Build verification:** Zero TS errors, zero new lint errors.
+
 ## Learnings (Archived — See Detailed Session Records)
 
 ### 2026-03-19: PostgreSQL schema (Issue #3)
@@ -2382,3 +2397,16 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
   - NoOp fallback when no DATABASE_URL (in-memory dev mode)
   - Combat stats aggregated per-player per-tick before writing (avoids N writes per strike event)
   - Loot pickup detected via inventory snapshot diff around take/loot commands
+
+### 2026-07-27: Server-Side Who List (Issue #366)
+- **Task:** Implement server-wide who list with visibility filtering
+- **Architecture:** WhoListService gathers players from all ZoneRoom instances via matchMaker.query() + getLocalRoomById(), batch-loads flags from CharacterFlagsRepository, applies resolveVisibility() per viewer-target pair
+- **Key decisions:**
+  - **getWhoListPlayerData() public method on ZoneRoom** — Clean API for cross-room data access (avoids casting to `any` for private fields). Returns characterId, characterName, roomId, zoneName.
+  - **Async `who` command intercept in handleCommandMessage** — Command handlers are sync, but who list needs async matchMaker + DB queries. Intercepted before the sync dispatch, same pattern as other async operations.
+  - **Dual delivery: text command + structured message** — `who` text command sends MUD-style ASCII table via narration. REQUEST_PLAYER_LIST message sends structured PlayerListEntry[] for Regis's modal UI.
+  - **devModeEnabled as admin proxy** — No per-player admin flag exists yet. Used global devModeEnabled (consistent with existing dev tools) for admin visibility check.
+  - **Phase 1 nulls for level/class** — No level or class system exists yet. Fields are null in PlayerListEntry, ready for future phases.
+  - **Zone name from zoneData?.zone.name with slug fallback** — Handles both hand-crafted zones (have display names) and procedural instances (slug only).
+- **Files:** `who/WhoListService.ts` (new), `who/index.ts` (new), `rooms/ZoneRoom.ts` (handler + methods), `commands/parser.ts` (+who), `commands/handlers/help.ts` (+who), `shared/src/index.ts` (types already added by Regis)
+- **Build: 0 new TS errors, 0 new lint errors. All 1379 tests passing, zero regressions.**
