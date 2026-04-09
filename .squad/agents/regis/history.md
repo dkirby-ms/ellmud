@@ -87,6 +87,67 @@
 - **Faction-based entry routing (Issue #309):** Replaced hardcoded `/refuge` route with `/zone`. ZoneExploration hub detection now calls `/api/spawn-zone` to resolve the player's faction stronghold (e.g. `zone:the-foundry`) instead of hardcoding `zone:the-refuge`. Button text changed from "Enter Refuge" to "Enter World". `fetchSpawnZone()` added to `api.ts`. All navigation fallbacks, error links, admin links updated. Test mocks updated with `fetchSpawnZone`. 2533 tests passing.
 - **Starting zone picker replaces faction picker:** CharacterSelect.tsx now uses `STARTING_ZONES` array (the-reliquary, the-bloom-observatory, the-carrion-court) instead of `FACTIONS`. API sends `startingZoneSlug` instead of `factionSlug`. Shared types `CharacterSummary` and `CreateCharacterRequest` updated in both occurrences in `packages/shared/src/index.ts` — `factionSlug`/`factionName` are now nullable, `startingZoneSlug`/`startingZoneName` added. Character cards show zone name with 📍 icon; faction shown only if earned. Server test `character-repository.test.ts` updated to match. 2555 tests passing.
 
+---
+
+## 2026-04-09: Research — Issue #366 Who List Design
+
+**Status:** 🔍 Research Complete (go:needs-research issue — no implementation)  
+**Deliverable:** Design proposal filed to `.squad/decisions/inbox/regis-who-list-design.md`
+
+**Context & Dependencies:**
+- Issue #366 requires dual interfaces: text command (`/who`) + styled modal  
+- Depends on #365 (Elminster's user flags system — [Anon], [RP])
+- Server controls all visibility filtering (client is dumb terminal)
+
+**Key Design Decisions:**
+1. **Two complementary interfaces:**
+   - **Text command** (`/who`) outputs ASCII-formatted table to game narration (type: `system` message)
+   - **Modal** (WhoListModal.tsx) shows real-time player list with filtering & sorting
+
+2. **Button placement:** Top bar next to Settings button (alongside username, before connection indicator)
+
+3. **Modal architecture:** Sidebar (filters + sort) + content area (player list table) — consistent with SettingsModal pattern
+
+4. **Data flow:** New Colyseus message type `PLAYER_LIST` broadcasts periodically (5–10s interval). Server pre-filters per visibility rules before sending to client.
+
+5. **Server-side filtering (Elminster implements):** 
+   - If target has [Anon] flag AND viewer not in same room: name/level/class → "???"
+   - Zone name always visible (enables navigation)
+   - Flags always visible ([Anon], [RP])
+
+6. **Styling:** Monospace names (MUD heritage), gold accents (`text-accent-gold`), dark theme (`bg-bg-panel`, `bg-bg-primary`)
+
+7. **Real-time updates:** Client uses `useMemo` for filtered/sorted list; listens to Colyseus broadcast; updates modal as players join/leave
+
+**Component Architecture:**
+- **WhoListModal.tsx** (new) — 400 lines, React component with filter/sort state, memoized derived list
+- **ZoneExploration.tsx** (modify) — Add `showWho` state, "Who" button in top bar, wire modal
+- **useZoneConnection.ts** (modify) — Subscribe to PLAYER_LIST broadcast, dispatch to app context
+- **store.ts** (modify) — Add `playerList: PlayerListEntry[]` to AppState
+- **shared/index.ts** (modify) — Add `PLAYER_LIST` message type, define `PlayerListMessage` interface
+
+**Testing Strategy:**
+- Filter/sort logic (unit tests)
+- Anon flag visibility rules (integration tests)
+- Real-time updates via Colyseus (mocked broadcast tests)
+- Modal keyboard nav, Escape-to-close (UI tests)
+
+**Future Enhancements (Post-MVP):**
+- Click zone name to navigate (if admin or party member)
+- Keyboard shortcut (W key)
+- Search by player name
+- Party membership indicator
+- PvP/faction hostile badges
+
+**Notes for Elminster:**
+1. Flag system (#365) is blocking prerequisite
+2. Design assumes periodic broadcast (simpler than event-driven); can optimize later
+3. ASCII table formatting (with borders) done server-side; client just displays as `system` message
+4. Player list endpoint should NOT expose hidden data — filter on server before sending wire message
+
+**Files Produced:**
+- `.squad/decisions/inbox/regis-who-list-design.md` (23KB, comprehensive design spec with acceptance criteria)
+
 ## 2026-03-27T15:39Z — Phase C3 Complete
 
 **Completed:** Client room connection updates for zone naming  
@@ -1633,3 +1694,30 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
   - `packages/client/src/pages/CharacterSelect.tsx` — Character selection screen with auth UI
   - `packages/client/src/pages/ZoneExploration.tsx` — In-zone gameplay screen (no sign-out)
 - **Disconnect Handling**: The `handleLogout` function properly calls `roomRef.current?.leave()` before dispatching LOGOUT to ensure WebSocket cleanup.
+
+### In-Game Settings Modal (2026-04-10)
+- **Modal Pattern**: In-game settings should be a modal overlay, NOT a navigation event, to preserve zone/WebSocket state
+- **Design Consistency**: Modal uses same dark panel styling as game UI (bg-bg-primary, bg-bg-panel, border-accent-gold, semi-transparent backdrop)
+- **Dismissal**: Modal supports three close mechanisms: X button, Escape key, and clicking backdrop — standard UX pattern for overlays
+- **State Isolation**: Settings.tsx (full page with logout) remains for character select; SettingsModal.tsx (no logout) for in-game
+- **Component Reuse**: Modal extracts same settings UI from Settings.tsx, shares useSettings hook for consistent state management
+- **Z-index Layering**: Modal uses z-50 to overlay game UI without interfering with WebSocket or zone state
+- **File Paths**:
+  - `packages/client/src/components/SettingsModal.tsx` — Modal component for in-game settings
+  - `packages/client/src/pages/ZoneExploration.tsx` — Integrated modal trigger (line 344: setShowSettings)
+  - `packages/client/src/pages/Settings.tsx` — Full-page settings (unchanged, used from CharacterSelect)
+  - `packages/client/src/hooks/useSettings.ts` — Shared settings state management
+
+
+### Issue #365: Flag Toggles in Settings UI (2025-07-24)
+- **Separate hook for flags**: Created `useFlags` hook — flags use Colyseus room messages (TOGGLE_FLAG), not REST API like `useSettings`. Different persistence layer (character_flags vs user_settings).
+- **Optimistic localStorage**: Flags cached in localStorage for instant UI feedback; room message sent when connected.
+- **Toggle switch pattern**: Functional toggle using `role="switch"` + `aria-checked` for accessibility. Gold background when on, muted when off. Knob slides left/right via `left-1`/`left-7` Tailwind classes.
+- **Both locations**: Flags section added to both SettingsModal (in-game) and Settings page (character select). Follows existing inline-section-per-category pattern.
+- **Wire protocol**: `TOGGLE_FLAG` (client→server) and `FLAG_STATE` (server→client) added to shared MessageTypes. `sendToggleFlag()` added to connection.ts. `onFlagState` handler wired into both `connect()` and `switchRoom()`.
+- **File Paths**:
+  - `packages/client/src/hooks/useFlags.ts` — Flag state hook (new)
+  - `packages/client/src/services/connection.ts` — sendToggleFlag + onFlagState handler
+  - `packages/client/src/components/SettingsModal.tsx` — Flags category added
+  - `packages/client/src/pages/Settings.tsx` — Flags category added
+  - `packages/shared/src/index.ts` — UserFlagType, ToggleFlagMessage, FlagStateMessage types
