@@ -15,9 +15,9 @@
  * 8. Dedicated validate-token endpoint returns clear success/failure
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import express, { type Request, type Response } from 'express';
-import { adminAuth } from '../admin/middleware.js';
+import { adminAuth, resetAdminAuth } from '../admin/middleware.js';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
@@ -67,6 +67,11 @@ async function authRequest(
 
 describe('Admin Token Validation — Middleware (Issue #369)', () => {
   const originalEnv = process.env['ADMIN_TOKEN'];
+
+  beforeEach(() => {
+    // Ensure no session-based auth leaks from other test files
+    resetAdminAuth();
+  });
 
   afterEach(() => {
     if (originalEnv !== undefined) {
@@ -191,12 +196,13 @@ describe('Admin Token Validation — Middleware (Issue #369)', () => {
       expect(res.body.error).toMatch(/not configured/i);
     });
 
-    it('returns 503 even with no Authorization header when ADMIN_TOKEN unset', async () => {
+    it('returns 401 when no Authorization header and ADMIN_TOKEN unset', async () => {
       delete process.env['ADMIN_TOKEN'];
       const app = createAuthTestApp();
       const res = await authRequest(app, '/protected');
 
-      expect(res.status).toBe(503);
+      // Missing auth header is caught first → 401
+      expect(res.status).toBe(401);
     });
   });
 

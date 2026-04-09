@@ -5,6 +5,7 @@ import { Toaster } from 'sonner';
 import { AppContext, appReducer, initialState } from './store.js';
 import type { AppState } from './store.js';
 import { onAuthError, validateToken, fetchMe } from './services/api.js';
+import { isValidRole } from '@ellmud/shared';
 
 const TOKEN_KEY = 'ellmud_token';
 const PLAYER_KEY = 'ellmud_playerId';
@@ -38,12 +39,13 @@ export function App(): React.JSX.Element {
         if (!valid) dispatch({ type: 'LOGOUT' });
       });
       
-      // Fetch username if missing
-      if (!state.username && state.token) {
+      // Fetch username and role if missing
+      if (state.token) {
         fetchMe(state.token).then((data) => {
-          dispatch({ type: 'LOGIN_SUCCESS', token: state.token!, playerId: data.playerId, username: data.username });
+          const role = data.role && isValidRole(data.role) ? data.role : 'player';
+          dispatch({ type: 'LOGIN_SUCCESS', token: state.token!, playerId: data.playerId, username: data.username, role });
         }).catch(() => {
-          // Ignore errors - username is optional
+          // Ignore errors - username/role fetch is non-blocking
         });
       }
     }

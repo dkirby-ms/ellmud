@@ -11,6 +11,7 @@ import { Router, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import type { AuthService } from './AuthService.js';
 import { AuthError, DuplicateUsernameError } from './AuthService.js';
+import type { PlayerRepository } from './PlayerRepository.js';
 
 /** Rate limit config for login: 10 attempts per 15 min per IP. */
 export const LOGIN_RATE_LIMIT = { windowMs: 15 * 60 * 1000, max: 10 } as const;
@@ -18,7 +19,7 @@ export const LOGIN_RATE_LIMIT = { windowMs: 15 * 60 * 1000, max: 10 } as const;
 /** Rate limit config for registration: 5 attempts per hour per IP. */
 export const REGISTER_RATE_LIMIT = { windowMs: 60 * 60 * 1000, max: 5 } as const;
 
-export function createAuthRouter(authService: AuthService): Router {
+export function createAuthRouter(authService: AuthService, playerRepo?: PlayerRepository): Router {
   const router = Router();
 
   const loginLimiter = rateLimit({
@@ -82,7 +83,18 @@ export function createAuthRouter(authService: AuthService): Router {
       res.status(401).json({ error: 'Session expired or invalid' });
       return;
     }
-    res.status(200).json({ playerId: payload.playerId, username: payload.username });
+
+    // Look up role from identity table if we have a player repo
+    let role = 'player';
+    if (playerRepo) {
+      try {
+        role = await playerRepo.getRoleByPlayerId(payload.playerId);
+      } catch {
+        // Fall back to 'player' if lookup fails
+      }
+    }
+
+    res.status(200).json({ playerId: payload.playerId, username: payload.username, role });
   });
 
   return router;

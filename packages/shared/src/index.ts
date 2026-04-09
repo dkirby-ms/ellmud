@@ -6,6 +6,32 @@
  * NO Colyseus Schema state is ever synced to the client.
  */
 
+// ─── User Roles ──────────────────────────────────────────────────────────────
+
+/** Valid user roles ordered by privilege (lowest → highest). */
+export const VALID_ROLES = ['player', 'content-dev', 'admin'] as const;
+export type UserRole = typeof VALID_ROLES[number];
+
+/**
+ * Role hierarchy — numeric weight for comparison.
+ * Higher value = more privilege.
+ */
+export const ROLE_HIERARCHY: Record<UserRole, number> = {
+  player: 0,
+  'content-dev': 1,
+  admin: 2,
+} as const;
+
+/** Check whether `role` meets or exceeds the `required` privilege level. */
+export function hasMinRole(role: UserRole, required: UserRole): boolean {
+  return ROLE_HIERARCHY[role] >= ROLE_HIERARCHY[required];
+}
+
+/** Type guard — narrowing a raw string to UserRole. */
+export function isValidRole(role: string): role is UserRole {
+  return (VALID_ROLES as readonly string[]).includes(role);
+}
+
 // ─── Client → Server Messages ────────────────────────────────────────────────
 
 /** Client → Server: Player command input (verb-noun parsed client-side or raw). */

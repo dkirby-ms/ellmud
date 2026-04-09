@@ -2410,3 +2410,19 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
   - **Zone name from zoneData?.zone.name with slug fallback** — Handles both hand-crafted zones (have display names) and procedural instances (slug only).
 - **Files:** `who/WhoListService.ts` (new), `who/index.ts` (new), `rooms/ZoneRoom.ts` (handler + methods), `commands/parser.ts` (+who), `commands/handlers/help.ts` (+who), `shared/src/index.ts` (types already added by Regis)
 - **Build: 0 new TS errors, 0 new lint errors. All 1379 tests passing, zero regressions.**
+
+### 2026-07-27: Role-Based Admin Access (Issue #373)
+- **Task:** Add `player | content-dev | admin` role hierarchy end-to-end
+- **Architecture:** Shared types in `@ellmud/shared`, dual-path admin auth middleware (ADMIN_TOKEN + session token with role check), role stored in DB (player_identities.role), client state + auto-auth
+- **Key decisions:**
+  - **ROLE_HIERARCHY as Record<UserRole, number>** — player=0, content-dev=1, admin=2. Numeric weights for comparison via `hasMinRole()`.
+  - **Role lookup from DB, not JWT** — `getRoleByPlayerId()` on PlayerRepository reads from player_identities table. Role changes take effect immediately without re-login.
+  - **Dual admin auth** — Middleware checks ADMIN_TOKEN first (exact match, silent if unset), then validates session token via AuthService + role check. Backward compatible.
+  - **initAdminAuth() module-level init** — Same pattern as colyseus-auth. Called once at startup to inject AuthService + PlayerRepository into middleware module state.
+  - **401 vs 403 vs 503** — 401 for missing/invalid/expired tokens, 403 for valid session with insufficient role, 503 only when no auth method is configured at all.
+  - **AUTO_PROMOTE_ADMIN env var** — At startup, promotes the named player to admin role in DB with audit log. For initial bootstrap only.
+  - **Client dual-token strategy** — admin-api getAdminToken() returns admin_token ?? ellmud_token. Allows game session to auth admin panel.
+  - **resetAdminAuth() for test isolation** — Module-level state needs explicit reset between test files to prevent leaks.
+- **Files:** `shared/src/index.ts` (types), `server/src/admin/middleware.ts` (rewritten), `server/src/auth/roles.ts` (new), `server/src/auth/PlayerRepository.ts`, `server/src/auth/PgPlayerRepository.ts`, `server/src/auth/routes.ts`, `server/src/admin/users/user-routes.ts`, `server/src/index.ts`, `client/src/store.ts`, `client/src/lib/admin-api.ts`, `client/src/App.tsx`, `client/src/pages/admin/AdminLayout.tsx`
+- **PR:** #375 → dev
+- **Build: 0 TS errors, 0 lint errors. All 2966 tests passing, zero regressions.**

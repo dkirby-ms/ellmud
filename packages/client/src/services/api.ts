@@ -127,8 +127,8 @@ export async function deleteCharacter(token: string, characterId: string): Promi
   });
 }
 
-export async function fetchMe(token: string): Promise<{ playerId: string; username: string }> {
-  return request<{ playerId: string; username: string }>('/auth/me', {
+export async function fetchMe(token: string): Promise<{ playerId: string; username: string; role?: string }> {
+  return request<{ playerId: string; username: string; role?: string }>('/auth/me', {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` },
   });
