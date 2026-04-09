@@ -88,3 +88,14 @@ export function parseSpeedwalk(input: string): SpeedwalkResult | SpeedwalkError 
 
   return { ok: true, moves };
 }
+
+/**
+ * Determine whether an input should activate multi-move speedwalk mode.
+ * Single direction letters (n/s/e/w/u/d) and `1n`-style single moves
+ * return false so they are handled as normal commands.
+ */
+export function shouldTreatAsSpeedwalk(input: string): boolean {
+  if (!isSpeedwalk(input)) return false;
+  const result = parseSpeedwalk(input);
+  return result.ok && result.moves.length > 1;
+}

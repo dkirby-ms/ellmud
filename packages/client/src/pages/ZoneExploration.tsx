@@ -29,7 +29,7 @@ import { useExplorationMap } from "../hooks/useExplorationMap.js";
 import { useMapToggle } from "../hooks/useMapToggle.js";
 import { useVersion } from "../hooks/useVersion.js";
 import { useDirectionKeys } from "../hooks/useDirectionKeys.js";
-import { isSpeedwalk, parseSpeedwalk } from "../utils/speedwalk.js";
+import { shouldTreatAsSpeedwalk, parseSpeedwalk } from "../utils/speedwalk.js";
 import { fetchSpawnZone } from "../services/api.js";
 import type { CombatAction } from "@ellmud/shared";
 
@@ -180,18 +180,17 @@ export default function ZoneExploration() {
       setHistoryIndex(-1);
       setCommand("");
 
-      // Phase 2: Speedwalk detection
-      if (isSpeedwalk(trimmed)) {
+      // Phase 2: Speedwalk detection — only for multi-move sequences.
+      // Single direction letters (n/s/e/w/u/d) fall through to normal
+      // command handling so they don't trigger false "Speedwalk" messages.
+      if (shouldTreatAsSpeedwalk(trimmed)) {
         if (state.inCombat) {
           addSystemMessage("Speedwalk blocked — you are in combat!");
           return;
         }
 
         const result = parseSpeedwalk(trimmed);
-        if (!result.ok) {
-          addSystemMessage(result.error);
-          return;
-        }
+        if (!result.ok) return;
 
         // Execute each move sequentially with a small delay so the server
         // can process each one and the response echoes back.
