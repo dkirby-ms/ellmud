@@ -40,6 +40,16 @@
 
 ## Learnings (Archived — See Detailed Session Records)
 
+**Gameplay Metrics Tests (2026-07, Issue #360):**
+- MetricsService API: `recordX(playerId, typedMetadata)` — separate args, NOT a single object
+- All `recordX()` methods are fire-and-forget (`void` return), internally call private `record()` which returns `Promise<void>` with `.catch()` error swallowing
+- Testing fire-and-forget: call the public method, then `await flush()` (setTimeout 0) to drain the microtask queue before asserting on mocks
+- Error logging uses `console.error('[metrics] ...')` pattern — lowercase tag, matches codebase convention
+- `metrics-provider.ts` follows exact same singleton pattern as `death-penalty-provider.ts` (NoOp fallback, `reset*()` for testing)
+- MetricsService uses `query()` directly (not `getClient()`), single INSERT per event — no transactions needed
+- Metadata is serialized via `JSON.stringify()` before passing as $3 param to JSONB column
+- 29 tests cover: 4 event types × happy path + JSONB serialization + DB failure resilience + concurrent writes + provider integration
+
 **Reconnect Room Position Fix (2026-07, Issue #355):**
 - Browser refresh triggers a NEW `onJoin()` (not Colyseus `allowReconnection`), because the client does a fresh `joinOrCreate()` with the same playerId
 - `ZoneRoom.onJoin()` duplicate-join path (line ~421) must preserve `currentRoomId` from existing `PlayerState` before creating a new one
