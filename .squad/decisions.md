@@ -7437,3 +7437,40 @@ If the team changes the base URL pattern or adds request interceptors to `api.ts
 - File upload can wait until macro system foundation is solid
 - v1 focus: localStorage → server sync, essential 3 settings (fontSize, verbosity, narrationStyle), placeholder for future (keybinds, audio, accessibility)
 
+---
+
+## Decision: Removed Deprecated Refuge Screen
+
+**Date:** 2026-04-09  
+**Author:** Regis (Frontend)  
+**Status:** Implemented
+
+### Context
+The Refuge screen (`/refuge`) was deprecated and no longer accessible to users through normal navigation. It served as an early debug/test hub with equipment, crafting, marketplace, and expedition board tabs.
+
+### Decision
+Completely removed the Refuge screen from the codebase and relocated critical functionality:
+
+1. **Deleted** `packages/client/src/pages/Refuge.tsx` (575 lines)
+2. **Added** Settings button to ZoneExploration.tsx top bar (next to logout)
+3. **Renamed** all "Refuge" references to generic "Hub" terminology
+4. **Updated** all test files and components
+
+### Rationale
+- Users couldn't access `/refuge` anymore — dead code
+- Settings access was ONLY available from Refuge screen — needed relocation
+- Generic "hub" terminology is more flexible than specific "Refuge" naming
+- Settings gear icon in main game view is better UX than hidden in separate screen
+
+### Impact
+- **User-facing:** Settings now accessible from main game screen (ZoneExploration)
+- **Code:** -575 lines, cleaner terminology, better separation of concerns
+- **Tests:** All 2815 tests passing after updates to match new UI text
+
+### Files Changed
+- Deleted: `pages/Refuge.tsx`
+- Modified: `ZoneExploration.tsx`, `ReconnectionOverlay.tsx`, `useReconnection.ts`, `useZoneConnection.ts`, `ChatPanel.tsx`, `Login.tsx`, `Leaderboard.tsx`, plus 8+ test files
+
+### Follow-up
+None required. The faction hub concept remains intact — players still have hub zones like The Reliquary, The Bloom Observatory, etc. This just removed the old debug screen.
+

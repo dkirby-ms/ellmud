@@ -27,6 +27,54 @@
 
 ## Learnings
 
+### 2025-01-14: User Config File System Research
+**Task:** Research and design proposal for optional `.ellmudrc` user config file system (Issue #359).
+
+**Scope:** DCSS-style player configuration to control display preferences, gameplay settings, keybindings, and macros.
+
+**Current Surface Findings:**
+- **Client:** localStorage persists 3 settings (fontSize, verbosity, narrationStyle) in Settings.tsx — no server sync, lost on logout
+- **Server:** No `user_settings` table; `player_profile` schema holds only skills, equipment, carry weight (progression data, not preferences)
+- **Architecture constraint:** Message-based (no Colyseus schema sync); all client-server communication via message types in `@ellmud/shared`
+- **Auth model:** Token-based, `GET /auth/me` validates identity; no per-player settings endpoint yet
+
+**Design Decisions (Approved):**
+1. **Storage:** Server-primary (PostgreSQL `user_settings` table, JSONB `config` column) + client cache (localStorage). Rationale: server-authoritative prevents cheating (gameplay settings), persists across devices, survives logout.
+2. **Format:** Plain-text `.ellmudrc` (user-facing, DCSS-inspired: `verbosity = standard`) stored as structured JSONB in DB (`{ "display": {...}, "gameplay": {...}, "accessibility": {...} }`). Phase 2 adds external file parsing.
+3. **Sync:** HTTP API — `GET /api/user/settings` (load on login), `PUT /api/user/settings` (save on logout). localStorage as draft cache to avoid latency.
+4. **v1 Scope:** Migrate existing 3 settings to DB + keybinds stub (store but don't wire to combat). Defer Lua macros, file import/export, presets to Phase 2.
+5. **Authority Model:** Server-authoritative for gameplay settings (auto-attack, combat thresholds); client-trusted for cosmetics (fonts, colors, verbosity). Server echoes config on GET to validate client state.
+
+**Architecture Pattern:**
+- Similar to `PlayerProfileRepository` (interface + InMemory/Pg pattern)
+- Migration 004: create `user_settings(player_id UUID PK, config JSONB DEFAULT '{}')`
+- `UserSettingsRepository`: load/save + defaults + validation schema
+- Auth routes: GET/PUT `/api/user/settings` (require Bearer token)
+- Settings.tsx refactored to use API instead of direct localStorage
+
+**Risk Analysis:**
+- **Settings explosion:** v1 scoped to 6 essential options; code review gate before expansion
+- **Gameplay exploits:** Server validates all gameplay settings; client-only for cosmetics
+- **Sync latency:** localStorage cache reduces API calls
+- **Unfinished keybinds:** Store in config but UI disabled ("Coming soon") — avoids re-work when combat input layer refactored
+
+**Team Split:**
+- **Frontend (2–3 days):** Settings service (GET/PUT wrappers), Settings.tsx refactor to API, localStorage → DB migration
+- **Backend (1–2 days):** Migration, `UserSettingsRepository`, auth routes, validation schema
+- **Estimated total:** 5 days, small scope, high UX value
+
+**Decision Deliverable:**
+- Full proposal posted to issue #359 as comment
+- Decision doc: `.squad/decisions/inbox/elminster-user-config.md` (5100 words, storage architecture, format spec, v1 scope, risks, next steps, 3 open questions for user)
+
+**Key Insights:**
+- Existing localStorage pattern is client-only and breaks across devices — server persistence essential for multi-device play
+- DCSS-style text config + JSON storage hybrid balances UX (players can edit plain text) + maintainability (JSON is queryable, versionable)
+- v1 disciplined scope (migrate + stub) unblocks content team, avoids macro/Lua design yak-shaving
+- Authority model (server validates gameplay, trusts cosmetics) parallels existing Colyseus pattern (server authoritative for game state, client for UI)
+
+---
+
 ### 2026-04-08: Direction Shortcuts & Speedwalks Research
 - **Task:** Research and design proposal for issue #357 — arrow key shortcuts + speedwalk command syntax.
 - **Investigation:** Traced full client-server movement flow: CompassControl button → handleExitClick → sendRawCommand → parseCommand → handleGo. Mapped keyboard event handling in ZoneExploration.tsx, command parser aliasing (n→['go','north']), and server direction validation.
@@ -2326,3 +2374,128 @@ The `continue-on-error: true` flag allows the workflow to proceed even if `npm r
 - Unblocked Regis/Minsc for Phase 1 implementation
 - All 3 agents (Elminster, Regis, Drizzt) delivered on time
 - Team ready for next round of work
+
+---
+
+### 2026-04-09T00:45:00Z: Gameplay Metrics Architecture — Design Proposal Complete
+
+**Task:** Design & proposal for #360 — "otel style metrics of game events like player deaths, creature kills..."
+
+**Outcome:** ✅ Complete — Design proposal posted to GitHub issue & decision document committed.
+
+**Decision Deliverables:**
+- Comprehensive architecture doc (15K+ words) covering storage, emission, integration, analytics
+- Design proposal comment on #360 with executive summary, team split, risks, 4 open questions
+- SQL schema for `gameplay_metrics` table (event_type, player_id, zone_id, metadata JSONB)
+
+**Architecture Rationale:**
+- **PostgreSQL events table** (not OpenTelemetry SDK) — Ellmud is a monolithic game server, not distributed microservice. OTEL overhead unnecessary today. If Prometheus dashboards needed later, same EventCollector can feed exporter (no code changes).
+- **EventCollector service** with async batching — Queues events in memory, inserts every 50 events or 5 seconds. Non-blocking, prevents gameplay lag. Optional dependency injection (safe for tests).
+- **JSONB metadata** — Flexible event shapes (strike has damage/targetId/critical; loot has itemId/rarity; death has killerIds/reason). Follows established pattern in schema (loot_containers, creature_definitions).
+
+**V1 Scope: 12 Core Metrics**
+- Combat: player_strike_dealt, player_damage_taken, creature_kill, player_death, combat_encounter_started/ended
+- Survival: zone_entry, zone_extraction_success/failure, room_visited
+- Loot: item_looted, item_lost_on_death
+- Estimated volume: 20–30K events/day (easily within PostgreSQL capacity)
+
+**Integration Points:**
+- CombatSystem: Strike resolution, damage application, kill/death attribution
+- ZoneRoom: Player entry/exit, item pickup, room visitation tracking
+- CreatureManager: Loot drop metadata
+
+**Display (v1):** Admin metrics page (`/admin/metrics`) with:
+1. Event feed (last 100, filterable)
+2. KPI summary (24h kills, deaths, extractions, avg combat duration)
+3. Leaderboards (top 10 by kills, extraction rate, survival streak)
+
+Player-facing scoreboards deferred to Phase 2.
+
+**Team Split: ~5 Days**
+- Jarlaxle (Systems): EventCollector, migration, CombatSystem hooks (2–3 days)
+- Drizzt (Engine): ZoneRoom integration, perf benchmarking (1–2 days)
+- Regis (Frontend): Admin metrics page, leaderboards UI (1–2 days)
+- Minsc (Tester): Query validation, gameplay lag verification (0.5–1 day)
+
+**Open Questions Raised:**
+1. Player privacy — Leaderboards tied to player_id in queryable table. Acceptable? Anonymize after 7 days?
+2. Leaderboard scope — Global only (v1)? Or faction-based + zone-specific? (deferred to Phase 2)
+3. Loot tracking detail — All items or only rare? (proposed: all items, helps identify drop bugs)
+4. Combat event granularity — Per-strike (~100/encounter) or encounter summaries (1 event)? (proposed: per-strike for full visibility)
+
+**Risk Mitigation:**
+- Async batching + rate-limiting prevents gameplay lag
+- Optional injection maintains backward compatibility
+- 7-day retention + weekly VACUUM/ANALYZE prevents disk bloat
+- Unit tests for EventCollector, spot-check queries in admin UI
+- Document in SECURITY.md (gameplay-only metrics, no PII)
+
+**Coordination Impact:**
+- Unblocked Jarlaxle + Drizzt + Regis for Phase 1 implementation
+- Clear effort estimates enable sprint planning
+- 4 open questions focused for team alignment (not over-specified)
+
+## Learnings
+
+### Metrics Architecture Insights
+
+1. **PostgreSQL as Observability Backend** — For game servers at MUD scale (~100–1000 players), PostgreSQL is sufficient for event storage, queries, and analytics. OpenTelemetry SDKs are designed for distributed microservices and SaaS backends; they add indirection (exporters, collectors, external backends) that complicates a monolithic architecture. Start simple (DB tables), evolve to specialized tools (Prometheus, Grafana) only if volume/latency demands. This is a key pattern for cost-effective observability in game development.
+
+2. **JSONB Metadata as Escape Hatch** — Event types vary widely in shape (damage has attacker/defender/damage_type, loot has item_id/rarity/source, death has killerIds/location/reason). Rather than create separate tables for each event variant or over-normalize, JSONB allows:
+   - Single table for all events (schema simplicity)
+   - Flexible fields per event (extensibility without migrations)
+   - GIN indexing for ad-hoc queries ("which events involved fire damage?")
+   - Follows established precedent in the Ellmud schema (loot_containers, creature_definitions use JSONB)
+
+3. **Async Batching Prevents Gameplay Lag** — Direct database inserts per game event (100s per second during combat) would cause noticeable latency on client-side rendering. Batching + async means:
+   - Events queue in memory (fast, non-blocking)
+   - Batch inserts every N events or T seconds (amortizes DB overhead)
+   - Flush on shutdown (no data loss)
+   This pattern is reusable for any event stream (logging, analytics, telemetry).
+
+4. **Optional Dependency Injection for Backward Compatibility** — Passing EventCollector to system constructors as optional (defaulting to null) ensures:
+   - Existing tests don't require EventCollector setup
+   - New tests can inject a mock for validation
+   - Production code gracefully no-ops if EventCollector is null
+   - No rework needed when adding metrics to existing systems
+
+5. **v1 Scope Discipline** — Temptation to design "perfect" metrics (all event types, all fields, all query patterns). But a 5-day v1 that delivers 12 focused metrics beats a 3-week v1 trying to capture everything. Once v1 runs in production:
+   - You see real usage patterns (which leaderboards matter?)
+   - You identify missing events (what else do designers want to tune?)
+   - You can iterate faster (add events incrementally, not all-or-nothing)
+
+6. **Privacy by Design** — Metrics tied to player_id enable leaderboards but raise privacy concerns. Document early:
+   - What data is collected (gameplay events only, no chat/PII)
+   - Who can access it (admin tools only, not exposed in client)
+   - Retention policy (archive > 7 days, delete > 90 days)
+   This builds trust and satisfies compliance requirements.
+
+7. **Open Questions Drive Alignment** — Rather than prescribe every detail, raise 4 focused questions (privacy, scope, loot detail, event granularity) and ask the team. This:
+   - Signals that design isn't final (room for feedback)
+   - Ensures stakeholder consensus before implementation
+   - Prevents rework due to misaligned expectations
+   - Makes handoff to execution team smoother
+
+### Team & Process Insights
+
+8. **Effort Estimation by System** — Breaking down 5-day v1 by system (CombatSystem 1 day, ZoneRoom 1 day, etc.) enables parallel work:
+   - Jarlaxle owns core infrastructure (EventCollector, migrations)
+   - Drizzt + Regis work in parallel (engine + frontend)
+   - Minsc validates in parallel (tests + perf)
+   - No blocking, high utilization
+   This is better than sequential ("Jarlaxle first, then Drizzt") or vague ("5 days total").
+
+9. **Design Proposal as Issue Comment** — Posting the proposal directly on the GitHub issue ensures:
+   - Stakeholder (dkirby-ms) sees it in the right context
+   - Team can comment + iterate in the same place
+   - Decision is documented as issue history (not separate file only)
+   - Easier to reference in PRs ("as proposed in #360")
+
+### Architecture Decisions Catalog
+
+- **Event Storage:** PostgreSQL table (not separate OTEL exporter, not in-memory counters)
+- **Metadata Shape:** JSONB (not separate tables, not fixed schema)
+- **Emission Pattern:** Async batching via EventCollector (not sync inserts, not global state)
+- **Dependency Management:** Optional injection (not global singleton, not required)
+- **Initial Display:** Admin dashboard (not player-facing, not external Prometheus)
+- **Query Retention:** 7-day active + 90-day archive (not infinite, not real-time only)

@@ -48,6 +48,8 @@
 
 ## Learnings
 
+- **Issue #362 — Compass focus persistence across zone transitions (2026):** The `useEffect` in ZoneExploration that fires on `state.connectionStatus === "connected"` was unconditionally calling `inputRef.current?.focus()`, stealing focus from the compass on zone transitions. Fix: added a `lastFocusAreaRef` ("compass" | "prompt") updated by a `document.addEventListener('focusin', ...)` listener. On reconnect, checks the ref — if compass had focus, queries `compassRef.current?.querySelector('button:not([disabled])')` and focuses that instead. CompassControl converted to `forwardRef` to expose its DOM node. 4 new tests in `compass-focus-persistence.test.tsx`. Commit 59c1903.
+
 - **Issue #357 — Direction shortcuts + speedwalk (2026):** Phase 1: `useDirectionKeys` hook adds global keydown listener for arrow/PageUp/PageDown/numpad → direction mapping. Uses `document.activeElement` check to skip when input/textarea/contentEditable has focus (not inputRef comparison — works with any focused text field). Numpad5 is explicit no-op. Phase 2: `speedwalk.ts` pure-function parser — regex `(\d*)([nsewud])` iterates segments, 50-move client limit. In `ZoneExploration.tsx`, `handleSubmit` checks `isSpeedwalk()` before sending to server. Each move dispatched via `handleExitClick` with 150ms staggered `setTimeout`. Combat blocks speedwalk; entering combat mid-walk aborts via `speedwalkAbortRef` + useEffect on `state.inCombat`. Commit 2085460.
 
 - **Issue #358 — Inline MUD prompt with click-to-focus (2026):** The ZoneExploration command input was a separate full-width strip at the page bottom (`bg-bg-panel border-t`). Moved it inside the 70% narrative column, styled with terminal background (`#080910`), added `.command-input-line` CSS class with `:focus-within` gold glow. MudPrompt's blinking cursor removed (real input `>` replaces it). Click-to-focus on narrative area checks `window.getSelection()` to avoid stealing focus during text selection. Same treatment applied to Refuge chat. `tabIndex={1}` on input, `role="log"` on narrative areas. Commit 08b24c0.
@@ -1544,5 +1546,78 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
 - **Test coverage:** 12 tests covering lifecycle, fallback, merge, auth errors, loading states
 - **Cross-team:** Jarlaxle (Backend) completed #359 backend — UserSettingsRepository, GET/PUT endpoints, JSONB config (17 tests, Commit fb130d7)
 
+### 2026-04-22: Issue #361 — Compass golden highlight on selection
+- **Status:** ✅ Complete (Commit 0396dbc, on dev)
+- **What:** Compass direction buttons had hover styling (`hover:text-accent-gold`) but no focus/selection styling. Added `focus:text-accent-gold focus:bg-bg-elevated focus:outline-none` to all three button groups (cardinal/ordinal grid, Up, Down).
+- **Files modified:** `components/CompassControl.tsx`, `__tests__/compass-control.test.tsx`
+- **Tests:** 1 new test verifying focus classes on available vs disabled buttons; 9 total compass tests passing, 288 client tests passing
+- **Pattern:** Focus styling mirrors hover styling for MUD-theme interactive buttons
+
+## Learnings
+- Focus states on MUD-theme interactive buttons should mirror hover states: `focus:text-accent-gold focus:bg-bg-elevated focus:outline-none`
+- The `__tests__/*.test.js` compiled artifacts have pre-existing rollup parse failures; only `.test.tsx` source files are reliable test targets
+
 ## Roster Awareness
 - **Jarlaxle (Backend):** Completed #359 backend parallel work — user_settings table, provider pattern, API endpoints, server-side validation (17 tests, Commit fb130d7)
+
+## 2025-01-05: Removed deprecated Refuge screen
+
+**Task:** Remove the deprecated Refuge screen that users can no longer access.
+
+**Changes:**
+- Deleted `packages/client/src/pages/Refuge.tsx` entirely (575 lines removed)
+- Added Settings button (gear icon) to ZoneExploration.tsx top bar next to logout button
+  - This was the only way to access settings before (was in Refuge)
+  - Now settings accessible from main game view at /zone
+- Updated terminology across codebase: "Refuge" → "Hub" for generic faction hub references
+  - `useReconnection` hook: `returnToRefuge` → `returnToHub`
+  - `ReconnectionOverlay`: "Return to Refuge" button → "Return to Hub"
+  - `ChatPanel`: context type changed from "refuge" to "hub"
+- Updated Login.tsx button text: "Enter the Refuge" → "Enter the World"
+- Updated all test files to match new UI text and hook names
+
+**Patterns learned:**
+- Always provide settings access from the main gameplay screen, not just specialty screens
+- When removing a deprecated screen, audit all references in tests thoroughly
+- Use generic terminology ("hub") over specific location names for better flexibility
+- Settings icon (gear/cog) is a standard UX pattern that users recognize
+
+**Key files:**
+- ZoneExploration.tsx: Main game view with Settings button in top bar
+- ReconnectionOverlay.tsx: Overlay shown when connection is lost
+- useReconnection.ts: Hook managing reconnection state/actions
+- useZoneConnection.ts: Hook managing zone WebSocket connections
+- ChatPanel.tsx: Chat interface component with context-aware tabs
+
+### 2026-04-09: Task Batch — Refuge Removal + Issue #362 Focus Persistence
+- **Status:** ✅ Complete (Commits b250520, 59c1903)
+- **Tasks:** Two parallel background tasks
+
+#### Part 1: Remove Deprecated Refuge Screen
+- **Commit:** b250520
+- **Changes:**
+  - Deleted `packages/client/src/pages/Refuge.tsx` (575 lines)
+  - Added Settings button (gear icon) to ZoneExploration.tsx top bar next to logout
+  - Renamed "Refuge" → "Hub" terminology across 15+ files
+  - Updated test files to match new UI text
+- **Files modified:** ZoneExploration.tsx, ReconnectionOverlay.tsx, useReconnection.ts, useZoneConnection.ts, ChatPanel.tsx, Login.tsx, Leaderboard.tsx, 8+ test files
+- **Impact:** Dead code eliminated, settings UX improved (accessible from main game screen), terminology consistency
+- **Tests:** 2815/2815 passing
+
+#### Part 2: Issue #362 — Compass Focus Area Persistence
+- **Commit:** 59c1903
+- **Changes:**
+  - Added `forwardRef` to CompassControl exposing `setLastFocusArea()` method
+  - Implemented `lastFocusAreaRef` tracking in ZoneExploration
+  - Focus area survives zone navigation and reconnection
+  - Added 4 integration tests verifying persistence across navigation
+- **Pattern:** ForwardRef + useEffect + ref-based state to maintain focus across zone changes
+- **Tests:** 4 new tests (all passing), 2815+ total tests passing
+- **Impact:** Players can now navigate between zones and return to previously-selected compass area
+- **Issue status:** #362 CLOSED
+
+**Patterns learned:**
+- Two independent frontend tasks can run in parallel without conflicts
+- ForwardRef is cleaner than callback props for exposing single methods from components
+- Focus state should persist at the parent level (ZoneExploration) rather than within compass itself
+- Settings access is critical UX — always expose from main gameplay screen
