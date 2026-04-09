@@ -27,6 +27,30 @@
 
 ## Learnings
 
+### 2026-04-10: Optional User Flags Architecture (#365)
+**Task:** Research and design optional user flags for player information visibility and roleplay indicators.
+
+**Scope:** Two flags — [Anon] (hides username/level/class from non-roommates) and [RP] (visual indicator for roleplay engagement).
+
+**Design Decisions (Approved):**
+1. **Storage:** New `character_flags` table with JSONB `flags` column (not `players` table). Rationale: dedicated table for sparse optional data; JSONB allows Phase 2 extensibility without migrations.
+2. **Flag definitions:** Hardcoded TypeScript enum in `@ellmud/shared` with `FLAG_DEFINITIONS` metadata (name, description, toggleable). Extensible via code; new flags need only enum addition.
+3. **Toggle mechanism:** In-game command `/flag <name>` (e.g., `/flag anon`, `/flag rp`). No settings UI integration in v1.
+4. **Visibility rules — [Anon]:**
+   - Same room = visible (prevents abuse, information is inferred from proximity anyway).
+   - Different room = generic description (e.g., "A mysterious figure").
+   - Admin always sees truth (role='admin' bypass).
+5. **Visibility rules — [RP]:** Always visible, no restrictions. It's a courtesy signal, not a mask.
+6. **Server authority:** Server constructs player data for who/look responses; client receives only what server permits. No client-side filtering or data hiding logic.
+7. **Data layer:** `CharacterFlagsRepository` interface with Postgres + InMemory providers (provider pattern, consistent with existing repo architecture like `UserSettingsRepository`).
+8. **Migration 009:** Simple table creation + index. Idempotent. No seed data.
+
+**Key Insight:** Flags are orthogonal to existing systems (combat, awareness, equipment). [Anon] applies *after* awareness tier is calculated (awareness still shows equipment descriptions, flags hide identity on top). Same-room exemption prevents anonymity from being an exploit vector in shared-room combat.
+
+**Blockers & Dependencies:** None. Design is ready for implementation. Depends on shared types being extracted. Unblocks #366 (who list) which needs server-side visibility logic.
+
+**Deliverable:** Full proposal (21.6K) at `.squad/decisions/inbox/elminster-user-flags-design.md` with data model, command syntax, visibility rules, repository interface, migration, tests, implementation checklist, and 5 open questions for dkirby-ms.
+
 ### 2025-01-14: User Config File System Research
 **Task:** Research and design proposal for optional `.ellmudrc` user config file system (Issue #359).
 
