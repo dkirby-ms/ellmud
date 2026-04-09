@@ -1105,22 +1105,14 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
 
     // Posture commands: broadcast posture change to other players in the room (#371)
-    const isPostureCommand = verb === 'stand' || verb === 'sit' || verb === 'crouch' || verb === 'prone' || verb === 'recline';
-    if (isPostureCommand && player.posture !== previousPosture) {
-      const characterName = this.characterNames.get(playerId) ?? 'A wanderer';
-      const postureMessages: Record<string, string> = {
-        standing: 'stands up.',
-        sitting: 'sits down.',
-        crouching: 'crouches down.',
-        prone: 'drops to the ground.',
-        reclining: 'reclines.',
-      };
-      const msg = postureMessages[player.posture] ?? 'shifts position.';
+    // Uses _postureChange metadata from the command result (single source of truth in posture.ts)
+    const postureChange = (result as import('../commands/index.js').CommandResult & { _postureChange?: { characterName: string; message: string } })._postureChange;
+    if (postureChange) {
       for (const [sid, ps] of this.players) {
         if (sid !== playerId && ps.currentRoomId === player.currentRoomId) {
           const c = this.findClient(sid);
           if (c) {
-            this.sendNarrate(c, { text: `${characterName} ${msg}`, type: 'ambient', timestamp: Date.now() });
+            this.sendNarrate(c, { text: postureChange.message, type: 'ambient', timestamp: Date.now() });
           }
         }
       }
