@@ -1853,3 +1853,13 @@ The tests expect:
 - **Result:** All 35 tests pass against Regis's implementation
 - **Pattern:** Comprehensive pre-merge test verification ensures solid implementation
 - **Team Impact:** Regis implementation verified solid; PR #372 ready for merge with full test coverage
+
+
+### Release Workflow Fix (2026-04-09, Issue #379)
+**Problem:** release.yml (run #24201081668) failed at checkout: ref: main does not exist. Repo uses dev to uat to prod, not main.
+**Scope:** Three workflows (release.yml, squad-release.yml, squad-promote.yml) all referenced non-existent main/preview branches.
+**Fix:** Aligned all three workflows with actual dev to uat to prod branching model.
+- release.yml: checkout/push prod instead of main
+- squad-release.yml: trigger on push to prod
+- squad-promote.yml: dev to uat to prod pipeline
+**Key Learning:** Squad tooling templates ship with dev to preview to main model by default; must be adapted to match each project actual branch strategy.
