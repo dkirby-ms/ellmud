@@ -42,7 +42,7 @@ interface UseDirectionKeysOptions {
   enabled: boolean;
 }
 
-export function useDirectionKeys({ onMove, inputRef, enabled }: UseDirectionKeysOptions): void {
+export function useDirectionKeys({ onMove, inputRef: _inputRef, enabled }: UseDirectionKeysOptions): void {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (!enabled) return;

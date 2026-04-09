@@ -15,7 +15,6 @@ import {
   appReducer,
   initialState,
   type AppState,
-  type AppAction,
 } from '../store.js';
 import CompassControl from '../components/CompassControl.js';
 
