@@ -35,6 +35,7 @@ import { initFactionProvider } from './faction/index.js';
 import { initRunHistoryProvider } from './run-history/index.js';
 import { initLoadoutProvider } from './loadout/index.js';
 import { initDeathPenaltyProvider } from './systems/index.js';
+import { initMetricsProvider } from './metrics/index.js';
 import { initCharacterProvider } from './character/index.js';
 import { createCharacterRouter } from './api/characters.js';
 import { createSpawnZoneRouter } from './api/spawn-zone.js';
@@ -108,6 +109,10 @@ console.log(`[Ellmud] Loadout persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'
 // ─── Death Penalty Persistence ─────────────────────────────────────────────
 initDeathPenaltyProvider(USE_PG);
 console.log(`[Ellmud] Death penalty persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Gameplay Metrics ──────────────────────────────────────────────────────
+initMetricsProvider(USE_PG);
+console.log(`[Ellmud] Gameplay metrics: ${USE_PG ? 'PostgreSQL' : 'no-op'}`);
 
 // ─── Character Persistence ──────────────────────────────────────────────────
 initCharacterProvider(USE_PG);

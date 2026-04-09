@@ -2363,3 +2363,22 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 
 ## Roster Awareness
 - **Regis (Frontend):** Completed #359 frontend parallel work — `useSettings` hook, Settings.tsx refactor, localStorage→server sync (12 tests, Commit f4ab813)
+
+## Session: Gameplay Metrics (#360)
+- **Task:** Implement server-side gameplay metrics collection (deaths, kills, loot pickups, combat stats)
+- **Status:** ✅ Complete
+- **Files created:**
+  - `packages/server/src/db/migrations/008_gameplay_metrics.sql` — append-only `game_metrics` table with JSONB metadata, indexed by player/type/time
+  - `packages/server/src/metrics/MetricsService.ts` — fire-and-forget DB writes, typed metadata per event type
+  - `packages/server/src/metrics/metrics-provider.ts` — singleton provider (Pg live / NoOp fallback), follows death-penalty-provider pattern
+  - `packages/server/src/metrics/index.ts` — barrel export
+- **Files modified:**
+  - `packages/server/src/index.ts` — init metrics provider at boot
+  - `packages/server/src/rooms/ZoneRoom.ts` — hooks for death, creature kills, PvP kills, combat stats, loot pickup
+- **Architecture decisions:**
+  - Single `game_metrics` table with `event_type` discriminator + JSONB metadata (flexible, no migration churn for new event types)
+  - All metric writes are fire-and-forget (`void this.record(...)`) — never block the game tick
+  - Provider pattern consistent with death-penalty-provider, stash-provider, etc.
+  - NoOp fallback when no DATABASE_URL (in-memory dev mode)
+  - Combat stats aggregated per-player per-tick before writing (avoids N writes per strike event)
+  - Loot pickup detected via inventory snapshot diff around take/loot commands

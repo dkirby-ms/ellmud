@@ -50,6 +50,7 @@ import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
 import { DowningSystem, type DowningEvent } from '../systems/DowningSystem.js';
 import { CorpseSystem } from '../systems/CorpseSystem.js';
 import { type DeathPenaltyStore, getDeathPenaltyStore } from '../systems/index.js';
+import { type MetricsService, getMetricsService } from '../metrics/index.js';
 import {
   NOISE_VALUES,
   SOUND_DESCRIPTIONS,
@@ -126,6 +127,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private corpseSystem!: CorpseSystem;
   private narrationService!: NarrationService;
   private deathPenaltyStore!: DeathPenaltyStore;
+  private metricsService!: MetricsService;
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
   private loadoutService?: LoadoutService;
@@ -321,6 +323,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Initialize downing system (GDD §6.4 — bleed-out timers, stabilization)
     this.downingSystem = new DowningSystem();
     this.deathPenaltyStore = getDeathPenaltyStore();
+    this.metricsService = getMetricsService();
 
     // Initialize narration service (GDD §4 — LLM narration pipeline)
     this.narrationService = createNarrationService();
@@ -808,6 +811,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
       this.syncCreaturesAfterCombat(tickResult);
       this.deliverCombatResults(tickResult);
+      this.recordCombatMetrics(tickResult);
 
       // Propagate combat sounds to nearby rooms (GDD §12)
       this.propagateCombatSounds(tickResult);
@@ -966,8 +970,27 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
 
     const previousRoomId = player.currentRoomId;
+
+    // Snapshot inventory for loot pickup metrics (take/loot commands)
+    const trackLoot = verb === 'take' || verb === 'loot';
+    const prevInventoryIds = trackLoot ? new Set(player.inventory.keys()) : undefined;
+
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
+
+    // Record loot pickup metrics for newly acquired items (non-blocking)
+    if (trackLoot && prevInventoryIds) {
+      for (const [itemId, entry] of player.inventory) {
+        if (!prevInventoryIds.has(itemId)) {
+          this.metricsService.recordLootPickup(this.dbPlayerId(playerId), {
+            itemId: entry.item.id,
+            itemName: entry.item.name,
+            roomId: player.currentRoomId,
+            source: verb === 'loot' ? 'corpse' : 'room',
+          });
+        }
+      }
+    }
 
     // Inter-zone exit: send transfer message to client instead of moving locally
     if (result.zoneTransfer) {
@@ -1378,6 +1401,50 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
   }
 
+  /** Record per-player combat stats from this tick's events (non-blocking). */
+  private recordCombatMetrics(tickResult: TickResult): void {
+    // Aggregate per-player stats from strike events this tick
+    const stats = new Map<string, { roomId: string; dealt: number; taken: number; hits: number; misses: number }>();
+
+    for (const event of tickResult.events) {
+      if (event.type !== 'strike') continue;
+
+      // Attacker stats (damage dealt, hit/miss)
+      if (event.actorId && !event.actorId.startsWith('creature-')) {
+        let s = stats.get(event.actorId);
+        if (!s) { s = { roomId: '', dealt: 0, taken: 0, hits: 0, misses: 0 }; stats.set(event.actorId, s); }
+        const combatant = this.combatSystem.getCombatant(event.actorId);
+        if (combatant) s.roomId = combatant.roomId;
+        if (event.dodged) {
+          s.misses++;
+        } else {
+          s.dealt += event.damage ?? 0;
+          s.hits++;
+        }
+      }
+
+      // Target stats (damage taken)
+      if (event.targetId && !event.targetId.startsWith('creature-') && !event.dodged) {
+        let s = stats.get(event.targetId);
+        if (!s) { s = { roomId: '', dealt: 0, taken: 0, hits: 0, misses: 0 }; stats.set(event.targetId, s); }
+        const combatant = this.combatSystem.getCombatant(event.targetId);
+        if (combatant) s.roomId = combatant.roomId;
+        s.taken += event.damage ?? 0;
+      }
+    }
+
+    // Fire off one metric event per player who participated
+    for (const [playerId, s] of stats) {
+      this.metricsService.recordCombatStats(this.dbPlayerId(playerId), {
+        roomId: s.roomId,
+        damageDealt: s.dealt,
+        damageTaken: s.taken,
+        hits: s.hits,
+        misses: s.misses,
+      });
+    }
+  }
+
   /** Send active trace descriptions to a client as narration. */
   private sendTraceNarrations(client: Client, roomId: string): void {
     const descriptions = this.traceSystem.getTracesForPlayer(roomId, {
@@ -1714,6 +1781,20 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         }
         this.combatSystem.removeCombatant(event.actorId);
 
+        // Record kill metrics for each player who contributed (non-blocking, skip sandbox)
+        if (!isSandboxCreature && event.killerIds) {
+          for (const killerId of event.killerIds) {
+            if (killerId.startsWith('creature-')) continue;
+            const killerDbId = this.dbPlayerId(killerId);
+            this.metricsService.recordKill(killerDbId, {
+              victimId: event.actorId,
+              victimName: event.actorName,
+              roomId: roomId ?? 'unknown',
+              isCreature: true,
+            });
+          }
+        }
+
         // Trace: creature death creates corpse trace (skip for sandbox)
         if (roomId && !isSandboxCreature) {
           this.traceSystem.addTrace(roomId, 'corpse', {
@@ -1952,6 +2033,14 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.log(`Death penalty: ${this.playerTag(playerId)} death count now ${newCount}`);
     });
 
+    // Record death metric (non-blocking)
+    this.metricsService.recordDeath(deathDbId, {
+      roomId,
+      killerIds,
+      isPvP: isPvPKill,
+      itemsLost: corpseItems.length,
+    });
+
     // Apply death penalty debuff to player state (on any death)
     player.deathPenalty = {
       appliedAt: Date.now(),
@@ -1975,6 +2064,14 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           timestamp: Date.now(),
         };
         this.log(`PvPKillEvent: ${JSON.stringify(pvpEvent)}`);
+
+        // Record PvP kill metric (non-blocking)
+        this.metricsService.recordKill(this.dbPlayerId(killerId), {
+          victimId: playerId,
+          victimName: playerName,
+          roomId,
+          isCreature: false,
+        });
       }
     }
 
