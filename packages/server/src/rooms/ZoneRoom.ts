@@ -23,6 +23,9 @@ import {
   type RoomOccupantsMessage,
   type AdminLiveRoomInfo,
   type PlayerListMessage,
+  type ToggleFlagMessage,
+  type FlagStateMessage,
+  isValidFlagName,
   DEATH_PENALTY_DEFAULTS,
   OPPOSITE_DIRECTION,
   MessageTypes,
@@ -93,6 +96,7 @@ import { InMemoryCharacterRepository, getCharacterRepository } from '../characte
 import { createNarrationService } from '../narrative/factory.js';
 import type { NarrationService } from '../narrative/NarrationService.js';
 import { gatherPlayerList, formatWhoListText, type ZonePlayerData } from '../who/index.js';
+import { getCharacterFlagsRepository } from '../db/CharacterFlagsRepository.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -383,6 +387,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     this.onMessage(MessageTypes.SWAP_ITEM, (client: Client, message: SwapItemMessage) => {
       void this.handleSwapItem(client, message);
+    });
+
+    // Character flags: toggle anon/rp from Settings UI
+    this.onMessage(MessageTypes.TOGGLE_FLAG, (client: Client, message: ToggleFlagMessage) => {
+      void this.handleToggleFlag(client, message);
     });
 
     // Who list: client requests the player list via structured message
@@ -2955,6 +2964,28 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         type: 'system',
         timestamp: Date.now(),
       });
+    }
+  }
+
+  // ─── Character Flags (Issue #365) ────────────────────────────────────────
+
+  /**
+   * Handle TOGGLE_FLAG message from the Settings UI.
+   * Persists the flag change to the database and echoes the new state back.
+   */
+  private async handleToggleFlag(client: Client, message: ToggleFlagMessage): Promise<void> {
+    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+    if (!isValidFlagName(message.flag)) return;
+
+    try {
+      const repo = getCharacterFlagsRepository();
+      await repo.setFlag(playerId, message.flag, message.enabled);
+
+      // Echo confirmed flag state back to the client
+      const flags = await repo.getFlags(playerId);
+      client.send(MessageTypes.FLAG_STATE, { flags } satisfies FlagStateMessage);
+    } catch (err) {
+      this.log(`Failed to toggle flag ${message.flag} for ${this.playerTag(playerId)}: ${err}`);
     }
   }
 

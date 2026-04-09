@@ -25,35 +25,21 @@ function FlagBadge({ flag }: { flag: string }) {
 function PlayerRow({ entry }: { entry: PlayerListEntry }) {
   return (
     <tr className="border-b border-border-muted/30 hover:bg-bg-elevated/40 transition-colors">
-      <td className="py-1.5 px-3 font-mono text-sm">
+      <td style={{ width: '35%' }} className="py-1.5 px-3 font-mono text-sm overflow-hidden text-ellipsis whitespace-nowrap">
         {entry.anon ? (
           <span className="text-text-disabled italic">???</span>
         ) : (
           <span className="text-text-primary">{entry.name}</span>
         )}
       </td>
-      <td className="py-1.5 px-3 font-mono text-sm text-center">
-        {entry.anon ? (
-          <span className="text-text-disabled">???</span>
-        ) : (
-          <span className="text-text-secondary">{entry.level ?? '—'}</span>
-        )}
-      </td>
-      <td className="py-1.5 px-3 font-mono text-sm">
-        {entry.anon ? (
-          <span className="text-text-disabled">???</span>
-        ) : (
-          <span className="text-text-secondary">{entry.class ?? '—'}</span>
-        )}
-      </td>
-      <td className="py-1.5 px-3 font-mono text-sm">
+      <td style={{ width: '40%' }} className="py-1.5 px-3 font-mono text-sm overflow-hidden text-ellipsis whitespace-nowrap">
         {entry.anon ? (
           <span className="text-text-disabled">???</span>
         ) : (
           <span className="text-text-secondary">{entry.zone ?? '—'}</span>
         )}
       </td>
-      <td className="py-1.5 px-3">
+      <td style={{ width: '25%' }} className="py-1.5 px-3">
         <div className="flex gap-1">
           {entry.flags.map((f) => (
             <FlagBadge key={f} flag={f} />
@@ -130,14 +116,17 @@ export default function WhoListModal({ open, onClose }: WhoListModalProps) {
               No players online.
             </p>
           ) : (
-            <table className="w-full text-left">
+            <table className="w-full text-left" style={{ tableLayout: 'fixed' }}>
+              <colgroup>
+                <col style={{ width: '35%' }} />
+                <col style={{ width: '40%' }} />
+                <col style={{ width: '25%' }} />
+              </colgroup>
               <thead>
                 <tr className="border-b border-border-muted text-text-disabled text-xs uppercase font-mono tracking-wider">
-                  <th className="py-2 px-3">Name</th>
-                  <th className="py-2 px-3 text-center">Lvl</th>
-                  <th className="py-2 px-3">Class</th>
-                  <th className="py-2 px-3">Zone</th>
-                  <th className="py-2 px-3">Flags</th>
+                  <th style={{ width: '35%' }} className="py-2 px-3">Name</th>
+                  <th style={{ width: '40%' }} className="py-2 px-3">Zone</th>
+                  <th style={{ width: '25%' }} className="py-2 px-3">Flags</th>
                 </tr>
               </thead>
               <tbody>
