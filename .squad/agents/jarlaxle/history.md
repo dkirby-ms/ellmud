@@ -2459,3 +2459,11 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - All raw traces preserved in storage for TTL/decay/game logic
 - 8 new tests, zero regressions across trace + phase2 QA tests
 - Decision: Presentation-only fix with composable architecture
+
+### 2025-07-22: Creature Room Appearance — Individual Lines (Issue #383)
+- Replaced type-aggregation logic (Map + `(xN)` count suffix) with per-creature loop in `look.ts`, `go.ts`, `goto.ts`.
+- Each creature instance now renders its own line using `roomDescription` field, falling back to `A <name> lurks here.`.
+- ANSI tags in `roomDescription` pass through unchanged — client parser already supports them.
+- No schema or type changes needed — `roomDescription` field exists throughout the stack (DB → template → instance → command context).
+- Added 11 new tests in `creature-appearance.test.ts` covering all three commands. All 60 tests pass.
+- Learning: The creature rendering pipeline is purely presentation-layer. Field already flows DB → template → instance → CreatureRef → handler. Changes were isolated to three handler files with identical aggregation blocks.
