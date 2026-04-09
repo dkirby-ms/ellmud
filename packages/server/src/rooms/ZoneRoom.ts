@@ -150,6 +150,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private characterNames = new Map<string, string>();
   /** Maps playerId → faction slug for death routing (cached on join). */
   private playerFactionSlugs = new Map<string, string>();
+  /** Maps playerId → character flags (anon, rp) cached on join (Issue #370). */
+  private playerFlagsCache = new Map<string, import('@ellmud/shared').CharacterFlags>();
 
   // ─── Zone-specific fields ──────────────────────────────────────────────────
   private zoneSlug?: string;
@@ -504,6 +506,15 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.log(`Failed to load character for ${this.playerTag(playerId)}: ${err}`);
     }
 
+    // Load character flags (anon, rp) into cache for room visibility (Issue #370)
+    try {
+      const flagsRepo = getCharacterFlagsRepository();
+      const flags = await flagsRepo.getFlags(playerId);
+      this.playerFlagsCache.set(playerId, flags);
+    } catch (err) {
+      this.log(`Failed to load flags for ${this.playerTag(playerId)}: ${err}`);
+    }
+
     // Track join time for run duration calculation
     this.playerJoinTimes.set(playerId, Date.now());
 
@@ -661,6 +672,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.combatSystem.removeCombatant(playerId);
       this.characterNames.delete(playerId);
       this.playerFactionSlugs.delete(playerId);
+      this.playerFlagsCache.delete(playerId);
       this.ownerPlayerIds.delete(playerId);
       this.updateMetadata();
     }
@@ -1112,9 +1124,13 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private buildCommandContext(player: PlayerState, args: string[]): CommandContext {
     const room = this.roomGraph.rooms.get(player.currentRoomId)!;
     const otherPlayersInRoom: string[] = [];
+    const otherPlayerInfo: import('../commands/index.js').PlayerRef[] = [];
     for (const [sid, ps] of this.players) {
       if (sid !== player.sessionId && ps.currentRoomId === player.currentRoomId) {
         otherPlayersInRoom.push(sid);
+        const name = this.characterNames.get(sid) ?? 'A wanderer';
+        const flags = this.playerFlagsCache.get(sid);
+        otherPlayerInfo.push({ sessionId: sid, name, anon: flags?.anon === true });
       }
     }
 
@@ -1131,6 +1147,18 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       args,
       resolveRoom: (roomId: string) => this.roomGraph.rooms.get(roomId),
       otherPlayersInRoom,
+      otherPlayerInfo,
+      resolvePlayersInRoom: (roomId: string) => {
+        const result: import('../commands/index.js').PlayerRef[] = [];
+        for (const [sid, ps] of this.players) {
+          if (sid !== player.sessionId && ps.currentRoomId === roomId) {
+            const name = this.characterNames.get(sid) ?? 'A wanderer';
+            const flags = this.playerFlagsCache.get(sid);
+            result.push({ sessionId: sid, name, anon: flags?.anon === true });
+          }
+        }
+        return result;
+      },
       stability: this.state.stability,
       characterName: this.characterNames.get(player.sessionId),
       combatSystem: this.combatSystem,
@@ -2983,6 +3011,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
       // Echo confirmed flag state back to the client
       const flags = await repo.getFlags(playerId);
+      this.playerFlagsCache.set(playerId, flags);
       client.send(MessageTypes.FLAG_STATE, { flags } satisfies FlagStateMessage);
     } catch (err) {
       this.log(`Failed to toggle flag ${message.flag} for ${this.playerTag(playerId)}: ${err}`);

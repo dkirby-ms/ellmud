@@ -90,6 +90,14 @@ export function handleGo(ctx: CommandContext): CommandResult {
     }
   }
 
+  // Other players in the target room (Issue #370)
+  const playersInTarget = ctx.resolvePlayersInRoom?.(targetRoomId) ?? [];
+  for (const p of playersInTarget) {
+    if (!p.anon) {
+      lines.push(`${p.name} is here.`);
+    }
+  }
+
   return {
     narrations: [{ text: lines.join('\n'), type: 'room' }],
     roomHeader: {
