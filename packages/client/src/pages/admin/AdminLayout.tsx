@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import {
   listEntities, fetchNotifications, setAdminToken, getAdminToken, clearAdminToken,
+  validateAdminToken, ADMIN_AUTH_FAILURE_EVENT,
   type EntityType, type AdminNotification,
 } from "../../lib/admin-api";
 import { useVersion } from "../../hooks/useVersion";
@@ -72,6 +73,35 @@ export default function AdminLayout() {
   const [authenticated, setAuthenticated] = useState(() => !!getAdminToken());
   const [tokenInput, setTokenInput] = useState("");
   const [authError, setAuthError] = useState("");
+  const [validating, setValidating] = useState(() => !!getAdminToken());
+
+  // Listen for 401/403 from any admin API call and reset to login
+  useEffect(() => {
+    function handleAuthFailure() {
+      clearAdminToken();
+      setAuthenticated(false);
+      setAuthError("Session expired — please re-enter your admin token.");
+    }
+    window.addEventListener(ADMIN_AUTH_FAILURE_EVENT, handleAuthFailure);
+    return () => window.removeEventListener(ADMIN_AUTH_FAILURE_EVENT, handleAuthFailure);
+  }, []);
+
+  // Validate a stored token on mount before showing the admin UI
+  useEffect(() => {
+    if (!getAdminToken()) { setValidating(false); return; }
+    let cancelled = false;
+    validateAdminToken()
+      .then(() => { if (!cancelled) { setAuthenticated(true); setValidating(false); } })
+      .catch(() => {
+        if (!cancelled) {
+          clearAdminToken();
+          setAuthenticated(false);
+          setValidating(false);
+          setAuthError("Stored token is no longer valid — please re-enter.");
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [allEntities, setAllEntities] = useState<SearchableEntity[]>([]);
@@ -173,7 +203,7 @@ export default function AdminLayout() {
     if (!tokenInput.trim()) { setAuthError("Token is required"); return; }
     setAdminToken(tokenInput.trim());
     try {
-      await fetchNotifications();
+      await validateAdminToken();
       setAuthenticated(true);
       setAuthError("");
     } catch {
@@ -181,6 +211,17 @@ export default function AdminLayout() {
       setAuthError("Invalid token — check your server's ADMIN_TOKEN env var");
     }
   };
+
+  if (validating) {
+    return (
+      <div className="h-screen bg-[#0A0B0F] flex items-center justify-center">
+        <div className="flex items-center gap-3 text-[#8A8B95]">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span className="text-sm" style={{ fontFamily: "var(--font-sans)" }}>Validating session…</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!authenticated) {
     return (
