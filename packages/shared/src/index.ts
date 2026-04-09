@@ -253,6 +253,7 @@ export const MessageTypes = {
   EQUIP_ITEM: 'equip_item',
   UNEQUIP_ITEM: 'unequip_item',
   SWAP_ITEM: 'swap_item',
+  TOGGLE_FLAG: 'toggle_flag',
 
   // Client ↔ Server: Character management
   CHARACTER_CREATE: 'character_create',
@@ -279,6 +280,7 @@ export const MessageTypes = {
   EXPLORATION_DATA: 'exploration_data',
   EXPLORATION_UPDATE: 'exploration_update',
   ROOM_OCCUPANTS: 'room_occupants',
+  FLAG_STATE: 'flag_state',
 } as const;
 
 export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
@@ -866,4 +868,65 @@ export interface AdminLiveRoomsResponse {
   rooms: AdminLiveRoomInfo[];
   totalPlayers: number;
   totalCreatures: number;
+}
+
+// ─── User Flags ──────────────────────────────────────────────────────────────
+
+/** Flag types that players can toggle on their character. */
+export type UserFlagType = 'anon' | 'rp';
+
+/** Client → Server: toggle a character flag. */
+export interface ToggleFlagMessage {
+  flag: UserFlagType;
+  enabled: boolean;
+}
+
+/** Server → Client: current flag state for the active character. */
+export interface FlagStateMessage {
+  flags: Record<UserFlagType, boolean>;
+}
+
+// ─── Character Flags (Issue #365) ────────────────────────────────────────────
+
+/** Per-character display flags. All flags default to false. */
+export interface CharacterFlags {
+  /** Hide name/level/class from other players (except same-room and admins). */
+  anon: boolean;
+  /** Mark this character as roleplaying — always visible to everyone. */
+  rp: boolean;
+}
+
+/** Default flag values for new characters. */
+export const DEFAULT_CHARACTER_FLAGS: CharacterFlags = {
+  anon: false,
+  rp: false,
+};
+
+/** Valid flag names (used for runtime validation). */
+export type CharacterFlagName = keyof CharacterFlags;
+
+/** Metadata for each supported flag. */
+export interface FlagDefinition {
+  name: CharacterFlagName;
+  label: string;
+  description: string;
+}
+
+/** Registry of all supported flags with display metadata. */
+export const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
+  {
+    name: 'anon',
+    label: '[Anon]',
+    description: 'Hide your identity from other players. Admins and players in the same room can still see you.',
+  },
+  {
+    name: 'rp',
+    label: '[RP]',
+    description: 'Signal that you are roleplaying in-character.',
+  },
+] as const;
+
+/** Check whether a string is a valid flag name. */
+export function isValidFlagName(name: string): name is CharacterFlagName {
+  return name === 'anon' || name === 'rp';
 }

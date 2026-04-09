@@ -37,6 +37,7 @@ import { handleStashView, handleStore } from './handlers/stash-command.js';
 import { handleLoadoutView } from './handlers/loadout-command.js';
 import { handleRent } from './handlers/rent.js';
 import { handleSandbox } from './handlers/sandbox.js';
+import { handleFlag } from './handlers/flag.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -175,6 +176,7 @@ handlers.set('pos', handlePosition); // Shorthand alias
 handlers.set('goto', handleGoto);
 handlers.set('teleport', handleTeleport);
 handlers.set('help', handleHelp);
+handlers.set('flag', handleFlag);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(

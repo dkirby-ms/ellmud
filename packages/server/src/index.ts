@@ -41,6 +41,7 @@ import { createCharacterRouter } from './api/characters.js';
 import { createSpawnZoneRouter } from './api/spawn-zone.js';
 import { createSettingsRouter } from './api/settings.js';
 import { initUserSettingsProvider } from './db/UserSettingsRepository.js';
+import { initCharacterFlagsProvider } from './db/CharacterFlagsRepository.js';
 import { initZoneProvider, getZoneRepository } from './zones/index.js';
 import { initExplorationProvider } from './exploration/index.js';
 import { initContentRegistry } from './content/index.js';
@@ -129,6 +130,10 @@ console.log(`[Ellmud] Exploration persistence: ${USE_PG ? 'PostgreSQL' : 'in-mem
 // ─── User Settings Persistence ──────────────────────────────────────────────
 initUserSettingsProvider(USE_PG);
 console.log(`[Ellmud] User settings persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Character Flags Persistence ────────────────────────────────────────────
+initCharacterFlagsProvider(USE_PG);
+console.log(`[Ellmud] Character flags persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Content Registry (DB-driven creature/item definitions) ─────────────────
 if (USE_PG) {
