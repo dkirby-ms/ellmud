@@ -5,11 +5,11 @@ import AnsiText from "./AnsiText.js";
 interface ChatPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  context: "zone" | "refuge";
+  context: "zone" | "hub";
   onSendMessage?: (text: string) => void;
 }
 
-type ChatTab = "proximity" | "whisper" | "refuge" | "squad";
+type ChatTab = "proximity" | "whisper" | "hub" | "squad";
 
 interface ChatMessage {
   id: string;
@@ -25,7 +25,7 @@ export default function ChatPanel({
   onSendMessage,
 }: ChatPanelProps) {
   const [activeTab, setActiveTab] = useState<ChatTab>(
-    context === "zone" ? "proximity" : "refuge"
+    context === "zone" ? "proximity" : "hub"
   );
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -82,7 +82,7 @@ export default function ChatPanel({
   const tabs: { id: ChatTab; label: string; available: boolean }[] = [
     { id: "proximity", label: "Proximity", available: context === "zone" },
     { id: "whisper", label: "Whisper", available: true },
-    { id: "refuge", label: "Refuge", available: context === "refuge" },
+    { id: "hub", label: "Hub", available: context === "hub" },
     { id: "squad", label: "Squad", available: false },
   ];
 

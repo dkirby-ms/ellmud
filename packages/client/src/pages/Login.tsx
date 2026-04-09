@@ -40,7 +40,7 @@ export default function Login() {
   const flavorTexts = [
     "The ground trembles. Another rift opens.",
     "Deep below, something stirs in the darkness.",
-    "The Refuge calls to those who would risk everything.",
+    "The hubs call to those who would risk everything.",
     "Shadows lengthen. Time grows short.",
   ];
 
@@ -229,7 +229,7 @@ export default function Login() {
                 ? "Connecting..."
                 : isRegister
                   ? "Create Character"
-                  : "Enter the Refuge"}
+                  : "Enter the World"}
             </button>
           </form>
         )}

@@ -6,6 +6,7 @@ import {
   Sword,
   ArrowLeft,
   LogOut,
+  Settings,
 } from "lucide-react";
 import CombinedStashLoadout from "../components/CombinedStashLoadout";
 import ChatPanel from "../components/ChatPanel";
@@ -352,6 +353,13 @@ export default function ZoneExploration() {
           <span className="text-text-secondary text-sm font-sans">
             {state.username ?? state.email ?? "Unknown"}
           </span>
+          <button
+            onClick={() => navigate("/settings")}
+            className="text-text-secondary hover:text-accent-gold transition-colors"
+            title="Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
           <button
             onClick={handleLogout}
             className="text-text-secondary hover:text-danger transition-colors"
@@ -876,7 +884,7 @@ export default function ZoneExploration() {
         elapsedSeconds={reconnection.elapsedSeconds}
         onReconnect={reconnection.reconnectNow}
         onCancel={reconnection.cancel}
-        onReturnToRefuge={reconnection.returnToRefuge}
+        onReturnToHub={reconnection.returnToHub}
       />
     </div>
   );

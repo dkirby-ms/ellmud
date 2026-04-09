@@ -323,7 +323,7 @@ export default function Leaderboard() {
                 style={{ fontFamily: "var(--font-serif)", lineHeight: 1.6 }}
               >
                 Eliminate 5 Drowned Revenants in Flooded Crypt zones. The
-                Refuge scholars seek to understand their corruption.
+                hub scholars seek to understand their corruption.
               </p>
               <div className="mb-4">
                 <div className="flex justify-between mb-1">
@@ -371,7 +371,7 @@ export default function Leaderboard() {
                 className="text-[#4A4B55] text-sm"
                 style={{ fontFamily: "var(--font-serif)" }}
               >
-                Visit the Contracts board in the Refuge to accept new
+                Visit the Contracts board in the hub to accept new
                 assignments.
               </p>
             </div>

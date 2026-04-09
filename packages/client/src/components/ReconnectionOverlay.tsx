@@ -13,7 +13,7 @@ export interface ReconnectionOverlayProps {
   elapsedSeconds?: number;
   onReconnect?: () => void;
   onCancel?: () => void;
-  onReturnToRefuge?: () => void;
+  onReturnToHub?: () => void;
 }
 
 export function ReconnectionOverlay({
@@ -23,7 +23,7 @@ export function ReconnectionOverlay({
   elapsedSeconds = 0,
   onReconnect,
   onCancel,
-  onReturnToRefuge,
+  onReturnToHub,
 }: ReconnectionOverlayProps): React.JSX.Element | null {
   const [dismissed, setDismissed] = useState(false);
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -76,11 +76,11 @@ export function ReconnectionOverlay({
                 Reconnect Now
               </button>
               <button
-                onClick={onReturnToRefuge}
+                onClick={onReturnToHub}
                 type="button"
                 className="flex-1 border border-border-muted hover:bg-bg-elevated text-text-secondary py-2 rounded transition-colors font-sans"
               >
-                Return to Refuge
+                Return to Hub
               </button>
             </div>
           </>

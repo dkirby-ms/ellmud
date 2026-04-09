@@ -68,17 +68,17 @@ describe('useReconnection', () => {
     expect(onReconnect.mock.calls.length).toBe(callCount);
   });
 
-  it('calls onReturnToRefuge and hides overlay', () => {
-    const onReturnToRefuge = vi.fn();
+  it('calls onReturnToHub and hides overlay', () => {
+    const onReturnToHub = vi.fn();
     const onReconnect = vi.fn().mockResolvedValue(false);
     const { result } = renderHook(() =>
-      useReconnection({ onReconnect, onReturnToRefuge }),
+      useReconnection({ onReconnect, onReturnToHub }),
     );
 
     act(() => { result.current.reportDisconnect(); });
-    act(() => { result.current.returnToRefuge(); });
+    act(() => { result.current.returnToHub(); });
 
-    expect(onReturnToRefuge).toHaveBeenCalledOnce();
+    expect(onReturnToHub).toHaveBeenCalledOnce();
     expect(result.current.overlayState).toBe('hidden');
   });
 

@@ -64,7 +64,7 @@ vi.mock('../hooks/useZoneConnection.js', () => ({
       elapsedSeconds: 0,
       reconnectNow: vi.fn(),
       cancel: vi.fn(),
-      returnToRefuge: vi.fn(),
+      returnToHub: vi.fn(),
     },
     roomRef: { current: null },
   }),

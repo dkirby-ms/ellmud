@@ -1064,7 +1064,7 @@ export default function ZonesDetail() {
                               type="text"
                               value={exitForm.targetZoneSlug}
                               onChange={(e) => setExitForm({ ...exitForm, targetZoneSlug: e.target.value })}
-                              placeholder="e.g., refuge"
+                              placeholder="e.g., the-reliquary"
                               className="w-full bg-[#12131A] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] text-sm focus:border-[#C9A84C] focus:outline-none"
                               style={{ fontFamily: "var(--font-mono)" }}
                             />
