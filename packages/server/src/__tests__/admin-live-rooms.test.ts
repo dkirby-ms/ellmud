@@ -802,10 +802,13 @@ describe('roomGraphRooms in zone detail response', () => {
     expect(res.body.roomGraphRooms).toBeDefined();
     expect(res.body.roomGraphRooms).toHaveLength(2);
 
-    const ids = (res.body as any).roomGraphRooms.map((r: { id: string }) => r.id).sort();
+    const detail = res.body as {
+      roomGraphRooms: Array<{ id: string; name: string; type: string }>;
+    };
+    const ids = detail.roomGraphRooms.map(r => r.id).sort();
     expect(ids).toEqual(['corridor', 'entry']);
 
-    const entry = (res.body as any).roomGraphRooms.find((r: { id: string }) => r.id === 'entry');
+    const entry = detail.roomGraphRooms.find(r => r.id === 'entry');
     expect(entry.name).toBe('Rift Entry');
     expect(entry.type).toBe('entry');
   });
@@ -842,14 +845,17 @@ describe('roomGraphRooms in zone detail response', () => {
     const detailRes = await request(app, 'get', '/admin/api/rooms/zone-room-rg', { token: TEST_TOKEN });
     expect(detailRes.status).toBe(200);
 
-    const creature = (detailRes.body as any).creatures.find(
-      (c: { id: string }) => c.id === (spawnRes.body as any).spawned.creatureId,
-    );
+    const spawned = spawnRes.body.spawned as { creatureId: string; spawnRoomId: string };
+    const detail = detailRes.body as {
+      creatures: Array<{ id: string; currentRoomId: string }>;
+      roomGraphRooms: Array<{ id: string }>;
+    };
+    const creature = detail.creatures.find(c => c.id === spawned.creatureId);
     expect(creature).toBeDefined();
-    expect(creature.currentRoomId).toBe('entry');
+    expect(creature!.currentRoomId).toBe('entry');
 
     // The key assertion: creature.currentRoomId must exist in roomGraphRooms
-    const roomIds = (detailRes.body as any).roomGraphRooms.map((r: { id: string }) => r.id);
+    const roomIds = detail.roomGraphRooms.map(r => r.id);
     expect(roomIds).toContain(creature.currentRoomId);
   });
 
