@@ -18,7 +18,7 @@ import type { AuditEventInput } from '../admin/audit/audit-routes.js';
 
 // ─── Mock the audit logger to capture calls ──────────────────────────────────
 
-const mockLogAuditEvent = vi.fn<[AuditEventInput], Promise<void>>();
+const mockLogAuditEvent = vi.fn<(input: AuditEventInput) => Promise<void>>();
 
 vi.mock('../admin/audit/audit-routes.js', async (importOriginal) => {
   const orig = await importOriginal<typeof import('../admin/audit/audit-routes.js')>();

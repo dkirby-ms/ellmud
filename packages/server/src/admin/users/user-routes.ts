@@ -19,7 +19,7 @@
 
 import { Router, type Request, type Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { adminAuth } from '../middleware.js';
+import { adminAuth, type AuthenticatedAdminRequest } from '../middleware.js';
 import {
   type UserStore,
   type UserRecord,
@@ -28,18 +28,13 @@ import {
   DuplicateUsernameError,
   DuplicateProviderError,
 } from './user-store.js';
+import { logAuditEvent } from '../audit/audit-routes.js';
+import { VALID_ROLES, isValidRole, type UserRole } from '@ellmud/shared';
 
 const BCRYPT_ROUNDS = 10;
 
-const VALID_ROLES = ['player', 'viewer', 'moderator', 'admin'] as const;
-type UserRole = typeof VALID_ROLES[number];
-
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-function isValidRole(role: string): role is UserRole {
-  return VALID_ROLES.includes(role as UserRole);
 }
 
 function toJson(record: UserRecord) {
@@ -191,11 +186,28 @@ export function createUserRouter(store?: UserStore): Router {
         return;
       }
 
+      // Fetch existing user to detect role change for audit
+      const existing = role !== undefined ? await userStore.getUserById(req.params.id) : null;
+
       const updated = await userStore.updateUser(req.params.id, { username, email, role });
 
       if (!updated) {
         res.status(404).json({ error: 'User not found' });
         return;
+      }
+
+      // Audit log: role change
+      if (role !== undefined && existing && existing.role !== role) {
+        const adminReq = req as AuthenticatedAdminRequest;
+        const actor = adminReq.adminUser?.username ?? 'admin-token';
+        logAuditEvent({
+          action: 'role_change',
+          entityType: 'user',
+          entityId: req.params.id,
+          entityName: updated.username,
+          actor,
+          details: { previousRole: existing.role, newRole: role },
+        }).catch(() => {}); // fire-and-forget
       }
 
       res.json(toJson(updated));

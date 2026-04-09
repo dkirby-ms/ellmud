@@ -54,6 +54,7 @@ vi.mock('../lib/admin-api.js', () => ({
   setAdminToken: vi.fn(),
   clearAdminToken: vi.fn(),
   validateAdminToken: vi.fn().mockResolvedValue(undefined),
+  isSessionAuth: vi.fn(() => false),
   adminFetch: vi.fn().mockResolvedValue({}),
   listEntities: vi.fn().mockResolvedValue([]),
   fetchNotifications: vi.fn().mockResolvedValue([]),
@@ -131,8 +132,7 @@ describe('Admin Page Gating by Role (Issue #373)', () => {
       authenticated: true,
       token: 'player-session-token',
       playerId: 'player-1',
-      // Jarlaxle will add 'role' to AppState; for now we cast
-      ...({ role: 'player' } as Partial<AppState>),
+      userRole: 'player',
     };
 
     it('player is blocked from /admin', async () => {
@@ -175,7 +175,7 @@ describe('Admin Page Gating by Role (Issue #373)', () => {
       authenticated: true,
       token: 'content-dev-session-token',
       playerId: 'player-2',
-      ...({ role: 'content-dev' } as Partial<AppState>),
+      userRole: 'content-dev',
     };
 
     it('content-dev can access /admin dashboard', async () => {
@@ -206,7 +206,7 @@ describe('Admin Page Gating by Role (Issue #373)', () => {
       authenticated: true,
       token: 'admin-session-token',
       playerId: 'player-3',
-      ...({ role: 'admin' } as Partial<AppState>),
+      userRole: 'admin',
     };
 
     it('admin can access /admin dashboard', async () => {

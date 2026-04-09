@@ -17,7 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   type UserRole,
-  ROLE_HIERARCHY,
+  ROLE_HIERARCHY_LIST as ROLE_HIERARCHY,
   hasRole,
   isAdmin,
   isContentDev,

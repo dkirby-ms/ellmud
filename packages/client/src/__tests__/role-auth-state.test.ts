@@ -17,41 +17,39 @@ import { appReducer, initialState, type AppAction, type AppState } from '../stor
 describe('Role in App State (Issue #373)', () => {
   describe('initial state', () => {
     it('has a role field', () => {
-      // Jarlaxle will add 'role' to AppState
-      expect(initialState).toHaveProperty('role');
+      expect(initialState).toHaveProperty('userRole');
     });
 
     it('defaults role to "player"', () => {
-      expect((initialState as AppState & { role: string }).role).toBe('player');
+      expect(initialState.userRole).toBe('player');
     });
   });
 
   describe('LOGIN_SUCCESS stores role', () => {
     it('stores role from LOGIN_SUCCESS action', () => {
-      // Jarlaxle will add 'role' to the LOGIN_SUCCESS action type
-      const action = {
+      const action: AppAction = {
         type: 'LOGIN_SUCCESS',
         token: 'tok',
         playerId: 'p1',
         username: 'TestUser',
         role: 'admin',
-      } as AppAction;
+      };
 
       const state = appReducer(initialState, action);
-      expect((state as AppState & { role: string }).role).toBe('admin');
+      expect(state.userRole).toBe('admin');
     });
 
     it('stores content-dev role from LOGIN_SUCCESS', () => {
-      const action = {
+      const action: AppAction = {
         type: 'LOGIN_SUCCESS',
         token: 'tok',
         playerId: 'p1',
         username: 'DevUser',
         role: 'content-dev',
-      } as AppAction;
+      };
 
       const state = appReducer(initialState, action);
-      expect((state as AppState & { role: string }).role).toBe('content-dev');
+      expect(state.userRole).toBe('content-dev');
     });
 
     it('defaults role to "player" when LOGIN_SUCCESS omits role', () => {
@@ -63,54 +61,50 @@ describe('Role in App State (Issue #373)', () => {
       };
 
       const state = appReducer(initialState, action);
-      expect((state as AppState & { role: string }).role).toBe('player');
+      expect(state.userRole).toBe('player');
     });
   });
 
   describe('LOGOUT resets role', () => {
     it('resets role to "player" on logout', () => {
-      // First, login as admin
-      const loginAction = {
+      const loginAction: AppAction = {
         type: 'LOGIN_SUCCESS',
         token: 'tok',
         playerId: 'p1',
         username: 'Admin',
         role: 'admin',
-      } as AppAction;
+      };
 
       const loggedInState = appReducer(initialState, loginAction);
-      expect((loggedInState as AppState & { role: string }).role).toBe('admin');
+      expect(loggedInState.userRole).toBe('admin');
 
-      // Then logout
       const loggedOutState = appReducer(loggedInState, { type: 'LOGOUT' });
-      expect((loggedOutState as AppState & { role: string }).role).toBe('player');
+      expect(loggedOutState.userRole).toBe('player');
     });
   });
 
-  describe('SET_ROLE action', () => {
-    it('updates role via SET_ROLE action', () => {
-      // Jarlaxle may add a SET_ROLE action for when /auth/me returns role
-      const action = {
-        type: 'SET_ROLE',
+  describe('SET_USER_ROLE action', () => {
+    it('updates role via SET_USER_ROLE action', () => {
+      const action: AppAction = {
+        type: 'SET_USER_ROLE',
         role: 'content-dev',
-      } as unknown as AppAction;
+      };
 
       const state = appReducer(initialState, action);
-      expect((state as AppState & { role: string }).role).toBe('content-dev');
+      expect(state.userRole).toBe('content-dev');
     });
 
-    it('SET_ROLE to admin works', () => {
-      const action = {
-        type: 'SET_ROLE',
+    it('SET_USER_ROLE to admin works', () => {
+      const action: AppAction = {
+        type: 'SET_USER_ROLE',
         role: 'admin',
-      } as unknown as AppAction;
+      };
 
       const state = appReducer(initialState, action);
-      expect((state as AppState & { role: string }).role).toBe('admin');
+      expect(state.userRole).toBe('admin');
     });
 
-    it('SET_ROLE to player works', () => {
-      // Start with an admin state
+    it('SET_USER_ROLE to player works', () => {
       const adminState = appReducer(initialState, {
         type: 'LOGIN_SUCCESS',
         token: 'tok',
@@ -118,13 +112,13 @@ describe('Role in App State (Issue #373)', () => {
         role: 'admin',
       } as AppAction);
 
-      const action = {
-        type: 'SET_ROLE',
+      const action: AppAction = {
+        type: 'SET_USER_ROLE',
         role: 'player',
-      } as unknown as AppAction;
+      };
 
       const state = appReducer(adminState, action);
-      expect((state as AppState & { role: string }).role).toBe('player');
+      expect(state.userRole).toBe('player');
     });
   });
 });

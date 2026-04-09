@@ -19,9 +19,7 @@ import { AuthService } from '../auth/AuthService.js';
 import { InMemoryTokenStore } from '../auth/TokenStore.js';
 import { InMemoryPlayerRepository } from '../auth/PlayerRepository.js';
 
-// Import the anticipated function — will fail until implemented
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-expect-error — TDD: module does not exist yet
+// Import the auto-promote function
 import { autoPromoteAdmin } from '../auth/roles.js';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
@@ -61,12 +59,10 @@ describe('AUTO_PROMOTE_ADMIN (Issue #373)', () => {
     await autoPromoteAdmin(playerRepo);
 
     // Verify: user should now have admin role
-    // The exact mechanism depends on implementation, but the player repo
-    // should reflect the role change
     const player = await playerRepo.findByUsername('PromoteMe');
     expect(player).not.toBeNull();
-    // Jarlaxle will add 'role' to the player data
-    expect((player as Record<string, unknown>)['role']).toBe('admin');
+    const role = await playerRepo.getRoleByPlayerId(player!.id);
+    expect(role).toBe('admin');
 
     tokenStore.dispose();
   });
@@ -97,7 +93,8 @@ describe('AUTO_PROMOTE_ADMIN (Issue #373)', () => {
 
     // Verify still admin (not downgraded or errored)
     const player = await playerRepo.findByUsername('AlreadyAdmin');
-    expect((player as Record<string, unknown>)['role']).toBe('admin');
+    const role = await playerRepo.getRoleByPlayerId(player!.id);
+    expect(role).toBe('admin');
 
     consoleSpy.mockRestore();
     tokenStore.dispose();
@@ -134,7 +131,8 @@ describe('AUTO_PROMOTE_ADMIN (Issue #373)', () => {
     await autoPromoteAdmin(playerRepo);
 
     const player = await playerRepo.findByUsername('MixedCase');
-    expect((player as Record<string, unknown>)['role']).toBe('admin');
+    const role = await playerRepo.getRoleByPlayerId(player!.id);
+    expect(role).toBe('admin');
 
     tokenStore.dispose();
   });

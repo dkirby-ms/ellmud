@@ -16,7 +16,7 @@
 
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import express, { type Request, type Response } from 'express';
-import { adminAuth } from '../admin/middleware.js';
+import { adminAuth, initAdminAuth, resetAdminAuth } from '../admin/middleware.js';
 import { AuthService } from '../auth/AuthService.js';
 import { InMemoryTokenStore } from '../auth/TokenStore.js';
 import { InMemoryPlayerRepository } from '../auth/PlayerRepository.js';
@@ -38,10 +38,13 @@ function createAuthService() {
  * - Auth routes (register, login, /auth/me)
  * - A protected admin endpoint behind adminAuth
  */
-function createRoleTestApp(authService: AuthService): express.Express {
+function createRoleTestApp(authService: AuthService, playerRepo: InMemoryPlayerRepository): express.Express {
+  // Initialize session-based admin auth
+  initAdminAuth(authService, playerRepo);
+
   const app = express();
   app.use(express.json());
-  app.use(createAuthRouter(authService));
+  app.use(createAuthRouter(authService, playerRepo));
   app.get('/admin/api/test', adminAuth, (_req: Request, res: Response) => {
     res.json({ ok: true, message: 'Admin access granted' });
   });
@@ -91,6 +94,7 @@ async function httpRequest(
 describe('Role-Based Admin Auth Middleware (Issue #373)', () => {
   let authService: AuthService;
   let tokenStore: InMemoryTokenStore;
+  let playerRepo: InMemoryPlayerRepository;
   let app: express.Express;
   const originalAdminToken = process.env['ADMIN_TOKEN'];
 
@@ -98,11 +102,13 @@ describe('Role-Based Admin Auth Middleware (Issue #373)', () => {
     const deps = createAuthService();
     authService = deps.authService;
     tokenStore = deps.tokenStore;
-    app = createRoleTestApp(authService);
+    playerRepo = deps.playerRepo;
+    app = createRoleTestApp(authService, playerRepo);
   });
 
   afterEach(() => {
     tokenStore.dispose();
+    resetAdminAuth();
     if (originalAdminToken !== undefined) {
       process.env['ADMIN_TOKEN'] = originalAdminToken;
     } else {
@@ -231,13 +237,8 @@ describe('Role-Based Admin Auth Middleware (Issue #373)', () => {
       delete process.env['ADMIN_TOKEN'];
       const reg = await authService.register('ContentCreator', 'password123');
 
-      // Manually set the role in the token store to simulate content-dev promotion
-      // Jarlaxle's implementation should store role in TokenData
-      await tokenStore.set(reg.token, {
-        playerId: reg.playerId,
-        username: 'ContentCreator',
-        role: 'content-dev',
-      } as never, 86400);
+      // Set role on the player repo (where the middleware reads it from)
+      await playerRepo.setRole(reg.playerId, 'content-dev');
 
       const res = await httpRequest(app, 'get', '/admin/api/test', {
         token: reg.token,
@@ -250,12 +251,8 @@ describe('Role-Based Admin Auth Middleware (Issue #373)', () => {
       delete process.env['ADMIN_TOKEN'];
       const reg = await authService.register('AdminUser', 'password123');
 
-      // Manually set admin role in token store
-      await tokenStore.set(reg.token, {
-        playerId: reg.playerId,
-        username: 'AdminUser',
-        role: 'admin',
-      } as never, 86400);
+      // Set admin role on player repo
+      await playerRepo.setRole(reg.playerId, 'admin');
 
       const res = await httpRequest(app, 'get', '/admin/api/test', {
         token: reg.token,
@@ -271,15 +268,17 @@ describe('Role-Based Admin Auth Middleware (Issue #373)', () => {
 describe('GET /auth/me includes role (Issue #373)', () => {
   let authService: AuthService;
   let tokenStore: InMemoryTokenStore;
+  let playerRepo: InMemoryPlayerRepository;
   let app: express.Express;
 
   beforeEach(() => {
     const deps = createAuthService();
     authService = deps.authService;
     tokenStore = deps.tokenStore;
+    playerRepo = deps.playerRepo;
     app = express();
     app.use(express.json());
-    app.use(createAuthRouter(authService));
+    app.use(createAuthRouter(authService, playerRepo));
   });
 
   afterEach(() => {
@@ -310,12 +309,8 @@ describe('GET /auth/me includes role (Issue #373)', () => {
   it('returns "admin" role for admin users', async () => {
     const reg = await authService.register('AdminMe', 'password123');
 
-    // Simulate admin role in token store
-    await tokenStore.set(reg.token, {
-      playerId: reg.playerId,
-      username: 'AdminMe',
-      role: 'admin',
-    } as never, 86400);
+    // Set admin role in player repo
+    await playerRepo.setRole(reg.playerId, 'admin');
 
     const res = await httpRequest(app, 'get', '/auth/me', {
       token: reg.token,
@@ -327,11 +322,7 @@ describe('GET /auth/me includes role (Issue #373)', () => {
   it('returns "content-dev" role for content-dev users', async () => {
     const reg = await authService.register('DevUser', 'password123');
 
-    await tokenStore.set(reg.token, {
-      playerId: reg.playerId,
-      username: 'DevUser',
-      role: 'content-dev',
-    } as never, 86400);
+    await playerRepo.setRole(reg.playerId, 'content-dev');
 
     const res = await httpRequest(app, 'get', '/auth/me', {
       token: reg.token,
