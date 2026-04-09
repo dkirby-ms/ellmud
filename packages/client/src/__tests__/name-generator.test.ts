@@ -55,7 +55,16 @@ describe("generateRandomName", () => {
     for (let i = 0; i < 30; i++) {
       names.add(generateRandomName());
     }
-    // Should produce at least 5 distinct names out of 30 calls
-    expect(names.size).toBeGreaterThanOrEqual(5);
+    // Should produce at least 10 distinct names out of 30 calls
+    expect(names.size).toBeGreaterThanOrEqual(10);
+  });
+
+  it("produces varied name lengths", () => {
+    const lengths = new Set<number>();
+    for (let i = 0; i < 100; i++) {
+      lengths.add(generateRandomName().length);
+    }
+    // Should produce at least 5 distinct lengths across 100 names
+    expect(lengths.size).toBeGreaterThanOrEqual(5);
   });
 });
