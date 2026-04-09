@@ -71,8 +71,15 @@ function showFullRoom(ctx: CommandContext): CommandResult {
     }
   }
 
-  // Other players in the room
-  if (ctx.otherPlayersInRoom.length > 0) {
+  // Other players in the room (Issue #370)
+  if (ctx.otherPlayerInfo && ctx.otherPlayerInfo.length > 0) {
+    for (const p of ctx.otherPlayerInfo) {
+      if (!p.anon) {
+        lines.push(`${p.name} is here.`);
+      }
+    }
+  } else if (ctx.otherPlayersInRoom.length > 0) {
+    // Fallback: legacy count-based display when detailed info unavailable
     const count = ctx.otherPlayersInRoom.length;
     lines.push(`${count} other ${count === 1 ? 'wanderer lingers' : 'wanderers linger'} here.`);
   }

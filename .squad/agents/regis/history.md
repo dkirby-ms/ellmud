@@ -1740,3 +1740,45 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
 - **Tests:** 7 new tests, all 338 client tests passing
 - **Team impact:** No shared package changes, no API changes, no server changes. Server validates names but doesn't generate.
 - **Future:** If server needs to generate NPC names, move generator to `@ellmud/shared`
+
+### Issue #369: Admin Invalid Token Error (2026-04-10)
+- **Status:** ✅ Complete (PR #372, branch squad/369-admin-invalid-token → dev)
+- **Bug:** Invalid admin tokens were silently accepted because `fetchNotifications()` swallowed 401/403 errors via internal `.catch()` handlers. Stale tokens in localStorage were also trusted without re-validation.
+- **Root cause:** `fetchNotifications` calls `fetchValidationWarnings` and `fetchRecentChanges` both wrapped in `.catch(() => defaults)`, so auth errors never propagated to `handleAdminLogin`.
+- **Fix approach:**
+  1. Added `validateAdminToken()` in `admin-api.ts` — calls `/admin/api/dashboard/metrics` which properly propagates errors
+  2. `handleAdminLogin` now uses `validateAdminToken()` instead of `fetchNotifications()`
+  3. Added startup validation: stored token is checked on mount before showing admin UI
+  4. Added `ADMIN_AUTH_FAILURE_EVENT` custom event: `adminFetch` broadcasts on 401/403, `AdminLayout` listens and resets to login
+  5. Entity hooks (`useAdminEntity`, `useAdminEntityList`) silently absorb auth errors since global event handles redirect
+- **Pattern:** Event-based auth failure broadcasting from API layer to layout — avoids prop drilling or context for auth state
+- **Files modified:**
+  - `packages/client/src/lib/admin-api.ts` — Added `validateAdminToken()`, `ADMIN_AUTH_FAILURE_EVENT`, 401/403 event dispatch in `adminFetch`
+  - `packages/client/src/pages/admin/AdminLayout.tsx` — Startup validation, auth failure listener, validating state
+  - `packages/client/src/hooks/useAdminEntityList.ts` — Auth error guard
+  - `packages/client/src/hooks/useAdminEntity.ts` — Auth error guard
+  - `packages/client/src/__tests__/admin-token-validation.test.tsx` — Updated mocks for new exports
+  - `packages/client/src/__tests__/auth-guards.test.tsx` — Updated mocks for new exports
+- **Tests:** All 356 client tests passing (17 admin-token-validation tests)
+
+---
+
+### 2026-04-09: Issue #369 — Admin Invalid Token Error (with Minsc)
+- **Status:** ✅ Complete (PR #372)
+- **Collaboration:** Regis implementation + Minsc comprehensive test coverage
+- **Bug:** Invalid admin tokens stored to localStorage, `authenticated` set to `true` without server validation on mount, breaking all admin pages with 403s
+- **Solution:**
+  - **`validateAdminToken()`** function in `admin-api.ts` — lightweight API call to verify stored token
+  - **`ADMIN_AUTH_FAILURE_EVENT`** custom event — `adminFetch` dispatches on 401/403 responses
+  - **Mount-time validation** — `AdminLayout` calls `validateAdminToken()` on component mount
+  - **Auth failure listener** — Automatically resets to login form on 401/403
+  - **`validating` loading state** — Shows spinner while stored token is checked
+  - **`handleAdminLogin` validation** — Validates token before setting `authenticated = true`
+- **Test Coverage:** Minsc wrote 35 tests (17 client, 18 server) covering all token validation scenarios
+- **Pattern:** Zero-dependency global event dispatch for auth failures; works across component tree without prop drilling
+- **Tests:** All 356 client tests passing; 35 new admin token validation tests passing
+- **Files modified:**
+  - `packages/client/src/lib/admin-api.ts` — `validateAdminToken()`, `ADMIN_AUTH_FAILURE_EVENT`, event dispatch
+  - `packages/client/src/pages/admin/AdminLayout.tsx` — Startup validation, failure listener, validating state
+  - `packages/client/src/__tests__/admin-token-validation.test.tsx` — New test file (17 tests)
+- **Team Impact:** Minsc verified implementation solid; PR #372 ready for merge

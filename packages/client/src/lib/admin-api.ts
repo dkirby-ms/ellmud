@@ -8,6 +8,9 @@
 
 const ADMIN_TOKEN_KEY = 'admin_token';
 
+/** Fired on any 401 from adminFetch so AdminLayout can reset to login. */
+export const ADMIN_AUTH_FAILURE_EVENT = 'admin:auth-failure';
+
 export class AdminAPIError extends Error {
   constructor(
     message: string,
@@ -31,6 +34,14 @@ export function clearAdminToken(): void {
   localStorage.removeItem(ADMIN_TOKEN_KEY);
 }
 
+/**
+ * Validates the current admin token by making a lightweight API call.
+ * Throws AdminAPIError (status 401/403) if the token is invalid.
+ */
+export async function validateAdminToken(): Promise<void> {
+  await adminFetch<unknown>('/admin/api/dashboard/metrics');
+}
+
 export async function adminFetch<T>(
   path: string,
   options: RequestInit = {}
@@ -52,11 +63,15 @@ export async function adminFetch<T>(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new AdminAPIError(
+    const apiError = new AdminAPIError(
       error.error || `HTTP ${response.status}`,
       response.status,
       error.details
     );
+    if (response.status === 401 || response.status === 403) {
+      window.dispatchEvent(new CustomEvent(ADMIN_AUTH_FAILURE_EVENT));
+    }
+    throw apiError;
   }
 
   // 204 No Content for DELETE

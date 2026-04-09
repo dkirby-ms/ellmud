@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { type EntityType, listEntities } from '../lib/admin-api.js';
+import { type EntityType, listEntities, AdminAPIError } from '../lib/admin-api.js';
 
 export interface UseAdminEntityListResult<T> {
   data: T[];
@@ -28,6 +28,8 @@ export function useAdminEntityList<T>(entityType: EntityType): UseAdminEntityLis
       const entities = await listEntities<T>(entityType);
       setData(entities);
     } catch (err) {
+      // 401/403 auth errors are handled globally via ADMIN_AUTH_FAILURE_EVENT
+      if (err instanceof AdminAPIError && (err.status === 401 || err.status === 403)) return;
       setError(err instanceof Error ? err.message : 'Failed to load entities');
     } finally {
       setLoading(false);

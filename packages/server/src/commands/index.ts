@@ -79,6 +79,13 @@ export interface CreatureRef {
   dodgeSkillRank?: number;
 }
 
+/** Lightweight player info for room display (Issue #370). */
+export interface PlayerRef {
+  sessionId: string;
+  name: string;
+  anon: boolean;
+}
+
 export interface CommandContext {
   player: PlayerState;
   room: Room;
@@ -87,6 +94,10 @@ export interface CommandContext {
   resolveRoom: (roomId: string) => Room | undefined;
   /** Other player session IDs in the same room. */
   otherPlayersInRoom: string[];
+  /** Detailed info about other players in the same room (Issue #370). */
+  otherPlayerInfo?: PlayerRef[];
+  /** Resolve visible players in an arbitrary room by ID (Issue #370). */
+  resolvePlayersInRoom?: (roomId: string) => PlayerRef[];
   /** Current zone stability (0–1). */
   stability: number;
   /** The player's in-game character name. */

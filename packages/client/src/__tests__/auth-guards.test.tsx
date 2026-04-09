@@ -45,6 +45,7 @@ vi.mock('../lib/admin-api.js', () => ({
   getAdminToken: vi.fn(() => localStorage.getItem('admin_token')),
   setAdminToken: vi.fn(),
   clearAdminToken: vi.fn(),
+  validateAdminToken: vi.fn().mockResolvedValue(undefined),
   adminFetch: vi.fn().mockResolvedValue({}),
   listEntities: vi.fn().mockResolvedValue([]),
   fetchNotifications: vi.fn().mockResolvedValue([]),
@@ -55,6 +56,13 @@ vi.mock('../lib/admin-api.js', () => ({
     activeZones: 0,
     dbStatus: 'connected',
   }),
+  ADMIN_AUTH_FAILURE_EVENT: 'admin:auth-failure',
+  AdminAPIError: class AdminAPIError extends Error {
+    constructor(message: string, public status: number, public details?: unknown) {
+      super(message);
+      this.name = 'AdminAPIError';
+    }
+  },
 }));
 
 /**
