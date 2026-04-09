@@ -3,7 +3,7 @@
  * Wires up listeners for every known MessageType so tests don't need boilerplate.
  */
 import { MessageTypes } from '@ellmud/shared';
-import type { NarrateMessage, RoomHeaderMessage, ZoneStateMessage, RoomSwitchMessage, OverlayMessage, PlayerStateMessage } from '@ellmud/shared';
+import type { NarrateMessage, RoomHeaderMessage, ZoneStateMessage, RoomSwitchMessage, OverlayMessage, PlayerStateMessage, LoadoutUpdateMessage, StashUpdateMessage } from '@ellmud/shared';
 
 export interface CollectedMessage {
   type: string;
@@ -19,6 +19,8 @@ export class MessageCollector {
   readonly roomSwitch: RoomSwitchMessage[] = [];
   readonly overlayState: OverlayMessage[] = [];
   readonly playerState: PlayerStateMessage[] = [];
+  readonly loadoutUpdate: LoadoutUpdateMessage[] = [];
+  readonly stashUpdate: StashUpdateMessage[] = [];
 
   constructor(client: { onMessage: (type: string, cb: (data: unknown) => void) => void }) {
     client.onMessage(MessageTypes.NARRATE, (data) => {
@@ -56,6 +58,18 @@ export class MessageCollector {
       this.playerState.push(msg);
       this.all.push({ type: MessageTypes.PLAYER_STATE, data: msg, receivedAt: Date.now() });
     });
+
+    client.onMessage(MessageTypes.LOADOUT_UPDATE, (data) => {
+      const msg = data as LoadoutUpdateMessage;
+      this.loadoutUpdate.push(msg);
+      this.all.push({ type: MessageTypes.LOADOUT_UPDATE, data: msg, receivedAt: Date.now() });
+    });
+
+    client.onMessage(MessageTypes.STASH_UPDATE, (data) => {
+      const msg = data as StashUpdateMessage;
+      this.stashUpdate.push(msg);
+      this.all.push({ type: MessageTypes.STASH_UPDATE, data: msg, receivedAt: Date.now() });
+    });
   }
 
   /** Get all narrate messages of a specific narration type. */
@@ -83,5 +97,7 @@ export class MessageCollector {
     this.roomSwitch.length = 0;
     this.overlayState.length = 0;
     this.playerState.length = 0;
+    this.loadoutUpdate.length = 0;
+    this.stashUpdate.length = 0;
   }
 }

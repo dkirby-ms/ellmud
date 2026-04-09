@@ -14,6 +14,8 @@ import {
   type UnequipItemMessage,
   type SwapItemMessage,
   type LoadoutUpdateMessage,
+  type StashUpdateMessage,
+  type DisplayItem,
   type PlayerStateMessage,
   type TelegraphMessage,
   type ZoneTransferMessage,
@@ -27,6 +29,8 @@ import {
   type FlagStateMessage,
   isValidFlagName,
   isValidPosture,
+  SLOT_ACCEPTS,
+  EQUIPMENT_SLOT_ORDER,
   DEATH_PENALTY_DEFAULTS,
   OPPOSITE_DIRECTION,
   POSTURE_MOVEMENT_VERBS,
@@ -608,6 +612,13 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       maxStamina: 0,
       statusEffects: [],
     } satisfies PlayerStateMessage);
+
+    // Send full stash + loadout state to client on join (#377)
+    try {
+      await this.sendLoadoutAndStashUpdate(client, playerId);
+    } catch (err) {
+      this.log(`Failed to send equipment state for ${this.playerTag(playerId)}: ${err}`);
+    }
   }
 
   async onLeave(client: Client, code?: number): Promise<void> {
@@ -2667,7 +2678,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
               }
             }
 
-            await this.sendZoneLoadoutUpdate(client, playerId);
+            await this.sendLoadoutAndStashUpdate(client, playerId);
             client.send(MessageTypes.NARRATE, {
               text: `Equipped from inventory to ${message.targetSlot}.`,
               type: 'system',
@@ -2692,7 +2703,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         return;
       }
 
-      await this.sendZoneLoadoutUpdate(client, playerId);
+      await this.sendLoadoutAndStashUpdate(client, playerId);
       client.send(MessageTypes.NARRATE, {
         text: `Item equipped to ${message.targetSlot}.`,
         type: 'system',
@@ -2732,7 +2743,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         return;
       }
 
-      await this.sendZoneLoadoutUpdate(client, playerId);
+      await this.sendLoadoutAndStashUpdate(client, playerId);
       client.send(MessageTypes.NARRATE, {
         text: `Item unequipped from ${message.slot}.`,
         type: 'system',
@@ -2772,7 +2783,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         return;
       }
 
-      await this.sendZoneLoadoutUpdate(client, playerId);
+      await this.sendLoadoutAndStashUpdate(client, playerId);
       client.send(MessageTypes.NARRATE, {
         text: `Item swapped into ${message.targetSlot}.`,
         type: 'system',
@@ -2788,13 +2799,40 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
   }
 
-  /** Send loadout update to client after equipment change. */
-  private async sendZoneLoadoutUpdate(client: Client, playerId: string): Promise<void> {
-    if (!this.loadoutService) return;
-    const loadoutView = await this.loadoutService.getLoadoutView(this.dbPlayerId(playerId));
-    client.send(MessageTypes.LOADOUT_UPDATE, {
-      slots: loadoutView.slots,
-    } satisfies LoadoutUpdateMessage);
+  /** Send full loadout + stash state to client (on join and after equipment changes). */
+  private async sendLoadoutAndStashUpdate(client: Client, playerId: string): Promise<void> {
+    const dbId = this.dbPlayerId(playerId);
+
+    // Send loadout (equipped items)
+    if (this.loadoutService) {
+      const loadoutView = await this.loadoutService.getLoadoutView(dbId);
+      client.send(MessageTypes.LOADOUT_UPDATE, {
+        slots: loadoutView.slots,
+      } satisfies LoadoutUpdateMessage);
+    }
+
+    // Send stash (stored items)
+    if (this.stashService) {
+      const stashView = await this.stashService.loadStash(dbId);
+      const stashItems: DisplayItem[] = stashView.entries.map((entry) => {
+        const allowedSlots = EQUIPMENT_SLOT_ORDER.filter(
+          (s) => SLOT_ACCEPTS[s].includes(entry.definition.type),
+        );
+        return {
+          instanceId: entry.instance.instanceId,
+          definitionId: entry.instance.itemId,
+          name: entry.definition.name,
+          type: entry.definition.type,
+          tier: entry.definition.rarity,
+          weight: entry.definition.weight,
+          description: entry.definition.description,
+          allowedSlots,
+        };
+      });
+      client.send(MessageTypes.STASH_UPDATE, {
+        items: stashItems,
+      } satisfies StashUpdateMessage);
+    }
   }
 
   /** Send player state update to client (HP, stamina, status effects). */
