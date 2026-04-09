@@ -636,14 +636,14 @@ export default function LiveRoomDetail() {
                                         {prop}
                                       </span>
                                     ))}
-                                    {zr.npcs?.length > 0 && (
+                                    {(zr.npcs?.length ?? 0) > 0 && (
                                       <span className="px-1.5 py-0.5 text-[10px] rounded bg-[#8B2500]/20 text-[#8B2500]"
                                         style={{ fontFamily: "var(--font-sans)" }}
                                       >
                                         NPCs
                                       </span>
                                     )}
-                                    {zr.lootContainers?.length > 0 && (
+                                    {(zr.lootContainers?.length ?? 0) > 0 && (
                                       <span className="px-1.5 py-0.5 text-[10px] rounded bg-[#C9A84C]/20 text-[#C9A84C]"
                                         style={{ fontFamily: "var(--font-sans)" }}
                                       >
