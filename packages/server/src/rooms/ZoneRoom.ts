@@ -22,6 +22,7 @@ import {
   type ExplorationUpdateMessage,
   type RoomOccupantsMessage,
   type AdminLiveRoomInfo,
+  type PlayerListMessage,
   DEATH_PENALTY_DEFAULTS,
   OPPOSITE_DIRECTION,
   MessageTypes,
@@ -91,6 +92,7 @@ import type { CharacterRepository } from '../character/index.js';
 import { InMemoryCharacterRepository, getCharacterRepository } from '../character/index.js';
 import { createNarrationService } from '../narrative/factory.js';
 import type { NarrationService } from '../narrative/NarrationService.js';
+import { gatherPlayerList, formatWhoListText, type ZonePlayerData } from '../who/index.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -381,6 +383,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     this.onMessage(MessageTypes.SWAP_ITEM, (client: Client, message: SwapItemMessage) => {
       void this.handleSwapItem(client, message);
+    });
+
+    // Who list: client requests the player list via structured message
+    this.onMessage(MessageTypes.REQUEST_PLAYER_LIST, (client: Client) => {
+      void this.handleRequestPlayerList(client);
     });
 
     // 1-second tick for all game simulation
@@ -966,6 +973,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         type: 'system',
         timestamp: Date.now(),
       });
+      return;
+    }
+
+    // Async command: `who` — requires cross-room matchMaker query + flag loading
+    if (verb === 'who') {
+      void this.handleWhoCommand(client, playerId, player);
       return;
     }
 
@@ -2876,6 +2889,73 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   /** Expose the zone slug for admin API responses. */
   getZoneSlug(): string | undefined {
     return this.zoneSlug;
+  }
+
+  // ─── Who List (Issue #366) ──────────────────────────────────────────────
+
+  /**
+   * Return raw player data for cross-room who-list gathering.
+   * Called by WhoListService via matchMaker iteration.
+   */
+  getWhoListPlayerData(): ZonePlayerData[] {
+    const zoneName = this.zoneData?.zone.name ?? this.zoneSlug ?? 'Unknown Zone';
+    const result: ZonePlayerData[] = [];
+    for (const [characterId] of this.players) {
+      const charName = this.characterNames.get(characterId);
+      if (!charName) continue; // Skip players without loaded names (still joining)
+      const player = this.players.get(characterId);
+      if (!player) continue;
+      result.push({
+        characterId,
+        characterName: charName,
+        roomId: player.currentRoomId,
+        zoneName,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Handle REQUEST_PLAYER_LIST message — send structured PLAYER_LIST back.
+   */
+  private async handleRequestPlayerList(client: Client): Promise<void> {
+    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    try {
+      const entries = await gatherPlayerList(
+        playerId,
+        player.currentRoomId,
+        getConfig().devModeEnabled,
+      );
+      client.send(MessageTypes.PLAYER_LIST, { players: entries } satisfies PlayerListMessage);
+    } catch (err) {
+      this.log(`Failed to gather player list for ${this.playerTag(playerId)}: ${err}`);
+    }
+  }
+
+  /**
+   * Handle the text-based `who` command — gather the player list and
+   * send formatted ASCII table as narration.
+   */
+  private async handleWhoCommand(client: Client, playerId: string, player: PlayerState): Promise<void> {
+    try {
+      const entries = await gatherPlayerList(
+        playerId,
+        player.currentRoomId,
+        getConfig().devModeEnabled,
+      );
+      const text = formatWhoListText(entries);
+      this.sendNarrate(client, { text, type: 'system', timestamp: Date.now() });
+    } catch (err) {
+      this.log(`Failed to handle who command for ${this.playerTag(playerId)}: ${err}`);
+      this.sendNarrate(client, {
+        text: 'The who list is momentarily unavailable.',
+        type: 'system',
+        timestamp: Date.now(),
+      });
+    }
   }
 
   // ─── Logging ─────────────────────────────────────────────────────────────

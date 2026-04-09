@@ -281,6 +281,11 @@ export const MessageTypes = {
   EXPLORATION_UPDATE: 'exploration_update',
   ROOM_OCCUPANTS: 'room_occupants',
   FLAG_STATE: 'flag_state',
+
+  // Client → Server: who list
+  REQUEST_PLAYER_LIST: 'request_player_list',
+  // Server → Client: who list response
+  PLAYER_LIST: 'player_list',
 } as const;
 
 export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
@@ -884,6 +889,24 @@ export interface ToggleFlagMessage {
 /** Server → Client: current flag state for the active character. */
 export interface FlagStateMessage {
   flags: Record<UserFlagType, boolean>;
+}
+
+// ─── Who List (Issue #366) ───────────────────────────────────────────────────
+
+/** A single entry in the server-wide who list. */
+export interface PlayerListEntry {
+  name: string;
+  level: number | null;
+  class: string | null;
+  zone: string | null;
+  flags: UserFlagType[];
+  /** true when the player has [Anon] active (hidden fields are already nulled) */
+  anon: boolean;
+}
+
+/** Server → Client: who list response. */
+export interface PlayerListMessage {
+  players: PlayerListEntry[];
 }
 
 // ─── Character Flags (Issue #365) ────────────────────────────────────────────

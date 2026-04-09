@@ -67,6 +67,7 @@ const KNOWN_VERBS = new Set([
   'sandbox',
   'help',
   'flag',
+  'who',
 ]);
 
 export interface ParseResult {
