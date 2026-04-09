@@ -157,7 +157,7 @@ describe('Admin Route Auth Guards', () => {
       await waitFor(() => {
         expect(screen.queryByLabelText('Username')).not.toBeInTheDocument();
       });
-      expect(screen.queryByText('Enter the Refuge')).not.toBeInTheDocument();
+      expect(screen.queryByText('Enter the World')).not.toBeInTheDocument();
     });
   });
 

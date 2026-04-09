@@ -38,6 +38,8 @@ import { initDeathPenaltyProvider } from './systems/index.js';
 import { initCharacterProvider } from './character/index.js';
 import { createCharacterRouter } from './api/characters.js';
 import { createSpawnZoneRouter } from './api/spawn-zone.js';
+import { createSettingsRouter } from './api/settings.js';
+import { initUserSettingsProvider } from './db/UserSettingsRepository.js';
 import { initZoneProvider, getZoneRepository } from './zones/index.js';
 import { initExplorationProvider } from './exploration/index.js';
 import { initContentRegistry } from './content/index.js';
@@ -119,6 +121,10 @@ console.log(`[Ellmud] Zone persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`)
 initExplorationProvider(USE_PG);
 console.log(`[Ellmud] Exploration persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
+// ─── User Settings Persistence ──────────────────────────────────────────────
+initUserSettingsProvider(USE_PG);
+console.log(`[Ellmud] User settings persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
 // ─── Content Registry (DB-driven creature/item definitions) ─────────────────
 if (USE_PG) {
   try {
@@ -186,6 +192,10 @@ console.log('[Ellmud] Character API: enabled');
 // ─── Spawn Zone API ─────────────────────────────────────────────────────────
 app.use(createSpawnZoneRouter(authService));
 console.log('[Ellmud] Spawn Zone API: enabled');
+
+// ─── User Settings API ──────────────────────────────────────────────────────
+app.use(createSettingsRouter({ authService }));
+console.log('[Ellmud] User Settings API: enabled');
 
 // Version endpoint — /api/version
 app.use(createVersionRouter());

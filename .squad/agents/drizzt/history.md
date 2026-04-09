@@ -3304,3 +3304,150 @@ Created comprehensive `help` command handler supporting context-aware command di
 - Context-aware filtering crucial for UX (hiding irrelevant commands)
 - Defensive coding patterns eliminate non-null assertion warnings
 - System narration type provides proper semantic separation from game events
+
+## Learnings
+- Cross-zone `goto` was returning zoneTransfer without validating zone existence → client disconnect
+- Command handlers are synchronous; zone validation requires an optional callback pattern on CommandContext
+- `resolveZoneExists` added as optional sync callback (like resolveRoom, resolvePlayerByName)
+- ZoneRoom caches known zone slugs via `getZoneRepository().getAllZones()` on create (best-effort, non-blocking)
+- Belt-and-suspenders: validate at handler level (goto) AND at ZoneRoom level before sending ZONE_TRANSFER
+- Key files: `commands/handlers/goto.ts`, `commands/index.ts` (CommandContext), `rooms/ZoneRoom.ts`
+
+## Goto Zone Validation Fix (Issue #342, Commit 73bc91e)
+
+**Date:** 2026-04-07
+**Role:** Engine Developer
+**Status:** ✅ Complete
+
+**Root Cause:** `handleGoto` returned a `zoneTransfer` for cross-zone targets without checking if the zone exists. Client received ZONE_TRANSFER for a nonexistent zone, matchmaker failed, player disconnected.
+
+**Fix:**
+- Added `resolveZoneExists?: (slug: string) => boolean` to `CommandContext`
+- `handleGoto` validates zone slug before returning `zoneTransfer`
+- ZoneRoom caches known zone slugs during `onCreate` and wires the callback
+- Defensive check in ZoneRoom's `handleCommandMessage` before sending ZONE_TRANSFER
+
+**Files Modified:**
+- `packages/server/src/commands/index.ts` — Added `resolveZoneExists` to CommandContext
+- `packages/server/src/commands/handlers/goto.ts` — Zone existence check before transfer
+- `packages/server/src/rooms/ZoneRoom.ts` — `knownZoneSlugs` cache, callback wiring, defensive check
+- `packages/server/src/__tests__/goto.test.ts` — 3 new tests (nonexistent zone, valid zone, same-zone colon with bad room)
+
+**Tests:** 10 goto tests pass, 2331 total server tests pass, zero regressions.
+
+## Visual Crossing Detection & Phase 10 (computeLayout)
+
+**Date:** 2026-07-24
+**Role:** Engine Developer
+**Status:** ✅ Complete
+
+**Problem:** `countCrossings()` only detected crossings between orthogonal edges, ignoring diagonal edges rendered as smooth-step paths in the ZoneDesigner UI. Users could see crossings the algorithm didn't count.
+
+**Root Cause:** `buildEdgeSegments()` skipped diagonal edges entirely. The renderer draws diagonal edges as multi-segment orthogonal smooth-step paths (via ReactFlow's `getSmoothStepPath`), which can cross other edges visually.
+
+**Approach — `visualCrossingMode` flag:**
+- Modifying crossing detection during existing pipeline phases (5d/5e/9) caused butterfly effects — different fix decisions cascaded into different final layouts, introducing regressions (e.g., Siltgate gained 2 diagonals)
+- Solution: a `visualCrossingMode` flag that's `false` during existing phases (preserving exact old behaviour) and `true` only during a new Phase 10
+- Distance-1 edges remain excluded even in visual mode (can't cross on integer grids)
+
+**Key changes:**
+- `EdgeSegment` interface: added `dir` field for exit direction
+- `buildEdgePathSegments()`: models diagonal edges as 1–3 orthogonal segments approximating the smooth-step rendered path (east/west → horizontal-first, north/south → vertical-first)
+- `buildEdgeSegments()`: conditional — old skip logic when `!visualCrossingMode`, multi-segment paths when `true`
+- `edgePairCrosses()` / `findEdgeCrossingPair()`: mode-aware crossing checks using visual path segments
+- `fixEdgeCrossings()` and `fixCrossingsByInsertion()` rechecks: conditional — old single-segment logic vs visual-path logic
+- `fixCrossingsByInsertion()` diagonal guard: broader all-z-level check in visual mode (prevents pipeline from creating new diagonals anywhere, not just within the moved group)
+- Phase 10: after Phase 9, enables visual mode, runs `fixCrossingsByInsertion` + `fixOcclusions` with rollback, then disables visual mode
+
+**Test update:** Midgaard crossing test (test 29) now counts visual crossings using multi-segment smooth-step path modelling, matching the engine's detection.
+
+**Files Modified:**
+- `packages/client/src/map/computeLayout.ts` — All crossing detection and Phase 10 pipeline changes
+- `packages/client/src/map/__tests__/computeLayout.test.ts` — Visual crossing counting in test 29
+
+**Tests:** 29 layout tests pass, Siltgate 0 diagonals, zero regressions.
+
+### Learnings
+- Changing crossing detection mid-pipeline causes butterfly effects — fix algorithms make different decisions that cascade through subsequent phases
+- Flag-based mode isolation (old behaviour during existing phases, new behaviour in a new phase) avoids cascading regressions
+- Distance-1 edges on integer grids cannot produce orthogonal crossings — safe to always skip
+- ReactFlow smooth-step paths route horizontal-first for east/west exits, vertical-first for north/south
+
+---
+
+### Live Rooms Admin API (Issue #344) — PR #353
+**Task:** Implement server-side APIs for live zone room management
+**Status:** ✅ Complete — PR #353 opened against dev
+**Branch:** `squad/344-live-rooms-admin`
+
+**Changes (4 files, +379 lines):**
+- `admin/routes.ts` — 4 new endpoints: GET /rooms/live, POST broadcast, POST teleport, POST spawn-creature
+- `admin/types.ts` — Added `zoneSlug` field to `AdminZoneDetail`
+- `rooms/ZoneRoom.ts` — 4 public admin methods: `adminBroadcastToRoom()`, `adminTeleportPlayer()`, `adminGetLiveRooms()`, `getZoneSlug()`
+- `shared/src/index.ts` — Admin request/response types for all 4 endpoints
+
+**Key decisions:**
+- **Public admin methods on ZoneRoom** — Rather than reaching into private internals from routes, added well-defined public methods that encapsulate the logic. This keeps the admin API clean and ZoneRoom's internals private.
+- **Route ordering for /rooms/live** — Must be registered BEFORE /rooms/:roomId to avoid Express param capture of "live" as a roomId.
+- **Teleport re-delivers full room state** — Matches the existing reconnect/goto pattern: room header, description, occupants, exploration data.
+
+## Learnings
+- Express route ordering matters when mixing static and parameterized paths — `/rooms/live` must precede `/rooms/:roomId`
+- ZoneRoom's `broadcastToRoom` and `broadcastPlayerMovement` are private — adding public `admin*` wrappers is the right pattern to avoid `as any` casts from route handlers
+- The shared package must be rebuilt (`rm -rf dist && tsc --build`) before server can see new shared types — incremental builds may skip unchanged-timestamp files
+
+---
+
+## Session: Fix broken test runner and lint errors (2025-07)
+
+### What was done
+- Aligned vitest from mixed v3/v4 (client/shared had ^4.1.0, server had ^3.2.1) to ^3.2.1 across all workspaces
+- Cleaned corrupted local vitest v4 installs from package-lock.json (npm workspace dedup issue)
+- Fixed all 9 ESLint errors: added `**/*.d.ts` to eslint ignores, disabled no-control-regex for ansi-parser, prefixed unused vars/functions with `_`, fixed eslint-disable scope for multi-line any cast
+- Result: `npx vitest run` exits 0, `npx eslint .` reports 0 errors
+
+## Learnings
+- npm workspaces can pin stale versions in package-lock.json even after changing package.json — must remove both node_modules AND lockfile entries for affected packages
+- eslint `eslint-disable-next-line` only covers the single next line; multi-line statements need block `eslint-disable`/`eslint-enable` comments
+- Generated `.d.ts` files should be excluded from ESLint via ignores in eslint.config.mjs (`**/*.d.ts`)
+
+## Session: Fix spawn→display bug — creatures invisible on Room Graph tab (2025-07)
+
+### What was done
+- Root-caused why spawned creatures didn't appear on the admin Room Graph tab: the client's `roomOccupancy` useMemo returned an empty map when `zoneData` was null (procedural zones have no `zoneSlug`, so the separate zone-data fetch always fails).
+- Added `roomGraphRooms[]` to the `getZoneDetail()` server response — serialises the live room graph rooms so the client can map creatures → rooms without a separate zone-data fetch.
+- Updated client: `roomOccupancy` now falls back to `roomGraphRooms`; new `displayRooms` memo normalises both zone-data and room-graph sources for the tab.
+- Added 3 new integration tests covering roomGraphRooms presence, procedural zone coverage, and creature→room alignment.
+- Commit: `e3d506b` on dev.
+
+### Learnings
+- The Room Graph tab depended on a *separate* zone-data API call (`getZone(slug)`) that is completely unrelated to the room detail response; for procedural zones where `zoneSlug` is undefined this always produced null, silently hiding all creature occupancy.
+- When the server already has authoritative data (the room graph), include it in the response rather than forcing the client to fetch it separately — eliminates a class of race/availability bugs.
+- `useMemo` with an early-return on null silently swallows data; prefer fallback chains over early returns when the downstream UI depends on the result.
+
+---
+
+### 2026-04-08T22:59:00Z: Spawn Display Bug Fix — Procedural Zones
+
+**Task:** Fix spawn creature display bug for static zones (roomOccupancy memo issue).
+
+**Outcome:** ✅ Complete — PR merged to dev (commit b0b44c1).
+
+**Root Cause:** roomOccupancy memo fell back to empty map when zone-data fetch returned null (procedural zones have no zoneSlug). Fresh roomGraphRooms[] from server was sent but not used by client.
+
+**Fix (2-part):**
+1. Server: Include roomGraphRooms[] in getZoneDetail() response
+2. Client: Update roomOccupancy fallback chain (zone-data → room-graph → empty)
+
+**Impact:**
+- Admin Zone Room management now fully functional for procedural zones
+- Creatures displayed correctly for both static and procedural zones
+- Eliminates silent data loss
+
+**Tests Added:**
+- 8 new client tests (Room Graph tab occupancy)
+- 2 new server integration tests (roomGraphRooms serialization)
+
+**Quality:** Root-cause-driven; comprehensive test coverage; zero regressions.
+
+**Learnings:** Server should include authoritative data in response rather than force separate fetch; prevents silent failures.

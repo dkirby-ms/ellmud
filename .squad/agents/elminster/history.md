@@ -27,6 +27,79 @@
 
 ## Learnings
 
+### 2025-01-14: User Config File System Research
+**Task:** Research and design proposal for optional `.ellmudrc` user config file system (Issue #359).
+
+**Scope:** DCSS-style player configuration to control display preferences, gameplay settings, keybindings, and macros.
+
+**Current Surface Findings:**
+- **Client:** localStorage persists 3 settings (fontSize, verbosity, narrationStyle) in Settings.tsx — no server sync, lost on logout
+- **Server:** No `user_settings` table; `player_profile` schema holds only skills, equipment, carry weight (progression data, not preferences)
+- **Architecture constraint:** Message-based (no Colyseus schema sync); all client-server communication via message types in `@ellmud/shared`
+- **Auth model:** Token-based, `GET /auth/me` validates identity; no per-player settings endpoint yet
+
+**Design Decisions (Approved):**
+1. **Storage:** Server-primary (PostgreSQL `user_settings` table, JSONB `config` column) + client cache (localStorage). Rationale: server-authoritative prevents cheating (gameplay settings), persists across devices, survives logout.
+2. **Format:** Plain-text `.ellmudrc` (user-facing, DCSS-inspired: `verbosity = standard`) stored as structured JSONB in DB (`{ "display": {...}, "gameplay": {...}, "accessibility": {...} }`). Phase 2 adds external file parsing.
+3. **Sync:** HTTP API — `GET /api/user/settings` (load on login), `PUT /api/user/settings` (save on logout). localStorage as draft cache to avoid latency.
+4. **v1 Scope:** Migrate existing 3 settings to DB + keybinds stub (store but don't wire to combat). Defer Lua macros, file import/export, presets to Phase 2.
+5. **Authority Model:** Server-authoritative for gameplay settings (auto-attack, combat thresholds); client-trusted for cosmetics (fonts, colors, verbosity). Server echoes config on GET to validate client state.
+
+**Architecture Pattern:**
+- Similar to `PlayerProfileRepository` (interface + InMemory/Pg pattern)
+- Migration 004: create `user_settings(player_id UUID PK, config JSONB DEFAULT '{}')`
+- `UserSettingsRepository`: load/save + defaults + validation schema
+- Auth routes: GET/PUT `/api/user/settings` (require Bearer token)
+- Settings.tsx refactored to use API instead of direct localStorage
+
+**Risk Analysis:**
+- **Settings explosion:** v1 scoped to 6 essential options; code review gate before expansion
+- **Gameplay exploits:** Server validates all gameplay settings; client-only for cosmetics
+- **Sync latency:** localStorage cache reduces API calls
+- **Unfinished keybinds:** Store in config but UI disabled ("Coming soon") — avoids re-work when combat input layer refactored
+
+**Team Split:**
+- **Frontend (2–3 days):** Settings service (GET/PUT wrappers), Settings.tsx refactor to API, localStorage → DB migration
+- **Backend (1–2 days):** Migration, `UserSettingsRepository`, auth routes, validation schema
+- **Estimated total:** 5 days, small scope, high UX value
+
+**Decision Deliverable:**
+- Full proposal posted to issue #359 as comment
+- Decision doc: `.squad/decisions/inbox/elminster-user-config.md` (5100 words, storage architecture, format spec, v1 scope, risks, next steps, 3 open questions for user)
+
+**Key Insights:**
+- Existing localStorage pattern is client-only and breaks across devices — server persistence essential for multi-device play
+- DCSS-style text config + JSON storage hybrid balances UX (players can edit plain text) + maintainability (JSON is queryable, versionable)
+- v1 disciplined scope (migrate + stub) unblocks content team, avoids macro/Lua design yak-shaving
+- Authority model (server validates gameplay, trusts cosmetics) parallels existing Colyseus pattern (server authoritative for game state, client for UI)
+
+---
+
+### 2026-04-08: Direction Shortcuts & Speedwalks Research
+- **Task:** Research and design proposal for issue #357 — arrow key shortcuts + speedwalk command syntax.
+- **Investigation:** Traced full client-server movement flow: CompassControl button → handleExitClick → sendRawCommand → parseCommand → handleGo. Mapped keyboard event handling in ZoneExploration.tsx, command parser aliasing (n→['go','north']), and server direction validation.
+- **Current state:** Game supports 6 directions (n/s/e/w/u/d); compass renders 8 (ordinals missing from server). Text input currently handles arrow keys for command history (ArrowUp/Down).
+- **Key design decision:** Client-side implementation for both features (zero server complexity). Phase 1: arrow key + numpad listener (50–100 lines, 2–4 hours). Phase 2: speedwalk parser (200–300 lines, 3–5 hours). Phase 3 (future): server-side speedwalk verb for atomic execution.
+- **Feature 1 (Arrow Keys):** Map keyboard to directions; listener activates only when input not focused. Reuses existing `handleExitClick(direction)` flow. Numpad layout includes ordinals but server doesn't support them yet — decided to ignore ordinals in MVP, add in Phase 3 if design wants it.
+- **Feature 2 (Speedwalk):** Parser expands `10e4n2s` to array of ['e','e',...,'n','n','n','n','s','s'], sends each as separate `go` command. Rate limit: 50 moves client-side. Fail-stop semantics: halts on first failure (wall, combat). Zero server changes for MVP.
+- **Open questions identified:** 5 team decisions needed (ordinal support, numpad5 behavior, text focus handling, speedwalk feedback, combat interaction).
+- **Deliverables:** Comprehensive proposal posted to issue #357; decision file `.squad/decisions/inbox/elminster-direction-shortcuts.md` with open questions, code sketches, testing checklist.
+- **Key insight:** Classic MUD features like speedwalks translate beautifully to client-side parsing — no need for server state complexity. The server remains oblivious, processing each move normally. Keyboard shortcuts similarly benefit from client-side interception and existing callback reuse. Both features share the principle: client handles convenience, server handles authority.
+
+### 2026-04-07: BFS Layout Engine Architecture Review
+- **Task:** Full architecture review of `packages/client/src/map/computeLayout.ts` (2746 lines, BFS + 8 refinement phases).
+- **Architecture:** BFS compass-aware placement → force-directed relaxation → diagonal cascade fix → direction violation repair → occlusion fix → iterative expansion + occlusion cleanup → final grid scaling. Pure function, no side effects.
+- **Key strength:** Z-level isolation is excellent — each floor gets its own occupied set, sub-levels are anchored at entry points and expand independently. Grid cluster detection (perpendicular-path-convergence test) is mathematically sound.
+- **Critical concern — scoring function duplication:** `layoutScore()` (L779) and `occlusionAwareScore()` (L1882) are ~95% identical, differing only in the occlusion penalty weight (3 vs 15). This is a DRY violation and a maintenance hazard — any future scoring change must be applied in two places.
+- **Critical concern — O(n²) scoring on every candidate:** Every trial move in relaxation/occlusion phases calls `layoutScore(z)` which iterates all rooms × all exits × all rooms (for occlusion check). With pairwise swaps (O(n²) pairs), this is effectively O(n⁴) per iteration. The Siltgate test (59 rooms) takes 222ms — at 100+ rooms this will become a bottleneck.
+- **Critical concern — diamond-search boilerplate:** The Manhattan-distance ring search pattern is copy-pasted 10+ times with varying radii. Should be extracted to a `generateDiamondCandidates(cx, cy, maxRadius)` generator.
+- **Concern — magic numbers:** 23+ hardcoded limits (radius caps of 200, pass limits of 40/50/60/100, group size caps of 40/60/90, scoring weights 3/15/20/50) with no named constants or documented rationale.
+- **Concern — GRID_STEP = 1:** The constant exists (L66) but is set to 1 (no-op multiplication). Commit `b7a86af` claims "add grid spacing" but the feature is effectively disabled. Either use it (set to 2) or remove the dead scaling loop at L766-768.
+- **Good — test coverage:** 25 tests covering single rooms, corridors, grids, cycles, z-levels, collisions, disconnected subgraphs, direction correctness, and a real 59-room zone. Comprehensive.
+- **Good — interface:** Clean `Map<string, LayoutRoom> → Map<string, RoomPosition>` contract. ELK adapter consumes it correctly, multiplying by GRID_SPACING for pixel coordinates.
+- **Recommendation:** Decompose into ~5 files (types, helpers, BFS core, refinement phases, scoring). Extract the candidate-generation diamond pattern. Parameterize `layoutScore` with occlusion weight. Add named constants for all magic numbers.
+- **Deliverable:** Full review written to `.squad/decisions/inbox/elminster-bfs-review.md`.
+
 ### 2026-04-07: Combat Sandbox Architecture Design
 - **Task:** Design architecture for a combat sandbox dev tool inside the Refuge hub zone.
 - **Analysis:** Read CombatSystem (tick-based encounter orchestrator), CreatureManager (template-based spawning), feature-room pattern (command gating by RoomType), Refuge zone structure (7-room hub-and-spoke from hearth), existing dev commands (goto, teleport, peaceful), RoomType dual-definition (shared + server packages), damage model (stance multipliers, dodge rolls, flanking, armour).
@@ -2203,3 +2276,226 @@ PR #294 implements auto-attack default targeting and target management per GDD �
 - Static metadata registries provide single source of truth for command documentation
 - Context-aware filtering improves player UX by showing only relevant commands
 - Help is discovery tool → must never be feature-gated
+
+### 2026-04-08: PR #350 Code Review — Repo Hygiene (Issue #343)
+
+**Task:** Architectural review of PR #350 (9 files for open-source readiness: LICENSE, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, .editorconfig, issue templates, PR template, release workflow)
+
+**Review Scope:**
+1. Correctness — Does content match the project (Ellmud, Node.js/TypeScript, monorepo)?
+2. Completeness — Are there gaps or missing sections?
+3. Consistency — Do references match actual repo structure?
+4. release.yml — Does the workflow make sense for Docker/Azure deployment?
+
+**Findings — 7/9 Files Approved:**
+- **LICENSE (ISC):** Correct. Matches package.json exactly. Attribution year (2026, dkirby-ms) is accurate.
+- **CONTRIBUTING.md:** Excellent. Clear workflow (pick issue → branch from dev → test/lint/build → conventional commits → PR). References docs/setup.md (verified exists). Code style honesty (TypeScript, ESLint, patterns, comments for complex logic only). Proper scoping of areas (Game Logic, Client, Backend, Docs). Minor note: Line ~127 references "Discord server" without link. Non-blocking; can add link when Discord is created or change to "GitHub Discussions."
+- **CODE_OF_CONDUCT.md:** Correct. Contributor Covenant 2.0 adaptation. Enforcement escalation is sound (private → warning → mute → ban). Covers GitHub + Discord + other channels. Pledge and Standards are inclusive.
+- **SECURITY.md:** Appropriate. 48-hour vulnerability acknowledgement SLA is reasonable for v0.1.0. Does NOT encourage public disclosure before fix. Best practices cover actual threat surface: .env secrets, Azure AI keys, PostgreSQL/Redis credentials, Microsoft Entra integration. Version support table (Latest: Supported, Older: Not supported) acceptable for pre-release.
+- **.editorconfig:** Well-configured. 2-space indent (matches npm/Node convention, existing codebase), LF with final newlines, UTF-8, markdown whitespace preservation (correct: no trim trailing whitespace), Makefile tabs (correct).
+- **Issue Templates (bug_report.md, feature_request.md):** YAML frontmatter correct. Templates guide toward reproducibility. Bug template includes environment (OS, Node version, browser, game version). Feature template emphasizes problem/solution/alternatives/impact.
+- **PULL_REQUEST_TEMPLATE.md:** High-quality. Testing checklist (build, lint, test) enforces code quality gate. Type-of-Change covers all relevant categories. Rebase guidance on `dev` aligns with CONTRIBUTING.md workflow.
+
+**Finding — 1/9 File Rejected (release.yml):**
+
+**CRITICAL ISSUE — Line 87 uses deprecated GitHub Action:**
+```yaml
+- name: Create GitHub Release
+  uses: actions/create-release@v1
+```
+The `actions/create-release@v1` action was deprecated Dec 2022 and archived. GitHub may remove it from the Marketplace at any time. Future release runs will fail to create GitHub Releases, leaving the project with unpublished releases (tags pushed, no Release artifacts).
+
+**Fix:** Replace with `ncipollo/release-action@v1` (well-maintained, 3000+ stars, widely used in industry).
+
+**MINOR ISSUE — Line 53 (non-blocking):**
+```yaml
+- name: Sync workspace versions
+  run: npm run version:sync
+  continue-on-error: true
+```
+The `continue-on-error: true` flag allows the workflow to proceed even if `npm run version:sync` fails. If sync fails, packages/client|server|shared will have stale versions. Recommendation: Remove `continue-on-error: true` so failures are visible.
+
+**POSITIVE FINDINGS — Workflow Logic:**
+- Line 27: Correct checkout of `main` branch with `fetch-depth: 0` (needed for tag history)
+- Line 37: Uses `.nvmrc` for Node version (verified: set to 20)
+- Line 50: Non-interactive `npm version ${{ github.event.inputs.version }}` is correct
+- Lines 75-81: Fallback tag lookup handles edge case (first release) with `HEAD` → correct
+- Line 17-18: Permissions (`contents: write`, `pull-requests: read`) are correct for release creation
+
+**Permissions Check:** ✅ The `contents: write` permission is declared and sufficient for a replacement release action.
+
+**Verdict:** REQUEST CHANGES. The release workflow is otherwise well-designed for the monorepo (it calls `npm run version:sync` to propagate version bumps to workspace packages/client|server|shared). The deprecated action is the only blocker.
+
+**Next Step:** Danilo/dkirby-ms updates release.yml to use `ncipollo/release-action@v1`, re-pushes, Elminster will approve + merge.
+
+**Architectural Patterns Validated:**
+- Manual trigger (`workflow_dispatch`) is appropriate for v0.1.0 (developer-controlled releases, not automatic on tag)
+- Monorepo versioning via `npm version` + `npm run version:sync` is the correct approach (tested: sync script exists and works)
+- Changelog generation from git log is pragmatic MVP (can be upgraded to standard-changelog in Phase 2)
+- GitHub Release as artifact repository (not relying on npm publish for game server) aligns with Docker deployment model
+
+**Decision File:** `.squad/decisions/inbox/elminster-pr-350-review.md` (full detailed review, 8900+ words, ready for team reference)
+
+### 2026-04-08: Room Features Architecture Proposal (Issue #345)
+- **Task:** Research and design proposal for room features system — interactive triggers in rooms that players can examine via `look <target>` commands.
+- **Analysis scope:** Current room data model (zone_rooms schema, ZoneRoomDefinition types), look command implementation (no arg handling today), feature-room pattern precedent (stash, sandbox, board), contract/quest system status (planned Phase 4, not yet implemented).
+- **Data model decision:** Add JSONB column `features` to `zone_rooms` table. Follows established precedent (loot_containers, hazards, npcs all use JSONB). No new table needed — features are tightly coupled to rooms, no cross-room reuse, loaded once per zone.
+- **Feature schema:** `{ id, keywords[], shortDescription?, longDescription, questId? }`. Keywords enable multi-word matching (`look wooden sign`). `questId` reserves space for future quest initiation without requiring migration.
+- **Command flow decision:** Refactor `handleLook(ctx)` to dispatch on `args.length`. No args → full room (existing behavior). With args → exact keyword match on room features → fallback to "not found" error. Clean separation: `showFullRoom()` + `examineFeature()` helpers.
+- **Keyword matching:** Exact match (case-insensitive), `args.join(' ')` for multi-word, first match wins. No fuzzy matching (predictable for authors, testable, no ambiguity). Rejected alternative: substring/partial matching (prone to unintended overlaps, unpredictable).
+- **Quest integration:** Phase 2 work, blocked on Issue #44 (quest engine, currently `go:no` Phase 4). Schema reserves `questId` field now. When quest system lands, `examineFeature()` calls `ctx.questService?.tryInitiateQuest(questId)` and appends narration. Clean integration point, no rework needed.
+- **Feature description strategy:** Phase 1 uses explicit authoring (add hint to room description: "There is a note on the wall"). Phase 2+ could inject `feature.shortDescription` dynamically. Decision: Start explicit (works today, zero code), add injection later if valuable.
+- **Alternative rejected: Separate table:** `zone_room_features` table with FK to zone_rooms would normalize data but require join on zone load, add complexity to adapter, no query benefit (features only accessed via room).
+- **Alternative rejected: Wait for quest system:** Ship narration-only features now (2-3 days), add quest hooks later. Rationale: Unblock content authoring, prove pattern, incremental risk, quest system is months away.
+- **Risk assessment:** Low. Schema change is additive (DEFAULT '[]'), command flow is simple (no state, no multiplayer concerns), no external dependencies for Phase 1. Medium risk for Phase 2 (quest API undefined), mitigated by interface design now.
+- **Implementation plan:** Phase 1 (2-3 days, Drizzt or Jarlaxle): Migration + types + adapter + command refactor + tests + seed examples. Phase 2 (depends on #44): Quest service integration, context injection, narration logic. Phase 3+ (optional): Hidden features, interactive verbs (use/activate), clickable UI, LLM narration.
+- **Agent recommendation:** Jarlaxle (owns content pipeline, zone-adapter, JSONB precedent) or Drizzt (owns command system, look.ts, context building). Either qualified, recommend Jarlaxle if content seeding is priority.
+- **Content authoring:** SQL updates to add features, coordinate room description changes. Future: Admin UI in Zone Designer (editable feature list, WYSIWYG editor, keyword validation).
+- **Testing strategy:** Unit tests (keyword matching, fallback, edge cases), integration tests (load zone, examine feature, verify narration), regression tests (existing look unchanged). Quest tests in Phase 2 with mock service.
+- **Key learnings:** Established JSONB pattern works for room extensions. Exact keyword matching is simpler and more predictable than fuzzy. Feature-as-narration (Phase 1) + quest-hooks (Phase 2) is clean separation of concerns. Reserving schema fields for future systems avoids migrations.
+- **Deliverable:** Full proposal written to `.squad/decisions/inbox/elminster-room-features-proposal.md` (7800+ words, 24 code examples, migration SQL, TypeScript interfaces, implementation plan, risk analysis, authoring workflow).
+
+---
+
+---
+
+### 2026-04-08T22:59:00Z: Direction Shortcuts Architecture — Complete
+
+**Task:** Research and document direction shortcuts & speedwalk architecture for #357.
+
+**Outcome:** ✅ Complete — Design proposal posted and approved for team review.
+
+**Decision Deliverables:**
+- Architecture document (400 lines, 3 phases, code sketches, testing checklist)
+- 5 open questions for team: ordinal support, Numpad5 behavior, text input focus, speedwalk feedback, combat interaction
+- Estimated effort breakdown: Phase 1 (2–4 hrs), Phase 2 (3–5 hrs)
+
+**Coordination Impact:**
+- Unblocked Regis/Minsc for Phase 1 implementation
+- All 3 agents (Elminster, Regis, Drizzt) delivered on time
+- Team ready for next round of work
+
+---
+
+### 2026-04-09T00:45:00Z: Gameplay Metrics Architecture — Design Proposal Complete
+
+**Task:** Design & proposal for #360 — "otel style metrics of game events like player deaths, creature kills..."
+
+**Outcome:** ✅ Complete — Design proposal posted to GitHub issue & decision document committed.
+
+**Decision Deliverables:**
+- Comprehensive architecture doc (15K+ words) covering storage, emission, integration, analytics
+- Design proposal comment on #360 with executive summary, team split, risks, 4 open questions
+- SQL schema for `gameplay_metrics` table (event_type, player_id, zone_id, metadata JSONB)
+
+**Architecture Rationale:**
+- **PostgreSQL events table** (not OpenTelemetry SDK) — Ellmud is a monolithic game server, not distributed microservice. OTEL overhead unnecessary today. If Prometheus dashboards needed later, same EventCollector can feed exporter (no code changes).
+- **EventCollector service** with async batching — Queues events in memory, inserts every 50 events or 5 seconds. Non-blocking, prevents gameplay lag. Optional dependency injection (safe for tests).
+- **JSONB metadata** — Flexible event shapes (strike has damage/targetId/critical; loot has itemId/rarity; death has killerIds/reason). Follows established pattern in schema (loot_containers, creature_definitions).
+
+**V1 Scope: 12 Core Metrics**
+- Combat: player_strike_dealt, player_damage_taken, creature_kill, player_death, combat_encounter_started/ended
+- Survival: zone_entry, zone_extraction_success/failure, room_visited
+- Loot: item_looted, item_lost_on_death
+- Estimated volume: 20–30K events/day (easily within PostgreSQL capacity)
+
+**Integration Points:**
+- CombatSystem: Strike resolution, damage application, kill/death attribution
+- ZoneRoom: Player entry/exit, item pickup, room visitation tracking
+- CreatureManager: Loot drop metadata
+
+**Display (v1):** Admin metrics page (`/admin/metrics`) with:
+1. Event feed (last 100, filterable)
+2. KPI summary (24h kills, deaths, extractions, avg combat duration)
+3. Leaderboards (top 10 by kills, extraction rate, survival streak)
+
+Player-facing scoreboards deferred to Phase 2.
+
+**Team Split: ~5 Days**
+- Jarlaxle (Systems): EventCollector, migration, CombatSystem hooks (2–3 days)
+- Drizzt (Engine): ZoneRoom integration, perf benchmarking (1–2 days)
+- Regis (Frontend): Admin metrics page, leaderboards UI (1–2 days)
+- Minsc (Tester): Query validation, gameplay lag verification (0.5–1 day)
+
+**Open Questions Raised:**
+1. Player privacy — Leaderboards tied to player_id in queryable table. Acceptable? Anonymize after 7 days?
+2. Leaderboard scope — Global only (v1)? Or faction-based + zone-specific? (deferred to Phase 2)
+3. Loot tracking detail — All items or only rare? (proposed: all items, helps identify drop bugs)
+4. Combat event granularity — Per-strike (~100/encounter) or encounter summaries (1 event)? (proposed: per-strike for full visibility)
+
+**Risk Mitigation:**
+- Async batching + rate-limiting prevents gameplay lag
+- Optional injection maintains backward compatibility
+- 7-day retention + weekly VACUUM/ANALYZE prevents disk bloat
+- Unit tests for EventCollector, spot-check queries in admin UI
+- Document in SECURITY.md (gameplay-only metrics, no PII)
+
+**Coordination Impact:**
+- Unblocked Jarlaxle + Drizzt + Regis for Phase 1 implementation
+- Clear effort estimates enable sprint planning
+- 4 open questions focused for team alignment (not over-specified)
+
+## Learnings
+
+### Metrics Architecture Insights
+
+1. **PostgreSQL as Observability Backend** — For game servers at MUD scale (~100–1000 players), PostgreSQL is sufficient for event storage, queries, and analytics. OpenTelemetry SDKs are designed for distributed microservices and SaaS backends; they add indirection (exporters, collectors, external backends) that complicates a monolithic architecture. Start simple (DB tables), evolve to specialized tools (Prometheus, Grafana) only if volume/latency demands. This is a key pattern for cost-effective observability in game development.
+
+2. **JSONB Metadata as Escape Hatch** — Event types vary widely in shape (damage has attacker/defender/damage_type, loot has item_id/rarity/source, death has killerIds/location/reason). Rather than create separate tables for each event variant or over-normalize, JSONB allows:
+   - Single table for all events (schema simplicity)
+   - Flexible fields per event (extensibility without migrations)
+   - GIN indexing for ad-hoc queries ("which events involved fire damage?")
+   - Follows established precedent in the Ellmud schema (loot_containers, creature_definitions use JSONB)
+
+3. **Async Batching Prevents Gameplay Lag** — Direct database inserts per game event (100s per second during combat) would cause noticeable latency on client-side rendering. Batching + async means:
+   - Events queue in memory (fast, non-blocking)
+   - Batch inserts every N events or T seconds (amortizes DB overhead)
+   - Flush on shutdown (no data loss)
+   This pattern is reusable for any event stream (logging, analytics, telemetry).
+
+4. **Optional Dependency Injection for Backward Compatibility** — Passing EventCollector to system constructors as optional (defaulting to null) ensures:
+   - Existing tests don't require EventCollector setup
+   - New tests can inject a mock for validation
+   - Production code gracefully no-ops if EventCollector is null
+   - No rework needed when adding metrics to existing systems
+
+5. **v1 Scope Discipline** — Temptation to design "perfect" metrics (all event types, all fields, all query patterns). But a 5-day v1 that delivers 12 focused metrics beats a 3-week v1 trying to capture everything. Once v1 runs in production:
+   - You see real usage patterns (which leaderboards matter?)
+   - You identify missing events (what else do designers want to tune?)
+   - You can iterate faster (add events incrementally, not all-or-nothing)
+
+6. **Privacy by Design** — Metrics tied to player_id enable leaderboards but raise privacy concerns. Document early:
+   - What data is collected (gameplay events only, no chat/PII)
+   - Who can access it (admin tools only, not exposed in client)
+   - Retention policy (archive > 7 days, delete > 90 days)
+   This builds trust and satisfies compliance requirements.
+
+7. **Open Questions Drive Alignment** — Rather than prescribe every detail, raise 4 focused questions (privacy, scope, loot detail, event granularity) and ask the team. This:
+   - Signals that design isn't final (room for feedback)
+   - Ensures stakeholder consensus before implementation
+   - Prevents rework due to misaligned expectations
+   - Makes handoff to execution team smoother
+
+### Team & Process Insights
+
+8. **Effort Estimation by System** — Breaking down 5-day v1 by system (CombatSystem 1 day, ZoneRoom 1 day, etc.) enables parallel work:
+   - Jarlaxle owns core infrastructure (EventCollector, migrations)
+   - Drizzt + Regis work in parallel (engine + frontend)
+   - Minsc validates in parallel (tests + perf)
+   - No blocking, high utilization
+   This is better than sequential ("Jarlaxle first, then Drizzt") or vague ("5 days total").
+
+9. **Design Proposal as Issue Comment** — Posting the proposal directly on the GitHub issue ensures:
+   - Stakeholder (dkirby-ms) sees it in the right context
+   - Team can comment + iterate in the same place
+   - Decision is documented as issue history (not separate file only)
+   - Easier to reference in PRs ("as proposed in #360")
+
+### Architecture Decisions Catalog
+
+- **Event Storage:** PostgreSQL table (not separate OTEL exporter, not in-memory counters)
+- **Metadata Shape:** JSONB (not separate tables, not fixed schema)
+- **Emission Pattern:** Async batching via EventCollector (not sync inserts, not global state)
+- **Dependency Management:** Optional injection (not global singleton, not required)
+- **Initial Display:** Admin dashboard (not player-facing, not external Prometheus)
+- **Query Retention:** 7-day active + 90-day archive (not infinite, not real-time only)

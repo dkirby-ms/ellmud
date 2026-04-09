@@ -247,3 +247,13 @@
 - **Direction conflict check:** training-grounds had south (hearth) and east (war-room) — north was free
 - **Pattern:** Matched 003_seed_zones.sql exactly — cross-join VALUES, text[] cast for properties, NULLIF for target columns, ON CONFLICT DO NOTHING for idempotency
 - **Transaction:** Full BEGIN/COMMIT wrap for atomicity
+
+### Classic CircleMUD Zone Imports (2025-07-25)
+- **Migrations:** `006_import_chessboard.sql`, `007_import_high_tower.sql`, `008_import_haon_dor.sql`
+- **Source:** tbaMUD GitHub stock areas (lib/world/wld/), imported via `scripts/import-diku-zone.ts`
+- **The Chessboard (36.wld):** 67 rooms, 230 intra-zone exits, 1 cross-zone skip (east to vnum 3066). Grid pattern with black/white squares, treasuries with locked up/down exits.
+- **The High Tower of Magic (25.wld):** 100 rooms, 221 intra-zone exits, 4 cross-zone skips. Vertical tower with up/down exits across multiple levels. One exit targets vnum -1 (broken data in source).
+- **The Haon-Dor Forest (60.wld):** 60 rooms, 147 intra-zone exits, 3 cross-zone skips (to zones 61 and 30). Branching wilderness with forest trails.
+- **Numbering note:** Used 006/007/008 because 005_sandbox_rooms.sql already existed (task originally specified 005/006/007).
+- **Importer observations:** Works cleanly on all three zone types — grid, vertical tower, and branching wilderness. Cross-zone exit warnings are expected and correct. The importer handles locked/hidden exits from CircleMUD flags properly.
+- **SQL validation:** All 3 files have proper BEGIN/COMMIT wrapping, INSERT INTO zone_rooms + zone_exits with cross-join VALUES pattern, ON CONFLICT DO NOTHING for idempotency.

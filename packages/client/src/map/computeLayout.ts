@@ -58,7 +58,126 @@ const PERPENDICULAR_PAIRS: [string, string][] = [
 
 const MIN_GRID_CLUSTER_SIZE = 9; // 3×3 minimum
 
+// ─── Layout Constants ────────────────────────────────────────────────────────
+
+/** Maximum spiral search radius before giving up. */
+const MAX_SEARCH_RADIUS = 500;
+
+/** Penalty for diagonal exits (connected rooms not axis-aligned). */
+const DIAGONAL_PENALTY = 20;
+
+/** Penalty for direction-violated exits (e.g. east exit with dx ≤ 0). */
+const DIRECTION_MISMATCH_PENALTY = 50;
+
+/** Light occlusion penalty for rooms on exit line segments (early phases). */
+const OCCLUSION_PENALTY_LIGHT = 3;
+
+/** Heavy occlusion penalty for dedicated occlusion fix phase. */
+const OCCLUSION_PENALTY_HEAVY = 15;
+
+/** Max force-relaxation iterations per z-level. */
+const FORCE_RELAXATION_ITERATIONS = 200;
+
+/** Diamond search radius around the ideal position during relaxation. */
+const RELAX_CANDIDATE_RADIUS = 4;
+
+/** Diamond search radius around each neighbor's "want" position. */
+const NEIGHBOR_CANDIDATE_RADIUS = 2;
+
+/** Max pairwise swap iterations. */
+const SWAP_ITERATIONS = 50;
+
+/** Max single-room move iterations after each swap round. */
+const POST_SWAP_MOVE_ITERATIONS = 50;
+
+/** Max diagonal cascade fix passes. */
+const DIAGONAL_CASCADE_PASSES = 60;
+
+/** Search radius when displacing an occupant during diagonal fix. */
+const DIAGONAL_DISPLACE_RADIUS = 5;
+
+/** Max rooms in a push/cascade group before aborting. */
+const MAX_PUSH_GROUP_SIZE = 40;
+
+/** Post-diagonal single-room relaxation iterations. */
+const POST_DIAGONAL_RELAX_ITERATIONS = 100;
+
+/** Diamond search radius in post-diagonal relaxation. */
+const POST_DIAGONAL_CANDIDATE_RADIUS = 3;
+
+/** Max direction violation repair passes. */
+const DIRECTION_VIOLATION_PASSES = 100;
+
+/** Diamond search radius for direction violation candidate moves. */
+const VIOLATION_CANDIDATE_RADIUS = 10;
+
+/** Diamond search radius for direction violation swaps. */
+const VIOLATION_SWAP_RADIUS = 4;
+
+/** Max occlusion fix iterations. */
+const OCCLUSION_FIX_ITERATIONS = 200;
+
+/** Wide diamond search radius for occluder displacement. */
+const OCCLUDER_SEARCH_RADIUS = 8;
+
+/** Diamond search radius for two-move occluder relocation. */
+const TWO_MOVE_OCCLUDER_RADIUS = 6;
+
+/** Diamond search radius for evictee relocation in two-move strategy. */
+const TWO_MOVE_EVICTEE_RADIUS = 4;
+
+/** Diamond search radius for segment compaction. */
+const COMPACTION_CANDIDATE_RADIUS = 2;
+
+/** Max grid expansion passes. */
+const EXPANSION_PASSES = 40;
+
+/** Max rooms in a direction violation shift group. */
+const MAX_VIOLATION_GROUP_SIZE = 60;
+
+/** Max rooms in an expansion shift group. */
+const MAX_EXPANSION_GROUP_SIZE = 90;
+
+/** Max cardinal alignment iterations per axis. */
+const CARDINAL_ALIGNMENT_ITERATIONS = 30;
+
+/** Max edge-crossing resolution passes. */
+const CROSSING_FIX_PASSES = 30;
+
+/** Diamond search radius for crossing-fix candidate moves. */
+const CROSSING_CANDIDATE_RADIUS = 6;
+
+/** Max insertion-based crossing resolution passes. */
+const INSERTION_FIX_PASSES = 20;
+
+/** Gap between disconnected subgraphs. */
+const DISCONNECTED_SUBGRAPH_GAP = 3;
+
+/** Number of expansion + occlusion cleanup rounds. */
+const EXPANSION_OCCLUSION_ROUNDS = 3;
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Yield cell coordinates in expanding diamond (Manhattan distance) order.
+ * Each ring at distance r contains all cells exactly r steps from center.
+ */
+function* diamondCandidates(
+  cx: number,
+  cy: number,
+  minRadius: number,
+  maxRadius: number,
+): Generator<{ x: number; y: number }> {
+  for (let r = minRadius; r <= maxRadius; r++) {
+    for (let ddx = -r; ddx <= r; ddx++) {
+      const absRem = r - Math.abs(ddx);
+      const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
+      for (const ddy of dyOpts) {
+        yield { x: cx + ddx, y: cy + ddy };
+      }
+    }
+  }
+}
 
 /** Encode a 2D cell coordinate as a set key. */
 function cellKey(x: number, y: number): string {
@@ -68,7 +187,7 @@ function cellKey(x: number, y: number): string {
 /**
  * Spiral outward from (cx, cy) to find the nearest unoccupied cell.
  * Searches in concentric rings of increasing Manhattan distance.
- * Used for disconnected subgraph placement.
+ * Returns the start position if no free cell is found within MAX_SEARCH_RADIUS.
  */
 function findNearestUnoccupied(
   cx: number,
@@ -77,22 +196,11 @@ function findNearestUnoccupied(
 ): { x: number; y: number } {
   if (!occupied.has(cellKey(cx, cy))) return { x: cx, y: cy };
 
-  for (let radius = 1; ; radius++) {
-    // Walk the ring at this Manhattan distance.
-    // Top edge: y = cy - radius, x from cx - radius to cx + radius
-    for (let dx = -radius; dx <= radius; dx++) {
-      const dy = -(radius - Math.abs(dx));
-      const key = cellKey(cx + dx, cy + dy);
-      if (!occupied.has(key)) return { x: cx + dx, y: cy + dy };
-    }
-    // Bottom edge (skip corners already visited above)
-    for (let dx = -radius; dx <= radius; dx++) {
-      const dy = radius - Math.abs(dx);
-      if (dy === -(radius - Math.abs(dx))) continue; // already checked (only when dy==0 and dx==±radius)
-      const key = cellKey(cx + dx, cy + dy);
-      if (!occupied.has(key)) return { x: cx + dx, y: cy + dy };
-    }
+  for (const c of diamondCandidates(cx, cy, 1, MAX_SEARCH_RADIUS)) {
+    if (!occupied.has(cellKey(c.x, c.y))) return c;
   }
+
+  return { x: cx, y: cy };
 }
 
 /**
@@ -133,41 +241,32 @@ function findNearestDirectional(
     }
   }
 
-  for (let radius = 1; radius < 200; radius++) {
+  for (let radius = 1; radius <= MAX_SEARCH_RADIUS; radius++) {
     let best: { x: number; y: number } | null = null;
     let bestScore = -Infinity;
-    // Fallback: best candidate that IS on an exit line (still better than nothing)
     let bestOnLine: { x: number; y: number } | null = null;
     let bestOnLineScore = -Infinity;
 
-    for (let ddx = -radius; ddx <= radius; ddx++) {
-      const absRemainder = radius - Math.abs(ddx);
-      const dyOptions = absRemainder === 0 ? [0] : [-absRemainder, absRemainder];
+    for (const c of diamondCandidates(idealX, idealY, radius, radius)) {
+      if (occupied.has(cellKey(c.x, c.y))) continue;
+      if (!satisfiesDirection(c.x, c.y)) continue;
 
-      for (const ddy of dyOptions) {
-        const cx = idealX + ddx;
-        const cy = idealY + ddy;
-        if (occupied.has(cellKey(cx, cy))) continue;
-        if (!satisfiesDirection(cx, cy)) continue;
+      const score = (c.x - idealX) * dirDx + (c.y - idealY) * dirDy;
+      const onLine = exitLineCells?.has(cellKey(c.x, c.y));
 
-        const score = ddx * dirDx + ddy * dirDy;
-        const onLine = exitLineCells?.has(cellKey(cx, cy));
-
-        if (onLine) {
-          if (score > bestOnLineScore) {
-            bestOnLineScore = score;
-            bestOnLine = { x: cx, y: cy };
-          }
-        } else {
-          if (score > bestScore) {
-            bestScore = score;
-            best = { x: cx, y: cy };
-          }
+      if (onLine) {
+        if (score > bestOnLineScore) {
+          bestOnLineScore = score;
+          bestOnLine = c;
+        }
+      } else {
+        if (score > bestScore) {
+          bestScore = score;
+          best = c;
         }
       }
     }
 
-    // Prefer off-line candidates; fall back to on-line if necessary
     if (best) return best;
     if (bestOnLine) return bestOnLine;
   }
@@ -323,6 +422,12 @@ export function computeLayout(
   }
   const pendingZTransitions: ZTransition[] = [];
 
+  // When true, buildEdgeSegments models diagonal edges as multi-segment
+  // smooth-step paths, matching what the user sees in ZoneDesigner.
+  // Disabled during the core pipeline to preserve existing layout stability;
+  // enabled for a dedicated visual-crossing fix pass after Phase 9.
+  let visualCrossingMode = false;
+
   // Pre-detect grid clusters before BFS
   const gridClusters = detectGridClusters(rooms);
   const placedClusters = new Set<number>();
@@ -371,40 +476,29 @@ export function computeLayout(
     // Find the smallest shift (spiral) that avoids all collisions
     let shiftX = 0;
     let shiftY = 0;
-    outer: for (let radius = 0; radius < 200; radius++) {
-      if (radius === 0) {
-        // Try no shift first
+
+    // Try no shift first
+    let needsShift = false;
+    for (const p of positions) {
+      if (occupied.has(cellKey(anchorX + p.relX, anchorY + p.relY))) {
+        needsShift = true;
+        break;
+      }
+    }
+
+    if (needsShift) {
+      for (const c of diamondCandidates(0, 0, 1, MAX_SEARCH_RADIUS)) {
         let collision = false;
         for (const p of positions) {
-          if (occupied.has(cellKey(anchorX + p.relX, anchorY + p.relY))) {
+          if (occupied.has(cellKey(anchorX + p.relX + c.x, anchorY + p.relY + c.y))) {
             collision = true;
             break;
           }
         }
-        if (!collision) break;
-      } else {
-        // Try all offsets at this Manhattan distance
-        for (let dx = -radius; dx <= radius; dx++) {
-          for (const sign of [-1, 1]) {
-            const dy = sign * (radius - Math.abs(dx));
-            let collision = false;
-            for (const p of positions) {
-              if (
-                occupied.has(
-                  cellKey(anchorX + p.relX + dx, anchorY + p.relY + dy),
-                )
-              ) {
-                collision = true;
-                break;
-              }
-            }
-            if (!collision) {
-              shiftX = dx;
-              shiftY = dy;
-              break outer;
-            }
-            if (dy === 0) break; // avoid checking (dx, 0) twice
-          }
+        if (!collision) {
+          shiftX = c.x;
+          shiftY = c.y;
+          break;
         }
       }
     }
@@ -606,7 +700,7 @@ export function computeLayout(
       if (p.x > maxX) maxX = p.x;
     }
 
-    const offsetX = maxX + 3;
+    const offsetX = maxX + DISCONNECTED_SUBGRAPH_GAP;
     bfs(roomId, offsetX, 0, 0);
   }
 
@@ -624,15 +718,15 @@ export function computeLayout(
   }
 
   /**
-   * Count ALL direction mismatches involving room `rid` if it were at (px, py):
-   * 1. rid's exits — does moving rid break the direction to its neighbors?
-   * 2. Reverse exits — do neighbors that exit toward rid see a reversal?
+   * Count ALL direction mismatches involving room `rid` if it were at (px, py).
+   * posOverrides lets callers simulate position changes without mutating result.
    */
   function countMismatchesInvolving(
     rid: string,
     px: number,
     py: number,
     z: number,
+    posOverrides?: Map<string, { x: number; y: number }>,
   ): number {
     let count = 0;
     const room = rooms.get(rid);
@@ -640,7 +734,8 @@ export function computeLayout(
       for (const [dir, nid] of room.exits) {
         const off = DIRECTION_OFFSETS[dir];
         if (!off || off.dz !== 0) continue;
-        const np = result.get(nid);
+        const override = posOverrides?.get(nid);
+        const np = override ? { x: override.x, y: override.y, z } : result.get(nid);
         if (!np || np.z !== z) continue;
         const dx = np.x - px;
         const dy = np.y - py;
@@ -659,7 +754,8 @@ export function computeLayout(
       for (const { fromId, dir } of revArr) {
         const off = DIRECTION_OFFSETS[dir];
         if (!off || off.dz !== 0) continue;
-        const fp = result.get(fromId);
+        const override = posOverrides?.get(fromId);
+        const fp = override ? { x: override.x, y: override.y, z } : result.get(fromId);
         if (!fp || fp.z !== z) continue;
         const dx = px - fp.x;
         const dy = py - fp.y;
@@ -690,7 +786,61 @@ export function computeLayout(
     return after > before;
   }
 
-  /** Reject room swaps that would increase direction mismatches. */
+  /**
+   * Reject moves that break axis alignment with already-adjacent neighbors.
+   * If a room is currently at Manhattan distance 1 from a neighbor and both
+   * share an axis (same x or same y), don't move it to a position that
+   * creates a diagonal with that neighbor.
+   */
+  function moveWouldBreakAlignment(
+    rid: string,
+    nx: number,
+    ny: number,
+    z: number,
+  ): boolean {
+    const cur = result.get(rid);
+    if (!cur || cur.z !== z) return false;
+    const room = rooms.get(rid);
+    if (!room) return false;
+
+    for (const [dir, nid] of room.exits) {
+      const offset = DIRECTION_OFFSETS[dir];
+      if (!offset || offset.dz !== 0) continue;
+      const np = result.get(nid);
+      if (!np || np.z !== z) continue;
+      const curDist = Math.abs(cur.x - np.x) + Math.abs(cur.y - np.y);
+      if (curDist !== 1) continue; // only protect adjacent pairs
+      // For E/W exits: protect Y alignment
+      if (offset.dx !== 0 && offset.dy === 0) {
+        if (cur.y === np.y && ny !== np.y) return true;
+      }
+      // For N/S exits: protect X alignment
+      if (offset.dy !== 0 && offset.dx === 0) {
+        if (cur.x === np.x && nx !== np.x) return true;
+      }
+    }
+    // Also check reverse exits (rooms that point at us)
+    const revArr = reverseExits.get(rid);
+    if (revArr) {
+      for (const { fromId, dir } of revArr) {
+        const offset = DIRECTION_OFFSETS[dir];
+        if (!offset || offset.dz !== 0) continue;
+        const fp = result.get(fromId);
+        if (!fp || fp.z !== z) continue;
+        const curDist = Math.abs(cur.x - fp.x) + Math.abs(cur.y - fp.y);
+        if (curDist !== 1) continue;
+        if (offset.dx !== 0 && offset.dy === 0) {
+          if (cur.y === fp.y && ny !== fp.y) return true;
+        }
+        if (offset.dy !== 0 && offset.dx === 0) {
+          if (cur.x === fp.x && nx !== fp.x) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /** Reject room swaps that would increase direction mismatches. Pure — no side effects. */
   function swapWouldIncreaseMismatches(
     a: string,
     posA: { x: number; y: number },
@@ -700,12 +850,12 @@ export function computeLayout(
   ): boolean {
     const beforeA = countMismatchesInvolving(a, posA.x, posA.y, z);
     const beforeB = countMismatchesInvolving(b, posB.x, posB.y, z);
-    result.set(a, { x: posB.x, y: posB.y, z });
-    result.set(b, { x: posA.x, y: posA.y, z });
-    const afterA = countMismatchesInvolving(a, posB.x, posB.y, z);
-    const afterB = countMismatchesInvolving(b, posA.x, posA.y, z);
-    result.set(a, { x: posA.x, y: posA.y, z });
-    result.set(b, { x: posB.x, y: posB.y, z });
+    const overrides = new Map<string, { x: number; y: number }>([
+      [a, { x: posB.x, y: posB.y }],
+      [b, { x: posA.x, y: posA.y }],
+    ]);
+    const afterA = countMismatchesInvolving(a, posB.x, posB.y, z, overrides);
+    const afterB = countMismatchesInvolving(b, posA.x, posA.y, z, overrides);
     return (afterA + afterB) > (beforeA + beforeB);
   }
 
@@ -735,6 +885,33 @@ export function computeLayout(
   //   3. Shifting groups of rooms to create space ("add space to accommodate")
   fixDirectionViolations();
 
+  // ── Phase 5c: Cardinal alignment ───────────────────────────────────────
+  // After BFS + relaxation + diagonal fix + direction repair, east/west
+  // connected rooms may still sit at different y values (and north/south
+  // connected rooms at different x values). This happens when the BFS entry
+  // point causes two rooms to be reached via different paths that land on
+  // different rows/columns. The fix: for each E/W alignment group (rooms
+  // connected by east/west exits), pick the majority y and cascade-shift
+  // outlier rooms plus their north/south subtrees to match. Symmetric
+  // treatment for N/S groups and x coordinates.
+  fixCardinalAlignment();
+
+  // ── Phase 5d: Edge crossing elimination ──────────────────────────────
+  // After cardinal alignment, some edges may cross each other: a horizontal
+  // segment intersecting a vertical segment at a point that is not a room.
+  // This confuses the map visually. Detect such crossings and resolve them
+  // by repositioning one of the involved rooms (preferring the one with
+  // fewer connections) to an uncrossed cell, without breaking alignment or
+  // direction constraints.
+  fixEdgeCrossings();
+
+  // ── Phase 5e: Crossing fix via grid expansion ──────────────────────────
+  // If crossings remain after Phase 5d, this phase expands the grid by
+  // inserting a blank row or column outside the crossing edge's span,
+  // then moves the crossing group into the gap. This adds genuine space
+  // rather than rearranging existing positions.
+  fixCrossingsByInsertion();
+
   // ── Phase 6: Occlusion fix ────────────────────────────────────────────
   // After all placement/relaxation phases, rooms may still sit on the
   // straight-line segment between two other connected rooms, visually
@@ -747,10 +924,78 @@ export function computeLayout(
   // Alternate between grid expansion (inserting columns/rows by group
   // shifts) and individual-room occlusion fixes. Each round exploits free
   // cells created by the previous round's expansion.
-  for (let round = 0; round < 3; round++) {
+  for (let round = 0; round < EXPANSION_OCCLUSION_ROUNDS; round++) {
     resolveOcclusionsByExpansion();
     fixOcclusions();
   }
+
+  // ── Phase 9: Final crossing elimination ──────────────────────────────
+  // Phases 6–8 can reintroduce crossings while resolving occlusions.
+  // Process one crossing fix at a time: shift an alignment group, run
+  // fixOcclusions to clean up, and keep the fix only if net occlusion
+  // count didn't regress. Some crossings are acceptable when the zone
+  // topology makes them unavoidable.
+  {
+    for (const [z] of occupiedByZ) {
+      for (let iter = 0; iter < INSERTION_FIX_PASSES; iter++) {
+        if (countCrossings(z) === 0) break;
+
+        const snap = new Map<string, { x: number; y: number; z: number }>();
+        for (const [id, p] of result) if (p.z === z) snap.set(id, { ...p });
+        const occSnap = new Set(occupiedByZ.get(z)!);
+        const occBefore = countOcclusions(z);
+
+        const fixed = fixCrossingsByInsertion(1, true);
+        if (fixed === 0) break;
+
+        fixOcclusions();
+
+        // Allow a small occlusion increase (fixOcclusions may not clean
+        // up every new occlusion, but a modest increase is acceptable
+        // when it eliminates crossings).
+        if (countOcclusions(z) > occBefore + 2) {
+          for (const [id, p] of snap) result.set(id, p);
+          const occ = occupiedByZ.get(z)!;
+          occ.clear();
+          for (const k of occSnap) occ.add(k);
+          break; // this crossing couldn't be fixed cleanly, stop
+        }
+      }
+    }
+  }
+
+  // ── Phase 10: Visual crossing elimination ─────────────────────────────
+  // The ZoneDesigner renders diagonal edges as smooth-step paths that can
+  // cross other edges even though the centre-to-centre segment is purely
+  // diagonal. Enable visual-path mode so buildEdgeSegments models these
+  // rendered paths, then run crossing fixes to reduce what the user sees.
+  visualCrossingMode = true;
+  {
+    for (const [z] of occupiedByZ) {
+      for (let iter = 0; iter < INSERTION_FIX_PASSES; iter++) {
+        if (countCrossings(z) === 0) break;
+
+        const snap = new Map<string, { x: number; y: number; z: number }>();
+        for (const [id, p] of result) if (p.z === z) snap.set(id, { ...p });
+        const occSnap = new Set(occupiedByZ.get(z)!);
+        const occBefore = countOcclusions(z);
+
+        const fixed = fixCrossingsByInsertion(1, true);
+        if (fixed === 0) break;
+
+        fixOcclusions();
+
+        if (countOcclusions(z) > occBefore + 2) {
+          for (const [id, p] of snap) result.set(id, p);
+          const occ = occupiedByZ.get(z)!;
+          occ.clear();
+          for (const k of occSnap) occ.add(k);
+          break;
+        }
+      }
+    }
+  }
+  visualCrossingMode = false;
 
   return result;
 
@@ -761,10 +1006,9 @@ export function computeLayout(
    * cardinal exit where distance > 1, plus a penalty for each diagonal,
    * plus a penalty for rooms sitting on exit line segments (occlusions).
    */
-  function layoutScore(z: number): number {
+  function layoutScore(z: number, occlusionWeight: number = OCCLUSION_PENALTY_LIGHT): number {
     let score = 0;
 
-    // Collect z-level room positions for occlusion checks
     const zPositions: { id: string; x: number; y: number }[] = [];
     for (const [id, pos] of result) {
       if (pos.z === z) zPositions.push({ id, x: pos.x, y: pos.y });
@@ -781,16 +1025,9 @@ export function computeLayout(
         if (!tp || tp.z !== z) continue;
         const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
         if (dist > 1) score += dist - 1;
-        // Diagonal penalty — heavily penalize directionally wrong exits.
-        // Must be large enough that the relaxation will accept longer but
-        // axis-aligned connections over short diagonal ones.
-        if (pos.x !== tp.x && pos.y !== tp.y) score += 20;
-        // Direction mismatch penalty — penalizes rooms placed opposite to
-        // or perpendicular to their exit direction. Strict: east exits must
-        // have dx > 0, not just dx >= 0. This catches perpendicular placements
-        // (dx=0 for east) that would render as wrong-direction lines.
-        // Weight is dominant (50) to ensure direction correctness is prioritized
-        // over distance compactness or diagonal elimination.
+        if (pos.x !== tp.x && pos.y !== tp.y) {
+          score += DIAGONAL_PENALTY;
+        }
         const dx = tp.x - pos.x;
         const dy = tp.y - pos.y;
         if (
@@ -799,29 +1036,188 @@ export function computeLayout(
           (offset.dy > 0 && dy <= 0) ||
           (offset.dy < 0 && dy >= 0)
         ) {
-          score += 50;
+          score += DIRECTION_MISMATCH_PENALTY;
         }
-        // Line-through-room occlusion penalty — rooms sitting on an exit
-        // line segment between two other connected rooms are visually
-        // confusing. Kept moderate so force-relaxation and diagonal cascade
-        // can converge; the dedicated fixOcclusions phase handles residuals.
         if (dist >= 2 && (pos.x === tp.x || pos.y === tp.y)) {
           for (const other of zPositions) {
             if (other.id === roomId || other.id === targetId) continue;
             if (pos.x === tp.x && other.x === pos.x) {
               const minY = Math.min(pos.y, tp.y);
               const maxY = Math.max(pos.y, tp.y);
-              if (other.y > minY && other.y < maxY) score += 3;
+              if (other.y > minY && other.y < maxY) score += occlusionWeight;
             } else if (pos.y === tp.y && other.y === pos.y) {
               const minX = Math.min(pos.x, tp.x);
               const maxX = Math.max(pos.x, tp.x);
-              if (other.x > minX && other.x < maxX) score += 3;
+              if (other.x > minX && other.x < maxX) score += occlusionWeight;
             }
           }
         }
       }
     }
     return score;
+  }
+
+  /**
+   * Relaxation-specific score: identical to layoutScore but uses a
+   * proportional diagonal penalty that scales with perpendicular displacement.
+   * This prevents the force-directed pass from dragging axis-aligned rooms
+   * off-axis toward distant neighbours (e.g. wall-road pulling
+   * inside-the-west-gate 4 cells off the main-street row in Midgaard).
+   * Later phases (diagonal cascade, direction-violation repair) use the
+   * standard flat penalty so they remain free to shuffle rooms as needed.
+   */
+  function relaxationScore(z: number): number {
+    let score = 0;
+
+    const zPositions: { id: string; x: number; y: number }[] = [];
+    for (const [id, pos] of result) {
+      if (pos.z === z) zPositions.push({ id, x: pos.x, y: pos.y });
+    }
+
+    for (const [roomId, pos] of result) {
+      if (pos.z !== z) continue;
+      const room = rooms.get(roomId);
+      if (!room) continue;
+      for (const [dir, targetId] of room.exits) {
+        const offset = DIRECTION_OFFSETS[dir];
+        if (!offset || offset.dz !== 0) continue;
+        const tp = result.get(targetId);
+        if (!tp || tp.z !== z) continue;
+        const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
+        if (dist > 1) score += dist - 1;
+        if (pos.x !== tp.x && pos.y !== tp.y) {
+          const offAxis = offset.dx !== 0
+            ? Math.abs(tp.y - pos.y)
+            : Math.abs(tp.x - pos.x);
+          score += DIAGONAL_PENALTY * Math.max(offAxis, 1);
+        }
+        const dx = tp.x - pos.x;
+        const dy = tp.y - pos.y;
+        if (
+          (offset.dx > 0 && dx <= 0) ||
+          (offset.dx < 0 && dx >= 0) ||
+          (offset.dy > 0 && dy <= 0) ||
+          (offset.dy < 0 && dy >= 0)
+        ) {
+          score += DIRECTION_MISMATCH_PENALTY;
+        }
+        if (dist >= 2 && (pos.x === tp.x || pos.y === tp.y)) {
+          for (const other of zPositions) {
+            if (other.id === roomId || other.id === targetId) continue;
+            if (pos.x === tp.x && other.x === pos.x) {
+              const minY = Math.min(pos.y, tp.y);
+              const maxY = Math.max(pos.y, tp.y);
+              if (other.y > minY && other.y < maxY) score += OCCLUSION_PENALTY_LIGHT;
+            } else if (pos.y === tp.y && other.y === pos.y) {
+              const minX = Math.min(pos.x, tp.x);
+              const maxX = Math.max(pos.x, tp.x);
+              if (other.x > minX && other.x < maxX) score += OCCLUSION_PENALTY_LIGHT;
+            }
+          }
+        }
+      }
+    }
+    return score;
+  }
+
+  /**
+   * Compute the score contribution of a single room's exits.
+   * Used for incremental delta scoring during pairwise swaps.
+   */
+  function roomScoreContribution(
+    roomId: string,
+    z: number,
+    zPositions: { id: string; x: number; y: number }[],
+    occlusionWeight: number = OCCLUSION_PENALTY_LIGHT,
+  ): number {
+    let score = 0;
+    const pos = result.get(roomId);
+    if (!pos || pos.z !== z) return 0;
+    const room = rooms.get(roomId);
+    if (!room) return 0;
+
+    for (const [dir, targetId] of room.exits) {
+      const offset = DIRECTION_OFFSETS[dir];
+      if (!offset || offset.dz !== 0) continue;
+      const tp = result.get(targetId);
+      if (!tp || tp.z !== z) continue;
+      const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
+      if (dist > 1) score += dist - 1;
+      if (pos.x !== tp.x && pos.y !== tp.y) {
+        score += DIAGONAL_PENALTY;
+      }
+      const dx = tp.x - pos.x;
+      const dy = tp.y - pos.y;
+      if (
+        (offset.dx > 0 && dx <= 0) ||
+        (offset.dx < 0 && dx >= 0) ||
+        (offset.dy > 0 && dy <= 0) ||
+        (offset.dy < 0 && dy >= 0)
+      ) {
+        score += DIRECTION_MISMATCH_PENALTY;
+      }
+      if (dist >= 2 && (pos.x === tp.x || pos.y === tp.y)) {
+        for (const other of zPositions) {
+          if (other.id === roomId || other.id === targetId) continue;
+          if (pos.x === tp.x && other.x === pos.x) {
+            const minY = Math.min(pos.y, tp.y);
+            const maxY = Math.max(pos.y, tp.y);
+            if (other.y > minY && other.y < maxY) score += occlusionWeight;
+          } else if (pos.y === tp.y && other.y === pos.y) {
+            const minX = Math.min(pos.x, tp.x);
+            const maxX = Math.max(pos.x, tp.x);
+            if (other.x > minX && other.x < maxX) score += occlusionWeight;
+          }
+        }
+      }
+    }
+    return score;
+  }
+
+  /**
+   * Collect room IDs whose score contribution may change when rooms in
+   * `changedIds` move. This includes the changed rooms themselves plus
+   * any room that shares an exit edge with them (their neighbors).
+   */
+  function affectedRooms(changedIds: string[], z: number): Set<string> {
+    const affected = new Set<string>(changedIds);
+    for (const rid of changedIds) {
+      const room = rooms.get(rid);
+      if (!room) continue;
+      for (const [dir, nid] of room.exits) {
+        const off = DIRECTION_OFFSETS[dir];
+        if (!off || off.dz !== 0) continue;
+        const np = result.get(nid);
+        if (np && np.z === z) affected.add(nid);
+      }
+      const revArr = reverseExits.get(rid);
+      if (revArr) {
+        for (const { fromId, dir } of revArr) {
+          const off = DIRECTION_OFFSETS[dir];
+          if (!off || off.dz !== 0) continue;
+          const fp = result.get(fromId);
+          if (fp && fp.z === z) affected.add(fromId);
+        }
+      }
+    }
+    return affected;
+  }
+
+  /**
+   * Sum the score contributions of a set of rooms. Each exit edge is
+   * counted once from the source room's perspective.
+   */
+  function sumContributions(
+    roomIds: Set<string>,
+    z: number,
+    zPositions: { id: string; x: number; y: number }[],
+    occlusionWeight: number = OCCLUSION_PENALTY_LIGHT,
+  ): number {
+    let total = 0;
+    for (const rid of roomIds) {
+      total += roomScoreContribution(rid, z, zPositions, occlusionWeight);
+    }
+    return total;
   }
 
   /**
@@ -856,6 +1252,94 @@ export function computeLayout(
   }
 
   /**
+   * One pass of single-room relaxation: try moving each room to reduce the
+   * layout score. Builds candidates near the ideal position and near each
+   * neighbor's preferred position, then commits the best-scoring move.
+   */
+  function relaxRooms(
+    zRoomIds: string[],
+    z: number,
+    occupied: Set<string>,
+    startScore: number,
+    scoreFn: (z: number) => number,
+  ): { score: number; improved: boolean } {
+    let score = startScore;
+    let improved = false;
+
+    for (const roomId of zRoomIds) {
+      const pos = result.get(roomId)!;
+      const ideal = idealPosition(roomId, z);
+      if (!ideal) continue;
+      if (ideal.x === pos.x && ideal.y === pos.y) continue;
+
+      const candidateSet = new Set<string>();
+      const candidates: { x: number; y: number }[] = [];
+      const addCandidate = (x: number, y: number) => {
+        const k = cellKey(x, y);
+        if (!candidateSet.has(k)) {
+          candidateSet.add(k);
+          candidates.push({ x, y });
+        }
+      };
+
+      for (const c of diamondCandidates(ideal.x, ideal.y, 0, RELAX_CANDIDATE_RADIUS)) {
+        addCandidate(c.x, c.y);
+      }
+
+      const room = rooms.get(roomId);
+      if (room) {
+        for (const [dir, neighborId] of room.exits) {
+          const offset = DIRECTION_OFFSETS[dir];
+          if (!offset || offset.dz !== 0) continue;
+          const neighborPos = result.get(neighborId);
+          if (!neighborPos || neighborPos.z !== z) continue;
+          const wantX = neighborPos.x - offset.dx;
+          const wantY = neighborPos.y - offset.dy;
+          for (const c of diamondCandidates(wantX, wantY, 0, NEIGHBOR_CANDIDATE_RADIUS)) {
+            addCandidate(c.x, c.y);
+          }
+        }
+      }
+
+      let bestPos: { x: number; y: number } | null = null;
+      let bestScore = score;
+
+      for (const cand of candidates) {
+        if (cand.x === pos.x && cand.y === pos.y) continue;
+        const key = cellKey(cand.x, cand.y);
+        if (occupied.has(key)) continue;
+        if (moveWouldIncreaseMismatches(roomId, cand.x, cand.y, z)) continue;
+        if (moveWouldBreakAlignment(roomId, cand.x, cand.y, z)) continue;
+
+        const oldKey = cellKey(pos.x, pos.y);
+        occupied.delete(oldKey);
+        occupied.add(key);
+        result.set(roomId, { x: cand.x, y: cand.y, z });
+
+        const newScore = scoreFn(z);
+        if (newScore < bestScore) {
+          bestScore = newScore;
+          bestPos = cand;
+        }
+
+        occupied.delete(key);
+        occupied.add(oldKey);
+        result.set(roomId, pos);
+      }
+
+      if (bestPos) {
+        occupied.delete(cellKey(pos.x, pos.y));
+        occupied.add(cellKey(bestPos.x, bestPos.y));
+        result.set(roomId, { x: bestPos.x, y: bestPos.y, z });
+        score = bestScore;
+        improved = true;
+      }
+    }
+
+    return { score, improved };
+  }
+
+  /**
    * Iterative force-directed relaxation. Each iteration:
    * 1. For each room, compute where its neighbors "want" it
    * 2. Try moving the room to that ideal position (or nearby)
@@ -868,110 +1352,29 @@ export function computeLayout(
         if (pos.z === z) zRoomIds.push(id);
       }
 
-      let currentScore = layoutScore(z);
+      let currentScore = relaxationScore(z);
       if (currentScore === 0) continue; // Already perfect
 
-      for (let iter = 0; iter < 200 && currentScore > 0; iter++) {
-        let improved = false;
-
-        for (const roomId of zRoomIds) {
-          const pos = result.get(roomId)!;
-          const ideal = idealPosition(roomId, z);
-          if (!ideal) continue;
-
-          // Skip if already at ideal
-          if (ideal.x === pos.x && ideal.y === pos.y) continue;
-
-          // Try the ideal position and nearby cells (within radius 4)
-          const candidateSet = new Set<string>();
-          const candidates: { x: number; y: number }[] = [];
-          const addCandidate = (x: number, y: number) => {
-            const k = cellKey(x, y);
-            if (!candidateSet.has(k)) {
-              candidateSet.add(k);
-              candidates.push({ x, y });
-            }
-          };
-
-          // Candidates near the average ideal position
-          for (let r = 0; r <= 4; r++) {
-            for (let ddx = -r; ddx <= r; ddx++) {
-              const absRem = r - Math.abs(ddx);
-              const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-              for (const ddy of dyOpts) {
-                addCandidate(ideal.x + ddx, ideal.y + ddy);
-              }
-            }
-          }
-
-          // Candidates near each neighbor's "wants" position (where each
-          // individual neighbor wants this room, not the average)
-          const room = rooms.get(roomId);
-          if (room) {
-            for (const [dir, neighborId] of room.exits) {
-              const offset = DIRECTION_OFFSETS[dir];
-              if (!offset || offset.dz !== 0) continue;
-              const neighborPos = result.get(neighborId);
-              if (!neighborPos || neighborPos.z !== z) continue;
-              const wantX = neighborPos.x - offset.dx;
-              const wantY = neighborPos.y - offset.dy;
-              for (let r = 0; r <= 2; r++) {
-                for (let ddx = -r; ddx <= r; ddx++) {
-                  const absRem = r - Math.abs(ddx);
-                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                  for (const ddy of dyOpts) {
-                    addCandidate(wantX + ddx, wantY + ddy);
-                  }
-                }
-              }
-            }
-          }
-
-          let bestPos: { x: number; y: number } | null = null;
-          let bestScore = currentScore;
-
-          for (const cand of candidates) {
-            if (cand.x === pos.x && cand.y === pos.y) continue;
-            const key = cellKey(cand.x, cand.y);
-            if (occupied.has(key)) continue;
-            if (moveWouldIncreaseMismatches(roomId, cand.x, cand.y, z)) continue;
-
-            // Tentatively move room
-            const oldKey = cellKey(pos.x, pos.y);
-            occupied.delete(oldKey);
-            occupied.add(key);
-            result.set(roomId, { x: cand.x, y: cand.y, z });
-
-            const newScore = layoutScore(z);
-            if (newScore < bestScore) {
-              bestScore = newScore;
-              bestPos = cand;
-            }
-
-            // Undo
-            occupied.delete(key);
-            occupied.add(oldKey);
-            result.set(roomId, pos);
-          }
-
-          if (bestPos) {
-            // Commit the move
-            occupied.delete(cellKey(pos.x, pos.y));
-            occupied.add(cellKey(bestPos.x, bestPos.y));
-            const newPos = { x: bestPos.x, y: bestPos.y, z };
-            result.set(roomId, newPos);
-            currentScore = bestScore;
-            improved = true;
-          }
-        }
-
-        if (!improved) break;
+      for (let iter = 0; iter < FORCE_RELAXATION_ITERATIONS && currentScore > 0; iter++) {
+        const r = relaxRooms(zRoomIds, z, occupied, currentScore, relaxationScore);
+        currentScore = r.score;
+        if (!r.improved) break;
       }
 
       // Phase 2: Try room swaps — explores multi-room rearrangements that
       // single-room moves can't find (e.g., two rooms blocking each other)
       if (currentScore > 0) {
-        for (let swapIter = 0; swapIter < 50 && currentScore > 0; swapIter++) {
+        // Pre-build z-level positions for delta scoring
+        let zPositions: { id: string; x: number; y: number }[] = [];
+        const refreshZPositions = () => {
+          zPositions = [];
+          for (const [id, pos] of result) {
+            if (pos.z === z) zPositions.push({ id, x: pos.x, y: pos.y });
+          }
+        };
+        refreshZPositions();
+
+        for (let swapIter = 0; swapIter < SWAP_ITERATIONS && currentScore > 0; swapIter++) {
           let swapped = false;
 
           for (let i = 0; i < zRoomIds.length && currentScore > 0; i++) {
@@ -980,110 +1383,50 @@ export function computeLayout(
               const posA = result.get(a)!;
               const posB = result.get(b)!;
 
-              // Hard guard: reject swaps that would increase direction mismatches
               if (swapWouldIncreaseMismatches(a, posA, b, posB, z)) continue;
+
+              // Delta scoring: compute contribution of affected rooms before/after
+              const affected = affectedRooms([a, b], z);
+              const beforeDelta = sumContributions(affected, z, zPositions);
 
               // Tentatively swap
               result.set(a, { x: posB.x, y: posB.y, z });
               result.set(b, { x: posA.x, y: posA.y, z });
 
-              const newScore = layoutScore(z);
+              // Update zPositions for the two swapped rooms
+              for (const zp of zPositions) {
+                if (zp.id === a) { zp.x = posB.x; zp.y = posB.y; }
+                else if (zp.id === b) { zp.x = posA.x; zp.y = posA.y; }
+              }
+
+              const afterDelta = sumContributions(affected, z, zPositions);
+              const newScore = currentScore - beforeDelta + afterDelta;
+
               if (newScore < currentScore) {
-                // Accept (occupied set doesn't change — both cells stay occupied)
                 currentScore = newScore;
                 swapped = true;
               } else {
-                // Undo
+                // Undo swap and zPositions
                 result.set(a, posA);
                 result.set(b, posB);
+                for (const zp of zPositions) {
+                  if (zp.id === a) { zp.x = posA.x; zp.y = posA.y; }
+                  else if (zp.id === b) { zp.x = posB.x; zp.y = posB.y; }
+                }
               }
             }
           }
 
           if (!swapped) break;
 
-          // After a swap, re-run single-room moves to exploit freed opportunities
-          for (let moveIter = 0; moveIter < 50 && currentScore > 0; moveIter++) {
-            let moved = false;
-            for (const roomId of zRoomIds) {
-              const pos = result.get(roomId)!;
-              const ideal = idealPosition(roomId, z);
-              if (!ideal) continue;
-              if (ideal.x === pos.x && ideal.y === pos.y) continue;
-
-              const candidateSet2 = new Set<string>();
-              const candidates: { x: number; y: number }[] = [];
-              const addCand = (x: number, y: number) => {
-                const k = cellKey(x, y);
-                if (!candidateSet2.has(k)) {
-                  candidateSet2.add(k);
-                  candidates.push({ x, y });
-                }
-              };
-              for (let r = 0; r <= 4; r++) {
-                for (let ddx = -r; ddx <= r; ddx++) {
-                  const absRem = r - Math.abs(ddx);
-                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                  for (const ddy of dyOpts) {
-                    addCand(ideal.x + ddx, ideal.y + ddy);
-                  }
-                }
-              }
-              const roomDef = rooms.get(roomId);
-              if (roomDef) {
-                for (const [dir2, nId] of roomDef.exits) {
-                  const off = DIRECTION_OFFSETS[dir2];
-                  if (!off || off.dz !== 0) continue;
-                  const np = result.get(nId);
-                  if (!np || np.z !== z) continue;
-                  const wx = np.x - off.dx, wy = np.y - off.dy;
-                  for (let r = 0; r <= 2; r++) {
-                    for (let ddx = -r; ddx <= r; ddx++) {
-                      const absRem = r - Math.abs(ddx);
-                      const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                      for (const ddy of dyOpts) {
-                        addCand(wx + ddx, wy + ddy);
-                      }
-                    }
-                  }
-                }
-              }
-
-              let bestPos: { x: number; y: number } | null = null;
-              let bestScore = currentScore;
-
-              for (const cand of candidates) {
-                if (cand.x === pos.x && cand.y === pos.y) continue;
-                const key = cellKey(cand.x, cand.y);
-                if (occupied.has(key)) continue;
-                if (moveWouldIncreaseMismatches(roomId, cand.x, cand.y, z)) continue;
-
-                const oldKey = cellKey(pos.x, pos.y);
-                occupied.delete(oldKey);
-                occupied.add(key);
-                result.set(roomId, { x: cand.x, y: cand.y, z });
-
-                const newScore = layoutScore(z);
-                if (newScore < bestScore) {
-                  bestScore = newScore;
-                  bestPos = cand;
-                }
-
-                occupied.delete(key);
-                occupied.add(oldKey);
-                result.set(roomId, pos);
-              }
-
-              if (bestPos) {
-                occupied.delete(cellKey(pos.x, pos.y));
-                occupied.add(cellKey(bestPos.x, bestPos.y));
-                result.set(roomId, { x: bestPos.x, y: bestPos.y, z });
-                currentScore = bestScore;
-                moved = true;
-              }
-            }
-            if (!moved) break;
+          // After a swap round, re-run single-room moves
+          for (let moveIter = 0; moveIter < POST_SWAP_MOVE_ITERATIONS && currentScore > 0; moveIter++) {
+            const r = relaxRooms(zRoomIds, z, occupied, currentScore, layoutScore);
+            currentScore = r.score;
+            if (!r.improved) break;
           }
+          // Refresh zPositions after relaxation moves
+          refreshZPositions();
         }
       }
     }
@@ -1102,16 +1445,19 @@ export function computeLayout(
    */
   function fixDiagonalCascade(): void {
     for (const [z, occupied] of occupiedByZ) {
-      // Build reverse lookup: position → roomId
-      function posToRoom(): Map<string, string> {
-        const m = new Map<string, string>();
-        for (const [id, p] of result) {
-          if (p.z === z) m.set(cellKey(p.x, p.y), id);
-        }
-        return m;
+      // Persistent reverse lookup: position → roomId (updated incrementally)
+      const posToRoomMap = new Map<string, string>();
+      for (const [id, p] of result) {
+        if (p.z === z) posToRoomMap.set(cellKey(p.x, p.y), id);
       }
 
-      for (let pass = 0; pass < 60; pass++) {
+      for (let pass = 0; pass < DIAGONAL_CASCADE_PASSES; pass++) {
+        // Refresh reverse lookup at the start of each pass
+        posToRoomMap.clear();
+        for (const [id, p] of result) {
+          if (p.z === z) posToRoomMap.set(cellKey(p.x, p.y), id);
+        }
+
         const diags: Array<{
           roomId: string;
           targetId: string;
@@ -1165,6 +1511,7 @@ export function computeLayout(
             const moverPos = result.get(sm.mover)!;
             if (moverPos.x === sm.newX && moverPos.y === sm.newY) continue;
             if (moveWouldIncreaseMismatches(sm.mover, sm.newX, sm.newY, z)) continue;
+            if (moveWouldBreakAlignment(sm.mover, sm.newX, sm.newY, z)) continue;
 
             const targetKey = cellKey(sm.newX, sm.newY);
 
@@ -1184,8 +1531,7 @@ export function computeLayout(
               result.set(sm.mover, moverPos);
             } else {
               // Try swap with occupant
-              const pMap = posToRoom();
-              const occupantId = pMap.get(targetKey);
+              const occupantId = posToRoomMap.get(targetKey);
               if (!occupantId || occupantId === roomId || occupantId === targetId)
                 continue;
               const occupantPos = result.get(occupantId)!;
@@ -1203,36 +1549,29 @@ export function computeLayout(
 
               // Displace occupant to nearby cell
               const occupantKey = cellKey(occupantPos.x, occupantPos.y);
-              for (let r = 1; r <= 5 && !improved; r++) {
-                for (let ddx = -r; ddx <= r && !improved; ddx++) {
-                  const absRem = r - Math.abs(ddx);
-                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                  for (const ddy of dyOpts) {
-                    const nx = occupantPos.x + ddx;
-                    const ny = occupantPos.y + ddy;
-                    const nk = cellKey(nx, ny);
-                    if (occupied.has(nk)) continue;
+              for (const c of diamondCandidates(occupantPos.x, occupantPos.y, 1, DIAGONAL_DISPLACE_RADIUS)) {
+                if (improved) break;
+                const nk = cellKey(c.x, c.y);
+                if (occupied.has(nk)) continue;
 
-                    occupied.delete(moverOldKey);
-                    occupied.delete(occupantKey);
-                    occupied.add(targetKey);
-                    occupied.add(nk);
-                    result.set(sm.mover, { x: sm.newX, y: sm.newY, z });
-                    result.set(occupantId, { x: nx, y: ny, z });
+                occupied.delete(moverOldKey);
+                occupied.delete(occupantKey);
+                occupied.add(targetKey);
+                occupied.add(nk);
+                result.set(sm.mover, { x: sm.newX, y: sm.newY, z });
+                result.set(occupantId, { x: c.x, y: c.y, z });
 
-                    if (layoutScore(z) < currentScore) {
-                      improved = true;
-                      break;
-                    }
-
-                    occupied.delete(targetKey);
-                    occupied.delete(nk);
-                    occupied.add(moverOldKey);
-                    occupied.add(occupantKey);
-                    result.set(sm.mover, moverPos);
-                    result.set(occupantId, occupantPos);
-                  }
+                if (layoutScore(z) < currentScore) {
+                  improved = true;
+                  break;
                 }
+
+                occupied.delete(targetKey);
+                occupied.delete(nk);
+                occupied.add(moverOldKey);
+                occupied.add(occupantKey);
+                result.set(sm.mover, moverPos);
+                result.set(occupantId, occupantPos);
               }
             }
           }
@@ -1276,6 +1615,8 @@ export function computeLayout(
             if (aFree && bFree && keyA !== keyB) {
               if (moveWouldIncreaseMismatches(roomId, newAx, newAy, z) ||
                   moveWouldIncreaseMismatches(targetId, newBx, newBy, z)) continue;
+              if (moveWouldBreakAlignment(roomId, newAx, newAy, z) ||
+                  moveWouldBreakAlignment(targetId, newBx, newBy, z)) continue;
               occupied.delete(oldKeyA);
               occupied.delete(oldKeyB);
               occupied.add(keyA);
@@ -1339,8 +1680,7 @@ export function computeLayout(
 
                 // If new position is occupied by a non-push room, add it
                 if (occupied.has(pNewKey)) {
-                  const pmap = posToRoom();
-                  const occ = pmap.get(pNewKey);
+                  const occ = posToRoomMap.get(pNewKey);
                   if (occ && !pushSet.has(occ)) {
                     pushSet.add(occ);
                     pushQueue.push(occ);
@@ -1384,7 +1724,7 @@ export function computeLayout(
                   }
                 }
 
-                if (pushSet.size > 40) {
+                if (pushSet.size > MAX_PUSH_GROUP_SIZE) {
                   tooLarge = true;
                   break;
                 }
@@ -1405,8 +1745,7 @@ export function computeLayout(
                 const ny = isVertical ? pp.y : pp.y + shift;
                 const nk = cellKey(nx, ny);
                 if (occupied.has(nk)) {
-                  const pm = posToRoom();
-                  const atCell = pm.get(nk);
+                  const atCell = posToRoomMap.get(nk);
                   if (!atCell || !pushSet.has(atCell)) {
                     canMove = false;
                     break;
@@ -1418,9 +1757,11 @@ export function computeLayout(
               if (!canMove) continue;
 
               // Guard: reject if any room in the push set would increase mismatches
+              // or break axis alignment with an adjacent cardinal neighbour
               let wouldIncrease = false;
               for (const [pid, m] of moves) {
-                if (moveWouldIncreaseMismatches(pid, m.newX, m.newY, z)) {
+                if (moveWouldIncreaseMismatches(pid, m.newX, m.newY, z) ||
+                    moveWouldBreakAlignment(pid, m.newX, m.newY, z)) {
                   wouldIncrease = true;
                   break;
                 }
@@ -1458,12 +1799,12 @@ export function computeLayout(
 
       // After cascade fixes, run one more pass of single-room relaxation
       // to clean up any remaining non-optimal placements
-      let score = layoutScore(z);
+      let score = relaxationScore(z);
       const zRooms: string[] = [];
       for (const [id, p] of result) {
         if (p.z === z) zRooms.push(id);
       }
-      for (let iter = 0; iter < 100 && score > 0; iter++) {
+      for (let iter = 0; iter < POST_DIAGONAL_RELAX_ITERATIONS && score > 0; iter++) {
         let moved = false;
         for (const rid of zRooms) {
           const rp = result.get(rid)!;
@@ -1480,14 +1821,8 @@ export function computeLayout(
             const k = cellKey(x, y);
             if (!targets.has(k)) targets.add(k);
           };
-          for (let r = 0; r <= 3; r++) {
-            for (let ddx = -r; ddx <= r; ddx++) {
-              const absRem = r - Math.abs(ddx);
-              const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-              for (const ddy of dyOpts) {
-                addTarget(ideal.x + ddx, ideal.y + ddy);
-              }
-            }
+          for (const c of diamondCandidates(ideal.x, ideal.y, 0, POST_DIAGONAL_CANDIDATE_RADIUS)) {
+            addTarget(c.x, c.y);
           }
           if (room) {
             for (const [d, nid] of room.exits) {
@@ -1505,13 +1840,14 @@ export function computeLayout(
             if (tx === rp.x && ty === rp.y) continue;
             if (occupied.has(tk)) continue;
             if (moveWouldIncreaseMismatches(rid, tx, ty, z)) continue;
+            if (moveWouldBreakAlignment(rid, tx, ty, z)) continue;
 
             const oldKey = cellKey(rp.x, rp.y);
             occupied.delete(oldKey);
             occupied.add(tk);
             result.set(rid, { x: tx, y: ty, z });
 
-            const ns = layoutScore(z);
+            const ns = relaxationScore(z);
             if (ns < bestScore) {
               bestScore = ns;
               bestPos = { x: tx, y: ty };
@@ -1549,7 +1885,7 @@ export function computeLayout(
    */
   function fixDirectionViolations(): void {
     for (const [z, occupied] of occupiedByZ) {
-      for (let pass = 0; pass < 100; pass++) {
+      for (let pass = 0; pass < DIRECTION_VIOLATION_PASSES; pass++) {
         // Find all direction violations on this z-level
         const violations: Array<{
           roomId: string;
@@ -1595,20 +1931,12 @@ export function computeLayout(
           const idealBy = posA.y + offset.dy;
 
           const candidates: Array<{ x: number; y: number }> = [];
-          for (let r = 0; r <= 10; r++) {
-            for (let ddx = -r; ddx <= r; ddx++) {
-              const absRem = r - Math.abs(ddx);
-              const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-              for (const ddy of dyOpts) {
-                const cx = idealBx + ddx;
-                const cy = idealBy + ddy;
-                if (offset.dx > 0 && cx <= posA.x) continue;
-                if (offset.dx < 0 && cx >= posA.x) continue;
-                if (offset.dy > 0 && cy <= posA.y) continue;
-                if (offset.dy < 0 && cy >= posA.y) continue;
-                candidates.push({ x: cx, y: cy });
-              }
-            }
+          for (const c of diamondCandidates(idealBx, idealBy, 0, VIOLATION_CANDIDATE_RADIUS)) {
+            if (offset.dx > 0 && c.x <= posA.x) continue;
+            if (offset.dx < 0 && c.x >= posA.x) continue;
+            if (offset.dy > 0 && c.y <= posA.y) continue;
+            if (offset.dy < 0 && c.y >= posA.y) continue;
+            candidates.push(c);
           }
 
           // Try moving target (B)
@@ -1623,34 +1951,26 @@ export function computeLayout(
             const mCands: Array<{ x: number; y: number }> = [];
             const baseX = isTarget ? anchorPos.x + offset.dx : anchorPos.x - offset.dx;
             const baseY = isTarget ? anchorPos.y + offset.dy : anchorPos.y - offset.dy;
-            for (let r = 0; r <= 10; r++) {
-              for (let ddx = -r; ddx <= r; ddx++) {
-                const absRem = r - Math.abs(ddx);
-                const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                for (const ddy of dyOpts) {
-                  const cx = baseX + ddx;
-                  const cy = baseY + ddy;
-                  if (isTarget) {
-                    if (offset.dx > 0 && cx <= anchorPos.x) continue;
-                    if (offset.dx < 0 && cx >= anchorPos.x) continue;
-                    if (offset.dy > 0 && cy <= anchorPos.y) continue;
-                    if (offset.dy < 0 && cy >= anchorPos.y) continue;
-                  } else {
-                    // Moving source: source must be in the opposite direction
-                    if (offset.dx > 0 && cx >= anchorPos.x) continue;
-                    if (offset.dx < 0 && cx <= anchorPos.x) continue;
-                    if (offset.dy > 0 && cy >= anchorPos.y) continue;
-                    if (offset.dy < 0 && cy <= anchorPos.y) continue;
-                  }
-                  mCands.push({ x: cx, y: cy });
-                }
+            for (const c of diamondCandidates(baseX, baseY, 0, VIOLATION_CANDIDATE_RADIUS)) {
+              if (isTarget) {
+                if (offset.dx > 0 && c.x <= anchorPos.x) continue;
+                if (offset.dx < 0 && c.x >= anchorPos.x) continue;
+                if (offset.dy > 0 && c.y <= anchorPos.y) continue;
+                if (offset.dy < 0 && c.y >= anchorPos.y) continue;
+              } else {
+                if (offset.dx > 0 && c.x >= anchorPos.x) continue;
+                if (offset.dx < 0 && c.x <= anchorPos.x) continue;
+                if (offset.dy > 0 && c.y >= anchorPos.y) continue;
+                if (offset.dy < 0 && c.y <= anchorPos.y) continue;
               }
+              mCands.push(c);
             }
 
             for (const cand of mCands) {
               if (cand.x === moverPos.x && cand.y === moverPos.y) continue;
               const ck = cellKey(cand.x, cand.y);
               if (occupied.has(ck)) continue;
+              if (moveWouldBreakAlignment(mover, cand.x, cand.y, z)) continue;
 
               const beforeM = countMismatchesInvolving(mover, moverPos.x, moverPos.y, z);
               const oldKey = cellKey(moverPos.x, moverPos.y);
@@ -1689,49 +2009,42 @@ export function computeLayout(
             const swapBaseY = isTarget ? anchorPos.y + offset.dy : anchorPos.y - offset.dy;
 
             // Try swapping with rooms at or near the ideal position
-            for (let sr = 0; sr <= 4; sr++) {
+            for (const c of diamondCandidates(swapBaseX, swapBaseY, 0, VIOLATION_SWAP_RADIUS)) {
               if (fixed) break;
-              for (let ddx = -sr; ddx <= sr; ddx++) {
-                if (fixed) break;
-                const absRem = sr - Math.abs(ddx);
-                const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                for (const ddy of dyOpts) {
-                  const sx = swapBaseX + ddx;
-                  const sy = swapBaseY + ddy;
-                  const sk = cellKey(sx, sy);
-                  if (!occupied.has(sk)) continue;
-                  if (sx === moverPos.x && sy === moverPos.y) continue;
+              const sk = cellKey(c.x, c.y);
+              if (!occupied.has(sk)) continue;
+              if (c.x === moverPos.x && c.y === moverPos.y) continue;
 
-                  // Find who's at this position
-                  let swapTarget: string | null = null;
-                  for (const [rid, rp] of result) {
-                    if (rp.z === z && rp.x === sx && rp.y === sy) {
-                      swapTarget = rid;
-                      break;
-                    }
-                  }
-                  if (!swapTarget || swapTarget === roomId || swapTarget === targetId) continue;
-
-                  const stPos = result.get(swapTarget)!;
-
-                  if (swapWouldIncreaseMismatches(mover, moverPos, swapTarget, stPos, z)) continue;
-
-                  // Tentatively swap
-                  result.set(mover, { x: stPos.x, y: stPos.y, z });
-                  result.set(swapTarget, { x: moverPos.x, y: moverPos.y, z });
-
-                  const newScore = layoutScore(z);
-                  if (newScore < currentScore) {
-                    currentScore = newScore;
-                    fixed = true;
-                    break;
-                  }
-
-                  // Undo
-                  result.set(mover, moverPos);
-                  result.set(swapTarget, stPos);
+              // Find who's at this position
+              let swapTarget: string | null = null;
+              for (const [rid, rp] of result) {
+                if (rp.z === z && rp.x === c.x && rp.y === c.y) {
+                  swapTarget = rid;
+                  break;
                 }
               }
+              if (!swapTarget || swapTarget === roomId || swapTarget === targetId) continue;
+
+              const stPos = result.get(swapTarget)!;
+
+              if (swapWouldIncreaseMismatches(mover, moverPos, swapTarget, stPos, z)) continue;
+              if (moveWouldBreakAlignment(mover, stPos.x, stPos.y, z) ||
+                  moveWouldBreakAlignment(swapTarget, moverPos.x, moverPos.y, z)) continue;
+
+              // Tentatively swap
+              result.set(mover, { x: stPos.x, y: stPos.y, z });
+              result.set(swapTarget, { x: moverPos.x, y: moverPos.y, z });
+
+              const newScore = layoutScore(z);
+              if (newScore < currentScore) {
+                currentScore = newScore;
+                fixed = true;
+                break;
+              }
+
+              // Undo
+              result.set(mover, moverPos);
+              result.set(swapTarget, stPos);
             }
           }
 
@@ -1800,7 +2113,7 @@ export function computeLayout(
                 }
               }
 
-              if (group.size > 60) { tooLarge = true; break; }
+              if (group.size > MAX_VIOLATION_GROUP_SIZE) { tooLarge = true; break; }
             }
 
             if (tooLarge || group.has(roomId)) continue;
@@ -1828,6 +2141,17 @@ export function computeLayout(
               if (occupied.has(nk) && !oldKeys.has(nk)) { valid = false; break; }
             }
             if (!valid) continue;
+
+            // Reject if any room in the group would break axis alignment
+            // with a neighbour outside the group
+            let wouldBreak = false;
+            for (const [rid, m] of moves) {
+              if (moveWouldBreakAlignment(rid, m.nx, m.ny, z)) {
+                wouldBreak = true;
+                break;
+              }
+            }
+            if (wouldBreak) continue;
 
             // Apply tentatively
             for (const [, m] of moves) occupied.delete(cellKey(m.ox, m.oy));
@@ -1857,62 +2181,1008 @@ export function computeLayout(
     }
   }
 
-  // ── Occlusion fix ──────────────────────────────────────────────────────────
+  // ── Cardinal alignment ────────────────────────────────────────────────────
 
   /**
-   * Scoring function for occlusion resolution. Identical to layoutScore but
-   * with a much heavier occlusion penalty (15 vs 3). Used only by Phase 6
-   * so that earlier phases keep their stable optimization trajectory.
+   * Post-BFS cardinal alignment pass.
+   *
+   * East/west connected rooms must share the same y coordinate; north/south
+   * connected rooms must share the same x coordinate.  BFS visit order can
+   * violate this when the entry room reaches two E/W-connected rooms via
+   * different paths that land on different rows.
+   *
+   * Algorithm:
+   *   1. Build alignment groups using union-find on the relevant axis
+   *      (E/W exits → same-y group, N/S exits → same-x group).
+   *   2. For each group with mixed coordinates, pick the target value
+   *      (mode — the coordinate used by the most members).
+   *   3. For each outlier room, collect its perpendicular subtree
+   *      (N/S chain for E/W groups, E/W chain for N/S groups) and
+   *      cascade-shift the whole chain by the delta.
+   *   4. Accept the shift only if it reduces the global layout score.
    */
-  function occlusionAwareScore(z: number): number {
-    let score = 0;
+  function fixCardinalAlignment(): void {
+    for (const [z, occupied] of occupiedByZ) {
+      alignAxis(z, occupied, 'ew');
+      alignAxis(z, occupied, 'ns');
+    }
+  }
 
-    const zPositions: { id: string; x: number; y: number }[] = [];
+  /**
+   * Align one axis: 'ew' aligns east/west groups on shared y,
+   *                  'ns' aligns north/south groups on shared x.
+   */
+  function alignAxis(
+    z: number,
+    occupied: Set<string>,
+    axis: 'ew' | 'ns',
+  ): void {
+    const groupDirs = axis === 'ew' ? ['east', 'west'] : ['north', 'south'];
+    const perpDirs = axis === 'ew' ? ['north', 'south'] : ['east', 'west'];
+
+    // ── union-find ──────────────────────────────────────────────────────
+    const ufParent = new Map<string, string>();
     for (const [id, pos] of result) {
-      if (pos.z === z) zPositions.push({ id, x: pos.x, y: pos.y });
+      if (pos.z === z) ufParent.set(id, id);
+    }
+    function ufFind(x: string): string {
+      let root = x;
+      while (ufParent.get(root) !== root) root = ufParent.get(root)!;
+      let cur = x;
+      while (cur !== root) {
+        const n = ufParent.get(cur)!;
+        ufParent.set(cur, root);
+        cur = n;
+      }
+      return root;
+    }
+    function ufUnion(a: string, b: string): void {
+      const ra = ufFind(a), rb = ufFind(b);
+      if (ra !== rb) ufParent.set(ra, rb);
     }
 
-    for (const [roomId, pos] of result) {
-      if (pos.z !== z) continue;
+    for (const [roomId, room] of rooms) {
+      const pos = result.get(roomId);
+      if (!pos || pos.z !== z) continue;
+      for (const [dir, targetId] of room.exits) {
+        if (!groupDirs.includes(dir)) continue;
+        const tp = result.get(targetId);
+        if (!tp || tp.z !== z) continue;
+        ufUnion(roomId, targetId);
+      }
+    }
+
+    // ── group by root ───────────────────────────────────────────────────
+    const groups = new Map<string, string[]>();
+    for (const id of ufParent.keys()) {
+      const root = ufFind(id);
+      let arr = groups.get(root);
+      if (!arr) { arr = []; groups.set(root, arr); }
+      arr.push(id);
+    }
+
+    // ── align each group ────────────────────────────────────────────────
+    const coordOf = (id: string): number => {
+      const p = result.get(id)!;
+      return axis === 'ew' ? p.y : p.x;
+    };
+
+    for (let iter = 0; iter < CARDINAL_ALIGNMENT_ITERATIONS; iter++) {
+      let anyShift = false;
+
+      // Process largest groups first so they win coordinate conflicts.
+      const sortedGroups = [...groups.entries()]
+        .filter(([, g]) => g.length > 1)
+        .sort((a, b) => b[1].length - a[1].length);
+
+      for (const [, group] of sortedGroups) {
+        const freq = new Map<number, number>();
+        for (const id of group) {
+          const c = coordOf(id);
+          freq.set(c, (freq.get(c) ?? 0) + 1);
+        }
+        if (freq.size <= 1) continue; // already aligned
+
+        // Target = mode (most common coordinate)
+        let targetCoord = 0;
+        let maxCount = 0;
+        for (const [c, count] of freq) {
+          if (count > maxCount) { maxCount = count; targetCoord = c; }
+        }
+
+        // Batch all outlier cascades: collect every room that needs to
+        // shift, along with its perpendicular subtree, in one pass.
+        // Each room gets the delta of its originating outlier.
+        //
+        // When the cascade encounters a room that belongs to another
+        // multi-room alignment group, it pulls in that ENTIRE group so
+        // their internal alignment is preserved during the shift.
+        const batchRooms = new Map<string, number>(); // roomId → delta
+
+        for (const mobileId of group) {
+          if (coordOf(mobileId) === targetCoord) continue;
+          if (batchRooms.has(mobileId)) continue;
+          const delta = targetCoord - coordOf(mobileId);
+
+          // BFS perpendicular cascade from this outlier
+          const cascade = new Set<string>();
+          cascade.add(mobileId);
+          const bfsQ: string[] = [mobileId];
+
+          while (bfsQ.length > 0) {
+            const curId = bfsQ.shift()!;
+            const curRoom = rooms.get(curId);
+            if (curRoom) {
+              for (const [dir, nid] of curRoom.exits) {
+                if (!perpDirs.includes(dir)) continue;
+                if (cascade.has(nid)) continue;
+                const np = result.get(nid);
+                if (!np || np.z !== z) continue;
+                // Stop at rooms in the same alignment group
+                if (ufFind(nid) === ufFind(mobileId)) continue;
+                cascade.add(nid);
+                bfsQ.push(nid);
+                // If this room belongs to another multi-room alignment
+                // group, pull in the entire group to preserve their
+                // internal alignment during the shift.
+                const nRoot = ufFind(nid);
+                const nGroup = groups.get(nRoot);
+                if (nGroup && nGroup.length > 1) {
+                  for (const gid of nGroup) {
+                    if (!cascade.has(gid)) {
+                      cascade.add(gid);
+                      bfsQ.push(gid);
+                    }
+                  }
+                }
+              }
+            }
+            const revArr = reverseExits.get(curId);
+            if (revArr) {
+              for (const { fromId, dir } of revArr) {
+                if (!perpDirs.includes(dir)) continue;
+                if (cascade.has(fromId)) continue;
+                const fp = result.get(fromId);
+                if (!fp || fp.z !== z) continue;
+                if (ufFind(fromId) === ufFind(mobileId)) continue;
+                cascade.add(fromId);
+                bfsQ.push(fromId);
+                const fRoot = ufFind(fromId);
+                const fGroup = groups.get(fRoot);
+                if (fGroup && fGroup.length > 1) {
+                  for (const gid of fGroup) {
+                    if (!cascade.has(gid)) {
+                      cascade.add(gid);
+                      bfsQ.push(gid);
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          for (const id of cascade) {
+            if (!batchRooms.has(id)) batchRooms.set(id, delta);
+          }
+        }
+
+        if (batchRooms.size === 0) continue;
+
+        // Save old positions for rollback — includes batch rooms and
+        // any non-batch rooms displaced by the chain push.
+        const oldPos = new Map<string, { x: number; y: number }>();
+        for (const [id] of batchRooms) {
+          const p = result.get(id)!;
+          oldPos.set(id, { x: p.x, y: p.y });
+        }
+
+        // Count misaligned pairs in ALL groups before the shift.
+        const countMisaligned = (): number => {
+          let n = 0;
+          for (const [, grp] of groups) {
+            if (grp.length <= 1) continue;
+            const c0 = coordOf(grp[0]);
+            for (let i = 1; i < grp.length; i++) {
+              if (coordOf(grp[i]) !== c0) n++;
+            }
+          }
+          return n;
+        };
+
+        const misalignBefore = countMisaligned();
+
+        // Determine shift direction for chain push
+        const firstDelta = [...batchRooms.values()][0];
+        const pushSign = firstDelta > 0 ? 1 : -1;
+
+        // Chain push: move a room to (tx, ty).  If the target is
+        // occupied, push the occupant 1 step further in pushSign
+        // direction (domino style), preserving relative ordering.
+        const chainPush = (rid: string, tx: number, ty: number): void => {
+          const key = cellKey(tx, ty);
+          if (occupied.has(key)) {
+            // Find the occupant
+            for (const [oid, op] of result) {
+              if (op.z === z && op.x === tx && op.y === ty && oid !== rid) {
+                if (!oldPos.has(oid)) {
+                  oldPos.set(oid, { x: op.x, y: op.y });
+                }
+                occupied.delete(key);
+                const ptx = axis === 'ew' ? tx : tx + pushSign;
+                const pty = axis === 'ew' ? ty + pushSign : ty;
+                chainPush(oid, ptx, pty);
+                break;
+              }
+            }
+          }
+          result.set(rid, { x: tx, y: ty, z });
+          occupied.add(key);
+        };
+
+        // Remove all batch rooms from occupied first
+        for (const [id] of batchRooms) {
+          const p = result.get(id)!;
+          occupied.delete(cellKey(p.x, p.y));
+        }
+
+        // Sort batch rooms so we place furthest-in-push-direction first
+        // to avoid batch-internal collisions.
+        const sortedBatch = [...batchRooms.entries()].sort((a, b) => {
+          const pa = oldPos.get(a[0])!, pb = oldPos.get(b[0])!;
+          const ca = axis === 'ew' ? pa.y : pa.x;
+          const cb = axis === 'ew' ? pb.y : pb.x;
+          return pushSign > 0 ? cb - ca : ca - cb;
+        });
+
+        for (const [id, delta] of sortedBatch) {
+          const old = oldPos.get(id)!;
+          const nx = axis === 'ew' ? old.x : old.x + delta;
+          const ny = axis === 'ew' ? old.y + delta : old.y;
+          chainPush(id, nx, ny);
+        }
+
+        const misalignAfter = countMisaligned();
+
+        if (misalignAfter >= misalignBefore) {
+          // Rollback — shift didn't improve alignment
+          // Undo all moves (batch + chain-pushed non-batch rooms)
+          for (const [id] of oldPos) {
+            const rp = result.get(id)!;
+            occupied.delete(cellKey(rp.x, rp.y));
+          }
+          for (const [id, old] of oldPos) {
+            result.set(id, { x: old.x, y: old.y, z });
+            occupied.add(cellKey(old.x, old.y));
+          }
+        } else {
+          anyShift = true;
+        }
+      }
+
+      if (!anyShift) break;
+    }
+  }
+
+  // ── Edge crossing elimination ──────────────────────────────────────────────
+
+  /** Represents a straight orthogonal edge segment between two rooms. */
+  interface EdgeSegment {
+    fromId: string;
+    toId: string;
+    x1: number; y1: number;
+    x2: number; y2: number;
+    axis: 'h' | 'v'; // horizontal or vertical
+    dir: string;      // exit direction from source room
+  }
+
+  /**
+   * Detect whether two orthogonal edge segments cross.
+   * A crossing occurs when one segment is horizontal and the other vertical,
+   * and they intersect at a point that is NOT a shared room endpoint.
+   * Collinear (parallel) segments cannot cross in this model since edges
+   * are strictly horizontal or vertical.
+   */
+  function segmentsCross(a: EdgeSegment, b: EdgeSegment): boolean {
+    if (a.axis === b.axis) return false; // parallel segments don't cross
+
+    // One must be horizontal, the other vertical
+    const h = a.axis === 'h' ? a : b;
+    const v = a.axis === 'h' ? b : a;
+
+    const hMinX = Math.min(h.x1, h.x2);
+    const hMaxX = Math.max(h.x1, h.x2);
+    const hY = h.y1; // horizontal segment: both endpoints share y
+
+    const vMinY = Math.min(v.y1, v.y2);
+    const vMaxY = Math.max(v.y1, v.y2);
+    const vX = v.x1; // vertical segment: both endpoints share x
+
+    // Check geometric intersection (strict interior for both segments)
+    if (vX <= hMinX || vX >= hMaxX) return false;
+    if (hY <= vMinY || hY >= vMaxY) return false;
+
+    // The intersection point is (vX, hY).
+    // Exclude cases where this is a shared room endpoint.
+    const ix = vX, iy = hY;
+    const endpoints = new Set<string>([
+      cellKey(a.x1, a.y1), cellKey(a.x2, a.y2),
+      cellKey(b.x1, b.y1), cellKey(b.x2, b.y2),
+    ]);
+    if (endpoints.has(cellKey(ix, iy))) return false;
+
+    return true;
+  }
+
+  /**
+   * Build orthogonal segments that approximate the visual (smooth-step)
+   * path for a single edge.  Orthogonal edges produce one segment;
+   * diagonal edges produce up to three segments forming an L/Z-shape
+   * whose turn point is at the midpoint between the two rooms.
+   */
+  function buildEdgePathSegments(
+    fromId: string, toId: string, dir: string,
+  ): EdgeSegment[] {
+    const rp = result.get(fromId)!;
+    const tp = result.get(toId)!;
+    if (rp.z !== tp.z) return [];
+    if (rp.x === tp.x && rp.y === tp.y) return [];
+
+    const segs: EdgeSegment[] = [];
+
+    if (rp.x === tp.x || rp.y === tp.y) {
+      // Orthogonal — single straight segment
+      segs.push({
+        fromId, toId,
+        x1: rp.x, y1: rp.y, x2: tp.x, y2: tp.y,
+        axis: rp.y === tp.y ? 'h' : 'v',
+        dir,
+      });
+    } else {
+      // Diagonal — model rendered smooth-step path as orthogonal segments.
+      // Exit direction determines the first-leg orientation.
+      const isHorizontalFirst = dir === 'east' || dir === 'west';
+
+      if (isHorizontalFirst) {
+        const midX = (rp.x + tp.x) / 2;
+        if (rp.x !== midX) {
+          segs.push({ fromId, toId, x1: rp.x, y1: rp.y, x2: midX, y2: rp.y, axis: 'h', dir });
+        }
+        if (rp.y !== tp.y) {
+          segs.push({ fromId, toId, x1: midX, y1: rp.y, x2: midX, y2: tp.y, axis: 'v', dir });
+        }
+        if (midX !== tp.x) {
+          segs.push({ fromId, toId, x1: midX, y1: tp.y, x2: tp.x, y2: tp.y, axis: 'h', dir });
+        }
+      } else {
+        const midY = (rp.y + tp.y) / 2;
+        if (rp.y !== midY) {
+          segs.push({ fromId, toId, x1: rp.x, y1: rp.y, x2: rp.x, y2: midY, axis: 'v', dir });
+        }
+        if (rp.x !== tp.x) {
+          segs.push({ fromId, toId, x1: rp.x, y1: midY, x2: tp.x, y2: midY, axis: 'h', dir });
+        }
+        if (midY !== tp.y) {
+          segs.push({ fromId, toId, x1: tp.x, y1: midY, x2: tp.x, y2: tp.y, axis: 'v', dir });
+        }
+      }
+    }
+    return segs;
+  }
+
+  /** Check whether two edges (by their visual paths) still cross. */
+  function edgePairCrosses(
+    fromA: string, toA: string, dirA: string,
+    fromB: string, toB: string, dirB: string,
+  ): boolean {
+    const segsA = buildEdgePathSegments(fromA, toA, dirA);
+    const segsB = buildEdgePathSegments(fromB, toB, dirB);
+    for (const sa of segsA) {
+      for (const sb of segsB) {
+        if (segmentsCross(sa, sb)) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Find a specific pair of crossing sub-segments between two edges,
+   * or null if no crossing exists.  Used by grid-expansion so it can
+   * determine the H/V orientation of the crossing.
+   */
+  function findEdgeCrossingPair(
+    fromA: string, toA: string, dirA: string,
+    fromB: string, toB: string, dirB: string,
+  ): [EdgeSegment, EdgeSegment] | null {
+    const segsA = buildEdgePathSegments(fromA, toA, dirA);
+    const segsB = buildEdgePathSegments(fromB, toB, dirB);
+    for (const sa of segsA) {
+      for (const sb of segsB) {
+        if (segmentsCross(sa, sb)) return [sa, sb];
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Build edge segments for a given z-level.
+   *
+   * In normal mode: only orthogonal edges with distance >= 2 (original
+   * behaviour that earlier phases rely on).
+   *
+   * In visual mode (visualCrossingMode): also includes diagonal edges
+   * modelled as multi-segment smooth-step paths, matching what the user
+   * sees in the ZoneDesigner UI.
+   */
+  function buildEdgeSegments(z: number): EdgeSegment[] {
+    const segments: EdgeSegment[] = [];
+    const seen = new Set<string>();
+
+    for (const [roomId, room] of rooms) {
+      const rp = result.get(roomId);
+      if (!rp || rp.z !== z) continue;
+
+      for (const [dir, targetId] of room.exits) {
+        const off = DIRECTION_OFFSETS[dir];
+        if (!off || off.dz !== 0) continue;
+        const tp = result.get(targetId);
+        if (!tp || tp.z !== z) continue;
+
+        // Distance-1 segments are too short to visually cross other edges
+        if (Math.abs(rp.x - tp.x) + Math.abs(rp.y - tp.y) < 2) continue;
+
+        if (!visualCrossingMode) {
+          // Original mode: skip diagonal edges
+          if (rp.x !== tp.x && rp.y !== tp.y) continue;
+        }
+
+        const sk = [roomId, targetId].sort().join('|');
+        if (seen.has(sk)) continue;
+        seen.add(sk);
+
+        segments.push(...buildEdgePathSegments(roomId, targetId, dir));
+      }
+    }
+    return segments;
+  }
+
+  /** Count total edge crossings for a z-level. */
+  function countCrossings(z: number): number {
+    const segments = buildEdgeSegments(z);
+    let count = 0;
+    for (let i = 0; i < segments.length; i++) {
+      for (let j = i + 1; j < segments.length; j++) {
+        if (segmentsCross(segments[i], segments[j])) count++;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Phase 5d: Detect and resolve edge crossings.
+   *
+   * Strategy: for each pair of crossing edges, identify the four endpoint
+   * rooms. Try moving each room (preferring fewer-connection rooms) to a
+   * nearby free cell that reduces crossings without creating diagonals,
+   * direction violations, or alignment breaks.
+   */
+  function fixEdgeCrossings(): void {
+    for (const [z, occupied] of occupiedByZ) {
+      for (let pass = 0; pass < CROSSING_FIX_PASSES; pass++) {
+        const segments = buildEdgeSegments(z);
+
+        // Find all crossing pairs
+        const crossings: [EdgeSegment, EdgeSegment][] = [];
+        for (let i = 0; i < segments.length; i++) {
+          for (let j = i + 1; j < segments.length; j++) {
+            if (segmentsCross(segments[i], segments[j])) {
+              crossings.push([segments[i], segments[j]]);
+            }
+          }
+        }
+
+        if (crossings.length === 0) break;
+
+        let anyResolved = false;
+
+        for (const [segA, segB] of crossings) {
+          // Recheck — a prior fix in this pass may have resolved this crossing
+          if (visualCrossingMode) {
+            if (!edgePairCrosses(segA.fromId, segA.toId, segA.dir, segB.fromId, segB.toId, segB.dir)) continue;
+          } else {
+            const rpA1 = result.get(segA.fromId)!;
+            const rpA2 = result.get(segA.toId)!;
+            const rpB1 = result.get(segB.fromId)!;
+            const rpB2 = result.get(segB.toId)!;
+            const curA: EdgeSegment = {
+              ...segA, x1: rpA1.x, y1: rpA1.y, x2: rpA2.x, y2: rpA2.y,
+              axis: rpA1.y === rpA2.y ? 'h' : 'v',
+            };
+            const curB: EdgeSegment = {
+              ...segB, x1: rpB1.x, y1: rpB1.y, x2: rpB2.x, y2: rpB2.y,
+              axis: rpB1.y === rpB2.y ? 'h' : 'v',
+            };
+            if (rpA1.x !== rpA2.x && rpA1.y !== rpA2.y) continue;
+            if (rpB1.x !== rpB2.x && rpB1.y !== rpB2.y) continue;
+            if (!segmentsCross(curA, curB)) continue;
+          }
+
+          // Collect candidate rooms from both edges, sorted by exit count
+          // (fewer exits = easier to move without side effects)
+          const candidateRooms = [
+            segA.fromId, segA.toId, segB.fromId, segB.toId,
+          ].sort((a, b) => {
+            const exA = rooms.get(a)?.exits.size ?? 0;
+            const exB = rooms.get(b)?.exits.size ?? 0;
+            return exA - exB;
+          });
+
+          const crossingsBefore = countCrossings(z);
+          let resolved = false;
+
+          for (const rid of candidateRooms) {
+            if (resolved) break;
+            const curPos = result.get(rid)!;
+            if (curPos.z !== z) continue;
+
+            // Try nearby candidates
+            for (const cand of diamondCandidates(curPos.x, curPos.y, 1, CROSSING_CANDIDATE_RADIUS)) {
+              const key = cellKey(cand.x, cand.y);
+              if (occupied.has(key)) continue;
+
+              // Guard: no diagonals with neighbors
+              let createsDiag = false;
+              const room = rooms.get(rid);
+              if (room) {
+                for (const [dir, nid] of room.exits) {
+                  const off = DIRECTION_OFFSETS[dir];
+                  if (!off || off.dz !== 0) continue;
+                  const np = result.get(nid);
+                  if (!np || np.z !== z) continue;
+                  if (cand.x !== np.x && cand.y !== np.y) { createsDiag = true; break; }
+                }
+              }
+              if (createsDiag) continue;
+              // Also check reverse exits
+              const revArr = reverseExits.get(rid);
+              if (revArr) {
+                for (const { fromId, dir } of revArr) {
+                  const off = DIRECTION_OFFSETS[dir];
+                  if (!off || off.dz !== 0) continue;
+                  const fp = result.get(fromId);
+                  if (!fp || fp.z !== z) continue;
+                  if (cand.x !== fp.x && cand.y !== fp.y) { createsDiag = true; break; }
+                }
+              }
+              if (createsDiag) continue;
+
+              // Guard: no direction mismatches increase
+              if (moveWouldIncreaseMismatches(rid, cand.x, cand.y, z)) continue;
+              // Guard: no alignment breaks
+              if (moveWouldBreakAlignment(rid, cand.x, cand.y, z)) continue;
+
+              // Trial move
+              const oldKey = cellKey(curPos.x, curPos.y);
+              occupied.delete(oldKey);
+              occupied.add(key);
+              result.set(rid, { x: cand.x, y: cand.y, z });
+
+              const crossingsAfter = countCrossings(z);
+
+              if (crossingsAfter < crossingsBefore) {
+                // Accept
+                resolved = true;
+                anyResolved = true;
+                break;
+              } else {
+                // Rollback
+                occupied.delete(key);
+                occupied.add(oldKey);
+                result.set(rid, curPos);
+              }
+            }
+          }
+        }
+
+        if (!anyResolved) break;
+      }
+    }
+  }
+
+  /**
+   * Phase 5e: Fix crossings by selective grid expansion (row/column insertion).
+   *
+   * For each H×V crossing, create a blank row (or column) OUTSIDE the
+   * vertical (or horizontal) edge's span by shifting one partition of
+   * the grid, then move the crossing edge's alignment group into the gap.
+   * This genuinely expands the grid at the crossing point rather than
+   * rearranging existing rows.
+   *
+   * Four candidates per crossing:
+   *   Row: shift rooms above V's top by −1, move H to gap (vMinY−1)
+   *   Row: shift rooms below V's bottom by +1, move H to gap (vMaxY+1)
+   *   Col: shift rooms left of H's left by −1, move V to gap (hMinX−1)
+   *   Col: shift rooms right of H's right by +1, move V to gap (hMaxX+1)
+   *
+   * The partition shift is uniform and preserves all internal alignment.
+   * Only the moved group's jump can introduce direction mismatches
+   * (controlled by allowWeightedMismatch).
+   */
+
+  /**
+   * Build the alignment group reachable from a seed room via the given
+   * exit directions (e.g. ['east','west'] for an E-W group).
+   * Returns the set of room IDs connected through those directions.
+   */
+  function buildAxisGroup(seedId: string, z: number, dirs: string[]): Set<string> {
+    const group = new Set<string>();
+    const queue = [seedId];
+    group.add(seedId);
+    while (queue.length > 0) {
+      const rid = queue.shift()!;
+      const room = rooms.get(rid);
+      if (room) {
+        for (const [dir, nid] of room.exits) {
+          if (!dirs.includes(dir)) continue;
+          if (group.has(nid)) continue;
+          const np = result.get(nid);
+          if (!np || np.z !== z) continue;
+          group.add(nid);
+          queue.push(nid);
+        }
+      }
+      const revArr = reverseExits.get(rid);
+      if (revArr) {
+        for (const { fromId, dir } of revArr) {
+          if (!dirs.includes(dir)) continue;
+          if (group.has(fromId)) continue;
+          const fp = result.get(fromId);
+          if (!fp || fp.z !== z) continue;
+          group.add(fromId);
+          queue.push(fromId);
+        }
+      }
+    }
+    return group;
+  }
+
+  /** Count occlusions (rooms blocking straight-line exits) for a z-level. */
+  function countOcclusions(z: number): number {
+    let count = 0;
+    const zPos = new Map<string, { x: number; y: number }>();
+    for (const [id, p] of result) {
+      if (p.z === z) zPos.set(id, { x: p.x, y: p.y });
+    }
+    for (const [roomId, pos] of zPos) {
       const room = rooms.get(roomId);
       if (!room) continue;
       for (const [dir, targetId] of room.exits) {
-        const offset = DIRECTION_OFFSETS[dir];
-        if (!offset || offset.dz !== 0) continue;
-        const tp = result.get(targetId);
-        if (!tp || tp.z !== z) continue;
+        const off = DIRECTION_OFFSETS[dir];
+        if (!off || off.dz !== 0) continue;
+        const tp = zPos.get(targetId);
+        if (!tp) continue;
         const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
-        if (dist > 1) score += dist - 1;
-        if (pos.x !== tp.x && pos.y !== tp.y) score += 20;
-        const dx = tp.x - pos.x;
-        const dy = tp.y - pos.y;
-        if (
-          (offset.dx > 0 && dx <= 0) ||
-          (offset.dx < 0 && dx >= 0) ||
-          (offset.dy > 0 && dy <= 0) ||
-          (offset.dy < 0 && dy >= 0)
-        ) {
-          score += 50;
-        }
-        // Heavy occlusion penalty — the whole point of this phase
-        if (dist >= 2 && (pos.x === tp.x || pos.y === tp.y)) {
-          for (const other of zPositions) {
-            if (other.id === roomId || other.id === targetId) continue;
-            if (pos.x === tp.x && other.x === pos.x) {
-              const minY = Math.min(pos.y, tp.y);
-              const maxY = Math.max(pos.y, tp.y);
-              if (other.y > minY && other.y < maxY) score += 15;
-            } else if (pos.y === tp.y && other.y === pos.y) {
-              const minX = Math.min(pos.x, tp.x);
-              const maxX = Math.max(pos.x, tp.x);
-              if (other.x > minX && other.x < maxX) score += 15;
-            }
+        if (dist < 2) continue;
+        if (pos.x === tp.x) {
+          const minY = Math.min(pos.y, tp.y), maxY = Math.max(pos.y, tp.y);
+          for (const [oid, op] of zPos) {
+            if (oid === roomId || oid === targetId) continue;
+            if (op.x === pos.x && op.y > minY && op.y < maxY) count++;
+          }
+        } else if (pos.y === tp.y) {
+          const minX = Math.min(pos.x, tp.x), maxX = Math.max(pos.x, tp.x);
+          for (const [oid, op] of zPos) {
+            if (oid === roomId || oid === targetId) continue;
+            if (op.y === pos.y && op.x > minX && op.x < maxX) count++;
           }
         }
       }
     }
-    return score;
+    return count;
   }
+
+  function fixCrossingsByInsertion(maxFixes = Infinity, allowWeightedMismatch = false): number {
+    let totalFixed = 0;
+    for (const [z, occupied] of occupiedByZ) {
+      for (let pass = 0; pass < INSERTION_FIX_PASSES; pass++) {
+        if (totalFixed >= maxFixes) break;
+        const crossingsBefore = countCrossings(z);
+        if (crossingsBefore === 0) break;
+
+        const segments = buildEdgeSegments(z);
+        const crossingPairs: [EdgeSegment, EdgeSegment][] = [];
+        for (let i = 0; i < segments.length; i++) {
+          for (let j = i + 1; j < segments.length; j++) {
+            if (segmentsCross(segments[i], segments[j])) {
+              crossingPairs.push([segments[i], segments[j]]);
+            }
+          }
+        }
+        if (crossingPairs.length === 0) break;
+
+        let anyFixed = false;
+
+        for (const [segA, segB] of crossingPairs) {
+          if (totalFixed >= maxFixes) break;
+
+          // Recheck with current positions (earlier fixes may have resolved this)
+          let curA: EdgeSegment;
+          let curB: EdgeSegment;
+          if (visualCrossingMode) {
+            const pair = findEdgeCrossingPair(
+              segA.fromId, segA.toId, segA.dir,
+              segB.fromId, segB.toId, segB.dir,
+            );
+            if (!pair) continue;
+            [curA, curB] = pair;
+          } else {
+            const rpA1 = result.get(segA.fromId)!;
+            const rpA2 = result.get(segA.toId)!;
+            const rpB1 = result.get(segB.fromId)!;
+            const rpB2 = result.get(segB.toId)!;
+            if (rpA1.x !== rpA2.x && rpA1.y !== rpA2.y) continue;
+            if (rpB1.x !== rpB2.x && rpB1.y !== rpB2.y) continue;
+            curA = {
+              ...segA, x1: rpA1.x, y1: rpA1.y, x2: rpA2.x, y2: rpA2.y,
+              axis: rpA1.y === rpA2.y ? 'h' : 'v',
+            };
+            curB = {
+              ...segB, x1: rpB1.x, y1: rpB1.y, x2: rpB2.x, y2: rpB2.y,
+              axis: rpB1.y === rpB2.y ? 'h' : 'v',
+            };
+            if (!segmentsCross(curA, curB)) continue;
+          }
+
+          const hSeg = curA.axis === 'h' ? curA : curB;
+          const vSeg = curA.axis === 'h' ? curB : curA;
+          const hY = hSeg.y1;
+          const vX = vSeg.x1;
+          const vMinY = Math.min(vSeg.y1, vSeg.y2);
+          const vMaxY = Math.max(vSeg.y1, vSeg.y2);
+          const hMinX = Math.min(hSeg.x1, hSeg.x2);
+          const hMaxX = Math.max(hSeg.x1, hSeg.x2);
+
+          // Grid-expansion candidates: shift a partition to open a blank
+          // row/col OUTSIDE the crossing edge's span, then move the other
+          // edge's alignment group into the gap.
+          interface InsertionCandidate {
+            moveEdge: 'h' | 'v';       // which edge's group to relocate
+            shiftAxis: 'y' | 'x';       // axis of the partition shift
+            shiftOp: 'lt' | 'gt';       // shift rooms < or > boundary
+            shiftBoundary: number;       // boundary coord (strict)
+            shiftDelta: number;          // -1 or +1
+            targetCoord: number;         // gap coordinate for the group
+            jumpDist: number;            // how far the group jumps
+          }
+          const candidates: InsertionCandidate[] = [];
+
+          // Row insertions: move H's E-W group outside V's y-range
+          // A: Above V — shift rooms at y < vMinY by -1, gap at vMinY-1
+          candidates.push({
+            moveEdge: 'h', shiftAxis: 'y', shiftOp: 'lt', shiftBoundary: vMinY,
+            shiftDelta: -1, targetCoord: vMinY - 1,
+            jumpDist: Math.abs(hY - (vMinY - 1)),
+          });
+          // B: Below V — shift rooms at y > vMaxY by +1, gap at vMaxY+1
+          candidates.push({
+            moveEdge: 'h', shiftAxis: 'y', shiftOp: 'gt', shiftBoundary: vMaxY,
+            shiftDelta: 1, targetCoord: vMaxY + 1,
+            jumpDist: Math.abs(hY - (vMaxY + 1)),
+          });
+          // Column insertions: move V's N-S group outside H's x-range
+          // C: Left of H — shift rooms at x < hMinX by -1, gap at hMinX-1
+          candidates.push({
+            moveEdge: 'v', shiftAxis: 'x', shiftOp: 'lt', shiftBoundary: hMinX,
+            shiftDelta: -1, targetCoord: hMinX - 1,
+            jumpDist: Math.abs(vX - (hMinX - 1)),
+          });
+          // D: Right of H — shift rooms at x > hMaxX by +1, gap at hMaxX+1
+          candidates.push({
+            moveEdge: 'v', shiftAxis: 'x', shiftOp: 'gt', shiftBoundary: hMaxX,
+            shiftDelta: 1, targetCoord: hMaxX + 1,
+            jumpDist: Math.abs(vX - (hMaxX + 1)),
+          });
+
+          // Prefer smallest jump distance (least disruptive)
+          candidates.sort((a, b) => a.jumpDist - b.jumpDist);
+
+          let resolved = false;
+
+          for (const cand of candidates) {
+            if (resolved) break;
+
+            // Snapshot all z-level rooms for rollback
+            const snapshot = new Map<string, { x: number; y: number }>();
+            for (const [id, p] of result) {
+              if (p.z === z) snapshot.set(id, { x: p.x, y: p.y });
+            }
+            const occupiedSnapshot = new Set(occupied);
+
+            // Step 1: Shift partition to create a blank row/column.
+            // Rooms strictly beyond V's (or H's) endpoint are pushed
+            // away by 1, opening a gap just outside the edge's span.
+            const toShift: string[] = [];
+            for (const [id, p] of result) {
+              if (p.z !== z) continue;
+              const coord = cand.shiftAxis === 'y' ? p.y : p.x;
+              const shouldShift = cand.shiftOp === 'lt'
+                ? coord < cand.shiftBoundary
+                : coord > cand.shiftBoundary;
+              if (shouldShift) toShift.push(id);
+            }
+            // Remove old positions first (avoids key collisions)
+            for (const id of toShift) {
+              const old = snapshot.get(id)!;
+              occupied.delete(cellKey(old.x, old.y));
+            }
+            // Apply shift using snapshot coords
+            for (const id of toShift) {
+              const old = snapshot.get(id)!;
+              const nx = cand.shiftAxis === 'x' ? old.x + cand.shiftDelta : old.x;
+              const ny = cand.shiftAxis === 'y' ? old.y + cand.shiftDelta : old.y;
+              result.set(id, { x: nx, y: ny, z });
+              occupied.add(cellKey(nx, ny));
+            }
+
+            // Step 2: Move alignment group into the gap.
+            const seedId = cand.moveEdge === 'h' ? hSeg.fromId : vSeg.fromId;
+            const dirs = cand.moveEdge === 'h' ? ['east', 'west'] : ['north', 'south'];
+            const group = buildAxisGroup(seedId, z, dirs);
+            // Remove group from current positions
+            for (const rid of group) {
+              const p = result.get(rid)!;
+              occupied.delete(cellKey(p.x, p.y));
+            }
+            // Place group at target coordinate
+            for (const rid of group) {
+              const p = result.get(rid)!;
+              const nx = cand.shiftAxis === 'x' ? cand.targetCoord : p.x;
+              const ny = cand.shiftAxis === 'y' ? cand.targetCoord : p.y;
+              result.set(rid, { x: nx, y: ny, z });
+              occupied.add(cellKey(nx, ny));
+            }
+
+            // Step 3: Quality checks
+            // 3a: No new diagonals.
+            // In visual mode, check ALL z-level rooms (broader guard).
+            // In normal mode, only check moved group (original behaviour).
+            let violates = false;
+            if (visualCrossingMode) {
+              for (const [id, p] of result) {
+                if (violates) break;
+                if (p.z !== z) continue;
+                const room = rooms.get(id);
+                if (room) {
+                  for (const [dir, nid] of room.exits) {
+                    const off = DIRECTION_OFFSETS[dir];
+                    if (!off || off.dz !== 0) continue;
+                    const np = result.get(nid);
+                    if (!np || np.z !== z) continue;
+                    if (p.x !== np.x && p.y !== np.y) {
+                      const oldP = snapshot.get(id);
+                      const oldN = snapshot.get(nid);
+                      if (oldP && oldN && (oldP.x === oldN.x || oldP.y === oldN.y)) {
+                        violates = true; break;
+                      }
+                    }
+                  }
+                }
+              }
+            } else {
+              for (const id of group) {
+                if (violates) break;
+                const p = result.get(id)!;
+                const room = rooms.get(id);
+                if (room) {
+                  for (const [dir, nid] of room.exits) {
+                    const off = DIRECTION_OFFSETS[dir];
+                    if (!off || off.dz !== 0) continue;
+                    const np = result.get(nid);
+                    if (!np || np.z !== z) continue;
+                    if (p.x !== np.x && p.y !== np.y) { violates = true; break; }
+                  }
+                }
+                if (!violates) {
+                  const revArr = reverseExits.get(id);
+                  if (revArr) {
+                    for (const { fromId, dir } of revArr) {
+                      const off = DIRECTION_OFFSETS[dir];
+                      if (!off || off.dz !== 0) continue;
+                      const fp = result.get(fromId);
+                      if (!fp || fp.z !== z) continue;
+                      if (p.x !== fp.x && p.y !== fp.y) { violates = true; break; }
+                    }
+                  }
+                }
+              }
+            }
+
+            if (!violates) {
+              // 3b: Crossings must decrease
+              const crossingsAfter = countCrossings(z);
+              if (crossingsAfter < crossingsBefore) {
+                // 3c: Direction mismatch check (only moved group
+                //     neighborhood — the partition shift is uniform
+                //     and creates no mismatches)
+                const movedSet = new Set(group);
+                const neighborhood = new Set(movedSet);
+                for (const id of movedSet) {
+                  const room = rooms.get(id);
+                  if (room) {
+                    for (const [, nid] of room.exits) {
+                      const np = result.get(nid);
+                      if (np && np.z === z) neighborhood.add(nid);
+                    }
+                  }
+                  const revArr = reverseExits.get(id);
+                  if (revArr) {
+                    for (const { fromId } of revArr) {
+                      const fp = result.get(fromId);
+                      if (fp && fp.z === z) neighborhood.add(fromId);
+                    }
+                  }
+                }
+                const neighborhoodIds = [...neighborhood];
+
+                let mismatchAfter = 0;
+                for (const id of neighborhoodIds) {
+                  const p = result.get(id)!;
+                  mismatchAfter += countMismatchesInvolving(id, p.x, p.y, z);
+                }
+
+                // Temporarily restore pre-insertion positions to measure mismatchBefore
+                const afterPos = new Map<string, { x: number; y: number }>();
+                for (const [id, p] of result) {
+                  if (p.z === z) afterPos.set(id, { x: p.x, y: p.y });
+                }
+                for (const [id, old] of snapshot) {
+                  result.set(id, { x: old.x, y: old.y, z });
+                }
+                let mismatchBefore = 0;
+                for (const id of neighborhoodIds) {
+                  const old = snapshot.get(id)!;
+                  mismatchBefore += countMismatchesInvolving(id, old.x, old.y, z);
+                }
+                // Restore after positions
+                for (const [id, pos] of afterPos) {
+                  result.set(id, { x: pos.x, y: pos.y, z });
+                }
+
+                const crossingsFixed = crossingsBefore - crossingsAfter;
+                const mismatchDelta = mismatchAfter - mismatchBefore;
+                // In weighted mode (Phase 9), accept if crossing benefit
+                // outweighs mismatch cost. In strict mode (Phase 5e),
+                // reject any mismatch increase.
+                const acceptable = mismatchDelta <= 0 ||
+                  (allowWeightedMismatch && crossingsFixed >= mismatchDelta);
+                if (acceptable) {
+                  resolved = true;
+                  anyFixed = true;
+                  totalFixed++;
+                } else {
+                  violates = true;
+                }
+              } else {
+                violates = true;
+              }
+            }
+
+            if (violates) {
+              // Rollback: restore all z-level positions
+              for (const [id, old] of snapshot) result.set(id, { x: old.x, y: old.y, z });
+              occupied.clear();
+              for (const k of occupiedSnapshot) occupied.add(k);
+            }
+          }
+        }
+
+        if (!anyFixed) break;
+      }
+    }
+    return totalFixed;
+  }
+
+
+  // ── Occlusion fix ──────────────────────────────────────────────────────────
 
   /**
    * Detect rooms sitting on straight-line exit segments between two other
@@ -1943,52 +3213,17 @@ export function computeLayout(
       return false;
     }
 
-    /** Count occlusions for a z-level. */
-    function countOcclusions(z: number): number {
-      let count = 0;
-      const zPos = new Map<string, { x: number; y: number }>();
-      for (const [id, p] of result) {
-        if (p.z === z) zPos.set(id, { x: p.x, y: p.y });
-      }
-      for (const [roomId, pos] of zPos) {
-        const room = rooms.get(roomId);
-        if (!room) continue;
-        for (const [dir, targetId] of room.exits) {
-          const off = DIRECTION_OFFSETS[dir];
-          if (!off || off.dz !== 0) continue;
-          const tp = zPos.get(targetId);
-          if (!tp) continue;
-          const dist = Math.abs(tp.x - pos.x) + Math.abs(tp.y - pos.y);
-          if (dist < 2) continue;
-          if (pos.x === tp.x) {
-            const minY = Math.min(pos.y, tp.y), maxY = Math.max(pos.y, tp.y);
-            for (const [oid, op] of zPos) {
-              if (oid === roomId || oid === targetId) continue;
-              if (op.x === pos.x && op.y > minY && op.y < maxY) count++;
-            }
-          } else if (pos.y === tp.y) {
-            const minX = Math.min(pos.x, tp.x), maxX = Math.max(pos.x, tp.x);
-            for (const [oid, op] of zPos) {
-              if (oid === roomId || oid === targetId) continue;
-              if (op.y === pos.y && op.x > minX && op.x < maxX) count++;
-            }
-          }
-        }
-      }
-      return count;
-    }
-
     for (const [z, occupied] of occupiedByZ) {
       const zRoomIds: string[] = [];
       for (const [id, p] of result) {
         if (p.z === z) zRoomIds.push(id);
       }
 
-      let currentScore = occlusionAwareScore(z);
+      let currentScore = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
       if (currentScore === 0) continue;
 
       // ── Strategy A: Single-room moves with occlusion-aware scoring ──
-      for (let iter = 0; iter < 200 && currentScore > 0; iter++) {
+      for (let iter = 0; iter < OCCLUSION_FIX_ITERATIONS && currentScore > 0; iter++) {
         let improved = false;
 
         for (const roomId of zRoomIds) {
@@ -2006,12 +3241,8 @@ export function computeLayout(
             }
           };
 
-          for (let r = 0; r <= 4; r++) {
-            for (let ddx = -r; ddx <= r; ddx++) {
-              const absRem = r - Math.abs(ddx);
-              const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-              for (const ddy of dyOpts) addCandidate(ideal.x + ddx, ideal.y + ddy);
-            }
+          for (const c of diamondCandidates(ideal.x, ideal.y, 0, RELAX_CANDIDATE_RADIUS)) {
+            addCandidate(c.x, c.y);
           }
           const roomDef = rooms.get(roomId);
           if (roomDef) {
@@ -2021,12 +3252,8 @@ export function computeLayout(
               const np = result.get(nid);
               if (!np || np.z !== z) continue;
               const wantX = np.x - off.dx, wantY = np.y - off.dy;
-              for (let r = 0; r <= 2; r++) {
-                for (let ddx = -r; ddx <= r; ddx++) {
-                  const absRem = r - Math.abs(ddx);
-                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                  for (const ddy of dyOpts) addCandidate(wantX + ddx, wantY + ddy);
-                }
+              for (const c of diamondCandidates(wantX, wantY, 0, NEIGHBOR_CANDIDATE_RADIUS)) {
+                addCandidate(c.x, c.y);
               }
             }
           }
@@ -2047,7 +3274,7 @@ export function computeLayout(
             occupied.add(key);
             result.set(roomId, { x: cand.x, y: cand.y, z });
 
-            const newScore = occlusionAwareScore(z);
+            const newScore = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
             if (newScore < bestScore) {
               bestScore = newScore;
               bestPos = cand;
@@ -2072,7 +3299,16 @@ export function computeLayout(
 
       // ── Strategy B: Pairwise swaps ──
       if (currentScore > 0) {
-        for (let swapIter = 0; swapIter < 50 && currentScore > 0; swapIter++) {
+        let occZPositions: { id: string; x: number; y: number }[] = [];
+        const refreshOccZPos = () => {
+          occZPositions = [];
+          for (const [id, pos] of result) {
+            if (pos.z === z) occZPositions.push({ id, x: pos.x, y: pos.y });
+          }
+        };
+        refreshOccZPos();
+
+        for (let swapIter = 0; swapIter < SWAP_ITERATIONS && currentScore > 0; swapIter++) {
           let swapped = false;
           for (let i = 0; i < zRoomIds.length && currentScore > 0; i++) {
             for (let j = i + 1; j < zRoomIds.length; j++) {
@@ -2080,26 +3316,39 @@ export function computeLayout(
               const posA = result.get(a)!;
               const posB = result.get(b)!;
 
-              // Quick diagonal pre-check: would the swap create diagonals?
               if (wouldCreateDiag(a, posB.x, posB.y, z)) continue;
               if (wouldCreateDiag(b, posA.x, posA.y, z)) continue;
-              // Direction reversal guard
               if (swapWouldIncreaseMismatches(a, posA, b, posB, z)) continue;
+
+              const affected = affectedRooms([a, b], z);
+              const beforeDelta = sumContributions(affected, z, occZPositions, OCCLUSION_PENALTY_HEAVY);
 
               result.set(a, { x: posB.x, y: posB.y, z });
               result.set(b, { x: posA.x, y: posA.y, z });
 
-              const ns = occlusionAwareScore(z);
+              for (const zp of occZPositions) {
+                if (zp.id === a) { zp.x = posB.x; zp.y = posB.y; }
+                else if (zp.id === b) { zp.x = posA.x; zp.y = posA.y; }
+              }
+
+              const afterDelta = sumContributions(affected, z, occZPositions, OCCLUSION_PENALTY_HEAVY);
+              const ns = currentScore - beforeDelta + afterDelta;
+
               if (ns < currentScore) {
                 currentScore = ns;
                 swapped = true;
               } else {
                 result.set(a, posA);
                 result.set(b, posB);
+                for (const zp of occZPositions) {
+                  if (zp.id === a) { zp.x = posA.x; zp.y = posA.y; }
+                  else if (zp.id === b) { zp.x = posB.x; zp.y = posB.y; }
+                }
               }
             }
           }
           if (!swapped) break;
+          refreshOccZPos();
         }
       }
 
@@ -2163,13 +3412,8 @@ export function computeLayout(
             if (!oCandidateSet.has(k)) { oCandidateSet.add(k); oCandidates.push({ x, y }); }
           };
 
-          // Search a wide diamond (radius 8) around current position
-          for (let r = 1; r <= 8; r++) {
-            for (let ddx = -r; ddx <= r; ddx++) {
-              const absRem = r - Math.abs(ddx);
-              const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-              for (const ddy of dyOpts) oAdd(oPos.x + ddx, oPos.y + ddy);
-            }
+          for (const c of diamondCandidates(oPos.x, oPos.y, 1, OCCLUDER_SEARCH_RADIUS)) {
+            oAdd(c.x, c.y);
           }
           // Also search near each neighbor's ideal placement
           const oRoom = rooms.get(oid);
@@ -2181,18 +3425,14 @@ export function computeLayout(
               if (!np || np.z !== z) continue;
               // Where the neighbor wants this room
               const wx = np.x - off.dx, wy = np.y - off.dy;
-              for (let r = 0; r <= 4; r++) {
-                for (let ddx = -r; ddx <= r; ddx++) {
-                  const absRem = r - Math.abs(ddx);
-                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                  for (const ddy of dyOpts) oAdd(wx + ddx, wy + ddy);
-                }
+              for (const c of diamondCandidates(wx, wy, 0, RELAX_CANDIDATE_RADIUS)) {
+                oAdd(c.x, c.y);
               }
             }
           }
 
           let bestPos: { x: number; y: number } | null = null;
-          let bestScore = occlusionAwareScore(z);
+          let bestScore = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
 
           for (const cand of oCandidates) {
             if (cand.x === oPos.x && cand.y === oPos.y) continue;
@@ -2206,7 +3446,7 @@ export function computeLayout(
             occupied.add(ck);
             result.set(oid, { x: cand.x, y: cand.y, z });
 
-            const ns = occlusionAwareScore(z);
+            const ns = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
             if (ns < bestScore) {
               bestScore = ns;
               bestPos = cand;
@@ -2268,17 +3508,12 @@ export function computeLayout(
 
           // Candidate cells for the occluder (radius 6 around current pos)
           const tgtCells: Array<{ x: number; y: number }> = [];
-          for (let r = 1; r <= 6; r++) {
-            for (let ddx = -r; ddx <= r; ddx++) {
-              const absRem = r - Math.abs(ddx);
-              for (const ddy of absRem === 0 ? [0] : [-absRem, absRem]) {
-                tgtCells.push({ x: oPos.x + ddx, y: oPos.y + ddy });
-              }
-            }
+          for (const c of diamondCandidates(oPos.x, oPos.y, 1, TWO_MOVE_OCCLUDER_RADIUS)) {
+            tgtCells.push(c);
           }
 
           let bestTwoMove: { occluderTo: { x: number; y: number }; evictee: string; evicteeTo: { x: number; y: number } } | null = null;
-          let bestTwoScore = occlusionAwareScore(z);
+          let bestTwoScore = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
 
           for (const tgt of tgtCells) {
             if (tgt.x === oPos.x && tgt.y === oPos.y) continue;
@@ -2297,13 +3532,8 @@ export function computeLayout(
             const evPos = result.get(evictee)!;
             // Try relocating evictee to a nearby free cell
             const evCands: Array<{ x: number; y: number }> = [];
-            for (let r = 1; r <= 4; r++) {
-              for (let ddx = -r; ddx <= r; ddx++) {
-                const absRem = r - Math.abs(ddx);
-                for (const ddy of absRem === 0 ? [0] : [-absRem, absRem]) {
-                  evCands.push({ x: evPos.x + ddx, y: evPos.y + ddy });
-                }
-              }
+            for (const c of diamondCandidates(evPos.x, evPos.y, 1, TWO_MOVE_EVICTEE_RADIUS)) {
+              evCands.push(c);
             }
 
             // Save state
@@ -2323,7 +3553,7 @@ export function computeLayout(
 
               // Check no diags created for evictee
               if (!wouldCreateDiag(evictee, evTgt.x, evTgt.y, z) && !wouldCreateDiag(oid2, tgt.x, tgt.y, z)) {
-                const ns = occlusionAwareScore(z);
+                const ns = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
                 if (ns < bestTwoScore) {
                   bestTwoScore = ns;
                   bestTwoMove = { occluderTo: tgt, evictee, evicteeTo: evTgt };
@@ -2411,17 +3641,11 @@ export function computeLayout(
 
               // Try the adjacent cell and nearby alternatives
               const compactCands: { x: number; y: number }[] = [{ x: adjX, y: adjY }];
-              for (let r = 1; r <= 2; r++) {
-                for (let ddx = -r; ddx <= r; ddx++) {
-                  const absRem = r - Math.abs(ddx);
-                  const dyOpts = absRem === 0 ? [0] : [-absRem, absRem];
-                  for (const ddy of dyOpts) {
-                    compactCands.push({ x: adjX + ddx, y: adjY + ddy });
-                  }
-                }
+              for (const c of diamondCandidates(adjX, adjY, 1, COMPACTION_CANDIDATE_RADIUS)) {
+                compactCands.push(c);
               }
 
-              const beforeScore = occlusionAwareScore(z);
+              const beforeScore = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
               let bestPos: { x: number; y: number } | null = null;
               let bestScore = beforeScore;
 
@@ -2437,7 +3661,7 @@ export function computeLayout(
                 occupied.add(ck);
                 result.set(mover, { x: cand.x, y: cand.y, z });
 
-                const ns = occlusionAwareScore(z);
+                const ns = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
                 if (ns < bestScore) {
                   bestScore = ns;
                   bestPos = cand;
@@ -2478,10 +3702,10 @@ export function computeLayout(
    */
   function resolveOcclusionsByExpansion(): void {
     for (const [z, occupied] of occupiedByZ) {
-      let currentScore = occlusionAwareScore(z);
+      let currentScore = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
       if (currentScore === 0) continue;
 
-      for (let pass = 0; pass < 40; pass++) {
+      for (let pass = 0; pass < EXPANSION_PASSES; pass++) {
         const zRooms: string[] = [];
         for (const [id, p] of result) {
           if (p.z === z) zRooms.push(id);
@@ -2621,7 +3845,7 @@ export function computeLayout(
                 gQueue.push(collider);
               }
 
-              if (group.size > 90) { tooLarge = true; break; }
+              if (group.size > MAX_EXPANSION_GROUP_SIZE) { tooLarge = true; break; }
             }
 
             if (tooLarge) continue;
@@ -2704,7 +3928,7 @@ export function computeLayout(
               result.set(rid, { x: m.nx, y: m.ny, z });
             }
 
-            const newScore = occlusionAwareScore(z);
+            const newScore = layoutScore(z, OCCLUSION_PENALTY_HEAVY);
             if (newScore < currentScore) {
               currentScore = newScore;
               improved = true;

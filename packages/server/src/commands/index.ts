@@ -116,6 +116,8 @@ export interface CommandContext {
   creatureManager?: CreatureManager;
   /** Override scenario storage directory (dev/testing). */
   scenarioDir?: string;
+  /** Check if a zone slug corresponds to a known zone (dev tools). */
+  resolveZoneExists?: (slug: string) => boolean;
   /** Resolve a connected player by character name (dev tools). */
   resolvePlayerByName?: (name: string) => { sessionId: string; player: PlayerState; characterName: string } | undefined;
 }

@@ -350,6 +350,7 @@ CREATE TABLE zone_rooms (
   loot_containers JSONB NOT NULL DEFAULT '[]',
   hazards         JSONB NOT NULL DEFAULT '[]',
   npcs            JSONB NOT NULL DEFAULT '[]',
+  features        JSONB NOT NULL DEFAULT '[]',
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT uq_zone_room_slug UNIQUE (zone_id, slug)

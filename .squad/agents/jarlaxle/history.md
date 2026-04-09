@@ -2326,3 +2326,40 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
   - GDD.md §6.11 — Complete position system specification
 - **Recommendation:** Prototype Phase 1 in feature branch. Go/no-go based on performance (<100ms/tick with 30 entities) and text-mode UX. If successful, grid becomes opt-in for boss fights. If not, defer until graphical client available.
 - **Design doc:** `docs/design/337-combat-grid-systems.md` (27KB, 8 sections: current system analysis, grid mechanics proposal, creature AI pathfinding, integration analysis, risks, phased implementation)
+
+### 2026-07-28: Admin Spawn→Display Bug Fix (commit a82cf3d)
+- **Task:** Fix bug where creatures spawned via admin UI don't appear in the room list
+- **Root causes found (3 issues):**
+  1. **`handleSpawn` didn't await `loadRoom()`** — Frontend showed success before data refresh completed, leaving stale creature list visible. Fixed by awaiting `loadRoom()` before showing success feedback.
+  2. **`/spawn` endpoint lacked room validation** — Unlike `/spawn-creature` (which uses `ZoneRoom.adminSpawnCreature` with room graph validation), the `/spawn` endpoint accepted any `targetRoomId` string. If the room didn't exist in the zone graph, the creature had a `currentRoomId` that didn't match any room in the frontend's `roomOccupancy` map, making it invisible in the Room Graph tab.
+  3. **`getZoneDetail()` hardcoded `name: 'zone'`** — Persistent zones (e.g., `zone:flooded-crypt`) lost their actual room name in the detail response. Fixed to return `room.roomName`.
+- **Approach:** End-to-end trace of spawn→display pipeline (both endpoints, CreatureManager, frontend React state). Backend confirmed correct via integration tests before examining frontend.
+- **Key architectural learnings:**
+  - Two spawn endpoints exist: `/spawn` (generic, used by frontend) and `/spawn-creature` (zone-specific, uses `adminSpawnCreature`). The `/spawn` endpoint bypasses ZoneRoom's room validation.
+  - Frontend `roomOccupancy` useMemo maps creatures by `currentRoomId` against `zoneData.rooms[].slug`. Both must use same format (zone slugs). For procedural zones (`zoneSlug` undefined), the Room Graph tab shows "Zone data unavailable" — a known limitation.
+  - `contentEntityToCreatureTemplate()` (added in 5f3eb60) converts flat ContentEntity to nested CreatureTemplate shape — critical for the `/spawn` endpoint.
+- **Tests added:** 5 new integration tests in `admin-live-rooms.test.ts` covering spawn→display flow, auto-room-selection, multi-spawn, invalid room rejection, and room name accuracy. All 2385 server tests pass.
+- **Files changed:** `routes.ts` (room validation + name fix), `LiveRoomDetail.tsx` (await loadRoom), `admin-live-rooms.test.ts` (+5 tests)
+
+### User Settings Backend (#359)
+- **Built:** Migration `007_user_settings.sql`, `UserSettingsRepository` (interface + PG + InMemory), settings API routes (`GET/PUT /api/user/settings`), mounted in server entry.
+- **Pattern:** Followed existing provider pattern (interface → PgImpl + InMemoryImpl → singleton provider). Routes accept `{ authService }` deps, resolve repo lazily via `getUserSettingsRepository()`.
+- **Types:** `UserSettings` and `UserSettingsConfig` exported from `db/types.ts` and re-exported from `db/index.ts`.
+- **Validation:** Server validates fontSize (int 12–24), verbosity (terse/standard/verbose), narrationStyle (default/gothic/noir/clinical), rejects unknown top-level keys. 400 with descriptive error messages.
+- **Auth:** Bearer token pattern matching `characters.ts` — `authenticate()` helper extracts playerId from token.
+- **Tests:** 17 tests in `user-settings.test.ts` covering auth (401), GET defaults, PUT create/update, persistence round-trip, and all validation rules. All 2408 server tests pass.
+- **Files:** `007_user_settings.sql`, `db/UserSettingsRepository.ts`, `db/types.ts`, `db/index.ts`, `api/settings.ts`, `index.ts`, `__tests__/user-settings.test.ts`
+
+---
+
+### 2026-04-09: Issue #359 — User Settings Backend Implementation
+- **Task:** Implement server-authoritative user settings persistence
+- **Status:** ✅ Complete (Commit fb130d7)
+- **Files:** Migration 007_user_settings.sql, UserSettingsRepository.ts, endpoints GET/PUT /api/user/settings
+- **Architecture:** Provider pattern (Pg + InMemory) consistent with all persistence layers
+- **Key decision:** JSONB config blob (avoids migration churn), server-side validation (security), inline auth (consistency)
+- **Test coverage:** 17 tests covering migration, repository, API, validation, edge cases
+- **Cross-team:** Regis (Frontend) building `useSettings` hook on top of GET/PUT contract
+
+## Roster Awareness
+- **Regis (Frontend):** Completed #359 frontend parallel work — `useSettings` hook, Settings.tsx refactor, localStorage→server sync (12 tests, Commit f4ab813)

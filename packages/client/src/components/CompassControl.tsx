@@ -9,6 +9,7 @@
  * commands via the provided onNavigate callback.
  */
 
+import { forwardRef } from 'react';
 import { useAppContext } from '../store.js';
 
 /** All directions the compass can display, in layout order. */
@@ -36,7 +37,7 @@ interface CompassControlProps {
   onNavigate: (direction: string) => void;
 }
 
-export default function CompassControl({ onNavigate }: CompassControlProps) {
+const CompassControl = forwardRef<HTMLDivElement, CompassControlProps>(function CompassControl({ onNavigate }, ref) {
   const { state } = useAppContext();
   const exits = state.roomHeader?.exits ?? [];
   const exitSet = new Set(exits.map((e) => e.toLowerCase()));
@@ -45,7 +46,7 @@ export default function CompassControl({ onNavigate }: CompassControlProps) {
   const hasDown = exitSet.has('down');
 
   return (
-    <div className="p-4 border-b border-border-muted" data-testid="compass-control">
+    <div ref={ref} className="p-4 border-b border-border-muted" data-testid="compass-control">
       <h3 className="text-text-secondary text-xs mb-3 font-sans">COMPASS</h3>
 
       {/* Compass rose — 3×3 grid for cardinal/ordinal directions */}
@@ -73,7 +74,7 @@ export default function CompassControl({ onNavigate }: CompassControlProps) {
               onClick={() => onNavigate(dir)}
               className={`h-8 rounded text-xs font-mono transition-colors ${
                 available
-                  ? 'text-interactive hover:text-accent-gold hover:bg-bg-elevated cursor-pointer'
+                  ? 'text-interactive hover:text-accent-gold hover:bg-bg-elevated focus:text-accent-gold focus:bg-bg-elevated focus:outline-none focus:ring-2 focus:ring-accent-gold cursor-pointer'
                   : 'text-text-disabled opacity-30 cursor-default'
               }`}
               title={available ? `Go ${dir}` : `${dir} — no exit`}
@@ -92,7 +93,7 @@ export default function CompassControl({ onNavigate }: CompassControlProps) {
           onClick={() => onNavigate('up')}
           className={`px-3 h-7 rounded text-xs font-mono transition-colors ${
             hasUp
-              ? 'text-interactive hover:text-accent-gold hover:bg-bg-elevated cursor-pointer'
+              ? 'text-interactive hover:text-accent-gold hover:bg-bg-elevated focus:text-accent-gold focus:bg-bg-elevated focus:outline-none focus:ring-2 focus:ring-accent-gold cursor-pointer'
               : 'text-text-disabled opacity-30 cursor-default'
           }`}
           title={hasUp ? 'Go up' : 'up — no exit'}
@@ -105,7 +106,7 @@ export default function CompassControl({ onNavigate }: CompassControlProps) {
           onClick={() => onNavigate('down')}
           className={`px-3 h-7 rounded text-xs font-mono transition-colors ${
             hasDown
-              ? 'text-interactive hover:text-accent-gold hover:bg-bg-elevated cursor-pointer'
+              ? 'text-interactive hover:text-accent-gold hover:bg-bg-elevated focus:text-accent-gold focus:bg-bg-elevated focus:outline-none focus:ring-2 focus:ring-accent-gold cursor-pointer'
               : 'text-text-disabled opacity-30 cursor-default'
           }`}
           title={hasDown ? 'Go down' : 'down — no exit'}
@@ -115,4 +116,6 @@ export default function CompassControl({ onNavigate }: CompassControlProps) {
       </div>
     </div>
   );
-}
+});
+
+export default CompassControl;

@@ -5345,3 +5345,2132 @@ Potential improvements:
 **Status:** COMPLETE
 
 All tests passing. Issue #340 closed with commit 795994e. Help command fully operational with context-aware filtering and alias support.
+
+---
+
+# Architecture Review: BFS Layout Engine
+
+**Reviewer:** Elminster (Lead/Architect)  
+**Date:** 2026-04-07  
+**Commit reviewed:** `b7a86af` (HEAD)
+
+## Assessment Summary
+
+The BFS layout engine (computeLayout.ts, 2746 lines) is **architecturally sound** but has **accumulated technical debt**. Review identified 1 critical performance issue, 3 robustness/maintainability concerns, and 5 refactoring opportunities.
+
+## Strengths
+
+1. **Z-Level Isolation** — Clean per-floor layout with deferred vertical exits
+2. **Grid Detection** — Mathematically precise perpendicular-path convergence test
+3. **Pure Interface** — No side effects, easy to test and integrate
+4. **Direction Guards** — Comprehensive reversal checks prevent compass violations
+5. **Test Coverage** — 25 tests covering single rooms through 109-room Warrens zone
+6. **Exit Line Avoidance** — Efficient edge occlusion prevention
+
+## Critical Issues
+
+### P0: O(n⁴) Scoring Bottleneck
+**Lines:** 989–1018, 2090–2118  
+**Impact:** Siltgate (59 rooms) takes 222ms. A 200-room zone would take ~30 seconds — unusable.
+
+**Root cause:** Pairwise swap loops (O(n²) pairs) × `layoutScore()` (O(n²) evaluation per pair) = O(n⁴).
+
+**Mitigation:** Implement incremental scoring. When moving one room, only recompute that room's exits and its neighbors, not the entire z-level. Drops per-move complexity from O(n²) to O(degree × n) ≈ O(n), making total swaps O(n³) or better.
+
+### P1: Code Quality
+1. **Scoring DRY violation** (L779–840 vs 1882–1930) — 95% identical functions, divergent occlusion weights. Extract parameterized `computeScore(occlusionWeight)`.
+2. **Magic numbers** (23+ instances) — Hardcoded limits like 200, 20, 50, 15, 3, etc. with no semantic meaning. Name them: `MAX_SEARCH_RADIUS`, `DIAGONAL_PENALTY`, etc.
+3. **Diamond search boilerplate** (10+ copies) — Extract `diamondCandidates()` generator to eliminate ~100 lines of copy-paste.
+4. **GRID_STEP = 1 is a no-op** — Feature appears enabled but multiplies by 1. Either set to 2 or remove.
+5. **`findNearestUnoccupied` infinite loop** (L87) — No termination bound. Add radius cap (e.g., 500).
+
+## Recommendations (Prioritized)
+
+| Priority | Item | Effort | Impact |
+|----------|------|--------|--------|
+| P0 | Incremental scoring | 2–3 days | Essential for scaling past 20–30 rooms |
+| P1 | Extract scoring, name constants, extract helpers | 2–3 days | Maintainability, reduces debt |
+| P2 | Fix GRID_STEP, add loop bounds | 0.5 day | Removes dead code, improves robustness |
+| P3 | File decomposition (future) | 1 week | Needed only if file grows further |
+
+## Algorithm Assessment
+
+BFS + refinement pipeline is the correct approach for compass-aware MUD layouts. Phase ordering is sound — each phase fixes problems earlier phases can't solve.
+
+**Post-BFS scaling (Option C):** Architecturally correct. Preserves all refinement invariants because refinement operates pre-scale. Currently disabled (`GRID_STEP = 1`).
+
+## Decision
+
+**Do NOT refactor until P0 is complete.** The current structure is coherent and testable. Grid spacing feature (`b7a86af`) is safe to merge — it only adds dead code (`GRID_STEP = 1` loop) and doesn't break existing functionality.
+
+**Future work:** Schedule P0/P1 refactoring for next sprint once grid spacing is stable in production.
+
+---
+
+**Status:** REVIEW COMPLETE (no code changes)
+
+---
+
+# Decision: BFS Grid Spacing — Post-BFS Scaling (Option C)
+
+**Author:** Regis  
+**Date:** 2026-04-07  
+**Scope:** `packages/client/src/map/computeLayout.ts`
+
+## Context
+
+Dense zones (like Midgaard) produce cascading collision displacements in the BFS layout engine because rooms are placed on adjacent grid cells (spacing = 1). The `findNearestDirectional()` spiral pushes rooms to non-ideal positions, producing criss-crossing edges.
+
+## Decision
+
+**Chose Option C: Post-BFS scaling** over Option A (scaling DIRECTION_OFFSETS) or Option B (GRID_STEP multiplier in BFS loop).
+
+Added `const GRID_STEP = 2` and a final scaling pass that multiplies all `(x, y)` coordinates by 2 after all 8 refinement phases complete.
+
+## Rationale
+
+- **Zero risk to BFS internals:** All distance heuristics, direction checks, layout scoring, force relaxation, diagonal fix, direction violation repair, and occlusion fix operate unchanged at spacing=1.
+- **Z-level unaffected:** z is a floor index, not spatial — not scaled.
+- **Tunable:** GRID_STEP can be changed to 3 or higher if needed.
+- **ELK integration:** `elkLayout.ts` applies its own `GRID_SPACING` (100px) on top, so visual spacing doubles automatically to ~200px.
+
+## Implementation
+
+File: `packages/client/src/map/computeLayout.ts`
+- Added constant: `const GRID_STEP = 2` (line reference in commit `b7a86af`)
+- Added scaling loop: Multiplies all (x, y) coordinates by GRID_STEP after refinement phases
+- Z-coordinates unchanged
+
+## Validation
+
+- 244 client tests passing ✅
+- TypeScript compilation clean ✅
+- ESLint: 0 errors ✅
+- Commit: `b7a86af feat(map): add grid spacing to BFS layout engine`
+
+## Impact
+
+- All callers of `computeLayout()` receive coordinates at 2x scale
+- Well-designed zones with clean compass exits lay out on a perfect grid with no displacement
+- Dense zones have fewer collision cascades
+- Visual spacing to player: `(BFS grid × 2) × ELK scaling (100px) = ~200px minimum between rooms`
+
+---
+
+**Status:** IMPLEMENTED (commit `b7a86af`)
+
+
+# Decision: BFS Layout Engine Refactoring
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-04-07  
+**Files:** `packages/client/src/map/computeLayout.ts`
+
+## Summary
+
+Refactored computeLayout.ts per Elminster's architecture review. The file went from 2746 lines with 23+ magic numbers, 17 duplicated diamond search patterns, 2 near-identical scoring functions, and a mutation bug — to ~2734 cleaner lines with named constants, a shared generator, parameterized scoring, and pure functions.
+
+## Key Decisions
+
+1. **Diamond candidate generator over inline loops.** Extracted `diamondCandidates(cx, cy, minRadius, maxRadius)` as a generator function. Callers handle filtering/processing; the generator handles iteration order. This reduced 17 copy-pasted patterns to single-line calls.
+
+2. **Parameterized scoring over duplicate functions.** Merged `occlusionAwareScore()` into `layoutScore(z, occlusionWeight?)`. Default weight 3 for early phases, pass 15 for occlusion fix phase. One function, two behaviors.
+
+3. **Position overrides over mutation for swap testing.** `countMismatchesInvolving()` now accepts an optional `posOverrides` Map. `swapWouldIncreaseMismatches()` passes overrides instead of temporarily mutating the shared `result` Map. This eliminates a class of bugs where interrupted/concurrent reads could see inconsistent state.
+
+4. **Delta scoring for swaps.** Added `roomScoreContribution()`, `affectedRooms()`, and `sumContributions()` helpers. Swap evaluation computes only the score change for affected rooms (~constant per swap) instead of the full O(n²) layout score. Measurable speedup on large zones.
+
+5. **Removed GRID_STEP dead code.** The `GRID_STEP=1` constant and its scaling loop were no-ops (multiply by 1). Removed entirely. If grid spacing is needed later, it should be re-implemented properly.
+
+## Impact
+
+- All 25 computeLayout + 13 elk-layout tests pass with identical results
+- ~15% speedup on test suite (249ms vs 293ms)
+- File reduced by ~12 lines despite adding new helper functions
+
+## Commits
+
+- `02c3382` refactor(computeLayout): Phase 1 mechanical cleanup
+- `b51a65e` perf(computeLayout): Phase 2 — fix mutation bug, cache posToRoom, delta scoring
+
+**Status:** IMPLEMENTED
+
+---
+
+# Decision: Post-BFS Cardinal Alignment Pass (Phase 5c)
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-04-15  
+**Commit:** b82ce8e  
+
+## Context
+
+The user reported that `inside-the-west-gate-of-midgaard` and `main-street` appeared at different y levels in the zone designer, creating a visual right-angle on what should be a straight E/W corridor.
+
+## Root Cause
+
+Two issues combine:
+
+1. **Data mismatch:** The Midgaard migration uses room type `'entrance'` for `outside-the-west-gate-of-midgaard`, but `ZoneDesigner.tsx` line 109 checks for `'entry'`. No match → falls back to `rooms[0]?.slug` (arbitrary DB order).
+
+2. **BFS entry-point sensitivity:** Different BFS starting rooms produce different visit orders. When BFS reaches main-street via temple-square→market-square (from the north) and inside-the-west-gate via a different path, they end up on different grid rows.
+
+## Decision
+
+Added **Phase 5c: Cardinal Alignment** to `computeLayout.ts`, a general post-BFS correction pass:
+
+- Builds union-find groups for E/W exits (rooms that must share the same y) and N/S exits (same x).
+- For each misaligned group, batch cascade-shifts all outlier rooms + their perpendicular subtrees to the majority coordinate.
+- Accepts shifts only if the global layout score improves (no regressions).
+- Runs after direction violation repair, before occlusion fix.
+
+## Team Impact
+
+- **No API changes.** Pure client-side layout engine change.
+- **ELK adapter unchanged.** `elkLayout.ts` was not the problem — it faithfully passes BFS coordinates through.
+- **Separate fix needed:** The `'entrance'` vs `'entry'` type mismatch in the Midgaard migration should be fixed by whoever owns the DB schema. The cardinal alignment pass is a general safety net, not a Midgaard-specific hack.
+
+## Tests
+
+- 27 BFS layout tests passing (including new entry-point independence test).
+- 13 ELK layout tests passing.
+- 271 total client tests passing.
+
+**Status:** IMPLEMENTED (commit b82ce8e)
+
+---
+
+# Decision: Zone Transfer Validation Pattern
+
+**Author:** Drizzt (Engine Dev)
+**Date:** 2026-04-07
+**Issue:** #342
+
+## Context
+Cross-zone `goto` (and potentially `go` with inter-zone exits) can issue a `zoneTransfer` to a nonexistent zone, causing the client to disconnect when the matchmaker fails.
+
+## Decision
+Zone transfer validation uses a **two-layer pattern**:
+
+1. **Handler level** — `resolveZoneExists` optional callback on `CommandContext` enables synchronous zone validation in command handlers (currently used by `goto`).
+2. **Room level** — `ZoneRoom.handleCommandMessage` checks `knownZoneSlugs` cache before sending any `ZONE_TRANSFER` message as a defensive safety net.
+
+## Rationale
+- Command handlers are synchronous; async zone repo calls can't be added without changing the handler signature.
+- Optional callback pattern is consistent with existing `resolveRoom`, `resolvePlayerByName` on CommandContext.
+- Cached zone slugs are best-effort (loaded on room create); stale cache is acceptable since zone creation is rare and server restarts refresh.
+- Belt-and-suspenders: handler validation catches bad `goto` input early; room-level check catches edge cases from any command that produces `zoneTransfer`.
+
+## Impact
+- Any new command that accepts zone slugs from user input should use `ctx.resolveZoneExists` for validation.
+- The `go` command's inter-zone exits come from authored zone data, so handler-level validation isn't needed there (room-level check covers it).
+
+**Status:** IMPLEMENTED
+
+---
+
+# Decision: Classic CircleMUD Zone Import Numbering
+
+**Date:** 2025-07-25
+**Author:** Bruenor (Content Builder)
+
+## Context
+
+Imported 3 classic CircleMUD zones (Chessboard, High Tower of Magic, Haon-Dor Forest) from tbaMUD stock areas using the existing `scripts/import-diku-zone.ts` importer.
+
+## Decision
+
+Used migration numbers **006, 007, 008** instead of the originally requested 005, 006, 007, because `005_sandbox_rooms.sql` already existed. The importer was not modified — it worked correctly on all three zone topology types (grid, vertical tower, branching wilderness).
+
+## Outcome
+
+| Zone | Migration | Rooms | Exits | Cross-zone Skipped |
+|------|-----------|-------|-------|--------------------|
+| The Chessboard | 006 | 67 | 230 | 1 |
+| The High Tower of Magic | 007 | 100 | 221 | 4 |
+| The Haon-Dor Forest | 008 | 60 | 147 | 3 |
+
+All SQL files follow the established pattern (BEGIN/COMMIT, cross-join VALUES, ON CONFLICT DO NOTHING). These are auto-generated and marked as needing review before production use. Cross-zone exits are expected skips — those rooms live in other .wld files.
+
+**Status:** IMPLEMENTED
+
+---
+
+**Note:** This section merged from .squad/decisions/inbox on 2026-04-08T01:21Z. Deduplicated Regis alignment fixes into single Phase 5c entry.
+
+---
+
+# Decision: Repo Hygiene Foundations (#343)
+
+**Date:** 2026-04-08  
+**Decision Maker:** Danilo (Community Relations)  
+**Issue:** #343  
+**Status:** Implemented  
+
+## Summary
+
+Ellmud now has a complete hygiene and QoL foundation for scaling contributor engagement and automating releases.
+
+## What Was Added
+
+| File | Purpose |
+|------|---------|
+| `LICENSE` | ISC (matches package.json) |
+| `CONTRIBUTING.md` | Contribution workflow, setup, code style |
+| `CODE_OF_CONDUCT.md` | Contributor Covenant 2.0 |
+| `SECURITY.md` | Responsible vulnerability disclosure |
+| `.editorconfig` | 2-space indent, Unix line endings, UTF-8 |
+| `.github/ISSUE_TEMPLATE/bug_report.md` | Bug reporting guidance |
+| `.github/ISSUE_TEMPLATE/feature_request.md` | Feature request guidance |
+| `.github/PULL_REQUEST_TEMPLATE.md` | PR checklist and context |
+| `.github/workflows/release.yml` | Automated release (version bump + tag + GitHub release) |
+
+## Key Technical Choices
+
+### Release Workflow
+- **Trigger:** `workflow_dispatch` (manual, via Actions UI)
+- **Input:** version type (major/minor/patch)
+- **Logic:**
+  1. Bumps `package.json` version via `npm version`
+  2. Syncs workspace package.json files via `npm run version:sync`
+  3. Commits version bump
+  4. Creates git tag (`v{version}`)
+  5. Pushes to main + creates GitHub Release with auto-generated changelog
+
+### Issue & PR Templates
+- YAML frontmatter (GitHub standard) for metadata (labels, assignees)
+- Clear sections guiding users to provide actionable information
+- Bug template: steps to reproduce, environment, logs
+- Feature template: problem, solution, alternatives, impact
+- PR template: type of change, testing checklist, code review focus
+
+### Code of Conduct
+- Adopted Contributor Covenant 2.0 (widely recognized, clear enforcement)
+- Enforcement escalation: warning → mute → ban (for serious violations)
+- Direct reporting to maintainers (not public GitHub issues)
+
+## Impact
+
+✅ **For Contributors:**
+- Clear setup instructions (docs/setup.md reference)
+- Explicit code style expectations (TypeScript, ESLint, comments only for complex logic)
+- Template-driven issue/PR creation = better signal-to-noise
+- Standard code of conduct = safe, welcoming community
+
+✅ **For Maintainers:**
+- Automated release pipeline = fewer manual steps, fewer mistakes
+- Consistent editor config = fewer formatting nitpicks in review
+- Issue/PR templates = structured data, easier triage
+- Security disclosure path = responsible handling of vulnerabilities
+
+✅ **For the Project:**
+- Scales contributor onboarding without increasing maintainer load
+- Reduces friction for first-time contributors
+- Professional presentation (LICENSE, CONTRIBUTING visible in repo root)
+
+## Future Enhancements (Out of Scope)
+
+- Add CI/CD integration tests to PR template reminders
+- Add Discord webhook notifications for releases
+- Add automated changelog generation (changelog.md)
+- Add contributor attribution in release notes
+- Add automated dependabot PR template customizations
+
+## References
+
+- Contributor Covenant v2.0: https://www.contributor-covenant.org/version/2_0/code_of_conduct/
+- EditorConfig: https://editorconfig.org/
+- GitHub Issue Templates: https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/
+- GitHub Actions: https://docs.github.com/en/actions
+
+---
+
+# Decision: Architecture Diagram Format
+
+**Author:** Danilo  
+**Date:** 2026-04-08  
+**PR:** #348 (merged as #349)  
+**Status:** Implemented  
+
+## Summary
+
+The README architecture diagram uses **Mermaid** (not ASCII art or external images). This means:
+
+- The diagram is version-controlled as code, not a binary asset.
+- It renders natively on GitHub — no external tool or image hosting needed.
+- Anyone can update the architecture by editing the Mermaid block in `README.md`.
+
+## Rationale
+
+- Mermaid is the most maintainable option: diffs are readable, changes are reviewable.
+- GitHub renders Mermaid in markdown natively — no build step required.
+- The previous ASCII diagram was hard to update and didn't scale as the system grew.
+
+## Impact
+
+- **If you change the architecture** (add a new service, rename a subsystem, add a new data store), update the Mermaid block in `README.md` under `## Architecture`.
+- The diagram is color-coded by component group — keep colors consistent when adding nodes.
+
+**Status:** Merged
+# PR #350 Architectural Review — Repo Hygiene
+
+**Reviewer:** Elminster (Lead/Architect)  
+**Date:** 2026-04-08  
+**PR:** #350 — chore: repo hygiene improvements (#343)  
+**Author:** Danilo (via dkirby-ms)  
+**Status:** REQUEST CHANGES (Critical fix required before merge)  
+
+---
+
+## Summary
+
+PR #350 adds 9 files to establish open-source readiness: LICENSE, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, .editorconfig, and GitHub templates. **Excellent work on 8/9 files.** However, `release.yml` contains a critical flaw that will break automated release creation.
+
+---
+
+## Detailed Review
+
+### ✅ APPROVED (7/9 files)
+
+#### 1. LICENSE (ISC)
+- **Status:** Correct
+- **Details:** ISC text with proper attribution (2026, dkirby-ms). Matches package.json `"license": "ISC"`.
+- **No issues.**
+
+#### 2. CONTRIBUTING.md
+- **Status:** Approved with minor note
+- **Strengths:**
+  - Clear workflow: Pick issue → Create branch from `dev` → Make changes → Test (build, lint, test) → Commit with Conventional Commits → Open PR
+  - References existing `docs/setup.md` (verified exists)
+  - Code style section is honest: "TypeScript, ESLint, existing patterns, comments only for complex logic"
+  - Testing section enforces checklist discipline
+  - Areas of contribution are well-scoped (Game Logic, Client, Backend, Documentation)
+- **Minor note:** Line ~127 references "Discord community server" without URL. Either add the actual invite link or change to "GitHub Discussions" (exists by default). Non-blocking.
+- **Decision:** Approved as-is. Discord ref can be added in a follow-up if/when Discord server is created.
+
+#### 3. CODE_OF_CONDUCT.md
+- **Status:** Correct
+- **Details:**
+  - Adapted from Contributor Covenant 2.0 (industry standard, good attribution)
+  - Enforcement escalation is sound: private → warning → temporary mute → ban
+  - Scope covers GitHub + Discord + other channels
+  - Pledge and Standards sections are inclusive and clear
+- **No issues.**
+
+#### 4. SECURITY.md
+- **Status:** Correct
+- **Strengths:**
+  - Vulnerability reporting: 48-hour acknowledgement SLA is reasonable for a v0.1.0 game project
+  - Does NOT encourage public disclosure before fix (good)
+  - Security best practices cover the actual threat surface: .env secrets, Azure AI keys, PostgreSQL/Redis credentials, Microsoft Entra integration
+- **Minor note:** Supported Versions table says "Latest: Supported | Older: Not supported" but doesn't enumerate specific versions. Acceptable for a pre-release project (v0.1.0).
+- **Decision:** Approved.
+
+#### 5. .editorconfig
+- **Status:** Correct
+- **Details:**
+  - 2-space indent across all file types (matches npm convention, matches existing codebase)
+  - Unix line endings (LF) with final newline (correct for cross-platform teams)
+  - UTF-8 charset (correct)
+  - Markdown: `trim_trailing_whitespace = false` (good—preserves intentional breaks in markdown)
+  - Makefile: indent_style = tab (correct—makefiles require tabs)
+- **No issues.**
+
+#### 6. .github/ISSUE_TEMPLATE/bug_report.md
+- **Status:** Correct
+- **Details:**
+  - YAML frontmatter with `name`, `labels: bug`, proper title prefix `[BUG]`
+  - Sections: Description, Steps to Reproduce, Expected vs Actual Behavior, Environment (OS, Node version, browser, game version), Screenshots/Logs, Additional Context
+  - Guides users toward reproducibility (good for game bugs with environment variance)
+- **No issues.**
+
+#### 7. .github/ISSUE_TEMPLATE/feature_request.md
+- **Status:** Correct
+- **Details:**
+  - YAML frontmatter with `name`, `labels: enhancement`, title prefix `[FEATURE]`
+  - Sections: Problem, Proposed Solution, Alternatives, Additional Context (including scope: game logic/UI/admin tools, affected systems, priority)
+  - Guides users toward design-first thinking
+- **No issues.**
+
+#### 8. .github/PULL_REQUEST_TEMPLATE.md
+- **Status:** Excellent
+- **Strengths:**
+  - Type-of-Change checklist (bug fix, feature, breaking change, docs, chore)
+  - Testing section with explicit checkboxes: build, lint, test, no linting errors, builds successfully
+  - Checklist discipline reinforces code quality gate
+  - References rebasing on `dev` branch (matches CONTRIBUTING.md workflow)
+  - Screenshots section (good for UI work)
+  - Notes section for context
+- **Decision:** Approved as-is. This is a high-quality PR template.
+
+### 🚫 REJECTED (1/9 files) — release.yml requires revision
+
+#### 9. .github/workflows/release.yml
+- **Status:** REQUEST CHANGES (Critical issue)
+
+**What the workflow does:**
+- Manual trigger (`workflow_dispatch`) with version input (major, minor, patch)
+- Checks out main branch, sets up Node.js, installs deps
+- Bumps version in package.json, syncs workspace versions
+- Creates git tag, pushes commits + tag
+- Generates changelog from commit history
+- **Creates GitHub Release** (the critical step)
+- Optional Slack notification
+
+**CRITICAL ISSUE — Line 87:**
+```yaml
+- name: Create GitHub Release
+  uses: actions/create-release@v1
+```
+
+This action was **deprecated Dec 2022 and archived**. GitHub no longer maintains it, and it may be removed from the Actions Marketplace without warning.
+
+- **Risk:** Future release runs will fail to create the GitHub Release, leaving the project with unpublished releases (tags pushed but no GitHub Release artifacts).
+- **Impact:** Automation silently degrades; users cannot download release artifacts.
+- **Fix:** Replace with a maintained alternative:
+  - **Option A (Recommended):** Use `ncipollo/release-action@v1` (well-maintained, 3K+ stars, widely used)
+    ```yaml
+    - name: Create GitHub Release
+      uses: ncipollo/release-action@v1
+      with:
+        tag: v${{ steps.version.outputs.version }}
+        name: Release v${{ steps.version.outputs.version }}
+        body: |
+          # Release v${{ steps.version.outputs.version }}
+          
+          ## Changes
+          ${{ steps.release_notes.outputs.CHANGELOG }}
+          
+          For detailed changes, see the [commit log](https://github.com/${{ github.repository }}/commits/v${{ steps.version.outputs.version }}).
+        draft: false
+        prerelease: false
+        token: ${{ secrets.GITHUB_TOKEN }}
+    ```
+  - **Option B:** Use GitHub REST API directly (more verbose but zero external dependencies)
+
+**MINOR ISSUE — Line 53:**
+```yaml
+- name: Sync workspace versions
+  run: npm run version:sync
+  continue-on-error: true
+```
+
+The `continue-on-error: true` flag allows the workflow to proceed even if `npm run version:sync` fails. **Consequence:** If workspace version sync fails, the root package.json will have v0.1.1 but packages/client|server|shared will still be v0.1.0. This creates a fragmented release state.
+
+- **Recommendation:** Remove `continue-on-error: true` so failures are visible and require investigation.
+
+**PERMISSIONS — Lines 17-18:**
+```yaml
+permissions:
+  contents: write
+  pull-requests: read
+```
+
+These are correct. The `create-release` action (or replacement) will need `contents: write` to push tags and create releases. ✅
+
+---
+
+## Architectural Decisions Made
+
+1. **release.yml approach is sound:** Manual trigger (workflow_dispatch) is appropriate for a v0.1.0 project. Automatic semantic versioning with `npm version` is clean.
+
+2. **Workspace version sync strategy is correct:** Using `npm run version:sync` to propagate the root version to all workspace packages (client, server, shared) is the right approach for a monorepo using npm workspaces.
+
+3. **Changelog generation is pragmatic:** Git log-based changelog is acceptable for an MVP. As the project matures, consider GitHub Release History API or a dedicated changelog tool (e.g., standard-changelog).
+
+---
+
+## Required Actions Before Merge
+
+- [ ] Replace `actions/create-release@v1` with `ncipollo/release-action@v1` (or equivalent)
+- [ ] (Optional but recommended) Remove `continue-on-error: true` from the version:sync step
+- [ ] Re-test the workflow by triggering a dry-run release (e.g., bump to v0.1.1)
+- [ ] Re-push and request re-review
+
+---
+
+## Outcome
+
+**Verdict:** REQUEST CHANGES
+
+**Reason:** Critical deprecated action will break release automation. Fix is straightforward (2-line change). All other 8 files are approved and ready to merge.
+
+**Path forward:** Danilo/dkirby-ms revises release.yml, re-pushes to the same branch. Elminster will approve and merge.
+
+---
+
+## Appendix: Verification Checklist
+
+- [x] LICENSE: Matches package.json license + copyright year
+- [x] CONTRIBUTING.md: References exist (docs/setup.md), workflow aligns with team practice
+- [x] CODE_OF_CONDUCT.md: Covers reported channels, has enforcement policy
+- [x] SECURITY.md: Covers threat surface (env vars, API keys, dependencies)
+- [x] .editorconfig: Matches npm/Node conventions (2-space, LF, UTF-8)
+- [x] Issue templates: YAML frontmatter correct, label assignment clear
+- [x] PR template: Testing checklist + rebase guidance
+- [x] release.yml: Workflow logic sound, but deprecated action must be replaced
+
+# Design Proposal: Room Features System (Issue #345)
+
+**Author:** Elminster (Lead/Architect)  
+**Date:** 2026-04-08  
+**Issue:** #345 — Room features  
+**Related:** #44 — Contracts/Quest Engine  
+**Status:** Research & Design Complete — Awaiting Implementation Assignment
+
+---
+
+## Executive Summary
+
+This proposal defines the architecture for **room features** — interactive triggers within rooms that players can examine via `look <target>` commands. These features enable richer environmental storytelling, hidden lore, quest initiation, and interactive world-building beyond base room descriptions.
+
+**Key Points:**
+- **Scope:** Generic room feature system supporting arbitrary triggers per room
+- **Use cases:** Notes on walls, inscriptions, murals, environmental details, quest initiation triggers
+- **Command pattern:** `look <target>` dispatches to room feature if target matches; falls back to existing look behavior
+- **Data model:** JSONB column `features` on `zone_rooms` table (no new table needed)
+- **Quest integration:** Features can reference contract/quest IDs for initiation triggers
+- **Implementation effort:** 2-3 days (Drizzt or Jarlaxle), low risk
+
+---
+
+## Current State Analysis
+
+### 1. Room Data Model
+
+**Database schema** (`packages/server/src/db/migrations/001_schema.sql:342-356`):
+```sql
+CREATE TABLE zone_rooms (
+  id              UUID PRIMARY KEY,
+  zone_id         UUID NOT NULL REFERENCES zones(id) ON DELETE CASCADE,
+  slug            TEXT NOT NULL,
+  name            TEXT NOT NULL,
+  description     TEXT NOT NULL,
+  type            TEXT NOT NULL DEFAULT 'corridor',
+  properties      TEXT[] NOT NULL DEFAULT '{}',
+  loot_containers JSONB NOT NULL DEFAULT '[]',
+  hazards         JSONB NOT NULL DEFAULT '[]',
+  npcs            JSONB NOT NULL DEFAULT '[]',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uq_zone_room_slug UNIQUE (zone_id, slug)
+);
+```
+
+**TypeScript types** (`packages/shared/src/zone.ts:40-55`):
+```typescript
+export interface ZoneRoomDefinition {
+  id: string;
+  zoneId: string;
+  slug: string;
+  name: string;
+  description: string;
+  type: RoomType;
+  properties: RoomProperty[];
+  lootContainers: LootContainer[];
+  hazards: HazardPlaceholder[];
+  npcs: Array<{
+    creatureId: string;
+    spawnCount: number;
+    behavior?: string;
+  }>;
+}
+```
+
+**Observations:**
+- Rooms already support structured JSONB data for `loot_containers`, `hazards`, `npcs`
+- Pattern is established: JSONB columns for dynamic, schema-flexible content
+- `zone-adapter.ts` converts `ZoneRoomDefinition` → `Room` (runtime graph format)
+- Rooms are loaded once at zone instantiation, then held in memory as `Map<string, Room>`
+
+### 2. Current Look Command
+
+**Handler** (`packages/server/src/commands/handlers/look.ts`):
+- **No argument handling** — current `look` command ignores `ctx.args`
+- Displays: room description, exits, items, creatures, players, corpses
+- Returns a `CommandResult` with narrations and a room header
+- No logic for examining specific objects or targets
+
+**Parser** (`packages/server/src/commands/parser.ts:28`):
+- `l` alias → `look` (single-letter shorthand)
+- No parsing logic for multi-word targets (e.g., `look wooden sign`)
+- Args are preserved in `CommandMessage.args: string[]`
+
+**Command flow:**
+1. Player types `look` or `look <target>`
+2. `parseCommand()` → `{ verb: 'look', args: ['<target>'] }`
+3. `handleCommand('look', ctx)` calls `handleLook(ctx)`
+4. `handleLook()` currently ignores `ctx.args` entirely
+
+### 3. Feature-Room Pattern (Established Precedent)
+
+**Example: Stash Room** (`packages/server/src/commands/handlers/stash-command.ts`):
+- Feature-gated commands (`stash`, `store`) require `feature_stash` room type
+- Services injected into `CommandContext` (e.g., `ctx.stashService`)
+- Command handlers check context availability before executing
+- Pattern: feature rooms enable specific commands + inject feature-specific context
+
+**Example: Sandbox Room** (`packages/server/src/commands/handlers/sandbox.ts`):
+- Multiple room types (`feature_sandbox`, `feature_sandbox_arena`, `feature_sandbox_stats`)
+- Sub-commands route to different behaviors based on room type and args
+- Pattern: commands with sub-verbs dispatch on args
+
+**Key insight:** Room features need **no new room type** — they extend existing rooms with data, not behavior gates.
+
+### 4. Contract/Quest System (Currently Unimplemented)
+
+**Current state:**
+- `feature_contracts` room type exists in type definitions
+- No database schema for contracts/quests (#44 is marked `go:no`, Phase 4, no implementation)
+- ContractsList.tsx is a placeholder UI showing "PLANNED — PHASE 3"
+- Issue #44 was updated 2 hours ago with new scope: quest engine with multi-step objectives
+
+**Implications for room features:**
+- Room features can be **quest-agnostic** initially (just narration)
+- Schema should **reserve space** for future quest/contract IDs
+- When quest system lands, features can trigger quest initiation without schema migration
+
+---
+
+## Proposed Architecture
+
+### 1. Data Model: Room Features
+
+Add a `features` JSONB column to `zone_rooms`:
+
+**Migration** (`packages/server/src/db/migrations/009_room_features.sql`):
+```sql
+-- Add features column to zone_rooms
+ALTER TABLE zone_rooms
+  ADD COLUMN features JSONB NOT NULL DEFAULT '[]';
+
+-- Example: A note on the wall (narrative only)
+UPDATE zone_rooms SET features = '[
+  {
+    "id": "wall-note",
+    "keywords": ["note", "wall note", "parchment"],
+    "shortDescription": "A torn parchment is pinned to the wall.",
+    "longDescription": "The note reads: \"They watch from the water. Do not trust the reflections.\" The handwriting is erratic.",
+    "questId": null
+  }
+]'::jsonb
+WHERE zone_id = (SELECT id FROM zones WHERE slug = 'the-warrens')
+  AND slug = 'flooded-cellar';
+
+-- Example: An inscription that initiates a quest (future)
+UPDATE zone_rooms SET features = '[
+  {
+    "id": "altar-inscription",
+    "keywords": ["inscription", "altar", "runes"],
+    "shortDescription": "Ancient runes glow faintly on the altar.",
+    "longDescription": "The inscription reads: \"Speak the names of the drowned, and they shall answer.\" A chill runs through you.",
+    "questId": "quest_drowned_covenant"
+  }
+]'::jsonb
+WHERE zone_id = (SELECT id FROM zones WHERE slug = 'the-siltgate')
+  AND slug = 'shrine';
+```
+
+**TypeScript types** (extend `ZoneRoomDefinition` in `packages/shared/src/zone.ts`):
+```typescript
+export interface RoomFeature {
+  /** Unique ID within the room (e.g., 'wall-note', 'altar-inscription') */
+  id: string;
+  /** Keywords players can use to target this feature (e.g., ['note', 'parchment']) */
+  keywords: string[];
+  /** Inline description shown in base room description (optional) */
+  shortDescription?: string;
+  /** Full narration when player examines the feature */
+  longDescription: string;
+  /** Optional: quest/contract ID to initiate when examined (future) */
+  questId?: string | null;
+}
+
+export interface ZoneRoomDefinition {
+  // ... existing fields ...
+  features: RoomFeature[];
+}
+```
+
+**Runtime representation** (extend `Room` in `packages/shared/src/room-graph.ts`):
+```typescript
+export interface Room {
+  // ... existing fields ...
+  features?: RoomFeature[];
+}
+```
+
+**Adapter changes** (`packages/server/src/zones/zone-adapter.ts:45-58`):
+```typescript
+for (const zr of zoneRooms) {
+  const room: Room = {
+    id: zr.slug,
+    name: zr.name,
+    description: zr.description,
+    type: zr.type,
+    exits: new Map<Direction, string>(),
+    items: [...zr.lootContainers],
+    hazards: [...zr.hazards],
+    ...(zr.properties.length > 0 ? { properties: [...zr.properties] } : {}),
+    ...(zr.features?.length > 0 ? { features: [...zr.features] } : {}), // NEW
+  };
+  rooms.set(zr.slug, room);
+  slugToRoom.set(zr.slug, room);
+}
+```
+
+### 2. Command Flow: Enhanced Look Handler
+
+**Updated `handleLook()`** (`packages/server/src/commands/handlers/look.ts`):
+
+```typescript
+export function handleLook(ctx: CommandContext): CommandResult {
+  const { room, args } = ctx;
+
+  // Case 1: "look" with no target → show full room description (existing behavior)
+  if (args.length === 0) {
+    return showFullRoom(ctx);
+  }
+
+  // Case 2: "look <target>" → check room features
+  const target = args.join(' ').toLowerCase().trim();
+
+  if (room.features && room.features.length > 0) {
+    const match = room.features.find(f =>
+      f.keywords.some(kw => kw.toLowerCase() === target)
+    );
+
+    if (match) {
+      return examineFeature(ctx, match);
+    }
+  }
+
+  // Case 3: No feature match → fallback (future: examine items, creatures, players)
+  return {
+    narrations: [{
+      text: `You don't see anything called "${args.join(' ')}" here.`,
+      type: 'system',
+    }],
+  };
+}
+
+function showFullRoom(ctx: CommandContext): CommandResult {
+  const { room } = ctx;
+  const exitList = Array.from(room.exits.keys()).join(', ') || 'none';
+
+  const lines: string[] = [
+    room.description,
+    '',
+    `Exits: ${exitList}`,
+  ];
+
+  // ... existing creature, player, corpse, item logic ...
+
+  return {
+    narrations: [{ text: lines.join('\n'), type: 'room' }],
+    roomHeader: {
+      roomName: room.name,
+      roomSlug: room.id,
+      exits: Array.from(room.exits.keys()),
+      stability: ctx.stability,
+    },
+  };
+}
+
+function examineFeature(ctx: CommandContext, feature: RoomFeature): CommandResult {
+  const narrations: NarrationEntry[] = [
+    { text: feature.longDescription, type: 'room' },
+  ];
+
+  // Future: quest initiation logic
+  if (feature.questId) {
+    // TODO: Check if player has already started this quest
+    // TODO: Call quest system to initiate quest
+    // TODO: Add quest-started narration to result
+    narrations.push({
+      text: `(Quest initiation: ${feature.questId} — not yet implemented)`,
+      type: 'system',
+    });
+  }
+
+  return { narrations };
+}
+```
+
+**Key design decisions:**
+- **No ambiguity resolution:** If keywords overlap, first match wins (authoring responsibility)
+- **Exact keyword match:** `target === keyword` (case-insensitive), no fuzzy matching
+- **Multi-word support:** `args.join(' ')` allows `look wooden sign` to match keyword `"wooden sign"`
+- **Graceful degradation:** Unknown targets return a neutral error, not a parser rejection
+- **Future extensibility:** Fallback case can later dispatch to item/creature/player examination
+
+### 3. Feature Description Integration
+
+**Option A: Explicit in base description** (recommended for Phase 1):
+- Authoring: Add feature hint directly to `zone_rooms.description` field
+- Example: `"You're in a castle cellar. There is a note on the wall."`
+- Pro: Zero code changes, maximum control, works today
+- Con: Authors must manually coordinate description + feature keywords
+
+**Option B: Dynamic injection** (Phase 2+):
+- System: Append `feature.shortDescription` to room description if present
+- Example: Room description + `"\n\nYou notice: A torn parchment pinned to the wall."`
+- Pro: DRY — feature data drives both base description and examine text
+- Con: Requires `handleLook()` refactor to inject feature hints into room narration
+
+**Decision:** Start with Option A. Option B can be added incrementally without breaking changes.
+
+### 4. Quest Integration (Future)
+
+When the quest system lands (Issue #44), room features integrate as follows:
+
+**Quest initiation flow:**
+1. Player examines feature with `questId` set
+2. `examineFeature()` calls `ctx.questService?.tryInitiateQuest(questId, playerId)`
+3. Quest service checks prerequisites, player state, returns result
+4. If initiated: narration appended ("You feel a pull toward the depths…")
+5. If already active: narration reflects status ("You've already accepted this task.")
+6. If ineligible: narration explains ("You lack the reputation to take this contract.")
+
+**Required context injection** (when quest system exists):
+```typescript
+export interface CommandContext {
+  // ... existing fields ...
+  questService?: QuestService; // NEW — injected by ZoneRoom for all rooms
+}
+```
+
+**Schema compatibility:** The `questId` field is already reserved in `RoomFeature` — no migration needed.
+
+---
+
+## Implementation Plan
+
+### Phase 1: Core Feature System (2-3 days)
+
+**Agent:** Drizzt (Engine Dev) or Jarlaxle (Systems Dev)
+
+**Tasks:**
+1. **Migration:** Create `009_room_features.sql` with `ALTER TABLE` + seed examples
+2. **Types:** Add `RoomFeature` interface to `packages/shared/src/zone.ts`, extend `ZoneRoomDefinition` and `Room`
+3. **Adapter:** Update `zone-adapter.ts` to copy `features` from `ZoneRoomDefinition` → `Room`
+4. **Command:** Refactor `handleLook()` to dispatch on `args`, add `examineFeature()` helper
+5. **Tests:** Unit tests for keyword matching, multi-word targets, graceful fallback
+6. **Content:** Seed 3-5 example features across existing zones (Warrens, Siltgate)
+
+**Acceptance criteria:**
+- `look` with no args works as before
+- `look note` examines feature if keywords match
+- `look unknown` returns "You don't see anything called…"
+- Database stores features in JSONB, adapter loads them into runtime rooms
+- No quest initiation yet — just narration
+
+**Risk:** Low. Existing look command is simple, feature matching is deterministic, no cross-system dependencies.
+
+### Phase 2: Quest Initiation Hooks (depends on Issue #44)
+
+**Agent:** TBD (blocked on quest system design)
+
+**Tasks:**
+1. **Context:** Add `questService` to `CommandContext`, inject in `ZoneRoom.buildContext()`
+2. **Logic:** In `examineFeature()`, check `feature.questId`, call `questService.tryInitiateQuest()`
+3. **Narration:** Append quest-initiated messages to result
+4. **Tests:** Integration tests with mock quest service, verify initiation flow
+
+**Acceptance criteria:**
+- Examining feature with `questId` calls quest service
+- Quest service response reflected in narration
+- Players cannot double-initiate quests
+
+**Risk:** Medium. Depends on quest system API contract (not yet designed).
+
+### Phase 3: Enhanced Feature Types (optional, Phase 4+)
+
+**Potential extensions:**
+- **Interactive features:** `use altar`, `activate lever` → trigger room state changes
+- **Conditional features:** Show/hide features based on quest state or faction rep
+- **Multi-stage features:** Examining feature multiple times reveals more info
+- **Clickable UI:** Frontend renders feature keywords as clickable links in room description
+
+**Agent:** TBD (future work, not in scope for #345)
+
+---
+
+## Design Rationale & Alternatives Considered
+
+### Why JSONB column instead of new table?
+
+**Decision:** JSONB column `features` on `zone_rooms`.
+
+**Rationale:**
+- Features are **tightly coupled to rooms** — no reuse across rooms, no need for normalization
+- Existing precedent: `loot_containers`, `hazards`, `npcs` all use JSONB
+- Query pattern: Load entire zone bundle once, hold in memory → no N+1 queries
+- Schema flexibility: Authors can add custom fields (e.g., `"discoverable": true`) without migrations
+
+**Alternative rejected:** Separate `zone_room_features` table with foreign key to `zone_rooms`.
+- Pro: Normalized, easier to query all features across zones
+- Con: Join required on zone load, slower cold start, more complex adapter logic
+- Con: No use case for querying features independently of rooms
+
+### Why exact keyword matching instead of fuzzy/partial?
+
+**Decision:** Exact match (case-insensitive) on full keyword string.
+
+**Rationale:**
+- **Predictability:** Authors control exactly what triggers the feature
+- **No ambiguity:** `look note` matches `"note"`, not `"notebook"` or `"denote"`
+- **Simplicity:** No Levenshtein distance, no substring search, no regex
+- **Consistency:** Aligns with existing command patterns (`attack goblin` requires exact name)
+
+**Alternative rejected:** Fuzzy matching (substring, partial match, did-you-mean).
+- Pro: More forgiving UX
+- Con: Unpredictable for authors, harder to test, prone to unintended matches
+- Example: `look sign` might match both `"wooden sign"` and `"insignia"` → which wins?
+
+**Future extension:** If needed, add `"aliases"` field to `RoomFeature` for common misspellings.
+
+### Why start with narration-only, delay quest integration?
+
+**Decision:** Phase 1 delivers examine-and-read features with no quest logic.
+
+**Rationale:**
+- **Quest system doesn't exist yet** (#44 is Phase 4, currently `go:no`)
+- **Fast delivery:** Core feature system can ship in 2-3 days, unblocked
+- **Prove the pattern:** Validate keyword matching, content authoring, UX before adding complexity
+- **Incremental risk:** Phase 1 is low-risk, Phase 2 (quest hooks) inherits stable foundation
+
+**Alternative rejected:** Wait for quest system, ship both at once.
+- Pro: Fully integrated feature set
+- Con: Delays useful content tool by weeks/months, blocks world-building work
+
+---
+
+## Dependencies & Risks
+
+### Dependencies
+
+**Upstream (blocking this work):**
+- None. Room features are independent of other systems.
+
+**Downstream (blocked by this work):**
+- Issue #44 (Quest Engine) — Quest initiation via room features requires this system
+- Content authoring — Laeral/Bruenor can begin adding interactive lore once Phase 1 lands
+
+### Risks
+
+**Low risk:**
+- Schema change is additive (new column, no data loss)
+- Command flow is simple (no state changes, just narration dispatch)
+- No cross-room interactions, no multiplayer concerns
+- Test coverage straightforward (keyword matching + fallback)
+
+**Medium risk (Phase 2 only):**
+- Quest system API is undefined — integration contract may shift
+- Mitigation: Design `questService` interface now, stub implementation for tests
+
+**No risk:**
+- Performance: Features loaded once per zone, held in memory
+- Backwards compatibility: Existing rooms have `features = []`, no behavior change
+- Migration: `DEFAULT '[]'` makes rollout non-breaking
+
+---
+
+## Content Authoring Workflow
+
+Once Phase 1 lands, content creators (Laeral, Bruenor) can add features via SQL:
+
+**Example: Add a mural in the Siltgate shrine**
+```sql
+UPDATE zone_rooms
+SET features = features || '[
+  {
+    "id": "shrine-mural",
+    "keywords": ["mural", "painting", "fresco"],
+    "shortDescription": "A faded mural depicts a procession of robed figures.",
+    "longDescription": "The mural shows robed figures descending into dark water, their faces serene. At the center, a crowned figure holds a black pearl. The paint is centuries old, but the pearl seems to shimmer."
+  }
+]'::jsonb
+WHERE zone_id = (SELECT id FROM zones WHERE slug = 'the-siltgate')
+  AND slug = 'shrine';
+```
+
+**Example: Update room description to reference the mural**
+```sql
+UPDATE zone_rooms
+SET description = 'An altar rises from black water in the center of a domed chamber. Strange symbols pulse with faint violet light along the walls. A faded mural covers the eastern wall.'
+WHERE zone_id = (SELECT id FROM zones WHERE slug = 'the-siltgate')
+  AND slug = 'shrine';
+```
+
+**Future: Admin UI** (Phase 4+, out of scope for #345):
+- Zone Designer could render features as editable list in room detail panel
+- WYSIWYG editor for `longDescription` with ANSI preview
+- Keyword validation (warn if keywords overlap across features in same room)
+
+---
+
+## Testing Strategy
+
+**Unit tests** (`packages/server/src/__tests__/room-features.test.ts`):
+- Keyword matching: exact match, case-insensitive, multi-word
+- Fallback behavior: unknown target returns error narration
+- No-args behavior: existing `look` works unchanged
+- Edge cases: empty keywords array, duplicate keywords, null descriptions
+
+**Integration tests** (`packages/server/src/__tests__/feature-examine-flow.test.ts`):
+- Load zone with features, player examines feature, verify narration
+- Multiple features in same room, verify correct one returned
+- Feature in one room doesn't leak to adjacent room
+
+**Regression tests:**
+- Existing `look` command tests pass unchanged
+- Zones with no features behave identically to today
+
+**Future (Phase 2):**
+- Quest initiation: Mock quest service, verify `tryInitiateQuest()` called with correct params
+- Quest state: Verify repeated examine reflects quest status (not started / active / completed)
+
+---
+
+## Open Questions
+
+1. **Should features be discoverable or always visible?**
+   - Current proposal: Features mentioned in room description (explicit)
+   - Alternative: Hidden features require `search` command or passive Perception check
+   - Decision: Start explicit, add hidden features in Phase 3 if needed
+
+2. **Should examining a feature consume an action/tick?**
+   - Current proposal: No — `look <target>` is instant, like `look`
+   - Alternative: Interactive features (use/activate) could take a tick
+   - Decision: Narration is free, interactions (future) cost time
+
+3. **Should features support audio cues / LLM narration?**
+   - Current proposal: Static text only (DM voice)
+   - Alternative: Features trigger LLM narration for flavour variation
+   - Decision: Static for Phase 1 (consistent, testable), LLM in Phase 3 if desired
+
+4. **Should the frontend render features as clickable?**
+   - Current proposal: Text-only, players type `look <target>`
+   - Alternative: Parse room narration, render keywords as `<button>` or `<a>`
+   - Decision: Backend-ready, frontend enhancement is Phase 4 polish
+
+---
+
+## Agent Assignment Recommendation
+
+**Phase 1 implementation (2-3 days):**
+
+**Primary candidate:** Jarlaxle (Systems Dev)
+- Owns content pipeline (migrations, zone seeding, zone-adapter)
+- Experience with JSONB schema extensions (npcs, hazards)
+- Can coordinate with Laeral/Bruenor on example content
+
+**Alternative candidate:** Drizzt (Engine Dev)
+- Owns command system (look.ts, parser.ts)
+- Deep knowledge of command flow and context building
+- Can quickly extend `handleLook()` with feature dispatch
+
+**Decision:** Either agent is qualified. Recommend Jarlaxle if content seeding is priority, Drizzt if command polish is priority.
+
+**Phase 2 implementation (quest hooks):**
+- Blocked on Issue #44 quest system design
+- Agent TBD based on who owns quest service implementation
+- Integration risk is low if Phase 1 interface is stable
+
+---
+
+## Summary
+
+Room features are a **high-value, low-risk** addition to the world-building toolkit. The JSONB schema pattern is proven, the command flow is simple, and the system is fully backwards-compatible. Phase 1 delivers immediate content authoring capabilities with no external dependencies. Phase 2 (quest integration) slots in cleanly once the quest system exists.
+
+**Recommendation:** Approve for implementation. Assign to Jarlaxle or Drizzt for 2-3 day sprint.
+
+---
+
+# Live Rooms Admin Page — Research & Design Proposal
+
+**Issue:** #344  
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-01-20  
+**Status:** Research Complete — Awaiting Approval
+
+---
+
+## Executive Summary
+
+Issue #344 requests an admin page for **Live Rooms** (zone room management, NOT Colyseus room management) that allows admins to:
+1. See which zone rooms are currently live/active
+2. Send broadcast messages to a specific room
+3. Spawn new creatures in a specific room
+4. Teleport a player to a specific room
+
+**Current State:** We already have LiveRooms.tsx and LiveRoomDetail.tsx pages that handle Colyseus room instance management (pause/resume, creature spawning). The requested features require **zone-specific room management** (individual rooms within a zone instance), which is a different concern.
+
+**Key Finding:** The request conflates two concepts:
+- **Colyseus rooms** (zone instances, e.g., `zone:the-refuge`) — already managed by LiveRoomDetail.tsx
+- **Zone rooms** (individual rooms within a zone's room graph, e.g., `hearth`, `stash-alcove`) — NOT currently exposed in admin UI
+
+This proposal clarifies the distinction and recommends a design that enhances the existing LiveRoomDetail page rather than creating a separate page.
+
+---
+
+## 1. Current Admin Dashboard Structure
+
+### 1.1 Existing Admin Pages
+
+**Pattern:** List page → Detail page with forms
+
+Examples:
+- `/admin/creatures` → `/admin/creatures/:id` — Content CRUD
+- `/admin/items` → `/admin/items/:id` — Content CRUD
+- `/admin/zones` → `/admin/zones/:slug` → Zone Designer — Zone content editing
+- `/admin/live-rooms` → `/admin/live-rooms/:roomId` — Live Colyseus room management
+
+**AdminLayout.tsx Navigation:**
+- Dashboard
+- **Content** section: Creatures, Items, Modifiers, Loot Tables, Skills, Factions, Rooms, Zones, Narrative, Balance, Contracts, Recipes
+- **System** section: **Live Rooms**, Deploy, Audit Log, Users
+
+**Current Live Rooms pages:**
+- **LiveRooms.tsx** (`/admin/live-rooms`) — Lists all active Colyseus room instances with Room ID, Type, Players, Status, Created timestamp
+- **LiveRoomDetail.tsx** (`/admin/live-rooms/:roomId`) — Shows detailed view of a single Colyseus room instance with:
+  - Room Status (lifecycle, stability, collapse timer, tick, connected clients, player count, paused state)
+  - Creatures list (name, ID, behavior state, HP, current room ID)
+  - Players list (session ID, current room ID, inventory count, weight)
+  - Actions: Pause/Resume, Spawn Creature (with modal for template + target room selection)
+
+### 1.2 API Structure
+
+**Admin API endpoints** (packages/server/src/admin/routes.ts):
+- `GET /admin/api/rooms` — List all Colyseus room instances
+- `GET /admin/api/rooms/:roomId` — Get Colyseus room detail
+- `POST /admin/api/rooms/:roomId/pause` — Pause Colyseus room tick
+- `POST /admin/api/rooms/:roomId/resume` — Resume Colyseus room tick
+- `POST /admin/api/rooms/:roomId/spawn` — Spawn creature in a zone (with optional `targetRoomId` field for zone room targeting)
+
+**Client API wrappers** (packages/client/src/lib/admin-api.ts):
+- `fetchLiveRooms()` → `{ rooms: LiveRoomSummary[] }`
+- `fetchLiveRoomDetail(roomId)` → `LiveRoomDetail`
+- `pauseRoom(roomId)` → `{ roomId, paused }`
+- `resumeRoom(roomId)` → `{ roomId, paused }`
+- `spawnInRoom(roomId, type, templateId, targetRoomId?)` → `SpawnResult`
+
+---
+
+## 2. Zone Room vs Colyseus Room Clarification
+
+**Colyseus Room (Already Managed):**
+- A live server-side room instance (e.g., `zone:the-refuge`, Colyseus room ID `abc-123-xyz`)
+- Managed by ZoneRoom.ts or RefugeRoom.ts
+- Has players connected via WebSocket
+- Has lifecycle state (seeding, open, active, destabilizing, collapse)
+- Can be paused/resumed (stops game tick)
+- Current admin page: LiveRoomDetail.tsx
+
+**Zone Room (NOT Currently in Admin UI):**
+- An individual room within a zone's room graph (e.g., `hearth`, `stash-alcove`, `training-grounds`)
+- Defined in `zone_rooms` table with slug, name, description, features
+- Connected via exits in `zone_exits` table
+- Players navigate between zone rooms using directional commands (`go north`)
+- Creatures occupy specific zone rooms (tracked by `currentRoomId` field)
+- **No direct admin UI for zone room management currently exists**
+
+**Issue #344 Request Analysis:**
+- "See which zone rooms are currently live/active" — Ambiguous: Could mean either Colyseus rooms (already visible) OR zone rooms with players/creatures in them (not currently exposed)
+- "Send broadcast messages to a specific room" — Implies zone room targeting (broadcast to players in `hearth`, not entire zone instance)
+- "Spawn new creatures in a specific room" — Already implemented! `spawnInRoom` accepts `targetRoomId` parameter
+- "Teleport a player to a specific room" — Implies zone room targeting (move player to `stash-alcove` within current zone)
+
+**Interpretation:** The request is for **zone-room-level management within a live Colyseus room instance**. This is an enhancement to LiveRoomDetail.tsx, not a new page.
+
+---
+
+## 3. Proposed Solution: Enhance LiveRoomDetail.tsx
+
+### 3.1 Current LiveRoomDetail Features
+- ✅ View room status (lifecycle, stability, tick, paused state)
+- ✅ View creatures in the zone (with current room ID shown)
+- ✅ View players in the zone (with current room ID shown)
+- ✅ Pause/resume zone tick
+- ✅ Spawn creatures (with optional target room ID)
+
+### 3.2 Missing Features (From Issue #344)
+- ❌ **Explicit zone room list** — No visual representation of the zone's room graph
+- ❌ **Room occupancy view** — Can't easily see "which rooms have players/creatures right now"
+- ❌ **Broadcast to specific room** — No API endpoint or UI for this
+- ❌ **Teleport player to room** — No API endpoint or UI for this
+
+### 3.3 Proposed Enhancements
+
+#### Enhancement 1: Zone Room Graph Visualization
+**Location:** New section in LiveRoomDetail.tsx below "Room Status"
+
+**UI Components:**
+- Tabbed interface: "Room Graph" | "Creatures" | "Players"
+- **Room Graph tab:**
+  - Table view of all zone rooms (fetched from zone definition)
+  - Columns: Room Name, Slug, Players (count), Creatures (count), Features (badges for stash, expedition-board, etc.)
+  - Click row to expand/collapse room detail:
+    - Player list in this room (session ID, inventory)
+    - Creature list in this room (name, HP, behavior)
+    - Actions: "Broadcast to Room", "Spawn Creature Here", "Teleport Player Here"
+
+**Data Source:**
+- Zone definition (rooms + exits) — fetch via `GET /admin/api/zones/:slug`
+- Live room detail (players, creatures) — already fetched via `fetchLiveRoomDetail(roomId)`
+- **Challenge:** Current `LiveRoomDetail` doesn't include zone slug, so we can't fetch the zone definition
+  - **Solution:** Add `zoneSlug` field to `AdminZoneDetail` response in admin/routes.ts
+
+**API Changes Required:**
+- Modify `GET /admin/api/rooms/:roomId` to include `zoneSlug: string` in response for zone rooms
+
+#### Enhancement 2: Broadcast Message to Room
+**UI:** New button in room detail row actions: "Broadcast to Room"
+
+**Modal:**
+- Title: "Broadcast Message to [Room Name]"
+- Text area: Message input (max 500 chars)
+- Checkbox: "Send as system message" (default checked)
+- Buttons: Cancel | Send
+
+**New API Endpoint:**
+```
+POST /admin/api/rooms/:roomId/broadcast
+Body: { targetRoomId: string, message: string, type: 'system' | 'admin' }
+Response: { success: boolean, message: string }
+```
+
+**Server Implementation (admin/routes.ts):**
+```typescript
+router.post('/admin/api/rooms/:roomId/broadcast', adminAuth, async (req, res) => {
+  const room = safeGetRoom(req.params.roomId);
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  
+  const { targetRoomId, message, type = 'system' } = req.body;
+  if (!targetRoomId || !message) {
+    return res.status(400).json({ error: 'Missing targetRoomId or message' });
+  }
+  
+  // Call ZoneRoom method to broadcast to specific room
+  const zoneRoom = room as any; // Cast to ZoneRoom
+  if (typeof zoneRoom.broadcastToRoom === 'function') {
+    zoneRoom.broadcastToRoom(targetRoomId, {
+      narrations: [{ text: `[ADMIN] ${message}`, type }]
+    });
+    res.json({ success: true, message: 'Broadcast sent' });
+  } else {
+    res.status(400).json({ error: 'Room does not support room-specific broadcasts' });
+  }
+});
+```
+
+**ZoneRoom.ts Changes:**
+- `broadcastToRoom()` method already exists! (line 1133)
+- No changes needed — endpoint just needs to call it
+
+#### Enhancement 3: Teleport Player to Room
+**UI:** New button in room detail row actions: "Teleport Player Here"
+
+**Modal:**
+- Title: "Teleport Player to [Room Name]"
+- Dropdown: Select player (shows session ID or character name if available)
+- Checkbox: "Notify player" (default checked)
+- Buttons: Cancel | Teleport
+
+**New API Endpoint:**
+```
+POST /admin/api/rooms/:roomId/teleport
+Body: { sessionId: string, targetRoomId: string, notify: boolean }
+Response: { success: boolean, message: string }
+```
+
+**Server Implementation (admin/routes.ts):**
+```typescript
+router.post('/admin/api/rooms/:roomId/teleport', adminAuth, async (req, res) => {
+  const room = safeGetRoom(req.params.roomId);
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  
+  const { sessionId, targetRoomId, notify = true } = req.body;
+  if (!sessionId || !targetRoomId) {
+    return res.status(400).json({ error: 'Missing sessionId or targetRoomId' });
+  }
+  
+  const zoneRoom = room as any; // Cast to ZoneRoom
+  const player = zoneRoom.players?.get(sessionId);
+  if (!player) {
+    return res.status(404).json({ error: 'Player not found in this room' });
+  }
+  
+  // Validate target room exists
+  const targetRoom = zoneRoom.roomGraph?.rooms?.get(targetRoomId);
+  if (!targetRoom) {
+    return res.status(400).json({ error: 'Target room not found in zone graph' });
+  }
+  
+  // Update player location
+  const previousRoomId = player.currentRoomId;
+  player.currentRoomId = targetRoomId;
+  
+  // Notify player if requested
+  if (notify) {
+    const client = room.clients.find(c => c.sessionId === sessionId);
+    if (client) {
+      const { MessageTypes } = await import('@ellmud/shared');
+      client.send(MessageTypes.NARRATE, {
+        text: `[ADMIN] You have been teleported to ${targetRoom.name}.`,
+        type: 'system',
+        timestamp: Date.now(),
+      });
+    }
+  }
+  
+  // Broadcast movement (reuse existing ZoneRoom logic)
+  if (typeof zoneRoom.broadcastPlayerMovement === 'function') {
+    zoneRoom.broadcastPlayerMovement(sessionId, previousRoomId, targetRoomId, null);
+  }
+  if (typeof zoneRoom.broadcastRoomOccupantsUpdate === 'function') {
+    zoneRoom.broadcastRoomOccupantsUpdate(previousRoomId);
+    zoneRoom.broadcastRoomOccupantsUpdate(targetRoomId);
+  }
+  
+  res.json({ 
+    success: true, 
+    message: `Teleported player to ${targetRoom.name}` 
+  });
+});
+```
+
+**ZoneRoom.ts Changes:**
+- `broadcastPlayerMovement()` method already exists (line 1639) — private, needs to be made accessible
+- **Recommendation:** Add public method `adminTeleportPlayer(sessionId, targetRoomId)` to ZoneRoom.ts that encapsulates the logic above
+
+#### Enhancement 4: Quick Actions Sidebar Improvements
+**Current:** Quick Info card shows Room Type, Full ID, Paused state
+
+**Proposed Addition:**
+- "Quick Actions" card below Quick Info
+- Buttons:
+  - "View Zone Graph" → Opens room graph tab
+  - "Broadcast to All" → Opens broadcast modal (no target room, broadcasts to entire zone)
+  - "Spawn Creature" → Already exists, move to this card for consistency
+
+---
+
+## 4. Work Breakdown
+
+### Frontend Work (Regis)
+1. **LiveRoomDetail.tsx enhancements:**
+   - Add zone slug field to LiveRoomDetail interface
+   - Add "Room Graph" tab with table view of zone rooms
+   - Add room detail expansion with player/creature lists
+   - Add "Broadcast to Room" button + modal
+   - Add "Teleport Player Here" button + modal
+   - Add Quick Actions sidebar card
+2. **admin-api.ts additions:**
+   - Add `broadcastToRoom(roomId, targetRoomId, message, type)` function
+   - Add `teleportPlayer(roomId, sessionId, targetRoomId, notify)` function
+3. **Zone data fetching:**
+   - Add logic to fetch zone definition when room is a zone instance
+   - Handle non-zone rooms gracefully (hide room graph tab)
+
+**Estimated LOC:** +300 lines (mostly UI components, modals, state management)
+
+### Backend Work (Jarlaxle + Drizzt)
+1. **Admin routes (Jarlaxle):**
+   - Add `zoneSlug` field to `AdminZoneDetail` response in `GET /admin/api/rooms/:roomId`
+   - Add `POST /admin/api/rooms/:roomId/broadcast` endpoint
+   - Add `POST /admin/api/rooms/:roomId/teleport` endpoint
+2. **ZoneRoom.ts (Drizzt):**
+   - Add public `adminTeleportPlayer(sessionId, targetRoomId)` method
+   - Consider making `broadcastToRoom()` public (currently private)
+   - Add validation for room existence before teleporting
+
+**Estimated LOC:** +80-100 lines (admin routes + ZoneRoom methods)
+
+### Architecture Work (Elminster)
+**None required** — This enhancement fits within existing patterns:
+- Admin routes already handle room management
+- ZoneRoom already has broadcast and movement logic
+- Client-server contract already established for admin operations
+
+### Testing (Minsc)
+1. Add integration tests for new admin endpoints:
+   - Test broadcast to specific room
+   - Test player teleportation
+   - Test validation (room not found, player not found)
+2. Add client tests for new UI components:
+   - Room graph table rendering
+   - Broadcast modal interaction
+   - Teleport modal interaction
+
+**Estimated LOC:** +150 lines (test cases)
+
+---
+
+## 5. Design Mockup (Wireframe Description)
+
+### LiveRoomDetail.tsx Layout (Enhanced)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ [← Back]  Zone — abc-123…                          [🔄] [⏸️ Pause] │
+├─────────────────────────────────────────────────────────────────┤
+│ ✅ Spawn succeeded                                               │
+├─────────────────────────────────────────────────────────────────┤
+│ ┌──────────────────────────────┐ ┌──────────────────────────┐  │
+│ │ Room Status                  │ │ Quick Info               │  │
+│ │ Lifecycle: active            │ │ Room Type: zone          │  │
+│ │ Stability: 97%               │ │ Full ID: abc-123…        │  │
+│ │ Tick: 1234                   │ │ Paused: No               │  │
+│ └──────────────────────────────┘ └──────────────────────────┘  │
+│                                                                   │
+│ ┌──────────────────────────────┐ ┌──────────────────────────┐  │
+│ │ Room Graph | Creatures | … │ │ Quick Actions            │  │
+│ ├──────────────────────────────┤ │ [View Zone Graph]        │  │
+│ │ Room Name   Players Creatures│ │ [Broadcast to All]       │  │
+│ │ ────────────────────────────│ │ [Spawn Creature]         │  │
+│ │ Hearth          2      0    │ └──────────────────────────┘  │
+│ │ Stash Alcove    1      0    │                               │
+│ │ Training…       0      3    │ ⏸️ Tick halted — resume to    │
+│ │   [Expand ▼]                │  continue simulation          │
+│ │   Players: session-abc…     │                               │
+│ │   Creatures:                │                               │
+│ │     • Goblin (12/15 HP)     │                               │
+│ │     • Orc (28/30 HP)        │                               │
+│ │   Actions:                  │                               │
+│ │     [Broadcast to Room]     │                               │
+│ │     [Spawn Creature Here]   │                               │
+│ │     [Teleport Player Here]  │                               │
+│ │ Market          0      0    │                               │
+│ └──────────────────────────────┘                               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Interaction Flow:**
+1. Admin navigates to `/admin/live-rooms/:roomId`
+2. Page fetches both Colyseus room detail AND zone definition (if zone room)
+3. "Room Graph" tab shows table of zone rooms with live occupancy counts
+4. Admin clicks row to expand → sees players/creatures in that room
+5. Admin clicks "Broadcast to Room" → modal opens, admin types message, click Send
+6. Admin clicks "Teleport Player Here" → modal opens, admin selects player, click Teleport
+7. Feedback toast appears at top of page confirming action
+
+---
+
+## 6. Alternative Approaches Considered
+
+### Alternative 1: Separate "Zone Room Manager" Page
+**Pros:** Clean separation of concerns, dedicated UI for zone room management
+**Cons:** 
+- Duplicates Colyseus room selection (need to pick room first)
+- Adds navigation step (LiveRooms → LiveRoomDetail → Zone Room Manager)
+- Splits related functionality (pause/resume in one page, broadcast in another)
+**Verdict:** Rejected — unnecessary navigation complexity
+
+### Alternative 2: Add Zone Room Management to Zone Designer
+**Pros:** Zone Designer already shows room graph, could add "Live View" toggle
+**Cons:**
+- Zone Designer is for content editing (zones, rooms, exits), not runtime operations
+- Mixes content CRUD with live operations (same issue that led to LiveRooms split)
+- Zone Designer doesn't know which Colyseus room instance to target
+**Verdict:** Rejected — wrong conceptual layer
+
+### Alternative 3: Room-First Navigation (Instead of Colyseus-Room-First)
+**Pros:** Could show all live rooms across all zones in one table
+**Cons:**
+- Loses Colyseus room context (lifecycle, stability, pause/resume)
+- Hard to understand "which zone instance is this room in?"
+- Requires complex filtering UI ("show only rooms in zone X")
+**Verdict:** Rejected — Colyseus room is the right starting point
+
+---
+
+## 7. Open Questions
+
+1. **Should broadcast messages be logged?** Current spawn operations are not logged. Should broadcast/teleport operations be added to audit log?
+   - **Recommendation:** YES — add audit log entries for broadcast and teleport actions
+
+2. **Should zone room graph be cached?** Fetching zone definition on every LiveRoomDetail load might be slow for large zones.
+   - **Recommendation:** Add client-side caching with React Query or SWR (future optimization)
+
+3. **Should we expose room features in the room graph table?** (e.g., show "Stash" badge for stash rooms)
+   - **Recommendation:** YES — helps admins understand room purpose at a glance
+
+4. **Should teleport trigger `look` command?** When player is teleported, should they automatically receive room description?
+   - **Recommendation:** YES — send room header + description via existing `handleLook` logic
+
+5. **Should we support multi-player teleport?** (select multiple players, teleport all to same room)
+   - **Recommendation:** NO for Phase 1 — single-player teleport is sufficient for debugging
+
+---
+
+## 8. Success Criteria
+
+**This enhancement is successful when:**
+1. Admins can view a list of zone rooms within a live Colyseus room instance
+2. Admins can see which players and creatures are in each zone room
+3. Admins can send broadcast messages to a specific zone room
+4. Admins can teleport a player to a specific zone room
+5. All actions provide immediate feedback (success/error toasts)
+6. No new navigation pages are added (enhancement to existing LiveRoomDetail page)
+
+---
+
+## 9. Rollout Plan
+
+### Phase 1: Foundation (Backend + API)
+- Add `zoneSlug` to LiveRoomDetail response
+- Add `POST /admin/api/rooms/:roomId/broadcast` endpoint
+- Add `POST /admin/api/rooms/:roomId/teleport` endpoint
+- Add `adminTeleportPlayer()` method to ZoneRoom.ts
+
+### Phase 2: Frontend UI
+- Add room graph tab to LiveRoomDetail.tsx
+- Add broadcast modal + integration
+- Add teleport modal + integration
+- Add Quick Actions sidebar
+
+### Phase 3: Polish
+- Add audit log entries
+- Add loading states and error handling
+- Add room feature badges
+- Add tests
+
+**Estimated Timeline:**
+- Phase 1: 2-3 days (Jarlaxle + Drizzt)
+- Phase 2: 3-4 days (Regis)
+- Phase 3: 1-2 days (Regis + Minsc)
+- **Total: 6-9 days**
+
+---
+
+## 10. Recommendation
+
+**Proceed with this proposal** — Enhance LiveRoomDetail.tsx with zone room management rather than creating a separate page. This keeps related functionality together, reduces navigation complexity, and leverages existing UI patterns.
+
+**Next Steps:**
+1. Get approval from Elminster (Architecture) and dkirby-ms (Product)
+2. Create backend tickets for Jarlaxle (admin routes) and Drizzt (ZoneRoom methods)
+3. Create frontend ticket for Regis (LiveRoomDetail enhancements)
+4. Update issue #344 with clarified scope and link to this proposal
+
+---
+
+## Appendix A: Existing Code References
+
+**LiveRooms.tsx:** packages/client/src/pages/admin/LiveRooms.tsx (182 lines)  
+**LiveRoomDetail.tsx:** packages/client/src/pages/admin/LiveRoomDetail.tsx (667 lines)  
+**admin-api.ts:** packages/client/src/lib/admin-api.ts (Live room section: lines 172-251)  
+**admin/routes.ts:** packages/server/src/admin/routes.ts (lines 45-604 for room endpoints)  
+**ZoneRoom.ts:** packages/server/src/rooms/ZoneRoom.ts (lines 1133, 1639, 2342 for broadcast methods)  
+**teleport command:** packages/server/src/commands/handlers/teleport.ts (64 lines, dev-mode only)
+
+---
+
+## Appendix B: Related Issues & PRs
+
+- **Issue #137 / PR #147** — Orphan endpoint finalization (pause/resume/spawn implemented)
+- **Issue #309** — Faction-based entry routing (established zone slug patterns)
+- **Issue #317** — Zone designer portal connections (established inter-zone patterns)
+
+---
+
+**End of Proposal**
+
+---
+
+## 11. Decision: Preserve Room Position on Duplicate Join (#355)
+
+**Author:** Minsc (Tester/QA)  
+**Date:** 2026-07-08  
+**Status:** Implemented & pushed to dev
+
+### Context
+
+Issue #355: Browser refresh caused players to reconnect to their spawn room instead of their current room.
+
+### Decision
+
+When `ZoneRoom.onJoin()` detects a duplicate `playerId` (browser refresh / reconnect), preserve the existing player's `currentRoomId` and use it as the start room instead of recomputing from entry points.
+
+### Rationale
+
+- Browser refresh creates a new WebSocket connection (fresh `joinOrCreate()`), NOT a Colyseus `allowReconnection()`. This means the `onJoin()` path always runs.
+- The duplicate-join block correctly displaced old sessions but then always overwrote `PlayerState` with a fresh entry room.
+- Fix is surgical: 1 new variable + 1 new condition. No impact on new player joins or any other path.
+
+### Impact
+
+- `ZoneRoom.ts`: 2 small additions to `onJoin()`
+- New test file: `reconnect-room-position.test.ts` (3 tests)
+- Full server suite passes (2385 tests, 0 failures)
+# Decision: Align all workspace packages on vitest ^3.2.x
+
+**Author:** Drizzt (Engine Dev)
+**Date:** 2025-07-24
+
+## Context
+Client and shared packages had vitest ^4.1.0 while server had ^3.2.1. npm installed vitest v4 locally in client/shared but those installs were corrupted (missing dist/). This broke the test runner completely.
+
+## Decision
+- All three workspace packages now use `vitest: "^3.2.1"` and `@vitest/coverage-v8: "^3.2.1"`
+- Root hoisted vitest v3.2.4 serves all workspaces (no local installs)
+- Added `**/*.d.ts` to ESLint ignores in `eslint.config.mjs` — generated declaration files should never be linted
+
+## Rationale
+- v3.2.x is the stable version already working at root; v4.x is too new and npm's workspace dedup can't handle mixed major versions cleanly
+- All team members should keep vitest versions aligned going forward to avoid repeat breakage
+
+---
+
+
+# Decision: Direction Shortcuts & Speedwalks Architecture
+
+**Date:** 2026-04-08  
+**Author:** Elminster (Lead/Architect)  
+**Issue:** #357 — "[FEATURE] direction shortcuts"  
+**Status:** Awaiting team review & open questions resolution
+
+---
+
+## Decision Summary
+
+Implement two movement convenience features in phases:
+
+1. **Phase 1 (Arrow Keys + Numpad):** Client-side keyboard handler, no server changes
+2. **Phase 2 (Speedwalk Parser):** Client-side text parser, no server changes
+3. **Phase 3 (Future):** Server-side speedwalk verb for post-launch sophistication
+
+This recommendation prioritizes simplicity and quick delivery of high-UX-value features.
+
+---
+
+## Architecture
+
+### Feature 1: Arrow Keys + Numpad Shortcuts
+
+**Implementation:** Client-side keyboard event listener in `ZoneExploration.tsx`
+
+**Key Mapping:**
+```
+ArrowUp     → go north
+ArrowDown   → go south
+ArrowLeft   → go west
+ArrowRight  → go east
+PageUp      → go up
+PageDown    → go down
+Numpad8/9/7/6/3/1/2/4 → north/northeast/northwest/east/southeast/southwest/south/west
+Numpad5     → (no-op or reserved for future use)
+```
+
+**Interaction with existing code:**
+- Listener activates only when text input is NOT focused
+- On direction keypress, call `handleExitClick(direction)` directly
+- Uses existing `sendRawCommand(room, 'go ' + direction)` flow
+- Server is unaware of keyboard origin; receives normal `go` commands
+
+**Server Changes:** None
+
+**Client Files:**
+- `packages/client/src/pages/ZoneExploration.tsx` — Add keyboard listener
+- `packages/client/src/hooks/useZoneConnection.ts` — No changes (reuses existing `handleExitClick`)
+
+**Complexity:** Small (50–100 lines)  
+**Effort:** 2–4 hours
+
+---
+
+### Feature 2: Speedwalk Parser
+
+**Implementation:** Client-side text parser + command expander in `packages/client/src/utils/speedwalkParser.ts`
+
+**Parser Contract:**
+```typescript
+// Input: "10e4n2s"
+// Output: ['e', 'e', 'e', ..., 'n', 'n', 'n', 'n', 's', 's']
+
+interface SpeedwalkParseResult {
+  ok: boolean;
+  moves?: string[];           // Directions to move (e.g., ['n', 'n', 's'])
+  error?: string;             // Error message if ok=false
+  totalMoves?: number;        // Count of expanded moves
+}
+
+function parseSpeedwalk(input: string): SpeedwalkParseResult;
+```
+
+**Parsing Rules:**
+- Syntax: `[count]direction[count]direction...` where count is optional
+- Example: `10e` = 10 east moves, `ene` = east, north, east (no counts)
+- Supported directions: `n`, `s`, `e`, `w`, `u`, `d` (6 cardinal/vertical)
+- Max total moves: **50** (client-side rate limit)
+- Invalid syntax: Return error, don't process
+
+**Integration:**
+1. In `ZoneExploration.tsx`, detect if user input matches speedwalk pattern
+2. If yes, parse and expand to individual `go` commands
+3. Send each via `sendRawCommand()` in rapid succession
+4. Server processes each as normal `go` command
+
+**Fail-Stop Semantics:**
+- If any move fails (e.g., "wall to the east"), the speedwalk halts
+- Remaining queued moves are discarded
+- Server narration explains the failure
+- User sees all echoed moves in chat, then the failure message
+
+**Example Flow:**
+```
+User: "10e"
+Client: Parses to ['e', 'e', ..., 'e'] (10 moves)
+Client: Sends 10× "go e" commands
+Server: Executes move 1-6 successfully
+Server: Move 7 hits a wall, returns error
+Client: Displays echo "you move east" 6 times, then "wall to the east"
+Result: Player has moved 6 rooms east
+```
+
+**Rate Limiting:**
+- Client-side: Max 50 moves per speedwalk command
+- Server-side: Inherent limit from WebSocket message rate + ~4 ticks/sec tick cadence
+- No additional anti-abuse measures needed for MVP
+
+**Server Changes:** None (MVP)
+
+**Client Files:**
+- `packages/client/src/utils/speedwalkParser.ts` — New utility
+- `packages/client/src/utils/__tests__/speedwalkParser.test.ts` — Tests
+- `packages/client/src/pages/ZoneExploration.tsx` — Integrate parser into `handleCommand`
+
+**Complexity:** Medium (200–300 lines of code + tests)  
+**Effort:** 3–5 hours
+
+**Tests to cover:**
+- Simple counts: `10e` → 10× east
+- Mixed syntax: `3ene2s` → east, north, east, east, south, south
+- Invalid syntax: `10e10` (invalid direction), `e10e` (count not prefix)
+- Rate limit: `51e` rejected with "too many moves"
+- Edge cases: empty input, spaces, uppercase vs lowercase
+
+---
+
+### Phase 3 (Future): Server-Side Speedwalk Verb
+
+**Not part of this decision, but noted for Phase 3:**
+
+A dedicated `speedwalk` command handler on the server would enable:
+- Atomic execution (all moves succeed or none)
+- Better error reporting
+- Server-side move throttling per tick
+
+**Implementation outline:**
+```typescript
+// Server: packages/server/src/commands/handlers/speedwalk.ts
+// Parser: packages/server/src/commands/parser.ts — add 'speedwalk' verb
+
+// User input: "speedwalk 10e4n2s"
+// Server parses, validates all moves, then executes with per-tick throttle
+// On failure, entire batch is rolled back
+```
+
+**Deferred because:**
+- MVP client-side approach is simpler and ships faster
+- Server-side adds complexity (state machine for multi-tick execution)
+- Current WebSocket rate-limiting is adequate
+- Can add in Phase 3 post-launch without breaking change
+
+---
+
+## Open Questions (Team Review Required)
+
+Before implementation proceeds, resolve:
+
+### 1. Ordinal Direction Support
+
+**Question:** Should the game support northeast/northwest/southeast/southwest movement?
+
+Currently:
+- `CompassControl.tsx` renders ordinal buttons but they're UI-only
+- `handleGo()` server-side only recognizes 6 directions (n/s/e/w/u/d)
+- Numpad mapping assumes ordinals are supported
+
+**Options:**
+- **Option A:** Extend server support (add ordinal exits to RoomGraph, generator, all zones)
+  - **Pros:** Full numpad utilization, richer navigation
+  - **Cons:** Significant server-side work, generator changes, zone redesign
+  - **Effort:** 2–3 days of backend + design work
+  
+- **Option B:** Numpad ordinals remap to cardinal fallbacks (e.g., numpad9 → try north, then east)
+  - **Pros:** Quick, no server changes
+  - **Cons:** Numpad doesn't feel "authentic" if ordinals don't work
+  - **Effort:** 10 lines of client code
+
+- **Option C:** Ignore numpad ordinals for MVP; allow only cardinals
+  - **Pros:** Simplest, no ambiguity
+  - **Cons:** Numpad layout wasted
+  - **Effort:** Note in documentation
+
+**Recommendation:** Option C (MVP ignores ordinals). Add ordinal support in Phase 3 if design wants it.
+
+---
+
+### 2. Numpad5 Behavior
+
+**Question:** What should the center key (Numpad5) do?
+
+**Options:**
+- No-op (ignore it)
+- Trigger "look" command
+- Cancel queued speedwalk
+- Reserved for future use
+
+**Recommendation:** No-op for MVP. Can be assigned later if needed.
+
+---
+
+### 3. Text Input Focus Handling
+
+**Question:** Should arrow keys trigger movement when the text input field is focused?
+
+**Current MUD conventions:** Arrow keys work for command history even when typing, but numpad works regardless.
+
+**Options:**
+- Allow arrow keys ONLY when input is NOT focused
+- Always allow numpad keys (even while typing)
+- Allow all movement keys only when input not focused
+
+**Recommendation:** Arrow keys blocked while typing (to not interfere with selection/editing); numpad always allowed.
+
+---
+
+### 4. Speedwalk Feedback
+
+**Question:** How much feedback should be shown as speedwalk executes?
+
+**Options:**
+- Echo each move as it's sent (current behavior, e.g., "You move east" × 10)
+- Echo only after parsing succeeds (brief "Starting 10-move sequence")
+- Show move counter (e.g., "Moving... 7/10")
+- Show detailed narration only for final position
+
+**Recommendation:** Echo moves normally (existing behavior). Keep it simple for MVP.
+
+---
+
+### 5. Combat Interaction
+
+**Question:** Should speedwalk be blocked when player is in combat?
+
+**Current behavior:** `go` command is blocked in combat; player must use `flee`.
+
+**Options:**
+- Block speedwalk in combat (consistent with `go`)
+- Allow speedwalk but halt on first combat engagement
+- Allow speedwalk and fight mid-move (risky)
+
+**Recommendation:** Block speedwalk in combat (consistent with `go`). Check `combatSystem.isInCombat()` before expanding speedwalk.
+
+---
+
+## Alignment with Design
+
+**GDD Alignment:**
+- §5.1 (Command Syntax): No changes to verb-noun structure. Arrow keys and speedwalk are client-side conveniences, transparent to server.
+- §6.0 (Combat): Speedwalk should respect combat movement lock (consistent with `go`).
+
+**Feature Interactions:**
+- Compass button clicks continue to work (unaffected)
+- Text commands continue to work (unaffected)
+- New: Keyboard shortcuts + speedwalk syntax
+- No impact on server state, combat, zone design, or narrative
+
+---
+
+## Testing Checklist
+
+### Keyboard Shortcuts (Phase 1)
+- [ ] Arrow keys move in correct directions
+- [ ] Numpad cardinal keys move correctly
+- [ ] PageUp/PageDown move up/down
+- [ ] Arrow keys don't interfere with text input (history navigation, editing)
+- [ ] Multiple rapid key presses queue moves correctly
+- [ ] Message echo shows "You move <direction>" for each keystroke
+
+### Speedwalk Parser (Phase 2)
+- [ ] Simple counts parsed correctly (`10e` → 10 east moves)
+- [ ] Mixed syntax parsed correctly (`3ene2s` → e, n, e, e, s, s)
+- [ ] Rate limit enforced (`51e` rejected)
+- [ ] Invalid syntax rejected gracefully (`10x`, `e10e`, empty input)
+- [ ] Case-insensitive (`10E` = `10e`)
+- [ ] Partial failure handled (wall mid-walk halts remaining moves)
+- [ ] Message echo shows all moves and final failure message
+
+### Integration
+- [ ] Arrow keys don't interfere with speedwalk input
+- [ ] Speedwalk doesn't execute if player is in combat
+- [ ] Both features work in Refuge and ZoneExploration pages
+
+---
+
+## Files Modified (Summary)
+
+### Phase 1: Arrow Keys + Numpad
+- `packages/client/src/pages/ZoneExploration.tsx` — Add keyboard listener
+- `packages/client/src/pages/Refuge.tsx` — Add keyboard listener (if needed for consistency)
+
+### Phase 2: Speedwalk Parser
+- `packages/client/src/utils/speedwalkParser.ts` — New parser utility
+- `packages/client/src/utils/__tests__/speedwalkParser.test.ts` — Tests
+- `packages/client/src/pages/ZoneExploration.tsx` — Integrate parser into `handleCommand`
+- `packages/client/src/pages/Refuge.tsx` — Integrate parser (optional, if speedwalk supported there)
+
+### Phase 3: Server-Side (Future)
+- `packages/server/src/commands/handlers/speedwalk.ts` — New handler
+- `packages/server/src/commands/index.ts` — Register `speedwalk` verb
+- `packages/server/src/commands/parser.ts` — Add speedwalk parsing (optional)
+- Tests: `packages/server/src/__tests__/speedwalk-command.test.ts`
+
+---
+
+## Decision Boundary
+
+**This decision covers:**
+- Architecture approach (client-side for Phases 1 & 2)
+- Implementation roadmap (3 phases)
+- Open questions for team input
+
+**Out of scope:**
+- Specific UI/UX design (e.g., help text about keyboard shortcuts)
+- Theming or styling of any new UI elements
+- Integration with other systems (cosmetics, plugins, etc.)
+
+---
+
+## Related Issues
+
+- #357 — Direction Shortcuts (this issue)
+- GDD.md — §5.1 (Command Syntax), §6.0 (Combat)
+
+---
+
+## Sign-Off
+
+**Decision Made By:** Elminster (Lead/Architect)  
+**Status:** Ready for team review  
+**Next Step:** Team feedback on open questions → proceed with Phase 1
+
+---
+
+---
+
+## 2026-04-09T00:16:00Z: User directive — #357 design decisions
+
+**By:** dkirby-ms (via Copilot)  
+**What:**
+1. No ordinal directions (NE/NW/SE/SW) — cardinal only (n/s/e/w/u/d)
+2. Numpad5 does nothing — macros deferred to later
+3. Arrow keys only intercepted when input is NOT focused (text editing preserved)
+4. Speedwalk echoes each individual move
+5. Speedwalk blocked during combat
+
+**Why:** User answers to Elminster's 5 open questions on #357
+
+**Implementation Status:** Complete (Commit 2085460, pushed to dev)
+
+---
+
+## Decision: User Settings Backend Architecture (#359)
+
+**Author:** Jarlaxle (Systems Dev)  
+**Date:** 2026-04-09  
+**Status:** Implemented  
+**Issue:** #359
+
+### Decision
+User settings backend uses the **provider pattern** (interface → PG + InMemory) consistent with all other server persistence (characters, stash, factions, etc.). The API is two endpoints: `GET /api/user/settings` and `PUT /api/user/settings`.
+
+### Key Choices
+1. **JSONB config blob** — single `config` column with structured categories (`display`, `narration`, `gameplay`, `accessibility`). Avoids schema migrations for new settings.
+2. **Server-side validation** — fontSize range (12–24), verbosity enum, narrationStyle enum, unknown top-level key rejection. Invalid → 400.
+3. **No middleware** — auth is an inline `authenticate()` helper per the characters.ts pattern, not Express middleware. Keeps it consistent with existing routes.
+4. **Default config on GET** — if no row exists, returns empty category objects. No DB write on first GET.
+5. **Upsert semantics** — PUT always succeeds (creates or replaces). No separate POST/PATCH.
+
+### Scope Boundaries (per user decisions)
+- No keybind export, no profiles/presets, no .rcfile upload in v1.
+- `gameplay` and `accessibility` categories are present but empty — reserved for future use.
+
+---
+
+## Decision: Settings API Client Architecture (Self-Contained Fetch) (#359)
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-04-09  
+**Status:** Implemented  
+**Issue:** #359
+
+### Decision
+`settings-api.ts` has its own fetch logic instead of importing the shared `request()` from `api.ts`.
+
+### Rationale
+The shared `request()` fires the global 401 handler (`_on401`) which dispatches `LOGOUT`, clearing all auth state. For settings, a 401 should degrade gracefully (fall back to localStorage) — not force the user out of the app. Keeping the settings API self-contained means auth errors in settings don't cascade.
+
+### Impact
+If the team changes the base URL pattern or adds request interceptors to `api.ts`, `settings-api.ts` needs to be updated separately. If this becomes a maintenance burden, we can extract a shared `fetchWithAuth()` helper that takes an error strategy parameter.
+
+---
+
+## User Decision: #359 Scope Boundaries (User Preferences & Configuration)
+
+**From:** dkirby-ms (User)  
+**Date:** 2026-04-09  
+**Answering:** Elminster's 3 open design questions
+
+### Decisions
+1. **Keybind export in `.ellmudrc` format:** **Wait for macros** — no export in v1
+2. **Settings profiles/presets:** **No need** — not in v1  
+3. **`.rcfile` file upload:** **UI-only edits** — no file upload in v1
+
+### Rationale
+- Keybind export requires full macro system (Lua/DSL) — phase 2 work
+- Profiles add complexity without immediate user value
+- File upload can wait until macro system foundation is solid
+- v1 focus: localStorage → server sync, essential 3 settings (fontSize, verbosity, narrationStyle), placeholder for future (keybinds, audio, accessibility)
+
+---
+
+## Decision: Removed Deprecated Refuge Screen
+
+**Date:** 2026-04-09  
+**Author:** Regis (Frontend)  
+**Status:** Implemented
+
+### Context
+The Refuge screen (`/refuge`) was deprecated and no longer accessible to users through normal navigation. It served as an early debug/test hub with equipment, crafting, marketplace, and expedition board tabs.
+
+### Decision
+Completely removed the Refuge screen from the codebase and relocated critical functionality:
+
+1. **Deleted** `packages/client/src/pages/Refuge.tsx` (575 lines)
+2. **Added** Settings button to ZoneExploration.tsx top bar (next to logout)
+3. **Renamed** all "Refuge" references to generic "Hub" terminology
+4. **Updated** all test files and components
+
+### Rationale
+- Users couldn't access `/refuge` anymore — dead code
+- Settings access was ONLY available from Refuge screen — needed relocation
+- Generic "hub" terminology is more flexible than specific "Refuge" naming
+- Settings gear icon in main game view is better UX than hidden in separate screen
+
+### Impact
+- **User-facing:** Settings now accessible from main game screen (ZoneExploration)
+- **Code:** -575 lines, cleaner terminology, better separation of concerns
+- **Tests:** All 2815 tests passing after updates to match new UI text
+
+### Files Changed
+- Deleted: `pages/Refuge.tsx`
+- Modified: `ZoneExploration.tsx`, `ReconnectionOverlay.tsx`, `useReconnection.ts`, `useZoneConnection.ts`, `ChatPanel.tsx`, `Login.tsx`, `Leaderboard.tsx`, plus 8+ test files
+
+### Follow-up
+None required. The faction hub concept remains intact — players still have hub zones like The Reliquary, The Bloom Observatory, etc. This just removed the old debug screen.
+

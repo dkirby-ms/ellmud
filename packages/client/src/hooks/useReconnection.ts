@@ -14,7 +14,7 @@ export interface UseReconnectionOptions {
   maxAttempts?: number;
   baseDelayMs?: number;
   onReconnect: () => Promise<boolean>;
-  onReturnToRefuge?: () => void;
+  onReturnToHub?: () => void;
 }
 
 export interface UseReconnectionResult {
@@ -29,15 +29,15 @@ export interface UseReconnectionResult {
   reconnectNow: () => void;
   /** Cancel automatic reconnection */
   cancel: () => void;
-  /** Return to refuge (leave zone) */
-  returnToRefuge: () => void;
+  /** Return to hub (leave zone) */
+  returnToHub: () => void;
 }
 
 export function useReconnection({
   maxAttempts = 5,
   baseDelayMs = 2000,
   onReconnect,
-  onReturnToRefuge,
+  onReturnToHub,
 }: UseReconnectionOptions): UseReconnectionResult {
   const [overlayState, setOverlayState] = useState<OverlayState>('hidden');
   const [attempt, setAttempt] = useState(0);
@@ -133,13 +133,13 @@ export function useReconnection({
     setOverlayState('disconnected');
   }, [clearTimers]);
 
-  const returnToRefuge = useCallback(() => {
+  const returnToHub = useCallback(() => {
     cancelled.current = true;
     reconnecting.current = false;
     clearTimers();
     setOverlayState('hidden');
-    onReturnToRefuge?.();
-  }, [clearTimers, onReturnToRefuge]);
+    onReturnToHub?.();
+  }, [clearTimers, onReturnToHub]);
 
   // Cleanup on unmount
   useEffect(() => clearTimers, [clearTimers]);
@@ -152,6 +152,6 @@ export function useReconnection({
     reportConnected,
     reconnectNow,
     cancel,
-    returnToRefuge,
+    returnToHub,
   };
 }

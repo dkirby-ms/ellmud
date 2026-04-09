@@ -118,7 +118,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
         return false;
       }
     },
-    onReturnToRefuge: () => {
+    onReturnToHub: () => {
       roomRef.current?.leave();
       roomRef.current = null;
       dispatch({ type: 'CLEAR_MESSAGES' });

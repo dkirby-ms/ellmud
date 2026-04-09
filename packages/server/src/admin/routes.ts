@@ -22,6 +22,16 @@ import type {
 import type { ContentEntity, IContentStore } from './content/ContentStore.js';
 import type { ContentEntityType } from './content/content-types.js';
 import type { CreatureTemplate } from '../creatures/types.js';
+import type {
+  AdminBroadcastRequest,
+  AdminBroadcastResponse,
+  AdminLiveRoomInfo,
+  AdminLiveRoomsResponse,
+  AdminSpawnCreatureRequest,
+  AdminSpawnCreatureResponse,
+  AdminTeleportRequest,
+  AdminTeleportResponse,
+} from '@ellmud/shared';
 
 export interface AdminRouterDeps {
   /** Narration telemetry tracker instance (optional — metrics degrade gracefully). */
@@ -36,6 +46,46 @@ export interface AdminRouterDeps {
   isStashPg?: boolean;
   /** Content stores — used by spawn endpoint to look up creature templates. */
   contentStores?: Map<ContentEntityType, IContentStore<ContentEntity>>;
+}
+
+/** Check if a Colyseus room name is a ZoneRoom instance ('zone' or 'zone:<slug>'). */
+function isZoneRoomName(name: string): boolean {
+  return name === 'zone' || name.startsWith('zone:');
+}
+
+/**
+ * Convert a flat ContentEntity (from the creature content store) into the
+ * nested CreatureTemplate shape that CreatureManager.spawnSingleCreature expects.
+ *
+ * The content store stores stats/spawn-rules as top-level keys (maxHp, attack,
+ * minCount…) while CreatureTemplate nests them under `stats` and `spawnRules`.
+ */
+function contentEntityToCreatureTemplate(entity: ContentEntity): CreatureTemplate {
+  const e = entity as Record<string, unknown>;
+  return {
+    type: (e.type as string) ?? 'unknown',
+    name: (e.name as string) ?? 'Unknown Creature',
+    stats: {
+      maxHp: (e.maxHp as number) ?? 100,
+      attack: (e.attack as number) ?? 10,
+      defence: (e.defence as number) ?? 5,
+      armour: (e.armour as number) ?? 0,
+      agility: (e.agility as number) ?? 0,
+    },
+    lootTable: Array.isArray(e.lootTable) ? (e.lootTable as CreatureTemplate['lootTable']) : [],
+    spawnRules: {
+      minCount: (e.minCount as number) ?? 1,
+      maxCount: (e.maxCount as number) ?? 3,
+      preferredRoomTypes: Array.isArray(e.preferredRooms) ? (e.preferredRooms as string[]) : [],
+      forbiddenRoomTypes: Array.isArray(e.forbiddenRooms) ? (e.forbiddenRooms as string[]) : [],
+    },
+    idleTicksMin: (e.idleTicksMin as number) ?? 3,
+    idleTicksMax: (e.idleTicksMax as number) ?? 8,
+    fleeThreshold: (e.fleeThreshold as number) ?? 0.2,
+    aggressive: (e.aggressive as boolean) ?? true,
+    roomDescription: (e.roomDescription as string) ?? undefined,
+    positionType: (e.positionType as CreatureTemplate['positionType']) ?? undefined,
+  };
 }
 
 export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
@@ -61,6 +111,39 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
     }
   });
 
+  // ─── GET /admin/api/rooms/live — List all live zone rooms with occupancy ──
+  // NOTE: Must be registered BEFORE /admin/api/rooms/:roomId to avoid param capture.
+  router.get('/admin/api/rooms/live', adminAuth, async (_req: Request, res: Response) => {
+    try {
+      const rooms = await safeQueryRooms();
+      const allLiveRooms: AdminLiveRoomInfo[] = [];
+      let totalPlayers = 0;
+      let totalCreatures = 0;
+
+      for (const roomCache of rooms) {
+        if (!isZoneRoomName(roomCache.name)) continue;
+        const room = safeGetRoom(roomCache.roomId);
+        if (!room) continue;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const zoneRoom = room as any;
+        if (typeof zoneRoom.adminGetLiveRooms !== 'function') continue;
+
+        const liveRooms = zoneRoom.adminGetLiveRooms() as AdminLiveRoomInfo[];
+        for (const lr of liveRooms) {
+          totalPlayers += lr.playerCount;
+          totalCreatures += lr.creatureCount;
+          allLiveRooms.push(lr);
+        }
+      }
+
+      res.json({ rooms: allLiveRooms, totalPlayers, totalCreatures } satisfies AdminLiveRoomsResponse);
+    } catch (err) {
+      console.error('[Admin] Failed to list live rooms:', err);
+      res.status(500).json({ error: 'Failed to list live rooms' });
+    }
+  });
+
   // ─── GET /admin/api/rooms/:roomId — Room detail ──────────────────────────
   router.get('/admin/api/rooms/:roomId', adminAuth, async (req: Request, res: Response) => {
     try {
@@ -72,11 +155,8 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         return;
       }
 
-      if (room.roomName === 'zone') {
+      if (isZoneRoomName(room.roomName)) {
         const detail = getZoneDetail(room);
-        res.json(detail);
-      } else if (room.roomName === 'refuge') {
-        const detail = getRefugeDetail(room);
         res.json(detail);
       } else {
         res.json({
@@ -98,7 +178,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
       const creatures: Array<AdminCreatureInfo & { zoneRoomId: string }> = [];
 
       for (const roomCache of rooms) {
-        if (roomCache.name !== 'zone') continue;
+        if (!isZoneRoomName(roomCache.name)) continue;
         const room = safeGetRoom(roomCache.roomId);
         if (!room) continue;
 
@@ -372,23 +452,10 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         const room = safeGetRoom(roomCache.roomId);
         if (!room) continue;
 
-        if (room.roomName === 'zone') {
+        if (isZoneRoomName(room.roomName)) {
           const zonePlayers = getZonePlayers(room);
           for (const p of zonePlayers) {
-            players.push({ ...p, roomId: roomCache.roomId, roomName: 'zone' });
-          }
-        } else if (room.roomName === 'refuge') {
-          // Refuge doesn't have PlayerState objects, just session→playerId mapping
-          for (const client of room.clients) {
-            players.push({
-              sessionId: client.sessionId,
-              currentRoomId: 'refuge',
-              inventoryCount: 0,
-              currentWeight: 0,
-              maxCarryWeight: 0,
-              roomId: roomCache.roomId,
-              roomName: 'refuge',
-            });
+            players.push({ ...p, roomId: roomCache.roomId, roomName: room.roomName });
           }
         }
       }
@@ -563,8 +630,23 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
           return;
         }
 
-        // Cast to CreatureTemplate (content store entity has the same shape + id field)
-        const template = templateEntity as unknown as CreatureTemplate;
+        // Validate that the target room exists in the zone's room graph
+        {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rg = (room as any)['roomGraph'] as
+            | { rooms: Map<string, unknown> }
+            | undefined;
+
+          if (rg && !rg.rooms.has(spawnRoomId)) {
+            res.status(400).json({
+              error: `Target room "${spawnRoomId}" not found in zone's room graph`,
+            });
+            return;
+          }
+        }
+
+        // Convert flat content entity into the nested CreatureTemplate shape
+        const template = contentEntityToCreatureTemplate(templateEntity);
         const creature = cm.spawnSingleCreature(template, spawnRoomId);
 
         // Broadcast spawn notification to players in the room
@@ -600,6 +682,142 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
     } catch (err) {
       console.error('[Admin] Failed to spawn:', err);
       res.status(500).json({ error: 'Failed to spawn' });
+    }
+  });
+
+  // ─── POST /admin/api/rooms/:roomId/broadcast — Broadcast message to zone room
+  router.post('/admin/api/rooms/:roomId/broadcast', adminAuth, async (req: Request, res: Response) => {
+    try {
+      const room = safeGetRoom(req.params.roomId);
+      if (!room) {
+        res.status(404).json({ error: 'Room not found' });
+        return;
+      }
+
+      const { targetRoomId, message, type = 'system' } = req.body as AdminBroadcastRequest;
+      if (!targetRoomId || !message) {
+        res.status(400).json({ error: 'Missing required fields: targetRoomId, message' });
+        return;
+      }
+
+      if (type !== 'system' && type !== 'admin') {
+        res.status(400).json({ error: 'type must be "system" or "admin"' });
+        return;
+      }
+
+      if (message.length > 500) {
+        res.status(400).json({ error: 'Message must be 500 characters or less' });
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const zoneRoom = room as any;
+      if (typeof zoneRoom.adminBroadcastToRoom !== 'function') {
+        res.status(400).json({ error: 'Room does not support room-specific broadcasts' });
+        return;
+      }
+
+      const result = zoneRoom.adminBroadcastToRoom(targetRoomId, message, type) as { success: boolean; error?: string };
+      if (!result.success) {
+        res.status(400).json({ error: result.error });
+        return;
+      }
+
+      res.json({ success: true, message: 'Broadcast sent' } satisfies AdminBroadcastResponse);
+    } catch (err) {
+      console.error('[Admin] Failed to broadcast:', err);
+      res.status(500).json({ error: 'Failed to broadcast message' });
+    }
+  });
+
+  // ─── POST /admin/api/rooms/:roomId/teleport — Teleport player to zone room ─
+  router.post('/admin/api/rooms/:roomId/teleport', adminAuth, async (req: Request, res: Response) => {
+    try {
+      const room = safeGetRoom(req.params.roomId);
+      if (!room) {
+        res.status(404).json({ error: 'Room not found' });
+        return;
+      }
+
+      const { sessionId, targetRoomId, notify = true } = req.body as AdminTeleportRequest;
+      if (!sessionId || !targetRoomId) {
+        res.status(400).json({ error: 'Missing required fields: sessionId, targetRoomId' });
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const zoneRoom = room as any;
+      if (typeof zoneRoom.adminTeleportPlayer !== 'function') {
+        res.status(400).json({ error: 'Room does not support player teleportation' });
+        return;
+      }
+
+      const result = zoneRoom.adminTeleportPlayer(sessionId, targetRoomId, notify) as { success: boolean; error?: string; roomName?: string };
+      if (!result.success) {
+        res.status(400).json({ error: result.error });
+        return;
+      }
+
+      res.json({ success: true, message: `Teleported player to ${result.roomName}` } satisfies AdminTeleportResponse);
+    } catch (err) {
+      console.error('[Admin] Failed to teleport:', err);
+      res.status(500).json({ error: 'Failed to teleport player' });
+    }
+  });
+
+  // ─── POST /admin/api/rooms/:roomId/spawn-creature — Spawn creature in zone room
+  router.post('/admin/api/rooms/:roomId/spawn-creature', adminAuth, async (req: Request, res: Response) => {
+    try {
+      const room = safeGetRoom(req.params.roomId);
+      if (!room) {
+        res.status(404).json({ error: 'Room not found' });
+        return;
+      }
+
+      const { templateId, targetRoomId } = req.body as AdminSpawnCreatureRequest;
+      if (!templateId || !targetRoomId) {
+        res.status(400).json({ error: 'Missing required fields: templateId, targetRoomId' });
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const zoneRoom = room as any;
+      if (typeof zoneRoom.adminSpawnCreature !== 'function') {
+        res.status(400).json({ error: 'Room does not support creature spawning' });
+        return;
+      }
+
+      // Look up creature template from content store (stays in routes — needs deps)
+      const creatureStore = deps.contentStores?.get('creatures');
+      if (!creatureStore) {
+        res.status(500).json({ error: 'Content store not available — cannot resolve creature template' });
+        return;
+      }
+
+      const templateEntity = await creatureStore.getById(templateId);
+      if (!templateEntity) {
+        res.status(404).json({ error: `Creature template "${templateId}" not found` });
+        return;
+      }
+
+      const template = contentEntityToCreatureTemplate(templateEntity);
+      const result = zoneRoom.adminSpawnCreature(template, targetRoomId) as { success: boolean; error?: string; creatureId?: string; creatureName?: string };
+      if (!result.success) {
+        res.status(400).json({ error: result.error });
+        return;
+      }
+
+      const response: AdminSpawnCreatureResponse = {
+        success: true,
+        creatureId: result.creatureId!,
+        creatureName: result.creatureName!,
+        spawnRoomId: targetRoomId,
+        message: `Spawned "${result.creatureName}" (${result.creatureId}) in room ${targetRoomId}`,
+      };
+      res.json(response);
+    } catch (err) {
+      console.error('[Admin] Failed to spawn creature:', err);
+      res.status(500).json({ error: 'Failed to spawn creature' });
     }
   });
 
@@ -675,11 +893,15 @@ function getZoneDetail(room: import('@colyseus/core').Room): AdminZoneDetail {
     | Map<string, { sessionId: string; currentRoomId: string; inventory: Map<string, unknown>; currentWeight: number; maxCarryWeight: number }>
     | undefined;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const characterNames = (room as any)['characterNames'] as Map<string, string> | undefined;
+
   const players: AdminPlayerInfo[] = [];
   if (playersMap) {
     for (const [, ps] of playersMap) {
       players.push({
         sessionId: ps.sessionId,
+        characterName: characterNames?.get(ps.sessionId),
         currentRoomId: ps.currentRoomId,
         inventoryCount: ps.inventory.size,
         currentWeight: ps.currentWeight,
@@ -710,9 +932,30 @@ function getZoneDetail(room: import('@colyseus/core').Room): AdminZoneDetail {
     }
   }
 
+  // Resolve zone slug via public accessor
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const zoneSlug = typeof (room as any).getZoneSlug === 'function'
+    ? (room as any).getZoneSlug() as string | undefined
+    : undefined;
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  // Serialise room-graph rooms so the client can map creatures → rooms
+  // without a separate zone-data fetch (fixes procedural zones / fetch failures).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const roomGraph = (room as any)['roomGraph'] as
+    | { rooms: Map<string, { id: string; name: string; type?: string }> }
+    | undefined;
+
+  const roomGraphRooms: Array<{ id: string; name: string; type?: string }> = [];
+  if (roomGraph) {
+    for (const [, r] of roomGraph.rooms) {
+      roomGraphRooms.push({ id: r.id, name: r.name, type: r.type });
+    }
+  }
+
   return {
     roomId: room.roomId,
-    name: 'zone',
+    name: room.roomName,
     clients: room.clients.length,
     lifecycle: state.lifecycle ?? 'unknown',
     stability: state.stability ?? 0,
@@ -722,10 +965,12 @@ function getZoneDetail(room: import('@colyseus/core').Room): AdminZoneDetail {
     paused: !room.clock.running,
     players,
     creatures,
+    zoneSlug,
+    roomGraphRooms,
   };
 }
 
-function getRefugeDetail(room: import('@colyseus/core').Room): AdminRefugeDetail {
+function _getRefugeDetail(room: import('@colyseus/core').Room): AdminRefugeDetail {
   const state = room.state as {
     tick?: number;
     playerCount?: number;

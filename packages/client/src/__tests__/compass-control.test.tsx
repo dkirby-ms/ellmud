@@ -118,6 +118,25 @@ describe('CompassControl', () => {
     });
   });
 
+  it('applies golden highlight classes to available direction buttons', () => {
+    renderCompass({
+      roomHeader: { roomName: 'Hall', exits: ['north', 'south', 'up'], stability: 1 },
+    });
+
+    const northBtn = screen.getByText('N');
+    const westBtn = screen.getByText('W');
+    const upBtn = screen.getByText('▲ Up').closest('button')!;
+
+    // Available buttons should have focus:text-accent-gold for selection highlight
+    expect(northBtn.className).toContain('focus:text-accent-gold');
+    expect(northBtn.className).toContain('focus:bg-bg-elevated');
+    expect(upBtn.className).toContain('focus:text-accent-gold');
+    expect(upBtn.className).toContain('focus:bg-bg-elevated');
+
+    // Disabled buttons should NOT have focus highlight classes
+    expect(westBtn.className).not.toContain('focus:text-accent-gold');
+  });
+
   it('handles ordinal directions (northeast, etc.)', async () => {
     const user = userEvent.setup();
     const { onNavigate } = renderCompass({

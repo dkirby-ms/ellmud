@@ -62,6 +62,7 @@ interface StyledSegment {
 // 1. Normalise raw ANSI escapes into lightweight tags
 // ---------------------------------------------------------------------------
 
+// eslint-disable-next-line no-control-regex
 const ANSI_RE = /\x1b\[([\d;]*)m/g;
 
 function ansiEscapesToTags(input: string): string {

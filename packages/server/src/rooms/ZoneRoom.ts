@@ -21,6 +21,7 @@ import {
   type ExplorationDataMessage,
   type ExplorationUpdateMessage,
   type RoomOccupantsMessage,
+  type AdminLiveRoomInfo,
   DEATH_PENALTY_DEFAULTS,
   OPPOSITE_DIRECTION,
   MessageTypes,
@@ -149,6 +150,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private repopTimer?: ReturnType<typeof setInterval>;
   /** Room IDs with feature_sandbox_arena type — get combat ticks even in dev zones. */
   private sandboxRoomIds = new Set<string>();
+  /** Cached zone slugs for fast synchronous lookups (dev tools: goto validation). */
+  private knownZoneSlugs = new Set<string>();
 
   /**
    * Inject profile repository. Called before room lifecycle if provided.
@@ -352,6 +355,13 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.characterRepo = getCharacterRepository();
     }
 
+    // Cache known zone slugs for synchronous goto validation (best-effort, non-blocking)
+    getZoneRepository().getAllZones().then((zones) => {
+      for (const z of zones) this.knownZoneSlugs.add(z.slug);
+    }).catch((err) => {
+      this.log(`Failed to cache zone slugs: ${err}`);
+    });
+
     // Register message handlers
     this.onMessage(MessageTypes.COMMAND, (client: Client, message: CommandMessage) => {
       this.handleCommandMessage(client, message);
@@ -406,10 +416,14 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Character ID: passed from client after character selection. Falls back to playerId for backwards compat.
     const playerId = (options['characterId'] as string) || rawPlayerId;
 
-    // Guard against the same playerId joining twice (double-click / client race condition).
+    // Guard against the same playerId joining twice (double-click / client race condition / browser refresh).
     // If the player is already present, displace the old session rather than corrupting state.
+    // Preserve the player's current room so reconnection doesn't reset position (#355).
+    let preservedRoomId: string | undefined;
     if (this.players.has(playerId)) {
-      this.log(`Duplicate join detected: ${this.playerTag(playerId)} (new session=${client.sessionId}). Displacing old session.`);
+      const existingState = this.players.get(playerId)!;
+      preservedRoomId = existingState.currentRoomId;
+      this.log(`Duplicate join detected: ${this.playerTag(playerId)} (new session=${client.sessionId}, room=${preservedRoomId}). Displacing old session.`);
 
       // Remove old session→playerId mapping so its onLeave becomes a cleanup no-op
       for (const [sid, pid] of this.playerIds) {
@@ -474,9 +488,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Track join time for run duration calculation
     this.playerJoinTimes.set(playerId, Date.now());
 
-    // Determine entry room based on zone vs instance
+    // Determine entry room based on zone vs instance.
+    // If this is a reconnecting player (duplicate join), preserve their current room (#355).
     let startRoom: string;
-    if (this.isZone) {
+    if (preservedRoomId && this.roomGraph.rooms.has(preservedRoomId)) {
+      startRoom = preservedRoomId;
+    } else if (this.isZone) {
       const targetRoom = options['targetRoomSlug'];
       if (typeof targetRoom === 'string' && this.roomGraph.rooms.has(targetRoom)) {
         startRoom = targetRoom;
@@ -954,6 +971,15 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Inter-zone exit: send transfer message to client instead of moving locally
     if (result.zoneTransfer) {
+      // Defensive: verify target zone is known before sending transfer (prevents disconnect on bad slug)
+      if (!this.knownZoneSlugs.has(result.zoneTransfer.targetZoneSlug)) {
+        this.sendNarrate(client, {
+          text: `No such zone: '${result.zoneTransfer.targetZoneSlug}'.`,
+          type: 'system',
+          timestamp: Date.now(),
+        });
+        return;
+      }
       this.deliverResult(client, result);
       client.send(MessageTypes.ZONE_TRANSFER, {
         targetZoneSlug: result.zoneTransfer.targetZoneSlug,
@@ -1074,6 +1100,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           })),
       corpseSystem: this.corpseSystem,
       creatureManager: this.creatureManager,
+      resolveZoneExists: (slug: string) => this.knownZoneSlugs.has(slug),
       resolvePlayerByName: (name: string) => {
         const lower = name.toLowerCase();
         for (const [sid, ps] of this.players) {
@@ -2608,6 +2635,150 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       durability: null,
       maxDurability: null,
     };
+  }
+
+  // ─── Admin API Methods (Issue #344: Live Rooms) ──────────────────────────
+
+  /**
+   * Broadcast an admin message to all players in a specific zone room.
+   * Called from admin API endpoint POST /admin/api/rooms/:roomId/broadcast.
+   */
+  adminBroadcastToRoom(targetRoomId: string, message: string, type: 'system' | 'admin' = 'system'): { success: boolean; error?: string } {
+    const room = this.roomGraph.rooms.get(targetRoomId);
+    if (!room) {
+      return { success: false, error: `Room "${targetRoomId}" not found in zone graph` };
+    }
+
+    const prefix = type === 'admin' ? '[ADMIN] ' : '[SYSTEM] ';
+    this.broadcastToRoom(targetRoomId, {
+      narrations: [{ text: `${prefix}${message}`, type: 'system' }],
+    });
+
+    this.log(`Admin broadcast to room "${targetRoomId}": ${message}`);
+    return { success: true };
+  }
+
+  /**
+   * Teleport a player to a specific zone room.
+   * Called from admin API endpoint POST /admin/api/rooms/:roomId/teleport.
+   * Sends room description, occupants, and movement broadcasts.
+   */
+  adminTeleportPlayer(sessionId: string, targetRoomId: string, notify = true): { success: boolean; error?: string; roomName?: string } {
+    const player = this.players.get(sessionId);
+    if (!player) {
+      return { success: false, error: `Player "${sessionId}" not found in this zone` };
+    }
+
+    const targetRoom = this.roomGraph.rooms.get(targetRoomId);
+    if (!targetRoom) {
+      return { success: false, error: `Room "${targetRoomId}" not found in zone graph` };
+    }
+
+    const previousRoomId = player.currentRoomId;
+    if (previousRoomId === targetRoomId) {
+      return { success: false, error: `Player is already in room "${targetRoomId}"` };
+    }
+
+    // Move the player
+    player.currentRoomId = targetRoomId;
+
+    // Broadcast departure/arrival to other players
+    this.broadcastPlayerMovement(sessionId, previousRoomId, targetRoomId);
+
+    // Update occupants for both rooms
+    this.broadcastRoomOccupantsUpdate(previousRoomId);
+    this.broadcastRoomOccupantsUpdate(targetRoomId);
+
+    // Send the teleported player their new room info
+    const client = this.findClient(sessionId);
+    if (client) {
+      if (notify) {
+        this.sendNarrate(client, {
+          text: `[ADMIN] You have been teleported to ${targetRoom.name}.`,
+          type: 'system',
+          timestamp: Date.now(),
+        });
+      }
+
+      // Re-deliver room description (same pattern as reconnect/goto)
+      const lookResult = handleLook(this.buildCommandContext(player, []));
+      this.deliverResult(client, lookResult);
+
+      // Send room occupants to the moved player
+      this.sendRoomOccupants(client, sessionId, targetRoomId);
+
+      // Send exploration update for the new room
+      this.sendExplorationUpdate(client, sessionId, targetRoomId);
+    }
+
+    this.log(`Admin teleported ${this.playerTag(sessionId)} from "${previousRoomId}" to "${targetRoomId}"`);
+    return { success: true, roomName: targetRoom.name };
+  }
+
+  /**
+   * Get live zone room data: each room with its current players and creatures.
+   * Called from admin API endpoint GET /admin/api/rooms/live.
+   */
+  adminGetLiveRooms(): AdminLiveRoomInfo[] {
+    const result: AdminLiveRoomInfo[] = [];
+
+    for (const [roomId, room] of this.roomGraph.rooms) {
+      const players: Array<{ sessionId: string; characterName?: string }> = [];
+      for (const [sid, ps] of this.players) {
+        if (ps.currentRoomId === roomId) {
+          players.push({
+            sessionId: sid,
+            characterName: this.characterNames.get(sid),
+          });
+        }
+      }
+
+      const creatures: Array<{ id: string; name: string; hp: number; maxHp: number }> = [];
+      const creaturesInRoom = this.creatureManager.getCreaturesInRoom(roomId);
+      for (const c of creaturesInRoom) {
+        creatures.push({ id: c.id, name: c.name, hp: c.hp, maxHp: c.maxHp });
+      }
+
+      result.push({
+        roomId,
+        roomName: room.name,
+        roomType: room.type ?? 'corridor',
+        playerCount: players.length,
+        creatureCount: creatures.length,
+        players,
+        creatures,
+      });
+    }
+
+    return result;
+  }
+
+  /**
+   * Spawn a creature in a specific zone room from an admin-resolved template.
+   * Called from admin API endpoint POST /admin/api/rooms/:roomId/spawn-creature.
+   * Template resolution stays in routes.ts (needs deps.contentStores); everything
+   * after that is encapsulated here.
+   */
+  adminSpawnCreature(template: import('../creatures/types.js').CreatureTemplate, targetRoomId: string): { success: boolean; error?: string; creatureId?: string; creatureName?: string } {
+    const room = this.roomGraph.rooms.get(targetRoomId);
+    if (!room) {
+      return { success: false, error: `Room "${targetRoomId}" not found in zone graph` };
+    }
+
+    const creature = this.creatureManager.spawnSingleCreature(template, targetRoomId);
+
+    // Broadcast spawn notification to players in the target room
+    this.broadcastToRoom(targetRoomId, {
+      narrations: [{ text: `[SYSTEM] A ${creature.name} materializes from thin air.`, type: 'system' }],
+    });
+
+    this.log(`Admin spawned "${creature.name}" (${creature.id}) in room "${targetRoomId}"`);
+    return { success: true, creatureId: creature.id, creatureName: creature.name };
+  }
+
+  /** Expose the zone slug for admin API responses. */
+  getZoneSlug(): string | undefined {
+    return this.zoneSlug;
   }
 
   // ─── Logging ─────────────────────────────────────────────────────────────

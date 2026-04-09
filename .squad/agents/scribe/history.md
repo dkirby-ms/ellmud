@@ -214,3 +214,48 @@ Initial setup complete. Scribe orchestration workflow established: create orches
 - Commit .squad/ changes
 - Zone navigation now fully reliable across transitions
 - Map rendering accuracy restored; floor bounds correct
+
+## Session: Layout Alignment & Crossing Fixes (2026-04-08T01:54Z)
+
+### Tasks Completed
+
+1. ✅ **Orchestration Logs Written** (2 entries)
+   - Regis: Cardinal Alignment v3 (Phase 5c) — Commit 117e679
+     - Group-aware cascade, chain-push collision resolution
+     - 27+13 tests pass; full corridor alignment in Midgaard
+   - Regis: Edge Crossing Elimination (Phase 5d) — Commit 2495643
+     - Orthogonal segment detection; endpoint repositioning
+     - 28+13 tests pass; no regressions
+
+2. ✅ **Session Log Created**
+   - `.squad/log/2026-04-08T01:54-layout-alignment-crossings.md`
+   - Brief overview of both Regis layout refinements
+
+3. ✅ **Decision Inbox Merged → decisions.md**
+   - 3 inbox files processed:
+     - Copilot directive: "No curved edges on map"
+     - Regis Cardinal Alignment v3 decision
+     - Regis Edge Crossing Elimination decision
+   - All inbox files deleted
+
+4. ✅ **Agent History Updated**
+   - Scribe: This session entry
+
+### User Directives Captured
+
+1. **No Curved/Diagonal Edges on Map** (2026-04-08T01:25:00Z)
+   - All connections must be orthogonal (horizontal or vertical)
+   - Curves indicate layout failure, not rendering choice
+
+### Impact Summary
+
+- **Cardinal Alignment:** All E/W pairs share y-coordinate, all N/S pairs share x-coordinate
+- **Crossing Detection:** No intersecting edge lines; all paths remain orthogonal
+- **Midgaard Test:** Full corridor alignment verified (9 rooms including gate pairs)
+- **No Regressions:** 40+ tests passing across both phases
+- **Future Zones:** Parallel corridor topology should work without zone-specific logic
+
+### Next Steps
+
+- Coordinate with zone design on additional test zones
+- Monitor map rendering for curved edge elimination

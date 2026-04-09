@@ -5,7 +5,7 @@ import {
   Volume2,
   Sword,
   ArrowLeft,
-  LogOut,
+  Settings,
 } from "lucide-react";
 import CombinedStashLoadout from "../components/CombinedStashLoadout";
 import ChatPanel from "../components/ChatPanel";
@@ -25,7 +25,9 @@ import { useAutoScroll } from "../hooks/useAutoScroll.js";
 import { useExplorationMap } from "../hooks/useExplorationMap.js";
 import { useMapToggle } from "../hooks/useMapToggle.js";
 import { useVersion } from "../hooks/useVersion.js";
-import { logout as apiLogout, fetchSpawnZone } from "../services/api.js";
+import { useDirectionKeys } from "../hooks/useDirectionKeys.js";
+import { isSpeedwalk, parseSpeedwalk } from "../utils/speedwalk.js";
+import { fetchSpawnZone } from "../services/api.js";
 import type { CombatAction } from "@ellmud/shared";
 
 // ─── Status Effect Classifier ────────────────────────────────────────────────
@@ -42,7 +44,7 @@ function getEffectType(effect: StatusEffect): 'buff' | 'debuff' | 'neutral' {
 
 export default function ZoneExploration() {
   const navigate = useNavigate();
-  const location = useLocation();
+  const _location = useLocation();
   const { zoneId } = useParams<{ zoneId?: string }>();
   const { state, dispatch } = useAppContext();
   const version = useVersion();
@@ -82,28 +84,63 @@ export default function ZoneExploration() {
   const [chatOpen, setChatOpen] = useState(false);
   const { containerRef: narrativeRef, bottomRef } = useAutoScroll(state.messages);
 
-  // Re-focus the command input after zone switches (input is disabled while connecting)
+  // ─── Focus persistence across zone transitions ───────────────────────────────
   const inputRef = useRef<HTMLInputElement>(null);
+  const compassRef = useRef<HTMLDivElement>(null);
+  const speedwalkAbortRef = useRef(false);
+
+  // Track which UI area had focus before a zone switch so we can restore it.
+  // "compass" = a compass button was focused; "prompt" = the command input.
+  const lastFocusAreaRef = useRef<'compass' | 'prompt'>('prompt');
+
+  useEffect(() => {
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as Node | null;
+      if (compassRef.current?.contains(target)) {
+        lastFocusAreaRef.current = 'compass';
+      } else if (inputRef.current && inputRef.current === target) {
+        lastFocusAreaRef.current = 'prompt';
+      }
+    };
+    document.addEventListener('focusin', handleFocusIn);
+    return () => document.removeEventListener('focusin', handleFocusIn);
+  }, []);
+
+  // Restore focus after zone switches (input is disabled while connecting).
+  // If the compass had focus, re-focus the first available compass button
+  // instead of stealing focus to the prompt.
   useEffect(() => {
     if (state.connectionStatus === "connected") {
-      // Defer focus to next frame so the input is re-enabled first
-      requestAnimationFrame(() => inputRef.current?.focus());
+      requestAnimationFrame(() => {
+        if (lastFocusAreaRef.current === 'compass') {
+          const btn = compassRef.current?.querySelector<HTMLButtonElement>(
+            'button:not([disabled])',
+          );
+          if (btn) {
+            btn.focus();
+            return;
+          }
+        }
+        inputRef.current?.focus();
+      });
     }
   }, [state.connectionStatus]);
 
-  // Logout handler
-  const handleLogout = useCallback(async () => {
-    if (state.token) {
-      try {
-        await apiLogout(state.token);
-      } catch {
-        /* best effort */
-      }
+  // Phase 1: Arrow key / numpad direction shortcuts (only when input is not focused)
+  useDirectionKeys({
+    onMove: handleExitClick,
+    inputRef,
+    enabled: state.connectionStatus === "connected",
+  });
+
+  // Abort any active speedwalk when combat starts
+  useEffect(() => {
+    if (state.inCombat) {
+      speedwalkAbortRef.current = true;
     }
-    roomRef.current?.leave();
-    dispatch({ type: "LOGOUT" });
-    navigate("/");
-  }, [state.token, dispatch, navigate, roomRef]);
+  }, [state.inCombat]);
+
+  // Logout handler
 
   // Derive room info from server state
   const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
@@ -111,17 +148,69 @@ export default function ZoneExploration() {
   const roomType = state.roomHeader?.roomType;
   const roomSlug = state.roomHeader?.roomSlug;
 
+  const speedwalkMsgCounter = useRef(0);
+
+  const addSystemMessage = useCallback(
+    (text: string) => {
+      dispatch({
+        type: "ADD_MESSAGE",
+        message: {
+          id: `sw-${++speedwalkMsgCounter.current}`,
+          text,
+          type: "system",
+          timestamp: Date.now(),
+        },
+      });
+    },
+    [dispatch]
+  );
+
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      if (!command.trim()) return;
+      const trimmed = command.trim();
+      if (!trimmed) return;
 
       setCommandHistory((prev) => [...prev, command]);
       setHistoryIndex(-1);
-      sendCommand(command);
       setCommand("");
+
+      // Phase 2: Speedwalk detection
+      if (isSpeedwalk(trimmed)) {
+        if (state.inCombat) {
+          addSystemMessage("Speedwalk blocked — you are in combat!");
+          return;
+        }
+
+        const result = parseSpeedwalk(trimmed);
+        if (!result.ok) {
+          addSystemMessage(result.error);
+          return;
+        }
+
+        // Execute each move sequentially with a small delay so the server
+        // can process each one and the response echoes back.
+        speedwalkAbortRef.current = false;
+        const moves = result.moves;
+        addSystemMessage(`Speedwalk: ${moves.length} moves (${trimmed})`);
+        let i = 0;
+
+        const step = () => {
+          if (speedwalkAbortRef.current || i >= moves.length) return;
+          handleExitClick(moves[i]);
+          i++;
+          if (i < moves.length) {
+            setTimeout(step, 150);
+          }
+        };
+
+        step();
+        return;
+      }
+
+      sendCommand(command);
     },
-    [command, sendCommand]
+    [command, sendCommand, handleExitClick, state.inCombat]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -229,6 +318,12 @@ export default function ZoneExploration() {
     ? KNOWN_COMMANDS.find(cmd => cmd.startsWith(command.trim().toLowerCase())) ?? null
     : null;
 
+  // Click anywhere in the narrative to focus the command input
+  const handleNarrativeClick = useCallback(() => {
+    if (window.getSelection()?.toString()) return;
+    inputRef.current?.focus();
+  }, []);
+
   return (
     <div className="h-screen bg-bg-primary flex flex-col">
       {/* Top bar */}
@@ -246,11 +341,11 @@ export default function ZoneExploration() {
             {state.username ?? state.email ?? "Unknown"}
           </span>
           <button
-            onClick={handleLogout}
-            className="text-text-secondary hover:text-danger transition-colors"
-            title="Sign out"
+            onClick={() => navigate("/settings")}
+            className="text-text-secondary hover:text-accent-gold transition-colors"
+            title="Settings"
           >
-            <LogOut className="w-4 h-4" />
+            <Settings className="w-4 h-4" />
           </button>
           <span className="text-text-disabled">|</span>
           {connectionIndicator()}
@@ -294,7 +389,10 @@ export default function ZoneExploration() {
           {/* Narrative text — render from real AppContext messages */}
           <div
             ref={narrativeRef}
-            className="flex-1 overflow-y-auto px-6 py-4 space-y-1 narrative-scroll narrative-terminal"
+            onClick={handleNarrativeClick}
+            className="flex-1 overflow-y-auto px-6 py-4 space-y-1 narrative-scroll narrative-terminal narrative-clickable"
+            role="log"
+            aria-label="Game narrative"
           >
             {state.messages.map((msg) => (
               <div key={msg.id}>
@@ -385,8 +483,41 @@ export default function ZoneExploration() {
             <div ref={bottomRef} aria-hidden="true" />
           </div>
 
-          {/* MUD-style status prompt — positioned below scroll container */}
-          <MudPrompt />
+          {/* MUD-style status prompt + inline command input */}
+          <div className="command-input-line">
+            <MudPrompt />
+            {autoCompleteHint && (
+              <div data-testid="autocomplete-hint" className="text-text-disabled text-xs font-mono px-6 py-0.5">
+                {autoCompleteHint}
+              </div>
+            )}
+            <form onSubmit={handleSubmit} className="flex items-center gap-2 px-6 py-2">
+              <span
+                className="text-accent-gold text-lg font-mono"
+                aria-hidden="true"
+              >
+                &gt;
+              </span>
+              <input
+                ref={inputRef}
+                type="text"
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  state.connectionStatus === "connected"
+                    ? "Type a command..."
+                    : isHub ? "Connecting to stronghold..." : "Connecting to instance..."
+                }
+                disabled={state.connectionStatus !== "connected"}
+                className="flex-1 bg-transparent text-text-primary placeholder:text-text-disabled focus:outline-none disabled:opacity-50 font-mono"
+                style={{ fontSize: "1rem" }}
+                autoFocus
+                tabIndex={1}
+                aria-label="Command input"
+              />
+            </form>
+          </div>
         </div>
 
         {/* Sidebar (30%) */}
@@ -576,7 +707,7 @@ export default function ZoneExploration() {
 
           {/* Compass + Minimap */}
           <div className="flex items-center justify-center gap-4 px-4 py-2">
-            <CompassControl onNavigate={handleExitClick} />
+            <CompassControl ref={compassRef} onNavigate={handleExitClick} />
             <div className="h-16 border-l border-border-muted" />
             <MinimapWidget
               visitedRooms={mapState.visitedRooms}
@@ -665,38 +796,6 @@ export default function ZoneExploration() {
         </div>
       )}
 
-      {/* Command Input */}
-      <div className="bg-bg-panel border-t border-border-muted px-6 py-4">
-        {autoCompleteHint && (
-          <div data-testid="autocomplete-hint" className="text-text-disabled text-xs font-mono mb-1 px-6">
-            {autoCompleteHint}
-          </div>
-        )}
-        <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <span
-            className="text-accent-gold text-lg font-mono"
-          >
-            &gt;
-          </span>
-          <input
-            ref={inputRef}
-            type="text"
-            value={command}
-            onChange={(e) => setCommand(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              state.connectionStatus === "connected"
-                ? "Type a command..."
-                : isHub ? "Connecting to stronghold..." : "Connecting to instance..."
-            }
-            disabled={state.connectionStatus !== "connected"}
-            className="flex-1 bg-transparent text-text-primary placeholder:text-text-disabled focus:outline-none disabled:opacity-50 font-mono"
-            style={{ fontSize: "1rem" }}
-            autoFocus
-          />
-        </form>
-      </div>
-
       {/* Equipment Overlay */}
       {inventoryOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
@@ -753,7 +852,7 @@ export default function ZoneExploration() {
       <ChatPanel
         isOpen={chatOpen}
         onClose={() => setChatOpen(false)}
-        context={isHub ? "refuge" : "zone"}
+        context={isHub ? "hub" : "zone"}
         onSendMessage={sendChatMessage}
       />
 
@@ -765,7 +864,7 @@ export default function ZoneExploration() {
         elapsedSeconds={reconnection.elapsedSeconds}
         onReconnect={reconnection.reconnectNow}
         onCancel={reconnection.cancel}
-        onReturnToRefuge={reconnection.returnToRefuge}
+        onReturnToHub={reconnection.returnToHub}
       />
     </div>
   );

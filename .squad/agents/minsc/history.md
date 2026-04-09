@@ -40,6 +40,14 @@
 
 ## Learnings (Archived — See Detailed Session Records)
 
+**Reconnect Room Position Fix (2026-07, Issue #355):**
+- Browser refresh triggers a NEW `onJoin()` (not Colyseus `allowReconnection`), because the client does a fresh `joinOrCreate()` with the same playerId
+- `ZoneRoom.onJoin()` duplicate-join path (line ~421) must preserve `currentRoomId` from existing `PlayerState` before creating a new one
+- Fix: capture `preservedRoomId` before displacing old session, use it in start-room resolution
+- Key files: `packages/server/src/rooms/ZoneRoom.ts` (onJoin), `packages/client/src/hooks/useZoneConnection.ts` (reconnect flow)
+- Regression test: `packages/server/src/__tests__/reconnect-room-position.test.ts` (3 tests)
+- Full server suite: 2383 tests passing, zero regressions
+
 **Sandbox Phase 3 Testing Patterns (2026-07):**
 - Phase 3 adds 29 tests (82 total): scenario save/load/list/delete (16), seed (4), replay (4), integration (1), PRNG unit (5 including seededPrng)
 - `handleScenario` dispatches to save/load/list/delete sub-handlers; scenarios stored as JSON in `SCENARIO_DIR`

@@ -43,41 +43,102 @@ npm run dev:client    # Client + Admin: http://localhost:3000
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Browser Clients                           │
-│  Game (React) │ Admin Dashboard │ SSH/Raw TCP (Phase 3+)    │
-└──────┬────────────────────────────────────────────────────┬──┘
-       │ HTTP + WebSocket                    │ raw TCP
-       │                                       │
-       ├─────────────────────┬────────────────┤
-       │                     │                │
-       v                     v                v
-┌─────────────────────────────────────────────────────────────┐
-│                 Game Server (Colyseus)                       │
-│  ShardRoom │ RefugeRoom │ Express API │ WebSocket Server    │
-└──────┬────────────────────┬──────────────────────────────┬──┘
-       │                    │                              │
-   Commands            Content & Admin API            Narration
-       │                    │                              │
-       v                    v                              v
-┌──────────────────────────────────────────────────────────────┐
-│        Game Systems + Persistence Layer                      │
-│   Combat │ AI │ Items │ Extraction │ Auth                  │
-└──────┬────────────────────┬──────────────────────────────┬──┘
-       │                    │                              │
-       v                    v                              v
-   [PostgreSQL]        [Redis Cache]             [Azure AI Foundry]
-   Players, Stash,     Narration Cache,          GPT-4o-mini
-   Run History         Colyseus Presence         (prose descriptions)
+```mermaid
+graph TB
+  subgraph Clients["🖥️ Browser Clients"]
+    GameUI["Game Client<br/><small>React · Colyseus SDK</small>"]
+    AdminUI["Admin Dashboard<br/><small>React · CRUD · Simulators</small>"]
+    FutureClient["SSH / Raw TCP<br/><small>Phase 3+</small>"]
+  end
+
+  subgraph Server["⚙️ Game Server — @ellmud/server"]
+    direction TB
+    Transport["Colyseus WebSocket Transport<br/><small>ws://localhost:2567</small>"]
+
+    subgraph Rooms["Colyseus Rooms"]
+      ZoneRoom["ZoneRoom<br/><small>Shard instances · Tick loop</small>"]
+    end
+
+    subgraph Systems["Game Systems"]
+      Combat["Combat<br/><small>Tick-based · Strike/Dodge/Flee</small>"]
+      Creatures["Creature AI<br/><small>Behavior · Spawning</small>"]
+      Items["Items & Loot<br/><small>6 tiers · Drop tables</small>"]
+      Exploration["Exploration<br/><small>Zones · Extraction</small>"]
+      Stash["Stash & Loadout<br/><small>Persistent inventory</small>"]
+    end
+
+    subgraph APIs["HTTP APIs"]
+      AdminAPI["Admin API<br/><small>Content CRUD · Audit log</small>"]
+      AuthMod["Auth<br/><small>Entra OIDC · bcrypt fallback</small>"]
+      HealthAPI["Health & Monitor<br/><small>/health · /colyseus</small>"]
+    end
+
+    Narrative["Narration Engine<br/><small>LLM enrichment · Template fallback</small>"]
+    CommandParser["Command Parser<br/><small>17 verbs + aliases</small>"]
+  end
+
+  subgraph Shared["📦 @ellmud/shared"]
+    Types["Types · Message Protocol · Item Definitions"]
+  end
+
+  subgraph Data["🗄️ Data Layer"]
+    PG[("PostgreSQL<br/><small>Players · Stash · Run History<br/>Content · Audit Log</small>")]
+    Redis[("Redis<br/><small>Narration Cache<br/>Colyseus Presence</small>")]
+  end
+
+  subgraph AI["🤖 AI Services"]
+    LLM["Azure AI Foundry<br/><small>GPT-4o-mini<br/>Prose narration</small>"]
+  end
+
+  subgraph Infra["☁️ Azure Infrastructure"]
+    ACA["Container Apps<br/><small>Game server hosting</small>"]
+    ACR["Container Registry<br/><small>Docker images</small>"]
+    Monitor["App Insights<br/><small>Log Analytics</small>"]
+  end
+
+  GameUI -- "WebSocket<br/>(commands + state)" --> Transport
+  AdminUI -- "HTTP + WS" --> Transport
+  FutureClient -. "raw TCP (planned)" .-> Transport
+  Transport --> ZoneRoom
+  Transport --> APIs
+  ZoneRoom --> CommandParser
+  CommandParser --> Systems
+  ZoneRoom --> Narrative
+  Narrative --> LLM
+  Narrative --> Redis
+  Systems --> PG
+  AdminAPI --> PG
+  AuthMod --> PG
+  ZoneRoom --> Redis
+  GameUI -.-> Shared
+  Server -.-> Shared
+  ACA --> Server
+  ACR --> ACA
+  Monitor --> ACA
+
+  classDef client fill:#4a90d9,stroke:#2c5282,color:#fff
+  classDef server fill:#48bb78,stroke:#276749,color:#fff
+  classDef data fill:#ed8936,stroke:#c05621,color:#fff
+  classDef ai fill:#9f7aea,stroke:#6b46c1,color:#fff
+  classDef infra fill:#718096,stroke:#4a5568,color:#fff
+  classDef shared fill:#38b2ac,stroke:#285e61,color:#fff
+
+  class GameUI,AdminUI,FutureClient client
+  class Transport,ZoneRoom,Combat,Creatures,Items,Exploration,Stash,AdminAPI,AuthMod,HealthAPI,Narrative,CommandParser server
+  class PG,Redis data
+  class LLM ai
+  class ACA,ACR,Monitor infra
+  class Types shared
 ```
 
-**Design Principle:**
-- **Game Logic:** Server-authoritative. All state changes validated on server.
-- **Client Communication:** Narrated prose only (never raw state). Rich text descriptions of game events.
-- **LLM Role:** Enriches template narratives asynchronously. Fallback templates fire on timeout.
-- **Admin Interface:** Direct API access to content, audit trails, and live metrics.
-- **Auth Flow:** Microsoft Entra External ID (OAuth/OIDC) with bcrypt fallback for local development.
+> **How to read this:** Arrows show data flow. Solid lines = active today; dashed lines = planned or compile-time dependency.
+
+**Design Principles:**
+- **Server-Authoritative:** All game state changes are validated on the server. The client never mutates state directly.
+- **Narrated Prose:** Players receive rich text descriptions of events — never raw state data. The LLM enriches templates asynchronously with fallback on timeout.
+- **Monorepo:** Three packages — `shared` (types/protocol), `server` (Colyseus game server), and `client` (React web app) — built and deployed together.
+- **Admin Interface:** Direct API access to all content types, full audit trail, and live metric dashboards.
+- **Auth:** Microsoft Entra External ID (OAuth/OIDC) for production, with bcrypt-based local auth for development.
 
 ## Documentation
 

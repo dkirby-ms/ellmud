@@ -120,6 +120,6 @@ export async function runMigrations(): Promise<void> {
 }
 
 // Re-export types for convenience.
-export type { Player, PlayerIdentity, ItemDefinition, StashEntry, PlayerSkill, Faction, FactionMembership, RunHistory } from './types.js';
+export type { Player, PlayerIdentity, ItemDefinition, StashEntry, PlayerSkill, Faction, FactionMembership, RunHistory, UserSettings, UserSettingsConfig } from './types.js';
 export { FactionSlugs } from './types.js';
 export type { SkillCategory, ItemType, FactionSlug } from './types.js';

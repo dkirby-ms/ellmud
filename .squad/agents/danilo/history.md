@@ -19,4 +19,27 @@ Key public-facing areas:
 
 ## Learnings
 
-(Append new learnings below this line)
+### #343 — Repo Hygiene (2026-04-08)
+
+**What was done:**
+- Created 9 missing hygiene files to scale contributor onboarding and automate releases
+- LICENSE (ISC, matching package.json)
+- CONTRIBUTING.md with clear contribution workflow, setup, code style expectations
+- CODE_OF_CONDUCT.md (Contributor Covenant 2.0)
+- SECURITY.md with responsible disclosure guidelines
+- .editorconfig for consistent formatting (2-space indent, Unix line endings)
+- .github/ISSUE_TEMPLATE/bug_report.md and feature_request.md
+- .github/PULL_REQUEST_TEMPLATE.md with checklist
+- .github/workflows/release.yml for automated version bumping and GitHub releases
+
+**Key decisions:**
+- Release workflow triggers on workflow_dispatch for manual control; uses `npm version` + `npm run version:sync` for workspace versioning
+- PR template emphasizes testing (build, lint, test) and checklist discipline
+- Issue templates use YAML frontmatter (GitHub standard) with labels and assignees
+- CODE_OF_CONDUCT adapted from Contributor Covenant 2.0 (industry standard)
+
+**Outcome:** PR #347 merged. Repo now has complete hygiene foundation for scaling contributors. Release pipeline is ready for manual triggering.
+
+**Patterns to reuse:**
+- This template set scales to similar game projects; minimal customization needed
+- GitHub Actions release workflow is solid for monorepos using npm workspaces

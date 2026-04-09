@@ -1,7 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useParams } from "react-router";
 import {
   ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  MapPin,
+  Megaphone,
+  Move,
   Pause,
   Play,
   Plus,
@@ -15,17 +20,26 @@ import {
   pauseRoom,
   resumeRoom,
   spawnInRoom,
+  broadcastToRoom,
+  teleportPlayer,
   listEntities,
   type LiveRoomDetail as RoomDetail,
   type LiveRoomCreature,
+  type LiveRoomPlayer,
   AdminAPIError,
 } from "../../lib/admin-api.js";
+import {
+  getZone,
+  type ZoneData,
+} from "../../lib/zone-api.js";
 
 interface CreatureTemplate {
   id: string;
   name: string;
   type: string;
 }
+
+type DetailTab = "room-graph" | "creatures" | "players";
 
 export default function LiveRoomDetail() {
   const { roomId } = useParams();
@@ -37,6 +51,16 @@ export default function LiveRoomDetail() {
     type: "success" | "error";
     message: string;
   } | null>(null);
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<DetailTab>("room-graph");
+
+  // Zone data state
+  const [zoneData, setZoneData] = useState<ZoneData | null>(null);
+  const [zoneLoading, setZoneLoading] = useState(false);
+
+  // Expanded room rows in the room graph
+  const [expandedRooms, setExpandedRooms] = useState<Set<string>>(new Set());
 
   // Spawn modal state
   const [showSpawnModal, setShowSpawnModal] = useState(false);
@@ -53,6 +77,26 @@ export default function LiveRoomDetail() {
     title: string;
     message: string;
   } | null>(null);
+
+  // Broadcast modal state
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+  const [broadcastTargetRoom, setBroadcastTargetRoom] = useState<{
+    slug: string;
+    name: string;
+  } | null>(null);
+  const [broadcastMessage, setBroadcastMessage] = useState("");
+  const [broadcastAsSystem, setBroadcastAsSystem] = useState(true);
+  const [broadcasting, setBroadcasting] = useState(false);
+
+  // Teleport modal state
+  const [showTeleportModal, setShowTeleportModal] = useState(false);
+  const [teleportTargetRoom, setTeleportTargetRoom] = useState<{
+    slug: string;
+    name: string;
+  } | null>(null);
+  const [teleportPlayerId, setTeleportPlayerId] = useState("");
+  const [teleportNotify, setTeleportNotify] = useState(true);
+  const [teleporting, setTeleporting] = useState(false);
 
   const loadRoom = useCallback(async () => {
     if (!roomId) return;
@@ -73,6 +117,77 @@ export default function LiveRoomDetail() {
   useEffect(() => {
     loadRoom();
   }, [loadRoom]);
+
+  // Fetch zone definition when we have a zoneSlug
+  useEffect(() => {
+    if (!room?.zoneSlug) {
+      setZoneData(null);
+      return;
+    }
+    let cancelled = false;
+    setZoneLoading(true);
+    getZone(room.zoneSlug)
+      .then((data) => {
+        if (!cancelled) setZoneData(data);
+      })
+      .catch(() => {
+        if (!cancelled) setZoneData(null);
+      })
+      .finally(() => {
+        if (!cancelled) setZoneLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [room?.zoneSlug]);
+
+  // Compute per-room occupancy from live player/creature data.
+  // IMPORTANT: Prefer roomGraphRooms (from the same API response as
+  // creatures) over zoneData.rooms (from a separate, possibly stale
+  // zone-definition fetch).  This guarantees room keys always match
+  // creature.currentRoomId values.
+  const roomOccupancy = useMemo(() => {
+    const map: Record<
+      string,
+      { players: LiveRoomPlayer[]; creatures: LiveRoomCreature[] }
+    > = {};
+    const roomList: { slug?: string; id?: string }[] =
+      room?.roomGraphRooms?.map((r) => ({ slug: r.id, id: r.id })) ?? zoneData?.rooms ?? [];
+    if (roomList.length === 0) return map;
+    for (const zr of roomList) {
+      const key = (zr as { slug?: string }).slug ?? (zr as { id?: string }).id ?? '';
+      if (key) map[key] = { players: [], creatures: [] };
+    }
+    for (const p of room?.players ?? []) {
+      if (map[p.currentRoomId]) {
+        map[p.currentRoomId].players.push(p);
+      }
+    }
+    for (const c of room?.creatures ?? []) {
+      // Auto-create room entry if creature references a room not yet in the
+      // map (defensive: prevents silently dropping creatures).
+      if (!map[c.currentRoomId]) {
+        map[c.currentRoomId] = { players: [], creatures: [] };
+      }
+      map[c.currentRoomId].creatures.push(c);
+    }
+    return map;
+  }, [zoneData, room?.players, room?.creatures, room?.roomGraphRooms]);
+
+  // Normalised room list for the Room Graph tab.
+  // Prefer full zone data; fall back to the lightweight roomGraphRooms
+  // included in every zone room detail response.
+  const displayRooms: { slug: string; name: string; type?: string; properties?: string[]; npcs?: { creatureId: string }[]; lootContainers?: { id: string }[] }[] = useMemo(() => {
+    if (zoneData) return zoneData.rooms;
+    if (room?.roomGraphRooms) {
+      return room.roomGraphRooms.map((r) => ({
+        slug: r.id,
+        name: r.name,
+        type: r.type,
+      }));
+    }
+    return [];
+  }, [zoneData, room?.roomGraphRooms]);
 
   const showFeedback = (type: "success" | "error", message: string) => {
     setActionFeedback({ type, message });
@@ -125,9 +240,9 @@ export default function LiveRoomDetail() {
         selectedTemplate,
         targetRoomId || undefined
       );
-      showFeedback("success", result.message);
       setShowSpawnModal(false);
-      loadRoom(); // Refresh to see new creature
+      await loadRoom(); // Refresh to see new creature
+      showFeedback("success", result.message);
     } catch (err) {
       showFeedback(
         "error",
@@ -135,6 +250,89 @@ export default function LiveRoomDetail() {
       );
     } finally {
       setSpawning(false);
+    }
+  };
+
+  const openBroadcastModal = (targetRoom: { slug: string; name: string }) => {
+    setBroadcastTargetRoom(targetRoom);
+    setBroadcastMessage("");
+    setBroadcastAsSystem(true);
+    setShowBroadcastModal(true);
+  };
+
+  const handleBroadcast = async () => {
+    if (!roomId || !broadcastTargetRoom || !broadcastMessage.trim()) return;
+    setBroadcasting(true);
+    try {
+      const result = await broadcastToRoom(
+        roomId,
+        broadcastTargetRoom.slug,
+        broadcastMessage.trim(),
+        broadcastAsSystem ? "system" : "admin"
+      );
+      showFeedback("success", result.message);
+      setShowBroadcastModal(false);
+    } catch (err) {
+      showFeedback(
+        "error",
+        err instanceof AdminAPIError ? err.message : "Broadcast failed"
+      );
+    } finally {
+      setBroadcasting(false);
+    }
+  };
+
+  const openTeleportModal = (targetRoom: { slug: string; name: string }) => {
+    setTeleportTargetRoom(targetRoom);
+    setTeleportPlayerId("");
+    setTeleportNotify(true);
+    setShowTeleportModal(true);
+  };
+
+  const handleTeleport = async () => {
+    if (!roomId || !teleportTargetRoom || !teleportPlayerId) return;
+    setTeleporting(true);
+    try {
+      const result = await teleportPlayer(
+        roomId,
+        teleportPlayerId,
+        teleportTargetRoom.slug,
+        teleportNotify
+      );
+      showFeedback("success", result.message);
+      setShowTeleportModal(false);
+      loadRoom(); // Refresh to see updated positions
+    } catch (err) {
+      showFeedback(
+        "error",
+        err instanceof AdminAPIError ? err.message : "Teleport failed"
+      );
+    } finally {
+      setTeleporting(false);
+    }
+  };
+
+  const toggleRoomExpanded = (slug: string) => {
+    setExpandedRooms((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) {
+        next.delete(slug);
+      } else {
+        next.add(slug);
+      }
+      return next;
+    });
+  };
+
+  const openSpawnInRoom = async (targetSlug: string) => {
+    setShowSpawnModal(true);
+    setSelectedTemplate("");
+    setTargetRoomId(targetSlug);
+    try {
+      const templates = await listEntities<CreatureTemplate>("creatures");
+      setCreatureTemplates(templates);
+    } catch {
+      setCreatureTemplates([]);
     }
   };
 
@@ -321,8 +519,405 @@ export default function LiveRoomDetail() {
               </div>
             </div>
 
-            {/* Creatures (zone only) */}
-            {isZoneRoom && room.creatures && (
+            {/* Tabbed content area */}
+            {isZoneRoom && (
+              <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg overflow-hidden">
+                {/* Tab bar */}
+                <div className="flex border-b border-[#2A2B35]">
+                  {(
+                    [
+                      { key: "room-graph" as DetailTab, label: "Room Graph", icon: MapPin },
+                      { key: "creatures" as DetailTab, label: `Creatures (${room.creatures?.length ?? 0})`, icon: Skull },
+                      { key: "players" as DetailTab, label: `Players (${room.players?.length ?? 0})`, icon: Users },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveTab(tab.key)}
+                      className={`px-5 py-3 text-sm flex items-center gap-2 transition-colors border-b-2 ${
+                        activeTab === tab.key
+                          ? "border-[#C9A84C] text-[#C9A84C]"
+                          : "border-transparent text-[#8A8B95] hover:text-[#E8E0D0]"
+                      }`}
+                      style={{ fontFamily: "var(--font-sans)" }}
+                    >
+                      <tab.icon className="w-4 h-4" />
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Tab content */}
+                <div className="p-6">
+                  {/* Room Graph Tab */}
+                  {activeTab === "room-graph" && (
+                    <>
+                      {zoneLoading && displayRooms.length === 0 ? (
+                        <p
+                          className="text-[#8A8B95] text-sm"
+                          style={{ fontFamily: "var(--font-sans)" }}
+                        >
+                          Loading zone rooms…
+                        </p>
+                      ) : displayRooms.length === 0 ? (
+                        <p
+                          className="text-[#8A8B95] text-sm"
+                          style={{ fontFamily: "var(--font-sans)" }}
+                        >
+                          No rooms defined for this zone.
+                        </p>
+                      ) : (
+                        <div className="space-y-1">
+                          {/* Header row */}
+                          <div className="grid grid-cols-[24px_1fr_100px_100px_1fr] gap-3 px-3 py-2 text-[#8A8B95] text-xs uppercase tracking-wider"
+                            style={{ fontFamily: "var(--font-sans)" }}
+                          >
+                            <span />
+                            <span>Room Name</span>
+                            <span className="text-center">Players</span>
+                            <span className="text-center">Creatures</span>
+                            <span>Features</span>
+                          </div>
+                          {displayRooms.map((zr) => {
+                            const occ = roomOccupancy[zr.slug] ?? {
+                              players: [],
+                              creatures: [],
+                            };
+                            const isExpanded = expandedRooms.has(zr.slug);
+                            return (
+                              <div key={zr.slug}>
+                                <button
+                                  onClick={() => toggleRoomExpanded(zr.slug)}
+                                  className="w-full grid grid-cols-[24px_1fr_100px_100px_1fr] gap-3 px-3 py-2 rounded hover:bg-[#1C1D27] transition-colors items-center text-left"
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown className="w-4 h-4 text-[#8A8B95]" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4 text-[#8A8B95]" />
+                                  )}
+                                  <div>
+                                    <span className="text-[#E8E0D0] text-sm">
+                                      {zr.name}
+                                    </span>
+                                    <span
+                                      className="text-[#8A8B95] text-xs ml-2"
+                                      style={{ fontFamily: "var(--font-mono)" }}
+                                    >
+                                      {zr.slug}
+                                    </span>
+                                  </div>
+                                  <span
+                                    className={`text-center text-sm ${
+                                      occ.players.length > 0
+                                        ? "text-[#C9A84C]"
+                                        : "text-[#4A4B55]"
+                                    }`}
+                                    style={{ fontFamily: "var(--font-mono)" }}
+                                  >
+                                    {occ.players.length}
+                                  </span>
+                                  <span
+                                    className={`text-center text-sm ${
+                                      occ.creatures.length > 0
+                                        ? "text-[#8B2500]"
+                                        : "text-[#4A4B55]"
+                                    }`}
+                                    style={{ fontFamily: "var(--font-mono)" }}
+                                  >
+                                    {occ.creatures.length}
+                                  </span>
+                                  <div className="flex gap-1 flex-wrap">
+                                    {(zr.properties ?? []).map((prop) => (
+                                      <span
+                                        key={prop}
+                                        className="px-1.5 py-0.5 text-[10px] rounded bg-[#2A2B35] text-[#8A8B95]"
+                                        style={{ fontFamily: "var(--font-sans)" }}
+                                      >
+                                        {prop}
+                                      </span>
+                                    ))}
+                                    {(zr.npcs?.length ?? 0) > 0 && (
+                                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-[#8B2500]/20 text-[#8B2500]"
+                                        style={{ fontFamily: "var(--font-sans)" }}
+                                      >
+                                        NPCs
+                                      </span>
+                                    )}
+                                    {(zr.lootContainers?.length ?? 0) > 0 && (
+                                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-[#C9A84C]/20 text-[#C9A84C]"
+                                        style={{ fontFamily: "var(--font-sans)" }}
+                                      >
+                                        Loot
+                                      </span>
+                                    )}
+                                  </div>
+                                </button>
+
+                                {/* Expanded detail */}
+                                {isExpanded && (
+                                  <div className="ml-8 mr-3 mb-3 border-l-2 border-[#2A2B35] pl-4 space-y-3">
+                                    {/* Players in this room */}
+                                    {occ.players.length > 0 && (
+                                      <div>
+                                        <h4
+                                          className="text-[#8A8B95] text-xs uppercase tracking-wider mb-1"
+                                          style={{ fontFamily: "var(--font-sans)" }}
+                                        >
+                                          Players
+                                        </h4>
+                                        {occ.players.map((p) => (
+                                          <div
+                                            key={p.sessionId}
+                                            className="flex items-center gap-3 text-sm py-1"
+                                          >
+                                            <Users className="w-3 h-3 text-[#C9A84C]" />
+                                            <span
+                                              className="text-[#E8E0D0]"
+                                              style={{ fontFamily: "var(--font-mono)" }}
+                                            >
+                                              {p.characterName ?? `${p.sessionId.slice(0, 10)}…`}
+                                            </span>
+                                            <span
+                                              className="text-[#8A8B95] text-xs"
+                                              style={{ fontFamily: "var(--font-sans)" }}
+                                            >
+                                              {p.inventoryCount} items
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* Creatures in this room */}
+                                    {occ.creatures.length > 0 && (
+                                      <div>
+                                        <h4
+                                          className="text-[#8A8B95] text-xs uppercase tracking-wider mb-1"
+                                          style={{ fontFamily: "var(--font-sans)" }}
+                                        >
+                                          Creatures
+                                        </h4>
+                                        {occ.creatures.map((c) => (
+                                          <div
+                                            key={c.id}
+                                            className="flex items-center gap-3 text-sm py-1"
+                                          >
+                                            <Skull
+                                              className={`w-3 h-3 ${
+                                                c.isAlive
+                                                  ? "text-[#8B2500]"
+                                                  : "text-[#4A4B55]"
+                                              }`}
+                                            />
+                                            <span className="text-[#E8E0D0]">
+                                              {c.name}
+                                            </span>
+                                            <span
+                                              className={`text-xs ${
+                                                c.hp / c.maxHp > 0.5
+                                                  ? "text-[#2D6B4F]"
+                                                  : c.hp / c.maxHp > 0.25
+                                                  ? "text-[#C9A84C]"
+                                                  : "text-[#8B2500]"
+                                              }`}
+                                              style={{
+                                                fontFamily: "var(--font-mono)",
+                                              }}
+                                            >
+                                              {c.hp}/{c.maxHp} HP
+                                            </span>
+                                            <span
+                                              className="text-xs px-1.5 py-0.5 rounded"
+                                              style={{
+                                                fontFamily: "var(--font-sans)",
+                                                backgroundColor:
+                                                  behaviorColor(c.behaviorState) + "20",
+                                                color: behaviorColor(
+                                                  c.behaviorState
+                                                ),
+                                              }}
+                                            >
+                                              {c.behaviorState}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* Room actions */}
+                                    <div className="flex gap-2 pt-1">
+                                      <button
+                                        onClick={() =>
+                                          openBroadcastModal({
+                                            slug: zr.slug,
+                                            name: zr.name,
+                                          })
+                                        }
+                                        className="px-3 py-1.5 text-xs border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:bg-[#1C1D27] rounded transition-colors flex items-center gap-1.5"
+                                        style={{ fontFamily: "var(--font-sans)" }}
+                                      >
+                                        <Megaphone className="w-3 h-3" />
+                                        Broadcast
+                                      </button>
+                                      <button
+                                        onClick={() => openSpawnInRoom(zr.slug)}
+                                        className="px-3 py-1.5 text-xs border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:bg-[#1C1D27] rounded transition-colors flex items-center gap-1.5"
+                                        style={{ fontFamily: "var(--font-sans)" }}
+                                      >
+                                        <Plus className="w-3 h-3" />
+                                        Spawn Here
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          openTeleportModal({
+                                            slug: zr.slug,
+                                            name: zr.name,
+                                          })
+                                        }
+                                        className="px-3 py-1.5 text-xs border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:bg-[#1C1D27] rounded transition-colors flex items-center gap-1.5"
+                                        style={{ fontFamily: "var(--font-sans)" }}
+                                      >
+                                        <Move className="w-3 h-3" />
+                                        Teleport Here
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Creatures Tab */}
+                  {activeTab === "creatures" && (
+                    <>
+                      {!room.creatures || room.creatures.length === 0 ? (
+                        <p
+                          className="text-[#8A8B95] text-sm"
+                          style={{ fontFamily: "var(--font-sans)" }}
+                        >
+                          No creatures in this zone.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {room.creatures.map((c: LiveRoomCreature) => (
+                            <div
+                              key={c.id}
+                              className="flex items-center justify-between bg-[#1C1D27] rounded px-4 py-2"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Skull
+                                  className={`w-4 h-4 ${
+                                    c.isAlive ? "text-[#8B2500]" : "text-[#4A4B55]"
+                                  }`}
+                                />
+                                <div>
+                                  <span
+                                    className="text-[#E8E0D0] text-sm"
+                                   
+                                  >
+                                    {c.name}
+                                  </span>
+                                  <span
+                                    className="text-[#8A8B95] text-xs ml-2"
+                                    style={{ fontFamily: "var(--font-mono)" }}
+                                  >
+                                    {c.id}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <span
+                                  className="text-xs px-2 py-1 rounded"
+                                  style={{
+                                    fontFamily: "var(--font-sans)",
+                                    backgroundColor: behaviorColor(c.behaviorState) + "20",
+                                    color: behaviorColor(c.behaviorState),
+                                  }}
+                                >
+                                  {c.behaviorState}
+                                </span>
+                                <span
+                                  className={`text-sm ${
+                                    c.hp / c.maxHp > 0.5
+                                      ? "text-[#2D6B4F]"
+                                      : c.hp / c.maxHp > 0.25
+                                      ? "text-[#C9A84C]"
+                                      : "text-[#8B2500]"
+                                  }`}
+                                  style={{ fontFamily: "var(--font-mono)" }}
+                                >
+                                  {c.hp}/{c.maxHp} HP
+                                </span>
+                                <span
+                                  className="text-[#8A8B95] text-xs"
+                                  style={{ fontFamily: "var(--font-mono)" }}
+                                >
+                                  Room: {c.currentRoomId}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Players Tab */}
+                  {activeTab === "players" && (
+                    <>
+                      {!room.players || room.players.length === 0 ? (
+                        <p
+                          className="text-[#8A8B95] text-sm"
+                          style={{ fontFamily: "var(--font-sans)" }}
+                        >
+                          No players in this zone.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {room.players.map((p) => (
+                            <div
+                              key={p.sessionId}
+                              className="flex items-center justify-between bg-[#1C1D27] rounded px-4 py-2"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Users className="w-4 h-4 text-[#C9A84C]" />
+                                <span
+                                  className="text-[#E8E0D0] text-sm"
+                                  style={{ fontFamily: "var(--font-mono)" }}
+                                >
+                                  {p.characterName ?? `${p.sessionId.slice(0, 10)}…`}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <span
+                                  className="text-[#8A8B95] text-xs"
+                                  style={{ fontFamily: "var(--font-mono)" }}
+                                >
+                                  Room: {p.currentRoomId}
+                                </span>
+                                <span
+                                  className="text-[#8A8B95] text-xs"
+                                  style={{ fontFamily: "var(--font-sans)" }}
+                                >
+                                  {p.inventoryCount} items · {p.currentWeight}/{p.maxCarryWeight} wt
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Creatures (non-zone or no tabs fallback) */}
+            {!isZoneRoom && room.creatures && room.creatures.length > 0 && (
               <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                 <h2
                   className="text-[#C9A84C] text-lg mb-4"
@@ -330,80 +925,68 @@ export default function LiveRoomDetail() {
                 >
                   Creatures ({room.creatures.length})
                 </h2>
-                {room.creatures.length === 0 ? (
-                  <p
-                    className="text-[#8A8B95] text-sm"
-                    style={{ fontFamily: "var(--font-sans)" }}
-                  >
-                    No creatures in this zone.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {room.creatures.map((c: LiveRoomCreature) => (
-                      <div
-                        key={c.id}
-                        className="flex items-center justify-between bg-[#1C1D27] rounded px-4 py-2"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Skull
-                            className={`w-4 h-4 ${
-                              c.isAlive ? "text-[#8B2500]" : "text-[#4A4B55]"
-                            }`}
-                          />
-                          <div>
-                            <span
-                              className="text-[#E8E0D0] text-sm"
-                             
-                            >
-                              {c.name}
-                            </span>
-                            <span
-                              className="text-[#8A8B95] text-xs ml-2"
-                              style={{ fontFamily: "var(--font-mono)" }}
-                            >
-                              {c.id}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <span
-                            className="text-xs px-2 py-1 rounded"
-                            style={{
-                              fontFamily: "var(--font-sans)",
-                              backgroundColor: behaviorColor(c.behaviorState) + "20",
-                              color: behaviorColor(c.behaviorState),
-                            }}
-                          >
-                            {c.behaviorState}
+                <div className="space-y-2">
+                  {room.creatures.map((c: LiveRoomCreature) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between bg-[#1C1D27] rounded px-4 py-2"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Skull
+                          className={`w-4 h-4 ${
+                            c.isAlive ? "text-[#8B2500]" : "text-[#4A4B55]"
+                          }`}
+                        />
+                        <div>
+                          <span className="text-[#E8E0D0] text-sm">
+                            {c.name}
                           </span>
                           <span
-                            className={`text-sm ${
-                              c.hp / c.maxHp > 0.5
-                                ? "text-[#2D6B4F]"
-                                : c.hp / c.maxHp > 0.25
-                                ? "text-[#C9A84C]"
-                                : "text-[#8B2500]"
-                            }`}
+                            className="text-[#8A8B95] text-xs ml-2"
                             style={{ fontFamily: "var(--font-mono)" }}
                           >
-                            {c.hp}/{c.maxHp} HP
-                          </span>
-                          <span
-                            className="text-[#8A8B95] text-xs"
-                            style={{ fontFamily: "var(--font-mono)" }}
-                          >
-                            Room: {c.currentRoomId}
+                            {c.id}
                           </span>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <div className="flex items-center gap-4">
+                        <span
+                          className="text-xs px-2 py-1 rounded"
+                          style={{
+                            fontFamily: "var(--font-sans)",
+                            backgroundColor: behaviorColor(c.behaviorState) + "20",
+                            color: behaviorColor(c.behaviorState),
+                          }}
+                        >
+                          {c.behaviorState}
+                        </span>
+                        <span
+                          className={`text-sm ${
+                            c.hp / c.maxHp > 0.5
+                              ? "text-[#2D6B4F]"
+                              : c.hp / c.maxHp > 0.25
+                              ? "text-[#C9A84C]"
+                              : "text-[#8B2500]"
+                          }`}
+                          style={{ fontFamily: "var(--font-mono)" }}
+                        >
+                          {c.hp}/{c.maxHp} HP
+                        </span>
+                        <span
+                          className="text-[#8A8B95] text-xs"
+                          style={{ fontFamily: "var(--font-mono)" }}
+                        >
+                          Room: {c.currentRoomId}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* Players */}
-            {room.players && room.players.length > 0 && (
+            {/* Players (non-zone fallback) */}
+            {!isZoneRoom && room.players && room.players.length > 0 && (
               <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
                 <h2
                   className="text-[#C9A84C] text-lg mb-4"
@@ -423,7 +1006,7 @@ export default function LiveRoomDetail() {
                           className="text-[#E8E0D0] text-sm"
                           style={{ fontFamily: "var(--font-mono)" }}
                         >
-                          {p.sessionId.slice(0, 10)}…
+                          {p.characterName ?? `${p.sessionId.slice(0, 10)}…`}
                         </span>
                       </div>
                       <div className="flex items-center gap-4">
@@ -447,7 +1030,7 @@ export default function LiveRoomDetail() {
             )}
           </div>
 
-          {/* Right column — quick actions */}
+          {/* Right column — quick info & actions */}
           <div className="space-y-6">
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h3
@@ -463,8 +1046,39 @@ export default function LiveRoomDetail() {
                 <div>Room Type: {room.name}</div>
                 <div>Full ID: {room.roomId}</div>
                 <div>Paused: {room.paused ? "Yes" : "No"}</div>
+                {room.zoneSlug && <div>Zone: {room.zoneSlug}</div>}
               </div>
             </div>
+
+            {/* Quick Actions card */}
+            {isZoneRoom && (
+              <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
+                <h3
+                  className="text-[#C9A84C] text-sm mb-4"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  Quick Actions
+                </h3>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setActiveTab("room-graph")}
+                    className="w-full px-3 py-2 text-xs text-left border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:bg-[#1C1D27] rounded transition-colors flex items-center gap-2"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    <MapPin className="w-3.5 h-3.5" />
+                    View Zone Graph
+                  </button>
+                  <button
+                    onClick={openSpawnModal}
+                    className="w-full px-3 py-2 text-xs text-left border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:bg-[#1C1D27] rounded transition-colors flex items-center gap-2"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Spawn Creature
+                  </button>
+                </div>
+              </div>
+            )}
 
             {isZoneRoom && (
               <div
@@ -615,6 +1229,158 @@ export default function LiveRoomDetail() {
               >
                 <Plus className="w-4 h-4" />
                 {spawning ? "Spawning…" : "Spawn"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Broadcast Modal */}
+      {showBroadcastModal && broadcastTargetRoom && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3
+                className="text-[#C9A84C] text-lg"
+               
+              >
+                Broadcast to {broadcastTargetRoom.name}
+              </h3>
+              <button
+                onClick={() => setShowBroadcastModal(false)}
+                className="text-[#8A8B95] hover:text-[#E8E0D0] transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label
+                  className="block text-[#8A8B95] text-sm mb-2"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  Message
+                </label>
+                <textarea
+                  value={broadcastMessage}
+                  onChange={(e) =>
+                    setBroadcastMessage(e.target.value.slice(0, 500))
+                  }
+                  placeholder="Enter message to broadcast…"
+                  rows={4}
+                  className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                />
+                <span
+                  className="text-[#4A4B55] text-xs mt-1 block text-right"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  {broadcastMessage.length}/500
+                </span>
+              </div>
+              <label
+                className="flex items-center gap-2 text-[#8A8B95] text-sm cursor-pointer"
+                style={{ fontFamily: "var(--font-sans)" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={broadcastAsSystem}
+                  onChange={(e) => setBroadcastAsSystem(e.target.checked)}
+                  className="accent-[#C9A84C]"
+                />
+                Send as system message
+              </label>
+            </div>
+            <div className="flex gap-3 justify-end mt-6">
+              <button
+                onClick={() => setShowBroadcastModal(false)}
+                className="px-4 py-2 border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors"
+                style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBroadcast}
+                disabled={broadcasting || !broadcastMessage.trim()}
+                className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2 disabled:opacity-50"
+                style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
+              >
+                <Megaphone className="w-4 h-4" />
+                {broadcasting ? "Sending…" : "Send"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Teleport Modal */}
+      {showTeleportModal && teleportTargetRoom && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3
+                className="text-[#C9A84C] text-lg"
+               
+              >
+                Teleport Player to {teleportTargetRoom.name}
+              </h3>
+              <button
+                onClick={() => setShowTeleportModal(false)}
+                className="text-[#8A8B95] hover:text-[#E8E0D0] transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label
+                  className="block text-[#8A8B95] text-sm mb-2"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  Select Player
+                </label>
+                <select
+                  value={teleportPlayerId}
+                  onChange={(e) => setTeleportPlayerId(e.target.value)}
+                  className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
+                >
+                  <option value="">Select player…</option>
+                  {(room?.players ?? []).map((p) => (
+                    <option key={p.sessionId} value={p.sessionId}>
+                      {p.characterName ?? `${p.sessionId.slice(0, 8)}…`} (in {p.currentRoomId})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <label
+                className="flex items-center gap-2 text-[#8A8B95] text-sm cursor-pointer"
+                style={{ fontFamily: "var(--font-sans)" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={teleportNotify}
+                  onChange={(e) => setTeleportNotify(e.target.checked)}
+                  className="accent-[#C9A84C]"
+                />
+                Notify player
+              </label>
+            </div>
+            <div className="flex gap-3 justify-end mt-6">
+              <button
+                onClick={() => setShowTeleportModal(false)}
+                className="px-4 py-2 border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors"
+                style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleTeleport}
+                disabled={teleporting || !teleportPlayerId}
+                className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2 disabled:opacity-50"
+                style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
+              >
+                <Move className="w-4 h-4" />
+                {teleporting ? "Teleporting…" : "Teleport"}
               </button>
             </div>
           </div>

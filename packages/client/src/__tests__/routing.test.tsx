@@ -117,7 +117,7 @@ describe('Routing', () => {
       await waitFor(() => {
         expect(screen.queryByLabelText('Username')).not.toBeInTheDocument();
       });
-      expect(screen.queryByText('Enter the Refuge')).not.toBeInTheDocument();
+      expect(screen.queryByText('Enter the World')).not.toBeInTheDocument();
     });
 
     it('renders zone page for authenticated user at /zone', async () => {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router";
 import {
   ArrowLeft,
@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { logout as apiLogout } from "../services/api";
 import { useAppContext } from "../store";
+import { useSettings } from "../hooks/useSettings";
 
 type SettingCategory =
   | "account"
@@ -48,32 +49,16 @@ const categories: {
 
 export default function Settings() {
   const { state, dispatch } = useAppContext();
+  const { settings, updateSetting, isLoading, isSynced } = useSettings();
   const [activeCategory, setActiveCategory] =
     useState<SettingCategory>("narration");
-  const [fontSize, setFontSize] = useState(() =>
-    Number(localStorage.getItem("ellmud_fontSize") ?? 16)
-  );
-  const [verbosity, setVerbosity] = useState(() =>
-    localStorage.getItem("ellmud_verbosity") ?? "standard"
-  );
-  const [narrationStyle, setNarrationStyle] = useState(() =>
-    localStorage.getItem("ellmud_narrationStyle") ?? "default"
-  );
   const [loggingOut, setLoggingOut] = useState(false);
   const navigate = useNavigate();
 
-  // Persist display preferences to localStorage
-  useEffect(() => {
-    localStorage.setItem("ellmud_fontSize", String(fontSize));
-  }, [fontSize]);
-
-  useEffect(() => {
-    localStorage.setItem("ellmud_verbosity", verbosity);
-  }, [verbosity]);
-
-  useEffect(() => {
-    localStorage.setItem("ellmud_narrationStyle", narrationStyle);
-  }, [narrationStyle]);
+  // Derived from hook — replaces direct localStorage reads
+  const fontSize = settings.display.fontSize;
+  const verbosity = settings.narration.verbosity;
+  const narrationStyle = settings.narration.narrationStyle;
 
   const handleLogout = useCallback(async () => {
     setLoggingOut(true);
@@ -106,6 +91,16 @@ export default function Settings() {
           >
             Settings
           </h1>
+          {isLoading && (
+            <span className="text-text-disabled text-xs font-sans ml-2 animate-pulse">
+              Syncing…
+            </span>
+          )}
+          {!isLoading && isSynced && (
+            <span className="text-success text-xs font-sans ml-2 opacity-60">
+              ✓ Synced
+            </span>
+          )}
         </div>
       </div>
 
@@ -217,7 +212,7 @@ export default function Settings() {
                       min="12"
                       max="24"
                       value={fontSize}
-                      onChange={(e) => setFontSize(Number(e.target.value))}
+                      onChange={(e) => updateSetting('display', 'fontSize', Number(e.target.value))}
                       className="flex-1"
                     />
                     <span
@@ -287,7 +282,7 @@ export default function Settings() {
                         name="verbosity"
                         value="terse"
                         checked={verbosity === "terse"}
-                        onChange={(e) => setVerbosity(e.target.value)}
+                        onChange={(e) => updateSetting('narration', 'verbosity', e.target.value)}
                         className="mt-1"
                       />
                       <div className="flex-1">
@@ -311,7 +306,7 @@ export default function Settings() {
                         name="verbosity"
                         value="standard"
                         checked={verbosity === "standard"}
-                        onChange={(e) => setVerbosity(e.target.value)}
+                        onChange={(e) => updateSetting('narration', 'verbosity', e.target.value)}
                         className="mt-1"
                       />
                       <div className="flex-1">
@@ -335,7 +330,7 @@ export default function Settings() {
                         name="verbosity"
                         value="verbose"
                         checked={verbosity === "verbose"}
-                        onChange={(e) => setVerbosity(e.target.value)}
+                        onChange={(e) => updateSetting('narration', 'verbosity', e.target.value)}
                         className="mt-1"
                       />
                       <div className="flex-1">
@@ -363,7 +358,7 @@ export default function Settings() {
                   </label>
                   <select
                     value={narrationStyle}
-                    onChange={(e) => setNarrationStyle(e.target.value)}
+                    onChange={(e) => updateSetting('narration', 'narrationStyle', e.target.value)}
                     className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-primary focus:border-accent-gold focus:outline-none font-sans"
                   >
                     <option value="default">Default</option>

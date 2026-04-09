@@ -161,4 +161,39 @@ describe('goto command', () => {
       text.includes('teleport') || text.includes('transfer') || text.includes('zone'),
     ).toBe(true);
   });
+
+  // 8. Cross-zone goto with nonexistent zone returns error (resolveZoneExists)
+  it('returns error when cross-zone target zone does not exist', () => {
+    enableDevMode();
+    const result = handleGoto(buildCtx(['ghost-zone:entrance'], {
+      resolveZoneExists: () => false,
+    }));
+
+    expect(result.zoneTransfer).toBeUndefined();
+    const text = narrationText(result).toLowerCase();
+    expect(text).toContain('no such zone');
+    expect(text).toContain('ghost-zone');
+  });
+
+  // 9. Cross-zone goto with existing zone returns zoneTransfer
+  it('returns zoneTransfer when cross-zone target zone exists', () => {
+    enableDevMode();
+    const result = handleGoto(buildCtx(['valid-zone:hall'], {
+      resolveZoneExists: (slug) => slug === 'valid-zone',
+    }));
+
+    expect(result.zoneTransfer).toBeDefined();
+    expect(result.zoneTransfer!.targetZoneSlug).toBe('valid-zone');
+    expect(result.zoneTransfer!.targetRoomSlug).toBe('hall');
+  });
+
+  // 10. Same-zone slug with colon syntax and nonexistent room returns error
+  it('returns error for nonexistent room when colon syntax targets current zone', () => {
+    enableDevMode();
+    const result = handleGoto(buildCtx(['current-zone:nonexistent-room']));
+
+    expect(result.zoneTransfer).toBeUndefined();
+    const text = narrationText(result).toLowerCase();
+    expect(text).toContain('no room with slug');
+  });
 });

@@ -5961,3 +5961,233 @@ This document is the canonical reference for squad implementation.
 - **Next steps:** Regis estimates client build complexity; Bruenor assesses content requirements; Squad schedules art production phase
 
 
+
+---
+
+## 2026-01-19: Sandbox Combat Log Captures via ZoneRoom Tick Interception
+
+**By:** Drizzt (Engine Dev)  
+**Scope:** Combat Sandbox Phase 2  
+
+**Decision:** Phase 2 sandbox `log` command captures combat events by intercepting TickResult in ZoneRoom's update loop. After `resolveTick()` returns, we call `recordSandboxCombatEvents(tickResult, tick)` only when `hasSandboxCombat` is true.
+
+**Why:**
+- Requires zero changes to CombatSystem's core resolution logic
+- Scopes logging to sandbox rooms only (no overhead in production combat)
+- Uses a module-level ring buffer (max 100 entries, FIFO) in sandbox.ts
+
+**Implications:**
+- Stat override tracking uses module-level Maps — works because sandbox is single-instance per zone server
+- `_resetSandboxState()` exported for test cleanup between test cases
+- If CombatSystem ever changes its TickResult shape, the log capture will need updating (but it only reads `events[].type/actorName/targetName/damage/dodged` — stable fields)
+
+---
+
+## 2026-01-19: Sandbox Scenario Persistence — File-Based JSON
+
+**By:** Drizzt (Engine Dev)  
+**Scope:** Combat Sandbox Phase 3  
+
+**Decision:** Scenario save/load uses JSON files on disk at `packages/server/data/sandbox-scenarios/`. The `CommandContext` interface gained a `scenarioDir?: string` override so tests can use isolated temp dirs.
+
+**Schema:** Each scenario stores one entry per creature instance (not grouped by type) with optional per-creature stat overrides. Top-level `seed` field stores the PRNG seed, `overrides` aggregates all entity overrides, `playerOverrides` stores player-specific overrides.
+
+**Key Choices:**
+- **Per-instance creature entries** rather than grouped-by-type — enables individual override tracking and simpler round-trip fidelity
+- **`handleSet` now matches creature IDs** alongside name/type partial matching — needed for programmatic targeting
+- **Load registers overridden creatures as combatants** via `creatureManager.toCombatant()` so stat overrides are immediately visible in the combat system
+- **`.gitignore` excludes `*.json` in the scenario dir** but tracks `.gitkeep` — user scenarios don't pollute version control
+
+**Impact:**
+- `CommandContext` interface in `commands/index.ts` has a new optional field `scenarioDir`
+- No changes to CreatureManager, CombatSystem, or any production hot path
+- 82 sandbox tests passing (all Phase 1 + 2 + 3)
+
+---
+
+## 2026-01-20: featureHandlers Multi-Room Type Support
+
+**By:** Drizzt (Engine Dev)  
+**Scope:** Combat Sandbox Phase 1  
+
+**Decision:** Extended the `featureHandlers` map in `commands/index.ts` to support `requiredRoomType: string | string[]`.
+
+The gate logic now normalizes to an array and uses `includes()`:
+```typescript
+const allowed = Array.isArray(featureCmd.requiredRoomType)
+  ? featureCmd.requiredRoomType
+  : [featureCmd.requiredRoomType];
+if (!allowed.includes(ctx.room.type as string)) { ... }
+```
+
+**Rationale:** The sandbox command must work in all 3 sandbox room types (`feature_sandbox`, `feature_sandbox_arena`, `feature_sandbox_stats`). Existing feature handlers use a single string — this change is backward-compatible.
+
+**Impact:**
+- All existing `featureHandlers` entries unchanged (single string still works)
+- New commands can now gate to multiple room types without registering duplicate entries
+- 2213 tests pass, zero regressions
+
+---
+
+## 2026-04-07T15:15:52Z: Sandbox Architecture — Shared CombatSystem
+
+**By:** dkirby-ms (via Copilot)  
+**Scope:** Combat Sandbox Architecture  
+
+**Decision:** Sandbox uses the zone's existing CombatSystem instance (not a separate isolated instance).
+
+**Why:** Avoids divergence between sandbox and real combat resolution.
+
+**Layout:** 3 rooms — sandbox-lobby (feature_sandbox), sandbox-arena (feature_sandbox_arena), sandbox-stats-lab (feature_sandbox_stats). Connected north from training-grounds. Can expand later.
+
+**Rationale:** User decision resolving the Elminster/Drizzt architecture split and Elminster/Laeral room layout split.
+
+---
+
+## 2026-04-13: Smooth Step (Right-Angle) Edge Connectors for Zone Designer
+
+**By:** Regis (Frontend Dev)  
+**Scope:** Zone Designer UI — Edge Rendering
+
+**Decision:** Migrated from Bézier curves to smooth step (right-angle) connectors in `ZoneExitEdge.tsx`.
+
+**Implementation:**
+- Replaced `getBezierPath` with `getSmoothStepPath`
+- Added `borderRadius: 8` for rounded corners (not harsh 90° angles)
+- Added `offset: 20` for padding from nodes
+- Updated test mocks and documentation
+
+**Why:**
+1. **Semantic correctness:** Movement in the MUD is orthogonal (N/S/E/W/U/D). Right-angle connectors visually match this.
+2. **Layout tolerance:** Smooth step paths forgive minor position drift from BFS collisions.
+3. **Visual consistency:** Direction gradients, arrowheads, and modifiers preserved.
+4. **Cleaner visuals:** Eliminates dramatic arcs while maintaining clear directional flow.
+
+**Context:** BFS layout places rooms on a 2D grid. When the ideal cell is occupied, `findNearestDirectional()` searches for alternatives. This can cause edge misalignment (e.g., an edge from A's west handle to B's east handle). Smooth step paths accommodate these inherent placement trade-offs gracefully.
+
+**Impact:**
+- User experience: Clearer, more predictable edge routing
+- Code: Minimal change (2-line update + test mocks)
+- Performance: No impact
+- Tests: All 25 edge tests passing with updated mock
+
+**Files Modified:**
+- `packages/client/src/components/map/ZoneExitEdge.tsx`
+- `packages/client/src/__tests__/zone-exit-edge.test.tsx`
+
+
+---
+
+## 2026-04-08T01:25:00Z: No Curved Edges on Map — User Directive
+
+**By:** dkirby-ms (via Copilot)  
+**Scope:** Map Layout — User Experience
+
+**Directive:** No curved or diagonal edges on the map. All connections must be drawn as straight orthogonal lines (horizontal or vertical). If two rooms connected by a cardinal exit aren't on the same axis, fix the layout — don't draw a curve.
+
+**Rationale:** The map should only have straight lines. Curves indicate a layout alignment failure, not a rendering choice.
+
+---
+
+## 2026-04-17: Cardinal Alignment v3 — Group-Aware Cascade + Chain Push
+
+**By:** Regis (Frontend Dev)  
+**Commit:** 117e679  
+**Scope:** Map Layout — Phase 5c Alignment
+
+**Context:**
+Phase 5c cardinal alignment in `computeLayout.ts` had a cascade guard (v2, commit b82ce8e) that was too conservative. It prevented alignment of main-street ↔ inside-the-west-gate-of-midgaard because wall-road-2 (in the poor-alley E/W group) was anchored at its group's majority coordinate. The `layoutScore` rollback also rejected valid alignment shifts (score 214→394 for a 19-room cascade).
+
+**Decision:**
+Replaced the fragile cascade guard + layoutScore rollback with three general-purpose mechanisms:
+
+1. **Group-aware cascade:** When the perpendicular BFS encounters a room in another multi-room alignment group, pull in the ENTIRE group — not just that one room. This preserves their internal E/W (or N/S) alignment during the shift.
+
+2. **Chain-push collision resolution:** Instead of `findNearestUnoccupied` (which displaces rooms sideways, breaking other alignments), push colliding rooms 1 step further in the shift direction (domino style). This preserves relative ordering along the perpendicular axis.
+
+3. **Alignment-specific acceptance:** Use total misaligned-pair count across ALL groups as the acceptance criterion, instead of `layoutScore`. The alignment pass should prioritize cardinal alignment over distance minimization.
+
+**Impact:**
+- All E/W-connected room pairs now share the same y-coordinate
+- All N/S-connected room pairs now share the same x-coordinate
+- No zone-specific logic, no hardcoded room slugs
+- 27 computeLayout tests + 13 elk-layout tests pass
+- Midgaard test now asserts full corridor alignment (9 rooms including both gate pairs)
+- No API or server changes required
+- The alignment pass moves up to ~20 rooms per iteration but converges in 1-2 passes
+- Future zones with similar topology (parallel E/W corridors connected by N/S chains) should work correctly without additional fixes
+
+**Files Modified:**
+- `packages/client/src/map/computeLayout.ts`
+- `packages/client/src/map/__tests__/computeLayout.test.ts`
+
+---
+
+## 2026-04-17: Edge Crossing Elimination — Phase 5d
+
+**By:** Regis (Frontend Dev)  
+**Commit:** 2495643  
+**Scope:** Map Layout — Phase 5d Crossing Detection
+
+**Context:**
+The BFS layout engine could produce layouts where two edge lines visually cross over each other (e.g., a horizontal A→B edge crossing a vertical C→D edge at a grid point that has no room). This made the map confusing — players saw intersecting lines and assumed a room existed there.
+
+**Decision:**
+Added **Phase 5d** to the layout refinement pipeline in `computeLayout.ts`, positioned after cardinal alignment (5c) and before occlusion fix (6).
+
+**Algorithm:**
+- **Detection:** Build all orthogonal edge segments per z-level (skip diagonals, skip distance-1 edges); test all segment pairs for intersection at strictly interior points (excluding shared endpoints)
+- **Resolution:** For each crossing pair, try moving each of the four endpoint rooms (fewest-exits first) to a nearby free cell within CROSSING_CANDIDATE_RADIUS=6
+- **Acceptance:** Crossing decreases AND move passes all guards: no diagonals, no direction mismatches, no alignment breaks
+- **Iteration:** Up to CROSSING_FIX_PASSES=30 times, recomputing segments each pass
+
+**Constraints Preserved:**
+- Cardinal alignment (E/W same y, N/S same x) — guarded by `moveWouldBreakAlignment()`
+- Direction semantics — guarded by `moveWouldIncreaseMismatches()`
+- No diagonals — explicit check against all neighbors
+- No collisions — occupied-set check
+
+**Impact:**
+- No regressions: All 28 layout tests + 13 ELK tests pass, including Midgaard
+- New test (Test 28): Constructs a topology with guaranteed crossing and verifies it's eliminated
+- Performance: O(E² × passes) per z-level, negligible for zones <200 rooms
+
+**Files Modified:**
+- `packages/client/src/map/computeLayout.ts`
+- `packages/client/src/map/__tests__/computeLayout.test.ts`
+
+---
+
+## 2026-04-08: Include roomGraphRooms in zone detail response
+
+**By:** Drizzt (Engine Dev)  
+**Commit:** e3d506b  
+**Scope:** Admin — Room Graph Display Fix
+
+**Context:**
+
+The admin Room Graph tab was unable to display spawned creatures because it depended on a separate zone-data API call (`GET /admin/api/zones/:slug`) to determine the room list. For procedural zones that have no `zoneSlug`, this fetch always returned null, causing the `roomOccupancy` useMemo to short-circuit with an empty map — silently hiding all creature occupancy.
+
+The previous fix (commit `a82cf3d`) addressed three surface symptoms (fire-and-forget `loadRoom`, invalid room ID validation, hardcoded zone name) but did not fix the root cause.
+
+**Decision:**
+
+Include the live room graph rooms in the `getZoneDetail()` response as a new `roomGraphRooms[]` field. The client now uses this authoritative room list as a fallback when zone data is unavailable.
+
+**Rationale:**
+
+- The server already has the room graph — duplicating the fetch on the client creates an unnecessary failure point.
+- This fixes both procedural zones (no `zoneSlug`) and any scenario where the zone API fetch fails.
+- The room graph is the source of truth for creature placement (spawn validates against it), so using it for display ensures consistency.
+
+**Trade-offs:**
+
+- Slightly larger room detail response (adds room id/name/type per room).
+- When full zone data IS available, it's still preferred for richer metadata (properties, NPCs, loot containers).
+
+**Impact:**
+
+- 3 new tests added
+- 2388 total tests pass
+- No regressions
+- Fixes procedural zone creature display

@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
+import { Settings, LogOut } from "lucide-react";
 import { useAppContext } from "../store";
 import {
   fetchCharacters,
   createCharacter,
   selectCharacter,
   deleteCharacter,
+  logout as apiLogout,
   ApiError,
 } from "../services/api";
 import type { CharacterSummary } from "@ellmud/shared";
@@ -124,6 +126,18 @@ export default function CharacterSelect() {
     }
   };
 
+  const handleLogout = async () => {
+    if (state.token) {
+      try {
+        await apiLogout(state.token);
+      } catch {
+        /* best effort */
+      }
+    }
+    dispatch({ type: "LOGOUT" });
+    navigate("/");
+  };
+
   // ─── Loading State ──────────────────────────────────────────────────────
 
   if (loading) {
@@ -139,7 +153,32 @@ export default function CharacterSelect() {
   // ─── Render ─────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-bg-primary flex">
+    <div className="min-h-screen bg-bg-primary flex flex-col">
+      {/* Top bar */}
+      <div className="bg-bg-panel border-b border-border-muted px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <span className="text-text-secondary text-sm font-sans">
+            {state.username ?? state.email ?? "Unknown"}
+          </span>
+          <button
+            onClick={() => navigate("/settings")}
+            className="text-text-secondary hover:text-accent-gold transition-colors"
+            title="Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleLogout}
+            className="text-text-secondary hover:text-danger transition-colors"
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 flex">
       {/* Left panel — Character list */}
       <div className="w-[40%] bg-bg-panel border-r border-border-muted p-8 overflow-y-auto">
         <h2
@@ -329,6 +368,7 @@ export default function CharacterSelect() {
             </p>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
