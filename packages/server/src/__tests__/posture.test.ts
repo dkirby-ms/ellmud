@@ -15,7 +15,7 @@
  * @see Issue #371
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { handleCommand, type CommandContext, type CommandResult, type PlayerRef } from '../commands/index.js';
+import { handleCommand, type CommandContext, type CommandResult } from '../commands/index.js';
 import { parseCommand } from '../commands/parser.js';
 import { handleLook } from '../commands/handlers/look.js';
 import { forcePosture } from '../commands/handlers/posture.js';
