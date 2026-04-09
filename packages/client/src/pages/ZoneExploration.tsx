@@ -25,6 +25,8 @@ import { useAutoScroll } from "../hooks/useAutoScroll.js";
 import { useExplorationMap } from "../hooks/useExplorationMap.js";
 import { useMapToggle } from "../hooks/useMapToggle.js";
 import { useVersion } from "../hooks/useVersion.js";
+import { useDirectionKeys } from "../hooks/useDirectionKeys.js";
+import { isSpeedwalk, parseSpeedwalk } from "../utils/speedwalk.js";
 import { logout as apiLogout, fetchSpawnZone } from "../services/api.js";
 import type { CombatAction } from "@ellmud/shared";
 
@@ -84,12 +86,27 @@ export default function ZoneExploration() {
 
   // Re-focus the command input after zone switches (input is disabled while connecting)
   const inputRef = useRef<HTMLInputElement>(null);
+  const speedwalkAbortRef = useRef(false);
   useEffect(() => {
     if (state.connectionStatus === "connected") {
       // Defer focus to next frame so the input is re-enabled first
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [state.connectionStatus]);
+
+  // Phase 1: Arrow key / numpad direction shortcuts (only when input is not focused)
+  useDirectionKeys({
+    onMove: handleExitClick,
+    inputRef,
+    enabled: state.connectionStatus === "connected",
+  });
+
+  // Abort any active speedwalk when combat starts
+  useEffect(() => {
+    if (state.inCombat) {
+      speedwalkAbortRef.current = true;
+    }
+  }, [state.inCombat]);
 
   // Logout handler
   const handleLogout = useCallback(async () => {
@@ -111,17 +128,69 @@ export default function ZoneExploration() {
   const roomType = state.roomHeader?.roomType;
   const roomSlug = state.roomHeader?.roomSlug;
 
+  const speedwalkMsgCounter = useRef(0);
+
+  const addSystemMessage = useCallback(
+    (text: string) => {
+      dispatch({
+        type: "ADD_MESSAGE",
+        message: {
+          id: `sw-${++speedwalkMsgCounter.current}`,
+          text,
+          type: "system",
+          timestamp: Date.now(),
+        },
+      });
+    },
+    [dispatch]
+  );
+
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      if (!command.trim()) return;
+      const trimmed = command.trim();
+      if (!trimmed) return;
 
       setCommandHistory((prev) => [...prev, command]);
       setHistoryIndex(-1);
-      sendCommand(command);
       setCommand("");
+
+      // Phase 2: Speedwalk detection
+      if (isSpeedwalk(trimmed)) {
+        if (state.inCombat) {
+          addSystemMessage("Speedwalk blocked — you are in combat!");
+          return;
+        }
+
+        const result = parseSpeedwalk(trimmed);
+        if (!result.ok) {
+          addSystemMessage(result.error);
+          return;
+        }
+
+        // Execute each move sequentially with a small delay so the server
+        // can process each one and the response echoes back.
+        speedwalkAbortRef.current = false;
+        const moves = result.moves;
+        addSystemMessage(`Speedwalk: ${moves.length} moves (${trimmed})`);
+        let i = 0;
+
+        const step = () => {
+          if (speedwalkAbortRef.current || i >= moves.length) return;
+          handleExitClick(moves[i]);
+          i++;
+          if (i < moves.length) {
+            setTimeout(step, 150);
+          }
+        };
+
+        step();
+        return;
+      }
+
+      sendCommand(command);
     },
-    [command, sendCommand]
+    [command, sendCommand, handleExitClick, state.inCombat]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
