@@ -172,7 +172,7 @@
 .mud-miss       { color: #C4A000; opacity: 0.7; } /* yellow + dim */
 
 /* Message types */
-.mud-system     { color: #555753; white-space: pre-line; }  /* gray/dim, preserve newlines */
+.mud-system     { color: #555753; white-space: pre-wrap; }  /* gray/dim, preserve spaces + newlines */
 .mud-npc        { color: #06989A; }              /* ANSI cyan */
 .mud-player     { color: #EEEEEC; }              /* bright white */
 .mud-exits      { color: #C4A000; font-weight: 700; } /* yellow + bold */
