@@ -48,6 +48,8 @@
 
 ## Learnings
 
+- **Issues #384 & #385 — Live Rooms occupancy filters + context menu (2026):** Added two features to the Room Graph tab in `LiveRoomDetail.tsx`. (1) Occupancy filter bar: `filterPlayers` / `filterCreatures` boolean toggles, `filteredDisplayRooms` useMemo derived from `displayRooms` + `roomOccupancy`. OR logic when both active. Shows count badge `filtered/total`. (2) Right-click context menu: `contextMenu` state `{x,y,roomSlug,roomName}`, `handleRoomContextMenu` on `onContextMenu` of each room row button. Fixed-position popup with inline styles matching ZoneDesigner pattern (bg `#1C1D27`, border `#2A2B35`, hover `#2A2B35`). Close-on-escape/outside via window event listeners in useEffect. Inline buttons removed; hint text in expanded rows. Modals (broadcast/spawn/teleport) unchanged — only trigger moved. Commit 70f6746.
+
 - **Issue #368 — Random character names (2026):** Created `utils/name-generator.ts` with 64 curated cyber noir names + syllable combiner (35 onsets × 20 codas). 60/40 curated/procedural split. All outputs validated against shared `validateCharacterName` (profanity filter, 2-24 chars, alpha-only, capitalization). Replaced hardcoded "Kael" placeholder in `CharacterSelect.tsx`. State initialized via `useState(generateRandomName)` (lazy initializer). Regenerate button uses lucide `Dices` icon, styled to match existing `bg-bg-elevated` pattern. Fresh name generated on "+ New Character" click and after successful creation. 7 tests. Commit ee3e991.
 
 - **Issue #366 — Who list UI (2026):** Built `WhoListModal.tsx` (following SettingsModal pattern), `useWhoList.ts` hook, and integrated into ZoneExploration. Added `REQUEST_PLAYER_LIST` / `PLAYER_LIST` MessageTypes + `PlayerListEntry` / `PlayerListMessage` to shared. Hook sends request via Colyseus room, listens for response. Modal shows table (Name, Lvl, Class, Zone, Flags) with "???" for anon players, flag badges, monospace font, dark theme. Users icon button in top bar next to Settings gear. No server-side logic (Jarlaxle). `/who` command handled server-side — text response flows through existing narrate pipeline, no client interception needed. Updated types test count 28→30.
@@ -1782,3 +1784,27 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
   - `packages/client/src/pages/admin/AdminLayout.tsx` — Startup validation, failure listener, validating state
   - `packages/client/src/__tests__/admin-token-validation.test.tsx` — New test file (17 tests)
 - **Team Impact:** Minsc verified implementation solid; PR #372 ready for merge
+
+
+---
+
+### 2026-04-09: Issues #384–#385 — Live Rooms Admin UI (Background Session)
+
+**Status:** ✅ Complete  
+**Issues:** #384 (Occupancy filters), #385 (Right-click context menu)  
+**Commit:** 70f6746
+
+**Summary:**
+- **#384 — Occupancy Filter Toggles:** Added filter bar above live rooms list with Players/Creatures checkboxes. OR logic when both active (show rooms with players OR creatures). Improves room discovery on busy admin dashboard.
+- **#385 — Right-click Context Menu:** Room Graph tab now uses right-click context menu instead of inline action buttons (Broadcast/Spawn/Teleport). Reused ZoneDesigner pattern (inline styles, window listeners for escape/outside close). Significantly reduces row clutter.
+
+**Architecture Decisions:**
+- Context menu pattern from ZoneDesigner reused entirely — maintains consistency across admin tools
+- Inline styles (not CSS classes) match ZoneDesigner convention — admin UI not in styled-components refactor scope
+- No API changes, no type changes, no data model changes
+
+**Design Decision Filed:** `.squad/decisions/inbox/regis-live-rooms-ui.md` documenting pattern rationale and future implications.
+
+**Test Status:** 3049 tests passing. New UI features covered by existing live rooms test suite.
+
+**Team Impact:** Establishes admin UI pattern — right-click context menus on data rows should follow this style convention.

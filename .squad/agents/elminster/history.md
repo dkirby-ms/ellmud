@@ -27,6 +27,29 @@
 
 ## Learnings
 
+### 2025-07-22: Creature Room Appearance Design (#383)
+**Task:** Design spec for individual creature lines in room descriptions with ANSI tag support.
+
+**Key Finding:** No schema migration or type changes needed. The `room_description` column already exists on `creature_definitions` (added by migration 009), and `roomDescription?: string` is already on `CreatureTemplate`, `Creature`, and `CreatureRef` interfaces. All seed creatures already have values. ANSI tag support (`[red]text[/red]`) works end-to-end via the client parser at `packages/client/src/lib/ansi-parser.ts`.
+
+**Design Decision:** Rendering-only change. Replace creature aggregation-by-type logic (which shows `(xN)` counts) with a simple per-creature loop in 3 files:
+- `packages/server/src/commands/handlers/look.ts` (lines 57-72)
+- `packages/server/src/commands/handlers/go.ts` (lines 78-93)
+- `packages/server/src/commands/handlers/goto.ts` (lines 84-99)
+
+**Architecture Pattern:** Room rendering is duplicated across look/go/goto handlers — all three build creature lines identically. A future refactor could extract a shared `renderCreatureLines(creatures: CreatureRef[]): string[]` utility, but that's out of scope for this issue.
+
+**Key File Paths:**
+- Creature types: `packages/server/src/creatures/types.ts`
+- Creature manager: `packages/server/src/creatures/CreatureManager.ts`
+- Command context / CreatureRef: `packages/server/src/commands/index.ts:68-81`
+- ZoneRoom context building: `packages/server/src/rooms/ZoneRoom.ts:1186-1222`
+- Admin content store: `packages/server/src/admin/content/PgCreatureDefinitionsStore.ts`
+- ANSI parser: `packages/client/src/lib/ansi-parser.ts`
+- Seed data: `packages/server/src/db/migrations/002_seed_content.sql:84-150`
+
+**Deliverable:** Full spec at `.squad/decisions/inbox/elminster-creature-appearance.md`, summary posted to issue #383.
+
 ### 2026-04-10: Optional User Flags Architecture (#365)
 **Task:** Research and design optional user flags for player information visibility and roleplay indicators.
 
