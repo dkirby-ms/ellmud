@@ -40,6 +40,18 @@
 
 ## Learnings (Archived — See Detailed Session Records)
 
+**Admin Token Validation Tests (2026-07, Issue #369):**
+- Admin auth flow: `adminAuth` middleware (`packages/server/src/admin/middleware.ts`) validates `ADMIN_TOKEN` env var, returns 503/401/403
+- Client token stored in `localStorage` via `admin-api.ts` helpers: `getAdminToken()`, `setAdminToken()`, `clearAdminToken()`
+- `AdminLayout.tsx` manages auth state: login form → `handleAdminLogin()` → `validateAdminToken()` → sets `authenticated`
+- Regis added `ADMIN_AUTH_FAILURE_EVENT` custom event: `adminFetch` dispatches on 401/403, `AdminLayout` listens to reset to login
+- Regis added mount-time validation: `useEffect` calls `validateAdminToken()` on load to catch stale stored tokens
+- `validating` state shows loading spinner while stored token is checked (prevents flash of admin content)
+- Client admin tests mock `admin-api.js` — must include ALL exports: `validateAdminToken`, `ADMIN_AUTH_FAILURE_EVENT`, `AdminAPIError`
+- The text `⚙ Ellmud Content Admin` requires regex matching in tests (emoji prefix breaks `getByText` exact match)
+- Test files: `packages/client/src/__tests__/admin-token-validation.test.tsx` (17 tests), `packages/server/src/__tests__/admin-token-validation.test.ts` (18 tests)
+- Total: 35 tests covering empty/missing/invalid/valid/stale/recovery/mid-session-expiry scenarios
+
 **Gameplay Metrics Tests (2026-07, Issue #360):**
 - MetricsService API: `recordX(playerId, typedMetadata)` — separate args, NOT a single object
 - All `recordX()` methods are fire-and-forget (`void` return), internally call private `record()` which returns `Promise<void>` with `.catch()` error swallowing
