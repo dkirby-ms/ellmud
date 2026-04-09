@@ -7711,3 +7711,264 @@ Added `shouldTreatAsSpeedwalk()` that requires the parsed result to contain 2+ m
 ## Impact
 - **Regis (Frontend):** The `shouldTreatAsSpeedwalk()` export from `speedwalk.ts` is now the correct gate for speedwalk mode. Use it instead of `isSpeedwalk()` when deciding UI behavior.
 - **Server:** No changes needed. Direction aliases already handle single letters.
+# Design Spec: Creature Room Appearance — Individual Lines with ANSI Support
+
+**Issue:** #383 — [FEATURE] creature appearance in room  
+**Author:** Elminster (Lead/Architect)  
+**Date:** 2025-07-22  
+**Label:** `go:needs-research` → `go:ready` (after approval)  
+**Assignees:** Jarlaxle (Systems Dev — rendering changes), Drizzt (Engine Dev — if template/manager changes needed)
+
+---
+
+## Summary
+
+Creatures in a room currently appear aggregated by type on a single line with a count suffix (e.g., `"A goblin lurks here. (x3)"`). The issue requests that **each creature instance gets its own dedicated line**, with the text coming from the creature's `roomDescription` field, and that the text supports ANSI color tags.
+
+**Good news: no schema migration or type changes are needed.** The `room_description` column already exists on `creature_definitions`, and `roomDescription?: string` is already on both `CreatureTemplate` and `Creature` interfaces. ANSI tag parsing (`[red]text[/red]`) already works end-to-end in the client. This is a rendering-only change.
+
+---
+
+## Current State
+
+### Schema (already sufficient)
+
+| Layer | Location | Field |
+|-------|----------|-------|
+| Database | `creature_definitions.room_description` (TEXT, nullable) | `packages/server/src/db/migrations/001_schema.sql:142` |
+| Template | `CreatureTemplate.roomDescription?: string` | `packages/server/src/creatures/types.ts:76` |
+| Instance | `Creature.roomDescription?: string` | `packages/server/src/creatures/types.ts:111` |
+| Command context | `CreatureRef.roomDescription?: string` | `packages/server/src/commands/index.ts:72` |
+| Admin API | `PgCreatureDefinitionsStore` reads/writes `room_description` | `packages/server/src/admin/content/PgCreatureDefinitionsStore.ts:50,163` |
+
+All existing creatures in seed data already have `room_description` values (see `002_seed_content.sql:84-150`).
+
+### Current Rendering (what changes)
+
+Three files contain identical aggregation logic that groups creatures by type and appends `(xN)`:
+
+1. **`packages/server/src/commands/handlers/look.ts:57-72`** — `showFullRoom()` (the "look" command)
+2. **`packages/server/src/commands/handlers/go.ts:76-93`** — room entry after movement
+3. **`packages/server/src/commands/handlers/goto.ts:83-99`** — admin teleport room entry
+
+All three follow this pattern:
+```typescript
+// CURRENT: aggregate by type
+const creaturesByType = new Map<string, { creature: CreatureRef; count: number }>();
+for (const c of creatures) {
+  const key = c.type ?? c.name;
+  const existing = creaturesByType.get(key);
+  if (existing) existing.count++;
+  else creaturesByType.set(key, { creature: c, count: 1 });
+}
+for (const [, { creature, count }] of creaturesByType) {
+  const desc = creature.roomDescription || `A ${creature.name} lurks here.`;
+  lines.push(count > 1 ? `${desc} (x${count})` : desc);
+}
+```
+
+### ANSI Tag System (already sufficient)
+
+The client parser at `packages/client/src/lib/ansi-parser.ts` supports lightweight tags:
+- Colors: `[red]`, `[green]`, `[cyan]`, `[bright-yellow]`, etc.
+- Modifiers: `[bold]`, `[dim]`, `[italic]`, `[underline]`
+- Closing: `[/red]` or `[/]` (pop any)
+
+Server sends raw text with tags embedded; client renders them as styled `<span>` elements with `.ansi-*` CSS classes. No server-side processing is needed — tags pass through as plain strings.
+
+---
+
+## Design
+
+### Change 1: Replace Aggregation with Individual Lines
+
+In all three files (`look.ts`, `go.ts`, `goto.ts`), replace the aggregation block with a simple per-creature loop:
+
+```typescript
+// NEW: one line per creature instance
+for (const creature of creatures) {
+  lines.push(creature.roomDescription || `A ${creature.name} lurks here.`);
+}
+```
+
+**That's the entire rendering change.** The fallback `A ${creature.name} lurks here.` handles creatures that lack a `roomDescription` (defensive, though all current creatures have one).
+
+#### File-specific changes:
+
+**`packages/server/src/commands/handlers/look.ts` (lines 57-72):**
+Replace:
+```typescript
+if (ctx.creaturesInRoom && ctx.creaturesInRoom.length > 0) {
+  const creaturesByType = new Map<string, { creature: import('../index.js').CreatureRef; count: number }>();
+  for (const c of ctx.creaturesInRoom) {
+    const key = c.type ?? c.name;
+    const existing = creaturesByType.get(key);
+    if (existing) {
+      existing.count++;
+    } else {
+      creaturesByType.set(key, { creature: c, count: 1 });
+    }
+  }
+  for (const [, { creature, count }] of creaturesByType) {
+    const desc = creature.roomDescription || `A ${creature.name} lurks here.`;
+    lines.push(count > 1 ? `${desc} (x${count})` : desc);
+  }
+}
+```
+With:
+```typescript
+if (ctx.creaturesInRoom && ctx.creaturesInRoom.length > 0) {
+  for (const creature of ctx.creaturesInRoom) {
+    lines.push(creature.roomDescription || `A ${creature.name} lurks here.`);
+  }
+}
+```
+
+**`packages/server/src/commands/handlers/go.ts` (lines 78-93):**
+Replace:
+```typescript
+if (creatures.length > 0) {
+  const creaturesByType = new Map<string, { creature: import('../index.js').CreatureRef; count: number }>();
+  // ...aggregation logic...
+}
+```
+With:
+```typescript
+for (const creature of creatures) {
+  lines.push(creature.roomDescription || `A ${creature.name} lurks here.`);
+}
+```
+
+**`packages/server/src/commands/handlers/goto.ts` (lines 84-99):**
+Same replacement pattern as `go.ts`.
+
+### Change 2: ANSI Tags in `roomDescription` Content
+
+No code change is required for ANSI support. The `roomDescription` field is a plain string that flows from DB → server → client. The client's `parseAnsiText()` already handles tags in any `NarrateMessage` text.
+
+To demonstrate and validate, update a few seed creature descriptions with ANSI tags. Example seed data updates in `002_seed_content.sql` (optional, can be done in a follow-up content pass):
+
+```sql
+-- Before:
+'A drowned revenant sways in the murk, waterlogged limbs dragging.'
+-- After (with ANSI):
+'A [dim]drowned revenant[/dim] sways in the murk, waterlogged limbs dragging.'
+
+-- Before:
+'The Collapsed One looms here, stone and flesh fused into one.'
+-- After (with ANSI):
+'[bold][red]The Collapsed One[/red][/bold] looms here, stone and flesh fused into one.'
+```
+
+This is a content decision for the team/dkirby-ms, not a code requirement. The system supports it immediately.
+
+### Change 3: Admin UI Guidance
+
+The admin content editor (`PgCreatureDefinitionsStore`) already reads and writes `roomDescription` as a free-text string. Admins can include ANSI tags directly in the creature editor. No admin UI changes are needed, but a tooltip or help text saying "Supports ANSI tags: [red], [bold], etc." would be a nice enhancement (out of scope for this issue).
+
+---
+
+## What Does NOT Change
+
+| Component | Status |
+|-----------|--------|
+| Database schema (`creature_definitions`) | ✅ No migration needed — `room_description` column exists |
+| Shared types (`@ellmud/shared`) | ✅ No changes — `CreaturePositionType` and narrative types unchanged |
+| Server types (`CreatureTemplate`, `Creature`, `CreatureRef`) | ✅ No changes — `roomDescription?: string` already present |
+| `CreatureManager` | ✅ No changes — already copies `roomDescription` from template to instance |
+| `ZoneRoom` context building | ✅ No changes — already passes `roomDescription` to `CreatureRef` |
+| Admin API / content store | ✅ No changes — already persists `room_description` |
+| Client ANSI parser | ✅ No changes — already parses `[tag]` syntax in all narration text |
+
+---
+
+## Example Output
+
+### Before (current aggregated):
+```
+The Silt Flats
+A vast expanse of cracked earth stretches before you.
+
+Exits: north, east, south
+
+A slum rat sniffs along the ground. (x3)
+A hollow stalker drifts in the shadows, barely visible.
+```
+
+### After (individual lines, with optional ANSI):
+```
+The Silt Flats
+A vast expanse of cracked earth stretches before you.
+
+Exits: north, east, south
+
+A slum rat sniffs along the ground.
+A slum rat sniffs along the ground.
+A slum rat sniffs along the ground.
+A [dim]hollow stalker[/dim] drifts in the shadows, barely visible.
+```
+
+---
+
+## Testing
+
+### Unit Tests
+
+**File:** `packages/server/src/__tests__/look.test.ts` (or create if not present)
+
+1. **Individual creature lines** — Given 3 creatures of the same type in a room, `handleLook()` should return 3 separate lines (not 1 aggregated line with `(x3)`).
+2. **roomDescription used** — Given a creature with `roomDescription: "A goblin crouches here."`, the output should contain that exact string.
+3. **Fallback text** — Given a creature with no `roomDescription`, output should contain `"A <name> lurks here."`.
+4. **ANSI tags pass through** — Given `roomDescription: "[red]A fire imp[/red] smolders here."`, the output should contain the tag text verbatim (server does not strip tags).
+5. **Same tests for `go.ts` and `goto.ts`** — Verify creature lines in room entry output follow the same pattern.
+
+### Manual QA
+
+1. Enter a room with multiple creatures of the same type → verify each gets its own line.
+2. Add ANSI tags to a creature's `roomDescription` via admin panel → verify colored text renders in the game client.
+3. Enter a room with a creature that has no `roomDescription` → verify fallback text appears.
+
+---
+
+## Implementation Checklist
+
+- [ ] **`look.ts`** — Replace aggregation block (lines 57-72) with per-creature loop
+- [ ] **`go.ts`** — Replace aggregation block (lines 78-93) with per-creature loop
+- [ ] **`goto.ts`** — Replace aggregation block (lines 84-99) with per-creature loop
+- [ ] **Tests** — Add/update tests for individual creature line rendering
+- [ ] **(Optional)** Update a few seed `room_description` values with ANSI tags as examples
+- [ ] **(Optional)** Add admin UI tooltip noting ANSI tag support in `roomDescription` field
+
+---
+
+## Open Questions for dkirby-ms
+
+1. **Duplicate lines acceptable?** With 5 slum rats in a room, the player will see the identical line 5 times. This is authentic to classic MUD style, but we could add variation (e.g., "Another slum rat sniffs along the ground." for the 2nd+). Recommend: ship as-is, iterate if it feels wrong.
+
+2. **ANSI in seed data now or later?** We can update the seed creature descriptions with color tags in this PR or defer to a dedicated content pass. Recommend: defer to content pass so this PR stays focused on the rendering change.
+
+3. **Behavior state variation?** A creature in `alert` or `fleeing` state could show a different room description. This is out of scope for #383 but worth noting as a future enhancement. The current design supports it — just add conditional logic in the rendering loop.
+
+# Decision: Live Rooms Context Menu Pattern
+
+**Author:** Regis  
+**Date:** 2026-07-24  
+**Issues:** #384, #385
+
+## Context
+The Room Graph tab on the Live Room detail page had inline Broadcast/Spawn/Teleport buttons under each expanded room row, cluttering the UI.
+
+## Decision
+Replaced inline action buttons with a right-click context menu, reusing the exact same styling pattern from ZoneDesigner.tsx (inline styles, window event listeners for close-on-escape/outside, fixed positioning at click coordinates).
+
+Also added occupancy filter toggles (Players/Creatures) as a filter bar above the room list.
+
+## Rationale
+- Context menu pattern already established in ZoneDesigner — reusing it maintains consistency
+- Inline styles (not CSS classes) match ZoneDesigner convention for context menus
+- Filters use OR logic when both active (show rooms with players OR creatures) — simplest mental model
+
+## Team Impact
+- No API changes
+- No shared type changes
+- Pattern: right-click context menus on admin data rows should follow ZoneDesigner inline-style convention
