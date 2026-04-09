@@ -29,7 +29,7 @@ import {
   DuplicateProviderError,
 } from './user-store.js';
 import { logAuditEvent } from '../audit/audit-routes.js';
-import { VALID_ROLES, isValidRole, type UserRole } from '@ellmud/shared';
+import { VALID_ROLES, isValidRole } from '@ellmud/shared';
 
 const BCRYPT_ROUNDS = 10;
 

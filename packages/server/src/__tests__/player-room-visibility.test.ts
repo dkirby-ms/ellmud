@@ -5,7 +5,7 @@
  * should be listed by name. Anonymous players are hidden.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { handleLook } from '../commands/handlers/look.js';
 import { handleCommand, type CommandContext, type PlayerRef } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
@@ -19,17 +19,6 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
     name: 'Test Chamber',
     description: 'A plain room for testing.',
     exits: new Map<Direction, string>([['north', 'north-room']]),
-    items: [],
-    ...overrides,
-  };
-}
-
-function makeNorthRoom(overrides: Partial<Room> = {}): Room {
-  return {
-    id: 'north-room',
-    name: 'North Chamber',
-    description: 'A room to the north.',
-    exits: new Map<Direction, string>([['south', 'test-room']]),
     items: [],
     ...overrides,
   };
