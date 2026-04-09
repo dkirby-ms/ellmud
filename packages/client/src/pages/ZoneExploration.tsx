@@ -19,6 +19,7 @@ import { RoomOccupants } from "../components/RoomOccupants.js";
 import { CombatHUD } from "../components/CombatHUD.js";
 import "../components/map/map.css";
 import MudPrompt from "../components/MudPrompt.js";
+import SettingsModal from "../components/SettingsModal.js";
 import { useAppContext, type StatusEffect } from "../store.js";
 import { useZoneConnection } from "../hooks/useZoneConnection.js";
 import { useAutoScroll } from "../hooks/useAutoScroll.js";
@@ -82,6 +83,7 @@ export default function ZoneExploration() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const { containerRef: narrativeRef, bottomRef } = useAutoScroll(state.messages);
 
   // ─── Focus persistence across zone transitions ───────────────────────────────
@@ -341,7 +343,7 @@ export default function ZoneExploration() {
             {state.username ?? state.email ?? "Unknown"}
           </span>
           <button
-            onClick={() => navigate("/settings")}
+            onClick={() => setShowSettings(true)}
             className="text-text-secondary hover:text-accent-gold transition-colors"
             title="Settings"
           >
@@ -865,6 +867,12 @@ export default function ZoneExploration() {
         onReconnect={reconnection.reconnectNow}
         onCancel={reconnection.cancel}
         onReturnToHub={reconnection.returnToHub}
+      />
+
+      {/* Settings Modal */}
+      <SettingsModal
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
       />
     </div>
   );
