@@ -7474,3 +7474,75 @@ Completely removed the Refuge screen from the codebase and relocated critical fu
 ### Follow-up
 None required. The faction hub concept remains intact — players still have hub zones like The Reliquary, The Bloom Observatory, etc. This just removed the old debug screen.
 
+
+---
+
+## Decision: Admin API auth failure broadcasting via custom events
+
+**Author:** Regis  
+**Date:** 2026-04-10  
+**Issue:** #369  
+
+### Context
+
+Admin token validation needed a way to communicate auth failures from deep in the API layer back to the AdminLayout without prop drilling or React context.
+
+### Decision
+
+Use `window.dispatchEvent(new CustomEvent('admin:auth-failure'))` in `adminFetch` when a 401/403 is received. `AdminLayout` listens for this event and resets to the login form.
+
+### Rationale
+
+- Simple, zero-dependency approach
+- Works regardless of component tree depth
+- Hooks can silently absorb auth errors knowing the global handler redirects
+- No new React context needed
+
+### Impact
+
+- All admin API calls now broadcast auth failures automatically
+- Any future admin component automatically benefits from this pattern
+- Minsc verified via 35 tests: no server changes needed — the existing 401/403 responses are sufficient
+
+---
+
+## Decision: Admin Token Validation Test Coverage (35 Tests)
+
+**Author:** Minsc (Tester)  
+**Date:** 2026-04-10  
+**Issue:** #369 — admin invalid token error  
+
+### Analysis
+
+The original bug: invalid admin tokens stored in localStorage, `authenticated` set to `true` on page load without server validation. Every admin page broke with 403s.
+
+### Regis Implementation Verified
+
+All 35 tests pass against the fix:
+
+1. **`validateAdminToken()` function** in `admin-api.ts` — lightweight API call to verify token
+2. **`ADMIN_AUTH_FAILURE_EVENT`** — `adminFetch` dispatches on 401/403
+3. **Mount-time validation** — `AdminLayout` calls `validateAdminToken()` on mount to catch stale tokens
+4. **Auth failure listener** — Resets to login form when any admin API call gets 401/403
+5. **`validating` loading state** — Shows spinner while stored token is checked
+6. **`handleAdminLogin` validation** — Validates before setting `authenticated = true`
+
+### Test Coverage (35 tests total)
+
+**Client-side (17 tests):** `packages/client/src/__tests__/admin-token-validation.test.tsx`
+- Token submission validation (empty, missing, whitespace, invalid, valid)
+- Recovery flow (re-enter after rejection, error clears on typing)
+- Stale stored token detection on mount
+- Event-driven auth failure handling
+- Loading state rendering
+
+**Server-side (18 tests):** `packages/server/src/__tests__/admin-token-validation.test.ts`
+- Authorization header validation (missing, malformed)
+- Token validation (wrong, partial, case-altered, whitespace)
+- Correct token handling (200 response)
+- Fail-closed mode (ADMIN_TOKEN not set → 503)
+- Error response format validation
+
+### Status
+
+PR #372 ready to merge with full test coverage. No additional implementation needed.

@@ -1805,3 +1805,27 @@ The tests expect:
 - Comprehensive edge case testing prevents regressions
 - Test-driven development enables confidence in spec compliance
 - Feature filtering patterns can be tested in isolation for maintainability
+
+---
+
+### 2026-04-09: Issue #369 — Admin Token Validation Test Suite (with Regis)
+- **Status:** ✅ Complete — 35 tests written and passing
+- **Collaboration:** Minsc tests + Regis implementation
+- **Context:** Regis fixed admin token validation; Minsc wrote comprehensive test coverage
+- **Test Suite (35 tests total):**
+  - **Client-side (17 tests):** `packages/client/src/__tests__/admin-token-validation.test.tsx`
+    - Token submission validation (empty, missing, whitespace, invalid, valid)
+    - Recovery flow (re-enter after rejection, error clears on typing)
+    - Stale stored token detection on mount
+    - Event-driven auth failure handling (`ADMIN_AUTH_FAILURE_EVENT`)
+    - Loading state (`validating`) rendering
+  - **Server-side (18 tests):** `packages/server/src/__tests__/admin-token-validation.test.ts`
+    - Authorization header validation (missing, malformed)
+    - Token validation (wrong, partial, case-altered, whitespace)
+    - Correct token handling (200 response)
+    - Fail-closed mode (ADMIN_TOKEN not set → 503)
+    - Error response format validation
+- **Coverage:** All token validation scenarios, client-server roundtrip, error messages, edge cases
+- **Result:** All 35 tests pass against Regis's implementation
+- **Pattern:** Comprehensive pre-merge test verification ensures solid implementation
+- **Team Impact:** Regis implementation verified solid; PR #372 ready for merge with full test coverage
