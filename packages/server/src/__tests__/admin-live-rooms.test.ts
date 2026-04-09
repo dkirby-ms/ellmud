@@ -809,8 +809,8 @@ describe('roomGraphRooms in zone detail response', () => {
     expect(ids).toEqual(['corridor', 'entry']);
 
     const entry = detail.roomGraphRooms.find(r => r.id === 'entry');
-    expect(entry.name).toBe('Rift Entry');
-    expect(entry.type).toBe('entry');
+    expect(entry!.name).toBe('Rift Entry');
+    expect(entry!.type).toBe('entry');
   });
 
   it('includes roomGraphRooms even without zoneSlug (procedural zones)', async () => {
@@ -856,7 +856,7 @@ describe('roomGraphRooms in zone detail response', () => {
 
     // The key assertion: creature.currentRoomId must exist in roomGraphRooms
     const roomIds = detail.roomGraphRooms.map(r => r.id);
-    expect(roomIds).toContain(creature.currentRoomId);
+    expect(roomIds).toContain(creature!.currentRoomId);
   });
 
   it('static zone: spawned creature appears and matches roomGraphRooms', async () => {
