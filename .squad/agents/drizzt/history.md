@@ -3451,3 +3451,23 @@ Created comprehensive `help` command handler supporting context-aware command di
 **Quality:** Root-cause-driven; comprehensive test coverage; zero regressions.
 
 **Learnings:** Server should include authoritative data in response rather than force separate fetch; prevents silent failures.
+
+---
+
+### 2026-04-09: ZoneRoom Starting Gear Fix (Minsc, Issue #377)
+
+**Context:** Minsc fixed missing starting gear visibility in ZoneRoom's onJoin() handler.
+
+**Key Learning for Room Types:** Any future room type that displays equipment must call `sendLoadoutAndStashUpdate()` on player join, not just `sendLoadoutUpdate()`. Equipment visibility requires both loadout AND stash state synchronized to client.
+
+**Implementation Pattern:** New combined method in ZoneRoom:
+```typescript
+sendLoadoutAndStashUpdate(client: GameClient): void {
+  this.sendLoadoutUpdate(client);
+  this.sendStashUpdate(client);
+}
+```
+
+**Test Coverage:** 6 new integration tests verify equipment visibility. MessageCollector test helper now captures both message types automatically.
+
+**Impact:** Any room type extending ZoneRoom should follow this pattern. Client side handles both messages correctly — no client changes needed.

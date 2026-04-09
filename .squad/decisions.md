@@ -7574,3 +7574,104 @@ Not registered in the parser. Only settable via `forcePosture()`. Reserved for f
 
 ### 6. PlayerRef.posture is optional
 Backward compatible — code without posture data renders "is here" fallback. No breaking changes to existing PlayerRef consumers.
+
+---
+
+## Decision: Release Workflows Alignment with dev/uat/prod (#379)
+
+**Author:** Minsc (Tester)  
+**Issue:** #379  
+**Date:** 2026-04-09  
+
+### Problem
+Squad's default release workflow templates ship with `dev → preview → main` branching model. This repository uses `dev → uat → prod`. The hardcoded `main` branch references caused release.yml run #24201081668 to fail with `fatal: ref: main does not exist`.
+
+### Decision
+Updated all three release-related workflows to match actual repository branching:
+- **release.yml:** Checks out and pushes to `prod` (not `main`)
+- **squad-release.yml:** Triggers on push to `prod` (not `main`)
+- **squad-promote.yml:** Promotes `dev → uat → prod` (not `dev → preview → main`)
+
+### Impact
+- Release workflow now succeeds when dispatched
+- Squad promote pipeline is usable for version management
+- Consistent with existing `ci-cd.yml` which already targets `uat`/`prod`
+
+### Related
+- Commits committed to `dev` branch
+
+---
+
+## Decision: Starting Gear Missing — sendLoadoutAndStashUpdate() (#377)
+
+**Author:** Minsc (Tester)  
+**Issue:** #377  
+**Date:** 2026-04-09  
+
+### Problem
+Players' starting gear (equipment) was invisible in the client after joining a zone. Root cause: ZoneRoom's `onJoin()` method was missing `STASH_UPDATE` message broadcast.
+
+### Root Cause
+During the RefugeRoom→ZoneRoom merge, the old `sendZoneLoadoutUpdate()` method was removed. The new ZoneRoom implementation sent only `LOADOUT_UPDATE`, leaving stash empty on client-side.
+
+### Decision
+- Created new combined method `sendLoadoutAndStashUpdate()` that sends both `LOADOUT_UPDATE` and `STASH_UPDATE`
+- Updated all equipment change handlers (equip/unequip/swap) to use the new method
+- Updated ZoneRoom's `onJoin()` to call `sendLoadoutAndStashUpdate()`
+- Enhanced `MessageCollector` test helper to capture both message types
+
+### Impact
+- Equipment visibility fixed; starting gear now visible
+- 6 new integration tests written and passing
+- All 2582 existing tests continue to pass
+- Any future room type displaying equipment must call `sendLoadoutAndStashUpdate()` on join
+- Client side requires no changes (already handles both messages correctly)
+
+### Related Commits
+- 30038ec — Fix: ZoneRoom sendLoadoutAndStashUpdate() on join
+- 0ac5d48 — Test: 6 integration tests for starting gear visibility
+
+---
+
+## Decision: Posture Broadcast Logic — Redundant Implementation (PR #376)
+
+**Author:** Elminster  
+**PR:** #376  
+**Date:** 2026-04-09  
+**Type:** Code Quality Concern  
+
+### Problem
+The posture command handlers define a `_postureChange` metadata field that is never consumed by ZoneRoom. Instead, ZoneRoom implements its own broadcast logic with manual verb detection and duplicated message maps. This duplication creates maintenance debt.
+
+### Current State
+- posture.ts defines `POSTURE_CHANGE_MESSAGES` and includes `_postureChange` metadata in CommandResult (lines 40-41)
+- ZoneRoom re-implements the same messages with hardcoded verb detection (lines 1107-1126)
+- All 63 tests pass despite the duplication
+- The unused `_postureChange` field doesn't cause runtime errors
+
+### Options Considered
+
+**Option 1: Use the Metadata Pattern (Recommended)**
+- ZoneRoom consumes `result._postureChange` instead of detecting posture commands manually
+- Single source of truth for posture messages
+- Consistent with other metadata patterns (targetNarrations, zoneTransfer)
+- Easier to extend for future custom messages
+- Requires TypeScript casting to access `_postureChange`
+
+**Option 2: Remove the Unused Metadata**
+- Delete `_postureChange` from posture.ts; keep ZoneRoom's manual detection
+- No TypeScript casting needed
+- Simpler for current case but keeps hardcoded verb list and duplication
+
+**Option 3: Document and Accept**
+- Add comment explaining duplication; defer refactor to broader command/broadcast redesign
+- Zero code change but leaves technical debt
+
+### Decision
+PR #376 is approved. Not blocking merge.
+
+**Recommendation:** Option 1 as a follow-up refactor task (low priority, non-urgent). Aligns with existing metadata patterns and prevents future message drift. If no refactor is planned, recommend Option 2 to clean up unused code.
+
+### Related
+- CommandResult metadata pattern used elsewhere (ZoneRoom.ts: zoneTransfer, targetNarrations, action)
+- Issue #371 (character posture system)
