@@ -1621,3 +1621,15 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
 - ForwardRef is cleaner than callback props for exposing single methods from components
 - Focus state should persist at the parent level (ZoneExploration) rather than within compass itself
 - Settings access is critical UX — always expose from main gameplay screen
+
+## Learnings
+
+### Issue #363: Sign-out Button Placement (2026-04-09)
+- **Game Design Pattern**: Players in a zone should NOT have access to sign-out. They must rent at an inn before disconnecting. This is a deliberate gameplay mechanic.
+- **Auth UI Placement**: Sign-in/sign-out UI belongs on the character select screen, NOT in the zone explorer.
+- **Settings Access**: Settings should be accessible from both character select AND zone exploration for convenience.
+- **Top Bar Pattern**: Consistent top bar UI across screens: user identity (username/email) → settings gear → sign-out (when appropriate).
+- **File Paths**:
+  - `packages/client/src/pages/CharacterSelect.tsx` — Character selection screen with auth UI
+  - `packages/client/src/pages/ZoneExploration.tsx` — In-zone gameplay screen (no sign-out)
+- **Disconnect Handling**: The `handleLogout` function properly calls `roomRef.current?.leave()` before dispatching LOGOUT to ensure WebSocket cleanup.
