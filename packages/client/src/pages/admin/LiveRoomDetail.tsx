@@ -430,13 +430,7 @@ export default function LiveRoomDetail() {
   const isZoneRoom = room.name === "zone" || isZone;
 
   return (
-    <div
-      className="h-full flex flex-col"
-      onContextMenu={(e) => {
-        e.preventDefault();
-        setContextMenu(null);
-      }}
-    >
+    <div className="h-full flex flex-col">
       {/* Header */}
       <div className="bg-[#12131A] border-b border-[#2A2B35] px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">

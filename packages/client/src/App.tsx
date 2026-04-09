@@ -30,6 +30,15 @@ export function App(): React.JSX.Element {
     onAuthError(() => dispatch({ type: 'LOGOUT' }));
   }, [dispatch]);
 
+  // Suppress the browser right-click menu across the entire app.
+  // Individual components (e.g. ZoneDesigner, LiveRoomDetail) provide
+  // their own custom context menus via onContextMenu + stopPropagation.
+  useEffect(() => {
+    const suppress = (e: MouseEvent) => e.preventDefault();
+    document.addEventListener('contextmenu', suppress);
+    return () => document.removeEventListener('contextmenu', suppress);
+  }, []);
+
   // Validate persisted token on mount (non-blocking).
   // If the server rejects it with 401, clear auth immediately.
   // Also fetch username from /auth/me if missing (for existing sessions).
