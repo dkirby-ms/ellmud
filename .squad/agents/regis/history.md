@@ -1532,3 +1532,17 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
 - Zero regressions (all admin tests pass)
 
 **Quality:** Minimal, surgical fix; verified backend compatibility.
+
+---
+
+### 2026-04-09: Issue #359 — User Settings Frontend Implementation
+- **Task:** Implement client-side server-synced user settings
+- **Status:** ✅ Complete (Commit f4ab813)
+- **Files:** settings-api.ts (typed client), useSettings.ts (sync hook), Settings.tsx (refactor), 12 tests
+- **Architecture:** Self-contained fetch (prevent 401 cascade), localStorage cache, optimistic writes, graceful fallback
+- **Key decision:** Separate settings API from shared request() to avoid global logout on 401
+- **Test coverage:** 12 tests covering lifecycle, fallback, merge, auth errors, loading states
+- **Cross-team:** Jarlaxle (Backend) completed #359 backend — UserSettingsRepository, GET/PUT endpoints, JSONB config (17 tests, Commit fb130d7)
+
+## Roster Awareness
+- **Jarlaxle (Backend):** Completed #359 backend parallel work — user_settings table, provider pattern, API endpoints, server-side validation (17 tests, Commit fb130d7)

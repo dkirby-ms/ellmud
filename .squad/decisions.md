@@ -7376,3 +7376,63 @@ Currently:
 **Why:** User answers to Elminster's 5 open questions on #357
 
 **Implementation Status:** Complete (Commit 2085460, pushed to dev)
+
+---
+
+## Decision: User Settings Backend Architecture (#359)
+
+**Author:** Jarlaxle (Systems Dev)  
+**Date:** 2026-04-09  
+**Status:** Implemented  
+**Issue:** #359
+
+### Decision
+User settings backend uses the **provider pattern** (interface → PG + InMemory) consistent with all other server persistence (characters, stash, factions, etc.). The API is two endpoints: `GET /api/user/settings` and `PUT /api/user/settings`.
+
+### Key Choices
+1. **JSONB config blob** — single `config` column with structured categories (`display`, `narration`, `gameplay`, `accessibility`). Avoids schema migrations for new settings.
+2. **Server-side validation** — fontSize range (12–24), verbosity enum, narrationStyle enum, unknown top-level key rejection. Invalid → 400.
+3. **No middleware** — auth is an inline `authenticate()` helper per the characters.ts pattern, not Express middleware. Keeps it consistent with existing routes.
+4. **Default config on GET** — if no row exists, returns empty category objects. No DB write on first GET.
+5. **Upsert semantics** — PUT always succeeds (creates or replaces). No separate POST/PATCH.
+
+### Scope Boundaries (per user decisions)
+- No keybind export, no profiles/presets, no .rcfile upload in v1.
+- `gameplay` and `accessibility` categories are present but empty — reserved for future use.
+
+---
+
+## Decision: Settings API Client Architecture (Self-Contained Fetch) (#359)
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-04-09  
+**Status:** Implemented  
+**Issue:** #359
+
+### Decision
+`settings-api.ts` has its own fetch logic instead of importing the shared `request()` from `api.ts`.
+
+### Rationale
+The shared `request()` fires the global 401 handler (`_on401`) which dispatches `LOGOUT`, clearing all auth state. For settings, a 401 should degrade gracefully (fall back to localStorage) — not force the user out of the app. Keeping the settings API self-contained means auth errors in settings don't cascade.
+
+### Impact
+If the team changes the base URL pattern or adds request interceptors to `api.ts`, `settings-api.ts` needs to be updated separately. If this becomes a maintenance burden, we can extract a shared `fetchWithAuth()` helper that takes an error strategy parameter.
+
+---
+
+## User Decision: #359 Scope Boundaries (User Preferences & Configuration)
+
+**From:** dkirby-ms (User)  
+**Date:** 2026-04-09  
+**Answering:** Elminster's 3 open design questions
+
+### Decisions
+1. **Keybind export in `.ellmudrc` format:** **Wait for macros** — no export in v1
+2. **Settings profiles/presets:** **No need** — not in v1  
+3. **`.rcfile` file upload:** **UI-only edits** — no file upload in v1
+
+### Rationale
+- Keybind export requires full macro system (Lua/DSL) — phase 2 work
+- Profiles add complexity without immediate user value
+- File upload can wait until macro system foundation is solid
+- v1 focus: localStorage → server sync, essential 3 settings (fontSize, verbosity, narrationStyle), placeholder for future (keybinds, audio, accessibility)

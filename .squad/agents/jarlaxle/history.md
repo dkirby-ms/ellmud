@@ -2349,3 +2349,17 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - **Auth:** Bearer token pattern matching `characters.ts` — `authenticate()` helper extracts playerId from token.
 - **Tests:** 17 tests in `user-settings.test.ts` covering auth (401), GET defaults, PUT create/update, persistence round-trip, and all validation rules. All 2408 server tests pass.
 - **Files:** `007_user_settings.sql`, `db/UserSettingsRepository.ts`, `db/types.ts`, `db/index.ts`, `api/settings.ts`, `index.ts`, `__tests__/user-settings.test.ts`
+
+---
+
+### 2026-04-09: Issue #359 — User Settings Backend Implementation
+- **Task:** Implement server-authoritative user settings persistence
+- **Status:** ✅ Complete (Commit fb130d7)
+- **Files:** Migration 007_user_settings.sql, UserSettingsRepository.ts, endpoints GET/PUT /api/user/settings
+- **Architecture:** Provider pattern (Pg + InMemory) consistent with all persistence layers
+- **Key decision:** JSONB config blob (avoids migration churn), server-side validation (security), inline auth (consistency)
+- **Test coverage:** 17 tests covering migration, repository, API, validation, edge cases
+- **Cross-team:** Regis (Frontend) building `useSettings` hook on top of GET/PUT contract
+
+## Roster Awareness
+- **Regis (Frontend):** Completed #359 frontend parallel work — `useSettings` hook, Settings.tsx refactor, localStorage→server sync (12 tests, Commit f4ab813)
