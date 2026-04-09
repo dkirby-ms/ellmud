@@ -3471,3 +3471,30 @@ sendLoadoutAndStashUpdate(client: GameClient): void {
 **Test Coverage:** 6 new integration tests verify equipment visibility. MessageCollector test helper now captures both message types automatically.
 
 **Impact:** Any room type extending ZoneRoom should follow this pattern. Client side handles both messages correctly — no client changes needed.
+
+
+---
+
+## Session: Fix #380 - False Speedwalk Detection
+
+**Date:** 2025-07-22
+**Issue:** #380 - Single direction commands (n/s/e/w/u/d) sometimes show Speedwalk message
+**Commit:** e101f02
+
+### Problem
+The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts matches single direction letters. When a player typed n to go north, isSpeedwalk('n') returned true, entering the speedwalk code path and showing Speedwalk: 1 moves (n) - a false positive.
+
+### Fix
+- Added shouldTreatAsSpeedwalk(input) helper requiring 2+ parsed moves before activating speedwalk mode
+- Updated ZoneExploration.tsx to use the new helper; single direction letters fall through to sendCommand()
+- Server parser already handles n to go north via direction aliases in packages/server/src/commands/parser.ts
+
+### Key Files
+- packages/client/src/utils/speedwalk.ts - parser + new shouldTreatAsSpeedwalk() gate
+- packages/client/src/pages/ZoneExploration.tsx - command submit handler
+- packages/server/src/commands/parser.ts - server-side direction aliases
+
+## Learnings
+- Speedwalk detection is entirely client-side (ZoneExploration.tsx), not server-side
+- The server command parser already has direction aliases: n/s/e/w/u/d to go direction
+- isSpeedwalk() is intentionally broad (matches single letters) - the gating for speedwalk mode needs to be separate from the syntax check
