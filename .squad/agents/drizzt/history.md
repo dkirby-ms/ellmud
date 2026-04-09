@@ -3498,3 +3498,14 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 - Speedwalk detection is entirely client-side (ZoneExploration.tsx), not server-side
 - The server command parser already has direction aliases: n/s/e/w/u/d to go direction
 - isSpeedwalk() is intentionally broad (matches single letters) - the gating for speedwalk mode needs to be separate from the syntax check
+
+### 2026-04-09: Issue #380 Speedwalk Gate (PR Background Session)
+**Issue:** #380 - False speedwalking detection on single direction letters
+**Commit:** (committed in background session)
+
+### Summary  
+- Added shouldTreatAsSpeedwalk() requiring 2+ parsed moves
+- Single direction letters now bypass speedwalk mode, use normal sendCommand()
+- isSpeedwalk() regex unchanged (still valid syntax check)
+- 7 new tests, all 29 existing tests passing
+- Impact: Regis should use shouldTreatAsSpeedwalk() for UI gate instead of isSpeedwalk()

@@ -29,6 +29,14 @@
 
 ## Learnings
 
+### Trace De-duplication (Issue #381)
+- **Task:** Fix duplicate "footprints leading \<direction\>" messages shown to players
+- **Root cause:** `getTracesForPlayer()` mapped every raw trace 1:1 to a `TraceDescription`. Multiple footprints in the same direction = duplicate messages.
+- **Fix:** Added `deduplicateTraces()` — groups by `(type, direction)` key, keeps most recent trace per group. Only affects player-facing output; raw `getTracesInRoom()` unchanged for game logic.
+- **Key files:** `packages/server/src/systems/TraceSystem.ts`, `packages/server/src/__tests__/trace-system.test.ts`
+- **Pattern:** Presentation-layer dedup (don't mutate storage, consolidate at the view/description boundary)
+- **Tests:** 8 new tests covering consolidation, direction separation, mixed types, expert-level actor display
+
 ### Character Posture System (PR #376, Issue #371)
 - **Task:** Implement full posture system — 7 states, 5 player commands, DB persistence, movement integration, room/who display
 - **Architecture:** Posture stored directly on `PlayerState` + DB `characters.posture` column. Shared type enums/maps in `@ellmud/shared`. Commands are thin wrappers that set state and return broadcast metadata.
@@ -2440,3 +2448,14 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - **Files:** `shared/src/index.ts` (types), `server/src/admin/middleware.ts` (rewritten), `server/src/auth/roles.ts` (new), `server/src/auth/PlayerRepository.ts`, `server/src/auth/PgPlayerRepository.ts`, `server/src/auth/routes.ts`, `server/src/admin/users/user-routes.ts`, `server/src/index.ts`, `client/src/store.ts`, `client/src/lib/admin-api.ts`, `client/src/App.tsx`, `client/src/pages/admin/AdminLayout.tsx`
 - **PR:** #375 → dev
 - **Build: 0 TS errors, 0 lint errors. All 2966 tests passing, zero regressions.**
+
+### 2026-04-09: Issue #381 Trace De-duplication (PR Background Session)
+**Issue:** #381 - Duplicate footprint messages in same direction
+**Commit:** (committed in background session)
+
+### Summary
+- Added deduplicateTraces() in TraceSystem.getTracesForPlayer() grouping by (type, direction)
+- Keeps most recent trace per group, eliminating duplicate player-facing messages
+- All raw traces preserved in storage for TTL/decay/game logic
+- 8 new tests, zero regressions across trace + phase2 QA tests
+- Decision: Presentation-only fix with composable architecture
