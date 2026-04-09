@@ -178,6 +178,11 @@ export function sendToggleFlag(room: Room, msg: ToggleFlagMessage): void {
   room.send(MessageTypes.TOGGLE_FLAG, msg);
 }
 
+/** Request the server-wide player list (who list). */
+export function sendRequestPlayerList(room: Room): void {
+  room.send(MessageTypes.REQUEST_PLAYER_LIST, {});
+}
+
 /** Direction aliases — single letters and bare direction words expand to "go <dir>". */
 const DIRECTION_ALIASES: Record<string, [string, string]> = {
   n: ['go', 'north'], s: ['go', 'south'], e: ['go', 'east'],

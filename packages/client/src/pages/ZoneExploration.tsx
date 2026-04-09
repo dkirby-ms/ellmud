@@ -6,6 +6,7 @@ import {
   Sword,
   ArrowLeft,
   Settings,
+  Users,
 } from "lucide-react";
 import CombinedStashLoadout from "../components/CombinedStashLoadout";
 import ChatPanel from "../components/ChatPanel";
@@ -20,6 +21,7 @@ import { CombatHUD } from "../components/CombatHUD.js";
 import "../components/map/map.css";
 import MudPrompt from "../components/MudPrompt.js";
 import SettingsModal from "../components/SettingsModal.js";
+import WhoListModal from "../components/WhoListModal.js";
 import { useAppContext, type StatusEffect } from "../store.js";
 import { useZoneConnection } from "../hooks/useZoneConnection.js";
 import { useAutoScroll } from "../hooks/useAutoScroll.js";
@@ -84,6 +86,7 @@ export default function ZoneExploration() {
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showWho, setShowWho] = useState(false);
   const { containerRef: narrativeRef, bottomRef } = useAutoScroll(state.messages);
 
   // ─── Focus persistence across zone transitions ───────────────────────────────
@@ -348,6 +351,13 @@ export default function ZoneExploration() {
             title="Settings"
           >
             <Settings className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setShowWho(true)}
+            className="text-text-secondary hover:text-accent-gold transition-colors"
+            title="Who's online"
+          >
+            <Users className="w-4 h-4" />
           </button>
           <span className="text-text-disabled">|</span>
           {connectionIndicator()}
@@ -873,6 +883,12 @@ export default function ZoneExploration() {
       <SettingsModal
         open={showSettings}
         onClose={() => setShowSettings(false)}
+      />
+
+      {/* Who List Modal */}
+      <WhoListModal
+        open={showWho}
+        onClose={() => setShowWho(false)}
       />
     </div>
   );
