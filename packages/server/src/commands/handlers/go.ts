@@ -4,7 +4,7 @@
 
 import type { CommandResult, CommandContext } from '../index.js';
 import type { Direction } from '../../generator/RoomGraph.js';
-import { isInterZoneId, parseInterZoneId } from '@ellmud/shared';
+import { isInterZoneId, parseInterZoneId, POSTURE_ROOM_DESCRIPTIONS } from '@ellmud/shared';
 
 const VALID_DIRECTIONS = new Set<string>(['north', 'south', 'east', 'west', 'up', 'down']);
 
@@ -54,6 +54,8 @@ export function handleGo(ctx: CommandContext): CommandResult {
 
   // Move player
   player.currentRoomId = targetRoomId;
+  // Auto-reset posture to standing on movement (#371)
+  player.posture = 'standing';
 
   // Build room description for the new room
   const exitList = Array.from(targetRoom.exits.keys()).join(', ') || 'none';
@@ -94,7 +96,8 @@ export function handleGo(ctx: CommandContext): CommandResult {
   const playersInTarget = ctx.resolvePlayersInRoom?.(targetRoomId) ?? [];
   for (const p of playersInTarget) {
     if (!p.anon) {
-      lines.push(`${p.name} is here.`);
+      const postureDesc = p.posture ? POSTURE_ROOM_DESCRIPTIONS[p.posture] : 'is here';
+      lines.push(`${p.name} ${postureDesc}.`);
     }
   }
 

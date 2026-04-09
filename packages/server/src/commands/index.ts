@@ -38,6 +38,7 @@ import { handleLoadoutView } from './handlers/loadout-command.js';
 import { handleRent } from './handlers/rent.js';
 import { handleSandbox } from './handlers/sandbox.js';
 import { handleFlag } from './handlers/flag.js';
+import { handleStand, handleSit, handleCrouch, handleProne, handleRecline } from './handlers/posture.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -84,6 +85,8 @@ export interface PlayerRef {
   sessionId: string;
   name: string;
   anon: boolean;
+  /** Current posture for room display (#371). */
+  posture?: import('@ellmud/shared').Posture;
 }
 
 export interface CommandContext {
@@ -188,6 +191,11 @@ handlers.set('goto', handleGoto);
 handlers.set('teleport', handleTeleport);
 handlers.set('help', handleHelp);
 handlers.set('flag', handleFlag);
+handlers.set('stand', handleStand);
+handlers.set('sit', handleSit);
+handlers.set('crouch', handleCrouch);
+handlers.set('prone', handleProne);
+handlers.set('recline', handleRecline);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(

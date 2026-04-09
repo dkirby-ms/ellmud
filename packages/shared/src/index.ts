@@ -126,6 +126,58 @@ export type CombatAction =
   | 'flee'
   | 'observe';
 
+// ─── Character Posture (#371) ────────────────────────────────────────────────
+
+/** Physical posture states a character can be in. */
+export type Posture =
+  | 'standing'
+  | 'sitting'
+  | 'crouching'
+  | 'prone'
+  | 'reclining'
+  | 'floating'
+  | 'hovering';
+
+/** All valid posture values. */
+export const VALID_POSTURES: readonly Posture[] = [
+  'standing', 'sitting', 'crouching', 'prone', 'reclining', 'floating', 'hovering',
+] as const;
+
+/** Postures that players can set via commands. */
+export const PLAYER_SETTABLE_POSTURES: readonly Posture[] = [
+  'standing', 'sitting', 'crouching', 'prone', 'reclining',
+] as const;
+
+/** Default posture for new/reset characters. */
+export const DEFAULT_POSTURE: Posture = 'standing';
+
+/** Movement verb used when departing a room, keyed by current posture. */
+export const POSTURE_MOVEMENT_VERBS: Record<Posture, string> = {
+  standing: 'walks',
+  sitting: 'stands up and walks',
+  crouching: 'sneaks',
+  prone: 'crawls',
+  reclining: 'gets up and walks',
+  floating: 'floats',
+  hovering: 'drifts',
+};
+
+/** Description of a character's posture for room display. */
+export const POSTURE_ROOM_DESCRIPTIONS: Record<Posture, string> = {
+  standing: 'is standing here',
+  sitting: 'is sitting here',
+  crouching: 'is crouching here',
+  prone: 'is lying prone here',
+  reclining: 'is reclining here',
+  floating: 'is floating here',
+  hovering: 'is hovering here',
+};
+
+/** Type guard — narrowing a raw string to Posture. */
+export function isValidPosture(value: string): value is Posture {
+  return (VALID_POSTURES as readonly string[]).includes(value);
+}
+
 // ─── Room Positioning (GDD §6.11) ──────────────────────────────────────────
 
 /** Spatial position zones in combat (GDD §6.11). */
@@ -928,6 +980,8 @@ export interface PlayerListEntry {
   flags: UserFlagType[];
   /** true when the player has [Anon] active (hidden fields are already nulled) */
   anon: boolean;
+  /** Current character posture (#371). */
+  posture?: Posture;
 }
 
 /** Server → Client: who list response. */

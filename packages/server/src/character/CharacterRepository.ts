@@ -41,4 +41,10 @@ export interface CharacterRepository {
 
   /** Get the last inn location for a character. */
   getLastInn(characterId: string): Promise<{ zoneSlug: string; roomSlug: string } | null>;
+
+  /** Persist the character's current posture (#371). */
+  savePosture(characterId: string, posture: string): Promise<void>;
+
+  /** Load the character's persisted posture (#371). Returns 'standing' if unset. */
+  loadPosture(characterId: string): Promise<string>;
 }
