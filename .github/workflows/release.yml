@@ -24,7 +24,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: prod
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -64,7 +64,7 @@ jobs:
 
       - name: Push changes and tag
         run: |
-          git push origin main
+          git push origin prod
           git push origin "v${{ steps.version.outputs.version }}"
 
       - name: Generate release notes
