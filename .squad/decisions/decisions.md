@@ -7609,3 +7609,113 @@ Jarlaxle's MetricsService uses a fire-and-forget pattern — public methods retu
 
 ---
 
+
+### 2026-04-09T13:34Z: User directive — flags & who list scope
+**By:** dkirby-ms (via Copilot)
+**What:**
+- Admins can always see through [Anon]
+- [Anon] exception is same-room only (not same-zone)
+- Only [Anon] and [RP] flags for v1
+- Who list is server-wide (all players, not zone-scoped)
+- Flags persist across sessions (logout/login)
+- Flags should be toggleable in the player settings UI (not just /flag command)
+**Why:** User request — captured for team memory
+
+---
+
+### 2026-07-28Z: Jarlaxle — User Flags Implementation (#365)
+**By:** Jarlaxle (Game Systems Developer)
+**What was built:**
+1. **Migration 009** (`character_flags`) — JSONB-based flag storage keyed by character_id UUID PK.
+2. **Shared types** — `CharacterFlags`, `FLAG_DEFINITIONS`, `isValidFlagName()` in `@ellmud/shared`.
+3. **CharacterFlagsRepository** — Pg + InMemory + singleton provider (follows UserSettingsRepository pattern).
+4. **VisibilityService** — Pure function `resolveVisibility(viewer, target)` → `VisiblePlayerInfo`.
+5. **`/flag` command** — Toggle `anon`/`rp`, show flag list. Registered in parser + handler registry.
+6. **Server boot** — `initCharacterFlagsProvider()` called alongside other providers.
+**Key decisions:**
+- **JSONB over separate rows per flag** — One row per character, flags as JSONB object. Simpler queries, atomic reads, easy to extend for future flags without schema changes.
+- **VisibilityService is a pure function, not a class** — No state, no DB dependency. Caller provides all context (viewer room, admin status, target flags). Testable, composable.
+- **[Anon] see-through: same-room only** — Per user directive, same-zone is NOT sufficient. Only same-room or admin can see through anon.
+- **Fire-and-forget toggle** — Flag writes don't block the game loop. Same fire-and-forget pattern as MetricsService.
+- **No REST endpoints** — Flags are toggled via `/flag` command or WebSocket messages (settings UI). No HTTP API.
+**Integration contract for other agents:**
+- **Regis (Settings UI):** Import `CharacterFlags`, `FLAG_DEFINITIONS`, `isValidFlagName` from `@ellmud/shared`. Call `getCharacterFlagsRepository().setFlag(characterId, flagName, value)` on toggle.
+- **Who list (#366):** Call `getCharacterFlagsRepository().getAllFlags()` to get all player flags. Use `resolveVisibility()` from `visibility/index.ts` to filter each player's display info per-viewer.
+- **Look command:** Use `resolveVisibility()` to determine player display names in room descriptions.
+**What was NOT built (by design):**
+- No settings UI toggle (Regis handles)
+- No who list command (#366, separate issue)
+- No REST endpoints for flags
+
+---
+
+### 2026-07-27Z: Jarlaxle — Who List Server Implementation (#366)
+**By:** Jarlaxle (Game Systems Dev)
+**What was built:**
+- `WhoListService` — cross-room player gathering + visibility filtering
+- `getWhoListPlayerData()` on ZoneRoom — public API for matchMaker iteration
+- `REQUEST_PLAYER_LIST` → `PLAYER_LIST` message handler (structured data for Regis's modal)
+- `who` text command (MUD-style ASCII table via narration)
+- Parser + help registry updates
+**Key decisions for team:**
+1. **Cross-room data gathering uses matchMaker.query() → getLocalRoomById() → getWhoListPlayerData()** — Same pattern as admin routes, but through a clean public method instead of `(room as any)['players']`. If you need cross-room data in the future, follow this pattern.
+2. **`who` is an async intercept in handleCommandMessage**, NOT a registered sync handler — because it needs matchMaker + DB queries. If more async commands are needed, follow this precedent: intercept before the `const ctx = this.buildCommandContext(...)` line.
+3. **devModeEnabled = admin for visibility checks** — No per-player admin flag exists. When it does, update ViewerContext.isAdmin resolution in handleRequestPlayerList + handleWhoCommand.
+4. **PlayerListEntry.level and .class are null** — Phase 1 has no level/class system. Fill them in when those systems land.
+**Data contract for Regis:**
+Client sends `REQUEST_PLAYER_LIST` (no payload) → Server responds with `PLAYER_LIST` containing `{ players: PlayerListEntry[] }`. The server pre-filters based on viewer's visibility — client renders what it receives, no further filtering needed.
+
+---
+
+### 2026-07-24Z: Regis — Flag toggle UI architecture
+**Decision:** Character flags (anon, rp) use a separate `useFlags` hook rather than extending the existing `useSettings` hook.
+**Why:**
+- Flags are stored in `character_flags` table, not `user_settings` — different persistence layer.
+- Flags are toggled via Colyseus room messages (`TOGGLE_FLAG`), not REST API like settings.
+- `useFlags` caches optimistically in localStorage and sends room messages when connected.
+- When the Settings page is accessed outside a zone (no room), toggles still work via localStorage; the server will sync on next zone join.
+**Integration point:** `sendToggleFlag()` in `connection.ts` sends `{ flag, enabled }` — Jarlaxle's `onToggleFlag` handler on the server picks this up.
+**Files:**
+- `packages/client/src/hooks/useFlags.ts` — new hook
+- `packages/client/src/services/connection.ts` — `sendToggleFlag` + `onFlagState` handler
+- `packages/client/src/components/SettingsModal.tsx` — Flags category
+- `packages/client/src/pages/Settings.tsx` — Flags category
+
+---
+
+### 2026-04-22Z: Regis — Random Character Name Generator (#368)
+**By:** Regis (Frontend Dev)
+**Decision:** The random name generator lives in the client at `packages/client/src/utils/name-generator.ts`, not in `packages/shared/`. The server validates names but doesn't need to generate them — this is purely a UI convenience feature.
+**Design:**
+- **64 curated names** + **syllable combiner** (35 onsets × 20 codas = 700 possible procedural names)
+- 60/40 curated/procedural split per call
+- All outputs validated through shared `validateCharacterName()` before returning (catches profanity, format, length)
+- Curated names are pre-vetted but the validation call is belt-and-suspenders
+**Name Aesthetic:** Cyber noir — dark urban fantasy, not hacker/techy. Names like Vex, Nyx, Riven, Corven, Sevrin. Short (3-8 chars), pronounceable, moody.
+**UI Pattern:**
+- Name field pre-populated on load via `useState(generateRandomName)` (lazy initializer avoids extra call)
+- Regenerate button (lucide `Dices` icon) next to input, same `bg-bg-elevated` styling
+- Fresh name on "+ New Character" click and after successful creation
+- User can always clear and type their own name
+**Team Impact:**
+- No shared package changes
+- No API changes
+- No server changes needed
+- If the server ever needs to generate names (e.g., NPC naming), the generator could be moved to shared
+
+---
+
+### 2026-04-09Z: Regis — Who List Modal (#366)
+**By:** Regis (Frontend Dev)
+**What:**
+- Added `REQUEST_PLAYER_LIST` (client→server) and `PLAYER_LIST` (server→client) to shared MessageTypes
+- Added `PlayerListEntry` and `PlayerListMessage` interfaces to `@ellmud/shared`
+- `PlayerListEntry` shape: `{ name, level, class, zone, flags, anon }` — server nulls hidden fields for anon players, client renders "???"
+- Created `useWhoList` hook: sends request on modal open, listens for response, provides `refresh()`
+- Created `WhoListModal.tsx`: dark-themed modal, monospace table, flag badges, sorted by zone→name
+- Users icon button added to ZoneExploration top bar (next to Settings gear)
+- `/who` text command: no client interception needed — server formats text, client shows it via existing narrate pipeline
+- Updated shared types test count from 28 to 30
+**For Jarlaxle:** Server needs to handle `REQUEST_PLAYER_LIST` message and respond with `PLAYER_LIST` containing `PlayerListEntry[]`. Anon players should have `level`, `class`, and `zone` set to null and `anon: true`. The `flags` array should always include active flags (RP is always visible). Also wire `/who` server-side to send formatted text via NARRATE.
+
+---

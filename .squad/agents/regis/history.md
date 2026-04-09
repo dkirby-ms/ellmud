@@ -48,6 +48,8 @@
 
 ## Learnings
 
+- **Issue #368 — Random character names (2026):** Created `utils/name-generator.ts` with 64 curated cyber noir names + syllable combiner (35 onsets × 20 codas). 60/40 curated/procedural split. All outputs validated against shared `validateCharacterName` (profanity filter, 2-24 chars, alpha-only, capitalization). Replaced hardcoded "Kael" placeholder in `CharacterSelect.tsx`. State initialized via `useState(generateRandomName)` (lazy initializer). Regenerate button uses lucide `Dices` icon, styled to match existing `bg-bg-elevated` pattern. Fresh name generated on "+ New Character" click and after successful creation. 7 tests. Commit ee3e991.
+
 - **Issue #366 — Who list UI (2026):** Built `WhoListModal.tsx` (following SettingsModal pattern), `useWhoList.ts` hook, and integrated into ZoneExploration. Added `REQUEST_PLAYER_LIST` / `PLAYER_LIST` MessageTypes + `PlayerListEntry` / `PlayerListMessage` to shared. Hook sends request via Colyseus room, listens for response. Modal shows table (Name, Lvl, Class, Zone, Flags) with "???" for anon players, flag badges, monospace font, dark theme. Users icon button in top bar next to Settings gear. No server-side logic (Jarlaxle). `/who` command handled server-side — text response flows through existing narrate pipeline, no client interception needed. Updated types test count 28→30.
 
 - **Issue #362 — Compass focus persistence across zone transitions (2026):** The `useEffect` in ZoneExploration that fires on `state.connectionStatus === "connected"` was unconditionally calling `inputRef.current?.focus()`, stealing focus from the compass on zone transitions. Fix: added a `lastFocusAreaRef` ("compass" | "prompt") updated by a `document.addEventListener('focusin', ...)` listener. On reconnect, checks the ref — if compass had focus, queries `compassRef.current?.querySelector('button:not([disabled])')` and focuses that instead. CompassControl converted to `forwardRef` to expose its DOM node. 4 new tests in `compass-focus-persistence.test.tsx`. Commit 59c1903.
@@ -1723,3 +1725,18 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
   - `packages/client/src/components/SettingsModal.tsx` — Flags category added
   - `packages/client/src/pages/Settings.tsx` — Flags category added
   - `packages/shared/src/index.ts` — UserFlagType, ToggleFlagMessage, FlagStateMessage types
+
+### Issue #368: Random Character Name Generator (2026-04-09)
+- **Status:** ✅ Complete (Commit ee3e991, pushed to main, issue closed)
+- **What:** Client-side random name generator with UI regenerate button
+- **Design:** 64 curated cyber noir names + syllable combiner (35 onsets × 20 codas = 700 procedural combinations), 60/40 curated/procedural split
+- **Name aesthetic:** Dark urban fantasy: Vex, Nyx, Riven, Corven, Sevrin. Short (3-8 chars), pronounceable, moody.
+- **Files created:**
+  - `packages/client/src/utils/name-generator.ts` — Core generator with validation
+  - `packages/client/src/__tests__/name-generator.test.ts` — 7 tests
+- **Files modified:**
+  - `packages/client/src/pages/CharacterSelect.tsx` — Integrated regenerate button (Dices icon, bg-bg-elevated)
+- **UI pattern:** Name field pre-populated via lazy initializer; regenerate button next to input; fresh name on "+ New Character" and after creation; user can always type own name
+- **Tests:** 7 new tests, all 338 client tests passing
+- **Team impact:** No shared package changes, no API changes, no server changes. Server validates names but doesn't generate.
+- **Future:** If server needs to generate NPC names, move generator to `@ellmud/shared`
