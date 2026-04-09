@@ -7436,3 +7436,4 @@ If the team changes the base URL pattern or adds request interceptors to `api.ts
 - Profiles add complexity without immediate user value
 - File upload can wait until macro system foundation is solid
 - v1 focus: localStorage → server sync, essential 3 settings (fontSize, verbosity, narrationStyle), placeholder for future (keybinds, audio, accessibility)
+
