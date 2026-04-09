@@ -5,7 +5,6 @@ import {
   Volume2,
   Sword,
   ArrowLeft,
-  LogOut,
   Settings,
 } from "lucide-react";
 import CombinedStashLoadout from "../components/CombinedStashLoadout";
@@ -28,7 +27,7 @@ import { useMapToggle } from "../hooks/useMapToggle.js";
 import { useVersion } from "../hooks/useVersion.js";
 import { useDirectionKeys } from "../hooks/useDirectionKeys.js";
 import { isSpeedwalk, parseSpeedwalk } from "../utils/speedwalk.js";
-import { logout as apiLogout, fetchSpawnZone } from "../services/api.js";
+import { fetchSpawnZone } from "../services/api.js";
 import type { CombatAction } from "@ellmud/shared";
 
 // ─── Status Effect Classifier ────────────────────────────────────────────────
@@ -142,18 +141,6 @@ export default function ZoneExploration() {
   }, [state.inCombat]);
 
   // Logout handler
-  const handleLogout = useCallback(async () => {
-    if (state.token) {
-      try {
-        await apiLogout(state.token);
-      } catch {
-        /* best effort */
-      }
-    }
-    roomRef.current?.leave();
-    dispatch({ type: "LOGOUT" });
-    navigate("/");
-  }, [state.token, dispatch, navigate, roomRef]);
 
   // Derive room info from server state
   const currentRoom = state.roomHeader?.roomName ?? "Connecting...";
@@ -359,13 +346,6 @@ export default function ZoneExploration() {
             title="Settings"
           >
             <Settings className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleLogout}
-            className="text-text-secondary hover:text-danger transition-colors"
-            title="Sign out"
-          >
-            <LogOut className="w-4 h-4" />
           </button>
           <span className="text-text-disabled">|</span>
           {connectionIndicator()}
