@@ -127,3 +127,20 @@ export const FactionSlugs = {
 } as const;
 
 export type FactionSlug = typeof FactionSlugs[keyof typeof FactionSlugs];
+
+// ─── User Settings ──────────────────────────────────────────────────────────
+
+export interface UserSettingsConfig {
+  display?: { fontSize?: number };
+  narration?: { verbosity?: 'terse' | 'standard' | 'verbose'; narrationStyle?: string };
+  gameplay?: Record<string, unknown>;
+  accessibility?: Record<string, unknown>;
+}
+
+export interface UserSettings {
+  id: string;
+  playerId: string;
+  config: UserSettingsConfig;
+  createdAt: Date;
+  updatedAt: Date;
+}

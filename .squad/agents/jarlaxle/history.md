@@ -2340,3 +2340,12 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
   - `contentEntityToCreatureTemplate()` (added in 5f3eb60) converts flat ContentEntity to nested CreatureTemplate shape — critical for the `/spawn` endpoint.
 - **Tests added:** 5 new integration tests in `admin-live-rooms.test.ts` covering spawn→display flow, auto-room-selection, multi-spawn, invalid room rejection, and room name accuracy. All 2385 server tests pass.
 - **Files changed:** `routes.ts` (room validation + name fix), `LiveRoomDetail.tsx` (await loadRoom), `admin-live-rooms.test.ts` (+5 tests)
+
+### User Settings Backend (#359)
+- **Built:** Migration `007_user_settings.sql`, `UserSettingsRepository` (interface + PG + InMemory), settings API routes (`GET/PUT /api/user/settings`), mounted in server entry.
+- **Pattern:** Followed existing provider pattern (interface → PgImpl + InMemoryImpl → singleton provider). Routes accept `{ authService }` deps, resolve repo lazily via `getUserSettingsRepository()`.
+- **Types:** `UserSettings` and `UserSettingsConfig` exported from `db/types.ts` and re-exported from `db/index.ts`.
+- **Validation:** Server validates fontSize (int 12–24), verbosity (terse/standard/verbose), narrationStyle (default/gothic/noir/clinical), rejects unknown top-level keys. 400 with descriptive error messages.
+- **Auth:** Bearer token pattern matching `characters.ts` — `authenticate()` helper extracts playerId from token.
+- **Tests:** 17 tests in `user-settings.test.ts` covering auth (401), GET defaults, PUT create/update, persistence round-trip, and all validation rules. All 2408 server tests pass.
+- **Files:** `007_user_settings.sql`, `db/UserSettingsRepository.ts`, `db/types.ts`, `db/index.ts`, `api/settings.ts`, `index.ts`, `__tests__/user-settings.test.ts`
