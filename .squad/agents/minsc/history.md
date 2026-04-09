@@ -40,6 +40,18 @@
 
 ## Learnings (Archived — See Detailed Session Records)
 
+**Character Posture System Tests (2026-07, Issue #371):**
+- 63 tests total (57 unit + 6 integration), all passing — Jarlaxle's implementation already landed
+- Posture type (`Posture`) exported from `@ellmud/shared` with 7 values, `PLAYER_SETTABLE_POSTURES` excludes floating/hovering
+- `PlayerState.posture` field defaults to `DEFAULT_POSTURE` ('standing'), auto-resets on movement in `go.ts`
+- `forcePosture()` exported from `commands/handlers/posture.ts` — used for knockdowns, returns broadcast message or null
+- `PlayerRef.posture` (optional) drives room display via `POSTURE_ROOM_DESCRIPTIONS` lookup in `look.ts` and `go.ts`
+- `_postureChange` metadata on `CommandResult` for ZoneRoom to broadcast third-person messages
+- `POSTURE_MOVEMENT_VERBS` maps posture → departure verb (walks, crawls, sneaks, etc.)
+- `PlayerListEntry.posture` optional field added to who list; `formatWhoListText` includes it
+- Test files: `posture.test.ts` (57 unit tests), `posture-integration.test.ts` (6 Colyseus integration tests)
+- Full suite: 3029 passing, zero regressions
+
 **Role-Based Admin Access Tests (2026-07, Issue #373):**
 - TDD tests for role hierarchy: `player < content-dev < admin` — tests import from anticipated `auth/roles.js` module
 - Role-based admin middleware: tests verify session-token + role grants admin access (content-dev/admin → 200, player → 403)
