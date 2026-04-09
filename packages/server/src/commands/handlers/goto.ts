@@ -80,22 +80,10 @@ export function handleGoto(ctx: CommandContext): CommandResult {
     lines.push(`You see: ${itemNames}`);
   }
 
+  // Creatures — one line per creature instance (#383)
   const creatures = ctx.resolveCreaturesInRoom?.(slug) ?? [];
-  if (creatures.length > 0) {
-    const creaturesByType = new Map<string, { creature: import('../index.js').CreatureRef; count: number }>();
-    for (const c of creatures) {
-      const key = c.type ?? c.name;
-      const existing = creaturesByType.get(key);
-      if (existing) {
-        existing.count++;
-      } else {
-        creaturesByType.set(key, { creature: c, count: 1 });
-      }
-    }
-    for (const [, { creature, count }] of creaturesByType) {
-      const desc = creature.roomDescription || `A ${creature.name} lurks here.`;
-      lines.push(count > 1 ? `${desc} (x${count})` : desc);
-    }
+  for (const creature of creatures) {
+    lines.push(creature.roomDescription || `A ${creature.name} lurks here.`);
   }
 
   return {

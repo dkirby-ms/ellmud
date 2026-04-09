@@ -72,24 +72,10 @@ export function handleGo(ctx: CommandContext): CommandResult {
     lines.push(`You see: ${itemNames}`);
   }
 
-  // Creatures in the target room
+  // Creatures in the target room — one line per creature instance (#383)
   const creatures = ctx.resolveCreaturesInRoom?.(targetRoomId) ?? [];
-  if (creatures.length > 0) {
-    // Group creatures by type and count
-    const creaturesByType = new Map<string, { creature: import('../index.js').CreatureRef; count: number }>();
-    for (const c of creatures) {
-      const key = c.type ?? c.name;
-      const existing = creaturesByType.get(key);
-      if (existing) {
-        existing.count++;
-      } else {
-        creaturesByType.set(key, { creature: c, count: 1 });
-      }
-    }
-    for (const [, { creature, count }] of creaturesByType) {
-      const desc = creature.roomDescription || `A ${creature.name} lurks here.`;
-      lines.push(count > 1 ? `${desc} (x${count})` : desc);
-    }
+  for (const creature of creatures) {
+    lines.push(creature.roomDescription || `A ${creature.name} lurks here.`);
   }
 
   // Other players in the target room (Issue #370)
