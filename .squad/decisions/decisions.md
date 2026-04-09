@@ -7719,3 +7719,41 @@ Client sends `REQUEST_PLAYER_LIST` (no payload) → Server responds with `PLAYER
 **For Jarlaxle:** Server needs to handle `REQUEST_PLAYER_LIST` message and respond with `PLAYER_LIST` containing `PlayerListEntry[]`. Anon players should have `level`, `class`, and `zone` set to null and `anon: true`. The `flags` array should always include active flags (RP is always visible). Also wire `/who` server-side to send formatted text via NARRATE.
 
 ---
+
+---
+
+### 2026-04-09T17:17Z: User decisions on #373 admin user flag
+**By:** dkirby-ms (via Copilot)
+**What:**
+1. ADMIN_TOKEN: Keep as silent fallback for CI/emergency. Do NOT prompt user if env var is missing — just skip it.
+2. First admin bootstrap: env var auto-promote strategy (e.g., AUTO_ADMIN_EMAIL or similar).
+3. Role hierarchy: `player < content-dev < admin`. Drop viewer and moderator — not needed.
+4. Scope v1: Both admin and content-dev get full access to admin pages. Per-page restrictions deferred.
+5. Audit: YES, audit role changes (log who changed what role and when).
+**Why:** User answers to Elminster's 5 decision points on #373 — these are binding design constraints.
+
+---
+
+### 2026-04-09Z: Jarlaxle — Role-Based Admin Access Architecture (Issue #373, PR #375)
+**Author:** Jarlaxle  
+**Date:** 2026-04-09  
+**PR:** #375  
+**Status:** Implemented
+
+**Context:** Issue #373 required adding role-based access control to the admin system. The existing admin auth used only a static `ADMIN_TOKEN` env var with no per-user authorization.
+
+**Decision:** Three-tier role hierarchy (`player < content-dev < admin`), roles stored in DB (`player_identities.role`), dual-path auth (ADMIN_TOKEN fallback + session-based with DB lookup), immediate role changes without re-login.
+
+**Key Points:**
+- Role hierarchy: numeric weights (0, 1, 2). No viewer/moderator — minimal per spec.
+- Roles fetched per admin request via `PlayerRepository.getRoleByPlayerId()` — role changes take effect immediately.
+- Dual-path auth: ADMIN_TOKEN (silent if unset) then session token with role check.
+- HTTP semantics: 401 auth failure, 403 insufficient role, 503 no auth configured.
+- Module-level init pattern with `resetAdminAuth()` for test isolation.
+
+**Impact:**
+- Shared package exports role types
+- Server middleware now async
+- Client admin panel auto-authenticates with role check
+- All tests passing
+

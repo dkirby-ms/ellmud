@@ -10,12 +10,11 @@ import {
   AdminAPIError,
 } from '../../lib/admin-api';
 
-const ROLES = ['player', 'viewer', 'moderator', 'admin'] as const;
+const ROLES = ['player', 'content-dev', 'admin'] as const;
 
 const ROLE_COLORS: Record<string, string> = {
   admin: 'bg-[#8B2252]',
-  moderator: 'bg-[#3A7D7B]',
-  viewer: 'bg-[#4A4B55]',
+  'content-dev': 'bg-[#3A7D7B]',
   player: 'bg-[#2A5D3A]',
 };
 
@@ -169,7 +168,7 @@ function UserFormModal({ user, onSave, onCancel, saving, error }: UserFormProps)
             >
               {ROLES.map((r) => (
                 <option key={r} value={r}>
-                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                  {r.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-')}
                 </option>
               ))}
             </select>

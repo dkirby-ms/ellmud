@@ -199,4 +199,21 @@ export class PgCharacterRepository implements CharacterRepository {
     if (!row?.last_inn_zone_slug || !row?.last_inn_room_slug) return null;
     return { zoneSlug: row.last_inn_zone_slug, roomSlug: row.last_inn_room_slug };
   }
+
+  async savePosture(characterId: string, posture: string): Promise<void> {
+    await query(
+      `UPDATE characters SET posture = $1
+       WHERE id = $2 AND deleted_at IS NULL`,
+      [posture, characterId],
+    );
+  }
+
+  async loadPosture(characterId: string): Promise<string> {
+    const result = await query<{ posture: string }>(
+      `SELECT posture FROM characters
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [characterId],
+    );
+    return result.rows[0]?.posture ?? 'standing';
+  }
 }

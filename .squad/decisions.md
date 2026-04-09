@@ -7546,3 +7546,31 @@ All 35 tests pass against the fix:
 ### Status
 
 PR #372 ready to merge with full test coverage. No additional implementation needed.
+
+---
+
+## Decision: Posture System Architecture (#371)
+
+**Author:** Jarlaxle  
+**PR:** #376  
+**Date:** 2026-07-26  
+
+## Decisions Made
+
+### 1. Posture is DB-backed, not session-local
+Posture persists to the `characters.posture` column (migration 010). This overrides Elminster's v1 session-only proposal. Players reconnecting to a zone will resume their last posture.
+
+### 2. `_postureChange` metadata pattern
+Posture command handlers return `_postureChange` metadata alongside their CommandResult. ZoneRoom reads this to broadcast third-person narration ("Alice sits down.") to other players in the room. This avoids coupling posture handlers to ZoneRoom internals while keeping broadcast logic centralized.
+
+### 3. Pre-movement posture capture
+Movement departure verbs require the posture *before* the go handler runs (since it resets posture to standing). `previousPosture` is captured before `handleCommand()` and passed to `broadcastPlayerMovement()`.
+
+### 4. `forcePosture()` API for system effects
+A separate utility function `forcePosture(player, posture, name)` exists for combat knockdowns and future game effects. It's decoupled from the command handler pipeline and can be called from any system.
+
+### 5. floating/hovering are system-only
+Not registered in the parser. Only settable via `forcePosture()`. Reserved for flight/levitation effects in future phases.
+
+### 6. PlayerRef.posture is optional
+Backward compatible — code without posture data renders "is here" fallback. No breaking changes to existing PlayerRef consumers.

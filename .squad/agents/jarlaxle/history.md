@@ -29,6 +29,20 @@
 
 ## Learnings
 
+### Character Posture System (PR #376, Issue #371)
+- **Task:** Implement full posture system — 7 states, 5 player commands, DB persistence, movement integration, room/who display
+- **Architecture:** Posture stored directly on `PlayerState` + DB `characters.posture` column. Shared type enums/maps in `@ellmud/shared`. Commands are thin wrappers that set state and return broadcast metadata.
+- **Key decisions:**
+  - **DB-backed, not session-only** — Overrides Elminster's v1 proposal. Posture survives reconnects via `savePosture()`/`loadPosture()` on CharacterRepository.
+  - **`_postureChange` metadata on CommandResult** — Posture commands return broadcast info for ZoneRoom to narrate to other players. Avoids coupling command handler to ZoneRoom internals.
+  - **Pre-movement posture capture** — Must snapshot `player.posture` BEFORE `handleCommand()` runs, since `handleGo` resets posture during execution. Captured as `previousPosture` for departure verb selection.
+  - **Movement verb via `POSTURE_MOVEMENT_VERBS` lookup** — Clean record-based approach. "walks"/"crawls"/"sneaks"/"floats"/"drifts" based on posture at departure time.
+  - **`forcePosture()` utility** — Separate from command handlers, accepts PlayerState directly. For combat knockdowns and future system effects. Returns null if already in target posture.
+  - **floating/hovering system-only** — Not in parser `KNOWN_VERBS`. Only settable via `forcePosture()`. Reserved for flight/levitation effects.
+  - **`PlayerRef.posture` optional field** — Backward-compatible: existing code without posture renders "is here" fallback.
+- **Files:** `shared/index.ts` (types), `PlayerState.ts`, `posture.ts` (handler), `go.ts`/`look.ts` (display), `ZoneRoom.ts` (integration), `WhoListService.ts`, `WhoListModal.tsx`, `CharacterRepository.ts` (persistence), migration 010
+- **Tests:** 57 unit + 6 integration, all 3029 total passing
+
 ### 2026-04-05 (Round 4): Ability System — Cooldowns, Stamina, Damage Model (PR #296)
 - **Task:** Implement Phase 1 ability system per GDD §6.3 (Heavy Strike, Block, Observe)
 - **Architecture:** Data-driven layer on top of existing combat — minimal invasive changes to CombatState/DamageOptions

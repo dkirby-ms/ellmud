@@ -26,8 +26,10 @@ import {
   type ToggleFlagMessage,
   type FlagStateMessage,
   isValidFlagName,
+  isValidPosture,
   DEATH_PENALTY_DEFAULTS,
   OPPOSITE_DIRECTION,
+  POSTURE_MOVEMENT_VERBS,
   MessageTypes,
 } from '@ellmud/shared';
 import { ZoneState } from '../state.js';
@@ -556,6 +558,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     );
     this.players.set(playerId, playerState);
 
+    // Load persisted posture from DB (#371)
+    try {
+      const savedPosture = await this.characterRepo.loadPosture(playerId);
+      if (isValidPosture(savedPosture)) {
+        playerState.posture = savedPosture;
+      }
+    } catch (err) {
+      this.log(`Failed to load posture for ${this.playerTag(playerId)}: ${err}`);
+    }
+
     this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig())} players)`);
 
     // Send initial system narration using NarrationService (async, don't block join)
@@ -1004,6 +1016,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
 
     const previousRoomId = player.currentRoomId;
+    // Capture posture before command execution for movement verb narration (#371)
+    const previousPosture = player.posture;
 
     // Snapshot inventory for loot pickup metrics (take/loot commands)
     const trackLoot = verb === 'take' || verb === 'loot';
@@ -1067,7 +1081,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }, direction);
 
       // Broadcast arrival/departure narrations to other players
-      this.broadcastPlayerMovement(playerId, previousRoomId, player.currentRoomId, direction);
+      this.broadcastPlayerMovement(playerId, previousRoomId, player.currentRoomId, direction, previousPosture);
+
+      // Persist posture reset to DB (#371)
+      this.persistPosture(playerId).catch((err) => {
+        this.log(`Failed to persist posture reset for ${this.playerTag(playerId)}: ${err}`);
+      });
 
       // Awareness: notify observers in destination room about entering player
       this.runAwarenessChecks(playerId, player.currentRoomId, 'arrival');
@@ -1083,6 +1102,25 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       // Broadcast updated occupants to other players in both rooms
       this.broadcastRoomOccupantsUpdate(previousRoomId);
       this.broadcastRoomOccupantsUpdate(player.currentRoomId);
+    }
+
+    // Posture commands: broadcast posture change to other players in the room (#371)
+    // Uses _postureChange metadata from the command result (single source of truth in posture.ts)
+    const postureChange = (result as import('../commands/index.js').CommandResult & { _postureChange?: { characterName: string; message: string } })._postureChange;
+    if (postureChange) {
+      for (const [sid, ps] of this.players) {
+        if (sid !== playerId && ps.currentRoomId === player.currentRoomId) {
+          const c = this.findClient(sid);
+          if (c) {
+            this.sendNarrate(c, { text: postureChange.message, type: 'ambient', timestamp: Date.now() });
+          }
+        }
+      }
+
+      // Persist posture change to DB
+      this.persistPosture(playerId).catch((err) => {
+        this.log(`Failed to persist posture for ${this.playerTag(playerId)}: ${err}`);
+      });
     }
 
     // Social commands (say, emote) broadcast to all players in the same room
@@ -1130,7 +1168,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         otherPlayersInRoom.push(sid);
         const name = this.characterNames.get(sid) ?? 'A wanderer';
         const flags = this.playerFlagsCache.get(sid);
-        otherPlayerInfo.push({ sessionId: sid, name, anon: flags?.anon === true });
+        otherPlayerInfo.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture });
       }
     }
 
@@ -1154,7 +1192,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           if (sid !== player.sessionId && ps.currentRoomId === roomId) {
             const name = this.characterNames.get(sid) ?? 'A wanderer';
             const flags = this.playerFlagsCache.get(sid);
-            result.push({ sessionId: sid, name, anon: flags?.anon === true });
+            result.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture });
           }
         }
         return result;
@@ -1766,12 +1804,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     sourceRoomId: string,
     targetRoomId: string,
     direction?: string,
+    posture?: import('@ellmud/shared').Posture,
   ): void {
     const name = this.characterNames.get(playerId) ?? 'A wanderer';
 
+    // Use posture-aware movement verbs for departure (#371)
+    const moveVerb = posture ? POSTURE_MOVEMENT_VERBS[posture] : 'walks';
+
     // Departure: tell players in the source room
     const departureText = direction
-      ? `${name} leaves to the ${direction}.`
+      ? `${name} ${moveVerb} ${direction}.`
       : `${name} leaves.`;
     for (const [sid, ps] of this.players) {
       if (sid !== playerId && ps.currentRoomId === sourceRoomId) {
@@ -2535,6 +2577,17 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
   }
 
+  /** Persist posture to DB for reconnect survival (#371). */
+  private async persistPosture(playerId: string): Promise<void> {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    try {
+      await this.characterRepo.savePosture(playerId, player.posture);
+    } catch (err) {
+      this.log(`Failed to persist posture for ${this.playerTag(playerId)}: ${err}`);
+    }
+  }
+
   // ─── Run History Persistence ────────────────────────────────────────────
 
   /** Record a zone run when a player survives or the zone collapses. */
@@ -2947,6 +3000,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         characterName: charName,
         roomId: player.currentRoomId,
         zoneName,
+        posture: player.posture,
       });
     }
     return result;

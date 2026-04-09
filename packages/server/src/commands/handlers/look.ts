@@ -6,6 +6,7 @@
 import type { CommandResult } from '../index.js';
 import type { CommandContext } from '../index.js';
 import type { RoomFeature } from '@ellmud/shared';
+import { POSTURE_ROOM_DESCRIPTIONS } from '@ellmud/shared';
 
 export function handleLook(ctx: CommandContext): CommandResult {
   const { room, args } = ctx;
@@ -75,7 +76,8 @@ function showFullRoom(ctx: CommandContext): CommandResult {
   if (ctx.otherPlayerInfo && ctx.otherPlayerInfo.length > 0) {
     for (const p of ctx.otherPlayerInfo) {
       if (!p.anon) {
-        lines.push(`${p.name} is here.`);
+        const postureDesc = p.posture ? POSTURE_ROOM_DESCRIPTIONS[p.posture] : 'is here';
+        lines.push(`${p.name} ${postureDesc}.`);
       }
     }
   } else if (ctx.otherPlayersInRoom.length > 0) {

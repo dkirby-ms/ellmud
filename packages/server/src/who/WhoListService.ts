@@ -9,7 +9,7 @@
  */
 
 import { matchMaker } from '@colyseus/core';
-import type { CharacterFlags, PlayerListEntry } from '@ellmud/shared';
+import type { CharacterFlags, PlayerListEntry, Posture } from '@ellmud/shared';
 import { DEFAULT_CHARACTER_FLAGS } from '@ellmud/shared';
 import { resolveVisibility, type ViewerContext, type TargetContext } from '../visibility/index.js';
 import { getCharacterFlagsRepository } from '../db/CharacterFlagsRepository.js';
@@ -20,6 +20,8 @@ export interface ZonePlayerData {
   characterName: string;
   roomId: string;
   zoneName: string;
+  /** Current character posture (#371). */
+  posture?: Posture;
 }
 
 /** Check if a Colyseus room name is a ZoneRoom instance. */
@@ -110,6 +112,7 @@ export async function gatherPlayerList(
       zone: visibility.isAnonymous ? null : pd.zoneName,
       flags: activeFlags,
       anon: visibility.isAnonymous,
+      posture: visibility.isAnonymous ? undefined : pd.posture,
     });
   }
 
@@ -134,11 +137,12 @@ export function formatWhoListText(entries: PlayerListEntry[]): string {
 
   // Header
   const nameW = 22;
-  const zoneW = 20;
+  const zoneW = 18;
+  const statusW = 12;
   lines.push(
-    `  ${'Name'.padEnd(nameW)}${'Zone'.padEnd(zoneW)}Flags`,
+    `  ${'Name'.padEnd(nameW)}${'Zone'.padEnd(zoneW)}${'Status'.padEnd(statusW)}Flags`,
   );
-  lines.push(`  ${'─'.repeat(nameW)}${'─'.repeat(zoneW)}${'─'.repeat(14)}`);
+  lines.push(`  ${'─'.repeat(nameW)}${'─'.repeat(zoneW)}${'─'.repeat(statusW)}${'─'.repeat(14)}`);
 
   for (const entry of entries) {
     const displayName = entry.anon
@@ -149,6 +153,9 @@ export function formatWhoListText(entries: PlayerListEntry[]): string {
       ? '[dim]???[/dim]'
       : (entry.zone ?? '[dim]Unknown[/dim]');
 
+    const postureLabel = entry.anon ? '???' : (entry.posture ?? 'standing');
+    const displayStatus = entry.anon ? '[dim]???[/dim]' : `[dim]${postureLabel}[/dim]`;
+
     const flagTags: string[] = [];
     if (entry.flags.includes('rp')) flagTags.push('[green][RP][/green]');
     if (entry.flags.includes('anon')) flagTags.push('[yellow][Anon][/yellow]');
@@ -157,9 +164,10 @@ export function formatWhoListText(entries: PlayerListEntry[]): string {
     // Pad using plain-text widths (markup tags don't count for alignment)
     const plainName = entry.anon ? '???' : entry.name;
     const plainZone = entry.anon ? '???' : (entry.zone ?? 'Unknown');
+    const plainStatus = entry.anon ? '???' : postureLabel;
 
     lines.push(
-      `  ${displayName}${' '.repeat(Math.max(1, nameW - plainName.length))}${displayZone}${' '.repeat(Math.max(1, zoneW - plainZone.length))}${flagStr}`,
+      `  ${displayName}${' '.repeat(Math.max(1, nameW - plainName.length))}${displayZone}${' '.repeat(Math.max(1, zoneW - plainZone.length))}${displayStatus}${' '.repeat(Math.max(1, statusW - plainStatus.length))}${flagStr}`,
     );
   }
 
