@@ -73,7 +73,7 @@ export default function CompassControl({ onNavigate }: CompassControlProps) {
               onClick={() => onNavigate(dir)}
               className={`h-8 rounded text-xs font-mono transition-colors ${
                 available
-                  ? 'text-interactive hover:text-accent-gold hover:bg-bg-elevated cursor-pointer'
+                  ? 'text-interactive hover:text-accent-gold hover:bg-bg-elevated focus:text-accent-gold focus:bg-bg-elevated focus:outline-none cursor-pointer'
                   : 'text-text-disabled opacity-30 cursor-default'
               }`}
               title={available ? `Go ${dir}` : `${dir} — no exit`}
@@ -92,7 +92,7 @@ export default function CompassControl({ onNavigate }: CompassControlProps) {
           onClick={() => onNavigate('up')}
           className={`px-3 h-7 rounded text-xs font-mono transition-colors ${
             hasUp
-              ? 'text-interactive hover:text-accent-gold hover:bg-bg-elevated cursor-pointer'
+              ? 'text-interactive hover:text-accent-gold hover:bg-bg-elevated focus:text-accent-gold focus:bg-bg-elevated focus:outline-none cursor-pointer'
               : 'text-text-disabled opacity-30 cursor-default'
           }`}
           title={hasUp ? 'Go up' : 'up — no exit'}
@@ -105,7 +105,7 @@ export default function CompassControl({ onNavigate }: CompassControlProps) {
           onClick={() => onNavigate('down')}
           className={`px-3 h-7 rounded text-xs font-mono transition-colors ${
             hasDown
-              ? 'text-interactive hover:text-accent-gold hover:bg-bg-elevated cursor-pointer'
+              ? 'text-interactive hover:text-accent-gold hover:bg-bg-elevated focus:text-accent-gold focus:bg-bg-elevated focus:outline-none cursor-pointer'
               : 'text-text-disabled opacity-30 cursor-default'
           }`}
           title={hasDown ? 'Go down' : 'down — no exit'}
