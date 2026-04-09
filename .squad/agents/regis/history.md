@@ -16,6 +16,14 @@
 
 ## Team Updates
 
+### 2026-04-09: Issue #357 — Direction Shortcuts & Speedwalk
+- **Status:** ✅ Complete (Commit 2085460, pushed to dev)
+- **Design decisions applied:** Cardinal directions only; arrow keys skip when input focused; speedwalk echoes each move; combat blocks speedwalk
+- **Tests:** 23 new unit tests, 314+ client tests passing
+- **Files:** `useDirectionKeys.ts` (hook), `speedwalk.ts` (parser), `ZoneExploration.tsx` (integration)
+- **Key features:** Global keydown listener with `document.activeElement` check; 50-move client limit; 150ms staggered dispatch; combat abort via `speedwalkAbortRef`
+- **Team impact:** New keyboard navigation pattern set; speedwalk framework ready for further enhancements
+
 ### 2026-04-06: Issues #316 & #317 — Zone Designer Context Menu Enhancements
 - **Issue #316:** Implemented styled delete confirmation modal (dark theme pattern) replacing browser confirm()
 - **Issue #317:** Implemented "Connect to Zone..." context menu option; integrated direction conflict warnings
@@ -26,6 +34,8 @@
 ---
 
 ## Learnings
+
+- **Issue #357 — Direction shortcuts + speedwalk (2026):** Phase 1: `useDirectionKeys` hook adds global keydown listener for arrow/PageUp/PageDown/numpad → direction mapping. Uses `document.activeElement` check to skip when input/textarea/contentEditable has focus (not inputRef comparison — works with any focused text field). Numpad5 is explicit no-op. Phase 2: `speedwalk.ts` pure-function parser — regex `(\d*)([nsewud])` iterates segments, 50-move client limit. In `ZoneExploration.tsx`, `handleSubmit` checks `isSpeedwalk()` before sending to server. Each move dispatched via `handleExitClick` with 150ms staggered `setTimeout`. Combat blocks speedwalk; entering combat mid-walk aborts via `speedwalkAbortRef` + useEffect on `state.inCombat`. Commit 2085460.
 
 - **Issue #358 — Inline MUD prompt with click-to-focus (2026):** The ZoneExploration command input was a separate full-width strip at the page bottom (`bg-bg-panel border-t`). Moved it inside the 70% narrative column, styled with terminal background (`#080910`), added `.command-input-line` CSS class with `:focus-within` gold glow. MudPrompt's blinking cursor removed (real input `>` replaces it). Click-to-focus on narrative area checks `window.getSelection()` to avoid stealing focus during text selection. Same treatment applied to Refuge chat. `tabIndex={1}` on input, `role="log"` on narrative areas. Commit 08b24c0.
 

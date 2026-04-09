@@ -7360,3 +7360,19 @@ Currently:
 **Next Step:** Team feedback on open questions → proceed with Phase 1
 
 ---
+
+---
+
+## 2026-04-09T00:16:00Z: User directive — #357 design decisions
+
+**By:** dkirby-ms (via Copilot)  
+**What:**
+1. No ordinal directions (NE/NW/SE/SW) — cardinal only (n/s/e/w/u/d)
+2. Numpad5 does nothing — macros deferred to later
+3. Arrow keys only intercepted when input is NOT focused (text editing preserved)
+4. Speedwalk echoes each individual move
+5. Speedwalk blocked during combat
+
+**Why:** User answers to Elminster's 5 open questions on #357
+
+**Implementation Status:** Complete (Commit 2085460, pushed to dev)
