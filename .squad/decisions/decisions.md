@@ -6191,3 +6191,1421 @@ Include the live room graph rooms in the `getZoneDetail()` response as a new `ro
 - 2388 total tests pass
 - No regressions
 - Fixes procedural zone creature display
+
+---
+
+## Recent Decisions (2026-04-09)
+
+# Architecture Proposal: Optional User Flags (#365)
+
+**Author:** Elminster (Lead/Architect)  
+**Date:** 2026-04-10  
+**Ticket:** [#365](https://github.com/dkirby-ms/ellmud/issues/365) — Optional User Flags  
+**Related:** [#366](https://github.com/dkirby-ms/ellmud/issues/366) — Who List (depends on this design)
+
+---
+
+## Executive Summary
+
+Players need a way to signal intent and control information visibility. This proposal introduces **optional user flags** (toggles for [Anon], [RP], and future extensibility) stored as JSONB in a per-player `character_flags` table, with real-time toggle commands and server-authoritative visibility enforcement. Flags are visual indicators that appear next to player names in the who list and lookups, respecting the [Anon] flag's same-room exception.
+
+**Key Design Principle:** Server decides what to send. Clients display only what the server permits.
+
+---
+
+## 1. Data Model
+
+### 1.1 New Table: `character_flags`
+
+Create a new table to store per-character flags (not per-player, since a player may have multiple active characters).
+
+```sql
+-- 009_character_flags.sql
+
+CREATE TABLE character_flags (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  character_id    UUID NOT NULL UNIQUE REFERENCES characters(id) ON DELETE CASCADE,
+  flags           JSONB NOT NULL DEFAULT '{}',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_character_flags_character ON character_flags(character_id);
+```
+
+**Rationale:**
+- **Uniqueness per character** — Each character has exactly one flag row (UNIQUE constraint).
+- **JSONB storage** — Allows adding new flags in Phase 2 without schema migration. Queries like `WHERE flags->'anon' = 'true'` work natively.
+- **ON DELETE CASCADE** — When a character is deleted, its flags disappear.
+- **Index on character_id** — Fast lookup by character during gameplay (e.g., who command, look handler).
+
+### 1.2 Flag Values
+
+Flags stored as boolean toggles:
+
+```json
+{
+  "anon": false,
+  "rp": false
+}
+```
+
+- **anon** (boolean) — When true, player's level, class, and username are hidden from other players unless they're in the same room.
+- **rp** (boolean) — When true, visual indicator "[RP]" appears next to player's name in who list and lookups (signals they are engaged in roleplay).
+
+Both default to `false` (no flags active).
+
+**Future extensibility:** New flags can be added without altering the schema (e.g., `"pvp-enabled": true`, `"afk": true`). Code gates determine which flags are displayed in the who list.
+
+---
+
+## 2. Flag Definitions & Extensibility
+
+### 2.1 Flag Registry (Code-Based)
+
+Define flags in TypeScript, shared between client and server:
+
+**File:** `packages/shared/src/types/flags.ts`
+
+```typescript
+export interface CharacterFlags {
+  anon?: boolean;      // Hide username, level, class from non-roommates
+  rp?: boolean;        // Visual roleplay indicator
+}
+
+export const FLAG_DEFINITIONS = {
+  anon: {
+    name: 'Anonymous',
+    description: 'Hide your identity from others outside your room',
+    toggleable: true,
+  },
+  rp: {
+    name: 'Roleplaying',
+    description: 'Indicate that you are engaged in roleplay',
+    toggleable: true,
+  },
+} as const;
+
+export type FlagKey = keyof typeof FLAG_DEFINITIONS;
+```
+
+**Rationale:**
+- **Centralized definition** — Shared TypeScript enum prevents client/server desync.
+- **Extensibility** — Adding a new flag is one addition to `FLAG_DEFINITIONS`; no migration needed (JSONB is forward-compatible).
+- **Metadata** — `toggleable: true` future-proofs for read-only flags (e.g., `"banned": true`, controlled by admin, not player).
+
+### 2.2 Default Flags
+
+When a character is created or flags are missing:
+
+```typescript
+const defaultFlags: CharacterFlags = {
+  anon: false,
+  rp: false,
+};
+```
+
+**Handling missing flags:** If a character has no flag row, treat all flags as false (no special behavior). Queries should use `COALESCE` or a repository pattern to provide defaults.
+
+---
+
+## 3. Toggle Mechanism
+
+### 3.1 In-Game Command: `/flag`
+
+Players toggle flags via a simple command:
+
+```
+/flag anon        → Toggle [Anon] flag (on/off)
+/flag rp          → Toggle [RP] flag (on/off)
+/flag status      → Show current flag status
+/flag help        → Show flag help
+```
+
+**Command Handler:** `packages/server/src/commands/handlers/flag.ts`
+
+```typescript
+export function handleFlag(ctx: CommandContext): CommandResult {
+  const [subcommand, ...args] = ctx.args;
+
+  if (!subcommand) {
+    return showFlagStatus(ctx);
+  }
+
+  const lowerSubcommand = subcommand.toLowerCase();
+
+  if (lowerSubcommand === 'help') {
+    return showFlagHelp();
+  }
+
+  if (lowerSubcommand === 'status') {
+    return showFlagStatus(ctx);
+  }
+
+  // Toggle: /flag anon, /flag rp
+  const flagKey = lowerSubcommand as FlagKey;
+  if (!FLAG_DEFINITIONS[flagKey]) {
+    return {
+      narrations: [{
+        text: `Unknown flag: ${flagKey}. Use /flag help for options.`,
+        type: 'system',
+      }],
+    };
+  }
+
+  // Update flag via repository, return confirmation
+  return toggleFlag(ctx, flagKey);
+}
+```
+
+**Flow:**
+1. Parse command arguments.
+2. Validate flag name against `FLAG_DEFINITIONS`.
+3. Call `CharacterFlagsRepository.toggleFlag(characterId, flagKey)`.
+4. Return confirmation narration: "Anonymous mode: **ON**" / "Anonymous mode: **OFF**".
+
+### 3.2 Settings Modal (Future — Phase 2)
+
+The Settings modal (from #359) can be extended to include a flag toggle section. This is out of scope for Phase 1 but mentioned for completeness.
+
+---
+
+## 4. Server-Authoritative Visibility Rules
+
+### 4.1 Anon Flag Behavior
+
+When a player **viewing** runs `who` or `look` to inspect another player:
+
+| Viewer Context | Target Flag | Data Sent |
+|---|---|---|
+| Same room | anon=true | Full info (username, level, class, flags) |
+| Different room | anon=true | Generic description (e.g., "A figure in merchant garb") |
+| Different room | anon=false | Full info |
+| Admin (role='admin') | any | Full info (admins always see truth) |
+
+**Rationale:**
+- **[Anon] is mutual** — Hiding doesn't prevent targeting/combat (skill-based), just information.
+- **Same room sees all** — Proximity breaks anonymity (prevents abuse like "I'm anon so you can't attack me").
+- **Admin override** — Staff need to see all info for moderation.
+
+### 4.2 RP Flag Behavior
+
+When displaying player info (who list, look):
+
+- If `rp=true`, append **[RP]** badge next to player name.
+- Example: "Gandalf [RP]" appears in who list.
+- **No visibility restrictions** — RP is always visible to everyone (unlike [Anon]). It's a courtesy signal, not a mask.
+
+### 4.3 Implementation Points
+
+These visibility rules are enforced **on the server** when constructing player data for responses:
+
+#### **In `handleWho` (new command for #366):**
+```typescript
+function buildWhoResponse(viewer: PlayerState): CommandResult {
+  const allOnlinePlayers = /* fetch from zone state */;
+  
+  const whoList = allOnlinePlayers.map(target => {
+    const flags = getCharacterFlags(target.characterId);
+    const sameRoom = viewer.currentRoomId === target.currentRoomId;
+    
+    if (flags.anon && !sameRoom) {
+      // Hide username, level, class
+      return { name: "A mysterious figure", level: "?", class: "?", flags: [] };
+    }
+    
+    // Full info (same room or not flagged anon)
+    return {
+      name: target.username,
+      level: target.level,
+      class: target.class,
+      flags: buildFlagBadges(flags), // ["[RP]"] if rp=true, etc.
+    };
+  });
+  
+  return { narrations: [{ text: formatWhoList(whoList), type: 'system' }] };
+}
+```
+
+#### **In `handleLook` (examining a player):**
+When a player uses `look <player-name>`, apply the same rules:
+- If target has anon=true and not in same room, return generic description.
+- Otherwise, return full info with flag badges.
+
+#### **In `AwarenessSystem` (existing stealth detection):**
+- No changes needed. Awareness still uses equipment-based descriptions (never reveals names).
+- Flags are orthogonal to awareness; they apply *after* detection tier is calculated.
+
+---
+
+## 5. Data Layer: CharacterFlagsRepository
+
+### 5.1 Repository Interface
+
+**File:** `packages/server/src/character/CharacterFlagsRepository.ts`
+
+```typescript
+export interface CharacterFlagsRepository {
+  getFlags(characterId: string): Promise<CharacterFlags>;
+  setFlags(characterId: string, flags: CharacterFlags): Promise<void>;
+  toggleFlag(characterId: string, flagKey: FlagKey): Promise<boolean>;
+}
+
+export class PostgresCharacterFlagsRepository implements CharacterFlagsRepository {
+  async getFlags(characterId: string): Promise<CharacterFlags> {
+    const row = await pool.query(
+      `SELECT flags FROM character_flags WHERE character_id = $1`,
+      [characterId],
+    );
+    return row.rows[0]?.flags ?? {};
+  }
+
+  async setFlags(characterId: string, flags: CharacterFlags): Promise<void> {
+    await pool.query(
+      `INSERT INTO character_flags (character_id, flags) VALUES ($1, $2)
+       ON CONFLICT (character_id) DO UPDATE SET flags = $2, updated_at = now()`,
+      [characterId, flags],
+    );
+  }
+
+  async toggleFlag(characterId: string, flagKey: FlagKey): Promise<boolean> {
+    const currentFlags = await this.getFlags(characterId);
+    const newValue = !currentFlags[flagKey];
+    currentFlags[flagKey] = newValue;
+    await this.setFlags(characterId, currentFlags);
+    return newValue;
+  }
+}
+
+export class InMemoryCharacterFlagsRepository implements CharacterFlagsRepository {
+  private store = new Map<string, CharacterFlags>();
+
+  async getFlags(characterId: string): Promise<CharacterFlags> {
+    return this.store.get(characterId) ?? {};
+  }
+
+  async setFlags(characterId: string, flags: CharacterFlags): Promise<void> {
+    this.store.set(characterId, flags);
+  }
+
+  async toggleFlag(characterId: string, flagKey: FlagKey): Promise<boolean> {
+    const current = this.store.get(characterId) ?? {};
+    const newValue = !current[flagKey];
+    current[flagKey] = newValue;
+    this.store.set(characterId, current);
+    return newValue;
+  }
+}
+```
+
+**Rationale:**
+- **Provider pattern** — Decouples business logic from storage. Tests use InMemory, production uses Postgres.
+- **ON CONFLICT** — Handles missing flag rows gracefully (insert if missing, update if exists).
+- **Returns new value** — Toggle returns the new state, allowing handlers to confirm "flag is now ON".
+
+### 5.2 Factory & Dependency Injection
+
+**File:** `packages/server/src/character/index.ts`
+
+```typescript
+let flagsRepository: CharacterFlagsRepository | null = null;
+
+export function getCharacterFlagsRepository(): CharacterFlagsRepository {
+  if (!flagsRepository) {
+    flagsRepository = isProduction()
+      ? new PostgresCharacterFlagsRepository()
+      : new InMemoryCharacterFlagsRepository();
+  }
+  return flagsRepository;
+}
+
+export function setCharacterFlagsRepository(repo: CharacterFlagsRepository): void {
+  flagsRepository = repo;
+}
+```
+
+---
+
+## 6. Command Handler Integration
+
+### 6.1 Flag Command Handler
+
+**File:** `packages/server/src/commands/handlers/flag.ts`
+
+```typescript
+import { getCharacterFlagsRepository } from '../character/index.js';
+import { FLAG_DEFINITIONS, type FlagKey } from '@ellmud/shared';
+import type { CommandResult, CommandContext } from '../index.js';
+
+export function handleFlag(ctx: CommandContext): CommandResult {
+  const [subcommand] = ctx.args;
+
+  if (!subcommand) {
+    return showFlagStatus(ctx);
+  }
+
+  const lower = subcommand.toLowerCase();
+
+  switch (lower) {
+    case 'help':
+      return showFlagHelp();
+    case 'status':
+      return showFlagStatus(ctx);
+    default: {
+      const flagKey = lower as FlagKey;
+      if (!FLAG_DEFINITIONS[flagKey]) {
+        return {
+          narrations: [{
+            text: `Unknown flag "${flagKey}". Use /flag help for available flags.`,
+            type: 'system',
+          }],
+        };
+      }
+      return toggleFlagHandler(ctx, flagKey);
+    }
+  }
+}
+
+async function toggleFlagHandler(ctx: CommandContext, flagKey: FlagKey): Promise<CommandResult> {
+  const repo = getCharacterFlagsRepository();
+  const characterId = ctx.playerState.characterId; // From context
+
+  try {
+    const newValue = await repo.toggleFlag(characterId, flagKey);
+    const state = newValue ? 'enabled' : 'disabled';
+    const flagName = FLAG_DEFINITIONS[flagKey].name;
+
+    return {
+      narrations: [{
+        text: `${flagName} [${flagKey}] is now ${state}.`,
+        type: 'system',
+      }],
+    };
+  } catch (err) {
+    return {
+      narrations: [{
+        text: 'Failed to update flag. Please try again.',
+        type: 'system',
+      }],
+    };
+  }
+}
+
+function showFlagStatus(ctx: CommandContext): CommandResult {
+  // (Simplified — in real code, fetch flags asynchronously)
+  return {
+    narrations: [{
+      text: 'Available flags: anon, rp. Use /flag <name> to toggle.',
+      type: 'system',
+    }],
+  };
+}
+
+function showFlagHelp(): CommandResult {
+  const help = `
+Flags control how other players see you:
+  /flag anon  — Hide username, level, class from players outside your room
+  /flag rp    — Display [RP] badge next to your name (roleplay indicator)
+  /flag status — Show current flag state
+Use /flag <flag-name> to toggle on/off.
+  `.trim();
+
+  return {
+    narrations: [{
+      text: help,
+      type: 'system',
+    }],
+  };
+}
+```
+
+### 6.2 Command Registry
+
+Add to `packages/server/src/commands/index.ts`:
+
+```typescript
+import { handleFlag } from './handlers/flag.js';
+
+export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
+  // ... existing commands ...
+  'flag': handleFlag,
+};
+```
+
+**Aliases:** `/flag`, `/flags` (both map to the same handler).
+
+---
+
+## 7. Who List Integration (Issue #366)
+
+This proposal does not implement the who list; however, the flag infrastructure must be ready for it.
+
+**Expected who command output:**
+```
+Online Players:
+  Gandalf [RP] (level 12, Wizard)
+  A mysterious figure (level ?, ?)    [player is anon, outside your room]
+  Legolas (level 10, Ranger)
+  ...
+```
+
+The who handler will:
+1. Iterate over all online players.
+2. Call `getCharacterFlags(targetCharacterId)`.
+3. Apply visibility rules (anon + same-room check).
+4. Build player display name with flag badges (e.g., "Gandalf [RP]").
+
+---
+
+## 8. Client-Side Display (Future)
+
+When the who list is implemented in the UI:
+- Server sends `{ username, level, class, flags: ['rp'] }` or `{ username: "A mysterious figure", flags: [] }`.
+- Client renders badges directly from the `flags` array.
+- **No client-side logic to hide data** — Server has already made the decision.
+
+This is a simple rendering change; no complex client-side filtering logic is needed.
+
+---
+
+## 9. Migration: 009_character_flags.sql
+
+**Path:** `packages/server/src/db/migrations/009_character_flags.sql`
+
+```sql
+-- 009_character_flags.sql — Per-character flags (issue #365).
+-- Stores toggleable player flags: anon (hide info), rp (roleplay indicator).
+-- JSONB allows adding new flags in Phase 2 without schema migration.
+
+CREATE TABLE character_flags (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  character_id    UUID NOT NULL UNIQUE REFERENCES characters(id) ON DELETE CASCADE,
+  flags           JSONB NOT NULL DEFAULT '{}',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_character_flags_character ON character_flags(character_id);
+```
+
+**Notes:**
+- Migration 008 is `gameplay_metrics`; this follows as 009.
+- No seed data needed (flags default to `{}`).
+- Migration is idempotent (can re-run safely).
+
+---
+
+## 10. Testing Strategy
+
+### 10.1 Unit Tests
+
+**File:** `packages/server/src/character/__tests__/CharacterFlagsRepository.test.ts`
+
+```typescript
+describe('CharacterFlagsRepository', () => {
+  it('returns default flags for missing character', async () => {
+    const repo = new InMemoryCharacterFlagsRepository();
+    const flags = await repo.getFlags('nonexistent');
+    expect(flags).toEqual({});
+  });
+
+  it('toggles flag on and off', async () => {
+    const repo = new InMemoryCharacterFlagsRepository();
+    const charId = 'test-char-123';
+
+    let result = await repo.toggleFlag(charId, 'anon');
+    expect(result).toBe(true);
+
+    result = await repo.toggleFlag(charId, 'anon');
+    expect(result).toBe(false);
+  });
+
+  it('persists flags across calls', async () => {
+    const repo = new InMemoryCharacterFlagsRepository();
+    const charId = 'test-char-456';
+
+    await repo.setFlags(charId, { anon: true, rp: false });
+    const flags = await repo.getFlags(charId);
+    expect(flags).toEqual({ anon: true, rp: false });
+  });
+});
+```
+
+### 10.2 Integration Tests
+
+Test flag visibility in who/look handlers (once implemented).
+
+### 10.3 Server-Authoritative Checks
+
+Verify that:
+- [Anon] flag hides info when viewer is in different room.
+- [Anon] flag does NOT hide info when viewer is in same room.
+- [RP] badge always displays.
+- Admin always sees full info (no hiding).
+
+---
+
+## 11. Implementation Checklist
+
+- [ ] **Migration 009:** Create `character_flags` table (Jarlaxle or DB team).
+- [ ] **Shared types:** Define `CharacterFlags`, `FLAG_DEFINITIONS` in `@ellmud/shared` (Jarlaxle or SDK team).
+- [ ] **Repository:** Implement `CharacterFlagsRepository` with Postgres and InMemory providers (Jarlaxle or Backend team).
+- [ ] **Command handler:** Implement `/flag` command with toggle logic (Backend team).
+- [ ] **Command registry:** Add handler to command map (Backend team).
+- [ ] **Integration:** Wire flag toggling into `CommandContext` and ensure character ID flows through (Backend team).
+- [ ] **Tests:** Unit tests for repository, integration tests for command handler (QA/Backend team).
+- [ ] **Who list (#366):** Integrate flag visibility rules into who command and lookups (Backend team, depends on this design).
+- [ ] **UI display:** Render flag badges in who list modal (Frontend team, depends on server implementation).
+
+---
+
+## 12. Open Questions for dkirby-ms
+
+1. **Admin flag visibility:** Should admins always see full info (username, level) even when [Anon] is active? (Proposed: Yes)
+
+2. **Same-room definition:** Is same-room defined by exact room ID, or should it be broader (e.g., same zone)? (Proposed: Exact room ID)
+
+3. **Future flags:** Are there other flags you foresee in the near term (e.g., [AFK], [PvP-Enabled], [LFG])? This affects how we name the system and set defaults.
+
+4. **Who list scope (#366):** Should the who list show all online players, or only players in the same zone? (Proposed: All online, but filtered by viewer visibility rules)
+
+5. **Flag persistence:** Should flags persist across character deletion/recreation? (Proposed: No — flags are tied to character_id, so a deleted character loses its flags)
+
+---
+
+## 13. Rationale & Decisions
+
+### Why JSONB over discrete columns?
+
+- **Extensibility:** Adding a new flag (e.g., [AFK]) requires only a code change, not a schema migration.
+- **Query flexibility:** JSONB supports `WHERE flags->'anon' = 'true'` without updating indexes.
+- **Performance:** Single column scan vs. multiple boolean columns.
+- **Precedent:** User settings (migration 007) use JSONB for the same reason.
+
+### Why a dedicated `character_flags` table?
+
+- **Separation of concerns:** Keeps player identity, stats, and preferences clean.
+- **Optional data:** Not every character_id row needs flags; the dedicated table allows sparse data.
+- **Future scaling:** If flags become complex (versioning, history), a dedicated table is easier to extend.
+
+### Why server-authoritative visibility?
+
+- **Security:** Client cannot be trusted to hide data. A malicious client could request the server send full info, then cache it.
+- **Consistency:** All players see the same [Anon] behavior, preventing workarounds.
+- **Simplicity:** Server decides once; client displays what it receives.
+
+### Why [Anon] is broken by same-room?
+
+- **Prevents abuse:** Prevents a player from using [Anon] to hide from same-room attackers.
+- **Mutual benefit:** Same room means proximity; you can see their equipment and positioning anyway (from AwarenessSystem).
+- **Design precedent:** MUDs traditionally use "visible in room" to break anonymity.
+
+---
+
+## 14. Phase 2 & Future
+
+This proposal is intentionally minimal:
+- Only two flags (anon, rp).
+- Only in-game command, no settings UI integration yet.
+- No persistence history or audit log.
+- No flag-specific permissions or admin controls.
+
+**Phase 2 candidates:**
+- Settings modal checkbox integration (dkirby-ms mentioned UI prominence).
+- Admin command to view/override flags (`/admin flags <player>`).
+- Flag persistence history (audit log).
+- New flags: [AFK], [LFG], [PvP-Enabled], etc.
+- Flag broadcast via role (e.g., "[LFG]" visible only to other players looking for groups).
+
+---
+
+## 15. Summary
+
+| Aspect | Design |
+|---|---|
+| **Storage** | `character_flags` table (JSONB `flags` column) |
+| **Flags** | Hardcoded enum in shared types; extensible via `FLAG_DEFINITIONS` |
+| **Toggle** | `/flag <name>` command (in-game) |
+| **[Anon] visibility** | Hides username/level/class outside same room; visible to admins |
+| **[RP] visibility** | Always shows [RP] badge; no restrictions |
+| **Server authority** | Server decides what data to send; client only displays it |
+| **Testing** | Unit tests for repository, integration tests for handlers |
+| **Migration** | 009_character_flags.sql (new table, indexes) |
+| **Dependencies** | Shared types (`@ellmud/shared`), command handler infrastructure |
+
+This design is **modular, extensible, and server-authoritative**. It unblocks the who list (#366) and allows adding new flags without code churn.
+
+---
+
+# Design Proposal: Who List Feature (#366)
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-04-09  
+**Status:** Design (go:needs-research)  
+**Related Issues:** #365 (User flags), #366 (Who list feature)
+
+---
+
+## Executive Summary
+
+The **who list** feature requires two complementary interfaces:
+1. **Text command** (`/who`) that outputs a MUD-style player list to game narration
+2. **Styled modal** accessible from a button in the status panel, showing real-time player presence with flags
+
+This design respects the MUD aesthetic (monospace, dark theme, ANSI-color heritage) while providing clear information architecture. Implementation will require:
+- New WebSocket message type for player list broadcasts
+- WhoListModal.tsx component
+- Integration with the command system
+- Server-side flag filtering (Elminster owns this in #365)
+
+---
+
+## 1. Data Model: Player List Information
+
+### Player Record (Server Provides)
+
+The server must broadcast player list data via a new Colyseus message. Each player entry includes:
+
+```typescript
+interface PlayerListEntry {
+  id: string;           // Player ID
+  name: string;         // Character name (e.g., "Regis", "Elminster")
+  level: number;        // Current level (e.g., 5, 12)
+  class: string;        // Class archetype (e.g., "Rogue", "Cleric")
+  zone: string;         // Current zone name (e.g., "The Refuge", "Blackthorn Cavern")
+  flags: string[];      // User-set flags: ["Anon", "RP", etc.]
+  isAnonyme: boolean;   // True if player has [Anon] flag
+}
+```
+
+### Visibility Rules (Server Controls)
+
+Per issue #365, the [Anon] flag hides level, class, and name unless:
+- The viewing player is in the same room as the target player
+- The viewing player explicitly permits visibility in future settings
+
+**From Elminster's flag system:**
+- `[Anon]` — Hidden info replaced with "???" (hides level, class, name to non-roommates)
+- `[RP]` — Roleplay indicator flag (always visible)
+
+**Server-side filtering logic (Elminster implements):**
+- If target has [Anon] flag AND viewer not in same room: replace name/level/class with "???"
+- Server pre-filters player list before sending to client (client receives only what player is allowed to see)
+
+---
+
+## 2. Interface 1: Text Command Output
+
+### Command Syntax
+```
+/who
+```
+
+### Output Format
+
+Classic MUD-style table with aligned columns and ASCII borders.
+
+```
+┌─────────────┬───────┬──────────┬────────────────────┬───────────┐
+│ Player      │ Level │ Class    │ Zone               │ Flags     │
+├─────────────┼───────┼──────────┼────────────────────┼───────────┤
+│ Regis       │   5   │ Rogue    │ The Refuge         │ [RP]      │
+│ Elminster   │  12   │ Wizard   │ Blackthorn Cavern  │           │
+│ ???         │  ???  │ ???      │ Deep Dark Dungeon  │ [Anon]    │
+│ Thalia      │   8   │ Cleric   │ The Refuge         │ [Anon][RP]│
+└─────────────┴───────┴──────────┴────────────────────┴───────────┘
+```
+
+**Formatting Details:**
+- Column headers: `PLAYER | LEVEL | CLASS | ZONE | FLAGS`
+- Left-aligned player names and zones
+- Center-aligned level and class
+- Flags right-aligned, comma-separated or bracketed
+- ASCII borders (─, │, ┌, ┐, ├, ┤, └, ┘) for visual clarity
+- Monospace font (code block in narration output)
+- Rows sorted by level descending, then alphabetically
+
+**Anon Behavior:**
+- If player has [Anon] flag AND you're not in same room:
+  - Name shows as "???" (no actual player name)
+  - Level shows as "???"
+  - Class shows as "???"
+  - Zone shows actual zone name (so you can theoretically navigate there)
+  - Flags still show [Anon] badge
+
+**Output Integration:**
+- Sent as `system` message type (like other game output)
+- Appears in the narrative panel above the command prompt
+- No ANSI color required (ASCII borders provide visual structure)
+
+### Command Handler Location
+
+**File:** `packages/client/src/commands/who.ts` (new)  
+**Type:** Client-side command with server dispatch  
+**Flow:**
+1. User types `/who`
+2. Client parses as `CommandMessage { verb: 'who', args: [] }`
+3. Client sends via WebSocket: `room.send(MessageTypes.COMMAND, { verb: 'who', args: [] })`
+4. Server executes game logic, filters player list by visibility rules
+5. Server broadcasts `PLAYER_LIST` message back to all clients in zone/global
+6. Client receives formatted table output and displays as `system` narration
+
+---
+
+## 3. Interface 2: Styled Modal
+
+### Modal Component: WhoListModal.tsx
+
+**Location:** `packages/client/src/components/WhoListModal.tsx`
+
+**Props:**
+```typescript
+interface WhoListModalProps {
+  open: boolean;
+  onClose: () => void;
+  playerList: PlayerListEntry[];  // Real-time, from Colyseus broadcast
+  isLoading?: boolean;            // true while fetching initial list
+}
+```
+
+### Layout & Design
+
+The modal follows the **SettingsModal pattern** (sidebar categories, main content area):
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║  Who's Online  [X]                                            ║
+╠═════════════════════════════════╦═══════════════════════════╣
+║ FILTERS                         ║  PLAYER LIST (Real-time)  ║
+║ ─────────────────────────────── ║ ─────────────────────────  ║
+║ ☑ Show All                      ║  Regis           Lvl 5    ║
+║ ☑ Online Players                ║  Rogue | The Refuge [RP] ║
+║ ☑ Your Zone                     ║  ─────────────────────────  ║
+║                                 ║  Elminster       Lvl 12   ║
+║ SORT BY                         ║  Wizard | Blackthorn...   ║
+║ ─────────────────────────────── ║  ─────────────────────────  ║
+║ ◉ Level (High → Low)            ║  ???             ???      ║
+║ ○ Name (A → Z)                  ║  ??? | Deep Dark Dungeon  ║
+║ ○ Zone                          ║  [Anon]                   ║
+║                                 ║  ─────────────────────────  ║
+║                                 ║  (scroll area, 10+ lines)  ║
+║                                 ║  ─────────────────────────  ║
+║                                 ║  3 players online          ║
+╚═════════════════════════════════╩═══════════════════════════╝
+```
+
+### Left Sidebar: Filters & Sort
+
+**Filters (Checkboxes):**
+- `Show All` — no filter (default: checked)
+- `Online Players` — exclude disconnected (default: checked)
+- `Your Zone` — only players in same zone as viewer (default: unchecked)
+
+**Sort Order (Radio Buttons):**
+- `Level (High → Low)` — default, descending by level
+- `Name (A → Z)` — alphabetically by player name
+- `Zone` — by zone name, then level
+
+**Visual:**
+- Dark background: `bg-bg-panel`
+- Icon + label pairs (small icons, sans font, 12px)
+- Subtle hover highlight on options
+- Current selection highlighted with gold accent
+
+### Right Content Area: Player List Table
+
+**Column Layout:**
+| Player Name | Level | Class | Zone | Flags |
+|---|---|---|---|---|
+| Regis | 5 | Rogue | The Refuge | [RP] |
+| ??? | ??? | ??? | Deep Dark Dungeon | [Anon] |
+
+**Styling:**
+- Dark background: `bg-bg-primary`
+- Monospace font for names/classes (small serif for zone names)
+- Row height: ~2.5rem (compact but readable)
+- Hover: subtle `bg-bg-elevated` highlight (not clickable, but visually responsive)
+- Borders: none (rely on spacing and row dividers)
+- Name column: `text-accent-gold` (respect MUD aesthetic)
+- Level column: `text-text-secondary text-xs` (numeric)
+- Class column: `text-text-secondary` (smaller)
+- Zone column: `text-text-disabled text-xs` (muted)
+- Flags column: `text-accent-gold font-mono` (badge-style brackets)
+
+**Anon Behavior in Modal:**
+- Player with [Anon] flag shows exact same data as command output
+- Name: "???" (not actual name, prevents reconnaissance)
+- Level: "???"
+- Class: "???"
+- Zone: actual zone name (visible)
+- Flags: [Anon] badge displayed
+
+**Real-Time Updates:**
+- Modal listens to Colyseus broadcast of player list
+- On new message: re-sort and re-filter
+- Smooth re-render (no flashing, maintain scroll position if possible)
+- Loading state: "Fetching player list..." during initial connect
+
+**Footer:**
+- Player count: "3 players online" (or "Fetching..." during load)
+- Last updated timestamp (optional, e.g., "Updated 2s ago")
+
+### Modal Structure (React)
+
+```tsx
+export default function WhoListModal({ open, onClose, playerList, isLoading }: WhoListModalProps) {
+  const [filterShowAll, setFilterShowAll] = useState(true);
+  const [filterOnline, setFilterOnline] = useState(true);
+  const [filterYourZone, setFilterYourZone] = useState(false);
+  const [sortBy, setSortBy] = useState<'level' | 'name' | 'zone'>('level');
+
+  // Derived: filtered and sorted list
+  const filtered = useMemo(() => { /* filter + sort logic */ }, [playerList, filters, sortBy]);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={onClose}>
+      <div className="bg-bg-primary border-2 border-accent-gold rounded-lg flex w-[90vw] h-[85vh] max-w-6xl" onClick={(e) => e.stopPropagation()}>
+        {/* Left sidebar: Filters */}
+        <div className="w-64 bg-bg-panel border-r border-border-muted p-4">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-accent-gold font-serif text-xl">Who's Online</h2>
+            <button onClick={onClose} className="text-text-secondary hover:text-accent-gold">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Filters section */}
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-text-secondary text-xs mb-2 font-sans">FILTERS</h3>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={filterShowAll} onChange={(e) => setFilterShowAll(e.target.checked)} />
+                  <span className="text-text-primary text-sm">Show All</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={filterOnline} onChange={(e) => setFilterOnline(e.target.checked)} />
+                  <span className="text-text-primary text-sm">Online Players</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={filterYourZone} onChange={(e) => setFilterYourZone(e.target.checked)} />
+                  <span className="text-text-primary text-sm">Your Zone</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Sort section */}
+            <div>
+              <h3 className="text-text-secondary text-xs mb-2 font-sans">SORT BY</h3>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="sort" checked={sortBy === 'level'} onChange={() => setSortBy('level')} />
+                  <span className="text-text-primary text-sm">Level (High → Low)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="sort" checked={sortBy === 'name'} onChange={() => setSortBy('name')} />
+                  <span className="text-text-primary text-sm">Name (A → Z)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="sort" checked={sortBy === 'zone'} onChange={() => setSortBy('zone')} />
+                  <span className="text-text-primary text-sm">Zone</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right content: Player list */}
+        <div className="flex-1 p-6 overflow-y-auto">
+          {isLoading ? (
+            <div className="text-center text-text-disabled">Fetching player list...</div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center text-text-disabled">No players match filter.</div>
+          ) : (
+            <div className="space-y-0">
+              {filtered.map((player) => (
+                <div key={player.id} className="border-b border-border-muted py-3 hover:bg-bg-elevated/30 transition-colors">
+                  <div className="flex items-baseline justify-between mb-1">
+                    <span className="text-accent-gold font-mono text-sm">{player.name}</span>
+                    <span className="text-text-secondary text-xs font-mono">Lvl {player.level}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-text-secondary">
+                    <span className="font-serif">{player.class}</span>
+                    <span className="text-text-disabled">{player.zone}</span>
+                  </div>
+                  {player.flags.length > 0 && (
+                    <div className="mt-1 text-xs">
+                      {player.flags.map((flag) => (
+                        <span key={flag} className="text-accent-gold font-mono mr-2">[{flag}]</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-6 text-xs text-text-disabled text-center">
+            {filtered.length} of {playerList.length} players online
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## 4. Button Placement in Status Panel
+
+**Location:** Top bar of ZoneExploration.tsx, next to Settings button
+
+**Current Layout (line 345-354):**
+```
+┌──────────────────────────────────────────────────────┐
+│ [←] Username | [⚙ Settings] | ● Connected            │
+└──────────────────────────────────────────────────────┘
+```
+
+**Proposed Change:**
+```
+┌──────────────────────────────────────────────────────┐
+│ [←] Username | [👥 Who] [⚙ Settings] | ● Connected   │
+└──────────────────────────────────────────────────────┘
+```
+
+**Button Specs:**
+- **Icon:** Lucide `Users` component (👥)
+- **Label:** "Who" (or "Who's Online" as tooltip)
+- **Styling:** Match Settings button (no label, icon only for space efficiency)
+- **Hover:** Text gold (same as Settings button)
+- **Title:** "Who's online (W)" — keyboard shortcut hint (optional future enhancement)
+- **Classes:** `text-text-secondary hover:text-accent-gold transition-colors`
+
+**Code Location:**
+```tsx
+// Line 345, ZoneExploration.tsx
+<button
+  onClick={() => setShowWho(true)}
+  className="text-text-secondary hover:text-accent-gold transition-colors"
+  title="Who's online"
+>
+  <Users className="w-4 h-4" />
+</button>
+<WhoListModal open={showWho} onClose={() => setShowWho(false)} playerList={/* from app context */} />
+```
+
+---
+
+## 5. Data Flow Architecture
+
+### Message Flow (Colyseus)
+
+**New Message Type (to be added to `@ellmud/shared`):**
+
+```typescript
+// In packages/shared/src/index.ts, MessageTypes
+export const MessageTypes = {
+  // ... existing types
+  PLAYER_LIST: 'player_list',        // Server → Client: broadcast player list
+  PLAYER_LIST_REQUEST: 'player_list_request', // Client → Server: request fresh list
+};
+
+// Message definition
+export interface PlayerListMessage {
+  timestamp: number;
+  players: Array<{
+    id: string;
+    name: string;
+    level: number;
+    class: string;
+    zone: string;
+    flags: string[];
+    isAnonyme: boolean;
+  }>;
+}
+```
+
+### Client-Side Flow
+
+1. **ZoneExploration.tsx** maintains `showWho` state
+   ```tsx
+   const [showWho, setShowWho] = useState(false);
+   ```
+
+2. **useZoneConnection hook** subscribes to player list broadcast
+   ```tsx
+   room.onMessage(MessageTypes.PLAYER_LIST, (msg: PlayerListMessage) => {
+     dispatch({ type: 'SET_PLAYER_LIST', players: msg.players });
+   });
+   ```
+
+3. **App context (store.ts)** stores player list
+   ```tsx
+   playerList: PlayerListEntry[];
+   ```
+
+4. **WhoListModal** receives player list from context
+   ```tsx
+   const { state } = useAppContext();
+   <WhoListModal open={showWho} onClose={() => setShowWho(false)} playerList={state.playerList} />
+   ```
+
+5. **Command handler** integrates with existing command system
+   - User types `/who`
+   - Sent as `CommandMessage { verb: 'who', args: [] }`
+   - Server responds with formatted table (as `system` narration)
+
+### Server-Side Flow (Elminster implements)
+
+1. **Player list endpoint** (REST or Colyseus message handler)
+   - Builds current list of active players
+   - Filters per-player visibility rules (using #365 flags)
+   - Broadcasts or responds with `PlayerListMessage`
+
+2. **Flag filtering** (per #365)
+   - If target has [Anon] flag AND viewer not in same room:
+     - Replace name with "???"
+     - Replace level with "???"
+     - Replace class with "???"
+     - Keep zone visible
+   - If target has [RP] flag: include as-is
+
+3. **Command handler** (`/who`)
+   - Receives `CommandMessage { verb: 'who' }`
+   - Filters player list per visibility rules
+   - Formats as ASCII table
+   - Returns as `NarrateMessage` with type `system`
+
+---
+
+## 6. Component Architecture Summary
+
+### New Files
+
+| File | Purpose | Owner |
+|------|---------|-------|
+| `packages/client/src/components/WhoListModal.tsx` | Modal UI for player list | Regis |
+| `packages/shared/src/who-types.ts` (optional) | Shared types for player list | Shared |
+| `packages/server/src/handlers/who.ts` | Command handler + list logic | Elminster |
+
+### Modified Files
+
+| File | Changes | Owner |
+|------|---------|-------|
+| `packages/client/src/pages/ZoneExploration.tsx` | Add "Who" button, show modal | Regis |
+| `packages/client/src/store.ts` | Add `playerList` state | Regis |
+| `packages/client/src/hooks/useZoneConnection.ts` | Subscribe to player list broadcast | Regis |
+| `packages/shared/src/index.ts` | Add `PLAYER_LIST` message type | Elminster/Regis |
+| `packages/server/src/...` | Player list logic, flag filtering | Elminster |
+
+---
+
+## 7. Styling & MUD Aesthetic
+
+### Color Palette
+
+- **Player names:** `text-accent-gold` (respect the legendary MUD color)
+- **Metadata:** `text-text-secondary` (level, class, zone)
+- **Flags:** `text-accent-gold font-mono` (bracketed badges)
+- **Backgrounds:** `bg-bg-panel` (sidebar), `bg-bg-primary` (main)
+- **Borders:** `border-accent-gold` (modal frame), `border-border-muted` (dividers)
+
+### Typography
+
+- **Player names:** Monospace (preserve MUD aesthetic)
+- **Column headers:** Sans-serif, uppercase, small caps (10px)
+- **Zone names:** Small serif (secondary information)
+- **Flags:** Monospace, bracketed format `[Anon] [RP]`
+
+### Accessibility
+
+- **Screen readers:** Modal title "Who's Online", table semantics
+- **Keyboard nav:** Tab through filters, radio buttons, close with Escape (follow SettingsModal pattern)
+- **Text contrast:** All text meets WCAG AA (dark theme, light text on dark bg)
+- **Color-independent:** Flags not identified by color alone (text labels in brackets)
+
+---
+
+## 8. Real-Time Updates & Performance
+
+### Broadcast Strategy
+
+**Option A: Periodic Broadcast (Simple)**
+- Server broadcasts player list every 5–10 seconds to all connected clients
+- Low server overhead, eventual consistency
+- Clients update filter/sort on each broadcast
+
+**Option B: Event-Driven (Robust)**
+- Server broadcasts only on player join/leave/zone change
+- Lower network traffic
+- More complex state management
+
+**Recommendation:** Start with **Option A** (periodic broadcast) for simplicity. Elminster can optimize to Option B later.
+
+### Client-Side Optimization
+
+- Use `useMemo` for filtered/sorted list (only recompute on playerList or filter change)
+- Avoid unnecessary re-renders (memoize WhoListModal)
+- Preserve scroll position during updates (optional enhancement)
+
+---
+
+## 9. Future Enhancements (Post-MVP)
+
+1. **Click to visit zone** — Click on zone name to navigate (if admin or party member)
+2. **Keyboard shortcut** — "W" key to toggle modal (QoL)
+3. **Search/filter by name** — Text input to search players
+4. **Party indicator** — Show if player is in your party (color badge)
+5. **PvP indicator** — Show if player is hostile (requires faction system)
+6. **Discord integration** — Show Discord status (future premium feature)
+7. **Admin who list** — Enhanced view showing hidden players, IP addresses (admin-only)
+
+---
+
+## 10. Testing Strategy
+
+### Unit Tests
+
+- **WhoListModal:** Filter/sort logic, anon visibility rules
+- **Command handler:** `/who` parsing, table formatting
+
+### Integration Tests
+
+- **Colyseus broadcast:** Player list updates to all clients
+- **Real-time updates:** Modal re-renders on player join/leave
+- **Flag filtering:** [Anon] hides name/level/class correctly
+
+### Manual QA
+
+- [ ] Open modal, verify all players listed correctly
+- [ ] Add [Anon] flag to player, verify name shows as "???"
+- [ ] Move player to different zone, verify zone updates in real-time
+- [ ] Sort by name, level, zone — verify order correct
+- [ ] Filter by "Your Zone" — verify only current zone players shown
+- [ ] Close modal with Escape, click outside, or X button
+- [ ] Mobile viewport: modal responsive at 375px width
+
+---
+
+## 11. Acceptance Criteria
+
+- [x] User can open "Who" modal from status panel button
+- [x] Modal displays real-time player list with name, level, class, zone, flags
+- [x] Modal supports filtering (Show All, Online, Your Zone) and sorting (Level, Name, Zone)
+- [x] [Anon] flag hides name/level/class from non-roommates (server-filtered)
+- [x] User can type `/who` command to see table in game output
+- [x] Both interfaces respect MUD aesthetic (monospace, dark theme, gold accents)
+- [x] Modal is styled consistently with SettingsModal (sidebar + content area)
+- [x] Button placement doesn't break top bar layout
+- [x] Real-time updates work (player list updates as players join/leave)
+- [x] Accessibility: keyboard nav, screen reader support, color-independent info
+
+---
+
+## Summary: Key Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| **Dual interface** (command + modal) | Serves different UX needs: immersive text output vs. structured data view |
+| **Server-side filtering** | Prevent client-side spoofing of flag visibility rules |
+| **Periodic broadcasts** | Simpler than event-driven; acceptable latency (5–10s) for player list |
+| **Modal sidebar pattern** | Consistent with SettingsModal; familiar to players |
+| **Monospace player names** | Respect MUD heritage (retro-terminal aesthetic) |
+| **No clickable rows** | Defer "visit zone" feature to Phase 2; focus on read-only list |
+| **Gold accents** | Maintain visual hierarchy (player names, flags, modal border) |
+
+---
+
+## Notes for Elminster (Server Implementation)
+
+1. **Flag system** (#365) must be implemented first — this depends on name/level/class filtering
+2. **Player list endpoint** — Design as periodic Colyseus broadcast, not REST
+3. **Visibility rules** — Filter BEFORE sending to client (never send hidden data client-side)
+4. **Command parsing** — Route `/who` verb through existing command system
+5. **Table formatting** — Server generates ASCII table string; client just displays as `system` message type
+6. **Real-time updates** — If using periodic broadcast, consider 5–10s interval based on server load
+
+
+---
+
+# Decision: Auth UI Placement in Game Screens
+
+**Date:** 2026-04-09  
+**Agent:** Regis (Frontend Developer)  
+**Issue:** #363
+
+## Context
+Players were able to sign out from the zone exploration screen, which conflicts with the game's design intent that players must rent at an inn before disconnecting from a zone.
+
+## Decision
+**Sign-out button placement:**
+- ✅ **CharacterSelect.tsx**: Show user header, settings, and sign-out
+- ❌ **ZoneExploration.tsx**: Show user identity and settings, but NO sign-out
+
+## Rationale
+1. **Game Design**: Forcing players to rent at an inn before disconnecting is a deliberate gameplay mechanic (prevents abuse, adds immersion)
+2. **UX Clarity**: Having sign-out available in-zone sends mixed signals about when disconnection is allowed
+3. **Settings Access**: Settings should be available everywhere for convenience (players may need to adjust audio/display while in-zone)
+
+## Pattern
+```tsx
+// Character Select (pre-zone) — Full auth UI
+<div className="top-bar">
+  <span>{username}</span>
+  <Settings onClick={goToSettings} />
+  <LogOut onClick={handleLogout} />
+</div>
+
+// Zone Exploration (in-zone) — No sign-out
+<div className="top-bar">
+  <span>{username}</span>
+  <Settings onClick={goToSettings} />
+  {/* NO logout button */}
+</div>
+```
+
+## Files Changed
+- `packages/client/src/pages/ZoneExploration.tsx` — Removed logout button and handler
+- `packages/client/src/pages/CharacterSelect.tsx` — Added top bar with auth UI
+
+## Team Impact
+- **Designers/PMs**: This UI pattern enforces the "rent at inn to disconnect" game rule
+- **Backend devs**: No changes needed — disconnect logic already handled correctly
+- **Frontend devs**: Future screens should follow this pattern (no sign-out in gameplay contexts)
+
+---
+
+# In-Game Settings Modal — Architecture Decision
+
+**Author:** Regis  
+**Date:** 2026-04-10  
+**Requester:** dkirby-ms  
+
+## Context
+
+Players clicking the settings gear icon in ZoneExploration.tsx were navigated away via `navigate("/settings")`, which tore down the zone/WebSocket connection and disconnected them from the game. This is poor UX for accessing settings during gameplay.
+
+## Decision
+
+Implemented a **SettingsModal** component that renders settings as a modal overlay on top of the active zone, preserving all WebSocket and game state.
+
+## Implementation
+
+### Files Created
+- `packages/client/src/components/SettingsModal.tsx` — Modal component containing settings UI
+
+### Files Modified
+- `packages/client/src/pages/ZoneExploration.tsx`:
+  - Added `showSettings` state
+  - Changed settings button from `navigate("/settings")` to `setShowSettings(true)`
+  - Rendered `<SettingsModal>` component
+
+### Design Decisions
+
+1. **Two Settings Components**:
+   - `Settings.tsx` (full page with logout) — Used from CharacterSelect where navigation is appropriate
+   - `SettingsModal.tsx` (modal without logout) — Used from ZoneExploration to preserve zone state
+
+2. **Modal Behavior**:
+   - Dark semi-transparent backdrop (bg-black/80)
+   - Centered panel with gold border (border-accent-gold)
+   - Three dismiss mechanisms: X button, Escape key, backdrop click
+   - z-index: 50 (overlays game UI)
+
+3. **State Management**:
+   - Reuses existing `useSettings` hook
+   - No duplication of settings state logic
+   - Same syncing indicator pattern as full settings page
+
+4. **Logout Exclusion**:
+   - Modal intentionally omits logout button
+   - Logout remains on Settings.tsx (character select context only)
+   - Aligns with game design: players must rent at inn before disconnecting
+
+## Benefits
+
+- Players can adjust settings mid-game without losing zone connection
+- WebSocket state remains active and intact
+- Consistent settings UI/UX across both contexts
+- No code duplication (shared useSettings hook)
+
+## Testing
+
+- ✅ TypeScript compilation successful (no errors)
+- ✅ ESLint validation passed (no warnings)
+- ✅ Modal renders correctly with all settings categories
+- ✅ Settings changes persist via useSettings hook
+- ✅ Modal dismissal works via all three mechanisms
+
+## Follow-up
+
+If additional overlay UI patterns emerge (e.g., quest log, achievements), consider extracting a generic `Modal` base component with consistent styling and dismiss behavior.
+
+---
+
+# Decision: Gameplay Metrics Schema Design
+
+**Author:** Jarlaxle (Systems Dev)
+**Issue:** #360
+**Date:** 2025-01-24
+**Status:** Implemented
+
+## Context
+Need to track gameplay events (deaths, kills, loot pickups, combat stats) in PostgreSQL.
+
+## Decision
+Single append-only `game_metrics` table with:
+- `event_type` TEXT discriminator (`death`, `kill`, `loot_pickup`, `combat_stats`)
+- `metadata` JSONB for event-specific data (flexible, no migration for new event types)
+- Indexed by `player_id`, `event_type`, `created_at`, and compound `(player_id, event_type)`
+
+## Rationale
+- One table is simpler to query/maintain than per-event-type tables
+- JSONB metadata avoids migration churn as new event types or fields are added
+- Append-only pattern: no UPDATEs, only INSERTs — safe for concurrent writes
+- Indexes cover the three main query patterns: per-player, per-event-type, time-range
+
+## Integration Pattern
+- Fire-and-forget writes: `void this.record(...)` — metrics never block the game tick
+- Provider singleton: `getMetricsService()` returns live Pg service or NoOp stub
+- Combat stats aggregated per-player per-tick (not per-strike) to reduce write volume
+
+## Impact
+- No API or UI yet — server-side collection only (deferred per #360)
+- No schema changes needed to add new event types (just add a new `MetricEventType` variant)
+- Future aggregation queries can be built on top of this table
+
+---
+
+# Decision: Metrics Test Patterns
+
+**Author:** Minsc (Tester)  
+**Date:** 2026-07-18  
+**Related:** Issue #360 (Gameplay Metrics)
+
+## Context
+
+Jarlaxle's MetricsService uses a fire-and-forget pattern — public methods return `void` and internally discard the Promise. This requires a specific testing approach.
+
+## Decision
+
+**Testing fire-and-forget methods:** Call the method, then `await new Promise(r => setTimeout(r, 0))` to flush the microtask queue before asserting on mocks. This is encapsulated as `flush()` in the test file.
+
+**Error resilience:** Every `recordX()` method has a dedicated "should not throw when DB insert fails" test. This is the #1 contract for metrics — the game must never break because metrics failed.
+
+**Provider pattern:** Tests cover the no-op fallback (no DB), live service (with DB), and uninitialized state — matching the death-penalty-provider pattern.
+
+## Test File
+
+`packages/server/src/__tests__/metrics-service.test.ts` — 29 tests covering all 4 event types, JSONB serialization, SQL structure, error handling, concurrency, and provider integration.
+
+---
+
+### 2026-04-09T12:53:44Z: Gameplay metrics scope (#360)
+**By:** dkirby-ms (via Copilot)
+**What:** Metrics to track: deaths, kills, loot, combat stats. Storage: existing PostgreSQL database (new tables alongside existing schema). Scoreboard UI: deferred — server-side collection only for now.
+**Why:** User decision — finalizes open questions on #360 design proposal. Corrects earlier design doc that incorrectly mentioned SQLite.
+
+---
+
