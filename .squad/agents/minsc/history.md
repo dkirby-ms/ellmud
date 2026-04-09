@@ -40,6 +40,18 @@
 
 ## Learnings (Archived — See Detailed Session Records)
 
+**Role-Based Admin Access Tests (2026-07, Issue #373):**
+- TDD tests for role hierarchy: `player < content-dev < admin` — tests import from anticipated `auth/roles.js` module
+- Role-based admin middleware: tests verify session-token + role grants admin access (content-dev/admin → 200, player → 403)
+- ADMIN_TOKEN env var stays as fallback auth path; absence should NOT produce 503 anymore (session auth is primary)
+- GET `/auth/me` must return `role` field; defaults to `'player'` for new registrations
+- AUTO_PROMOTE_ADMIN env var: `autoPromoteAdmin(playerRepo)` looks up username, promotes to admin, no-ops if already admin, no crash if user not found
+- Client AppState needs `role` field (default: `'player'`), LOGIN_SUCCESS stores role, SET_ROLE action for mid-session updates
+- Audit: role changes logged via `logAuditEvent` with `action: 'role_change'`, `details: { oldRole, newRole }`, auto-promote uses `actor: 'system:auto-promote'`
+- Test files: `role-hierarchy.test.ts`, `role-admin-auth.test.ts`, `auto-promote-admin.test.ts`, `role-audit.test.ts` (server), `role-admin-gating.test.tsx`, `role-auth-state.test.ts` (client)
+- 43 tests total: 17 failing (TDD awaiting Jarlaxle's implementation), 26 passing (contract/shape tests)
+- Pre-existing failure in `admin-token-validation.test.ts` line 199 (503→401 mismatch on ADMIN_TOKEN unset) — not related to #373
+
 **Admin Token Validation Tests (2026-07, Issue #369):**
 - Admin auth flow: `adminAuth` middleware (`packages/server/src/admin/middleware.ts`) validates `ADMIN_TOKEN` env var, returns 503/401/403
 - Client token stored in `localStorage` via `admin-api.ts` helpers: `getAdminToken()`, `setAdminToken()`, `clearAdminToken()`
