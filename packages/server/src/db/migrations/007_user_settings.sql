@@ -1,7 +1,7 @@
 -- 007_user_settings.sql — Per-player settings stored as JSONB (#359).
 -- Categories: display, narration, gameplay, accessibility.
 
-CREATE TABLE user_settings (
+CREATE TABLE IF NOT EXISTS user_settings (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   player_id   UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
   config      JSONB NOT NULL DEFAULT '{}',
