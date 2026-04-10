@@ -80,3 +80,13 @@ jobs:
           else
             echo "ℹ️ Nothing to commit — uat is already up to date after stripping"
           fi
+
+      - name: Trigger CI/CD on uat
+        if: steps.check.outputs.commits_ahead != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Give GitHub a moment to process the push
+          sleep 5
+          gh workflow run ci-cd.yml --ref uat
+          echo "✅ Triggered CI/CD pipeline on uat"
