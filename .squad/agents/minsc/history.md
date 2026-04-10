@@ -1983,3 +1983,46 @@ Directly clear the DOM input via `inputRef.current.value = ''` in handleSubmit, 
 
 **Architecture Pattern:**
 ZoneExploration.tsx handleSubmit checks speedwalk AFTER clearing state but BEFORE React commits. The speedwalk check uses a trimmed copy of command captured at handler entry — unaffected by the clear. The vulnerability is between submissions, not within a single submission.
+
+---
+
+## Session: Squad Cleanup + Inventory Wiring Handoff (2026-04-10T22:58:49Z)
+
+**Status:** ✅ Complete  
+**Cross-Agent Note:** Drizzt has wired the INVENTORY_UPDATE message end-to-end
+
+### INVENTORY_UPDATE Message Wiring (Drizzt)
+
+The Gear tab inventory pane is now functional. Here's what was implemented:
+
+**Server Changes:**
+- Added INVENTORY_UPDATE message type to shared package
+- ZoneRoom.sendInventoryUpdate() sends full inventory state (items array with id, name, weight, tier)
+- Called on: player join, post-command (if inventory size changed), post-equip-from-inventory
+
+**Client Changes:**
+- Message handler wired in connection.ts
+- SET_INVENTORY action dispatch in useZoneConnection hook
+- StatusPanel can now consume state.inventory to render gear items
+
+**Pattern:** Full-state snapshot (matches STASH_UPDATE/LOADOUT_UPDATE)
+
+**Key Detail for Frontend Work:**
+- Inventory size comparison heuristic (player.inventory.size !== prevInventorySize) detects mutations
+- No command verb hardcoding needed
+- Any inventory-mutating command automatically triggers broadcast
+
+**Tier Handling:**
+- Inventory items resolved via getItemDefinition(id).tier with 'common' fallback
+- Client receives tier as string; cast to GearTier
+
+### Implication for Container System
+
+When implementing containers (Elminster's planned Phase 4), follow the same INVENTORY_UPDATE pattern:
+- Send full state snapshot on load/mutation
+- Use size or membership comparison to detect changes
+- Clients replaces store — no merge/patch needed
+
+### Quality Check
+
+All 2666 tests pass, zero type errors. Commit: 8d934c9
