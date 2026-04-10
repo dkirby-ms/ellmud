@@ -304,6 +304,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
               name: e.name,
               duration: e.remainingTicks,
             })),
+            posture: msg.posture,
           });
         }
       },

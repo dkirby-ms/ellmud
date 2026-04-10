@@ -236,6 +236,7 @@ export interface PlayerStateMessage {
   stamina: number;
   maxStamina: number;
   statusEffects: Array<{ id: string; name: string; remainingTicks: number }>;
+  posture: Posture;
 }
 
 /** Server → Client: Enemy telegraph broadcast (GDD §6.5). */

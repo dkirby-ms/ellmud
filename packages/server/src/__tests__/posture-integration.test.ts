@@ -139,6 +139,19 @@ describe('Posture Integration — Colyseus Server (Issue #371)', () => {
 
   // ─── PLAYER_STATE includes posture ────────────────────────────────────────
 
+  it('PLAYER_STATE message includes posture on join', async () => {
+    const { client, collector } = await connectTestClient(colyseus, 'zone');
+
+    // Initial PLAYER_STATE should include default posture
+    const initialState = collector.playerState.find(
+      (msg) => msg.posture !== undefined,
+    );
+    expect(initialState).toBeDefined();
+    expect(initialState!.posture).toBe('standing');
+
+    await client.leave();
+  });
+
   it('PLAYER_STATE message includes posture after posture change', async () => {
     const { client, collector } = await connectTestClient(colyseus, 'zone');
     collector.clear();
@@ -146,19 +159,11 @@ describe('Posture Integration — Colyseus Server (Issue #371)', () => {
     client.send(MessageTypes.COMMAND, makeCommand('sit'));
     await wait(500);
 
-    // Check if any PLAYER_STATE message was sent with posture info
-    // The implementation may send posture as part of PLAYER_STATE or a new message type
     const stateWithPosture = collector.playerState.find(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (msg) => (msg as any).posture !== undefined,
+      (msg) => msg.posture === 'sitting',
     );
-
-    // If posture is in PLAYER_STATE:
-    if (stateWithPosture) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((stateWithPosture as any).posture).toBe('sitting');
-    }
-    // Otherwise posture info comes through narration (also acceptable)
+    expect(stateWithPosture).toBeDefined();
+    expect(stateWithPosture!.posture).toBe('sitting');
 
     await client.leave();
   });

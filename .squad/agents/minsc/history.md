@@ -1964,3 +1964,22 @@ Items spawned via admin panel (#389) integrate with these commands. The item pro
 - 8 todo tests scaffolded for equip command (awaiting implementation)
 - Covers: basic equip, not in inventory, not equippable, no args, slot conflict, auto-swap, display update, rollback on failure
 - get alias test written with graceful fallback (passes whether or not alias is registered)
+
+## Learnings
+
+### Speedwalk False Positive Investigation (#380 Residual)
+
+**Key Files:**
+- `packages/client/src/utils/speedwalk.ts` — `isSpeedwalk()`, `parseSpeedwalk()`, `shouldTreatAsSpeedwalk()` (pure functions)
+- `packages/client/src/pages/ZoneExploration.tsx` — `handleSubmit` (line 173-218), controlled input (line 512-516)
+- `packages/client/src/hooks/useDirectionKeys.ts` — arrow/numpad shortcuts (only when input not focused; not involved in bug)
+- `packages/client/src/__tests__/speedwalk-false-positive.test.tsx` — 13 reproduction tests
+
+**Root Cause:**
+React 18 controlled input (`value={command}` + `setCommand("")`) has a race window where the DOM isn't cleared before the next keystroke. Fast typing of individual directions (n, Enter, e, Enter) can accumulate to "ne" in the input, triggering `shouldTreatAsSpeedwalk("ne")` → true (false positive). Secondary cause: OS key-repeat on held direction keys produces "nn" etc.
+
+**Fix Approach (recommended):**
+Directly clear the DOM input via `inputRef.current.value = ''` in handleSubmit, alongside the React `setCommand("")`. This synchronously prevents accumulation. See `.squad/decisions/inbox/minsc-speedwalk-research.md` for full analysis and 5 ranked fix options.
+
+**Architecture Pattern:**
+ZoneExploration.tsx handleSubmit checks speedwalk AFTER clearing state but BEFORE React commits. The speedwalk check uses a trimmed copy of command captured at handler entry — unaffected by the clear. The vulnerability is between submissions, not within a single submission.
