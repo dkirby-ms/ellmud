@@ -101,7 +101,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         clients: r.clients,
         maxClients: r.maxClients,
         locked: r.locked ?? false,
-        createdAt: r.createdAt?.toISOString(),
+        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : undefined,
         metadata: r.metadata as Record<string, unknown> | undefined,
       }));
       res.json({ rooms: summaries });
