@@ -98,7 +98,8 @@ import type { Item } from '../generator/RoomGraph.js';
 import type { ExplorationRepository } from '../exploration/index.js';
 import { getExplorationRepository } from '../exploration/index.js';
 import type { CharacterRepository } from '../character/index.js';
-import { InMemoryCharacterRepository, getCharacterRepository } from '../character/index.js';
+import { InMemoryCharacterRepository, getCharacterRepository, isCharacterPg } from '../character/index.js';
+import { grantStarterKit } from '../api/starter-kit.js';
 import { createNarrationService } from '../narrative/factory.js';
 import type { NarrationService } from '../narrative/NarrationService.js';
 import { gatherPlayerList, formatWhoListText, type ZonePlayerData } from '../who/index.js';
@@ -570,6 +571,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
     } catch (err) {
       this.log(`Failed to load posture for ${this.playerTag(playerId)}: ${err}`);
+    }
+
+    // Grant starter kit to inventory on first zone join (non-fatal)
+    try {
+      const kitCount = await grantStarterKit(playerId, playerState, this.characterRepo, isCharacterPg());
+      if (kitCount > 0) {
+        this.log(`Starter kit: granted ${kitCount} item(s) to ${this.playerTag(playerId)}`);
+      }
+    } catch (err) {
+      this.log(`Failed to grant starter kit for ${this.playerTag(playerId)}: ${err}`);
     }
 
     this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig())} players)`);

@@ -3624,3 +3624,26 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 **Integration:** Your equip/drop/get commands work seamlessly with items spawned via admin panel. Room generation and item properties (name, weight, equipSlot) integrate directly.
 
 **No action needed** — just awareness that Regis's admin work enables full item spawning workflow for testing/development.
+
+
+---
+
+## Starter Kit to Inventory Migration (2025-07-24)
+
+**Task:** Move starter kit items from player_stash to player inventory.
+**Branch:** squad/fix-starter-kit-inventory
+**Approach:** Option B -- grant on first zone join with starter_kit_granted flag.
+
+**Changes:**
+- starter-kit.ts rewritten: adds items to PlayerState.inventory via addItem() instead of INSERT into player_stash
+- ZoneRoom.onJoin calls grantStarterKit() after PlayerState creation, gated by isStarterKitGranted flag
+- characters.ts no longer calls grantStarterKit at creation time
+- CharacterRepository extended with isStarterKitGranted() / markStarterKitGranted() (PG + InMemory)
+- New migration: 012_starter_kit_granted.sql (boolean column on characters)
+- Tests: 7 passing (grant, flag, re-grant prevention, weight limits, no-pg, no-items)
+
+## Learnings
+
+- **Inventory vs Stash separation:** Inventory is intentionally in-memory (extraction-game transient). Stash is the persistent bank. Starter items belong in inventory, granted at first zone join -- not in stash at character creation.
+- **CharacterRepository extension pattern:** Add method to interface, implement in PgCharacterRepository (SQL) + InMemoryCharacterRepository (Map/Set), use in ZoneRoom via this.characterRepo.
+- **isCharacterPg() gate:** Use isCharacterPg() from character-provider.ts to determine if PG is available for queries that need the DB (e.g., item_definitions lookup).
