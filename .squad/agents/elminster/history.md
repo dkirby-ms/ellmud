@@ -2546,3 +2546,20 @@ Player-facing scoreboards deferred to Phase 2.
 - **Dependency Management:** Optional injection (not global singleton, not required)
 - **Initial Display:** Admin dashboard (not player-facing, not external Prometheus)
 - **Query Retention:** 7-day active + 90-day archive (not infinite, not real-time only)
+
+### 2026-07-22: Code Review — #390 Player Item Interaction & #389 Admin Spawn Items
+
+**Branch 1: `squad/390-player-item-interaction` (Drizzt) — APPROVED → PR #392**
+- Reviewed: equip/unequip command handlers, `get` alias, `equipSlot` on Item, PlayerState equipment tracking, `_roomEvent` broadcast pattern, inventory display updates
+- 50 tests, all passing. Full suite (3121 tests) green.
+- Minor notes: `_roomEvent` uses inline type widening rather than extending the interface — functional but could be formalized. Equipped items don't count toward carry weight — design choice, consistent within implementation.
+
+**Branch 2: `squad/389-admin-spawn-items` (Regis) — APPROVED → PR #393**
+- Reviewed: admin API item spawn endpoint, ZoneRoom.adminSpawnItem(), LiveRoomDetail.tsx spawn modal type toggle
+- Full suite (3071 tests) green.
+- Minor notes: `itemToSpawn` construction omits `equipSlot` and `roomDescription` — forward-compatibility concern once #390 merges. Follows existing `as any` cast pattern for ZoneRoom access from admin routes.
+
+**Patterns observed:**
+- `_roomEvent` is a new convention for 3rd-person broadcasts; should be formalized if adopted by more commands
+- Admin route to ZoneRoom method pattern (`adminSpawnCreature` / `adminSpawnItem`) is clean and consistent
+- Content store entity to domain object mapping needs a shared helper to avoid field omissions
