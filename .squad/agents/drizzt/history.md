@@ -3687,3 +3687,27 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 **Issue:** #409  
 **Proposal:** decisions/inbox/elminster-container-system.md (awaiting David's feedback on 6 design questions)
 
+
+
+---
+
+### INVENTORY_UPDATE Message Wiring (2026-07-17)
+**Task:** Wire end-to-end INVENTORY_UPDATE message so StatusPanel Gear tab shows inventory items.
+**Status:** Complete -- committed to dev branch.
+
+**Changes (5 files, 68 insertions):**
+- packages/shared/src/index.ts: Added INVENTORY_UPDATE to MessageTypes, added InventoryUpdateMessage interface
+- packages/server/src/rooms/ZoneRoom.ts: Added sendInventoryUpdate() method, called on join + after inventory-mutating commands + after equip-from-inventory
+- packages/client/src/services/connection.ts: Added onInventoryUpdate to MessageHandlers, wired in both connect() and switchRoom()
+- packages/client/src/hooks/useZoneConnection.ts: Added onInventoryUpdate handler dispatching SET_INVENTORY action
+
+**Pattern:** Follows existing STASH_UPDATE/LOADOUT_UPDATE pattern -- server sends full state snapshot, client replaces store. Inventory size comparison detects mutations after command execution.
+
+**Tests:** 2666 passed, 0 errors, 0 lint errors (12 pre-existing warnings).
+
+## Learnings
+- ItemDefinition has tier: GearTier, not rarity -- the plan referenced rarity but the actual field is tier
+- Inventory Item (from RoomGraph.ts) has no tier; must look up via getItemDefinition(id) from registry
+- sendLoadoutAndStashUpdate is async (stash/loadout use DB); sendInventoryUpdate is synchronous (inventory is in-memory Map)
+- Size comparison (player.inventory.size !== prevInventorySize) is a clean heuristic for detecting inventory mutations -- avoids hardcoding verb lists
+- Shared package must be rebuilt (tsc -p packages/shared/tsconfig.json) before server/client can see new exports
