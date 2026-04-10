@@ -2639,7 +2639,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
   private async handleEquipItem(client: Client, message: EquipItemMessage): Promise<void> {
     const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
-    const player = this.players.get(client.sessionId);
+    const player = this.players.get(playerId);
 
     if (!this.loadoutService || !player) {
       client.send(MessageTypes.NARRATE, {
