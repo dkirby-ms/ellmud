@@ -36,11 +36,22 @@ const COMMAND_HELP: Record<string, CommandHelp> = {
   take: {
     description: 'Pick up an item from the ground.',
     usage: 'take <item>',
+    aliases: ['get', 'g'],
     category: 'Items',
   },
   drop: {
     description: 'Drop an item from your inventory.',
     usage: 'drop <item>',
+    category: 'Items',
+  },
+  equip: {
+    description: 'Equip an item from your inventory.',
+    usage: 'equip <item>',
+    category: 'Items',
+  },
+  unequip: {
+    description: 'Unequip an item back to your inventory.',
+    usage: 'unequip <weapon|armour>',
     category: 'Items',
   },
   inventory: {

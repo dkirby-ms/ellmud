@@ -8,6 +8,7 @@ import {
   MapPin,
   Megaphone,
   Move,
+  Package,
   Pause,
   Play,
   Plus,
@@ -40,6 +41,15 @@ interface CreatureTemplate {
   type: string;
 }
 
+interface ItemTemplate {
+  id: string;
+  name: string;
+  type: string;
+  tier?: string;
+}
+
+type SpawnType = "creature" | "item";
+
 type DetailTab = "room-graph" | "creatures" | "players";
 
 export default function LiveRoomDetail() {
@@ -65,9 +75,11 @@ export default function LiveRoomDetail() {
 
   // Spawn modal state
   const [showSpawnModal, setShowSpawnModal] = useState(false);
+  const [spawnType, setSpawnType] = useState<SpawnType>("creature");
   const [creatureTemplates, setCreatureTemplates] = useState<
     CreatureTemplate[]
   >([]);
+  const [itemTemplates, setItemTemplates] = useState<ItemTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [targetRoomId, setTargetRoomId] = useState("");
   const [spawning, setSpawning] = useState(false);
@@ -235,11 +247,17 @@ export default function LiveRoomDetail() {
     setShowSpawnModal(true);
     setSelectedTemplate("");
     setTargetRoomId("");
+    setSpawnType("creature");
     try {
-      const templates = await listEntities<CreatureTemplate>("creatures");
-      setCreatureTemplates(templates);
+      const [creatures, items] = await Promise.all([
+        listEntities<CreatureTemplate>("creatures"),
+        listEntities<ItemTemplate>("items"),
+      ]);
+      setCreatureTemplates(creatures);
+      setItemTemplates(items);
     } catch {
       setCreatureTemplates([]);
+      setItemTemplates([]);
     }
   };
 
@@ -249,12 +267,12 @@ export default function LiveRoomDetail() {
     try {
       const result = await spawnInRoom(
         roomId,
-        "creature",
+        spawnType,
         selectedTemplate,
         targetRoomId || undefined
       );
       setShowSpawnModal(false);
-      await loadRoom(); // Refresh to see new creature
+      await loadRoom(); // Refresh to see new entity
       showFeedback("success", result.message);
     } catch (err) {
       showFeedback(
@@ -384,11 +402,17 @@ export default function LiveRoomDetail() {
     setShowSpawnModal(true);
     setSelectedTemplate("");
     setTargetRoomId(targetSlug);
+    setSpawnType("creature");
     try {
-      const templates = await listEntities<CreatureTemplate>("creatures");
-      setCreatureTemplates(templates);
+      const [creatures, items] = await Promise.all([
+        listEntities<CreatureTemplate>("creatures"),
+        listEntities<ItemTemplate>("items"),
+      ]);
+      setCreatureTemplates(creatures);
+      setItemTemplates(items);
     } catch {
       setCreatureTemplates([]);
+      setItemTemplates([]);
     }
   };
 
@@ -1362,7 +1386,7 @@ export default function LiveRoomDetail() {
                 className="text-[#C9A84C] text-lg"
                
               >
-                Spawn Creature
+                Spawn {spawnType === "creature" ? "Creature" : "Item"}
               </h3>
               <button
                 onClick={() => setShowSpawnModal(false)}
@@ -1372,12 +1396,50 @@ export default function LiveRoomDetail() {
               </button>
             </div>
             <div className="space-y-4">
+              {/* Type toggle */}
               <div>
                 <label
                   className="block text-[#8A8B95] text-sm mb-2"
                   style={{ fontFamily: "var(--font-sans)" }}
                 >
-                  Creature Template
+                  Spawn Type
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setSpawnType("creature"); setSelectedTemplate(""); }}
+                    className="flex-1 px-3 py-2 rounded text-sm flex items-center justify-center gap-2 transition-colors"
+                    style={{
+                      fontFamily: "var(--font-sans)",
+                      background: spawnType === "creature" ? "#C9A84C" : "#1C1D27",
+                      color: spawnType === "creature" ? "#0A0B0F" : "#8A8B95",
+                      border: `1px solid ${spawnType === "creature" ? "#C9A84C" : "#2A2B35"}`,
+                    }}
+                  >
+                    <Skull className="w-4 h-4" />
+                    Creature
+                  </button>
+                  <button
+                    onClick={() => { setSpawnType("item"); setSelectedTemplate(""); }}
+                    className="flex-1 px-3 py-2 rounded text-sm flex items-center justify-center gap-2 transition-colors"
+                    style={{
+                      fontFamily: "var(--font-sans)",
+                      background: spawnType === "item" ? "#C9A84C" : "#1C1D27",
+                      color: spawnType === "item" ? "#0A0B0F" : "#8A8B95",
+                      border: `1px solid ${spawnType === "item" ? "#C9A84C" : "#2A2B35"}`,
+                    }}
+                  >
+                    <Package className="w-4 h-4" />
+                    Item
+                  </button>
+                </div>
+              </div>
+              {/* Template selector */}
+              <div>
+                <label
+                  className="block text-[#8A8B95] text-sm mb-2"
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  {spawnType === "creature" ? "Creature Template" : "Item Template"}
                 </label>
                 <select
                   value={selectedTemplate}
@@ -1385,12 +1447,20 @@ export default function LiveRoomDetail() {
                   className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none"
                  
                 >
-                  <option value="">Select creature…</option>
-                  {creatureTemplates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.id})
-                    </option>
-                  ))}
+                  <option value="">
+                    Select {spawnType === "creature" ? "creature" : "item"}…
+                  </option>
+                  {spawnType === "creature"
+                    ? creatureTemplates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({t.id})
+                        </option>
+                      ))
+                    : itemTemplates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}{t.tier ? ` [${t.tier}]` : ""} ({t.id})
+                        </option>
+                      ))}
                 </select>
               </div>
               <div>

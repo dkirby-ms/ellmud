@@ -67,9 +67,9 @@ export function handleGo(ctx: CommandContext): CommandResult {
     `Exits: ${exitList}`,
   ];
 
-  if (targetRoom.items.length > 0) {
-    const itemNames = targetRoom.items.map((i) => i.name).join(', ');
-    lines.push(`You see: ${itemNames}`);
+  // Items in the target room — one line per item (#386)
+  for (const item of targetRoom.items) {
+    lines.push(item.roomDescription || `A ${item.name} lies here.`);
   }
 
   // Creatures in the target room — one line per creature instance (#383)

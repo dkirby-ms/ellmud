@@ -1030,8 +1030,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Capture posture before command execution for movement verb narration (#371)
     const previousPosture = player.posture;
 
-    // Snapshot inventory for loot pickup metrics (take/loot commands)
-    const trackLoot = verb === 'take' || verb === 'loot';
+    // Snapshot inventory for loot pickup metrics (take/get/loot commands)
+    const trackLoot = verb === 'take' || verb === 'get' || verb === 'loot';
     const prevInventoryIds = trackLoot ? new Set(player.inventory.keys()) : undefined;
 
     const ctx = this.buildCommandContext(player, args);
@@ -1132,6 +1132,19 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.persistPosture(playerId).catch((err) => {
         this.log(`Failed to persist posture for ${this.playerTag(playerId)}: ${err}`);
       });
+    }
+
+    // Item interaction broadcasts: notify other players when items are picked up, dropped, or equipped (#390)
+    const roomEvent = (result as import('../commands/index.js').CommandResult & { _roomEvent?: string })._roomEvent;
+    if (roomEvent) {
+      for (const [sid, ps] of this.players) {
+        if (sid !== playerId && ps.currentRoomId === player.currentRoomId) {
+          const c = this.findClient(sid);
+          if (c) {
+            this.sendNarrate(c, { text: roomEvent, type: 'ambient', timestamp: Date.now() });
+          }
+        }
+      }
     }
 
     // Social commands (say, emote) broadcast to all players in the same room
@@ -2639,7 +2652,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
   private async handleEquipItem(client: Client, message: EquipItemMessage): Promise<void> {
     const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
-    const player = this.players.get(client.sessionId);
+    const player = this.players.get(playerId);
 
     if (!this.loadoutService || !player) {
       client.send(MessageTypes.NARRATE, {
@@ -3012,6 +3025,27 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     this.log(`Admin spawned "${creature.name}" (${creature.id}) in room "${targetRoomId}"`);
     return { success: true, creatureId: creature.id, creatureName: creature.name };
+  }
+
+  /**
+   * Spawn an item in a specific zone room from an admin-resolved item definition.
+   * Called from admin API endpoint POST /admin/api/rooms/:roomId/spawn.
+   */
+  adminSpawnItem(item: Item, targetRoomId: string): { success: boolean; error?: string } {
+    const room = this.roomGraph.rooms.get(targetRoomId);
+    if (!room) {
+      return { success: false, error: `Room "${targetRoomId}" not found in zone graph` };
+    }
+
+    room.items.push(item);
+
+    // Broadcast spawn notification to players in the target room
+    this.broadcastToRoom(targetRoomId, {
+      narrations: [{ text: `[SYSTEM] A ${item.name} materializes from thin air.`, type: 'system' }],
+    });
+
+    this.log(`Admin spawned item "${item.name}" (${item.id}) in room "${targetRoomId}"`);
+    return { success: true };
   }
 
   /** Expose the zone slug for admin API responses. */

@@ -48,9 +48,9 @@ function showFullRoom(ctx: CommandContext): CommandResult {
     `Exits: ${exitList}`,
   ];
 
-  if (room.items.length > 0) {
-    const itemNames = room.items.map((i) => i.name).join(', ');
-    lines.push(`You see: ${itemNames}`);
+  // Items in the room — one line per item (#386)
+  for (const item of room.items) {
+    lines.push(item.roomDescription || `A ${item.name} lies here.`);
   }
 
   // Creatures in the room — one line per creature instance (#383)

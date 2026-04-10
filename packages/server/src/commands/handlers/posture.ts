@@ -9,7 +9,7 @@
 import type { Posture } from '@ellmud/shared';
 import type { CommandResult, CommandContext } from '../index.js';
 
-/** Narration messages when changing posture. */
+/** Third-person narration messages when changing posture (for room broadcast). */
 const POSTURE_CHANGE_MESSAGES: Record<Posture, string> = {
   standing: 'stands up.',
   sitting: 'sits down.',
@@ -18,6 +18,17 @@ const POSTURE_CHANGE_MESSAGES: Record<Posture, string> = {
   reclining: 'reclines.',
   floating: 'begins to float.',
   hovering: 'hovers in place.',
+};
+
+/** Second-person narration (for the acting player). */
+const POSTURE_SELF_MESSAGES: Record<Posture, string> = {
+  standing: 'stand up',
+  sitting: 'sit down',
+  crouching: 'crouch down',
+  prone: 'drop to the ground',
+  reclining: 'recline',
+  floating: 'begin to float',
+  hovering: 'hover in place',
 };
 
 function changePosture(ctx: CommandContext, newPosture: Posture): CommandResult {
@@ -32,7 +43,7 @@ function changePosture(ctx: CommandContext, newPosture: Posture): CommandResult 
   player.posture = newPosture;
 
   const characterName = ctx.characterName ?? 'A wanderer';
-  const selfMsg = `You ${newPosture === 'standing' ? 'stand up' : POSTURE_CHANGE_MESSAGES[newPosture].replace(/\.$/, '')}. `;
+  const selfMsg = `You ${POSTURE_SELF_MESSAGES[newPosture]}. `;
 
   return {
     narrations: [{ text: selfMsg, type: 'room' }],
