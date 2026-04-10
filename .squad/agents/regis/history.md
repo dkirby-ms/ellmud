@@ -1808,3 +1808,5 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
 **Test Status:** 3049 tests passing. New UI features covered by existing live rooms test suite.
 
 **Team Impact:** Establishes admin UI pattern — right-click context menus on data rows should follow this style convention.
+
+- **Issue #389 — Admin item spawn in Live Rooms (2026):** Extended the spawn modal in LiveRoomDetail.tsx to support both creatures and items. Added SpawnType toggle (creature/item) with Skull/Package lucide icons. Both template lists loaded in parallel via Promise.all. Server-side POST /admin/api/rooms/:roomId/spawn endpoint item branch was a TODO stub — implemented it: resolves item from content store, validates, then calls ZoneRoom.adminSpawnItem() which pushes to room.items array and broadcasts narration. Non-zone rooms fall back to broadcast-only. Key types: Item from generator/RoomGraph.ts (id, name, weight, description), ItemDefinition from @ellmud/shared (id, name, type, tier, baseStats, ...). Commit 48e16ce.
