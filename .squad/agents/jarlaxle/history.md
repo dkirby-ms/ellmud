@@ -2481,3 +2481,25 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - No schema or type changes needed — `roomDescription` field exists throughout the stack (DB → template → instance → command context).
 - Added 11 new tests in `creature-appearance.test.ts` covering all three commands. All 60 tests pass.
 - Learning: The creature rendering pipeline is purely presentation-layer. Field already flows DB → template → instance → CreatureRef → handler. Changes were isolated to three handler files with identical aggregation blocks.
+
+---
+
+## Session: 2026-04-10 — Issue #402: Illumination System Phase 1
+
+**PR:** #407 (squad/402-illumination-v1 → dev)
+
+### What was done
+- Added room-level illumination column (`illumination TEXT DEFAULT 'lit'`) to `zone_rooms` via migration 012.
+- Exported `Illumination` type (`'lit' | 'dark'`) and `DARKNESS_MESSAGE` constant from `@ellmud/shared`.
+- Added `illumination?` field to both Room interfaces (shared + server), SerializedRoom, and ZoneRoomDefinition.
+- Updated zone-adapter and PgZoneRepository to thread illumination from DB to Room objects.
+- Added darkness gates to look.ts, go.ts, and goto.ts — dark rooms show a darkness message and exits only, hiding description/creatures/items/players/features.
+- Populated `NarrationRoom.light_level` from `room.illumination` (was hardcoded 1.0).
+- 14 new tests, all passing. Full suite: 2677 pass.
+
+### Learnings
+- **Two Room interfaces exist**: `packages/shared/src/room-graph.ts` (used by zone-adapter) and `packages/server/src/generator/RoomGraph.ts` (used by CommandContext). Both must be updated for any room-level field.
+- **CommandContext.room** uses the server-side Room from `generator/RoomGraph.ts` (imported in `commands/index.ts`).
+- **PgZoneRepository uses SELECT star**, so new DB columns are automatically available without query changes — but the `ZoneRoomRow` interface must still be updated for TypeScript.
+- **Shared package rebuild required**: After editing shared src, must run `cd packages/shared && rm -f tsconfig.tsbuildinfo && npx tsc --build` for server to pick up changes.
+- **Opt-in pattern works well**: Making `illumination` optional (undefined = lit) ensures zero impact on existing rooms while allowing new rooms to opt into darkness.
