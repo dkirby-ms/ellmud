@@ -61,6 +61,16 @@ jobs:
             echo "ℹ️ Nothing to commit — uat is already up to date"
           fi
 
+      - name: Trigger CI/CD on uat
+        if: ${{ inputs.dry_run == 'false' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Give GitHub a moment to process the push
+          sleep 5
+          gh workflow run ci-cd.yml --ref uat
+          echo "✅ Triggered CI/CD pipeline on uat"
+
       - name: Dry run complete
         if: ${{ inputs.dry_run == 'true' }}
         run: echo "🔍 Dry run complete — no changes pushed."
@@ -114,6 +124,15 @@ jobs:
           git merge origin/uat --no-ff -m "chore: promote uat → prod (v$(node -e "console.log(require('./package.json').version)"))"
           git push origin prod
           echo "✅ Pushed prod — squad-release.yml will tag and publish the release"
+
+      - name: Trigger CI/CD on prod
+        if: ${{ inputs.dry_run == 'false' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sleep 5
+          gh workflow run ci-cd.yml --ref prod
+          echo "✅ Triggered CI/CD pipeline on prod"
 
       - name: Dry run complete
         if: ${{ inputs.dry_run == 'true' }}
