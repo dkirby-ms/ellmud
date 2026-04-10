@@ -7972,3 +7972,25 @@ Also added occupancy filter toggles (Players/Creatures) as a filter bar above th
 - No API changes
 - No shared type changes
 - Pattern: right-click context menus on admin data rows should follow ZoneDesigner inline-style convention
+
+---
+
+# Decision: Hotfix PR targeting prod for release workflow
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-04-10  
+**PR:** #387  
+**Issue:** #379
+
+## Context
+
+The release GitHub Action (`release.yml`) runs exclusively on the `prod` branch. It calls `npm run version:sync` to keep workspace package versions in sync after a version bump. However, the `prod` branch was missing both the npm scripts (`version:bump`, `version:sync`) and the `scripts/sync-versions.mjs` file. These were added on `dev` but never merged forward through `uat → prod`.
+
+## Decision
+
+Opened PR #387 directly targeting `prod` as a hotfix. The script content is identical to what exists on `dev`, so no divergence is introduced. This avoids waiting for a full `dev → uat → prod` promotion cycle for a CI-only fix.
+
+## Team Impact
+
+- **Branching:** This is an exception to the normal `dev → uat → prod` flow. Justified because the fix only affects CI tooling (not game code) and the content already exists on `dev`.
+- **Future:** If new CI scripts are added on `dev`, ensure they get merged forward to `prod` before the release workflow references them.

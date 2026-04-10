@@ -3509,3 +3509,22 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 - isSpeedwalk() regex unchanged (still valid syntax check)
 - 7 new tests, all 29 existing tests passing
 - Impact: Regis should use shouldTreatAsSpeedwalk() for UI gate instead of isSpeedwalk()
+
+### 2026-04-10: Issue #379 Release Workflow Fix (PR #387)
+**Issue:** #379 - Release GitHub Action errors out on prod
+**PR:** #387 (targeting prod)
+**Root cause:** The release workflow (release.yml) calls npm run version:sync on the prod branch, but prod was missing both the version:bump/version:sync npm scripts and the scripts/sync-versions.mjs file. These existed on dev but were never merged forward.
+**Fix:** Created branch from prod, added the two npm scripts to package.json and created sync-versions.mjs (identical to dev). Verified script runs correctly against prod workspace packages.
+**Key decision:** Targeted the PR directly at prod since that is where the release workflow runs. This is a hotfix-style patch - the scripts already exist on dev, so no drift is introduced.
+
+### 2026-04-10: Equipment Handler Player Lookup Bug Fix
+**Bug:** handleEquipItem in ZoneRoom.ts was looking up player state using client.sessionId instead of resolved playerId. Since this.players is keyed by character ID (playerId), the lookup always returned undefined when a character ID was provided, causing "Equipment system unavailable" for all equip attempts.
+**Fix:** Changed this.players.get(client.sessionId) to this.players.get(playerId) on line 2642. One-line fix matching the pattern used by all other handlers.
+**Verification:** handleUnequipItem and handleSwapItem are clean -- they don't use the players map directly. All 2601 server tests pass.
+**Test gap noted:** Existing loadout-integration.test.ts tests don't catch this because Colyseus test helpers use sessionId as playerId (same value in tests). The bug only manifests when a separate character ID is provided via playerIds map.
+
+## Learnings
+
+- **this.players map key:** Always keyed by playerId (character ID), never client.sessionId. Set at line 563 in ZoneRoom.ts. Any new handler that needs player state must resolve playerId first via this.playerIds.get(client.sessionId) ?? client.sessionId, then use that to look up from this.players.
+- **Test blind spot:** Colyseus ColyseusTestServer uses sessionId as playerId in test mode, so sessionId/playerId key mismatches are invisible in integration tests. Manual or E2E testing with real character IDs is needed to catch these.
+- **Equipment handlers location:** handleEquipItem (~line 2640), handleUnequipItem (~line 2722), handleSwapItem (~line 2762) in packages/server/src/rooms/ZoneRoom.ts.
