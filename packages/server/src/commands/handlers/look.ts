@@ -65,7 +65,15 @@ function showFullRoom(ctx: CommandContext): CommandResult {
     for (const p of ctx.otherPlayerInfo) {
       if (!p.anon) {
         const postureDesc = p.posture ? POSTURE_ROOM_DESCRIPTIONS[p.posture] : 'is here';
-        lines.push(`${p.name} ${postureDesc}.`);
+        // Show follow status in room description (#403)
+        if (p.followingPlayerId) {
+          const leaderName = ctx.otherPlayerInfo.find(op => op.sessionId === p.followingPlayerId)?.name
+            ?? (p.followingPlayerId === ctx.player.sessionId ? ctx.characterName : undefined)
+            ?? 'someone';
+          lines.push(`${p.name} ${postureDesc}, following ${leaderName}.`);
+        } else {
+          lines.push(`${p.name} ${postureDesc}.`);
+        }
       }
     }
   } else if (ctx.otherPlayersInRoom.length > 0) {
