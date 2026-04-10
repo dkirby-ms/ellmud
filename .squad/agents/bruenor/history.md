@@ -257,3 +257,61 @@
 - **Numbering note:** Used 006/007/008 because 005_sandbox_rooms.sql already existed (task originally specified 005/006/007).
 - **Importer observations:** Works cleanly on all three zone types — grid, vertical tower, and branching wilderness. Cross-zone exit warnings are expected and correct. The importer handles locked/hidden exits from CircleMUD flags properly.
 - **SQL validation:** All 3 files have proper BEGIN/COMMIT wrapping, INSERT INTO zone_rooms + zone_exits with cross-join VALUES pattern, ON CONFLICT DO NOTHING for idempotency.
+
+### Bestiary Template Implementation (2026-04-10)
+- **Scope:** Implemented Laeral's bestiary design (#391) as TypeScript creature templates
+- **Created:** 81 new creature template files in `packages/server/src/creatures/templates/`
+- **Source:** Design from `squad/391-dystopian-bestiary` branch (86 total creatures, 5 already existed)
+- **Zone coverage:**
+  - Collapsed Megastructure (Ruins): 7 new creatures (concrete-shambler, razorwing-swarm, scrap-brute, memory-echo, ruin-colossus, fracture-phantom, ash-warden, the-sovereign-of-dust)
+  - Flooded Depths: 12 new creatures (sludge-crawler through the-abyssal-maw)
+  - Toxic Wastes: 12 new creatures (bile-rat through the-spillmother)
+  - Overgrown Sanctuary: 12 new creatures (thorn-creeper through the-green-mother)
+  - Derelict Factory: 12 new creatures (scrap-gremlin through the-assembly-line)
+  - Irradiated Wasteland: 12 new creatures (rad-roach through the-fallout-king)
+  - Deep Shadow: 14 new creatures (shadow-rat through the-endless-dark)
+- **Template structure:** Each includes JSDoc header, stats, loot table, spawn rules, abilities, room description, behavioral flags
+- **Pattern compliance:**
+  - Kebab-case filenames matching type slugs
+  - All exported from `creatures/index.ts`
+  - Matches existing 5 template format exactly (gutterspawn, rubble-scavenger, drowned-revenant, hollow-stalker, the-collapsed-one)
+  - TypeScript compilation verified (tsc --noEmit)
+  - ESLint passed with 0 warnings
+- **String escaping lesson:** Item names and descriptions with apostrophes (e.g., "Warden's Brand") needed explicit escaping in generator script. Fixed by escaping single quotes in both name and description fields during loot table formatting.
+- **Data parsing:** Built Python parser for bestiary markdown format. Initial loot/abilities regex failed on multi-line content — fixed by first extracting section text, then matching within that scope.
+- **Branch:** `squad/391-bestiary-templates`
+- **PR:** #398 to dev
+- **Files:** 82 changed (81 new templates + index.ts update), 5391 insertions
+
+**Learnings:**
+- When parsing structured markdown with sections, extract the section first, then parse within it — single-pass regex across full text fails on multi-line captures
+- Always escape apostrophes in generated TypeScript string literals (both item names and descriptions)
+- Creature template pattern: stats → lootTable → spawnRules → idle timers → behavioral flags → optional roomDescription/abilities
+- TypeScript template files follow strict pattern: JSDoc → import → export const → template object with fixed property order
+
+### Bestiary SQL Migration (2026-04-10)
+- **Migration:** `011_bestiary_creatures.sql` — Complete database implementation of Laeral's bestiary design
+- **Scope:** 81 new creature definitions + 343 new loot item definitions
+- **Source:** `docs/bestiary-design.md` (86 total creatures, 5 already existed in 002_seed_content.sql)
+- **Database-first approach:** The creature system uses a **database-driven ContentRegistry** pattern. All creature data lives in the `creature_definitions` PostgreSQL table and is loaded at runtime by `ContentRegistry`. The TypeScript `.ts` template files in `packages/server/src/creatures/templates/` are **LEGACY FALLBACKS only**.
+- **Item handling:** Generated 343 new item definitions for all loot drops referenced by creatures. Used `ON CONFLICT (id) DO NOTHING` to skip items that already exist from migration 002.
+- **Creature handling:** Used `ON CONFLICT (type) DO NOTHING` to skip the 5 existing creatures (gutterspawn, rubble_scavenger, drowned_revenant, hollow_stalker, the_collapsed_one).
+- **SQL generation:** Built Node.js parser to extract creature data from markdown → JSON, then generate SQL inserts matching the exact pattern from 002_seed_content.sql.
+- **Validation:** Verified all 253 unique loot item IDs in creature loot_table JSONB arrays have corresponding item definitions (either existing or new).
+- **Pattern compliance:**
+  - Followed exact column order from 002_seed_content.sql
+  - `loot_table` is JSONB: `'[{"itemId":"some_item","dropWeight":80}]'::jsonb`
+  - `preferred_rooms` and `forbidden_rooms` are TEXT arrays: `'{corridor,dead_end}'`
+  - `slug` = `type` (snake_case) for all creatures
+  - `idle_ticks_min/max` calculated with 10x multiplier pattern from 002
+- **Branch:** `squad/391-bestiary-seed`
+- **PR:** #399 to dev
+- **Files:** 1 new migration file, 685 lines
+
+**Learnings:**
+- **Database-driven content is the correct approach** — TypeScript templates were legacy fallback pattern
+- SQL migration files are the source of truth for creatures, not TypeScript template files
+- When generating large SQL migrations from design docs, parse to JSON first for validation, then generate SQL
+- Always verify loot item IDs exist before referencing them in JSONB loot tables
+- Use `ON CONFLICT DO NOTHING` for idempotent migrations that might overlap with existing seed data
+- Node.js string literal escaping: `str.replace(/'/g, "''"` for SQL single-quote escaping
