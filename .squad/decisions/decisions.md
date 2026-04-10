@@ -1,111 +1,3 @@
-## 2026-04-01T16:45:00Z: Faction Strongholds — Zone Category & Routing Pattern
-
-**By:** Jarlaxle (Systems Dev)  
-**Issue:** #236  
-**Scope:** Faction stronghold zones with new zone category and death routing  
-**Outcome:** ✅ SUCCESS — PR #259
-
-### Decision
-
-Faction strongholds use a new zone category `faction_hub` (distinct from `hub`) and link to factions via a `faction_slug` column on the `zones` table. Death routing resolves the player's faction slug at join time and caches it for the session. The static mapping in `stronghold.ts` maps faction slug → zone slug without a DB query at death time.
-
-### Rationale
-
-- Separate `faction_hub` category lets existing `hub` checks (Refuge) remain untouched while allowing faction-specific behavior to be gated on the new category.
-- Caching `factionSlug` on join avoids async DB queries during the time-critical death handler (3-second delay timer).
-- Static mapping is acceptable for 3 factions; if factions become user-created, the mapping should move to DB lookup.
-
-### Impact
-
-- **Server:** `ZoneRoom` now has a `playerFactionSlugs` map. `isNonCombatZone` check includes `faction_hub`.
-- **Client:** `useZoneConnection.ts` recognizes all 3 stronghold targets as hub zones for state cleanup.
-- **Shared:** `ZoneDefinition.category` union expanded, `factionSlug` field added (optional).
-- **Database:** `zones` table has new `factionSlug` column (nullable, indexed).
-- **Unblocks:** #238 (death/spawn routing), #239 (Refuge repurposing)
-
-### Deliverables
-
-- 3 stronghold zones: The Foundry (Ironwright Compact), The Cartographium (Veil Cartographers), The Counting House (Scarlet Ledger)
-- 8 feature rooms per stronghold (24 total)
-- 21 new tests covering zone generation, faction routing, capacity
-- Zero regressions in existing test suite
-
----
-
-## 2026-04-01T16:45:00Z: Corpse/Loot-on-Death System
-
-**By:** Drizzt (Engine Dev)  
-**Issue:** #237  
-**Scope:** In-memory corpse system replacing direct item drop on death  
-**Outcome:** ✅ SUCCESS — PR #258
-
-### Decision
-
-Implemented corpses as zone-scoped in-memory entities (CorpseSystem), separate from the existing TraceSystem. On player death, non-soulbound inventory items move into a Corpse entity in the room instead of dropping to the room floor. Players loot corpses via the new `loot` command. Corpses decay after a configurable TTL (default 600s).
-
-### Rationale
-
-- Corpses need inventory storage, which traces don't support (traces are visual markers only)
-- In-memory storage is appropriate since room items are already ephemeral (destroyed on zone collapse)
-- Soulbound check leverages existing `ItemDefinition.soulbound` field from the item registry
-- Keeping trace and corpse systems separate maintains single-responsibility: traces = environmental evidence filtered by tracking skill, corpses = lootable containers visible to all
-
-### Impact
-
-- Death handler no longer drops items to `room.items[]` — they go into corpse entity
-- `look` command now shows corpses with item counts (e.g., "A corpse (8 items)")
-- `loot` verb added to parser and command registry
-- `corpseTTLSeconds` added to ServerConfig (env: CORPSE_TTL_SECONDS)
-- Tests expecting items on room floor after death need updating (completed in this PR)
-- Equipment-to-corpse conversion (loadout items) deferred to future work — requires async loadout resolution
-
-### Deliverables
-
-- CorpseSystem in-memory entity storage with TTL-based cleanup
-- `loot <corpse>` command with weight validation
-- 33 new tests covering corpse creation, looting, TTL expiry, soulbound filtering
-- Zero regressions in existing test suite
-
-### Known Limitations
-
-- Equipment-to-corpse conversion deferred (loadout items stay equipped at death)
-- Corpse cosmetics hardcoded; customization deferred to future work
-
----
-
-## 2026-04-01T16:45:00Z: Repurpose Refuge as Designer/Debug Hub
-
-**By:** Jarlaxle (Systems Dev)  
-**Issue:** #239  
-**Scope:** Zone categorization, Refuge repurposing  
-**Outcome:** ✅ SUCCESS — PR #260 (after migration fix)
-
-### Decision
-
-The Refuge zone category changed from `hub` to `dev`. The shared `ZoneDefinition.category` type now includes `'dev'` as a valid value. The `dev` category is treated identically to `hub`/`social` in the ZoneRoom tick loop — no collapse timer, no creature AI, no combat resolution. Faction strongholds (#236) are now the primary player hubs.
-
-### Rationale
-
-With faction strongholds serving as the real player hubs, the Refuge is no longer the canonical starting area for most players. Rather than remove it (it still serves as the fallback for unaffiliated players), it's repurposed as a designer/debug hub where game systems can be tested safely. The `dev` category signals this intent clearly in the DB and shared types.
-
-### Impact
-
-- **Shared types:** `ZoneDefinition.category` gains `'dev'` — any code that exhaustively switches on category needs updating
-- **DB seed:** Refuge zone row changes category column value; requires migration for existing databases
-- **Server:** `isNonCombatZone` in ZoneRoom now includes `'dev'` — dev zones are safe from combat/collapse
-- **Client:** Refuge.tsx descriptions updated but file not renamed (still functional as fallback)
-- **Tests:** Faction-stronghold tests updated to seed Refuge as `dev`; test helpers accept `'dev'` category
-
-### Deliverables
-
-- Refuge category changed from `hub` to `dev` in seed and live databases
-- Migration `014_repurpose_refuge.sql` added for existing database instances
-- Type definitions updated to include `'dev'` category
-- 13 tests updated for Refuge as development environment
-- Zero regressions
-
----
-
 ## 2026-04-04T17:24:38Z: Migration Discipline — Seed Files Pair with Numbered Migrations
 
 **By:** Elminster (Reviewer), enforced by Drizzt (Engine Dev)  
@@ -141,28 +33,6 @@ PR #260 initially lacked the numbered migration and was rejected by Elminster. D
 - Migration `014_repurpose_refuge.sql` added and verified
 - Decision documented for team reference
 - Pattern now part of standard review checklist
-
----
-
-## 2026-04-04T19:52:00Z: User Directive — elkjs + ReactFlow for Zone Designer
-
-**By:** saitcho (via Copilot)  
-**Date:** 2026-04-04  
-**Context:** User reviewed 6 alternatives for zone designer map rendering improvements
-
-**Decision:** elkjs + ReactFlow (xyflow) is the preferred long-term approach for zone designer map rendering.
-
-**Rationale:**
-- **elkjs** replaces `computeLayout.ts` for layout (crossing minimization, edge routing, layered algorithms)
-- **ReactFlow** replaces hand-rolled SVG for rendering (pan/zoom/drag/minimap)
-- **MUD-specific constraints** encoded as elkjs port-side and layer constraints (compass directions, grid alignment)
-- User reviewed 6 alternatives and chose this combination as the bulletproof long-term solution
-
-**Key Details:**
-- Layout engine: BFS (`computeLayout.ts`, ~2700 lines) → ELK.js (Sugiyama layered algorithm)
-- Rendering: Hand-crafted SVG (~3600 lines) → ReactFlow (@xyflow/react)
-- Direction mapping: Compass directions (N/S/E/W) → ELK port-side constraints
-- Multi-floor support: Z-axis → ELK layer constraints
 
 ---
 
@@ -1054,17 +924,6 @@ if (!allowed.includes(ctx.room.type as string)) { ... }
 - `packages/client/src/components/map/ZoneExitEdge.tsx`
 - `packages/client/src/__tests__/zone-exit-edge.test.tsx`
 
-
----
-
-## 2026-04-08T01:25:00Z: No Curved Edges on Map — User Directive
-
-**By:** dkirby-ms (via Copilot)  
-**Scope:** Map Layout — User Experience
-
-**Directive:** No curved or diagonal edges on the map. All connections must be drawn as straight orthogonal lines (horizontal or vertical). If two rooms connected by a cardinal exit aren't on the same axis, fix the layout — don't draw a curve.
-
-**Rationale:** The map should only have straight lines. Curves indicate a layout alignment failure, not a rendering choice.
 
 ---
 
@@ -2589,19 +2448,6 @@ Jarlaxle's MetricsService uses a fire-and-forget pattern — public methods retu
 ---
 
 
-### 2026-04-09T13:34Z: User directive — flags & who list scope
-**By:** dkirby-ms (via Copilot)
-**What:**
-- Admins can always see through [Anon]
-- [Anon] exception is same-room only (not same-zone)
-- Only [Anon] and [RP] flags for v1
-- Who list is server-wide (all players, not zone-scoped)
-- Flags persist across sessions (logout/login)
-- Flags should be toggleable in the player settings UI (not just /flag command)
-**Why:** User request — captured for team memory
-
----
-
 ### 2026-07-28Z: Jarlaxle — User Flags Implementation (#365)
 **By:** Jarlaxle (Game Systems Developer)
 **What was built:**
@@ -3062,49 +2908,6 @@ _Merged from decisions/inbox/elminster-review-390-389.md on 2026-04-10T20:30._
 **Estimated time:** 2–3 weeks for full implementation.
 
 _Merged from decisions/inbox/laeral-bestiary-design.md on 2026-04-10T20:30._
-
----
-
-## 2026-04-10T21:30:00Z: User directive — Inventory vs Stash Architecture
-
-**By:** David (dkirby-ms) (via Copilot)  
-**Scope:** Game architecture clarification
-
-**Decision:** Inventory and stash are SEPARATE concepts (like a traditional MMORPG bank).
-
-- **Player inventory** — Accessible everywhere; item cap & weight cap; in-memory on PlayerState
-- **Stash** — Accessible only in `feature_stash` rooms; much higher item limit; no weight limit; persisted in `player_stash`
-- **StatusPanel GearTab** — Correctly shows inventory items, NOT stash items
-
-**Why:** User request — clarifies game's item storage architecture as foundational for upcoming container and inventory persistence work.
-
-**Impact:**
-- Starter kit items should go to inventory (Drizzt's fix)
-- Future inventory persistence will expand on this model
-- Stash remains a separate banking system
-
----
-
-## 2026-04-10T21:34:18Z: User directive — Inventory Persistence & Container Items
-
-**By:** David (dkirby-ms) (via Copilot)  
-**Scope:** Foundational game design
-
-**Decision:**
-1. **Inventory Persistence** — Player inventory is NOT transient; persists across sessions via DB (needs `player_inventory` table)
-2. **Death Mechanics** — Inventory CAN be lost on death
-3. **Container Item Type** — New first-class `'container'` ItemType for items that hold other items
-4. **Death → Corpse Container** — On player death, drop a special "corpse" container representing the body; contains all gear player carried upon death
-5. **Starter Items** — Should go into player inventory (persistent), not stash
-
-**Why:** User directive — foundational for inventory, death, and loot systems.
-
-**Impact:**
-- Elminster's 4-phase architecture proposal (issues #409, decisions/inbox/elminster-container-system.md)
-- Drizzt's starter kit fix (PR #410, decisions/inbox/drizzt-starter-kit-approach.md)
-- Establishes DB-backed inventory model
-- Container is first-class item type
-- Extraction-game loot loop (death → corpse container → looting → extraction)
 
 ---
 
