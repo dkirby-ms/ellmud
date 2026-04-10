@@ -15,6 +15,7 @@ import {
   type SwapItemMessage,
   type LoadoutUpdateMessage,
   type StashUpdateMessage,
+  type InventoryUpdateMessage,
   type DisplayItem,
   type PlayerStateMessage,
   type TelegraphMessage,
@@ -631,6 +632,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     } catch (err) {
       this.log(`Failed to send equipment state for ${this.playerTag(playerId)}: ${err}`);
     }
+
+    // Send current inventory to client on join
+    this.sendInventoryUpdate(client, playerId);
   }
 
   async onLeave(client: Client, code?: number): Promise<void> {
@@ -1046,6 +1050,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     const trackLoot = verb === 'take' || verb === 'get' || verb === 'loot';
     const prevInventoryIds = trackLoot ? new Set(player.inventory.keys()) : undefined;
 
+    // Snapshot inventory size to detect mutations for INVENTORY_UPDATE
+    const prevInventorySize = player.inventory.size;
+
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
 
@@ -1195,6 +1202,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Trace: send trace narrations on room entry or "look"
     if (movedRoom || verb === 'look') {
       this.sendTraceNarrations(client, player.currentRoomId);
+    }
+
+    // Send inventory update if inventory changed during command execution
+    if (player.inventory.size !== prevInventorySize) {
+      this.sendInventoryUpdate(client, playerId);
     }
   }
 
@@ -2707,6 +2719,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             }
 
             await this.sendLoadoutAndStashUpdate(client, playerId);
+            this.sendInventoryUpdate(client, playerId);
             client.send(MessageTypes.NARRATE, {
               text: `Equipped from inventory to ${message.targetSlot}.`,
               type: 'system',
@@ -2861,6 +2874,28 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         items: stashItems,
       } satisfies StashUpdateMessage);
     }
+  }
+
+  /** Send current inventory contents to client (on join and after inventory mutations). */
+  private sendInventoryUpdate(client: Client, playerId: string): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    const items = Array.from(player.inventory.values()).map((entry) => {
+      const def = getItemDefinition(entry.item.id);
+      return {
+        id: entry.item.id,
+        name: entry.item.name,
+        weight: entry.item.weight,
+        tier: (def?.tier ?? 'common') as string,
+      };
+    });
+
+    client.send(MessageTypes.INVENTORY_UPDATE, {
+      items,
+      currentWeight: player.currentWeight,
+      maxWeight: player.maxCarryWeight,
+    } satisfies InventoryUpdateMessage);
   }
 
   /** Send player state update to client (HP, stamina, status effects, posture). */

@@ -26,6 +26,7 @@ import type {
   StashUpdateMessage,
   PlayerStateMessage,
   ZoneTransferMessage,
+  InventoryUpdateMessage,
 } from '@ellmud/shared';
 import type { Room } from '@colyseus/sdk';
 import type { MessageHandlers } from '../services/connection.js';
@@ -289,6 +290,18 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       onStashUpdate: (msg: StashUpdateMessage) => {
         if (!disposed) {
           dispatch({ type: 'SET_STASH_ITEMS', items: msg.items });
+        }
+      },
+      onInventoryUpdate: (msg: InventoryUpdateMessage) => {
+        if (!disposed) {
+          dispatch({
+            type: 'SET_INVENTORY',
+            items: msg.items.map(item => ({
+              id: item.id,
+              name: item.name,
+              tier: item.tier as import('@ellmud/shared').GearTier,
+            })),
+          });
         }
       },
       onPlayerState: (msg: PlayerStateMessage) => {

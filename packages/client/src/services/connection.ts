@@ -22,6 +22,7 @@ import {
   type RoomOccupantsMessage,
   type FlagStateMessage,
   type ToggleFlagMessage,
+  type InventoryUpdateMessage,
 } from '@ellmud/shared';
 
 const WS_ENDPOINT = import.meta.env.VITE_WS_URL ??
@@ -38,6 +39,7 @@ export interface MessageHandlers {
   onZoneTransfer?: (msg: ZoneTransferMessage) => void;
   onLoadoutUpdate?: (msg: LoadoutUpdateMessage) => void;
   onStashUpdate?: (msg: StashUpdateMessage) => void;
+  onInventoryUpdate?: (msg: InventoryUpdateMessage) => void;
   onPlayerState?: (msg: import('@ellmud/shared').PlayerStateMessage) => void;
   onRoomOccupants?: (msg: RoomOccupantsMessage) => void;
   onFlagState?: (msg: FlagStateMessage) => void;
@@ -80,6 +82,9 @@ export async function connect(
   }
   if (handlers.onStashUpdate) {
     room.onMessage(MessageTypes.STASH_UPDATE, handlers.onStashUpdate);
+  }
+  if (handlers.onInventoryUpdate) {
+    room.onMessage(MessageTypes.INVENTORY_UPDATE, handlers.onInventoryUpdate);
   }
   if (handlers.onPlayerState) {
     room.onMessage(MessageTypes.PLAYER_STATE, handlers.onPlayerState);
@@ -138,6 +143,9 @@ export async function switchRoom(
   }
   if (handlers.onStashUpdate) {
     newRoom.onMessage(MessageTypes.STASH_UPDATE, handlers.onStashUpdate);
+  }
+  if (handlers.onInventoryUpdate) {
+    newRoom.onMessage(MessageTypes.INVENTORY_UPDATE, handlers.onInventoryUpdate);
   }
   if (handlers.onPlayerState) {
     newRoom.onMessage(MessageTypes.PLAYER_STATE, handlers.onPlayerState);

@@ -354,6 +354,7 @@ export const MessageTypes = {
   OVERLAY_STATE: 'overlay_state',
   STASH_UPDATE: 'stash_update',
   LOADOUT_UPDATE: 'loadout_update',
+  INVENTORY_UPDATE: 'inventory_update',
   ROOM_SWITCH: 'room_switch',
   ZONE_TRANSFER: 'zone_transfer',
   EXPLORATION_DATA: 'exploration_data',
@@ -850,6 +851,13 @@ export interface SwapItemMessage {
 /** Server → Client: Full stash contents after any change. */
 export interface StashUpdateMessage {
   items: DisplayItem[];
+}
+
+/** Server → Client: Current inventory contents after any change. */
+export interface InventoryUpdateMessage {
+  items: Array<{ id: string; name: string; weight: number; tier: string }>;
+  currentWeight: number;
+  maxWeight: number;
 }
 
 // ─── Character System (Character Selection & Management) ─────────────────────
