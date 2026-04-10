@@ -6,6 +6,7 @@ name: CI/CD
 # prod — production, push triggers build + deploy to Prod Container App
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [uat, prod]
     paths-ignore:
