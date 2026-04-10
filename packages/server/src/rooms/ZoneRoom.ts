@@ -15,6 +15,7 @@ import {
   type SwapItemMessage,
   type LoadoutUpdateMessage,
   type StashUpdateMessage,
+  type InventoryUpdateMessage,
   type DisplayItem,
   type PlayerStateMessage,
   type TelegraphMessage,
@@ -98,7 +99,8 @@ import type { Item } from '../generator/RoomGraph.js';
 import type { ExplorationRepository } from '../exploration/index.js';
 import { getExplorationRepository } from '../exploration/index.js';
 import type { CharacterRepository } from '../character/index.js';
-import { InMemoryCharacterRepository, getCharacterRepository } from '../character/index.js';
+import { InMemoryCharacterRepository, getCharacterRepository, isCharacterPg } from '../character/index.js';
+import { grantStarterKit } from '../api/starter-kit.js';
 import { createNarrationService } from '../narrative/factory.js';
 import type { NarrationService } from '../narrative/NarrationService.js';
 import { gatherPlayerList, formatWhoListText, type ZonePlayerData } from '../who/index.js';
@@ -572,6 +574,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.log(`Failed to load posture for ${this.playerTag(playerId)}: ${err}`);
     }
 
+    // Grant starter kit to inventory on first zone join (non-fatal)
+    try {
+      const kitCount = await grantStarterKit(playerId, playerState, this.characterRepo, isCharacterPg());
+      if (kitCount > 0) {
+        this.log(`Starter kit: granted ${kitCount} item(s) to ${this.playerTag(playerId)}`);
+      }
+    } catch (err) {
+      this.log(`Failed to grant starter kit for ${this.playerTag(playerId)}: ${err}`);
+    }
+
     this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig())} players)`);
 
     // Send initial system narration using NarrationService (async, don't block join)
@@ -603,7 +615,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       collapseTimer: this.state.collapseTimer,
     });
 
-    // Send initial player state (HP, stamina, status effects)
+    // Send initial player state (HP, stamina, status effects, posture)
     // Combatant doesn't exist yet, so we use default stats
     client.send(MessageTypes.PLAYER_STATE, {
       hp: 100, // DEFAULT_PLAYER_STATS.maxHp
@@ -611,6 +623,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       stamina: 0,
       maxStamina: 0,
       statusEffects: [],
+      posture: playerState.posture,
     } satisfies PlayerStateMessage);
 
     // Send full stash + loadout state to client on join (#377)
@@ -619,6 +632,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     } catch (err) {
       this.log(`Failed to send equipment state for ${this.playerTag(playerId)}: ${err}`);
     }
+
+    // Send current inventory to client on join
+    this.sendInventoryUpdate(client, playerId);
   }
 
   async onLeave(client: Client, code?: number): Promise<void> {
@@ -1034,6 +1050,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     const trackLoot = verb === 'take' || verb === 'get' || verb === 'loot';
     const prevInventoryIds = trackLoot ? new Set(player.inventory.keys()) : undefined;
 
+    // Snapshot inventory size to detect mutations for INVENTORY_UPDATE
+    const prevInventorySize = player.inventory.size;
+
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
 
@@ -1128,6 +1147,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         }
       }
 
+      // Sync updated posture to the acting player's status panel (#404)
+      this.sendPostureState(client, playerId);
+
       // Persist posture change to DB
       this.persistPosture(playerId).catch((err) => {
         this.log(`Failed to persist posture for ${this.playerTag(playerId)}: ${err}`);
@@ -1180,6 +1202,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Trace: send trace narrations on room entry or "look"
     if (movedRoom || verb === 'look') {
       this.sendTraceNarrations(client, player.currentRoomId);
+    }
+
+    // Send inventory update if inventory changed during command execution
+    if (player.inventory.size !== prevInventorySize) {
+      this.sendInventoryUpdate(client, playerId);
     }
   }
 
@@ -2692,6 +2719,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             }
 
             await this.sendLoadoutAndStashUpdate(client, playerId);
+            this.sendInventoryUpdate(client, playerId);
             client.send(MessageTypes.NARRATE, {
               text: `Equipped from inventory to ${message.targetSlot}.`,
               type: 'system',
@@ -2848,8 +2876,31 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
   }
 
-  /** Send player state update to client (HP, stamina, status effects). */
+  /** Send current inventory contents to client (on join and after inventory mutations). */
+  private sendInventoryUpdate(client: Client, playerId: string): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    const items = Array.from(player.inventory.values()).map((entry) => {
+      const def = getItemDefinition(entry.item.id);
+      return {
+        id: entry.item.id,
+        name: entry.item.name,
+        weight: entry.item.weight,
+        tier: (def?.tier ?? 'common') as string,
+      };
+    });
+
+    client.send(MessageTypes.INVENTORY_UPDATE, {
+      items,
+      currentWeight: player.currentWeight,
+      maxWeight: player.maxCarryWeight,
+    } satisfies InventoryUpdateMessage);
+  }
+
+  /** Send player state update to client (HP, stamina, status effects, posture). */
   private sendPlayerState(client: Client, playerId: string): void {
+    const player = this.players.get(playerId);
     const combatant = this.combatSystem.getCombatant(playerId);
     if (!combatant) return;
 
@@ -2859,6 +2910,23 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       stamina: 0, // Placeholder — stamina system not implemented yet
       maxStamina: 0,
       statusEffects: [], // TODO: Implement status effects tracking
+      posture: player?.posture ?? 'standing',
+    } satisfies PlayerStateMessage);
+  }
+
+  /** Send posture-only state update (works outside combat). */
+  private sendPostureState(client: Client, playerId: string): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    const combatant = this.combatSystem.getCombatant(playerId);
+    client.send(MessageTypes.PLAYER_STATE, {
+      hp: combatant?.hp ?? 100,
+      maxHp: combatant?.maxHp ?? 100,
+      stamina: 0,
+      maxStamina: 0,
+      statusEffects: [],
+      posture: player.posture,
     } satisfies PlayerStateMessage);
   }
 

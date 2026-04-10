@@ -10,6 +10,7 @@ export class InMemoryCharacterRepository implements CharacterRepository {
   private characters = new Map<string, CharacterRow>();
   private lastInns = new Map<string, { zoneSlug: string; roomSlug: string }>();
   private postures = new Map<string, string>();
+  private starterKitGranted = new Set<string>();
 
   async list(playerId: string): Promise<CharacterSummary[]> {
     const chars: CharacterSummary[] = [];
@@ -101,6 +102,14 @@ export class InMemoryCharacterRepository implements CharacterRepository {
 
   async loadPosture(characterId: string): Promise<string> {
     return this.postures.get(characterId) ?? 'standing';
+  }
+
+  async isStarterKitGranted(characterId: string): Promise<boolean> {
+    return this.starterKitGranted.has(characterId);
+  }
+
+  async markStarterKitGranted(characterId: string): Promise<void> {
+    this.starterKitGranted.add(characterId);
   }
 
   private toSummary(row: CharacterRow): CharacterSummary {

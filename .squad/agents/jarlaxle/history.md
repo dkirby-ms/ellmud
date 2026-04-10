@@ -454,6 +454,29 @@ Wave 6 delivered your Shard Exploration Sidebar & Combat Overlay component. This
 Wave 7 will deliver final 3 client UI issues (#68 Refuge Hub, #72 Extraction Screen, #73 Chat & Social Panel). Your combat overlay will integrate with character stats and extraction mechanics.
 ---
 
+## Session: Implementation Batch — Illumination System (2026-04-10)
+
+**Date:** 2026-04-10  
+**Status:** ✅ Complete  
+**PR:** #407  
+
+**Jarlaxle deliverable (PR #407):**
+- Added `illumination` column to `zone_rooms` table
+- Threaded through types, zone adapter, Colyseus schema
+- Gated look/go/goto commands in dark rooms
+- Binary lit/unlit design (light sources are future work)
+- Dark rooms usable for ambush/hide mechanics
+
+**Cross-team impact on Jarlaxle:**
+- Drizzt: Posture system (PlayerStateMessage) + Follow+Consent (5 commands, 37 tests)
+- Regis: StatusPanel tabs (234-line extraction, 3-tab layout)
+- Minsc: Speedwalk research (root cause, 5 fix approaches)
+- Team decisions merged to decisions.md
+
+**Quality:** Complete and tested. Ready for integration with light source items (future phase).
+
+---
+
 ## Session: Issue #66 — Shard Exploration Sidebar & Combat Overlay
 
 **Date:** 2025-07-21

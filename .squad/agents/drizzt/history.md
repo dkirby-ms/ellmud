@@ -45,6 +45,17 @@
 **Design briefs:** 3 architectural decision documents posted to GitHub + merged to .squad/decisions/decisions.md
 
 **Next:** Coordinate with Jarlaxle (illumination Phase 1) and Regis (panel extraction) on implementation sequencing.
+### Implementation Batch: Posture + Follow + StatusPanel + Illumination (2026-04-10) — Team sync
+**Team Effort:** Drizzt (PR #406 + #408), Regis (PR #405), Jarlaxle (PR #407), Minsc (research)  
+**Status:** ✅ Complete — All PRs opened, orchestration logs generated  
+**Deliverables:**
+- Drizzt: Posture system (PlayerStateMessage wiring) + Follow+Consent (5 commands, 37 tests, auto-follow, consent v1)
+- Regis: StatusPanel tabs (234-line extraction, 3-tab layout, graceful posture fallback)
+- Jarlaxle: Illumination system (zone_rooms column, look/go/goto gating, dark room mechanics)
+- Minsc: Speedwalk research (root cause analysis, 5 fix approaches, reproduction tests)
+**Decisions:** 6 team decisions merged to decisions.md with full context and team impact
+**Impact:** Foundation for Phase 3 (Groups) and Phase 4 (Combat Rewards). Speedwalk fix ready for implementation.
+**Tests:** All passing, zero regressions
 
 ---
 
@@ -3623,3 +3634,90 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 **Integration:** Your equip/drop/get commands work seamlessly with items spawned via admin panel. Room generation and item properties (name, weight, equipSlot) integrate directly.
 
 **No action needed** — just awareness that Regis's admin work enables full item spawning workflow for testing/development.
+
+
+---
+
+## Starter Kit to Inventory Migration (2025-07-24)
+
+**Task:** Move starter kit items from player_stash to player inventory.
+**Branch:** squad/fix-starter-kit-inventory
+**Approach:** Option B -- grant on first zone join with starter_kit_granted flag.
+
+**Changes:**
+- starter-kit.ts rewritten: adds items to PlayerState.inventory via addItem() instead of INSERT into player_stash
+- ZoneRoom.onJoin calls grantStarterKit() after PlayerState creation, gated by isStarterKitGranted flag
+- characters.ts no longer calls grantStarterKit at creation time
+- CharacterRepository extended with isStarterKitGranted() / markStarterKitGranted() (PG + InMemory)
+- New migration: 012_starter_kit_granted.sql (boolean column on characters)
+- Tests: 7 passing (grant, flag, re-grant prevention, weight limits, no-pg, no-items)
+
+## Learnings
+
+- **Inventory vs Stash separation:** Inventory is intentionally in-memory (extraction-game transient). Stash is the persistent bank. Starter items belong in inventory, granted at first zone join -- not in stash at character creation.
+- **CharacterRepository extension pattern:** Add method to interface, implement in PgCharacterRepository (SQL) + InMemoryCharacterRepository (Map/Set), use in ZoneRoom via this.characterRepo.
+- **isCharacterPg() gate:** Use isCharacterPg() from character-provider.ts to determine if PG is available for queries that need the DB (e.g., item_definitions lookup).
+
+
+---
+
+## Cross-Team Update: Elminster Container System Scoping (2026-04-10)
+
+**From:** Scribe  
+**Context:** Elminster completed comprehensive scoping of container item system and death mechanics investigation.
+
+**What Elminster Did:**
+- Investigated death mechanics thoroughly — corpse system confirmed fully operational
+- **Found critical bug:** Equipped items vanish on death (not collected into corpse)
+- Proposed 4-phase architecture: inventory persistence → container type → death integration → world containers
+- Created issue #409
+- Documented 7-section proposal with current state analysis, risk analysis, implementation phases
+
+**Key Findings for Your Starter Kit Work:**
+- Death mechanics are well-understood; equipped items bug is pre-existing
+- Your starter items (now in inventory) will follow the same death flow as all inventory items
+- When Phase 3 (death integration) is implemented, your starter items will be properly transferred to corpse if player dies
+
+**Design Decisions Relevant to Inventory:**
+- **Container type** — max nesting depth 1 (containers can't hold containers by default)
+- **Inventory persistence** — event-driven save (on mutation) + debounced 250ms + disconnect
+- **Load on zone join** — mirrors your zone-join starter kit grant pattern
+- **Evolutionary approach** — keep CorpseSystem parallel; Phase 4 evaluates unification
+
+**Open Questions for David:**
+- Corpse TTL (loot window duration)?
+- Equipped items on death — lootable or destroyed?
+- Container UI design (inline vs. separate panel)?
+
+**Implications for Your PR #410:**
+- Your zone-join grant pattern is consistent with Phase 1 load strategy
+- Starter items in inventory will be subject to same death mechanics as other inventory
+- No conflicts with Elminster's architecture; actually aligns well
+
+**Issue:** #409  
+**Proposal:** decisions/inbox/elminster-container-system.md (awaiting David's feedback on 6 design questions)
+
+
+
+---
+
+### INVENTORY_UPDATE Message Wiring (2026-07-17)
+**Task:** Wire end-to-end INVENTORY_UPDATE message so StatusPanel Gear tab shows inventory items.
+**Status:** Complete -- committed to dev branch.
+
+**Changes (5 files, 68 insertions):**
+- packages/shared/src/index.ts: Added INVENTORY_UPDATE to MessageTypes, added InventoryUpdateMessage interface
+- packages/server/src/rooms/ZoneRoom.ts: Added sendInventoryUpdate() method, called on join + after inventory-mutating commands + after equip-from-inventory
+- packages/client/src/services/connection.ts: Added onInventoryUpdate to MessageHandlers, wired in both connect() and switchRoom()
+- packages/client/src/hooks/useZoneConnection.ts: Added onInventoryUpdate handler dispatching SET_INVENTORY action
+
+**Pattern:** Follows existing STASH_UPDATE/LOADOUT_UPDATE pattern -- server sends full state snapshot, client replaces store. Inventory size comparison detects mutations after command execution.
+
+**Tests:** 2666 passed, 0 errors, 0 lint errors (12 pre-existing warnings).
+
+## Learnings
+- ItemDefinition has tier: GearTier, not rarity -- the plan referenced rarity but the actual field is tier
+- Inventory Item (from RoomGraph.ts) has no tier; must look up via getItemDefinition(id) from registry
+- sendLoadoutAndStashUpdate is async (stash/loadout use DB); sendInventoryUpdate is synchronous (inventory is in-memory Map)
+- Size comparison (player.inventory.size !== prevInventorySize) is a clean heuristic for detecting inventory mutations -- avoids hardcoding verb lists
+- Shared package must be rebuilt (tsc -p packages/shared/tsconfig.json) before server/client can see new exports
