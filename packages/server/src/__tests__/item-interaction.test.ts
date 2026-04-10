@@ -10,8 +10,6 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { handleCommand, type CommandContext, type CommandResult } from '../commands/index.js';
-import { handleTake } from '../commands/handlers/take.js';
-import { handleDrop } from '../commands/handlers/drop.js';
 import { PlayerState } from '../state/PlayerState.js';
 import type { Room, Item, Direction } from '../generator/RoomGraph.js';
 
