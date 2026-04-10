@@ -1842,3 +1842,21 @@ Items spawned through admin panel integrate fully with player item interaction c
 
 **Quality:** All 3106 tests passing, zero regressions. Pattern consistent with adminSpawnCreature.
 - **Issue #389 — Admin item spawn in Live Rooms (2026):** Extended the spawn modal in LiveRoomDetail.tsx to support both creatures and items. Added SpawnType toggle (creature/item) with Skull/Package lucide icons. Both template lists loaded in parallel via Promise.all. Server-side POST /admin/api/rooms/:roomId/spawn endpoint item branch was a TODO stub — implemented it: resolves item from content store, validates, then calls ZoneRoom.adminSpawnItem() which pushes to room.items array and broadcasts narration. Non-zone rooms fall back to broadcast-only. Key types: Item from generator/RoomGraph.ts (id, name, weight, description), ItemDefinition from @ellmud/shared (id, name, type, tier, baseStats, ...). Commit 48e16ce.
+
+
+### Issue #404: Status Panel Tab Redesign (2026-04-10)
+- **Status:** Complete (PR #405, branch squad/404-status-panel-tabs to dev)
+- **What:** Extracted ~234 lines of inline sidebar JSX from ZoneExploration.tsx into StatusPanel component with 3-tab layout
+- **Design:**
+  - **Always-visible header**: HP bar, Stamina bar, Posture/Stance, Status Effect pills
+  - **Tab bar** (useState-driven, no URL routing): Environment | Gear | Character
+  - **Environment tab** (default): Compass, Minimap, CombatHUD (combat-conditional), Room Occupants
+  - **Gear tab**: Equipment Silhouette, full Inventory list with overflow handling
+  - **Character tab**: Sound Cues with direction highlighting, Quick Actions, skills/reputation placeholder
+- **Posture handling**: Uses safe dynamic property access with fallback chain: posture field from Drizzt PR, then pendingCombatAction, then Cautious default
+- **Line impact**: ZoneExploration.tsx 894 to 618 lines (-276). StatusPanel.tsx 436 lines.
+- **Test updates**: Sound cue direction highlighting tests now click Character tab before assertions. All 407 client tests passing.
+- **Files created**: packages/client/src/components/StatusPanel.tsx
+- **Files modified**: packages/client/src/pages/ZoneExploration.tsx, packages/client/src/__tests__/ux-batch2-combat-sidebar.test.tsx
+- **Removed from ZoneExploration**: getEffectType, DEBUFF/BUFF keywords, highlightDirections, hpPercent, staminaPercent, healthState, enemyStatus -- all moved to StatusPanel
+- **Removed imports from ZoneExploration**: Sword, CompassControl, MinimapWidget, EquipmentSilhouette, RoomOccupants, CombatHUD, useVersion, StatusEffect type
