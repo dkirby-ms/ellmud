@@ -1874,3 +1874,24 @@ The tests expect:
 - squad-release.yml: trigger on push to prod
 - squad-promote.yml: dev to uat to prod pipeline
 **Key Learning:** Squad tooling templates ship with dev to preview to main model by default; must be adapted to match each project actual branch strategy.
+
+### Learnings — Item Interaction Tests (#390)
+
+**Test Pattern for Command Handler Tests:**
+- Build CommandContext manually with makeRoom(), makeItem(), makePlayer() helpers
+- Call handleCommand(verb, ctx) directly — no Colyseus server needed
+- Assert on result.narrations[0].text for output and .type for visibility (room = broadcast, system = private)
+
+**Edge Cases Identified for Item Interaction:**
+- Weight boundary: exact limit succeeds, 1 over fails
+- Cumulative weight: existing inventory reduces remaining capacity
+- Stack behavior: take stacks same-id items, drop removes only one from stack
+- Race condition: second player cannot take item already taken by first (room.items mutation is immediate)
+- Identity preservation: dropped items retain all properties through drop-take round-trip
+- Case-insensitive matching works for both take and drop
+- No duplication: total item count in world (room + inventory) stays constant
+
+**Anticipatory equip Tests:**
+- 8 todo tests scaffolded for equip command (awaiting implementation)
+- Covers: basic equip, not in inventory, not equippable, no args, slot conflict, auto-swap, display update, rollback on failure
+- get alias test written with graceful fallback (passes whether or not alias is registered)

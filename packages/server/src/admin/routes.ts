@@ -665,19 +665,74 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
         return;
       }
 
-      // type === 'item' — Phase 1 stub: broadcast only
-      // TODO: Implement item spawn via inventory/room loot system
-      const { MessageTypes } = await import('@ellmud/shared');
-      room.broadcast(MessageTypes.NARRATE, {
-        text: `[ADMIN] A ${type} (${id}) materializes from thin air.`,
-        type: 'system',
-        timestamp: Date.now(),
-      });
+      // type === 'item' — resolve from content store and place in room
+      const itemStore = deps.contentStores?.get('items');
+      if (!itemStore) {
+        res.status(500).json({ error: 'Content store not available — cannot resolve item template' });
+        return;
+      }
+
+      const itemEntity = await itemStore.getById(id);
+      if (!itemEntity) {
+        res.status(404).json({ error: `Item template "${id}" not found` });
+        return;
+      }
+
+      // Access the ZoneRoom's adminSpawnItem method
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const zoneRoom = room as any;
+      if (typeof zoneRoom.adminSpawnItem !== 'function') {
+        // Room doesn't support item spawning (e.g., refuge) — fall back to broadcast
+        const { MessageTypes } = await import('@ellmud/shared');
+        room.broadcast(MessageTypes.NARRATE, {
+          text: `[ADMIN] A ${itemEntity.name ?? id} materializes from thin air.`,
+          type: 'system',
+          timestamp: Date.now(),
+        });
+
+        res.json({
+          roomId: room.roomId,
+          spawned: { type, id },
+          message: `Broadcast spawn of "${id}" — room does not support item spawning (non-zone room)`,
+        });
+        return;
+      }
+
+      // Determine spawn room
+      let itemSpawnRoomId = targetRoomId;
+      if (!itemSpawnRoomId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const roomGraph = (room as any)['roomGraph'] as
+          | { rooms: Map<string, { id: string }> }
+          | undefined;
+
+        if (roomGraph && roomGraph.rooms.size > 0) {
+          itemSpawnRoomId = roomGraph.rooms.values().next().value?.id;
+        }
+      }
+
+      if (!itemSpawnRoomId) {
+        res.status(400).json({ error: 'No targetRoomId provided and room graph unavailable' });
+        return;
+      }
+
+      const itemToSpawn = {
+        id: itemEntity.id as string,
+        name: (itemEntity.name as string) ?? id,
+        weight: (itemEntity.weight as number) ?? 1,
+        description: (itemEntity.description as string) ?? '',
+      };
+
+      const result = zoneRoom.adminSpawnItem(itemToSpawn, itemSpawnRoomId) as { success: boolean; error?: string };
+      if (!result.success) {
+        res.status(400).json({ error: result.error });
+        return;
+      }
 
       res.json({
         roomId: room.roomId,
-        spawned: { type, id },
-        message: `Spawned ${type} "${id}" in room ${room.roomId} (broadcast only — item spawn not yet implemented)`,
+        spawned: { type, id, spawnRoomId: itemSpawnRoomId },
+        message: `Spawned item "${itemToSpawn.name}" in room ${itemSpawnRoomId}`,
       });
     } catch (err) {
       console.error('[Admin] Failed to spawn:', err);
