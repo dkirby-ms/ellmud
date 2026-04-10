@@ -3543,3 +3543,25 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 ## Learnings
 
 - **Colyseus matchMaker.query() room data types:** createdAt is returned as an epoch number (not a Date object). Always wrap in new Date() before calling Date methods on Colyseus room cache properties.
+
+---
+
+## Session: Item Room Appearance (#386)
+
+**Date:** 2025-07-25
+**Issue:** #386 — Items should get per-item descriptive lines in room descriptions (mirrors #383 for creatures)
+
+### What was done
+- Added optional `roomDescription` field to `Item` interface in `RoomGraph.ts`
+- Updated `look.ts`, `go.ts`, `goto.ts` to render each item on its own line instead of aggregating as `You see: item1, item2`
+- Fallback text: `A ${item.name} lies here.` when no `roomDescription` is set
+- ANSI tags pass through verbatim (same as creatures)
+- Created `item-appearance.test.ts` with 11 tests mirroring `creature-appearance.test.ts`
+- All 2612 server tests pass
+
+### Commit
+- `1bbf209` — feat: per-item room descriptions with ANSI tag support (#386)
+
+## Learnings
+
+- **Room appearance pattern:** Both creatures and items now follow the same per-entity `roomDescription` pattern in look/go/goto handlers. Any new entity type appearing in rooms should follow this established convention.
