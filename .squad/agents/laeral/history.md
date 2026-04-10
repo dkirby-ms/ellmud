@@ -31,6 +31,26 @@
 
 ## Learnings
 
+### 2026-04-07: Issue #391 — Dystopian Future Bestiary Design
+- Designed comprehensive bestiary for post-apocalyptic world with ~103 creatures across 7 zone environments.
+- **Zone environments defined:** Collapsed Megastructure (ruins), Flooded Depths (submerged infrastructure), Toxic Wastes (chemical zones), Overgrown Ruins (bio-hazard), Industrial Graveyard (tech ruins), Desolate Wastes (radiation), Eternal Night (darkness zones).
+- **Creature distribution:** Tier 1 (40 creatures), Tier 2 (35 creatures), Tier 3 (20 creatures), Bosses (8 total: 2 Tier 2, 6 Tier 3).
+- **Stat scaling philosophy:** Tier 1 (15-60 HP, 5-15 Attack), Tier 2 (60-120 HP, 15-30 Attack), Tier 3 (120-250 HP, 30-60 Attack), Bosses (150-420 HP, 18-80 Attack). Progression builds from existing Warrens baseline (Gutterspawn 15 HP → The Collapsed One 150 HP → Assembly Line 420 HP).
+- **Archetype mix per zone:** Each environment includes Berserker (high damage, medium durability), Skulker (high agility, hit-and-flee), Guardian (slow, devastating, high armour), Swarm (numerous, weak), Ranged (distance attacks), Caster (abilities, telegraphed) to create varied encounters.
+- **Loot tier distribution:** Scrap (T1 common), Common (T1-2 useful baseline), Sturdy (T1 rare, T2 common), Refined (T2 rare, T3 common), Masterwork (boss drops), Anomalous (rare T3 boss drops).
+- **Telegraphed abilities:** Wind-up times (3-9 ticks based on tier), atmospheric telegraph text, damage proportional to wind-up. Bosses have 2-4 abilities minimum with summon mechanics and area attacks.
+- **Thematic consistency:** All creatures fit dystopian future setting (NOT medieval fantasy except Midgaard experiment). Named with post-apocalyptic flavor: Gutterspawn, Pressure Horror, Nano Swarm, Atomic Colossus, The Spillmother, etc.
+- **Passive/ambient creatures:** Included 4 non-hostile creatures (Scrap Pigeon, Rad Crow, Mutant Fish School, Salvage Mule) for atmospheric texture and optional hunting.
+- **Room descriptions:** Each creature has atmospheric description shown when entering rooms — sets tone, hints threat level, uses active verbs and sensory details.
+- **Boss design patterns:** Multi-phase abilities, summon mechanics, area effects, thematic ultimate attacks. Each boss is thematically anchored to its environment (Sovereign of Dust commands rubble, Abyssal Maw controls water, Spillmother births mutations, etc.).
+- **Implementation handoff notes:** Design doc includes TypeScript template structure, database migration guidance, item definition requirements, spawn rule integration, and stat balance testing recommendations.
+- **Design principle: environmental storytelling through creatures** — each zone's roster tells a story about what happened there (industrial accidents → hazmat horrors, radiation exposure → gamma ghouls, nature reclaiming → forest titans).
+- **Key file paths:** Design document at `docs/bestiary-design.md`. Existing creature templates at `packages/server/src/creatures/templates/`. Creature types at `packages/server/src/creatures/types.ts`.
+- **Estimated implementation time:** 2-3 weeks for Bruenor to build 100+ creature templates + items + zone integration.
+- Design document saved to `docs/bestiary-design.md` for implementation.
+
+---
+
 ### 2026-04-07: Sandbox Arena Content Design — The Refuge Combat Testing Facilities
 - Designed a complete sandbox combat system for The Refuge, extending the dev hub with dedicated testing infrastructure.
 - **Physical layout:** 4 new rooms (Proving Hall, Test Arena, Armory, Control Sanctum) connected via north exit from the Hearth, forming a thematic training complex.
