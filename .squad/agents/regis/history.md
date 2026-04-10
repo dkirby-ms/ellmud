@@ -1811,6 +1811,30 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
 
 ---
 
+## Session: Implementation Batch — Posture, Follow, StatusPanel, Illumination (2026-04-10)
+
+**Date:** 2026-04-10  
+**Status:** ✅ Complete  
+**Type:** Team sync — 4 agents, 4 orchestration logs  
+
+**Regis deliverable (PR #405):**
+- StatusPanel Tab Extraction from ZoneExploration.tsx
+- Extracted 234-line inline JSX into tabbed component
+- 3-tab layout: Environment (default), Gear, Character
+- Persistent header: HP, Stamina, Posture, Status Effects
+- Graceful fallback for Drizzt's in-flight posture PR using type-unsafe cast
+- Can be cleaned up once Drizzt's PR merges
+
+**Cross-team impact on Regis:**
+- Drizzt: Posture system completed (PlayerStateMessage wiring) + Follow+Consent (5 commands, 37 tests)
+- Jarlaxle: Illumination system (zone_rooms column, look/go/goto gating)
+- Minsc: Speedwalk research (root cause, 5 fix approaches)
+- Team decisions merged to decisions.md
+
+**Quality:** All tests passing, zero regressions. UI improvements ship with Phase 1 foundation work.
+
+---
+
 ## Session: Admin Item Spawn in Live Rooms (#389)
 
 **Date:** 2026-04-10  

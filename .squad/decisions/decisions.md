@@ -7865,3 +7865,221 @@ All 8 equip tests and 2 take→equip integration tests are scaffolded as `it.tod
 
 _Merged from decisions/inbox/ on 2026-04-10T13:27._
 
+
+---
+
+## 2026-04-10T20:30: Follow + Consent System Architecture
+
+**Date:** 2026-04-10  
+**Author:** Drizzt (Engine Dev)  
+**Issue:** #403  
+**PR:** #408  
+
+**Decision:** Bidirectional follow state on PlayerState with room-gated auto-follow and binary zone-wide consent.
+
+**Follow state architecture:**
+- Follower: `followingPlayerId: string | null`
+- Leader: `followers: Set<string>`
+- Updated via `_followStarted`/`_followStopped` metadata on CommandResult, wired in ZoneRoom
+
+**Auto-follow design:**
+- `moveFollowers()` only moves followers in same departure room (prevents cross-zone teleporting)
+- Followers auto-reset posture to standing on movement
+
+**Consent system:**
+- `consentedPlayers: Set<string>` — all-or-nothing per player for v1
+- Consent lookup uses `resolvePlayerByName` for zone-wide reach
+- Follow does NOT require consent v1 (same-room presence is implicit consent)
+- Future: per-action consent types (group, trade, teleport)
+
+**Team impact:**
+- PlayerRef interface: optional `followingPlayerId` field for follow display
+- ZoneRoom.onLeave: calls `cleanupFollowRelationships()`
+- New commands: follow, unfollow, consent, unconsent, revoke
+- Phase 3 (Groups) and Phase 4 (Combat Rewards) are future work
+
+_Merged from decisions/inbox/drizzt-follow-consent-arch.md on 2026-04-10T20:30._
+
+---
+
+## 2026-04-10T20:30: StatusPanel Tab Architecture
+
+**Date:** 2026-04-10  
+**Author:** Regis (Frontend Dev)  
+**Issue:** #404  
+**PR:** #405  
+
+**Decision:** Extract 234-line inline StatusPanel from ZoneExploration.tsx into tabbed component (3 tabs).
+
+**Tab layout:**
+- **Header** (always visible): HP, Stamina, Posture, Status Effects
+- **Environment** (default tab): Compass, Minimap, CombatHUD, Occupants
+- **Gear**: Equipment Silhouette, full Inventory
+- **Character**: Sound Cues, Quick Actions (future expansion)
+
+**Design rationale:**
+- Header shows vital signs + debuffs (always needed)
+- Environment tab shows what changes most (room state, navigation)
+- Gear groups equipment together (better than splitting)
+- Character is natural home for skills/reputation future work
+- Tab state via useState (no URL routing)
+
+**Posture compatibility:**
+- Graceful fallback using unsafe cast `(state as unknown as Record<string, unknown>).posture`
+- Can be cleaned up once Drizzt's posture field lands in AppState
+
+**Team impact:**
+- Sound cue tests require clicking "Character" tab first
+- StatusPanel reads directly from AppContext (parent only passes refs/callbacks)
+
+_Merged from decisions/inbox/regis-status-panel-tabs.md on 2026-04-10T20:30._
+
+---
+
+## 2026-04-10T20:30: Illumination System Design
+
+**Date:** 2026-04-10  
+**Author:** Jarlaxle (Systems Dev)  
+**Issue:** #407  
+**PR:** #407  
+
+**Decision:** Add illumination column to zone_rooms table with room-gated look/go/goto commands.
+
+**Design:**
+- Illumination is room-scoped (binary lit/unlit)
+- Dark rooms prevent navigation (go/goto blocked)
+- Dark rooms prevent inspection (look blocked)
+- Light sources are future work (torches, spells, ambient lighting)
+- Dark rooms usable for ambush/hide mechanics
+
+**Implementation:**
+- Added `illumination` column to `zone_rooms`
+- Threaded through types, zone adapter, Colyseus schema
+- Movement logic updated in direction/go handlers
+- Inspection gated on illumination availability
+
+**Team impact:**
+- Zone room data now includes illumination metadata
+- Ready for light source items integration
+
+_Merged from decisions/inbox/ (implicit from PR #407) on 2026-04-10T20:30._
+
+---
+
+## 2026-04-10T20:30: Speedwalk False Positive Research
+
+**Date:** 2026-04-10  
+**Author:** Minsc (Tester)  
+**Issue:** #380 (Residual)  
+**Status:** Research Complete — Fix approaches proposed  
+
+**Problem:** When player types direction commands rapidly (e.g., `n` Enter `e` Enter), input can accumulate to `"ne"` before submit, triggering false positive "Speedwalk: 2 moves" message.
+
+**Root causes identified:**
+1. **React controlled input race condition** (primary) — `setCommand("")` is async; user can type next direction before DOM clears
+2. **OS key-repeat** (secondary) — Holding direction key fires repeat, creating `"nn"` in input
+3. **Stale closure with React 18 batching** (edge case) — Previous direction stuck in input
+
+**Proposed fix approaches (ranked):**
+1. **Fix A (recommended):** Synchronous DOM clear via ref — One line, zero risk
+2. **Fix B:** Track input source (paste vs typed) — Eliminates false positives from typing
+3. **Fix C:** flushSync — Not recommended (performance impact)
+4. **Fix D:** Debounce-based detection (300ms threshold) — Covers both race + repeat
+5. **Fix E:** Minimum input length heuristic (3+ chars) — Simple but changes feature contract
+
+**Reproduction:** 13-test suite in `packages/client/src/__tests__/speedwalk-false-positive.test.tsx` demonstrates accumulated state triggering false positive.
+
+**Recommendation:** Fix A (ref-based DOM clear) is safest. If belt-and-suspenders, combine A + D.
+
+_Merged from decisions/inbox/minsc-speedwalk-research.md on 2026-04-10T20:30._
+
+---
+
+## 2026-04-10T20:30: Scheduled dev → uat Promotion Workflow
+
+**Date:** 2026-04-10  
+**Author:** Khelben (CI/CD Dev)  
+**Status:** Proposed  
+**PR:** squad/uat-daily-builds → dev  
+
+**Decision:** Create separate `.github/workflows/scheduled-uat-promote.yml` for automated dev → uat promotion 3x daily (08:00, 14:00, 20:00 UTC).
+
+**Design:**
+- Runs 3x daily via cron, supports manual trigger via workflow_dispatch
+- Only promotes dev → uat (uat → prod stays manual)
+- Skips if dev has no commits ahead of uat
+- Strips forbidden paths (`.squad/`, `.ai-team/`, etc.) — same logic as `squad-promote.yml`
+- Concurrency group prevents overlapping runs
+- Pinned action SHAs match existing CI
+
+**Why separate workflow:**
+- `squad-promote.yml` handles full dev → uat → prod chain and should stay manual (prod needs human approval)
+- Scheduled automation only touches dev → uat leg
+- Schedule can be tuned without touching prod logic
+
+**Risks:**
+- If dev has broken build, scheduled merge pushes to uat (mitigation: `ci-cd.yml` runs tests on uat push, deploy has rollback)
+- Forbidden path stripping is duplicated (future: extract to reusable composite action)
+
+**Follow-up:** Monitor 3x/day frequency; adjust cron schedule as needed.
+
+_Merged from decisions/inbox/khelben-uat-daily-builds.md on 2026-04-10T20:30._
+
+---
+
+## 2026-04-10T20:30: Review Decision — #390 + #389 Approved
+
+**Date:** 2026-04-10  
+**Author:** Elminster (Review Lead)  
+**PRs:** #392 (Item Interaction), #393 (Admin Item Spawn)  
+
+**Decisions:**
+1. Both branches approved, all tests passing
+2. **Merge order matters:** PR #392 (item interaction) first — introduces `equipSlot` on Item interface. PR #393 (admin spawn) should update after to include `equipSlot` and `roomDescription` in itemToSpawn construction
+3. **`_roomEvent` pattern (non-blocking):** Branch #390 introduces `_roomEvent` as ad-hoc field on CommandResult for 3rd-person broadcast. If more commands adopt this, formalize into CommandResult interface. For now, underscore convention acceptable
+4. **Content entity mapping (non-blocking):** Admin spawn route manually constructs itemToSpawn with only 4 fields. Will silently drop new fields as Item interface grows. Future: Create shared `toItem()` mapper (like existing `toCreatureTemplate()`)
+
+**Action items:**
+- After #392 merges, update #393 to pass through `equipSlot` and `roomDescription` in itemToSpawn
+- Consider formalizing `_roomEvent` on CommandResult if third command uses it
+
+_Merged from decisions/inbox/elminster-review-390-389.md on 2026-04-10T20:30._
+
+---
+
+## 2026-04-10T20:30: Dystopian Future Bestiary Design
+
+**Date:** 2026-04-10  
+**Author:** Laeral (Content Designer)  
+**Issue:** #391  
+**Status:** Design Complete — Ready for Implementation  
+
+**Decision:** Design comprehensive bestiary of ~103 creatures for dystopian future setting across 7 zone environments with full stat progression (Tier 1–3 + bosses).
+
+**Design structure:**
+- **Zones:** 7 environments (Collapsed Megastructure, Flooded Depths, Toxic Wastes, Overgrown Ruins, Industrial Graveyard, Desolate Wastes, Eternal Night)
+- **Tier distribution:** T1 (40), T2 (35), T3 (20) creatures + 8 bosses (pyramid structure, most time at T1)
+- **Stat scaling:** T1 HP 15–60, T2 HP 60–120, T3 HP 120–250, Bosses HP 150–420
+- **Archetypes:** Berserker, Skulker, Guardian, Swarm, Ranged, Caster (each zone has mix)
+- **Telegraphed abilities:** Elite/boss abilities with wind-up (3–9 ticks) + atmospheric telegraph text
+- **Loot tables:** 6 tiers (Scrap, Common, Sturdy, Refined, Masterwork, Anomalous) supporting progression
+- **Passive creatures:** 4 non-hostile (Scrap Pigeon, Rad Crow, Mutant Fish School, Salvage Mule)
+- **Boss patterns:** Multi-phase abilities, summons, area effects, signature ultimates
+
+**Thematic principles:**
+1. Post-apocalyptic, NOT fantasy (mutations, machines, toxic adaptations)
+2. Louisiana Gothic maintained where applicable
+3. Uncanny valley horror preferred ("almost human" unsettles more)
+4. Nature is indifferent (not evil, just adapted)
+5. Technology dead or corrupted (no friendly robots)
+
+**Implementation handoff (for Bruenor):**
+- Create TS templates (one per creature)
+- Update creature types in types.ts
+- Database migration: seed creature_definitions
+- Item definitions: 100+ items
+- Zone integration & ability system
+
+**Estimated time:** 2–3 weeks for full implementation.
+
+_Merged from decisions/inbox/laeral-bestiary-design.md on 2026-04-10T20:30._
