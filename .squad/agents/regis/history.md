@@ -1809,4 +1809,36 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
 
 **Team Impact:** Establishes admin UI pattern — right-click context menus on data rows should follow this style convention.
 
+---
+
+## Session: Admin Item Spawn in Live Rooms (#389)
+
+**Date:** 2026-04-10  
+**Status:** ✅ Complete  
+**Branch:** `squad/389-admin-spawn-items`  
+**Tests:** All 3106 passing  
+
+**Summary:**
+Extended the existing spawn modal (creature context) to handle both creatures and items via type toggle. The server-side POST /admin/api/rooms/:roomId/spawn already accepted type=item but was stubbed. Now fully implemented.
+
+**What was done:**
+- Spawn modal now has creature/item type toggle (dropdown or tabs)
+- Server-side adminSpawnItem() method implemented on ZoneRoom (mirrors adminSpawnCreature)
+- Item content store queried by spawn endpoint — items loaded in parallel with creatures
+- Modal refactored to support both creature and item content templates
+
+**Rationale:**
+- Reuses existing spawn infrastructure rather than new modal/endpoint
+- The spawn endpoint already validates type=creature|item — follows contract
+- adminSpawnItem mirrors adminSpawnCreature pattern: validate room, mutate state, broadcast narration
+
+**Impact:**
+- **Server (Jarlaxle):** New adminSpawnItem method on ZoneRoom
+- **Shared:** No type changes — spawnInRoom already accepts type=item
+- **Drizzt:** Items spawned via admin panel can now be picked up with get/drop/equip
+
+**Handoff to Drizzt:**
+Items spawned through admin panel integrate fully with player item interaction commands (#390). Room generation and item properties flow directly into the command system.
+
+**Quality:** All 3106 tests passing, zero regressions. Pattern consistent with adminSpawnCreature.
 - **Issue #389 — Admin item spawn in Live Rooms (2026):** Extended the spawn modal in LiveRoomDetail.tsx to support both creatures and items. Added SpawnType toggle (creature/item) with Skull/Package lucide icons. Both template lists loaded in parallel via Promise.all. Server-side POST /admin/api/rooms/:roomId/spawn endpoint item branch was a TODO stub — implemented it: resolves item from content store, validates, then calls ZoneRoom.adminSpawnItem() which pushes to room.items array and broadcasts narration. Non-zone rooms fall back to broadcast-only. Key types: Item from generator/RoomGraph.ts (id, name, weight, description), ItemDefinition from @ellmud/shared (id, name, type, tier, baseStats, ...). Commit 48e16ce.

@@ -7757,3 +7757,111 @@ Client sends `REQUEST_PLAYER_LIST` (no payload) → Server responds with `PLAYER
 - Client admin panel auto-authenticates with role check
 - All tests passing
 
+---
+
+## 2026-04-10T13:27:00Z: Item Equipment System (#390)
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-04-10  
+**Status:** Implemented  
+**Branch:** `squad/390-player-item-interaction`  
+
+**Summary**
+
+Implemented `get`/`equip`/`unequip` commands for player item interaction. The `get` verb is an alias for the existing `take` command. Equipment uses a simple two-slot model (weapon/armour) with an optional `equipSlot` field on the `Item` interface.
+
+**Key Decisions**
+
+1. **`equipSlot` on Item interface:** Items declare equippability via `equipSlot?: 'weapon' | 'armour'`. This is separate from the stash/loadout system (which uses `DisplayItem` and `EquipmentSlotType`). The in-game equip operates on room-pickup items, not stash items.
+
+2. **Auto-swap on equip:** Equipping an item to an occupied slot automatically swaps the old item back to inventory. No confirmation prompt needed.
+
+3. **`_roomEvent` broadcast pattern:** Item interactions (take/drop/equip/unequip) broadcast to other players in the room using a `_roomEvent` string on CommandResult. This follows the same pattern as `_postureChange` from #371.
+
+4. **Equipment backing store:** `PlayerState.equippedItems` (private Map) stores actual `Item` objects behind the `VisibleEquipment` display strings. This enables proper swap-back during equip/unequip.
+
+**Who This Affects**
+
+- **Jarlaxle:** Room generation may want to set `equipSlot` on generated items (weapons/armour).
+- **Minsc:** Anticipatory tests in `item-interaction.test.ts` have been replaced with real assertions.
+- **Regis:** Inventory display now shows an "Equipped" section if items are equipped.
+
+**Deliverables**
+
+- 50 new tests written and passing
+- All 2662 server tests passing
+- Get/take alias working
+- Equip with auto-swap implemented
+- Unequip command implemented
+- Room broadcasts via `_roomEvent` pattern
+
+---
+
+## 2026-04-10T13:27:00Z: Admin Item Spawn in Live Rooms (#389)
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-04-10  
+**Status:** Implemented  
+**Branch:** `squad/389-admin-spawn-items`  
+
+**Decision**
+
+Extended the existing spawn modal to handle both creatures and items via a type toggle, rather than creating a separate modal or endpoint. The server-side POST /admin/api/rooms/:roomId/spawn already accepted type=item but was a stub. Now fully implemented.
+
+**Rationale**
+
+- Reuses existing spawn infrastructure (modal, API, spawnInRoom client function)
+- The spawn endpoint already validates type=creature|item, so adding real item placement follows the established contract
+- adminSpawnItem on ZoneRoom mirrors adminSpawnCreature pattern: validate room exists in graph, mutate state, broadcast narration
+
+**Impact**
+
+- **Server (Jarlaxle):** New adminSpawnItem method on ZoneRoom. Item content store now queried by spawn endpoint.
+- **Client (Regis):** Spawn modal now loads items content alongside creatures. No new routes or API endpoints.
+- **Shared:** No type changes needed — spawnInRoom already accepts type=item.
+
+**Deliverables**
+
+- Spawn modal extended with type toggle (creature ↔ item)
+- Server-side adminSpawnItem() method implemented
+- Parallel template loading for creatures and items
+- All 3106 tests passing
+
+---
+
+## 2026-04-10T13:27:00Z: Item Interaction Tests — Edge Cases for #390
+
+**From:** Minsc (Tester)  
+**For:** Drizzt (implementing #390), team  
+**Date:** 2026-04-10  
+
+**Test File**
+
+`packages/server/src/__tests__/item-interaction.test.ts` — 45 tests (35 passing, 10 todo for equip).
+
+**Edge Cases the Implementation Should Handle**
+
+1. **"get" alias:** Issue says "get" but codebase uses "take". If adding a `get` alias, register it in `commands/index.ts`. Test is ready and will auto-detect.
+
+2. **Weight boundary precision:** Tests verify exact-limit pickup succeeds and 1-over fails. The existing `canCarry()` uses `<=` which is correct.
+
+3. **Stack drop behavior:** `removeItem()` decrements quantity by 1. Tests verify dropping from a stack of 2 leaves 1 in inventory. This is correct current behavior.
+
+4. **Race condition (multiplayer):** Room items are mutated in-place (splice). Second player trying to take an already-taken item gets "don't see" error. This works because the server is single-threaded, but worth noting for any future async refactors.
+
+5. **Equip command decisions answered:**
+   - Equip removes the item from inventory and stores in PlayerState.equippedItems
+   - Auto-swap on occupied slot (no error)
+   - Equip works anywhere (not limited to stash rooms)
+   - Item interface uses `equipSlot?: 'weapon' | 'armour'` field
+
+**Tests Awaiting Implementation (`.todo`)**
+
+All 8 equip tests and 2 take→equip integration tests are scaffolded as `it.todo()`. Once the equip handler lands, remaining tests flesh out with real assertions.
+
+**Status**
+
+✅ Complete — 35 passing, 10 equip stubs now have real assertions from Drizzt's implementation.
+
+_Merged from decisions/inbox/ on 2026-04-10T13:27._
+

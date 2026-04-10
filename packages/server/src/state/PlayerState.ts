@@ -53,6 +53,8 @@ export class PlayerState {
   deathPenalty: DeathPenaltyDebuff | null = null;
   /** Current physical posture (#371). */
   posture: Posture = DEFAULT_POSTURE;
+  /** Actual Item objects backing equipped slots (#390). */
+  private readonly equippedItems = new Map<string, Item>();
 
   constructor(
     sessionId: string,
@@ -122,5 +124,20 @@ export class PlayerState {
       }
     }
     return null;
+  }
+
+  /** Get the actual Item object backing an equipment slot (#390). */
+  getEquippedItem(slot: string): Item | null {
+    return this.equippedItems.get(slot) ?? null;
+  }
+
+  /** Store an Item object in an equipment slot (#390). */
+  setEquippedItem(slot: string, item: Item): void {
+    this.equippedItems.set(slot, item);
+  }
+
+  /** Remove the Item object from an equipment slot (#390). */
+  clearEquippedItem(slot: string): void {
+    this.equippedItems.delete(slot);
   }
 }

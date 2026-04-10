@@ -32,10 +32,15 @@ export function handleDrop(ctx: CommandContext): CommandResult {
   // Place in room
   room.items.push(removed);
 
-  return {
+  const result: CommandResult & { _roomEvent?: string } = {
     narrations: [{
       text: `You drop the ${removed.name}. (${player.currentWeight}/${player.maxCarryWeight} weight)`,
       type: 'room',
     }],
   };
+
+  const charName = ctx.characterName ?? 'Someone';
+  result._roomEvent = `${charName} drops ${removed.name}.`;
+
+  return result;
 }

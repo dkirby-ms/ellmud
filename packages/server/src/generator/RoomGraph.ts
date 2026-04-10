@@ -13,6 +13,8 @@ export interface Item {
   description: string;
   /** Short atmospheric line shown in room descriptions. Supports ANSI tags (#386). */
   roomDescription?: string;
+  /** Equipment slot this item can be equipped to (#390). */
+  equipSlot?: 'weapon' | 'armour';
 }
 
 export type Direction = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
@@ -86,8 +88,8 @@ export function createTestRoomGraph(): RoomGraph {
       ['west', 'entry'],
     ]),
     items: [
-      { id: 'halberd', name: 'corroded halberd', weight: 5, description: 'A pitted halberd. Still sharp enough to wound.' },
-      { id: 'shield', name: 'dented shield', weight: 3, description: 'A battered shield bearing an unknown crest.' },
+      { id: 'halberd', name: 'corroded halberd', weight: 5, description: 'A pitted halberd. Still sharp enough to wound.', equipSlot: 'weapon' },
+      { id: 'shield', name: 'dented shield', weight: 3, description: 'A battered shield bearing an unknown crest.', equipSlot: 'armour' },
     ],
   });
 

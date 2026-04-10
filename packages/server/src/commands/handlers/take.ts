@@ -41,10 +41,15 @@ export function handleTake(ctx: CommandContext): CommandResult {
   room.items.splice(itemIndex, 1);
   player.addItem(item);
 
-  return {
+  const result: CommandResult & { _roomEvent?: string } = {
     narrations: [{
       text: `You pick up the ${item.name}. (${player.currentWeight}/${player.maxCarryWeight} weight)`,
       type: 'room',
     }],
   };
+
+  const charName = ctx.characterName ?? 'Someone';
+  result._roomEvent = `${charName} picks up ${item.name}.`;
+
+  return result;
 }

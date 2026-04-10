@@ -28,6 +28,7 @@ const COMMAND_ALIASES: Record<string, string> = {
   l: 'look',
   i: 'inventory',
   k: 'attack',
+  g: 'get',
   '?': 'help',
 };
 
@@ -36,8 +37,11 @@ const KNOWN_VERBS = new Set([
   'go',
   'look',
   'take',
+  'get',
   'drop',
   'inventory',
+  'equip',
+  'unequip',
   'attack',
   'strike',
   'dodge',
