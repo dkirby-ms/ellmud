@@ -3594,3 +3594,19 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 - **`_roomEvent` broadcast pattern:** For commands that should notify other players in the room (item pickup/drop/equip), attach a `_roomEvent: string` to the CommandResult. ZoneRoom checks for this field and broadcasts to other players as 'ambient' narrations. Follows the same pattern as `_postureChange` from #371.
 - **Equipment backing store:** VisibleEquipment only stores display strings. The actual Item objects are tracked via PlayerState.equippedItems Map for proper swap-back support during equip/unequip cycles.
 - **Item equipSlot:** The `equipSlot` field on the Item interface is the gate for equippability. Items without it return "can't be equipped". This is backward-compatible — existing items without the field are unaffected.
+
+---
+
+## Cross-Team Update: Regis Admin Spawn Items (#389)
+
+**From:** Scribe (2026-04-10)  
+**Context:** Parallel work with Regis on admin item spawn while implementing #390.
+
+**Handoff from Regis:**
+- Admin spawn modal now has creature/item type toggle
+- Server adminSpawnItem() implemented to match adminSpawnCreature pattern
+- Items spawned via admin panel can now be picked up and interacted with
+
+**Integration:** Your equip/drop/get commands work seamlessly with items spawned via admin panel. Room generation and item properties (name, weight, equipSlot) integrate directly.
+
+**No action needed** — just awareness that Regis's admin work enables full item spawning workflow for testing/development.
