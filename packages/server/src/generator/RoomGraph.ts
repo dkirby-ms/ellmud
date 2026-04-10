@@ -11,6 +11,8 @@ export interface Item {
   name: string;
   weight: number;
   description: string;
+  /** Short atmospheric line shown in room descriptions. Supports ANSI tags (#386). */
+  roomDescription?: string;
 }
 
 export type Direction = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
