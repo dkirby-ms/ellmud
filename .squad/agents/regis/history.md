@@ -1811,6 +1811,30 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
 
 ---
 
+## Session: Implementation Batch — Posture, Follow, StatusPanel, Illumination (2026-04-10)
+
+**Date:** 2026-04-10  
+**Status:** ✅ Complete  
+**Type:** Team sync — 4 agents, 4 orchestration logs  
+
+**Regis deliverable (PR #405):**
+- StatusPanel Tab Extraction from ZoneExploration.tsx
+- Extracted 234-line inline JSX into tabbed component
+- 3-tab layout: Environment (default), Gear, Character
+- Persistent header: HP, Stamina, Posture, Status Effects
+- Graceful fallback for Drizzt's in-flight posture PR using type-unsafe cast
+- Can be cleaned up once Drizzt's PR merges
+
+**Cross-team impact on Regis:**
+- Drizzt: Posture system completed (PlayerStateMessage wiring) + Follow+Consent (5 commands, 37 tests)
+- Jarlaxle: Illumination system (zone_rooms column, look/go/goto gating)
+- Minsc: Speedwalk research (root cause, 5 fix approaches)
+- Team decisions merged to decisions.md
+
+**Quality:** All tests passing, zero regressions. UI improvements ship with Phase 1 foundation work.
+
+---
+
 ## Session: Admin Item Spawn in Live Rooms (#389)
 
 **Date:** 2026-04-10  
@@ -1860,3 +1884,14 @@ Items spawned through admin panel integrate fully with player item interaction c
 - **Files modified**: packages/client/src/pages/ZoneExploration.tsx, packages/client/src/__tests__/ux-batch2-combat-sidebar.test.tsx
 - **Removed from ZoneExploration**: getEffectType, DEBUFF/BUFF keywords, highlightDirections, hpPercent, staminaPercent, healthState, enemyStatus -- all moved to StatusPanel
 - **Removed imports from ZoneExploration**: Sword, CompassControl, MinimapWidget, EquipmentSilhouette, RoomOccupants, CombatHUD, useVersion, StatusEffect type
+
+### Merge conflict resolution: PR #405 vs #406 posture sync (2026-04-10)
+- **Status:** Resolved, pushed to squad/404-status-panel-tabs
+- **Conflict:** ZoneExploration.tsx — my StatusPanel extraction (HEAD) vs Drizzt's inline posture sync changes (origin/dev)
+- **Resolution:** Kept StatusPanel component usage, discarded the inline sidebar from dev. StatusPanel already reads `state.posture` as a properly typed `Posture` field — no unsafe cast needed now that #406 is merged.
+- **Rebuild required:** Had to rebuild `@ellmud/shared` package so the client could see the updated `PlayerStateMessage.posture` type.
+- **Verification:** tsc clean, 420/420 tests pass, lint clean (4 pre-existing warnings in unrelated files).
+
+## Learnings
+- When merging branches that touch shared types, always rebuild the shared package (`npm run build --workspace=packages/shared`) before running tsc on downstream packages.
+- Component extraction PRs are resilient to merge conflicts — the conflict was only in the consumption site (ZoneExploration.tsx), not in the extracted component itself.

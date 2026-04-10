@@ -29,6 +29,17 @@
 
 ## Recent Team Work
 
+### Implementation Batch: Speedwalk Research (2026-04-10) — Team research sync
+**Team Effort:** Minsc (research), Drizzt (posture + follow), Regis (UI tabs), Jarlaxle (illumination)  
+**Status:** ✅ Complete — Research document finalized, 5 fix approaches proposed  
+**Research findings:**
+- Root cause analysis: React controlled input race condition + OS key-repeat + stale closure edge case
+- False positive trigger: `setCommand("")` is async; user can type next direction before DOM clears
+- Reproduction test: 13 tests in `packages/client/src/__tests__/speedwalk-false-positive.test.tsx` demonstrating accumulated state
+- Fix approaches ranked: Fix A (ref-based DOM clear) recommended, Fix D (debounce) as belt-and-suspenders
+**Impact:** Speedwalk feature working correctly for intended use; false positives documented and reproducible
+**Documentation:** `.squad/decisions/inbox/minsc-speedwalk-research.md` merged to decisions.md
+
 ### OAuth Username Integration (2026-04-05) — Coordinated with Drizzt & Regis
 **Team Effort:** Drizzt (backend), Regis (frontend), Minsc (tests)  
 **Status:** ✅ Complete — comprehensive test coverage for username feature  

@@ -3,7 +3,6 @@ import { useNavigate, useLocation, useParams } from "react-router";
 import {
   Eye,
   Volume2,
-  Sword,
   ArrowLeft,
   Settings,
   Users,
@@ -11,46 +10,28 @@ import {
 import CombinedStashLoadout from "../components/CombinedStashLoadout";
 import ChatPanel from "../components/ChatPanel";
 import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
-import CompassControl from "../components/CompassControl";
-import { MinimapWidget } from "../components/map/MinimapWidget.js";
 import { FullMapOverlay } from "../components/map/FullMapOverlay.js";
 import AnsiText from "../components/AnsiText.js";
-import { EquipmentSilhouette } from "../components/EquipmentSilhouette.js";
-import { RoomOccupants } from "../components/RoomOccupants.js";
-import { CombatHUD } from "../components/CombatHUD.js";
+import { StatusPanel } from "../components/StatusPanel.js";
 import "../components/map/map.css";
 import MudPrompt from "../components/MudPrompt.js";
 import SettingsModal from "../components/SettingsModal.js";
 import WhoListModal from "../components/WhoListModal.js";
-import { useAppContext, type StatusEffect } from "../store.js";
+import { useAppContext } from "../store.js";
 import { useZoneConnection } from "../hooks/useZoneConnection.js";
 import { useAutoScroll } from "../hooks/useAutoScroll.js";
 import { useExplorationMap } from "../hooks/useExplorationMap.js";
 import { useMapToggle } from "../hooks/useMapToggle.js";
-import { useVersion } from "../hooks/useVersion.js";
 import { useDirectionKeys } from "../hooks/useDirectionKeys.js";
 import { shouldTreatAsSpeedwalk, parseSpeedwalk } from "../utils/speedwalk.js";
 import { fetchSpawnZone } from "../services/api.js";
 import type { CombatAction } from "@ellmud/shared";
-
-// ─── Status Effect Classifier ────────────────────────────────────────────────
-
-const DEBUFF_KEYWORDS = ['bleeding', 'poisoned', 'burning', 'weakened', 'slowed', 'stunned', 'confused', 'cursed', 'blind', 'fear', 'zone-sick'];
-const BUFF_KEYWORDS = ['haste', 'strength', 'shield', 'regeneration', 'regen', 'blessed', 'fortified', 'empowered', 'protect', 'harden'];
-
-function getEffectType(effect: StatusEffect): 'buff' | 'debuff' | 'neutral' {
-  const name = effect.name.toLowerCase();
-  if (DEBUFF_KEYWORDS.some(d => name.includes(d))) return 'debuff';
-  if (BUFF_KEYWORDS.some(b => name.includes(b))) return 'buff';
-  return 'neutral';
-}
 
 export default function ZoneExploration() {
   const navigate = useNavigate();
   const _location = useLocation();
   const { zoneId } = useParams<{ zoneId?: string }>();
   const { state, dispatch } = useAppContext();
-  const version = useVersion();
 
   // Derive zone mode: /zone (hub) vs /zone/:zoneId (specific zone)
   const isHub = !zoneId;
@@ -282,37 +263,6 @@ export default function ZoneExploration() {
     }
   };
 
-  // Enemy status derived from real combat data
-  const enemyStatus = state.enemyStatus;
-
-  // ─── HP / Stamina State Helpers ─────────────────────────────────────────
-  const hpPercent = state.playerMaxHp > 0 ? state.playerHp / state.playerMaxHp : 0;
-  const staminaPercent = state.playerMaxStamina > 0 ? state.playerStamina / state.playerMaxStamina : 0;
-  const healthState = hpPercent > 0.6
-    ? { label: 'Healthy', color: 'text-success', barColor: 'bg-success', barClass: 'status-bar-hp-healthy', numericClass: 'status-numeric-hp-healthy', pulse: false }
-    : hpPercent >= 0.3
-    ? { label: 'Wounded', color: 'text-warning', barColor: 'bg-warning', barClass: 'status-bar-hp-wounded', numericClass: 'status-numeric-hp-wounded', pulse: false }
-    : { label: 'Critical', color: 'text-danger', barColor: 'bg-danger', barClass: 'status-bar-hp-critical', numericClass: 'status-numeric-hp-critical', pulse: true };
-
-  // ─── Sound Cue Direction Highlighting ──────────────────────────────────
-  const highlightDirections = (text: string) => {
-    const directionRegex = /\b(north|south|east|west|above|below)\b/gi;
-    const parts: (string | JSX.Element)[] = [];
-    let lastIndex = 0;
-    let match;
-    while ((match = directionRegex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push(text.slice(lastIndex, match.index));
-      }
-      parts.push(<span key={match.index} className="text-interactive">{match[0]}</span>);
-      lastIndex = directionRegex.lastIndex;
-    }
-    if (lastIndex < text.length) {
-      parts.push(text.slice(lastIndex));
-    }
-    return parts.length > 0 ? parts : [text];
-  };
-
   // ─── Auto-complete ─────────────────────────────────────────────────────
   const KNOWN_COMMANDS = [
     'strike', 'heavy strike', 'dodge', 'block', 'use item', 'skill', 'flee', 'observe',
@@ -531,241 +481,15 @@ export default function ZoneExploration() {
           </div>
         </div>
 
-        {/* Sidebar (30%) */}
-        <div className="w-[30%] bg-bg-panel border-l border-border-muted flex flex-col">
-          {/* Character Status */}
-          <div className="p-4 border-b border-border-muted">
-            <h3
-              className="text-text-secondary text-xs mb-3 font-sans"
-            >
-              STATUS
-            </h3>
-            <div className="space-y-3">
-              {/* HP Bar */}
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-text-disabled text-xs font-sans">Health</span>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`${healthState.color} text-xs font-mono ${healthState.pulse ? 'animate-pulse' : ''}`}
-                    >
-                      {healthState.label}
-                    </span>
-                    <span className={`text-xs font-mono ${healthState.numericClass}`}>
-                      {state.playerHp}/{state.playerMaxHp}
-                    </span>
-                  </div>
-                </div>
-                <div
-                  className="status-bar"
-                  role="progressbar"
-                  aria-label={`Health: ${state.playerHp} of ${state.playerMaxHp}`}
-                  aria-valuenow={state.playerHp}
-                  aria-valuemin={0}
-                  aria-valuemax={state.playerMaxHp}
-                >
-                  <div
-                    className={`status-bar-fill ${healthState.barClass}`}
-                    style={{ width: `${hpPercent * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-
-              {/* Stamina Bar */}
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-text-disabled text-xs font-sans">Stamina</span>
-                  <span className="text-xs font-mono status-numeric-stamina">
-                    {state.playerStamina}/{state.playerMaxStamina}
-                  </span>
-                </div>
-                <div
-                  className="status-bar"
-                  role="progressbar"
-                  aria-label={`Stamina: ${state.playerStamina} of ${state.playerMaxStamina}`}
-                  aria-valuenow={state.playerStamina}
-                  aria-valuemin={0}
-                  aria-valuemax={state.playerMaxStamina}
-                >
-                  <div
-                    className="status-bar-fill status-bar-stamina"
-                    style={{ width: staminaPercent > 0 ? `${staminaPercent * 100}%` : '0%' }}
-                  ></div>
-                </div>
-              </div>
-
-              {/* Stance */}
-              <div>
-                <span
-                  className="text-text-disabled text-xs font-sans"
-                >
-                  Stance
-                </span>
-                <p
-                  className="text-text-primary text-sm font-mono"
-                >
-                  {state.pendingCombatAction ?? state.posture.charAt(0).toUpperCase() + state.posture.slice(1)}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Status Effects */}
-          {state.statusEffects && state.statusEffects.length > 0 && (
-            <div className="p-4 border-b border-border-muted" data-testid="status-effects">
-              <h3 className="text-text-secondary text-xs mb-3 font-sans">STATUS EFFECTS</h3>
-              <div className="flex flex-wrap gap-1.5">
-                {state.statusEffects.map((effect) => {
-                  const type = getEffectType(effect);
-                  return (
-                    <span
-                      key={effect.id}
-                      data-effect={effect.id}
-                      className={`status-pill status-pill-${type} ${
-                        type === 'debuff' ? 'text-danger' : type === 'buff' ? 'text-success' : 'text-text-secondary'
-                      }`}
-                    >
-                      {effect.name}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Room Occupants */}
-          <div className="p-4 border-b border-border-muted">
-            <RoomOccupants 
-              creatures={state.roomOccupants.creatures}
-              players={state.roomOccupants.players}
-            />
-          </div>
-
-          {/* Equipment Silhouette */}
-          <div className="p-4 border-b border-border-muted">
-            <EquipmentSilhouette loadout={state.loadout} />
-          </div>
-
-          {/* Quick Inventory */}
-          <div className="p-4 border-b border-border-muted">
-            <h3
-              className="text-text-secondary text-xs mb-3 font-sans"
-            >
-              QUICK INVENTORY
-            </h3>
-            <div className="space-y-2 text-sm">
-              {state.inventory.length > 0 ? (
-                state.inventory.slice(0, 3).map((item) => (
-                  <div key={item.id} className="flex items-center gap-2">
-                    <Sword className="w-4 h-4 text-text-secondary" />
-                    <span className="text-text-primary font-serif">
-                      {item.name}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-text-disabled text-xs font-sans">
-                  No items carried
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Combat HUD (during combat) */}
-          {state.inCombat && (
-            <div className="p-4 border-b border-border-muted">
-              <CombatHUD
-                enemyStatus={enemyStatus}
-                availableTargets={
-                  state.roomOccupants.creatures
-                    .filter((c) => c.aggressive)
-                    .map((c) => ({
-                      id: c.id,
-                      name: c.name,
-                      hp: 100,
-                      maxHp: 100,
-                    }))
-                }
-              />
-            </div>
-          )}
-
-          {/* Sound Cues */}
-          <div className="p-4 border-b border-border-muted">
-            <h3
-              className="text-text-secondary text-xs mb-3 font-sans"
-            >
-              SOUND CUES
-            </h3>
-            <div className="space-y-2">
-              {state.soundCues.length > 0 ? (
-                state.soundCues.slice(-5).map((cue) => (
-                  <p
-                    key={cue.id}
-                    data-sound-cue={cue.id}
-                    className="text-text-secondary text-xs italic font-serif"
-                  >
-                    <span>{highlightDirections(cue.text)}</span>
-                  </p>
-                ))
-              ) : (
-                <p className="text-text-disabled text-xs font-sans">
-                  Silence.
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Compass + Minimap */}
-          <div className="flex items-center justify-center gap-4 px-4 py-2">
-            <CompassControl ref={compassRef} onNavigate={handleExitClick} />
-            <div className="h-16 border-l border-border-muted" />
-            <MinimapWidget
-              visitedRooms={mapState.visitedRooms}
-              ghostRooms={mapState.ghostRooms}
-              positions={mapState.positions}
-              currentRoomId={mapState.currentRoomId}
-              onToggleFullMap={toggleMap}
-            />
-          </div>
-
-          {/* Quick Actions */}
-          <div className="p-4">
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                onClick={() => sendCommand("look")}
-                className="px-2 py-1 text-text-secondary hover:bg-bg-elevated hover:text-text-primary rounded text-xs transition-colors font-sans"
-              >
-                Look
-              </button>
-              <button
-                onClick={() => sendCommand("listen")}
-                className="px-2 py-1 text-text-secondary hover:bg-bg-elevated hover:text-text-primary rounded text-xs transition-colors font-sans"
-              >
-                Listen
-              </button>
-              <button
-                onClick={() => setInventoryOpen(true)}
-                className="px-2 py-1 text-text-secondary hover:bg-bg-elevated hover:text-text-primary rounded text-xs transition-colors font-sans"
-              >
-                Inventory
-              </button>
-            </div>
-          </div>
-
-          {/* Version indicator */}
-          <div className="mt-auto px-4 py-2 text-right">
-            <span
-              className="text-[10px] font-mono opacity-30 hover:opacity-70 transition-opacity cursor-default select-none"
-              style={{ color: 'var(--color-text-disabled, #555)' }}
-              title={`v${version.version} — Built: ${version.buildTime}`}
-              aria-label={`Version ${version.version}, built ${version.buildTime}`}
-              tabIndex={0}
-            >
-              v{version.version}
-            </span>
-          </div>
-        </div>
+        {/* Sidebar (30%) — Status Panel */}
+        <StatusPanel
+          compassRef={compassRef}
+          onNavigate={handleExitClick}
+          onSendCommand={sendCommand}
+          onOpenInventory={() => setInventoryOpen(true)}
+          mapState={mapState}
+          onToggleFullMap={toggleMap}
+        />
       </div>
 
       {/* Combat Action Bar */}

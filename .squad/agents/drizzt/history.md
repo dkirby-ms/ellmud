@@ -35,6 +35,20 @@
 
 ## Recent Team Work
 
+### Implementation Batch: Posture + Follow + StatusPanel + Illumination (2026-04-10) — Team sync
+**Team Effort:** Drizzt (PR #406 + #408), Regis (PR #405), Jarlaxle (PR #407), Minsc (research)  
+**Status:** ✅ Complete — All PRs opened, orchestration logs generated  
+**Deliverables:**
+- Drizzt: Posture system (PlayerStateMessage wiring) + Follow+Consent (5 commands, 37 tests, auto-follow, consent v1)
+- Regis: StatusPanel tabs (234-line extraction, 3-tab layout, graceful posture fallback)
+- Jarlaxle: Illumination system (zone_rooms column, look/go/goto gating, dark room mechanics)
+- Minsc: Speedwalk research (root cause analysis, 5 fix approaches, reproduction tests)
+**Decisions:** 6 team decisions merged to decisions.md with full context and team impact
+**Impact:** Foundation for Phase 3 (Groups) and Phase 4 (Combat Rewards). Speedwalk fix ready for implementation.
+**Tests:** All passing, zero regressions
+
+---
+
 ### OAuth Username Integration (2026-04-05) — Coordinated with Regis & Minsc
 **Team Effort:** Drizzt (backend), Regis (frontend), Minsc (tests)  
 **Status:** ✅ Complete — username display and sign-out feature shipped  
