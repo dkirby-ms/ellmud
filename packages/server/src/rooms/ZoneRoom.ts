@@ -2396,7 +2396,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         narration_type: narrativeType,
         room: {
           id: room.id,
-          light_level: 1.0, // TODO: implement lighting system
+          light_level: room.illumination === 'dark' ? 0.0 : 1.0,
           exits: Array.from(room.exits.keys()),
           features: [], // TODO: extract from room properties
           items_visible: room.items.map((item) => ({

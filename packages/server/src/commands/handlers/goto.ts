@@ -3,10 +3,12 @@
  * goto <zone:room-slug>   — Dev-only teleport to a room in another zone.
  *
  * Gated by DEV_MODE_ENABLED config flag — only available on dev servers.
+ * Dark rooms show only a darkness message and exits (Issue #402).
  */
 
 import type { CommandContext, CommandResult } from '../index.js';
 import { getConfig } from '../../config.js';
+import { DARKNESS_MESSAGE } from '@ellmud/shared';
 
 export function handleGoto(ctx: CommandContext): CommandResult {
   if (!getConfig().devModeEnabled) {
@@ -65,6 +67,27 @@ export function handleGoto(ctx: CommandContext): CommandResult {
   }
 
   player.currentRoomId = slug;
+
+  // Dark room: show darkness message instead of full room contents (#402)
+  if (targetRoom.illumination === 'dark') {
+    const exitList = Array.from(targetRoom.exits.keys()).join(', ') || 'none';
+    const lines: string[] = [
+      `Teleported to ${targetRoom.name}.`,
+      '',
+      DARKNESS_MESSAGE,
+      '',
+      `Exits: ${exitList}`,
+    ];
+    return {
+      narrations: [{ text: lines.join('\n'), type: 'room' }],
+      roomHeader: {
+        roomName: targetRoom.name,
+        roomSlug: targetRoom.id,
+        exits: Array.from(targetRoom.exits.keys()),
+        stability: ctx.stability,
+      },
+    };
+  }
 
   const exitList = Array.from(targetRoom.exits.keys()).join(', ') || 'none';
   const lines: string[] = [

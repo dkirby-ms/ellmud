@@ -1,19 +1,35 @@
 /**
  * look — Describe the current room, its contents, exits, and occupants.
  * With a target argument, examine a specific room feature.
+ * Dark rooms show only a darkness message and exits (Issue #402).
  */
 
 import type { CommandResult } from '../index.js';
 import type { CommandContext } from '../index.js';
 import type { RoomFeature } from '@ellmud/shared';
-import { POSTURE_ROOM_DESCRIPTIONS } from '@ellmud/shared';
+import { POSTURE_ROOM_DESCRIPTIONS, DARKNESS_MESSAGE } from '@ellmud/shared';
+
+/** Check if a room is dark and player has no light source. */
+function isRoomDark(ctx: CommandContext): boolean {
+  return ctx.room.illumination === 'dark';
+}
 
 export function handleLook(ctx: CommandContext): CommandResult {
   const { room, args } = ctx;
 
   // "look" with no target → show full room description (existing behavior)
   if (args.length === 0) {
+    if (isRoomDark(ctx)) {
+      return showDarkRoom(ctx);
+    }
     return showFullRoom(ctx);
+  }
+
+  // Dark rooms block examining features
+  if (isRoomDark(ctx)) {
+    return {
+      narrations: [{ text: DARKNESS_MESSAGE, type: 'room' }],
+    };
   }
 
   // "look <target>" → search room features for a keyword match
@@ -35,6 +51,26 @@ export function handleLook(ctx: CommandContext): CommandResult {
       text: `You don't see that here.`,
       type: 'system',
     }],
+  };
+}
+
+function showDarkRoom(ctx: CommandContext): CommandResult {
+  const { room } = ctx;
+  const exitList = Array.from(room.exits.keys()).join(', ') || 'none';
+  const lines: string[] = [
+    DARKNESS_MESSAGE,
+    '',
+    `Exits: ${exitList}`,
+  ];
+
+  return {
+    narrations: [{ text: lines.join('\n'), type: 'room' }],
+    roomHeader: {
+      roomName: room.name,
+      roomSlug: room.id,
+      exits: Array.from(room.exits.keys()),
+      stability: ctx.stability,
+    },
   };
 }
 
