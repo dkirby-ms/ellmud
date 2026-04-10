@@ -13,6 +13,40 @@
 - **User:** dkirby-ms
 - **GDD:** GDD.md (comprehensive design document covering all game systems)
 
+## Core Context (Architecture, Decisions, Foundations — Completed)
+
+**Foundation work (Phase 1: Repository + GDD):**
+- ✅ **GDD Comprehensive:** Frozen on 2026-03-19, covers all systems (combat, zones, extraction, narration, auth, loot)
+- ✅ **GitHub Backlog:** #1–#49 (4 phases, 16 labels, 4 milestones) fully triaged and decomposed from GDD
+- ✅ **Colyseus + Azure Architecture:** WebSocket framework selected, Azure Container Apps + PostgreSQL + Redis, optional Auth via env var
+- ✅ **Migration Consolidation:** 22 migrations consolidated into 4 semantic groups (schema, seed, entities, features)
+- ✅ **Admin Dashboard:** Express routes, SSE broadcasts, content (creatures/items/zones) CRUD, separate ADMIN_TOKEN auth
+
+**Team Architecture Decisions (Merged to decisions.md):**
+- Stash persistence: InMemoryStashRepository + PgStashRepository (weight-based capacity)
+- Room topology enforcement: biome → room_type rules (prevent invalid connections)
+- Extraction state machine: clear messaging for different states (channeling, mid-flight, landed)
+- Combat system: Pure logic + callback injection pattern for event handling
+- In-memory cache default: Redis as optional config switch (backwards compatible)
+- Colyseus test server: One per file, no file parallelism, polling over fixed waits
+- Colyseus Schema types: `defineTypes()` over `@type()` decorators (TypeScript 5.9.3 compatibility)
+
+**Design Specs Completed (Proposals in Decisions):**
+- GDD Roadmap → GitHub Issues decomposition (roadmap architecture & priority framework)
+- Creature room appearance (#383): Individual creature lines with ANSI tag support
+- Optional user flags (#365): [Anon], [RP] flags via character_flags table + `/flag` command
+- Figma export strategy: Conversion of design assets to TypeScript icon components
+
+**Research & Analysis Completed:**
+- User config file system (project-root based via env override)
+- Direction shortcuts & speedwalks (root cause: React state race condition + key repeat)
+- BFS layout engine (corridor-first generation, depth-first room building)
+- Combat sandbox (isolated testing with minimal dependencies)
+
+**All Phase 1 work complete. Zero test regressions. Ready for Phase 2 (Groups) and Phase 3 (Combat Rewards).**
+
+---
+
 ## Team Updates
 
 ### 2026-04-06: Stronghold-Zone Connection Orchestration
