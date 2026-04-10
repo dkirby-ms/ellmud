@@ -8,11 +8,13 @@ import {
   Volume2,
   Keyboard,
   Accessibility,
+  Shield,
   LogOut,
 } from "lucide-react";
 import { logout as apiLogout } from "../services/api";
 import { useAppContext } from "../store";
 import { useSettings } from "../hooks/useSettings";
+import { useFlags } from "../hooks/useFlags";
 
 type SettingCategory =
   | "account"
@@ -20,7 +22,8 @@ type SettingCategory =
   | "narration"
   | "audio"
   | "keybinds"
-  | "accessibility";
+  | "accessibility"
+  | "flags";
 
 const categories: {
   id: SettingCategory;
@@ -45,11 +48,17 @@ const categories: {
     label: "Accessibility",
     icon: <Accessibility className="w-4 h-4" />,
   },
+  {
+    id: "flags",
+    label: "Flags",
+    icon: <Shield className="w-4 h-4" />,
+  },
 ];
 
 export default function Settings() {
   const { state, dispatch } = useAppContext();
   const { settings, updateSetting, isLoading, isSynced } = useSettings();
+  const { flags, toggleFlag } = useFlags();
   const [activeCategory, setActiveCategory] =
     useState<SettingCategory>("narration");
   const [loggingOut, setLoggingOut] = useState(false);
@@ -495,6 +504,76 @@ export default function Settings() {
                     className="w-12 h-6 bg-border-muted rounded-full relative transition-colors font-sans"
                   >
                     <div className="w-4 h-4 bg-text-secondary rounded-full absolute left-1 top-1"></div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {/* Flags */}
+          {activeCategory === "flags" && (
+            <div className="max-w-2xl">
+              <h2
+                className="text-accent-gold mb-6 font-serif"
+                style={{ fontSize: "1.5rem" }}
+              >
+                Flags
+              </h2>
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-text-primary mb-1 font-sans">
+                      Anonymous Mode
+                    </p>
+                    <p className="text-text-secondary text-sm font-sans">
+                      Hide your name, level, and class from other players unless
+                      they&apos;re in the same room
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => toggleFlag("anon", !flags.anon)}
+                    className={`w-12 h-6 rounded-full relative transition-colors font-sans ${
+                      flags.anon ? "bg-accent-gold" : "bg-border-muted"
+                    }`}
+                    role="switch"
+                    aria-checked={flags.anon}
+                    aria-label="Toggle anonymous mode"
+                  >
+                    <div
+                      className={`w-4 h-4 rounded-full absolute top-1 transition-all ${
+                        flags.anon
+                          ? "left-7 bg-bg-primary"
+                          : "left-1 bg-text-secondary"
+                      }`}
+                    ></div>
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-text-primary mb-1 font-sans">
+                      Roleplay Mode
+                    </p>
+                    <p className="text-text-secondary text-sm font-sans">
+                      Show [RP] indicator next to your name to signal
+                      you&apos;re in character
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => toggleFlag("rp", !flags.rp)}
+                    className={`w-12 h-6 rounded-full relative transition-colors font-sans ${
+                      flags.rp ? "bg-accent-gold" : "bg-border-muted"
+                    }`}
+                    role="switch"
+                    aria-checked={flags.rp}
+                    aria-label="Toggle roleplay mode"
+                  >
+                    <div
+                      className={`w-4 h-4 rounded-full absolute top-1 transition-all ${
+                        flags.rp
+                          ? "left-7 bg-bg-primary"
+                          : "left-1 bg-text-secondary"
+                      }`}
+                    ></div>
                   </button>
                 </div>
               </div>

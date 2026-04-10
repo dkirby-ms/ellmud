@@ -217,6 +217,11 @@ const COMMAND_HELP: Record<string, CommandHelp> = {
   },
 
   // Meta
+  who: {
+    description: 'See who is online across all zones.',
+    usage: 'who',
+    category: 'Meta',
+  },
   help: {
     description: 'Show available commands or detailed help for a specific command.',
     usage: 'help [command]',
@@ -348,6 +353,7 @@ export function handleHelp(ctx: CommandContext): CommandResult {
     'Inn',
     'Sandbox',
     'Dev Tools',
+    'Meta',
   ];
 
   for (const category of categoryOrder) {

@@ -29,6 +29,28 @@
 
 ## Learnings
 
+### Trace De-duplication (Issue #381)
+- **Task:** Fix duplicate "footprints leading \<direction\>" messages shown to players
+- **Root cause:** `getTracesForPlayer()` mapped every raw trace 1:1 to a `TraceDescription`. Multiple footprints in the same direction = duplicate messages.
+- **Fix:** Added `deduplicateTraces()` — groups by `(type, direction)` key, keeps most recent trace per group. Only affects player-facing output; raw `getTracesInRoom()` unchanged for game logic.
+- **Key files:** `packages/server/src/systems/TraceSystem.ts`, `packages/server/src/__tests__/trace-system.test.ts`
+- **Pattern:** Presentation-layer dedup (don't mutate storage, consolidate at the view/description boundary)
+- **Tests:** 8 new tests covering consolidation, direction separation, mixed types, expert-level actor display
+
+### Character Posture System (PR #376, Issue #371)
+- **Task:** Implement full posture system — 7 states, 5 player commands, DB persistence, movement integration, room/who display
+- **Architecture:** Posture stored directly on `PlayerState` + DB `characters.posture` column. Shared type enums/maps in `@ellmud/shared`. Commands are thin wrappers that set state and return broadcast metadata.
+- **Key decisions:**
+  - **DB-backed, not session-only** — Overrides Elminster's v1 proposal. Posture survives reconnects via `savePosture()`/`loadPosture()` on CharacterRepository.
+  - **`_postureChange` metadata on CommandResult** — Posture commands return broadcast info for ZoneRoom to narrate to other players. Avoids coupling command handler to ZoneRoom internals.
+  - **Pre-movement posture capture** — Must snapshot `player.posture` BEFORE `handleCommand()` runs, since `handleGo` resets posture during execution. Captured as `previousPosture` for departure verb selection.
+  - **Movement verb via `POSTURE_MOVEMENT_VERBS` lookup** — Clean record-based approach. "walks"/"crawls"/"sneaks"/"floats"/"drifts" based on posture at departure time.
+  - **`forcePosture()` utility** — Separate from command handlers, accepts PlayerState directly. For combat knockdowns and future system effects. Returns null if already in target posture.
+  - **floating/hovering system-only** — Not in parser `KNOWN_VERBS`. Only settable via `forcePosture()`. Reserved for flight/levitation effects.
+  - **`PlayerRef.posture` optional field** — Backward-compatible: existing code without posture renders "is here" fallback.
+- **Files:** `shared/index.ts` (types), `PlayerState.ts`, `posture.ts` (handler), `go.ts`/`look.ts` (display), `ZoneRoom.ts` (integration), `WhoListService.ts`, `WhoListModal.tsx`, `CharacterRepository.ts` (persistence), migration 010
+- **Tests:** 57 unit + 6 integration, all 3029 total passing
+
 ### 2026-04-05 (Round 4): Ability System — Cooldowns, Stamina, Damage Model (PR #296)
 - **Task:** Implement Phase 1 ability system per GDD §6.3 (Heavy Strike, Block, Observe)
 - **Architecture:** Data-driven layer on top of existing combat — minimal invasive changes to CombatState/DamageOptions
@@ -98,6 +120,21 @@
   - **DamageBreakdown formatting** — Compact `(raw:10 ×1.0 -arm:3 = 7)` format. Shows ability/stance multiplier only when != 1.0. Shows flanking only when active.
 - **Files:** `combat/prng.ts` (new), `combat/CombatSystem.ts` (setRollFn), `combat/index.ts` (export), `commands/handlers/sandbox.ts` (seed + replay handlers)
 - **All 2278 tests passing (12 new Phase 3 tests: 4 seed, 4 replay, 4 PRNG unit). 16 pre-existing scenario persistence test stubs remain failing (not in scope).**
+
+### 2026-07-28: User Flags Backend (Issue #365)
+- **Task:** Implement server-side backend for optional user flags (anon, rp)
+- **Architecture:** JSONB flags column on character_flags table, singleton provider, pure visibility service
+- **Key decisions:**
+  - **Migration 009** — `character_flags` table with `character_id UUID PRIMARY KEY REFERENCES characters(id)`, `flags JSONB DEFAULT '{}'`. Simpler than a separate row per flag — JSONB allows atomic multi-flag reads and easy extension.
+  - **Shared types in `@ellmud/shared`** — `CharacterFlags` interface, `FLAG_DEFINITIONS` constant, `isValidFlagName()` guard. Both server and client import from same source of truth.
+  - **CharacterFlagsRepository** — Follows `UserSettingsRepository` pattern exactly: interface → Pg implementation → InMemory implementation → singleton provider with `init/get/reset` functions.
+  - **VisibilityService as pure function** — `resolveVisibility(viewer, target)` is stateless. Takes viewer context (roomId, isAdmin) and target context (flags, roomId, characterName). Returns `VisiblePlayerInfo` with displayName, isAnonymous, tags array. No DB calls — caller provides all context.
+  - **[Anon] see-through rules** — Same-room OR admin can see through anon. Same-zone is NOT sufficient (per user directive).
+  - **Fire-and-forget toggle** — `/flag` command toggles asynchronously (same pattern as MetricsService.record). Optimistic feedback to player.
+  - **Command handlers are synchronous** — The `/flag` command with no args shows flag definitions statically. Actual flag state display will be enhanced when integrated with settings UI (Regis's work).
+- **Files:** `db/migrations/009_character_flags.sql`, `db/CharacterFlagsRepository.ts`, `visibility/VisibilityService.ts`, `visibility/index.ts`, `commands/handlers/flag.ts`, `commands/index.ts`, `commands/parser.ts`, `index.ts`, `shared/src/index.ts`
+- **Integration points:** Who list (#366) will use `getAllFlags()` + `resolveVisibility()`. Look command will use `resolveVisibility()` for player names. Settings UI (Regis) will call `setFlag()` via WebSocket message.
+- **Build verification:** Zero TS errors, zero new lint errors.
 
 ## Learnings (Archived — See Detailed Session Records)
 
@@ -2363,3 +2400,70 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 
 ## Roster Awareness
 - **Regis (Frontend):** Completed #359 frontend parallel work — `useSettings` hook, Settings.tsx refactor, localStorage→server sync (12 tests, Commit f4ab813)
+
+## Session: Gameplay Metrics (#360)
+- **Task:** Implement server-side gameplay metrics collection (deaths, kills, loot pickups, combat stats)
+- **Status:** ✅ Complete
+- **Files created:**
+  - `packages/server/src/db/migrations/008_gameplay_metrics.sql` — append-only `game_metrics` table with JSONB metadata, indexed by player/type/time
+  - `packages/server/src/metrics/MetricsService.ts` — fire-and-forget DB writes, typed metadata per event type
+  - `packages/server/src/metrics/metrics-provider.ts` — singleton provider (Pg live / NoOp fallback), follows death-penalty-provider pattern
+  - `packages/server/src/metrics/index.ts` — barrel export
+- **Files modified:**
+  - `packages/server/src/index.ts` — init metrics provider at boot
+  - `packages/server/src/rooms/ZoneRoom.ts` — hooks for death, creature kills, PvP kills, combat stats, loot pickup
+- **Architecture decisions:**
+  - Single `game_metrics` table with `event_type` discriminator + JSONB metadata (flexible, no migration churn for new event types)
+  - All metric writes are fire-and-forget (`void this.record(...)`) — never block the game tick
+  - Provider pattern consistent with death-penalty-provider, stash-provider, etc.
+  - NoOp fallback when no DATABASE_URL (in-memory dev mode)
+  - Combat stats aggregated per-player per-tick before writing (avoids N writes per strike event)
+  - Loot pickup detected via inventory snapshot diff around take/loot commands
+
+### 2026-07-27: Server-Side Who List (Issue #366)
+- **Task:** Implement server-wide who list with visibility filtering
+- **Architecture:** WhoListService gathers players from all ZoneRoom instances via matchMaker.query() + getLocalRoomById(), batch-loads flags from CharacterFlagsRepository, applies resolveVisibility() per viewer-target pair
+- **Key decisions:**
+  - **getWhoListPlayerData() public method on ZoneRoom** — Clean API for cross-room data access (avoids casting to `any` for private fields). Returns characterId, characterName, roomId, zoneName.
+  - **Async `who` command intercept in handleCommandMessage** — Command handlers are sync, but who list needs async matchMaker + DB queries. Intercepted before the sync dispatch, same pattern as other async operations.
+  - **Dual delivery: text command + structured message** — `who` text command sends MUD-style ASCII table via narration. REQUEST_PLAYER_LIST message sends structured PlayerListEntry[] for Regis's modal UI.
+  - **devModeEnabled as admin proxy** — No per-player admin flag exists yet. Used global devModeEnabled (consistent with existing dev tools) for admin visibility check.
+  - **Phase 1 nulls for level/class** — No level or class system exists yet. Fields are null in PlayerListEntry, ready for future phases.
+  - **Zone name from zoneData?.zone.name with slug fallback** — Handles both hand-crafted zones (have display names) and procedural instances (slug only).
+- **Files:** `who/WhoListService.ts` (new), `who/index.ts` (new), `rooms/ZoneRoom.ts` (handler + methods), `commands/parser.ts` (+who), `commands/handlers/help.ts` (+who), `shared/src/index.ts` (types already added by Regis)
+- **Build: 0 new TS errors, 0 new lint errors. All 1379 tests passing, zero regressions.**
+
+### 2026-07-27: Role-Based Admin Access (Issue #373)
+- **Task:** Add `player | content-dev | admin` role hierarchy end-to-end
+- **Architecture:** Shared types in `@ellmud/shared`, dual-path admin auth middleware (ADMIN_TOKEN + session token with role check), role stored in DB (player_identities.role), client state + auto-auth
+- **Key decisions:**
+  - **ROLE_HIERARCHY as Record<UserRole, number>** — player=0, content-dev=1, admin=2. Numeric weights for comparison via `hasMinRole()`.
+  - **Role lookup from DB, not JWT** — `getRoleByPlayerId()` on PlayerRepository reads from player_identities table. Role changes take effect immediately without re-login.
+  - **Dual admin auth** — Middleware checks ADMIN_TOKEN first (exact match, silent if unset), then validates session token via AuthService + role check. Backward compatible.
+  - **initAdminAuth() module-level init** — Same pattern as colyseus-auth. Called once at startup to inject AuthService + PlayerRepository into middleware module state.
+  - **401 vs 403 vs 503** — 401 for missing/invalid/expired tokens, 403 for valid session with insufficient role, 503 only when no auth method is configured at all.
+  - **AUTO_PROMOTE_ADMIN env var** — At startup, promotes the named player to admin role in DB with audit log. For initial bootstrap only.
+  - **Client dual-token strategy** — admin-api getAdminToken() returns admin_token ?? ellmud_token. Allows game session to auth admin panel.
+  - **resetAdminAuth() for test isolation** — Module-level state needs explicit reset between test files to prevent leaks.
+- **Files:** `shared/src/index.ts` (types), `server/src/admin/middleware.ts` (rewritten), `server/src/auth/roles.ts` (new), `server/src/auth/PlayerRepository.ts`, `server/src/auth/PgPlayerRepository.ts`, `server/src/auth/routes.ts`, `server/src/admin/users/user-routes.ts`, `server/src/index.ts`, `client/src/store.ts`, `client/src/lib/admin-api.ts`, `client/src/App.tsx`, `client/src/pages/admin/AdminLayout.tsx`
+- **PR:** #375 → dev
+- **Build: 0 TS errors, 0 lint errors. All 2966 tests passing, zero regressions.**
+
+### 2026-04-09: Issue #381 Trace De-duplication (PR Background Session)
+**Issue:** #381 - Duplicate footprint messages in same direction
+**Commit:** (committed in background session)
+
+### Summary
+- Added deduplicateTraces() in TraceSystem.getTracesForPlayer() grouping by (type, direction)
+- Keeps most recent trace per group, eliminating duplicate player-facing messages
+- All raw traces preserved in storage for TTL/decay/game logic
+- 8 new tests, zero regressions across trace + phase2 QA tests
+- Decision: Presentation-only fix with composable architecture
+
+### 2025-07-22: Creature Room Appearance — Individual Lines (Issue #383)
+- Replaced type-aggregation logic (Map + `(xN)` count suffix) with per-creature loop in `look.ts`, `go.ts`, `goto.ts`.
+- Each creature instance now renders its own line using `roomDescription` field, falling back to `A <name> lurks here.`.
+- ANSI tags in `roomDescription` pass through unchanged — client parser already supports them.
+- No schema or type changes needed — `roomDescription` field exists throughout the stack (DB → template → instance → command context).
+- Added 11 new tests in `creature-appearance.test.ts` covering all three commands. All 60 tests pass.
+- Learning: The creature rendering pipeline is purely presentation-layer. Field already flows DB → template → instance → CreatureRef → handler. Changes were isolated to three handler files with identical aggregation blocks.

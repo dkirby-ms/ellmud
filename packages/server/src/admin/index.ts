@@ -4,7 +4,7 @@
 
 export { createAdminRouter, type AdminRouterDeps } from './routes.js';
 export { createDashboardRouter } from './dashboard.js';
-export { adminAuth } from './middleware.js';
+export { adminAuth, initAdminAuth, type AuthenticatedAdminRequest } from './middleware.js';
 export type {
   AdminRoomSummary,
   AdminZoneDetail,

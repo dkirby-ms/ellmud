@@ -4,7 +4,7 @@
 
 import type { CommandResult, CommandContext } from '../index.js';
 import type { Direction } from '../../generator/RoomGraph.js';
-import { isInterZoneId, parseInterZoneId } from '@ellmud/shared';
+import { isInterZoneId, parseInterZoneId, POSTURE_ROOM_DESCRIPTIONS } from '@ellmud/shared';
 
 const VALID_DIRECTIONS = new Set<string>(['north', 'south', 'east', 'west', 'up', 'down']);
 
@@ -54,6 +54,8 @@ export function handleGo(ctx: CommandContext): CommandResult {
 
   // Move player
   player.currentRoomId = targetRoomId;
+  // Auto-reset posture to standing on movement (#371)
+  player.posture = 'standing';
 
   // Build room description for the new room
   const exitList = Array.from(targetRoom.exits.keys()).join(', ') || 'none';
@@ -70,23 +72,18 @@ export function handleGo(ctx: CommandContext): CommandResult {
     lines.push(`You see: ${itemNames}`);
   }
 
-  // Creatures in the target room
+  // Creatures in the target room — one line per creature instance (#383)
   const creatures = ctx.resolveCreaturesInRoom?.(targetRoomId) ?? [];
-  if (creatures.length > 0) {
-    // Group creatures by type and count
-    const creaturesByType = new Map<string, { creature: import('../index.js').CreatureRef; count: number }>();
-    for (const c of creatures) {
-      const key = c.type ?? c.name;
-      const existing = creaturesByType.get(key);
-      if (existing) {
-        existing.count++;
-      } else {
-        creaturesByType.set(key, { creature: c, count: 1 });
-      }
-    }
-    for (const [, { creature, count }] of creaturesByType) {
-      const desc = creature.roomDescription || `A ${creature.name} lurks here.`;
-      lines.push(count > 1 ? `${desc} (x${count})` : desc);
+  for (const creature of creatures) {
+    lines.push(creature.roomDescription || `A ${creature.name} lurks here.`);
+  }
+
+  // Other players in the target room (Issue #370)
+  const playersInTarget = ctx.resolvePlayersInRoom?.(targetRoomId) ?? [];
+  for (const p of playersInTarget) {
+    if (!p.anon) {
+      const postureDesc = p.posture ? POSTURE_ROOM_DESCRIPTIONS[p.posture] : 'is here';
+      lines.push(`${p.name} ${postureDesc}.`);
     }
   }
 

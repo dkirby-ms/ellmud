@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isSpeedwalk, parseSpeedwalk, MAX_SPEEDWALK_MOVES } from '../utils/speedwalk.js';
+import { isSpeedwalk, parseSpeedwalk, MAX_SPEEDWALK_MOVES, shouldTreatAsSpeedwalk } from '../utils/speedwalk.js';
 
 describe('isSpeedwalk', () => {
   it('recognises single direction letters', () => {
@@ -165,5 +165,42 @@ describe('parseSpeedwalk', () => {
       ok: true,
       moves: ['north', 'south', 'east', 'west', 'up', 'down'],
     });
+  });
+});
+
+describe('shouldTreatAsSpeedwalk', () => {
+  it('returns false for single direction letters (#380)', () => {
+    expect(shouldTreatAsSpeedwalk('n')).toBe(false);
+    expect(shouldTreatAsSpeedwalk('s')).toBe(false);
+    expect(shouldTreatAsSpeedwalk('e')).toBe(false);
+    expect(shouldTreatAsSpeedwalk('w')).toBe(false);
+    expect(shouldTreatAsSpeedwalk('u')).toBe(false);
+    expect(shouldTreatAsSpeedwalk('d')).toBe(false);
+  });
+
+  it('returns false for single move with explicit count 1', () => {
+    expect(shouldTreatAsSpeedwalk('1n')).toBe(false);
+    expect(shouldTreatAsSpeedwalk('1e')).toBe(false);
+  });
+
+  it('returns true for multi-move speedwalks', () => {
+    expect(shouldTreatAsSpeedwalk('ne')).toBe(true);
+    expect(shouldTreatAsSpeedwalk('3e2n')).toBe(true);
+    expect(shouldTreatAsSpeedwalk('enws')).toBe(true);
+  });
+
+  it('returns true for counted single-direction (2+ moves)', () => {
+    expect(shouldTreatAsSpeedwalk('2n')).toBe(true);
+    expect(shouldTreatAsSpeedwalk('5e')).toBe(true);
+  });
+
+  it('returns false for non-speedwalk commands', () => {
+    expect(shouldTreatAsSpeedwalk('look')).toBe(false);
+    expect(shouldTreatAsSpeedwalk('go north')).toBe(false);
+    expect(shouldTreatAsSpeedwalk('inventory')).toBe(false);
+  });
+
+  it('returns false for empty input', () => {
+    expect(shouldTreatAsSpeedwalk('')).toBe(false);
   });
 });

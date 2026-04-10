@@ -20,6 +20,8 @@ import {
   type EquipItemMessage,
   type UnequipItemMessage,
   type RoomOccupantsMessage,
+  type FlagStateMessage,
+  type ToggleFlagMessage,
 } from '@ellmud/shared';
 
 const WS_ENDPOINT = import.meta.env.VITE_WS_URL ??
@@ -38,6 +40,7 @@ export interface MessageHandlers {
   onStashUpdate?: (msg: StashUpdateMessage) => void;
   onPlayerState?: (msg: import('@ellmud/shared').PlayerStateMessage) => void;
   onRoomOccupants?: (msg: RoomOccupantsMessage) => void;
+  onFlagState?: (msg: FlagStateMessage) => void;
   onError: (code: number, message: string) => void;
   onLeave: (code: number) => void;
 }
@@ -86,6 +89,9 @@ export async function connect(
   }
   if (handlers.onRoomOccupants) {
     room.onMessage(MessageTypes.ROOM_OCCUPANTS, handlers.onRoomOccupants);
+  }
+  if (handlers.onFlagState) {
+    room.onMessage(MessageTypes.FLAG_STATE, handlers.onFlagState);
   }
 
   room.onError((code, message) => handlers.onError(code, message ?? 'Unknown error'));
@@ -142,6 +148,9 @@ export async function switchRoom(
   if (handlers.onRoomOccupants) {
     newRoom.onMessage(MessageTypes.ROOM_OCCUPANTS, handlers.onRoomOccupants);
   }
+  if (handlers.onFlagState) {
+    newRoom.onMessage(MessageTypes.FLAG_STATE, handlers.onFlagState);
+  }
 
   newRoom.onError((code, message) => handlers.onError(code, message ?? 'Unknown error'));
   newRoom.onLeave((code) => handlers.onLeave(code));
@@ -162,6 +171,16 @@ export function sendEquipItem(room: Room, msg: EquipItemMessage): void {
 /** Send unequip item request to server. */
 export function sendUnequipItem(room: Room, msg: UnequipItemMessage): void {
   room.send(MessageTypes.UNEQUIP_ITEM, msg);
+}
+
+/** Send toggle-flag request to server. */
+export function sendToggleFlag(room: Room, msg: ToggleFlagMessage): void {
+  room.send(MessageTypes.TOGGLE_FLAG, msg);
+}
+
+/** Request the server-wide player list (who list). */
+export function sendRequestPlayerList(room: Room): void {
+  room.send(MessageTypes.REQUEST_PLAYER_LIST, {});
 }
 
 /** Direction aliases — single letters and bare direction words expand to "go <dir>". */

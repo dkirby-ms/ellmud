@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { Settings, LogOut } from "lucide-react";
+import { Settings, LogOut, Dices } from "lucide-react";
 import { useAppContext } from "../store";
 import {
   fetchCharacters,
@@ -11,6 +11,7 @@ import {
   ApiError,
 } from "../services/api";
 import type { CharacterSummary } from "@ellmud/shared";
+import { generateRandomName } from "../utils/name-generator";
 
 const STARTING_ZONES = [
   {
@@ -47,7 +48,7 @@ export default function CharacterSelect() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [newCharName, setNewCharName] = useState("");
+  const [newCharName, setNewCharName] = useState(generateRandomName);
   const [selectedZone, setSelectedZone] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -83,7 +84,7 @@ export default function CharacterSelect() {
       // Reload full list to get complete character data (topSkills, startingZoneName, etc.)
       const chars = await fetchCharacters(token);
       setCharacters(chars);
-      setNewCharName("");
+      setNewCharName(generateRandomName());
       setSelectedZone("");
       setIsCreating(false);
     } catch (err) {
@@ -263,6 +264,7 @@ export default function CharacterSelect() {
           <button
             onClick={() => {
               setIsCreating(true);
+              setNewCharName(generateRandomName());
               setDeleteConfirm(null);
             }}
             className="w-full border-2 border-dashed border-border-muted hover:border-accent-gold text-text-secondary hover:text-accent-gold py-6 rounded-lg transition-colors font-sans"
@@ -292,18 +294,29 @@ export default function CharacterSelect() {
                   Character Name{" "}
                   <span className="text-text-disabled">(letters only)</span>
                 </label>
-                <input
-                  id="charName"
-                  type="text"
-                  value={newCharName}
-                  onChange={(e) => setNewCharName(sanitizeName(e.target.value))}
-                  placeholder="Kael"
-                  minLength={2}
-                  maxLength={24}
-                  className="w-full bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-primary focus:border-accent-gold focus:outline-none transition-colors font-sans"
-                  disabled={submitting}
-                  required
-                />
+                <div className="flex gap-2">
+                  <input
+                    id="charName"
+                    type="text"
+                    value={newCharName}
+                    onChange={(e) => setNewCharName(sanitizeName(e.target.value))}
+                    placeholder="Vex"
+                    minLength={2}
+                    maxLength={24}
+                    className="flex-1 bg-bg-elevated border border-border-muted rounded px-4 py-2 text-text-primary focus:border-accent-gold focus:outline-none transition-colors font-sans"
+                    disabled={submitting}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNewCharName(generateRandomName())}
+                    disabled={submitting}
+                    className="px-3 py-2 bg-bg-elevated border border-border-muted rounded text-text-secondary hover:text-accent-gold hover:border-accent-gold transition-colors disabled:opacity-50"
+                    title="Generate random name"
+                  >
+                    <Dices className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               <div>

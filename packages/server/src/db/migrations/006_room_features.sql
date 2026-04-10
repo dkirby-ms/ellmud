@@ -2,7 +2,7 @@
 -- Room features are examinable objects players can inspect via "look <target>".
 
 ALTER TABLE zone_rooms
-  ADD COLUMN features JSONB NOT NULL DEFAULT '[]';
+  ADD COLUMN IF NOT EXISTS features JSONB NOT NULL DEFAULT '[]';
 
 -- Seed: A note pinned to the wall in the Temple of Midgaard.
 -- The temple description already mentions "ancient wall paintings" on the walls.

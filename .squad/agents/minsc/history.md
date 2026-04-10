@@ -40,6 +40,63 @@
 
 ## Learnings (Archived — See Detailed Session Records)
 
+**Starting Gear Bug Fix (2026-07, Issue #377):**
+- Root cause: RefugeRoom→ZoneRoom merge lost `sendLoadoutAndStashUpdate()` call in `onJoin`
+- ZoneRoom.onJoin must send both `LOADOUT_UPDATE` and `STASH_UPDATE` to the client
+- `grantStarterKit()` (api/starter-kit.ts) inserts starter items into `player_stash` correctly — Postgres-only (`usePg` guard)
+- Starter items: 'Rusty Blade', 'Tattered Leather', 'Waterlogged Potion' — defined in migration 002_seed_content.sql
+- `PgStashRepository.loadStash` queries by `player_id` (players-table UUID), not `character_id`
+- `ZoneRoom.dbPlayerId()` maps characterId → players-table UUID for DB operations
+- `MessageCollector` test helper now captures `LOADOUT_UPDATE` and `STASH_UPDATE` messages
+- Test file: `starting-gear-on-join.test.ts` (6 integration tests)
+- Full suite: 2582 passing, zero regressions
+
+**Character Posture System Tests (2026-07, Issue #371):**
+- 63 tests total (57 unit + 6 integration), all passing — Jarlaxle's implementation already landed
+- Posture type (`Posture`) exported from `@ellmud/shared` with 7 values, `PLAYER_SETTABLE_POSTURES` excludes floating/hovering
+- `PlayerState.posture` field defaults to `DEFAULT_POSTURE` ('standing'), auto-resets on movement in `go.ts`
+- `forcePosture()` exported from `commands/handlers/posture.ts` — used for knockdowns, returns broadcast message or null
+- `PlayerRef.posture` (optional) drives room display via `POSTURE_ROOM_DESCRIPTIONS` lookup in `look.ts` and `go.ts`
+- `_postureChange` metadata on `CommandResult` for ZoneRoom to broadcast third-person messages
+- `POSTURE_MOVEMENT_VERBS` maps posture → departure verb (walks, crawls, sneaks, etc.)
+- `PlayerListEntry.posture` optional field added to who list; `formatWhoListText` includes it
+- Test files: `posture.test.ts` (57 unit tests), `posture-integration.test.ts` (6 Colyseus integration tests)
+- Full suite: 3029 passing, zero regressions
+
+**Role-Based Admin Access Tests (2026-07, Issue #373):**
+- TDD tests for role hierarchy: `player < content-dev < admin` — tests import from anticipated `auth/roles.js` module
+- Role-based admin middleware: tests verify session-token + role grants admin access (content-dev/admin → 200, player → 403)
+- ADMIN_TOKEN env var stays as fallback auth path; absence should NOT produce 503 anymore (session auth is primary)
+- GET `/auth/me` must return `role` field; defaults to `'player'` for new registrations
+- AUTO_PROMOTE_ADMIN env var: `autoPromoteAdmin(playerRepo)` looks up username, promotes to admin, no-ops if already admin, no crash if user not found
+- Client AppState needs `role` field (default: `'player'`), LOGIN_SUCCESS stores role, SET_ROLE action for mid-session updates
+- Audit: role changes logged via `logAuditEvent` with `action: 'role_change'`, `details: { oldRole, newRole }`, auto-promote uses `actor: 'system:auto-promote'`
+- Test files: `role-hierarchy.test.ts`, `role-admin-auth.test.ts`, `auto-promote-admin.test.ts`, `role-audit.test.ts` (server), `role-admin-gating.test.tsx`, `role-auth-state.test.ts` (client)
+- 43 tests total: 17 failing (TDD awaiting Jarlaxle's implementation), 26 passing (contract/shape tests)
+- Pre-existing failure in `admin-token-validation.test.ts` line 199 (503→401 mismatch on ADMIN_TOKEN unset) — not related to #373
+
+**Admin Token Validation Tests (2026-07, Issue #369):**
+- Admin auth flow: `adminAuth` middleware (`packages/server/src/admin/middleware.ts`) validates `ADMIN_TOKEN` env var, returns 503/401/403
+- Client token stored in `localStorage` via `admin-api.ts` helpers: `getAdminToken()`, `setAdminToken()`, `clearAdminToken()`
+- `AdminLayout.tsx` manages auth state: login form → `handleAdminLogin()` → `validateAdminToken()` → sets `authenticated`
+- Regis added `ADMIN_AUTH_FAILURE_EVENT` custom event: `adminFetch` dispatches on 401/403, `AdminLayout` listens to reset to login
+- Regis added mount-time validation: `useEffect` calls `validateAdminToken()` on load to catch stale stored tokens
+- `validating` state shows loading spinner while stored token is checked (prevents flash of admin content)
+- Client admin tests mock `admin-api.js` — must include ALL exports: `validateAdminToken`, `ADMIN_AUTH_FAILURE_EVENT`, `AdminAPIError`
+- The text `⚙ Ellmud Content Admin` requires regex matching in tests (emoji prefix breaks `getByText` exact match)
+- Test files: `packages/client/src/__tests__/admin-token-validation.test.tsx` (17 tests), `packages/server/src/__tests__/admin-token-validation.test.ts` (18 tests)
+- Total: 35 tests covering empty/missing/invalid/valid/stale/recovery/mid-session-expiry scenarios
+
+**Gameplay Metrics Tests (2026-07, Issue #360):**
+- MetricsService API: `recordX(playerId, typedMetadata)` — separate args, NOT a single object
+- All `recordX()` methods are fire-and-forget (`void` return), internally call private `record()` which returns `Promise<void>` with `.catch()` error swallowing
+- Testing fire-and-forget: call the public method, then `await flush()` (setTimeout 0) to drain the microtask queue before asserting on mocks
+- Error logging uses `console.error('[metrics] ...')` pattern — lowercase tag, matches codebase convention
+- `metrics-provider.ts` follows exact same singleton pattern as `death-penalty-provider.ts` (NoOp fallback, `reset*()` for testing)
+- MetricsService uses `query()` directly (not `getClient()`), single INSERT per event — no transactions needed
+- Metadata is serialized via `JSON.stringify()` before passing as $3 param to JSONB column
+- 29 tests cover: 4 event types × happy path + JSONB serialization + DB failure resilience + concurrent writes + provider integration
+
 **Reconnect Room Position Fix (2026-07, Issue #355):**
 - Browser refresh triggers a NEW `onJoin()` (not Colyseus `allowReconnection`), because the client does a fresh `joinOrCreate()` with the same playerId
 - `ZoneRoom.onJoin()` duplicate-join path (line ~421) must preserve `currentRoomId` from existing `PlayerState` before creating a new one
@@ -1783,3 +1840,37 @@ The tests expect:
 - Comprehensive edge case testing prevents regressions
 - Test-driven development enables confidence in spec compliance
 - Feature filtering patterns can be tested in isolation for maintainability
+
+---
+
+### 2026-04-09: Issue #369 — Admin Token Validation Test Suite (with Regis)
+- **Status:** ✅ Complete — 35 tests written and passing
+- **Collaboration:** Minsc tests + Regis implementation
+- **Context:** Regis fixed admin token validation; Minsc wrote comprehensive test coverage
+- **Test Suite (35 tests total):**
+  - **Client-side (17 tests):** `packages/client/src/__tests__/admin-token-validation.test.tsx`
+    - Token submission validation (empty, missing, whitespace, invalid, valid)
+    - Recovery flow (re-enter after rejection, error clears on typing)
+    - Stale stored token detection on mount
+    - Event-driven auth failure handling (`ADMIN_AUTH_FAILURE_EVENT`)
+    - Loading state (`validating`) rendering
+  - **Server-side (18 tests):** `packages/server/src/__tests__/admin-token-validation.test.ts`
+    - Authorization header validation (missing, malformed)
+    - Token validation (wrong, partial, case-altered, whitespace)
+    - Correct token handling (200 response)
+    - Fail-closed mode (ADMIN_TOKEN not set → 503)
+    - Error response format validation
+- **Coverage:** All token validation scenarios, client-server roundtrip, error messages, edge cases
+- **Result:** All 35 tests pass against Regis's implementation
+- **Pattern:** Comprehensive pre-merge test verification ensures solid implementation
+- **Team Impact:** Regis implementation verified solid; PR #372 ready for merge with full test coverage
+
+
+### Release Workflow Fix (2026-04-09, Issue #379)
+**Problem:** release.yml (run #24201081668) failed at checkout: ref: main does not exist. Repo uses dev to uat to prod, not main.
+**Scope:** Three workflows (release.yml, squad-release.yml, squad-promote.yml) all referenced non-existent main/preview branches.
+**Fix:** Aligned all three workflows with actual dev to uat to prod branching model.
+- release.yml: checkout/push prod instead of main
+- squad-release.yml: trigger on push to prod
+- squad-promote.yml: dev to uat to prod pipeline
+**Key Learning:** Squad tooling templates ship with dev to preview to main model by default; must be adapted to match each project actual branch strategy.

@@ -14,6 +14,8 @@ import {
   type UnequipItemMessage,
   type SwapItemMessage,
   type LoadoutUpdateMessage,
+  type StashUpdateMessage,
+  type DisplayItem,
   type PlayerStateMessage,
   type TelegraphMessage,
   type ZoneTransferMessage,
@@ -22,8 +24,16 @@ import {
   type ExplorationUpdateMessage,
   type RoomOccupantsMessage,
   type AdminLiveRoomInfo,
+  type PlayerListMessage,
+  type ToggleFlagMessage,
+  type FlagStateMessage,
+  isValidFlagName,
+  isValidPosture,
+  SLOT_ACCEPTS,
+  EQUIPMENT_SLOT_ORDER,
   DEATH_PENALTY_DEFAULTS,
   OPPOSITE_DIRECTION,
+  POSTURE_MOVEMENT_VERBS,
   MessageTypes,
 } from '@ellmud/shared';
 import { ZoneState } from '../state.js';
@@ -50,6 +60,7 @@ import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
 import { DowningSystem, type DowningEvent } from '../systems/DowningSystem.js';
 import { CorpseSystem } from '../systems/CorpseSystem.js';
 import { type DeathPenaltyStore, getDeathPenaltyStore } from '../systems/index.js';
+import { type MetricsService, getMetricsService } from '../metrics/index.js';
 import {
   NOISE_VALUES,
   SOUND_DESCRIPTIONS,
@@ -90,6 +101,8 @@ import type { CharacterRepository } from '../character/index.js';
 import { InMemoryCharacterRepository, getCharacterRepository } from '../character/index.js';
 import { createNarrationService } from '../narrative/factory.js';
 import type { NarrationService } from '../narrative/NarrationService.js';
+import { gatherPlayerList, formatWhoListText, type ZonePlayerData } from '../who/index.js';
+import { getCharacterFlagsRepository } from '../db/CharacterFlagsRepository.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -126,6 +139,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private corpseSystem!: CorpseSystem;
   private narrationService!: NarrationService;
   private deathPenaltyStore!: DeathPenaltyStore;
+  private metricsService!: MetricsService;
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
   private loadoutService?: LoadoutService;
@@ -142,6 +156,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private characterNames = new Map<string, string>();
   /** Maps playerId → faction slug for death routing (cached on join). */
   private playerFactionSlugs = new Map<string, string>();
+  /** Maps playerId → character flags (anon, rp) cached on join (Issue #370). */
+  private playerFlagsCache = new Map<string, import('@ellmud/shared').CharacterFlags>();
 
   // ─── Zone-specific fields ──────────────────────────────────────────────────
   private zoneSlug?: string;
@@ -321,6 +337,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Initialize downing system (GDD §6.4 — bleed-out timers, stabilization)
     this.downingSystem = new DowningSystem();
     this.deathPenaltyStore = getDeathPenaltyStore();
+    this.metricsService = getMetricsService();
 
     // Initialize narration service (GDD §4 — LLM narration pipeline)
     this.narrationService = createNarrationService();
@@ -378,6 +395,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     this.onMessage(MessageTypes.SWAP_ITEM, (client: Client, message: SwapItemMessage) => {
       void this.handleSwapItem(client, message);
+    });
+
+    // Character flags: toggle anon/rp from Settings UI
+    this.onMessage(MessageTypes.TOGGLE_FLAG, (client: Client, message: ToggleFlagMessage) => {
+      void this.handleToggleFlag(client, message);
+    });
+
+    // Who list: client requests the player list via structured message
+    this.onMessage(MessageTypes.REQUEST_PLAYER_LIST, (client: Client) => {
+      void this.handleRequestPlayerList(client);
     });
 
     // 1-second tick for all game simulation
@@ -485,6 +512,15 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.log(`Failed to load character for ${this.playerTag(playerId)}: ${err}`);
     }
 
+    // Load character flags (anon, rp) into cache for room visibility (Issue #370)
+    try {
+      const flagsRepo = getCharacterFlagsRepository();
+      const flags = await flagsRepo.getFlags(playerId);
+      this.playerFlagsCache.set(playerId, flags);
+    } catch (err) {
+      this.log(`Failed to load flags for ${this.playerTag(playerId)}: ${err}`);
+    }
+
     // Track join time for run duration calculation
     this.playerJoinTimes.set(playerId, Date.now());
 
@@ -526,6 +562,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     );
     this.players.set(playerId, playerState);
 
+    // Load persisted posture from DB (#371)
+    try {
+      const savedPosture = await this.characterRepo.loadPosture(playerId);
+      if (isValidPosture(savedPosture)) {
+        playerState.posture = savedPosture;
+      }
+    } catch (err) {
+      this.log(`Failed to load posture for ${this.playerTag(playerId)}: ${err}`);
+    }
+
     this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig())} players)`);
 
     // Send initial system narration using NarrationService (async, don't block join)
@@ -566,6 +612,13 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       maxStamina: 0,
       statusEffects: [],
     } satisfies PlayerStateMessage);
+
+    // Send full stash + loadout state to client on join (#377)
+    try {
+      await this.sendLoadoutAndStashUpdate(client, playerId);
+    } catch (err) {
+      this.log(`Failed to send equipment state for ${this.playerTag(playerId)}: ${err}`);
+    }
   }
 
   async onLeave(client: Client, code?: number): Promise<void> {
@@ -642,6 +695,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.combatSystem.removeCombatant(playerId);
       this.characterNames.delete(playerId);
       this.playerFactionSlugs.delete(playerId);
+      this.playerFlagsCache.delete(playerId);
       this.ownerPlayerIds.delete(playerId);
       this.updateMetadata();
     }
@@ -808,6 +862,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
       this.syncCreaturesAfterCombat(tickResult);
       this.deliverCombatResults(tickResult);
+      this.recordCombatMetrics(tickResult);
 
       // Propagate combat sounds to nearby rooms (GDD §12)
       this.propagateCombatSounds(tickResult);
@@ -965,9 +1020,36 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       return;
     }
 
+    // Async command: `who` — requires cross-room matchMaker query + flag loading
+    if (verb === 'who') {
+      void this.handleWhoCommand(client, playerId, player);
+      return;
+    }
+
     const previousRoomId = player.currentRoomId;
+    // Capture posture before command execution for movement verb narration (#371)
+    const previousPosture = player.posture;
+
+    // Snapshot inventory for loot pickup metrics (take/loot commands)
+    const trackLoot = verb === 'take' || verb === 'loot';
+    const prevInventoryIds = trackLoot ? new Set(player.inventory.keys()) : undefined;
+
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
+
+    // Record loot pickup metrics for newly acquired items (non-blocking)
+    if (trackLoot && prevInventoryIds) {
+      for (const [itemId, entry] of player.inventory) {
+        if (!prevInventoryIds.has(itemId)) {
+          this.metricsService.recordLootPickup(this.dbPlayerId(playerId), {
+            itemId: entry.item.id,
+            itemName: entry.item.name,
+            roomId: player.currentRoomId,
+            source: verb === 'loot' ? 'corpse' : 'room',
+          });
+        }
+      }
+    }
 
     // Inter-zone exit: send transfer message to client instead of moving locally
     if (result.zoneTransfer) {
@@ -1010,7 +1092,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }, direction);
 
       // Broadcast arrival/departure narrations to other players
-      this.broadcastPlayerMovement(playerId, previousRoomId, player.currentRoomId, direction);
+      this.broadcastPlayerMovement(playerId, previousRoomId, player.currentRoomId, direction, previousPosture);
+
+      // Persist posture reset to DB (#371)
+      this.persistPosture(playerId).catch((err) => {
+        this.log(`Failed to persist posture reset for ${this.playerTag(playerId)}: ${err}`);
+      });
 
       // Awareness: notify observers in destination room about entering player
       this.runAwarenessChecks(playerId, player.currentRoomId, 'arrival');
@@ -1026,6 +1113,25 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       // Broadcast updated occupants to other players in both rooms
       this.broadcastRoomOccupantsUpdate(previousRoomId);
       this.broadcastRoomOccupantsUpdate(player.currentRoomId);
+    }
+
+    // Posture commands: broadcast posture change to other players in the room (#371)
+    // Uses _postureChange metadata from the command result (single source of truth in posture.ts)
+    const postureChange = (result as import('../commands/index.js').CommandResult & { _postureChange?: { characterName: string; message: string } })._postureChange;
+    if (postureChange) {
+      for (const [sid, ps] of this.players) {
+        if (sid !== playerId && ps.currentRoomId === player.currentRoomId) {
+          const c = this.findClient(sid);
+          if (c) {
+            this.sendNarrate(c, { text: postureChange.message, type: 'ambient', timestamp: Date.now() });
+          }
+        }
+      }
+
+      // Persist posture change to DB
+      this.persistPosture(playerId).catch((err) => {
+        this.log(`Failed to persist posture for ${this.playerTag(playerId)}: ${err}`);
+      });
     }
 
     // Social commands (say, emote) broadcast to all players in the same room
@@ -1067,9 +1173,13 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private buildCommandContext(player: PlayerState, args: string[]): CommandContext {
     const room = this.roomGraph.rooms.get(player.currentRoomId)!;
     const otherPlayersInRoom: string[] = [];
+    const otherPlayerInfo: import('../commands/index.js').PlayerRef[] = [];
     for (const [sid, ps] of this.players) {
       if (sid !== player.sessionId && ps.currentRoomId === player.currentRoomId) {
         otherPlayersInRoom.push(sid);
+        const name = this.characterNames.get(sid) ?? 'A wanderer';
+        const flags = this.playerFlagsCache.get(sid);
+        otherPlayerInfo.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture });
       }
     }
 
@@ -1086,6 +1196,18 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       args,
       resolveRoom: (roomId: string) => this.roomGraph.rooms.get(roomId),
       otherPlayersInRoom,
+      otherPlayerInfo,
+      resolvePlayersInRoom: (roomId: string) => {
+        const result: import('../commands/index.js').PlayerRef[] = [];
+        for (const [sid, ps] of this.players) {
+          if (sid !== player.sessionId && ps.currentRoomId === roomId) {
+            const name = this.characterNames.get(sid) ?? 'A wanderer';
+            const flags = this.playerFlagsCache.get(sid);
+            result.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture });
+          }
+        }
+        return result;
+      },
       stability: this.state.stability,
       characterName: this.characterNames.get(player.sessionId),
       combatSystem: this.combatSystem,
@@ -1378,6 +1500,50 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
   }
 
+  /** Record per-player combat stats from this tick's events (non-blocking). */
+  private recordCombatMetrics(tickResult: TickResult): void {
+    // Aggregate per-player stats from strike events this tick
+    const stats = new Map<string, { roomId: string; dealt: number; taken: number; hits: number; misses: number }>();
+
+    for (const event of tickResult.events) {
+      if (event.type !== 'strike') continue;
+
+      // Attacker stats (damage dealt, hit/miss)
+      if (event.actorId && !event.actorId.startsWith('creature-')) {
+        let s = stats.get(event.actorId);
+        if (!s) { s = { roomId: '', dealt: 0, taken: 0, hits: 0, misses: 0 }; stats.set(event.actorId, s); }
+        const combatant = this.combatSystem.getCombatant(event.actorId);
+        if (combatant) s.roomId = combatant.roomId;
+        if (event.dodged) {
+          s.misses++;
+        } else {
+          s.dealt += event.damage ?? 0;
+          s.hits++;
+        }
+      }
+
+      // Target stats (damage taken)
+      if (event.targetId && !event.targetId.startsWith('creature-') && !event.dodged) {
+        let s = stats.get(event.targetId);
+        if (!s) { s = { roomId: '', dealt: 0, taken: 0, hits: 0, misses: 0 }; stats.set(event.targetId, s); }
+        const combatant = this.combatSystem.getCombatant(event.targetId);
+        if (combatant) s.roomId = combatant.roomId;
+        s.taken += event.damage ?? 0;
+      }
+    }
+
+    // Fire off one metric event per player who participated
+    for (const [playerId, s] of stats) {
+      this.metricsService.recordCombatStats(this.dbPlayerId(playerId), {
+        roomId: s.roomId,
+        damageDealt: s.dealt,
+        damageTaken: s.taken,
+        hits: s.hits,
+        misses: s.misses,
+      });
+    }
+  }
+
   /** Send active trace descriptions to a client as narration. */
   private sendTraceNarrations(client: Client, roomId: string): void {
     const descriptions = this.traceSystem.getTracesForPlayer(roomId, {
@@ -1649,12 +1815,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     sourceRoomId: string,
     targetRoomId: string,
     direction?: string,
+    posture?: import('@ellmud/shared').Posture,
   ): void {
     const name = this.characterNames.get(playerId) ?? 'A wanderer';
 
+    // Use posture-aware movement verbs for departure (#371)
+    const moveVerb = posture ? POSTURE_MOVEMENT_VERBS[posture] : 'walks';
+
     // Departure: tell players in the source room
     const departureText = direction
-      ? `${name} leaves to the ${direction}.`
+      ? `${name} ${moveVerb} ${direction}.`
       : `${name} leaves.`;
     for (const [sid, ps] of this.players) {
       if (sid !== playerId && ps.currentRoomId === sourceRoomId) {
@@ -1713,6 +1883,20 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           }
         }
         this.combatSystem.removeCombatant(event.actorId);
+
+        // Record kill metrics for each player who contributed (non-blocking, skip sandbox)
+        if (!isSandboxCreature && event.killerIds) {
+          for (const killerId of event.killerIds) {
+            if (killerId.startsWith('creature-')) continue;
+            const killerDbId = this.dbPlayerId(killerId);
+            this.metricsService.recordKill(killerDbId, {
+              victimId: event.actorId,
+              victimName: event.actorName,
+              roomId: roomId ?? 'unknown',
+              isCreature: true,
+            });
+          }
+        }
 
         // Trace: creature death creates corpse trace (skip for sandbox)
         if (roomId && !isSandboxCreature) {
@@ -1952,6 +2136,14 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.log(`Death penalty: ${this.playerTag(playerId)} death count now ${newCount}`);
     });
 
+    // Record death metric (non-blocking)
+    this.metricsService.recordDeath(deathDbId, {
+      roomId,
+      killerIds,
+      isPvP: isPvPKill,
+      itemsLost: corpseItems.length,
+    });
+
     // Apply death penalty debuff to player state (on any death)
     player.deathPenalty = {
       appliedAt: Date.now(),
@@ -1975,6 +2167,14 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           timestamp: Date.now(),
         };
         this.log(`PvPKillEvent: ${JSON.stringify(pvpEvent)}`);
+
+        // Record PvP kill metric (non-blocking)
+        this.metricsService.recordKill(this.dbPlayerId(killerId), {
+          victimId: playerId,
+          victimName: playerName,
+          roomId,
+          isCreature: false,
+        });
       }
     }
 
@@ -2388,6 +2588,17 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
   }
 
+  /** Persist posture to DB for reconnect survival (#371). */
+  private async persistPosture(playerId: string): Promise<void> {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    try {
+      await this.characterRepo.savePosture(playerId, player.posture);
+    } catch (err) {
+      this.log(`Failed to persist posture for ${this.playerTag(playerId)}: ${err}`);
+    }
+  }
+
   // ─── Run History Persistence ────────────────────────────────────────────
 
   /** Record a zone run when a player survives or the zone collapses. */
@@ -2467,7 +2678,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
               }
             }
 
-            await this.sendZoneLoadoutUpdate(client, playerId);
+            await this.sendLoadoutAndStashUpdate(client, playerId);
             client.send(MessageTypes.NARRATE, {
               text: `Equipped from inventory to ${message.targetSlot}.`,
               type: 'system',
@@ -2492,7 +2703,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         return;
       }
 
-      await this.sendZoneLoadoutUpdate(client, playerId);
+      await this.sendLoadoutAndStashUpdate(client, playerId);
       client.send(MessageTypes.NARRATE, {
         text: `Item equipped to ${message.targetSlot}.`,
         type: 'system',
@@ -2532,7 +2743,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         return;
       }
 
-      await this.sendZoneLoadoutUpdate(client, playerId);
+      await this.sendLoadoutAndStashUpdate(client, playerId);
       client.send(MessageTypes.NARRATE, {
         text: `Item unequipped from ${message.slot}.`,
         type: 'system',
@@ -2572,7 +2783,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         return;
       }
 
-      await this.sendZoneLoadoutUpdate(client, playerId);
+      await this.sendLoadoutAndStashUpdate(client, playerId);
       client.send(MessageTypes.NARRATE, {
         text: `Item swapped into ${message.targetSlot}.`,
         type: 'system',
@@ -2588,13 +2799,40 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
   }
 
-  /** Send loadout update to client after equipment change. */
-  private async sendZoneLoadoutUpdate(client: Client, playerId: string): Promise<void> {
-    if (!this.loadoutService) return;
-    const loadoutView = await this.loadoutService.getLoadoutView(this.dbPlayerId(playerId));
-    client.send(MessageTypes.LOADOUT_UPDATE, {
-      slots: loadoutView.slots,
-    } satisfies LoadoutUpdateMessage);
+  /** Send full loadout + stash state to client (on join and after equipment changes). */
+  private async sendLoadoutAndStashUpdate(client: Client, playerId: string): Promise<void> {
+    const dbId = this.dbPlayerId(playerId);
+
+    // Send loadout (equipped items)
+    if (this.loadoutService) {
+      const loadoutView = await this.loadoutService.getLoadoutView(dbId);
+      client.send(MessageTypes.LOADOUT_UPDATE, {
+        slots: loadoutView.slots,
+      } satisfies LoadoutUpdateMessage);
+    }
+
+    // Send stash (stored items)
+    if (this.stashService) {
+      const stashView = await this.stashService.loadStash(dbId);
+      const stashItems: DisplayItem[] = stashView.entries.map((entry) => {
+        const allowedSlots = EQUIPMENT_SLOT_ORDER.filter(
+          (s) => SLOT_ACCEPTS[s].includes(entry.definition.type),
+        );
+        return {
+          instanceId: entry.instance.instanceId,
+          definitionId: entry.instance.itemId,
+          name: entry.definition.name,
+          type: entry.definition.type,
+          tier: entry.definition.rarity,
+          weight: entry.definition.weight,
+          description: entry.definition.description,
+          allowedSlots,
+        };
+      });
+      client.send(MessageTypes.STASH_UPDATE, {
+        items: stashItems,
+      } satisfies StashUpdateMessage);
+    }
   }
 
   /** Send player state update to client (HP, stamina, status effects). */
@@ -2779,6 +3017,97 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   /** Expose the zone slug for admin API responses. */
   getZoneSlug(): string | undefined {
     return this.zoneSlug;
+  }
+
+  // ─── Who List (Issue #366) ──────────────────────────────────────────────
+
+  /**
+   * Return raw player data for cross-room who-list gathering.
+   * Called by WhoListService via matchMaker iteration.
+   */
+  getWhoListPlayerData(): ZonePlayerData[] {
+    const zoneName = this.zoneData?.zone.name ?? this.zoneSlug ?? 'Unknown Zone';
+    const result: ZonePlayerData[] = [];
+    for (const [characterId] of this.players) {
+      const charName = this.characterNames.get(characterId);
+      if (!charName) continue; // Skip players without loaded names (still joining)
+      const player = this.players.get(characterId);
+      if (!player) continue;
+      result.push({
+        characterId,
+        characterName: charName,
+        roomId: player.currentRoomId,
+        zoneName,
+        posture: player.posture,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Handle REQUEST_PLAYER_LIST message — send structured PLAYER_LIST back.
+   */
+  private async handleRequestPlayerList(client: Client): Promise<void> {
+    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    try {
+      const entries = await gatherPlayerList(
+        playerId,
+        player.currentRoomId,
+        getConfig().devModeEnabled,
+      );
+      client.send(MessageTypes.PLAYER_LIST, { players: entries } satisfies PlayerListMessage);
+    } catch (err) {
+      this.log(`Failed to gather player list for ${this.playerTag(playerId)}: ${err}`);
+    }
+  }
+
+  /**
+   * Handle the text-based `who` command — gather the player list and
+   * send formatted ASCII table as narration.
+   */
+  private async handleWhoCommand(client: Client, playerId: string, player: PlayerState): Promise<void> {
+    try {
+      const entries = await gatherPlayerList(
+        playerId,
+        player.currentRoomId,
+        getConfig().devModeEnabled,
+      );
+      const text = formatWhoListText(entries);
+      this.sendNarrate(client, { text, type: 'system', timestamp: Date.now() });
+    } catch (err) {
+      this.log(`Failed to handle who command for ${this.playerTag(playerId)}: ${err}`);
+      this.sendNarrate(client, {
+        text: 'The who list is momentarily unavailable.',
+        type: 'system',
+        timestamp: Date.now(),
+      });
+    }
+  }
+
+  // ─── Character Flags (Issue #365) ────────────────────────────────────────
+
+  /**
+   * Handle TOGGLE_FLAG message from the Settings UI.
+   * Persists the flag change to the database and echoes the new state back.
+   */
+  private async handleToggleFlag(client: Client, message: ToggleFlagMessage): Promise<void> {
+    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+    if (!isValidFlagName(message.flag)) return;
+
+    try {
+      const repo = getCharacterFlagsRepository();
+      await repo.setFlag(playerId, message.flag, message.enabled);
+
+      // Echo confirmed flag state back to the client
+      const flags = await repo.getFlags(playerId);
+      this.playerFlagsCache.set(playerId, flags);
+      client.send(MessageTypes.FLAG_STATE, { flags } satisfies FlagStateMessage);
+    } catch (err) {
+      this.log(`Failed to toggle flag ${message.flag} for ${this.playerTag(playerId)}: ${err}`);
+    }
   }
 
   // ─── Logging ─────────────────────────────────────────────────────────────

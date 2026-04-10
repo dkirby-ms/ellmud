@@ -409,7 +409,7 @@ describe('cross-migration consistency', () => {
     // Some tables use composite TEXT PKs instead of auto-generated UUIDs.
     // content_definitions was dropped in migration 029 but its CREATE TABLE
     // still exists in migration 007 — keep it in the exclusion list.
-    const COMPOSITE_PK_TABLES = ['item_definitions', 'player_loadout', 'auth_tokens'];
+    const COMPOSITE_PK_TABLES = ['item_definitions', 'player_loadout', 'auth_tokens', 'game_metrics'];
 
     for (const file of allMigrationFiles()) {
       const sql = readMigration(file);

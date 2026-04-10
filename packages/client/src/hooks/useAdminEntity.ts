@@ -11,6 +11,7 @@ import {
   getEntity,
   updateEntity,
   createEntity,
+  AdminAPIError,
 } from '../lib/admin-api.js';
 
 export interface UseAdminEntityResult<T> {
@@ -44,6 +45,7 @@ export function useAdminEntity<T extends { id?: string }>(
       const entity = await getEntity<T>(entityType, id);
       setData(entity);
     } catch (err) {
+      if (err instanceof AdminAPIError && (err.status === 401 || err.status === 403)) return;
       setError(err instanceof Error ? err.message : 'Failed to load entity');
     } finally {
       setLoading(false);
@@ -71,6 +73,7 @@ export function useAdminEntity<T extends { id?: string }>(
 
       setData(savedEntity);
     } catch (err) {
+      if (err instanceof AdminAPIError && (err.status === 401 || err.status === 403)) return;
       const message = err instanceof Error ? err.message : 'Failed to save entity';
       setSaveError(message);
       throw err;

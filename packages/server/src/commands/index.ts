@@ -37,6 +37,8 @@ import { handleStashView, handleStore } from './handlers/stash-command.js';
 import { handleLoadoutView } from './handlers/loadout-command.js';
 import { handleRent } from './handlers/rent.js';
 import { handleSandbox } from './handlers/sandbox.js';
+import { handleFlag } from './handlers/flag.js';
+import { handleStand, handleSit, handleCrouch, handleProne, handleRecline } from './handlers/posture.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -78,6 +80,15 @@ export interface CreatureRef {
   dodgeSkillRank?: number;
 }
 
+/** Lightweight player info for room display (Issue #370). */
+export interface PlayerRef {
+  sessionId: string;
+  name: string;
+  anon: boolean;
+  /** Current posture for room display (#371). */
+  posture?: import('@ellmud/shared').Posture;
+}
+
 export interface CommandContext {
   player: PlayerState;
   room: Room;
@@ -86,6 +97,10 @@ export interface CommandContext {
   resolveRoom: (roomId: string) => Room | undefined;
   /** Other player session IDs in the same room. */
   otherPlayersInRoom: string[];
+  /** Detailed info about other players in the same room (Issue #370). */
+  otherPlayerInfo?: PlayerRef[];
+  /** Resolve visible players in an arbitrary room by ID (Issue #370). */
+  resolvePlayersInRoom?: (roomId: string) => PlayerRef[];
   /** Current zone stability (0–1). */
   stability: number;
   /** The player's in-game character name. */
@@ -175,6 +190,12 @@ handlers.set('pos', handlePosition); // Shorthand alias
 handlers.set('goto', handleGoto);
 handlers.set('teleport', handleTeleport);
 handlers.set('help', handleHelp);
+handlers.set('flag', handleFlag);
+handlers.set('stand', handleStand);
+handlers.set('sit', handleSit);
+handlers.set('crouch', handleCrouch);
+handlers.set('prone', handleProne);
+handlers.set('recline', handleRecline);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(

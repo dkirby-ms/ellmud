@@ -7,7 +7,7 @@ import { createContext, useContext } from 'react';
 import type { Room } from '@colyseus/sdk';
 import type {
   NarrationType, RoomHeaderMessage, ZoneState, CombatAction, GearTier,
-  EquipmentSlots, DisplayItem, CharacterSummary,
+  EquipmentSlots, DisplayItem, CharacterSummary, UserRole,
 } from '@ellmud/shared';
 import { createEmptyEquipmentSlots } from '@ellmud/shared';
 
@@ -68,6 +68,7 @@ export interface AppState {
   playerId: string | null;
   email: string | null;
   username: string | null;
+  userRole: UserRole;
   activeCharacter: CharacterSummary | null;
   room: Room | null;
   messages: TerminalMessage[];
@@ -103,6 +104,7 @@ export const initialState: AppState = {
   playerId: null,
   email: null,
   username: null,
+  userRole: 'player',
   activeCharacter: null,
   room: null,
   messages: [],
@@ -134,8 +136,9 @@ export const initialState: AppState = {
 const MAX_SOUND_CUES = 20;
 
 export type AppAction =
-  | { type: 'LOGIN_SUCCESS'; token: string; playerId: string; email?: string; username?: string }
+  | { type: 'LOGIN_SUCCESS'; token: string; playerId: string; email?: string; username?: string; role?: UserRole }
   | { type: 'LOGOUT' }
+  | { type: 'SET_USER_ROLE'; role: UserRole }
   | { type: 'SET_ROOM'; room: Room | null }
   | { type: 'ADD_MESSAGE'; message: TerminalMessage }
   | { type: 'SET_ROOM_HEADER'; header: RoomHeaderMessage }
@@ -163,9 +166,11 @@ const MAX_MESSAGES = 500;
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'LOGIN_SUCCESS':
-      return { ...state, authenticated: true, token: action.token, playerId: action.playerId, email: action.email ?? null, username: action.username ?? null, error: null };
+      return { ...state, authenticated: true, token: action.token, playerId: action.playerId, email: action.email ?? null, username: action.username ?? null, userRole: action.role ?? 'player', error: null };
     case 'LOGOUT':
       return { ...initialState };
+    case 'SET_USER_ROLE':
+      return { ...state, userRole: action.role };
     case 'SET_ROOM':
       return action.room
         ? { ...state, room: action.room, connectionStatus: 'connected' }

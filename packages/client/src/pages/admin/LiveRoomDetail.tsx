@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronRight,
+  Filter,
   MapPin,
   Megaphone,
   Move,
@@ -97,6 +98,18 @@ export default function LiveRoomDetail() {
   const [teleportPlayerId, setTeleportPlayerId] = useState("");
   const [teleportNotify, setTeleportNotify] = useState(true);
   const [teleporting, setTeleporting] = useState(false);
+
+  // Occupancy filter state (#384)
+  const [filterPlayers, setFilterPlayers] = useState(false);
+  const [filterCreatures, setFilterCreatures] = useState(false);
+
+  // Context menu state (#385)
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    roomSlug: string;
+    roomName: string;
+  } | null>(null);
 
   const loadRoom = useCallback(async () => {
     if (!roomId) return;
@@ -323,6 +336,49 @@ export default function LiveRoomDetail() {
       return next;
     });
   };
+
+  // Filtered rooms based on occupancy toggles (#384)
+  const filteredDisplayRooms = useMemo(() => {
+    if (!filterPlayers && !filterCreatures) return displayRooms;
+    return displayRooms.filter((zr) => {
+      const occ = roomOccupancy[zr.slug];
+      if (!occ) return false;
+      if (filterPlayers && filterCreatures) {
+        return occ.players.length > 0 || occ.creatures.length > 0;
+      }
+      if (filterPlayers) return occ.players.length > 0;
+      if (filterCreatures) return occ.creatures.length > 0;
+      return true;
+    });
+  }, [displayRooms, roomOccupancy, filterPlayers, filterCreatures]);
+
+  // Context menu handler for room rows (#385)
+  const handleRoomContextMenu = (
+    e: React.MouseEvent,
+    roomSlug: string,
+    roomName: string,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, roomSlug, roomName });
+  };
+
+  // Close context menu on Escape or click outside
+  useEffect(() => {
+    if (!contextMenu) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setContextMenu(null);
+    }
+    function onClick() {
+      setContextMenu(null);
+    }
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onClick);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onClick);
+    };
+  }, [contextMenu]);
 
   const openSpawnInRoom = async (targetSlug: string) => {
     setShowSpawnModal(true);
@@ -568,6 +624,49 @@ export default function LiveRoomDetail() {
                         </p>
                       ) : (
                         <div className="space-y-1">
+                          {/* Occupancy filter bar (#384) */}
+                          <div className="flex items-center gap-2 mb-3">
+                            <Filter className="w-3.5 h-3.5 text-[#8A8B95]" />
+                            <span
+                              className="text-[#8A8B95] text-xs uppercase tracking-wider mr-1"
+                              style={{ fontFamily: "var(--font-sans)" }}
+                            >
+                              Show occupied:
+                            </span>
+                            <button
+                              onClick={() => setFilterPlayers((v) => !v)}
+                              className={`px-2.5 py-1 text-xs rounded border transition-colors flex items-center gap-1.5 ${
+                                filterPlayers
+                                  ? "border-[#C9A84C] bg-[#C9A84C]/15 text-[#C9A84C]"
+                                  : "border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:bg-[#1C1D27]"
+                              }`}
+                              style={{ fontFamily: "var(--font-sans)" }}
+                            >
+                              <Users className="w-3 h-3" />
+                              Players
+                            </button>
+                            <button
+                              onClick={() => setFilterCreatures((v) => !v)}
+                              className={`px-2.5 py-1 text-xs rounded border transition-colors flex items-center gap-1.5 ${
+                                filterCreatures
+                                  ? "border-[#8B2500] bg-[#8B2500]/15 text-[#8B2500]"
+                                  : "border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:bg-[#1C1D27]"
+                              }`}
+                              style={{ fontFamily: "var(--font-sans)" }}
+                            >
+                              <Skull className="w-3 h-3" />
+                              Creatures
+                            </button>
+                            {(filterPlayers || filterCreatures) && (
+                              <span
+                                className="text-[#8A8B95] text-xs ml-1"
+                                style={{ fontFamily: "var(--font-mono)" }}
+                              >
+                                {filteredDisplayRooms.length}/{displayRooms.length}
+                              </span>
+                            )}
+                          </div>
+
                           {/* Header row */}
                           <div className="grid grid-cols-[24px_1fr_100px_100px_1fr] gap-3 px-3 py-2 text-[#8A8B95] text-xs uppercase tracking-wider"
                             style={{ fontFamily: "var(--font-sans)" }}
@@ -578,7 +677,15 @@ export default function LiveRoomDetail() {
                             <span className="text-center">Creatures</span>
                             <span>Features</span>
                           </div>
-                          {displayRooms.map((zr) => {
+                          {filteredDisplayRooms.length === 0 && (filterPlayers || filterCreatures) ? (
+                            <p
+                              className="text-[#8A8B95] text-sm py-4 text-center"
+                              style={{ fontFamily: "var(--font-sans)" }}
+                            >
+                              No rooms match the current filter.
+                            </p>
+                          ) : (
+                          filteredDisplayRooms.map((zr) => {
                             const occ = roomOccupancy[zr.slug] ?? {
                               players: [],
                               creatures: [],
@@ -588,6 +695,7 @@ export default function LiveRoomDetail() {
                               <div key={zr.slug}>
                                 <button
                                   onClick={() => toggleRoomExpanded(zr.slug)}
+                                  onContextMenu={(e) => handleRoomContextMenu(e, zr.slug, zr.name)}
                                   className="w-full grid grid-cols-[24px_1fr_100px_100px_1fr] gap-3 px-3 py-2 rounded hover:bg-[#1C1D27] transition-colors items-center text-left"
                                 >
                                   {isExpanded ? (
@@ -744,48 +852,19 @@ export default function LiveRoomDetail() {
                                       </div>
                                     )}
 
-                                    {/* Room actions */}
-                                    <div className="flex gap-2 pt-1">
-                                      <button
-                                        onClick={() =>
-                                          openBroadcastModal({
-                                            slug: zr.slug,
-                                            name: zr.name,
-                                          })
-                                        }
-                                        className="px-3 py-1.5 text-xs border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:bg-[#1C1D27] rounded transition-colors flex items-center gap-1.5"
-                                        style={{ fontFamily: "var(--font-sans)" }}
-                                      >
-                                        <Megaphone className="w-3 h-3" />
-                                        Broadcast
-                                      </button>
-                                      <button
-                                        onClick={() => openSpawnInRoom(zr.slug)}
-                                        className="px-3 py-1.5 text-xs border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:bg-[#1C1D27] rounded transition-colors flex items-center gap-1.5"
-                                        style={{ fontFamily: "var(--font-sans)" }}
-                                      >
-                                        <Plus className="w-3 h-3" />
-                                        Spawn Here
-                                      </button>
-                                      <button
-                                        onClick={() =>
-                                          openTeleportModal({
-                                            slug: zr.slug,
-                                            name: zr.name,
-                                          })
-                                        }
-                                        className="px-3 py-1.5 text-xs border border-[#2A2B35] text-[#8A8B95] hover:text-[#E8E0D0] hover:bg-[#1C1D27] rounded transition-colors flex items-center gap-1.5"
-                                        style={{ fontFamily: "var(--font-sans)" }}
-                                      >
-                                        <Move className="w-3 h-3" />
-                                        Teleport Here
-                                      </button>
-                                    </div>
+                                    {/* Right-click hint (#385) */}
+                                    <p
+                                      className="text-[#4A4B55] text-xs italic pt-1"
+                                      style={{ fontFamily: "var(--font-sans)" }}
+                                    >
+                                      Right-click room row for actions
+                                    </p>
                                   </div>
                                 )}
                               </div>
                             );
-                          })}
+                          })
+                          )}
                         </div>
                       )}
                     </>
@@ -1152,6 +1231,125 @@ export default function LiveRoomDetail() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Room context menu (#385) */}
+      {contextMenu && (
+        <div
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: "fixed",
+            top: contextMenu.y,
+            left: contextMenu.x,
+            zIndex: 100,
+            background: "#1C1D27",
+            border: "1px solid #2A2B35",
+            borderRadius: 6,
+            padding: "4px 0",
+            minWidth: 180,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+            fontFamily: "var(--font-sans)",
+            fontSize: 12,
+            color: "#E0E0E0",
+          }}
+        >
+          {/* Room name header */}
+          <div style={{
+            padding: "4px 12px 4px",
+            color: "#C9A84C",
+            fontSize: 13,
+            fontWeight: 600,
+            borderBottom: "1px solid #2A2B35",
+            marginBottom: 4,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}>
+            {contextMenu.roomName}
+          </div>
+
+          <button
+            onClick={() => {
+              const { roomSlug, roomName } = contextMenu;
+              setContextMenu(null);
+              openBroadcastModal({ slug: roomSlug, name: roomName });
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              width: "100%",
+              padding: "6px 12px",
+              background: "transparent",
+              border: "none",
+              color: "#E0E0E0",
+              cursor: "pointer",
+              fontFamily: "var(--font-sans)",
+              fontSize: 12,
+              textAlign: "left",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#2A2B35"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+          >
+            <span style={{ width: 14, textAlign: "center" }}>📢</span>
+            Broadcast
+          </button>
+
+          <button
+            onClick={() => {
+              const { roomSlug } = contextMenu;
+              setContextMenu(null);
+              openSpawnInRoom(roomSlug);
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              width: "100%",
+              padding: "6px 12px",
+              background: "transparent",
+              border: "none",
+              color: "#E0E0E0",
+              cursor: "pointer",
+              fontFamily: "var(--font-sans)",
+              fontSize: 12,
+              textAlign: "left",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#2A2B35"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+          >
+            <span style={{ width: 14, textAlign: "center" }}>➕</span>
+            Spawn Here
+          </button>
+
+          <button
+            onClick={() => {
+              const { roomSlug, roomName } = contextMenu;
+              setContextMenu(null);
+              openTeleportModal({ slug: roomSlug, name: roomName });
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              width: "100%",
+              padding: "6px 12px",
+              background: "transparent",
+              border: "none",
+              color: "#E0E0E0",
+              cursor: "pointer",
+              fontFamily: "var(--font-sans)",
+              fontSize: 12,
+              textAlign: "left",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#2A2B35"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+          >
+            <span style={{ width: 14, textAlign: "center" }}>🔀</span>
+            Teleport Here
+          </button>
         </div>
       )}
 

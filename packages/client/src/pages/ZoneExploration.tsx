@@ -6,6 +6,7 @@ import {
   Sword,
   ArrowLeft,
   Settings,
+  Users,
 } from "lucide-react";
 import CombinedStashLoadout from "../components/CombinedStashLoadout";
 import ChatPanel from "../components/ChatPanel";
@@ -19,6 +20,8 @@ import { RoomOccupants } from "../components/RoomOccupants.js";
 import { CombatHUD } from "../components/CombatHUD.js";
 import "../components/map/map.css";
 import MudPrompt from "../components/MudPrompt.js";
+import SettingsModal from "../components/SettingsModal.js";
+import WhoListModal from "../components/WhoListModal.js";
 import { useAppContext, type StatusEffect } from "../store.js";
 import { useZoneConnection } from "../hooks/useZoneConnection.js";
 import { useAutoScroll } from "../hooks/useAutoScroll.js";
@@ -26,7 +29,7 @@ import { useExplorationMap } from "../hooks/useExplorationMap.js";
 import { useMapToggle } from "../hooks/useMapToggle.js";
 import { useVersion } from "../hooks/useVersion.js";
 import { useDirectionKeys } from "../hooks/useDirectionKeys.js";
-import { isSpeedwalk, parseSpeedwalk } from "../utils/speedwalk.js";
+import { shouldTreatAsSpeedwalk, parseSpeedwalk } from "../utils/speedwalk.js";
 import { fetchSpawnZone } from "../services/api.js";
 import type { CombatAction } from "@ellmud/shared";
 
@@ -82,6 +85,8 @@ export default function ZoneExploration() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showWho, setShowWho] = useState(false);
   const { containerRef: narrativeRef, bottomRef } = useAutoScroll(state.messages);
 
   // ─── Focus persistence across zone transitions ───────────────────────────────
@@ -175,18 +180,17 @@ export default function ZoneExploration() {
       setHistoryIndex(-1);
       setCommand("");
 
-      // Phase 2: Speedwalk detection
-      if (isSpeedwalk(trimmed)) {
+      // Phase 2: Speedwalk detection — only for multi-move sequences.
+      // Single direction letters (n/s/e/w/u/d) fall through to normal
+      // command handling so they don't trigger false "Speedwalk" messages.
+      if (shouldTreatAsSpeedwalk(trimmed)) {
         if (state.inCombat) {
           addSystemMessage("Speedwalk blocked — you are in combat!");
           return;
         }
 
         const result = parseSpeedwalk(trimmed);
-        if (!result.ok) {
-          addSystemMessage(result.error);
-          return;
-        }
+        if (!result.ok) return;
 
         // Execute each move sequentially with a small delay so the server
         // can process each one and the response echoes back.
@@ -341,11 +345,18 @@ export default function ZoneExploration() {
             {state.username ?? state.email ?? "Unknown"}
           </span>
           <button
-            onClick={() => navigate("/settings")}
+            onClick={() => setShowSettings(true)}
             className="text-text-secondary hover:text-accent-gold transition-colors"
             title="Settings"
           >
             <Settings className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setShowWho(true)}
+            className="text-text-secondary hover:text-accent-gold transition-colors"
+            title="Who's online"
+          >
+            <Users className="w-4 h-4" />
           </button>
           <span className="text-text-disabled">|</span>
           {connectionIndicator()}
@@ -865,6 +876,18 @@ export default function ZoneExploration() {
         onReconnect={reconnection.reconnectNow}
         onCancel={reconnection.cancel}
         onReturnToHub={reconnection.returnToHub}
+      />
+
+      {/* Settings Modal */}
+      <SettingsModal
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+      />
+
+      {/* Who List Modal */}
+      <WhoListModal
+        open={showWho}
+        onClose={() => setShowWho(false)}
       />
     </div>
   );

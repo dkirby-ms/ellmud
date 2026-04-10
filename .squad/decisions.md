@@ -7474,3 +7474,501 @@ Completely removed the Refuge screen from the codebase and relocated critical fu
 ### Follow-up
 None required. The faction hub concept remains intact — players still have hub zones like The Reliquary, The Bloom Observatory, etc. This just removed the old debug screen.
 
+
+---
+
+## Decision: Admin API auth failure broadcasting via custom events
+
+**Author:** Regis  
+**Date:** 2026-04-10  
+**Issue:** #369  
+
+### Context
+
+Admin token validation needed a way to communicate auth failures from deep in the API layer back to the AdminLayout without prop drilling or React context.
+
+### Decision
+
+Use `window.dispatchEvent(new CustomEvent('admin:auth-failure'))` in `adminFetch` when a 401/403 is received. `AdminLayout` listens for this event and resets to the login form.
+
+### Rationale
+
+- Simple, zero-dependency approach
+- Works regardless of component tree depth
+- Hooks can silently absorb auth errors knowing the global handler redirects
+- No new React context needed
+
+### Impact
+
+- All admin API calls now broadcast auth failures automatically
+- Any future admin component automatically benefits from this pattern
+- Minsc verified via 35 tests: no server changes needed — the existing 401/403 responses are sufficient
+
+---
+
+## Decision: Admin Token Validation Test Coverage (35 Tests)
+
+**Author:** Minsc (Tester)  
+**Date:** 2026-04-10  
+**Issue:** #369 — admin invalid token error  
+
+### Analysis
+
+The original bug: invalid admin tokens stored in localStorage, `authenticated` set to `true` on page load without server validation. Every admin page broke with 403s.
+
+### Regis Implementation Verified
+
+All 35 tests pass against the fix:
+
+1. **`validateAdminToken()` function** in `admin-api.ts` — lightweight API call to verify token
+2. **`ADMIN_AUTH_FAILURE_EVENT`** — `adminFetch` dispatches on 401/403
+3. **Mount-time validation** — `AdminLayout` calls `validateAdminToken()` on mount to catch stale tokens
+4. **Auth failure listener** — Resets to login form when any admin API call gets 401/403
+5. **`validating` loading state** — Shows spinner while stored token is checked
+6. **`handleAdminLogin` validation** — Validates before setting `authenticated = true`
+
+### Test Coverage (35 tests total)
+
+**Client-side (17 tests):** `packages/client/src/__tests__/admin-token-validation.test.tsx`
+- Token submission validation (empty, missing, whitespace, invalid, valid)
+- Recovery flow (re-enter after rejection, error clears on typing)
+- Stale stored token detection on mount
+- Event-driven auth failure handling
+- Loading state rendering
+
+**Server-side (18 tests):** `packages/server/src/__tests__/admin-token-validation.test.ts`
+- Authorization header validation (missing, malformed)
+- Token validation (wrong, partial, case-altered, whitespace)
+- Correct token handling (200 response)
+- Fail-closed mode (ADMIN_TOKEN not set → 503)
+- Error response format validation
+
+### Status
+
+PR #372 ready to merge with full test coverage. No additional implementation needed.
+
+---
+
+## Decision: Posture System Architecture (#371)
+
+**Author:** Jarlaxle  
+**PR:** #376  
+**Date:** 2026-07-26  
+
+## Decisions Made
+
+### 1. Posture is DB-backed, not session-local
+Posture persists to the `characters.posture` column (migration 010). This overrides Elminster's v1 session-only proposal. Players reconnecting to a zone will resume their last posture.
+
+### 2. `_postureChange` metadata pattern
+Posture command handlers return `_postureChange` metadata alongside their CommandResult. ZoneRoom reads this to broadcast third-person narration ("Alice sits down.") to other players in the room. This avoids coupling posture handlers to ZoneRoom internals while keeping broadcast logic centralized.
+
+### 3. Pre-movement posture capture
+Movement departure verbs require the posture *before* the go handler runs (since it resets posture to standing). `previousPosture` is captured before `handleCommand()` and passed to `broadcastPlayerMovement()`.
+
+### 4. `forcePosture()` API for system effects
+A separate utility function `forcePosture(player, posture, name)` exists for combat knockdowns and future game effects. It's decoupled from the command handler pipeline and can be called from any system.
+
+### 5. floating/hovering are system-only
+Not registered in the parser. Only settable via `forcePosture()`. Reserved for flight/levitation effects in future phases.
+
+### 6. PlayerRef.posture is optional
+Backward compatible — code without posture data renders "is here" fallback. No breaking changes to existing PlayerRef consumers.
+
+---
+
+## Decision: Release Workflows Alignment with dev/uat/prod (#379)
+
+**Author:** Minsc (Tester)  
+**Issue:** #379  
+**Date:** 2026-04-09  
+
+### Problem
+Squad's default release workflow templates ship with `dev → preview → main` branching model. This repository uses `dev → uat → prod`. The hardcoded `main` branch references caused release.yml run #24201081668 to fail with `fatal: ref: main does not exist`.
+
+### Decision
+Updated all three release-related workflows to match actual repository branching:
+- **release.yml:** Checks out and pushes to `prod` (not `main`)
+- **squad-release.yml:** Triggers on push to `prod` (not `main`)
+- **squad-promote.yml:** Promotes `dev → uat → prod` (not `dev → preview → main`)
+
+### Impact
+- Release workflow now succeeds when dispatched
+- Squad promote pipeline is usable for version management
+- Consistent with existing `ci-cd.yml` which already targets `uat`/`prod`
+
+### Related
+- Commits committed to `dev` branch
+
+---
+
+## Decision: Starting Gear Missing — sendLoadoutAndStashUpdate() (#377)
+
+**Author:** Minsc (Tester)  
+**Issue:** #377  
+**Date:** 2026-04-09  
+
+### Problem
+Players' starting gear (equipment) was invisible in the client after joining a zone. Root cause: ZoneRoom's `onJoin()` method was missing `STASH_UPDATE` message broadcast.
+
+### Root Cause
+During the RefugeRoom→ZoneRoom merge, the old `sendZoneLoadoutUpdate()` method was removed. The new ZoneRoom implementation sent only `LOADOUT_UPDATE`, leaving stash empty on client-side.
+
+### Decision
+- Created new combined method `sendLoadoutAndStashUpdate()` that sends both `LOADOUT_UPDATE` and `STASH_UPDATE`
+- Updated all equipment change handlers (equip/unequip/swap) to use the new method
+- Updated ZoneRoom's `onJoin()` to call `sendLoadoutAndStashUpdate()`
+- Enhanced `MessageCollector` test helper to capture both message types
+
+### Impact
+- Equipment visibility fixed; starting gear now visible
+- 6 new integration tests written and passing
+- All 2582 existing tests continue to pass
+- Any future room type displaying equipment must call `sendLoadoutAndStashUpdate()` on join
+- Client side requires no changes (already handles both messages correctly)
+
+### Related Commits
+- 30038ec — Fix: ZoneRoom sendLoadoutAndStashUpdate() on join
+- 0ac5d48 — Test: 6 integration tests for starting gear visibility
+
+---
+
+## Decision: Posture Broadcast Logic — Redundant Implementation (PR #376)
+
+**Author:** Elminster  
+**PR:** #376  
+**Date:** 2026-04-09  
+**Type:** Code Quality Concern  
+
+### Problem
+The posture command handlers define a `_postureChange` metadata field that is never consumed by ZoneRoom. Instead, ZoneRoom implements its own broadcast logic with manual verb detection and duplicated message maps. This duplication creates maintenance debt.
+
+### Current State
+- posture.ts defines `POSTURE_CHANGE_MESSAGES` and includes `_postureChange` metadata in CommandResult (lines 40-41)
+- ZoneRoom re-implements the same messages with hardcoded verb detection (lines 1107-1126)
+- All 63 tests pass despite the duplication
+- The unused `_postureChange` field doesn't cause runtime errors
+
+### Options Considered
+
+**Option 1: Use the Metadata Pattern (Recommended)**
+- ZoneRoom consumes `result._postureChange` instead of detecting posture commands manually
+- Single source of truth for posture messages
+- Consistent with other metadata patterns (targetNarrations, zoneTransfer)
+- Easier to extend for future custom messages
+- Requires TypeScript casting to access `_postureChange`
+
+**Option 2: Remove the Unused Metadata**
+- Delete `_postureChange` from posture.ts; keep ZoneRoom's manual detection
+- No TypeScript casting needed
+- Simpler for current case but keeps hardcoded verb list and duplication
+
+**Option 3: Document and Accept**
+- Add comment explaining duplication; defer refactor to broader command/broadcast redesign
+- Zero code change but leaves technical debt
+
+### Decision
+PR #376 is approved. Not blocking merge.
+
+**Recommendation:** Option 1 as a follow-up refactor task (low priority, non-urgent). Aligns with existing metadata patterns and prevents future message drift. If no refactor is planned, recommend Option 2 to clean up unused code.
+
+### Related
+- CommandResult metadata pattern used elsewhere (ZoneRoom.ts: zoneTransfer, targetNarrations, action)
+- Issue #371 (character posture system)
+# Decision: Trace De-duplication at Presentation Layer
+
+**Author:** Jarlaxle  
+**Date:** 2025-07-24  
+**Issue:** #381  
+
+## Context
+Multiple footprint traces in the same direction produced duplicate player-facing messages (e.g., three "Footprints leading east." lines).
+
+## Decision
+De-duplicate in `getTracesForPlayer()` by grouping traces on `(type, direction)` and keeping only the most recent trace per group. Raw `getTracesInRoom()` is unchanged — all traces remain in storage for TTL decay, eviction, and game logic.
+
+## Rationale
+- Presentation-only fix: no data loss, no behavioral change to tick/decay/cap systems
+- Most-recent-wins preserves accurate age descriptions and expert-level actor names
+- Composable: if future systems need per-trace granularity, they use `getTracesInRoom()`
+
+## Impact
+- `TraceSystem.ts`: +15 lines (new private method)
+- `trace-system.test.ts`: +8 tests
+- Zero regressions across 46 trace tests + 55 phase2 QA tests
+# Decision: Speedwalk gate requires 2+ moves
+
+**Author:** Drizzt
+**Date:** 2025-07-22
+**Issue:** #380
+
+## Context
+The `isSpeedwalk()` regex intentionally matches single direction letters (n/s/e/w/u/d) because they ARE valid speedwalk syntax. However, the UI was using this as the sole gate for entering speedwalk mode, which caused single-move commands to show "Speedwalk: 1 moves (n)".
+
+## Decision
+Added `shouldTreatAsSpeedwalk()` that requires the parsed result to contain 2+ moves. Single direction letters now go through the normal `sendCommand()` path. The `isSpeedwalk()` function remains unchanged (it's still correct as a syntax check).
+
+## Impact
+- **Regis (Frontend):** The `shouldTreatAsSpeedwalk()` export from `speedwalk.ts` is now the correct gate for speedwalk mode. Use it instead of `isSpeedwalk()` when deciding UI behavior.
+- **Server:** No changes needed. Direction aliases already handle single letters.
+# Design Spec: Creature Room Appearance — Individual Lines with ANSI Support
+
+**Issue:** #383 — [FEATURE] creature appearance in room  
+**Author:** Elminster (Lead/Architect)  
+**Date:** 2025-07-22  
+**Label:** `go:needs-research` → `go:ready` (after approval)  
+**Assignees:** Jarlaxle (Systems Dev — rendering changes), Drizzt (Engine Dev — if template/manager changes needed)
+
+---
+
+## Summary
+
+Creatures in a room currently appear aggregated by type on a single line with a count suffix (e.g., `"A goblin lurks here. (x3)"`). The issue requests that **each creature instance gets its own dedicated line**, with the text coming from the creature's `roomDescription` field, and that the text supports ANSI color tags.
+
+**Good news: no schema migration or type changes are needed.** The `room_description` column already exists on `creature_definitions`, and `roomDescription?: string` is already on both `CreatureTemplate` and `Creature` interfaces. ANSI tag parsing (`[red]text[/red]`) already works end-to-end in the client. This is a rendering-only change.
+
+---
+
+## Current State
+
+### Schema (already sufficient)
+
+| Layer | Location | Field |
+|-------|----------|-------|
+| Database | `creature_definitions.room_description` (TEXT, nullable) | `packages/server/src/db/migrations/001_schema.sql:142` |
+| Template | `CreatureTemplate.roomDescription?: string` | `packages/server/src/creatures/types.ts:76` |
+| Instance | `Creature.roomDescription?: string` | `packages/server/src/creatures/types.ts:111` |
+| Command context | `CreatureRef.roomDescription?: string` | `packages/server/src/commands/index.ts:72` |
+| Admin API | `PgCreatureDefinitionsStore` reads/writes `room_description` | `packages/server/src/admin/content/PgCreatureDefinitionsStore.ts:50,163` |
+
+All existing creatures in seed data already have `room_description` values (see `002_seed_content.sql:84-150`).
+
+### Current Rendering (what changes)
+
+Three files contain identical aggregation logic that groups creatures by type and appends `(xN)`:
+
+1. **`packages/server/src/commands/handlers/look.ts:57-72`** — `showFullRoom()` (the "look" command)
+2. **`packages/server/src/commands/handlers/go.ts:76-93`** — room entry after movement
+3. **`packages/server/src/commands/handlers/goto.ts:83-99`** — admin teleport room entry
+
+All three follow this pattern:
+```typescript
+// CURRENT: aggregate by type
+const creaturesByType = new Map<string, { creature: CreatureRef; count: number }>();
+for (const c of creatures) {
+  const key = c.type ?? c.name;
+  const existing = creaturesByType.get(key);
+  if (existing) existing.count++;
+  else creaturesByType.set(key, { creature: c, count: 1 });
+}
+for (const [, { creature, count }] of creaturesByType) {
+  const desc = creature.roomDescription || `A ${creature.name} lurks here.`;
+  lines.push(count > 1 ? `${desc} (x${count})` : desc);
+}
+```
+
+### ANSI Tag System (already sufficient)
+
+The client parser at `packages/client/src/lib/ansi-parser.ts` supports lightweight tags:
+- Colors: `[red]`, `[green]`, `[cyan]`, `[bright-yellow]`, etc.
+- Modifiers: `[bold]`, `[dim]`, `[italic]`, `[underline]`
+- Closing: `[/red]` or `[/]` (pop any)
+
+Server sends raw text with tags embedded; client renders them as styled `<span>` elements with `.ansi-*` CSS classes. No server-side processing is needed — tags pass through as plain strings.
+
+---
+
+## Design
+
+### Change 1: Replace Aggregation with Individual Lines
+
+In all three files (`look.ts`, `go.ts`, `goto.ts`), replace the aggregation block with a simple per-creature loop:
+
+```typescript
+// NEW: one line per creature instance
+for (const creature of creatures) {
+  lines.push(creature.roomDescription || `A ${creature.name} lurks here.`);
+}
+```
+
+**That's the entire rendering change.** The fallback `A ${creature.name} lurks here.` handles creatures that lack a `roomDescription` (defensive, though all current creatures have one).
+
+#### File-specific changes:
+
+**`packages/server/src/commands/handlers/look.ts` (lines 57-72):**
+Replace:
+```typescript
+if (ctx.creaturesInRoom && ctx.creaturesInRoom.length > 0) {
+  const creaturesByType = new Map<string, { creature: import('../index.js').CreatureRef; count: number }>();
+  for (const c of ctx.creaturesInRoom) {
+    const key = c.type ?? c.name;
+    const existing = creaturesByType.get(key);
+    if (existing) {
+      existing.count++;
+    } else {
+      creaturesByType.set(key, { creature: c, count: 1 });
+    }
+  }
+  for (const [, { creature, count }] of creaturesByType) {
+    const desc = creature.roomDescription || `A ${creature.name} lurks here.`;
+    lines.push(count > 1 ? `${desc} (x${count})` : desc);
+  }
+}
+```
+With:
+```typescript
+if (ctx.creaturesInRoom && ctx.creaturesInRoom.length > 0) {
+  for (const creature of ctx.creaturesInRoom) {
+    lines.push(creature.roomDescription || `A ${creature.name} lurks here.`);
+  }
+}
+```
+
+**`packages/server/src/commands/handlers/go.ts` (lines 78-93):**
+Replace:
+```typescript
+if (creatures.length > 0) {
+  const creaturesByType = new Map<string, { creature: import('../index.js').CreatureRef; count: number }>();
+  // ...aggregation logic...
+}
+```
+With:
+```typescript
+for (const creature of creatures) {
+  lines.push(creature.roomDescription || `A ${creature.name} lurks here.`);
+}
+```
+
+**`packages/server/src/commands/handlers/goto.ts` (lines 84-99):**
+Same replacement pattern as `go.ts`.
+
+### Change 2: ANSI Tags in `roomDescription` Content
+
+No code change is required for ANSI support. The `roomDescription` field is a plain string that flows from DB → server → client. The client's `parseAnsiText()` already handles tags in any `NarrateMessage` text.
+
+To demonstrate and validate, update a few seed creature descriptions with ANSI tags. Example seed data updates in `002_seed_content.sql` (optional, can be done in a follow-up content pass):
+
+```sql
+-- Before:
+'A drowned revenant sways in the murk, waterlogged limbs dragging.'
+-- After (with ANSI):
+'A [dim]drowned revenant[/dim] sways in the murk, waterlogged limbs dragging.'
+
+-- Before:
+'The Collapsed One looms here, stone and flesh fused into one.'
+-- After (with ANSI):
+'[bold][red]The Collapsed One[/red][/bold] looms here, stone and flesh fused into one.'
+```
+
+This is a content decision for the team/dkirby-ms, not a code requirement. The system supports it immediately.
+
+### Change 3: Admin UI Guidance
+
+The admin content editor (`PgCreatureDefinitionsStore`) already reads and writes `roomDescription` as a free-text string. Admins can include ANSI tags directly in the creature editor. No admin UI changes are needed, but a tooltip or help text saying "Supports ANSI tags: [red], [bold], etc." would be a nice enhancement (out of scope for this issue).
+
+---
+
+## What Does NOT Change
+
+| Component | Status |
+|-----------|--------|
+| Database schema (`creature_definitions`) | ✅ No migration needed — `room_description` column exists |
+| Shared types (`@ellmud/shared`) | ✅ No changes — `CreaturePositionType` and narrative types unchanged |
+| Server types (`CreatureTemplate`, `Creature`, `CreatureRef`) | ✅ No changes — `roomDescription?: string` already present |
+| `CreatureManager` | ✅ No changes — already copies `roomDescription` from template to instance |
+| `ZoneRoom` context building | ✅ No changes — already passes `roomDescription` to `CreatureRef` |
+| Admin API / content store | ✅ No changes — already persists `room_description` |
+| Client ANSI parser | ✅ No changes — already parses `[tag]` syntax in all narration text |
+
+---
+
+## Example Output
+
+### Before (current aggregated):
+```
+The Silt Flats
+A vast expanse of cracked earth stretches before you.
+
+Exits: north, east, south
+
+A slum rat sniffs along the ground. (x3)
+A hollow stalker drifts in the shadows, barely visible.
+```
+
+### After (individual lines, with optional ANSI):
+```
+The Silt Flats
+A vast expanse of cracked earth stretches before you.
+
+Exits: north, east, south
+
+A slum rat sniffs along the ground.
+A slum rat sniffs along the ground.
+A slum rat sniffs along the ground.
+A [dim]hollow stalker[/dim] drifts in the shadows, barely visible.
+```
+
+---
+
+## Testing
+
+### Unit Tests
+
+**File:** `packages/server/src/__tests__/look.test.ts` (or create if not present)
+
+1. **Individual creature lines** — Given 3 creatures of the same type in a room, `handleLook()` should return 3 separate lines (not 1 aggregated line with `(x3)`).
+2. **roomDescription used** — Given a creature with `roomDescription: "A goblin crouches here."`, the output should contain that exact string.
+3. **Fallback text** — Given a creature with no `roomDescription`, output should contain `"A <name> lurks here."`.
+4. **ANSI tags pass through** — Given `roomDescription: "[red]A fire imp[/red] smolders here."`, the output should contain the tag text verbatim (server does not strip tags).
+5. **Same tests for `go.ts` and `goto.ts`** — Verify creature lines in room entry output follow the same pattern.
+
+### Manual QA
+
+1. Enter a room with multiple creatures of the same type → verify each gets its own line.
+2. Add ANSI tags to a creature's `roomDescription` via admin panel → verify colored text renders in the game client.
+3. Enter a room with a creature that has no `roomDescription` → verify fallback text appears.
+
+---
+
+## Implementation Checklist
+
+- [ ] **`look.ts`** — Replace aggregation block (lines 57-72) with per-creature loop
+- [ ] **`go.ts`** — Replace aggregation block (lines 78-93) with per-creature loop
+- [ ] **`goto.ts`** — Replace aggregation block (lines 84-99) with per-creature loop
+- [ ] **Tests** — Add/update tests for individual creature line rendering
+- [ ] **(Optional)** Update a few seed `room_description` values with ANSI tags as examples
+- [ ] **(Optional)** Add admin UI tooltip noting ANSI tag support in `roomDescription` field
+
+---
+
+## Open Questions for dkirby-ms
+
+1. **Duplicate lines acceptable?** With 5 slum rats in a room, the player will see the identical line 5 times. This is authentic to classic MUD style, but we could add variation (e.g., "Another slum rat sniffs along the ground." for the 2nd+). Recommend: ship as-is, iterate if it feels wrong.
+
+2. **ANSI in seed data now or later?** We can update the seed creature descriptions with color tags in this PR or defer to a dedicated content pass. Recommend: defer to content pass so this PR stays focused on the rendering change.
+
+3. **Behavior state variation?** A creature in `alert` or `fleeing` state could show a different room description. This is out of scope for #383 but worth noting as a future enhancement. The current design supports it — just add conditional logic in the rendering loop.
+
+# Decision: Live Rooms Context Menu Pattern
+
+**Author:** Regis  
+**Date:** 2026-07-24  
+**Issues:** #384, #385
+
+## Context
+The Room Graph tab on the Live Room detail page had inline Broadcast/Spawn/Teleport buttons under each expanded room row, cluttering the UI.
+
+## Decision
+Replaced inline action buttons with a right-click context menu, reusing the exact same styling pattern from ZoneDesigner.tsx (inline styles, window event listeners for close-on-escape/outside, fixed positioning at click coordinates).
+
+Also added occupancy filter toggles (Players/Creatures) as a filter bar above the room list.
+
+## Rationale
+- Context menu pattern already established in ZoneDesigner — reusing it maintains consistency
+- Inline styles (not CSS classes) match ZoneDesigner convention for context menus
+- Filters use OR logic when both active (show rooms with players OR creatures) — simplest mental model
+
+## Team Impact
+- No API changes
+- No shared type changes
+- Pattern: right-click context menus on admin data rows should follow ZoneDesigner inline-style convention

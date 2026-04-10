@@ -6,6 +6,7 @@
 import type { CommandResult } from '../index.js';
 import type { CommandContext } from '../index.js';
 import type { RoomFeature } from '@ellmud/shared';
+import { POSTURE_ROOM_DESCRIPTIONS } from '@ellmud/shared';
 
 export function handleLook(ctx: CommandContext): CommandResult {
   const { room, args } = ctx;
@@ -52,27 +53,23 @@ function showFullRoom(ctx: CommandContext): CommandResult {
     lines.push(`You see: ${itemNames}`);
   }
 
-  // Creatures in the room
+  // Creatures in the room — one line per creature instance (#383)
   if (ctx.creaturesInRoom && ctx.creaturesInRoom.length > 0) {
-    // Group creatures by type and count
-    const creaturesByType = new Map<string, { creature: import('../index.js').CreatureRef; count: number }>();
-    for (const c of ctx.creaturesInRoom) {
-      const key = c.type ?? c.name;
-      const existing = creaturesByType.get(key);
-      if (existing) {
-        existing.count++;
-      } else {
-        creaturesByType.set(key, { creature: c, count: 1 });
-      }
-    }
-    for (const [, { creature, count }] of creaturesByType) {
-      const desc = creature.roomDescription || `A ${creature.name} lurks here.`;
-      lines.push(count > 1 ? `${desc} (x${count})` : desc);
+    for (const creature of ctx.creaturesInRoom) {
+      lines.push(creature.roomDescription || `A ${creature.name} lurks here.`);
     }
   }
 
-  // Other players in the room
-  if (ctx.otherPlayersInRoom.length > 0) {
+  // Other players in the room (Issue #370)
+  if (ctx.otherPlayerInfo && ctx.otherPlayerInfo.length > 0) {
+    for (const p of ctx.otherPlayerInfo) {
+      if (!p.anon) {
+        const postureDesc = p.posture ? POSTURE_ROOM_DESCRIPTIONS[p.posture] : 'is here';
+        lines.push(`${p.name} ${postureDesc}.`);
+      }
+    }
+  } else if (ctx.otherPlayersInRoom.length > 0) {
+    // Fallback: legacy count-based display when detailed info unavailable
     const count = ctx.otherPlayersInRoom.length;
     lines.push(`${count} other ${count === 1 ? 'wanderer lingers' : 'wanderers linger'} here.`);
   }

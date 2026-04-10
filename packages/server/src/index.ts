@@ -25,7 +25,7 @@ import {
 } from './auth/index.js';
 import { createHealthRouter } from './health.js';
 import { createVersionRouter } from './api/version.js';
-import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter, createDeployRouter, createZoneRouter } from './admin/index.js';
+import { createAdminRouter, createDashboardRouter, createContentRouter, createDashboardApiRouter, initializeContentStores, createUserRouter, createAuditRouter, createSimulateRouter, createDeployRouter, createZoneRouter, initAdminAuth } from './admin/index.js';
 import { getConfig, ZONE_DEFAULT_MAX_PLAYERS } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence, testRedisConnection } from './cache/index.js';
@@ -35,11 +35,13 @@ import { initFactionProvider } from './faction/index.js';
 import { initRunHistoryProvider } from './run-history/index.js';
 import { initLoadoutProvider } from './loadout/index.js';
 import { initDeathPenaltyProvider } from './systems/index.js';
+import { initMetricsProvider } from './metrics/index.js';
 import { initCharacterProvider } from './character/index.js';
 import { createCharacterRouter } from './api/characters.js';
 import { createSpawnZoneRouter } from './api/spawn-zone.js';
 import { createSettingsRouter } from './api/settings.js';
 import { initUserSettingsProvider } from './db/UserSettingsRepository.js';
+import { initCharacterFlagsProvider } from './db/CharacterFlagsRepository.js';
 import { initZoneProvider, getZoneRepository } from './zones/index.js';
 import { initExplorationProvider } from './exploration/index.js';
 import { initContentRegistry } from './content/index.js';
@@ -109,6 +111,10 @@ console.log(`[Ellmud] Loadout persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'
 initDeathPenaltyProvider(USE_PG);
 console.log(`[Ellmud] Death penalty persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
+// ─── Gameplay Metrics ──────────────────────────────────────────────────────
+initMetricsProvider(USE_PG);
+console.log(`[Ellmud] Gameplay metrics: ${USE_PG ? 'PostgreSQL' : 'no-op'}`);
+
 // ─── Character Persistence ──────────────────────────────────────────────────
 initCharacterProvider(USE_PG);
 console.log(`[Ellmud] Character persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
@@ -124,6 +130,10 @@ console.log(`[Ellmud] Exploration persistence: ${USE_PG ? 'PostgreSQL' : 'in-mem
 // ─── User Settings Persistence ──────────────────────────────────────────────
 initUserSettingsProvider(USE_PG);
 console.log(`[Ellmud] User settings persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Character Flags Persistence ────────────────────────────────────────────
+initCharacterFlagsProvider(USE_PG);
+console.log(`[Ellmud] Character flags persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Content Registry (DB-driven creature/item definitions) ─────────────────
 if (USE_PG) {
@@ -156,7 +166,7 @@ console.log(`[Ellmud] Token persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`
 // Mount local auth routes (only if ALLOW_LOCAL_AUTH is true)
 const ALLOW_LOCAL_AUTH = process.env.ALLOW_LOCAL_AUTH !== 'false';
 if (ALLOW_LOCAL_AUTH) {
-  app.use(createAuthRouter(authService));
+  app.use(createAuthRouter(authService, playerRepo));
   console.log('[Ellmud] Local authentication: enabled');
 } else {
   console.log('[Ellmud] Local authentication: disabled (OAuth only)');
@@ -205,7 +215,57 @@ app.use(createHealthRouter({ isCacheRedis, isPresenceRedis, isStashPg: isStashPg
 
 // ─── Admin Dashboard ─────────────────────────────────────────────────────────
 // Admin API at /admin/api/*, diagnostics dashboard at /monitor
-// Protected by ADMIN_TOKEN env var — admin auth is separate from player auth.
+// Protected by ADMIN_TOKEN (silent fallback) or session-based role check.
+
+// Initialize role-based admin auth (enables session token + role check)
+initAdminAuth(authService, playerRepo);
+console.log('[Ellmud] Admin auth: session-based role check enabled');
+
+// ─── AUTO_PROMOTE_ADMIN — Bootstrap first admin user ─────────────────────────
+const AUTO_PROMOTE = process.env['AUTO_PROMOTE_ADMIN'];
+if (AUTO_PROMOTE && USE_PG) {
+  try {
+    const { query: dbQuery } = await import('./db/index.js');
+    // Find user by username (case-insensitive)
+    const result = await dbQuery<{ id: string; identity_id: string; username: string }>(
+      `SELECT p.id, p.identity_id, p.username
+       FROM players p
+       WHERE LOWER(p.username) = LOWER($1)`,
+      [AUTO_PROMOTE],
+    );
+    if (result.rows.length > 0) {
+      const { identity_id, username } = result.rows[0];
+      const roleResult = await dbQuery<{ role: string }>(
+        `SELECT role FROM player_identities WHERE id = $1`,
+        [identity_id],
+      );
+      const currentRole = roleResult.rows[0]?.role ?? 'player';
+      if (currentRole !== 'admin') {
+        await dbQuery(
+          `UPDATE player_identities SET role = 'admin' WHERE id = $1`,
+          [identity_id],
+        );
+        console.log(`[Ellmud] AUTO_PROMOTE_ADMIN: Promoted '${username}' from '${currentRole}' to 'admin'`);
+        // Audit the auto-promotion
+        const { logAuditEvent } = await import('./admin/audit/audit-routes.js');
+        logAuditEvent({
+          action: 'role_change',
+          entityType: 'user',
+          entityId: result.rows[0].id,
+          entityName: username,
+          actor: 'system:auto-promote',
+          details: { previousRole: currentRole, newRole: 'admin', trigger: 'AUTO_PROMOTE_ADMIN' },
+        }).catch(() => {});
+      } else {
+        console.log(`[Ellmud] AUTO_PROMOTE_ADMIN: '${username}' is already admin`);
+      }
+    } else {
+      console.log(`[Ellmud] AUTO_PROMOTE_ADMIN: User '${AUTO_PROMOTE}' not found — will promote when they register`);
+    }
+  } catch (err) {
+    console.log('[Ellmud] AUTO_PROMOTE_ADMIN: Failed —', err instanceof Error ? err.message : String(err));
+  }
+}
 
 // Content CRUD API — admin-managed game content (items, creatures, etc.)
 const contentStores = initializeContentStores(USE_PG);

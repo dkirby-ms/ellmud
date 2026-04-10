@@ -48,6 +48,12 @@
 
 ## Learnings
 
+- **Issues #384 & #385 — Live Rooms occupancy filters + context menu (2026):** Added two features to the Room Graph tab in `LiveRoomDetail.tsx`. (1) Occupancy filter bar: `filterPlayers` / `filterCreatures` boolean toggles, `filteredDisplayRooms` useMemo derived from `displayRooms` + `roomOccupancy`. OR logic when both active. Shows count badge `filtered/total`. (2) Right-click context menu: `contextMenu` state `{x,y,roomSlug,roomName}`, `handleRoomContextMenu` on `onContextMenu` of each room row button. Fixed-position popup with inline styles matching ZoneDesigner pattern (bg `#1C1D27`, border `#2A2B35`, hover `#2A2B35`). Close-on-escape/outside via window event listeners in useEffect. Inline buttons removed; hint text in expanded rows. Modals (broadcast/spawn/teleport) unchanged — only trigger moved. Commit 70f6746.
+
+- **Issue #368 — Random character names (2026):** Created `utils/name-generator.ts` with 64 curated cyber noir names + syllable combiner (35 onsets × 20 codas). 60/40 curated/procedural split. All outputs validated against shared `validateCharacterName` (profanity filter, 2-24 chars, alpha-only, capitalization). Replaced hardcoded "Kael" placeholder in `CharacterSelect.tsx`. State initialized via `useState(generateRandomName)` (lazy initializer). Regenerate button uses lucide `Dices` icon, styled to match existing `bg-bg-elevated` pattern. Fresh name generated on "+ New Character" click and after successful creation. 7 tests. Commit ee3e991.
+
+- **Issue #366 — Who list UI (2026):** Built `WhoListModal.tsx` (following SettingsModal pattern), `useWhoList.ts` hook, and integrated into ZoneExploration. Added `REQUEST_PLAYER_LIST` / `PLAYER_LIST` MessageTypes + `PlayerListEntry` / `PlayerListMessage` to shared. Hook sends request via Colyseus room, listens for response. Modal shows table (Name, Lvl, Class, Zone, Flags) with "???" for anon players, flag badges, monospace font, dark theme. Users icon button in top bar next to Settings gear. No server-side logic (Jarlaxle). `/who` command handled server-side — text response flows through existing narrate pipeline, no client interception needed. Updated types test count 28→30.
+
 - **Issue #362 — Compass focus persistence across zone transitions (2026):** The `useEffect` in ZoneExploration that fires on `state.connectionStatus === "connected"` was unconditionally calling `inputRef.current?.focus()`, stealing focus from the compass on zone transitions. Fix: added a `lastFocusAreaRef` ("compass" | "prompt") updated by a `document.addEventListener('focusin', ...)` listener. On reconnect, checks the ref — if compass had focus, queries `compassRef.current?.querySelector('button:not([disabled])')` and focuses that instead. CompassControl converted to `forwardRef` to expose its DOM node. 4 new tests in `compass-focus-persistence.test.tsx`. Commit 59c1903.
 
 - **Issue #357 — Direction shortcuts + speedwalk (2026):** Phase 1: `useDirectionKeys` hook adds global keydown listener for arrow/PageUp/PageDown/numpad → direction mapping. Uses `document.activeElement` check to skip when input/textarea/contentEditable has focus (not inputRef comparison — works with any focused text field). Numpad5 is explicit no-op. Phase 2: `speedwalk.ts` pure-function parser — regex `(\d*)([nsewud])` iterates segments, 50-move client limit. In `ZoneExploration.tsx`, `handleSubmit` checks `isSpeedwalk()` before sending to server. Each move dispatched via `handleExitClick` with 150ms staggered `setTimeout`. Combat blocks speedwalk; entering combat mid-walk aborts via `speedwalkAbortRef` + useEffect on `state.inCombat`. Commit 2085460.
@@ -86,6 +92,67 @@
 - **OAuth username integration (2026-04-05):** Coordinated with Drizzt & Minsc — added username field to AppState, localStorage persistence, fetchMe() API integration, sign-out button on Login/AuthCallback/ZoneExploration/Refuge/Settings pages. Test suite 2521 passing, +5 new tests. User identity now persistent and visible across sessions.
 - **Faction-based entry routing (Issue #309):** Replaced hardcoded `/refuge` route with `/zone`. ZoneExploration hub detection now calls `/api/spawn-zone` to resolve the player's faction stronghold (e.g. `zone:the-foundry`) instead of hardcoding `zone:the-refuge`. Button text changed from "Enter Refuge" to "Enter World". `fetchSpawnZone()` added to `api.ts`. All navigation fallbacks, error links, admin links updated. Test mocks updated with `fetchSpawnZone`. 2533 tests passing.
 - **Starting zone picker replaces faction picker:** CharacterSelect.tsx now uses `STARTING_ZONES` array (the-reliquary, the-bloom-observatory, the-carrion-court) instead of `FACTIONS`. API sends `startingZoneSlug` instead of `factionSlug`. Shared types `CharacterSummary` and `CreateCharacterRequest` updated in both occurrences in `packages/shared/src/index.ts` — `factionSlug`/`factionName` are now nullable, `startingZoneSlug`/`startingZoneName` added. Character cards show zone name with 📍 icon; faction shown only if earned. Server test `character-repository.test.ts` updated to match. 2555 tests passing.
+
+---
+
+## 2026-04-09: Research — Issue #366 Who List Design
+
+**Status:** 🔍 Research Complete (go:needs-research issue — no implementation)  
+**Deliverable:** Design proposal filed to `.squad/decisions/inbox/regis-who-list-design.md`
+
+**Context & Dependencies:**
+- Issue #366 requires dual interfaces: text command (`/who`) + styled modal  
+- Depends on #365 (Elminster's user flags system — [Anon], [RP])
+- Server controls all visibility filtering (client is dumb terminal)
+
+**Key Design Decisions:**
+1. **Two complementary interfaces:**
+   - **Text command** (`/who`) outputs ASCII-formatted table to game narration (type: `system` message)
+   - **Modal** (WhoListModal.tsx) shows real-time player list with filtering & sorting
+
+2. **Button placement:** Top bar next to Settings button (alongside username, before connection indicator)
+
+3. **Modal architecture:** Sidebar (filters + sort) + content area (player list table) — consistent with SettingsModal pattern
+
+4. **Data flow:** New Colyseus message type `PLAYER_LIST` broadcasts periodically (5–10s interval). Server pre-filters per visibility rules before sending to client.
+
+5. **Server-side filtering (Elminster implements):** 
+   - If target has [Anon] flag AND viewer not in same room: name/level/class → "???"
+   - Zone name always visible (enables navigation)
+   - Flags always visible ([Anon], [RP])
+
+6. **Styling:** Monospace names (MUD heritage), gold accents (`text-accent-gold`), dark theme (`bg-bg-panel`, `bg-bg-primary`)
+
+7. **Real-time updates:** Client uses `useMemo` for filtered/sorted list; listens to Colyseus broadcast; updates modal as players join/leave
+
+**Component Architecture:**
+- **WhoListModal.tsx** (new) — 400 lines, React component with filter/sort state, memoized derived list
+- **ZoneExploration.tsx** (modify) — Add `showWho` state, "Who" button in top bar, wire modal
+- **useZoneConnection.ts** (modify) — Subscribe to PLAYER_LIST broadcast, dispatch to app context
+- **store.ts** (modify) — Add `playerList: PlayerListEntry[]` to AppState
+- **shared/index.ts** (modify) — Add `PLAYER_LIST` message type, define `PlayerListMessage` interface
+
+**Testing Strategy:**
+- Filter/sort logic (unit tests)
+- Anon flag visibility rules (integration tests)
+- Real-time updates via Colyseus (mocked broadcast tests)
+- Modal keyboard nav, Escape-to-close (UI tests)
+
+**Future Enhancements (Post-MVP):**
+- Click zone name to navigate (if admin or party member)
+- Keyboard shortcut (W key)
+- Search by player name
+- Party membership indicator
+- PvP/faction hostile badges
+
+**Notes for Elminster:**
+1. Flag system (#365) is blocking prerequisite
+2. Design assumes periodic broadcast (simpler than event-driven); can optimize later
+3. ASCII table formatting (with borders) done server-side; client just displays as `system` message
+4. Player list endpoint should NOT expose hidden data — filter on server before sending wire message
+
+**Files Produced:**
+- `.squad/decisions/inbox/regis-who-list-design.md` (23KB, comprehensive design spec with acceptance criteria)
 
 ## 2026-03-27T15:39Z — Phase C3 Complete
 
@@ -1633,3 +1700,111 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
   - `packages/client/src/pages/CharacterSelect.tsx` — Character selection screen with auth UI
   - `packages/client/src/pages/ZoneExploration.tsx` — In-zone gameplay screen (no sign-out)
 - **Disconnect Handling**: The `handleLogout` function properly calls `roomRef.current?.leave()` before dispatching LOGOUT to ensure WebSocket cleanup.
+
+### In-Game Settings Modal (2026-04-10)
+- **Modal Pattern**: In-game settings should be a modal overlay, NOT a navigation event, to preserve zone/WebSocket state
+- **Design Consistency**: Modal uses same dark panel styling as game UI (bg-bg-primary, bg-bg-panel, border-accent-gold, semi-transparent backdrop)
+- **Dismissal**: Modal supports three close mechanisms: X button, Escape key, and clicking backdrop — standard UX pattern for overlays
+- **State Isolation**: Settings.tsx (full page with logout) remains for character select; SettingsModal.tsx (no logout) for in-game
+- **Component Reuse**: Modal extracts same settings UI from Settings.tsx, shares useSettings hook for consistent state management
+- **Z-index Layering**: Modal uses z-50 to overlay game UI without interfering with WebSocket or zone state
+- **File Paths**:
+  - `packages/client/src/components/SettingsModal.tsx` — Modal component for in-game settings
+  - `packages/client/src/pages/ZoneExploration.tsx` — Integrated modal trigger (line 344: setShowSettings)
+  - `packages/client/src/pages/Settings.tsx` — Full-page settings (unchanged, used from CharacterSelect)
+  - `packages/client/src/hooks/useSettings.ts` — Shared settings state management
+
+
+### Issue #365: Flag Toggles in Settings UI (2025-07-24)
+- **Separate hook for flags**: Created `useFlags` hook — flags use Colyseus room messages (TOGGLE_FLAG), not REST API like `useSettings`. Different persistence layer (character_flags vs user_settings).
+- **Optimistic localStorage**: Flags cached in localStorage for instant UI feedback; room message sent when connected.
+- **Toggle switch pattern**: Functional toggle using `role="switch"` + `aria-checked` for accessibility. Gold background when on, muted when off. Knob slides left/right via `left-1`/`left-7` Tailwind classes.
+- **Both locations**: Flags section added to both SettingsModal (in-game) and Settings page (character select). Follows existing inline-section-per-category pattern.
+- **Wire protocol**: `TOGGLE_FLAG` (client→server) and `FLAG_STATE` (server→client) added to shared MessageTypes. `sendToggleFlag()` added to connection.ts. `onFlagState` handler wired into both `connect()` and `switchRoom()`.
+- **File Paths**:
+  - `packages/client/src/hooks/useFlags.ts` — Flag state hook (new)
+  - `packages/client/src/services/connection.ts` — sendToggleFlag + onFlagState handler
+  - `packages/client/src/components/SettingsModal.tsx` — Flags category added
+  - `packages/client/src/pages/Settings.tsx` — Flags category added
+  - `packages/shared/src/index.ts` — UserFlagType, ToggleFlagMessage, FlagStateMessage types
+
+### Issue #368: Random Character Name Generator (2026-04-09)
+- **Status:** ✅ Complete (Commit ee3e991, pushed to main, issue closed)
+- **What:** Client-side random name generator with UI regenerate button
+- **Design:** 64 curated cyber noir names + syllable combiner (35 onsets × 20 codas = 700 procedural combinations), 60/40 curated/procedural split
+- **Name aesthetic:** Dark urban fantasy: Vex, Nyx, Riven, Corven, Sevrin. Short (3-8 chars), pronounceable, moody.
+- **Files created:**
+  - `packages/client/src/utils/name-generator.ts` — Core generator with validation
+  - `packages/client/src/__tests__/name-generator.test.ts` — 7 tests
+- **Files modified:**
+  - `packages/client/src/pages/CharacterSelect.tsx` — Integrated regenerate button (Dices icon, bg-bg-elevated)
+- **UI pattern:** Name field pre-populated via lazy initializer; regenerate button next to input; fresh name on "+ New Character" and after creation; user can always type own name
+- **Tests:** 7 new tests, all 338 client tests passing
+- **Team impact:** No shared package changes, no API changes, no server changes. Server validates names but doesn't generate.
+- **Future:** If server needs to generate NPC names, move generator to `@ellmud/shared`
+
+### Issue #369: Admin Invalid Token Error (2026-04-10)
+- **Status:** ✅ Complete (PR #372, branch squad/369-admin-invalid-token → dev)
+- **Bug:** Invalid admin tokens were silently accepted because `fetchNotifications()` swallowed 401/403 errors via internal `.catch()` handlers. Stale tokens in localStorage were also trusted without re-validation.
+- **Root cause:** `fetchNotifications` calls `fetchValidationWarnings` and `fetchRecentChanges` both wrapped in `.catch(() => defaults)`, so auth errors never propagated to `handleAdminLogin`.
+- **Fix approach:**
+  1. Added `validateAdminToken()` in `admin-api.ts` — calls `/admin/api/dashboard/metrics` which properly propagates errors
+  2. `handleAdminLogin` now uses `validateAdminToken()` instead of `fetchNotifications()`
+  3. Added startup validation: stored token is checked on mount before showing admin UI
+  4. Added `ADMIN_AUTH_FAILURE_EVENT` custom event: `adminFetch` broadcasts on 401/403, `AdminLayout` listens and resets to login
+  5. Entity hooks (`useAdminEntity`, `useAdminEntityList`) silently absorb auth errors since global event handles redirect
+- **Pattern:** Event-based auth failure broadcasting from API layer to layout — avoids prop drilling or context for auth state
+- **Files modified:**
+  - `packages/client/src/lib/admin-api.ts` — Added `validateAdminToken()`, `ADMIN_AUTH_FAILURE_EVENT`, 401/403 event dispatch in `adminFetch`
+  - `packages/client/src/pages/admin/AdminLayout.tsx` — Startup validation, auth failure listener, validating state
+  - `packages/client/src/hooks/useAdminEntityList.ts` — Auth error guard
+  - `packages/client/src/hooks/useAdminEntity.ts` — Auth error guard
+  - `packages/client/src/__tests__/admin-token-validation.test.tsx` — Updated mocks for new exports
+  - `packages/client/src/__tests__/auth-guards.test.tsx` — Updated mocks for new exports
+- **Tests:** All 356 client tests passing (17 admin-token-validation tests)
+
+---
+
+### 2026-04-09: Issue #369 — Admin Invalid Token Error (with Minsc)
+- **Status:** ✅ Complete (PR #372)
+- **Collaboration:** Regis implementation + Minsc comprehensive test coverage
+- **Bug:** Invalid admin tokens stored to localStorage, `authenticated` set to `true` without server validation on mount, breaking all admin pages with 403s
+- **Solution:**
+  - **`validateAdminToken()`** function in `admin-api.ts` — lightweight API call to verify stored token
+  - **`ADMIN_AUTH_FAILURE_EVENT`** custom event — `adminFetch` dispatches on 401/403 responses
+  - **Mount-time validation** — `AdminLayout` calls `validateAdminToken()` on component mount
+  - **Auth failure listener** — Automatically resets to login form on 401/403
+  - **`validating` loading state** — Shows spinner while stored token is checked
+  - **`handleAdminLogin` validation** — Validates token before setting `authenticated = true`
+- **Test Coverage:** Minsc wrote 35 tests (17 client, 18 server) covering all token validation scenarios
+- **Pattern:** Zero-dependency global event dispatch for auth failures; works across component tree without prop drilling
+- **Tests:** All 356 client tests passing; 35 new admin token validation tests passing
+- **Files modified:**
+  - `packages/client/src/lib/admin-api.ts` — `validateAdminToken()`, `ADMIN_AUTH_FAILURE_EVENT`, event dispatch
+  - `packages/client/src/pages/admin/AdminLayout.tsx` — Startup validation, failure listener, validating state
+  - `packages/client/src/__tests__/admin-token-validation.test.tsx` — New test file (17 tests)
+- **Team Impact:** Minsc verified implementation solid; PR #372 ready for merge
+
+
+---
+
+### 2026-04-09: Issues #384–#385 — Live Rooms Admin UI (Background Session)
+
+**Status:** ✅ Complete  
+**Issues:** #384 (Occupancy filters), #385 (Right-click context menu)  
+**Commit:** 70f6746
+
+**Summary:**
+- **#384 — Occupancy Filter Toggles:** Added filter bar above live rooms list with Players/Creatures checkboxes. OR logic when both active (show rooms with players OR creatures). Improves room discovery on busy admin dashboard.
+- **#385 — Right-click Context Menu:** Room Graph tab now uses right-click context menu instead of inline action buttons (Broadcast/Spawn/Teleport). Reused ZoneDesigner pattern (inline styles, window listeners for escape/outside close). Significantly reduces row clutter.
+
+**Architecture Decisions:**
+- Context menu pattern from ZoneDesigner reused entirely — maintains consistency across admin tools
+- Inline styles (not CSS classes) match ZoneDesigner convention — admin UI not in styled-components refactor scope
+- No API changes, no type changes, no data model changes
+
+**Design Decision Filed:** `.squad/decisions/inbox/regis-live-rooms-ui.md` documenting pattern rationale and future implications.
+
+**Test Status:** 3049 tests passing. New UI features covered by existing live rooms test suite.
+
+**Team Impact:** Establishes admin UI pattern — right-click context menus on data rows should follow this style convention.

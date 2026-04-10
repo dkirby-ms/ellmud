@@ -442,4 +442,105 @@ describe('TraceSystem', () => {
       expect(MAX_TRACES_PER_ROOM).toBe(50);
     });
   });
+
+  // ─── Direction De-duplication (#381) ────────────────────────────────────
+
+  describe('direction de-duplication', () => {
+    it('should consolidate multiple footprints in the same direction into one message', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' }, 'east');
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p2' }, 'east');
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p3' }, 'east');
+
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.BASIC,
+      });
+      expect(descriptions).toHaveLength(1);
+      expect(descriptions[0].text).toContain('east');
+      expect(descriptions[0].type).toBe('footprint');
+    });
+
+    it('should keep footprints in different directions as separate messages', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' }, 'east');
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p2' }, 'west');
+
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.BASIC,
+      });
+      expect(descriptions).toHaveLength(2);
+      const dirs = descriptions.map(d => d.direction);
+      expect(dirs).toContain('east');
+      expect(dirs).toContain('west');
+    });
+
+    it('should consolidate blood trails in the same direction', () => {
+      system.addTrace(ROOM_A, 'blood_trail', { severity: 15 }, 'north');
+      system.addTrace(ROOM_A, 'blood_trail', { severity: 20 }, 'north');
+
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.BASIC,
+      });
+      expect(descriptions).toHaveLength(1);
+      expect(descriptions[0].type).toBe('blood_trail');
+    });
+
+    it('should use the most recent trace for the consolidated description', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1', actorName: 'OldWarrior' }, 'east');
+      vi.advanceTimersByTime(60_000);
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p2', actorName: 'NewWarrior' }, 'east');
+
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.EXPERT,
+      });
+      expect(descriptions).toHaveLength(1);
+      expect(descriptions[0].text).toContain('NewWarrior');
+    });
+
+    it('should not consolidate different trace types in the same direction', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' }, 'east');
+      system.addTrace(ROOM_A, 'blood_trail', { severity: 15 }, 'east');
+
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.BASIC,
+      });
+      expect(descriptions).toHaveLength(2);
+    });
+
+    it('should consolidate directionless traces of the same type', () => {
+      system.addTrace(ROOM_A, 'residue', {});
+      system.addTrace(ROOM_A, 'residue', {});
+
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.BASIC,
+      });
+      expect(descriptions).toHaveLength(1);
+      expect(descriptions[0].type).toBe('residue');
+    });
+
+    it('should not affect raw getTracesInRoom (only player-facing descriptions)', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' }, 'east');
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p2' }, 'east');
+
+      // Raw traces are still all there
+      expect(system.getTracesInRoom(ROOM_A)).toHaveLength(2);
+      // But player descriptions are consolidated
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.BASIC,
+      });
+      expect(descriptions).toHaveLength(1);
+    });
+
+    it('should handle mixed consolidated and unique traces', () => {
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p1' }, 'east');
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p2' }, 'east');
+      system.addTrace(ROOM_A, 'footprint', { actorId: 'p3' }, 'west');
+      system.addTrace(ROOM_A, 'blood_trail', { severity: 15 }, 'east');
+      system.addTrace(ROOM_A, 'corpse', {});
+
+      const descriptions = system.getTracesForPlayer(ROOM_A, {
+        tracking: TRACKING_THRESHOLDS.BASIC,
+      });
+      // footprint east (consolidated), footprint west, blood east, corpse
+      expect(descriptions).toHaveLength(4);
+    });
+  });
 });

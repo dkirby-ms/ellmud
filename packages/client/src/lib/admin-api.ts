@@ -2,11 +2,18 @@
  * Admin API utility — centralized fetch wrapper for admin content endpoints
  * and live room management.
  *
- * All requests include Authorization: Bearer <ADMIN_TOKEN> header.
- * Token is read from localStorage (set during admin login).
+ * Authentication priority:
+ * 1. If the user has an admin/content-dev role, use their game session token.
+ * 2. Fall back to a manually-entered admin token from localStorage.
+ *
+ * All requests include Authorization: Bearer <TOKEN> header.
  */
 
 const ADMIN_TOKEN_KEY = 'admin_token';
+const GAME_TOKEN_KEY = 'ellmud_token'; // game session token stored by auth flow
+
+/** Fired on any 401/403 from adminFetch so AdminLayout can reset to login. */
+export const ADMIN_AUTH_FAILURE_EVENT = 'admin:auth-failure';
 
 export class AdminAPIError extends Error {
   constructor(
@@ -20,7 +27,13 @@ export class AdminAPIError extends Error {
 }
 
 export function getAdminToken(): string | null {
-  return localStorage.getItem(ADMIN_TOKEN_KEY);
+  // Prefer explicit admin token, fall back to game session token
+  return localStorage.getItem(ADMIN_TOKEN_KEY) ?? localStorage.getItem(GAME_TOKEN_KEY);
+}
+
+/** Returns true if the user is authenticated via their game session (no separate admin token needed). */
+export function isSessionAuth(): boolean {
+  return !localStorage.getItem(ADMIN_TOKEN_KEY) && !!localStorage.getItem(GAME_TOKEN_KEY);
 }
 
 export function setAdminToken(token: string): void {
@@ -29,6 +42,14 @@ export function setAdminToken(token: string): void {
 
 export function clearAdminToken(): void {
   localStorage.removeItem(ADMIN_TOKEN_KEY);
+}
+
+/**
+ * Validates the current admin token by making a lightweight API call.
+ * Throws AdminAPIError (status 401/403) if the token is invalid.
+ */
+export async function validateAdminToken(): Promise<void> {
+  await adminFetch<unknown>('/admin/api/dashboard/metrics');
 }
 
 export async function adminFetch<T>(
@@ -52,11 +73,15 @@ export async function adminFetch<T>(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new AdminAPIError(
+    const apiError = new AdminAPIError(
       error.error || `HTTP ${response.status}`,
       response.status,
       error.details
     );
+    if (response.status === 401 || response.status === 403) {
+      window.dispatchEvent(new CustomEvent(ADMIN_AUTH_FAILURE_EVENT));
+    }
+    throw apiError;
   }
 
   // 204 No Content for DELETE

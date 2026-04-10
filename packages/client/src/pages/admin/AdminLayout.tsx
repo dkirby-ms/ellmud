@@ -7,9 +7,12 @@ import {
 } from "lucide-react";
 import {
   listEntities, fetchNotifications, setAdminToken, getAdminToken, clearAdminToken,
+  validateAdminToken, ADMIN_AUTH_FAILURE_EVENT, isSessionAuth,
   type EntityType, type AdminNotification,
 } from "../../lib/admin-api";
 import { useVersion } from "../../hooks/useVersion";
+import { useAppContext } from "../../store";
+import { hasMinRole } from "@ellmud/shared";
 
 interface SearchableEntity {
   id: string;
@@ -68,10 +71,54 @@ export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const version = useVersion();
+  const { state: appState } = useAppContext();
 
-  const [authenticated, setAuthenticated] = useState(() => !!getAdminToken());
+  // Determine if the user has admin/content-dev role from their game session
+  const hasAdminRole = appState.authenticated && hasMinRole(appState.userRole, 'content-dev');
+
+  const [authenticated, setAuthenticated] = useState(() => hasAdminRole || !!getAdminToken());
   const [tokenInput, setTokenInput] = useState("");
   const [authError, setAuthError] = useState("");
+  const [validating, setValidating] = useState(() => hasAdminRole || !!getAdminToken());
+
+  // If user gains admin role through app state, auto-authenticate
+  useEffect(() => {
+    if (hasAdminRole && !authenticated) {
+      // User has admin/content-dev role — validate via the admin endpoint
+      setValidating(true);
+      validateAdminToken()
+        .then(() => { setAuthenticated(true); setValidating(false); })
+        .catch(() => { setValidating(false); });
+    }
+  }, [hasAdminRole, authenticated]);
+
+  // Listen for 401/403 from any admin API call and reset to login
+  useEffect(() => {
+    function handleAuthFailure() {
+      clearAdminToken();
+      setAuthenticated(false);
+      setAuthError("Session expired — please re-enter your admin token.");
+    }
+    window.addEventListener(ADMIN_AUTH_FAILURE_EVENT, handleAuthFailure);
+    return () => window.removeEventListener(ADMIN_AUTH_FAILURE_EVENT, handleAuthFailure);
+  }, []);
+
+  // Validate a stored token on mount before showing the admin UI
+  useEffect(() => {
+    if (!getAdminToken()) { setValidating(false); return; }
+    let cancelled = false;
+    validateAdminToken()
+      .then(() => { if (!cancelled) { setAuthenticated(true); setValidating(false); } })
+      .catch(() => {
+        if (!cancelled) {
+          clearAdminToken();
+          setAuthenticated(false);
+          setValidating(false);
+          setAuthError("Stored token is no longer valid — please re-enter.");
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [allEntities, setAllEntities] = useState<SearchableEntity[]>([]);
@@ -173,7 +220,7 @@ export default function AdminLayout() {
     if (!tokenInput.trim()) { setAuthError("Token is required"); return; }
     setAdminToken(tokenInput.trim());
     try {
-      await fetchNotifications();
+      await validateAdminToken();
       setAuthenticated(true);
       setAuthError("");
     } catch {
@@ -182,6 +229,17 @@ export default function AdminLayout() {
     }
   };
 
+  if (validating) {
+    return (
+      <div className="h-screen bg-[#0A0B0F] flex items-center justify-center">
+        <div className="flex items-center gap-3 text-[#8A8B95]">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span className="text-sm" style={{ fontFamily: "var(--font-sans)" }}>Validating session…</span>
+        </div>
+      </div>
+    );
+  }
+
   if (!authenticated) {
     return (
       <div className="h-screen bg-[#0A0B0F] flex items-center justify-center">
@@ -189,7 +247,11 @@ export default function AdminLayout() {
           <h1 className="text-[#C9A84C] text-xl mb-2">
             ⚙ Ellmud Admin
           </h1>
-          <p className="text-[#8A8B95] text-sm mb-6">Enter admin token to continue.</p>
+          <p className="text-[#8A8B95] text-sm mb-6">
+            {hasAdminRole
+              ? "Your account has admin access, but the session couldn't be validated. Enter an admin token as fallback."
+              : "Enter admin token to continue. Users with admin or content-dev roles are authenticated automatically."}
+          </p>
           <form onSubmit={(e) => { e.preventDefault(); handleAdminLogin(); }}>
             <input
               type="password"
@@ -325,10 +387,10 @@ export default function AdminLayout() {
           </span>
 
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#C9A84C] flex items-center justify-center text-[#0A0B0F] font-bold">J</div>
+            <div className="w-8 h-8 rounded-full bg-[#C9A84C] flex items-center justify-center text-[#0A0B0F] font-bold">{(appState.username ?? 'A')[0].toUpperCase()}</div>
             <div>
-              <p className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-sans)" }}>Jane Doe</p>
-              <p className="text-[#4A4B55] text-xs" style={{ fontFamily: "var(--font-sans)" }}>Lead Designer</p>
+              <p className="text-[#E8E0D0] text-sm" style={{ fontFamily: "var(--font-sans)" }}>{appState.username ?? 'Admin'}</p>
+              <p className="text-[#4A4B55] text-xs" style={{ fontFamily: "var(--font-sans)" }}>{appState.userRole}</p>
             </div>
           </div>
         </div>

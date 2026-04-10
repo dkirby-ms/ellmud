@@ -66,6 +66,13 @@ const KNOWN_VERBS = new Set([
   'teleport',
   'sandbox',
   'help',
+  'flag',
+  'who',
+  'stand',
+  'sit',
+  'crouch',
+  'prone',
+  'recline',
 ]);
 
 export interface ParseResult {

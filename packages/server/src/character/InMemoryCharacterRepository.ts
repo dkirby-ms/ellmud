@@ -9,6 +9,7 @@ import crypto from 'crypto';
 export class InMemoryCharacterRepository implements CharacterRepository {
   private characters = new Map<string, CharacterRow>();
   private lastInns = new Map<string, { zoneSlug: string; roomSlug: string }>();
+  private postures = new Map<string, string>();
 
   async list(playerId: string): Promise<CharacterSummary[]> {
     const chars: CharacterSummary[] = [];
@@ -92,6 +93,14 @@ export class InMemoryCharacterRepository implements CharacterRepository {
 
   async getLastInn(characterId: string): Promise<{ zoneSlug: string; roomSlug: string } | null> {
     return this.lastInns.get(characterId) ?? null;
+  }
+
+  async savePosture(characterId: string, posture: string): Promise<void> {
+    this.postures.set(characterId, posture);
+  }
+
+  async loadPosture(characterId: string): Promise<string> {
+    return this.postures.get(characterId) ?? 'standing';
   }
 
   private toSummary(row: CharacterRow): CharacterSummary {

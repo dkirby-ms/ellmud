@@ -16,6 +16,8 @@ export interface PlayerRepository {
   findById(id: string): Promise<Player | null>;
   findByProvider(provider: string, providerId: string): Promise<Player | null>;
   createOAuthPlayer(provider: string, providerId: string, email: string | null, username: string): Promise<Player>;
+  /** Look up the role from `player_identities` for a given player ID. Returns 'player' as default. */
+  getRoleByPlayerId(playerId: string): Promise<string>;
 }
 
 /**
@@ -26,6 +28,7 @@ export class InMemoryPlayerRepository implements PlayerRepository {
   private players = new Map<string, Player & { passwordHash: string }>();
   private usernameIndex = new Map<string, string>(); // lowercase username → player id
   private providerIndex = new Map<string, string>(); // "provider:providerId" → player id
+  private roles = new Map<string, string>(); // player id → role
 
   async createPlayer(username: string, passwordHash: string): Promise<Player & { passwordHash: string }> {
     const lowerUsername = username.toLowerCase();
@@ -106,6 +109,15 @@ export class InMemoryPlayerRepository implements PlayerRepository {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash: _passwordHash, ...playerData } = player;
     return playerData;
+  }
+
+  async getRoleByPlayerId(playerId: string): Promise<string> {
+    return this.roles.get(playerId) ?? 'player';
+  }
+
+  /** Set a player's role (in-memory only — for testing/auto-promote). */
+  async setRole(playerId: string, role: string): Promise<void> {
+    this.roles.set(playerId, role);
   }
 }
 

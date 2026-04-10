@@ -3451,3 +3451,61 @@ Created comprehensive `help` command handler supporting context-aware command di
 **Quality:** Root-cause-driven; comprehensive test coverage; zero regressions.
 
 **Learnings:** Server should include authoritative data in response rather than force separate fetch; prevents silent failures.
+
+---
+
+### 2026-04-09: ZoneRoom Starting Gear Fix (Minsc, Issue #377)
+
+**Context:** Minsc fixed missing starting gear visibility in ZoneRoom's onJoin() handler.
+
+**Key Learning for Room Types:** Any future room type that displays equipment must call `sendLoadoutAndStashUpdate()` on player join, not just `sendLoadoutUpdate()`. Equipment visibility requires both loadout AND stash state synchronized to client.
+
+**Implementation Pattern:** New combined method in ZoneRoom:
+```typescript
+sendLoadoutAndStashUpdate(client: GameClient): void {
+  this.sendLoadoutUpdate(client);
+  this.sendStashUpdate(client);
+}
+```
+
+**Test Coverage:** 6 new integration tests verify equipment visibility. MessageCollector test helper now captures both message types automatically.
+
+**Impact:** Any room type extending ZoneRoom should follow this pattern. Client side handles both messages correctly — no client changes needed.
+
+
+---
+
+## Session: Fix #380 - False Speedwalk Detection
+
+**Date:** 2025-07-22
+**Issue:** #380 - Single direction commands (n/s/e/w/u/d) sometimes show Speedwalk message
+**Commit:** e101f02
+
+### Problem
+The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts matches single direction letters. When a player typed n to go north, isSpeedwalk('n') returned true, entering the speedwalk code path and showing Speedwalk: 1 moves (n) - a false positive.
+
+### Fix
+- Added shouldTreatAsSpeedwalk(input) helper requiring 2+ parsed moves before activating speedwalk mode
+- Updated ZoneExploration.tsx to use the new helper; single direction letters fall through to sendCommand()
+- Server parser already handles n to go north via direction aliases in packages/server/src/commands/parser.ts
+
+### Key Files
+- packages/client/src/utils/speedwalk.ts - parser + new shouldTreatAsSpeedwalk() gate
+- packages/client/src/pages/ZoneExploration.tsx - command submit handler
+- packages/server/src/commands/parser.ts - server-side direction aliases
+
+## Learnings
+- Speedwalk detection is entirely client-side (ZoneExploration.tsx), not server-side
+- The server command parser already has direction aliases: n/s/e/w/u/d to go direction
+- isSpeedwalk() is intentionally broad (matches single letters) - the gating for speedwalk mode needs to be separate from the syntax check
+
+### 2026-04-09: Issue #380 Speedwalk Gate (PR Background Session)
+**Issue:** #380 - False speedwalking detection on single direction letters
+**Commit:** (committed in background session)
+
+### Summary  
+- Added shouldTreatAsSpeedwalk() requiring 2+ parsed moves
+- Single direction letters now bypass speedwalk mode, use normal sendCommand()
+- isSpeedwalk() regex unchanged (still valid syntax check)
+- 7 new tests, all 29 existing tests passing
+- Impact: Regis should use shouldTreatAsSpeedwalk() for UI gate instead of isSpeedwalk()

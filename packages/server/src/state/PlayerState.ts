@@ -6,7 +6,8 @@
  */
 
 import type { Item } from '../generator/RoomGraph.js';
-import type { VisibleEquipment } from '@ellmud/shared';
+import type { VisibleEquipment, Posture } from '@ellmud/shared';
+import { DEFAULT_POSTURE } from '@ellmud/shared';
 
 export interface InventoryEntry {
   item: Item;
@@ -50,6 +51,8 @@ export class PlayerState {
   skills: PlayerSkills;
   equipment: VisibleEquipment | undefined;
   deathPenalty: DeathPenaltyDebuff | null = null;
+  /** Current physical posture (#371). */
+  posture: Posture = DEFAULT_POSTURE;
 
   constructor(
     sessionId: string,

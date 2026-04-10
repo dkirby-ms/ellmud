@@ -10,7 +10,7 @@
  *
  * Security & validation requirements:
  *   - All endpoints require Authorization: Bearer {ADMIN_TOKEN}
- *   - Valid roles: player, viewer, moderator, admin
+ *   - Valid roles: player, content-dev, admin
  *   - Password hash NEVER exposed in responses
  *   - Empty string roles should default to 'player' in POST
  *   - Username must be at least 3 characters
@@ -195,7 +195,7 @@ describe('Admin User Management — CRUD Lifecycle', () => {
         body: {
           username: `${testUsername}_updated`,
           email: 'updated@example.com',
-          role: 'moderator',
+          role: 'content-dev',
         },
       });
       expect(updateRes.status).toBe(200);
@@ -203,7 +203,7 @@ describe('Admin User Management — CRUD Lifecycle', () => {
       expect(updated.id).toBe(userId);
       expect(updated.username).toBe(`${testUsername}_updated`);
       expect(updated.email).toBe('updated@example.com');
-      expect(updated.role).toBe('moderator');
+      expect(updated.role).toBe('content-dev');
       expect(updated).not.toHaveProperty('password_hash');
       expect(updated).not.toHaveProperty('passwordHash');
 
@@ -215,7 +215,7 @@ describe('Admin User Management — CRUD Lifecycle', () => {
       const reFetched = getUpdatedRes.body as Record<string, unknown>;
       expect(reFetched.username).toBe(`${testUsername}_updated`);
       expect(reFetched.email).toBe('updated@example.com');
-      expect(reFetched.role).toBe('moderator');
+      expect(reFetched.role).toBe('content-dev');
 
       // ── Step 5: Delete ──
       const deleteRes = await request(app, 'delete', `/admin/api/users/${userId}`, {
@@ -286,13 +286,13 @@ describe('Admin User Management — POST Validation', () => {
           username: testUsername,
           email: 'valid@example.com',
           password: 'securepass123',
-          role: 'viewer',
+          role: 'content-dev',
         },
       });
       expect(res.status).toBe(201);
       const user = res.body as Record<string, unknown>;
       expect(user.username).toBe(testUsername);
-      expect(user.role).toBe('viewer');
+      expect(user.role).toBe('content-dev');
       expect(user).not.toHaveProperty('password_hash');
     } finally {
       await cleanupTestUser(testUsername);
@@ -614,7 +614,7 @@ describe('Admin User Management — Role Validation', () => {
     }
   });
 
-  const validRoles = ['player', 'viewer', 'moderator', 'admin'];
+  const validRoles = ['player', 'content-dev', 'admin'];
 
   for (const role of validRoles) {
     it(`POST with role="${role}" succeeds`, async () => {

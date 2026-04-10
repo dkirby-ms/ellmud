@@ -89,7 +89,7 @@ export class TraceSystem {
     return roomTraces.filter(t => this.isAlive(t, now));
   }
 
-  /** Get traces formatted for a player's skill level. */
+  /** Get traces formatted for a player's skill level, de-duplicated by type+direction. */
   getTracesForPlayer(roomId: string, skills: PlayerSkills = {}): TraceDescription[] {
     const tracking = skills.tracking ?? 0;
 
@@ -98,7 +98,8 @@ export class TraceSystem {
     }
 
     const traces = this.getTracesInRoom(roomId);
-    return traces.map(trace => this.describeTrace(trace, tracking));
+    const deduped = this.deduplicateTraces(traces);
+    return deduped.map(trace => this.describeTrace(trace, tracking));
   }
 
   /** Decay/expire traces. Call once per tick. deltaMs is milliseconds since last tick. */
@@ -131,6 +132,22 @@ export class TraceSystem {
   }
 
   // ─── Internal ──────────────────────────────────────────────────────────
+
+  /**
+   * De-duplicate traces by (type, direction). For each group, keep only the
+   * most recent trace so the player sees one message per type+direction.
+   */
+  private deduplicateTraces(traces: Trace[]): Trace[] {
+    const groups = new Map<string, Trace>();
+    for (const trace of traces) {
+      const key = `${trace.type}::${trace.direction ?? ''}`;
+      const existing = groups.get(key);
+      if (!existing || trace.createdAt > existing.createdAt) {
+        groups.set(key, trace);
+      }
+    }
+    return Array.from(groups.values());
+  }
 
   /** Evict one trace to make room. Prefers oldest expired, then oldest active. */
   private evictTrace(roomTraces: Trace[]): void {

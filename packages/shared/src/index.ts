@@ -6,6 +6,32 @@
  * NO Colyseus Schema state is ever synced to the client.
  */
 
+// ─── User Roles ──────────────────────────────────────────────────────────────
+
+/** Valid user roles ordered by privilege (lowest → highest). */
+export const VALID_ROLES = ['player', 'content-dev', 'admin'] as const;
+export type UserRole = typeof VALID_ROLES[number];
+
+/**
+ * Role hierarchy — numeric weight for comparison.
+ * Higher value = more privilege.
+ */
+export const ROLE_HIERARCHY: Record<UserRole, number> = {
+  player: 0,
+  'content-dev': 1,
+  admin: 2,
+} as const;
+
+/** Check whether `role` meets or exceeds the `required` privilege level. */
+export function hasMinRole(role: UserRole, required: UserRole): boolean {
+  return ROLE_HIERARCHY[role] >= ROLE_HIERARCHY[required];
+}
+
+/** Type guard — narrowing a raw string to UserRole. */
+export function isValidRole(role: string): role is UserRole {
+  return (VALID_ROLES as readonly string[]).includes(role);
+}
+
 // ─── Client → Server Messages ────────────────────────────────────────────────
 
 /** Client → Server: Player command input (verb-noun parsed client-side or raw). */
@@ -99,6 +125,58 @@ export type CombatAction =
   | 'skill'
   | 'flee'
   | 'observe';
+
+// ─── Character Posture (#371) ────────────────────────────────────────────────
+
+/** Physical posture states a character can be in. */
+export type Posture =
+  | 'standing'
+  | 'sitting'
+  | 'crouching'
+  | 'prone'
+  | 'reclining'
+  | 'floating'
+  | 'hovering';
+
+/** All valid posture values. */
+export const VALID_POSTURES: readonly Posture[] = [
+  'standing', 'sitting', 'crouching', 'prone', 'reclining', 'floating', 'hovering',
+] as const;
+
+/** Postures that players can set via commands. */
+export const PLAYER_SETTABLE_POSTURES: readonly Posture[] = [
+  'standing', 'sitting', 'crouching', 'prone', 'reclining',
+] as const;
+
+/** Default posture for new/reset characters. */
+export const DEFAULT_POSTURE: Posture = 'standing';
+
+/** Movement verb used when departing a room, keyed by current posture. */
+export const POSTURE_MOVEMENT_VERBS: Record<Posture, string> = {
+  standing: 'walks',
+  sitting: 'stands up and walks',
+  crouching: 'sneaks',
+  prone: 'crawls',
+  reclining: 'gets up and walks',
+  floating: 'floats',
+  hovering: 'drifts',
+};
+
+/** Description of a character's posture for room display. */
+export const POSTURE_ROOM_DESCRIPTIONS: Record<Posture, string> = {
+  standing: 'is standing here',
+  sitting: 'is sitting here',
+  crouching: 'is crouching here',
+  prone: 'is lying prone here',
+  reclining: 'is reclining here',
+  floating: 'is floating here',
+  hovering: 'is hovering here',
+};
+
+/** Type guard — narrowing a raw string to Posture. */
+export function isValidPosture(value: string): value is Posture {
+  return (VALID_POSTURES as readonly string[]).includes(value);
+}
 
 // ─── Room Positioning (GDD §6.11) ──────────────────────────────────────────
 
@@ -253,6 +331,7 @@ export const MessageTypes = {
   EQUIP_ITEM: 'equip_item',
   UNEQUIP_ITEM: 'unequip_item',
   SWAP_ITEM: 'swap_item',
+  TOGGLE_FLAG: 'toggle_flag',
 
   // Client ↔ Server: Character management
   CHARACTER_CREATE: 'character_create',
@@ -279,6 +358,12 @@ export const MessageTypes = {
   EXPLORATION_DATA: 'exploration_data',
   EXPLORATION_UPDATE: 'exploration_update',
   ROOM_OCCUPANTS: 'room_occupants',
+  FLAG_STATE: 'flag_state',
+
+  // Client → Server: who list
+  REQUEST_PLAYER_LIST: 'request_player_list',
+  // Server → Client: who list response
+  PLAYER_LIST: 'player_list',
 } as const;
 
 export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
@@ -866,4 +951,85 @@ export interface AdminLiveRoomsResponse {
   rooms: AdminLiveRoomInfo[];
   totalPlayers: number;
   totalCreatures: number;
+}
+
+// ─── User Flags ──────────────────────────────────────────────────────────────
+
+/** Flag types that players can toggle on their character. */
+export type UserFlagType = 'anon' | 'rp';
+
+/** Client → Server: toggle a character flag. */
+export interface ToggleFlagMessage {
+  flag: UserFlagType;
+  enabled: boolean;
+}
+
+/** Server → Client: current flag state for the active character. */
+export interface FlagStateMessage {
+  flags: Record<UserFlagType, boolean>;
+}
+
+// ─── Who List (Issue #366) ───────────────────────────────────────────────────
+
+/** A single entry in the server-wide who list. */
+export interface PlayerListEntry {
+  name: string;
+  level: number | null;
+  class: string | null;
+  zone: string | null;
+  flags: UserFlagType[];
+  /** true when the player has [Anon] active (hidden fields are already nulled) */
+  anon: boolean;
+  /** Current character posture (#371). */
+  posture?: Posture;
+}
+
+/** Server → Client: who list response. */
+export interface PlayerListMessage {
+  players: PlayerListEntry[];
+}
+
+// ─── Character Flags (Issue #365) ────────────────────────────────────────────
+
+/** Per-character display flags. All flags default to false. */
+export interface CharacterFlags {
+  /** Hide name/level/class from other players (except same-room and admins). */
+  anon: boolean;
+  /** Mark this character as roleplaying — always visible to everyone. */
+  rp: boolean;
+}
+
+/** Default flag values for new characters. */
+export const DEFAULT_CHARACTER_FLAGS: CharacterFlags = {
+  anon: false,
+  rp: false,
+};
+
+/** Valid flag names (used for runtime validation). */
+export type CharacterFlagName = keyof CharacterFlags;
+
+/** Metadata for each supported flag. */
+export interface FlagDefinition {
+  name: CharacterFlagName;
+  label: string;
+  description: string;
+}
+
+/** Registry of all supported flags with display metadata. */
+export const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
+  {
+    name: 'anon',
+    label: '[Anon]',
+    description: 'Hide your identity from other players. Admins and players in the same room can still see you.',
+  },
+  {
+    name: 'rp',
+    label: '[RP]',
+    description: 'Signal that you are roleplaying in-character.',
+  },
+] as const;
+
+/** Check whether a string is a valid flag name. */
+export function isValidFlagName(name: string): name is CharacterFlagName {
+  return name === 'anon' || name === 'rp';
 }

@@ -153,6 +153,16 @@ export class PgPlayerRepository implements PlayerRepository {
       client.release();
     }
   }
+  async getRoleByPlayerId(playerId: string): Promise<string> {
+    const result = await query<{ role: string }>(
+      `SELECT i.role
+       FROM player_identities i
+       JOIN players p ON p.identity_id = i.id
+       WHERE p.id = $1`,
+      [playerId],
+    );
+    return result.rows[0]?.role ?? 'player';
+  }
 }
 
 /** Type guard for PostgreSQL error objects. */
