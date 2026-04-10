@@ -603,7 +603,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       collapseTimer: this.state.collapseTimer,
     });
 
-    // Send initial player state (HP, stamina, status effects)
+    // Send initial player state (HP, stamina, status effects, posture)
     // Combatant doesn't exist yet, so we use default stats
     client.send(MessageTypes.PLAYER_STATE, {
       hp: 100, // DEFAULT_PLAYER_STATS.maxHp
@@ -611,6 +611,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       stamina: 0,
       maxStamina: 0,
       statusEffects: [],
+      posture: playerState.posture,
     } satisfies PlayerStateMessage);
 
     // Send full stash + loadout state to client on join (#377)
@@ -1127,6 +1128,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           }
         }
       }
+
+      // Sync updated posture to the acting player's status panel (#404)
+      this.sendPostureState(client, playerId);
 
       // Persist posture change to DB
       this.persistPosture(playerId).catch((err) => {
@@ -2848,8 +2852,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
   }
 
-  /** Send player state update to client (HP, stamina, status effects). */
+  /** Send player state update to client (HP, stamina, status effects, posture). */
   private sendPlayerState(client: Client, playerId: string): void {
+    const player = this.players.get(playerId);
     const combatant = this.combatSystem.getCombatant(playerId);
     if (!combatant) return;
 
@@ -2859,6 +2864,23 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       stamina: 0, // Placeholder — stamina system not implemented yet
       maxStamina: 0,
       statusEffects: [], // TODO: Implement status effects tracking
+      posture: player?.posture ?? 'standing',
+    } satisfies PlayerStateMessage);
+  }
+
+  /** Send posture-only state update (works outside combat). */
+  private sendPostureState(client: Client, playerId: string): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    const combatant = this.combatSystem.getCombatant(playerId);
+    client.send(MessageTypes.PLAYER_STATE, {
+      hp: combatant?.hp ?? 100,
+      maxHp: combatant?.maxHp ?? 100,
+      stamina: 0,
+      maxStamina: 0,
+      statusEffects: [],
+      posture: player.posture,
     } satisfies PlayerStateMessage);
   }
 

@@ -604,7 +604,7 @@ export default function ZoneExploration() {
                 <p
                   className="text-text-primary text-sm font-mono"
                 >
-                  {state.pendingCombatAction ?? "Cautious"}
+                  {state.pendingCombatAction ?? state.posture.charAt(0).toUpperCase() + state.posture.slice(1)}
                 </p>
               </div>
             </div>
