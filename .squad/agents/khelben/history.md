@@ -21,3 +21,6 @@
 - **Pinned action SHAs:** CI workflows use pinned commit SHAs for actions (e.g., `actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683`). Match these when adding new workflows.
 - **Forbidden paths stripped on promotion:** `.ai-team/`, `.squad/`, `.ai-team-templates/`, `team-docs/`, `docs/proposals/` — must be kept in sync across `squad-promote.yml` and `scheduled-uat-promote.yml`.
 - **Concurrency:** Scheduled workflow uses `concurrency: { group: scheduled-uat-promote, cancel-in-progress: false }` to prevent overlapping merge runs. CI uses per-ref groups with cancel-in-progress.
+- **GITHUB_TOKEN limitation:** Pushes made with `GITHUB_TOKEN` (by `github-actions[bot]`) do NOT trigger other workflows by design (to prevent infinite loops). Solution: use `workflow_dispatch` trigger + explicit `gh workflow run` calls after pushing.
+- **CI/CD trigger pattern:** After promotion workflows push to uat/prod, they now explicitly trigger `ci-cd.yml` via `gh workflow run ci-cd.yml --ref <branch>` using `GH_TOKEN`. A 5-second sleep gives GitHub time to process the push before triggering.
+
