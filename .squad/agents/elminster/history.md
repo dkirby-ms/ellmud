@@ -13,6 +13,40 @@
 - **User:** dkirby-ms
 - **GDD:** GDD.md (comprehensive design document covering all game systems)
 
+## Core Context (Architecture, Decisions, Foundations — Completed)
+
+**Foundation work (Phase 1: Repository + GDD):**
+- ✅ **GDD Comprehensive:** Frozen on 2026-03-19, covers all systems (combat, zones, extraction, narration, auth, loot)
+- ✅ **GitHub Backlog:** #1–#49 (4 phases, 16 labels, 4 milestones) fully triaged and decomposed from GDD
+- ✅ **Colyseus + Azure Architecture:** WebSocket framework selected, Azure Container Apps + PostgreSQL + Redis, optional Auth via env var
+- ✅ **Migration Consolidation:** 22 migrations consolidated into 4 semantic groups (schema, seed, entities, features)
+- ✅ **Admin Dashboard:** Express routes, SSE broadcasts, content (creatures/items/zones) CRUD, separate ADMIN_TOKEN auth
+
+**Team Architecture Decisions (Merged to decisions.md):**
+- Stash persistence: InMemoryStashRepository + PgStashRepository (weight-based capacity)
+- Room topology enforcement: biome → room_type rules (prevent invalid connections)
+- Extraction state machine: clear messaging for different states (channeling, mid-flight, landed)
+- Combat system: Pure logic + callback injection pattern for event handling
+- In-memory cache default: Redis as optional config switch (backwards compatible)
+- Colyseus test server: One per file, no file parallelism, polling over fixed waits
+- Colyseus Schema types: `defineTypes()` over `@type()` decorators (TypeScript 5.9.3 compatibility)
+
+**Design Specs Completed (Proposals in Decisions):**
+- GDD Roadmap → GitHub Issues decomposition (roadmap architecture & priority framework)
+- Creature room appearance (#383): Individual creature lines with ANSI tag support
+- Optional user flags (#365): [Anon], [RP] flags via character_flags table + `/flag` command
+- Figma export strategy: Conversion of design assets to TypeScript icon components
+
+**Research & Analysis Completed:**
+- User config file system (project-root based via env override)
+- Direction shortcuts & speedwalks (root cause: React state race condition + key repeat)
+- BFS layout engine (corridor-first generation, depth-first room building)
+- Combat sandbox (isolated testing with minimal dependencies)
+
+**All Phase 1 work complete. Zero test regressions. Ready for Phase 2 (Groups) and Phase 3 (Combat Rewards).**
+
+---
+
 ## Team Updates
 
 ### 2026-04-06: Stronghold-Zone Connection Orchestration
@@ -26,6 +60,41 @@
 ---
 
 ## Learnings
+
+### 2025-07-22: Container Item System Architecture (#409)
+**Task:** Scope and design architecture proposal for container item type, inventory persistence, and corpse loot system.
+
+**Key Findings:**
+1. **Death/corpse system already exists and is well-tested.** Full flow: DowningSystem (downed state, 10-tick bleed-out) → handlePlayerDeath() → CorpseSystem.addCorpse(). Loot command fully functional. Tests in `player-death.test.ts` and `corpse-loot.test.ts`.
+2. **Bug: equipped items vanish on death.** `ZoneRoom.ts:2113-2145` iterates `player.inventory` for corpse items but equipped items live in `player.equippedItems` (private Map on PlayerState). They're cleared but never added to the corpse.
+3. **Inventory is in-memory only.** `PlayerState.inventory` = `Map<string, InventoryEntry>`. No `player_inventory` table. Lost on disconnect. Stash IS persisted but inventory is not.
+4. **Two parallel item type systems.** `RoomGraph.Item` (lightweight runtime: id, name, weight, description, equipSlot?) vs `@ellmud/shared ItemDefinition/ItemInstance` (registry/persistence). No bridging between them.
+5. **Current ItemType enum lacks 'container'.** Types are: weapon, armour, consumable, material, tool, key.
+
+**Architecture Decisions (Proposed):**
+- 4-phase approach: inventory persistence → container type → death integration → world containers
+- Keep CorpseSystem separate from container items (well-tested, zone-scoped lifecycle)
+- Event-driven saves (not periodic) with 250ms debounce
+- Max container nesting depth: 1
+- `player_inventory` table mirrors `player_stash` schema for consistency
+
+**Key File Paths:**
+- Death handler: `packages/server/src/rooms/ZoneRoom.ts:2097-2260`
+- CorpseSystem: `packages/server/src/systems/CorpseSystem.ts`
+- DowningSystem: `packages/server/src/systems/DowningSystem.ts`
+- DeathPenalty: `packages/server/src/systems/DeathPenalty.ts`
+- PlayerState: `packages/server/src/state/PlayerState.ts`
+- Item types (shared): `packages/shared/src/items.ts`
+- Item types (runtime): `packages/server/src/generator/RoomGraph.ts:9-17`
+- Item registry: `packages/server/src/items/registry.ts`
+- Stash types: `packages/shared/src/types/stash.ts`
+- DB schema: `packages/server/src/db/migrations/001_schema.sql`
+- Loot command: `packages/server/src/commands/handlers/loot.ts`
+
+**Deliverables:**
+- Architecture proposal: `.squad/decisions/inbox/elminster-container-system.md`
+- GitHub issue: #409
+- 6 open questions for dkirby-ms on design decisions
 
 ### 2025-07-22: Creature Room Appearance Design (#383)
 **Task:** Design spec for individual creature lines in room descriptions with ANSI tag support.
@@ -2563,3 +2632,32 @@ Player-facing scoreboards deferred to Phase 2.
 - `_roomEvent` is a new convention for 3rd-person broadcasts; should be formalized if adopted by more commands
 - Admin route to ZoneRoom method pattern (`adminSpawnCreature` / `adminSpawnItem`) is clean and consistent
 - Content store entity to domain object mapping needs a shared helper to avoid field omissions
+
+
+---
+
+## Cross-Team Update: Drizzt Starter Kit to Inventory Migration (2026-04-10)
+
+**From:** Scribe  
+**Context:** Drizzt completed PR #410 — starter kit items now granted to inventory instead of stash on first zone join.
+
+**What Drizzt Did:**
+- Chose Option B (grant on zone join via flag) respecting transient inventory semantics
+- Added `starter_kit_granted` boolean to characters table
+- Rewrote starter-kit.ts to use PlayerState.addItem() instead of stash insertion
+- Integrated with ZoneRoom.onJoin() — gated by flag, fires once per character lifetime
+- Extended CharacterRepository with isStarterKitGranted() / markStarterKitGranted()
+- 7 new tests passing; all 2666 project tests pass
+
+**Why This Matters for You:**
+- Your inventory persistence architecture (Phase 1) will build on this pattern
+- Starter items now behave like all inventory — losable on death, transferable at extraction
+- Sets precedent for zone-join item distribution (grants, etc.)
+
+**Integration with Your Work:**
+- When you implement Phase 1 (player_inventory table), starter kit will already be in the in-memory inventory
+- Death flow (Phase 3) will clear this persistent inventory just like any other items
+- Your container type (Phase 2) can eventually wrap corpses; starter items follow same loot rules as other inventory
+
+**PR:** #410 (ready for merge)
+

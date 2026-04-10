@@ -216,4 +216,21 @@ export class PgCharacterRepository implements CharacterRepository {
     );
     return result.rows[0]?.posture ?? 'standing';
   }
+
+  async isStarterKitGranted(characterId: string): Promise<boolean> {
+    const result = await query<{ starter_kit_granted: boolean }>(
+      `SELECT starter_kit_granted FROM characters
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [characterId],
+    );
+    return result.rows[0]?.starter_kit_granted ?? false;
+  }
+
+  async markStarterKitGranted(characterId: string): Promise<void> {
+    await query(
+      `UPDATE characters SET starter_kit_granted = true
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [characterId],
+    );
+  }
 }

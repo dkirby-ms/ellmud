@@ -3624,3 +3624,66 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 **Integration:** Your equip/drop/get commands work seamlessly with items spawned via admin panel. Room generation and item properties (name, weight, equipSlot) integrate directly.
 
 **No action needed** — just awareness that Regis's admin work enables full item spawning workflow for testing/development.
+
+
+---
+
+## Starter Kit to Inventory Migration (2025-07-24)
+
+**Task:** Move starter kit items from player_stash to player inventory.
+**Branch:** squad/fix-starter-kit-inventory
+**Approach:** Option B -- grant on first zone join with starter_kit_granted flag.
+
+**Changes:**
+- starter-kit.ts rewritten: adds items to PlayerState.inventory via addItem() instead of INSERT into player_stash
+- ZoneRoom.onJoin calls grantStarterKit() after PlayerState creation, gated by isStarterKitGranted flag
+- characters.ts no longer calls grantStarterKit at creation time
+- CharacterRepository extended with isStarterKitGranted() / markStarterKitGranted() (PG + InMemory)
+- New migration: 012_starter_kit_granted.sql (boolean column on characters)
+- Tests: 7 passing (grant, flag, re-grant prevention, weight limits, no-pg, no-items)
+
+## Learnings
+
+- **Inventory vs Stash separation:** Inventory is intentionally in-memory (extraction-game transient). Stash is the persistent bank. Starter items belong in inventory, granted at first zone join -- not in stash at character creation.
+- **CharacterRepository extension pattern:** Add method to interface, implement in PgCharacterRepository (SQL) + InMemoryCharacterRepository (Map/Set), use in ZoneRoom via this.characterRepo.
+- **isCharacterPg() gate:** Use isCharacterPg() from character-provider.ts to determine if PG is available for queries that need the DB (e.g., item_definitions lookup).
+
+
+---
+
+## Cross-Team Update: Elminster Container System Scoping (2026-04-10)
+
+**From:** Scribe  
+**Context:** Elminster completed comprehensive scoping of container item system and death mechanics investigation.
+
+**What Elminster Did:**
+- Investigated death mechanics thoroughly — corpse system confirmed fully operational
+- **Found critical bug:** Equipped items vanish on death (not collected into corpse)
+- Proposed 4-phase architecture: inventory persistence → container type → death integration → world containers
+- Created issue #409
+- Documented 7-section proposal with current state analysis, risk analysis, implementation phases
+
+**Key Findings for Your Starter Kit Work:**
+- Death mechanics are well-understood; equipped items bug is pre-existing
+- Your starter items (now in inventory) will follow the same death flow as all inventory items
+- When Phase 3 (death integration) is implemented, your starter items will be properly transferred to corpse if player dies
+
+**Design Decisions Relevant to Inventory:**
+- **Container type** — max nesting depth 1 (containers can't hold containers by default)
+- **Inventory persistence** — event-driven save (on mutation) + debounced 250ms + disconnect
+- **Load on zone join** — mirrors your zone-join starter kit grant pattern
+- **Evolutionary approach** — keep CorpseSystem parallel; Phase 4 evaluates unification
+
+**Open Questions for David:**
+- Corpse TTL (loot window duration)?
+- Equipped items on death — lootable or destroyed?
+- Container UI design (inline vs. separate panel)?
+
+**Implications for Your PR #410:**
+- Your zone-join grant pattern is consistent with Phase 1 load strategy
+- Starter items in inventory will be subject to same death mechanics as other inventory
+- No conflicts with Elminster's architecture; actually aligns well
+
+**Issue:** #409  
+**Proposal:** decisions/inbox/elminster-container-system.md (awaiting David's feedback on 6 design questions)
+
