@@ -1,10 +1,3 @@
-# jarlaxle — History
-
-**For a quick overview, see [summary.md](./summary.md)**
-
----
-
-
 ## Project Context
 
 - **Project:** Ellmud — PvPvE Extraction RPG / Real-Time MUD
@@ -13,33 +6,6 @@
 - **User:** dkirby-ms
 - **GDD:** GDD.md (comprehensive design document covering all game systems)
 
-## Core Context (Phase 1 Foundation — Completed)
-
-**Completed work (high-level summary):**
-- ✅ PostgreSQL schema: Player/identity normalization, faction/skill types, JSONB item stats (Issue #3)
-- ✅ Room graph generation: Biome templates, PRNG, distance enforcement, 101 tests (Issue #5)
-- ✅ Combat system: Strike/dodge/flee, simultaneous resolution, pure game logic, 32 tests (Issue #6)
-- ✅ Creature AI: Behavior trees, deterministic spawning, loot system, 41 tests (Issue #7)
-- ✅ Shard exploration UI: Sidebar, combat overlay, HP tiers, 68 tests (Issue #66)
-- ✅ ACA deployment fix: Clear bootstrap args, improved health check validation
-
-**All tests passing, zero regressions. Phase 1 client UI 70% complete.**
-
----
-
-## Team Updates
-
-### 2026-04-10: Issue Triage Session — Elminster Orchestrated
-**Status:** ✅ Complete — 3 issues triaged and routed  
-**Issues assigned to Jarlaxle:**
-- **Issue #402** — Illumination & Visibility System (Phase 1: zone-adapter, migration 023, DB column)
-- **Issue #403** — Player Groups/Consent/Follow (Phase 3: GroupManager service, phase 4: combat reward pipeline)
-
-**Design briefs:** 3 architectural decision documents posted to GitHub + merged to .squad/decisions/decisions.md
-
-**Next:** Implement Phase 1 illumination (coordinate with Bruenor on content), then Groups Phase 1+2 with Drizzt on command handlers.
-
----
 
 ## Learnings
 
@@ -150,6 +116,7 @@
 - **Integration points:** Who list (#366) will use `getAllFlags()` + `resolveVisibility()`. Look command will use `resolveVisibility()` for player names. Settings UI (Regis) will call `setFlag()` via WebSocket message.
 - **Build verification:** Zero TS errors, zero new lint errors.
 
+
 ## Learnings (Archived — See Detailed Session Records)
 
 ### 2026-03-19: PostgreSQL schema (Issue #3)
@@ -218,6 +185,7 @@
 
 ---
 
+
 ## Wave 2 Work
 
 ### 2026-03-23: PR #117 (Trace System) Fixes & Merge
@@ -245,6 +213,7 @@
 
 ---
 
+
 ## Cross-Team Updates (2026-03-19T22:30)
 
 ### Figma Design Tokens Now Team Standard
@@ -259,6 +228,7 @@
 - React client now served from Express in production (`/public/` directory)
 - API routes (`/auth`, `/colyseus`, etc.) take precedence over SPA catch-all
 - Dockerfile multi-stage build ensures client artifacts are preserved
+
 
 ## Cross-Team Updates (Wave 1 completion — 2026-03-20T17:00)
 
@@ -304,6 +274,7 @@
 - Updated `docs/deployment.md` with correct values and deployment order docs.
 - **Lesson:** Bicep `existing` resources cannot have `dependsOn`. Role assignments require deterministic `name`/`scope` at deployment start — use local variables computed from params, not module outputs.
 - **Lesson:** This was infrastructure work outside my game systems domain. Bicep's compile-time vs runtime distinction is the main gotcha — ARM template generation happens before deployment, so certain properties must resolve from the template itself.
+
 ## Cross-Team Updates (Wave 2 completion — 2026-03-20T18:38)
 
 ### Bicep IaC Hardening Complete — PR #76 Ready
@@ -329,6 +300,7 @@
 - **Lesson:** Room type semantics (dead_end = 1 exit, junction = 3+ exits) must be enforced structurally, not just by name. The old code assigned types randomly but never guaranteed the connectivity matched the type.
 - **Lesson:** Order of post-processing matters. Junction enforcement before distance cuts = junctions lose exits. Junction enforcement after = need distance checking inside junction enforcement to prevent shortcuts.
 - Added 7 new tests (22 total in shard-gen.test.ts). All 1009 tests pass. PR #81.
+
 
 ## Wave 4b Completion — Creature Admin Dashboard (2026-03-20T22:11Z)
 
@@ -376,6 +348,7 @@ All topology enforcement in place. Creature AI can trust room types. Patrol logi
 
 ---
 
+
 ## Wave 5 Cross-Team Client UI Batch Context (2026-03-20T23:27:56Z)
 
 ### What Other Agents Are Doing
@@ -411,6 +384,7 @@ All topology enforcement in place. Creature AI can trust room types. Patrol logi
 4. **Anticipatory tests active** — 35 toast tests now validating your API; tests will pass immediately when feature branch merges
 
 **Next Issues (7 remaining for Phase 1 client UI):** #66, #68, #69, #70, #71, #72, #73
+
 
 ## Wave 6 — Phase 1 Client UI Batch Continued
 
@@ -453,6 +427,7 @@ Wave 6 delivered your Shard Exploration Sidebar & Combat Overlay component. This
 
 Wave 7 will deliver final 3 client UI issues (#68 Refuge Hub, #72 Extraction Screen, #73 Chat & Social Panel). Your combat overlay will integrate with character stats and extraction mechanics.
 ---
+
 
 ## Session: Issue #66 — Shard Exploration Sidebar & Combat Overlay
 
@@ -508,6 +483,7 @@ Wave 7 will deliver final 3 client UI issues (#68 Refuge Hub, #72 Extraction Scr
 
 ---
 
+
 ## 2026-03-21T15:09:00Z: Orchestration Complete
 
 **Status:** ✅ Session complete, decisions archived
@@ -518,6 +494,7 @@ Wave 7 will deliver final 3 client UI issues (#68 Refuge Hub, #72 Extraction Scr
 - CSS variable compliance decisions enforced
 
 ---
+
 
 ## Session: CI/CD ACA Deploy Revision Monitoring
 
@@ -577,6 +554,7 @@ Improved the ACA deployment workflow in `.github/workflows/ci-cd.yml`:
 - **Build status:** `tsc --noEmit` clean, `vite build` succeeds (577KB JS bundle)
 - **NOT touched:** services/, hooks/, store.ts, utils/ — all preserved for Phase B wiring
 
+
 ## Learnings
 
 ### 2026-03-21: Refuge Hub Wiring to Real Backend
@@ -613,6 +591,7 @@ Improved the ACA deployment workflow in `.github/workflows/ci-cd.yml`:
 - `Login.tsx` — Already wired to real API with LOGIN_SUCCESS dispatch
 
 **TSC + Vite build:** Both clean, zero errors.
+
 
 ## 2026-03-21: Combat Action Protocol Fix — ShardExploration.tsx
 
@@ -817,6 +796,7 @@ Implemented server-side proximity-based communication system with three social c
 
 **Commit:** `f368e3e` on `feat/awareness-stealth-system` branch. PR #119.
 
+
 ## Learnings
 
 - **Don't hardcode zeros as "Phase 1" defaults.** Hardcoded 0 for skills makes the entire system a no-op (score=0 → 'none' always). Use sensible baselines (5/5) so the system actually exercises its tiers when players interact. Zero is not a baseline, it's an off switch.
@@ -824,6 +804,7 @@ Implemented server-side proximity-based communication system with three social c
 - **PlayerState is the integration seam.** When a new game system needs player data (skills, equipment, status), PlayerState is where it lives. Keep the constructor backward-compatible with optional params and spread defaults.
 
 ---
+
 
 ## Wave 2 Complete — All Issues Shipped (2026-03-23)
 
@@ -857,6 +838,7 @@ Implemented server-side proximity-based communication system with three social c
 
 ---
 
+
 ## Phase 2: Feature Implementation & Fixes (2026-03-23)
 
 ### PR #122 — PvP Combat (REJECTED→REJECTED→APPROVED)
@@ -885,6 +867,7 @@ Implemented server-side proximity-based communication system with three social c
 - ✅ PR #122–#125 merged to dev
 
 ---
+
 
 ## Phase 2.5: Admin Panel Wiring (2026-03-23)
 
@@ -952,6 +935,7 @@ PHASE 4 (Polish):
 - Possibly: User management backend (#134) if needed
 
 ---
+
 
 ## 2026-03-23: Wire Items Admin Pages (Issue #129, PR #142)
 
@@ -1037,6 +1021,7 @@ This establishes the pattern for wiring the remaining admin pages:
 
 The admin-api utility is extensible — just add new functions for each entity type.
 
+
 ## Wave 1 Admin Wiring (2026-03-23T19:45Z)
 
 ### Cross-Team Coordination Note
@@ -1073,6 +1058,7 @@ The admin-api utility is extensible — just add new functions for each entity t
 
 
 ---
+
 
 ## Issue #131: Wire Remaining 6 Admin Pages (2026-03-23)
 
@@ -1190,6 +1176,7 @@ Entity slugs: `modifiers`, `skills`, `loot-tables` (hyphenated!), `factions`, `r
 - All 6 entity backend types defined in `packages/server/src/admin/content/content-types.ts`
 
 
+
 ## Wave 2 Admin Wiring: Remaining 6 Entities (2026-03-23T20:00Z)
 
 ### PR #145: LootTables, Skills, Factions, Rooms, Narratives, Modifiers Wiring
@@ -1215,6 +1202,7 @@ Entity slugs: `modifiers`, `skills`, `loot-tables` (hyphenated!), `factions`, `r
 
 ---
 
+
 ## Wave 1 Admin Wiring Fixes: PR #143 Creatures (2026-03-23T20:00Z)
 
 ### Surgical Fix Applied to Creatures Wiring
@@ -1229,6 +1217,7 @@ Entity slugs: `modifiers`, `skills`, `loot-tables` (hyphenated!), `factions`, `r
 
 
 ---
+
 
 ## 2026-03-23: Milestone — Entity Wiring Complete (PRs #143–#144 Merged)
 
@@ -1334,6 +1323,7 @@ Address three non-blocking cleanup items from Elminster's PR #154 review.
 - ✅ Test isolation verified (no state leakage between tests)
 - ✅ Committed to dev branch
 
+
 ## Learnings
 
 **Test Isolation Pattern:**
@@ -1343,6 +1333,7 @@ When using shared store instances in tests, a `resetStore()` method is cleaner t
 In-memory test implementations should enforce the same constraints as production stores. The providerIndex addition ensures InMemoryUserStore throws the same errors as PgUserStore for duplicate provider entries, maintaining test validity.
 
 ---
+
 
 ## 2026-03-24T12:01 — Post-Merge Cleanup (PR #154 Follow-Up)
 
@@ -1373,6 +1364,7 @@ In-memory test implementations should enforce the same constraints as production
 - ✅ Committed: af769a5
 
 **Pattern Established:** Store-backed tests now follow the abstraction + reset pattern, enabling maintainable, production-faithful test implementations.
+
 
 
 ## 2026-03-24: Dev Auto-Login Hook — Cross-Agent Update
@@ -1435,6 +1427,7 @@ Drizzt wired `useDevAutoLogin` hook into `Login.tsx`. No visual UI changes — j
 
 ---
 
+
 ## 2026-03-24: Elminster GDD Gap Analysis → 12 New Backlog Issues
 
 **Timestamp:** 2026-03-24T15:22:00Z  
@@ -1470,6 +1463,7 @@ Elminster completed a full code review comparing GDD (Game Design Document) agai
 - Squad system (#168) affects creature AI aggro decisions and loot distribution
 
 **Next:** Phase 2 multiplayer testing ready pending CI fix (#157). Phase 3 economic systems need prioritization before implementation.
+
 
 
 ## 2026-03-24: Auth bypass fix (Drizzt) — may affect your local dev workflow
@@ -1551,6 +1545,7 @@ This aligns local dev with production behavior, making auth bugs surface earlier
 - **Test:** Pre-staged `shardroom-player-id.test.ts` (11 tests) validates identity keying, reconnection, stash, combat, multi-player, and auth integration. Fixed reconnection test to keep a second client alive preventing room auto-disposal. All 1566 server tests pass, zero regressions.
 - **Pattern:** Both RefugeRoom and ShardRoom now use the same identity resolution: `options['playerId'] || client.sessionId`. The `playerIds` map provides `sessionId → playerId` lookup; `findClient()` does the reverse.
 
+
 ## Orchestration Log: 2026-03-25T12:16Z
 
 **Outcome (Jarlaxle):** Fixed ShardRoom sessionId → playerId keying across all player state (players map, combat, extraction, downing, traces, awareness, sound, messaging). Scope: Combat registration, stash transfer, extraction tracking, trace actor IDs, awareness lookups, sound propagation, and client delivery. Test: `shardroom-player-id.test.ts` (11 cases, 6 scenarios). Result: 1566 tests pass, zero regressions. PR #200 staged.
@@ -1567,6 +1562,7 @@ This aligns local dev with production behavior, making auth bugs surface earlier
 - **Tests:** Rewrote anticipatory test file from Minsc's placeholders to use real imports. 34 contract tests + 5 provider wiring tests. All 1600+ tests pass.
 - **Key design decision:** `onJoin` became async to support profile loading. This is safe — Colyseus supports async lifecycle methods, and RefugeRoom already uses async `onJoin`.
 - **Lesson:** Anticipatory test files from other team members may use different interface shapes. When implementing, replace local test doubles with real imports rather than adapting implementation to match placeholders.
+
 
 ## Cross-Agent Notice: Player Identity Handoff Bug Found (Elminster)
 
@@ -1626,6 +1622,7 @@ This aligns local dev with production behavior, making auth bugs surface earlier
 - Run with: `DATABASE_URL=postgresql://ellmud:ellmud_dev@localhost:5434/ellmud npx tsx packages/server/src/dev/seed-player-stash.ts [username]`
 - Successfully populated stash for player "asdf" (2c34fc43-ed1a-442d-bff7-84126db08dd1). All tiers (scrap→anomalous), all types (weapon, armour, consumable, material, tool, key) represented.
 
+
 ## Learnings
 
 **DB Schema vs App Types Mismatch:**
@@ -1670,6 +1667,7 @@ The `item_definitions` table has no unique constraint on `name`, so `ON CONFLICT
 - **API service**: Added `fetchCharacters`, `createCharacter`, `selectCharacter`, `deleteCharacter` functions.
 - Build clean, 80 server test files pass (1823 tests), shared tests pass (80 tests). Client ux-batch2 failures are pre-existing.
 
+
 ## Learnings
 
 **Character ID as gameplay identity:**
@@ -1690,6 +1688,7 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 - Build clean, all 1823 server tests pass (80 test files, 0 regressions).
 
 ---
+
 
 ## Session: Content Store Migration Phase 1 (2026-03-26T16:17:14Z)
 
@@ -1722,6 +1721,7 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 - When a game table already exists with FK constraints (e.g., faction_membership), always extend it rather than maintaining a parallel JSONB copy. The relational table is the source of truth.
 
 ---
+
 
 ## Session: Faction Admin Fields & Store Consolidation (2026-03-26T17:05:28Z)
 
@@ -1841,6 +1841,7 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 - Barrel export from `exploration/index.ts`.
 - Build verified — all three packages compile clean.
 
+
 ## Phase A Complete (2026-03-27T13:04)
 
 **Status:** ✅ Exploration Repository + DB Migration — DONE
@@ -1905,6 +1906,7 @@ DB canonical faction slugs are `ironwright`, `veil`, `scarlet`. The client Chara
 - **Files changed:** `PlayerState.ts`, `config.ts`, `ShardRoom.ts`, `commands/index.ts`, `commands/parser.ts`, new `commands/handlers/peaceful.ts`, new `__tests__/peaceful-mode.test.ts`.
 - **Tests:** 12 new tests covering behavior tree filtering, flag toggling, command gating, world state integration. All 2276+ tests passing, zero regressions.
 
+
 ## 2026-03-30T00:30Z — Batch 1 Peaceful Mode Completion
 
 **Note:** Peaceful mode defense three-layer now complete:
@@ -1941,6 +1943,7 @@ Peaceful flag properly persists across zone transitions. Dev team can now use `/
 - `packages/server/src/__tests__/creature-wiring.test.ts` — Fixed `buildCtx` helper, added 5 new tests
 
 **Tests:** All 2068 tests passing (23 in creature-wiring, 5 new). Zero regressions.
+
 
 ## Learnings
 
@@ -2044,6 +2047,7 @@ Peaceful flag properly persists across zone transitions. Dev team can now use `/
 - Followed exact same pattern as `aggressive` field addition (see history entry from 2025-03-30)
 - DB migration → Types → ContentRegistry query + mapping → CreatureManager copy → ShardRoom wiring → Command handlers
 
+
 ## Learnings
 
 - When adding fields to creatures, the pattern is: migration → types → ContentRegistry → CreatureManager (all 3 create methods) → ShardRoom (both maps) → CreatureRef type → command handlers
@@ -2126,6 +2130,7 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 
 ---
 
+
 ## Issue #229 — Remove Biome System
 
 **PR:** #246 | **Branch:** `squad/229-remove-biome-system` | **Base:** `dev`
@@ -2146,338 +2151,4 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - ✅ All 3 packages compile cleanly (`tsc --noEmit`)
 - ✅ All 2268 tests pass (107 test files, 0 failures)
 
-## Learnings
 
-- **Default branch is `dev`**, not `main`. Always base branches and PRs off `dev`.
-- **Migration ordering matters**: Seed migrations (003, 004) reference `zones.biome` column by its original name. Since they run before migration 011 (which renames biome→theme), they must keep the `biome` column name. Don't rename columns in seed migrations retroactively.
-- **`npx tsc --noEmit` from root shows noise**: Stale `dist/` artifacts cause TS6305 errors. Always run per-package to get real errors.
-- **Beware branch switching by other processes**: Another squad agent switched the working directory mid-edit. Always verify `git branch` before committing.
-
-### 2026-04-02: Procedural Generator Cleanup (Issue #241)
-- Renamed `packages/server/src/zone/` → `packages/server/src/generator/` — directory now reflects its role as the procedural generation module, separate from the zone management system.
-- Added `ENABLE_PROCEDURAL_GENERATION` feature flag to `config.ts` (env var: `ENABLE_PROCEDURAL_GENERATION`, default: `false`). Generator is off by default; hand-crafted zones are the primary path.
-- Gated `generateZoneGraph()` call in `ZoneRoom.ts` behind the feature flag. When disabled, falls back to `createTestRoomGraph()` with a log message.
-- Updated 21 import paths across 16 test files and 5 production files (`ZoneRoom.ts`, `PlayerState.ts`, `CreatureManager.ts`, `commands/index.ts`, `commands/handlers/go.ts`, `combat-actions.ts`).
-- Cleaned up "flooded-crypt biome" terminology → generic "theme" terminology in generator.ts comments and wave4-room-graph.test.ts describe blocks.
-- Confirmed: extraction anchors were already removed (no references in generator). Flooded-crypt biome file already deleted; templates already inlined into generator.ts.
-- All 151 tests pass (45 generator + 106 dependent). PR #263.
-### 2026-04-01: Faction Strongholds (Issue #236)
-- Created 3 faction stronghold zones (The Foundry, The Cartographium, The Counting House) with 8 feature rooms each.
-- Migration `013_faction_strongholds.sql` adds `faction_slug` column to zones table and seeds all 3 strongholds with category `faction_hub`.
-- New `stronghold.ts` utility module maps faction slugs → zone slugs with `resolvePlayerHubTarget()`.
-- Death routing in ZoneRoom now checks `playerFactionSlugs` cache (populated on join via `getPlayerFactionSlug`) and routes to faction stronghold.
-- Players without a faction fall back to the Refuge (backward compatible).
-- Added `faction_hub` to zone category union, `factionSlug` to ZoneDefinition, `feature_armoury` and `feature_war_room` to RoomType.
-- Room layout for each stronghold mirrors the Refuge hub-spoke pattern: commons (entry) → stash/armoury, training/war-room, expedition-board, market/infirmary.
-- 21 new tests covering all routing paths. All 7 existing player-death tests and 8 room-routing tests pass unchanged.
-- **Key files:** `packages/server/src/zones/stronghold.ts`, `packages/server/src/db/migrations/013_faction_strongholds.sql`
-- **PR #259**, branch `squad/236-faction-strongholds`
-
-### Corpse/Loot-on-Death System Complete (2026-04-01, Drizzt #237)
-
-**Context:** Drizzt completed corpse system with CorpseSystem entity storage, configurable TTL, and `loot` command. On death, non-soulbound items move to corpse; players loot via new verb. 33 new tests.
-
-**Relevance to Faction Strongholds:** Faction strongholds are configured as `faction_hub` zones (non-combat per death system design). When faction-affiliated players die in combat zones, they respawn at their stronghold, where they can manage loot recovery and death debuff state. The corpse system design (TTL-based cleanup, soulbound filtering) is orthogonal to stronghold architecture.
-
-**Integration Note:** Death routing (#238) will coordinate stronghold respawn destination with corpse system's item drop timing to ensure loot is available for recovery.
-
-**No action required** — stronghold zones are ready for death routing integration.
-
-### Repurpose Refuge as Designer/Debug Hub (2026-04-01, Jarlaxle #239)
-
-**Changes:**
-- Changed Refuge zone DB seed category from `hub` → `dev`, updated description to designer/debug framing
-- Added `'dev'` to shared `ZoneDefinition.category` union type
-- Added `'dev'` to `isNonCombatZone` check in ZoneRoom — dev zones skip collapse/combat like hub zones
-- Updated fallback Refuge graph hearth description to reflect debug staging area
-- Updated comments across NPCSystem, AmbientSystem, WeatherSystem, ambient-templates, stronghold.ts
-- Updated client Refuge.tsx default location label, ambient placeholder text, connection messages
-- Updated faction-strongholds tests to seed Refuge as `category: 'dev'`
-
-**What stays unchanged:**
-- The Refuge zone slug (`the-refuge`) and room structure — still works as fallback for unaffiliated players
-- NPCs are retained (useful for testing NPC interactions)
-- Fallback Refuge graph kept (for cases where no DB data exists)
-- All ambient narration templates kept (atmospheric prose still works for debug hub)
-- Client Refuge.tsx functional behavior unchanged — still connects to `zone:the-refuge`
-
-**Key design decision:** `dev` category added to `isNonCombatZone` so the debug hub behaves like hub/social zones (no collapse timer, no creature AI, no combat). This is correct — designers shouldn't worry about getting killed while testing.
-
-
-### 2026-04-04: PR Review — #260 Rejection (Elminster)
-
-**Sprint 3 PR Review:** Elminster reviewed #260 (Repurpose Refuge) and flagged a blocking issue.
-
-**Finding:** PR #260 modified the seed migration file (003_seed_zones.sql) to change Refuge category from `hub` → `dev`. However, this change will not apply to existing databases where the migration has already run. The migration runner tracks applied files by filename — once applied, seed files are never re-executed.
-
-**Decision:** Data modifications to existing rows must use a **new numbered migration file** (e.g., `014_repurpose_refuge.sql`) with UPDATE statements. Modifying seed files is acceptable only for fresh installations (both seed update AND new migration required).
-
-**Action:** PR #260 needs `014_repurpose_refuge.sql` migration before merge. This is now a documented team rule per the "Migration Discipline" decision.
-
-**Status:** Rejection filed to decisions.md. PR author (Jarlaxle #239 work) to add migration and push revision.
-
----
-
-## 2026-04-01: Refuge Repurposing as Designer/Debug Hub (Issue #239)
-
-**PR:** #260 | **Branch:** `squad/239-refuge-repurpose` | **Base:** `dev`
-
-**Task:** Recategorize Refuge from player spawn hub to developer/designer workspace to support new faction-based stronghold routing.
-
-**Work Completed:**
-- Database schema update: Room category changed from `hub` to `dev` for Refuge zone
-- Migration `014_refuge_repurpose.sql` updates Refuge category and preserves all room data
-- Type definitions: Updated `RoomCategory` union to reflect development use case
-- Descriptions: Updated Refuge zone description to reflect designer/debug purpose
-- Tests: 13 tests updated and added for Refuge as development environment
-
-**Architecture:**
-- **Primary change:** Refuge no longer serves as player spawn location
-- **New role:** Isolated development environment for zone design testing and debug workflows
-- **Fallback:** Remains as emergency routing fallback for unaffiliated/unroutable players
-- **Designer access:** Admin/designer tools continue to route to Refuge for safe testing
-- **Stronghold zones:** Ironwright Foundry, Veil Cartographium, Scarlet Counting House become primary player hubs
-
-**Testing:**
-- 13 tests updated for Refuge as designer environment
-- Integrated with Drizzt's faction stronghold routing (#238)
-- All server tests passing, zero regressions
-
-**Cross-team Impact:**
-- **Drizzt (Engine):** Death/spawn routing now uses faction strongholds; Refuge only fallback
-- **Regis (Frontend):** Client routing via `/api/spawn-zone` endpoint; Refuge no longer primary
-- **Designer workflows:** Clear isolation of design environment from player gameplay
-
-**Key Changes:**
-- Zone category enum: `hub` → `dev` for Refuge
-- Database migration standardizes category across all Refuge instances
-- Type system reflects developer-focused use case
-- All admin/designer features preserved and functional
-
-### 2026-04-04: PR #263 Merge Conflict Resolution
-- Merged `origin/dev` into `squad/241-generator-cleanup` after PRs #258, #259, #262, #264 landed first.
-- Three files conflicted — all were additive (both sides added different config fields/imports):
-  - `config.ts`: kept both `enableProceduralGeneration` (mine) and `corpseTTLSeconds` (from #237 corpse system)
-  - `player-death.test.ts`: kept my `generator/` import path rename + new `CorpseSystem` import from dev
-  - `wave3-redis-contracts.test.ts`: kept both config test defaults
-- **Lesson:** When another process shares the worktree, use a single bash session for the full checkout→merge→resolve→commit→push cycle to avoid branch-switching race conditions.
-- 153 targeted tests passing post-merge.
-
----
-
-## 2026-04-04: Merge Round — All 7 Sprint 3/4 PRs to Dev
-
-**Status:** ✅ Complete
-
-### PRs Merged (in order)
-
-1. ✅ **PR #258** (Corpse/Loot) — Drizzt author. Clean merge. Base for later PRs.
-2. ✅ **PR #259** (Faction Strongholds) — Jarlaxle author. Clean merge. Unblocks #260, #261.
-3. ✅ **PR #264** (DB Schema) — Drizzt author. Clean merge. Independent.
-4. ✅ **PR #262** (Client UI Terminology) — Independent. Clean merge.
-5. ✅ **PR #263** (Generator Cleanup) — Jarlaxle author. Merge after base moved. 3 conflicts resolved (config, test imports). 153 tests pass.
-6. ✅ **PR #261** (Death/Spawn Routing) — Drizzt author. Depends on #259. Clean merge.
-7. ✅ **PR #260** (Repurpose Refuge) — Jarlaxle author. Rejected once (missing migration), fixed by Drizzt, then merged.
-
-### Test Results
-
-- Server: 2187 tests passing
-- Client: All passing
-- Zero regressions
-
-### Key Outcomes
-
-- All 7 squad issues (#236-#242) completed and merged to dev
-- Migration Discipline decision established (seed files pair with numbered migrations)
-- Full backlog clear
-- Ready for Sprint 5 planning
-
-### Jarlaxle's Role in Merge Round
-
-- Authored PR #259 (Faction Strongholds) — foundational for #260, #261
-- Authored PR #260 (Repurpose Refuge) — rejected once (missing migration), fixed by Drizzt, then merged
-- Authored PR #263 (Generator Cleanup) — resolved 3 merge conflicts after base branch shift
-- PR #259 merged cleanly. PR #263 had 3 merge conflicts due to base branch changes after #258, #262, #264 landed.
-- Learned: Migration discipline is an engine-team responsibility; Drizzt applied the #260 fix (adding migration 014)
-
-### 2026-04-05: NarrationService + LLM Client Wiring (Issue #277)
-- **PR:** #292 (`squad/277-wire-narration-service`)
-- **Acceptance:** Wired Azure AI Foundry LLM narration pipeline into ZoneRoom runtime with graceful fallback to template-only mode.
-
-**Architecture:**
-- `config.ts`: Added optional `azureAI` config block (`AZURE_AI_ENDPOINT`, `AZURE_AI_KEY`, `AZURE_AI_DEPLOYMENT`, `AZURE_AI_API_VERSION` env vars)
-- `narrative/factory.ts`: Factory function that creates NarrationService with LLMClient when Azure config is present, or template-only mode when not
-- `ZoneRoom`: Added `narrationService` field, initialized in `onCreate()` via factory
-- `generateNarration()`: Helper method that builds `NarrationContext` from game state (player HP, room contents, creatures, traces, zone stability) and calls `narrationService.narrate()`
-- Initial entry narration now uses LLM pipeline (proof-of-concept)
-
-**Testing:**
-- `narration-wiring.test.ts`: Integration tests for factory, config loading, mock transport, and fallback behavior
-- All 6 tests pass: config detection, default values, mock LLM call, template fallback
-
-**Key Patterns:**
-- **Factory pattern for dependency injection:** `createNarrationService()` reads config and conditionally instantiates LLMClient
-- **Graceful degradation:** When Azure config is missing, NarrationService falls back to templates (existing behavior)
-- **Async narration with timeout:** NarrationService already handles timeout internally (cache/LLM/template within budget), so `await narrationService.narrate()` is safe to call from `onJoin()`
-- **NarrationContext building:** Maps PlayerState + RoomGraph + systems (CreatureManager, TraceSystem, etc.) to the structured schema expected by LLM client
-- **Future expansion:** Room descriptions (from `look`), combat actions, movement events can call `generateNarration()` with richer context
-
-**File Paths:**
-- `packages/server/src/config.ts` — Azure AI config block
-- `packages/server/src/narrative/factory.ts` — NarrationService factory
-- `packages/server/src/rooms/ZoneRoom.ts` — Integration point (line ~303 onCreate, line ~483 generateNarration helper, line ~486 first usage)
-- `packages/server/src/__tests__/narration-wiring.test.ts` — Integration tests
-- `KNOWN_ISSUES.md` — Updated #2 to reflect wiring completion
-
-**Decisions:**
-- Entry narration is the first LLM-enhanced call (low-frequency, high-value)
-- Full integration (room descriptions, combat, movement) deferred to future work — infrastructure is now in place
-- No telemetry for background enrichment failures yet (existing KNOWN_ISSUE retained)
-
-### 2026-04-05: Ability & Cooldown System Foundation (Issue #279)
-- Implemented the ability system data model and damage mechanics per GDD §6.3
-- **Ability definitions:** Created AbilityDefinition interface with id, name, type, cooldownTicks, staminaCost, effects
-- **Default abilities:** Heavy Strike (1.5x damage, 3-tick cooldown, 15 stamina), Block (5 damage reduction, 2-tick cooldown, 10 stamina), Observe (reveals stats, 0 cooldown, 5 stamina)
-- **Combatant changes:** Added stamina (100/100 for players), maxStamina, and abilityCooldowns Map to track cooldown ticks remaining
-- **Damage model updates:** DamageOptions now supports damageMultiplier and blockReduction; getStanceMultiplier handles heavy_strike and block actions
-- **Test suite:** 18 comprehensive tests covering all ability mechanics (cooldowns, stamina consumption, fallbacks, edge cases)
-- **Architecture notes:**
-  - Stamina tracked only for players (creatures have undefined stamina/cooldowns)
-  - Cooldowns decremented at START of tick (not end) so cooldownTicks represents "ticks until usable"
-  - Block applies flat reduction on top of armour (totalReduction = armour + block)
-  - QueuedAction.abilityId added for future skill action routing
-- **Next steps:** CombatSystem integration needed - validateAbilityAction(), updateCooldowns(), and resolveEncounterTick() modifications to handle ability actions and fallback to auto-attack when cooldown/stamina checks fail
-- **Outcome:** Foundation complete, tests written but skipped pending CombatSystem integration (squad/279-ability-cooldown-system branch, commit 495d3ce)
-
-### 2025-01-04: Combat Grid System Design Analysis (Issue #337)
-- **Task:** Research and write design analysis for DCSS-style grid-based tactical combat
-- **Context:** Issue #337 proposes replacing abstract position zones (Front/Flank/Rear) with x-y grid combat for tactical depth
-- **Key findings:**
-  - **Existing position system is foundational** — `packages/server/src/combat/CombatState.ts` defines `PositionZone` ('front' | 'flank' | 'rear') with position cooldowns (3 ticks). `CombatSystem.ts` validates range via `canReachTarget()`, applies flanking bonus (+15% from Flank when target's focus is Front). GDD §6.11 defines full mechanics.
-  - **Tick-based loop is grid-ready** — 1-second ticks with 6-phase resolution (position → ability → auto-attack → creature actions → status → broadcast). Adding grid movement fits cleanly in Phase 1 (position resolution).
-  - **Creature AI uses position types** — `CreaturePositionType` ('melee' | 'ranged' | 'skirmisher' | 'boss') determines reachability and repositioning behavior. Skirmishers chase high-threat Rear targets (healers). Boss creatures reach all zones. Grid version needs pathfinding (A* on grid graph).
-  - **Range validation is central** — Current logic: melee from Rear fails, ranged hits all zones. Grid logic: Chebyshev distance (max(|Δx|, |Δy|)) + weapon type ranges (melee ≤1 tile, short-range ≤5, long-range ≤10).
-- **Proposal:**
-  - **Grid dimensions:** 8×8 (small), 10×10 (standard), 12×12 (boss arenas). Stored per-room in `zone_rooms` table (`grid_width`, `grid_height`, `obstacles` JSONB).
-  - **Movement cost:** 1 action = 1 tile (orthogonal or diagonal). No multi-tile moves in Phase 1. Queued as `{ action: 'move', gridTarget: {x, y} }`.
-  - **Backward compatibility:** `gridPosition?: GridPosition` on `Combatant`. If present, use grid logic; else fall back to zone logic. Derive `position` (zone) from `gridPosition.y` for existing mechanics.
-  - **Phase 1 (3-4 weeks):** Grid movement, distance-based range validation, basic A* pathfinding for creatures. Text-based coordinates ("You at (5,3). Goblin at (4,1)."). NO LOS, NO cover, NO facing.
-  - **Phase 2 (4-6 weeks):** ASCII grid renderer, line-of-sight (raycasting), cover mechanics, facing/flanking, cone/circle telegraphs.
-  - **Phase 3 (stretch):** DCSS-style tile rendering (canvas/WebGL), animated movement, fog of war.
-- **Risks:**
-  - **Performance:** 20 players + 10 creatures = 900 range checks/tick. Mitigation: cache distance matrix (O(n²) once, O(1) lookups).
-  - **Text-mode rendering:** Can players visualize grid from coordinates alone? Need ASCII grid prototype.
-  - **Content complexity:** Designers must manually place spawn points and obstacles per room. Mitigation: make grid opt-in (boss fights only in Phase 1).
-- **Key files:**
-  - `packages/server/src/combat/CombatState.ts` — `PositionZone`, `Combatant.position`, `REPOSITION_COOLDOWN_TICKS`
-  - `packages/server/src/combat/CombatSystem.ts` — `canReachTarget()`, `getReachablePlayers()`, `pickCreatureTarget()`, position resolution in tick loop
-  - `packages/server/src/combat/damage.ts` — Flanking bonus logic (GDD §6.11)
-  - `packages/server/src/creatures/behavior.ts` — Creature state machine, action selection
-  - `packages/shared/src/index.ts` — `PositionZone`, `CreaturePositionType` type definitions
-  - GDD.md §6.11 — Complete position system specification
-- **Recommendation:** Prototype Phase 1 in feature branch. Go/no-go based on performance (<100ms/tick with 30 entities) and text-mode UX. If successful, grid becomes opt-in for boss fights. If not, defer until graphical client available.
-- **Design doc:** `docs/design/337-combat-grid-systems.md` (27KB, 8 sections: current system analysis, grid mechanics proposal, creature AI pathfinding, integration analysis, risks, phased implementation)
-
-### 2026-07-28: Admin Spawn→Display Bug Fix (commit a82cf3d)
-- **Task:** Fix bug where creatures spawned via admin UI don't appear in the room list
-- **Root causes found (3 issues):**
-  1. **`handleSpawn` didn't await `loadRoom()`** — Frontend showed success before data refresh completed, leaving stale creature list visible. Fixed by awaiting `loadRoom()` before showing success feedback.
-  2. **`/spawn` endpoint lacked room validation** — Unlike `/spawn-creature` (which uses `ZoneRoom.adminSpawnCreature` with room graph validation), the `/spawn` endpoint accepted any `targetRoomId` string. If the room didn't exist in the zone graph, the creature had a `currentRoomId` that didn't match any room in the frontend's `roomOccupancy` map, making it invisible in the Room Graph tab.
-  3. **`getZoneDetail()` hardcoded `name: 'zone'`** — Persistent zones (e.g., `zone:flooded-crypt`) lost their actual room name in the detail response. Fixed to return `room.roomName`.
-- **Approach:** End-to-end trace of spawn→display pipeline (both endpoints, CreatureManager, frontend React state). Backend confirmed correct via integration tests before examining frontend.
-- **Key architectural learnings:**
-  - Two spawn endpoints exist: `/spawn` (generic, used by frontend) and `/spawn-creature` (zone-specific, uses `adminSpawnCreature`). The `/spawn` endpoint bypasses ZoneRoom's room validation.
-  - Frontend `roomOccupancy` useMemo maps creatures by `currentRoomId` against `zoneData.rooms[].slug`. Both must use same format (zone slugs). For procedural zones (`zoneSlug` undefined), the Room Graph tab shows "Zone data unavailable" — a known limitation.
-  - `contentEntityToCreatureTemplate()` (added in 5f3eb60) converts flat ContentEntity to nested CreatureTemplate shape — critical for the `/spawn` endpoint.
-- **Tests added:** 5 new integration tests in `admin-live-rooms.test.ts` covering spawn→display flow, auto-room-selection, multi-spawn, invalid room rejection, and room name accuracy. All 2385 server tests pass.
-- **Files changed:** `routes.ts` (room validation + name fix), `LiveRoomDetail.tsx` (await loadRoom), `admin-live-rooms.test.ts` (+5 tests)
-
-### User Settings Backend (#359)
-- **Built:** Migration `007_user_settings.sql`, `UserSettingsRepository` (interface + PG + InMemory), settings API routes (`GET/PUT /api/user/settings`), mounted in server entry.
-- **Pattern:** Followed existing provider pattern (interface → PgImpl + InMemoryImpl → singleton provider). Routes accept `{ authService }` deps, resolve repo lazily via `getUserSettingsRepository()`.
-- **Types:** `UserSettings` and `UserSettingsConfig` exported from `db/types.ts` and re-exported from `db/index.ts`.
-- **Validation:** Server validates fontSize (int 12–24), verbosity (terse/standard/verbose), narrationStyle (default/gothic/noir/clinical), rejects unknown top-level keys. 400 with descriptive error messages.
-- **Auth:** Bearer token pattern matching `characters.ts` — `authenticate()` helper extracts playerId from token.
-- **Tests:** 17 tests in `user-settings.test.ts` covering auth (401), GET defaults, PUT create/update, persistence round-trip, and all validation rules. All 2408 server tests pass.
-- **Files:** `007_user_settings.sql`, `db/UserSettingsRepository.ts`, `db/types.ts`, `db/index.ts`, `api/settings.ts`, `index.ts`, `__tests__/user-settings.test.ts`
-
----
-
-### 2026-04-09: Issue #359 — User Settings Backend Implementation
-- **Task:** Implement server-authoritative user settings persistence
-- **Status:** ✅ Complete (Commit fb130d7)
-- **Files:** Migration 007_user_settings.sql, UserSettingsRepository.ts, endpoints GET/PUT /api/user/settings
-- **Architecture:** Provider pattern (Pg + InMemory) consistent with all persistence layers
-- **Key decision:** JSONB config blob (avoids migration churn), server-side validation (security), inline auth (consistency)
-- **Test coverage:** 17 tests covering migration, repository, API, validation, edge cases
-- **Cross-team:** Regis (Frontend) building `useSettings` hook on top of GET/PUT contract
-
-## Roster Awareness
-- **Regis (Frontend):** Completed #359 frontend parallel work — `useSettings` hook, Settings.tsx refactor, localStorage→server sync (12 tests, Commit f4ab813)
-
-## Session: Gameplay Metrics (#360)
-- **Task:** Implement server-side gameplay metrics collection (deaths, kills, loot pickups, combat stats)
-- **Status:** ✅ Complete
-- **Files created:**
-  - `packages/server/src/db/migrations/008_gameplay_metrics.sql` — append-only `game_metrics` table with JSONB metadata, indexed by player/type/time
-  - `packages/server/src/metrics/MetricsService.ts` — fire-and-forget DB writes, typed metadata per event type
-  - `packages/server/src/metrics/metrics-provider.ts` — singleton provider (Pg live / NoOp fallback), follows death-penalty-provider pattern
-  - `packages/server/src/metrics/index.ts` — barrel export
-- **Files modified:**
-  - `packages/server/src/index.ts` — init metrics provider at boot
-  - `packages/server/src/rooms/ZoneRoom.ts` — hooks for death, creature kills, PvP kills, combat stats, loot pickup
-- **Architecture decisions:**
-  - Single `game_metrics` table with `event_type` discriminator + JSONB metadata (flexible, no migration churn for new event types)
-  - All metric writes are fire-and-forget (`void this.record(...)`) — never block the game tick
-  - Provider pattern consistent with death-penalty-provider, stash-provider, etc.
-  - NoOp fallback when no DATABASE_URL (in-memory dev mode)
-  - Combat stats aggregated per-player per-tick before writing (avoids N writes per strike event)
-  - Loot pickup detected via inventory snapshot diff around take/loot commands
-
-### 2026-07-27: Server-Side Who List (Issue #366)
-- **Task:** Implement server-wide who list with visibility filtering
-- **Architecture:** WhoListService gathers players from all ZoneRoom instances via matchMaker.query() + getLocalRoomById(), batch-loads flags from CharacterFlagsRepository, applies resolveVisibility() per viewer-target pair
-- **Key decisions:**
-  - **getWhoListPlayerData() public method on ZoneRoom** — Clean API for cross-room data access (avoids casting to `any` for private fields). Returns characterId, characterName, roomId, zoneName.
-  - **Async `who` command intercept in handleCommandMessage** — Command handlers are sync, but who list needs async matchMaker + DB queries. Intercepted before the sync dispatch, same pattern as other async operations.
-  - **Dual delivery: text command + structured message** — `who` text command sends MUD-style ASCII table via narration. REQUEST_PLAYER_LIST message sends structured PlayerListEntry[] for Regis's modal UI.
-  - **devModeEnabled as admin proxy** — No per-player admin flag exists yet. Used global devModeEnabled (consistent with existing dev tools) for admin visibility check.
-  - **Phase 1 nulls for level/class** — No level or class system exists yet. Fields are null in PlayerListEntry, ready for future phases.
-  - **Zone name from zoneData?.zone.name with slug fallback** — Handles both hand-crafted zones (have display names) and procedural instances (slug only).
-- **Files:** `who/WhoListService.ts` (new), `who/index.ts` (new), `rooms/ZoneRoom.ts` (handler + methods), `commands/parser.ts` (+who), `commands/handlers/help.ts` (+who), `shared/src/index.ts` (types already added by Regis)
-- **Build: 0 new TS errors, 0 new lint errors. All 1379 tests passing, zero regressions.**
-
-### 2026-07-27: Role-Based Admin Access (Issue #373)
-- **Task:** Add `player | content-dev | admin` role hierarchy end-to-end
-- **Architecture:** Shared types in `@ellmud/shared`, dual-path admin auth middleware (ADMIN_TOKEN + session token with role check), role stored in DB (player_identities.role), client state + auto-auth
-- **Key decisions:**
-  - **ROLE_HIERARCHY as Record<UserRole, number>** — player=0, content-dev=1, admin=2. Numeric weights for comparison via `hasMinRole()`.
-  - **Role lookup from DB, not JWT** — `getRoleByPlayerId()` on PlayerRepository reads from player_identities table. Role changes take effect immediately without re-login.
-  - **Dual admin auth** — Middleware checks ADMIN_TOKEN first (exact match, silent if unset), then validates session token via AuthService + role check. Backward compatible.
-  - **initAdminAuth() module-level init** — Same pattern as colyseus-auth. Called once at startup to inject AuthService + PlayerRepository into middleware module state.
-  - **401 vs 403 vs 503** — 401 for missing/invalid/expired tokens, 403 for valid session with insufficient role, 503 only when no auth method is configured at all.
-  - **AUTO_PROMOTE_ADMIN env var** — At startup, promotes the named player to admin role in DB with audit log. For initial bootstrap only.
-  - **Client dual-token strategy** — admin-api getAdminToken() returns admin_token ?? ellmud_token. Allows game session to auth admin panel.
-  - **resetAdminAuth() for test isolation** — Module-level state needs explicit reset between test files to prevent leaks.
-- **Files:** `shared/src/index.ts` (types), `server/src/admin/middleware.ts` (rewritten), `server/src/auth/roles.ts` (new), `server/src/auth/PlayerRepository.ts`, `server/src/auth/PgPlayerRepository.ts`, `server/src/auth/routes.ts`, `server/src/admin/users/user-routes.ts`, `server/src/index.ts`, `client/src/store.ts`, `client/src/lib/admin-api.ts`, `client/src/App.tsx`, `client/src/pages/admin/AdminLayout.tsx`
-- **PR:** #375 → dev
-- **Build: 0 TS errors, 0 lint errors. All 2966 tests passing, zero regressions.**
-
-### 2026-04-09: Issue #381 Trace De-duplication (PR Background Session)
-**Issue:** #381 - Duplicate footprint messages in same direction
-**Commit:** (committed in background session)
-
-### Summary
-- Added deduplicateTraces() in TraceSystem.getTracesForPlayer() grouping by (type, direction)
-- Keeps most recent trace per group, eliminating duplicate player-facing messages
-- All raw traces preserved in storage for TTL/decay/game logic
-- 8 new tests, zero regressions across trace + phase2 QA tests
-- Decision: Presentation-only fix with composable architecture
-
-### 2025-07-22: Creature Room Appearance — Individual Lines (Issue #383)
-- Replaced type-aggregation logic (Map + `(xN)` count suffix) with per-creature loop in `look.ts`, `go.ts`, `goto.ts`.
-- Each creature instance now renders its own line using `roomDescription` field, falling back to `A <name> lurks here.`.
-- ANSI tags in `roomDescription` pass through unchanged — client parser already supports them.
-- No schema or type changes needed — `roomDescription` field exists throughout the stack (DB → template → instance → command context).
-- Added 11 new tests in `creature-appearance.test.ts` covering all three commands. All 60 tests pass.
-- Learning: The creature rendering pipeline is purely presentation-layer. Field already flows DB → template → instance → CreatureRef → handler. Changes were isolated to three handler files with identical aggregation blocks.

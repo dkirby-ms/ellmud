@@ -1,32 +1,4 @@
-# Regis — History
-
-## Core Context
-
-- **Project:** Ellmud — PvPvE Extraction RPG / Real-Time MUD
-- **Stack:** Node.js, Colyseus (WebSocket), React client, PostgreSQL
-- **User:** dkirby-ms
-- **Joined:** 2026-03-27
-- **Client path:** `packages/client/`
-- **Admin pages:** `packages/client/src/pages/admin/`
-- **Shared types:** `packages/shared/src/`
-- **Styling:** MUD-aesthetic, text-primary, ANSI colour heritage. Uses `theme.css` for base styles.
-- **Admin pattern:** List page (table) → Detail page (form with modals for nested data). Examples: `NarrativeDetail.tsx`, `BiomesDetail.tsx`.
-- **Hooks:** `useAutoScroll` for scrollable panes, `useShardConnection` for game room connections.
-- **Compass nav:** `CompassControl.tsx` in sidebar. Exit data via `state.roomHeader.exits`.
-
 ## Team Updates
-
-### 2026-04-10: Issue Triage Session — Elminster Orchestrated
-**Status:** ✅ Complete — 3 issues triaged and routed  
-**Issues assigned to Regis:**
-- **Issue #403** — Player Groups/Consent/Follow (UX: consent prompts, group UI)
-- **Issue #404** — Status Panel Tab Redesign (Panel extraction, tab UI, Tailwind integration)
-
-**Design briefs:** 3 architectural decision documents posted to GitHub + merged to .squad/decisions/decisions.md
-
-**Next:** Coordinate with Drizzt (posture sync) and Jarlaxle (group mechanics) on implementation timing.
-
----
 
 ### 2026-04-09: Issue #357 — Direction Shortcuts & Speedwalk
 - **Status:** ✅ Complete (Commit 2085460, pushed to dev)
@@ -58,6 +30,7 @@
 
 ---
 
+
 ## Learnings
 
 - **Issues #384 & #385 — Live Rooms occupancy filters + context menu (2026):** Added two features to the Room Graph tab in `LiveRoomDetail.tsx`. (1) Occupancy filter bar: `filterPlayers` / `filterCreatures` boolean toggles, `filteredDisplayRooms` useMemo derived from `displayRooms` + `roomOccupancy`. OR logic when both active. Shows count badge `filtered/total`. (2) Right-click context menu: `contextMenu` state `{x,y,roomSlug,roomName}`, `handleRoomContextMenu` on `onContextMenu` of each room row button. Fixed-position popup with inline styles matching ZoneDesigner pattern (bg `#1C1D27`, border `#2A2B35`, hover `#2A2B35`). Close-on-escape/outside via window event listeners in useEffect. Inline buttons removed; hint text in expanded rows. Modals (broadcast/spawn/teleport) unchanged — only trigger moved. Commit 70f6746.
@@ -69,8 +42,6 @@
 - **Issue #362 — Compass focus persistence across zone transitions (2026):** The `useEffect` in ZoneExploration that fires on `state.connectionStatus === "connected"` was unconditionally calling `inputRef.current?.focus()`, stealing focus from the compass on zone transitions. Fix: added a `lastFocusAreaRef` ("compass" | "prompt") updated by a `document.addEventListener('focusin', ...)` listener. On reconnect, checks the ref — if compass had focus, queries `compassRef.current?.querySelector('button:not([disabled])')` and focuses that instead. CompassControl converted to `forwardRef` to expose its DOM node. 4 new tests in `compass-focus-persistence.test.tsx`. Commit 59c1903.
 
 - **Issue #357 — Direction shortcuts + speedwalk (2026):** Phase 1: `useDirectionKeys` hook adds global keydown listener for arrow/PageUp/PageDown/numpad → direction mapping. Uses `document.activeElement` check to skip when input/textarea/contentEditable has focus (not inputRef comparison — works with any focused text field). Numpad5 is explicit no-op. Phase 2: `speedwalk.ts` pure-function parser — regex `(\d*)([nsewud])` iterates segments, 50-move client limit. In `ZoneExploration.tsx`, `handleSubmit` checks `isSpeedwalk()` before sending to server. Each move dispatched via `handleExitClick` with 150ms staggered `setTimeout`. Combat blocks speedwalk; entering combat mid-walk aborts via `speedwalkAbortRef` + useEffect on `state.inCombat`. Commit 2085460.
-
-- **Issue #380 — Speedwalk false-positive research (2026-04-21):** Investigated residual race condition where fast-typed individual direction commands (e.g., "n" Enter "e" Enter) sometimes trigger speedwalk UI. Root cause: React 18 `createRoot` batches `setCommand("")` asynchronously; DOM input retains old value between handleSubmit return and React re-render. If user types next direction char in that gap, onChange fires with concatenated value (e.g., "ne"), `shouldTreatAsSpeedwalk("ne")` → true. Recommended fix: wrap `setCommand("")` in `flushSync()` from `react-dom` to force synchronous clear. Research written to `.squad/decisions/inbox/regis-speedwalk-ux-research.md`. Key insight: React 18 concurrent mode defers all state updates to microtask scheduler, unlike React 17's synchronous flush within event handlers.
 
 - **Issue #358 — Inline MUD prompt with click-to-focus (2026):** The ZoneExploration command input was a separate full-width strip at the page bottom (`bg-bg-panel border-t`). Moved it inside the 70% narrative column, styled with terminal background (`#080910`), added `.command-input-line` CSS class with `:focus-within` gold glow. MudPrompt's blinking cursor removed (real input `>` replaces it). Click-to-focus on narrative area checks `window.getSelection()` to avoid stealing focus during text selection. Same treatment applied to Refuge chat. `tabIndex={1}` on input, `role="log"` on narrative areas. Commit 08b24c0.
 
@@ -108,6 +79,7 @@
 - **Starting zone picker replaces faction picker:** CharacterSelect.tsx now uses `STARTING_ZONES` array (the-reliquary, the-bloom-observatory, the-carrion-court) instead of `FACTIONS`. API sends `startingZoneSlug` instead of `factionSlug`. Shared types `CharacterSummary` and `CreateCharacterRequest` updated in both occurrences in `packages/shared/src/index.ts` — `factionSlug`/`factionName` are now nullable, `startingZoneSlug`/`startingZoneName` added. Character cards show zone name with 📍 icon; faction shown only if earned. Server test `character-repository.test.ts` updated to match. 2555 tests passing.
 
 ---
+
 
 ## 2026-04-09: Research — Issue #366 Who List Design
 
@@ -168,6 +140,7 @@
 **Files Produced:**
 - `.squad/decisions/inbox/regis-who-list-design.md` (23KB, comprehensive design spec with acceptance criteria)
 
+
 ## 2026-03-27T15:39Z — Phase C3 Complete
 
 **Completed:** Client room connection updates for zone naming  
@@ -184,6 +157,7 @@
 **Dependency:** Drizzt's Phase C (zone registration) — now satisfied.
 
 - **useShardConnection accepts roomName param:** The hook now takes an optional `roomName` string (default `'shard'`). ShardExploration derives the room name from `useLocation().pathname` — `/refuge` maps to `zone:the-refuge`, everything else defaults to `shard`. This means ShardExploration is reusable for any zone-mode room.
+
 
 ## 2026-04-12T19:30Z — Username Display & Sign-out UX
 
@@ -216,6 +190,7 @@ Inconsistent logout buttons across pages — some plain text, some missing entir
 
 - **Zone mode hides shard-specific UI:** When `isZone` is true, the "Back to Refuge" button, Shard Stability bar, and Collapse Timer sidebar section are hidden. ChatPanel context switches to `"refuge"`. CombinedStashLoadout gets `inShard={false}`.
 
+
 ## 2026-03-27T16:20Z — Refuge Unified Exploration UI
 
 **Completed:** Route `/refuge` to ShardExploration instead of old tab-based Refuge hub  
@@ -231,6 +206,7 @@ Inconsistent logout buttons across pages — some plain text, some missing entir
 **Note:** `Refuge.tsx` is NOT deleted — just no longer routed. Can be cleaned up later.
 
 - **Stability bar & collapse timer fully removed from UI:** The `Shard Stability` progress bar (room header), `COLLAPSE TIMER` sidebar section, `useCountdown` import, `collapseTime`/`collapseTimerMax` variables, `formatTime` helper, `getCollapseColor` function, and `stability` variable are all removed from `ShardExploration.tsx`. Server-side state (`collapseTimer`, `collapseTimerMax`, `shardState`, `stability`) is still sent and stored in `useShardConnection` — only the UI consumption was removed. The `useCountdown` hook file itself is preserved since it may be useful elsewhere.
+
 
 ## 2026-03-27T17:35Z — Death Refuge Navigation Fix
 
@@ -251,6 +227,7 @@ Inconsistent logout buttons across pages — some plain text, some missing entir
 
 ---
 
+
 ## Team Sync: 2026-03-27T17:40:16Z
 
 **Drizzt (Engine Dev) completed DB stability fixes simultaneously:**
@@ -269,6 +246,7 @@ Inconsistent logout buttons across pages — some plain text, some missing entir
 3. Refuge uses ShardExploration UI (Regis)
 4. Stability bar and collapse timer UI removed (Regis)
 5. Stability bar/collapse timer deprecation (user directive via Drizzt)
+
 
 ## Learnings
 
@@ -294,6 +272,7 @@ Inconsistent logout buttons across pages — some plain text, some missing entir
 
 ---
 
+
 ## Team Sync — 2026-03-27T19:11:50Z (Exploration Phase Complete)
 
 ### Phase Completion
@@ -317,6 +296,7 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 - Full decision trail available for team reference
 
 ---
+
 
 ## 2026-03-28T19:45Z — False Death Screen Fix
 
@@ -348,6 +328,7 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 - **Tier color system standardized:** Both ItemTooltip and EquipmentSilhouette use the same tier color mapping (scrap: gray `#808080`, common: white `#d4d4d4`, sturdy: green `#4ade80`, refined: blue `#60a5fa`, masterwork: purple `#c084fc`, anomalous: gold `#fbbf24`). These match the existing tier colors used throughout the client.
 
 ---
+
 
 ## 2026-03-28T21:05Z — Equipment Silhouette + Shared ItemTooltip (Phase 3)
 
@@ -386,12 +367,14 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 
 ---
 
+
 ## Cross-Team Notes
 
 - **Drizzt (Engine):** If you add computed stats (damage/speed/armour) to the `DisplayItem` message, ItemTooltip is ready to display them. Currently shows `?` as placeholder.
 - **Minsc (Content/Testing):** Equipment silhouette tests should verify tooltip appears on mouseover and displays correct tier colors/borders.
 
 ---
+
 
 ## MUD Prompt / Status Line Component (2026-03-27)
 
@@ -411,10 +394,12 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 
 **Decision Documented:** `.squad/decisions.md` — "2026-03-28: MUD Prompt / Status Line"
 
+
 ## Cross-Team Notes
 
 - **Drizzt (Engine):** If you add mana/MP to the game schema and sync to client, MudPrompt is ready to display it (just add the field to AppContext)
 - **Minsc (Content/Testing):** Your sidebar effect tests now use `within()` scoping to account for effect names appearing in both sidebar and prompt
+
 
 ## 2026-03-28 — Status Panel Wireup & Polish Pass
 
@@ -445,6 +430,7 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 - **Zone Designer zoom implemented via viewBox adjustment:** Added zoom state (0.25-3.0 range) with +/- buttons, percentage display, mouse wheel support, and keyboard shortcuts (+/=/- keys, 0 to reset). Zoom works by dividing viewBox dimensions by zoom factor and recentering. Removed maxHeight constraint on SVG to allow better zoom experience. UI matches designer dark theme (#12131A bg, #2A2B35 borders, #8A8B95 muted text). Mouse wheel uses preventDefault() to avoid page scroll conflicts.
 - **Zone Designer pan support via SVG viewBox offset:** Added panX/panY state that offsets the viewBox from its zoom-centered position. Pan activates on mousedown on the SVG background (not room/exit elements) using `e.target === e.currentTarget` guard. Mouse deltas convert from screen pixels to SVG coordinates via `getBoundingClientRect()` and viewBox width/height ratio. Pan direction is inverted (drag right → view moves left). Uses `useRef` for start position to avoid stale closures. Pan resets on floor change, zoom reset (0 key), and Maximize2 button. Cursor changes: `grab` default → `grabbing` while panning → `crosshair` in connect mode. "📍 Panned" toolbar indicator appears when panned, clickable to reset.
 
+
 ## 2026-03-27T19:51Z — Direction-Biased Layout Engine
 
 **Completed:** Fixed zone designer room placement to respect exit directions  
@@ -464,6 +450,7 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 - **Layout algorithm uses dot product for directional bias:** The `findNearestDirectional()` function scores candidate cells within each ring using `score = ddx * dirDx + ddy * dirDy` where `(ddx, ddy)` is the offset from ideal position and `(dirDx, dirDy)` is the exit direction vector. Higher scores mean better alignment with the exit direction.
 - **Direction-biased search still respects Manhattan distance priority:** Cells at radius 1 are tried before radius 2, radius 2 before radius 3, etc. Within each ring, the highest-scoring (most aligned) candidate wins. This minimizes displacement while respecting semantics.
 - **`findNearestUnoccupied()` preserved for disconnected subgraphs:** Disconnected components placed to the right of the main graph don't need directional bias (no meaningful "from" direction), so they still use the plain spiral search.
+
 
 
 ## 2026-03-27T20:05Z — Z-Level Independent Layout
@@ -486,10 +473,12 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 
 Each z-level gets its own `occupied` set since the designer displays one floor at a time — no visual overlap.
 
+
 ## Learnings
 
 - **Z-level layout must be independent of parent level positions.** When multiple surface rooms connect down to the same sub-level, the sub-level's cardinal topology should dictate its own layout, not the surface positions. Anchoring at the first z-transition and BFS-expanding with only cardinal exits solves this.
 - **Per-z-level occupied sets are essential.** Rooms on different z-levels can share (x,y) without conflict because the designer shows one floor at a time. A single global occupied set incorrectly blocks sub-level room placement.
+
 
 
 ## 2026-03-27T20:45Z — Styled Delete Exit Modal
@@ -519,6 +508,7 @@ Each z-level gets its own `occupied` set since the designer displays one floor a
 4. `confirmDeleteExit()` deletes selected exit and optionally reverse exit
 5. Selection cleared, zone refreshed via `onZoneChanged?.()`
 
+
 ## Learnings
 
 - **Modal pattern for confirmations is consistent:** All styled modals in Zone Designer follow same structure — fixed overlay with `bg-black/50`, centered card with dark theme colors, click backdrop to cancel, `stopPropagation()` on card to prevent close
@@ -529,6 +519,7 @@ Each z-level gets its own `occupied` set since the designer displays one floor a
 - **Property clipboard stores name/description/type/properties but NOT slug/id:** Identity fields should never be copied — only visual/descriptive properties are part of the "property brush"
 - **Toast notifications auto-dismiss after 3 seconds:** Simple setTimeout pattern with gold text (`#C9A84C`) on dark background, positioned at bottom center with `position: absolute` and `transform: translateX(-50%)`
 - **Paste Properties keeps clipboard loaded:** Don't clear `copiedRoomProps` after pasting — allows batch application to multiple rooms (power-user workflow)
+
 
 
 ## 2026-03-28T22:53Z — Zone Designer UX: Exit Modal & Copy-Paste
@@ -549,6 +540,7 @@ Each z-level gets its own `occupied` set since the designer displays one floor a
 **Impact:** Zone designers can now manage destructive operations with visual feedback and reuse room configurations across zones for faster design iteration.
 
 
+
 ## 2026-03-29T00:38-00:39Z — Admin Cleanup Session
 
 **Tasks Completed:**
@@ -556,6 +548,7 @@ Each z-level gets its own `occupied` set since the designer displays one floor a
 2. Removed serif font declarations from 25 admin component files (~120 changes)
 
 **Build & Tests:** ✅ All passing
+
 
 
 ## 2026-03-29T02:15Z — Zone Designer UX Improvements
@@ -595,6 +588,7 @@ Each z-level gets its own `occupied` set since the designer displays one floor a
 
 **Build:** ✅ Clean (tsc + vite)
 
+
 ## Learnings
 
 - **Square nodes provide better visual balance:** 100×100 squares feel more balanced than wide rectangles and work better with centered text. The reduced horizontal size (140→100) is offset by increased vertical space (60→100), keeping total area similar while improving proportion.
@@ -604,6 +598,7 @@ Each z-level gets its own `occupied` set since the designer displays one floor a
 - **Hover delay prevents tooltip flicker:** 150ms timeout before showing tooltip avoids flashing when mouse quickly moves across multiple rooms. Timer must be cleared on mouseLeave to prevent stale tooltips.
 - **Toggle pattern for optional UI elements:** Boolean state + toolbar toggle button following existing button styling patterns. Active state uses gold background (bg-[#C9A84C]), inactive uses border-only (border-[#4A4B55]).
 - **Conditional rendering based on toggle state:** When labels ON, show both name and slug in node with vertical offset. When OFF, show only centered slug and enable hover tooltip. Tooltip visibility also gated by showLabels to avoid redundancy.
+
 
 
 ## 2026-03-27T16:30Z — Zone Designer: Resizable Panel & NPC/Loot Management
@@ -652,6 +647,7 @@ Each z-level gets its own `occupied` set since the designer displays one floor a
 - **Admin UI styling:** Matches existing dark theme (bg-[#1C1D27], borders border-[#2A2B35], gold accent #C9A84C), sans-serif only, compact spacing
 - **ZoneDesigner is large:** 2600+ lines, required careful old_str matches for edits to avoid conflicts
 
+
 ## 2026-03-28 — Zone Designer Legend Panel
 
 **Completed:** Added collapsible legend panel to Zone Designer map view
@@ -687,6 +683,7 @@ Each z-level gets its own `occupied` set since the designer displays one floor a
 
 ---
 
+
 ## 2026-03-29T17:34Z: Orchestration Checkpoint — Legend + Exit Pairs Delivery
 
 **Status:** COMPLETE
@@ -708,6 +705,7 @@ Both tasks delivered and merged into team orchestration log.
 
 **Team Roster Status:** Regis — 2 successful feature deliveries this cycle
 
+
 ## 2026-03-27 — Zone Designer Exit Pair Rendering
 
 **Completed:** Updated ZoneDesigner SVG map to render exit pairs instead of individual exits  
@@ -727,6 +725,7 @@ Both tasks delivered and merged into team orchestration log.
 - `reverseExitEditForm` state tracks locked/hidden for the reverse direction independently.
 - `handleSavePair()` updates both exits in sequence. `handleAddReverse()` creates the reverse exit. `handleDeleteReverseOnly()` deletes just the reverse.
 - Unused code cleaned up: `missingReverseIds` useMemo, `arrowhead`/`arrowhead-warning`/`arrowhead-interfloor` SVG markers.
+
 
 ## 2026-03-29 — Layout Algorithm: Eliminate Diagonal Exits
 
@@ -763,6 +762,7 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - Push cascades must include ALL neighbors impacted by a shift (not just diagonal-creating ones) — direction reversals and distance blowups also need propagation
 - The 40-room cascade limit is sufficient for Siltgate; larger zones may need tuning
 
+
 ## 2026-03-28 — Room-over-exit-line occlusion fix
 
 **Completed:** Phase 6 (fixOcclusions) added to computeLayout.ts to reduce rooms sitting on exit line segments
@@ -784,6 +784,7 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - **Direction correctness > diagonal elimination > occlusion avoidance:** In the layout scoring hierarchy, direction reversals are the most visible and confusing artifact. Diagonals are tolerable (≤2 in 136-room zones). Occlusions are least severe. The optimization guards enforce this priority.
 - **Penalty value is fragile for direction enforcement:** Different penalty values (15, 20, 25, 30, 40, 50, 100) each produce radically different optimization trajectories in dense zones. Hard guards are the only reliable way to enforce direction correctness.
 
+
 ## 2026-03-27T21:10Z — Direction Reversal Fix
 
 **Completed:** Fixed harbourmasters-office direction reversal in Zone Designer layout
@@ -798,6 +799,7 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 **Root Cause:** Force-directed swap phase could accept swaps that reversed room directions when the combined improvement from diagonal/distance/occlusion reduction outweighed the direction mismatch penalty (15). The same issue existed in diagonal cascade and occlusion fix phases.
 
 **Fix:** Pre-built reverse adjacency map enables efficient bidirectional mismatch counting. Hard guards reject any move/swap that would increase the total direction mismatch count for the affected room and its neighbors.
+
 
 ## 2026-03-29 — Grid Expansion for Occlusion Resolution
 
@@ -816,12 +818,14 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 
 **Results:** Siltgate occlusions: 54→16 (70% reduction). harbourmasters-office completely cleared. 0 direction violations. 2 diagonals (unchanged).
 
+
 ## Learnings
 
 - **Grid expansion is the right pattern for occlusion resolution:** When direction guards prevent individual room moves, shifting entire groups of connected rooms preserves relative positions while creating space. Key insight from dkirby-ms: "add extra columns or rows to accommodate incongruous spatial relations."
 - **Iterative expansion+fix loop is effective:** Running fixOcclusions after grid expansion exploits newly freed cells. 3 rounds reduces occlusions further than a single pass.
 - **Group building via BFS with collision cascade:** Start from occluder, add neighbors that would develop diagonal/reversed exits, cascade through collision positions. Group size limit (90) prevents runaway cascading.
 - **Remaining occlusions are in long vertical corridors:** Rooms forming continuous north/south chains on the same column create segments that can't be resolved by perpendicular shifts alone — the entire chain would need to cascade.
+
 
 ## 2026-03-27T18:45Z — Death/Extraction Overlay Clobbering Fix
 
@@ -843,6 +847,7 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - **Death overlay auto-dismiss:** Death screen auto-clears after 3 seconds via `deathTimerRef`. Timer is cleaned up on unmount and on manual dismiss. The button calls `dismissExtraction()` to cancel the timer and clear state immediately.
 - **ExtractionOverlay isZone prop:** When `isZone=true`, the death screen hides shard-specific sections (Items Lost, Shard-sickness, Run Stats) and shows simpler zone-appropriate text instead.
 
+
 ## 2026-03-30T00:30Z — Extraction Overlay & Zone Death Fix
 
 **Completed:** Fix death/extraction overlay clobbering on zone room switches  
@@ -861,6 +866,7 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 
 **Handoff:** Death overlay now reliable across all zone transitions. Zone Designer work (grid expansion, direction guards, occlusion fix) all complete.
 
+
 ## 2026-03-27 — Input Focus Restoration on Zone Switch
 
 **Completed:** Fixed command input losing focus when switching zones  
@@ -877,6 +883,7 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 
 **Pattern:** For any input that gets disabled/re-enabled during async transitions, use ref + useEffect + rAF to restore focus. The `autoFocus` attribute alone is insufficient for re-enable scenarios.
 
+
 ## 2026-03-28 — Map Z-Level Ghost Room Bug Fix
 
 **Completed:** Fixed ghost rooms inflating floor bounds, causing incorrect ↑/↓ indicators on all rooms  
@@ -888,6 +895,7 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 **Build:** ✅ Clean  
 **Tests:** ✅ 24 computeLayout tests passed
 
+
 ## Learnings
 
 - **Floor bounds come from positions, not rooms.** `useFloorFilter.ts:computeFloorBounds` scans ALL positions (including ghosts). Any ghost with a synthetic z-value inflates the bounds, which cascades to FloorSelector, inter-floor edge filtering, and room visibility.
@@ -896,6 +904,7 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - **Key file paths for map rendering:** `useExplorationMap.ts` (state + ghost logic), `useFloorFilter.ts` (floor bounds + edge filtering), `MapRenderer.tsx` (SVG rendering + floor selector), `RoomNode.tsx` (room circles + badges), `ExitEdge.tsx` (edge lines + inter-floor styling), `constants.ts` (sizing/colors).
 
 ---
+
 
 ## Team Update (2026-03-30T00:40:00Z)
 
@@ -909,6 +918,7 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 **Key Patterns Documented:**
 - Input focus restoration: `useRef` + `useEffect` watching `connectionStatus` + `requestAnimationFrame` for re-enable scenarios
 - Ghost room positioning: Don't position up/down ghosts; show exit-based badges on parent rooms instead
+
 
 ## 2026-03-30 — Creature Display in Room Output
 
@@ -927,6 +937,7 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 **Key Decision:** Creatures now display as `Creatures: name1, name2` (comma-separated, single line) matching the `Exits:` and `You see:` patterns. Both `look` and `go` (entering a room) show creatures.
 
 **Pattern:** Added `resolveCreaturesInRoom` resolver function to `CommandContext` (parallels existing `resolveRoom`) so `go.ts` can look up creatures in the target room (since `creaturesInRoom` on the context refers to the source room, not the destination).
+
 
 ## 2026-03-30 — Creature Admin Page: Aggressive Toggle + Loot Table Fix + Room Description
 
@@ -951,6 +962,7 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 **Build:** ✅ Client and server TypeScript compile clean  
 **Database:** Migration 009 adds `room_description` column (already exists); migration 008 adds `aggressive` column (already exists)
 
+
 ## Learnings
 
 - **Item lookup pattern for loot tables:** Admin pages displaying foreign key references need to fetch the related entities list and build a lookup Map. Don't rely on the API returning joined data — the loot table stores only `{itemId, dropWeight}`, so the client must resolve names.
@@ -958,6 +970,7 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - **CamelCase ↔ snake_case mapping:** Server DB uses `room_description`, `aggressive`, etc. (snake_case). Admin API returns camelCase (`roomDescription`, `aggressive`). Store conversion happens in `rowToEntity()` and the parameter binding in INSERT/UPDATE.
 - **Loot table dropdown UX:** The old dropdown only showed the current item as a single `<option>`. Fixed by fetching all items and rendering them in the dropdown, allowing admins to change the item without editing JSON.
 - **Behavior & Spawn section organization:** Grouped `aggressive` checkbox with `idleTicksMin`/`idleTicksMax` inputs since they all relate to creature AI behavior (aggro, patrol frequency).
+
 
 ## 2026-03-30 — Room Occupants UI Implementation
 
@@ -1052,6 +1065,7 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - **Version display placement:** Admin panel: muted text in top bar right side (between notifications bell and user avatar). Game client: `mt-auto` pushes it to sidebar bottom-right, opacity-30 → opacity-70 on hover. Both use `title` attribute for build time tooltip and `aria-label` + `tabIndex={0}` for accessibility.
 
 ---
+
 
 ## 2026-04-01: Agent Work Summary
 
@@ -1215,6 +1229,7 @@ The layout algorithm's scoring function under-penalized diagonals (only 5 points
 - Consider incremental layout updates (preserve positions on edit)
 - Optimize ELK parameters (node spacing, layer spacing, edge routing strategy)
 
+
 ## 2026-04-05T21:55Z — Phase 1 Visual Polish Verified Complete
 
 **Task:** Implement Phase 1 visual polish for Zone Designer (#268)
@@ -1327,6 +1342,7 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 - ReactFlow's fitView needs a setTimeout(50ms) delay to work reliably after data changes
 - Floor indicator overlays need `pointerEvents: 'none'` to avoid blocking ReactFlow interactions
 
+
 ## 2026-04-04T22:25Z — Phase 3 Complete & Merged
 
 **Completed:** ReactFlow zone designer integration  
@@ -1361,6 +1377,7 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 
 ---
 
+
 ## Phase 6: Cleanup & Deprecation (#273) — PR #288
 
 ### Date: 2026-04-05
@@ -1388,6 +1405,7 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 
 ---
 
+
 ## Team Status Update (2026-04-04T22:47:57Z)
 
 ### Agents Completed This Round
@@ -1404,6 +1422,7 @@ Phase 3 is complete and pushed to PR #276. The zone designer now uses ReactFlow 
 - Phase 5+ advanced features (real-time collab, performance optimization)
 
 ---
+
 
 ## Learnings
 
@@ -1634,225 +1653,4 @@ Scribe completed orchestration and decision documentation for the Phase 5c Cardi
 - **Tests:** 1 new test verifying focus classes on available vs disabled buttons; 9 total compass tests passing, 288 client tests passing
 - **Pattern:** Focus styling mirrors hover styling for MUD-theme interactive buttons
 
-## Learnings
-- Focus states on MUD-theme interactive buttons should mirror hover states: `focus:text-accent-gold focus:bg-bg-elevated focus:outline-none`
-- The `__tests__/*.test.js` compiled artifacts have pre-existing rollup parse failures; only `.test.tsx` source files are reliable test targets
 
-## Roster Awareness
-- **Jarlaxle (Backend):** Completed #359 backend parallel work — user_settings table, provider pattern, API endpoints, server-side validation (17 tests, Commit fb130d7)
-
-## 2025-01-05: Removed deprecated Refuge screen
-
-**Task:** Remove the deprecated Refuge screen that users can no longer access.
-
-**Changes:**
-- Deleted `packages/client/src/pages/Refuge.tsx` entirely (575 lines removed)
-- Added Settings button (gear icon) to ZoneExploration.tsx top bar next to logout button
-  - This was the only way to access settings before (was in Refuge)
-  - Now settings accessible from main game view at /zone
-- Updated terminology across codebase: "Refuge" → "Hub" for generic faction hub references
-  - `useReconnection` hook: `returnToRefuge` → `returnToHub`
-  - `ReconnectionOverlay`: "Return to Refuge" button → "Return to Hub"
-  - `ChatPanel`: context type changed from "refuge" to "hub"
-- Updated Login.tsx button text: "Enter the Refuge" → "Enter the World"
-- Updated all test files to match new UI text and hook names
-
-**Patterns learned:**
-- Always provide settings access from the main gameplay screen, not just specialty screens
-- When removing a deprecated screen, audit all references in tests thoroughly
-- Use generic terminology ("hub") over specific location names for better flexibility
-- Settings icon (gear/cog) is a standard UX pattern that users recognize
-
-**Key files:**
-- ZoneExploration.tsx: Main game view with Settings button in top bar
-- ReconnectionOverlay.tsx: Overlay shown when connection is lost
-- useReconnection.ts: Hook managing reconnection state/actions
-- useZoneConnection.ts: Hook managing zone WebSocket connections
-- ChatPanel.tsx: Chat interface component with context-aware tabs
-
-### 2026-04-09: Task Batch — Refuge Removal + Issue #362 Focus Persistence
-- **Status:** ✅ Complete (Commits b250520, 59c1903)
-- **Tasks:** Two parallel background tasks
-
-#### Part 1: Remove Deprecated Refuge Screen
-- **Commit:** b250520
-- **Changes:**
-  - Deleted `packages/client/src/pages/Refuge.tsx` (575 lines)
-  - Added Settings button (gear icon) to ZoneExploration.tsx top bar next to logout
-  - Renamed "Refuge" → "Hub" terminology across 15+ files
-  - Updated test files to match new UI text
-- **Files modified:** ZoneExploration.tsx, ReconnectionOverlay.tsx, useReconnection.ts, useZoneConnection.ts, ChatPanel.tsx, Login.tsx, Leaderboard.tsx, 8+ test files
-- **Impact:** Dead code eliminated, settings UX improved (accessible from main game screen), terminology consistency
-- **Tests:** 2815/2815 passing
-
-#### Part 2: Issue #362 — Compass Focus Area Persistence
-- **Commit:** 59c1903
-- **Changes:**
-  - Added `forwardRef` to CompassControl exposing `setLastFocusArea()` method
-  - Implemented `lastFocusAreaRef` tracking in ZoneExploration
-  - Focus area survives zone navigation and reconnection
-  - Added 4 integration tests verifying persistence across navigation
-- **Pattern:** ForwardRef + useEffect + ref-based state to maintain focus across zone changes
-- **Tests:** 4 new tests (all passing), 2815+ total tests passing
-- **Impact:** Players can now navigate between zones and return to previously-selected compass area
-- **Issue status:** #362 CLOSED
-
-**Patterns learned:**
-- Two independent frontend tasks can run in parallel without conflicts
-- ForwardRef is cleaner than callback props for exposing single methods from components
-- Focus state should persist at the parent level (ZoneExploration) rather than within compass itself
-- Settings access is critical UX — always expose from main gameplay screen
-
-## Learnings
-
-### Issue #363: Sign-out Button Placement (2026-04-09)
-- **Game Design Pattern**: Players in a zone should NOT have access to sign-out. They must rent at an inn before disconnecting. This is a deliberate gameplay mechanic.
-- **Auth UI Placement**: Sign-in/sign-out UI belongs on the character select screen, NOT in the zone explorer.
-- **Settings Access**: Settings should be accessible from both character select AND zone exploration for convenience.
-- **Top Bar Pattern**: Consistent top bar UI across screens: user identity (username/email) → settings gear → sign-out (when appropriate).
-- **File Paths**:
-  - `packages/client/src/pages/CharacterSelect.tsx` — Character selection screen with auth UI
-  - `packages/client/src/pages/ZoneExploration.tsx` — In-zone gameplay screen (no sign-out)
-- **Disconnect Handling**: The `handleLogout` function properly calls `roomRef.current?.leave()` before dispatching LOGOUT to ensure WebSocket cleanup.
-
-### In-Game Settings Modal (2026-04-10)
-- **Modal Pattern**: In-game settings should be a modal overlay, NOT a navigation event, to preserve zone/WebSocket state
-- **Design Consistency**: Modal uses same dark panel styling as game UI (bg-bg-primary, bg-bg-panel, border-accent-gold, semi-transparent backdrop)
-- **Dismissal**: Modal supports three close mechanisms: X button, Escape key, and clicking backdrop — standard UX pattern for overlays
-- **State Isolation**: Settings.tsx (full page with logout) remains for character select; SettingsModal.tsx (no logout) for in-game
-- **Component Reuse**: Modal extracts same settings UI from Settings.tsx, shares useSettings hook for consistent state management
-- **Z-index Layering**: Modal uses z-50 to overlay game UI without interfering with WebSocket or zone state
-- **File Paths**:
-  - `packages/client/src/components/SettingsModal.tsx` — Modal component for in-game settings
-  - `packages/client/src/pages/ZoneExploration.tsx` — Integrated modal trigger (line 344: setShowSettings)
-  - `packages/client/src/pages/Settings.tsx` — Full-page settings (unchanged, used from CharacterSelect)
-  - `packages/client/src/hooks/useSettings.ts` — Shared settings state management
-
-
-### Issue #365: Flag Toggles in Settings UI (2025-07-24)
-- **Separate hook for flags**: Created `useFlags` hook — flags use Colyseus room messages (TOGGLE_FLAG), not REST API like `useSettings`. Different persistence layer (character_flags vs user_settings).
-- **Optimistic localStorage**: Flags cached in localStorage for instant UI feedback; room message sent when connected.
-- **Toggle switch pattern**: Functional toggle using `role="switch"` + `aria-checked` for accessibility. Gold background when on, muted when off. Knob slides left/right via `left-1`/`left-7` Tailwind classes.
-- **Both locations**: Flags section added to both SettingsModal (in-game) and Settings page (character select). Follows existing inline-section-per-category pattern.
-- **Wire protocol**: `TOGGLE_FLAG` (client→server) and `FLAG_STATE` (server→client) added to shared MessageTypes. `sendToggleFlag()` added to connection.ts. `onFlagState` handler wired into both `connect()` and `switchRoom()`.
-- **File Paths**:
-  - `packages/client/src/hooks/useFlags.ts` — Flag state hook (new)
-  - `packages/client/src/services/connection.ts` — sendToggleFlag + onFlagState handler
-  - `packages/client/src/components/SettingsModal.tsx` — Flags category added
-  - `packages/client/src/pages/Settings.tsx` — Flags category added
-  - `packages/shared/src/index.ts` — UserFlagType, ToggleFlagMessage, FlagStateMessage types
-
-### Issue #368: Random Character Name Generator (2026-04-09)
-- **Status:** ✅ Complete (Commit ee3e991, pushed to main, issue closed)
-- **What:** Client-side random name generator with UI regenerate button
-- **Design:** 64 curated cyber noir names + syllable combiner (35 onsets × 20 codas = 700 procedural combinations), 60/40 curated/procedural split
-- **Name aesthetic:** Dark urban fantasy: Vex, Nyx, Riven, Corven, Sevrin. Short (3-8 chars), pronounceable, moody.
-- **Files created:**
-  - `packages/client/src/utils/name-generator.ts` — Core generator with validation
-  - `packages/client/src/__tests__/name-generator.test.ts` — 7 tests
-- **Files modified:**
-  - `packages/client/src/pages/CharacterSelect.tsx` — Integrated regenerate button (Dices icon, bg-bg-elevated)
-- **UI pattern:** Name field pre-populated via lazy initializer; regenerate button next to input; fresh name on "+ New Character" and after creation; user can always type own name
-- **Tests:** 7 new tests, all 338 client tests passing
-- **Team impact:** No shared package changes, no API changes, no server changes. Server validates names but doesn't generate.
-- **Future:** If server needs to generate NPC names, move generator to `@ellmud/shared`
-
-### Issue #369: Admin Invalid Token Error (2026-04-10)
-- **Status:** ✅ Complete (PR #372, branch squad/369-admin-invalid-token → dev)
-- **Bug:** Invalid admin tokens were silently accepted because `fetchNotifications()` swallowed 401/403 errors via internal `.catch()` handlers. Stale tokens in localStorage were also trusted without re-validation.
-- **Root cause:** `fetchNotifications` calls `fetchValidationWarnings` and `fetchRecentChanges` both wrapped in `.catch(() => defaults)`, so auth errors never propagated to `handleAdminLogin`.
-- **Fix approach:**
-  1. Added `validateAdminToken()` in `admin-api.ts` — calls `/admin/api/dashboard/metrics` which properly propagates errors
-  2. `handleAdminLogin` now uses `validateAdminToken()` instead of `fetchNotifications()`
-  3. Added startup validation: stored token is checked on mount before showing admin UI
-  4. Added `ADMIN_AUTH_FAILURE_EVENT` custom event: `adminFetch` broadcasts on 401/403, `AdminLayout` listens and resets to login
-  5. Entity hooks (`useAdminEntity`, `useAdminEntityList`) silently absorb auth errors since global event handles redirect
-- **Pattern:** Event-based auth failure broadcasting from API layer to layout — avoids prop drilling or context for auth state
-- **Files modified:**
-  - `packages/client/src/lib/admin-api.ts` — Added `validateAdminToken()`, `ADMIN_AUTH_FAILURE_EVENT`, 401/403 event dispatch in `adminFetch`
-  - `packages/client/src/pages/admin/AdminLayout.tsx` — Startup validation, auth failure listener, validating state
-  - `packages/client/src/hooks/useAdminEntityList.ts` — Auth error guard
-  - `packages/client/src/hooks/useAdminEntity.ts` — Auth error guard
-  - `packages/client/src/__tests__/admin-token-validation.test.tsx` — Updated mocks for new exports
-  - `packages/client/src/__tests__/auth-guards.test.tsx` — Updated mocks for new exports
-- **Tests:** All 356 client tests passing (17 admin-token-validation tests)
-
----
-
-### 2026-04-09: Issue #369 — Admin Invalid Token Error (with Minsc)
-- **Status:** ✅ Complete (PR #372)
-- **Collaboration:** Regis implementation + Minsc comprehensive test coverage
-- **Bug:** Invalid admin tokens stored to localStorage, `authenticated` set to `true` without server validation on mount, breaking all admin pages with 403s
-- **Solution:**
-  - **`validateAdminToken()`** function in `admin-api.ts` — lightweight API call to verify stored token
-  - **`ADMIN_AUTH_FAILURE_EVENT`** custom event — `adminFetch` dispatches on 401/403 responses
-  - **Mount-time validation** — `AdminLayout` calls `validateAdminToken()` on component mount
-  - **Auth failure listener** — Automatically resets to login form on 401/403
-  - **`validating` loading state** — Shows spinner while stored token is checked
-  - **`handleAdminLogin` validation** — Validates token before setting `authenticated = true`
-- **Test Coverage:** Minsc wrote 35 tests (17 client, 18 server) covering all token validation scenarios
-- **Pattern:** Zero-dependency global event dispatch for auth failures; works across component tree without prop drilling
-- **Tests:** All 356 client tests passing; 35 new admin token validation tests passing
-- **Files modified:**
-  - `packages/client/src/lib/admin-api.ts` — `validateAdminToken()`, `ADMIN_AUTH_FAILURE_EVENT`, event dispatch
-  - `packages/client/src/pages/admin/AdminLayout.tsx` — Startup validation, failure listener, validating state
-  - `packages/client/src/__tests__/admin-token-validation.test.tsx` — New test file (17 tests)
-- **Team Impact:** Minsc verified implementation solid; PR #372 ready for merge
-
-
----
-
-### 2026-04-09: Issues #384–#385 — Live Rooms Admin UI (Background Session)
-
-**Status:** ✅ Complete  
-**Issues:** #384 (Occupancy filters), #385 (Right-click context menu)  
-**Commit:** 70f6746
-
-**Summary:**
-- **#384 — Occupancy Filter Toggles:** Added filter bar above live rooms list with Players/Creatures checkboxes. OR logic when both active (show rooms with players OR creatures). Improves room discovery on busy admin dashboard.
-- **#385 — Right-click Context Menu:** Room Graph tab now uses right-click context menu instead of inline action buttons (Broadcast/Spawn/Teleport). Reused ZoneDesigner pattern (inline styles, window listeners for escape/outside close). Significantly reduces row clutter.
-
-**Architecture Decisions:**
-- Context menu pattern from ZoneDesigner reused entirely — maintains consistency across admin tools
-- Inline styles (not CSS classes) match ZoneDesigner convention — admin UI not in styled-components refactor scope
-- No API changes, no type changes, no data model changes
-
-**Design Decision Filed:** `.squad/decisions/inbox/regis-live-rooms-ui.md` documenting pattern rationale and future implications.
-
-**Test Status:** 3049 tests passing. New UI features covered by existing live rooms test suite.
-
-**Team Impact:** Establishes admin UI pattern — right-click context menus on data rows should follow this style convention.
-
----
-
-## Session: Admin Item Spawn in Live Rooms (#389)
-
-**Date:** 2026-04-10  
-**Status:** ✅ Complete  
-**Branch:** `squad/389-admin-spawn-items`  
-**Tests:** All 3106 passing  
-
-**Summary:**
-Extended the existing spawn modal (creature context) to handle both creatures and items via type toggle. The server-side POST /admin/api/rooms/:roomId/spawn already accepted type=item but was stubbed. Now fully implemented.
-
-**What was done:**
-- Spawn modal now has creature/item type toggle (dropdown or tabs)
-- Server-side adminSpawnItem() method implemented on ZoneRoom (mirrors adminSpawnCreature)
-- Item content store queried by spawn endpoint — items loaded in parallel with creatures
-- Modal refactored to support both creature and item content templates
-
-**Rationale:**
-- Reuses existing spawn infrastructure rather than new modal/endpoint
-- The spawn endpoint already validates type=creature|item — follows contract
-- adminSpawnItem mirrors adminSpawnCreature pattern: validate room, mutate state, broadcast narration
-
-**Impact:**
-- **Server (Jarlaxle):** New adminSpawnItem method on ZoneRoom
-- **Shared:** No type changes — spawnInRoom already accepts type=item
-- **Drizzt:** Items spawned via admin panel can now be picked up with get/drop/equip
-
-**Handoff to Drizzt:**
-Items spawned through admin panel integrate fully with player item interaction commands (#390). Room generation and item properties flow directly into the command system.
-
-**Quality:** All 3106 tests passing, zero regressions. Pattern consistent with adminSpawnCreature.
-- **Issue #389 — Admin item spawn in Live Rooms (2026):** Extended the spawn modal in LiveRoomDetail.tsx to support both creatures and items. Added SpawnType toggle (creature/item) with Skull/Package lucide icons. Both template lists loaded in parallel via Promise.all. Server-side POST /admin/api/rooms/:roomId/spawn endpoint item branch was a TODO stub — implemented it: resolves item from content store, validates, then calls ZoneRoom.adminSpawnItem() which pushes to room.items array and broadcasts narration. Non-zone rooms fall back to broadcast-only. Key types: Item from generator/RoomGraph.ts (id, name, weight, description), ItemDefinition from @ellmud/shared (id, name, type, tier, baseStats, ...). Commit 48e16ce.

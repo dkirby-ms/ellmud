@@ -23,4 +23,5 @@
 - **Concurrency:** Scheduled workflow uses `concurrency: { group: scheduled-uat-promote, cancel-in-progress: false }` to prevent overlapping merge runs. CI uses per-ref groups with cancel-in-progress.
 - **GITHUB_TOKEN limitation:** Pushes made with `GITHUB_TOKEN` (by `github-actions[bot]`) do NOT trigger other workflows by design (to prevent infinite loops). Solution: use `workflow_dispatch` trigger + explicit `gh workflow run` calls after pushing.
 - **CI/CD trigger pattern:** After promotion workflows push to uat/prod, they now explicitly trigger `ci-cd.yml` via `gh workflow run ci-cd.yml --ref <branch>` using `GH_TOKEN`. A 5-second sleep gives GitHub time to process the push before triggering.
+- **workflow_dispatch needs actions:write:** `gh workflow run` uses the workflow_dispatch API, which requires `actions: write` permission on GITHUB_TOKEN. `contents: write` alone is not enough — the API returns HTTP 403 without it. Both promote workflows now carry both permissions.
 
