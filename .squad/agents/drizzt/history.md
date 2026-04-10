@@ -3528,3 +3528,18 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 - **this.players map key:** Always keyed by playerId (character ID), never client.sessionId. Set at line 563 in ZoneRoom.ts. Any new handler that needs player state must resolve playerId first via this.playerIds.get(client.sessionId) ?? client.sessionId, then use that to look up from this.players.
 - **Test blind spot:** Colyseus ColyseusTestServer uses sessionId as playerId in test mode, so sessionId/playerId key mismatches are invisible in integration tests. Manual or E2E testing with real character IDs is needed to catch these.
 - **Equipment handlers location:** handleEquipItem (~line 2640), handleUnequipItem (~line 2722), handleSwapItem (~line 2762) in packages/server/src/rooms/ZoneRoom.ts.
+
+
+---
+
+### Bug #388: Admin "Live Rooms" createdAt crash
+**Task:** Fix r.createdAt?.toISOString is not a function in admin routes
+**Status:** Complete — committed b233089
+**Root cause:** Colyseus matchMaker.query() returns createdAt as epoch number, not a Date. Calling .toISOString() on a number throws.
+**Fix:** r.createdAt ? new Date(r.createdAt).toISOString() : undefined — new Date() constructor handles both numbers and Date objects.
+**Scope:** Only one .toISOString() call on Colyseus room data existed (line 104). Other admin routes either destructure createdAt away or use proper Date objects from the DB.
+**Tests:** 2601 passed, 0 regressions.
+
+## Learnings
+
+- **Colyseus matchMaker.query() room data types:** createdAt is returned as an epoch number (not a Date object). Always wrap in new Date() before calling Date methods on Colyseus room cache properties.
