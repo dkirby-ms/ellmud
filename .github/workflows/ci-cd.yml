@@ -237,27 +237,35 @@ jobs:
           MAX_ATTEMPTS=20
           ATTEMPT=0
           RESPONSE=""
+          HTTP_CODE=""
 
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-            RESPONSE=$(curl -f -s "$HEALTH_URL" 2>/dev/null || true)
-            # Real server returns "uptime" field; placeholder returns "mode":"placeholder"
-            if echo "$RESPONSE" | grep -q '"uptime"'; then
-              echo "✓ Health check passed (real server confirmed)"
+            HTTP_CODE=$(curl -s -o response.tmp -w '%{http_code}' "$HEALTH_URL" || echo "000")
+            RESPONSE=$(cat response.tmp 2>/dev/null || true)
+            rm -f response.tmp
+
+            # Accept if: HTTP 200 + JSON contains status "ok" and no placeholder marker
+            if [ "$HTTP_CODE" = "200" ] \
+              && echo "$RESPONSE" | grep -q '"status"' \
+              && echo "$RESPONSE" | grep -q '"ok"' \
+              && ! echo "$RESPONSE" | grep -q '"placeholder"'; then
+              echo "✓ Health check passed — HTTP $HTTP_CODE, status: ok"
               exit 0
             fi
+
             ATTEMPT=$((ATTEMPT + 1))
             if [ -z "$RESPONSE" ]; then
               echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS — no response (server starting?), retrying in 5s..."
-            elif echo "$RESPONSE" | grep -q '"mode":"placeholder"'; then
+            elif echo "$RESPONSE" | grep -q '"placeholder"'; then
               echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS — placeholder still active, retrying in 5s..."
             else
-              echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS — unexpected response, retrying in 5s..."
+              echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS — HTTP $HTTP_CODE, retrying in 5s..."
             fi
             sleep 5
           done
 
           echo "✗ Health check failed after $MAX_ATTEMPTS attempts"
-          echo "Last response: $RESPONSE"
+          echo "Last response (HTTP $HTTP_CODE): $RESPONSE"
           exit 1
 
       - name: Rollback on failure
