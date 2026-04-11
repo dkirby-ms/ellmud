@@ -53,6 +53,7 @@ interface ZoneRoomRow {
   hazards: unknown[];
   npcs: unknown[];
   features: unknown[];
+  illumination: string;
   created_at: Date;
   updated_at: Date;
 }
@@ -108,6 +109,7 @@ function roomRowToEntity(row: ZoneRoomRow): ZoneRoomDefinition {
     hazards: row.hazards as ZoneRoomDefinition['hazards'],
     npcs: row.npcs as ZoneRoomDefinition['npcs'],
     features: (row.features ?? []) as ZoneRoomDefinition['features'],
+    illumination: (row.illumination === 'dark' ? 'dark' : undefined) as ZoneRoomDefinition['illumination'],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

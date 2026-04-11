@@ -12,6 +12,7 @@ import type {
   HazardPlaceholder,
   RoomFeature,
 } from './room-graph.js';
+import type { Illumination } from './index.js';
 
 // ─── Zone Definition ────────────────────────────────────────────────────────
 
@@ -55,6 +56,8 @@ export interface ZoneRoomDefinition {
   }>;
   /** Examinable features in this room (Issue #345). */
   features: RoomFeature[];
+  /** Room illumination level (Issue #402). Defaults to 'lit' if omitted. */
+  illumination?: Illumination;
 }
 
 // ─── Zone Exit Definition ───────────────────────────────────────────────────

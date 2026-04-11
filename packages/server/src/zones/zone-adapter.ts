@@ -53,6 +53,7 @@ export function convertZoneToRoomGraph(zoneData: ZoneData): RoomGraph {
       hazards: [...zr.hazards],
       ...(zr.properties.length > 0 ? { properties: [...zr.properties] } : {}),
       ...(zr.features.length > 0 ? { features: [...zr.features] } : {}),
+      ...(zr.illumination ? { illumination: zr.illumination } : {}),
     };
     rooms.set(zr.slug, room);
     slugToRoom.set(zr.slug, room);

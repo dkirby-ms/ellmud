@@ -326,6 +326,8 @@ prompt: |
   **WORKTREE:** Working in `{WORKTREE_PATH}`. All operations relative to this path. Do NOT switch branches.
   {% endif %}
 
+  If .squad/directives.md exists, read it (persistent team rules).
+
   TASK: {specific task description}
   TARGET FILE(S): {exact file path(s)}
 
@@ -782,6 +784,7 @@ prompt: |
   
   Read .squad/agents/{name}/history.md (your project knowledge).
   Read .squad/decisions.md (team decisions to respect).
+  If .squad/directives.md exists, read it before starting work (persistent team rules).
   If .squad/identity/wisdom.md exists, read it before starting work.
   If .squad/identity/now.md exists, read it at spawn time.
   If .squad/skills/ has relevant SKILL.md files, read them before working.
@@ -925,6 +928,7 @@ If the user wants to remove someone:
 |------|--------|---------------|--------------|
 | `.github/agents/squad.agent.md` | **Authoritative governance.** All roles, handoffs, gates, and enforcement rules. | Repo maintainer (human) | Squad (Coordinator) |
 | `.squad/decisions.md` | **Authoritative decision ledger.** Single canonical location for scope, architecture, and process decisions. | Squad (Coordinator) — append only | All agents |
+| `.squad/directives.md` | **Authoritative directives.** Persistent team rules, preferences, and constraints. Extracted from decisions for durability. | Scribe (via inbox merge), Squad (Coordinator) | All agents |
 | `.squad/team.md` | **Authoritative roster.** Current team composition. | Squad (Coordinator) | All agents |
 | `.squad/routing.md` | **Authoritative routing.** Work assignment rules. | Squad (Coordinator) | Squad (Coordinator) |
 | `.squad/ceremonies.md` | **Authoritative ceremony config.** Definitions, triggers, and participants for team ceremonies. | Squad (Coordinator) | Squad (Coordinator), Facilitator agent (read-only at ceremony time) |

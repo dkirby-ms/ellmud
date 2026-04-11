@@ -47,4 +47,10 @@ export interface CharacterRepository {
 
   /** Load the character's persisted posture (#371). Returns 'standing' if unset. */
   loadPosture(characterId: string): Promise<string>;
+
+  /** Check whether the starter kit has been granted to this character. */
+  isStarterKitGranted(characterId: string): Promise<boolean>;
+
+  /** Mark the starter kit as granted for this character. */
+  markStarterKitGranted(characterId: string): Promise<void>;
 }

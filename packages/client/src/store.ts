@@ -7,7 +7,7 @@ import { createContext, useContext } from 'react';
 import type { Room } from '@colyseus/sdk';
 import type {
   NarrationType, RoomHeaderMessage, ZoneState, CombatAction, GearTier,
-  EquipmentSlots, DisplayItem, CharacterSummary, UserRole,
+  EquipmentSlots, DisplayItem, CharacterSummary, UserRole, Posture,
 } from '@ellmud/shared';
 import { createEmptyEquipmentSlots } from '@ellmud/shared';
 
@@ -84,6 +84,7 @@ export interface AppState {
   enemyStatus: EnemyStatus | null;
   inventory: InventoryItem[];
   pendingCombatAction: CombatAction | null;
+  posture: Posture;
   statusEffects: StatusEffect[];
   playerHp: number;
   playerMaxHp: number;
@@ -120,6 +121,7 @@ export const initialState: AppState = {
   enemyStatus: null,
   inventory: [],
   pendingCombatAction: null,
+  posture: 'standing',
   statusEffects: [],
   playerHp: 100,
   playerMaxHp: 100,
@@ -158,7 +160,7 @@ export type AppAction =
   | { type: 'SET_STASH_ITEMS'; items: DisplayItem[] }
   | { type: 'SET_PENDING_EQUIP'; pending: boolean }
   | { type: 'SET_ACTIVE_CHARACTER'; character: CharacterSummary | null }
-  | { type: 'SET_PLAYER_STATE'; hp: number; maxHp: number; stamina: number; maxStamina: number; statusEffects: StatusEffect[] }
+  | { type: 'SET_PLAYER_STATE'; hp: number; maxHp: number; stamina: number; maxStamina: number; statusEffects: StatusEffect[]; posture: Posture }
   | { type: 'SET_ROOM_OCCUPANTS'; occupants: AppState['roomOccupants'] };
 
 const MAX_MESSAGES = 500;
@@ -226,6 +228,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         playerStamina: action.stamina,
         playerMaxStamina: action.maxStamina,
         statusEffects: action.statusEffects,
+        posture: action.posture,
       };
     case 'SET_ROOM_OCCUPANTS':
       return { ...state, roomOccupants: action.occupants };

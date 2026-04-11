@@ -15,6 +15,7 @@ import {
   type SwapItemMessage,
   type LoadoutUpdateMessage,
   type StashUpdateMessage,
+  type InventoryUpdateMessage,
   type DisplayItem,
   type PlayerStateMessage,
   type TelegraphMessage,
@@ -59,6 +60,7 @@ import { TraceSystem } from '../systems/index.js';
 import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
 import { DowningSystem, type DowningEvent } from '../systems/DowningSystem.js';
 import { CorpseSystem } from '../systems/CorpseSystem.js';
+import { GroupManager } from '../systems/GroupManager.js';
 import { type DeathPenaltyStore, getDeathPenaltyStore } from '../systems/index.js';
 import { type MetricsService, getMetricsService } from '../metrics/index.js';
 import {
@@ -98,7 +100,8 @@ import type { Item } from '../generator/RoomGraph.js';
 import type { ExplorationRepository } from '../exploration/index.js';
 import { getExplorationRepository } from '../exploration/index.js';
 import type { CharacterRepository } from '../character/index.js';
-import { InMemoryCharacterRepository, getCharacterRepository } from '../character/index.js';
+import { InMemoryCharacterRepository, getCharacterRepository, isCharacterPg } from '../character/index.js';
+import { grantStarterKit } from '../api/starter-kit.js';
 import { createNarrationService } from '../narrative/factory.js';
 import type { NarrationService } from '../narrative/NarrationService.js';
 import { gatherPlayerList, formatWhoListText, type ZonePlayerData } from '../who/index.js';
@@ -136,6 +139,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private traceSystem!: TraceSystem;
   private awarenessSystem!: AwarenessSystem;
   private downingSystem!: DowningSystem;
+  private groupManager!: GroupManager;
   private corpseSystem!: CorpseSystem;
   private narrationService!: NarrationService;
   private deathPenaltyStore!: DeathPenaltyStore;
@@ -336,6 +340,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Initialize downing system (GDD §6.4 — bleed-out timers, stabilization)
     this.downingSystem = new DowningSystem();
+    // Initialize group manager (#403 Phase 3)
+    this.groupManager = new GroupManager();
     this.deathPenaltyStore = getDeathPenaltyStore();
     this.metricsService = getMetricsService();
 
@@ -572,6 +578,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.log(`Failed to load posture for ${this.playerTag(playerId)}: ${err}`);
     }
 
+    // Grant starter kit to inventory on first zone join (non-fatal)
+    try {
+      const kitCount = await grantStarterKit(playerId, playerState, this.characterRepo, isCharacterPg());
+      if (kitCount > 0) {
+        this.log(`Starter kit: granted ${kitCount} item(s) to ${this.playerTag(playerId)}`);
+      }
+    } catch (err) {
+      this.log(`Failed to grant starter kit for ${this.playerTag(playerId)}: ${err}`);
+    }
+
     this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig())} players)`);
 
     // Send initial system narration using NarrationService (async, don't block join)
@@ -603,7 +619,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       collapseTimer: this.state.collapseTimer,
     });
 
-    // Send initial player state (HP, stamina, status effects)
+    // Send initial player state (HP, stamina, status effects, posture)
     // Combatant doesn't exist yet, so we use default stats
     client.send(MessageTypes.PLAYER_STATE, {
       hp: 100, // DEFAULT_PLAYER_STATS.maxHp
@@ -611,6 +627,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       stamina: 0,
       maxStamina: 0,
       statusEffects: [],
+      posture: playerState.posture,
     } satisfies PlayerStateMessage);
 
     // Send full stash + loadout state to client on join (#377)
@@ -619,6 +636,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     } catch (err) {
       this.log(`Failed to send equipment state for ${this.playerTag(playerId)}: ${err}`);
     }
+
+    // Send current inventory to client on join
+    this.sendInventoryUpdate(client, playerId);
   }
 
   async onLeave(client: Client, code?: number): Promise<void> {
@@ -699,6 +719,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.ownerPlayerIds.delete(playerId);
       this.updateMetadata();
     }
+    // Clean up follow relationships on disconnect (#403)
+    this.cleanupFollowRelationships(playerId);
+    // Clean up group membership on disconnect (#403 Phase 3)
+    // If leader disconnects → group disbands; otherwise member is removed.
+    this.cleanupGroupMembership(playerId);
     this.playerIds.delete(client.sessionId);
     this.log(`Player ${this.playerTag(playerId)} left (${this.state.playerCount} players)`);
   }
@@ -1034,6 +1059,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     const trackLoot = verb === 'take' || verb === 'get' || verb === 'loot';
     const prevInventoryIds = trackLoot ? new Set(player.inventory.keys()) : undefined;
 
+    // Snapshot inventory size to detect mutations for INVENTORY_UPDATE
+    const prevInventorySize = player.inventory.size;
+
     const ctx = this.buildCommandContext(player, args);
     const result = handleCommand(verb, ctx);
 
@@ -1113,6 +1141,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       // Broadcast updated occupants to other players in both rooms
       this.broadcastRoomOccupantsUpdate(previousRoomId);
       this.broadcastRoomOccupantsUpdate(player.currentRoomId);
+
+      // Auto-move followers (#403 Phase 1)
+      this.moveFollowers(playerId, previousRoomId, player.currentRoomId);
     }
 
     // Posture commands: broadcast posture change to other players in the room (#371)
@@ -1127,6 +1158,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           }
         }
       }
+
+      // Sync updated posture to the acting player's status panel (#404)
+      this.sendPostureState(client, playerId);
 
       // Persist posture change to DB
       this.persistPosture(playerId).catch((err) => {
@@ -1143,6 +1177,58 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           if (c) {
             this.sendNarrate(c, { text: roomEvent, type: 'ambient', timestamp: Date.now() });
           }
+        }
+      }
+    }
+
+    // Follow system: wire up follower sets when follow/unfollow commands execute (#403)
+    const followStarted = (result as import('../commands/index.js').CommandResult & { _followStarted?: { followerId: string; leaderId: string } })._followStarted;
+    if (followStarted) {
+      const leaderState = this.players.get(followStarted.leaderId);
+      if (leaderState) {
+        leaderState.addFollower(followStarted.followerId);
+      }
+    }
+    const followStopped = (result as import('../commands/index.js').CommandResult & { _followStopped?: { followerId: string; leaderId: string } })._followStopped;
+    if (followStopped) {
+      const leaderState = this.players.get(followStopped.leaderId);
+      if (leaderState) {
+        leaderState.removeFollower(followStopped.followerId);
+      }
+    }
+
+    // Group system: handle group events and gsay broadcasts (#403 Phase 3)
+    const groupEvent = (result as import('../commands/index.js').CommandResult & {
+      _groupEvent?: { type: string; groupId: string; memberIds?: string[]; targetId?: string; message: string };
+    })._groupEvent;
+    if (groupEvent) {
+      const targetIds = groupEvent.memberIds ?? [];
+      for (const memberId of targetIds) {
+        if (memberId === playerId) continue;
+        const memberClient = this.findClient(memberId);
+        if (memberClient) {
+          this.sendNarrate(memberClient, {
+            text: groupEvent.message,
+            type: 'system',
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
+
+    const gsay = (result as import('../commands/index.js').CommandResult & {
+      _gsay?: { groupId: string; senderId: string; senderName: string; message: string; memberIds: string[] };
+    })._gsay;
+    if (gsay) {
+      for (const memberId of gsay.memberIds) {
+        if (memberId === playerId) continue;
+        const memberClient = this.findClient(memberId);
+        if (memberClient) {
+          this.sendNarrate(memberClient, {
+            text: `[Group] ${gsay.senderName} says: ${gsay.message}`,
+            type: 'speech',
+            timestamp: Date.now(),
+          });
         }
       }
     }
@@ -1181,6 +1267,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     if (movedRoom || verb === 'look') {
       this.sendTraceNarrations(client, player.currentRoomId);
     }
+
+    // Send inventory update if inventory changed during command execution
+    if (player.inventory.size !== prevInventorySize) {
+      this.sendInventoryUpdate(client, playerId);
+    }
   }
 
   private buildCommandContext(player: PlayerState, args: string[]): CommandContext {
@@ -1192,7 +1283,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         otherPlayersInRoom.push(sid);
         const name = this.characterNames.get(sid) ?? 'A wanderer';
         const flags = this.playerFlagsCache.get(sid);
-        otherPlayerInfo.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture });
+        otherPlayerInfo.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture, followingPlayerId: ps.followingPlayerId });
       }
     }
 
@@ -1216,7 +1307,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           if (sid !== player.sessionId && ps.currentRoomId === roomId) {
             const name = this.characterNames.get(sid) ?? 'A wanderer';
             const flags = this.playerFlagsCache.get(sid);
-            result.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture });
+            result.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture, followingPlayerId: ps.followingPlayerId });
           }
         }
         return result;
@@ -1246,6 +1337,13 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         }
         return undefined;
       },
+      resolvePlayerById: (sessionId: string) => {
+        const ps = this.players.get(sessionId);
+        if (!ps) return undefined;
+        const charName = this.characterNames.get(sessionId) ?? 'Unknown';
+        return { player: ps, characterName: charName };
+      },
+      groupManager: this.groupManager,
     };
   }
 
@@ -1433,6 +1531,182 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           }
         }
       }
+    }
+  }
+
+  // ─── Follow System (#403 Phase 1) ─────────────────────────────────────────
+
+  /**
+   * Auto-move all followers when a leader moves rooms.
+   * Each follower sees the room description and other players are notified.
+   */
+  private moveFollowers(leaderId: string, fromRoomId: string, toRoomId: string): void {
+    const leaderState = this.players.get(leaderId);
+    if (!leaderState || leaderState.followers.size === 0) return;
+
+    const leaderName = this.characterNames.get(leaderId) ?? 'Someone';
+
+    for (const followerId of leaderState.followers) {
+      const followerState = this.players.get(followerId);
+      if (!followerState) continue;
+      // Only move followers who are in the same room the leader left
+      if (followerState.currentRoomId !== fromRoomId) continue;
+      // Skip downed/dead followers — they can't move (#412)
+      if (this.downingSystem.isPlayerDowned(followerId)) continue;
+
+      const followerPreviousRoom = followerState.currentRoomId;
+      followerState.currentRoomId = toRoomId;
+      followerState.posture = 'standing';
+
+      const followerClient = this.findClient(followerId);
+      const followerName = this.characterNames.get(followerId) ?? 'Someone';
+
+      // Notify the follower about the move
+      if (followerClient) {
+        const targetRoom = this.roomGraph.rooms.get(toRoomId);
+        if (targetRoom) {
+          const exitList = Array.from(targetRoom.exits.keys()).join(', ') || 'none';
+          const lines = [
+            `You follow ${leaderName}.`,
+            '',
+            targetRoom.description,
+            '',
+            `Exits: ${exitList}`,
+          ];
+
+          // Show other players in the destination room
+          const playersInTarget = this.getVisiblePlayersInRoom(toRoomId, followerId);
+          for (const p of playersInTarget) {
+            lines.push(`${p.name} is here.`);
+          }
+
+          this.deliverResult(followerClient, {
+            narrations: [{ text: lines.join('\n'), type: 'room' }],
+            roomHeader: {
+              roomName: targetRoom.name,
+              roomSlug: targetRoom.id,
+              exits: Array.from(targetRoom.exits.keys()),
+              stability: this.state.stability,
+            },
+          });
+        }
+
+        this.sendExplorationUpdate(followerClient, followerId, toRoomId);
+        this.sendRoomOccupants(followerClient, followerId, toRoomId);
+      }
+
+      // Broadcast departure/arrival to other players
+      this.broadcastPlayerMovement(followerId, followerPreviousRoom, toRoomId, undefined, followerState.posture);
+      this.broadcastRoomOccupantsUpdate(followerPreviousRoom);
+      this.broadcastRoomOccupantsUpdate(toRoomId);
+
+      // Notify departure room that follower left following leader
+      for (const [sid, ps] of this.players) {
+        if (sid !== followerId && sid !== leaderId && ps.currentRoomId === followerPreviousRoom) {
+          const c = this.findClient(sid);
+          if (c) {
+            this.sendNarrate(c, { text: `${followerName} follows ${leaderName}.`, type: 'ambient', timestamp: Date.now() });
+          }
+        }
+      }
+    }
+  }
+
+  /** Get visible (non-anon) players in a room, excluding a specific player. */
+  private getVisiblePlayersInRoom(roomId: string, excludeId: string): Array<{ name: string }> {
+    const result: Array<{ name: string }> = [];
+    for (const [sid, ps] of this.players) {
+      if (sid !== excludeId && ps.currentRoomId === roomId) {
+        const flags = this.playerFlagsCache.get(sid);
+        if (!flags?.anon) {
+          result.push({ name: this.characterNames.get(sid) ?? 'A wanderer' });
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Clean up all follow relationships when a player disconnects or leaves.
+   * - If the departing player was following someone, remove them from that leader's follower set.
+   * - If the departing player had followers, stop all of them from following.
+   */
+  private cleanupFollowRelationships(playerId: string): void {
+    // Get the player state before it might be deleted
+    // (onLeave deletes from this.players before calling cleanup, so we iterate all players)
+    
+    // Remove this player from any leader's follower set
+    for (const [, ps] of this.players) {
+      ps.followers.delete(playerId);
+    }
+
+    // If any players were following the departing player, stop them and notify
+    for (const [followerId, followerState] of this.players) {
+      if (followerState.followingPlayerId === playerId) {
+        followerState.stopFollowing();
+        const followerClient = this.findClient(followerId);
+        if (followerClient) {
+          const leaderName = this.characterNames.get(playerId) ?? 'Someone';
+          this.sendNarrate(followerClient, {
+            text: `${leaderName} has left. You stop following.`,
+            type: 'system',
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * Clean up group membership when a player disconnects or leaves (#403 Phase 3).
+   * If the departing player was the leader, the entire group disbands.
+   * If they were a regular member, they're removed and members are notified.
+   */
+  private cleanupGroupMembership(playerId: string): void {
+    const result = this.groupManager.handlePlayerLeave(playerId);
+    if (!result) return;
+
+    const playerName = this.characterNames.get(playerId) ?? 'Someone';
+
+    if (result.disbanded) {
+      // Leader left or group too small — notify all remaining members
+      for (const member of result.members) {
+        if (member.sessionId === playerId) continue;
+        const memberPlayer = this.players.get(member.sessionId);
+        if (memberPlayer) {
+          memberPlayer.groupId = null;
+        }
+        const memberClient = this.findClient(member.sessionId);
+        if (memberClient) {
+          this.sendNarrate(memberClient, {
+            text: `${playerName} has left. The group has been disbanded.`,
+            type: 'system',
+            timestamp: Date.now(),
+          });
+        }
+      }
+    } else {
+      // Regular member left — notify remaining group members
+      const group = this.groupManager.getGroup(result.members[0]?.sessionId ?? '');
+      if (group) {
+        for (const member of group.members.values()) {
+          if (member.sessionId === playerId) continue;
+          const memberClient = this.findClient(member.sessionId);
+          if (memberClient) {
+            this.sendNarrate(memberClient, {
+              text: `${playerName} has left the group.`,
+              type: 'system',
+              timestamp: Date.now(),
+            });
+          }
+        }
+      }
+    }
+
+    // Clear groupId on the departing player's state (if still available)
+    const departingPlayer = this.players.get(playerId);
+    if (departingPlayer) {
+      departingPlayer.groupId = null;
     }
   }
 
@@ -2090,6 +2364,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     const player = this.players.get(playerId);
     if (!player) return;
 
+    // Break follow relationships on death (#413)
+    this.cleanupFollowRelationships(playerId);
+    // Break group membership on death (#403 Phase 3)
+    this.cleanupGroupMembership(playerId);
+
     const room = this.roomGraph.rooms.get(roomId);
 
     // PvP detection: any non-creature attacker means this was a PvP kill
@@ -2396,7 +2675,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         narration_type: narrativeType,
         room: {
           id: room.id,
-          light_level: 1.0, // TODO: implement lighting system
+          light_level: room.illumination === 'dark' ? 0.0 : 1.0,
           exits: Array.from(room.exits.keys()),
           features: [], // TODO: extract from room properties
           items_visible: room.items.map((item) => ({
@@ -2692,6 +2971,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             }
 
             await this.sendLoadoutAndStashUpdate(client, playerId);
+            this.sendInventoryUpdate(client, playerId);
             client.send(MessageTypes.NARRATE, {
               text: `Equipped from inventory to ${message.targetSlot}.`,
               type: 'system',
@@ -2848,8 +3128,31 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
   }
 
-  /** Send player state update to client (HP, stamina, status effects). */
+  /** Send current inventory contents to client (on join and after inventory mutations). */
+  private sendInventoryUpdate(client: Client, playerId: string): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    const items = Array.from(player.inventory.values()).map((entry) => {
+      const def = getItemDefinition(entry.item.id);
+      return {
+        id: entry.item.id,
+        name: entry.item.name,
+        weight: entry.item.weight,
+        tier: (def?.tier ?? 'common') as string,
+      };
+    });
+
+    client.send(MessageTypes.INVENTORY_UPDATE, {
+      items,
+      currentWeight: player.currentWeight,
+      maxWeight: player.maxCarryWeight,
+    } satisfies InventoryUpdateMessage);
+  }
+
+  /** Send player state update to client (HP, stamina, status effects, posture). */
   private sendPlayerState(client: Client, playerId: string): void {
+    const player = this.players.get(playerId);
     const combatant = this.combatSystem.getCombatant(playerId);
     if (!combatant) return;
 
@@ -2859,6 +3162,23 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       stamina: 0, // Placeholder — stamina system not implemented yet
       maxStamina: 0,
       statusEffects: [], // TODO: Implement status effects tracking
+      posture: player?.posture ?? 'standing',
+    } satisfies PlayerStateMessage);
+  }
+
+  /** Send posture-only state update (works outside combat). */
+  private sendPostureState(client: Client, playerId: string): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    const combatant = this.combatSystem.getCombatant(playerId);
+    client.send(MessageTypes.PLAYER_STATE, {
+      hp: combatant?.hp ?? 100,
+      maxHp: combatant?.maxHp ?? 100,
+      stamina: 0,
+      maxStamina: 0,
+      statusEffects: [],
+      posture: player.posture,
     } satisfies PlayerStateMessage);
   }
 

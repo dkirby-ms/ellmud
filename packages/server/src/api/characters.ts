@@ -11,9 +11,8 @@ import { Router, type Request, type Response } from 'express';
 import { validateCharacterName } from '@ellmud/shared';
 import type { AuthService } from '../auth/AuthService.js';
 import { getCharacterRepository } from '../character/index.js';
-import { grantStarterKit } from './starter-kit.js';
 
-export function createCharacterRouter(authService: AuthService, usePg: boolean): Router {
+export function createCharacterRouter(authService: AuthService, _usePg: boolean): Router {
   const router = Router();
 
   /** Extract and validate Bearer token → playerId. */
@@ -79,12 +78,7 @@ export function createCharacterRouter(authService: AuthService, usePg: boolean):
       const repo = getCharacterRepository();
       const character = await repo.create(playerId, name, startingZoneSlug);
 
-      // Grant starter kit (weapon + armour + consumable)
-      try {
-        await grantStarterKit(playerId, character.id, usePg);
-      } catch (kitErr) {
-        console.warn('[Characters] Starter kit grant failed (non-fatal):', kitErr);
-      }
+      // Starter kit is now granted on first zone join (inventory, not stash).
 
       // Auto-select if it's the player's first character
       const allChars = await repo.list(playerId);
