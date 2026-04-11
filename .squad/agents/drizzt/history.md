@@ -3940,3 +3940,52 @@ Key lessons:
 - Client selectors for E2E: command input uses `aria-label="Command input"`, narrative uses `role="log"` with `aria-label="Game narrative"`
 - localStorage keys for auth: `ellmud_token`, `ellmud_playerId`, `ellmud_username` (defined in `packages/client/src/App.tsx`)
 - PlayerFixture pattern: register via API -> inject token into localStorage -> navigate to /zone -> wait for enabled command input as connection signal
+- The-reliquary starting room is `reliquary-commons` (The Preservation Hall, type `entry`) with exits: north, south, east, west, up
+- Movement messages: departure = `{name} walks {direction}.`, arrival = `{name} arrives from the {opposite direction}.`
+- Player display in look: `{name} is here.` (default standing posture, no follow)
+- Direction shortcuts work: bare `north`/`n` auto-expand to `go north` via parser aliases
+
+
+### Follow & Consent E2E Tests (#416 Phase 3) — 2026-04-11
+**Task:** Write Playwright E2E tests for the follow/consent system
+**Status:** Complete — 5 tests in packages/e2e/tests/follow.spec.ts, pushed to dev
+
+**Tests written:**
+1. Follow flow — player follows another in same room
+2. Consent grant + revoke — consent/revoke command cycle
+3. Auto-follow on movement — follower moves with leader, leader sees follower arrival
+4. Unfollow — follower stays behind when leader moves
+5. Revoke rejects when no prior consent granted
+
+**Key observations:**
+- Consent is NOT required for follow in the current implementation. Consent is a separate system for group membership (see group.ts). Follow only requires same-room visibility.
+- Auto-follow messages: follower sees You follow leader, leader sees follower follows you, departure room sees follower follows leader.
+- The revoke command is an alias for unconsent
+
+## Learnings
+
+- Follow and consent are SEPARATE systems — consent gates group membership, NOT follow. Follow only requires same-room visibility.
+- Follow auto-move messages: follower sees You follow leader, leader sees follower follows you (sent after room description)
+- revoke is a command alias for unconsent, both handled by handleUnconsent in consent.ts
+- E2E test pattern for unused-but-needed players: prefix with underscore to satisfy eslint no-unused-vars
+
+---
+
+### Group Feature E2E Tests (#416 Phase 4) — 2026-04-12
+**Task:** Write Playwright E2E tests for the group system
+**Status:** Complete — 6 tests committed and pushed to dev
+
+**Tests created in `packages/e2e/tests/group.spec.ts`:**
+1. Group add requires consent/follow (3-player scenario)
+2. Group formation via follow + group form
+3. gsay group chat delivery between members
+4. Group status shows leader, members, and sharing info
+5. Group share toggle changes loot sharing status
+6. Group leave with departure notification to leader
+
+**Key adaptation:** Task spec referenced group invite/accept commands, but actual implementation uses follow then group form/group add (consent-gated). Tests adapted to real server commands.
+
+## Learnings
+- Group system uses follow/consent + group form/group add, NOT invite/accept. The group add command requires the target to be following the leader or have consented.
+- Group events are broadcast to members via _groupEvent on CommandResult; gsay uses _gsay. ZoneRoom dispatches these to WebSocket clients.
+- 3-player E2E tests work fine with createPlayer fixture; all players cleaned up automatically.

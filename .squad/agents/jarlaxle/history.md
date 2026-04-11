@@ -43,6 +43,52 @@
 
 ## Learnings
 
+### Container Item Type (Issue #409 — Container System Phase 2)
+- **Task:** Implement `container` as a first-class ItemType for bags, pouches, etc.
+- **Architecture:** Container is a regular item with `type: 'container'` + `containerProperties` on ItemDefinition and `contents` on ItemInstance. All operations are pure functions (immutable).
+- **Key decisions:**
+  - **No DB migration needed** — Container contents serialize into existing `metadata` JSONB column on `player_inventory` table. The `inventoryToEntries()` helper writes `containerContents` into metadata.
+  - **No container nesting** — Placing a container inside another container is explicitly rejected. Simplifies persistence and prevents infinite depth.
+  - **carryBonus is optional per-bag** — Some bags increase carry capacity (Expedition Pack +5), others don't. `calculateCarryBonus()` sums across all inventory containers.
+  - **allowedItemTypes filtering** — Optional restriction (e.g., Apothecary's Pouch only accepts consumables).
+  - **Immutable operations** — `addItemToContainer()` and `removeItemFromContainer()` return new instances, never mutate.
+  - **Stacking inside containers** — Same definitionId items share a slot; different items use separate slots up to `maxSlots`.
+- **Files:** `shared/src/items.ts` (types + functions), `shared/src/index.ts` (exports), `server/src/items/registry.ts` (3 container defs), `server/src/items/index.ts` (exports), `server/src/generator/RoomGraph.ts` (Item interface), `server/src/inventory/PlayerInventoryRepository.ts` (serialization)
+- **Tests:** 44 new tests covering creation, add/remove, slot limits, weight limits, carry bonus, type filtering, nesting prevention, serialization. All 2886 server tests passing.
+
+### Container Commands (Issue #409 — Container System Phase 4)
+- **Task:** Implement player-facing `open`, `put X in Y`, `take X from Y` commands.
+- **Architecture:** Three command handlers bridging the server `Item` model (RoomGraph.ts) and the shared `ItemInstance`/`ItemDefinition` pure functions. The handlers construct an `ItemInstance` from the in-game `Item.containerContents` array, call the shared pure functions, then copy the result back.
+- **Key patterns:**
+  - **Preposition parsing in handlers** — `put` splits args on last ` in `, `take` splits on last ` from `. Using `lastIndexOf` to handle multi-word item names that might contain "in"/"from".
+  - **No parser changes beyond KNOWN_VERBS** — Preposition handling is in the handlers, not the parser. Parser just passes raw args through.
+  - **Item-to-ItemInstance bridge** — `{ instanceId: item.id, definitionId: item.id, durability: null, maxDurability: null, contents: item.containerContents ?? [] }` converts the server Item to the shared ItemInstance for pure function calls.
+  - **Self-insertion prevention** — `put satchel in satchel` explicitly caught before container validation.
+  - **Weight check on take-from** — Before removing from container, validates player can carry the item via `canCarry()`.
+- **Files:** `commands/handlers/open.ts` (new), `commands/handlers/put.ts` (new), `commands/handlers/take.ts` (extended), `commands/index.ts` (registration), `commands/parser.ts` (KNOWN_VERBS)
+- **Tests:** 29 new tests in `container-commands.test.ts`. All 2915 server tests passing, zero regressions.
+
+### Death → Corpse Integration (Issue #409 — Container System Phase 3)
+- **Task:** Fix equipped items vanishing on death, wire inventory persistence into death flow, update corpse TTL
+- **Bug fixed:** `handlePlayerDeath` in ZoneRoom.ts only iterated `player.inventory` for corpse items — `player.equippedItems` (private Map) was never included. Equipped gear simply disappeared on death.
+- **Fix:** Added `getEquippedItems()` and `clearAllEquippedItems()` to PlayerState. In death handler, iterate equipped items and add non-soulbound ones to `corpseItems` before clearing loadout. Soulbound equipped items are preserved.
+- **Corpse TTL:** Changed default from 600s (10 min) to 43200s (12 hours) per user decision. Still configurable via `CORPSE_TTL_SECONDS` env var.
+- **Files:** `state/PlayerState.ts`, `rooms/ZoneRoom.ts`, `config.ts`, `__tests__/death-equipped-items.test.ts`, `__tests__/wave3-redis-contracts.test.ts`
+- **Tests:** 10 new tests (equipped item accessors, corpse item collection, soulbound filtering, persistence, TTL). All 2842 tests passing.
+
+### Inventory Persistence (Issue #409 — Container System Phase 1)
+- **Task:** Persistent inventory storage so player carried items survive disconnect
+- **Architecture:** Mirrors the stash system exactly — `PlayerInventoryRepository` (interface), `InMemoryPlayerInventoryRepository`, `PgPlayerInventoryRepository`, singleton provider pattern
+- **Key decisions:**
+  - **Separate from stash** — Inventory (carried, weight-limited, everywhere) vs stash (bank, feature_stash rooms only, much higher capacity). Directive-enforced distinction.
+  - **Bulk save via `saveInventory()`** — On leave/death, the entire PlayerState inventory Map is serialized via `inventoryToEntries()` helper and written atomically (DELETE + INSERT in transaction for PG)
+  - **Debounced mutation save** — 2-second debounce on item mutations (take/drop) to coalesce rapid changes. Timer cleared on explicit save (leave/death) to avoid double-writes.
+  - **Load order: starter kit → persisted inventory** — Starter kit grants first (idempotent, one-time), then persisted items loaded on top. Both use `PlayerState.addItem()` which enforces weight limits.
+  - **Death saves after corpse split** — On death, soulbound items stay, non-soulbound go to corpse. Inventory is persisted AFTER the split so only soulbound items survive in DB.
+- **Migration:** `014_player_inventory.sql` — mirrors `player_stash` table structure (player_id FK, item_id FK, quantity, durability, metadata JSONB). Fixed pre-existing duplicate 012 migration numbering.
+- **Files:** `inventory/PlayerInventoryRepository.ts`, `inventory/PgPlayerInventoryRepository.ts`, `inventory/inventory-provider.ts`, `inventory/index.ts`, `rooms/ZoneRoom.ts` (lifecycle), `index.ts` (boot)
+- **Tests:** 36 new tests (repository contract + `inventoryToEntries` helper). All 2832 tests passing.
+
 ### Trace De-duplication (Issue #381)
 - **Task:** Fix duplicate "footprints leading \<direction\>" messages shown to players
 - **Root cause:** `getTracesForPlayer()` mapped every raw trace 1:1 to a `TraceDescription`. Multiple footprints in the same direction = duplicate messages.

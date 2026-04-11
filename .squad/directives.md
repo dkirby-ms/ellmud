@@ -45,4 +45,4 @@ Persistent rules and preferences set by Dale. Read by all agents at spawn time.
   - Curves indicate a layout alignment failure, not a rendering choice.
   - Cardinal alignment rules: E/W-connected rooms share the same y-coordinate; N/S-connected rooms share the same x-coordinate
 
-- **Text Combat is Canonical** — All position info, ability costs, cooldowns visible in text feed first. Grid updates sync with text, never ahead. Position-based UI (grid) is supplementary, never mandatory.
+- **Text Combat is Canonical** — All position info, ability costs, cooldowns visible in text feed first.  
