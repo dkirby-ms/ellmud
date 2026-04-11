@@ -9,7 +9,19 @@
  * 5. Player is cleaned up from combat and zone state
  */
 
-import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vitest';
+import { buildFixtureRegistry } from './helpers/item-fixtures.js';
+
+// Mock ContentRegistry so ZoneRoom integration tests work without a DB.
+const FIXTURE_MAP = buildFixtureRegistry();
+vi.mock('../content/index.js', () => ({
+  getContentRegistry: () => ({
+    isInitialized: () => true,
+    getItem: (id: string) => FIXTURE_MAP.get(id),
+    getAllItems: () => Array.from(FIXTURE_MAP.values()),
+  }),
+}));
+
 import { CombatSystem, createCombatant, DEFAULT_PLAYER_STATS } from '../combat/index.js';
 import type { CombatStats } from '../combat/CombatState.js';
 import { ColyseusTestServer } from '@colyseus/testing';
