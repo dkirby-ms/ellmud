@@ -4614,3 +4614,158 @@ Wrap all raw text interpolations of item/creature names and descriptions in `<An
 
 - Any new component that renders item or creature names should use `<AnsiText>` for consistency.
 - The `AnsiText` component is a default export from `packages/client/src/components/AnsiText.tsx`.
+# Decision: Automated Version Bumping
+
+**Date:** 2025-01-XX  
+**Author:** Khelben (CI/CD Dev)  
+**Status:** ✅ Implemented (PR #425)  
+**Scope:** CI/CD, Release Management, Versioning
+
+## Context
+
+The project had two overlapping release workflows:
+1. `release.yml` — Manual workflow_dispatch on prod, user picks major/minor/patch, runs npm version, commits, tags, creates GitHub Release
+2. `squad-release.yml` — Auto-triggered on prod push, reads version from package.json, creates tag + GitHub Release if tag doesn't exist
+
+This created confusion about which workflow to use and required manual version bumping before releases.
+
+## Decision
+
+**Implement automated version bumping tied to branch promotion workflow:**
+
+- **Patch bumps (0.1.x):** Automated on every dev → uat promotion
+- **Minor bumps (0.x.0):** Automated on every uat → prod promotion  
+- **Major bumps (x.0.0):** Manual only (reserved for breaking changes)
+
+**Deprecate `release.yml` in favor of the automated system.**
+
+## Rationale
+
+1. **Reduces Human Error:** Eliminates manual version bumping mistakes (forgetting to bump, wrong bump type, version conflicts)
+2. **Consistent Versioning:** Every UAT build gets a unique patch version
+3. **Clear Intent:** Minor version change = production release, patch = UAT build
+4. **Simpler Workflow:** Developers use promote workflow, versioning happens automatically
+5. **Idempotent Releases:** squad-release.yml remains idempotent and handles the actual GitHub Release creation
+
+## Implementation Details
+
+### Modified Workflows
+
+1. **scheduled-uat-promote.yml**
+   - Added Node.js setup and npm ci
+   - After merge: npm version patch --no-git-tag-version
+   - Sync workspace versions via npm run version:sync
+   - Commit with [skip ci] to prevent infinite loops
+
+2. **squad-promote.yml**
+   - dev→uat job: Same patch bump as scheduled workflow
+   - uat→prod job: Minor bump (resets patch to 0)
+   - Dry run mode shows version preview
+   - Removed CHANGELOG version validation
+
+3. **squad-release.yml**
+   - Removed CHANGELOG version validation
+   - Reads auto-bumped version from package.json
+   - Creates tag + GitHub Release (unchanged behavior)
+
+4. **release.yml**
+   - Renamed to DEPRECATED-release.yml
+   - Replaced with error stub explaining new model
+
+### Version Bump Flow
+
+```
+1. Merge branches
+2. npm version {patch|minor} --no-git-tag-version
+3. npm run version:sync (align workspace packages)
+4. git commit -m "chore: bump version to X.Y.Z [skip ci]"
+5. git push
+6. squad-release.yml reads version and creates release (prod only)
+```
+
+### Safety Mechanisms
+
+- **[skip ci]:** Prevents version bump commits from triggering workflows infinitely
+- **Idempotent:** Multiple runs don't double-bump (npm version fails if version exists)
+- **Dry run:** Shows what version WOULD be bumped to without committing
+- **Workspace sync:** Ensures monorepo packages stay aligned
+
+## Alternatives Considered
+
+1. **Keep manual release.yml:** Rejected — duplicate functionality, error-prone
+2. **Tag-based versioning:** Rejected — requires manual tagging, defeats automation
+3. **Semantic-release tool:** Rejected — too heavyweight, requires commit message conventions
+4. **Version in separate file:** Rejected — package.json is canonical for Node.js projects
+
+## Consequences
+
+### Positive
+- ✅ Zero manual version management
+- ✅ Every UAT build has unique version
+- ✅ Clear version history (patch = UAT, minor = prod)
+- ✅ Reduced risk of version conflicts
+- ✅ Simpler mental model for developers
+
+### Negative
+- ⚠️ Version numbers increment faster (every UAT merge)
+- ⚠️ Cannot skip versions (e.g., go from 0.1.5 → 0.1.7)
+- ⚠️ CHANGELOG no longer tied to version numbers
+
+### Mitigations
+- Version increment rate is acceptable for this project
+- Skipping versions is not a requirement
+- CHANGELOG can document changes by date/feature instead of version
+
+## Dependencies
+
+- `scripts/sync-versions.mjs` — Must work correctly for monorepo
+- `.nvmrc` — Defines Node.js version for workflows
+- `package.json` — Single source of truth for version
+
+## Validation
+
+- [x] Dry run mode shows correct version preview
+- [x] Patch bump works on dev → uat
+- [x] Minor bump works on uat → prod
+- [x] [skip ci] prevents infinite loops
+- [x] Workspace versions stay synced
+- [x] squad-release.yml picks up auto-bumped version
+- [x] Deprecated release.yml fails with helpful error
+
+## Rollback Plan
+
+If automated versioning causes issues:
+1. Restore `release.yml` from DEPRECATED-release.yml
+2. Revert changes to squad-promote.yml and scheduled-uat-promote.yml
+3. Manually bump versions before promoting to prod
+4. squad-release.yml continues to work (unchanged core behavior)
+
+## Team Communication
+
+- PR #425 documents the change comprehensively
+- Updated `.squad/agents/khelben/history.md` with learnings
+- This decision doc serves as reference for future team members
+
+## Related Decisions
+
+- Workflow Audit (2025-01) — Identified release.yml duplication
+- Scheduled UAT Promotion — Established 4x daily dev→uat pipeline
+- Forbidden Path Stripping — Prevent .squad/ from reaching prod
+
+## Open Questions
+
+- [ ] Should we add CHANGELOG automation (auto-generate from commits)?
+- [ ] Should we add version rollback capability for emergency fixes?
+- [ ] Should major version bumps also be automated (e.g., based on commit prefix)?
+
+## Success Metrics
+
+- Zero manual version bump errors
+- 100% of UAT builds have unique versions
+- Reduced time from dev→prod (no manual version step)
+- Developer feedback on new workflow
+
+---
+
+**Review Status:** Pending team review  
+**Next Review:** After 2 weeks of production use
