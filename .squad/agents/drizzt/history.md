@@ -3989,3 +3989,8 @@ Key lessons:
 - Group system uses follow/consent + group form/group add, NOT invite/accept. The group add command requires the target to be following the leader or have consented.
 - Group events are broadcast to members via _groupEvent on CommandResult; gsay uses _gsay. ZoneRoom dispatches these to WebSocket clients.
 - 3-player E2E tests work fine with createPlayer fixture; all players cleaned up automatically.
+- E2E tests must use go down/go up from starting room (reliquary-inn). The only exit from the spawn room is down to the lobby.
+- Character names in E2E tests need random alpha suffixes to prevent cross-test collisions from linkdead characters persisting in the Colyseus room.
+- Server sends posture-aware room descriptions (is standing here, is crouching here), so E2E patterns should use is.*here not is here.
+- Movement departure message format: name walks direction. Arrival: name arrives from the opposite. (e.g., from the down for up to down).
+- When asserting absence of content after a second look, scope the check to only fresh messages (count before, slice after) — the terminal log accumulates all session output.
