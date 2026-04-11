@@ -1,3 +1,10 @@
+# [0.2.0-dev.2](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.1...v0.2.0-dev.2) (2026-04-11)
+
+
+### Features
+
+* add 6 new container items across all tiers ([1e3367c](https://github.com/dkirby-ms/ellmud/commit/1e3367c6f6555fda4a64275d860b73b042839e85))
+
 # [0.2.0-dev.1](https://github.com/dkirby-ms/ellmud/compare/v0.1.1-dev.2...v0.2.0-dev.1) (2026-04-11)
 
 
