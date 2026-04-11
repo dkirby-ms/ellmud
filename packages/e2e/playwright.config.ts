@@ -3,12 +3,10 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Playwright configuration for Ellmud E2E tests.
  *
- * Prerequisites:
- *   - docker compose up -d          (Redis + Postgres)
- *   - ALLOW_LOCAL_AUTH=true npm run dev:server
- *   - VITE_ALLOW_LOCAL_AUTH=true npm run dev:client
+ * The webServer block auto-starts the game server and client.
+ * Prerequisites: Redis + Postgres must already be running.
  *
- * Or use the webServer config below to auto-start the dev stack.
+ * If servers are already running, Playwright reuses them (reuseExistingServer).
  */
 export default defineConfig({
   testDir: './tests',
@@ -36,20 +34,20 @@ export default defineConfig({
     },
   ],
 
-  // Optional: auto-start the dev stack before running tests.
-  // Uncomment when you want Playwright to manage the dev servers.
-  // webServer: [
-  //   {
-  //     command: 'ALLOW_LOCAL_AUTH=true npm run dev:server',
-  //     port: 2567,
-  //     reuseExistingServer: !process.env.CI,
-  //     cwd: '../../',
-  //   },
-  //   {
-  //     command: 'VITE_ALLOW_LOCAL_AUTH=true npm run dev:client',
-  //     port: 3000,
-  //     reuseExistingServer: !process.env.CI,
-  //     cwd: '../../',
-  //   },
-  // ],
+  webServer: [
+    {
+      command: 'ALLOW_LOCAL_AUTH=true npm run dev:server',
+      port: 2567,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+      cwd: '../../',
+    },
+    {
+      command: 'VITE_ALLOW_LOCAL_AUTH=true npm run dev:client',
+      port: 3000,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+      cwd: '../../',
+    },
+  ],
 });

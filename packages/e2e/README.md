@@ -2,33 +2,15 @@
 
 ## Prerequisites
 
-1. **Docker services** — Redis and PostgreSQL must be running:
-   ```bash
-   docker compose up -d
-   ```
+1. **Redis and PostgreSQL** must be running (e.g. `docker compose up -d` or local installs).
 
-2. **Game server** — Start with local auth enabled:
-   ```bash
-   ALLOW_LOCAL_AUTH=true npm run dev:server
-   ```
-
-3. **Client dev server** — Start with local auth enabled:
-   ```bash
-   VITE_ALLOW_LOCAL_AUTH=true npm run dev:client
-   ```
-
-4. **Playwright browsers** — Install Chromium (one-time):
+2. **Playwright browsers** — Install Chromium (one-time):
    ```bash
    npx playwright install chromium
    ```
 
-## Environment Variables
-
-| Variable | Value | Where |
-|---|---|---|
-| `ALLOW_LOCAL_AUTH` | `true` | Game server |
-| `VITE_ALLOW_LOCAL_AUTH` | `true` | Client dev server |
-| `AUTH_REQUIRED` | `true` (default) | Game server |
+That's it. Playwright auto-starts the game server and client dev server via the `webServer` config.
+If you already have them running, Playwright reuses them (`reuseExistingServer`).
 
 ## Running Tests
 
