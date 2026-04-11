@@ -35,3 +35,62 @@
 - **Label sync:** `sync-squad-labels.yml` parses team.md roster dynamically, creates/updates all squad:*, go:, release:, type:, priority: labels. Never deletes orphaned labels.
 - **Full audit report:** `.squad/decisions/inbox/khelben-workflow-audit.md` (comprehensive reference table, dependency graph, issue list with severity)
 
+---
+
+## Roster Restoration (2026-04-11)
+
+**Status:** ✅ Complete
+
+**Context:** Khelben was temporarily removed from active roster during CI/CD investigation phase. Restored to full team with all history and context intact.
+
+**Changes:**
+- Added to `.squad/team.md` (CI/CD Dev, role: ⚙️ CI/CD)
+- Added routing entries in `.squad/routing.md`
+- Updated `.squad/registry.json`
+
+**Impact:** Full CI/CD responsibilities resumed. No blocking dependencies.
+
+---
+
+## Comprehensive Workflow Audit (2026-04-11)
+
+**Status:** ✅ Complete
+
+**Scope:** Audit of all 14 GitHub Actions workflows in the repository.
+
+**Deliverables:**
+- Full audit report: `.squad/decisions/inbox/khelben-workflow-audit.md`
+- 11 actionable issues identified (3 critical/medium, 8 minor)
+- Comprehensive reference table with workflow definitions, dependencies, permissions
+- Dependency graph visualization
+- Severity-ranked issue list with recommendations
+
+**Key Findings:**
+
+1. **Critical/Medium Issues:**
+   - Release workflow duplication: `release.yml` (manual) vs `squad-release.yml` (auto-tag) both create releases
+   - Health check robustness: Uptime check fragile to API schema changes
+   - Concurrency serialization: `scheduled-uat-promote` and `squad-promote` may conflict if run simultaneously
+
+2. **Minor Issues (8):**
+   - Forbidden paths duplication across promotion workflows (maintain sync risk)
+   - Ralph integration silent failure mode
+   - Label sync orphaned label cleanup missing
+   - Insufficient error handling in deployment status checks
+   - Workflow documentation gaps
+   - Permission granularity improvements needed
+   - Action SHA pinning maintenance burden
+   - Test coverage for workflow logic
+
+**Recommendations:**
+- Archive `release.yml` in favor of `squad-release.yml`
+- Enhance health check with API schema versioning
+- Unify promotion workflows concurrency control with shared concurrency group
+- Extract forbidden paths to shared script (both promote workflows)
+- Improve Ralph integration error handling
+- Add orphaned label cleanup to `sync-squad-labels.yml`
+- Document workflow dependencies and trigger chains
+- Consider GitHub Actions reusable workflows for common patterns
+
+**Team Impact:** Establishes CI/CD audit baseline. Blocks future workflow additions until issues addressed. Enables incremental improvements without risk of regression.
+

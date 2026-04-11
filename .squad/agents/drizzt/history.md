@@ -3997,3 +3997,22 @@ Key lessons:
 - Migration system tracks files by filename — once deployed, files can be deleted but numbers should not be reused or renumbered. The persistence-schema-validation test now allows gaps in numbering.
 - When removing zone data, check for room feature seeds in later migrations (006_room_features.sql had midgaard-specific UPDATEs that referenced the deleted zone).
 - computeLayout test cases 26 and 29 use a synthetic 52-room dense city topology (avenue-1 through avenue-4, west-gate/east-gate corridor) to stress-test cardinal alignment and crossing reduction.
+
+---
+
+## Midgaard Zone Removal (Issue #420, PR #423) — 2026-04-11
+
+**Status:** ✅ Complete — PR merged
+
+**Scope:**
+- Removed `004_import_midgaard.sql` migration (sample data import)
+- Removed `scripts/sample-diku-import.sql` (import script)
+- Updated `006_room_features.sql` (removed midgaard-specific feature UPDATEs)
+- Updated `import-diku-zone.ts` (removed midgaard zone handler)
+- Updated `computeLayout.test.ts` (removed midgaard layout test case)
+
+**Decision:** Migration numbering allows gaps after file deletion (003 → 005). System tracks applied files by filename, so renumbering would break production state tracking. Gaps permitted for intentionally removed migrations.
+
+**Impact:** Cleaned up sample import infrastructure. Aligned database initialization with Phase 1 scope. No blocking dependencies for followup work.
+
+**Tests:** All 552 server tests pass. Zero regressions.
