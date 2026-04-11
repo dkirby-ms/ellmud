@@ -1339,7 +1339,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         otherPlayersInRoom.push(sid);
         const name = this.characterNames.get(sid) ?? 'A wanderer';
         const flags = this.playerFlagsCache.get(sid);
-        otherPlayerInfo.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture, followingPlayerId: ps.followingPlayerId });
+        otherPlayerInfo.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture, followingPlayerId: ps.followingPlayerId, allowFollowing: flags?.allowFollowing !== false });
       }
     }
 
@@ -1363,7 +1363,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           if (sid !== player.sessionId && ps.currentRoomId === roomId) {
             const name = this.characterNames.get(sid) ?? 'A wanderer';
             const flags = this.playerFlagsCache.get(sid);
-            result.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture, followingPlayerId: ps.followingPlayerId });
+            result.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture, followingPlayerId: ps.followingPlayerId, allowFollowing: flags?.allowFollowing !== false });
           }
         }
         return result;

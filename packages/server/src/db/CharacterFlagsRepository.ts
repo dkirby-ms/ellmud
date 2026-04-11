@@ -33,6 +33,7 @@ function rowToFlags(row: FlagsRow): CharacterFlags {
   return {
     anon: row.flags.anon === true,
     rp: row.flags.rp === true,
+    allowFollowing: row.flags.allowFollowing !== false,
   };
 }
 

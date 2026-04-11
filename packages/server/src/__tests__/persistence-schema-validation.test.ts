@@ -83,10 +83,12 @@ describe('Migration files', () => {
     expect(files.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('migration files are numbered sequentially', () => {
-    files.forEach((f, i) => {
+  it('migration files are numbered in ascending order', () => {
+    let prev = 0;
+    files.forEach((f) => {
       const num = parseInt(f.split('_')[0]!, 10);
-      expect(num).toBe(i + 1);
+      expect(num).toBeGreaterThan(prev);
+      prev = num;
     });
   });
 

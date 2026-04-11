@@ -45,6 +45,7 @@ import { handleConsent, handleUnconsent } from './handlers/consent.js';
 import { handleGroup, handleGsay } from './handlers/group.js';
 import { handleOpen } from './handlers/open.js';
 import { handlePut } from './handlers/put.js';
+import { handleToggle } from './handlers/toggle.js';
 import type { GroupManager } from '../systems/GroupManager.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -96,6 +97,8 @@ export interface PlayerRef {
   posture?: import('@ellmud/shared').Posture;
   /** Player ID this player is following, for room display (#403). */
   followingPlayerId?: string | null;
+  /** Whether this player allows others to follow them (#417). */
+  allowFollowing?: boolean;
 }
 
 export interface CommandContext {
@@ -221,6 +224,7 @@ handlers.set('group', handleGroup);
 handlers.set('gsay', handleGsay);
 handlers.set('open', handleOpen);
 handlers.set('put', handlePut);
+handlers.set('toggle', handleToggle);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(
