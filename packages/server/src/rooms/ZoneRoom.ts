@@ -1112,6 +1112,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Trace: movement creates footprints in the room LEFT
     const movedRoom = player.currentRoomId !== previousRoomId;
+    let pendingFollowerArrivals: string[] | undefined;
     if (movedRoom) {
       const direction = args[0]?.toLowerCase();
       this.traceSystem.addTrace(previousRoomId, 'footprint', {
@@ -1142,8 +1143,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.broadcastRoomOccupantsUpdate(previousRoomId);
       this.broadcastRoomOccupantsUpdate(player.currentRoomId);
 
-      // Auto-move followers (#403 Phase 1)
-      this.moveFollowers(playerId, previousRoomId, player.currentRoomId);
+      // Auto-move followers (#403 Phase 1) — collect names for deferred notification
+      const followedNames = this.moveFollowers(playerId, previousRoomId, player.currentRoomId);
+      if (followedNames.length > 0) {
+        pendingFollowerArrivals = followedNames;
+      }
     }
 
     // Posture commands: broadcast posture change to other players in the room (#371)
@@ -1247,6 +1251,13 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     } else {
       // Normal command: deliver only to sender
       this.deliverResult(client, result);
+    }
+
+    // Send deferred follower arrival notifications AFTER the leader's room description
+    if (pendingFollowerArrivals) {
+      for (const followerName of pendingFollowerArrivals) {
+        this.sendNarrate(client, { text: `${followerName} follows you.`, type: 'ambient', timestamp: Date.now() });
+      }
     }
 
     // Deliver targeted narrations (e.g., teleport notification to the moved player)
@@ -1539,12 +1550,15 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   /**
    * Auto-move all followers when a leader moves rooms.
    * Each follower sees the room description and other players are notified.
+   * Returns names of followers who moved (for deferred leader notifications).
    */
-  private moveFollowers(leaderId: string, fromRoomId: string, toRoomId: string): void {
+  private moveFollowers(leaderId: string, fromRoomId: string, toRoomId: string): string[] {
     const leaderState = this.players.get(leaderId);
-    if (!leaderState || leaderState.followers.size === 0) return;
+    if (!leaderState || leaderState.followers.size === 0) return [];
 
     const leaderName = this.characterNames.get(leaderId) ?? 'Someone';
+    const movedFollowerNames: string[] = [];
+    const leaderExclude = new Set([leaderId]);
 
     for (const followerId of leaderState.followers) {
       const followerState = this.players.get(followerId);
@@ -1595,8 +1609,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         this.sendRoomOccupants(followerClient, followerId, toRoomId);
       }
 
-      // Broadcast departure/arrival to other players
-      this.broadcastPlayerMovement(followerId, followerPreviousRoom, toRoomId, undefined, followerState.posture);
+      // Broadcast departure/arrival to other players (exclude leader from generic arrival)
+      this.broadcastPlayerMovement(followerId, followerPreviousRoom, toRoomId, undefined, followerState.posture, leaderExclude);
       this.broadcastRoomOccupantsUpdate(followerPreviousRoom);
       this.broadcastRoomOccupantsUpdate(toRoomId);
 
@@ -1609,7 +1623,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           }
         }
       }
+
+      movedFollowerNames.push(followerName);
     }
+
+    return movedFollowerNames;
   }
 
   /** Get visible (non-anon) players in a room, excluding a specific player. */
@@ -2103,6 +2121,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     targetRoomId: string,
     direction?: string,
     posture?: import('@ellmud/shared').Posture,
+    excludeFromArrivalIds?: Set<string>,
   ): void {
     const name = this.characterNames.get(playerId) ?? 'A wanderer';
 
@@ -2129,6 +2148,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       : `${name} arrives.`;
     for (const [sid, ps] of this.players) {
       if (sid !== playerId && ps.currentRoomId === targetRoomId) {
+        if (excludeFromArrivalIds?.has(sid)) continue;
         const c = this.findClient(sid);
         if (c) {
           this.sendNarrate(c, { text: arrivalText, type: 'ambient', timestamp: Date.now() });
