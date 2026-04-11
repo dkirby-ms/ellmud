@@ -8,18 +8,18 @@ test.describe('Group system', () => {
   test('group add fails without consent or follow', async ({ createPlayer }) => {
     const alice = await createPlayer('Alice');
     const charlie = await createPlayer('Charlie');
-    const _bob = await createPlayer('Bob');
+    const bob = await createPlayer('Bob');
 
     // Charlie follows Alice so she can form a group
-    await charlie.sendCommand('follow Alice');
-    await charlie.waitForMessage(/You begin following Alice/i);
+    await charlie.sendCommand(`follow ${alice.name}`);
+    await charlie.waitForMessage(new RegExp(`You begin following ${alice.name}`, 'i'));
 
     // Alice forms a group with Charlie
     await alice.sendCommand('group form');
-    await alice.waitForMessage(/You form a group with: Charlie/i);
+    await alice.waitForMessage(new RegExp(`You form a group with: ${charlie.name}`, 'i'));
 
     // Alice tries to add Bob — who hasn't followed or consented
-    await alice.sendCommand('group add Bob');
+    await alice.sendCommand(`group add ${bob.name}`);
     await alice.waitForMessage(/must be following you or have consented/i);
   });
 
@@ -32,12 +32,12 @@ test.describe('Group system', () => {
     const bob = await createPlayer('Bob');
 
     // Bob follows Alice
-    await bob.sendCommand('follow Alice');
-    await bob.waitForMessage(/You begin following Alice/i);
+    await bob.sendCommand(`follow ${alice.name}`);
+    await bob.waitForMessage(new RegExp(`You begin following ${alice.name}`, 'i'));
 
     // Alice forms the group
     await alice.sendCommand('group form');
-    await alice.waitForMessage(/You form a group with: Bob/i);
+    await alice.waitForMessage(new RegExp(`You form a group with: ${bob.name}`, 'i'));
 
     // Bob should see notification that the group was formed
     await bob.waitForMessage(/formed a group/i, { timeout: 10_000 });
@@ -52,17 +52,17 @@ test.describe('Group system', () => {
     const bob = await createPlayer('Bob');
 
     // Form group
-    await bob.sendCommand('follow Alice');
-    await bob.waitForMessage(/You begin following Alice/i);
+    await bob.sendCommand(`follow ${alice.name}`);
+    await bob.waitForMessage(new RegExp(`You begin following ${alice.name}`, 'i'));
     await alice.sendCommand('group form');
-    await alice.waitForMessage(/You form a group with: Bob/i);
+    await alice.waitForMessage(new RegExp(`You form a group with: ${bob.name}`, 'i'));
 
     // Alice sends a group message
     await alice.sendCommand('gsay hello everyone');
     await alice.waitForMessage(/\[Group\] You say: hello everyone/i);
 
     // Bob should receive the group message
-    await bob.waitForMessage(/\[Group\] Alice says: hello everyone/i, { timeout: 10_000 });
+    await bob.waitForMessage(new RegExp(`\\[Group\\] ${alice.name} says: hello everyone`, 'i'), { timeout: 10_000 });
   });
 
   /**
@@ -73,16 +73,16 @@ test.describe('Group system', () => {
     const bob = await createPlayer('Bob');
 
     // Form group
-    await bob.sendCommand('follow Alice');
-    await bob.waitForMessage(/You begin following Alice/i);
+    await bob.sendCommand(`follow ${alice.name}`);
+    await bob.waitForMessage(new RegExp(`You begin following ${alice.name}`, 'i'));
     await alice.sendCommand('group form');
-    await alice.waitForMessage(/You form a group with: Bob/i);
+    await alice.waitForMessage(new RegExp(`You form a group with: ${bob.name}`, 'i'));
 
     // Check group status
     await alice.sendCommand('group');
-    await alice.waitForMessage(/Leader: Alice/i);
+    await alice.waitForMessage(new RegExp(`Leader: ${alice.name}`, 'i'));
     await alice.waitForMessage(/Loot Sharing:/i);
-    await alice.waitForMessage(/Bob/i);
+    await alice.waitForMessage(new RegExp(bob.name, 'i'));
   });
 
   /**
@@ -94,10 +94,10 @@ test.describe('Group system', () => {
     const bob = await createPlayer('Bob');
 
     // Form group
-    await bob.sendCommand('follow Alice');
-    await bob.waitForMessage(/You begin following Alice/i);
+    await bob.sendCommand(`follow ${alice.name}`);
+    await bob.waitForMessage(new RegExp(`You begin following ${alice.name}`, 'i'));
     await alice.sendCommand('group form');
-    await alice.waitForMessage(/You form a group with: Bob/i);
+    await alice.waitForMessage(new RegExp(`You form a group with: ${bob.name}`, 'i'));
 
     // Toggle loot sharing on
     await alice.sendCommand('group share on');
@@ -117,16 +117,16 @@ test.describe('Group system', () => {
     const bob = await createPlayer('Bob');
 
     // Form group
-    await bob.sendCommand('follow Alice');
-    await bob.waitForMessage(/You begin following Alice/i);
+    await bob.sendCommand(`follow ${alice.name}`);
+    await bob.waitForMessage(new RegExp(`You begin following ${alice.name}`, 'i'));
     await alice.sendCommand('group form');
-    await alice.waitForMessage(/You form a group with: Bob/i);
+    await alice.waitForMessage(new RegExp(`You form a group with: ${bob.name}`, 'i'));
 
     // Bob leaves the group
     await bob.sendCommand('group leave');
     await bob.waitForMessage(/You leave the group/i);
 
     // Alice should see notification that Bob left
-    await alice.waitForMessage(/Bob has left the group/i, { timeout: 10_000 });
+    await alice.waitForMessage(new RegExp(`${bob.name} has left the group`, 'i'), { timeout: 10_000 });
   });
 });

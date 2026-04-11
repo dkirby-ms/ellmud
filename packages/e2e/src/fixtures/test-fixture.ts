@@ -19,14 +19,22 @@ export const test = base.extend<{
     const players: PlayerFixture[] = [];
 
     await use(async (name: string, zone = 'the-reliquary') => {
-      const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      const username = `test_${name}_${suffix}`;
+      // Username must be 3-20 chars (server validation)
+      const rand = Math.random().toString(36).slice(2, 8);
+      const username = `t_${name.slice(0, 6)}_${rand}`.slice(0, 20);
       const password = 'testpass123';
 
-      const player = new PlayerFixture(browser, name);
+      // Character names must be alpha-only, 2-24 chars, capital first + lowercase rest.
+      // Append a random alpha suffix to avoid cross-test collisions with linkdead characters.
+      const suffix = Array.from({ length: 4 }, () =>
+        String.fromCharCode(97 + Math.floor(Math.random() * 26)),
+      ).join('');
+      const charName = `${name}${suffix}`.slice(0, 24);
+
+      const player = new PlayerFixture(browser, charName);
       await player.register(username, password);
       await player.login();
-      await player.createCharacter(name, zone);
+      await player.createCharacter(charName, zone);
       await player.enterZone();
       players.push(player);
       return player;

@@ -16,11 +16,11 @@ test.describe('Multiplayer connection & movement', () => {
 
     // Alice sends `look` — should see Bob's character name in the room
     await alice.sendCommand('look');
-    await alice.waitForMessage(/Bob.*is here/i, { timeout: 10_000 });
+    await alice.waitForMessage(new RegExp(`${bob.name}.*is.*here`, 'i'), { timeout: 10_000 });
 
     // Bob sends `look` — should see Alice's character name in the room
     await bob.sendCommand('look');
-    await bob.waitForMessage(/Alice.*is here/i, { timeout: 10_000 });
+    await bob.waitForMessage(new RegExp(`${alice.name}.*is.*here`, 'i'), { timeout: 10_000 });
   });
 
   /**
@@ -30,11 +30,11 @@ test.describe('Multiplayer connection & movement', () => {
     const alice = await createPlayer('Alice');
     const bob = await createPlayer('Bob');
 
-    // Alice moves north (reliquary-commons → reliquary-catwalk-junction)
-    await alice.sendCommand('go north');
+    // Alice moves down (reliquary-inn → reliquary-inn-lobby)
+    await alice.sendCommand('go down');
 
-    // Bob should see a departure message: "Alice walks north."
-    await bob.waitForMessage(/Alice walks north/i, { timeout: 15_000 });
+    // Bob should see a departure message: "Alicexyz walks down."
+    await bob.waitForMessage(new RegExp(`${alice.name} walks down`, 'i'), { timeout: 15_000 });
   });
 
   /**
@@ -45,14 +45,14 @@ test.describe('Multiplayer connection & movement', () => {
     const bob = await createPlayer('Bob');
 
     // Alice leaves the room
-    await alice.sendCommand('go north');
-    await bob.waitForMessage(/Alice walks north/i, { timeout: 15_000 });
+    await alice.sendCommand('go down');
+    await bob.waitForMessage(new RegExp(`${alice.name} walks down`, 'i'), { timeout: 15_000 });
 
-    // Alice comes back south (catwalk-junction → commons)
-    await alice.sendCommand('go south');
+    // Alice comes back up (lobby → inn)
+    await alice.sendCommand('go up');
 
-    // Bob should see arrival: "Alice arrives from the north."
-    await bob.waitForMessage(/Alice arrives from the north/i, { timeout: 15_000 });
+    // Bob should see arrival: "Alicexyz arrives from the down."
+    await bob.waitForMessage(new RegExp(`${alice.name} arrives from the down`, 'i'), { timeout: 15_000 });
   });
 
   /**
@@ -64,24 +64,35 @@ test.describe('Multiplayer connection & movement', () => {
 
     // Verify Alice is visible first
     await bob.sendCommand('look');
-    await bob.waitForMessage(/Alice.*is here/i, { timeout: 10_000 });
+    await bob.waitForMessage(new RegExp(`${alice.name}.*is.*here`, 'i'), { timeout: 10_000 });
 
     // Alice moves away
-    await alice.sendCommand('go north');
-    await bob.waitForMessage(/Alice walks north/i, { timeout: 15_000 });
+    await alice.sendCommand('go down');
+    await bob.waitForMessage(new RegExp(`${alice.name} walks down`, 'i'), { timeout: 15_000 });
 
     // Small pause to let occupant updates propagate
     await bob.getPage().waitForTimeout(1000);
 
+    // Record message count before second look
+    const messagesBefore = await bob.getMessages();
+    const countBefore = messagesBefore.length;
+
     // Bob sends `look` — Alice should NOT be in the room
     await bob.sendCommand('look');
 
-    // Wait for the room description to appear (Preservation Hall is the starting room)
-    await bob.waitForMessage(/Preservation Hall|Exits:/i, { timeout: 10_000 });
+    // Wait for the look response to arrive (at least a few new messages)
+    await bob.getPage().waitForFunction(
+      (expectedMin: number) => {
+        const log = document.querySelector('[role="log"][aria-label="Game narrative"]');
+        return log ? log.querySelectorAll('div > *').length > expectedMin + 2 : false;
+      },
+      countBefore,
+      { timeout: 10_000 },
+    );
 
-    // Get all messages and check the most recent look output doesn't mention Alice
-    const messages = await bob.getMessages();
-    const lastMessages = messages.slice(-10).join('\n');
-    expect(lastMessages).not.toMatch(/Alice.*is here/i);
+    // Check only messages from after the second look — Alice should not be present
+    const allMessages = await bob.getMessages();
+    const freshMessages = allMessages.slice(countBefore).join('\n');
+    expect(freshMessages).not.toMatch(new RegExp(`${alice.name}.*is.*here`, 'i'));
   });
 });

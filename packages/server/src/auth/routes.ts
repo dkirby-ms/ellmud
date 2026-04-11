@@ -22,19 +22,26 @@ export const REGISTER_RATE_LIMIT = { windowMs: 60 * 60 * 1000, max: 5 } as const
 export function createAuthRouter(authService: AuthService, playerRepo?: PlayerRepository): Router {
   const router = Router();
 
-  const loginLimiter = rateLimit({
-    ...LOGIN_RATE_LIMIT,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: 'Too many login attempts. Please try again later.' },
-  });
+  // In local-auth / dev mode, disable rate limiting so E2E tests can register freely
+  const skipRateLimit = process.env.ALLOW_LOCAL_AUTH === 'true';
 
-  const registerLimiter = rateLimit({
-    ...REGISTER_RATE_LIMIT,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: 'Too many registration attempts. Please try again later.' },
-  });
+  const loginLimiter = skipRateLimit
+    ? (_req: Request, _res: Response, next: () => void) => next()
+    : rateLimit({
+        ...LOGIN_RATE_LIMIT,
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: { error: 'Too many login attempts. Please try again later.' },
+      });
+
+  const registerLimiter = skipRateLimit
+    ? (_req: Request, _res: Response, next: () => void) => next()
+    : rateLimit({
+        ...REGISTER_RATE_LIMIT,
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: { error: 'Too many registration attempts. Please try again later.' },
+      });
 
   router.post('/auth/register', registerLimiter, async (req: Request, res: Response) => {
     try {

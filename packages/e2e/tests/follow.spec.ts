@@ -6,13 +6,12 @@ test.describe('Follow & consent system', () => {
    * (Consent is a separate system for group membership, not required for follow.)
    */
   test('follow flow — player follows another in the same room', async ({ createPlayer }) => {
-    // Leader must be in the room for follower to see them
-    const _leader = await createPlayer('Leader');
+    const leader = await createPlayer('Leader');
     const follower = await createPlayer('Follower');
 
-    // Follower follows leader
-    await follower.sendCommand('follow Leader');
-    await follower.waitForMessage(/You begin following Leader/i);
+    // Follower follows leader (using unique character name)
+    await follower.sendCommand(`follow ${leader.name}`);
+    await follower.waitForMessage(new RegExp(`You begin following ${leader.name}`, 'i'));
   });
 
   /**
@@ -20,16 +19,15 @@ test.describe('Follow & consent system', () => {
    */
   test('consent grant and revoke flow', async ({ createPlayer }) => {
     const alice = await createPlayer('Alice');
-    // Bob must exist in the room for consent resolution
-    const _bob = await createPlayer('Bob');
+    const bob = await createPlayer('Bob');
 
     // Alice grants consent to Bob
-    await alice.sendCommand('consent Bob');
-    await alice.waitForMessage(/You grant consent to Bob/i);
+    await alice.sendCommand(`consent ${bob.name}`);
+    await alice.waitForMessage(new RegExp(`You grant consent to ${bob.name}`, 'i'));
 
     // Alice revokes consent from Bob
-    await alice.sendCommand('revoke Bob');
-    await alice.waitForMessage(/You revoke consent from Bob/i);
+    await alice.sendCommand(`revoke ${bob.name}`);
+    await alice.waitForMessage(new RegExp(`You revoke consent from ${bob.name}`, 'i'));
   });
 
   /**
@@ -41,21 +39,21 @@ test.describe('Follow & consent system', () => {
     const follower = await createPlayer('Follower');
 
     // Follower starts following leader
-    await follower.sendCommand('follow Leader');
-    await follower.waitForMessage(/You begin following Leader/i);
+    await follower.sendCommand(`follow ${leader.name}`);
+    await follower.waitForMessage(new RegExp(`You begin following ${leader.name}`, 'i'));
 
-    // Leader moves north (reliquary-commons → reliquary-catwalk-junction)
-    await leader.sendCommand('go north');
+    // Leader moves down (reliquary-inn → reliquary-inn-lobby)
+    await leader.sendCommand('go down');
 
     // Leader sees follower arrival notification
-    await leader.waitForMessage(/Follower follows you/i, { timeout: 15_000 });
+    await leader.waitForMessage(new RegExp(`${follower.name} follows you`, 'i'), { timeout: 15_000 });
 
     // Follower sees "You follow Leader." and the new room
-    await follower.waitForMessage(/You follow Leader/i, { timeout: 15_000 });
+    await follower.waitForMessage(new RegExp(`You follow ${leader.name}`, 'i'), { timeout: 15_000 });
 
     // Verify both are in the same new room — follower sends look
     await follower.sendCommand('look');
-    await follower.waitForMessage(/Leader.*is here/i, { timeout: 10_000 });
+    await follower.waitForMessage(new RegExp(`${leader.name}.*is.*here`, 'i'), { timeout: 10_000 });
   });
 
   /**
@@ -66,27 +64,27 @@ test.describe('Follow & consent system', () => {
     const follower = await createPlayer('Follower');
 
     // Follower follows, then unfollows
-    await follower.sendCommand('follow Leader');
-    await follower.waitForMessage(/You begin following Leader/i);
+    await follower.sendCommand(`follow ${leader.name}`);
+    await follower.waitForMessage(new RegExp(`You begin following ${leader.name}`, 'i'));
 
     await follower.sendCommand('unfollow');
     await follower.waitForMessage(/You stop following/i);
 
-    // Leader moves north
-    await leader.sendCommand('go north');
+    // Leader moves down
+    await leader.sendCommand('go down');
 
     // Follower should see leader's departure, NOT auto-follow
-    await follower.waitForMessage(/Leader walks north/i, { timeout: 15_000 });
+    await follower.waitForMessage(new RegExp(`${leader.name} walks down`, 'i'), { timeout: 15_000 });
 
     // Small pause for state to settle
     await follower.getPage().waitForTimeout(1000);
 
     // Follower sends look — should NOT see leader in the room
     await follower.sendCommand('look');
-    await follower.waitForMessage(/Preservation Hall|Exits:/i, { timeout: 10_000 });
+    await follower.waitForMessage(/Sleeper Cells|Exits:/i, { timeout: 10_000 });
     const messages = await follower.getMessages();
     const recentMessages = messages.slice(-10).join('\n');
-    expect(recentMessages).not.toMatch(/Leader.*is here/i);
+    expect(recentMessages).not.toMatch(new RegExp(`${leader.name}.*is.*here`, 'i'));
   });
 
   /**
@@ -95,10 +93,10 @@ test.describe('Follow & consent system', () => {
    */
   test('revoke rejects when no consent granted', async ({ createPlayer }) => {
     const alice = await createPlayer('Alice');
-    await createPlayer('Bob');
+    const bob = await createPlayer('Bob');
 
     // Try to revoke consent from Bob without having granted it
-    await alice.sendCommand('revoke Bob');
+    await alice.sendCommand(`revoke ${bob.name}`);
     await alice.waitForMessage(/haven't granted consent/i);
   });
 });

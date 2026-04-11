@@ -10,10 +10,11 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests',
-  fullyParallel: true,
+  // Multiplayer tests share a room — run serially to avoid conflicts
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1,
 
   // Generous timeout — WebSocket connections need time to establish
   timeout: 30_000,
