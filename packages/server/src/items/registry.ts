@@ -287,6 +287,107 @@ export const APOTHECARY_POUCH: ItemDefinition = {
   },
 };
 
+export const MUNITIONS_WRAP: ItemDefinition = {
+  id: 'munitions_wrap',
+  name: 'Munitions Wrap',
+  type: 'container',
+  tier: 'sturdy',
+  baseStats: {},
+  baseDurability: null,
+  weight: 1,
+  description: 'A length of oiled canvas, rolled tight and cinched with copper wire. Keeps blades dry and edges true.',
+  soulbound: false,
+  containerProperties: {
+    maxSlots: 4,
+    maxWeight: 20,
+    allowedItemTypes: ['weapon'],
+  },
+};
+
+export const IRONBOUND_COFFER: ItemDefinition = {
+  id: 'ironbound_coffer',
+  name: '[bold]Ironbound Coffer[reset]',
+  type: 'container',
+  tier: 'refined',
+  baseStats: {},
+  baseDurability: null,
+  weight: 4,
+  description: 'Heavy iron banding reinforces this salt-stained chest. Whatever it once held, it held securely. The lock has long since rusted open.',
+  soulbound: false,
+  containerProperties: {
+    maxSlots: 10,
+    maxWeight: 50,
+    carryBonus: 10,
+  },
+};
+
+export const SALVAGERS_HAVERSACK: ItemDefinition = {
+  id: 'salvagers_haversack',
+  name: "Salvager's Haversack",
+  type: 'container',
+  tier: 'refined',
+  baseStats: {},
+  baseDurability: null,
+  weight: 2,
+  description: 'Dozens of interior pockets, each sized for ore chunks and bone fragments. A salvager who knew their trade stitched this.',
+  soulbound: false,
+  containerProperties: {
+    maxSlots: 12,
+    maxWeight: 25,
+    allowedItemTypes: ['material'],
+  },
+};
+
+export const WARDENS_LOCKBOX: ItemDefinition = {
+  id: 'wardens_lockbox',
+  name: "[cyan]Warden's Lockbox[reset]",
+  type: 'container',
+  tier: 'masterwork',
+  baseStats: {},
+  baseDurability: null,
+  weight: 3,
+  description: '[dim]Rune-etched steel, cold to the touch. The interior is lined with a material that drinks light. Whatever the wardens guarded, they guarded it well.[reset]',
+  soulbound: false,
+  containerProperties: {
+    maxSlots: 12,
+    maxWeight: 60,
+    carryBonus: 15,
+  },
+};
+
+export const FLESHKNIT_SATCHEL: ItemDefinition = {
+  id: 'fleshknit_satchel',
+  name: '[magenta]Fleshknit Satchel[reset]',
+  type: 'container',
+  tier: 'masterwork',
+  baseStats: {},
+  baseDurability: null,
+  weight: 1,
+  description: '[dim]The leather breathes. Faintly. Stitched from something that was alive more recently than you\'d like, its interior shifts to accommodate whatever you feed it.[reset]',
+  soulbound: false,
+  containerProperties: {
+    maxSlots: 8,
+    maxWeight: 15,
+    allowedItemTypes: ['consumable', 'key'],
+  },
+};
+
+export const HOLLOW_OF_THE_FORGOTTEN: ItemDefinition = {
+  id: 'hollow_of_the_forgotten',
+  name: '[bold][yellow]Hollow of the Forgotten[reset]',
+  type: 'container',
+  tier: 'anomalous',
+  baseStats: {},
+  baseDurability: null,
+  weight: 0,
+  description: '[bold]It shouldn\'t be able to hold this much. The opening is no wider than your fist, yet your arm slides in to the shoulder. Things placed inside do not rattle. Things placed inside do not weigh anything at all.[reset]',
+  soulbound: false,
+  containerProperties: {
+    maxSlots: 16,
+    carryBonus: 25,
+  },
+};
+
 // ─── Warrens Items ──────────────────────────────────────────────────────────
 
 export const BENT_REBAR: ItemDefinition = {
@@ -398,6 +499,12 @@ const ALL_ITEMS: ItemDefinition[] = [
   TATTERED_SATCHEL,
   EXPEDITION_PACK,
   APOTHECARY_POUCH,
+  MUNITIONS_WRAP,
+  IRONBOUND_COFFER,
+  SALVAGERS_HAVERSACK,
+  WARDENS_LOCKBOX,
+  FLESHKNIT_SATCHEL,
+  HOLLOW_OF_THE_FORGOTTEN,
   // Warrens items
   BENT_REBAR,
   SCAVENGER_SHIV,
