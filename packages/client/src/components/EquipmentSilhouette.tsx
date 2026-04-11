@@ -19,6 +19,7 @@
 import { useState } from 'react';
 import type { EquipmentSlots, EquipmentSlotType, GearTier } from '@ellmud/shared';
 import { ItemTooltip } from './ItemTooltip.js';
+import AnsiText from './AnsiText.js';
 
 // ─── Tier → Color Mapping ───────────────────────────────────────────────────
 
@@ -150,7 +151,7 @@ export function EquipmentSilhouette({ loadout }: EquipmentSilhouetteProps) {
                         className="equipment-item-name"
                         style={{ color: tierColor }}
                       >
-                        {item.name.length > 12 ? `${item.name.slice(0, 11)}…` : item.name}
+                        <AnsiText text={item.name.length > 12 ? `${item.name.slice(0, 11)}…` : item.name} />
                       </span>
                     )}
                   </div>

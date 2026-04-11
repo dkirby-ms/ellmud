@@ -3,6 +3,8 @@
  * Displayed in the right status panel of ZoneExploration.
  */
 
+import AnsiText from './AnsiText.js';
+
 interface Creature {
   id: string;
   name: string;
@@ -67,7 +69,7 @@ export function RoomOccupants({ creatures, players }: RoomOccupantsProps) {
                 {group.aggressive ? '⚔' : '·'}
               </span>
               <span className="text-gray-300">
-                {group.name}
+                <AnsiText text={group.name} />
                 {group.count > 1 && <span className="text-gray-500"> (x{group.count})</span>}
               </span>
             </button>

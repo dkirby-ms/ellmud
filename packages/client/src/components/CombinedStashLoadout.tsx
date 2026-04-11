@@ -215,7 +215,7 @@ export default function CombinedStashLoadout({ room, inZone = false }: CombinedS
                   {/* Equipped item or empty */}
                   {item ? (
                     <span className={tierClass(item.tier)} style={{ fontSize: '0.8rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {item.name}
+                      <AnsiText text={item.name} />
                     </span>
                   ) : (
                     <span className="ansi-dim" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
@@ -300,7 +300,7 @@ export default function CombinedStashLoadout({ room, inZone = false }: CombinedS
 
                       {/* Item name with tier color */}
                       <span className={tierClass(item.tier)} style={{ fontSize: '0.8rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {item.name}
+                        <AnsiText text={item.name} />
                       </span>
 
                       {/* Weight */}
@@ -328,7 +328,7 @@ export default function CombinedStashLoadout({ room, inZone = false }: CombinedS
                     >
                       <span className="ansi-bright-cyan">◆</span>
                       <span className={tierClass(item.tier)}>
-                        {item.name}
+                        <AnsiText text={item.name} />
                       </span>
                     </div>
                   ))}
@@ -342,7 +342,7 @@ export default function CombinedStashLoadout({ room, inZone = false }: CombinedS
             <div style={{ borderTop: '1px solid #2A2B35', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
               <div className="flex items-center gap-2 mb-1">
                 <span className={`${tierClass(selectedItem.tier)}`} style={{ fontSize: '0.85rem' }}>
-                  {selectedItem.name}
+                  <AnsiText text={selectedItem.name} />
                 </span>
                 <span className="ansi-dim" style={{ fontSize: '0.7rem' }}>
                   ({selectedItem.tier})

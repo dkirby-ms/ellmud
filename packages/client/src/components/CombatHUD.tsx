@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import { Sword, Shield, Heart, Target } from 'lucide-react';
 import type { EnemyStatus } from '../store.js';
+import AnsiText from './AnsiText.js';
 
 interface CombatHUDProps {
   enemyStatus: EnemyStatus | null;
@@ -76,7 +77,7 @@ export function CombatHUD({
 
           <div className="space-y-2">
             <p className="text-text-primary text-sm font-serif">
-              {enemyStatus.name}
+              <AnsiText text={enemyStatus.name} />
             </p>
 
             {/* HP Bar with Tier */}
@@ -153,7 +154,7 @@ export function CombatHUD({
                         onTargetChange?.(target.id);
                       }}
                     >
-                      <span>{target.name}</span>
+                      <span><AnsiText text={target.name} /></span>
                       <span className="text-xs">
                         {target.maxHp > 0
                           ? `${Math.round((target.hp / target.maxHp) * 100)}%`

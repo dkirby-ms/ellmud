@@ -9,6 +9,7 @@
 
 import React, { useState, type RefObject } from "react";
 import { Sword, Bug } from "lucide-react";
+import AnsiText from "./AnsiText.js";
 import CompassControl from "./CompassControl.js";
 import { MinimapWidget, type MinimapWidgetProps } from "./map/MinimapWidget.js";
 import { EquipmentSilhouette } from "./EquipmentSilhouette.js";
@@ -352,7 +353,7 @@ function GearTab({ loadout, inventory, onOpenInventory }: GearTabProps) {
             inventory.slice(0, 5).map((item) => (
               <div key={item.id} className="flex items-center gap-2">
                 <Sword className="w-4 h-4 text-text-secondary" />
-                <span className="text-text-primary font-serif">{item.name}</span>
+                <span className="text-text-primary font-serif"><AnsiText text={item.name} /></span>
               </div>
             ))
           ) : (
