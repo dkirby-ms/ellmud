@@ -30,6 +30,7 @@ import { getConfig, ZONE_DEFAULT_MAX_PLAYERS } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence, testRedisConnection } from './cache/index.js';
 import { initStashProvider, isStashPg, loadItemDefsFromDb } from './stash/index.js';
+import { initInventoryProvider } from './inventory/index.js';
 import { initProfileProvider } from './player/index.js';
 import { initFactionProvider } from './faction/index.js';
 import { initRunHistoryProvider } from './run-history/index.js';
@@ -90,6 +91,10 @@ if (USE_PG) {
   console.log(`[Ellmud] Loaded ${count} item definitions from database.`);
 }
 console.log(`[Ellmud] Stash persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Inventory Persistence (#409) ───────────────────────────────────────────
+initInventoryProvider(USE_PG);
+console.log(`[Ellmud] Inventory persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Player Profile Persistence ─────────────────────────────────────────────
 initProfileProvider(USE_PG);

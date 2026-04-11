@@ -63,6 +63,18 @@ export interface StashEntry {
   acquired_at: Date;
 }
 
+// ─── Player Inventory (Carried Items — Issue #409) ───────────────────────────
+
+export interface PlayerInventoryRow {
+  id: string;
+  player_id: string;
+  item_id: string;
+  quantity: number;
+  durability: number | null;
+  metadata: Record<string, unknown>;
+  acquired_at: Date;
+}
+
 // ─── Skills & Progression ────────────────────────────────────────────────────
 
 export type SkillCategory =

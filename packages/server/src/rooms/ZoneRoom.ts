@@ -75,6 +75,8 @@ import { getConfig, getMaxPlayersForTier, getMaxPlayersForZone } from '../config
 import { StashService, InMemoryStashRepository, getStashRepository, getItemDefs } from '../stash/index.js';
 import type { StashRepository } from '../stash/index.js';
 import { transferInventoryToStash } from '../systems/stash-transfer.js';
+import type { PlayerInventoryRepository } from '../inventory/index.js';
+import { InMemoryPlayerInventoryRepository, getInventoryRepository, inventoryToEntries } from '../inventory/index.js';
 import { CreatureManager, DROWNED_REVENANT, type CreatureAction } from '../creatures/index.js';
 import type { CreatureWorldState } from '../creatures/behavior.js';
 import { createPRNG } from '../generator/prng.js';
@@ -147,6 +149,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
   private loadoutService?: LoadoutService;
+  private inventoryRepo: PlayerInventoryRepository = new InMemoryPlayerInventoryRepository();
+  /** Debounce timer for inventory persistence (per-player). */
+  private inventorySaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private itemDefs = new Map<string, StashItem>();
   private zoneTier: ZoneTier = 1;
   private profileRepo: PlayerProfileRepository = new InMemoryPlayerProfileRepository();
@@ -206,6 +211,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       repo ?? new InMemoryStashRepository(),
       this.itemDefs,
     );
+  }
+
+  /** Inject inventory repository for testing (#409). */
+  initInventory(repo?: PlayerInventoryRepository): void {
+    this.inventoryRepo = repo ?? new InMemoryPlayerInventoryRepository();
   }
 
   /** Inject loadout dependencies for testing. */
@@ -351,6 +361,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Initialize stash with shared provider if not already injected
     if (!this.stashService) {
       this.initStash(getStashRepository(), getItemDefs());
+    }
+
+    // Initialize inventory repo with shared provider if not already injected (#409)
+    if (this.inventoryRepo instanceof InMemoryPlayerInventoryRepository) {
+      this.inventoryRepo = getInventoryRepository();
     }
 
     // Initialize loadout with shared provider if not already injected
@@ -588,6 +603,26 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.log(`Failed to grant starter kit for ${this.playerTag(playerId)}: ${err}`);
     }
 
+    // Load persisted inventory from DB (#409)
+    try {
+      const savedItems = await this.inventoryRepo.loadInventory(this.dbPlayerId(playerId));
+      for (const entry of savedItems) {
+        for (let i = 0; i < entry.quantity; i++) {
+          playerState.addItem({
+            id: entry.itemId,
+            name: entry.name,
+            weight: entry.weight,
+            description: entry.description,
+          });
+        }
+      }
+      if (savedItems.length > 0) {
+        this.log(`Loaded ${savedItems.length} inventory item(s) for ${this.playerTag(playerId)}`);
+      }
+    } catch (err) {
+      this.log(`Failed to load inventory for ${this.playerTag(playerId)}: ${err}`);
+    }
+
     this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig())} players)`);
 
     // Send initial system narration using NarrationService (async, don't block join)
@@ -707,6 +742,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       // Persist player profile (skills, stats) before cleanup
       await this.savePlayerProfile(playerId, this.players.get(playerId)!);
 
+      // Persist player inventory before cleanup (#409)
+      await this.savePlayerInventory(playerId, this.players.get(playerId)!);
+
       // Record run (player left or timed out)
       await this.recordRunHistory(playerId, this.players.get(playerId), false);
 
@@ -772,6 +810,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     if (this.repopTimer) {
       clearInterval(this.repopTimer);
     }
+    // Clear any pending inventory save timers (#409)
+    for (const timer of this.inventorySaveTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.inventorySaveTimers.clear();
     this.log(`ZoneRoom disposed: ${this.roomId}`);
   }
 
@@ -1282,6 +1325,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Send inventory update if inventory changed during command execution
     if (player.inventory.size !== prevInventorySize) {
       this.sendInventoryUpdate(client, playerId);
+      // Debounced save to persistence (#409)
+      this.debouncedInventorySave(playerId, player);
     }
   }
 
@@ -2516,6 +2561,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
     }
 
+    // Persist inventory after death (only soulbound items remain) (#409)
+    await this.savePlayerInventory(playerId, player);
+
     // Clear equipped loadout — gear is lost on death (both in-memory and repo)
     player.equipment = undefined;
     if (this.loadoutService) {
@@ -3005,6 +3053,39 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     } catch (err) {
       this.log(`Failed to persist posture for ${this.playerTag(playerId)}: ${err}`);
     }
+  }
+
+  // ─── Inventory Persistence (#409) ─────────────────────────────────────────
+
+  /** Persist the player's current inventory to the database. */
+  private async savePlayerInventory(playerId: string, playerState: PlayerState): Promise<void> {
+    try {
+      // Cancel any pending debounced save
+      const timer = this.inventorySaveTimers.get(playerId);
+      if (timer) {
+        clearTimeout(timer);
+        this.inventorySaveTimers.delete(playerId);
+      }
+      const entries = inventoryToEntries(playerState.inventory);
+      await this.inventoryRepo.saveInventory(this.dbPlayerId(playerId), entries);
+    } catch (err) {
+      this.log(`Failed to save inventory for ${this.playerTag(playerId)}: ${err}`);
+    }
+  }
+
+  /** Debounced inventory save — coalesces rapid mutations into a single write. */
+  private debouncedInventorySave(playerId: string, playerState: PlayerState): void {
+    const existing = this.inventorySaveTimers.get(playerId);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(() => {
+      this.inventorySaveTimers.delete(playerId);
+      this.savePlayerInventory(playerId, playerState).catch((err) => {
+        this.log(`Debounced inventory save failed for ${this.playerTag(playerId)}: ${err}`);
+      });
+    }, 2000); // 2-second debounce
+
+    this.inventorySaveTimers.set(playerId, timer);
   }
 
   // ─── Run History Persistence ────────────────────────────────────────────
