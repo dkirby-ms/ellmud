@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Send, AlertCircle } from "lucide-react";
 import { getItem, createItem, updateItem, AdminAPIError } from "../../lib/admin-api";
 import AnsiPreview from "../../components/admin/AnsiPreview.js";
+import AnsiText from "../../components/AnsiText.js";
 
 type ItemType = "weapon" | "armour" | "consumable" | "material" | "tool" | "key" | "blueprint";
 type GearTier = "scrap" | "common" | "sturdy" | "refined" | "masterwork" | "anomalous";
@@ -183,7 +184,7 @@ export default function ItemsDetail() {
             className="text-[#C9A84C] text-xl"
            
           >
-            {isNew ? "New Item" : formData.name}
+            {isNew ? "New Item" : <AnsiText text={formData.name} />}
           </h1>
           {!isNew && (
             <span
@@ -470,7 +471,7 @@ export default function ItemsDetail() {
                     color: tierColors[formData.tier],
                   }}
                 >
-                  {formData.name}
+                  <AnsiText text={formData.name} />
                 </div>
                 <div
                   className="text-[#8A8B95] text-xs mb-3"

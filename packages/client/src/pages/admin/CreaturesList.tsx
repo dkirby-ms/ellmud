@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { Plus, Search, Filter, AlertCircle } from "lucide-react";
 import { listCreatures, AdminAPIError } from "../../lib/admin-api";
+import AnsiText from "../../components/AnsiText.js";
 
 type Status = "draft" | "review" | "published" | "deprecated";
 
@@ -255,7 +256,7 @@ export default function CreaturesList() {
                     className="text-[#E8E0D0] hover:text-[#C9A84C] transition-colors"
                    
                   >
-                    {creature.name}
+                    <AnsiText text={creature.name} />
                   </Link>
                 </td>
                 <td className="p-4">

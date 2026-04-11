@@ -1,4 +1,5 @@
 import { Sword, Shield, Droplet, Wrench, Key } from "lucide-react";
+import AnsiText from "./AnsiText.js";
 
 interface EquipmentSlot {
   id: string;
@@ -92,7 +93,7 @@ export default function LoadoutTab() {
                     </p>
                     {slot.equipped ? (
                       <p className="text-text-primary font-serif">
-                        {slot.equipped}
+                        <AnsiText text={slot.equipped} />
                       </p>
                     ) : (
                       <p className="text-text-disabled italic font-serif">
@@ -137,7 +138,7 @@ export default function LoadoutTab() {
                   </div>
                   {slot.equipped ? (
                     <p className="text-text-primary text-sm font-serif">
-                      {slot.equipped}
+                      <AnsiText text={slot.equipped} />
                     </p>
                   ) : (
                     <p className="text-text-disabled italic text-sm font-serif">
@@ -171,7 +172,7 @@ export default function LoadoutTab() {
                   </div>
                   {slot.equipped ? (
                     <p className="text-text-primary text-sm font-serif">
-                      {slot.equipped}
+                      <AnsiText text={slot.equipped} />
                     </p>
                   ) : (
                     <p className="text-text-disabled italic text-sm font-serif">
@@ -194,7 +195,7 @@ export default function LoadoutTab() {
                 <Key className="w-5 h-5 text-accent-gold" />
                 <div>
                   <p className="text-text-primary font-serif">
-                    Corrupted Iron Key
+                    <AnsiText text="Corrupted Iron Key" />
                   </p>
                   <p className="text-text-disabled text-xs font-sans">
                     Grants access to Tier 1 zones
