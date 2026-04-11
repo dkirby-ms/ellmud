@@ -8,6 +8,7 @@ import type { CommandResult } from '../index.js';
 import type { CommandContext } from '../index.js';
 import type { RoomFeature } from '@ellmud/shared';
 import { POSTURE_ROOM_DESCRIPTIONS, DARKNESS_MESSAGE } from '@ellmud/shared';
+import { formatPlayerLines } from './player-display.js';
 
 /** Check if a room is dark and player has no light source. */
 function isRoomDark(ctx: CommandContext): boolean {
@@ -98,20 +99,7 @@ function showFullRoom(ctx: CommandContext): CommandResult {
 
   // Other players in the room (Issue #370)
   if (ctx.otherPlayerInfo && ctx.otherPlayerInfo.length > 0) {
-    for (const p of ctx.otherPlayerInfo) {
-      if (!p.anon) {
-        const postureDesc = p.posture ? POSTURE_ROOM_DESCRIPTIONS[p.posture] : 'is here';
-        // Show follow status in room description (#403)
-        if (p.followingPlayerId) {
-          const leaderName = ctx.otherPlayerInfo.find(op => op.sessionId === p.followingPlayerId)?.name
-            ?? (p.followingPlayerId === ctx.player.sessionId ? ctx.characterName : undefined)
-            ?? 'someone';
-          lines.push(`${p.name} ${postureDesc}, following ${leaderName}.`);
-        } else {
-          lines.push(`${p.name} ${postureDesc}.`);
-        }
-      }
-    }
+    lines.push(...formatPlayerLines(ctx.otherPlayerInfo, ctx.player.sessionId, ctx.characterName));
   } else if (ctx.otherPlayersInRoom.length > 0) {
     // Fallback: legacy count-based display when detailed info unavailable
     const count = ctx.otherPlayersInRoom.length;

@@ -60,6 +60,7 @@ import { TraceSystem } from '../systems/index.js';
 import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
 import { DowningSystem, type DowningEvent } from '../systems/DowningSystem.js';
 import { CorpseSystem } from '../systems/CorpseSystem.js';
+import { GroupManager } from '../systems/GroupManager.js';
 import { type DeathPenaltyStore, getDeathPenaltyStore } from '../systems/index.js';
 import { type MetricsService, getMetricsService } from '../metrics/index.js';
 import {
@@ -138,6 +139,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private traceSystem!: TraceSystem;
   private awarenessSystem!: AwarenessSystem;
   private downingSystem!: DowningSystem;
+  private groupManager!: GroupManager;
   private corpseSystem!: CorpseSystem;
   private narrationService!: NarrationService;
   private deathPenaltyStore!: DeathPenaltyStore;
@@ -338,6 +340,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Initialize downing system (GDD §6.4 — bleed-out timers, stabilization)
     this.downingSystem = new DowningSystem();
+    // Initialize group manager (#403 Phase 3)
+    this.groupManager = new GroupManager();
     this.deathPenaltyStore = getDeathPenaltyStore();
     this.metricsService = getMetricsService();
 
@@ -717,6 +721,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
     // Clean up follow relationships on disconnect (#403)
     this.cleanupFollowRelationships(playerId);
+    // Clean up group membership on disconnect (#403 Phase 3)
+    // If leader disconnects → group disbands; otherwise member is removed.
+    this.cleanupGroupMembership(playerId);
     this.playerIds.delete(client.sessionId);
     this.log(`Player ${this.playerTag(playerId)} left (${this.state.playerCount} players)`);
   }
@@ -1190,6 +1197,42 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
     }
 
+    // Group system: handle group events and gsay broadcasts (#403 Phase 3)
+    const groupEvent = (result as import('../commands/index.js').CommandResult & {
+      _groupEvent?: { type: string; groupId: string; memberIds?: string[]; targetId?: string; message: string };
+    })._groupEvent;
+    if (groupEvent) {
+      const targetIds = groupEvent.memberIds ?? [];
+      for (const memberId of targetIds) {
+        if (memberId === playerId) continue;
+        const memberClient = this.findClient(memberId);
+        if (memberClient) {
+          this.sendNarrate(memberClient, {
+            text: groupEvent.message,
+            type: 'system',
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
+
+    const gsay = (result as import('../commands/index.js').CommandResult & {
+      _gsay?: { groupId: string; senderId: string; senderName: string; message: string; memberIds: string[] };
+    })._gsay;
+    if (gsay) {
+      for (const memberId of gsay.memberIds) {
+        if (memberId === playerId) continue;
+        const memberClient = this.findClient(memberId);
+        if (memberClient) {
+          this.sendNarrate(memberClient, {
+            text: `[Group] ${gsay.senderName} says: ${gsay.message}`,
+            type: 'speech',
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
+
     // Social commands (say, emote) broadcast to all players in the same room
     // Whisper is handled separately with targeted delivery
     const isSocialBroadcast = verb === 'say' || verb === 'emote';
@@ -1294,6 +1337,13 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         }
         return undefined;
       },
+      resolvePlayerById: (sessionId: string) => {
+        const ps = this.players.get(sessionId);
+        if (!ps) return undefined;
+        const charName = this.characterNames.get(sessionId) ?? 'Unknown';
+        return { player: ps, characterName: charName };
+      },
+      groupManager: this.groupManager,
     };
   }
 
@@ -1501,6 +1551,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       if (!followerState) continue;
       // Only move followers who are in the same room the leader left
       if (followerState.currentRoomId !== fromRoomId) continue;
+      // Skip downed/dead followers — they can't move (#412)
+      if (this.downingSystem.isPlayerDowned(followerId)) continue;
 
       const followerPreviousRoom = followerState.currentRoomId;
       followerState.currentRoomId = toRoomId;
@@ -1602,6 +1654,59 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           });
         }
       }
+    }
+  }
+
+  /**
+   * Clean up group membership when a player disconnects or leaves (#403 Phase 3).
+   * If the departing player was the leader, the entire group disbands.
+   * If they were a regular member, they're removed and members are notified.
+   */
+  private cleanupGroupMembership(playerId: string): void {
+    const result = this.groupManager.handlePlayerLeave(playerId);
+    if (!result) return;
+
+    const playerName = this.characterNames.get(playerId) ?? 'Someone';
+
+    if (result.disbanded) {
+      // Leader left or group too small — notify all remaining members
+      for (const member of result.members) {
+        if (member.sessionId === playerId) continue;
+        const memberPlayer = this.players.get(member.sessionId);
+        if (memberPlayer) {
+          memberPlayer.groupId = null;
+        }
+        const memberClient = this.findClient(member.sessionId);
+        if (memberClient) {
+          this.sendNarrate(memberClient, {
+            text: `${playerName} has left. The group has been disbanded.`,
+            type: 'system',
+            timestamp: Date.now(),
+          });
+        }
+      }
+    } else {
+      // Regular member left — notify remaining group members
+      const group = this.groupManager.getGroup(result.members[0]?.sessionId ?? '');
+      if (group) {
+        for (const member of group.members.values()) {
+          if (member.sessionId === playerId) continue;
+          const memberClient = this.findClient(member.sessionId);
+          if (memberClient) {
+            this.sendNarrate(memberClient, {
+              text: `${playerName} has left the group.`,
+              type: 'system',
+              timestamp: Date.now(),
+            });
+          }
+        }
+      }
+    }
+
+    // Clear groupId on the departing player's state (if still available)
+    const departingPlayer = this.players.get(playerId);
+    if (departingPlayer) {
+      departingPlayer.groupId = null;
     }
   }
 
@@ -2258,6 +2363,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private async handlePlayerDeath(playerId: string, playerName: string, roomId: string, killerIds?: string[]): Promise<void> {
     const player = this.players.get(playerId);
     if (!player) return;
+
+    // Break follow relationships on death (#413)
+    this.cleanupFollowRelationships(playerId);
+    // Break group membership on death (#403 Phase 3)
+    this.cleanupGroupMembership(playerId);
 
     const room = this.roomGraph.rooms.get(roomId);
 

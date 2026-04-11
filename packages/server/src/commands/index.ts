@@ -42,6 +42,8 @@ import { handleFlag } from './handlers/flag.js';
 import { handleStand, handleSit, handleCrouch, handleProne, handleRecline } from './handlers/posture.js';
 import { handleFollow, handleUnfollow } from './handlers/follow.js';
 import { handleConsent, handleUnconsent } from './handlers/consent.js';
+import { handleGroup, handleGsay } from './handlers/group.js';
+import type { GroupManager } from '../systems/GroupManager.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -140,6 +142,10 @@ export interface CommandContext {
   resolveZoneExists?: (slug: string) => boolean;
   /** Resolve a connected player by character name (dev tools). */
   resolvePlayerByName?: (name: string) => { sessionId: string; player: PlayerState; characterName: string } | undefined;
+  /** Resolve a connected player by session ID (#403 Phase 3). */
+  resolvePlayerById?: (sessionId: string) => { player: PlayerState; characterName: string } | undefined;
+  /** Group manager for group commands (#403 Phase 3). */
+  groupManager?: GroupManager;
 }
 
 export type CommandHandler = (ctx: CommandContext) => CommandResult;
@@ -209,6 +215,8 @@ handlers.set('unfollow', handleUnfollow);
 handlers.set('consent', handleConsent);
 handlers.set('unconsent', handleUnconsent);
 handlers.set('revoke', handleUnconsent);
+handlers.set('group', handleGroup);
+handlers.set('gsay', handleGsay);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(

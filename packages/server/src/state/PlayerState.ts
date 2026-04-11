@@ -66,6 +66,10 @@ export class PlayerState {
   /** Set of player IDs (character IDs) this player has granted consent to. */
   readonly consentedPlayers = new Set<string>();
 
+  // ─── Group System (#403 Phase 3) ──────────────────────────────────────
+  /** Group ID this player belongs to, or null. */
+  groupId: string | null = null;
+
   constructor(
     sessionId: string,
     startRoomId: string,
