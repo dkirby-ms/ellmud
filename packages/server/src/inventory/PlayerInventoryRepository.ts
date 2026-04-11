@@ -127,6 +127,11 @@ export function inventoryToEntries(
 ): InventoryItemEntry[] {
   const entries: InventoryItemEntry[] = [];
   for (const [, entry] of inventory) {
+    const metadata: Record<string, unknown> = {};
+    // Persist container contents in metadata if present
+    if ('containerContents' in entry.item && Array.isArray(entry.item.containerContents)) {
+      metadata.containerContents = entry.item.containerContents;
+    }
     entries.push({
       itemId: entry.item.id,
       name: entry.item.name,
@@ -134,7 +139,7 @@ export function inventoryToEntries(
       description: entry.item.description,
       quantity: entry.quantity,
       durability: null,
-      metadata: {},
+      metadata,
     });
   }
   return entries;

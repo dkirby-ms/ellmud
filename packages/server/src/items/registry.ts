@@ -235,6 +235,58 @@ export const CRYPT_KEY_FRAGMENT: ItemDefinition = {
   soulbound: false,
 };
 
+// ─── Containers ─────────────────────────────────────────────────────────────
+
+export const TATTERED_SATCHEL: ItemDefinition = {
+  id: 'tattered_satchel',
+  name: 'Tattered Satchel',
+  type: 'container',
+  tier: 'scrap',
+  baseStats: {},
+  baseDurability: null,
+  weight: 1,
+  description: 'A worn leather satchel with fraying straps. Holds a few small items.',
+  soulbound: false,
+  containerProperties: {
+    maxSlots: 4,
+    maxWeight: 10,
+  },
+};
+
+export const EXPEDITION_PACK: ItemDefinition = {
+  id: 'expedition_pack',
+  name: 'Expedition Pack',
+  type: 'container',
+  tier: 'common',
+  baseStats: {},
+  baseDurability: null,
+  weight: 2,
+  description: 'A sturdy canvas pack issued to expeditioners. Increases carrying capacity.',
+  soulbound: false,
+  containerProperties: {
+    maxSlots: 8,
+    maxWeight: 30,
+    carryBonus: 5,
+  },
+};
+
+export const APOTHECARY_POUCH: ItemDefinition = {
+  id: 'apothecary_pouch',
+  name: "Apothecary's Pouch",
+  type: 'container',
+  tier: 'sturdy',
+  baseStats: {},
+  baseDurability: null,
+  weight: 0.5,
+  description: 'A small padded pouch designed for carrying potions and salves safely.',
+  soulbound: false,
+  containerProperties: {
+    maxSlots: 6,
+    maxWeight: 8,
+    allowedItemTypes: ['consumable'],
+  },
+};
+
 // ─── Warrens Items ──────────────────────────────────────────────────────────
 
 export const BENT_REBAR: ItemDefinition = {
@@ -342,6 +394,10 @@ const ALL_ITEMS: ItemDefinition[] = [
   TARNISHED_AMULET,
   DROWNED_OFFERING,
   CRYPT_KEY_FRAGMENT,
+  // Containers
+  TATTERED_SATCHEL,
+  EXPEDITION_PACK,
+  APOTHECARY_POUCH,
   // Warrens items
   BENT_REBAR,
   SCAVENGER_SHIV,
