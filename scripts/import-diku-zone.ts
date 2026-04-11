@@ -8,8 +8,8 @@
  *   npx tsx scripts/import-diku-zone.ts <path-to-wld-file> [zone-slug] [zone-name]
  *
  * Examples:
- *   npx tsx scripts/import-diku-zone.ts scripts/midgaard.wld
- *   npx tsx scripts/import-diku-zone.ts scripts/midgaard.wld midgaard "Midgaard City"
+ *   npx tsx scripts/import-diku-zone.ts zones/myzone.wld
+ *   npx tsx scripts/import-diku-zone.ts zones/myzone.wld myzone "My Zone Name"
  *
  * Output: Writes a `.sql` file to stdout (redirect to save).
  *
@@ -498,8 +498,8 @@ function main(): void {
     console.error('Usage: npx tsx scripts/import-diku-zone.ts <path-to-wld-file> [zone-slug] [zone-name]');
     console.error('');
     console.error('Examples:');
-    console.error('  npx tsx scripts/import-diku-zone.ts scripts/midgaard.wld');
-    console.error('  npx tsx scripts/import-diku-zone.ts scripts/midgaard.wld midgaard "Midgaard City"');
+    console.error('  npx tsx scripts/import-diku-zone.ts zones/myzone.wld');
+    console.error('  npx tsx scripts/import-diku-zone.ts zones/myzone.wld myzone "My Zone Name"');
     process.exit(1);
   }
 
