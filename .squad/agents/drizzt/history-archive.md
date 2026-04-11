@@ -1,10 +1,3 @@
-# drizzt — History
-
-**For a quick overview, see [summary.md](./summary.md)**
-
----
-
-
 ## Project Context
 
 - **Project:** Ellmud — PvPvE Extraction RPG / Real-Time MUD
@@ -13,51 +6,8 @@
 - **User:** dkirby-ms
 - **GDD:** GDD.md (comprehensive design document covering all game systems, architecture frozen 2026-03-19)
 
-## Core Context (Phase 1 Foundation — Completed)
-
-**Completed work (high-level summary):**
-- ✅ Repository provisioning: 49 issues (#1–#49) across 4 phases, 16 labels, 4 milestones
-- ✅ Stash persistence: InMemoryStashRepository, weight-based capacity (200 units default), 43 tests
-- ✅ Extraction mechanic: 5-tick channeled escape, command locks, noise generation, 30 tests
-- ✅ Room graph generation: Jarlaxle completed (6 files, 101 tests, Flooded Crypt biome)
-- ✅ Combat system: Jarlaxle completed (strike/dodge/flee, 1s tick loop, 32 tests)
-- ✅ Auth system: PostgreSQL schema, bcrypt + JWT, optional by default
-- ✅ Narration pipeline: LLM + in-memory cache + template fallbacks
-- ✅ Web client: React terminal, message protocol, 44 tests
-- ✅ Type declarations: `.d.ts` pattern for Vite/vitest (import.meta, jest-dom)
-- ✅ CI/CD: GitHub Actions, OIDC Azure login, `az acr build`, revision-based rollback
-- ✅ Bicep IaC: Two-phase deployment (Environment → Redis → Game Server)
-- ✅ Admin dashboard: Express routes + SSE + separate ADMIN_TOKEN
-
-**All 552 server tests passing, zero regressions.**
-
----
 
 ## Recent Team Work
-
-### 2026-04-10: Issue Triage Session — Elminster Orchestrated
-**Status:** ✅ Complete — 3 issues triaged and routed  
-**Issues assigned to Drizzt:**
-- **Issue #402** — Illumination & Visibility System (Phase 2: PlayerState vision flags, combat integration)
-- **Issue #403** — Player Groups/Consent/Follow (Phase 1+2: PlayerState fields, command handlers, movement hooks)
-- **Issue #404** — Status Panel Tab Redesign (Prerequisite: posture sync to PlayerStateMessage)
-
-**Design briefs:** 3 architectural decision documents posted to GitHub + merged to .squad/decisions/decisions.md
-
-**Next:** Coordinate with Jarlaxle (illumination Phase 1) and Regis (panel extraction) on implementation sequencing.
-### Implementation Batch: Posture + Follow + StatusPanel + Illumination (2026-04-10) — Team sync
-**Team Effort:** Drizzt (PR #406 + #408), Regis (PR #405), Jarlaxle (PR #407), Minsc (research)  
-**Status:** ✅ Complete — All PRs opened, orchestration logs generated  
-**Deliverables:**
-- Drizzt: Posture system (PlayerStateMessage wiring) + Follow+Consent (5 commands, 37 tests, auto-follow, consent v1)
-- Regis: StatusPanel tabs (234-line extraction, 3-tab layout, graceful posture fallback)
-- Jarlaxle: Illumination system (zone_rooms column, look/go/goto gating, dark room mechanics)
-- Minsc: Speedwalk research (root cause analysis, 5 fix approaches, reproduction tests)
-**Decisions:** 6 team decisions merged to decisions.md with full context and team impact
-**Impact:** Foundation for Phase 3 (Groups) and Phase 4 (Combat Rewards). Speedwalk fix ready for implementation.
-**Tests:** All passing, zero regressions
-
----
 
 ### OAuth Username Integration (2026-04-05) — Coordinated with Regis & Minsc
 **Team Effort:** Drizzt (backend), Regis (frontend), Minsc (tests)  
@@ -66,6 +16,7 @@
 **Tests:** 2521 passing, +5 new tests for OAuth username callback and store actions
 
 ---
+
 
 ## Recent Work
 
@@ -134,6 +85,7 @@
 
 ---
 
+
 ## Cross-Team Updates (2026-03-19T22:30)
 
 ### Static File Serving Pattern Documented
@@ -149,6 +101,7 @@
 - Any new UI work must use these design tokens; old cyan palette is deprecated
 
 ---
+
 
 ## Learnings (Archived — See Detailed Session Records)
 
@@ -186,6 +139,7 @@
 
 ---
 
+
 ## Wave 2 Work
 
 ### 2026-03-23: PR #118 (Sound Propagation System) Fixes & Merge
@@ -213,6 +167,7 @@
 - Modifiers (heavy_door, cavern, water) now function as designed in GDD §12
 
 ---
+
 
 ## Cross-Team Updates (2026-03-19T22:30)
 
@@ -259,6 +214,7 @@
 - `FOR UPDATE` row locking in stash operations to prevent race conditions
 - JSONB metadata column for extensible item properties (maxDurability now, roll data later)
 - `DATABASE_URL` as the single toggle between in-memory and PG persistence
+
 ## Cross-Team Updates (Wave 2 completion — 2026-03-20T18:38)
 
 ### Minsc Built 125 Contract Tests — Ready for PG Validation
@@ -294,6 +250,7 @@
 - Env var precedence: `REDIS_CONNECTION_STRING` > `REDIS_URL` > `redis://localhost:6379`
 - Two-toggle design: cache and presence are independently configurable (Phase 1 can enable cache without presence)
 
+
 ## Learnings
 
 ### Redis Presence Dynamic Import Pattern
@@ -310,6 +267,7 @@
 - **Package:** `@colyseus/redis-presence@0.17.6`
 - **Constructor:** Accepts `string | number | RedisOptions | ClusterNode[]` — connection string works directly
 - **Internals:** Creates two ioredis clients (pub + sub) internally for Pub/Sub presence. The `shutdown()` method cleanly disconnects both
+
 ## Wave 3 Complete — Redis Container Integration (2026-03-20T20:21:36Z)
 
 ### Redis Container Setup — PR #78
@@ -357,6 +315,7 @@
 - **Why:** The shardboard needs authoritative, up-to-date joinability checks (open lifecycle + player count) without leaking Schema state to clients.
 - **Guard:** When extraction removes a player before `onLeave`, skip the second decrement by checking `players.has(sessionId)` so shard player counts stay accurate.
 
+
 ## Wave 4b Completion — All Phase 1 Server Issues Closed (2026-03-20T22:11Z)
 
 **Status:** ✅ Complete  
@@ -401,6 +360,7 @@ All 8 server issues closed. Ready for Phase 1 Client UI batch (#66–#75) or Pha
 - **PR:** #84 → dev
 
 ---
+
 
 ## Wave 5 Cross-Team Client UI Batch Context (2026-03-20T23:27:56Z)
 
@@ -462,6 +422,7 @@ All 8 server issues closed. Ready for Phase 1 Client UI batch (#66–#75) or Pha
 - **Fix:** Always verify `git branch --show-current` immediately before committing. When cherry-pick conflicts arise, recreate files directly on the target branch instead.
 - **Pattern:** For clean PRs from dev, always: `git checkout dev && git checkout -b squad/XX-slug`, verify branch name, create/edit files, commit.
 
+
 ## Wave 6 — Phase 1 Client UI Batch Continued
 
 **Status:** ✅ Complete — Reconnection Overlay (#70, PR #88) + Loading & Transition States (#71, PR #89) merged to dev
@@ -496,6 +457,7 @@ Wave 6 delivered final 2 critical client UI foundation components. Reconnection 
 
 Wave 7 will deliver final 3 client UI issues (#68, #72, #73) using locked anticipatory test contracts. Your reconnection and loading state infrastructure will support all remaining pages.
 
+
 ## Wave 7 — Extraction Screen (2026-03-21)
 
 ### Extraction Screen — PR #92
@@ -511,6 +473,7 @@ Wave 7 will deliver final 3 client UI issues (#68, #72, #73) using locked antici
 5. **52 tests** covering all phases, tier colors, accessibility, edge cases
 
 ---
+
 
 ## 2026-03-21T15:09:00Z: Docker Port Isolation & Orchestration Complete
 
@@ -538,6 +501,7 @@ Wave 7 will deliver final 3 client UI issues (#68, #72, #73) using locked antici
 - Session log written to .squad/log/2026-03-21T15-09-aca-fix-docker-ports.md
 
 ---
+
 
 ## 2026-03-21T15:45:00Z: PostgreSQL Startup Resilience
 
@@ -581,6 +545,7 @@ Wave 7 will deliver final 3 client UI issues (#68, #72, #73) using locked antici
 - ExtractionOverlay driven by extraction_state messages (started/progress/completed/interrupted)
 - Combat action bar disables buttons while pendingCombatAction is set, shows real tick count
 - Command input disabled when connectionStatus !== 'connected'
+
 
 ## Learnings
 
@@ -713,6 +678,7 @@ Properties (heavy_door, cavern, water) were silently lost at three layers:
 
 ---
 
+
 ## Wave 2 Complete — All Issues Shipped (2026-03-23)
 
 **Status:** ✅ Complete — PR #119 merged to dev, dev → uat promotion (PR #120) complete
@@ -746,6 +712,7 @@ Properties (heavy_door, cavern, water) were silently lost at three layers:
 
 ---
 
+
 ## PR #122 Fix — Shard-Sickness + PvPKillEvent (2026-03-23)
 
 **Branch:** `feat/pvp-combat` (commit 72c2b76)
@@ -764,6 +731,7 @@ Also added PvP-specific death narration and imported `PvPKillEvent`/`SHARD_SICKN
 
 
 ---
+
 
 ## Phase 2: Feature Implementation & Fixes (2026-03-23)
 
@@ -794,6 +762,7 @@ Also added PvP-specific death narration and imported `PvPKillEvent`/`SHARD_SICKN
 - ✅ PR #126 (dev → uat) created for QA validation
 
 ---
+
 
 ## Phase 2.5: Admin Panel Wiring (2026-03-23)
 
@@ -896,6 +865,7 @@ PHASE 4 (Polish):
 
 ---
 
+
 ## Cross-Team Update (2026-03-23T19:15Z)
 
 ### User Directives Captured
@@ -922,6 +892,7 @@ Two critical directives require changes to PR #141:
 3. Coordinate with Minsc: OAuth implementation may require new auth test patterns
 4. ~~Update PR #141 description to note PostgreSQL + OAuth requirements~~ ✅ Done
 
+
 ## Learnings
 
 ### PostgreSQL Content Store (PR #141 revision — 2026-03-24)
@@ -943,6 +914,7 @@ Two critical directives require changes to PR #141:
 **User preference:** No statically defined assets in production. Static registries can remain for backward compat but are NOT the source of truth when DATABASE_URL is set.
 
 ---
+
 
 ## Creatures Admin Wiring (#128) — 2026-03-24
 
@@ -1021,6 +993,7 @@ All changes verified with `npx tsc --noEmit` (zero errors).
 - Test create/edit/save flows
 - Verify error handling
 - Consider adding success toast notifications (future enhancement)
+
 ## Issue #130 - Wire BiomesList & BiomesDetail to Content CRUD API (2025-01-21)
 
 ### Task
@@ -1084,6 +1057,7 @@ Wire the BiomesList and BiomesDetail admin pages to the real Content CRUD API en
 - Array editors in forms need careful state management (`updateArrayItem`, `removeArrayItem`, `addArrayItem`)
 - localStorage token pattern works but is Phase 1 — production will need secure auth flow
 
+
 ## Wave 1 Admin Wiring (2026-03-23T19:45Z)
 
 ### Cross-Team Coordination Note
@@ -1120,6 +1094,7 @@ Wire the BiomesList and BiomesDetail admin pages to the real Content CRUD API en
 
 
 
+
 ## Wave 2 Admin Wiring: Biomes (2026-03-23T20:00Z)
 
 ### PR #144: BiomesList & BiomesDetail Wiring
@@ -1138,6 +1113,7 @@ Wire the BiomesList and BiomesDetail admin pages to the real Content CRUD API en
 - Pattern: Early return with error state if validation fails
 
 **Status:** Awaiting fix implementation.
+
 
 
 ## Learnings
@@ -1173,6 +1149,7 @@ Wire the BiomesList and BiomesDetail admin pages to the real Content CRUD API en
 
 
 ---
+
 
 ## 2026-03-23: Milestone — Entity Wiring Complete (PR #145 Fixes + Merge)
 
@@ -1223,6 +1200,7 @@ This pattern can be reused for other storage-backend abstractions in the codebas
 
 **Verification:** Client type check clean (no new errors). All 1443 server tests pass. Zero production risk — hook gates on `import.meta.env.DEV` which is `false` in production builds.
 
+
 ## 2026-03-24: Dev Auto-Login Hook Wired Up
 
 **Timestamp:** 2026-03-24T12:10:00Z  
@@ -1235,6 +1213,7 @@ Investigated local dev login friction where developers were forced to manually l
 - `packages/client/src/pages/Login.tsx` — added hook call
 
 **Impact:** Dev users now auto-login with `dev/devdev` credentials when running locally.
+
 
 
 ## 2026-03-24: Redis ETIMEDOUT Crash Fix — Pre-Validation Probe
@@ -1291,6 +1270,7 @@ Updated `createPresence()` and the RedisDriver init in `index.ts` to probe conne
 
 **Phase 1 Status on Auth/Engine:** ✅ Production-ready (server-authoritative, anti-cheat hardened, deterministic combat). Auth rate limiting needed for Phase 2 security.
 
+
 ## Learnings
 
 ### ACA Redis Add-on Migration (2026-03-24)
@@ -1320,6 +1300,7 @@ Updated `createPresence()` and the RedisDriver init in `index.ts` to probe conne
 **Pattern:** Client env vars must use the `VITE_` prefix to be exposed via `import.meta.env`. The `VITE_ALLOW_LOCAL_AUTH` var is checked as a string comparison (`=== 'false'`) since env vars are always strings. Default behavior (var unset) is to allow local auth + dev auto-login.
 
 ---
+
 
 ## Session: Fix auth bypass in local dev (2025-07-24)
 
@@ -1452,6 +1433,7 @@ Combined effect: auth was completely invisible in local development. Broken auth
 
 ---
 
+
 ## 2026-03-25 — Entra OAuth Fix Deployment Complete
 
 **Status:** Deployed to origin/dev  
@@ -1468,6 +1450,7 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - Be ready to troubleshoot deployment-specific issues (env var passing, DNS, etc.)
 
 ---
+
 
 ## 2026-03-25 — Phase 2 Backlog: Rate Limiting + Azure Transport Tests
 
@@ -1498,11 +1481,13 @@ Combined effect: auth was completely invisible in local development. Broken auth
 
 **Key decision:** Moved rate limiters from module-level singletons into `createAuthRouter()` to prevent shared state between test suites. Each Express app instance gets fresh rate limit counters.
 
+
 ## Learnings
 
 - **express-rate-limit v7+ uses standardHeaders by default** — set `legacyHeaders: false` to avoid duplicate X-RateLimit-* headers alongside the new RateLimit-* standard headers.
 - **Module-level middleware singletons cause cross-test contamination** — rate limiters (or any stateful middleware) must be instantiated per-router when tests create multiple Express app instances. Factory-inside-factory pattern solves this cleanly.
 - **fetch interception for transport tests** — overriding `globalThis.fetch` in test scope lets you validate URL construction, headers, and request shape without hitting a real endpoint. Always restore in `finally` block.
+
 
 ## Cross-Agent Notice: ShardRoom Identity Keying (Jarlaxle #197)
 
@@ -1523,6 +1508,7 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - Issue #197, PR #200 (staged)
 - Decision: `.squad/decisions/decisions.md` (2026-03-25 entry)
 - Tests validate reconnection recovery, stash persistence, combat continuity
+
 
 ## Cross-Agent Notice: Player Identity Handoff Bug (Elminster Investigation)
 
@@ -1564,6 +1550,7 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - Compass reads reactive state from `useAppContext()` — updates automatically on room change
 - Available exits styled with `--interactive` (teal), hover `--accent-gold`; unavailable at `opacity-30` + disabled
 - Compact `max-w-[9rem]` fits the 30% sidebar without overflow
+
 ## 2026-03-25 — Fix Missing `agility` on CombatStats Objects
 
 **Status:** Committed to dev (local)
@@ -1577,6 +1564,7 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - `drowned-revenant.ts` line 19: added `agility: 3` (low-tier creature, matches its defensive stat level)
 
 **Verification:** Build clean, all 1659 tests pass (68 files).
+
 
 ## Learnings
 
@@ -1606,6 +1594,7 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - `packages/client/src/pages/ShardExploration.tsx` — Shard narrative terminal
 - `packages/client/src/pages/Refuge.tsx` — Refuge chat terminal
 - `packages/client/src/components/ChatPanel.tsx` — Social chat terminal
+
 
 ## 2026-03-25: Terminal Aesthetic Implementation (Completed)
 
@@ -1708,6 +1697,7 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - `VisibleEquipment` is a simple optional-fields interface (`weapon?`, `armour?`, `tier?`). Store as JSONB, treat empty `{}` as undefined on load.
 - Profile data that isn't skill-based (maxCarryWeight, equipment) belongs in a dedicated table, not shoehorned into player_skills.
 
+
 ## Learnings
 
 ### 2026-07-24: Double-Join Fix (Presence Flickers Bug)
@@ -1744,6 +1734,7 @@ Combined effect: auth was completely invisible in local development. Broken auth
 7. **Starter kit** — New characters get Rusty Blade + Tattered Leather + Waterlogged Potion from item_definitions. Graceful skip if items don't exist.
 8. **44 new tests** — name validation (16), InMemory repo (15), PgRepo mocked (9), starter kit (4).
 
+
 ## Learnings
 
 - Character name uniqueness uses `lower(name)` in the partial unique index for case-insensitive matching without application-level checks.
@@ -1754,6 +1745,7 @@ Combined effect: auth was completely invisible in local development. Broken auth
 - When committing in a shared worktree, always `git add` only your files — other agents may have staged changes that would get swept into your commit.
 
 ---
+
 
 ## Session: Content Store Migration Phase 1 (2026-03-26T16:17:14Z)
 
@@ -1799,6 +1791,7 @@ Combined effect: auth was completely invisible in local development. Broken auth
 
 ---
 
+
 ## Orchestration Session — Migration 024 & Init Annotation (2026-03-26T16:34:12Z)
 
 **Session Context:** Multi-agent batch completion for Phase 2 content store finalization.
@@ -1831,6 +1824,7 @@ Combined effect: auth was completely invisible in local development. Broken auth
 
 
 ---
+
 
 ## Phase 2 Content Store Consolidation — Faction Dual-Table Resolution (2026-03-26T17:05:28Z)
 
@@ -1866,6 +1860,7 @@ When a game table already exists with relational structure and FK constraints (l
 
 ---
 
+
 ## Zone Type System + Zone-to-RoomGraph Adapter (2026-03-26)
 
 **Task:** Create shared zone types and a zone-to-RoomGraph adapter for hand-crafted authored zones.
@@ -1890,6 +1885,7 @@ When a game table already exists with relational structure and FK constraints (l
 - `ZoneDefinition` includes `biome: BiomeType` so the adapter produces fully valid `RoomGraph` (biome is required by the shared interface).
 - Zone `tier` is `number` (flexible for authored content), clamped to `ShardTier` (1|2|3) in the adapter.
 - Zone types reuse shared room-graph types (LootContainer, HazardPlaceholder, RoomProperty) rather than defining parallel types, ensuring zones flow through the same shard infrastructure without adaptation.
+
 
 ## Phase B — ShardRoom Polymorphism + Repop System + Inter-Zone Exits
 
@@ -1958,6 +1954,7 @@ When a game table already exists with relational structure and FK constraints (l
 - Server-side `RoomGraph.ts` has a LOCAL duplicate of RoomType that must stay in sync with `@ellmud/shared`
 - Biome files (e.g., flooded-crypt.ts) use `Record<RoomType, ...>` — expanding RoomType requires adding placeholder entries to all biome files
 
+
 ## 2026-03-27T11:55Z: Feature Room Types Decision Archived
 
 **What:** Feature Room Types implementation decision formally filed in `.squad/decisions/decisions.md`.
@@ -1967,6 +1964,7 @@ When a game table already exists with relational structure and FK constraints (l
 **Files Referenced:** packages/shared/src/room-graph.ts, packages/server/src/db/RoomGraph.ts, biome templates
 
 **Status:** Complete. Feature room type discriminant and type guards are canonical and referenced in Phase 1 zone unification work.
+
 
 ## 2025-07-24: Phase A2+A3+A4 — Command Handlers, CommandContext Extension, Feature-Gating
 
@@ -1991,6 +1989,7 @@ When a game table already exists with relational structure and FK constraints (l
 - CommandHandler type is synchronous — async service integration happens at room level (RefugeRoom), not in command handlers
 - Feature-gate middleware uses a separate Map from the standard handlers registry, checked first in handleCommand()
 - StashService and LoadoutService both have getXxxSummary(playerId) async methods for narration text
+
 
 ## Phase A Complete (2026-03-27T13:04)
 
@@ -2081,6 +2080,7 @@ When a game table already exists with relational structure and FK constraints (l
 6. **D3 — Exploration provider init** (`index.ts`): Added `initExplorationProvider(USE_PG)` at server boot alongside other providers.
 7. **Test updates**: Updated room-switching.test.ts (4 assertions) and player-death.test.ts (2 assertions) to expect `'zone:the-refuge'` instead of `'refuge'`.
 
+
 ## Learnings
 
 - `getZoneContentStore` does not exist; zones are accessed via `getZoneRepository()` from `../zones/index.js` which has `getAllZones()` returning `ZoneDefinition[]` with `.slug` field.
@@ -2089,6 +2089,7 @@ When a game table already exists with relational structure and FK constraints (l
 - The exploration provider follows the same lazy-init singleton pattern as all other providers (stash, profile, faction, etc.).
 
 **Verification:** Build clean. 2243 tests passing (101 files), 0 regressions.
+
 
 ## 2026-03-27T15:39Z — Phase C+D Complete
 
@@ -2123,12 +2124,14 @@ When a game table already exists with relational structure and FK constraints (l
 
 **Build verification:** 0 non-test compilation errors. 6 test-file errors remain (all in `__tests__/`) — Minsc is handling those in parallel.
 
+
 ## Learnings
 
 - After deleting a module, always grep non-test source for both the class name AND the state class (RefugeRoom + RefugeState) to catch stale references.
 - Comment-only cleanups are worth doing during dead-code removal — stale references in comments create confusion during future code archaeology.
 
 ---
+
 
 ## 2026-03-27T16:04Z — Phase E Complete + Unified Room Architecture Achieved
 
@@ -2175,6 +2178,7 @@ Zone engine now has a single, unified room abstraction (ShardRoom) replacing the
 
 ---
 
+
 ## Learnings
 
 ### PostgreSQL ON CONFLICT Syntax
@@ -2200,6 +2204,7 @@ Zone engine now has a single, unified room abstraction (ShardRoom) replacing the
 
 ---
 
+
 ## Team Sync: 2026-03-27T17:40:16Z
 
 **Regis (Frontend Dev) completed death navigation fixes simultaneously:**
@@ -2222,6 +2227,7 @@ Zone engine now has a single, unified room abstraction (ShardRoom) replacing the
 5. Stability bar/collapse timer deprecation (user directive via Regis)
 
 ---
+
 
 ## Session: Add Exploration Message Types
 
@@ -2251,6 +2257,7 @@ Zone engine now has a single, unified room abstraction (ShardRoom) replacing the
 
 ---
 
+
 ## Team Sync — 2026-03-27T19:11:50Z (Exploration Phase Complete)
 
 ### Phase Completion
@@ -2273,6 +2280,7 @@ All 13 plan todos completed. Build clean, 2271 tests passing, 0 lint errors.
 - Full decision trail available for team reference
 
 ---
+
 
 ## Learnings
 
@@ -2305,6 +2313,7 @@ Examples:
 
 ---
 
+
 ## Cascade Delete Exits (2026-03-27)
 
 **Task:** Ensure that when a room is deleted from a zone, all exit records referencing that room are automatically removed to maintain database referential integrity.
@@ -2329,6 +2338,7 @@ Examples:
 
 
 ---
+
 
 ## Fix Refuge Routing Bugs (2026-07-17)
 
@@ -2362,6 +2372,7 @@ Extraction complete and player death sent `target: 'refuge'` in ROOM_SWITCH mess
 - ✅ Tests: 2362 tests passed (89 server + 6 shared test files, 0 failures)
 - ✅ Lint: 0 errors (8 pre-existing warnings, unchanged)
 
+
 ## Learnings
 
 - **Colyseus room names are the source of truth for routing.** When a client calls `joinOrCreate("zone:the-refuge", opts)`, Colyseus sets `this.roomName` to `"zone:the-refuge"`. The options bag is for extra parameters, not for duplicating what the room name already encodes. Server-side derivation from `roomName` is more robust than relying on clients to pass `zoneSlug`.
@@ -2369,6 +2380,7 @@ Extraction complete and player death sent `target: 'refuge'` in ROOM_SWITCH mess
 - **ROOM_SWITCH targets must match Colyseus define() names exactly.** The client uses the `target` field to call `joinOrCreate(target, ...)`. If the server sends `target: 'refuge'` but the room is defined as `'zone:the-refuge'`, the client can't find the room. Always use the full `zone:{slug}` name.
 
 ---
+
 
 ## Refuge Spawn Routing Fix (2026-03-27)
 
@@ -2379,6 +2391,7 @@ Extraction complete and player death sent `target: 'refuge'` in ROOM_SWITCH mess
 **Decision:** .squad/decisions/decisions.md — "2026-07-17: Derive zoneSlug from Colyseus Room Name"
 
 ---
+
 
 ## Exploration Message Wiring Verification (2025-07-17)
 
@@ -2397,11 +2410,13 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 - ✅ Tests: 2022 + 17 newly activated = 2039 passing, 0 failures
 - ✅ Lint: 0 errors, only pre-existing warnings
 
+
 ## Learnings
 
 - **RoomGraph exits are `Map<Direction, string>`, but ExploredRoomData expects `Record<string, string>`.** Always convert with `Object.fromEntries()` or manual iteration when building exploration payloads from the room graph.
 
 - **Exploration repository uses fire-and-forget persistence.** The `recordVisit` call is awaited with `.catch()` to avoid blocking the hot path. If DB writes fail, the map still renders — only persistence is lost.
+
 
 ## Learnings
 
@@ -2415,6 +2430,7 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 - Tests: `packages/server/src/__tests__/orphaned-exits.test.ts` — 9 tests covering all categories.
 
 ---
+
 
 ## Orphaned-Exit Cleanup API (2026-03-27)
 
@@ -2435,12 +2451,14 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 
 **Decision Documented:** `.squad/decisions.md` — "2026-03-27: Orphaned-Exit Cleanup API"
 
+
 ## Cross-Team Notes
 
 - **Lyra (Admin UI):** This API is ready for a "Clean Orphaned Exits" button in zone management UI
 - **Regis (Frontend):** MUD prompt component is live and ready for mana field addition when you add MP/mana to the game schema
 
 ---
+
 
 ## PLAYER_STATE Message Pipeline (2026-03-27)
 
@@ -2499,6 +2517,7 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 **Pattern Followed:** Matched existing message-only protocol patterns (LOADOUT_UPDATE, STASH_UPDATE) — no Schema sync, all state arrives via typed messages with `client.send()`.
 
 
+
 ## Learnings
 
 ### Message-Only Protocol Pattern (PLAYER_STATE implementation)
@@ -2524,6 +2543,7 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 - New items (rat_tail, corroded_pipe, sewer_moss, waterlogged_bone, revenant_essence) designed to fit Warrens/Crypt flavor.
 
 **Verification:** All 91 test files pass (2051 tests), zero regressions.
+
 
 ## Learnings
 - **Cross-migration tests are strict:** The persistence-schema-validation test extracts CREATE TABLE, CREATE INDEX, and CONSTRAINT names across ALL migration files and asserts global uniqueness. When rebuilding an existing table, use ALTER TABLE instead of DROP + CREATE TABLE.
@@ -2552,6 +2572,7 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 - **Test updates:** Updated `persistence-schema-validation.test.ts` — filename assertions, describe labels, FK regex to handle TEXT references, COMPOSITE_PK_TABLES for item_definitions
 - **Verification:** DB reset + migrations complete cleanly, server starts, all 59 schema tests pass
 
+
 ## Learnings
 - **Test regex sensitivity:** The schema validation tests use exact type keywords (`INT` vs `INTEGER`) in regexes. Use `INT` for columns that have inline CHECK constraints to match existing test patterns.
 - **extractForeignKeys only matched UUID:** Had to extend regex to `(?:UUID|TEXT)` since item_definitions.id and player_loadout.item_id are TEXT PKs/FKs.
@@ -2563,6 +2584,7 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 
 ---
 
+
 ## Team Update (2026-03-29T14:40:00Z)
 
 **Documented:** Drizzt's migration consolidation work
@@ -2571,6 +2593,7 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 - Decision merged into `.squad/decisions/decisions.md` (inbox file deleted)
 - Commit 95a6f97 logged
 - Tests: 2051 server + 158 shared tests PASSING ✓
+
 
 ## 2026-03-30T00:30Z — Combat Bugs Batch 1 Complete
 
@@ -2604,6 +2627,7 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 
 ---
 
+
 ## Team Update (2026-03-30T00:40:00Z)
 
 **Documented:** Zone transition bugs batch (Drizzt + Regis parallel work)
@@ -2616,6 +2640,7 @@ Activated all 17 `.todo()` tests in `exploration-messages.test.ts` — all pass.
 **Key Pattern Documented:** `options['targetRoomSlug']` validated against zone roomGraph on join — falls back to startRoomId for direct joins or invalid slugs.
 
 ---
+
 
 ## 2026-03-30T01:15Z — Startup Logging Fixes for Azure Container Apps
 
@@ -2654,6 +2679,7 @@ User-facing startup narrative messages should ALL go to stdout. Internal error d
 
 ---
 
+
 ## 2026-03-30T02:00Z — Redis ACA Dev Service Bicep Resource
 
 **Completed:** Added Redis dev service (add-on) resource to Bicep template for automatic deployment
@@ -2685,6 +2711,7 @@ Redis ACA add-on was previously created manually via `az containerapp add-on red
 
 ---
 
+
 ## Layout Engine Analysis (2026-03-30)
 
 **Task:** Analyze `computeLayout.ts` (2727 lines) and produce a technical reference document for zone designers explaining topological conflicts, scoring weights, and design guidelines.
@@ -2713,6 +2740,7 @@ Key insight: Topological conflicts are fundamentally about cycle offset sums. An
 - The cycle offset sum test (for every fundamental cycle, sum DIRECTION_OFFSETS — must return to (0,0)) is the key insight for a pre-layout validation utility.
 
 ---
+
 
 ## Zone Topology Validator (2025-07-25)
 
@@ -2753,6 +2781,7 @@ The validator found 10 topological conflicts in Siltgate, grouped into 5 conflic
 - No barrel file exists for `packages/client/src/map/` — modules are imported directly by file path.
 
 ---
+
 
 ## Warrens Zone Topology Analysis (2025-07-25)
 
@@ -2839,6 +2868,7 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 
 ---
 
+
 ## 2026-04-01: Agent Work Summary
 
 **Task completed:** Versioning Infrastructure. Semver system established with Vite injection, /api/version endpoint, sync scripts, and bump workflows. Decision and orchestration logs created. Client-side integration via `useVersion()` hook is ready; server-side routes operational.
@@ -2888,6 +2918,7 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 
 **Learning:** Seed files are one-shot — any change to already-applied seed data requires a corresponding numbered migration file. Always pair seed edits with migrations for existing environments.
 ---
+
 
 ## 2026-04-01: Death/Spawn Routing to Faction Strongholds (Issue #238)
 
@@ -2946,6 +2977,7 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 **Role:** Engine Dev  
 **Task:** Implement auto-attack default targeting and target management system
 
+
 ## Status: ✅ COMPLETE — PR #294 opened
 
 ### Deliverables
@@ -2982,6 +3014,7 @@ Topology fixes are **recommended but not urgent**. The delta-6 conflicts are wit
 - Unlock dependent features (group combat phase)
 
 ---
+
 
 ## 2026-04-04: Merge Round — All 7 Sprint 3/4 PRs to Dev
 
@@ -3091,6 +3124,7 @@ Threat tables are stored per-encounter, mapped by creature ID. Each creature mai
 
 **All 2533 tests passing, zero regressions.**
 
+
 ## Learnings
 - The `LLMTransport` type abstraction makes adding new providers trivial — just implement `(LLMRequest, AbortSignal) => Promise<LLMResponse>`.
 - OpenAI-compatible API is the de facto standard — model goes in request body (not URL like Azure deployments).
@@ -3120,6 +3154,7 @@ Threat tables are stored per-encounter, mapped by creature ID. Each creature mai
 
 **Files changed:** `characters.ts`, `starter-kit.ts`, `character-starter-kit.test.ts`
 
+
 ## Learnings
 - `faction_membership` has a UNIQUE constraint on `player_id` — one faction per player. `updateFaction()` uses INSERT ON CONFLICT so it's idempotent.
 - `item_definitions` schema: `base_stats` (JSONB) vs `base_durability` (INTEGER) — they are separate columns, not nested.
@@ -3131,6 +3166,7 @@ Threat tables are stored per-encounter, mapped by creature ID. Each creature mai
 
 
 ---
+
 
 ## Migration Consolidation (Session: 003_seed_zones consolidation)
 
@@ -3160,6 +3196,7 @@ Consolidated 22 incremental SQL migration files into 3 clean files per Elminster
 - `packages/server/src/commands/index.ts` — wired `handleGoto` into registry
 - `packages/server/src/__tests__/goto-command.test.ts` — 5 tests (dev gate, valid teleport, invalid slug, missing arg, parser)
 
+
 ## Learnings
 - Room IDs in the room graph double as slugs — `resolveRoom(slug)` works directly for lookup
 - Dev-gated commands follow a clean pattern: check `getConfig().devModeEnabled` first, reject with generic message
@@ -3175,6 +3212,7 @@ Consolidated 22 incremental SQL migration files into 3 clean files per Elminster
 - `packages/server/src/commands/index.ts` — added `resolvePlayerByName` to CommandContext, `targetNarrations` to CommandResult, wired `handleTeleport`
 - `packages/server/src/rooms/ZoneRoom.ts` — wired `resolvePlayerByName` in `buildCommandContext`, delivers `targetNarrations` after normal result
 - `packages/server/src/__tests__/teleport-command.test.ts` — 7 tests (dev gate, success, player not found, room not found, missing args x2, parser)
+
 
 ## Learnings
 - `targetNarrations` on CommandResult is a new pattern for sending directed messages to arbitrary players (not just sender or room broadcast)
@@ -3206,6 +3244,7 @@ Consolidated 22 incremental SQL migration files into 3 clean files per Elminster
 - `packages/server/src/rooms/ZoneRoom.ts` — sandboxRoomIds tracking, selective combat tick, death penalty bypass
 - `packages/server/src/db/migrations/005_sandbox_arena.sql` — Refuge room seed data
 
+
 ## Learnings
 - `isNonCombatZone` in ZoneRoom.update() is a zone-level flag based on category — any room-level combat opt-in requires modifying this guard
 - featureHandlers pattern: Map<verb, { handler, requiredRoomType }> — clean extension point, no need to touch handleCommand dispatch logic
@@ -3234,6 +3273,7 @@ Consolidated 22 incremental SQL migration files into 3 clean files per Elminster
 - Player death in sandbox arena: auto-revive at 1 HP, no downed state, no death penalty — player stays in room
 - spawnCreatureInRoom delegates to spawnSingleCreature then tags sandbox — reuses existing spawn path
 - Arena room discovery: handler walks connected exits from current room to find feature_sandbox_arena
+
 
 ## Learnings
 - Record<RoomType, ...> in generator.ts breaks when new room types are added — must update both shared and server RoomType unions AND the generator templates
@@ -3278,12 +3318,14 @@ Consolidated 22 incremental SQL migration files into 3 clean files per Elminster
 - Not feature-gated itself — help is always available regardless of location
 - Lint-clean: Avoided non-null assertions by using defensive checks and Map operations
 
+
 ## Learnings
 - Help commands should be standard handlers, not feature-gated — players need discovery tools everywhere
 - Static metadata registries scale better than dynamic handler introspection for command documentation
 - `?` alias for help is idiomatic in MUDs and text interfaces
 - Context-aware help improves UX by hiding irrelevant commands (feature rooms, dev tools)
 - Non-null assertion warnings can be avoided with early returns and safe Map operations (get + check vs get + !)
+
 
 ## Help Command Implementation (Issue #340, Commit 795994e)
 
@@ -3329,6 +3371,7 @@ Created comprehensive `help` command handler supporting context-aware command di
 - Defensive coding patterns eliminate non-null assertion warnings
 - System narration type provides proper semantic separation from game events
 
+
 ## Learnings
 - Cross-zone `goto` was returning zoneTransfer without validating zone existence → client disconnect
 - Command handlers are synchronous; zone validation requires an optional callback pattern on CommandContext
@@ -3336,6 +3379,7 @@ Created comprehensive `help` command handler supporting context-aware command di
 - ZoneRoom caches known zone slugs via `getZoneRepository().getAllZones()` on create (best-effort, non-blocking)
 - Belt-and-suspenders: validate at handler level (goto) AND at ZoneRoom level before sending ZONE_TRANSFER
 - Key files: `commands/handlers/goto.ts`, `commands/index.ts` (CommandContext), `rooms/ZoneRoom.ts`
+
 
 ## Goto Zone Validation Fix (Issue #342, Commit 73bc91e)
 
@@ -3358,6 +3402,7 @@ Created comprehensive `help` command handler supporting context-aware command di
 - `packages/server/src/__tests__/goto.test.ts` — 3 new tests (nonexistent zone, valid zone, same-zone colon with bad room)
 
 **Tests:** 10 goto tests pass, 2331 total server tests pass, zero regressions.
+
 
 ## Visual Crossing Detection & Phase 10 (computeLayout)
 
@@ -3415,12 +3460,14 @@ Created comprehensive `help` command handler supporting context-aware command di
 - **Route ordering for /rooms/live** — Must be registered BEFORE /rooms/:roomId to avoid Express param capture of "live" as a roomId.
 - **Teleport re-delivers full room state** — Matches the existing reconnect/goto pattern: room header, description, occupants, exploration data.
 
+
 ## Learnings
 - Express route ordering matters when mixing static and parameterized paths — `/rooms/live` must precede `/rooms/:roomId`
 - ZoneRoom's `broadcastToRoom` and `broadcastPlayerMovement` are private — adding public `admin*` wrappers is the right pattern to avoid `as any` casts from route handlers
 - The shared package must be rebuilt (`rm -rf dist && tsc --build`) before server can see new shared types — incremental builds may skip unchanged-timestamp files
 
 ---
+
 
 ## Session: Fix broken test runner and lint errors (2025-07)
 
@@ -3430,10 +3477,12 @@ Created comprehensive `help` command handler supporting context-aware command di
 - Fixed all 9 ESLint errors: added `**/*.d.ts` to eslint ignores, disabled no-control-regex for ansi-parser, prefixed unused vars/functions with `_`, fixed eslint-disable scope for multi-line any cast
 - Result: `npx vitest run` exits 0, `npx eslint .` reports 0 errors
 
+
 ## Learnings
 - npm workspaces can pin stale versions in package-lock.json even after changing package.json — must remove both node_modules AND lockfile entries for affected packages
 - eslint `eslint-disable-next-line` only covers the single next line; multi-line statements need block `eslint-disable`/`eslint-enable` comments
 - Generated `.d.ts` files should be excluded from ESLint via ignores in eslint.config.mjs (`**/*.d.ts`)
+
 
 ## Session: Fix spawn→display bug — creatures invisible on Room Graph tab (2025-07)
 
@@ -3499,6 +3548,7 @@ sendLoadoutAndStashUpdate(client: GameClient): void {
 
 ---
 
+
 ## Session: Fix #380 - False Speedwalk Detection
 
 **Date:** 2025-07-22
@@ -3517,6 +3567,7 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 - packages/client/src/utils/speedwalk.ts - parser + new shouldTreatAsSpeedwalk() gate
 - packages/client/src/pages/ZoneExploration.tsx - command submit handler
 - packages/server/src/commands/parser.ts - server-side direction aliases
+
 
 ## Learnings
 - Speedwalk detection is entirely client-side (ZoneExploration.tsx), not server-side
@@ -3547,6 +3598,7 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 **Verification:** handleUnequipItem and handleSwapItem are clean -- they don't use the players map directly. All 2601 server tests pass.
 **Test gap noted:** Existing loadout-integration.test.ts tests don't catch this because Colyseus test helpers use sessionId as playerId (same value in tests). The bug only manifests when a separate character ID is provided via playerIds map.
 
+
 ## Learnings
 
 - **this.players map key:** Always keyed by playerId (character ID), never client.sessionId. Set at line 563 in ZoneRoom.ts. Any new handler that needs player state must resolve playerId first via this.playerIds.get(client.sessionId) ?? client.sessionId, then use that to look up from this.players.
@@ -3564,202 +3616,11 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 **Scope:** Only one .toISOString() call on Colyseus room data existed (line 104). Other admin routes either destructure createdAt away or use proper Date objects from the DB.
 **Tests:** 2601 passed, 0 regressions.
 
+
 ## Learnings
 
 - **Colyseus matchMaker.query() room data types:** createdAt is returned as an epoch number (not a Date object). Always wrap in new Date() before calling Date methods on Colyseus room cache properties.
 
 ---
 
-## Session: Item Room Appearance (#386)
 
-**Date:** 2025-07-25
-**Issue:** #386 — Items should get per-item descriptive lines in room descriptions (mirrors #383 for creatures)
-
-### What was done
-- Added optional `roomDescription` field to `Item` interface in `RoomGraph.ts`
-- Updated `look.ts`, `go.ts`, `goto.ts` to render each item on its own line instead of aggregating as `You see: item1, item2`
-- Fallback text: `A ${item.name} lies here.` when no `roomDescription` is set
-- ANSI tags pass through verbatim (same as creatures)
-- Created `item-appearance.test.ts` with 11 tests mirroring `creature-appearance.test.ts`
-- All 2612 server tests pass
-
-### Commit
-- `1bbf209` — feat: per-item room descriptions with ANSI tag support (#386)
-
-## Learnings
-
-- **Room appearance pattern:** Both creatures and items now follow the same per-entity `roomDescription` pattern in look/go/goto handlers. Any new entity type appearing in rooms should follow this established convention.
-
-### Player Item Interaction Commands (Issue #390)
-**Task:** Implement get/drop/equip player item interaction commands
-**Status:** ✅ Complete — branch `squad/390-player-item-interaction`
-**Changes:**
-- Added `get` alias for `take` command (+ `g` single-letter alias)
-- Created `equip` command handler: equips items from inventory to weapon/armour slots
-- Created `unequip` command handler: returns equipped items to inventory
-- Added `equipSlot?: 'weapon' | 'armour'` optional field to `Item` interface
-- Added `_roomEvent` broadcast pattern for item interactions (take/drop/equip/unequip)
-- Updated inventory display to show equipped items section
-- Added PlayerState equipment backing store (getEquippedItem/setEquippedItem/clearEquippedItem)
-- 50 tests: get alias, equip/unequip, swap, edge cases, integration flows
-- All 2662 server tests passing, zero regressions
-
-**Key files:**
-- `packages/server/src/commands/handlers/equip.ts` — equip/unequip handlers
-- `packages/server/src/state/PlayerState.ts` — equippedItems backing map
-- `packages/server/src/generator/RoomGraph.ts` — Item.equipSlot field
-- `packages/server/src/__tests__/item-interaction.test.ts` — 50 tests
-
-**Commit:**
-- `0df83ad` — feat: player item interaction - get/drop/equip (#390)
-
-## Learnings
-
-- **`_roomEvent` broadcast pattern:** For commands that should notify other players in the room (item pickup/drop/equip), attach a `_roomEvent: string` to the CommandResult. ZoneRoom checks for this field and broadcasts to other players as 'ambient' narrations. Follows the same pattern as `_postureChange` from #371.
-- **Equipment backing store:** VisibleEquipment only stores display strings. The actual Item objects are tracked via PlayerState.equippedItems Map for proper swap-back support during equip/unequip cycles.
-- **Item equipSlot:** The `equipSlot` field on the Item interface is the gate for equippability. Items without it return "can't be equipped". This is backward-compatible — existing items without the field are unaffected.
-
----
-
-## Cross-Team Update: Regis Admin Spawn Items (#389)
-
-**From:** Scribe (2026-04-10)  
-**Context:** Parallel work with Regis on admin item spawn while implementing #390.
-
-**Handoff from Regis:**
-- Admin spawn modal now has creature/item type toggle
-- Server adminSpawnItem() implemented to match adminSpawnCreature pattern
-- Items spawned via admin panel can now be picked up and interacted with
-
-**Integration:** Your equip/drop/get commands work seamlessly with items spawned via admin panel. Room generation and item properties (name, weight, equipSlot) integrate directly.
-
-**No action needed** — just awareness that Regis's admin work enables full item spawning workflow for testing/development.
-
-
----
-
-## Session: Follow + Consent System (#403 Phase 1+2)
-
-**Date:** 2025-07-25
-**Issue:** #403 — Player groups, player consent, follow
-**PR:** #408 (targeting dev)
-**Commit:** e4d40e4
-
-### What was done
-
-**Phase 1 — Follow:**
-- follow/unfollow command handlers
-- PlayerState fields: followingPlayerId, followers Set, helper methods
-- Auto-follow on leader movement via ZoneRoom.moveFollowers()
-- Follow status in room descriptions (look, go): "X is here, following Y."
-- Follow cleanup on disconnect via ZoneRoom.cleanupFollowRelationships()
-- _followStarted/_followStopped metadata for ZoneRoom wiring
-- _roomEvent broadcasts for ambient follow/unfollow
-
-**Phase 2 — Consent:**
-- consent/unconsent/revoke command handlers
-- PlayerState.consentedPlayers Set (session-scoped, binary)
-- Zone-wide player lookup via resolvePlayerByName
-
-### Key Files
-- packages/server/src/commands/handlers/follow.ts
-- packages/server/src/commands/handlers/consent.ts
-- packages/server/src/commands/index.ts
-- packages/server/src/state/PlayerState.ts
-- packages/server/src/rooms/ZoneRoom.ts
-- packages/server/src/__tests__/follow-consent.test.ts (37 tests)
-
-### Results
-- 37 new tests, 2713 existing tests passing, zero regressions
-
-## Learnings
-
-- **Follow metadata pattern:** _followStarted/_followStopped on CommandResult, same pattern as _postureChange and _roomEvent. ZoneRoom reads these to wire bidirectional follower sets.
-- **Auto-follow guards:** moveFollowers() only moves followers in the same room the leader left. Prevents cross-zone teleporting.
-- **Follow cleanup on disconnect:** cleanupFollowRelationships() iterates all remaining players to clear follower sets and notify followers.
-- **PlayerRef.followingPlayerId:** Added to lightweight display interface so look/go show follow status without needing full PlayerState.
-- **Consent is zone-wide:** consent/unconsent use resolvePlayerByName, not just same-room lookup.
-## Starter Kit to Inventory Migration (2025-07-24)
-
-**Task:** Move starter kit items from player_stash to player inventory.
-**Branch:** squad/fix-starter-kit-inventory
-**Approach:** Option B -- grant on first zone join with starter_kit_granted flag.
-
-**Changes:**
-- starter-kit.ts rewritten: adds items to PlayerState.inventory via addItem() instead of INSERT into player_stash
-- ZoneRoom.onJoin calls grantStarterKit() after PlayerState creation, gated by isStarterKitGranted flag
-- characters.ts no longer calls grantStarterKit at creation time
-- CharacterRepository extended with isStarterKitGranted() / markStarterKitGranted() (PG + InMemory)
-- New migration: 012_starter_kit_granted.sql (boolean column on characters)
-- Tests: 7 passing (grant, flag, re-grant prevention, weight limits, no-pg, no-items)
-
-## Learnings
-
-- **Inventory vs Stash separation:** Inventory is intentionally in-memory (extraction-game transient). Stash is the persistent bank. Starter items belong in inventory, granted at first zone join -- not in stash at character creation.
-- **CharacterRepository extension pattern:** Add method to interface, implement in PgCharacterRepository (SQL) + InMemoryCharacterRepository (Map/Set), use in ZoneRoom via this.characterRepo.
-- **isCharacterPg() gate:** Use isCharacterPg() from character-provider.ts to determine if PG is available for queries that need the DB (e.g., item_definitions lookup).
-
-
----
-
-## Cross-Team Update: Elminster Container System Scoping (2026-04-10)
-
-**From:** Scribe  
-**Context:** Elminster completed comprehensive scoping of container item system and death mechanics investigation.
-
-**What Elminster Did:**
-- Investigated death mechanics thoroughly — corpse system confirmed fully operational
-- **Found critical bug:** Equipped items vanish on death (not collected into corpse)
-- Proposed 4-phase architecture: inventory persistence → container type → death integration → world containers
-- Created issue #409
-- Documented 7-section proposal with current state analysis, risk analysis, implementation phases
-
-**Key Findings for Your Starter Kit Work:**
-- Death mechanics are well-understood; equipped items bug is pre-existing
-- Your starter items (now in inventory) will follow the same death flow as all inventory items
-- When Phase 3 (death integration) is implemented, your starter items will be properly transferred to corpse if player dies
-
-**Design Decisions Relevant to Inventory:**
-- **Container type** — max nesting depth 1 (containers can't hold containers by default)
-- **Inventory persistence** — event-driven save (on mutation) + debounced 250ms + disconnect
-- **Load on zone join** — mirrors your zone-join starter kit grant pattern
-- **Evolutionary approach** — keep CorpseSystem parallel; Phase 4 evaluates unification
-
-**Open Questions for David:**
-- Corpse TTL (loot window duration)?
-- Equipped items on death — lootable or destroyed?
-- Container UI design (inline vs. separate panel)?
-
-**Implications for Your PR #410:**
-- Your zone-join grant pattern is consistent with Phase 1 load strategy
-- Starter items in inventory will be subject to same death mechanics as other inventory
-- No conflicts with Elminster's architecture; actually aligns well
-
-**Issue:** #409  
-**Proposal:** decisions/inbox/elminster-container-system.md (awaiting David's feedback on 6 design questions)
-
-
-
----
-
-### INVENTORY_UPDATE Message Wiring (2026-07-17)
-**Task:** Wire end-to-end INVENTORY_UPDATE message so StatusPanel Gear tab shows inventory items.
-**Status:** Complete -- committed to dev branch.
-
-**Changes (5 files, 68 insertions):**
-- packages/shared/src/index.ts: Added INVENTORY_UPDATE to MessageTypes, added InventoryUpdateMessage interface
-- packages/server/src/rooms/ZoneRoom.ts: Added sendInventoryUpdate() method, called on join + after inventory-mutating commands + after equip-from-inventory
-- packages/client/src/services/connection.ts: Added onInventoryUpdate to MessageHandlers, wired in both connect() and switchRoom()
-- packages/client/src/hooks/useZoneConnection.ts: Added onInventoryUpdate handler dispatching SET_INVENTORY action
-
-**Pattern:** Follows existing STASH_UPDATE/LOADOUT_UPDATE pattern -- server sends full state snapshot, client replaces store. Inventory size comparison detects mutations after command execution.
-
-**Tests:** 2666 passed, 0 errors, 0 lint errors (12 pre-existing warnings).
-
-## Learnings
-- ItemDefinition has tier: GearTier, not rarity -- the plan referenced rarity but the actual field is tier
-- Inventory Item (from RoomGraph.ts) has no tier; must look up via getItemDefinition(id) from registry
-- sendLoadoutAndStashUpdate is async (stash/loadout use DB); sendInventoryUpdate is synchronous (inventory is in-memory Map)
-- Size comparison (player.inventory.size !== prevInventorySize) is a clean heuristic for detecting inventory mutations -- avoids hardcoding verb lists
-- Shared package must be rebuilt (tsc -p packages/shared/tsconfig.json) before server/client can see new exports
-- PR #407 merge conflict resolution (2026-07-24): Only `.squad/decisions/decisions.md` conflicted when merging dev into squad/402-illumination-v1. Code files (ZoneRoom.ts, shared/index.ts) auto-merged cleanly — illumination fields and INVENTORY_UPDATE wiring touched different areas. decisions.md resolved by keeping all content from both sides (append-only union strategy). Lint passed with 0 errors.

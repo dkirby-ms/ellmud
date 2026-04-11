@@ -185,6 +185,20 @@ describe('appReducer', () => {
     expect(state.pendingCombatAction).toBe('dodge');
   });
 
+  it('SET_PLAYER_STATE updates posture', () => {
+    const state = appReducer(initialState, {
+      type: 'SET_PLAYER_STATE',
+      hp: 80, maxHp: 100, stamina: 0, maxStamina: 0,
+      statusEffects: [],
+      posture: 'sitting',
+    });
+    expect(state.posture).toBe('sitting');
+  });
+
+  it('initial posture is standing', () => {
+    expect(initialState.posture).toBe('standing');
+  });
+
   it('SET_COLLAPSE_TIMER updates timer', () => {
     const state = appReducer(initialState, { type: 'SET_COLLAPSE_TIMER', timer: 45 });
     expect(state.collapseTimer).toBe(45);

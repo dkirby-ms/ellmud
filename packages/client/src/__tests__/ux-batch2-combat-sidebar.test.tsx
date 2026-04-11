@@ -301,13 +301,17 @@ describe('Gap #12: HP bar dynamic states', () => {
 // gaps-brief §3B: direction words highlighted in teal (text-interactive)
 
 describe('Gap #16: Sound cue direction highlighting', () => {
-  it('direction words (north, south, east, west, above, below) highlighted with interactive/teal class', () => {
+  it('direction words (north, south, east, west, above, below) highlighted with interactive/teal class', async () => {
     // UX Review Batch 2 — anticipatory test (gap #16)
+    // Sound cues are under the "Character" tab in StatusPanel
+    const user = userEvent.setup();
     renderZoneExploration({
       soundCues: [
         { id: 'sc-1', text: 'Footsteps echo from the north', timestamp: Date.now() },
       ],
     });
+
+    await user.click(screen.getByRole('button', { name: 'Character' }));
 
     const cueContainer = screen.getByText(/Footsteps echo from the/);
     const highlightedWord = within(cueContainer.closest('[data-sound-cue]') ?? cueContainer)
@@ -315,13 +319,17 @@ describe('Gap #16: Sound cue direction highlighting', () => {
     expect(highlightedWord).toHaveClass('text-interactive');
   });
 
-  it('non-direction words in sound cues are not highlighted', () => {
+  it('non-direction words in sound cues are not highlighted', async () => {
     // UX Review Batch 2 — anticipatory test (gap #16)
+    // Sound cues are under the "Character" tab in StatusPanel
+    const user = userEvent.setup();
     renderZoneExploration({
       soundCues: [
         { id: 'sc-2', text: 'A distant growl from the east', timestamp: Date.now() },
       ],
     });
+
+    await user.click(screen.getByRole('button', { name: 'Character' }));
 
     const cueContainer = screen.getByText(/distant growl/);
     // "distant" and "growl" should NOT have the interactive highlight class

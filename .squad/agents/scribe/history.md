@@ -259,3 +259,59 @@ Initial setup complete. Scribe orchestration workflow established: create orches
 
 - Coordinate with zone design on additional test zones
 - Monitor map rendering for curved edge elimination
+
+---
+
+## Session: Squad Cleanup & Directives Extraction (2026-04-10T22:58:49Z)
+
+**Status:** ✅ Complete  
+**Requested by:** Dale Kirby (dkirby-ms)
+
+### Tasks Completed
+
+1. ✅ **Orchestration Logs Written**
+   - Drizzt: INVENTORY_UPDATE message wiring (92 lines, all 2666 tests pass)
+   - Scribe: Decisions cleanup + directives extraction (decisions ~5000 lines reduced)
+
+2. ✅ **Session Log Created**
+   - .squad/log/2026-04-10T22-session-inventory-fix-cleanup.md
+   - Summary of both Drizzt and Scribe work this session
+
+3. ✅ **Decision Inbox Merged**
+   - drizzt-inventory-update.md was already merged into decisions.md in Drizzt's commit
+   - Inbox file deleted
+   - Inbox directory now empty
+
+4. ✅ **Cross-Agent: Minsc History Updated**
+   - Appended INVENTORY_UPDATE context: client store dispatches SET_INVENTORY, Gear tab ready for rendering
+   - Documented tier handling and container system pattern implications
+   - Added quality metrics (2666 tests pass, commit 8d934c9)
+
+5. ✅ **Directives Extracted** (from previous session)
+   - Created .squad/directives.md (48 lines, 6 directives)
+   - Wired into spawn templates and squad.agent.md Source of Truth
+   - Included in Drizzt's commit
+
+### File Changes Summary
+
+**Created:**
+- .squad/orchestration-log/2026-04-10T22-58-49-drizzt.md
+- .squad/orchestration-log/2026-04-10T22-58-49-scribe.md
+- .squad/log/2026-04-10T22-session-inventory-fix-cleanup.md
+
+**Modified:**
+- .squad/agents/minsc/history.md (appended inventory context)
+- .squad/decisions/inbox/ (deleted drizzt-inventory-update.md)
+
+### Quality Metrics
+
+- All orchestration logs timestamped in ISO 8601 UTC
+- All cross-references verified (Minsc → inventory wiring context)
+- Inbox cleared and merged
+- Git ready for commit
+
+### Next Steps
+
+- Gear tab can now render inventory items from state.inventory
+- Container system planning can reference INVENTORY_UPDATE pattern
+- All agents have current squad status and directives
