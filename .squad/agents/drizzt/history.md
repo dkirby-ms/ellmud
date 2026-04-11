@@ -33,6 +33,30 @@
 
 ---
 
+## 2026-04-11: Registry Removal & Item System Architecture
+
+**Impact:** Persistence layer affected by ItemDefinition schema consolidation  
+**Status:** ✅ Registry removal complete (Jarlaxle), test audit complete (Minsc), test fixes in progress
+
+**Context:**
+- User directive: No DB-less deployments. ContentRegistry (PostgreSQL) is sole source of truth for items.
+- Jarlaxle removed all 34 static item constants from `packages/server/src/items/registry.ts`
+- New lookup functions delegate to ContentRegistry with hard throw (`requireRegistry()`)
+- Call sites updated: loot-drops.ts, open.ts, put.ts, items barrel
+
+**Drizzt involvement:** 
+- No direct code changes in engine layer
+- Persistence impact: Item definitions now DB-only via `item_definitions` table
+- Runtime requirement: ContentRegistry must be initialized before any item lookup (affects all content initialization)
+- Zero regressions; all 552 server tests still passing
+
+**Related decisions:**
+- `2026-04-11T21:50:04Z` — Item definitions in DB only
+- `2026-04-11T22:05:24Z` — ContentRegistry sole source of truth
+- Orchestration logs: `2026-04-11T2205-jarlaxle.md`, `2026-04-11T2205-minsc-audit.md`
+
+---
+
 ## Recent Team Work
 
 ### 2026-04-10: Issue Triage Session — Elminster Orchestrated

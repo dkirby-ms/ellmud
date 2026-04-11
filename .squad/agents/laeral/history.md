@@ -51,6 +51,31 @@
 
 ---
 
+## 2026-04-11: Item System Architecture Update
+
+**Impact:** Content authoring workflow now DB-only for all item definitions  
+**Status:** ✅ Complete — Item definitions moved from code to database
+
+**Context:**
+- User directive: No DB-less deployments. ContentRegistry (PostgreSQL) is sole source of truth.
+- Jarlaxle removed 34 static item constants from registry.ts; all item definitions now in `item_definitions` table
+- Implications for Laeral's container designs (2026-07-24):
+  - All 6 new containers (Munitions Wrap → Hollow of the Forgotten) will be added via ContentRegistry migrations, not code constants
+  - Migration files (INSERT into `item_definitions`) are the authoritative source
+  - ANSI formatting, container properties, tier progression all stored in DB
+
+**Process for Bruenor (Content Builder):**
+- Items → migrations (e.g., 016_add_containers.sql with 6 INSERT statements)
+- No registry.ts updates needed; content goes live immediately via ContentRegistry
+- Seed data verified complete in migrations 002 and 015
+
+**Related decisions:**
+- `2026-04-11T21:50:04Z` — Item definitions in DB only (Bruenor's responsibility)
+- `2026-04-11T22:05:24Z` — ContentRegistry sole source of truth
+- Container item designs ready for migration implementation: Munitions Wrap (sturdy), Ironbound Coffer (refined), Salvager's Haversack (refined), Warden's Lockbox (masterwork), Fleshknit Satchel (masterwork), Hollow of the Forgotten (anomalous)
+
+---
+
 ### 2026-04-07: Sandbox Arena Content Design — The Refuge Combat Testing Facilities
 - Designed a complete sandbox combat system for The Refuge, extending the dev hub with dedicated testing infrastructure.
 - **Physical layout:** 4 new rooms (Proving Hall, Test Arena, Armory, Control Sanctum) connected via north exit from the Hearth, forming a thematic training complex.

@@ -2050,3 +2050,34 @@ When implementing containers (Elminster's planned Phase 4), follow the same INVE
 ### Quality Check
 
 All 2666 tests pass, zero type errors. Commit: 8d934c9
+
+### Static Item Registry Removal — Test Audit (2026-07-17)
+
+**Context:** Team removing all static item definitions from `packages/server/src/items/registry.ts`. ContentRegistry (DB) becomes sole source of truth. Audit of all test files that will break.
+
+**Findings — 3 test files directly affected, 3 safe, 1 production file also impacted:**
+
+| File | Imports from registry | Category | Risk | Fix Approach |
+|---|---|---|---|---|
+| `items.test.ts` | `ITEM_REGISTRY`, `getItemDefinition`, `getAllItemDefinitions`, `getItemsByType`, `getItemsByTier`, `RUSTY_BLADE`, `IRON_SWORD`, `CORRODED_HALBERD`, `TATTERED_LEATHER`, `IRON_CHAINMAIL`, `WATERLOGGED_POTION`, `HEALING_DRAUGHT`, `STAMINA_TONIC`, `REVENANT_BONE`, `CRYPT_KEY_FRAGMENT`, `VOIDFORGED_BLADE` | Direct static + registry functions | 🔴 HIGH | Heaviest hit. Needs inline test fixtures (like loadout-fixtures.ts pattern) for static constants. Registry function tests need ContentRegistry mock or test seed. Loot drop tests (`getEligibleItems`, `spawnRoomLoot`, `generateCreatureLoot`) also break because `loot-drops.ts` internally reads `ITEM_REGISTRY`. |
+| `container-items.test.ts` | `TATTERED_SATCHEL`, `EXPEDITION_PACK`, `APOTHECARY_POUCH`, `HEALING_DRAUGHT`, `RUSTY_BLADE`, `getItemsByType` | Direct static + registry function | 🔴 HIGH | Replace static imports with inline test fixtures. `getItemsByType` call needs ContentRegistry mock. |
+| `container-commands.test.ts` | `TATTERED_SATCHEL`, `EXPEDITION_PACK`, `APOTHECARY_POUCH`, `RUSTY_BLADE`, `HEALING_DRAUGHT` | Direct static only | 🟡 MEDIUM | Replace with inline test fixtures. No registry function calls — simpler fix. |
+| `loadout-service.test.ts` | None from registry (uses `loadout-fixtures.ts`) | Self-contained fixtures | ✅ SAFE | No changes needed. |
+| `loadout-zone.test.ts` | None from registry (uses `loadout-fixtures.ts`) | Self-contained fixtures | ✅ SAFE | No changes needed. |
+| `loadout-anti-exploit.test.ts` | None from registry (uses `loadout-fixtures.ts`) | Self-contained fixtures | ✅ SAFE | No changes needed. |
+| `death-equipped-items.test.ts` | None (already has comment: "can't use getItemDefinition without content registry") | Already works around it | ✅ SAFE | No changes needed. Already uses own `makeItem` helper. |
+
+**Production file also impacted:** `packages/server/src/items/loot-drops.ts` imports `ITEM_REGISTRY` directly at line 12 and iterates it at line 43 in `getEligibleItems()`. This must be refactored to use ContentRegistry, and all loot-drop tests in `items.test.ts` will cascade-break.
+
+**Barrel export impact:** `packages/server/src/items/index.ts` re-exports all 21 static constants from registry.ts. The barrel file needs updating too (or the statics need to stay as re-exports from ContentRegistry).
+
+**Highest-risk tests (currently work WITHOUT DB, will REQUIRE one after):**
+1. `items.test.ts` — 50+ test cases covering registry queries, stats computation, loadout validation, and all loot-drop logic
+2. `container-items.test.ts` — 30+ test cases for container mechanics
+3. `container-commands.test.ts` — 20+ test cases for container command parsing
+
+**Recommended fix strategy:**
+1. Create a shared `__tests__/helpers/item-fixtures.ts` (like `loadout-fixtures.ts`) with inline definitions for all needed test items
+2. For registry function tests (`getItemDefinition`, `getItemsByType`, etc.), mock or seed ContentRegistry in a `beforeAll`
+3. Refactor `loot-drops.ts` to accept an item source parameter (or use ContentRegistry) instead of importing `ITEM_REGISTRY` directly
+4. Update `items/index.ts` barrel to remove static constant re-exports

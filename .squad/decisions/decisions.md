@@ -4769,3 +4769,227 @@ If automated versioning causes issues:
 
 **Review Status:** Pending team review  
 **Next Review:** After 2 weeks of production use
+
+
+---
+
+## 2026-04-11T21:50:04Z: User Directive — Item Definitions in Database Only
+
+**By:** dkirby-ms (via Copilot)  
+**Scope:** Content authoring workflow (Content Builder role)
+
+### What
+
+Bruenor's job as Content Builder requires seeding items into the database via migration files. The hardcoded in-memory registry (`ALL_ITEMS` in `registry.ts`) is a test/development fallback only — production content lives in the `item_definitions` table. Every new item Bruenor adds must include an INSERT into `item_definitions` (with `container_properties` JSONB for containers). No more registry-only content additions.
+
+### Why
+
+User request — captured for team memory. Prevents future PRs that only add items to the hardcoded registry without DB migrations. Ensures all content goes through canonical DB schema.
+
+### Impact
+
+- **Content Author Workflow:** Items → DB migrations, not code constants
+- **Test Files:** Can use static fixtures from tests; production uses ContentRegistry
+- **Seed Data:** Migrations 002 and 015 verified as complete
+- **Registry.ts Role:** Lookup functions only; no item definitions stored there
+
+### Related
+
+- Decision: 2026-04-11T22:05:24Z (Registry Removal — ContentRegistry sole source of truth)
+- Jarlaxle task: Removed 34 static constants from registry.ts
+- Minsc task: Test audit identified 3 files needing fixture updates
+
+---
+
+## 2026-04-11T22:05:24Z: User Directive — No DB-less Deployments
+
+**By:** dkirby-ms (via Copilot)  
+**Scope:** ContentRegistry as sole source of truth for items
+
+### What
+
+Drop static item definitions from registry.ts — ContentRegistry (DB) is the sole source of truth for item definitions. No deployments without the database.
+
+### Why
+
+User request — the project does not plan to support DB-less deployments. Static fallback in registry.ts is dead code. Removes dual-source-of-truth problem (code vs. DB).
+
+### Implementation
+
+- Jarlaxle removed all 34 static constants, `ALL_ITEMS`, `ITEM_REGISTRY` from registry.ts
+- Updated 4 lookup functions to delegate to ContentRegistry with hard throw
+- Added `getItemDefinitionsMap()` for call sites needing Map structure
+- Updated call sites: loot-drops.ts, open.ts, put.ts, items/index.ts barrel
+- Zero type errors; no regressions
+
+### Impact
+
+- **Production Code:** Fully updated, type-safe
+- **Test Files:** 3 files need updates to use fixtures instead of static imports
+- **Runtime Requirement:** ContentRegistry must be initialized before item lookup
+- **Error Handling:** `requireRegistry()` throws clear diagnostic if not initialized
+
+### Status
+
+- ✅ Registry removal complete (Jarlaxle)
+- ✅ Test audit complete (Minsc)
+- 🔄 Test fixes in progress (Minsc)
+
+### Related
+
+- Decision: 2026-04-11T21:50:04Z (Items in Database Only)
+- Orchestration: `2026-04-11T2205-jarlaxle.md`, `2026-04-11T2205-minsc-audit.md`
+
+---
+
+## 2026-01: Adopt semantic-release for Automated Versioning
+
+**Date:** 2025-01  
+**Status:** ✅ Implemented (PR #426)  
+**Owner:** Khelben (CI/CD Dev)  
+**Requested by:** dkirby-ms
+
+### Context
+
+PR #425 implemented a custom automated version bumping system (patch on dev→uat, minor on uat→prod, manual major). The user decided to close that PR and instead adopt **semantic-release**, an industry-standard tool for automated versioning based on conventional commit messages.
+
+### Decision
+
+Replace all custom version bumping logic with **semantic-release**.
+
+### Versioning Model
+
+- **prod branch** → full releases (1.0.0, 1.1.0, 2.0.0)
+- **dev branch** → pre-releases (1.0.0-dev.1, 1.0.0-dev.2, etc.)
+- Version bumps determined by **conventional commit messages**:
+  - `feat:` → minor bump (0.x.0)
+  - `fix:` → patch bump (0.0.x)
+  - `BREAKING CHANGE:` or `feat!:`/`fix!:` → major bump (x.0.0)
+  - `chore:`, `docs:`, etc. → no version bump
+
+### Implementation
+
+1. **Dependencies (7 plugins):**
+   - `@semantic-release/commit-analyzer` — reads conventional commits
+   - `@semantic-release/release-notes-generator` — generates release notes
+   - `@semantic-release/changelog` — updates CHANGELOG.md
+   - `@semantic-release/npm` — updates package.json (npmPublish: false)
+   - `@semantic-release/git` — commits version changes back with [skip ci]
+   - `@semantic-release/github` — creates GitHub Releases
+   - `@semantic-release/exec` — runs `npm run version:sync` for workspace packages
+
+2. **Configuration (`.releaserc.json`):** Branching on prod/dev, conventional commit parsing, workspace sync via exec
+
+### Rationale
+
+**Why semantic-release?**
+- Industry Standard: Mature, widely-adopted tool with extensive plugin ecosystem
+- Conventional Commits: Enforces commit discipline, making history readable
+- Fully Automated: No manual intervention needed for versioning
+- CHANGELOG Automation: Auto-generates CHANGELOG from commits
+- Pre-release Support: First-class support for dev pre-releases
+- GitHub Integration: Native GitHub Releases with auto-generated release notes
+- Monorepo Support: Via `@semantic-release/exec` for workspace version syncing
+
+**Why Not Custom System (PR #425)?**
+- Custom system required maintaining bespoke logic
+- No CHANGELOG automation
+- Version bumps tied to branch merges, not commit semantics
+- No pre-release support
+- Manual CHANGELOG updates still required
+- Reinventing a solved problem
+
+### Consequences
+
+**Positive:**
+- ✅ Zero manual version management
+- ✅ CHANGELOG fully automated
+- ✅ Pre-releases on dev without polluting prod
+- ✅ GitHub Releases auto-generated
+- ✅ Workspace packages synced automatically
+- ✅ No version conflicts
+- ✅ Industry best practice
+
+**Negative / Trade-offs:**
+- ⚠️ Requires commit discipline (conventional commits)
+- ⚠️ Team learning curve
+- ⚠️ More dependencies (283 new packages)
+- ⚠️ Less manual control (by design)
+
+### References
+
+- **PR #426:** feat: adopt semantic-release for automated versioning
+- **Conventional Commits:** https://www.conventionalcommits.org/
+- **semantic-release docs:** https://github.com/semantic-release/semantic-release
+
+---
+
+## 2026-01: Action Reference Convention
+
+**Author:** Khelben (CI/CD Dev)  
+**Date:** 2025-01-01  
+**PR:** #428
+
+### Decision
+
+All GitHub Actions references use **major version tags** (e.g., `actions/checkout@v4`, `azure/login@v2`). We do **not** use SHA-pinned refs.
+
+### Rationale
+
+SHA pinning adds maintenance burden (updating hashes on every minor release) for minimal security benefit in our context. Tag references are readable, consistent, and auto-receive patch updates.
+
+### Scope
+
+All files in `.github/workflows/`.
+
+---
+
+## 2026-07-24: Container Item Designs — Tier Progression & Specialization
+
+**Author:** Laeral (Content Designer)  
+**Status:** Ready for implementation (Bruenor)  
+
+### Overview
+
+Fills the container gaps at refined, masterwork, and anomalous tiers while adding specialized containers at existing tiers for variety. Designed around the extraction loop: risk vs. reward, inventory management as tactical choice, and the thrill of finding something worth carrying home.
+
+### New Containers (6 items)
+
+| ID | Name | Tier | Slots | Max Weight | Carry Bonus | Restriction | Weight |
+|----|------|------|-------|-----------|-------------|-------------|--------|
+| `munitions_wrap` | Munitions Wrap | sturdy | 4 | 20 | — | weapon | 1 |
+| `ironbound_coffer` | Ironbound Coffer | refined | 10 | 50 | +10 | — | 4 |
+| `salvagers_haversack` | Salvager's Haversack | refined | 12 | 25 | — | material | 2 |
+| `wardens_lockbox` | Warden's Lockbox | masterwork | 12 | 60 | +15 | — | 3 |
+| `fleshknit_satchel` | Fleshknit Satchel | masterwork | 8 | 15 | — | consumable, key | 1 |
+| `hollow_of_the_forgotten` | Hollow of the Forgotten | anomalous | 16 | ∞ | +25 | — | 0 |
+
+### Design Rationale
+
+**Tier Progression:**
+- **Sturdy specialist:** Munitions Wrap (weapon-only) — first restricted container, forces tactical choices
+- **Refined general:** Ironbound Coffer (10/50, +10) — significant upgrade from common, but heavy (4 weight)
+- **Refined specialist:** Salvager's Haversack (12 slots, 25 weight cap) — rewards material economy builds
+- **Masterwork general:** Warden's Lockbox (12/60, +15) — endgame bag for most players, cyan name tag signals rarity
+- **Masterwork specialist:** Fleshknit Satchel (consumable+key) — upgrade from Apothecary's Pouch, body-horror flavor
+- **Anomalous:** Hollow of the Forgotten (16 slots, ∞ weight, +25 bonus) — dream find, zero weight, breaks physics
+
+### Implementation Notes for Bruenor
+
+- All use `type: 'container'`, `baseStats: {}`, `baseDurability: null`
+- `allowedItemTypes` uses union values: `'weapon'`, `'material'`, `'consumable'`, `'key'`, `'armour'` (British spelling)
+- ANSI tags in `name`/`description`: `[bold]`, `[dim]`, `[cyan]`, `[yellow]`, `[magenta]`, `[reset]`
+- Hollow of the Forgotten omits `maxWeight` — no weight limit
+- Container nesting already blocked by `addItemToContainer()`
+- Export constants: `UPPER_SNAKE_CASE`, add to `ALL_ITEMS` array (or ContentRegistry migrations)
+- Suggested drop tables: weapon racks (Munitions), mid-zone locked rooms (Ironbound), crafting areas (Salvager), boss drops (Warden/Fleshknit), anomalous T3 bosses (Hollow)
+
+### Completion Status
+
+- ✅ Design completed and documented
+- 🔄 Implementation ready (Bruenor)
+
+---
+
+**Review Status:** Decisions inbox merged, deduplicator applied  
+**Next Archive Review:** When decisions.md exceeds 250KB or after 30 days
