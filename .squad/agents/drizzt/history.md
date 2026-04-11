@@ -3834,3 +3834,70 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 **Decision Recorded:** drizzt-group-formation-architecture.md merged to decisions.md (2026-04-11T00:45:00Z)
 
 **Phase 3 Status:** ✅ COMPLETE — Group Formation live on dev
+
+---
+
+## Learnings
+
+### Group Loot Sharing Implementation (Issue 403 Phase 6) - PR 415
+Task: Implement group loot sharing for items from creature deaths
+Status: Complete - PR 415 opened against dev
+Branch: squad/403-group-rewards
+
+Architecture:
+- GroupManager extensions - Added lootSharing field (default: false), setLootSharing() (leader-only), getLootSharing() getter
+- Group command - New group share subcommand, status display in showGroupInfo(), full validation
+- ZoneRoom loot distribution - Round-robin algorithm in syncCreaturesAfterCombat()
+  - Uses event.killerIds[0] to identify group
+  - Filters group members to same room only
+  - Round-robin with weight capacity checks (player.canCarry())
+  - Skips members who cannot carry, tries next member
+  - Drops unclaimed items to floor
+  - Narration to recipients and group members
+
+Key decisions:
+- Items only - No XP or currency distribution
+- Leader discretion - Default OFF, leader must enable
+- Same-room only - Only members present at location receive items
+- Round-robin fairness - Deterministic distribution order
+
+Implementation: 19 tests covering command validation, GroupManager methods, round-robin fairness, room filtering, weight edge cases, floor drop behavior.
+
+Files modified:
+- GroupManager.ts - Group interface, setLootSharing/getLootSharing
+- group.ts - handleGroupShare(), showGroupInfo() updates
+- ZoneRoom.ts - Loot distribution in syncCreaturesAfterCombat()
+- group-loot.test.ts - NEW: 19 tests
+
+Key lessons:
+- Deterministic distribution ensures fairness and predictability
+- Weight checks matter - players can refuse items via weight limits
+- Same-room filter prevents absent members from receiving loot
+- Item interface lives in generator/RoomGraph.ts not separate types file
+
+### 2026-04-11: Phase 6 Group Loot Sharing Implementation — PR #415
+
+**Task:** Implement Phase 6 of Issue #403 — Group Loot Sharing
+
+**Deliverables:**
+- `group share on` — Leader enables loot sharing
+- `group share off` — Leader disables loot sharing  
+- `group share` — Any member views current status
+
+**Code changes:**
+- GroupManager: `lootSharing: boolean` field (default false), `setLootSharing(requesterId, enabled)` (leader-only), `getLootSharing(playerId)` getter
+- group.ts: `handleGroupShare()` command handler with validation and narration
+- ZoneRoom.ts: Distribution loop in `syncCreaturesAfterCombat()` with round-robin, weight checks, same-room filtering
+
+**Architecture:**
+- Round-robin distribution: Fair, deterministic, no randomness
+- Same-room only: Prevents AFK members in safe zones from receiving loot
+- Weight capacity checks: Respects player carry limits
+- Default OFF: Groups must explicitly enable; prevents unintended distribution
+- Leader-only toggle: Prevents griefing and disputes
+- Items only: No XP or currency in this phase
+
+**Test coverage:** 19 comprehensive tests covering command validation, manager methods, distribution fairness, and edge cases. All 2792 server tests passing, zero regressions.
+
+**Status:** ✅ COMPLETE — PR #415 approved by Elminster, merged to dev
+

@@ -2773,3 +2773,60 @@ Researched 3 open issues. Posted design briefs. Updated labels. Routed to implem
 
 
 
+
+
+## Learnings
+
+### 2025-06-11: PR #415 Group Loot Sharing Review
+**Context:** Reviewed Phase 6 of #403 (Player Groups) — group loot sharing feature.
+
+**Key observations:**
+1. **Integration pattern:** The loot distribution hooks cleanly into `syncCreaturesAfterCombat()` with a `distributed` flag to prevent fallback when sharing succeeds. This pattern allows opt-in behavior without disrupting the existing floor-drop flow.
+2. **Round-robin fairness:** The implementation uses simple round-robin with `memberIndex` increment. This is fair over time and easier to test/verify than need-based or random distribution.
+3. **Same-room filtering:** Filtering by `currentRoomId` is critical for preventing remote loot teleportation. The PR correctly applies this filter before distribution.
+4. **Edge case handling:** The nested loop (try all members before dropping) handles mixed carry capacities gracefully. If member A is full, B gets the item; if all are full, floor drop occurs.
+5. **Test coverage:** 19 tests covering command validation, manager logic, and distribution mechanics. Simulation tests verify round-robin behavior without requiring full ZoneRoom integration.
+6. **Leader-only enforcement:** `GroupManager.setLootSharing()` correctly enforces leader-only access. Non-leaders can view but not toggle.
+
+**Verdict:** APPROVED. Clean architecture, comprehensive tests, no regressions. The implementation is production-ready.
+
+**Future considerations:**
+- If XP/currency sharing is added in future phases, consider extracting distribution logic into a reusable `GroupRewardDistributor` class.
+- Monitor player feedback on round-robin vs. need-based distribution (e.g., "don't give me items I can't carry").
+- The `group loot history` command could be a useful future enhancement for transparency.
+
+### 2026-04-11: PR #415 Review — Group Loot Sharing (#403 Phase 6)
+
+**Task:** Code review of group loot sharing system PR.
+
+**Verdict: APPROVE**
+
+**Architecture (Clean):**
+- Loot distribution logic cleanly hooks into `syncCreaturesAfterCombat()` with minimal disruption to existing creature death flow.
+- GroupManager extends cleanly: `lootSharing: boolean` field, `setLootSharing()` (leader-only), `getLootSharing()` getter.
+- Round-robin algorithm is fair and robust, handles all edge cases correctly.
+
+**Design Compliance:**
+- ✅ **Items only:** Distributes corpse loot items; no XP or currency sharing
+- ✅ **Leader toggle:** `group share on/off` command set enforces leader-only access
+- ✅ **Equal split:** Round-robin distribution among group members in same room
+- ✅ **Same-room filtering:** Only members at kill location receive items
+- ✅ **Weight checks:** Respects player.canCarry() capacity limits
+
+**Edge Cases (All Covered):**
+- Single member in room → receives all items ✓
+- No one can carry → items drop to floor with narration ✓
+- Empty loot array → no duplicate floor narration ✓
+- Mixed carry capacities → algorithm tries all members ✓
+- Group members in different rooms → same-room filter prevents distribution ✓
+- NPC kills → creator check prevents activation ✓
+- Sharing OFF or no group → existing floor-drop behavior preserved ✓
+
+**Test Coverage (19 tests):**
+- Command tests: 8 (toggle validation, non-leader rejection, status display)
+- GroupManager tests: 6 (default state, toggle enforcement, access control)
+- Distribution tests: 5 (round-robin fairness, same-room filtering, weight checks)
+
+**Regression Check:** 2792 server tests passing, zero new failures.
+
+**Status:** ✅ APPROVED — Ready to merge to dev

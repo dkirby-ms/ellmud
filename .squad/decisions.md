@@ -7994,3 +7994,116 @@ Opened PR #387 directly targeting `prod` as a hotfix. The script content is iden
 
 - **Branching:** This is an exception to the normal `dev → uat → prod` flow. Justified because the fix only affects CI tooling (not game code) and the content already exists on `dev`.
 - **Future:** If new CI scripts are added on `dev`, ensure they get merged forward to `prod` before the release workflow references them.
+
+---
+
+# Decision: Phase 6 Group Rewards Design
+
+**Author:** Dale Kirby (via Copilot directive)  
+**Date:** 2026-04-11  
+**Issue:** #403 Phase 6  
+
+## Context
+
+Group reward sharing rules for #403 Phase 6 require clarification on scope, distribution mechanism, and toggle mechanism.
+
+## Decision
+
+1. **Rewards scope:** Items from corpses only. No XP system. Water currency with creatures not yet designed — skip for now.
+2. **Leader discretion:** Leader toggles sharing on/off via `group share on/off`.
+3. **Split method:** Equal distribution (round-robin) among all group members in the same room.
+
+## Rationale
+
+- **Items only** keeps scope tight for Phase 6, allowing future expansion to XP and currency separately.
+- **Leader toggle** prevents unintended loot distribution and gives group leadership control.
+- **Same-room only** prevents abuse (AFK members in safe zones receiving loot).
+- **Round-robin fairness** ensures deterministic, equal distribution over time without complex need/greed systems.
+
+## Team Impact
+
+- Unblocks Phase 6 implementation (loot sharing commands, GroupManager extensions, ZoneRoom distribution logic).
+- Establishes pattern for future reward sharing phases (XP, currency can follow similar design).
+- No schema changes required.
+
+---
+
+# Decision: Group Loot Sharing Implementation (Phase 6)
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2026-04-11  
+**Issue:** #403 Phase 6  
+**PR:** #415  
+
+## Context
+
+PR #415 implements group loot sharing as designed. Implementation distributes creature loot items round-robin to group members in the same room, with leader-controlled toggle and weight capacity checks.
+
+## Decision
+
+### GroupManager Extensions
+- Added `lootSharing: boolean` to Group interface (default: false)
+- Added `setLootSharing(requesterId, enabled)` - leader-only toggle
+- Added `getLootSharing(playerId)` - convenience getter for any member
+
+### Group Command
+- `group share on` - enable loot sharing (leader only)
+- `group share off` - disable loot sharing (leader only)
+- `group share` - view current status (any member)
+- `showGroupInfo()` now displays sharing status
+
+### ZoneRoom Loot Distribution
+Modified `syncCreaturesAfterCombat()` to:
+1. Check if killer is in a group with lootSharing enabled
+2. Gather group members in same room as the kill
+3. Distribute items round-robin with weight checks:
+   - Try to give item to next member in rotation
+   - If they can't carry (weight check), try next member
+   - If NO member can carry, drop to floor
+4. Send narration to recipient and other group members
+5. Fallback to existing floor drop if sharing OFF
+
+## Key Design Decisions
+
+**Round-robin distribution:** Ensures fairness over time. Members receive items in deterministic rotation order (no randomness).
+
+**Same-room only:** Only members physically present at the kill location receive items. Prevents abuse (afk members in safe zone getting loot).
+
+**Weight capacity checks:** Respects player.canCarry(item) weight limits. Members can effectively "refuse" items by being over-encumbered.
+
+**Default OFF:** Groups must explicitly enable sharing. Prevents unintended loot distribution in casual groups.
+
+**Leader-only toggle:** Only the group leader can change sharing status. Prevents disputes and griefing.
+
+**Items only:** No XP or currency distribution in this phase. Keeps scope tight, allows future expansion.
+
+## Trade-offs
+
+**Pro:**
+- Fair and predictable
+- Respects player autonomy (weight limits)
+- Simple mental model (round-robin)
+- Minimal state (just boolean flag)
+
+**Con:**
+- No priority system (all members equal)
+- No item preferences (sword to warrior, etc.)
+- Round-robin can feel rigid if players have roles
+
+Future enhancements could add loot priorities, item types filtering, or need/greed systems. Current implementation provides solid foundation.
+
+## Test Coverage
+
+19 comprehensive tests covering:
+- Command validation (leader-only, error handling)
+- GroupManager methods (setLootSharing, getLootSharing)
+- Round-robin fairness (3 items → 3 players, 5 items → 3 players)
+- Same-room filtering (members in different rooms don't receive items)
+- Weight capacity edge cases (skip members who can't carry)
+- Floor drop behavior (items drop when no one can carry)
+
+All 2792 server tests passing, zero regressions.
+
+## Team Impact
+
+This completes Phase 6 of #403. Future phases (XP sharing, water currency) will follow similar patterns but are deferred per Dale's scope decision.
