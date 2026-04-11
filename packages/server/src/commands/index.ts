@@ -40,6 +40,8 @@ import { handleRent } from './handlers/rent.js';
 import { handleSandbox } from './handlers/sandbox.js';
 import { handleFlag } from './handlers/flag.js';
 import { handleStand, handleSit, handleCrouch, handleProne, handleRecline } from './handlers/posture.js';
+import { handleFollow, handleUnfollow } from './handlers/follow.js';
+import { handleConsent, handleUnconsent } from './handlers/consent.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -88,6 +90,8 @@ export interface PlayerRef {
   anon: boolean;
   /** Current posture for room display (#371). */
   posture?: import('@ellmud/shared').Posture;
+  /** Player ID this player is following, for room display (#403). */
+  followingPlayerId?: string | null;
 }
 
 export interface CommandContext {
@@ -200,6 +204,11 @@ handlers.set('sit', handleSit);
 handlers.set('crouch', handleCrouch);
 handlers.set('prone', handleProne);
 handlers.set('recline', handleRecline);
+handlers.set('follow', handleFollow);
+handlers.set('unfollow', handleUnfollow);
+handlers.set('consent', handleConsent);
+handlers.set('unconsent', handleUnconsent);
+handlers.set('revoke', handleUnconsent);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(

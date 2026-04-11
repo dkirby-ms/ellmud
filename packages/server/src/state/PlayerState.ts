@@ -56,6 +56,16 @@ export class PlayerState {
   /** Actual Item objects backing equipped slots (#390). */
   private readonly equippedItems = new Map<string, Item>();
 
+  // ─── Follow System (#403 Phase 1) ──────────────────────────────────────
+  /** Player ID (character ID) this player is following, or null. */
+  followingPlayerId: string | null = null;
+  /** Set of player IDs (character IDs) currently following this player. */
+  readonly followers = new Set<string>();
+
+  // ─── Consent System (#403 Phase 2) ─────────────────────────────────────
+  /** Set of player IDs (character IDs) this player has granted consent to. */
+  readonly consentedPlayers = new Set<string>();
+
   constructor(
     sessionId: string,
     startRoomId: string,
@@ -139,5 +149,31 @@ export class PlayerState {
   /** Remove the Item object from an equipment slot (#390). */
   clearEquippedItem(slot: string): void {
     this.equippedItems.delete(slot);
+  }
+
+  // ─── Follow helpers (#403) ─────────────────────────────────────────────
+
+  /** Start following another player. Returns false if already following someone. */
+  startFollowing(leaderId: string): boolean {
+    if (this.followingPlayerId) return false;
+    this.followingPlayerId = leaderId;
+    return true;
+  }
+
+  /** Stop following the current leader. Returns the former leader ID or null. */
+  stopFollowing(): string | null {
+    const prev = this.followingPlayerId;
+    this.followingPlayerId = null;
+    return prev;
+  }
+
+  /** Add a follower to this player's follower set. */
+  addFollower(followerId: string): void {
+    this.followers.add(followerId);
+  }
+
+  /** Remove a follower from this player's follower set. */
+  removeFollower(followerId: string): void {
+    this.followers.delete(followerId);
   }
 }

@@ -105,7 +105,14 @@ export function handleGo(ctx: CommandContext): CommandResult {
   for (const p of playersInTarget) {
     if (!p.anon) {
       const postureDesc = p.posture ? POSTURE_ROOM_DESCRIPTIONS[p.posture] : 'is here';
-      lines.push(`${p.name} ${postureDesc}.`);
+      if (p.followingPlayerId) {
+        const leaderName = playersInTarget.find(op => op.sessionId === p.followingPlayerId)?.name
+          ?? (p.followingPlayerId === ctx.player.sessionId ? ctx.characterName : undefined)
+          ?? 'someone';
+        lines.push(`${p.name} ${postureDesc}, following ${leaderName}.`);
+      } else {
+        lines.push(`${p.name} ${postureDesc}.`);
+      }
     }
   }
 

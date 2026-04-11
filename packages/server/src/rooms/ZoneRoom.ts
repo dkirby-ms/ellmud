@@ -715,6 +715,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.ownerPlayerIds.delete(playerId);
       this.updateMetadata();
     }
+    // Clean up follow relationships on disconnect (#403)
+    this.cleanupFollowRelationships(playerId);
     this.playerIds.delete(client.sessionId);
     this.log(`Player ${this.playerTag(playerId)} left (${this.state.playerCount} players)`);
   }
@@ -1132,6 +1134,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       // Broadcast updated occupants to other players in both rooms
       this.broadcastRoomOccupantsUpdate(previousRoomId);
       this.broadcastRoomOccupantsUpdate(player.currentRoomId);
+
+      // Auto-move followers (#403 Phase 1)
+      this.moveFollowers(playerId, previousRoomId, player.currentRoomId);
     }
 
     // Posture commands: broadcast posture change to other players in the room (#371)
@@ -1166,6 +1171,22 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             this.sendNarrate(c, { text: roomEvent, type: 'ambient', timestamp: Date.now() });
           }
         }
+      }
+    }
+
+    // Follow system: wire up follower sets when follow/unfollow commands execute (#403)
+    const followStarted = (result as import('../commands/index.js').CommandResult & { _followStarted?: { followerId: string; leaderId: string } })._followStarted;
+    if (followStarted) {
+      const leaderState = this.players.get(followStarted.leaderId);
+      if (leaderState) {
+        leaderState.addFollower(followStarted.followerId);
+      }
+    }
+    const followStopped = (result as import('../commands/index.js').CommandResult & { _followStopped?: { followerId: string; leaderId: string } })._followStopped;
+    if (followStopped) {
+      const leaderState = this.players.get(followStopped.leaderId);
+      if (leaderState) {
+        leaderState.removeFollower(followStopped.followerId);
       }
     }
 
@@ -1219,7 +1240,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         otherPlayersInRoom.push(sid);
         const name = this.characterNames.get(sid) ?? 'A wanderer';
         const flags = this.playerFlagsCache.get(sid);
-        otherPlayerInfo.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture });
+        otherPlayerInfo.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture, followingPlayerId: ps.followingPlayerId });
       }
     }
 
@@ -1243,7 +1264,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           if (sid !== player.sessionId && ps.currentRoomId === roomId) {
             const name = this.characterNames.get(sid) ?? 'A wanderer';
             const flags = this.playerFlagsCache.get(sid);
-            result.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture });
+            result.push({ sessionId: sid, name, anon: flags?.anon === true, posture: ps.posture, followingPlayerId: ps.followingPlayerId });
           }
         }
         return result;
@@ -1458,6 +1479,127 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             // Exploration: send map update for the flee destination
             this.sendExplorationUpdate(client, flee.combatantId, flee.toRoomId);
           }
+        }
+      }
+    }
+  }
+
+  // ─── Follow System (#403 Phase 1) ─────────────────────────────────────────
+
+  /**
+   * Auto-move all followers when a leader moves rooms.
+   * Each follower sees the room description and other players are notified.
+   */
+  private moveFollowers(leaderId: string, fromRoomId: string, toRoomId: string): void {
+    const leaderState = this.players.get(leaderId);
+    if (!leaderState || leaderState.followers.size === 0) return;
+
+    const leaderName = this.characterNames.get(leaderId) ?? 'Someone';
+
+    for (const followerId of leaderState.followers) {
+      const followerState = this.players.get(followerId);
+      if (!followerState) continue;
+      // Only move followers who are in the same room the leader left
+      if (followerState.currentRoomId !== fromRoomId) continue;
+
+      const followerPreviousRoom = followerState.currentRoomId;
+      followerState.currentRoomId = toRoomId;
+      followerState.posture = 'standing';
+
+      const followerClient = this.findClient(followerId);
+      const followerName = this.characterNames.get(followerId) ?? 'Someone';
+
+      // Notify the follower about the move
+      if (followerClient) {
+        const targetRoom = this.roomGraph.rooms.get(toRoomId);
+        if (targetRoom) {
+          const exitList = Array.from(targetRoom.exits.keys()).join(', ') || 'none';
+          const lines = [
+            `You follow ${leaderName}.`,
+            '',
+            targetRoom.description,
+            '',
+            `Exits: ${exitList}`,
+          ];
+
+          // Show other players in the destination room
+          const playersInTarget = this.getVisiblePlayersInRoom(toRoomId, followerId);
+          for (const p of playersInTarget) {
+            lines.push(`${p.name} is here.`);
+          }
+
+          this.deliverResult(followerClient, {
+            narrations: [{ text: lines.join('\n'), type: 'room' }],
+            roomHeader: {
+              roomName: targetRoom.name,
+              roomSlug: targetRoom.id,
+              exits: Array.from(targetRoom.exits.keys()),
+              stability: this.state.stability,
+            },
+          });
+        }
+
+        this.sendExplorationUpdate(followerClient, followerId, toRoomId);
+        this.sendRoomOccupants(followerClient, followerId, toRoomId);
+      }
+
+      // Broadcast departure/arrival to other players
+      this.broadcastPlayerMovement(followerId, followerPreviousRoom, toRoomId, undefined, followerState.posture);
+      this.broadcastRoomOccupantsUpdate(followerPreviousRoom);
+      this.broadcastRoomOccupantsUpdate(toRoomId);
+
+      // Notify departure room that follower left following leader
+      for (const [sid, ps] of this.players) {
+        if (sid !== followerId && sid !== leaderId && ps.currentRoomId === followerPreviousRoom) {
+          const c = this.findClient(sid);
+          if (c) {
+            this.sendNarrate(c, { text: `${followerName} follows ${leaderName}.`, type: 'ambient', timestamp: Date.now() });
+          }
+        }
+      }
+    }
+  }
+
+  /** Get visible (non-anon) players in a room, excluding a specific player. */
+  private getVisiblePlayersInRoom(roomId: string, excludeId: string): Array<{ name: string }> {
+    const result: Array<{ name: string }> = [];
+    for (const [sid, ps] of this.players) {
+      if (sid !== excludeId && ps.currentRoomId === roomId) {
+        const flags = this.playerFlagsCache.get(sid);
+        if (!flags?.anon) {
+          result.push({ name: this.characterNames.get(sid) ?? 'A wanderer' });
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Clean up all follow relationships when a player disconnects or leaves.
+   * - If the departing player was following someone, remove them from that leader's follower set.
+   * - If the departing player had followers, stop all of them from following.
+   */
+  private cleanupFollowRelationships(playerId: string): void {
+    // Get the player state before it might be deleted
+    // (onLeave deletes from this.players before calling cleanup, so we iterate all players)
+    
+    // Remove this player from any leader's follower set
+    for (const [, ps] of this.players) {
+      ps.followers.delete(playerId);
+    }
+
+    // If any players were following the departing player, stop them and notify
+    for (const [followerId, followerState] of this.players) {
+      if (followerState.followingPlayerId === playerId) {
+        followerState.stopFollowing();
+        const followerClient = this.findClient(followerId);
+        if (followerClient) {
+          const leaderName = this.characterNames.get(playerId) ?? 'Someone';
+          this.sendNarrate(followerClient, {
+            text: `${leaderName} has left. You stop following.`,
+            type: 'system',
+            timestamp: Date.now(),
+          });
         }
       }
     }

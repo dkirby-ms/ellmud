@@ -3638,6 +3638,47 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 
 ---
 
+## Session: Follow + Consent System (#403 Phase 1+2)
+
+**Date:** 2025-07-25
+**Issue:** #403 — Player groups, player consent, follow
+**PR:** #408 (targeting dev)
+**Commit:** e4d40e4
+
+### What was done
+
+**Phase 1 — Follow:**
+- follow/unfollow command handlers
+- PlayerState fields: followingPlayerId, followers Set, helper methods
+- Auto-follow on leader movement via ZoneRoom.moveFollowers()
+- Follow status in room descriptions (look, go): "X is here, following Y."
+- Follow cleanup on disconnect via ZoneRoom.cleanupFollowRelationships()
+- _followStarted/_followStopped metadata for ZoneRoom wiring
+- _roomEvent broadcasts for ambient follow/unfollow
+
+**Phase 2 — Consent:**
+- consent/unconsent/revoke command handlers
+- PlayerState.consentedPlayers Set (session-scoped, binary)
+- Zone-wide player lookup via resolvePlayerByName
+
+### Key Files
+- packages/server/src/commands/handlers/follow.ts
+- packages/server/src/commands/handlers/consent.ts
+- packages/server/src/commands/index.ts
+- packages/server/src/state/PlayerState.ts
+- packages/server/src/rooms/ZoneRoom.ts
+- packages/server/src/__tests__/follow-consent.test.ts (37 tests)
+
+### Results
+- 37 new tests, 2713 existing tests passing, zero regressions
+
+## Learnings
+
+- **Follow metadata pattern:** _followStarted/_followStopped on CommandResult, same pattern as _postureChange and _roomEvent. ZoneRoom reads these to wire bidirectional follower sets.
+- **Auto-follow guards:** moveFollowers() only moves followers in the same room the leader left. Prevents cross-zone teleporting.
+- **Follow cleanup on disconnect:** cleanupFollowRelationships() iterates all remaining players to clear follower sets and notify followers.
+- **PlayerRef.followingPlayerId:** Added to lightweight display interface so look/go show follow status without needing full PlayerState.
+- **Consent is zone-wide:** consent/unconsent use resolvePlayerByName, not just same-room lookup.
 ## Starter Kit to Inventory Migration (2025-07-24)
 
 **Task:** Move starter kit items from player_stash to player inventory.
