@@ -40,6 +40,15 @@ jobs:
       - name: Fetch all branches
         run: git fetch --all
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Check if dev is ahead of uat
         id: check
         run: |
@@ -68,14 +77,13 @@ jobs:
           # Strip forbidden paths from merge commit
           bash .github/scripts/strip-forbidden-paths.sh
 
-          # Commit if there are staged changes
+          # Commit the merge if there are staged changes
           if ! git diff --cached --quiet; then
-            VERSION=$(node -e "console.log(require('./package.json').version)")
-            git commit -m "chore: promote dev → uat (v${VERSION}) [scheduled]"
+            git commit -m "chore: merge dev → uat [scheduled]"
             git push origin uat
-            echo "✅ Pushed uat branch with dev changes"
+            echo "✅ Merged dev into uat and pushed"
           else
-            echo "ℹ️ Nothing to commit — uat is already up to date after stripping"
+            echo "ℹ️ Nothing to merge — uat is already up to date after stripping"
           fi
 
       - name: Trigger CI/CD on uat

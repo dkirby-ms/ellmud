@@ -36,6 +36,15 @@ jobs:
       - name: Fetch all branches
         run: git fetch --all
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Show current state (dry run info)
         run: |
           echo "=== dev HEAD ===" && git log origin/dev -1 --oneline
@@ -52,13 +61,13 @@ jobs:
           # Strip forbidden paths from merge commit
           bash .github/scripts/strip-forbidden-paths.sh
 
-          # Commit if there are staged changes
+          # Commit the merge if there are staged changes
           if ! git diff --cached --quiet; then
-            git commit -m "chore: promote dev → uat (v$(node -e "console.log(require('./package.json').version)"))"
+            git commit -m "chore: merge dev → uat"
             git push origin uat
-            echo "✅ Pushed uat branch"
+            echo "✅ Merged dev into uat and pushed"
           else
-            echo "ℹ️ Nothing to commit — uat is already up to date"
+            echo "ℹ️ Nothing to merge — uat is already up to date"
           fi
 
       - name: Trigger CI/CD on uat
@@ -93,22 +102,24 @@ jobs:
       - name: Fetch all branches
         run: git fetch --all
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Show current state
         run: |
           echo "=== uat HEAD ===" && git log origin/uat -1 --oneline
           echo "=== prod HEAD ===" && git log origin/prod -1 --oneline
-          echo "=== Version ===" && node -e "console.log('v' + require('./package.json').version)"
 
       - name: Validate uat is release-ready
         run: |
           git checkout uat
-          VERSION=$(node -e "console.log(require('./package.json').version)")
-          if ! grep -q "## \[$VERSION\]" CHANGELOG.md 2>/dev/null; then
-            echo "::error::Version $VERSION not found in CHANGELOG.md — update before releasing"
-            exit 1
-          fi
-          echo "✅ Version $VERSION has CHANGELOG entry"
-
+          
           # Verify no forbidden files on uat
           FORBIDDEN=$(git ls-files | grep -E "^(\.(ai-team|squad|ai-team-templates)/|team-docs/|docs/proposals/)" || true)
           if [ -n "$FORBIDDEN" ]; then
@@ -121,9 +132,9 @@ jobs:
         if: ${{ inputs.dry_run == 'false' }}
         run: |
           git checkout prod
-          git merge origin/uat --no-ff -m "chore: promote uat → prod (v$(node -e "console.log(require('./package.json').version)"))"
+          git merge origin/uat --no-ff -m "chore: merge uat → prod"
           git push origin prod
-          echo "✅ Pushed prod — squad-release.yml will tag and publish the release"
+          echo "✅ Merged uat into prod and pushed — squad-release.yml will create release"
 
       - name: Trigger CI/CD on prod
         if: ${{ inputs.dry_run == 'false' }}

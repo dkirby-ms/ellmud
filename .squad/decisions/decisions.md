@@ -3935,3 +3935,837 @@ Groups use the same in-memory, session-scoped pattern as follow/consent. A `Grou
 - ✅ ZoneRoom integration for group broadcasts
 - ✅ PR #414 merged to dev
 - ✅ All 3 blocking issues (#411, #412, #413) closed
+
+---
+
+### 2026-04-11T13:03Z: Design answers for #409 Container System
+**By:** Dale Kirby (via Copilot)
+**What:** Answers to 5 open design questions from Elminster's architecture proposal:
+1. **Equipped items on death:** Lootable — equipped items go into the corpse
+2. **Corpse TTL:** 12 hours (much longer than Elminster's suggestion of 10 min — player-friendly)
+3. **Container UI:** Inline in inventory panel (simpler approach)
+4. **Bag carry bonus:** Some bags can increase carry capacity, but not every bag (optional property per bag)
+5. **Stash ↔ inventory transfer:** Yes, but only at stash locations (safe rooms/hubs)
+**Why:** User decisions to unblock #409 implementation phases
+### 2026-04-11T16:56Z: User directive
+**By:** Copilot (via dkirby-ms)
+**What:** No full CI on dev branch — too expensive for GitHub Actions minutes. Dev PRs do not need the full Ellmud test suite.
+**Why:** User request — captured for team memory
+### 2026-04-11T17:00Z: User directive - Versioning strategy
+**By:** Copilot (via dkirby-ms)
+**What:** Desired versioning model:
+- **Build number (patch):** Auto-bump on every dev build or promote cycle - no manual intervention
+- **Minor version:** Auto-bump on release (promote to prod)
+- **Major version:** Manual only - reserved for the user to bump intentionally
+- Deprecate the overlap between release.yml (manual) and squad-release.yml (auto) - consolidate into one automated path
+**Why:** User request - current process requires manual version bumps which is friction. Automation should handle build + minor; human controls major.
+# Decision: CodeQL Security Fixes — Drizzt (#419)
+
+**Date:** 2025-07-22  
+**Author:** Drizzt (Engine Dev)  
+**Issue:** #419
+
+## Decisions Made
+
+### 1. Sanitization: Single-char removal over multi-char regex
+Replaced `/<[^>]*>/g` (multi-char HTML tag strip) with `/[<>]/g` (single-char angle bracket removal). This eliminates the CodeQL "Incomplete multi-character sanitization" alert because single-character removal can't be bypassed by nesting (e.g. `<<script>script>` → `script`). ANSI tags use `[`/`]`, not `<`/`>`, so this is safe.
+
+Also extended control char range from `\x00-\x1F\x7F` to `\x00-\x1F\x7F-\x9F` to cover C1 control characters.
+
+### 2. Rate limiting: Shared middleware with tiered limits
+Created `packages/server/src/middleware/rate-limit.ts` with a `createLimiter()` factory that respects `ALLOW_LOCAL_AUTH` bypass (matching auth/routes.ts pattern). Pre-built tiers:
+- **auth**: 20 req/15 min (Entra callback)
+- **api**: 60 req/15 min (characters, settings, spawn-zone)
+- **admin-write**: 100 req/15 min (creature/item definition CRUD — already behind adminAuth)
+- **static**: 200 req/15 min (catch-all SPA serving)
+
+### 3. ReDoS: Character-class email regex
+Replaced polynomial `/^[^\s@]+@[^\s@]+\.[^\s@]+$/` with linear `/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/`. Slightly more restrictive but covers all practical email formats.
+
+## Impact
+- 11 files changed, 87 insertions, 22 deletions
+- All 2915 server tests pass, lint clean
+- No behavioral changes to game logic
+# Decision: Playwright E2E Testing Infrastructure
+
+**Author:** Drizzt  
+**Date:** 2026-04-11  
+**Issue:** #416
+
+## What
+
+Created `packages/e2e/` workspace with Playwright for end-to-end multiplayer testing.
+
+## Key Decisions
+
+1. **Base URL is `localhost:3000`** — the Vite dev server port (not 5173). Vite proxies `/auth/*`, `/api/*`, `/colyseus` to the game server on port 2567.
+
+2. **PlayerFixture pattern** — Each test player is an isolated BrowserContext. Auth is done via API (`POST /auth/register`), then the token is injected into localStorage. This avoids brittle UI-based login flows.
+
+3. **Selectors** — Command input: `input[aria-label="Command input"]`. Narrative terminal: `[role="log"][aria-label="Game narrative"]`. These are stable accessibility attributes already in the client.
+
+4. **Default zone** — All test players start in `the-reliquary` for co-location in multiplayer tests.
+
+5. **Chromium only** for now. Firefox/WebKit can be added later.
+
+## Who Cares
+
+- **Regis:** If client selectors change (aria-labels on command input or narrative terminal), E2E tests will break.
+- **Everyone:** Run `npm run test:e2e` from root. Requires dev stack running with `ALLOW_LOCAL_AUTH=true`.
+# Decision: E2E Character Name Isolation
+
+**Author:** Drizzt  
+**Date:** 2026-04-11  
+**Status:** Implemented
+
+## Context
+
+E2E tests create characters that persist in the Colyseus room as "linkdead" after test cleanup. The DB record is deleted, but the in-room state remains. When subsequent tests create characters with the same name, pattern assertions match stale output.
+
+## Decision
+
+Character names in E2E tests now include a random 4-letter alpha suffix (e.g., `Alicexmqp` instead of `Alice`). All test assertions use the dynamic `player.name` property rather than hardcoded strings.
+
+## Impact
+
+- **All agents writing E2E tests:** Use `player.name` for commands (`follow ${leader.name}`) and assertions (`new RegExp(alice.name, 'i')`). Never hardcode character names.
+- **Room topology:** Starting room is `reliquary-inn` with only a `down` exit. Use `go down`/`go up` for movement tests.
+- **Pattern matching:** Server sends posture-aware descriptions (`is standing here`), so use `is.*here` in regex patterns.
+# Decision: Follow Arrival Message Ordering
+
+**Author:** Drizzt  
+**Date:** 2026-07-24  
+**Scope:** Server — ZoneRoom follow system
+
+## Context
+
+When a leader moves rooms, `moveFollowers` executes inside the `movedRoom` block, before `deliverResult` sends the leader's own room description. This caused follower arrival messages to be lost (rendered above the room header in the client).
+
+## Decision
+
+- `moveFollowers` now returns follower names instead of sending leader notifications inline.
+- `broadcastPlayerMovement` accepts an optional `excludeFromArrivalIds` set so the leader is excluded from the generic "arrives" message for followers.
+- Deferred "X follows you." notifications are sent to the leader AFTER `deliverResult` in `handleCommandMessage`.
+
+## Impact
+
+- **Regis / Client:** No client changes needed — uses existing `narrate` message with type `ambient`.
+- **Jarlaxle / Content:** Departure room behavior unchanged ("X follows Y." still sent).
+- **All:** Any future system that needs deferred post-room-description notifications should follow this same pattern.
+# Decision: Group E2E Tests Adapted to Actual Commands
+
+**Author:** Drizzt
+**Date:** 2026-04-12
+**Context:** #416 Phase 4 — Group Feature E2E Tests
+
+## Decision
+The task spec described `group invite` and `group accept` commands, but the actual server implementation uses a different flow: `follow` then `group form` (creates group from all followers) and `group add <player>` (requires target to be following or have consented). The E2E tests were written to match the real implementation, not the spec.
+
+## Impact
+- All 6 test scenarios from the spec are covered, adapted to actual commands
+- Future test writers should reference `packages/server/src/commands/handlers/group.ts` for canonical command behavior
+- If an invite/accept system is ever added, these tests will need updating
+# Research Summary: Issues #417 & #418
+
+**Author:** Elminster  
+**Date:** 2026-04-11  
+**Status:** Complete — Both issues ready for implementation
+
+---
+
+## ISSUE #417: [FEATURE] Toggle Follow
+
+### Current Follow System Analysis
+
+**Locations:**
+- Follow command: `packages/server/src/commands/handlers/follow.ts`
+- Consent system: `packages/server/src/commands/handlers/consent.ts`
+- PlayerState: `packages/server/src/state/PlayerState.ts` (lines 59-67)
+
+**Current Implementation:**
+- `PlayerState.followingPlayerId`: Tracks who this player is following (in-memory, session-scoped)
+- `PlayerState.followers`: Set of player IDs following this player (in-memory, session-scoped)
+- **Consent system:** Binary all-or-nothing per-player model (session-scoped, resets on disconnect)
+- **No persistence:** Both follow and consent currently disappear on disconnect
+
+### Problem & Solution
+
+**Issue:** Players cannot prevent others from following them. The follow command only checks if the follower finds the target in the same room—there's no opt-out mechanism.
+
+**Solution Architecture:**
+1. **New Database Column:** Add `allowFollowing: BOOLEAN NOT NULL DEFAULT true` to `character_flags` table (migrating with #365's pattern)
+2. **Follow Command Logic:** Check `allowFollowing` flag before permitting follow:
+   ```
+   if (!target.allowFollowing && follower != leader) → reject with "Player does not accept followers"
+   ```
+3. **Toggle Command:** New `/toggle follow` command (generic framework for future boolean settings):
+   ```
+   /toggle follow → flips allowFollowing, persists to character_flags
+   /toggle rp     → existing behavior (already in character_flags)
+   /toggle anon   → existing behavior
+   ```
+4. **Settings UI:** Integrate toggle into player settings panel (toggleable flags already exist in UI for `/flag` command)
+
+### Storage Decision
+- **Where:** `character_flags.flags` JSONB (like existing `anon` and `rp` flags)
+- **Why:** Consistent with existing flag pattern, persists across sessions, character-scoped
+- **Alternative rejected:** New table — unnecessary complexity; flags are the right pattern
+
+### Implementation Notes
+- Admins can always follow others (if desired, enforce in follow command)
+- The "followers" set on PlayerState is already correct — no changes needed there
+- Follow command rejection should show a clear, friendly message
+
+---
+
+## ISSUE #418: [FEATURE] ANSI Tags Support for Items & Creatures
+
+### Current ANSI Tag System Analysis
+
+**ANSI Parser:** `packages/client/src/lib/ansi-parser.ts`
+- Supports lightweight tags: `[red]...[/red]`, `[bold]...[/bold]`
+- Supports raw ANSI escapes: `\x1b[31m...`
+- Already generates React spans with `.ansi-*` CSS classes
+
+**AnsiText Component:** `packages/client/src/components/AnsiText.tsx`
+- Simple wrapper: calls `parseAnsiText()` and renders result
+- Already used in ZoneExploration.tsx for all narration display
+
+**Where Item/Creature Names & Descriptions Appear:**
+
+1. **Main Text Window** (ZoneExploration.tsx):
+   - Room descriptions (already use AnsiText ✓)
+   - Look command output (items + creatures listed as strings within narration ✓)
+   - Combat messages, take/drop messages, etc. (all via narrations ✓)
+
+2. **Status Panel** (StatusPanel.tsx):
+   - RoomOccupants component (creature/player names)
+   - Currently displays raw text — **NEEDS AnsiText wrapper**
+
+3. **Item Tooltips** (ItemTooltip.tsx):
+   - Shows item name, description, stats
+   - Currently displays raw text — **NEEDS AnsiText wrapper**
+
+4. **Inventory Overlay** (InventoryOverlay.tsx):
+   - Item names and descriptions in list
+   - Currently displays raw text — **NEEDS AnsiText wrapper**
+
+### Server-Side Data Structure
+
+**Item Interface** (`packages/server/src/generator/RoomGraph.ts`):
+```typescript
+export interface Item {
+  id: string;
+  name: string;                     // ← Can contain ANSI tags
+  description: string;              // ← Can contain ANSI tags
+  roomDescription?: string;         // ← Already supports ANSI tags (#386)
+  weight: number;
+  // ...
+}
+```
+
+**Creature Interface** (`packages/server/src/creatures/types.ts`):
+```typescript
+export interface CreatureTemplate {
+  name: string;                     // ← Can contain ANSI tags
+  roomDescription?: string;         // ← Already supports ANSI tags
+  // ...
+}
+
+export interface Creature {
+  name: string;                     // ← Can contain ANSI tags
+  roomDescription?: string;         // ← Already supports ANSI tags
+  // ...
+}
+```
+
+**Current Usage:**
+- `roomDescription` already supports ANSI tags (used in look/go/goto commands)
+- `name` field is plain text in most places but passed through narrations (which are parsed for ANSI)
+- When items/creatures appear in narrations like "A [red]bloodied[/red] dagger lies here.", tags are parsed by client ✓
+
+### What Needs to Change
+
+**Server-side:** No changes required! Item/creature names and descriptions can already contain ANSI tags.
+
+**Client-side Changes:**
+
+1. **RoomOccupants.tsx** (Status Panel):
+   - Wrap creature.name in `<AnsiText>` component
+   - Wrap player names (also support ANSI if desired)
+
+2. **ItemTooltip.tsx**:
+   - Wrap name and description in `<AnsiText>` components
+
+3. **InventoryOverlay.tsx**:
+   - Wrap item names and descriptions in `<AnsiText>` components
+
+4. **StatusPanel.tsx** (if displaying item/creature names anywhere):
+   - Wrap in `<AnsiText>` where applicable
+
+5. **Look Command Output:**
+   - Already works! Line like "A [red]bloodied dagger[/red] lies here." is parsed when rendered as narration ✓
+   - No client changes needed for main text window
+
+### Storage Decision
+- **No database changes needed** — the fields already exist and support the content
+- Content creators can add ANSI tags to item/creature names and descriptions via:
+  - Admin CRUD API (already done for rooms)
+  - Content seed files
+  - Migration scripts
+
+---
+
+## Implementation Recommendations
+
+### ISSUE #417 — Toggle Follow
+
+**Owner:** Jarlaxle (Systems) — This is a player interaction/consent system feature
+- Follow command logic change (server)
+- Toggle command implementation (server)
+- Settings UI integration (client via settings modal)
+
+**Effort:** Small (1-2 sprints)
+- Add migration for `character_flags` (if not already JSONB)
+- Add toggle logic to follow command
+- Create `/toggle` command handler (reusable pattern)
+- Wire toggle into settings UI
+
+**Dependencies:** None (character_flags exists, follow command exists)
+
+---
+
+### ISSUE #418 — ANSI Tags for Items & Creatures
+
+**Owner:** Regis (Client) — Primarily UI/display changes
+- RoomOccupants.tsx, ItemTooltip.tsx, InventoryOverlay.tsx updates
+- Verify AnsiText is imported and used correctly
+
+**Effort:** Very small (0.5 sprint)
+- 4-5 file changes, mostly wrapping text in `<AnsiText>` components
+- No server changes, no database changes
+- Content can already contain ANSI tags
+
+**Dependencies:** None (ANSI parser already exists and works)
+
+---
+
+## Decisions
+
+1. **#417 Storage:** Use `character_flags.flags` JSONB for `allowFollowing` flag (consistent with existing pattern)
+2. **#417 Scope:** Focus on follow-blocking first; toggle command is the generic framework (extends to other boolean settings later)
+3. **#418 Scope:** Client-side text rendering only — server data structures already support ANSI
+4. **#418 Placement:** Use `<AnsiText>` component consistently wherever item/creature names and descriptions appear
+# Decision: Container Command Preposition Parsing
+
+**Author:** Jarlaxle  
+**Date:** 2025-07-17  
+**Issue:** #409 Phase 4
+
+## Decision
+
+Preposition parsing for `put X in Y` and `take X from Y` is handled **inside the command handlers**, not in the parser. The parser passes the full args array unmodified.
+
+## Rationale
+
+- The parser's job is verb recognition and alias expansion. Adding preposition-aware grammar would couple it to specific command semantics.
+- Using `lastIndexOf(' in ')` / `lastIndexOf(' from ')` in handlers handles multi-word item names gracefully (e.g., "put iron sword in expedition pack").
+- This pattern is consistent with how `loot X from corpse` already works in `loot.ts` (regex-based `from` extraction).
+- Future preposition commands (e.g., `give X to Y`) can follow the same handler-side pattern.
+
+## Impact
+
+Any agent adding preposition-based commands should parse them in the handler, not modify the parser.
+# Decision: Container Item Type Architecture (#409 Phase 2)
+
+**Author:** Jarlaxle  
+**Date:** 2025-07-15  
+**Status:** Implemented and pushed to dev
+
+## Decision
+
+Container items are regular items with `type: 'container'` — no separate entity or table. Container properties live on `ItemDefinition.containerProperties`, and runtime contents live on `ItemInstance.contents`.
+
+## Key Technical Choices
+
+1. **No new DB migration** — Container contents are serialized into the existing `metadata` JSONB column on `player_inventory`. The `inventoryToEntries()` helper writes a `containerContents` key into metadata.
+
+2. **No container nesting** — You cannot put a bag inside a bag. This prevents infinite depth in persistence and weight calculations. Explicitly rejected in `addItemToContainer()`.
+
+3. **Immutable container operations** — All add/remove functions return new `ItemInstance` objects. Original is never mutated. This keeps state management predictable for ZoneRoom lifecycle.
+
+4. **carryBonus is opt-in per container definition** — `calculateCarryBonus()` sums bonuses from all containers in inventory. Not all containers provide this bonus.
+
+5. **Weight calculation** — Container total weight = own weight + sum of contents weights. This feeds into existing `PlayerState.currentWeight` calculations.
+
+## Implications for Other Agents
+
+- **Drizzt (Commands)**: Will need container-specific commands: `put <item> in <bag>`, `get <item> from <bag>`, `look in <bag>`. These should call the shared `addItemToContainer`/`removeItemFromContainer` functions.
+- **Bruenor (Content)**: Can define new container items in DB seeds using `containerProperties` JSON field.
+- **Client**: Container contents display inline in inventory panel (user-confirmed — not a separate panel).
+### 2026-04-11: Equipped items are lootable on death (#409 Phase 3)
+**By:** Jarlaxle
+**What:** Equipped items now drop into the corpse on player death alongside inventory items. Soulbound equipped items are preserved (same rule as inventory). Corpse TTL updated to 12 hours (43200s) per user decision.
+**Impact:** Bruenor/Drizzt — any client-side death UI or corpse display should account for equipped gear appearing in corpse item lists. The `VisibleEquipment` on PlayerState is cleared on death (same as before), but the actual Item objects now go into the corpse instead of being destroyed.
+**Files:** `PlayerState.ts` (new `getEquippedItems()`, `clearAllEquippedItems()`), `ZoneRoom.ts` (death handler), `config.ts` (TTL default)
+### 2026-04-11: Inventory Persistence Architecture (Issue #409)
+**By:** Jarlaxle
+**What:** Implemented persistent player inventory as a new `inventory/` module following the exact same provider pattern as `stash/`.
+**Key decisions:**
+1. **Inventory module is separate from stash module** — Both use the same interface/InMemory/Pg/provider pattern but are independent modules. Inventory = carried items (everywhere, weight-limited). Stash = bank (feature_stash rooms only).
+2. **Bulk save on lifecycle events** — `saveInventory()` does atomic replace (DELETE all + INSERT). Used on leave and death.
+3. **Debounced save on mutations** — 2-second debounce timer per player on take/drop to coalesce rapid item changes. Timer cleared before explicit saves.
+4. **Load order in onJoin** — Starter kit grants first (one-time, idempotent), then persisted inventory loaded from DB. Weight limits enforced by `PlayerState.addItem()`.
+5. **Death persists after corpse split** — Non-soulbound items go to corpse, soulbound stay. DB save happens after the split so only survivors persist.
+6. **Migration 014** — Fixed pre-existing duplicate 012 numbering (renamed starter_kit_granted to 013, new inventory is 014).
+**Why:** Foundation for Container System Phase 2+ (corpse containers, bag carry bonuses, stash↔inventory transfers).
+# Decision: Shared Forbidden-Paths Script
+
+**Date:** 2025-07-15
+**Author:** Khelben (CI/CD Dev)
+**PR:** #424
+
+## Context
+Two workflows (`scheduled-uat-promote.yml` and `squad-promote.yml`) independently maintained identical forbidden-path lists for stripping AI-team/squad files during dev→uat promotion. Any update to one list could miss the other, creating a sync risk.
+
+Additionally, these workflows used different concurrency groups (or none), allowing them to race on UAT merges.
+
+## Decision
+1. **Extracted forbidden paths** into `.github/scripts/strip-forbidden-paths.sh` — single source of truth.
+2. **Aligned concurrency groups** to `uat-promote` across both workflows.
+3. **Hardened health check** in `ci-cd.yml` to check `"status":"ok"` instead of `"uptime"`.
+
+## Impact
+- Adding/removing forbidden paths requires changing only one file.
+- Scheduled and manual UAT promotes can no longer race.
+- Health check survives API schema changes.
+# Minsc Research: Issues #419 and #420
+
+**Researcher:** Minsc (Tester)  
+**Date:** 2026-04-11  
+**Issues:** #419 (CodeQL alerts), #420 (Remove midgaard zone)
+
+---
+
+## ISSUE #419 — CodeQL Alerts
+
+### Executive Summary
+15 open CodeQL alerts identified across the codebase. Three categories: **incomplete input sanitization** (3), **polynomial regex vulnerability** (1), **missing rate limiting** (10), plus one already-fixed randomness issue. All have clear remediation paths and are testable.
+
+### Detailed Findings
+
+#### 1. **Incomplete Multi-Character Sanitization** (HIGH severity, 3 instances)
+
+**Files:**
+- `packages/server/src/commands/handlers/say.ts:18`
+- `packages/server/src/commands/handlers/emote.ts:15`
+- `packages/server/src/commands/handlers/whisper.ts:15`
+
+**Root Cause:**
+All three use identical regex: `/[\x00-\x1F\x7F]/g`
+- This strips control characters AND DEL (0x7F)
+- **Gap:** Missing range \x7B-\x7E (braces `{`, pipe `|`, tilde `~`)
+- These characters can be injected into game narration for XSS via LLM prompt injection
+
+**Recommended Fix:**
+Expand regex to: `/[\x00-\x1F\x7B-\x7E\x7F]/g` (add ASCII special chars 123-126)
+Or use whitelist: Allow only alphanumeric + basic punctuation (`.!?,'"-`)
+
+**Risk Level:** Medium — Only affects in-game chat; LLM narration may interpret these as markup. Attackers can inject control sequences.
+
+**Testing Strategy:**
+- Unit tests for each handler with payloads: `say "{inject}"`, `emote "|command"`, `whisper ~hack~`
+- Verify sanitized output contains no special chars
+
+---
+
+#### 2. **Polynomial ReDoS (Regular Expression Denial of Service)** (HIGH severity, 1 instance)
+
+**File:** `packages/server/src/admin/users/user-routes.ts:37`
+
+**Current Regex:**
+```javascript
+/^[^\s@]+@[^\s@]+\.[^\s@]+$/
+```
+
+**Problem:**
+- `[^\s@]+` matches "any char except space or @", repeated unbounded
+- When given a long string of non-@ chars followed by backtracking failure, causes exponential backtracking
+- Example: 50 chars of "A" followed by "@" but missing dot → tries millions of combinations
+
+**Recommended Fix:**
+Replace with simpler, linear regex:
+```javascript
+/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+```
+Or use a library like `email-validator` for robust RFC 5322 compliance.
+
+**Risk Level:** Medium — Admin endpoints only; limited exposure. But can cause server slowdown under attack.
+
+**Testing Strategy:**
+- Benchmark regex speed on valid emails (should be <1ms)
+- Stress test with 1000-char malformed email; measure response time
+- Verify no DoS with inputs like `"a".repeat(50)+"@"`
+
+---
+
+#### 3. **Missing Rate Limiting** (HIGH severity, 10 instances)
+
+**Affected Endpoints:**
+- Auth: `POST /auth/entra/callback` (entra-routes.ts:51)
+- API: `POST /api/characters/` (characters.ts:36, 52, 108, 130)
+- API: `POST /api/settings/` (settings.ts:110, 127)
+- API: `POST /api/spawn-zone` (spawn-zone.ts:41)
+- Admin: `POST /admin/api/creature-definitions` (routes.ts:253, 290, 352, 387)
+- Server: Catch-all static file serving (index.ts:321)
+
+**Why It Matters:**
+- Character creation, OAuth callback, item/creature creation all lack per-IP or per-user rate limiting
+- Allows brute-force attacks, spam, resource exhaustion
+- OWASP A04:2021 — Insecure Design
+
+**Recommended Fix:**
+Implement `express-rate-limit` middleware:
+```javascript
+const rateLimit = require('express-rate-limit');
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: 100, // 100 requests per window
+  keyGenerator: (req) => req.user?.id || req.ip, // Per-user or per-IP
+});
+app.use('/api/characters', limiter);
+app.use('/admin/api/', limiter);
+```
+
+**Risk Level:** High — These are high-value endpoints. Missing rate limits are low-hanging fruit for attackers.
+
+**Testing Strategy:**
+- Load test each endpoint with 500 requests in 1 second
+- Verify 429 (Too Many Requests) response after limit exceeded
+- Verify authenticated users get higher limits than anonymous
+
+---
+
+#### 4. **Insecure Randomness** (HIGH severity, 1 instance)
+
+**File:** `packages/e2e/src/fixtures/test-fixture.ts:23` (FIXED)
+
+**Status:** ✅ Already resolved  
+Alert #4 marked as "fixed". The test fixture was using `Math.random()` for username generation; likely corrected to use `crypto.getRandomValues()`.
+
+---
+
+### Summary Table
+
+| Alert | Count | Files | Severity | Status |
+|-------|-------|-------|----------|--------|
+| Incomplete Sanitization | 3 | say.ts, emote.ts, whisper.ts | HIGH | Open, fixable |
+| Polynomial ReDoS | 1 | user-routes.ts | HIGH | Open, fixable |
+| Missing Rate Limiting | 10 | index.ts, entra-routes.ts, admin/routes.ts, api/* | HIGH | Open, fixable |
+| Insecure Randomness | 1 | test-fixture.ts | HIGH | **FIXED** |
+| **Total Open** | **15** | — | — | — |
+
+---
+
+## ISSUE #420 — Remove Midgaard Zone Import
+
+### Executive Summary
+The Midgaard zone (classic DikuMUD city) was imported as a test of the `.wld` importer. It is now safe to remove. **Five locations** require cleanup: one migration, one SQL sample, one importer documentation, one test file, and one room features migration.
+
+### Detailed Findings
+
+#### **Files to Remove or Modify:**
+
+1. **Migration (Data):** `packages/server/src/db/migrations/004_import_midgaard.sql`
+   - **Action:** DELETE entire file
+   - **Impact:** Zone `midgaard` and all 57 rooms/115 exits removed from DB on next migration
+   - **Risk:** If any active player characters are in Midgaard rooms, they will have invalid room references. Check DB before deletion.
+   - **Coordinate:** Ensure no players have `current_room_slug` = any Midgaard room
+
+2. **Sample SQL:** `scripts/sample-diku-import.sql`
+   - **Action:** DELETE entire file OR DELETE Midgaard section (lines with "Midgaard City" and all associated INSERT statements)
+   - **Rationale:** This is example/documentation of the import format; keeping it doesn't hurt, but removing clarifies that Midgaard is no longer a built-in zone
+   - **Note:** The file is NOT auto-run; it's just a reference for how `.wld` imports work
+
+3. **Importer Documentation:** `scripts/import-diku-zone.ts`, `scripts/import-diku-zone.js`, `scripts/import-diku-zone.d.ts`
+   - **Action:** UPDATE comments/examples
+   - **Current:** Examples show `npx tsx scripts/import-diku-zone.ts scripts/midgaard.wld midgaard "Midgaard City"`
+   - **Recommended:** Replace with a generic example or remove Midgaard-specific mention
+   - **Impact:** Low — just documentation; users can still import other zones
+
+4. **Room Features Migration:** `packages/server/src/db/migrations/006_room_features.sql` (lines 18-19, 32)
+   - **Action:** DELETE two SQL queries that reference Midgaard
+   - **Current:**
+     ```sql
+     WHERE zone_id = (SELECT id FROM zones WHERE slug = 'midgaard')
+       AND slug = 'the-temple-of-midgaard';
+     ```
+   - **Rationale:** These are example/seed data for the Temple of Midgaard room features; once migration 004 is deleted, this zone won't exist
+
+5. **Test Data:** `packages/client/src/map/__tests__/computeLayout.test.ts`
+   - **Action:** DELETE test case #29 or UPDATE to use a different zone topology
+   - **Current:** Test loads Midgaard's full 57-room topology to validate edge crossing minimization
+   - **Recommendation:** Keep the TEST logic, but replace Midgaard topology with a generated/mock dense zone. Test #29 is valuable for regression testing (crossing elimination on dense graphs).
+   - **Learnings documented in `.squad/agents/regis/history.md`**
+   - **Risk:** If deleted, lose regression coverage for complex layout scenarios
+
+---
+
+#### **Shared Infrastructure — DO NOT REMOVE:**
+
+- **Importer itself:** `scripts/import-diku-zone.ts` — The `.wld` parser/importer should STAY. It's reusable infrastructure for importing other DikuMUD zones in the future.
+- **ELK layout engine, zone designer:** These are general-purpose and have no Midgaard-specific logic.
+- **Test utilities:** The test infrastructure in `computeLayout.test.ts` should stay; only the Midgaard-specific test case is removable.
+
+---
+
+### Cleanup Checklist
+
+- [ ] **Verify no players in Midgaard:** Run `SELECT COUNT(*) FROM player_state WHERE current_zone_slug = 'midgaard'`
+- [ ] **Delete migration:** `004_import_midgaard.sql`
+- [ ] **Delete sample SQL:** `scripts/sample-diku-import.sql` (or archive to `docs/examples/`)
+- [ ] **Update importer examples:** `scripts/import-diku-zone.ts` (comments), `scripts/import-diku-zone.d.ts`
+- [ ] **Update room features migration:** `006_room_features.sql` (remove Midgaard references)
+- [ ] **Update test case:** `computeLayout.test.ts` test #29 (replace or delete)
+- [ ] **Run migrations:** Verify no errors on fresh DB
+- [ ] **Test zone designer:** Load another zone (e.g., Siltgate) and verify layout engine still works
+
+---
+
+### Risk Assessment
+
+**Low Risk.**
+- Midgaard is not referenced in any gameplay code, only in migrations and tests.
+- No hardcoded zone slug in config or game logic.
+- Removing the migration will simply fail to create the zone on next DB init — no cascading logic failures.
+- Test case removal is safe (other tests cover layout engine).
+
+**Coordinate With:**
+- DB team: Ensure no active players in Midgaard before migration deletion
+- Frontend team: Update test case or provide alternative dense zone topology
+
+---
+
+## Recommendations
+
+### For #419 (CodeQL):
+1. **Immediate:** Fix sanitization regex in all three command handlers (2-hour task, high impact)
+2. **Short-term:** Add rate limiting to auth/API endpoints (4-hour task, medium complexity)
+3. **Polish:** Replace email regex with library or hardened pattern (1-hour task)
+4. **Verification:** Add integration tests for each fix
+
+### For #420 (Midgaard):
+1. **Immediate:** Verify no players in Midgaard zone
+2. **Execute:** Follow cleanup checklist (1-2 hour task, straightforward)
+3. **Verification:** Run test suite; verify zone designer still works with other zones
+
+---
+
+## Test Plan
+
+### For #419:
+- **Sanitization:** Unit tests in `say.test.ts`, `emote.test.ts`, `whisper.test.ts` with payloads: `{`, `|`, `~`, `\x7B`, etc.
+- **ReDoS:** Benchmark test with 1000-char malformed email; measure regex speed (<1ms expected)
+- **Rate Limiting:** Integration test hitting endpoints 500+ times in 1s; verify 429 response
+
+### For #420:
+- **Migration:** Run `npm run migrate` on fresh DB; verify Midgaard zone does NOT exist
+- **Zone Designer:** Load Siltgate or other zone; verify no errors
+- **Tests:** Run `npm run test`; verify no failures related to missing Midgaard
+
+---
+
+## Ownership
+
+- **CodeQL Fixes:** Drizzt (Backend) or Minsc (if taking ownership of security tests)
+- **Midgaard Removal:** Laeral (Content/Infrastructure) or Regis (if test refactoring needed)
+- **Verification:** Minsc (test coverage)
+# Decision: ANSI Tag Rendering for Items and Creatures (#418)
+
+**Author:** Regis (Frontend Dev)
+**Date:** 2025-07-17
+**Status:** Implemented
+
+## Context
+
+Issue #418 requested ANSI tag support (e.g., `[red]...[/red]`) for item names, item descriptions, and creature names across all player-facing UI components.
+
+The ANSI parser (`ansi-parser.ts`) and the `AnsiText` React component already existed and were in use for the main text narration window and a couple of item descriptions.
+
+## Decision
+
+Wrap all raw text interpolations of item/creature names and descriptions in `<AnsiText text={...} />` across every player-facing component that renders them:
+
+- **RoomOccupants** — creature names
+- **ItemTooltip** — item name (description was already wrapped)
+- **InventoryOverlay** — item names and flavor text
+- **StatusPanel GearTab** — inventory item names
+- **CombatHUD** — enemy name and available target names
+- **CombinedStashLoadout** — item names in loadout, inventory list, zone finds, and selected detail
+- **EquipmentSilhouette** — equipped item names (with existing truncation preserved)
+
+## Rationale
+
+- Client-only change; no server or shared type modifications needed since item/creature data structures already pass strings that may contain ANSI markup.
+- AnsiText gracefully handles strings with no ANSI tags (renders as plain text), so this is a safe universal wrap.
+- EquipmentSilhouette applies a 12-char truncation before passing to AnsiText. If truncation cuts an ANSI tag, the parser degrades gracefully. The full name is always visible in the ItemTooltip hover.
+
+## Implications
+
+- Any new component that renders item or creature names should use `<AnsiText>` for consistency.
+- The `AnsiText` component is a default export from `packages/client/src/components/AnsiText.tsx`.
+# Decision: Automated Version Bumping
+
+**Date:** 2025-01-XX  
+**Author:** Khelben (CI/CD Dev)  
+**Status:** ✅ Implemented (PR #425)  
+**Scope:** CI/CD, Release Management, Versioning
+
+## Context
+
+The project had two overlapping release workflows:
+1. `release.yml` — Manual workflow_dispatch on prod, user picks major/minor/patch, runs npm version, commits, tags, creates GitHub Release
+2. `squad-release.yml` — Auto-triggered on prod push, reads version from package.json, creates tag + GitHub Release if tag doesn't exist
+
+This created confusion about which workflow to use and required manual version bumping before releases.
+
+## Decision
+
+**Implement automated version bumping tied to branch promotion workflow:**
+
+- **Patch bumps (0.1.x):** Automated on every dev → uat promotion
+- **Minor bumps (0.x.0):** Automated on every uat → prod promotion  
+- **Major bumps (x.0.0):** Manual only (reserved for breaking changes)
+
+**Deprecate `release.yml` in favor of the automated system.**
+
+## Rationale
+
+1. **Reduces Human Error:** Eliminates manual version bumping mistakes (forgetting to bump, wrong bump type, version conflicts)
+2. **Consistent Versioning:** Every UAT build gets a unique patch version
+3. **Clear Intent:** Minor version change = production release, patch = UAT build
+4. **Simpler Workflow:** Developers use promote workflow, versioning happens automatically
+5. **Idempotent Releases:** squad-release.yml remains idempotent and handles the actual GitHub Release creation
+
+## Implementation Details
+
+### Modified Workflows
+
+1. **scheduled-uat-promote.yml**
+   - Added Node.js setup and npm ci
+   - After merge: npm version patch --no-git-tag-version
+   - Sync workspace versions via npm run version:sync
+   - Commit with [skip ci] to prevent infinite loops
+
+2. **squad-promote.yml**
+   - dev→uat job: Same patch bump as scheduled workflow
+   - uat→prod job: Minor bump (resets patch to 0)
+   - Dry run mode shows version preview
+   - Removed CHANGELOG version validation
+
+3. **squad-release.yml**
+   - Removed CHANGELOG version validation
+   - Reads auto-bumped version from package.json
+   - Creates tag + GitHub Release (unchanged behavior)
+
+4. **release.yml**
+   - Renamed to DEPRECATED-release.yml
+   - Replaced with error stub explaining new model
+
+### Version Bump Flow
+
+```
+1. Merge branches
+2. npm version {patch|minor} --no-git-tag-version
+3. npm run version:sync (align workspace packages)
+4. git commit -m "chore: bump version to X.Y.Z [skip ci]"
+5. git push
+6. squad-release.yml reads version and creates release (prod only)
+```
+
+### Safety Mechanisms
+
+- **[skip ci]:** Prevents version bump commits from triggering workflows infinitely
+- **Idempotent:** Multiple runs don't double-bump (npm version fails if version exists)
+- **Dry run:** Shows what version WOULD be bumped to without committing
+- **Workspace sync:** Ensures monorepo packages stay aligned
+
+## Alternatives Considered
+
+1. **Keep manual release.yml:** Rejected — duplicate functionality, error-prone
+2. **Tag-based versioning:** Rejected — requires manual tagging, defeats automation
+3. **Semantic-release tool:** Rejected — too heavyweight, requires commit message conventions
+4. **Version in separate file:** Rejected — package.json is canonical for Node.js projects
+
+## Consequences
+
+### Positive
+- ✅ Zero manual version management
+- ✅ Every UAT build has unique version
+- ✅ Clear version history (patch = UAT, minor = prod)
+- ✅ Reduced risk of version conflicts
+- ✅ Simpler mental model for developers
+
+### Negative
+- ⚠️ Version numbers increment faster (every UAT merge)
+- ⚠️ Cannot skip versions (e.g., go from 0.1.5 → 0.1.7)
+- ⚠️ CHANGELOG no longer tied to version numbers
+
+### Mitigations
+- Version increment rate is acceptable for this project
+- Skipping versions is not a requirement
+- CHANGELOG can document changes by date/feature instead of version
+
+## Dependencies
+
+- `scripts/sync-versions.mjs` — Must work correctly for monorepo
+- `.nvmrc` — Defines Node.js version for workflows
+- `package.json` — Single source of truth for version
+
+## Validation
+
+- [x] Dry run mode shows correct version preview
+- [x] Patch bump works on dev → uat
+- [x] Minor bump works on uat → prod
+- [x] [skip ci] prevents infinite loops
+- [x] Workspace versions stay synced
+- [x] squad-release.yml picks up auto-bumped version
+- [x] Deprecated release.yml fails with helpful error
+
+## Rollback Plan
+
+If automated versioning causes issues:
+1. Restore `release.yml` from DEPRECATED-release.yml
+2. Revert changes to squad-promote.yml and scheduled-uat-promote.yml
+3. Manually bump versions before promoting to prod
+4. squad-release.yml continues to work (unchanged core behavior)
+
+## Team Communication
+
+- PR #425 documents the change comprehensively
+- Updated `.squad/agents/khelben/history.md` with learnings
+- This decision doc serves as reference for future team members
+
+## Related Decisions
+
+- Workflow Audit (2025-01) — Identified release.yml duplication
+- Scheduled UAT Promotion — Established 4x daily dev→uat pipeline
+- Forbidden Path Stripping — Prevent .squad/ from reaching prod
+
+## Open Questions
+
+- [ ] Should we add CHANGELOG automation (auto-generate from commits)?
+- [ ] Should we add version rollback capability for emergency fixes?
+- [ ] Should major version bumps also be automated (e.g., based on commit prefix)?
+
+## Success Metrics
+
+- Zero manual version bump errors
+- 100% of UAT builds have unique versions
+- Reduced time from dev→prod (no manual version step)
+- Developer feedback on new workflow
+
+---
+
+**Review Status:** Pending team review  
+**Next Review:** After 2 weeks of production use
