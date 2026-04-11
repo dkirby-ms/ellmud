@@ -3,6 +3,7 @@
  */
 
 import type { CommandContext, CommandResult } from '../index.js';
+import type { HelpCommandEntry } from '@ellmud/shared';
 import { getConfig } from '../../config.js';
 
 interface CommandHelp {
@@ -425,27 +426,29 @@ export function handleHelp(ctx: CommandContext): CommandResult {
       };
     }
 
-    const lines = [
-      `[bold][bright-yellow]═══ ${cmd} ═══[/bright-yellow][/bold]`,
-      meta.description,
-      `[dim]Usage:[/dim] [bright-cyan]${meta.usage}[/bright-cyan]`,
-    ];
-
-    if (meta.aliases && meta.aliases.length > 0) {
-      lines.push(`[dim]Aliases:[/dim] [cyan]${meta.aliases.join('[/cyan], [cyan]')}[/cyan]`);
-    }
+    // Return structured data for the modal, focused on the queried command
+    const entries = buildHelpEntries(ctx);
 
     return {
-      narrations: [{ text: lines.join('\n'), type: 'system' }],
+      narrations: [],
+      helpData: { commands: entries, focusCommand: cmd },
     };
   }
 
-  // help (no args) — show all available commands grouped by category
+  // help (no args) — return all available commands as structured data
+  const entries = buildHelpEntries(ctx);
+
+  return {
+    narrations: [],
+    helpData: { commands: entries },
+  };
+}
+
+/** Build a flat list of HelpCommandEntry objects in category display order. */
+function buildHelpEntries(ctx: CommandContext): HelpCommandEntry[] {
   const grouped = getAvailableCommands(ctx);
+  const entries: HelpCommandEntry[] = [];
 
-  const lines = ['[bold][bright-yellow]═══ Available Commands ═══[/bright-yellow][/bold]', ''];
-
-  // Define category display order
   const categoryOrder = [
     'Navigation',
     'Items',
@@ -466,23 +469,20 @@ export function handleHelp(ctx: CommandContext): CommandResult {
 
   for (const category of categoryOrder) {
     const commands = grouped.get(category);
-    if (!commands || commands.length === 0) {
-      continue;
-    }
+    if (!commands || commands.length === 0) continue;
 
-    lines.push(`[bold][yellow]${category}[/yellow][/bold]`);
     for (const cmd of commands) {
       const meta = COMMAND_HELP[cmd];
       if (!meta) continue;
-      const padding = ' '.repeat(Math.max(1, 16 - cmd.length));
-      lines.push(`  [bright-cyan]${cmd}[/bright-cyan]${padding}[dim]—[/dim] ${meta.description}`);
+      entries.push({
+        name: cmd,
+        description: meta.description,
+        usage: meta.usage,
+        aliases: meta.aliases,
+        category: meta.category,
+      });
     }
-    lines.push('');
   }
 
-  lines.push('[dim]Type [/dim][bright-cyan]help <command>[/bright-cyan][dim] for details.[/dim]');
-
-  return {
-    narrations: [{ text: lines.join('\n'), type: 'system' }],
-  };
+  return entries;
 }

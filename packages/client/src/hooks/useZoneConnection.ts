@@ -27,6 +27,7 @@ import type {
   PlayerStateMessage,
   ZoneTransferMessage,
   InventoryUpdateMessage,
+  HelpDataMessage,
 } from '@ellmud/shared';
 import type { Room } from '@colyseus/sdk';
 import type { MessageHandlers } from '../services/connection.js';
@@ -59,6 +60,10 @@ export interface UseZoneConnectionResult {
   reconnection: ReturnType<typeof useReconnection>;
   /** Current room ref for direct message sending (e.g. equipment) */
   roomRef: React.RefObject<Room | null>;
+  /** Structured help data from the server (triggers modal) */
+  helpData: HelpDataMessage | null;
+  /** Clear help data (close modal) */
+  clearHelpData: () => void;
 }
 
 const INITIAL_OVERLAY: OverlayState = { status: null, progress: 0, narration: null };
@@ -71,6 +76,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
   const soundCueCounterRef = useRef(0);
   const deathTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [overlay, setOverlay] = useState<OverlayState>(INITIAL_OVERLAY);
+  const [helpData, setHelpData] = useState<HelpDataMessage | null>(null);
   const overlayRef = useRef<OverlayState>(INITIAL_OVERLAY);
 
   // Keep ref in sync with state so onRoomSwitch can read current value synchronously
@@ -381,6 +387,10 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
           }
         }
       },
+      onHelpData: (msg: HelpDataMessage) => {
+        if (disposed) return;
+        setHelpData(msg);
+      },
     };
 
     handlersRef.current = handlers;
@@ -476,6 +486,8 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
     sendRawCommand(room, text);
   }, []);
 
+  const clearHelpData = useCallback(() => setHelpData(null), []);
+
   return {
     handleCommand,
     handleExitClick,
@@ -485,5 +497,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
     dismissOverlay,
     reconnection,
     roomRef,
+    helpData,
+    clearHelpData,
   };
 }

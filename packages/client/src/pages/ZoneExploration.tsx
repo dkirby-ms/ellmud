@@ -17,6 +17,7 @@ import "../components/map/map.css";
 import MudPrompt from "../components/MudPrompt.js";
 import SettingsModal from "../components/SettingsModal.js";
 import WhoListModal from "../components/WhoListModal.js";
+import HelpModal from "../components/HelpModal.js";
 import { useAppContext } from "../store.js";
 import { useZoneConnection } from "../hooks/useZoneConnection.js";
 import { useAutoScroll } from "../hooks/useAutoScroll.js";
@@ -56,6 +57,8 @@ export default function ZoneExploration() {
     dismissOverlay,
     reconnection,
     roomRef,
+    helpData,
+    clearHelpData,
   } = useZoneConnection(roomName);
 
   const mapState = useExplorationMap(roomRef.current);
@@ -612,6 +615,12 @@ export default function ZoneExploration() {
       <WhoListModal
         open={showWho}
         onClose={() => setShowWho(false)}
+      />
+
+      {/* Help Modal */}
+      <HelpModal
+        data={helpData}
+        onClose={clearHelpData}
       />
     </div>
   );

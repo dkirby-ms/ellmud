@@ -5,7 +5,7 @@
  * The ZoneRoom is responsible for building the context and delivering the result.
  */
 
-import type { NarrationType } from '@ellmud/shared';
+import type { NarrationType, HelpCommandEntry } from '@ellmud/shared';
 import type { Room } from '../generator/RoomGraph.js';
 import type { PlayerState } from '../state/PlayerState.js';
 import type { CombatSystem } from '../combat/CombatSystem.js';
@@ -71,6 +71,8 @@ export interface CommandResult {
   action?: 'rent';
   /** Narrations targeted at a specific player (e.g., teleport notification). */
   targetNarrations?: { sessionId: string; narrations: NarrationEntry[] };
+  /** Structured help data for client modal rendering. */
+  helpData?: { commands: HelpCommandEntry[]; focusCommand?: string };
 }
 
 export interface CreatureRef {

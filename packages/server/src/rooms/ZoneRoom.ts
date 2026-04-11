@@ -1421,6 +1421,10 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         timestamp: Date.now(),
       });
     }
+    // Send structured help data for modal rendering
+    if (result.helpData) {
+      client.send(MessageTypes.HELP_DATA, result.helpData);
+    }
   }
 
   /**
