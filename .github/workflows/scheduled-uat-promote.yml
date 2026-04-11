@@ -40,6 +40,15 @@ jobs:
       - name: Fetch all branches
         run: git fetch --all
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Check if dev is ahead of uat
         id: check
         run: |
@@ -68,15 +77,34 @@ jobs:
           # Strip forbidden paths from merge commit
           bash .github/scripts/strip-forbidden-paths.sh
 
-          # Commit if there are staged changes
+          # Commit the merge if there are staged changes
           if ! git diff --cached --quiet; then
-            VERSION=$(node -e "console.log(require('./package.json').version)")
-            git commit -m "chore: promote dev → uat (v${VERSION}) [scheduled]"
-            git push origin uat
-            echo "✅ Pushed uat branch with dev changes"
+            git commit -m "chore: merge dev → uat [scheduled]"
+            echo "✅ Merged dev into uat"
           else
-            echo "ℹ️ Nothing to commit — uat is already up to date after stripping"
+            echo "ℹ️ Nothing to merge — uat is already up to date after stripping"
           fi
+
+      - name: Bump patch version
+        if: steps.check.outputs.commits_ahead != '0'
+        run: |
+          # Bump patch version
+          npm version patch --no-git-tag-version
+          
+          # Sync workspace versions
+          npm run version:sync
+          
+          # Get the new version
+          NEW_VERSION=$(node -e "console.log(require('./package.json').version)")
+          echo "📦 Bumped version to $NEW_VERSION"
+          
+          # Commit version bump
+          git add package.json package-lock.json packages/*/package.json
+          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+          
+          # Push both commits (merge + version bump)
+          git push origin uat
+          echo "✅ Pushed uat branch with version $NEW_VERSION"
 
       - name: Trigger CI/CD on uat
         if: steps.check.outputs.commits_ahead != '0'
