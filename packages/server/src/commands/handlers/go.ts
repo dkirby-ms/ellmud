@@ -6,6 +6,7 @@
 import type { CommandResult, CommandContext } from '../index.js';
 import type { Direction } from '../../generator/RoomGraph.js';
 import { isInterZoneId, parseInterZoneId, POSTURE_ROOM_DESCRIPTIONS, DARKNESS_MESSAGE } from '@ellmud/shared';
+import { formatPlayerLines } from './player-display.js';
 
 const VALID_DIRECTIONS = new Set<string>(['north', 'south', 'east', 'west', 'up', 'down']);
 
@@ -102,19 +103,7 @@ export function handleGo(ctx: CommandContext): CommandResult {
 
   // Other players in the target room (Issue #370)
   const playersInTarget = ctx.resolvePlayersInRoom?.(targetRoomId) ?? [];
-  for (const p of playersInTarget) {
-    if (!p.anon) {
-      const postureDesc = p.posture ? POSTURE_ROOM_DESCRIPTIONS[p.posture] : 'is here';
-      if (p.followingPlayerId) {
-        const leaderName = playersInTarget.find(op => op.sessionId === p.followingPlayerId)?.name
-          ?? (p.followingPlayerId === ctx.player.sessionId ? ctx.characterName : undefined)
-          ?? 'someone';
-        lines.push(`${p.name} ${postureDesc}, following ${leaderName}.`);
-      } else {
-        lines.push(`${p.name} ${postureDesc}.`);
-      }
-    }
-  }
+  lines.push(...formatPlayerLines(playersInTarget, ctx.player.sessionId, ctx.characterName));
 
   return {
     narrations: [{ text: lines.join('\n'), type: 'room' }],

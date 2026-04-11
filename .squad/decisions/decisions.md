@@ -3838,3 +3838,44 @@ Previously hardcoded to 1.0 with a TODO. Now populated from `room.illumination` 
 - Darkvision trait for certain characters
 - Dynamic illumination (time-of-day, spell effects)
 - `'dim'` illumination level with partial visibility
+
+---
+
+## 2026-04-11T00:37:00Z: Architecture Approval — Follow + Consent System (Phase 1+2)
+
+**By:** Elminster (Reviewer)  
+**Date:** 2026-04-11  
+**PR:** #408 (feat: follow + consent system)  
+**Status:** Approved & Merged
+
+### Context
+
+1050-line PR adding follow/unfollow commands (Phase 1), consent/unconsent/revoke commands (Phase 2), auto-follow on movement, follow status in room descriptions, and disconnect cleanup. 37 tests, all passing.
+
+### Decision
+
+**Approve and merge.** The architecture is clean and consistent with existing patterns. The identified issues are non-blocking for v1 but must be addressed before Phase 3 (Groups).
+
+### Issues Found (Non-Blocking Follow-Ups)
+
+1. **#411 — Refactor follow-display logic:** Extract duplicated logic from `look.ts` and `go.ts` into a shared helper.
+2. **#412 — Skip downed followers in moveFollowers():** Currently a downed/dead follower teleports with their leader. Must skip downed state.
+3. **#413 — Clean up follow on player death:** `handlePlayerDeath()` needs to call follow cleanup. Dead leaders still have active followers.
+
+### Design Notes for Phase 3
+
+- **Transitive follow chains (A→B→C):** Intentionally don't propagate. Document this design decision.
+- **Consent gating:** Consent is not yet checked by `follow`. If Phase 3 requires consent-gated follow, wire it during that phase.
+- **Griefing prevention:** Consider a follower count cap before Phase 3 launch.
+
+### Who Should Fix
+
+- Issues #411–#413: Drizzt (original author) or Regis
+- Design scope #411–#413 resolution enables Phase 3 (Group Formation)
+
+### Deliverables
+
+- ✅ PR #408 merged to dev
+- ✅ All 37 tests passing on merge commit
+- ✅ 3 follow-up issues filed (#411, #412, #413)
+- ✅ Session log & orchestration logs created
