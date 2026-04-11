@@ -10,15 +10,15 @@ import type { CommandResult, CommandContext } from '../index.js';
 
 /**
  * Sanitizes user input to prevent prompt injection and control characters.
- * - Strips HTML-like markup
- * - Removes control characters
+ * - Strips angle brackets (single-char removal — not bypassable by nesting)
+ * - Removes C0/C1 control characters and DEL
  * - Truncates to max length
  */
 function sanitizeInput(text: string, maxLength: number): string {
   return text
-    .replace(/<[^>]*>/g, '') // Strip HTML-like tags
+    .replace(/[<>]/g, '')              // Strip angle brackets (ANSI tags use [] not <>)
     // eslint-disable-next-line no-control-regex
-    .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
+    .replace(/[\x00-\x1F\x7F-\x9F]/g, '') // Remove C0, DEL, and C1 control characters
     .slice(0, maxLength)
     .trim();
 }

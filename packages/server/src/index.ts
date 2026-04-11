@@ -11,6 +11,7 @@ import { monitor } from '@colyseus/monitor';
 import express from 'express';
 import http from 'http';
 import { ZoneRoom } from './rooms/index.js';
+import { staticLimiter } from './middleware/rate-limit.js';
 import {
   AuthService,
   InMemoryTokenStore,
@@ -318,7 +319,7 @@ app.use(express.static(publicPath));
 // interfere with Colyseus POST /matchmake/* routes).
 // In dev mode the client dist may not exist; skip gracefully.
 const indexHtml = path.join(publicPath, 'index.html');
-app.get('*', (_req, res) => {
+app.get('*', staticLimiter, (_req, res) => {
   res.sendFile(indexHtml, (err) => {
     if (err) res.status(404).end();
   });

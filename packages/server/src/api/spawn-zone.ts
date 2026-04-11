@@ -16,6 +16,7 @@ import type { AuthService } from '../auth/AuthService.js';
 import { getCharacterRepository } from '../character/index.js';
 import { getFactionRepository } from '../faction/index.js';
 import { resolvePlayerHubTarget, resolvePlayerHubSlug, resolveStartingZoneTarget } from '../zones/stronghold.js';
+import { apiLimiter } from '../middleware/rate-limit.js';
 
 export function createSpawnZoneRouter(authService: AuthService): Router {
   const router = Router();
@@ -38,7 +39,7 @@ export function createSpawnZoneRouter(authService: AuthService): Router {
 
   // ─── GET /api/spawn-zone ──────────────────────────────────────────────────
 
-  router.get('/api/spawn-zone', async (req: Request, res: Response) => {
+  router.get('/api/spawn-zone', apiLimiter, async (req: Request, res: Response) => {
     try {
       const playerId = await authenticate(req, res);
       if (!playerId) return;

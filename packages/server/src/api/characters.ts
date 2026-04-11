@@ -11,6 +11,7 @@ import { Router, type Request, type Response } from 'express';
 import { validateCharacterName } from '@ellmud/shared';
 import type { AuthService } from '../auth/AuthService.js';
 import { getCharacterRepository } from '../character/index.js';
+import { apiLimiter } from '../middleware/rate-limit.js';
 
 export function createCharacterRouter(authService: AuthService, _usePg: boolean): Router {
   const router = Router();
@@ -33,7 +34,7 @@ export function createCharacterRouter(authService: AuthService, _usePg: boolean)
 
   // ─── GET /api/characters ───────────────────────────────────────────────────
 
-  router.get('/api/characters', async (req: Request, res: Response) => {
+  router.get('/api/characters', apiLimiter, async (req: Request, res: Response) => {
     try {
       const playerId = await authenticate(req, res);
       if (!playerId) return;
@@ -49,7 +50,7 @@ export function createCharacterRouter(authService: AuthService, _usePg: boolean)
 
   // ─── POST /api/characters ──────────────────────────────────────────────────
 
-  router.post('/api/characters', async (req: Request, res: Response) => {
+  router.post('/api/characters', apiLimiter, async (req: Request, res: Response) => {
     try {
       const playerId = await authenticate(req, res);
       if (!playerId) return;
@@ -105,7 +106,7 @@ export function createCharacterRouter(authService: AuthService, _usePg: boolean)
 
   // ─── PUT /api/characters/:id/select ────────────────────────────────────────
 
-  router.put('/api/characters/:id/select', async (req: Request, res: Response) => {
+  router.put('/api/characters/:id/select', apiLimiter, async (req: Request, res: Response) => {
     try {
       const playerId = await authenticate(req, res);
       if (!playerId) return;
@@ -127,7 +128,7 @@ export function createCharacterRouter(authService: AuthService, _usePg: boolean)
 
   // ─── DELETE /api/characters/:id ────────────────────────────────────────────
 
-  router.delete('/api/characters/:id', async (req: Request, res: Response) => {
+  router.delete('/api/characters/:id', apiLimiter, async (req: Request, res: Response) => {
     try {
       const playerId = await authenticate(req, res);
       if (!playerId) return;
