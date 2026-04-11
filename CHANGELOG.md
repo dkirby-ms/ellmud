@@ -1,3 +1,16 @@
+# [0.2.0-dev.3](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.2...v0.2.0-dev.3) (2026-04-11)
+
+
+### Bug Fixes
+
+* complete test fixes for static registry removal ([8fc0ba2](https://github.com/dkirby-ms/ellmud/commit/8fc0ba263f6745bb81f8d4a002b0394d80eaaa79))
+* resolve test failures from registry removal + help modal refactor ([3c96b57](https://github.com/dkirby-ms/ellmud/commit/3c96b578921582498f96d5fa77aaaeff8af77c7b))
+
+
+### Features
+
+* help modal overlay with structured data from server ([6eb21b0](https://github.com/dkirby-ms/ellmud/commit/6eb21b0ecd4d5a3f064bd00f59acab0fc362599a))
+
 # [0.2.0-dev.2](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.1...v0.2.0-dev.2) (2026-04-11)
 
 
