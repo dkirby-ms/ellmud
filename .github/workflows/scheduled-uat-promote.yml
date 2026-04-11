@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -72,7 +72,20 @@ jobs:
         if: steps.check.outputs.commits_ahead != '0'
         run: |
           git checkout uat
-          git merge origin/dev --no-commit --no-ff -X theirs || true
+
+          # Merge dev into uat; allow "already up to date" but fail on real errors
+          MERGE_EXIT=0
+          git merge origin/dev --no-commit --no-ff -X theirs || MERGE_EXIT=$?
+          if [ "$MERGE_EXIT" -ne 0 ]; then
+            # Exit code 128 = nothing to merge / already up to date with --no-commit
+            if git diff --cached --quiet && git diff --quiet; then
+              echo "ℹ️ Nothing to merge — trees are identical"
+            else
+              echo "::error::Merge failed with exit code $MERGE_EXIT"
+              git merge --abort 2>/dev/null || true
+              exit 1
+            fi
+          fi
 
           # Strip forbidden paths from merge commit
           bash .github/scripts/strip-forbidden-paths.sh
