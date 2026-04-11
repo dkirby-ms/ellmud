@@ -101,7 +101,7 @@ export function ItemTooltip({ item, mouseX, mouseY }: ItemTooltipProps) {
           className="font-mono text-sm font-bold"
           style={{ color: tierColor }}
         >
-          {item.name}
+          <AnsiText text={item.name} />
         </span>
         <span
           className="text-xs font-mono px-1.5 py-0.5 rounded"

@@ -43,6 +43,8 @@ import { handleStand, handleSit, handleCrouch, handleProne, handleRecline } from
 import { handleFollow, handleUnfollow } from './handlers/follow.js';
 import { handleConsent, handleUnconsent } from './handlers/consent.js';
 import { handleGroup, handleGsay } from './handlers/group.js';
+import { handleOpen } from './handlers/open.js';
+import { handlePut } from './handlers/put.js';
 import type { GroupManager } from '../systems/GroupManager.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -217,6 +219,8 @@ handlers.set('unconsent', handleUnconsent);
 handlers.set('revoke', handleUnconsent);
 handlers.set('group', handleGroup);
 handlers.set('gsay', handleGsay);
+handlers.set('open', handleOpen);
+handlers.set('put', handlePut);
 
 /** Execute a command for a player. Returns narration results. */
 export function handleCommand(

@@ -25,7 +25,8 @@ export type ItemType =
   | 'consumable'
   | 'material'
   | 'tool'
-  | 'key';
+  | 'key'
+  | 'container';
 
 // ─── Item Stats ──────────────────────────────────────────────────────────────
 
@@ -83,6 +84,27 @@ export function compareTiers(a: GearTier, b: GearTier): number {
   return GEAR_TIER_ORDER.indexOf(a) - GEAR_TIER_ORDER.indexOf(b);
 }
 
+// ─── Container Properties ───────────────────────────────────────────────────
+
+/** Properties specific to container-type items (bags, pouches, etc.). */
+export interface ContainerProperties {
+  /** How many distinct item stacks this container can hold. */
+  maxSlots: number;
+  /** Optional weight limit for contents (own weight excluded). */
+  maxWeight?: number;
+  /** Optional: increases player's carry capacity when this bag is in inventory. */
+  carryBonus?: number;
+  /** Optional: restrict what item types can go inside (e.g., only consumables). */
+  allowedItemTypes?: ItemType[];
+}
+
+/** A single entry inside a container's contents. */
+export interface ContainerSlotEntry {
+  definitionId: string;
+  quantity: number;
+  durability: number | null;
+}
+
 // ─── Item Definition (template for all items of a kind) ─────────────────────
 
 export interface ItemDefinition {
@@ -96,6 +118,8 @@ export interface ItemDefinition {
   weight: number;
   description: string;
   soulbound: boolean;
+  /** Only present when type === 'container'. */
+  containerProperties?: ContainerProperties;
 }
 
 // ─── Item Instance (a specific item in a stash or loadout) ──────────────────
@@ -107,6 +131,8 @@ export interface ItemInstance {
   durability: number | null;
   /** Max durability (tier-adjusted). */
   maxDurability: number | null;
+  /** Items stored inside this container. Only present for container-type items. */
+  contents?: ContainerSlotEntry[];
 }
 
 // ─── Computed Stats (after rarity multiplier) ───────────────────────────────
@@ -144,12 +170,16 @@ export function computeMaxDurability(def: ItemDefinition): number | null {
 /** Create a fresh item instance from a definition. */
 export function createItemInstance(def: ItemDefinition, instanceId: string): ItemInstance {
   const maxDur = computeMaxDurability(def);
-  return {
+  const instance: ItemInstance = {
     instanceId,
     definitionId: def.id,
     durability: maxDur,
     maxDurability: maxDur,
   };
+  if (def.type === 'container') {
+    instance.contents = [];
+  }
+  return instance;
 }
 
 // ─── Durability ─────────────────────────────────────────────────────────────
@@ -256,4 +286,163 @@ export function validateLoadout(
   }
 
   return { valid: errors.length === 0, errors };
+}
+
+// ─── Container Operations ───────────────────────────────────────────────────
+
+export interface ContainerOperationResult {
+  success: boolean;
+  error?: string;
+}
+
+/** Calculate the total weight of a container's contents. */
+export function getContainerContentsWeight(
+  container: ItemInstance,
+  defs: Map<string, ItemDefinition>,
+): number {
+  if (!container.contents) return 0;
+  let total = 0;
+  for (const entry of container.contents) {
+    const def = defs.get(entry.definitionId);
+    if (def) total += def.weight * entry.quantity;
+  }
+  return total;
+}
+
+/**
+ * Calculate total weight of a container including its own weight + contents.
+ * A container's effective weight is its base weight plus the weight of everything inside.
+ */
+export function getContainerTotalWeight(
+  container: ItemInstance,
+  defs: Map<string, ItemDefinition>,
+): number {
+  const containerDef = defs.get(container.definitionId);
+  const ownWeight = containerDef?.weight ?? 0;
+  return ownWeight + getContainerContentsWeight(container, defs);
+}
+
+/** Count the number of occupied slots in a container. */
+export function getContainerSlotCount(container: ItemInstance): number {
+  return container.contents?.length ?? 0;
+}
+
+/**
+ * Add an item to a container. Stacks if the same definitionId already exists.
+ * Returns a new ItemInstance (immutable). Validates slot count, weight, and type restrictions.
+ */
+export function addItemToContainer(
+  container: ItemInstance,
+  containerDef: ItemDefinition,
+  itemToAdd: { definitionId: string; quantity: number; durability: number | null },
+  itemDef: ItemDefinition,
+  defs: Map<string, ItemDefinition>,
+): ContainerOperationResult & { updatedContainer?: ItemInstance } {
+  if (containerDef.type !== 'container' || !containerDef.containerProperties) {
+    return { success: false, error: 'Item is not a container' };
+  }
+
+  const props = containerDef.containerProperties;
+  const contents = container.contents ? [...container.contents.map(c => ({ ...c }))] : [];
+
+  // Check allowed item types
+  if (props.allowedItemTypes && !props.allowedItemTypes.includes(itemDef.type)) {
+    return { success: false, error: `This container does not accept ${itemDef.type} items` };
+  }
+
+  // Containers cannot be nested
+  if (itemDef.type === 'container') {
+    return { success: false, error: 'Cannot place a container inside another container' };
+  }
+
+  // Try to stack with existing entry
+  const existingIndex = contents.findIndex(c => c.definitionId === itemToAdd.definitionId);
+
+  if (existingIndex >= 0) {
+    // Stack onto existing — no new slot needed
+    contents[existingIndex] = {
+      ...contents[existingIndex],
+      quantity: contents[existingIndex].quantity + itemToAdd.quantity,
+    };
+  } else {
+    // New stack — check slot limit
+    if (contents.length >= props.maxSlots) {
+      return { success: false, error: `Container is full (${props.maxSlots}/${props.maxSlots} slots)` };
+    }
+    contents.push({ ...itemToAdd });
+  }
+
+  // Check weight limit
+  if (props.maxWeight != null) {
+    let contentsWeight = 0;
+    for (const entry of contents) {
+      const def = defs.get(entry.definitionId);
+      if (def) contentsWeight += def.weight * entry.quantity;
+    }
+    if (contentsWeight > props.maxWeight) {
+      return { success: false, error: `Container weight limit exceeded (${contentsWeight}/${props.maxWeight})` };
+    }
+  }
+
+  return {
+    success: true,
+    updatedContainer: { ...container, contents },
+  };
+}
+
+/**
+ * Remove an item from a container. Reduces quantity or removes the entry entirely.
+ * Returns a new ItemInstance (immutable).
+ */
+export function removeItemFromContainer(
+  container: ItemInstance,
+  definitionId: string,
+  quantity = 1,
+): ContainerOperationResult & { updatedContainer?: ItemInstance; removed?: ContainerSlotEntry } {
+  if (!container.contents) {
+    return { success: false, error: 'Container has no contents' };
+  }
+
+  const contents = container.contents.map(c => ({ ...c }));
+  const index = contents.findIndex(c => c.definitionId === definitionId);
+  if (index < 0) {
+    return { success: false, error: 'Item not found in container' };
+  }
+
+  const entry = contents[index];
+  if (quantity >= entry.quantity) {
+    // Remove entire stack
+    const removed = contents.splice(index, 1)[0];
+    return {
+      success: true,
+      updatedContainer: { ...container, contents },
+      removed,
+    };
+  }
+
+  // Partial removal
+  contents[index] = { ...entry, quantity: entry.quantity - quantity };
+  return {
+    success: true,
+    updatedContainer: { ...container, contents },
+    removed: { definitionId, quantity, durability: entry.durability },
+  };
+}
+
+/**
+ * Calculate the carry bonus provided by containers in a player's inventory.
+ * Only containers with a carryBonus property contribute.
+ */
+export function calculateCarryBonus(
+  inventoryInstances: ItemInstance[],
+  defs: Map<string, ItemDefinition>,
+): number {
+  let bonus = 0;
+  for (const instance of inventoryInstances) {
+    const def = defs.get(instance.definitionId);
+    if (def?.type === 'container' && def.containerProperties?.carryBonus) {
+      bonus += def.containerProperties.carryBonus;
+    }
+  }
+  return bonus;
 }

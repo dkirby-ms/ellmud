@@ -128,7 +128,7 @@ function makeServerConfig(overrides: Partial<ServerConfig['redis']> = {}): Serve
     reconnectDeathBehavior: 'kill',
     devModeEnabled: false,
     enableProceduralGeneration: false,
-    corpseTTLSeconds: 600,
+    corpseTTLSeconds: 43200,
     enableLLMNarration: false,
   };
 }

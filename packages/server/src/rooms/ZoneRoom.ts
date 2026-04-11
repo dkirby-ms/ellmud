@@ -75,6 +75,8 @@ import { getConfig, getMaxPlayersForTier, getMaxPlayersForZone } from '../config
 import { StashService, InMemoryStashRepository, getStashRepository, getItemDefs } from '../stash/index.js';
 import type { StashRepository } from '../stash/index.js';
 import { transferInventoryToStash } from '../systems/stash-transfer.js';
+import type { PlayerInventoryRepository } from '../inventory/index.js';
+import { InMemoryPlayerInventoryRepository, getInventoryRepository, inventoryToEntries } from '../inventory/index.js';
 import { CreatureManager, DROWNED_REVENANT, type CreatureAction } from '../creatures/index.js';
 import type { CreatureWorldState } from '../creatures/behavior.js';
 import { createPRNG } from '../generator/prng.js';
@@ -147,6 +149,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private creatureManager!: CreatureManager;
   private stashService?: StashService;
   private loadoutService?: LoadoutService;
+  private inventoryRepo: PlayerInventoryRepository = new InMemoryPlayerInventoryRepository();
+  /** Debounce timer for inventory persistence (per-player). */
+  private inventorySaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private itemDefs = new Map<string, StashItem>();
   private zoneTier: ZoneTier = 1;
   private profileRepo: PlayerProfileRepository = new InMemoryPlayerProfileRepository();
@@ -206,6 +211,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       repo ?? new InMemoryStashRepository(),
       this.itemDefs,
     );
+  }
+
+  /** Inject inventory repository for testing (#409). */
+  initInventory(repo?: PlayerInventoryRepository): void {
+    this.inventoryRepo = repo ?? new InMemoryPlayerInventoryRepository();
   }
 
   /** Inject loadout dependencies for testing. */
@@ -351,6 +361,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Initialize stash with shared provider if not already injected
     if (!this.stashService) {
       this.initStash(getStashRepository(), getItemDefs());
+    }
+
+    // Initialize inventory repo with shared provider if not already injected (#409)
+    if (this.inventoryRepo instanceof InMemoryPlayerInventoryRepository) {
+      this.inventoryRepo = getInventoryRepository();
     }
 
     // Initialize loadout with shared provider if not already injected
@@ -588,6 +603,26 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.log(`Failed to grant starter kit for ${this.playerTag(playerId)}: ${err}`);
     }
 
+    // Load persisted inventory from DB (#409)
+    try {
+      const savedItems = await this.inventoryRepo.loadInventory(this.dbPlayerId(playerId));
+      for (const entry of savedItems) {
+        for (let i = 0; i < entry.quantity; i++) {
+          playerState.addItem({
+            id: entry.itemId,
+            name: entry.name,
+            weight: entry.weight,
+            description: entry.description,
+          });
+        }
+      }
+      if (savedItems.length > 0) {
+        this.log(`Loaded ${savedItems.length} inventory item(s) for ${this.playerTag(playerId)}`);
+      }
+    } catch (err) {
+      this.log(`Failed to load inventory for ${this.playerTag(playerId)}: ${err}`);
+    }
+
     this.log(`Player ${this.playerTag(playerId)} joined at ${startRoom} (session=${client.sessionId}, ${this.state.playerCount}/${this.maxClients ?? getMaxPlayersForTier(this.zoneTier, getConfig())} players)`);
 
     // Send initial system narration using NarrationService (async, don't block join)
@@ -707,6 +742,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       // Persist player profile (skills, stats) before cleanup
       await this.savePlayerProfile(playerId, this.players.get(playerId)!);
 
+      // Persist player inventory before cleanup (#409)
+      await this.savePlayerInventory(playerId, this.players.get(playerId)!);
+
       // Record run (player left or timed out)
       await this.recordRunHistory(playerId, this.players.get(playerId), false);
 
@@ -772,6 +810,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     if (this.repopTimer) {
       clearInterval(this.repopTimer);
     }
+    // Clear any pending inventory save timers (#409)
+    for (const timer of this.inventorySaveTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.inventorySaveTimers.clear();
     this.log(`ZoneRoom disposed: ${this.roomId}`);
   }
 
@@ -1112,6 +1155,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Trace: movement creates footprints in the room LEFT
     const movedRoom = player.currentRoomId !== previousRoomId;
+    let pendingFollowerArrivals: string[] | undefined;
     if (movedRoom) {
       const direction = args[0]?.toLowerCase();
       this.traceSystem.addTrace(previousRoomId, 'footprint', {
@@ -1142,8 +1186,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.broadcastRoomOccupantsUpdate(previousRoomId);
       this.broadcastRoomOccupantsUpdate(player.currentRoomId);
 
-      // Auto-move followers (#403 Phase 1)
-      this.moveFollowers(playerId, previousRoomId, player.currentRoomId);
+      // Auto-move followers (#403 Phase 1) — collect names for deferred notification
+      const followedNames = this.moveFollowers(playerId, previousRoomId, player.currentRoomId);
+      if (followedNames.length > 0) {
+        pendingFollowerArrivals = followedNames;
+      }
     }
 
     // Posture commands: broadcast posture change to other players in the room (#371)
@@ -1249,6 +1296,13 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.deliverResult(client, result);
     }
 
+    // Send deferred follower arrival notifications AFTER the leader's room description
+    if (pendingFollowerArrivals) {
+      for (const followerName of pendingFollowerArrivals) {
+        this.sendNarrate(client, { text: `${followerName} follows you.`, type: 'ambient', timestamp: Date.now() });
+      }
+    }
+
     // Deliver targeted narrations (e.g., teleport notification to the moved player)
     if (result.targetNarrations) {
       const targetClient = this.clients.find((c) => c.sessionId === result.targetNarrations!.sessionId);
@@ -1271,6 +1325,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Send inventory update if inventory changed during command execution
     if (player.inventory.size !== prevInventorySize) {
       this.sendInventoryUpdate(client, playerId);
+      // Debounced save to persistence (#409)
+      this.debouncedInventorySave(playerId, player);
     }
   }
 
@@ -1539,12 +1595,15 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   /**
    * Auto-move all followers when a leader moves rooms.
    * Each follower sees the room description and other players are notified.
+   * Returns names of followers who moved (for deferred leader notifications).
    */
-  private moveFollowers(leaderId: string, fromRoomId: string, toRoomId: string): void {
+  private moveFollowers(leaderId: string, fromRoomId: string, toRoomId: string): string[] {
     const leaderState = this.players.get(leaderId);
-    if (!leaderState || leaderState.followers.size === 0) return;
+    if (!leaderState || leaderState.followers.size === 0) return [];
 
     const leaderName = this.characterNames.get(leaderId) ?? 'Someone';
+    const movedFollowerNames: string[] = [];
+    const leaderExclude = new Set([leaderId]);
 
     for (const followerId of leaderState.followers) {
       const followerState = this.players.get(followerId);
@@ -1595,8 +1654,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         this.sendRoomOccupants(followerClient, followerId, toRoomId);
       }
 
-      // Broadcast departure/arrival to other players
-      this.broadcastPlayerMovement(followerId, followerPreviousRoom, toRoomId, undefined, followerState.posture);
+      // Broadcast departure/arrival to other players (exclude leader from generic arrival)
+      this.broadcastPlayerMovement(followerId, followerPreviousRoom, toRoomId, undefined, followerState.posture, leaderExclude);
       this.broadcastRoomOccupantsUpdate(followerPreviousRoom);
       this.broadcastRoomOccupantsUpdate(toRoomId);
 
@@ -1609,7 +1668,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           }
         }
       }
+
+      movedFollowerNames.push(followerName);
     }
+
+    return movedFollowerNames;
   }
 
   /** Get visible (non-anon) players in a room, excluding a specific player. */
@@ -2103,6 +2166,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     targetRoomId: string,
     direction?: string,
     posture?: import('@ellmud/shared').Posture,
+    excludeFromArrivalIds?: Set<string>,
   ): void {
     const name = this.characterNames.get(playerId) ?? 'A wanderer';
 
@@ -2129,6 +2193,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       : `${name} arrives.`;
     for (const [sid, ps] of this.players) {
       if (sid !== playerId && ps.currentRoomId === targetRoomId) {
+        if (excludeFromArrivalIds?.has(sid)) continue;
         const c = this.findClient(sid);
         if (c) {
           this.sendNarrate(c, { text: arrivalText, type: 'ambient', timestamp: Date.now() });
@@ -2152,18 +2217,114 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         if (!isSandboxCreature && roomId && loot.length > 0) {
           const room = this.roomGraph.rooms.get(roomId);
           if (room) {
-            for (const item of loot) {
-              room.items.push(item);
+            // Phase 6: Group loot sharing (#403)
+            const killerId = event.killerIds?.[0];
+            let distributed = false;
+
+            if (killerId && !killerId.startsWith('creature-')) {
+              const killerGroup = this.groupManager.getGroup(killerId);
+              if (killerGroup && killerGroup.lootSharing) {
+                // Gather group members in the same room
+                const membersInRoom = Array.from(killerGroup.members.keys()).filter(memberId => {
+                  const ps = this.players.get(memberId);
+                  return ps && ps.currentRoomId === roomId;
+                });
+
+                if (membersInRoom.length > 0) {
+                  // Distribute items round-robin
+                  let memberIndex = 0;
+                  const droppedItems: import('../generator/RoomGraph.js').Item[] = [];
+
+                  for (const item of loot) {
+                    let itemGiven = false;
+
+                    // Try each member starting from current index
+                    for (let attempt = 0; attempt < membersInRoom.length; attempt++) {
+                      const memberId = membersInRoom[memberIndex]!;
+                      const memberPlayer = this.players.get(memberId);
+
+                      if (memberPlayer && memberPlayer.canCarry(item)) {
+                        memberPlayer.addItem(item);
+                        itemGiven = true;
+
+                        // Narrate to recipient
+                        const recipientClient = this.findClient(memberId);
+                        if (recipientClient) {
+                          this.sendNarrate(recipientClient, {
+                            text: `You receive a ${item.name} from the group loot.`,
+                            type: 'room',
+                            timestamp: Date.now(),
+                          });
+                        }
+
+                        // Narrate to other group members in room
+                        const recipientName = this.characterNames.get(memberId) ?? 'Someone';
+                        for (const otherId of membersInRoom) {
+                          if (otherId !== memberId) {
+                            const otherClient = this.findClient(otherId);
+                            if (otherClient) {
+                              this.sendNarrate(otherClient, {
+                                text: `${recipientName} receives a ${item.name}.`,
+                                type: 'room',
+                                timestamp: Date.now(),
+                              });
+                            }
+                          }
+                        }
+
+                        // Move to next member for next item
+                        memberIndex = (memberIndex + 1) % membersInRoom.length;
+                        break;
+                      }
+
+                      // Try next member
+                      memberIndex = (memberIndex + 1) % membersInRoom.length;
+                    }
+
+                    // If no one could carry it, drop to floor
+                    if (!itemGiven) {
+                      droppedItems.push(item);
+                    }
+                  }
+
+                  // Drop remaining items to floor
+                  for (const item of droppedItems) {
+                    room.items.push(item);
+                  }
+
+                  if (droppedItems.length > 0) {
+                    for (const sid of membersInRoom) {
+                      const client = this.findClient(sid);
+                      if (client) {
+                        this.sendNarrate(client, {
+                          text: droppedItems.map(i => `A ${i.name} drops to the ground.`).join('\n'),
+                          type: 'room',
+                          timestamp: Date.now(),
+                        });
+                      }
+                    }
+                  }
+
+                  distributed = true;
+                }
+              }
             }
-            for (const [sid, ps] of this.players) {
-              if (ps.currentRoomId === roomId) {
-                const client = this.findClient(sid);
-                if (client) {
-                  this.sendNarrate(client, {
-                    text: loot.map(i => `A ${i.name} drops to the ground.`).join('\n'),
-                    type: 'room',
-                    timestamp: Date.now(),
-                  });
+
+            // Fallback: no group sharing, drop all items to floor
+            if (!distributed) {
+              for (const item of loot) {
+                room.items.push(item);
+              }
+              for (const [sid, ps] of this.players) {
+                if (ps.currentRoomId === roomId) {
+                  const client = this.findClient(sid);
+                  if (client) {
+                    this.sendNarrate(client, {
+                      text: loot.map(i => `A ${i.name} drops to the ground.`).join('\n'),
+                      type: 'room',
+                      timestamp: Date.now(),
+                    });
+                  }
                 }
               }
             }
@@ -2391,6 +2552,18 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
     }
 
+    // Equipped items also drop into corpse unless soulbound (#409 Phase 3)
+    const keptEquipSlots: string[] = [];
+    for (const [slot, item] of player.getEquippedItems()) {
+      const def = getItemDefinition(item.id);
+      const isSoulbound = def?.soulbound ?? false;
+      if (isSoulbound) {
+        keptEquipSlots.push(slot);
+      } else {
+        corpseItems.push(item);
+      }
+    }
+
     // Clear inventory, then re-add soulbound items
     player.inventory.clear();
     for (const itemId of keptItemIds) {
@@ -2400,7 +2573,11 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
     }
 
+    // Persist inventory after death (only soulbound items remain) (#409)
+    await this.savePlayerInventory(playerId, player);
+
     // Clear equipped loadout — gear is lost on death (both in-memory and repo)
+    player.clearAllEquippedItems();
     player.equipment = undefined;
     if (this.loadoutService) {
       this.loadoutService.clearLoadout(this.dbPlayerId(playerId)).catch((err) => {
@@ -2889,6 +3066,39 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     } catch (err) {
       this.log(`Failed to persist posture for ${this.playerTag(playerId)}: ${err}`);
     }
+  }
+
+  // ─── Inventory Persistence (#409) ─────────────────────────────────────────
+
+  /** Persist the player's current inventory to the database. */
+  private async savePlayerInventory(playerId: string, playerState: PlayerState): Promise<void> {
+    try {
+      // Cancel any pending debounced save
+      const timer = this.inventorySaveTimers.get(playerId);
+      if (timer) {
+        clearTimeout(timer);
+        this.inventorySaveTimers.delete(playerId);
+      }
+      const entries = inventoryToEntries(playerState.inventory);
+      await this.inventoryRepo.saveInventory(this.dbPlayerId(playerId), entries);
+    } catch (err) {
+      this.log(`Failed to save inventory for ${this.playerTag(playerId)}: ${err}`);
+    }
+  }
+
+  /** Debounced inventory save — coalesces rapid mutations into a single write. */
+  private debouncedInventorySave(playerId: string, playerState: PlayerState): void {
+    const existing = this.inventorySaveTimers.get(playerId);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(() => {
+      this.inventorySaveTimers.delete(playerId);
+      this.savePlayerInventory(playerId, playerState).catch((err) => {
+        this.log(`Debounced inventory save failed for ${this.playerTag(playerId)}: ${err}`);
+      });
+    }, 2000); // 2-second debounce
+
+    this.inventorySaveTimers.set(playerId, timer);
   }
 
   // ─── Run History Persistence ────────────────────────────────────────────

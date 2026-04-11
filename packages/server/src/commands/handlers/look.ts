@@ -7,7 +7,7 @@
 import type { CommandResult } from '../index.js';
 import type { CommandContext } from '../index.js';
 import type { RoomFeature } from '@ellmud/shared';
-import { POSTURE_ROOM_DESCRIPTIONS, DARKNESS_MESSAGE } from '@ellmud/shared';
+import { DARKNESS_MESSAGE } from '@ellmud/shared';
 import { formatPlayerLines } from './player-display.js';
 
 /** Check if a room is dark and player has no light source. */

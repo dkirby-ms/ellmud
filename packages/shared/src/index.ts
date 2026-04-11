@@ -542,6 +542,9 @@ export type {
   ConsumableStats,
   ItemStats,
   RarityConfig,
+  ContainerProperties,
+  ContainerSlotEntry,
+  ContainerOperationResult,
   ItemDefinition,
   ItemInstance,
   Loadout,
@@ -563,6 +566,12 @@ export {
   getItemWeight,
   calculateLoadoutWeight,
   validateLoadout,
+  getContainerContentsWeight,
+  getContainerTotalWeight,
+  getContainerSlotCount,
+  addItemToContainer,
+  removeItemFromContainer,
+  calculateCarryBonus,
 } from './items.js';
 
 

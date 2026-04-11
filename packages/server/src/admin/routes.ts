@@ -8,6 +8,7 @@
 import { Router, type Request, type Response } from 'express';
 import { matchMaker } from '@colyseus/core';
 import { adminAuth } from './middleware.js';
+import { adminWriteLimiter } from '../middleware/rate-limit.js';
 import type { NarrationTelemetryTracker } from '../narrative/telemetry.js';
 import type { NarrationCache } from '../narrative/cache.js';
 import type { InMemoryNarrationCache } from '../narrative/cache.js';
@@ -250,7 +251,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
   });
 
   // ─── POST /admin/api/creature-definitions — Create a creature definition ─
-  router.post('/admin/api/creature-definitions', adminAuth, async (req: Request, res: Response) => {
+  router.post('/admin/api/creature-definitions', adminAuth, adminWriteLimiter, async (req: Request, res: Response) => {
     try {
       const { getPool } = await import('../db/index.js');
       const body = req.body as Record<string, unknown>;
@@ -287,7 +288,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
   });
 
   // ─── PUT /admin/api/creature-definitions/:slug — Update a creature ───────
-  router.put('/admin/api/creature-definitions/:slug', adminAuth, async (req: Request, res: Response) => {
+  router.put('/admin/api/creature-definitions/:slug', adminAuth, adminWriteLimiter, async (req: Request, res: Response) => {
     try {
       const { getPool } = await import('../db/index.js');
       const { slug } = req.params;
@@ -349,7 +350,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
   });
 
   // ─── POST /admin/api/item-definitions — Create an item definition ────────
-  router.post('/admin/api/item-definitions', adminAuth, async (req: Request, res: Response) => {
+  router.post('/admin/api/item-definitions', adminAuth, adminWriteLimiter, async (req: Request, res: Response) => {
     try {
       const { getPool } = await import('../db/index.js');
       const body = req.body as Record<string, unknown>;
@@ -384,7 +385,7 @@ export function createAdminRouter(deps: AdminRouterDeps = {}): Router {
   });
 
   // ─── PUT /admin/api/item-definitions/:id — Update an item ────────────────
-  router.put('/admin/api/item-definitions/:id', adminAuth, async (req: Request, res: Response) => {
+  router.put('/admin/api/item-definitions/:id', adminAuth, adminWriteLimiter, async (req: Request, res: Response) => {
     try {
       const { getPool } = await import('../db/index.js');
       const { id } = req.params;

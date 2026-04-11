@@ -6,10 +6,10 @@ name: Scheduled UAT Promote
 on:
   schedule:
     # 3x daily: 08:00 UTC (morning), 14:00 UTC (midday), 20:00 UTC (evening)
-    - cron: "0 3 * * *"
-    - cron: "0 9 * * *"
-    - cron: "0 15 * * *"
-    - cron: "0 20 * * *"
+    - cron: "0 13 * * *"
+    - cron: "0 17 * * *"
+    - cron: "0 21 * * *"
+    - cron: "0 01 * * *"
   workflow_dispatch:
 
 permissions:

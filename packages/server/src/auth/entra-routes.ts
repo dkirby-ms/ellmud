@@ -10,6 +10,7 @@ import type { Request, Response } from 'express';
 import cookieParser from 'cookie-parser';
 import type { AuthService } from './AuthService.js';
 import type { EntraAuthService } from './EntraAuthService.js';
+import { authLimiter } from '../middleware/rate-limit.js';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -48,7 +49,7 @@ export function createEntraRouter(
    * GET /auth/entra/callback
    * Handle OAuth callback — exchange code for tokens, create/find player, issue session token.
    */
-  router.get('/auth/entra/callback', async (req: Request, res: Response) => {
+  router.get('/auth/entra/callback', authLimiter, async (req: Request, res: Response) => {
     const expectedState = req.cookies.entra_state as string | undefined;
     const expectedNonce = req.cookies.entra_nonce as string | undefined;
 

@@ -155,6 +155,16 @@ export class PlayerState {
     this.equippedItems.delete(slot);
   }
 
+  /** Return all equipped items as [slot, Item] pairs (#409 Phase 3). */
+  getEquippedItems(): Array<[string, Item]> {
+    return Array.from(this.equippedItems.entries());
+  }
+
+  /** Remove all equipped item objects (#409 Phase 3). */
+  clearAllEquippedItems(): void {
+    this.equippedItems.clear();
+  }
+
   // ─── Follow helpers (#403) ─────────────────────────────────────────────
 
   /** Start following another player. Returns false if already following someone. */

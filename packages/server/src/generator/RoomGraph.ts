@@ -15,6 +15,10 @@ export interface Item {
   roomDescription?: string;
   /** Equipment slot this item can be equipped to (#390). */
   equipSlot?: 'weapon' | 'armour';
+  /** Present on container items — serialized contents for persistence (#409). */
+  containerContents?: Array<{ definitionId: string; quantity: number; durability: number | null }>;
+  /** Whether this item is soulbound (#409). */
+  soulbound?: boolean;
 }
 
 export type Direction = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';

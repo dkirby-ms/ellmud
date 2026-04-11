@@ -1,4 +1,5 @@
 import { X, Sword, Shield, Weight } from "lucide-react";
+import AnsiText from './AnsiText.js';
 
 interface InventoryOverlayProps {
   isOpen: boolean;
@@ -117,7 +118,7 @@ export default function InventoryOverlay({
                           color: getTierColor(item.tier),
                         }}
                       >
-                        {item.name}
+                        <AnsiText text={item.name} />
                       </h4>
                       <div className="flex items-center gap-3">
                         <span className="text-text-secondary text-sm font-sans">
@@ -156,7 +157,7 @@ export default function InventoryOverlay({
                     className="text-text-secondary text-sm italic mb-3 font-serif"
                     style={{ lineHeight: 1.6 }}
                   >
-                    {item.flavorText}
+                    <AnsiText text={item.flavorText} />
                   </p>
 
                   <div className="mb-3 flex gap-2 flex-wrap">

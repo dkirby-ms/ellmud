@@ -11,6 +11,7 @@ import { monitor } from '@colyseus/monitor';
 import express from 'express';
 import http from 'http';
 import { ZoneRoom } from './rooms/index.js';
+import { staticLimiter } from './middleware/rate-limit.js';
 import {
   AuthService,
   InMemoryTokenStore,
@@ -30,6 +31,7 @@ import { getConfig, ZONE_DEFAULT_MAX_PLAYERS } from './config.js';
 import { runMigrations } from './db/index.js';
 import { createNarrationCache, createPresence, testRedisConnection } from './cache/index.js';
 import { initStashProvider, isStashPg, loadItemDefsFromDb } from './stash/index.js';
+import { initInventoryProvider } from './inventory/index.js';
 import { initProfileProvider } from './player/index.js';
 import { initFactionProvider } from './faction/index.js';
 import { initRunHistoryProvider } from './run-history/index.js';
@@ -90,6 +92,10 @@ if (USE_PG) {
   console.log(`[Ellmud] Loaded ${count} item definitions from database.`);
 }
 console.log(`[Ellmud] Stash persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
+
+// ─── Inventory Persistence (#409) ───────────────────────────────────────────
+initInventoryProvider(USE_PG);
+console.log(`[Ellmud] Inventory persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Player Profile Persistence ─────────────────────────────────────────────
 initProfileProvider(USE_PG);
@@ -313,7 +319,7 @@ app.use(express.static(publicPath));
 // interfere with Colyseus POST /matchmake/* routes).
 // In dev mode the client dist may not exist; skip gracefully.
 const indexHtml = path.join(publicPath, 'index.html');
-app.get('*', (_req, res) => {
+app.get('*', staticLimiter, (_req, res) => {
   res.sendFile(indexHtml, (err) => {
     if (err) res.status(404).end();
   });

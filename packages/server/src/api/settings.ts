@@ -10,6 +10,7 @@ import type { AuthService } from '../auth/AuthService.js';
 import type { UserSettingsRepository } from '../db/UserSettingsRepository.js';
 import { getUserSettingsRepository } from '../db/UserSettingsRepository.js';
 import type { UserSettingsConfig } from '../db/types.js';
+import { apiLimiter } from '../middleware/rate-limit.js';
 
 // ─── Validation Constants ────────────────────────────────────────────────────
 
@@ -107,7 +108,7 @@ export function createSettingsRouter({ authService }: { authService: AuthService
 
   // ─── GET /api/user/settings ──────────────────────────────────────────────
 
-  router.get('/api/user/settings', async (req: Request, res: Response) => {
+  router.get('/api/user/settings', apiLimiter, async (req: Request, res: Response) => {
     try {
       const playerId = await authenticate(req, res);
       if (!playerId) return;
@@ -124,7 +125,7 @@ export function createSettingsRouter({ authService }: { authService: AuthService
 
   // ─── PUT /api/user/settings ──────────────────────────────────────────────
 
-  router.put('/api/user/settings', async (req: Request, res: Response) => {
+  router.put('/api/user/settings', apiLimiter, async (req: Request, res: Response) => {
     try {
       const playerId = await authenticate(req, res);
       if (!playerId) return;

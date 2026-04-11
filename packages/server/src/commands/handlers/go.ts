@@ -5,7 +5,7 @@
 
 import type { CommandResult, CommandContext } from '../index.js';
 import type { Direction } from '../../generator/RoomGraph.js';
-import { isInterZoneId, parseInterZoneId, POSTURE_ROOM_DESCRIPTIONS, DARKNESS_MESSAGE } from '@ellmud/shared';
+import { isInterZoneId, parseInterZoneId, DARKNESS_MESSAGE } from '@ellmud/shared';
 import { formatPlayerLines } from './player-display.js';
 
 const VALID_DIRECTIONS = new Set<string>(['north', 'south', 'east', 'west', 'up', 'down']);

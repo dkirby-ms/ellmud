@@ -1,0 +1,15 @@
+{
+  "name": "@ellmud/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playwright E2E tests for Ellmud multiplayer feature validation",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0"
+  }
+}
