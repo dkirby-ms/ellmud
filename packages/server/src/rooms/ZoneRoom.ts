@@ -2552,6 +2552,18 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
     }
 
+    // Equipped items also drop into corpse unless soulbound (#409 Phase 3)
+    const keptEquipSlots: string[] = [];
+    for (const [slot, item] of player.getEquippedItems()) {
+      const def = getItemDefinition(item.id);
+      const isSoulbound = def?.soulbound ?? false;
+      if (isSoulbound) {
+        keptEquipSlots.push(slot);
+      } else {
+        corpseItems.push(item);
+      }
+    }
+
     // Clear inventory, then re-add soulbound items
     player.inventory.clear();
     for (const itemId of keptItemIds) {
@@ -2565,6 +2577,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     await this.savePlayerInventory(playerId, player);
 
     // Clear equipped loadout — gear is lost on death (both in-memory and repo)
+    player.clearAllEquippedItems();
     player.equipment = undefined;
     if (this.loadoutService) {
       this.loadoutService.clearLoadout(this.dbPlayerId(playerId)).catch((err) => {

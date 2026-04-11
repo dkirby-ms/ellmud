@@ -155,7 +155,7 @@ export function loadConfig(): ServerConfig {
     reconnectDeathBehavior: (envStr('RECONNECT_DEATH_BEHAVIOR', 'kill') === 'safe-room' ? 'safe-room' : 'kill') as 'kill' | 'safe-room',
     devModeEnabled: envBool('DEV_MODE_ENABLED', false),
     enableProceduralGeneration: envBool('ENABLE_PROCEDURAL_GENERATION', false),
-    corpseTTLSeconds: envInt('CORPSE_TTL_SECONDS', 600), // 10 minutes default
+    corpseTTLSeconds: envInt('CORPSE_TTL_SECONDS', 43200), // 12 hours default (#409)
     openaiLLM: openaiEndpoint && openaiKey ? {
       endpoint: openaiEndpoint,
       apiKey: openaiKey,
