@@ -1917,3 +1917,19 @@ Items spawned through admin panel integrate fully with player item interaction c
 - When merging branches that touch shared types, always rebuild the shared package (`npm run build --workspace=packages/shared`) before running tsc on downstream packages.
 - Component extraction PRs are resilient to merge conflicts — the conflict was only in the consumption site (ZoneExploration.tsx), not in the extracted component itself.
 - Version indicator is in StatusPanel footer (StatusPanel.tsx lines 235+). Uses useVersion() hook from hooks/useVersion.ts. Good place for small utility links.
+
+
+### 2025-07-17: Issue #418 — ANSI Tags Support for Items and Creatures
+- **Status:** ✅ Complete (Commit 313c923, pushed to dev)
+- **What:** Wrapped item/creature name and description text in AnsiText across 7 client components
+- **Files changed:** RoomOccupants.tsx, ItemTooltip.tsx, InventoryOverlay.tsx, StatusPanel.tsx, CombatHUD.tsx, CombinedStashLoadout.tsx, EquipmentSilhouette.tsx
+- **Pattern:** Import AnsiText default export from ./AnsiText.js, wrap raw text interpolations with AnsiText component
+- **Notes:** ItemTooltip already had AnsiText for description; CombinedStashLoadout already had it for selectedItem.description. This pass completed all remaining name/text display points.
+- **No server changes needed** — ANSI tag strings already flow through item/creature data structures
+
+## Learnings
+
+- AnsiText is a default export, imported as import AnsiText from ./AnsiText.js
+- The ANSI parser handles unclosed tags gracefully — wrapping truncated strings (e.g., EquipmentSilhouette 12-char limit) is safe
+- CombinedStashLoadout is an additional item display surface beyond the four called out in the issue spec
+- CombatHUD renders creature names in the target panel and target list — another display surface for ANSI tags

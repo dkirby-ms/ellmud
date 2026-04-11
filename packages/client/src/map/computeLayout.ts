@@ -1062,7 +1062,7 @@ export function computeLayout(
    * proportional diagonal penalty that scales with perpendicular displacement.
    * This prevents the force-directed pass from dragging axis-aligned rooms
    * off-axis toward distant neighbours (e.g. wall-road pulling
-   * inside-the-west-gate 4 cells off the main-street row in Midgaard).
+   * inside-the-west-gate 4 cells off the main-street row in a dense city zone).
    * Later phases (diagonal cascade, direction-violation repair) use the
    * standard flat penalty so they remain free to shuffle rooms as needed.
    */

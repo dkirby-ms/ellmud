@@ -49,6 +49,30 @@
 
 ---
 
+## Security & Content Research (2026-04-11)
+
+### Issue #419 — CodeQL Alerts Research
+**Status:** ✅ Complete — 15 alerts analyzed, categorized, prioritized  
+**Findings:**
+- **3 Incomplete Sanitization (HIGH)** — `say.ts`, `emote.ts`, `whisper.ts`: Regex `/[\x00-\x1F\x7F]/g` misses special chars {|}~ (0x7B-0x7E). Risk: XSS via LLM prompt injection. Fix: expand to `/[\x00-\x1F\x7B-\x7E\x7F]/g`. Effort: 30 min.
+- **1 Polynomial ReDoS (HIGH)** — `user-routes.ts:37`: Email regex has overlapping quantifiers. Risk: DoS on malformed input. Fix: use simpler regex or library. Effort: 20 min.
+- **10 Missing Rate Limiting (HIGH)** — Auth callbacks, character creation, admin endpoints. Risk: Brute force, spam, resource exhaustion. Fix: `express-rate-limit` middleware. Effort: 2-3 hours.
+- **1 Insecure Randomness (FIXED ✅)** — Already corrected in e2e tests.
+**Outcome:** Comments posted to GitHub issue #419, labels updated, detailed remediation doc created.
+
+### Issue #420 — Midgaard Zone Removal Research
+**Status:** ✅ Complete — Full cleanup plan documented  
+**Findings:**
+- Midgaard was imported as a test of the `.wld` importer; safe to remove
+- **Files to DELETE:** Migration `004_import_midgaard.sql`, sample SQL `scripts/sample-diku-import.sql`
+- **Files to MODIFY:** Room features migration (2 queries), importer examples, layout test case #29
+- **Files to KEEP:** Importer itself (reusable infrastructure), layout engine, zone designer
+- **Risk:** Low — no hardcoded references in gameplay code. Pre-cleanup: verify no players in Midgaard zone.
+- **Effort:** 1-2 hours
+**Outcome:** Comments posted to GitHub issue #420, labels updated, detailed cleanup plan created.
+
+---
+
 ## Learnings (Archived — See Detailed Session Records)
 
 **Starting Gear Bug Fix (2026-07, Issue #377):**

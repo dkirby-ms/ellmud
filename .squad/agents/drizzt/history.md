@@ -3994,3 +3994,6 @@ Key lessons:
 - Server sends posture-aware room descriptions (is standing here, is crouching here), so E2E patterns should use is.*here not is here.
 - Movement departure message format: name walks direction. Arrival: name arrives from the opposite. (e.g., from the down for up to down).
 - When asserting absence of content after a second look, scope the check to only fresh messages (count before, slice after) — the terminal log accumulates all session output.
+- Migration system tracks files by filename — once deployed, files can be deleted but numbers should not be reused or renumbered. The persistence-schema-validation test now allows gaps in numbering.
+- When removing zone data, check for room feature seeds in later migrations (006_room_features.sql had midgaard-specific UPDATEs that referenced the deleted zone).
+- computeLayout test cases 26 and 29 use a synthetic 52-room dense city topology (avenue-1 through avenue-4, west-gate/east-gate corridor) to stress-test cardinal alignment and crossing reduction.

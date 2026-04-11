@@ -2830,3 +2830,67 @@ Researched 3 open issues. Posted design briefs. Updated labels. Routed to implem
 **Regression Check:** 2792 server tests passing, zero new failures.
 
 **Status:** ✅ APPROVED — Ready to merge to dev
+
+### 2026-04-11: Research Issues #417 & #418 — Feature Scoping
+
+**Task:** Architectural research and scoping for two feature requests:
+- #417: Toggle follow (allow/disallow followers)
+- #418: ANSI tags support for items and creatures
+
+**#417 Research Outcome: READY FOR IMPLEMENTATION**
+
+**Problem:** Players have no way to prevent others from following them.
+
+**Architecture Decision:**
+- **Storage:** Add `allowFollowing` boolean to `character_flags.flags` JSONB (consistent with existing `anon` and `rp` flags)
+- **Server logic:** Modify `follow.ts` handler to check target's `allowFollowing` flag before allowing follow
+- **Client feature:** Generic `/toggle` command for managing boolean player settings (framework for future toggles like `allowGroupInvites`, `allowPvP`)
+- **Persistence:** Character-scoped, persists across sessions (unlike in-memory consent system)
+
+**Key Insights:**
+1. Character_flags table already exists (migration 009) and uses JSONB—perfect pattern
+2. The "followers" set in PlayerState is already correct; no changes needed
+3. Consent system (session-scoped, all-or-nothing) is separate and should remain separate
+4. Follow rejection message should be clear: "Player does not accept followers"
+
+**Implementation Owner:** Jarlaxle (Systems)
+**Effort:** Small (1-2 sprints) — no external dependencies
+**Status:** READY — Assigned squad:jarlaxle label with go:ready
+
+---
+
+**#418 Research Outcome: READY FOR IMPLEMENTATION (Client-side only)**
+
+**Problem:** Items and creatures don't support ANSI color/formatting tags like rooms do.
+
+**Great News:** Server already supports this! No server changes needed.
+
+**Architecture Decision:**
+- **Server:** No changes required. Item/creature `name` and `description` fields already exist and support ANSI tags when passed through narrations
+- **Client:** Wrap creature/item names and descriptions in `AnsiText` component in 4 places:
+  1. RoomOccupants.tsx (creature names in Status Panel)
+  2. ItemTooltip.tsx (item name/description)
+  3. InventoryOverlay.tsx (carried items)
+  4. StatusPanel.tsx (if applicable)
+
+**Key Insights:**
+1. AnsiText component already exists and works perfectly (used throughout ZoneExploration.tsx)
+2. When items appear in narrations like "A [red]bloodied dagger[/red] lies here.", tags are already parsed
+3. `roomDescription` field on items/creatures already supports ANSI (issue #386)
+4. Content creators can add ANSI tags via admin API, seed files, or migrations
+
+**Implementation Owner:** Regis (Client/UI)
+**Effort:** Very small (0.5 sprint) — pure UI wrapping
+**Status:** READY — Assigned squad:regis label with go:ready
+
+---
+
+**Decisions Logged to:** `.squad/decisions/inbox/elminster-research-417-418.md`
+**GitHub Comments:** Both issues annotated with research summary and architect recommendations
+**Labels Updated:** Both issues transitioned from go:needs-research to go:ready, assigned squad member labels
+
+**Process Notes:**
+- Directives review confirmed inventory/stash separation and user flags architecture fit both issues
+- No conflicts with existing architecture patterns
+- Both issues are self-contained with clear acceptance criteria
+- No cross-system dependencies or blocking work identified

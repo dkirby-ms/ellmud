@@ -15,6 +15,7 @@ How to decide who handles what.
 | Code review, architecture | Elminster | Design review, system boundaries, scope decisions, technical direction |
 | Testing, QA, edge cases | Minsc | Test architecture, unit/integration tests, edge case coverage, fixtures |
 | Public docs, Discord, changelogs, community | Danilo | README, patch notes, Discord announcements, player guides, release comms |
+| CI/CD, GitHub Actions, Docker, deployment | Khelben | Workflows, build pipelines, Docker config, infra, deployment automation |
 | Scope & priorities | Elminster | What to build next, trade-offs, milestone planning |
 | Session logging | Scribe | Automatic — never needs routing |
 
@@ -29,6 +30,7 @@ How to decide who handles what.
 | `squad:volo` | LLM, narrative, prompt issues | Volo |
 | `squad:regis` | React UI, admin pages, client-side issues | Regis |
 | `squad:minsc` | Test, quality, regression issues | Minsc |
+| `squad:khelben` | CI/CD, GitHub Actions, Docker, deployment issues | Khelben |
 
 ### How Issue Assignment Works
 
