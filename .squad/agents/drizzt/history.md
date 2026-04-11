@@ -3811,3 +3811,26 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 - Group commands use _groupEvent and _gsay metadata on CommandResult (same pattern as _followStarted/_postureChange)
 - GroupManager.handlePlayerLeave() handles both leader-disband and member-removal in one call
 - resolvePlayerById was needed because resolvePlayerByName can't look up by session ID (needed for follower→name resolution in group form)
+
+---
+
+## PR #414 Review & Merge (2026-04-11)
+
+**Reviewer:** Elminster  
+**Status:** ✅ APPROVED & MERGED  
+**Verdict:** Clean architecture, proper permissions, 57 tests cover full surface
+
+- ✅ GroupManager pattern correctly centralizes group state
+- ✅ group add checks follower + consent sets atomically
+- ✅ All follow-up fixes correct (#411, #412, #413 addressed)
+- ✅ 57 tests pass (full coverage of all 8 commands + edge cases)
+- ✅ PR merged to dev branch
+
+**Issues Closed:**
+- #411 (Follow dependency in group formation)
+- #412 (Consent gating for group membership)
+- #413 (Leader disconnect behavior)
+
+**Decision Recorded:** drizzt-group-formation-architecture.md merged to decisions.md (2026-04-11T00:45:00Z)
+
+**Phase 3 Status:** ✅ COMPLETE — Group Formation live on dev
