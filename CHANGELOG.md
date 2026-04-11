@@ -1,3 +1,10 @@
+# [0.2.0-dev.1](https://github.com/dkirby-ms/ellmud/compare/v0.1.1-dev.2...v0.2.0-dev.1) (2026-04-11)
+
+
+### Features
+
+* add ANSI tag support for item and creature displays ([936b0bc](https://github.com/dkirby-ms/ellmud/commit/936b0bc108ff48c4d56b561afd9dc1b31602491b)), closes [#418](https://github.com/dkirby-ms/ellmud/issues/418)
+
 ## [0.1.1-dev.2](https://github.com/dkirby-ms/ellmud/compare/v0.1.1-dev.1...v0.1.1-dev.2) (2026-04-11)
 
 
