@@ -1,22 +1,24 @@
 # ⚠️ DEPRECATED WORKFLOW ⚠️
 #
-# This workflow has been deprecated in favor of automated version bumping.
+# This workflow has been deprecated in favor of semantic-release automation.
 #
-# **New versioning model:**
-# - Patch bumps: Automated on every dev → uat promotion
-# - Minor bumps: Automated on every uat → prod promotion
-# - Major bumps: Manual only (use `npm version major` on dev branch)
+# **New versioning model (semantic-release):**
+# - Versions determined automatically from conventional commit messages
+# - feat: commits → minor version bump (0.x.0)
+# - fix: commits → patch version bump (0.0.x)
+# - BREAKING CHANGE: or feat!:/fix!: → major version bump (x.0.0)
+# - dev branch → pre-releases (e.g., 1.0.0-dev.1)
+# - prod branch → full releases (e.g., 1.0.0)
 #
 # **Workflows:**
-# - `squad-promote.yml` — Manual promote with auto version bumping
-# - `scheduled-uat-promote.yml` — Scheduled dev → uat with auto patch bump
-# - `squad-release.yml` — Auto-tag and release on prod push
+# - `squad-release.yml` — Runs semantic-release on push to prod/dev
+# - Automated CHANGELOG generation
+# - Automated GitHub Releases with release notes
 #
-# **DO NOT USE THIS WORKFLOW** — It creates duplicate releases and bypasses
-# the automated version bumping system.
+# **DO NOT USE THIS WORKFLOW** — It bypasses the automated semantic versioning system.
 #
-# For reference, the original workflow is preserved below:
-# (renamed from release.yml on 2025-01-XX)
+# For reference, the original manual workflow is preserved below:
+# (originally deprecated on 2025-01-XX, updated for semantic-release on 2025-01-XX)
 
 name: Release (DEPRECATED - DO NOT USE)
 
@@ -24,7 +26,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '⚠️ DEPRECATED - Use squad-promote.yml instead'
+        description: '⚠️ DEPRECATED - Use semantic-release via squad-release.yml'
         required: true
         default: 'patch'
         type: choice
@@ -43,8 +45,10 @@ jobs:
     steps:
       - name: ⚠️ Workflow Deprecated
         run: |
-          echo "::error::This workflow is deprecated. Use squad-promote.yml for automated version bumping."
-          echo "::error::Patch bumps: Automated on dev → uat promotion"
-          echo "::error::Minor bumps: Automated on uat → prod promotion"
-          echo "::error::Major bumps: Manual npm version major on dev branch"
+          echo "::error::This workflow is deprecated. Use semantic-release for automated versioning."
+          echo "::error::Versions are now determined by conventional commit messages:"
+          echo "::error::  - feat: commits → minor bump (0.x.0)"
+          echo "::error::  - fix: commits → patch bump (0.0.x)"
+          echo "::error::  - BREAKING CHANGE: → major bump (x.0.0)"
+          echo "::error::Releases happen automatically via squad-release.yml on push to prod/dev"
           exit 1

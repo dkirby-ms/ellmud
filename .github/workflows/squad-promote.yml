@@ -49,20 +49,8 @@ jobs:
         run: |
           echo "=== dev HEAD ===" && git log origin/dev -1 --oneline
           echo "=== uat HEAD ===" && git log origin/uat -1 --oneline
-          echo "=== Current version ===" && node -e "console.log(require('./package.json').version)"
           echo "=== Files that would be stripped ==="
           git diff origin/uat..origin/dev --name-only | grep -E "^(\.(ai-team|squad|ai-team-templates)|team-docs/|docs/proposals/)" || echo "(none)"
-          
-          # Show what version would be bumped to
-          if [ "${{ inputs.dry_run }}" == "true" ]; then
-            CURRENT=$(node -e "console.log(require('./package.json').version)")
-            PARTS=(${CURRENT//./ })
-            MAJOR=${PARTS[0]}
-            MINOR=${PARTS[1]}
-            PATCH=${PARTS[2]}
-            NEW_PATCH=$((PATCH + 1))
-            echo "=== Would bump version to: ${MAJOR}.${MINOR}.${NEW_PATCH} ==="
-          fi
 
       - name: Merge dev → uat (strip forbidden paths)
         if: ${{ inputs.dry_run == 'false' }}
@@ -76,31 +64,11 @@ jobs:
           # Commit the merge if there are staged changes
           if ! git diff --cached --quiet; then
             git commit -m "chore: merge dev → uat"
-            echo "✅ Merged dev into uat"
+            git push origin uat
+            echo "✅ Merged dev into uat and pushed"
           else
             echo "ℹ️ Nothing to merge — uat is already up to date"
           fi
-
-      - name: Bump patch version
-        if: ${{ inputs.dry_run == 'false' }}
-        run: |
-          # Bump patch version
-          npm version patch --no-git-tag-version
-          
-          # Sync workspace versions
-          npm run version:sync
-          
-          # Get the new version
-          NEW_VERSION=$(node -e "console.log(require('./package.json').version)")
-          echo "📦 Bumped version to $NEW_VERSION"
-          
-          # Commit version bump
-          git add package.json package-lock.json packages/*/package.json
-          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
-          
-          # Push both commits (merge + version bump)
-          git push origin uat
-          echo "✅ Pushed uat branch with version $NEW_VERSION"
 
       - name: Trigger CI/CD on uat
         if: ${{ inputs.dry_run == 'false' }}
@@ -147,17 +115,6 @@ jobs:
         run: |
           echo "=== uat HEAD ===" && git log origin/uat -1 --oneline
           echo "=== prod HEAD ===" && git log origin/prod -1 --oneline
-          CURRENT=$(node -e "console.log(require('./package.json').version)")
-          echo "=== Current version: $CURRENT ==="
-          
-          # Show what version would be bumped to
-          if [ "${{ inputs.dry_run }}" == "true" ]; then
-            PARTS=(${CURRENT//./ })
-            MAJOR=${PARTS[0]}
-            MINOR=${PARTS[1]}
-            NEW_MINOR=$((MINOR + 1))
-            echo "=== Would bump minor version to: ${MAJOR}.${NEW_MINOR}.0 ==="
-          fi
 
       - name: Validate uat is release-ready
         run: |
@@ -176,28 +133,8 @@ jobs:
         run: |
           git checkout prod
           git merge origin/uat --no-ff -m "chore: merge uat → prod"
-          echo "✅ Merged uat into prod"
-
-      - name: Bump minor version
-        if: ${{ inputs.dry_run == 'false' }}
-        run: |
-          # Bump minor version (resets patch to 0)
-          npm version minor --no-git-tag-version
-          
-          # Sync workspace versions
-          npm run version:sync
-          
-          # Get the new version
-          NEW_VERSION=$(node -e "console.log(require('./package.json').version)")
-          echo "📦 Bumped minor version to $NEW_VERSION"
-          
-          # Commit version bump
-          git add package.json package-lock.json packages/*/package.json
-          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
-          
-          # Push both commits (merge + version bump)
           git push origin prod
-          echo "✅ Pushed prod — squad-release.yml will tag and publish release v$NEW_VERSION"
+          echo "✅ Merged uat into prod and pushed — squad-release.yml will create release"
 
       - name: Trigger CI/CD on prod
         if: ${{ inputs.dry_run == 'false' }}
