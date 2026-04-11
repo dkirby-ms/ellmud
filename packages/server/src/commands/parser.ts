@@ -84,6 +84,8 @@ const KNOWN_VERBS = new Set([
   'revoke',
   'group',
   'gsay',
+  'open',
+  'put',
 ]);
 
 export interface ParseResult {
