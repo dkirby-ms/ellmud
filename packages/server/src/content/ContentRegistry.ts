@@ -47,6 +47,7 @@ interface ItemRow {
   stackable: boolean;
   max_stack: number;
   status: string;
+  container_properties: Record<string, unknown> | null;
 }
 
 // ─── ContentRegistry ─────────────────────────────────────────────────────────
@@ -123,14 +124,14 @@ export class ContentRegistry {
   private async loadItems(): Promise<void> {
     const result = await this.pool!.query<ItemRow>(
       `SELECT id, name, type, tier, base_stats, base_durability, weight,
-              description, soulbound, stackable, max_stack, status
+              description, soulbound, stackable, max_stack, status, container_properties
        FROM item_definitions
        WHERE status = 'published'`,
     );
 
     const next = new Map<string, ItemDefinition>();
     for (const row of result.rows) {
-      next.set(row.id, {
+      const item: ItemDefinition = {
         id: row.id,
         name: row.name,
         type: row.type as ItemDefinition['type'],
@@ -140,7 +141,14 @@ export class ContentRegistry {
         weight: row.weight,
         description: row.description ?? '',
         soulbound: row.soulbound ?? false,
-      });
+      };
+      
+      // Map container_properties if present
+      if (row.container_properties) {
+        item.containerProperties = row.container_properties as ItemDefinition['containerProperties'];
+      }
+      
+      next.set(row.id, item);
     }
     this.items = next;
   }

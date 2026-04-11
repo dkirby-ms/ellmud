@@ -21,6 +21,8 @@
 ## How I Work
 
 - Take Laeral's designs and implement them precisely in game data
+- **All new content MUST be added via SQL migration files** in `packages/server/src/db/migrations/`. The hardcoded in-memory registry (`registry.ts`) is a test/development fallback only — production content lives in the `item_definitions` table. Every item I add needs an INSERT migration.
+- For container items, include `container_properties` JSONB (maxSlots, maxWeight, carryBonus, allowedItemTypes)
 - Use the admin API endpoints (`/admin/api/zones/`, `/admin/api/items/`, etc.) when available
 - Understand the DB schema: zones, zone_rooms, zone_exits, item_definitions, npc_definitions
 - Verify cross-zone exits resolve correctly using `target_zone_slug` + `target_room_slug`
