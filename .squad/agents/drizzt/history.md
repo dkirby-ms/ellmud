@@ -3901,3 +3901,42 @@ Key lessons:
 
 **Status:** ✅ COMPLETE — PR #415 approved by Elminster, merged to dev
 
+
+
+### Follow Arrival Notification Fix (2026-07-24)
+**Bug:** Leader did not see follower arrival messages after moving rooms. moveFollowers sent generic arrives before deliverResult rendered the room description, so the message was lost.
+**Fix:** moveFollowers now returns moved follower names; broadcastPlayerMovement excludes the leader via new excludeFromArrivalIds param; deferred X follows you notifications sent after deliverResult in handleCommandMessage.
+**Tests:** 3 new integration tests in follow-arrival.test.ts (message ordering, follower perspective, bystander sees generic arrival).
+
+## Learnings
+
+- broadcastPlayerMovement now supports an optional excludeFromArrivalIds set for cases where specific players should receive custom arrival notifications instead of the generic message.
+- Message ordering in handleCommandMessage matters. Side-effect notifications (follower arrivals, posture changes) must be sent AFTER deliverResult to appear below the room description in the client.
+
+---
+
+### Issue #416 — Playwright E2E Infrastructure Setup (Phase 1)
+**Date:** 2026-04-11
+**Status:** ✅ Complete — Committed to dev (7913ac2)
+
+**What was built:**
+- `packages/e2e/` workspace with `@playwright/test` dependency
+- `playwright.config.ts` — Chromium-only, baseURL `localhost:3000`, 30s timeout, list+HTML reporters
+- `PlayerFixture` class — wraps BrowserContext per player: register, login, createCharacter, selectCharacter, enterZone, sendCommand, waitForMessage, getMessages, cleanup
+- `test-fixture.ts` — extended Playwright `test` with `createPlayer()` factory + auto-cleanup
+- `connection.spec.ts` — smoke test (connect + look command)
+- Root `test:e2e` script, README documenting env requirements
+
+**Key decisions:**
+- Vite dev server runs on port 3000 (not 5173 as task suggested) — config confirmed in `packages/client/vite.config.ts`
+- Auth via API requests to `/auth/register`, token injected into localStorage (keys: `ellmud_token`, `ellmud_playerId`, `ellmud_username`)
+- Command input selector: `input[aria-label="Command input"]`
+- Narrative terminal selector: `[role="log"][aria-label="Game narrative"]`
+- Character cleanup is best-effort (DELETE /api/characters/:id)
+
+## Learnings
+
+- Vite dev server is on port 3000, not the Vite default 5173 — always check `vite.config.ts`
+- Client selectors for E2E: command input uses `aria-label="Command input"`, narrative uses `role="log"` with `aria-label="Game narrative"`
+- localStorage keys for auth: `ellmud_token`, `ellmud_playerId`, `ellmud_username` (defined in `packages/client/src/App.tsx`)
+- PlayerFixture pattern: register via API -> inject token into localStorage -> navigate to /zone -> wait for enabled command input as connection signal
