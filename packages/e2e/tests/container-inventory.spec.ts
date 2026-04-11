@@ -5,40 +5,18 @@
  * Starting gear: Rusty Blade (equipped weapon), Tattered Leather
  * (equipped armour), Waterlogged Potion (inventory consumable).
  *
- * Container tests require a "Tattered Satchel" (or similar container)
- * to be obtainable in the starting area. The item definition exists in
- * the DB (015_container_properties.sql) but is not currently seeded
- * into any room loot or starter kit. These tests will fail until a
- * container acquisition path is added to the reliquary starting zone.
+ * Container tests spawn a "Tattered Satchel" into the starting room
+ * via the admin spawn API before each test.
  */
 
 import { test, expect } from '../src/fixtures/test-fixture.js';
-import type { PlayerFixture } from '../src/fixtures/player-fixture.js';
-
-// ── Helpers ──────────────────────────────────────────────────────────
+import { adminSpawnItem } from '../src/helpers/admin-api.js';
 
 /** Short pause for async game-state propagation. */
 const SETTLE_MS = 500;
 
-/**
- * Attempt to pick up a container from the room floor.
- * Returns true if the player successfully picked one up.
- */
-async function tryPickUpContainer(
-  player: PlayerFixture,
-  containerName: string,
-): Promise<boolean> {
-  await player.sendCommand(`take ${containerName}`);
-  try {
-    await player.waitForMessage(
-      new RegExp(`You pick up the ${containerName}`, 'i'),
-      { timeout: 5_000 },
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
+/** The room where new characters spawn in the-reliquary zone. */
+const STARTING_ROOM = 'reliquary-inn';
 
 // ── Basic Item Flow ──────────────────────────────────────────────────
 
@@ -120,36 +98,17 @@ test.describe('Item Pickup & Drop', () => {
 // ── Container Mechanics ──────────────────────────────────────────────
 
 test.describe('Container Mechanics', () => {
-  /**
-   * Helper: sets up a player with a Tattered Satchel container.
-   * Attempts to pick one up from the room. If unavailable, the test
-   * will fail with a descriptive assertion error.
-   */
-  async function ensurePlayerHasContainer(player: PlayerFixture): Promise<void> {
-    const found = await tryPickUpContainer(player, 'satchel');
-    if (!found) {
-      // Last resort: check if already in inventory
-      await player.sendCommand('i');
-      try {
-        await player.waitForMessage(/Satchel/i, { timeout: 3_000 });
-        return; // already have one
-      } catch {
-        // Fail with clear message about prerequisites
-        expect(found, 'Container test requires a Tattered Satchel in the starting room. ' +
-          'Seed a container into the reliquary-inn room or update the starter kit.').toBeTruthy();
-      }
-    }
-  }
-
   test('player can put an item into a container', async ({ createPlayer }) => {
     const alice = await createPlayer('Alice');
-    await ensurePlayerHasContainer(alice);
+    await adminSpawnItem('tattered_satchel', STARTING_ROOM);
+    await alice.getPage().waitForTimeout(SETTLE_MS);
 
-    // Alice has Waterlogged Potion + Tattered Satchel in inventory
+    await alice.sendCommand('take satchel');
+    await alice.waitForMessage(/You pick up the.*Satchel/i);
+
     await alice.sendCommand('put waterlogged potion in satchel');
     await alice.waitForMessage(/You put Waterlogged Potion in.*Satchel/i);
 
-    // Verify via open
     await alice.sendCommand('open satchel');
     await alice.waitForMessage(/You open the.*Satchel/i);
     await alice.waitForMessage(/Waterlogged Potion/i);
@@ -157,7 +116,11 @@ test.describe('Container Mechanics', () => {
 
   test('player can open an empty container', async ({ createPlayer }) => {
     const alice = await createPlayer('Alice');
-    await ensurePlayerHasContainer(alice);
+    await adminSpawnItem('tattered_satchel', STARTING_ROOM);
+    await alice.getPage().waitForTimeout(SETTLE_MS);
+
+    await alice.sendCommand('take satchel');
+    await alice.waitForMessage(/You pick up the.*Satchel/i);
 
     await alice.sendCommand('open satchel');
     await alice.waitForMessage(/You open the.*Satchel/i);
@@ -167,7 +130,11 @@ test.describe('Container Mechanics', () => {
 
   test('player can take an item from a container', async ({ createPlayer }) => {
     const alice = await createPlayer('Alice');
-    await ensurePlayerHasContainer(alice);
+    await adminSpawnItem('tattered_satchel', STARTING_ROOM);
+    await alice.getPage().waitForTimeout(SETTLE_MS);
+
+    await alice.sendCommand('take satchel');
+    await alice.waitForMessage(/You pick up the.*Satchel/i);
 
     // Put item in container first
     await alice.sendCommand('put waterlogged potion in satchel');
@@ -204,8 +171,13 @@ test.describe('Container Exchange Between Players', () => {
     const alice = await createPlayer('Alice');
     const bob = await createPlayer('Bob');
 
-    // Alice picks up a container
-    await ensurePlayerHasContainerForExchange(alice);
+    // Spawn a satchel into the starting room via admin API
+    await adminSpawnItem('tattered_satchel', STARTING_ROOM);
+    await alice.getPage().waitForTimeout(SETTLE_MS);
+
+    // Alice picks up the container
+    await alice.sendCommand('take satchel');
+    await alice.waitForMessage(/You pick up the.*Satchel/i);
 
     // Alice puts her potion into the container
     await alice.sendCommand('put waterlogged potion in satchel');
@@ -234,8 +206,13 @@ test.describe('Container Exchange Between Players', () => {
     const alice = await createPlayer('Alice');
     const bob = await createPlayer('Bob');
 
+    // Spawn a satchel into the starting room via admin API
+    await adminSpawnItem('tattered_satchel', STARTING_ROOM);
+    await alice.getPage().waitForTimeout(SETTLE_MS);
+
     // Alice sets up container with item
-    await ensurePlayerHasContainerForExchange(alice);
+    await alice.sendCommand('take satchel');
+    await alice.waitForMessage(/You pick up the.*Satchel/i);
     await alice.sendCommand('put waterlogged potion in satchel');
     await alice.waitForMessage(/You put Waterlogged Potion in.*Satchel/i);
 
@@ -265,8 +242,11 @@ test.describe('Container Exchange Between Players', () => {
     const alice = await createPlayer('Alice');
     const bob = await createPlayer('Bob');
 
-    // ── Step 1: Alice gets a container ──
-    await ensurePlayerHasContainerForExchange(alice);
+    // ── Step 1: Spawn and pick up a container ──
+    await adminSpawnItem('tattered_satchel', STARTING_ROOM);
+    await alice.getPage().waitForTimeout(SETTLE_MS);
+    await alice.sendCommand('take satchel');
+    await alice.waitForMessage(/You pick up the.*Satchel/i);
 
     // ── Step 2: Alice drops her potion on the ground ──
     await alice.sendCommand('drop waterlogged potion');
@@ -322,24 +302,3 @@ test.describe('Container Exchange Between Players', () => {
     expect(recentAlice).not.toMatch(/Waterlogged Potion/i);
   });
 });
-
-// ── Exchange Helper ──────────────────────────────────────────────────
-
-/**
- * Ensure the player has a Tattered Satchel for exchange tests.
- * Same logic as ensurePlayerHasContainer in the Container Mechanics
- * describe block, but available to the exchange tests.
- */
-async function ensurePlayerHasContainerForExchange(player: PlayerFixture): Promise<void> {
-  const found = await tryPickUpContainer(player, 'satchel');
-  if (!found) {
-    await player.sendCommand('i');
-    try {
-      await player.waitForMessage(/Satchel/i, { timeout: 3_000 });
-      return;
-    } catch {
-      expect(found, 'Container exchange test requires a Tattered Satchel in the starting room. ' +
-        'Seed a container into the reliquary-inn room or update the starter kit.').toBeTruthy();
-    }
-  }
-}
