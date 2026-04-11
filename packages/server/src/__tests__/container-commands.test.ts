@@ -15,7 +15,6 @@ import {
   APOTHECARY_POUCH,
   RUSTY_BLADE,
   HEALING_DRAUGHT,
-  WATERLOGGED_POTION,
 } from '../items/index.js';
 
 // ─── Test Helpers ───────────────────────────────────────────────────────────
