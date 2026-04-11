@@ -43,3 +43,20 @@ Key public-facing areas:
 **Patterns to reuse:**
 - This template set scales to similar game projects; minimal customization needed
 - GitHub Actions release workflow is solid for monorepos using npm workspaces
+
+### Help Screen Refresh (2025-07)
+
+**What was done:**
+- Audited all 33 command handler files against COMMAND_HELP registry in help.ts
+- Added 15 missing commands: open, put, follow, unfollow, group, gsay, consent, unconsent, stand, sit, crouch, prone, recline, flag, toggle
+- Created 4 new categories: Containers, Social, Posture, Settings
+- Updated `take` entry to document `take <item> from <container>` syntax
+- Used sandbox's multi-line ANSI tag pattern for `group` subcommand listing
+- Confirmed `who` is handled async in ZoneRoom (not in handlers map) — correctly in help already
+- Noted `listen`, `use`, `search`, `extract` are in help but have no handler in the registry — left as-is (may be planned or client-handled)
+
+**Key patterns:**
+- COMMAND_HELP is a pure metadata registry; it doesn't need to match the handlers map 1:1 (some commands like `who` are async)
+- Multi-line usage strings use `\n` + ANSI `[bright-cyan]...[/bright-cyan]` tags for subcommand listings
+- Categories in COMMAND_HELP must also appear in the `categoryOrder` array to render on the help screen
+- Feature-gated commands use `requiredRoomType`; dev-only commands use `devOnly: true`

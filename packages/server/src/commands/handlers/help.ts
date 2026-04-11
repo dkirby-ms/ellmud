@@ -34,8 +34,9 @@ const COMMAND_HELP: Record<string, CommandHelp> = {
 
   // Items
   take: {
-    description: 'Pick up an item from the ground.',
-    usage: 'take <item>',
+    description: 'Pick up an item from the ground or take one from a container.',
+    usage: 'take <item>\n' +
+      '  [bright-cyan]take[/bright-cyan] <item> from <container>  — Remove an item from a container',
     aliases: ['get', 'g'],
     category: 'Items',
   },
@@ -76,6 +77,18 @@ const COMMAND_HELP: Record<string, CommandHelp> = {
     category: 'Items',
   },
 
+  // Containers
+  open: {
+    description: 'Open a container in your inventory to see its contents.',
+    usage: 'open <container>',
+    category: 'Containers',
+  },
+  put: {
+    description: 'Place an item from your inventory into a container.',
+    usage: 'put <item> in <container>',
+    category: 'Containers',
+  },
+
   // Communication
   say: {
     description: 'Speak to everyone in the room.',
@@ -96,6 +109,47 @@ const COMMAND_HELP: Record<string, CommandHelp> = {
     description: 'Listen for sounds in the area.',
     usage: 'listen',
     category: 'Communication',
+  },
+
+  // Social
+  follow: {
+    description: 'Follow another player — you move when they do.',
+    usage: 'follow <player>',
+    category: 'Social',
+  },
+  unfollow: {
+    description: 'Stop following your current leader.',
+    usage: 'unfollow',
+    category: 'Social',
+  },
+  group: {
+    description: 'Manage your adventuring group.',
+    usage: 'group [subcommand]\n' +
+      '  [bright-cyan]group[/bright-cyan]                    — Show group info\n' +
+      '  [bright-cyan]group form[/bright-cyan]               — Form a group from your followers\n' +
+      '  [bright-cyan]group add[/bright-cyan] <player>       — Add a player to the group\n' +
+      '  [bright-cyan]group remove[/bright-cyan] <player>    — Remove a member (leader only)\n' +
+      '  [bright-cyan]group leave[/bright-cyan]              — Leave the group\n' +
+      '  [bright-cyan]group disband[/bright-cyan]            — Disband the group (leader only)\n' +
+      '  [bright-cyan]group leader[/bright-cyan] <player>    — Transfer leadership\n' +
+      '  [bright-cyan]group share[/bright-cyan] [on|off]     — Toggle loot sharing',
+    category: 'Social',
+  },
+  gsay: {
+    description: 'Send a message to your group members only.',
+    usage: 'gsay <message>',
+    category: 'Social',
+  },
+  consent: {
+    description: 'Grant consent to a player (allows grouping and interactions).',
+    usage: 'consent <player>',
+    category: 'Social',
+  },
+  unconsent: {
+    description: 'Revoke consent from a player.',
+    usage: 'unconsent <player>',
+    aliases: ['revoke'],
+    category: 'Social',
   },
 
   // Combat
@@ -147,6 +201,33 @@ const COMMAND_HELP: Record<string, CommandHelp> = {
     description: 'Drop your weapon and exit combat.',
     usage: 'peaceful',
     category: 'Special Actions',
+  },
+
+  // Posture
+  stand: {
+    description: 'Stand up.',
+    usage: 'stand',
+    category: 'Posture',
+  },
+  sit: {
+    description: 'Sit down.',
+    usage: 'sit',
+    category: 'Posture',
+  },
+  crouch: {
+    description: 'Crouch down.',
+    usage: 'crouch',
+    category: 'Posture',
+  },
+  prone: {
+    description: 'Drop to the ground.',
+    usage: 'prone',
+    category: 'Posture',
+  },
+  recline: {
+    description: 'Recline and relax.',
+    usage: 'recline',
+    category: 'Posture',
   },
 
   // Feature: Expedition Board
@@ -225,6 +306,18 @@ const COMMAND_HELP: Record<string, CommandHelp> = {
     usage: 'teleport <player-name>',
     category: 'Dev Tools',
     devOnly: true,
+  },
+
+  // Settings
+  flag: {
+    description: 'Toggle a character flag like anonymous or roleplay mode.',
+    usage: 'flag [anon|rp]',
+    category: 'Settings',
+  },
+  toggle: {
+    description: 'Toggle a player setting on or off.',
+    usage: 'toggle [follow]',
+    category: 'Settings',
   },
 
   // Meta
@@ -356,12 +449,16 @@ export function handleHelp(ctx: CommandContext): CommandResult {
   const categoryOrder = [
     'Navigation',
     'Items',
+    'Containers',
     'Communication',
+    'Social',
     'Combat',
+    'Posture',
     'Special Actions',
     'Expedition Board',
     'Stash',
     'Inn',
+    'Settings',
     'Sandbox',
     'Dev Tools',
     'Meta',
