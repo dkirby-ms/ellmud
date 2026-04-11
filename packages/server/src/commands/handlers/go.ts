@@ -1,10 +1,11 @@
 /**
  * go [direction] — Move to an adjacent room. Validates exit exists.
+ * Dark target rooms show only a darkness message and exits (Issue #402).
  */
 
 import type { CommandResult, CommandContext } from '../index.js';
 import type { Direction } from '../../generator/RoomGraph.js';
-import { isInterZoneId, parseInterZoneId, POSTURE_ROOM_DESCRIPTIONS } from '@ellmud/shared';
+import { isInterZoneId, parseInterZoneId, POSTURE_ROOM_DESCRIPTIONS, DARKNESS_MESSAGE } from '@ellmud/shared';
 
 const VALID_DIRECTIONS = new Set<string>(['north', 'south', 'east', 'west', 'up', 'down']);
 
@@ -56,6 +57,27 @@ export function handleGo(ctx: CommandContext): CommandResult {
   player.currentRoomId = targetRoomId;
   // Auto-reset posture to standing on movement (#371)
   player.posture = 'standing';
+
+  // Dark room: show darkness message instead of full room contents (#402)
+  if (targetRoom.illumination === 'dark') {
+    const exitList = Array.from(targetRoom.exits.keys()).join(', ') || 'none';
+    const lines: string[] = [
+      `You move ${direction}.`,
+      '',
+      DARKNESS_MESSAGE,
+      '',
+      `Exits: ${exitList}`,
+    ];
+    return {
+      narrations: [{ text: lines.join('\n'), type: 'room' }],
+      roomHeader: {
+        roomName: targetRoom.name,
+        roomSlug: targetRoom.id,
+        exits: Array.from(targetRoom.exits.keys()),
+        stability: ctx.stability,
+      },
+    };
+  }
 
   // Build room description for the new room
   const exitList = Array.from(targetRoom.exits.keys()).join(', ') || 'none';

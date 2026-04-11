@@ -197,6 +197,14 @@ export type GearTier =
   | 'masterwork'
   | 'anomalous';
 
+// ─── Room Illumination (Issue #402) ─────────────────────────────────────────
+
+/** Room-level illumination state. Extensible for future values (dim, magical_darkness). */
+export type Illumination = 'lit' | 'dark';
+
+/** Darkness message shown when a player cannot see in a dark room. */
+export const DARKNESS_MESSAGE = "It is pitch black. You can't see a thing.";
+
 // ─── Zone Tiers (GDD §10.1) ────────────────────────────────────────────────
 
 export type ZoneTier = 1 | 2 | 3;

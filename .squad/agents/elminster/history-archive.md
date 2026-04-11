@@ -1,10 +1,3 @@
-# elminster — History
-
-**For a quick overview, see [summary.md](./summary.md)**
-
----
-
-
 ## Project Context
 
 - **Project:** Ellmud — PvPvE Extraction RPG / Real-Time MUD
@@ -13,39 +6,6 @@
 - **User:** dkirby-ms
 - **GDD:** GDD.md (comprehensive design document covering all game systems)
 
-## Core Context (Architecture, Decisions, Foundations — Completed)
-
-**Foundation work (Phase 1: Repository + GDD):**
-- ✅ **GDD Comprehensive:** Frozen on 2026-03-19, covers all systems (combat, zones, extraction, narration, auth, loot)
-- ✅ **GitHub Backlog:** #1–#49 (4 phases, 16 labels, 4 milestones) fully triaged and decomposed from GDD
-- ✅ **Colyseus + Azure Architecture:** WebSocket framework selected, Azure Container Apps + PostgreSQL + Redis, optional Auth via env var
-- ✅ **Migration Consolidation:** 22 migrations consolidated into 4 semantic groups (schema, seed, entities, features)
-- ✅ **Admin Dashboard:** Express routes, SSE broadcasts, content (creatures/items/zones) CRUD, separate ADMIN_TOKEN auth
-
-**Team Architecture Decisions (Merged to decisions.md):**
-- Stash persistence: InMemoryStashRepository + PgStashRepository (weight-based capacity)
-- Room topology enforcement: biome → room_type rules (prevent invalid connections)
-- Extraction state machine: clear messaging for different states (channeling, mid-flight, landed)
-- Combat system: Pure logic + callback injection pattern for event handling
-- In-memory cache default: Redis as optional config switch (backwards compatible)
-- Colyseus test server: One per file, no file parallelism, polling over fixed waits
-- Colyseus Schema types: `defineTypes()` over `@type()` decorators (TypeScript 5.9.3 compatibility)
-
-**Design Specs Completed (Proposals in Decisions):**
-- GDD Roadmap → GitHub Issues decomposition (roadmap architecture & priority framework)
-- Creature room appearance (#383): Individual creature lines with ANSI tag support
-- Optional user flags (#365): [Anon], [RP] flags via character_flags table + `/flag` command
-- Figma export strategy: Conversion of design assets to TypeScript icon components
-
-**Research & Analysis Completed:**
-- User config file system (project-root based via env override)
-- Direction shortcuts & speedwalks (root cause: React state race condition + key repeat)
-- BFS layout engine (corridor-first generation, depth-first room building)
-- Combat sandbox (isolated testing with minimal dependencies)
-
-**All Phase 1 work complete. Zero test regressions. Ready for Phase 2 (Groups) and Phase 3 (Combat Rewards).**
-
----
 
 ## Team Updates
 
@@ -59,42 +19,8 @@
 
 ---
 
+
 ## Learnings
-
-### 2025-07-22: Container Item System Architecture (#409)
-**Task:** Scope and design architecture proposal for container item type, inventory persistence, and corpse loot system.
-
-**Key Findings:**
-1. **Death/corpse system already exists and is well-tested.** Full flow: DowningSystem (downed state, 10-tick bleed-out) → handlePlayerDeath() → CorpseSystem.addCorpse(). Loot command fully functional. Tests in `player-death.test.ts` and `corpse-loot.test.ts`.
-2. **Bug: equipped items vanish on death.** `ZoneRoom.ts:2113-2145` iterates `player.inventory` for corpse items but equipped items live in `player.equippedItems` (private Map on PlayerState). They're cleared but never added to the corpse.
-3. **Inventory is in-memory only.** `PlayerState.inventory` = `Map<string, InventoryEntry>`. No `player_inventory` table. Lost on disconnect. Stash IS persisted but inventory is not.
-4. **Two parallel item type systems.** `RoomGraph.Item` (lightweight runtime: id, name, weight, description, equipSlot?) vs `@ellmud/shared ItemDefinition/ItemInstance` (registry/persistence). No bridging between them.
-5. **Current ItemType enum lacks 'container'.** Types are: weapon, armour, consumable, material, tool, key.
-
-**Architecture Decisions (Proposed):**
-- 4-phase approach: inventory persistence → container type → death integration → world containers
-- Keep CorpseSystem separate from container items (well-tested, zone-scoped lifecycle)
-- Event-driven saves (not periodic) with 250ms debounce
-- Max container nesting depth: 1
-- `player_inventory` table mirrors `player_stash` schema for consistency
-
-**Key File Paths:**
-- Death handler: `packages/server/src/rooms/ZoneRoom.ts:2097-2260`
-- CorpseSystem: `packages/server/src/systems/CorpseSystem.ts`
-- DowningSystem: `packages/server/src/systems/DowningSystem.ts`
-- DeathPenalty: `packages/server/src/systems/DeathPenalty.ts`
-- PlayerState: `packages/server/src/state/PlayerState.ts`
-- Item types (shared): `packages/shared/src/items.ts`
-- Item types (runtime): `packages/server/src/generator/RoomGraph.ts:9-17`
-- Item registry: `packages/server/src/items/registry.ts`
-- Stash types: `packages/shared/src/types/stash.ts`
-- DB schema: `packages/server/src/db/migrations/001_schema.sql`
-- Loot command: `packages/server/src/commands/handlers/loot.ts`
-
-**Deliverables:**
-- Architecture proposal: `.squad/decisions/inbox/elminster-container-system.md`
-- GitHub issue: #409
-- 6 open questions for dkirby-ms on design decisions
 
 ### 2025-07-22: Creature Room Appearance Design (#383)
 **Task:** Design spec for individual creature lines in room descriptions with ANSI tag support.
@@ -377,6 +303,7 @@
 - **Cross-system assessment:** All 4 PRs modify non-overlapping code paths and are architecturally compatible. PRs #80 and #83 both touch ShardRoom.ts but in different methods — will merge cleanly. Room topology (#81) gives creature behavior (#82) meaningful patrol semantics. Extraction messaging (#83) works correctly with stash transfer (#80).
 - **Lesson:** The `as any` bracket-access pattern for admin inspection of private fields is an acceptable compromise for debugging visibility, but duplication should be controlled — extract to a typed helper or add a public admin-only accessor method.
 
+
 ## Wave 4b Completion — PR Review Gate + All Phase 1 Server Complete (2026-03-20T22:11Z)
 
 **Status:** ✅ Complete  
@@ -445,6 +372,7 @@ All four PRs merge cleanly to dev:
 - **Architecture validated:** Message-only Colyseus protocol correctly enforced (zero Schema leakage). React Router structure sound. AppContext+RouterProvider integration correct. Token persistence pattern clean.
 - **Key files:** `.squad/decisions/inbox/elminster-ux-review.md` (full review verdict).
 
+
 ## 2026-03-21: UX Overhaul Branch Code Review
 
 **Session:** Post-wave-7 sprint review  
@@ -501,6 +429,7 @@ All four PRs merge cleanly to dev:
 - **Prioritized fix batches:** (1) Theme token migration, (2) ShardExploration combat/sidebar polish, (3) Overlay refinements, (4) Structural gaps, (5) Minor polish.
 **Next:** Phase 2 planning — content admin tool design ready (docs/content-admin-tool.md), implement per priority.
 
+
 ## Learnings
 
 ### 2026-03-21: Batch A Phase 1 Client UI Review (#84–#88)
@@ -542,6 +471,7 @@ All four PRs merge cleanly to dev:
 
 ---
 
+
 ## Wave 2 Complete — All Issues Shipped (2026-03-23)
 
 **Status:** ✅ Complete — PR #119 re-reviewed and approved, dev → uat promotion (PR #120) complete
@@ -577,6 +507,7 @@ All four PRs merge cleanly to dev:
 
 ---
 
+
 ## Phase 2: Code Review (2026-03-23)
 
 ### Review Cycle: All 4 PRs Reviewed (Round 1, 2, 3)
@@ -610,6 +541,7 @@ All four PRs merge cleanly to dev:
 - ✅ Final approvals: 2026-03-23T0100Z–0106Z
 
 ---
+
 
 ## Phase 2.5: Admin Audit Decomposition (2026-03-23)
 
@@ -713,6 +645,7 @@ The admin UI was built as a purely visual scaffold. It's not broken—it's incom
 
 
 
+
 ## Wave 2 Review Cycle: Admin Wiring PRs #142-#145 (2026-03-23T20:00Z)
 
 ### Review Summary
@@ -752,6 +685,7 @@ The admin UI was built as a purely visual scaffold. It's not broken—it's incom
 
 ---
 
+
 ## 2026-03-23: Milestone — Entity Wiring Complete (All PRs Approved)
 
 **Work:** Re-reviewed and approved PR #145 (validation fixes by Drizzt)
@@ -764,6 +698,7 @@ The admin UI was built as a purely visual scaffold. It's not broken—it's incom
 
 
 ---
+
 
 ## 2026-03-24: Review — PR #154 (Admin Users Fix) + Lint Sweep
 
@@ -1069,6 +1004,7 @@ The link between them is `players.id` = `player_skills.player_id` = `player_stas
 
 ---
 
+
 ## 2026-03-25: Identity Handoff Bug Fixed
 
 **Status:** ✅ Resolved and test-covered  
@@ -1146,6 +1082,7 @@ All future rooms must follow: `client.auth?.playerId` (excluding 'anonymous') �
 - **Key files:** `.squad/decisions/inbox/elminster-stash-loadout-plan.md` (full 32KB plan with code examples, edge cases, test strategy, timeline).
 
 - **Success criteria:** Players can equip/unequip via drag-drop, loadout validation prevents broken/incomplete entry, shard key consumed, multi-player sync works, full test coverage, no state divergence.
+
 
 ## 2026-03-25: Stash ↔ Loadout Unification Design (Completed)
 
@@ -1565,6 +1502,7 @@ CREATE TABLE zone_definitions (
 - **Handoff:** Jarlaxle (Systems Dev) to follow with ContentRegistry wiring and admin CRUD endpoints
 - **Orchestration log:** `.squad/orchestration-log/2026-03-29T13-45-00Z-elminster.md`
 
+
 ## Learnings
 
 ### GDD Major Overhaul (2024)
@@ -1617,6 +1555,7 @@ CREATE TABLE zone_definitions (
 
 **Scope:** GDD.md only, ~25 edits across 10+ sections.
 
+
 ## Learnings
 
 1. **Hub Abstraction Is Overdue:** The Refuge was serving double duty — player home *and* the only persistent hub implementation. Splitting into faction-specific hubs and a designer hub forces us to think about the hub as a pattern (feature rooms, persistent lifecycle, stash/board/market) rather than a singleton. This abstraction will simplify the eventual `FactionHubRoom` implementation.
@@ -1641,6 +1580,7 @@ CREATE TABLE zone_definitions (
 
 **Scope:** GDD.md only, ~30 edits across 15+ sections plus two new sections (§6.5, §6.6).
 
+
 ## Learnings
 
 1. **Genre Identity Was Load-Bearing:** "Extraction RPG" was woven into nearly every section — genre line, core fantasy, design pillars, gameplay loop, zone design, PvP framing, sound system, roadmap, and open questions. A grep for "extract" (case-insensitive) hit 30+ lines. Removing a genre identity from a GDD is not a find-and-replace — each reference requires contextual rewriting because the surrounding language was shaped by the extraction assumption.
@@ -1658,6 +1598,7 @@ CREATE TABLE zone_definitions (
 - Updated: `GDD.md` (extraction removed, death & corpse system added, genre reframed)
 
 ---
+
 
 ## Learnings — GDD vs Codebase Audit (2026-03-20)
 
@@ -1724,6 +1665,7 @@ CREATE TABLE zone_definitions (
 
 ---
 
+
 ## 2026-04-01: Agent Work Summary
 
 **Two tasks completed:** Group Combat System (20-player scale) and Room Positioning System (§6.11). Total updates: 2 major GDD sections (§6.10, §6.11) + 8 cross-references updated. Decisions recorded in `.squad/decisions.md`. Orchestration logs created in `.squad/orchestration-log/`.
@@ -1771,6 +1713,7 @@ CREATE TABLE zone_definitions (
 
 ---
 
+
 ## 2026-04-04: Merge Round — All 7 Sprint 3/4 PRs to Dev
 
 **Status:** ✅ Complete
@@ -1808,6 +1751,7 @@ CREATE TABLE zone_definitions (
 - Verified zero regressions post-merge
 
 ---
+
 
 ## 2026-04-04: Zone Designer Migration Architecture
 **Scope:** Long-term strategic redesign of zone designer from hand-rolled BFS + SVG to elkjs + ReactFlow
@@ -1886,6 +1830,7 @@ CREATE TABLE zone_definitions (
 
 ---
 
+
 ## Learnings
 
 ### Architecture Patterns
@@ -1917,6 +1862,7 @@ CREATE TABLE zone_definitions (
 ### 2026-04-04: Zone Designer Migration — Squad Label Triage Review
 **By:** Elminster (Lead)  
 **Reviewed:** Issues #266–#273 (Epic + 7 phases)  
+
 
 ## Triage Decisions
 
@@ -1960,9 +1906,11 @@ CREATE TABLE zone_definitions (
 - **Rationale:** Final cleanup (remove old code, update tests/docs). Regis implements; Minsc verifies nothing broke (regression test suite).
 - **Removed:** `go:needs-research`
 
+
 ## Pattern: `go:needs-research` Removal
 
 All 8 issues had `go:needs-research` labels despite a **detailed 20KB plan with 6-phase breakdown, risk matrix, feature preservation matrix, and success criteria already written**. Research is complete; work is implementation-ready. Removed from all issues.
+
 
 ## Assignment Rationale
 
@@ -1981,6 +1929,7 @@ All 8 issues had `go:needs-research` labels despite a **detailed 20KB plan with 
 - Validation warnings display correctly
 - Performance on large zones (100+ rooms)
 - No regressions to existing CRUD
+
 
 ## Outcome
 
@@ -2009,6 +1958,7 @@ All 8 issues now have correct squad labels aligned with work scope. Epic (#266) 
 4. All fixes are low-risk config/logic changes; no schema or architectural changes needed
 
 **Next steps:** Fixes are outlined with file paths and line numbers in decision document. Implementation ~40 lines of added logic across two workflows.
+
 
 ## Learnings — GDD §6 Combat Audit (2026-07-25)
 
@@ -2211,8 +2161,10 @@ The implementation correctly executes the decision. The async latency issue is a
 **PR:** #294 (Drizzt)  
 **Issue:** #278  
 
+
 ## Decision
 Approved PR #294 implementing auto-attack baseline and target management per GDD §6.1-§6.2. This is the foundational combat system change that flips the default action from dodge to auto-attack when a combatant has a valid, living target.
+
 
 ## Implementation Quality
 **✅ GDD Compliance:**
@@ -2234,435 +2186,16 @@ Approved PR #294 implementing auto-attack baseline and target management per GDD
 - All existing combat tests updated to reflect auto-attack baseline (46 assertions changed)
 - Edge cases covered: dead target, no target, explicit dodge override, target cycling, hostile filtering
 
+
 ## Rationale
 This is load-bearing combat system work. The auto-attack baseline is the foundation for abilities, positioning, and group combat (GDD §6.3, §6.11, §6.2). Drizzt executed this correctly — surgical changes, comprehensive tests, no unnecessary complexity.
 
 The implementation follows the existing combat system patterns and maintains server-authoritative state. The `currentTarget` field is the single source of truth for auto-attack behavior, and the tick resolution logic correctly handles all edge cases (dead target, missing target, explicit action override).
+
 
 ## Team Impact
 - **Minsc/Regis:** Combat UI will need to display current target and support target cycling (Tab key or `target next` command)
 - **Future work:** Ability system (GDD §6.3) can now assume auto-attack baseline — abilities replace auto-attack on the tick, not dodge
 - **Position system (GDD §6.11):** Will integrate with `currentTarget` for melee range validation
 
-## Key Files
-- `packages/server/src/combat/CombatState.ts` — Added `currentTarget?: string` field to Combatant
-- `packages/server/src/combat/CombatSystem.ts` — Auto-attack tick logic, setTarget/cycleTarget methods
-- `packages/server/src/commands/handlers/target.ts` — New command handler
-- `packages/server/src/__tests__/auto-attack.test.ts` — 14 new tests
-
----
-
-### 2026-04-05: PR #292 Review — Async Narration in Colyseus Hooks
-**Role:** Lead / Architect  
-**Task:** Review NarrationService wiring into ZoneRoom lifecycle hooks
-
-## Outcome: BLOCKED — Requested changes
-
-### Key Finding
-
-PR #292 wires NarrationService + LLM client into ZoneRoom lifecycle hooks with proper factory pattern and fallback logic. However, `onJoin()` awaits `generateNarration()` call (line 486), blocking player join flow for 0-2000ms (LLM latency + cache miss).
-
-**Violation:** GDD §4.5 — "LLM never blocks critical path"
-
-### Blocking Issue Details
-
-- **Impact:** Player sees "connecting..." spinner during join phase while LLM completes
-- **UX:** First zone entry with cache miss = 0-2s latency spike
-- **Scale:** 50 concurrent players/min × 2s = 100s aggregate blocking time/min
-- **Solution:** Fire-and-forget pattern
-
-### Approved Elements
-
-- ✅ Factory pattern for NarrationService injection
-- ✅ Fallback logic and timeout handling (2000ms)
-- ✅ Test structure and coverage approach
-- ✅ Type safety in service wiring
-
-### Decision Documented
-
-Created comprehensive decision document (`.squad/decisions/async-narration-pattern.md`) establishing fire-and-forget pattern for non-critical LLM calls:
-- Entry narration, combat actions, movement → fire-and-forget
-- Room descriptions (`look` command) → await with timeout (user requested)
-- Key principle: "Await only when user or game state depends on result"
-
----
-
-### 2026-04-05: PR #294 Review — Auto-Attack Baseline
-**Role:** Lead / Architect  
-**Task:** Review auto-attack targeting and target management implementation
-
-## Outcome: APPROVED — Ready to merge
-
-PR #294 implements auto-attack default targeting and target management per GDD §6.1-§6.2. All requirements met. 14 new tests, 46 updated assertions, all passing. No regressions.
-
----
-
-### 2025-04-05: Decomposing Issue #312 (Exiting the Game Outside of Combat)
-- **Task:** Research and decompose #312 — inn rooms, rent command, disconnect limbo visibility
-- **Key findings:**
-  - Feature rooms use a type-gated command dispatch system (`featureHandlers` map in `commands/index.ts`). Adding `feature_inn` + `rent` follows the exact same pattern as `feature_stash`/`stash` and `feature_expedition_board`/`board`.
-  - `RoomType` union in `packages/shared/src/room-graph.ts` is the single source of truth for room types. All `feature_*` types auto-detected by `isFeatureRoomType()`.
-  - Zone entry points defined by `entry_room_slugs` TEXT[] in `zones` table. Changing spawn to inn = updating this array in migration.
-  - Faction strongholds seeded in migration `013_faction_strongholds.sql`. Each has 8 feature rooms + commons entry. Inn rooms will be migration ~017.
-  - Disconnect already uses `playerState.disconnected = true` flag with 30s reconnection grace (`RECONNECTION_TIMEOUT_S` config, default 30). Players auto-dodge in combat while disconnected. Currently included in room occupants but flag not sent to clients.
-  - Consented leave = close code 4000. `rent` should trigger this server-side after persisting state.
-  - Client uses `navigate('/characters')` pattern for returning to character select (see `ZoneExploration.tsx` logout flow).
-  - `RoomOccupantsMessage` currently sends `{ id, name }` per player. Adding `disconnected?: boolean` is non-breaking.
-- **Decomposition:** 8 work items across Drizzt (4), Regis (2), Minsc (2). Critical path: WI-1→WI-2→WI-3→WI-5. Parallel track: WI-4→WI-6.
-- **Decision file:** `.squad/decisions/inbox/elminster-312-decomposition.md`
-- **GitHub comment:** Posted architecture summary on issue #312.
-
----
-
-### 2026-01-25: Issue #337 — Combat Grid System Unified Proposal
-- **Task:** Synthesize three team research documents (Jarlaxle systems, Regis frontend, Laeral visual design) into unified architectural proposal for DCSS-style grid combat
-- **Research reviewed:**
-  - `docs/design/337-combat-grid-systems.md` (695 lines) — Grid mechanics, tick integration, creature AI, backward compatibility
-  - `docs/design/337-combat-grid-frontend.md` (945 lines) — DCSS tilesets, Canvas 2D rendering, WebSocket sync, accessibility
-  - `docs/design/337-combat-grid-visual-design.md` (572 lines) — Creature representation, faction theming, fog-of-war, pixel art direction
-- **Key finding:** All three analyses converge on technical feasibility BUT identify two critical unknowns:
-  1. Can grid state be comprehensible in text-only mode? (MUD accessibility requirement)
-  2. Will performance hold at 20 players + 10 creatures per 1s tick? (900 range checks + pathfinding)
-- **Architectural synthesis:**
-  - Grid dimensions: 8-12 tiles per room, variable by room type
-  - Movement: 1 tile = 1 action, integrated into existing tick loop
-  - Backward compatibility: Zone derivation from grid coordinates (Front = y≤3, Flank = 4-6, Rear = 7+)
-  - Rendering: Canvas 2D + DCSS CC0 tiles (not WebGL, not SVG, not DOM-based ASCII)
-  - Server-authoritative state with WebSocket sync (no client-side prediction in Phase 1)
-  - Performance optimization: Distance matrix caching (O(n²) → O(1)), path caching (3-5 tick reuse)
-- **Conflict resolution:**
-  - **Text rendering:** Phase 1 includes BOTH text coordinates AND Canvas prototype (validate both approaches)
-  - **LOS/fog-of-war:** Defer to Phase 2 (coupled features, implement together or not at all)
-  - **Mobile support:** Desktop-only Phase 1, evaluate mobile demand before investing in touch UI
-  - **Animations:** Static grid Phase 1, movement tweens Phase 2, polish Phase 3 (ruthlessly minimal at each phase)
-- **Risk assessment:**
-  - Risk 1 (HIGH): Text-mode rendering unreadable → Mitigate with SPIKE Phase validation, ASCII grid fallback
-  - Risk 2 (HIGH): Performance degradation → Mitigate with distance/path caching, defer LOS to Phase 2
-  - Risk 3 (MEDIUM): Content design complexity → Make grid opt-in per room (boss fights only), build editor tooling
-  - Risk 4 (MEDIUM): User rejection → Grid is optional/toggleable, text-first preserved, early playtester feedback
-  - Risk 5 (MEDIUM): Development time underestimated → Strict phase boundaries, tight go/no-go gates
-- **Recommendation:** **SPIKE → GO/NO-GO → PHASE 1 (if approved)**
-  - SPIKE Phase (1 week): ASCII grid prototype, Canvas visual prototype, performance benchmark with 30 entities
-  - Phase 1 (3-4 weeks, if SPIKE passes): Minimal grid on 1-2 boss rooms, no LOS/cover/animations
-  - Phase 2-3 (post-launch): Tactical depth + visual polish
-  - **Priority assessment:** Grid is **optional enhancement, not core requirement**. Recommend post-launch Phase 2 unless dkirby-ms views it as flagship feature.
-- **Open questions for dkirby-ms:**
-  1. Timeline: Pre-launch or post-launch? (8-14 weeks vs defer)
-  2. Text tolerance: Acceptable ASCII awkwardness threshold?
-  3. Default state: Grid opt-in or opt-out?
-  4. Art budget: Free DCSS tiles or custom pixel art (\$500-1500)?
-  5. Success criterion: When is this "good enough to ship"?
-- **Deliverables:**
-  - `docs/design/337-combat-grid-proposal.md` (unified proposal, 400+ lines)
-  - GitHub issue comment with summary + link to proposal
-- **Key lesson:** When synthesizing multi-perspective research, identify **convergence points** (shared conclusions) vs **divergence points** (conflicts requiring architectural decisions). Resolve conflicts with clear rationale based on project constraints (text-first MUD identity, performance targets, phased delivery model). Front-load risk with SPIKE Phase — validate critical unknowns before heavy investment. Use strict go/no-go gates to enable early exit if any phase fails validation criteria.
-- **Architectural patterns:**
-  - **Grid as optional overlay:** Text-first combat remains fully functional, grid supplements but doesn't replace
-  - **Backward compatibility via zone derivation:** New grid systems coexist with existing zone-based logic (no breaking changes)
-  - **Phased risk reduction:** Minimal → Tactical → Polish, with go/no-go gates between each phase
-  - **Performance through caching:** Pre-compute expensive operations (distance matrix, pathfinding), reuse across tick
-- **Key files:** `docs/design/337-combat-grid-*.md` (3 research docs), `docs/design/337-combat-grid-proposal.md` (unified synthesis), `packages/server/src/combat/CombatSystem.ts` (integration point), `packages/client/src/components/CombatHUD.tsx` (client integration point)
-
-## Help Command Implementation Wave (Issue #340, Commit 795994e)
-
-**Date:** 2026-04-07  
-**Role:** Lead Researcher  
-**Status:** ✅ Complete
-
-**Research Deliverables:**
-- Comprehensive inventory of 37 commands across all handlers
-- Issue #340 requirements analysis and validation
-- GitHub issue coordination (label progression: go:needs-research → go:yes)
-- Unblocked concurrent implementation by Drizzt and Minsc
-
-**Key Research Findings:**
-- 7 command categories identified (Navigation, Items, Communication, Combat, Special Actions, Feature Rooms, Dev Tools)
-- Context-aware filtering requirements: room type matching + dev mode gating
-- Help modes: general listing (no args) + detailed per-command (with args)
-- Alias support essential for UX (`?` → `help`)
-
-**Coordination Impact:**
-- Early research findings enabled parallel development pipeline
-- Spec clarity prevented implementation rework
-- GitHub status updates kept stakeholders informed of progress
-- Team synchronization maintained across 3 concurrent work streams
-
-**Learned Patterns:**
-- Research-first approach unblocks parallel implementation work
-- Static metadata registries provide single source of truth for command documentation
-- Context-aware filtering improves player UX by showing only relevant commands
-- Help is discovery tool → must never be feature-gated
-
-### 2026-04-08: PR #350 Code Review — Repo Hygiene (Issue #343)
-
-**Task:** Architectural review of PR #350 (9 files for open-source readiness: LICENSE, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, .editorconfig, issue templates, PR template, release workflow)
-
-**Review Scope:**
-1. Correctness — Does content match the project (Ellmud, Node.js/TypeScript, monorepo)?
-2. Completeness — Are there gaps or missing sections?
-3. Consistency — Do references match actual repo structure?
-4. release.yml — Does the workflow make sense for Docker/Azure deployment?
-
-**Findings — 7/9 Files Approved:**
-- **LICENSE (ISC):** Correct. Matches package.json exactly. Attribution year (2026, dkirby-ms) is accurate.
-- **CONTRIBUTING.md:** Excellent. Clear workflow (pick issue → branch from dev → test/lint/build → conventional commits → PR). References docs/setup.md (verified exists). Code style honesty (TypeScript, ESLint, patterns, comments for complex logic only). Proper scoping of areas (Game Logic, Client, Backend, Docs). Minor note: Line ~127 references "Discord server" without link. Non-blocking; can add link when Discord is created or change to "GitHub Discussions."
-- **CODE_OF_CONDUCT.md:** Correct. Contributor Covenant 2.0 adaptation. Enforcement escalation is sound (private → warning → mute → ban). Covers GitHub + Discord + other channels. Pledge and Standards are inclusive.
-- **SECURITY.md:** Appropriate. 48-hour vulnerability acknowledgement SLA is reasonable for v0.1.0. Does NOT encourage public disclosure before fix. Best practices cover actual threat surface: .env secrets, Azure AI keys, PostgreSQL/Redis credentials, Microsoft Entra integration. Version support table (Latest: Supported, Older: Not supported) acceptable for pre-release.
-- **.editorconfig:** Well-configured. 2-space indent (matches npm/Node convention, existing codebase), LF with final newlines, UTF-8, markdown whitespace preservation (correct: no trim trailing whitespace), Makefile tabs (correct).
-- **Issue Templates (bug_report.md, feature_request.md):** YAML frontmatter correct. Templates guide toward reproducibility. Bug template includes environment (OS, Node version, browser, game version). Feature template emphasizes problem/solution/alternatives/impact.
-- **PULL_REQUEST_TEMPLATE.md:** High-quality. Testing checklist (build, lint, test) enforces code quality gate. Type-of-Change covers all relevant categories. Rebase guidance on `dev` aligns with CONTRIBUTING.md workflow.
-
-**Finding — 1/9 File Rejected (release.yml):**
-
-**CRITICAL ISSUE — Line 87 uses deprecated GitHub Action:**
-```yaml
-- name: Create GitHub Release
-  uses: actions/create-release@v1
-```
-The `actions/create-release@v1` action was deprecated Dec 2022 and archived. GitHub may remove it from the Marketplace at any time. Future release runs will fail to create GitHub Releases, leaving the project with unpublished releases (tags pushed, no Release artifacts).
-
-**Fix:** Replace with `ncipollo/release-action@v1` (well-maintained, 3000+ stars, widely used in industry).
-
-**MINOR ISSUE — Line 53 (non-blocking):**
-```yaml
-- name: Sync workspace versions
-  run: npm run version:sync
-  continue-on-error: true
-```
-The `continue-on-error: true` flag allows the workflow to proceed even if `npm run version:sync` fails. If sync fails, packages/client|server|shared will have stale versions. Recommendation: Remove `continue-on-error: true` so failures are visible.
-
-**POSITIVE FINDINGS — Workflow Logic:**
-- Line 27: Correct checkout of `main` branch with `fetch-depth: 0` (needed for tag history)
-- Line 37: Uses `.nvmrc` for Node version (verified: set to 20)
-- Line 50: Non-interactive `npm version ${{ github.event.inputs.version }}` is correct
-- Lines 75-81: Fallback tag lookup handles edge case (first release) with `HEAD` → correct
-- Line 17-18: Permissions (`contents: write`, `pull-requests: read`) are correct for release creation
-
-**Permissions Check:** ✅ The `contents: write` permission is declared and sufficient for a replacement release action.
-
-**Verdict:** REQUEST CHANGES. The release workflow is otherwise well-designed for the monorepo (it calls `npm run version:sync` to propagate version bumps to workspace packages/client|server|shared). The deprecated action is the only blocker.
-
-**Next Step:** Danilo/dkirby-ms updates release.yml to use `ncipollo/release-action@v1`, re-pushes, Elminster will approve + merge.
-
-**Architectural Patterns Validated:**
-- Manual trigger (`workflow_dispatch`) is appropriate for v0.1.0 (developer-controlled releases, not automatic on tag)
-- Monorepo versioning via `npm version` + `npm run version:sync` is the correct approach (tested: sync script exists and works)
-- Changelog generation from git log is pragmatic MVP (can be upgraded to standard-changelog in Phase 2)
-- GitHub Release as artifact repository (not relying on npm publish for game server) aligns with Docker deployment model
-
-**Decision File:** `.squad/decisions/inbox/elminster-pr-350-review.md` (full detailed review, 8900+ words, ready for team reference)
-
-### 2026-04-08: Room Features Architecture Proposal (Issue #345)
-- **Task:** Research and design proposal for room features system — interactive triggers in rooms that players can examine via `look <target>` commands.
-- **Analysis scope:** Current room data model (zone_rooms schema, ZoneRoomDefinition types), look command implementation (no arg handling today), feature-room pattern precedent (stash, sandbox, board), contract/quest system status (planned Phase 4, not yet implemented).
-- **Data model decision:** Add JSONB column `features` to `zone_rooms` table. Follows established precedent (loot_containers, hazards, npcs all use JSONB). No new table needed — features are tightly coupled to rooms, no cross-room reuse, loaded once per zone.
-- **Feature schema:** `{ id, keywords[], shortDescription?, longDescription, questId? }`. Keywords enable multi-word matching (`look wooden sign`). `questId` reserves space for future quest initiation without requiring migration.
-- **Command flow decision:** Refactor `handleLook(ctx)` to dispatch on `args.length`. No args → full room (existing behavior). With args → exact keyword match on room features → fallback to "not found" error. Clean separation: `showFullRoom()` + `examineFeature()` helpers.
-- **Keyword matching:** Exact match (case-insensitive), `args.join(' ')` for multi-word, first match wins. No fuzzy matching (predictable for authors, testable, no ambiguity). Rejected alternative: substring/partial matching (prone to unintended overlaps, unpredictable).
-- **Quest integration:** Phase 2 work, blocked on Issue #44 (quest engine, currently `go:no` Phase 4). Schema reserves `questId` field now. When quest system lands, `examineFeature()` calls `ctx.questService?.tryInitiateQuest(questId)` and appends narration. Clean integration point, no rework needed.
-- **Feature description strategy:** Phase 1 uses explicit authoring (add hint to room description: "There is a note on the wall"). Phase 2+ could inject `feature.shortDescription` dynamically. Decision: Start explicit (works today, zero code), add injection later if valuable.
-- **Alternative rejected: Separate table:** `zone_room_features` table with FK to zone_rooms would normalize data but require join on zone load, add complexity to adapter, no query benefit (features only accessed via room).
-- **Alternative rejected: Wait for quest system:** Ship narration-only features now (2-3 days), add quest hooks later. Rationale: Unblock content authoring, prove pattern, incremental risk, quest system is months away.
-- **Risk assessment:** Low. Schema change is additive (DEFAULT '[]'), command flow is simple (no state, no multiplayer concerns), no external dependencies for Phase 1. Medium risk for Phase 2 (quest API undefined), mitigated by interface design now.
-- **Implementation plan:** Phase 1 (2-3 days, Drizzt or Jarlaxle): Migration + types + adapter + command refactor + tests + seed examples. Phase 2 (depends on #44): Quest service integration, context injection, narration logic. Phase 3+ (optional): Hidden features, interactive verbs (use/activate), clickable UI, LLM narration.
-- **Agent recommendation:** Jarlaxle (owns content pipeline, zone-adapter, JSONB precedent) or Drizzt (owns command system, look.ts, context building). Either qualified, recommend Jarlaxle if content seeding is priority.
-- **Content authoring:** SQL updates to add features, coordinate room description changes. Future: Admin UI in Zone Designer (editable feature list, WYSIWYG editor, keyword validation).
-- **Testing strategy:** Unit tests (keyword matching, fallback, edge cases), integration tests (load zone, examine feature, verify narration), regression tests (existing look unchanged). Quest tests in Phase 2 with mock service.
-- **Key learnings:** Established JSONB pattern works for room extensions. Exact keyword matching is simpler and more predictable than fuzzy. Feature-as-narration (Phase 1) + quest-hooks (Phase 2) is clean separation of concerns. Reserving schema fields for future systems avoids migrations.
-- **Deliverable:** Full proposal written to `.squad/decisions/inbox/elminster-room-features-proposal.md` (7800+ words, 24 code examples, migration SQL, TypeScript interfaces, implementation plan, risk analysis, authoring workflow).
-
----
-
----
-
-### 2026-04-08T22:59:00Z: Direction Shortcuts Architecture — Complete
-
-**Task:** Research and document direction shortcuts & speedwalk architecture for #357.
-
-**Outcome:** ✅ Complete — Design proposal posted and approved for team review.
-
-**Decision Deliverables:**
-- Architecture document (400 lines, 3 phases, code sketches, testing checklist)
-- 5 open questions for team: ordinal support, Numpad5 behavior, text input focus, speedwalk feedback, combat interaction
-- Estimated effort breakdown: Phase 1 (2–4 hrs), Phase 2 (3–5 hrs)
-
-**Coordination Impact:**
-- Unblocked Regis/Minsc for Phase 1 implementation
-- All 3 agents (Elminster, Regis, Drizzt) delivered on time
-- Team ready for next round of work
-
----
-
-### 2026-04-09T00:45:00Z: Gameplay Metrics Architecture — Design Proposal Complete
-
-**Task:** Design & proposal for #360 — "otel style metrics of game events like player deaths, creature kills..."
-
-**Outcome:** ✅ Complete — Design proposal posted to GitHub issue & decision document committed.
-
-**Decision Deliverables:**
-- Comprehensive architecture doc (15K+ words) covering storage, emission, integration, analytics
-- Design proposal comment on #360 with executive summary, team split, risks, 4 open questions
-- SQL schema for `gameplay_metrics` table (event_type, player_id, zone_id, metadata JSONB)
-
-**Architecture Rationale:**
-- **PostgreSQL events table** (not OpenTelemetry SDK) — Ellmud is a monolithic game server, not distributed microservice. OTEL overhead unnecessary today. If Prometheus dashboards needed later, same EventCollector can feed exporter (no code changes).
-- **EventCollector service** with async batching — Queues events in memory, inserts every 50 events or 5 seconds. Non-blocking, prevents gameplay lag. Optional dependency injection (safe for tests).
-- **JSONB metadata** — Flexible event shapes (strike has damage/targetId/critical; loot has itemId/rarity; death has killerIds/reason). Follows established pattern in schema (loot_containers, creature_definitions).
-
-**V1 Scope: 12 Core Metrics**
-- Combat: player_strike_dealt, player_damage_taken, creature_kill, player_death, combat_encounter_started/ended
-- Survival: zone_entry, zone_extraction_success/failure, room_visited
-- Loot: item_looted, item_lost_on_death
-- Estimated volume: 20–30K events/day (easily within PostgreSQL capacity)
-
-**Integration Points:**
-- CombatSystem: Strike resolution, damage application, kill/death attribution
-- ZoneRoom: Player entry/exit, item pickup, room visitation tracking
-- CreatureManager: Loot drop metadata
-
-**Display (v1):** Admin metrics page (`/admin/metrics`) with:
-1. Event feed (last 100, filterable)
-2. KPI summary (24h kills, deaths, extractions, avg combat duration)
-3. Leaderboards (top 10 by kills, extraction rate, survival streak)
-
-Player-facing scoreboards deferred to Phase 2.
-
-**Team Split: ~5 Days**
-- Jarlaxle (Systems): EventCollector, migration, CombatSystem hooks (2–3 days)
-- Drizzt (Engine): ZoneRoom integration, perf benchmarking (1–2 days)
-- Regis (Frontend): Admin metrics page, leaderboards UI (1–2 days)
-- Minsc (Tester): Query validation, gameplay lag verification (0.5–1 day)
-
-**Open Questions Raised:**
-1. Player privacy — Leaderboards tied to player_id in queryable table. Acceptable? Anonymize after 7 days?
-2. Leaderboard scope — Global only (v1)? Or faction-based + zone-specific? (deferred to Phase 2)
-3. Loot tracking detail — All items or only rare? (proposed: all items, helps identify drop bugs)
-4. Combat event granularity — Per-strike (~100/encounter) or encounter summaries (1 event)? (proposed: per-strike for full visibility)
-
-**Risk Mitigation:**
-- Async batching + rate-limiting prevents gameplay lag
-- Optional injection maintains backward compatibility
-- 7-day retention + weekly VACUUM/ANALYZE prevents disk bloat
-- Unit tests for EventCollector, spot-check queries in admin UI
-- Document in SECURITY.md (gameplay-only metrics, no PII)
-
-**Coordination Impact:**
-- Unblocked Jarlaxle + Drizzt + Regis for Phase 1 implementation
-- Clear effort estimates enable sprint planning
-- 4 open questions focused for team alignment (not over-specified)
-
-## Learnings
-
-### Metrics Architecture Insights
-
-1. **PostgreSQL as Observability Backend** — For game servers at MUD scale (~100–1000 players), PostgreSQL is sufficient for event storage, queries, and analytics. OpenTelemetry SDKs are designed for distributed microservices and SaaS backends; they add indirection (exporters, collectors, external backends) that complicates a monolithic architecture. Start simple (DB tables), evolve to specialized tools (Prometheus, Grafana) only if volume/latency demands. This is a key pattern for cost-effective observability in game development.
-
-2. **JSONB Metadata as Escape Hatch** — Event types vary widely in shape (damage has attacker/defender/damage_type, loot has item_id/rarity/source, death has killerIds/location/reason). Rather than create separate tables for each event variant or over-normalize, JSONB allows:
-   - Single table for all events (schema simplicity)
-   - Flexible fields per event (extensibility without migrations)
-   - GIN indexing for ad-hoc queries ("which events involved fire damage?")
-   - Follows established precedent in the Ellmud schema (loot_containers, creature_definitions use JSONB)
-
-3. **Async Batching Prevents Gameplay Lag** — Direct database inserts per game event (100s per second during combat) would cause noticeable latency on client-side rendering. Batching + async means:
-   - Events queue in memory (fast, non-blocking)
-   - Batch inserts every N events or T seconds (amortizes DB overhead)
-   - Flush on shutdown (no data loss)
-   This pattern is reusable for any event stream (logging, analytics, telemetry).
-
-4. **Optional Dependency Injection for Backward Compatibility** — Passing EventCollector to system constructors as optional (defaulting to null) ensures:
-   - Existing tests don't require EventCollector setup
-   - New tests can inject a mock for validation
-   - Production code gracefully no-ops if EventCollector is null
-   - No rework needed when adding metrics to existing systems
-
-5. **v1 Scope Discipline** — Temptation to design "perfect" metrics (all event types, all fields, all query patterns). But a 5-day v1 that delivers 12 focused metrics beats a 3-week v1 trying to capture everything. Once v1 runs in production:
-   - You see real usage patterns (which leaderboards matter?)
-   - You identify missing events (what else do designers want to tune?)
-   - You can iterate faster (add events incrementally, not all-or-nothing)
-
-6. **Privacy by Design** — Metrics tied to player_id enable leaderboards but raise privacy concerns. Document early:
-   - What data is collected (gameplay events only, no chat/PII)
-   - Who can access it (admin tools only, not exposed in client)
-   - Retention policy (archive > 7 days, delete > 90 days)
-   This builds trust and satisfies compliance requirements.
-
-7. **Open Questions Drive Alignment** — Rather than prescribe every detail, raise 4 focused questions (privacy, scope, loot detail, event granularity) and ask the team. This:
-   - Signals that design isn't final (room for feedback)
-   - Ensures stakeholder consensus before implementation
-   - Prevents rework due to misaligned expectations
-   - Makes handoff to execution team smoother
-
-### Team & Process Insights
-
-8. **Effort Estimation by System** — Breaking down 5-day v1 by system (CombatSystem 1 day, ZoneRoom 1 day, etc.) enables parallel work:
-   - Jarlaxle owns core infrastructure (EventCollector, migrations)
-   - Drizzt + Regis work in parallel (engine + frontend)
-   - Minsc validates in parallel (tests + perf)
-   - No blocking, high utilization
-   This is better than sequential ("Jarlaxle first, then Drizzt") or vague ("5 days total").
-
-9. **Design Proposal as Issue Comment** — Posting the proposal directly on the GitHub issue ensures:
-   - Stakeholder (dkirby-ms) sees it in the right context
-   - Team can comment + iterate in the same place
-   - Decision is documented as issue history (not separate file only)
-   - Easier to reference in PRs ("as proposed in #360")
-
-### Architecture Decisions Catalog
-
-- **Event Storage:** PostgreSQL table (not separate OTEL exporter, not in-memory counters)
-- **Metadata Shape:** JSONB (not separate tables, not fixed schema)
-- **Emission Pattern:** Async batching via EventCollector (not sync inserts, not global state)
-- **Dependency Management:** Optional injection (not global singleton, not required)
-- **Initial Display:** Admin dashboard (not player-facing, not external Prometheus)
-- **Query Retention:** 7-day active + 90-day archive (not infinite, not real-time only)
-
-### 2026-07-22: Code Review — #390 Player Item Interaction & #389 Admin Spawn Items
-
-**Branch 1: `squad/390-player-item-interaction` (Drizzt) — APPROVED → PR #392**
-- Reviewed: equip/unequip command handlers, `get` alias, `equipSlot` on Item, PlayerState equipment tracking, `_roomEvent` broadcast pattern, inventory display updates
-- 50 tests, all passing. Full suite (3121 tests) green.
-- Minor notes: `_roomEvent` uses inline type widening rather than extending the interface — functional but could be formalized. Equipped items don't count toward carry weight — design choice, consistent within implementation.
-
-**Branch 2: `squad/389-admin-spawn-items` (Regis) — APPROVED → PR #393**
-- Reviewed: admin API item spawn endpoint, ZoneRoom.adminSpawnItem(), LiveRoomDetail.tsx spawn modal type toggle
-- Full suite (3071 tests) green.
-- Minor notes: `itemToSpawn` construction omits `equipSlot` and `roomDescription` — forward-compatibility concern once #390 merges. Follows existing `as any` cast pattern for ZoneRoom access from admin routes.
-
-**Patterns observed:**
-- `_roomEvent` is a new convention for 3rd-person broadcasts; should be formalized if adopted by more commands
-- Admin route to ZoneRoom method pattern (`adminSpawnCreature` / `adminSpawnItem`) is clean and consistent
-- Content store entity to domain object mapping needs a shared helper to avoid field omissions
-
-### 2026-07-23: Research and Triage of Issues 402, 403, 404
-
-Researched 3 open issues. Posted design briefs. Updated labels. Routed to implementers.
-402 Illumination: Jarlaxle+Drizzt. 403 Groups: Drizzt+Jarlaxle. 404 Panel: Regis+Drizzt.
-3 decision docs written to inbox.
-
----
-
-## Cross-Team Update: Drizzt Starter Kit to Inventory Migration (2026-04-10)
-
-**From:** Scribe  
-**Context:** Drizzt completed PR #410 — starter kit items now granted to inventory instead of stash on first zone join.
-
-**What Drizzt Did:**
-- Chose Option B (grant on zone join via flag) respecting transient inventory semantics
-- Added `starter_kit_granted` boolean to characters table
-- Rewrote starter-kit.ts to use PlayerState.addItem() instead of stash insertion
-- Integrated with ZoneRoom.onJoin() — gated by flag, fires once per character lifetime
-- Extended CharacterRepository with isStarterKitGranted() / markStarterKitGranted()
-- 7 new tests passing; all 2666 project tests pass
-
-**Why This Matters for You:**
-- Your inventory persistence architecture (Phase 1) will build on this pattern
-- Starter items now behave like all inventory — losable on death, transferable at extraction
-- Sets precedent for zone-join item distribution (grants, etc.)
-
-**Integration with Your Work:**
-- When you implement Phase 1 (player_inventory table), starter kit will already be in the in-memory inventory
-- Death flow (Phase 3) will clear this persistent inventory just like any other items
-- Your container type (Phase 2) can eventually wrap corpses; starter items follow same loot rules as other inventory
-
-**PR:** #410 (ready for merge)
 

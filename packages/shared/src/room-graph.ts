@@ -3,7 +3,7 @@
  * Defines the data structures for rooms, connections, and zone layouts.
  */
 
-import type { ZoneTier } from './index.js';
+import type { ZoneTier, Illumination } from './index.js';
 
 // ─── Directions ──────────────────────────────────────────────────────────────
 
@@ -112,6 +112,8 @@ export interface Room {
   properties?: RoomProperty[];
   /** Examinable features in this room (Issue #345). */
   features?: RoomFeature[];
+  /** Room illumination level (Issue #402). Defaults to 'lit' if omitted. */
+  illumination?: Illumination;
 }
 
 // ─── Room Graph ──────────────────────────────────────────────────────────────
@@ -136,6 +138,7 @@ export interface SerializedRoom {
   hazards: HazardPlaceholder[];
   properties?: RoomProperty[];
   features?: RoomFeature[];
+  illumination?: Illumination;
 }
 
 export interface SerializedRoomGraph {
@@ -160,6 +163,7 @@ export function serializeRoomGraph(graph: RoomGraph): SerializedRoomGraph {
       hazards: room.hazards,
       ...(room.properties?.length ? { properties: room.properties } : {}),
       ...(room.features?.length ? { features: room.features } : {}),
+      ...(room.illumination ? { illumination: room.illumination } : {}),
     });
   }
   return {
@@ -185,6 +189,7 @@ export function deserializeRoomGraph(data: SerializedRoomGraph): RoomGraph {
       hazards: sr.hazards,
       ...(sr.properties?.length ? { properties: sr.properties } : {}),
       ...(sr.features?.length ? { features: sr.features } : {}),
+      ...(sr.illumination ? { illumination: sr.illumination } : {}),
     });
   }
   return {

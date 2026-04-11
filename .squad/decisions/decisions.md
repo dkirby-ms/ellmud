@@ -2693,6 +2693,230 @@ _Merged from decisions/inbox/ on 2026-04-10T13:27._
 
 ---
 
+# Decision: Player Groups, Consent, Follow Architecture (Issue #403)
+
+**Author:** Elminster (Lead/Architect)
+**Date:** 2026-07-23
+**Issue:** #403
+
+## Context
+Players need follow, consent, and group mechanics (classic MUD style). No existing follow/group/consent commands, DB tables, or PlayerState fields exist.
+
+## Key Findings
+- Command registration is trivial (Map-based, add handler + register)
+- CombatSystem already tracks damage contributors per target (`killerIds[]`) — kill attribution ready
+- XP distribution NOT implemented (framework exists, logic doesn't)
+- Loot is free-for-all (anyone can loot any corpse)
+- ZoneRoom has robust player tracking and room broadcast infrastructure
+- `CommandContext` provides `otherPlayerInfo`, `resolvePlayersInRoom()` — player lookup ready
+
+## Decision
+**XL feature, broken into 4 independent phases:**
+
+1. **Follow (M):** `follow <player>`, `unfollow`. In-memory PlayerState fields (`followingSessionId`, `followers` Set). Auto-follow on leader movement. Zone-scoped, resets on collapse.
+
+2. **Consent (S):** `consent <player> <action>`. General-purpose consent map on PlayerState. Reusable for trade, teleport, future mechanics. Session-scoped.
+
+3. **Groups (L):** `GroupManager` service (like CombatSystem). `group form/add/remove/leave/disband`, `gsay`. In-memory, no DB for v1. Max 20 members. Leader departure = disband.
+
+4. **Combat Rewards (M, deferred):** Depends on XP system + Phase 3. Split XP among group members. Loot mode setting.
+
+**Ship Phase 1+2 first, Phase 3 as separate PR, Phase 4 deferred.**
+
+## Routing
+- Phase 1+2: Drizzt (PlayerState, command handlers, movement hooks)
+- Phase 3: Jarlaxle (new GroupManager service, cross-cutting integration)
+- Phase 4: Jarlaxle (combat reward pipeline)
+- All phases: Minsc (multi-player interaction tests)
+
+## Team Impact
+- New `follow`, `unfollow`, `consent`, `group`, `gsay` commands
+- PlayerState gains follow/consent fields
+- New `GroupManager` service injected into CommandContext
+- `handleGo()` gains follower-movement hook
+- Future: `handleLoot()` modified for group loot modes
+
+
+# Decision: Illumination & Visibility System Architecture (Issue #402)
+
+**Author:** Elminster (Lead/Architect)
+**Date:** 2026-07-23
+**Issue:** #402
+
+## Context
+Rooms need an illumination property (lit/dark) and players need vision state flags (blinded, nightvision, infravision, see_invisible). No illumination system exists today — rooms show all content unconditionally.
+
+## Key Findings
+- No illumination field in DB, types, or runtime Room objects
+- `ZoneModifier` type already includes `'darkness'` but it's not enforced
+- `NarrationRoom.light_level` field exists for LLM context but is never populated
+- `AwarenessSystem` provides player-to-player visibility (skill-based, not light-based) — separate concern
+- `PlayerState` has no vision/buff system beyond `deathPenalty`
+
+## Decision
+**Phase 1:** Add `illumination TEXT NOT NULL DEFAULT 'lit'` column to `zone_rooms`. Thread through types and zone-adapter. Gate look/go/goto output in dark rooms (show "pitch black" + exits only unless player has light source). TEXT column (not boolean) for extensibility.
+
+**Phase 2:** Add `visionFlags: Set<VisionFlag>` to PlayerState (in-memory, transient). Light-source items grant nightvision-equivalent. Combat accuracy penalty in darkness.
+
+**Phase 3 (deferred):** Dim illumination, time-of-day, magical darkness, ZoneModifier enforcement.
+
+## Routing
+- Phase 1: Jarlaxle (zone-adapter, migration) + Bruenor (content values)
+- Phase 2: Drizzt (PlayerState, command handlers, combat integration)
+
+## Team Impact
+- New `Illumination` type in shared package
+- Room interface gains `illumination` field
+- Zone adapter must map new column
+- Look/go/goto commands gain visibility gate
+- Combat damage pipeline gains darkness modifier (Phase 2)
+
+
+# Review Decision: #390 + #389 Approved
+
+**Date:** 2026-07-22
+**Author:** Elminster
+**PRs:** #392 (Item Interaction), #393 (Admin Item Spawn)
+
+## Decisions
+
+1. **Both branches approved and PRs opened.** All tests pass on both branches.
+
+2. **Merge order matters.** PR #392 (item interaction) should merge first — it introduces `equipSlot` on the `Item` interface. After that merges, PR #393 (admin spawn) should be updated to include `equipSlot` and `roomDescription` in the spawned item construction (`itemToSpawn` in `routes.ts`).
+
+3. **`_roomEvent` pattern (non-blocking).** Branch #390 introduces `_roomEvent` as an ad-hoc field on `CommandResult` for 3rd-person broadcast messages. If more commands adopt this pattern, it should be formalized into the `CommandResult` interface proper. For now, the underscore-prefixed convention is acceptable.
+
+4. **Content entity to domain object mapping.** The admin spawn route manually constructs `itemToSpawn` with only 4 fields. This will silently drop new fields as the `Item` interface grows. A shared `toItem()` mapper (like the existing `toCreatureTemplate()`) should be created. Non-blocking for this PR wave.
+
+## Action Items
+
+- After #392 merges, update #393 to pass through `equipSlot` and `roomDescription` in `itemToSpawn`
+- Consider formalizing `_roomEvent` on `CommandResult` if a third command uses it
+
+
+# Decision: Status Panel Tab Redesign (Issue #404)
+
+**Author:** Elminster (Lead/Architect)
+**Date:** 2026-07-23
+**Issue:** #404
+
+## Context
+Right-side status panel has 10 sections in a single scrolling column — too much content, needs tabs. Also, "Stance" shows hardcoded "Cautious" instead of actual posture.
+
+## Key Findings
+- Panel is 234 lines of inline JSX in ZoneExploration.tsx (not extracted)
+- Posture is NOT synced to client AppState — server has it, `PlayerStateMessage` doesn't include it
+- `WhoListModal` shows other players' posture, but local player's posture is missing from status panel
+- All needed data already available in AppState (HP, stamina, equipment, inventory, occupants, sound cues)
+- Equipment silhouette, compass, minimap already functional components
+- Styling: Tailwind CSS v4 with theme tokens
+
+## Decision
+**Prerequisite fix:** Add `posture` to `PlayerStateMessage` and `AppState`. Replace "Cautious" with real posture. Ships independently (S, half-day).
+
+**Main redesign:**
+1. Extract to `<StatusPanel>` component
+2. Always-visible header: HP bar, Stamina bar, Posture, Status Effect pills
+3. Tab bar: Environment (default) | Gear | Character
+4. Environment tab: Compass, Minimap, CombatHUD (conditional), Room Occupants
+5. Gear tab: Equipment Silhouette, Full Inventory
+6. Character tab: Sound Cues, Quick Actions, future skills/reputation
+
+Tab state via `useState` (ephemeral, no URL routing).
+
+## Routing
+- Posture sync: Drizzt (server-side PlayerStateMessage change)
+- Panel extraction + tabs: Regis (React components, Tailwind styling)
+
+## Team Impact
+- New `StatusPanel` component extracted from ZoneExploration.tsx
+- `PlayerStateMessage` gains `posture` field (server→client contract change)
+- AppState gains `posture: Posture` field
+- No API or shared type changes beyond posture sync
+
+
+# Decision: Add `actions: write` permission to promote workflows
+
+**Author:** Khelben (CI/CD Dev)
+**Date:** 2025-07-14
+**Status:** Implemented
+**PR:** #401
+**Branch:** squad/fix-promote-permissions
+
+## Context
+
+The Scheduled UAT Promote workflow (run #24256588502) successfully pushed dev → uat but failed at the "Trigger CI/CD on uat" step:
+
+```
+gh workflow run ci-cd.yml --ref uat
+HTTP 403: Resource not accessible by integration
+```
+
+The `gh workflow run` command calls the GitHub workflow_dispatch API, which requires `actions: write` permission. Both promote workflows (`scheduled-uat-promote.yml` and `squad-promote.yml`) only had `contents: write`.
+
+## Decision
+
+Add `actions: write` to the `permissions` block in both promote workflows, alongside the existing `contents: write`.
+
+## Rationale
+
+- `contents: write` — needed for `git push` to the target branch
+- `actions: write` — needed for `gh workflow run` (workflow_dispatch API)
+
+This is the minimum permission escalation required. No PAT or additional secrets needed since `GITHUB_TOKEN` supports `actions: write` when explicitly declared.
+
+## Impact
+
+- Fixes the 403 error on the CI/CD trigger step
+- Applies to both `scheduled-uat-promote.yml` and `squad-promote.yml`
+- No other workflow changes needed
+
+
+# Decision: Scheduled dev → uat Promotion Workflow
+
+**Date:** 2025-07-18  
+**Author:** Khelben (CI/CD Dev)  
+**Status:** Proposed  
+**PR:** squad/uat-daily-builds → dev
+
+---
+
+## Context
+
+The team wanted daily builds flowing into UAT automatically so QA always has fresh code to test without manual promotion steps.
+
+## Decision
+
+Created `.github/workflows/scheduled-uat-promote.yml` — a **new, separate** workflow that:
+
+1. **Runs 3x daily** (08:00, 14:00, 20:00 UTC) via `schedule` cron triggers
+2. **Supports manual trigger** via `workflow_dispatch`
+3. **Only promotes dev → uat** (uat → prod stays manual via `squad-promote.yml`)
+4. **Safety:** Skips if dev has no commits ahead of uat
+5. **Strips forbidden paths** (`.squad/`, `.ai-team/`, etc.) — same logic as `squad-promote.yml`
+6. **Concurrency group** prevents overlapping runs
+7. **Pinned action SHAs** match existing `ci-cd.yml`
+
+## Why a Separate Workflow
+
+- `squad-promote.yml` handles the full dev → uat → prod chain and should remain manual (prod deploys need human approval)
+- Scheduled automation should only touch the dev → uat leg
+- Keeping them separate means the schedule can be tuned without risking prod deployment logic
+
+## Risks
+
+- If dev has a broken build, the scheduled merge will push it to uat. Mitigation: `ci-cd.yml` runs build+test on push to uat and the deploy pipeline has rollback.
+- Forbidden path stripping logic is duplicated across two workflows. If paths change, both must be updated.
+
+## Follow-up
+
+- Consider extracting the forbidden-path stripping into a reusable composite action if the list grows.
+- Monitor whether 3x/day frequency is right — adjust cron schedule as needed.
+
+
+# Decision: Dystopian Future Bestiary Design
+
+**Date:** 2026-04-07  
 ## 2026-04-10T20:30: Follow + Consent System Architecture
 
 **Date:** 2026-04-10  
@@ -2879,6 +3103,589 @@ _Merged from decisions/inbox/elminster-review-390-389.md on 2026-04-10T20:30._
 **Issue:** #391  
 **Status:** Design Complete — Ready for Implementation  
 
+---
+
+## Decision
+
+Designed a comprehensive bestiary of ~103 creatures for Ellmud's dystopian future setting, distributed across 7 zone environments with full stat progression from Tier 1 to Tier 3 plus bosses.
+
+---
+
+## Context
+
+The game needed a creature roster to populate adventure zones beyond the initial 5 creatures in The Warrens. Requirements:
+- ~100 creatures across all tiers
+- Distributed across varied zone environments
+- Post-apocalyptic/dystopian theming (NOT medieval fantasy)
+- Mix of aggressive and passive creatures
+- Items and loot tables for each creature
+- Stat scaling that creates meaningful progression
+- Telegraphed abilities for elite/boss encounters
+
+---
+
+## Design Decisions
+
+### 1. Zone Environment Structure
+
+Organized creatures by thematic zone environments rather than pure tier:
+
+1. **Collapsed Megastructure** (ruins, rubble, urban decay)
+2. **Flooded Depths** (submerged infrastructure, aquatic mutations)
+3. **Toxic Wastes** (chemical spills, industrial hazards)
+4. **Overgrown Ruins** (nature reclaiming, aggressive flora/fauna)
+5. **Industrial Graveyard** (abandoned factories, rogue machinery)
+6. **Desolate Wastes** (radiation zones, nuclear fallout)
+7. **Eternal Night** (perpetual darkness, shadow creatures)
+
+**Rationale:** Zone environments create cohesive narrative theming. Creatures tell environmental stories (what happened here, what survived, what evolved). This structure supports future zone creation — designers can pick an environment and have a ready roster.
+
+### 2. Tier Distribution
+
+- **Tier 1 (Shallow):** 40 creatures — most common, varied, foundational encounters
+- **Tier 2 (Deep):** 35 creatures — more dangerous, specialized abilities
+- **Tier 3 (Abyssal):** 20 creatures — elite threats, unique mechanics
+- **Bosses:** 8 total (2 Tier 2, 6 Tier 3) — one signature boss per environment
+
+**Rationale:** Pyramid structure (more common creatures at lower tiers) supports zone population density. Tier 1 has the most variety because players spend the most time there. Bosses anchor each environment with memorable encounters.
+
+### 3. Stat Scaling Philosophy
+
+Progression based on existing Warrens baseline:
+
+- **Tier 1:** HP 15-60, Attack 5-15, Defence 1-6, Armour 0-5
+- **Tier 2:** HP 60-120, Attack 15-30, Defence 6-12, Armour 5-15
+- **Tier 3:** HP 120-250, Attack 30-60, Defence 12-25, Armour 15-30
+- **Bosses:** HP 150-420, Attack 18-80, Defence 8-30, Armour 10-40
+
+**Rationale:** Stats build from proven baseline (Gutterspawn 15 HP → The Collapsed One 150 HP). Tier ceilings overlap slightly to allow elite T1 creatures (Hollow Stalker) to bridge into T2 content. Boss stat ranges span multiple tiers to support varied difficulty.
+
+### 4. Archetype Variety
+
+Each zone environment includes mix of:
+
+- **Berserker** — High damage, medium durability, low agility (Scrap Brute, Gamma Ghoul)
+- **Skulker** — High agility, medium damage, low HP, hit-and-flee (Hollow Stalker, Tidal Lurker)
+- **Guardian** — High durability, low agility, devastating attacks (Concrete Shambler, Demolisher Mech)
+- **Swarm** — Numerous, weak individually, dangerous in groups (Gutterspawn, Rust Beetle)
+- **Ranged** — Distance attacks, medium stats (Acid Spitter, Arc Welder)
+- **Caster** — Abilities, telegraphed, medium HP (Memory Echo, Toxic Wraith)
+
+**Rationale:** Archetype variety creates tactical diversity. Players must adapt combat approach per encounter. Zone rosters feel cohesive (all Flooded Depths creatures are water-themed) while maintaining mechanical variety.
+
+### 5. Telegraphed Abilities
+
+Elite creatures and bosses have telegraphed abilities:
+
+- Wind-up time: 3-9 ticks (based on tier and damage)
+- Telegraph text: Atmospheric description of attack charging
+- Damage proportional to wind-up (longer wind-up = higher damage)
+- Bosses have 2-4 abilities minimum
+
+**Example:**
+```typescript
+{
+  id: 'frenzied_leap',
+  name: 'Frenzied Leap',
+  damage: 10,
+  windUpTicks: 4,
+  telegraphText: 'The gutterspawn crouches low, muscles coiling beneath its bloated hide...'
+}
+```
+
+**Rationale:** Telegraphs create counterplay opportunities. Players can react (flee, defensive stance, interrupt). Atmospheric telegraph text maintains MUD narrative feel while providing mechanical clarity.
+
+### 6. Loot Table Design
+
+Items follow tier system progression:
+
+- **Scrap** (T1 common drops) — Vendor trash baseline, crafting materials
+- **Common** (T1-2 useful gear) — Baseline equipment tier
+- **Sturdy** (T1 rare, T2 common) — Upgrade tier
+- **Refined** (T2 rare, T3 common) — Advanced gear
+- **Masterwork** (boss drops) — Elite equipment
+- **Anomalous** (rare T3 boss drops) — Top-tier unique items
+
+**Rationale:** Loot tables support economy (vendor trash for currency) and progression (gear upgrades). Boss loot includes signature items (Sovereign's Crown, Masterwork Assembly Suit) that define builds. Each creature has thematic drops (Gutterspawn Fang, Reactor Core Fragment, Shadow Silk).
+
+### 7. Passive/Ambient Creatures
+
+Included 4 non-hostile creatures:
+
+- **Scrap Pigeon** (Tier 0) — Urban scavengers, flee from threats
+- **Rad Crow** (Tier 1) — Intelligent scavengers, follow groups
+- **Mutant Fish School** (Tier 1) — Glowing fish in toxic water
+- **Salvage Mule** (Tier 0) — Pack animals, wandering after owner's death
+
+**Rationale:** Not everything should be hostile. Passive creatures add atmospheric texture, optional hunting targets, and environmental storytelling. Salvage Mules create emergent moments (finding abandoned pack animal with loot).
+
+### 8. Boss Design Patterns
+
+Each boss anchored to environment with signature mechanics:
+
+- **Multi-phase abilities** — Bosses have 2-4 distinct attacks
+- **Summon mechanics** — Call lesser creatures (Spillmother births mutations, Assembly Line builds robots)
+- **Area effects** — Damage multiple targets (Nuclear Inferno, Rubble Avalanche)
+- **Thematic ultimate** — Signature move defines boss identity (Abyssal Maw's Devouring Lunge, Endless Dark's Consume Light)
+
+**Example Boss Structure:**
+```
+The Spillmother (Tier 3 Boss)
+- Deluge of Poison (80 dmg, 8 tick wind-up)
+- Birth Spawn (summons 3-4 creatures, 6 tick wind-up)
+- Contamination Field (45 dmg area, 5 tick wind-up)
+```
+
+**Rationale:** Bosses are memorable setpiece encounters. Multi-ability design prevents repetitive combat. Summon mechanics create dynamic fights (players must manage adds while fighting boss). Area effects punish clustering, reward positioning.
+
+### 9. Environmental Storytelling
+
+Creatures designed to tell environment's story:
+
+- **Industrial Graveyard** — Sparker Drones (damaged maintenance bots), Rust Shambler (workers who died in accidents), Assembly Line (factory achieved consciousness)
+- **Desolate Wastes** — Gamma Ghoul (radiation victims), Atomic Colossus (walking reactor core), Fallout King (first to die in nuclear fire, first to rise)
+- **Overgrown Ruins** — Moss Walker (deer overgrown with vegetation), Green Mother (births all plant life), Forest Titan (animated tree defending overgrown zones)
+
+**Rationale:** Creatures answer implicit questions: What happened here? What survived? What evolved? Environmental consistency creates believable world. Players infer lore from creature design.
+
+### 10. Room Descriptions
+
+Each creature has atmospheric room description:
+
+- 2-4 sentences
+- Sets tone immediately
+- Hints at threat level
+- Uses active verbs and sensory details
+
+**Examples:**
+- "Gutterspawn scuttle through the debris, their wet breathing echoing off broken concrete."
+- "The Sovereign of Dust hovers above broken ground, debris swirling in impossible patterns."
+- "Something large moves through the overgrowth. You can't quite see it."
+
+**Rationale:** Room descriptions are first impression. They establish atmosphere and threat before combat starts. Active descriptions (creature doing something) feel more immediate than static descriptions (creature standing there).
+
+---
+
+## Thematic Principles
+
+1. **Post-apocalyptic, NOT fantasy** — Creatures reflect collapsed civilization (mutants, machines, toxic adaptations). No dragons, orcs, or goblins.
+
+2. **Louisiana Gothic maintained** — Where applicable, creatures reference Gulf Coast setting (Silt Serpent, Mutant Hound, Swamp denizens). Design doc is setting-agnostic for reusable patterns but honors established world.
+
+3. **Uncanny valley horror** — Best creatures are "almost human" (Memory Echo, Pale Wanderer, Fungal Shambler puppeting corpses). Distortion of familiar creates unease.
+
+4. **Nature is indifferent** — Wildlife (Moss Walker, Bloom Beast, Wasteland Hound) isn't evil, just adapted. Ecosystem as resource, not malevolent force.
+
+5. **Technology is dead or corrupted** — Machines (Sentry Bot, Shredder Unit, Nano Swarm) follow corrupted protocols or evolved beyond programming. No friendly robots.
+
+---
+
+## Implementation Handoff
+
+### For Bruenor (Systems Implementation)
+
+1. **Create TypeScript templates** — One file per creature in `packages/server/src/creatures/templates/`
+2. **Update creature types** — Add new type constants to `packages/server/src/creatures/types.ts`
+3. **Database migration** — Seed `creature_definitions` table with all creature entries
+4. **Item definitions** — Create items for all loot table entries (100+ items)
+5. **Zone integration** — Link creatures to appropriate zone environments via spawn rules
+6. **Ability implementation** — Build telegraphed ability system if not already complete
+7. **Boss encounters** — Create boss rooms in relevant zones
+
+### For Future Content Design
+
+- **Zone creation** — Designers can reference environment sections (e.g., "building Toxic Wastes zone, use Acid Spitter, Hazmat Horror, Mutation Titan")
+- **Creature variants** — Design doc provides templates for variants (e.g., "Scorched Behemoth" can inspire "Frozen Behemoth" for arctic zones)
+- **Boss patterns** — Reusable boss mechanics (summon adds, area effects, multi-phase abilities)
+
+---
+
+## Files Created
+
+- `docs/bestiary-design.md` — Complete bestiary design document (3200+ lines)
+
+---
+
+## Files Referenced
+
+- `packages/server/src/creatures/types.ts` — Creature type definitions
+- `packages/server/src/creatures/templates/gutterspawn.ts` — Example T1 creature
+- `packages/server/src/creatures/templates/the-collapsed-one.ts` — Example boss
+- `GDD.md` — World lore, zone tiers, item tiers
+
+---
+
+## Estimated Implementation Time
+
+2-3 weeks for:
+- 100+ creature TypeScript templates
+- 100+ item definitions
+- Database migration
+- Zone integration
+- Boss encounter design
+
+---
+
+## Open Questions (None)
+
+All design decisions finalized. Ready for implementation.
+
+---
+
+## Success Criteria
+
+- [ ] All 103 creatures implemented in TypeScript templates
+- [ ] All loot table items defined in database
+- [ ] Creatures spawn in appropriate zone environments
+- [ ] Telegraphed abilities functional in combat
+- [ ] Boss encounters tested and balanced
+- [ ] Stats validated against tier progression curves
+
+---
+
+**Next Action:** Bruenor implements creature templates and database entries.
+
+
+# Minsc — Speedwalk False Positive Research (#380 Residual)
+
+**Date:** 2025-07-18
+**Issue:** #380 — Moving quickly with individually typed commands triggers speedwalk message
+**Status:** Root cause identified, fix approaches proposed, reproduction test written
+
+---
+
+## Summary
+
+The original #380 fix (`shouldTreatAsSpeedwalk` requiring 2+ moves) correctly prevents **single direction letters** from triggering speedwalk. However, a **residual false positive** remains: when a player types individual direction commands rapidly (e.g., `n` Enter `e` Enter), the input can accumulate to `"ne"` before the second submit, which `shouldTreatAsSpeedwalk("ne")` correctly identifies as 2 moves — triggering the "Speedwalk: 2 moves (ne)" message even though the player intended two separate single-direction commands.
+
+## Root Cause Analysis
+
+### Trigger 1: React Controlled Input Race Condition (primary)
+
+The command input in `ZoneExploration.tsx` (line 512-516) is a **React controlled input**:
+
+```tsx
+<input value={command} onChange={(e) => setCommand(e.target.value)} />
+```
+
+In `handleSubmit` (line 173-218), `setCommand("")` clears the input after submission. However, React 18's state update is **not synchronous to the DOM**. The update is committed after the event handler returns and React re-renders.
+
+**The race window:**
+
+1. User submits `"n"` → `handleSubmit` fires → `setCommand("")` is **queued**
+2. React needs to re-render and commit before the DOM input clears
+3. User types `"e"` **before** React commits → browser appends `"e"` to the still-present `"n"` in the DOM → `onChange("ne")` fires → `setCommand("ne")`
+4. The `setCommand("")` from step 1 and `setCommand("ne")` from step 3 both enter React's batch. The final state is `"ne"` (last write wins if they resolve in the same render pass, or the `""` gets overwritten).
+5. User presses Enter → `handleSubmit` with `command = "ne"` → `shouldTreatAsSpeedwalk("ne")` → **true** → false positive
+
+**Timing window:** This is the gap between React's `setState` call and the DOM commit — typically under 16ms (one frame), but enough for a fast typist who can sustain 10+ keystrokes per second.
+
+### Trigger 2: Keyboard Key Repeat (secondary)
+
+If a player holds a direction key slightly too long before releasing, the OS key-repeat fires. A single held `n` key becomes `"nn"` in the input. On most systems, repeat delay is 250-500ms — plausible during rapid play.
+
+- Input: `"nn"` → `shouldTreatAsSpeedwalk("nn")` → **true** (2 moves) → false positive
+- This doesn't require any React race condition at all
+
+### Trigger 3: Stale Closure + React Batching (edge case)
+
+With React 18's automatic batching via `createRoot`, if multiple events are processed in the same microtask:
+
+1. `onChange` sets `command = "n"` (React hasn't re-rendered)
+2. Submit fires with **stale** `handleSubmit` closure (still has `command = ""` from previous render)
+3. `trimmed = ""` → early return → command `"n"` is **silently dropped**
+4. Input retains `"n"`, user types next direction → accumulates
+
+This causes the previous direction to be "stuck" in the input, leading to accumulation on the next keystroke.
+
+## Code Path
+
+```
+ZoneExploration.tsx:176  → const trimmed = command.trim()
+ZoneExploration.tsx:181  → setCommand("")           ← async, doesn't clear DOM immediately
+ZoneExploration.tsx:186  → shouldTreatAsSpeedwalk(trimmed)
+  speedwalk.ts:98        → isSpeedwalk(input)       ← matches "ne" as valid speedwalk
+  speedwalk.ts:99-100    → parseSpeedwalk → moves.length > 1  ← 2 moves → true
+ZoneExploration.tsx:199  → addSystemMessage("Speedwalk: 2 moves (ne)")  ← FALSE POSITIVE
+```
+
+## What's NOT the Cause
+
+- **Server-side throttling**: Speedwalk detection is entirely client-side
+- **`useDirectionKeys` hook**: Only fires when input is NOT focused (line 51-58 of `useDirectionKeys.ts`)
+- **Command history**: Arrow-up/down correctly sets a single value; no accumulation path
+- **`shouldTreatAsSpeedwalk` logic**: The function itself is correct — the bug is upstream (what value reaches it)
+
+## Reproduction
+
+Test file: `packages/client/src/__tests__/speedwalk-false-positive.test.tsx`
+
+- 13 tests, all passing
+- Demonstrates that accumulated direction chars ("ne", "nn", "nne") trigger `shouldTreatAsSpeedwalk` → true
+- Component test harness mirrors ZoneExploration's controlled input pattern
+- Note: In jsdom/testing-library, React commits synchronously, so the exact race can't be triggered programmatically — the test simulates the accumulated state directly
+
+## Proposed Fix Approaches (ranked)
+
+### Fix A: Synchronous DOM clear via ref (recommended — minimal change)
+
+In `handleSubmit`, directly clear the DOM input value via the ref **before** React's async state update:
+
+```tsx
+// In handleSubmit, after setCommand(""):
+if (inputRef.current) inputRef.current.value = '';
+```
+
+This ensures the DOM input is empty before the next keystroke, regardless of React's commit timing. Safe because React will also set it to `""` on re-render (idempotent).
+
+**Pros:** One line, zero risk of breaking anything, directly addresses the root cause.
+**Cons:** Slightly "un-React" — manually touching the DOM.
+
+### Fix B: Track input source (paste vs. typed)
+
+Only activate speedwalk mode when the input came from a paste event. Track via `onPaste` handler:
+
+```tsx
+const pastedRef = useRef(false);
+// onPaste: pastedRef.current = true
+// onChange: (if not paste) pastedRef.current = false
+// handleSubmit: only check speedwalk if pastedRef.current
+```
+
+**Pros:** Completely eliminates false positives from typing.
+**Cons:** Prevents users from intentionally typing speedwalks like `3e2n`. May be too restrictive.
+
+### Fix C: `flushSync` for input clearing
+
+```tsx
+import { flushSync } from 'react-dom';
+// In handleSubmit:
+flushSync(() => setCommand(''));
+```
+
+**Pros:** Guarantees synchronous DOM update.
+**Cons:** `flushSync` forces synchronous re-render of the entire component tree, which can cause performance issues. React docs discourage its use.
+
+### Fix D: Debounce-based detection
+
+Track the last submission timestamp. If a new submission arrives within N ms of the previous one, skip speedwalk detection and treat as a regular command.
+
+```tsx
+const lastSubmitRef = useRef(0);
+// In handleSubmit:
+const now = Date.now();
+const tooFast = now - lastSubmitRef.current < 300;
+lastSubmitRef.current = now;
+if (!tooFast && shouldTreatAsSpeedwalk(trimmed)) { ... }
+```
+
+**Pros:** Simple, addresses both race condition and key-repeat scenarios.
+**Cons:** Arbitrary threshold (300ms). Could miss legitimate speedwalks typed quickly.
+
+### Fix E: Minimum input length for speedwalk (simple heuristic)
+
+Require at least 3 characters for speedwalk activation (e.g., `3e` or `ene`). Two-char inputs like `ne`, `nn` are treated as regular commands.
+
+**Pros:** Very simple. Eliminates the most common false positive (2-char accumulation).
+**Cons:** Prevents legitimate 2-move speedwalks like `ne`. Changes the feature contract.
+
+## Recommendation
+
+**Fix A** (ref-based DOM clear) is the safest and most targeted fix. It addresses the root cause without changing speedwalk semantics or introducing arbitrary thresholds.
+
+If the team wants a belt-and-suspenders approach, **Fix A + Fix D** together would cover both the React race condition AND the key-repeat scenario.
+
+---
+
+*— Minsc, Tester*
+*"If it can break, it will break. Found it before the players did."*
+
+
+# Speedwalk False-Positive Research — Issue #380 (Residual Bug)
+
+**Author:** Regis (Frontend Dev)  
+**Date:** 2026-04-21  
+**Issue:** #380 — [BUG] moving quickly with individually typed commands between rooms sometimes results in showing a speedwalking message  
+**Status:** Research complete — fix approach proposed, not yet implemented
+
+---
+
+## Summary
+
+The prior fix (commit e101f02) correctly resolved the **deterministic** case where single direction letters always triggered speedwalk. However, the **intermittent** "sometimes" behavior described in the issue title is a **separate race condition** that still exists. Fast typists can trigger false speedwalk messages when typing individual direction commands in rapid succession.
+
+---
+
+## Root Cause Analysis
+
+### The Race Condition
+
+The bug is a classic React controlled-input timing gap between `setCommand("")` (async state update) and the DOM input actually clearing.
+
+**File:** `packages/client/src/pages/ZoneExploration.tsx`
+
+**Critical path** (lines 173–218):
+
+```
+handleSubmit fires →
+  line 181: setCommand("")          ← React batches this, not yet applied to DOM
+  line 186: shouldTreatAsSpeedwalk  ← checks current command
+  line 215: sendCommand(command)    ← sends to server
+  handler returns →
+  React schedules re-render (microtask) →
+  ⚠️ GAP: DOM input still has old value ("n") ←
+  User types next char ("e") →
+  DOM input becomes "ne" (appended to stale value) →
+  onChange fires with e.target.value = "ne" →
+  setCommand("ne") queued →
+  React flushes both: "" then "ne" → final command = "ne"
+```
+
+On the next Enter press, `shouldTreatAsSpeedwalk("ne")` returns `true` (2 moves: north + east), triggering the speedwalk UI even though the player intended two separate moves.
+
+### Why React 18 Makes This Possible
+
+- **React version:** 18.3.1 with `createRoot` (concurrent mode) — confirmed in `packages/client/src/main.tsx`
+- React 18's automatic batching defers all state updates to the next microtask/scheduler flush
+- In React 17, `setState` inside browser event handlers flushed synchronously — the input would have been cleared before the next keystroke arrived
+- In React 18, the re-render from `setCommand("")` is **asynchronous**, creating a window where the DOM input retains the old value
+
+### Reproduction Requirements
+
+1. Player must type fast enough that their next keystroke arrives between `handleSubmit` returning and React re-rendering (~1 frame, ≈16ms on 60fps)
+2. Previous command must be a single direction letter (n/s/e/w/u/d)
+3. Next keystroke must also be a direction letter
+4. The concatenation (e.g., "ne", "ns", "sw") passes `shouldTreatAsSpeedwalk()` — which requires 2+ moves
+
+This explains the **intermittent** nature: it only happens when the user types fast enough to beat the React render cycle.
+
+---
+
+## Code Trace: Full Command Flow
+
+### 1. Input Entry
+- **File:** `ZoneExploration.tsx:512-516`
+- Controlled input: `<input value={command} onChange={(e) => setCommand(e.target.value)} />`
+- Input is inside a `<form onSubmit={handleSubmit}>` (line 505)
+
+### 2. Form Submission
+- **File:** `ZoneExploration.tsx:173-218` — `handleSubmit` callback
+- Clears input via `setCommand("")` (line 181) — **async state update**
+- Checks `shouldTreatAsSpeedwalk(trimmed)` (line 186)
+- Falls through to `sendCommand(command)` for non-speedwalk (line 215)
+- Note: `sendCommand` is `handleCommand` from `useZoneConnection` (line 70)
+
+### 3. Speedwalk Detection
+- **File:** `speedwalk.ts:97-101` — `shouldTreatAsSpeedwalk()`
+- Calls `isSpeedwalk()` → regex `/^(\d*[nsewud])+$/` (line 25)
+- If match, parses and checks `moves.length > 1`
+- Threshold: **2 or more moves** triggers speedwalk mode
+
+### 4. Command Dispatch
+- **File:** `useZoneConnection.ts:434-442` — `handleCommand`
+- Sends raw text to server via `sendRawCommand(room, input)`
+- **File:** `connection.ts:195-209` — `sendRawCommand`
+- Server-side: direction aliases expand `n` → `go north` (line 187-191)
+
+### 5. Direction Key Shortcuts
+- **File:** `useDirectionKeys.ts` — global keydown listener
+- Only fires when input is **not** focused (line 50-58)
+- Calls `handleExitClick` directly — **no speedwalk detection involved**
+- Not a factor in this bug
+
+---
+
+## What the Prior Fix Addressed vs. What Remains
+
+| Scenario | Prior Fix (e101f02) | Residual Bug |
+|----------|-------------------|-------------|
+| Type "n", Enter → speedwalk message | ✅ Fixed (`shouldTreatAsSpeedwalk("n")` → false) | N/A |
+| Type "n", Enter, quickly type "e", Enter → speedwalk message | N/A | ❌ **Still broken** (race: input shows "ne") |
+| Type "ne" intentionally, Enter → speedwalk | N/A | ✅ Correct behavior (user intended speedwalk) |
+
+---
+
+## Proposed Fix Approaches
+
+### Option A: `flushSync` on input clear (Recommended)
+
+```typescript
+import { flushSync } from 'react-dom';
+
+// In handleSubmit, replace line 181:
+flushSync(() => setCommand(""));
+```
+
+**Pros:** Forces synchronous re-render, input DOM is cleared before any subsequent keystrokes. Root cause fix.  
+**Cons:** `flushSync` bypasses React's batching optimization — but this is a single state update on a low-frequency action (form submit), so performance impact is negligible.
+
+### Option B: Imperatively clear DOM input
+
+```typescript
+// After setCommand(""), add:
+if (inputRef.current) inputRef.current.value = "";
+```
+
+**Pros:** Immediate DOM effect, no React scheduling dependency.  
+**Cons:** Manipulating controlled input DOM directly is a React anti-pattern; could cause React to log warnings or behave unexpectedly if the controlled value and DOM value diverge.
+
+### Option C: Track last-submit timestamp
+
+```typescript
+const lastSubmitRef = useRef(0);
+
+// In handleSubmit:
+lastSubmitRef.current = Date.now();
+
+// In speedwalk check:
+const timeSinceLastSubmit = Date.now() - lastSubmitRef.current;
+if (shouldTreatAsSpeedwalk(trimmed) && timeSinceLastSubmit > 300) { ... }
+```
+
+**Pros:** Doesn't fight React's rendering model. Heuristic safety net.  
+**Cons:** Arbitrary threshold; doesn't fix the underlying race; could block legitimate rapid speedwalks.
+
+### Option D: Raise speedwalk threshold to 3+ moves
+
+```typescript
+// In shouldTreatAsSpeedwalk:
+return result.ok && result.moves.length > 2;  // was > 1
+```
+
+**Pros:** Simple, eliminates 2-char false positives.  
+**Cons:** Breaks legitimate 2-move speedwalks (e.g., "ne" for north-then-east). Trades one UX issue for another.
+
+### Recommendation
+
+**Option A (`flushSync`)** is the cleanest fix. It addresses the root cause (async input clearing) with minimal code change (1 import + wrapping 1 line). The performance cost is negligible since form submissions are user-paced, not high-frequency.
+
+---
+
+## Files Involved
+
+| File | Role |
+|------|------|
+| `packages/client/src/pages/ZoneExploration.tsx` | Command input, form handling, speedwalk integration |
+| `packages/client/src/utils/speedwalk.ts` | `isSpeedwalk()`, `shouldTreatAsSpeedwalk()`, `parseSpeedwalk()` |
+| `packages/client/src/hooks/useZoneConnection.ts` | `handleCommand`, `handleExitClick` — command dispatch |
+| `packages/client/src/hooks/useDirectionKeys.ts` | Arrow key shortcuts (not involved in this bug) |
+| `packages/client/src/services/connection.ts` | `sendRawCommand` — direction alias expansion |
+| `packages/client/src/__tests__/speedwalk.test.ts` | 48 existing tests — would need integration test for the race |
+
+---
+
+## Testing Considerations
+
+- Unit tests for `shouldTreatAsSpeedwalk` are thorough (48 tests) but don't cover the **integration timing** bug
+- A proper test would need to simulate the React render cycle gap — possibly via a React Testing Library integration test that:
+  1. Types "n" and submits the form
+  2. Immediately (before `act()` flushes) types "e" into the input
+  3. Verifies the input shows "e" (not "ne")
+  4. Submits again and verifies no speedwalk message appears
+- Alternatively, Playwright E2E test with fast keystroke injection
+
+
+_Merged from decisions/inbox/ on 2026-04-10T20:11._
 **Decision:** Design comprehensive bestiary of ~103 creatures for dystopian future setting across 7 zone environments with full stat progression (Tier 1–3 + bosses).
 
 **Design structure:**
