@@ -2572,3 +2572,33 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - **PgZoneRepository uses SELECT star**, so new DB columns are automatically available without query changes — but the `ZoneRoomRow` interface must still be updated for TypeScript.
 - **Shared package rebuild required**: After editing shared src, must run `cd packages/shared && rm -f tsconfig.tsbuildinfo && npx tsc --build` for server to pick up changes.
 - **Opt-in pattern works well**: Making `illumination` optional (undefined = lit) ensures zero impact on existing rooms while allowing new rooms to opt into darkness.
+
+
+## Session: Static Item Registry Removal
+
+### Context
+- **Task:** Remove all static item definitions from packages/server/src/items/registry.ts. ContentRegistry (DB-driven) is now the sole source of truth for items.
+- **Decision:** No deployments without the database. Static fallback eliminated.
+
+### Changes Made
+1. **packages/server/src/items/registry.ts** — Gutted all 34 static ItemDefinition constants, the ALL_ITEMS array, and the ITEM_REGISTRY Map. Retained and rewired getItemDefinition, getAllItemDefinitions, getItemsByType, getItemsByTier to delegate exclusively to ContentRegistry. Added getItemDefinitionsMap() helper for shared functions that need Map<string, ItemDefinition>. Added requireRegistry() guard that throws if DB is not initialized.
+2. **packages/server/src/items/index.ts** — Updated barrel export: removed all static constant re-exports, added getItemDefinitionsMap.
+3. **packages/server/src/items/loot-drops.ts** — Replaced ITEM_REGISTRY import with getItemDefinitionsMap().
+4. **packages/server/src/commands/handlers/open.ts** — Replaced ITEM_REGISTRY with getItemDefinitionsMap().
+5. **packages/server/src/commands/handlers/put.ts** — Replaced ITEM_REGISTRY with getItemDefinitionsMap().
+6. **packages/server/src/admin/content/init.ts** — Updated comment (no code change needed; getAllItemDefinitions still works).
+
+### Test Files Affected (NOT modified — Minsc domain)
+- packages/server/src/__tests__/items.test.ts — imports ITEM_REGISTRY, RUSTY_BLADE, IRON_SWORD, etc.
+- packages/server/src/__tests__/container-commands.test.ts — imports TATTERED_SATCHEL, EXPEDITION_PACK, APOTHECARY_POUCH, RUSTY_BLADE, HEALING_DRAUGHT
+- packages/server/src/__tests__/container-items.test.ts — imports TATTERED_SATCHEL, EXPEDITION_PACK, APOTHECARY_POUCH, HEALING_DRAUGHT, RUSTY_BLADE
+
+### Seed Data Verification
+- All 34 items from the static registry exist in DB migrations:
+  - 002_seed_content.sql — seeds all weapons, armour, consumables, materials, keys
+  - 015_container_properties.sql — seeds all container items with container_properties
+
+### Learnings
+- **getItemDefinitionsMap() pattern:** Shared pure functions (container weight calc, addItemToContainer) accept Map<string, ItemDefinition>. Since we no longer export a static Map, the new getItemDefinitionsMap() function builds one from ContentRegistry on demand.
+- **Migration discipline confirmed:** Every static item had a corresponding seed row in migrations. The DB is complete.
+- **Pre-existing TS error:** ContentRegistry.ts:148 has a type cast issue (Record<string, unknown> to ContainerProperties). Not introduced by this change, not touched.

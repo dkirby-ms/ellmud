@@ -16,7 +16,7 @@
  *
  * When usePg=false (dev mode), returns in-memory ContentStore instances
  * pre-populated from existing game registries:
- *   - Items: from ITEM_REGISTRY (18 items)
+ *   - Items: from ContentRegistry (DB-driven)
  *   - Creatures: from creature template exports
  *   - Modifiers: 5 shard modifiers
  *   - Factions: 3 known factions
