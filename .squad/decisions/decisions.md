@@ -3879,3 +3879,59 @@ Previously hardcoded to 1.0 with a TODO. Now populated from `room.illumination` 
 - ✅ All 37 tests passing on merge commit
 - ✅ 3 follow-up issues filed (#411, #412, #413)
 - ✅ Session log & orchestration logs created
+
+---
+
+## 2026-04-11T00:45:00Z: Group Formation Architecture (#403 Phase 3)
+
+**By:** Drizzt (Engine Dev)  
+**PR:** #414  
+**Date:** 2026-04-11
+
+### Decision
+
+Groups use the same in-memory, session-scoped pattern as follow/consent. A `GroupManager` class owns group state centrally (rather than distributing across PlayerState), keeping group operations atomic and preventing orphaned state.
+
+### Key Design Choices
+
+1. **Centralized GroupManager** — Groups are managed via a registry (groupId → Group), not scattered across PlayerStates. PlayerState only stores a `groupId` reference. This prevents inconsistencies when members disconnect.
+
+2. **Leader-disconnect disbands** — Per issue requirements. Implemented via `cleanupGroupMembership()` called from both `onLeave` and `handlePlayerDeath`.
+
+3. **Add requires follow OR consent** — `group add <player>` checks the leader's follower set AND the target's consentedPlayers set. This gates group membership behind explicit player intent.
+
+4. **gsay uses 'speech' NarrationType** — No 'chat' type exists in the shared schema. Group chat uses 'speech' to leverage existing client rendering for spoken messages.
+
+5. **_groupEvent/_gsay metadata pattern** — Command handlers return metadata that ZoneRoom interprets for broadcasting, consistent with _followStarted, _postureChange, _roomEvent patterns.
+
+### Commands Implemented (8 total)
+
+- group form — Create new group with current leader
+- group add — Add player to group (requires follow + consent)
+- group remove — Remove player from group
+- group kick — Leader kicks player from group
+- group leave — Player leaves group
+- group disband — Leader disbands entire group
+- group leader — Reassign group leadership
+- gsay — Group-scoped speech using ZoneRoom broadcast
+
+### Team Impact
+
+- **Regis (Client):** Group info display will need a client-side panel or tab. gsay messages arrive as 'speech' narrations with `[Group]` prefix.
+- **Jarlaxle (Content):** Future combat reward sharing (Phase 4) will read group membership from GroupManager.
+- **All:** resolvePlayerById is now available on CommandContext for any command that needs session-ID-based player lookup.
+
+### Follow-up Issues Resolved
+
+- #411 (Follow dependency in group formation)
+- #412 (Consent gating for group membership)
+- #413 (Leader disconnect behavior)
+
+### Deliverables
+
+- ✅ PR #414 approved by Elminster
+- ✅ 57 new tests covering all commands, permissions, edge cases
+- ✅ GroupManager centralized state management
+- ✅ ZoneRoom integration for group broadcasts
+- ✅ PR #414 merged to dev
+- ✅ All 3 blocking issues (#411, #412, #413) closed

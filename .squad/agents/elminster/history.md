@@ -61,6 +61,61 @@
 
 ## Learnings
 
+### 2026-04-11: PR #414 Review — Group Formation System (#403 Phase 3)
+**Task:** Code review of group formation system PR.
+
+**Verdict: APPROVE**
+
+**Architecture (Clean):**
+- GroupManager is fully separated from ZoneRoom — pure in-memory state with no Room/Client dependencies. ZoneRoom holds a single `GroupManager` instance and calls it during lifecycle events. Clean interface boundary.
+- The `_groupEvent` / `_gsay` sideband pattern on CommandResult is consistent with the existing `_followStopped` pattern from PR #408. Not the cleanest long-term pattern (typed sidebands on result objects), but consistent within the codebase.
+
+**State Management (Correct):**
+- Dual-map design (`groups` Map + `playerGroup` reverse index) ensures O(1) lookups in both directions.
+- `handlePlayerLeave()` correctly handles both leader-disconnect (→ disband) and member-disconnect (→ remove + auto-disband if ≤1).
+- Death cleanup calls `cleanupGroupMembership()` inside `handlePlayerDeath()`, correct ordering (before corpse/loot logic).
+- `PlayerState.groupId` is kept in sync by command handlers (set on form/add, cleared on remove/leave/disband/death/disconnect).
+
+**Security (Solid):**
+- All leader-only commands (add, remove/kick, disband, leader transfer) check `group.leaderId !== requesterId` both in GroupManager and in command handler layer (defense in depth).
+- `group add` requires target to be following leader OR have consented — no unconsented player additions.
+- Non-leaders can only `removeMember` themselves (verified at GroupManager level).
+
+**Edge Cases (All Covered):**
+- Leader disconnect → disband ✓ (cleanupGroupMembership in onLeave)
+- Max capacity (20) enforced on both formGroup and addMember ✓
+- Player in two groups impossible — `playerGroup` reverse index checked on form and add ✓
+- Auto-disband when group drops to ≤1 member ✓
+- Leader can't self-kick (must disband or transfer first) ✓
+
+**gsay (Correct):**
+- Scoped to group members only via `memberIds` from group state.
+- Cross-room delivery works: ZoneRoom iterates `memberIds` and finds clients by sessionId regardless of room.
+- Uses `speech` type consistently.
+
+**Follow-up Fixes (#411, #412, #413):**
+- #411: `player-display.ts` extracts duplicated follow-display logic from look.ts and go.ts. Clean, correct.
+- #412: `moveFollowers()` now calls `this.downingSystem.isPlayerDowned(followerId)` to skip downed followers. One-line fix, correct.
+- #413: `handlePlayerDeath()` now calls `cleanupFollowRelationships(playerId)` before any other death logic. Correct.
+
+**Test Coverage (57 tests — Thorough):**
+- GroupManager unit tests: 22 (form, add, remove, transfer, disband, handlePlayerLeave, edge cases)
+- Command handler tests: 22 (all 8 subcommands + error cases)
+- gsay tests: 4 (delivery, metadata, error cases)
+- formatPlayerLines helper: 5 (posture, following, anon, fallback)
+- PlayerState fields: 2
+- Max size: 3
+
+**Minor Nit (Non-blocking):**
+- Module-level `let nextGroupId = 1` in GroupManager.ts with `static resetIdCounter()` for tests is pragmatic but slightly impure. Acceptable for session-scoped in-memory state.
+
+**Key File Paths:**
+- GroupManager: `packages/server/src/systems/GroupManager.ts`
+- Group commands: `packages/server/src/commands/handlers/group.ts`
+- Player display helper: `packages/server/src/commands/handlers/player-display.ts`
+- ZoneRoom integration: `packages/server/src/rooms/ZoneRoom.ts` (lines ~340, ~721-726, ~1197-1240, ~1337-1350, ~1551, ~1657-1715, ~2364-2370)
+- Tests: `packages/server/src/__tests__/group.test.ts`
+
 ### 2025-07-22: Container Item System Architecture (#409)
 **Task:** Scope and design architecture proposal for container item type, inventory persistence, and corpse loot system.
 
@@ -2686,5 +2741,35 @@ Researched 3 open issues. Posted design briefs. Updated labels. Routed to implem
 **Decision:** Documented in .squad/decisions/decisions.md (2026-04-11T00:37:00Z entry)
 
 **Next:** Drizzt to merge PR; Phase 3 depends on #411, #412, #413 fixes.
+
+---
+
+## Review & Approval: Group Formation (PR #414) (2026-04-11)
+
+**Task:** Review PR #414 implementing Phase 3 Group Formation (8 commands, GroupManager, 57 tests)
+
+**What You Did:**
+- ✅ Reviewed architecture: GroupManager centralized pattern (vs. distributed PlayerState)
+- ✅ Verified permissions: group add correctly gates on follower + consent
+- ✅ Confirmed all 3 follow-up issues fixed (#411, #412, #413)
+- ✅ Test coverage: 57 new tests covering all 8 commands + edge cases
+- ✅ Implementation patterns: _groupEvent/_gsay metadata consistent with _followStarted/_postureChange
+
+**Verdict:** APPROVED — Clean architecture, proper permissions, full test surface.
+
+**Follow-up Issues Resolved:**
+- #411: Extracted player-display.ts shared helper
+- #412: moveFollowers() skips downed/dead followers
+- #413: handlePlayerDeath() breaks follow relationships
+
+**Decision Recorded:** Merged drizzt-group-formation-architecture.md → decisions.md (2026-04-11T00:45:00Z)
+
+**Merge Status:** ✅ PR #414 merged to dev
+
+**Team Impact Notes:**
+- Regis (Client): gsay messages arrive as 'speech' narrations; group panel needed
+- Jarlaxle (Content): Phase 4 combat rewards will read GroupManager
+- All: resolvePlayerById now available on CommandContext
+
 
 

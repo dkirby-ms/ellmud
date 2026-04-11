@@ -19,6 +19,7 @@ export interface Group {
   id: string;
   leaderId: string;
   members: Map<string, GroupMember>; // sessionId → GroupMember
+  lootSharing: boolean; // Phase 6: leader toggles loot distribution (#403)
 }
 
 let nextGroupId = 1;
@@ -58,7 +59,7 @@ export class GroupManager {
       members.set(m.sessionId, m);
     }
 
-    const group: Group = { id: groupId, leaderId, members };
+    const group: Group = { id: groupId, leaderId, members, lootSharing: false };
     this.groups.set(groupId, group);
 
     // Register all members
@@ -190,6 +191,31 @@ export class GroupManager {
   isLeader(playerId: string): boolean {
     const group = this.getGroup(playerId);
     return group?.leaderId === playerId;
+  }
+
+  /** Set loot sharing (leader only). Phase 6: #403. */
+  setLootSharing(
+    requesterId: string,
+    enabled: boolean,
+  ): { success: true; group: Group } | { success: false; error: string } {
+    const groupId = this.playerGroup.get(requesterId);
+    if (!groupId) return { success: false, error: 'You are not in a group.' };
+
+    const group = this.groups.get(groupId);
+    if (!group) return { success: false, error: 'Group not found.' };
+
+    if (group.leaderId !== requesterId) {
+      return { success: false, error: 'Only the group leader can change loot sharing.' };
+    }
+
+    group.lootSharing = enabled;
+    return { success: true, group };
+  }
+
+  /** Get loot sharing status for a player's group. Phase 6: #403. */
+  getLootSharing(playerId: string): boolean {
+    const group = this.getGroup(playerId);
+    return group?.lootSharing ?? false;
   }
 
   /**

@@ -9,6 +9,7 @@
  *   group leave             — Leave the group (non-leaders).
  *   group disband           — Disband the entire group (leader only).
  *   group leader <player>   — Transfer leadership to another member.
+ *   group share [on|off]    — Toggle or view loot sharing (leader only to toggle).
  *   group (no args)         — Show group information.
  *
  * gsay <message>            — Send a message only to group members.
@@ -44,10 +45,12 @@ export function handleGroup(ctx: CommandContext): CommandResult {
       return handleGroupDisband(ctx);
     case 'leader':
       return handleGroupLeader(ctx, subArgs);
+    case 'share':
+      return handleGroupShare(ctx, subArgs);
     default:
       return {
         narrations: [{
-          text: `Unknown group command "${subcommand}". Use: form, add, remove, leave, disband, leader, or just "group" for info.`,
+          text: `Unknown group command "${subcommand}". Use: form, add, remove, leave, disband, leader, share, or just "group" for info.`,
           type: 'system',
         }],
       };
@@ -64,9 +67,11 @@ function showGroupInfo(ctx: CommandContext): CommandResult {
 
   const leaderMember = group.members.get(group.leaderId);
   const leaderName = leaderMember?.characterName ?? 'Unknown';
+  const sharingStatus = group.lootSharing ? 'ON' : 'OFF';
   const lines = [
     `── Group ──`,
     `Leader: ${leaderName}`,
+    `Loot Sharing: ${sharingStatus}`,
     `Members (${group.members.size}):`,
   ];
 
@@ -367,6 +372,48 @@ function handleGroupLeader(ctx: CommandContext, args: string[]): CommandResult {
     },
   };
   return leaderResult;
+}
+
+function handleGroupShare(ctx: CommandContext, args: string[]): CommandResult {
+  const { player } = ctx;
+  const gm = ctx.groupManager!;
+
+  const group = gm.getGroup(player.sessionId);
+  if (!group) {
+    return { narrations: [{ text: 'You are not in a group.', type: 'system' }] };
+  }
+
+  // No args: show current status
+  if (args.length === 0) {
+    const status = group.lootSharing ? 'ON' : 'OFF';
+    return { narrations: [{ text: `Loot sharing is currently ${status}.`, type: 'system' }] };
+  }
+
+  // Toggle requires leader
+  const arg = args[0]!.toLowerCase();
+  if (arg !== 'on' && arg !== 'off') {
+    return { narrations: [{ text: 'Usage: group share [on|off]', type: 'system' }] };
+  }
+
+  const enabled = arg === 'on';
+  const result = gm.setLootSharing(player.sessionId, enabled);
+
+  if (!result.success) {
+    return { narrations: [{ text: result.error, type: 'system' }] };
+  }
+
+  const status = enabled ? 'ON' : 'OFF';
+  const charName = ctx.characterName ?? 'Someone';
+  const shareResult: CommandResult & { _groupEvent?: { type: string; groupId: string; memberIds: string[]; message: string } } = {
+    narrations: [{ text: `You turn loot sharing ${status}.`, type: 'room' }],
+    _groupEvent: {
+      type: 'loot_sharing_changed',
+      groupId: group.id,
+      memberIds: Array.from(group.members.keys()),
+      message: `${charName} turns loot sharing ${status}.`,
+    },
+  };
+  return shareResult;
 }
 
 /** gsay — Send a message to all group members. */

@@ -2152,18 +2152,114 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         if (!isSandboxCreature && roomId && loot.length > 0) {
           const room = this.roomGraph.rooms.get(roomId);
           if (room) {
-            for (const item of loot) {
-              room.items.push(item);
+            // Phase 6: Group loot sharing (#403)
+            const killerId = event.killerIds?.[0];
+            let distributed = false;
+
+            if (killerId && !killerId.startsWith('creature-')) {
+              const killerGroup = this.groupManager.getGroup(killerId);
+              if (killerGroup && killerGroup.lootSharing) {
+                // Gather group members in the same room
+                const membersInRoom = Array.from(killerGroup.members.keys()).filter(memberId => {
+                  const ps = this.players.get(memberId);
+                  return ps && ps.currentRoomId === roomId;
+                });
+
+                if (membersInRoom.length > 0) {
+                  // Distribute items round-robin
+                  let memberIndex = 0;
+                  const droppedItems: import('../generator/RoomGraph.js').Item[] = [];
+
+                  for (const item of loot) {
+                    let itemGiven = false;
+
+                    // Try each member starting from current index
+                    for (let attempt = 0; attempt < membersInRoom.length; attempt++) {
+                      const memberId = membersInRoom[memberIndex]!;
+                      const memberPlayer = this.players.get(memberId);
+
+                      if (memberPlayer && memberPlayer.canCarry(item)) {
+                        memberPlayer.addItem(item);
+                        itemGiven = true;
+
+                        // Narrate to recipient
+                        const recipientClient = this.findClient(memberId);
+                        if (recipientClient) {
+                          this.sendNarrate(recipientClient, {
+                            text: `You receive a ${item.name} from the group loot.`,
+                            type: 'room',
+                            timestamp: Date.now(),
+                          });
+                        }
+
+                        // Narrate to other group members in room
+                        const recipientName = this.characterNames.get(memberId) ?? 'Someone';
+                        for (const otherId of membersInRoom) {
+                          if (otherId !== memberId) {
+                            const otherClient = this.findClient(otherId);
+                            if (otherClient) {
+                              this.sendNarrate(otherClient, {
+                                text: `${recipientName} receives a ${item.name}.`,
+                                type: 'room',
+                                timestamp: Date.now(),
+                              });
+                            }
+                          }
+                        }
+
+                        // Move to next member for next item
+                        memberIndex = (memberIndex + 1) % membersInRoom.length;
+                        break;
+                      }
+
+                      // Try next member
+                      memberIndex = (memberIndex + 1) % membersInRoom.length;
+                    }
+
+                    // If no one could carry it, drop to floor
+                    if (!itemGiven) {
+                      droppedItems.push(item);
+                    }
+                  }
+
+                  // Drop remaining items to floor
+                  for (const item of droppedItems) {
+                    room.items.push(item);
+                  }
+
+                  if (droppedItems.length > 0) {
+                    for (const sid of membersInRoom) {
+                      const client = this.findClient(sid);
+                      if (client) {
+                        this.sendNarrate(client, {
+                          text: droppedItems.map(i => `A ${i.name} drops to the ground.`).join('\n'),
+                          type: 'room',
+                          timestamp: Date.now(),
+                        });
+                      }
+                    }
+                  }
+
+                  distributed = true;
+                }
+              }
             }
-            for (const [sid, ps] of this.players) {
-              if (ps.currentRoomId === roomId) {
-                const client = this.findClient(sid);
-                if (client) {
-                  this.sendNarrate(client, {
-                    text: loot.map(i => `A ${i.name} drops to the ground.`).join('\n'),
-                    type: 'room',
-                    timestamp: Date.now(),
-                  });
+
+            // Fallback: no group sharing, drop all items to floor
+            if (!distributed) {
+              for (const item of loot) {
+                room.items.push(item);
+              }
+              for (const [sid, ps] of this.players) {
+                if (ps.currentRoomId === roomId) {
+                  const client = this.findClient(sid);
+                  if (client) {
+                    this.sendNarrate(client, {
+                      text: loot.map(i => `A ${i.name} drops to the ground.`).join('\n'),
+                      type: 'room',
+                      timestamp: Date.now(),
+                    });
+                  }
                 }
               }
             }
