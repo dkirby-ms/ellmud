@@ -2081,3 +2081,26 @@ All 2666 tests pass, zero type errors. Commit: 8d934c9
 2. For registry function tests (`getItemDefinition`, `getItemsByType`, etc.), mock or seed ContentRegistry in a `beforeAll`
 3. Refactor `loot-drops.ts` to accept an item source parameter (or use ContentRegistry) instead of importing `ITEM_REGISTRY` directly
 4. Update `items/index.ts` barrel to remove static constant re-exports
+
+---
+
+## Learnings — Static Item Constant Removal Test Fix (2026-07-18)
+
+### Context
+After the team removed all static `ItemDefinition` constants from `items/registry.ts` (moving to DB-driven ContentRegistry), three test files broke. Fixed all three: `items.test.ts`, `container-items.test.ts`, `container-commands.test.ts`.
+
+### What Was Done
+- Created `packages/server/src/__tests__/helpers/item-fixtures.ts` — shared test fixture file with 14 inline `ItemDefinition` objects matching the DB seed data from `002_seed_content.sql` and `015_container_properties.sql`
+- All three test files now mock `../content/index.js` via `vi.mock()` to provide a fake `getContentRegistry()` backed by fixture data
+- Pattern: `vi.mock('../content/index.js', () => ({ getContentRegistry: () => fakeRegistry }))` where fakeRegistry implements `isInitialized()`, `getItem()`, and `getAllItems()`
+- Result: 139/139 tests passing across the three files, zero regressions in the broader suite
+
+### Key Patterns
+- **ContentRegistry mock pattern**: For any test that uses registry functions (`getItemDefinition`, `getAllItemDefinitions`, `getItemsByType`, `getItemsByTier`, `getItemDefinitionsMap`), or invokes code that calls them (e.g., command handlers, loot-drops), mock `../content/index.js` before importing the modules under test
+- **vi.mock hoisting**: Vitest hoists `vi.mock()` to the top, so the fixture map constant must be declared before the mock call but after the mock module path is known
+- Container command handlers (`open`, `put`, `take`) all call `getItemDefinition` and some call `getItemDefinitionsMap` — they ALSO need the ContentRegistry mock even though the test file doesn't directly import registry functions
+- `loot-drops.ts` calls `getItemDefinitionsMap()` internally, so loot tests also require the mock
+
+### Remaining Work
+- `wave4-room-graph.test.ts` also fails from the ContentRegistry removal (calls `graph-adapter.ts` → `getItemDefinition`) — not in scope for this fix but same pattern would apply
+- Other pre-existing failures: e2e tests, client admin-token tests, shared types test — all unrelated to this change
