@@ -73,6 +73,16 @@
 
 ---
 
+## Learnings
+
+**Container Inventory E2E Tests (2026-07):**
+- Created `packages/e2e/tests/container-inventory.spec.ts` — 10 tests covering drop/take, container put/open/take-from, and multi-player container exchange
+- Starter kit items: Rusty Blade (equipped weapon), Tattered Leather (equipped armour), Waterlogged Potion (inventory consumable)
+- Container items (015_container_properties.sql) exist as definitions but are NOT seeded into rooms, loot tables, or starter kits — container tests require a Tattered Satchel to be obtainable in the starting area
+- Exact message patterns discovered: `You pick up the {name}`, `You drop the {name}`, `You put {name} in {container}`, `You take {name} from {container}`, `You open the {container}:`, `A {name} lies here.`
+- No `give` command exists — player-to-player item transfer must go through drop/take on the ground
+- Admin spawn endpoint (`POST /admin/api/rooms/:roomId/spawn`) requires Colyseus room ID + ADMIN_TOKEN
+
 ## Learnings (Archived — See Detailed Session Records)
 
 **Starting Gear Bug Fix (2026-07, Issue #377):**
@@ -2104,3 +2114,20 @@ After the team removed all static `ItemDefinition` constants from `items/registr
 ### Remaining Work
 - `wave4-room-graph.test.ts` also fails from the ContentRegistry removal (calls `graph-adapter.ts` → `getItemDefinition`) — not in scope for this fix but same pattern would apply
 - Other pre-existing failures: e2e tests, client admin-token tests, shared types test — all unrelated to this change
+
+## Learnings — Round 2: Remaining Registry + Help Modal Test Fixes (2026-07-18)
+
+### What Was Done
+Fixed 6 more test files after the registry removal + Regis's help modal refactor:
+
+1. **wave4-room-graph.test.ts** — Added `vi.mock('../content/index.js')` with fixture map; all 24 tests pass (Graph Adapter tests were the only failures, non-adapter tests never needed registry)
+2. **creature-wiring.test.ts** — Same ContentRegistry mock pattern; `adaptRoomGraph` in `createTestZone()` was the trigger; all 22 tests pass
+3. **commands.test.ts** — Added mock for ZoneRoom integration tests; unit tests (parser, command handlers, PlayerState) never needed it since `createTestRoomGraph()` is hardcoded; all 44 tests pass
+4. **player-death.test.ts** — Same mock for ZoneRoom integration; unit tests (CombatSystem defeat detection) were fine; all 7 pass
+5. **help.test.ts** — Full rewrite: handler now returns `helpData: { commands: HelpCommandEntry[], focusCommand?: string }` with empty narrations instead of system narration text. Tests validate `helpData` payload, `focusCommand` for specific command queries, and command name presence/absence for context-aware filtering. All 26 pass.
+6. **types.test.ts** — Updated MessageTypes expected count from 30 → 32 (HELP_DATA + PLAYER_LIST added)
+
+### Key Findings
+- **help handler contract changed**: `handleHelp` returns `{ narrations: [], helpData: {...} }` — tests that checked `narrationText()` always got empty string. Error cases (unknown command, devMode-gated) still return narrations.
+- **admin-crud.test.ts** also fails from ContentRegistry removal (different code path via `admin/content/init.ts` → `getAllItemDefinitions`) — NOT in my scope but flagged
+- **ZoneRoom integration tests** (`commands.test.ts`, `player-death.test.ts`) need the mock even though they don't directly call registry functions — ZoneRoom's lifecycle loads content at boot
