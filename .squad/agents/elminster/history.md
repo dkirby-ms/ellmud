@@ -2666,3 +2666,25 @@ Researched 3 open issues. Posted design briefs. Updated labels. Routed to implem
 
 **PR:** #410 (ready for merge)
 
+---
+
+## Review & Approval: Follow + Consent System (PR #408) (2026-04-11)
+
+**Task:** Review 1050-line PR #408 implementing follow/unfollow + consent/unconsent/revoke commands (Phase 1+2)
+
+**What You Did:**
+- ✅ Reviewed architecture, test coverage (37 tests), implementation patterns
+- ✅ Identified 3 non-blocking issues for Phase 3 (Group Formation):
+  - #411: Extract duplicated follow-display logic (look.ts/go.ts)
+  - #412: Skip downed followers in moveFollowers()
+  - #413: Clean up follow on player death (handlePlayerDeath)
+- ✅ Approved PR for merge with follow-up issues documented
+- ✅ Design notes for Phase 3: transitive follow chains, consent gating, griefing prevention
+
+**Verdict:** APPROVED — Merge to dev. All follow-ups non-blocking for Phase 1+2, must fix before Phase 3.
+
+**Decision:** Documented in .squad/decisions/decisions.md (2026-04-11T00:37:00Z entry)
+
+**Next:** Drizzt to merge PR; Phase 3 depends on #411, #412, #413 fixes.
+
+

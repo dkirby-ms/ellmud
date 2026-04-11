@@ -3763,3 +3763,28 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 - Size comparison (player.inventory.size !== prevInventorySize) is a clean heuristic for detecting inventory mutations -- avoids hardcoding verb lists
 - Shared package must be rebuilt (tsc -p packages/shared/tsconfig.json) before server/client can see new exports
 - PR #407 merge conflict resolution (2026-07-24): Only `.squad/decisions/decisions.md` conflicted when merging dev into squad/402-illumination-v1. Code files (ZoneRoom.ts, shared/index.ts) auto-merged cleanly — illumination fields and INVENTORY_UPDATE wiring touched different areas. decisions.md resolved by keeping all content from both sides (append-only union strategy). Lint passed with 0 errors.
+
+---
+
+## Merge & Phase 3 Kickoff: Follow + Consent System (2026-04-11)
+
+**Task 1: Merge PR #408 (Follow + Consent)**
+- ✅ Resolved merge conflicts (clean auto-merge, no actual conflicts)
+- ✅ Verified all 37 tests pass on merge commit
+- ✅ Merged to dev branch — Follow system (Phase 1+2) now live
+
+**Task 2: Phase 3 Group Formation (In Progress)**
+- 📋 Blocking: Address Elminster's review feedback (#411, #412, #413)
+- 🎯 Design: Group state machine (forming → active → disbanded)
+- 🎯 Commands: form, add, remove, leave, disband, leader
+- 🎯 Rules: Leader required, max group size, disband cleans up follow relationships
+
+**Follow-Up Issues Filed:**
+- #411 — Extract duplicated follow-display logic (look.ts/go.ts)
+- #412 — Skip downed followers in moveFollowers()
+- #413 — Clean up follow on player death (handlePlayerDeath)
+
+**Context:** Phase 3 Group Formation depends on #411, #412, #413 fixes. Elminster approved PR #408 with these non-blocking follow-ups. You're assigned to address the bugs + implement group commands.
+
+**Decision:** Documented in .squad/decisions/decisions.md (2026-04-11T00:37:00Z entry)
+
