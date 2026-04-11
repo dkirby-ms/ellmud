@@ -34,8 +34,8 @@ import { PgFactionDefinitionsStore } from './PgFactionDefinitionsStore.js';
 import { PgSkillDefinitionsStore } from './PgSkillDefinitionsStore.js';
 import { PgLootTableDefinitionsStore } from './PgLootTableDefinitionsStore.js';
 import { PgRoomDefinitionsStore } from './PgRoomDefinitionsStore.js';
-import { getAllItemDefinitions } from '../../items/registry.js';
 import { DROWNED_REVENANT } from '../../creatures/templates/drowned-revenant.js';
+import { getContentRegistry } from '../../content/index.js';
 
 
 export function initializeContentStores(usePg = false): Map<ContentEntityType, IContentStore<ContentEntity>> {
@@ -61,8 +61,10 @@ function initializePgStores(): Map<ContentEntityType, IContentStore<ContentEntit
 function initializeInMemoryStores(): Map<ContentEntityType, IContentStore<ContentEntity>> {
   const stores = new Map<ContentEntityType, IContentStore<ContentEntity>>();
 
-  // ─── Items — seed from existing registry ─────────────────────────
-  const items = getAllItemDefinitions().map((item) => ({
+  // ─── Items — seed from ContentRegistry if available, else empty ──
+  const registry = getContentRegistry();
+  const rawItems = registry?.isInitialized() ? registry.getAllItems() : [];
+  const items = rawItems.map((item) => ({
     ...item,
     baseStats: { ...item.baseStats },
   }));

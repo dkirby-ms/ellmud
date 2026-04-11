@@ -4,18 +4,31 @@
  * Covers: open, put X in Y, take X from Y commands for container items.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { handleCommand, type CommandContext } from '../commands/index.js';
-import { parseCommand } from '../commands/parser.js';
-import { PlayerState } from '../state/PlayerState.js';
-import type { Item, Room } from '../generator/RoomGraph.js';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
+  ALL_FIXTURE_ITEMS,
+  buildFixtureRegistry,
   TATTERED_SATCHEL,
   EXPEDITION_PACK,
   APOTHECARY_POUCH,
   RUSTY_BLADE,
   HEALING_DRAUGHT,
-} from '../items/index.js';
+} from './helpers/item-fixtures.js';
+
+// Mock ContentRegistry so open/put/take handlers can resolve item definitions.
+const FIXTURE_MAP = buildFixtureRegistry();
+vi.mock('../content/index.js', () => ({
+  getContentRegistry: () => ({
+    isInitialized: () => true,
+    getItem: (id: string) => FIXTURE_MAP.get(id),
+    getAllItems: () => Array.from(FIXTURE_MAP.values()),
+  }),
+}));
+
+import { handleCommand, type CommandContext } from '../commands/index.js';
+import { parseCommand } from '../commands/parser.js';
+import { PlayerState } from '../state/PlayerState.js';
+import type { Item, Room } from '../generator/RoomGraph.js';
 
 // ─── Test Helpers ───────────────────────────────────────────────────────────
 
