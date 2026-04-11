@@ -42,6 +42,13 @@ export function handleFollow(ctx: CommandContext): CommandResult {
     };
   }
 
+  // Check if target allows followers (#417)
+  if (target.allowFollowing === false) {
+    return {
+      narrations: [{ text: `That player is not accepting followers.`, type: 'system' }],
+    };
+  }
+
   // Already following this player
   if (player.followingPlayerId === target.sessionId) {
     return {

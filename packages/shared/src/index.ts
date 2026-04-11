@@ -1017,18 +1017,21 @@ export interface PlayerListMessage {
 
 // ─── Character Flags (Issue #365) ────────────────────────────────────────────
 
-/** Per-character display flags. All flags default to false. */
+/** Per-character display flags. All flags default to false unless noted. */
 export interface CharacterFlags {
   /** Hide name/level/class from other players (except same-room and admins). */
   anon: boolean;
   /** Mark this character as roleplaying — always visible to everyone. */
   rp: boolean;
+  /** Allow other players to follow this character. Default: true. */
+  allowFollowing: boolean;
 }
 
 /** Default flag values for new characters. */
 export const DEFAULT_CHARACTER_FLAGS: CharacterFlags = {
   anon: false,
   rp: false,
+  allowFollowing: true,
 };
 
 /** Valid flag names (used for runtime validation). */
@@ -1053,9 +1056,14 @@ export const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     label: '[RP]',
     description: 'Signal that you are roleplaying in-character.',
   },
+  {
+    name: 'allowFollowing',
+    label: '[Follow]',
+    description: 'Allow other players to follow you. Enabled by default.',
+  },
 ] as const;
 
 /** Check whether a string is a valid flag name. */
 export function isValidFlagName(name: string): name is CharacterFlagName {
-  return name === 'anon' || name === 'rp';
+  return name === 'anon' || name === 'rp' || name === 'allowFollowing';
 }
