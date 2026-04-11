@@ -3788,3 +3788,26 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 
 **Decision:** Documented in .squad/decisions/decisions.md (2026-04-11T00:37:00Z entry)
 
+
+### Group Formation System — PR #414 (2026-04-11)
+**Task:** Implement Phase 3 of Issue #403 — Group Formation
+**Status:** ✅ Complete — PR #414 opened targeting dev
+**Branch:** squad/403-group-formation
+
+**Deliverables:**
+- GroupManager class (systems/GroupManager.ts) — in-memory group registry, max 20 members, session-scoped
+- 8 group commands: form, add, remove/kick, leave, disband, leader, info, gsay
+- Full ZoneRoom integration: event broadcasting, gsay delivery, disconnect/death cleanup
+- PlayerState.groupId field, CommandContext.groupManager + resolvePlayerById
+- 57 new tests, all 2773 server tests passing
+
+**Review Feedback Fixes (from PR #408):**
+- #411: Extracted player-display.ts shared helper (look.ts + go.ts deduplication)
+- #412: moveFollowers() skips downed/dead followers
+- #413: handlePlayerDeath() breaks follow relationships
+
+## Learnings
+- NarrationType in @ellmud/shared doesn't include 'chat' — use 'speech' for group chat
+- Group commands use _groupEvent and _gsay metadata on CommandResult (same pattern as _followStarted/_postureChange)
+- GroupManager.handlePlayerLeave() handles both leader-disband and member-removal in one call
+- resolvePlayerById was needed because resolvePlayerByName can't look up by session ID (needed for follower→name resolution in group form)
