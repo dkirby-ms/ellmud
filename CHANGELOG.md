@@ -1,3 +1,10 @@
+## [0.1.1-dev.2](https://github.com/dkirby-ms/ellmud/compare/v0.1.1-dev.1...v0.1.1-dev.2) (2026-04-11)
+
+
+### Bug Fixes
+
+* filter npm-internal vulnerabilities from CI audit step ([7783b30](https://github.com/dkirby-ms/ellmud/commit/7783b30548eebfc59908de74783f6a526eb9ba52))
+
 ## [0.1.1-dev.1](https://github.com/dkirby-ms/ellmud/compare/v0.1.0...v0.1.1-dev.1) (2026-04-11)
 
 
