@@ -17,7 +17,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: scheduled-uat-promote
+  group: uat-promote
   cancel-in-progress: false
 
 jobs:
@@ -66,12 +66,7 @@ jobs:
           git merge origin/dev --no-commit --no-ff -X theirs || true
 
           # Strip forbidden paths from merge commit
-          git rm -rf --cached --ignore-unmatch \
-            .ai-team/ \
-            .squad/ \
-            .ai-team-templates/ \
-            team-docs/ \
-            "docs/proposals/" || true
+          bash .github/scripts/strip-forbidden-paths.sh
 
           # Commit if there are staged changes
           if ! git diff --cached --quiet; then

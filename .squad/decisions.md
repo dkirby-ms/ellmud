@@ -8107,3 +8107,364 @@ All 2792 server tests passing, zero regressions.
 ## Team Impact
 
 This completes Phase 6 of #403. Future phases (XP sharing, water currency) will follow similar patterns but are deferred per Dale's scope decision.
+# Decision: Migration numbering allows gaps after file deletion
+
+**Author:** Drizzt  
+**Date:** 2025-07-24  
+**Issue:** #420  
+**PR:** #423  
+
+## Context
+Removing `004_import_midgaard.sql` created a gap in migration numbering (003 → 005). The migration system tracks applied files by filename — renumbering deployed migrations would break production state tracking.
+
+## Decision
+- Allow intentional gaps in migration file numbering
+- Updated `persistence-schema-validation.test.ts` to check ascending order (not strict sequential)
+- Migration numbers must still be unique and ascending; gaps are permitted when files are intentionally removed
+
+## Impact
+Any agent adding new migrations should continue using the next available number after the highest existing one (currently 014). Do not attempt to fill gaps.
+# Workflow Audit Report — Khelben (CI/CD Dev)
+
+**Date:** 2025  
+**Scope:** All 14 GitHub Actions workflows in `.github/workflows/`  
+**Status:** Ready for review
+
+---
+
+## Executive Summary
+
+The workflow landscape is **well-structured and disciplined**. The team has established clear branch-based promotion flows (dev → uat → prod), Squad-driven issue triage and assignment, and robust CI/CD with health checks and rollback capability. However, several **patterns and timing issues** deserve attention, especially around the relationship between manual and scheduled promotion workflows.
+
+---
+
+## Workflow Inventory & Reference Table
+
+### CI-CD Workflows (4 total)
+
+| Filename | Triggers | Category | What It Does | Dependencies |
+|----------|----------|----------|-----------|------------|
+| `ci-cd.yml` | `workflow_dispatch`, `pull_request` (uat/prod), `push` (uat/prod) | **Core CI/CD** | Build, test, lint, security audit on uat/prod; Docker build & push to ACR; deploy to Azure Container Apps with health check & rollback | Requires Azure OIDC secrets (environments: `uat`, `prod`) |
+| `release.yml` | `workflow_dispatch` (manual) | **Release** | Bump version (major/minor/patch) on prod, sync workspace versions, tag, push, create GitHub Release with changelog | Requires Git write permissions; reads package.json |
+| `scheduled-uat-promote.yml` | `schedule` (4x daily: 01:00, 13:00, 17:00, 21:00 UTC), `workflow_dispatch` | **Promotion** | Automatically merge dev → uat, strip forbidden paths (.squad/, .ai-team/, team-docs/), trigger CI/CD on uat | Requires `contents:write`, `actions:write` for workflow dispatch |
+| `squad-promote.yml` | `workflow_dispatch` (dry-run input) | **Promotion** | Manual dev → uat → prod promotion (2-job chain); stripe forbidden paths; dry-run mode for preview; triggers CI/CD after each merge | Requires `contents:write`, `actions:write` |
+
+### Squad Governance Workflows (7 total)
+
+| Filename | Triggers | Category | What It Does | Dependencies |
+|----------|----------|----------|-----------|------------|
+| `squad-ci.yml` | `pull_request` (dev/preview/main/insider, sync/reopen), `push` (dev/insider) | **Squad CI** | Runs Squad CLI tests (node --test test/*.test.js) | None — basic test runner |
+| `squad-docs.yml` | `push` (preview, docs/** paths), `workflow_dispatch` | **Squad Docs** | Build docs site from docs/ directory, deploy to GitHub Pages | Depends on docs/package.json, docs/dist output |
+| `squad-heartbeat.yml` | `schedule` (every 30 min), `issues` (closed, labeled), `pull_request` (closed), `workflow_dispatch` | **Squad Automation** | Ralph (smart triage) runs on schedule + event-driven; auto-assigns issues to @copilot based on routing rules; looks for `.squad/templates/ralph-triage.js` | Requires `.squad/team.md` or `.ai-team/team.md`; optional: `COPILOT_ASSIGN_TOKEN` |
+| `squad-insider-release.yml` | `push` (insider) | **Squad Release** | Runs tests, reads version, creates insider pre-release tag (v{version}-insider+{sha}), publishes as prerelease | Reads package.json version; requires Git tag/push permissions |
+| `squad-issue-assign.yml` | `issues` (labeled) → label type starts with `squad:` | **Squad Assignment** | Posts confirmation comment, assigns issue to team member; handles @copilot assignment via `COPILOT_ASSIGN_TOKEN` | Reads `.squad/team.md` or `.ai-team/team.md`; requires PAT for @copilot assignment |
+| `squad-label-enforce.yml` | `issues` (labeled) | **Squad Label Enforcement** | Enforces label mutual exclusivity (go:, release:, type:, priority:); auto-applies release:backlog on go:yes; removes release: on go:no | No external dependencies |
+| `squad-triage.yml` | `issues` (labeled) → label is exactly `squad` | **Squad Triage** | Lead-driven triage: routes issue to team member or @copilot based on capability profile keywords; posts detailed triage comment with team roster | Reads `.squad/team.md`, `.squad/routing.md` (or `.ai-team/` fallbacks); optional `COPILOT_ASSIGN_TOKEN` |
+| `squad-release.yml` | `push` (prod) | **Squad Release** | Validates version in CHANGELOG.md, checks no forbidden files on prod, creates release tag (v{version}), publishes GitHub Release with auto-generated notes | No external dependencies; idempotent (checks if tag exists first) |
+| `squad-preview.yml` | `push` (preview) | **Squad Preview** | Validates CHANGELOG.md entry for version, runs tests, ensures no .ai-team/ or .squad/ files tracked | No external dependencies |
+| `sync-squad-labels.yml` | `push` (to .squad/team.md or .ai-team/team.md), `workflow_dispatch` | **Squad Label Sync** | Parses team.md roster, creates/updates all squad:*, go:, release:, type:, priority:, bug, feedback labels; dynamically adds member labels from roster | Reads `.squad/team.md` or `.ai-team/team.md` |
+
+---
+
+## Workflow Dependency Graph
+
+```
+                    ┌─────────────────────────────────────────────┐
+                    │  Push to dev / PR to uat, prod              │
+                    └────────────────┬────────────────────────────┘
+                                     │
+                    ┌────────────────┴────────────────┐
+                    │                                 │
+            ┌───────▼────────┐           ┌──────────▼──────┐
+            │   squad-ci.yml │           │   ci-cd.yml     │
+            │  (tests only)  │           │  (build, test,  │
+            │                │           │   docker, deploy)
+            └────────────────┘           └────────────────┘
+                                                   │
+                                    ┌──────────────┼──────────────┐
+                                    │              │              │
+                              (on uat)      (on prod)      (on failure)
+                                    │              │              │
+                    ┌───────────────▼┐  ┌─────────▼────┐  ┌──────▼────┐
+                    │  ci-cd.yml     │  │  ci-cd.yml   │  │ create-   │
+                    │  (uat deploy)  │  │ (prod deploy)│  │ failure   │
+                    └────────────────┘  └──────────────┘  │ issue.yml │
+                                                          └───────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│  PROMOTION FLOWS                                                     │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  scheduled-uat-promote.yml (every 6 hours)                          │
+│    └─> merge dev → uat (strip forbidden)                           │
+│    └─> trigger ci-cd.yml --ref uat                                 │
+│                                                                      │
+│  squad-promote.yml (manual, dry-run capable)                        │
+│    └─> merge dev → uat (strip forbidden)                           │
+│    └─> merge uat → prod (validate CHANGELOG)                       │
+│    └─> trigger ci-cd.yml --ref uat                                 │
+│    └─> trigger ci-cd.yml --ref prod                                │
+│                                                                      │
+│  After prod push:                                                    │
+│    └─> squad-release.yml (auto-tag & publish release)              │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│  SQUAD ISSUE TRIAGE & ASSIGNMENT FLOWS                              │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Label 'squad' on issue                                             │
+│    └─> squad-triage.yml                                             │
+│        ├─> Read team.md & routing.md                               │
+│        ├─> Evaluate @copilot fit (if on team)                      │
+│        ├─> Route to member or @copilot                             │
+│        ├─> Apply squad:member or squad:copilot label               │
+│        ├─> Apply default go:needs-research label                   │
+│        └─> Post triage comment                                      │
+│                                                                      │
+│  Label squad:member added                                           │
+│    └─> squad-issue-assign.yml                                       │
+│        ├─> Post assignment comment                                  │
+│        └─> Assign @copilot (if squad:copilot, using PAT)          │
+│                                                                      │
+│  Label go:* or release:* or type:* or priority:* added             │
+│    └─> squad-label-enforce.yml                                      │
+│        ├─> Enforce mutual exclusivity (remove conflicting)          │
+│        ├─> Auto-apply release:backlog on go:yes (if no release)   │
+│        └─> Remove release: on go:no                                │
+│                                                                      │
+│  squad-heartbeat.yml (every 30 min or event-driven)                │
+│    ├─> Run Ralph triage (if .squad/templates/ralph-triage.js)     │
+│    ├─> Apply Ralph decisions (labels + comments)                   │
+│    └─> Auto-assign @copilot issues (if enabled)                   │
+│                                                                      │
+│  Update team.md                                                      │
+│    └─> sync-squad-labels.yml                                        │
+│        └─> Parse roster, create/update all squad:*, go:, release:  │
+│            type:, priority:, signal labels                          │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│  RELEASE MANAGEMENT                                                  │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Manual release.yml (workflow_dispatch on prod)                    │
+│    └─> Bump version, sync workspaces, tag, create GitHub Release   │
+│                                                                      │
+│  Push to insider branch                                             │
+│    └─> squad-insider-release.yml                                    │
+│        └─> Create insider prerelease tag (v{version}-insider+{sha}) │
+│                                                                      │
+│  Push to preview branch                                             │
+│    └─> squad-preview.yml                                            │
+│        └─> Validate CHANGELOG & no forbidden files                 │
+│                                                                      │
+│  Push to prod branch                                                │
+│    └─> squad-release.yml                                            │
+│        └─> Validate CHANGELOG, create tag (v{version}), publish    │
+│                                                                      │
+│  Docs push to preview (docs/** paths)                              │
+│    └─> squad-docs.yml                                               │
+│        └─> Build docs, deploy to GitHub Pages                      │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Issues & Recommendations
+
+### 🔴 **Critical Issues**
+
+#### 1. **Release Workflow Duplication: `release.yml` vs `squad-release.yml`** (HIGH)
+
+**Issue:** Two release workflows exist:
+- `release.yml`: Workflow dispatch on prod, bumps version, creates tag and GitHub Release
+- `squad-release.yml`: Auto-triggered on prod push, reads version from package.json, creates tag and release
+
+**Risk:** If someone runs `release.yml` (to bump version), it pushes to prod, which triggers `squad-release.yml`. But if the tag already exists (as it will, since `release.yml` created it), `squad-release.yml` is idempotent and exits silently. This is *acceptable but confusing*.
+
+**Recommendation:**
+- **Deprecate `release.yml`** — use `squad-promote.yml` (dev → uat → prod) followed by **manual** version bump on prod via a separate workflow or merge commit.
+- OR, consolidate: Have `release.yml` skip its tag creation if `squad-release.yml` is expected to handle it.
+- Document which one is the "official" path: For Squad projects, `squad-promote.yml` + `squad-release.yml` is the intended flow.
+
+---
+
+#### 2. **GitHub Token Limitations Not Fully Documented** (MEDIUM)
+
+**Issue:** The codebase has discovered and works around GITHUB_TOKEN limitations:
+- GITHUB_TOKEN pushes don't trigger workflows (by design, to prevent loops)
+- Solution: Use `gh workflow run` + `GH_TOKEN` to explicitly trigger workflows after promotion
+
+**Status:** Correctly implemented in `scheduled-uat-promote.yml` and `squad-promote.yml`, but this is a **subtle architectural constraint** that could bite future developers.
+
+**Recommendation:**
+- Add a comment in both promotion workflows explaining *why* the 5-second sleep + explicit `gh workflow run` is necessary
+- Consider documenting this in `.squad/decisions.md` as an architectural pattern
+
+---
+
+### 🟡 **Medium Issues**
+
+#### 3. **Scheduled Promotion Timing: Potential Overlap with Squad Work** (MEDIUM)
+
+**Issue:** `scheduled-uat-promote.yml` runs 4× daily (01:00, 13:00, 17:00, 21:00 UTC). If a team member is actively working on uat at the same time, or if squad-promote.yml is manually triggered, both could race.
+
+**Current safeguard:** `concurrency: { group: scheduled-uat-promote, cancel-in-progress: false }` ensures scheduled workflow doesn't cancel itself. But `squad-promote.yml` has its own concurrency (per-ref), so collisions are *possible*.
+
+**Recommendation:**
+- Update `squad-promote.yml` to use `concurrency: { group: squad-promote, cancel-in-progress: false }` to serialize with scheduled workflow.
+- Consider documenting the promotion schedule in team docs so manual promotes don't clash.
+
+---
+
+#### 4. **Forbidden Path Stripping Must Stay In Sync** (MEDIUM)
+
+**Issue:** Two workflows strip forbidden paths:
+- `scheduled-uat-promote.yml` (lines 69-74)
+- `squad-promote.yml` (lines 49-54)
+
+Both strip: `.ai-team/`, `.squad/`, `.ai-team-templates/`, `team-docs/`, `docs/proposals/`
+
+**Risk:** If one is updated and the other isn't, devops can leak into uat/prod.
+
+**Recommendation:**
+- Extract forbidden paths into a shared variable or script (e.g., `.github/scripts/forbidden-paths.txt`)
+- Or, add a comment with a link between both workflows: "**SYNC:** This list must match squad-promote.yml line 49"
+
+---
+
+#### 5. **Squad CI Only Tests Squad CLI, Not the Game** (MEDIUM)
+
+**Issue:** `squad-ci.yml` runs `node --test test/*.test.js` on dev/insider pushes and PRs to dev/preview/main/insider. But this tests the **Squad CLI itself**, not the Ellmud game server/client.
+
+**Current state:** Main CI is in `ci-cd.yml` (build, test, lint, security audit), which runs on uat/prod + PRs to uat/prod.
+
+**Risk:** PRs to dev don't trigger the full Ellmud test suite. A dev PR could merge and sit until it's promoted to uat, at which point CI/CD runs.
+
+**Recommendation:**
+- **Add a CI job for dev PRs** that mirrors `ci-cd.yml`'s build/test/lint steps but skips Docker/deploy.
+- OR, document that `dev` is development-only and full CI only happens on uat/prod.
+- If full CI on dev is desired, consider creating `ci-dev.yml`.
+
+---
+
+#### 6. **Health Check Dependency on "uptime" Field** (MEDIUM)
+
+**Issue:** In `ci-cd.yml` (line 244), the health check looks for `"uptime"` in the response to confirm the server is real (not a placeholder).
+
+```bash
+if echo "$RESPONSE" | grep -q '"uptime"'; then
+```
+
+This is fragile: if the API schema changes and "uptime" is renamed, deployments will fail even if the server is healthy.
+
+**Recommendation:**
+- Make the health endpoint check more robust (e.g., check for any JSON response, or check specific status code)
+- OR, document this assumption in the Dockerfile / server startup code.
+
+---
+
+### 🟢 **Minor Issues & Observations**
+
+#### 7. **Action SHA Pinning Inconsistency** (MINOR)
+
+**Issue:** Some workflows pin action SHAs (e.g., `ci-cd.yml` uses `actions/checkout@11bd71901...`), others use `@v4` (e.g., `squad-ci.yml`).
+
+**Risk:** Low, but inconsistent. Pinning is more secure; loose refs are more maintainable.
+
+**Recommendation:**
+- Pick a standard (pinned SHAs or vX tags) and apply consistently across all workflows.
+- Consider a `dependabot` rule to keep actions updated.
+
+---
+
+#### 8. **Error Handling in Promotion Workflows** (MINOR)
+
+**Issue:** `scheduled-uat-promote.yml` uses `git merge ... || true` (line 66) to catch merge failures. If the merge fails, it silently continues and tries to strip paths anyway.
+
+**Risk:** Very low (paths stripping still works), but could mask actual merge conflicts.
+
+**Recommendation:**
+- Check if merge succeeded before proceeding: `git merge ... || { echo "Merge failed"; exit 1; }`
+
+---
+
+#### 9. **Ralph Triage Script Not Bundled** (MINOR)
+
+**Issue:** `squad-heartbeat.yml` looks for `.squad/templates/ralph-triage.js` and warns if not found. But this file isn't committed in the repo; it's downloaded/generated by `squad upgrade`.
+
+**Risk:** If .squad/ isn't initialized, heartbeat workflow will silently skip Ralph (no error).
+
+**Recommendation:**
+- Document that `squad init` or `squad upgrade` must be run to enable Ralph.
+- Consider adding a check: if heartbeat is meant to run, ensure ralph-triage.js exists or fail loudly.
+
+---
+
+#### 10. **COPILOT_ASSIGN_TOKEN Not Documented** (MINOR)
+
+**Issue:** Multiple workflows reference `secrets.COPILOT_ASSIGN_TOKEN` as a fallback for auto-assigning @copilot. If not set, workflows fall back to GITHUB_TOKEN, which may not have sufficient permissions.
+
+**Current state:** Documented in Khelben's history, but not in the workflows themselves.
+
+**Recommendation:**
+- Add a comment in `squad-heartbeat.yml` and `squad-issue-assign.yml`: "COPILOT_ASSIGN_TOKEN: PAT with repo+api permissions; fallback to GITHUB_TOKEN if not set."
+
+---
+
+#### 11. **Orphaned Label Cleanup** (MINOR)
+
+**Issue:** `sync-squad-labels.yml` creates/updates labels but never deletes obsolete ones. If a team member is removed from team.md, their `squad:member` label lingers in the repo.
+
+**Risk:** Low (old labels don't hurt), but can clutter the label list.
+
+**Recommendation:**
+- Document: "Labels are never auto-deleted. Remove obsolete labels manually from GitHub settings."
+- OR, add logic to delete squad:* labels not in current roster.
+
+---
+
+## What's Working Well ✅
+
+1. **Branch-based promotion strategy** (dev → uat → prod) is clear and enforced.
+2. **Path stripping** correctly prevents devops files from leaking into uat/prod.
+3. **Issue triage & assignment automation** (squad-triage + squad-issue-assign) is robust and well-designed.
+4. **Azure Container Apps deployment** with health checks and automatic rollback is production-grade.
+5. **Version consistency validation** (CHANGELOG.md checks in squad-preview and squad-release).
+6. **Concurrency controls** prevent race conditions (mostly).
+7. **Label enforcement** (mutual exclusivity) is clever and prevents mis-labeled issues.
+
+---
+
+## Summary for Team
+
+| Category | Workflows | Status | Notes |
+|----------|-----------|--------|-------|
+| **Core CI/CD** | ci-cd.yml | ✅ Solid | Build/test/lint/deploy; health check + rollback |
+| **Promotions** | scheduled-uat-promote.yml, squad-promote.yml | ⚠️ Working | Minor race condition risk; duplication with release.yml |
+| **Release** | release.yml, squad-release.yml | ⚠️ Duplicate | Consider deprecating release.yml |
+| **Squad Governance** | squad-{ci,triage,assign,label-enforce,heartbeat} | ✅ Solid | Smart triage, auto-routing, @copilot integration |
+| **Docs & Preview** | squad-docs.yml, squad-preview.yml | ✅ Solid | Validation & deployment on preview |
+| **Insider/Release** | squad-insider-release.yml, squad-release.yml | ✅ Solid | Prerelease & stable release management |
+| **Label Sync** | sync-squad-labels.yml | ✅ Solid | Dynamically maintains label set from team.md |
+
+---
+
+## Next Steps (For Khelben)
+
+1. **Resolve release.yml vs squad-release.yml:** Pick the official path.
+2. **Document promotion timing:** Add team calendar or doc noting when scheduled promotes run.
+3. **Add forbidden-path sync check:** Link both promotion workflows or extract to shared script.
+4. **Consider ci-dev.yml:** For full test coverage on dev PRs.
+5. **Strengthen health check:** Make it more robust to API changes.
+
+---
+
+**Report compiled:** 2025-01 | **Audit Depth:** Full | **Confidence:** High
+
+---
+
