@@ -1933,3 +1933,17 @@ Items spawned through admin panel integrate fully with player item interaction c
 - The ANSI parser handles unclosed tags gracefully — wrapping truncated strings (e.g., EquipmentSilhouette 12-char limit) is safe
 - CombinedStashLoadout is an additional item display surface beyond the four called out in the issue spec
 - CombatHUD renders creature names in the target panel and target list — another display surface for ANSI tags
+
+### 2026-07-24: Issue #418 — ANSI Tags for Items and Creatures (PR #429)
+**Status:** ✅ Complete — branch `squad/418-ansi-tags-items-creatures`, PR #429 targeting dev
+
+**Changes:**
+- Wrapped item/creature names in `<AnsiText>` in 6 files: LoadoutTab, StashTab, ItemsList, CreaturesList, ItemsDetail, CreatureDetail
+- Verified 8 components already correctly using AnsiText: RoomOccupants, CombatHUD, StatusPanel, InventoryOverlay, ItemTooltip, CombinedStashLoadout, EquipmentSilhouette, ChatPanel
+- All 420 client tests pass
+
+## Learnings
+
+- LoadoutTab, StashTab currently use hardcoded mock data — will need revisiting when real API integration lands
+- Admin `<option>` elements (e.g., loot table dropdowns in CreatureDetail) cannot render React components — ANSI tags in those contexts would need a plain-text strip function
+- Admin detail page headings (h1) and preview cards are good surfaces for AnsiText too, so admins can preview formatted names

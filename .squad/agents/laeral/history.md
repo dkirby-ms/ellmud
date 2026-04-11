@@ -446,3 +446,12 @@ Designed physical connections for all three faction strongholds to main world zo
 **Status:** Design complete, merged to `.squad/decisions.md` for Bruenor's implementation.
 
 **Orchestration Log:** `.squad/orchestration-log/2026-04-06T19:20:15Z-laeral.md`
+
+### 2025-07-24: Container Item Tier Progression Design
+- Designed 6 new containers filling gaps at refined, masterwork, and anomalous tiers plus a sturdy-tier specialist.
+- **Container system key facts:** `ContainerProperties` interface in `packages/shared/src/items.ts`. Fields: `maxSlots`, `maxWeight?`, `carryBonus?`, `allowedItemTypes?`. Omitting `maxWeight` means no weight limit. Container nesting is blocked in `addItemToContainer()`.
+- **Existing containers:** Tattered Satchel (scrap), Expedition Pack (common), Apothecary's Pouch (sturdy/consumable-only).
+- **New containers designed:** Munitions Wrap (sturdy, weapon-only), Ironbound Coffer (refined, general), Salvager's Haversack (refined, material-only), Warden's Lockbox (masterwork, general), Fleshknit Satchel (masterwork, consumable+key), Hollow of the Forgotten (anomalous, no weight limit, 0 weight, +25 carry bonus).
+- **Design principles:** Weight trade-offs prevent strict upgrades at each tier; specialist containers reward build commitment; ANSI color tags in names signal rarity; anomalous tier is aspirational (drop weight 1).
+- **ItemType spelling:** Code uses `'armour'` (British), not `'armor'`. Registry constants use `UPPER_SNAKE_CASE`.
+- **Key file paths:** Container definitions in `packages/server/src/items/registry.ts`. Container interface in `packages/shared/src/items.ts`. Design doc at `.squad/decisions/inbox/laeral-container-designs.md`.

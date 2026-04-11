@@ -140,3 +140,17 @@
 - **Dry run version preview:** Bash arithmetic for version calculation improves UX
 
 **Impact:** Eliminates manual version management, ensures every UAT build has unique version, simplifies release process, reduces risk of version conflicts.
+
+---
+
+## Workflow Audit Fixes — Low Priority Items (2025-01, PR #428)
+
+**Status:** ✅ PR Created
+
+**Changes:**
+1. **Action ref standardization:** All workflows now use tag references (`@v4`, `@v2`, `@v7`, `@v3`) — no more SHA-pinned refs. This is the team standard going forward.
+2. **Merge error handling:** Promote workflows (`squad-promote.yml`, `scheduled-uat-promote.yml`) now properly distinguish "nothing to merge" from real merge failures instead of swallowing all errors with `|| true`.
+
+**Learnings:**
+- **Action ref convention is tags, not SHAs:** Team decided against SHA pinning for simplicity. All action refs use major version tags (e.g., `@v4`).
+- **Merge error pattern:** Capture exit code with `|| MERGE_EXIT=$?`, then check `git diff --cached --quiet && git diff --quiet` to distinguish "trees identical" from real failures. Always `git merge --abort` in error path.
