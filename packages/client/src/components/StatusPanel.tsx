@@ -8,7 +8,7 @@
  */
 
 import React, { useState, type RefObject } from "react";
-import { Sword } from "lucide-react";
+import { Sword, Bug } from "lucide-react";
 import CompassControl from "./CompassControl.js";
 import { MinimapWidget, type MinimapWidgetProps } from "./map/MinimapWidget.js";
 import { EquipmentSilhouette } from "./EquipmentSilhouette.js";
@@ -233,16 +233,27 @@ export function StatusPanel({
       </div>
 
       {/* Version indicator */}
-      <div className="mt-auto px-4 py-2 text-right border-t border-border-muted">
+      <div className="mt-auto px-4 py-2 flex items-center justify-end gap-2 border-t border-border-muted">
         <span
-          className="text-[10px] font-mono opacity-30 hover:opacity-70 transition-opacity cursor-default select-none"
-          style={{ color: 'var(--color-text-disabled, #555)' }}
+          className="text-[10px] font-mono opacity-50 hover:opacity-80 transition-opacity cursor-default select-none"
+          style={{ color: 'var(--color-text-secondary, #888)' }}
           title={`v${version.version} — Built: ${version.buildTime}`}
           aria-label={`Version ${version.version}, built ${version.buildTime}`}
           tabIndex={0}
         >
           v{version.version}
         </span>
+        <a
+          href="https://github.com/dkirby-ms/ellmud/issues/new"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="opacity-40 hover:opacity-80 transition-opacity"
+          style={{ color: 'var(--color-text-secondary, #888)' }}
+          title="Report an issue"
+          aria-label="Report an issue on GitHub"
+        >
+          <Bug className="w-3 h-3" />
+        </a>
       </div>
     </div>
   );

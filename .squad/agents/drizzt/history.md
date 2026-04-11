@@ -3721,3 +3721,4 @@ The client-side isSpeedwalk() regex in packages/client/src/utils/speedwalk.ts ma
 - sendLoadoutAndStashUpdate is async (stash/loadout use DB); sendInventoryUpdate is synchronous (inventory is in-memory Map)
 - Size comparison (player.inventory.size !== prevInventorySize) is a clean heuristic for detecting inventory mutations -- avoids hardcoding verb lists
 - Shared package must be rebuilt (tsc -p packages/shared/tsconfig.json) before server/client can see new exports
+- PR #407 merge conflict resolution (2026-07-24): Only `.squad/decisions/decisions.md` conflicted when merging dev into squad/402-illumination-v1. Code files (ZoneRoom.ts, shared/index.ts) auto-merged cleanly — illumination fields and INVENTORY_UPDATE wiring touched different areas. decisions.md resolved by keeping all content from both sides (append-only union strategy). Lint passed with 0 errors.

@@ -1906,6 +1906,14 @@ Items spawned through admin panel integrate fully with player item interaction c
 - **Rebuild required:** Had to rebuild `@ellmud/shared` package so the client could see the updated `PlayerStateMessage.posture` type.
 - **Verification:** tsc clean, 420/420 tests pass, lint clean (4 pre-existing warnings in unrelated files).
 
+### Version Indicator & Issue Link
+- **Status:** Complete
+- **File:** `packages/client/src/components/StatusPanel.tsx`
+- **Changes:** Brightened version number (opacity 30 to 50, color text-disabled to text-secondary), added small Bug icon link to GitHub issues page next to version
+- **Pattern:** Version indicator lives in StatusPanel footer; uses useVersion() hook; lucide-react icons available (Bug, Sword, etc.)
+- **Issue link:** Opens in new tab with target blank and rel noopener noreferrer
+
 ## Learnings
 - When merging branches that touch shared types, always rebuild the shared package (`npm run build --workspace=packages/shared`) before running tsc on downstream packages.
 - Component extraction PRs are resilient to merge conflicts — the conflict was only in the consumption site (ZoneExploration.tsx), not in the extracted component itself.
+- Version indicator is in StatusPanel footer (StatusPanel.tsx lines 235+). Uses useVersion() hook from hooks/useVersion.ts. Good place for small utility links.
