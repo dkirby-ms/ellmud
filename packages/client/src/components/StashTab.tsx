@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useDrag, useDrop, DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { Package, Weight, RotateCw, Trash2 } from "lucide-react";
+import AnsiText from "./AnsiText.js";
 
 interface GridItem {
   id: string;
@@ -198,7 +199,7 @@ function InventoryItem({ item, onMove: _onMove, onRotate, onDelete }: InventoryI
             fontSize: width === 1 ? "0.65rem" : "0.75rem",
           }}
         >
-          {item.name}
+          <AnsiText text={item.name} />
         </div>
 
         {/* Weight indicator */}
@@ -413,7 +414,7 @@ function StashTabContent() {
                       color: getTierColor(selectedItem.tier),
                     }}
                   >
-                    {selectedItem.name}
+                    <AnsiText text={selectedItem.name} />
                   </h4>
                   <div className="flex items-center gap-2 mb-2">
                     <span
