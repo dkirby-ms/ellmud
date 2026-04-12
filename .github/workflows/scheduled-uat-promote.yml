@@ -109,6 +109,19 @@ jobs:
             echo "ℹ️ Nothing to merge — uat is already up to date after stripping"
           fi
 
+      - name: Notify Discord of UAT promotion
+        if: steps.check.outputs.commits_ahead != '0'
+        continue-on-error: true
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_TESTING_ALERTS }}
+        run: |
+          COMMITS="${{ steps.check.outputs.commits_ahead }}"
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+          curl -s -o /dev/null -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\":\"🚀 **UAT Release Promoted from dev**\nPromoted **${COMMITS}** commit(s) to uat.\n[View uat branch](${REPO_URL}/tree/uat) · [View Actions](${REPO_URL}/actions)\"}" \
+            "$DISCORD_WEBHOOK_URL"
+
       - name: Trigger CI/CD on uat
         if: steps.check.outputs.commits_ahead != '0'
         env:
