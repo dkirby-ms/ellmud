@@ -4066,3 +4066,25 @@ Fixed 15 open CodeQL alerts across 3 categories:
 - **Loop-based sanitization** addresses incomplete multi-character sanitization alerts definitively. Even though /[<>]/g removes all angle brackets in one pass, CodeQL flags it unless the replacement is provably idempotent (loop until stable).
 - **Email regex ReDoS**: Any character class that includes dot followed by a literal dot creates an ambiguity causing polynomial backtracking. Fix by making dot separators explicit.
 - **Key file paths**: packages/server/src/commands/handlers/sanitize.ts (shared sanitization), packages/server/src/middleware/rate-limit.ts (rate limit factory).
+
+
+---
+
+## Session: CodeQL Security Fixes — Orchestration Log Filed (2026-04-12T14:00Z)
+
+**Status:** ✅ COMPLETE
+
+Scribe recorded orchestration logs for CodeQL security fixes work:
+
+### Deliverables Filed
+1. **Orchestration Log:** `.squad/orchestration-log/2026-04-12T14-00-drizzt-codeql.md`
+   - Summarizes all changes (sanitize.ts, email regex, global rateLimit)
+   - Documents team impact and decision references
+   
+2. **Session Log:** `.squad/log/2026-04-12T14-00-codeql-fixes.md`
+   - Brief summary of parallel Drizzt + Minsc work
+   
+3. **Decisions Merged:** CodeQL decisions added to `.squad/decisions/decisions.md`
+   - Inbox files deleted (drizzt-codeql-fixes.md, minsc-codeql-tests.md)
+
+**Key Reference:** All 15 CodeQL alerts addressed in PR #433. 3471 tests passing.

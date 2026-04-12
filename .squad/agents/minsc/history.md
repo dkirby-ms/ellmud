@@ -2153,3 +2153,26 @@ Created 3 new security test files (60 tests total, all passing):
 - packages/server/src/__tests__/security-sanitization.test.ts
 - packages/server/src/__tests__/security-redos.test.ts
 - packages/server/src/__tests__/security-rate-limiting.test.ts
+
+
+---
+
+## Session: Security Tests for CodeQL Fixes — Orchestration Log Filed (2026-04-12T14:00Z)
+
+**Status:** ✅ COMPLETE
+
+Scribe recorded orchestration logs for security test coverage work:
+
+### Deliverables Filed
+1. **Orchestration Log:** `.squad/orchestration-log/2026-04-12T14-00-minsc-codeql.md`
+   - Summarizes all 60 security tests (sanitization 28, ReDoS 27, rate limiting 5)
+   - Documents test strategy and key findings
+   - Lists team impact for future PR reviews
+   
+2. **Session Log:** `.squad/log/2026-04-12T14-00-codeql-fixes.md`
+   - Brief summary of parallel Drizzt + Minsc work
+   
+3. **Decisions Merged:** CodeQL security test decision added to `.squad/decisions/decisions.md`
+   - Inbox file deleted (minsc-codeql-tests.md)
+
+**Key Reference:** 60 tests passing against Drizzt's fixes. Zero regressions across 3471 total tests.
