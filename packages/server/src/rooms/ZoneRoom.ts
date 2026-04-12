@@ -46,6 +46,7 @@ import { createTestRoomGraph, type RoomGraph, type Direction } from '../generato
 import { generateZoneGraph } from '../generator/generator.js';
 import { adaptRoomGraph } from '../generator/graph-adapter.js';
 import { handleLook } from '../commands/handlers/look.js';
+import { handleToggleAsync } from '../commands/handlers/toggle.js';
 import {
   CombatSystem,
   type TickResult,
@@ -1091,6 +1092,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Async command: `who` — requires cross-room matchMaker query + flag loading
     if (verb === 'who') {
       void this.handleWhoCommand(client, playerId, player);
+      return;
+    }
+
+    // Async command: `toggle` — requires DB read/write to report new state (#432)
+    if (verb === 'toggle') {
+      void this.handleToggleCommand(client, player, args);
       return;
     }
 
@@ -3655,7 +3662,24 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
   }
 
-  // ─── Character Flags (Issue #365) ────────────────────────────────────────
+  /**
+   * Async handler for the `toggle` command (#432).
+   * Awaits DB read/write so the response reports the actual new state.
+   */
+  private async handleToggleCommand(client: Client, player: PlayerState, args: string[]): Promise<void> {
+    try {
+      const ctx = this.buildCommandContext(player, args);
+      const result = await handleToggleAsync(ctx);
+      this.deliverResult(client, result);
+    } catch (err) {
+      this.log(`Failed to handle toggle command: ${err}`);
+      this.sendNarrate(client, {
+        text: 'Toggle failed. Please try again.',
+        type: 'system',
+        timestamp: Date.now(),
+      });
+    }
+  }
 
   /**
    * Handle TOGGLE_FLAG message from the Settings UI.

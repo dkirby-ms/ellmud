@@ -2,7 +2,7 @@
  * toggle <option> — Toggle a player setting on or off.
  *
  * Usage:
- *   toggle         — Show available toggles
+ *   toggle         — Show available toggles and current states
  *   toggle follow  — Toggle whether others can follow you
  *
  * Extensible: new toggles can be added to TOGGLE_MAP below.
@@ -22,14 +22,22 @@ const TOGGLE_MAP: Record<string, { flagName: CharacterFlagName; label: string; e
   },
 };
 
-export function handleToggle(ctx: CommandContext): CommandResult {
+/**
+ * Async toggle handler — awaits DB read/write so the response reflects
+ * the actual new state. Called from ZoneRoom like the `who` command.
+ */
+export async function handleToggleAsync(ctx: CommandContext): Promise<CommandResult> {
   const toggleName = ctx.args[0]?.toLowerCase();
+  const characterId = ctx.player.sessionId;
+  const repo = getCharacterFlagsRepository();
 
-  // No args → show available toggles
+  // No args → show available toggles with current state
   if (!toggleName) {
+    const flags = await repo.getFlags(characterId);
     const lines: string[] = ['Available toggles:'];
     for (const [name, def] of Object.entries(TOGGLE_MAP)) {
-      lines.push(`  ${name} — ${def.label}`);
+      const state = flags[def.flagName] ? 'ON' : 'OFF';
+      lines.push(`  ${name} — ${def.label} [${state}]`);
     }
     lines.push('');
     lines.push('Use "toggle <name>" to flip a setting (e.g., "toggle follow").');
@@ -49,25 +57,13 @@ export function handleToggle(ctx: CommandContext): CommandResult {
     };
   }
 
-  const characterId = ctx.player.sessionId;
-  const repo = getCharacterFlagsRepository();
+  const current = await repo.getFlags(characterId);
+  const newValue = !current[def.flagName];
+  await repo.setFlag(characterId, def.flagName, newValue);
 
-  // Fire-and-forget async toggle (same pattern as /flag)
-  void (async () => {
-    try {
-      const current = await repo.getFlags(characterId);
-      const newValue = !current[def.flagName];
-      await repo.setFlag(characterId, def.flagName, newValue);
-    } catch (err) {
-      console.error(`[toggle] Failed to toggle ${def.flagName} for ${characterId}:`, err);
-    }
-  })();
-
-  // Optimistic feedback — we don't know exact state synchronously, but we
-  // tell the player it was toggled. The actual effect is immediate on next check.
   return {
     narrations: [{
-      text: `${def.label} toggled. Use "toggle ${toggleName}" again to reverse.`,
+      text: newValue ? def.enabledMsg : def.disabledMsg,
       type: 'system',
     }],
   };
