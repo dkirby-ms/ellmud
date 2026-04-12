@@ -1,3 +1,10 @@
+# [0.2.0-dev.8](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.7...v0.2.0-dev.8) (2026-04-12)
+
+
+### Bug Fixes
+
+* handle [reset] ANSI tag and simplify squad-promote workflow ([7fa7802](https://github.com/dkirby-ms/ellmud/commit/7fa780271353d07773a110a6f83a1b78cbbd1e60))
+
 # [0.2.0-dev.7](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.6...v0.2.0-dev.7) (2026-04-12)
 
 
@@ -69,7 +76,7 @@
 * **ci:** standardize action refs and replace merge error swallowing ([921359c](https://github.com/dkirby-ms/ellmud/commit/921359cbea65769ba21d90db3c92c17496f43ef0))
 * limit GitHub Releases to production branch only ([2089600](https://github.com/dkirby-ms/ellmud/commit/20896006a174bf0e81df37e1318302b48b02b091))
 
-# 1.0.0-dev.1 (2026-04-11)
+# 0.1.0-dev.1 (2026-04-11)
 
 
 ### Bug Fixes
