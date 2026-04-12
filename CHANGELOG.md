@@ -1,3 +1,10 @@
+# [0.2.0-dev.14](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.13...v0.2.0-dev.14) (2026-04-12)
+
+
+### Features
+
+* rename loot_containers → starting_items, remove collapse lifecycle, drop room_definitions ([#438](https://github.com/dkirby-ms/ellmud/issues/438)) ([#439](https://github.com/dkirby-ms/ellmud/issues/439)) ([b6e2782](https://github.com/dkirby-ms/ellmud/commit/b6e278286ae021e091803d6601a3df31440a2af5))
+
 # [0.2.0-dev.13](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.12...v0.2.0-dev.13) (2026-04-12)
 
 
