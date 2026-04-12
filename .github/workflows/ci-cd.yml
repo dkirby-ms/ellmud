@@ -76,7 +76,7 @@ jobs:
         run: npm run lint
 
       - name: Run tests
-        run: npm run test
+        run: npm run test:ci
 
   # ─── Docker Build & Push to ACR ───────────────────────────────────────────────
   # Runs on push to uat/prod only. Uses GitHub environments for per-env secrets.
