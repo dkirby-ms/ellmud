@@ -54,7 +54,7 @@ async function seedZone(
     description: 'A warm, safe room.',
     type: 'entry',
     properties: [],
-    lootContainers: [],
+    startingItems: [],
     hazards: [],
     npcs: [],
     features: [],
@@ -67,7 +67,7 @@ async function seedZone(
     description: 'A dim hallway.',
     type: 'corridor',
     properties: [],
-    lootContainers: [],
+    startingItems: [],
     hazards: [],
     npcs: [],
     features: [],
@@ -196,7 +196,7 @@ describe('B1 — AmbientSystem Gating', () => {
   });
 
   it('procedural mode (no zone) does NOT create AmbientSystem', async () => {
-    const room = await colyseus.createRoom('zone', { useTestGraph: true, collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true });
     const { client } = await connectWithPlayer(room, 'ambient-zone-player');
 
     expect(internals(room).isZone).toBe(false);
@@ -217,7 +217,7 @@ describe('B1 — AmbientSystem Gating', () => {
   });
 
   it('procedural mode does NOT send ambient narration on join', async () => {
-    const room = await colyseus.createRoom('zone', { useTestGraph: true, collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true });
     const { client, collector } = await connectWithPlayer(room, 'no-ambient-player');
 
     const ambientMessages = collector.narrate.filter((m) => m.type === 'ambient');
@@ -284,7 +284,7 @@ describe('B2 — Zone-Mode Announcements', () => {
   });
 
   it('procedural mode does NOT send arrival announcements', async () => {
-    const room = await colyseus.createRoom('zone', { useTestGraph: true, collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true });
 
     const { client: client1, collector: collector1 } = await connectWithPlayer(
       room,
@@ -361,7 +361,7 @@ describe('B4 — PendingEnter Guard', () => {
   });
 
   it.todo('pendingEnter starts empty for new room', async () => {
-    const room = await colyseus.createRoom('zone', { useTestGraph: true, collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true });
     const roomInternals = internals(room);
 
     expect(roomInternals.pendingEnter.size).toBe(0);
@@ -392,7 +392,7 @@ describe('B6 — Zone Reconnection Grace', () => {
   });
 
   it('procedural mode uses default reconnection (not zone-specific)', async () => {
-    const room = await colyseus.createRoom('zone', { useTestGraph: true, collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true });
     const { client } = await connectWithPlayer(room, 'zone-recon-check');
 
     // Procedural mode: isZone=false, so reconnection grace falls through to config default (30s)
@@ -451,7 +451,7 @@ describe('Zone Metadata Basics', () => {
   });
 
   it('procedural mode has no zone metadata', async () => {
-    const room = await colyseus.createRoom('zone', { useTestGraph: true, collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', { useTestGraph: true });
     const { client } = await connectWithPlayer(room, 'meta-zone-player');
 
     const roomInternals = internals(room);

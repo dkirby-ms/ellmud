@@ -180,9 +180,8 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       },
       onZoneState: (msg: ZoneStateMessage) => {
         if (disposed) return;
-        dispatch({ type: 'SET_ZONE_STATE', state: msg.state, collapseTimer: msg.collapseTimer });
-        const showTimer = msg.collapseTimer && (msg.state === 'active' || msg.state === 'destabilising');
-        addMessage(`[Zone: ${msg.state}${showTimer ? ` — ${msg.collapseTimer}s remaining` : ''}]`, 'system');
+        dispatch({ type: 'SET_ZONE_STATE', state: msg.state });
+        addMessage(`[Zone: ${msg.state}]`, 'system');
       },
       onCombatResult: (msg: CombatResultMessage) => {
         if (disposed) return;

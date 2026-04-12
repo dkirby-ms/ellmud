@@ -66,7 +66,7 @@ async function seedZone(
     description: 'A warm, safe room.',
     type: 'entry',
     properties: [],
-    lootContainers: [],
+    startingItems: [],
     hazards: [],
     npcs: [],
     features: [],
@@ -79,7 +79,7 @@ async function seedZone(
     description: 'A dim hallway stretching north.',
     type: 'corridor',
     properties: [],
-    lootContainers: [],
+    startingItems: [],
     hazards: [],
     npcs: [],
     features: [],
@@ -385,7 +385,6 @@ describe('M6 — Exploration works in procedural mode (procedural)', () => {
   it('EXPLORATION_DATA has null zoneSlug for zone rooms', async () => {
     const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
-      collapseTimer: 120,
     });
     const { client, explorationData } = await connectWithExploration(room, 'msg-zone-data');
 
@@ -402,7 +401,6 @@ describe('M6 — Exploration works in procedural mode (procedural)', () => {
   it('EXPLORATION_UPDATE has null zoneSlug after movement in zone', async () => {
     const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
-      collapseTimer: 120,
     });
     const { client, explorationUpdates, explorationData } =
       await connectWithExploration(room, 'msg-zone-update');
@@ -430,7 +428,6 @@ describe('M6 — Exploration works in procedural mode (procedural)', () => {
   it('recordVisit stores null zoneSlug for zone rooms', async () => {
     const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
-      collapseTimer: 120,
     });
     const { client } = await connectWithExploration(room, 'msg-procedural-repo');
 
@@ -457,7 +454,6 @@ describe('M7 — Flee records exploration', () => {
     // Use procedural mode with test graph — creatures spawn in non-entry rooms
     const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
-      collapseTimer: 120,
     });
     const { client, explorationData } =
       await connectWithExploration(room, 'msg-flee-record');

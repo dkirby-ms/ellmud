@@ -85,16 +85,14 @@ describe('Message Type Shapes', () => {
     expect(msg.stability).toBe(0.75);
   });
 
-  it('ZoneStateMessage should accept state and optional collapseTimer', () => {
-    const msg: ZoneStateMessage = { state: 'active', collapseTimer: 600 };
-    expect(msg.state).toBe('active');
-    expect(msg.collapseTimer).toBe(600);
+  it('ZoneStateMessage should accept state', () => {
+    const msg: ZoneStateMessage = { state: 'open' };
+    expect(msg.state).toBe('open');
   });
 
-  it('ZoneStateMessage should work without collapseTimer', () => {
-    const msg: ZoneStateMessage = { state: 'seeding' };
-    expect(msg.state).toBe('seeding');
-    expect(msg.collapseTimer).toBeUndefined();
+  it('ZoneStateMessage state is always open', () => {
+    const msg: ZoneStateMessage = { state: 'open' };
+    expect(msg.state).toBe('open');
   });
 
   it('OverlayMessage should accept overlay state fields', () => {
@@ -132,9 +130,9 @@ describe('Type Enumerations', () => {
     expect(types).toHaveLength(6);
   });
 
-  it('ZoneState should allow all lifecycle states', () => {
-    const states: ZoneState[] = ['seeding', 'open', 'active', 'destabilising', 'collapse'];
-    expect(states).toHaveLength(5);
+  it('ZoneState is always open (MUD-style persistent)', () => {
+    const states: ZoneState[] = ['open'];
+    expect(states).toHaveLength(1);
   });
 
   it('CombatAction should allow all combat actions', () => {

@@ -55,7 +55,7 @@ async function seedZone(
     description: 'A warm, safe room.',
     type: 'entry',
     properties: [],
-    lootContainers: [],
+    startingItems: [],
     hazards: [],
     npcs: [],
     features: [],
@@ -68,7 +68,7 @@ async function seedZone(
     description: 'A dim hallway.',
     type: 'corridor',
     properties: [],
-    lootContainers: [],
+    startingItems: [],
     hazards: [],
     npcs: [],
     features: [],
@@ -161,7 +161,6 @@ describe('C1 — ROOM_SWITCH targets use zone:the-refuge', () => {
     // messages sent DON'T use the old 'refuge' target
     const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
-      collapseTimer: 120,
     });
     const { client, collector } = await connectWithPlayer(room, 'route-no-bare-refuge');
 
@@ -236,7 +235,6 @@ describe('C3 — Procedural room name remains "zone"', () => {
   it('procedural zone uses room type "zone" (no zone: prefix)', async () => {
     const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
-      collapseTimer: 120,
     });
     const { client, collector } = await connectWithPlayer(room, 'route-zone-player');
 
@@ -275,7 +273,6 @@ describe('C3 — Procedural room name remains "zone"', () => {
     });
     const proceduralRoom = await colyseus.createRoom('zone', {
       useTestGraph: true,
-      collapseTimer: 120,
     });
 
     const { client: zoneClient } = await connectWithPlayer(zoneRoom, 'coexist-zone-player');

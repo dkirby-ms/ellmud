@@ -2,7 +2,7 @@
  * Adapts the shared RoomGraph (from the procedural generator) to the local
  * Room/RoomGraph types used by command handlers and PlayerState.
  *
- * The generator produces LootContainer[] per room; this adapter resolves
+ * The generator produces StartingItem[] per room; this adapter resolves
  * container item IDs to full Item objects via the item registry.
  */
 
@@ -30,7 +30,7 @@ export function adaptRoomGraph(shared: SharedRoomGraph): RoomGraph {
 
 /**
  * Convert a single shared Room to the local Room format.
- * Resolves LootContainer item IDs → Item objects.
+ * Resolves StartingItem item IDs → Item objects.
  */
 function adaptRoom(shared: SharedRoom): Room {
   const items: Item[] = [];

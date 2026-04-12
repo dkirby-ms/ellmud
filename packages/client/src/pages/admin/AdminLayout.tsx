@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import {
   listEntities, fetchNotifications, setAdminToken, getAdminToken, clearAdminToken,
-  validateAdminToken, ADMIN_AUTH_FAILURE_EVENT, isSessionAuth,
+  validateAdminToken, ADMIN_AUTH_FAILURE_EVENT,
   type EntityType, type AdminNotification,
 } from "../../lib/admin-api";
 import { useVersion } from "../../hooks/useVersion";

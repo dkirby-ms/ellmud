@@ -13,8 +13,8 @@
  *   - Next Enter: shouldTreatAsSpeedwalk("ne") → TRUE (false positive)
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, useCallback, useRef } from 'react';
 import { shouldTreatAsSpeedwalk, parseSpeedwalk } from '../utils/speedwalk.js';
