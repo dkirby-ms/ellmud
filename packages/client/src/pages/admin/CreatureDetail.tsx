@@ -5,7 +5,7 @@ import { getCreature, createCreature, updateCreature, listItems, AdminAPIError, 
 import AnsiPreview from "../../components/admin/AnsiPreview.js";
 import AnsiText from "../../components/AnsiText.js";
 
-type Status = "draft" | "review" | "published" | "deprecated";
+type Status = "draft" | "published" | "deprecated";
 
 interface LootEntry {
   itemId: string;
@@ -39,7 +39,6 @@ interface CreatureFormData {
 const getStatusBadge = (status: Status) => {
   const badges = {
     draft: { emoji: "📝", label: "Draft", color: "#4A4B55" },
-    review: { emoji: "⏳", label: "In Review", color: "#B8860B" },
     published: { emoji: "✅", label: "Published", color: "#2D6B4F" },
     deprecated: { emoji: "⛔", label: "Deprecated", color: "#8B2500" },
   };
@@ -175,7 +174,7 @@ export default function CreatureDetail() {
     return errors.length === 0;
   };
 
-  const handleSave = async (submitForReview: boolean) => {
+  const handleSave = async (publish: boolean) => {
     if (!validateForm()) return;
     try {
       setSaving(true);
@@ -189,7 +188,7 @@ export default function CreatureDetail() {
           dropWeight: entry.weight,
           weight: entry.weight,
         })),
-        status: submitForReview ? ('review' as Status) : formData.status,
+        status: publish ? ('published' as Status) : formData.status,
       };
       if (isNew) {
         await createCreature(payload);
@@ -201,7 +200,7 @@ export default function CreatureDetail() {
       if (err instanceof AdminAPIError) {
         setError(err.message);
       } else {
-        setError(submitForReview ? 'Failed to submit for review' : 'Failed to save creature');
+        setError(publish ? 'Failed to publish' : 'Failed to save creature');
       }
       console.error('Failed to save creature:', err);
     } finally {
@@ -300,7 +299,7 @@ export default function CreatureDetail() {
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
             <Send className="w-4 h-4" />
-            {saving ? 'Submitting...' : 'Submit Review'}
+            {saving ? 'Publishing...' : 'Publish'}
           </button>
         </div>
       </div>
