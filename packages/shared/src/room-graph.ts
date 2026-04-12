@@ -67,13 +67,16 @@ export interface HazardPlaceholder {
   severity: number; // 0–1
 }
 
-// ─── Loot Container ─────────────────────────────────────────────────────────
+// ─── Starting Item ──────────────────────────────────────────────────────────
 
-export interface LootContainer {
+export interface StartingItem {
   id: string;
   type: 'crate' | 'chest' | 'altar' | 'corpse';
   items: string[]; // item IDs (populated at generation time)
 }
+
+/** @deprecated Use StartingItem instead. */
+export type LootContainer = StartingItem;
 
 // ─── Room Properties (GDD §12 — Sound Propagation Modifiers) ─────────────────
 
@@ -106,7 +109,7 @@ export interface Room {
   description: string;
   type: RoomType;
   exits: Map<Direction, string>; // direction → roomId
-  items: LootContainer[];
+  items: StartingItem[];
   hazards: HazardPlaceholder[];
   /** Optional properties affecting sound propagation (GDD §12). */
   properties?: RoomProperty[];
@@ -134,7 +137,7 @@ export interface SerializedRoom {
   description: string;
   type: RoomType;
   exits: Record<string, string>;
-  items: LootContainer[];
+  items: StartingItem[];
   hazards: HazardPlaceholder[];
   properties?: RoomProperty[];
   features?: RoomFeature[];

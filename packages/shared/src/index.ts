@@ -82,7 +82,7 @@ export interface NarrateMessage {
 export interface RoomHeaderMessage {
   roomName: string;
   exits: string[];
-  stability: number; // 0–1, zone stability
+  stability: number; // 0–1, zone stability (always 1.0, kept for client compat)
   /** Zone name, present when the room is part of a hand-crafted zone. */
   zoneName?: string;
   /** Room type (entry, boss, etc.), present for zone rooms. */
@@ -100,18 +100,12 @@ export interface ZoneTransferMessage {
 /** Server → Client: Zone lifecycle state change notification. */
 export interface ZoneStateMessage {
   state: ZoneState;
-  collapseTimer?: number; // seconds remaining, if applicable
 }
 
 // ─── Zone Lifecycle ─────────────────────────────────────────────────────────
 
-/** Zone lifecycle states (GDD §2.3). */
-export type ZoneState =
-  | 'seeding'        // Room graph generation, creature spawning
-  | 'open'           // Entry points active, players may join
-  | 'active'         // Full exploration, combat
-  | 'destabilising'  // Final 25% — hazards intensify
-  | 'collapse';      // Zone destroyed, items lost
+/** Zone lifecycle states. Zones are persistent MUD-style: always 'open'. */
+export type ZoneState = 'open';
 
 // ─── Combat Actions (GDD §6.2) ──────────────────────────────────────────────
 
@@ -428,6 +422,7 @@ export type {
   FeatureRoomType,
   RoomProperty,
   HazardPlaceholder,
+  StartingItem,
   LootContainer,
   RoomFeature,
   Room,

@@ -99,7 +99,7 @@ describe('ZoneRoom', () => {
     await client.leave();
   });
 
-  it('should progress through lifecycle states', async () => {
+  it('should be in open state immediately (no lifecycle progression)', async () => {
     const room = await colyseus.createRoom('zone', {});
     const client = await colyseus.connectTo(room);
 
@@ -108,15 +108,15 @@ describe('ZoneRoom', () => {
       stateChanges.push(data);
     });
 
-    // Wait for seeding → open → active transitions
-    await new Promise((resolve) => setTimeout(resolve, 8000));
+    // Wait briefly — zone should already be open
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    // Should have received state change notifications
-    expect(stateChanges.length).toBeGreaterThanOrEqual(2);
+    // Should have received at least one state notification
+    expect(stateChanges.length).toBeGreaterThanOrEqual(1);
 
+    // All states should be 'open'
     const states = stateChanges.map((s) => s.state);
-    expect(states).toContain('seeding');
-    expect(states).toContain('open');
+    expect(states.every((s) => s === 'open')).toBe(true);
 
     await client.leave();
   });

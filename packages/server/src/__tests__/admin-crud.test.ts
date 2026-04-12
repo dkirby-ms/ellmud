@@ -1,8 +1,8 @@
 /**
  * Integration tests for the Admin Content CRUD API (Issue #139).
  *
- * Tests the full CRUD lifecycle for all 9 content entity types:
- *   items, creatures, modifiers, skills, loot-tables, factions, rooms, narrative
+ * Tests the full CRUD lifecycle for all content entity types:
+ *   items, creatures, modifiers, skills, loot-tables, factions, narrative
  *
  * Written TDD-style — these tests define the contract and will fail until
  * Drizzt lands the implementation on this branch.
@@ -55,10 +55,6 @@ const ENTITY_FIXTURES: Record<string, { create: Record<string, unknown>; update:
     create: { name: 'Ironhearth', factionId: 'ironhearth', description: 'Stalwart defenders of the Refuge' },
     update: { description: 'Battle-hardened defenders of the last Refuge' },
   },
-  rooms: {
-    create: { name: 'Flooded Antechamber', type: 'corridor', description: 'A half-submerged passage', exits: {} },
-    update: { description: 'A fully submerged passage', exits: { north: 'room-2' } },
-  },
   narrative: {
     create: { name: 'Crypt Entry', type: 'room_description', template: 'You step into the crypt...', tags: ['entry', 'atmospheric'] },
     update: { template: 'You cautiously enter the crypt...', tags: ['entry', 'atmospheric', 'revised'] },
@@ -66,7 +62,7 @@ const ENTITY_FIXTURES: Record<string, { create: Record<string, unknown>; update:
 };
 
 /**
- * All 8 entity type slugs used in URL paths.
+ * All 7 entity type slugs used in URL paths.
  */
 const ENTITY_TYPES = Object.keys(ENTITY_FIXTURES);
 

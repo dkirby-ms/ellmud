@@ -1,5 +1,5 @@
 /**
- * Content store initialization — creates all 8 content stores.
+ * Content store initialization — creates all 7 content stores.
  *
  * When usePg=true (DATABASE_URL set), every entity type routes to a
  * dedicated relational store backed by its own table:
@@ -10,8 +10,8 @@
  *   factions    → PgFactionDefinitionsStore      (migration 004+025)
  *   skills      → PgSkillDefinitionsStore        (migration 026)
  *   loot-tables → PgLootTableDefinitionsStore    (migration 027)
- *   rooms       → PgRoomDefinitionsStore         (migration 028)
  *
+ * The room_definitions table was dropped in migration 016.
  * The legacy content_definitions JSONB table is dropped in migration 029.
  *
  * When usePg=false (dev mode), returns in-memory ContentStore instances
@@ -33,7 +33,7 @@ import { PgCreatureDefinitionsStore } from './PgCreatureDefinitionsStore.js';
 import { PgFactionDefinitionsStore } from './PgFactionDefinitionsStore.js';
 import { PgSkillDefinitionsStore } from './PgSkillDefinitionsStore.js';
 import { PgLootTableDefinitionsStore } from './PgLootTableDefinitionsStore.js';
-import { PgRoomDefinitionsStore } from './PgRoomDefinitionsStore.js';
+
 import { DROWNED_REVENANT } from '../../creatures/templates/drowned-revenant.js';
 import { getContentRegistry } from '../../content/index.js';
 
@@ -54,7 +54,6 @@ function initializePgStores(): Map<ContentEntityType, IContentStore<ContentEntit
   stores.set('factions', new PgFactionDefinitionsStore());
   stores.set('skills', new PgSkillDefinitionsStore());
   stores.set('loot-tables', new PgLootTableDefinitionsStore());
-  stores.set('rooms', new PgRoomDefinitionsStore());
   return stores;
 }
 
@@ -103,9 +102,6 @@ function initializeInMemoryStores(): Map<ContentEntityType, IContentStore<Conten
 
   // ─── Loot Tables — start empty ────────────────────────────────────
   stores.set('loot-tables', new ContentStore('loot-tables'));
-
-  // ─── Room Templates — start empty ─────────────────────────────────
-  stores.set('rooms', new ContentStore('rooms'));
 
   // ─── Narrative Templates — start empty ────────────────────────────
   stores.set('narrative', new ContentStore('narrative'));

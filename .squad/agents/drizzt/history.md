@@ -4095,3 +4095,26 @@ Scribe recorded orchestration logs for CodeQL security fixes work:
 - **Key files:** `packages/server/src/commands/handlers/toggle.ts`, `packages/server/src/rooms/ZoneRoom.ts` (handleToggleCommand method near handleWhoCommand)
 - **CommandHandler type is sync** (`(ctx) => CommandResult`). Async commands must be special-cased in ZoneRoom rather than changing the type (too many test call sites depend on sync return).
 - **TOGGLE_MAP** in toggle.ts has `enabledMsg`/`disabledMsg` fields — always use them for response text.
+
+
+---
+
+### Issue #438: Starting Items Rename + Collapse Lifecycle Removal (2026-04-12)
+**Status:** Complete -- committed on branch squad/438-starting-items-no-collapse
+
+**What was done:**
+- Renamed loot_containers to starting_items across DB schema (migration 016), shared types, server code, admin code, and all tests
+- LootContainer to StartingItem with backward-compat alias kept
+- Removed entire collapse lifecycle: seedZone(), handleCollapse(), collapse timer countdown, destabilising transitions
+- ZoneState simplified to just open -- zones are persistent MUD-style
+- repopZone() now only respawns creatures; items persist permanently
+- Deleted resolveZoneRoomItems() and broadcastRepopNarration()
+- Rewrote all repop tests to verify items do NOT respawn
+- 33 files changed, 165 insertions, 519 deletions
+
+## Learnings
+
+- When using sed to remove options from JS object literals, watch for trailing commas after deletion -- they cause syntax errors. Use perl multiline regex for safer cleanup.
+- Shared package must be rebuilt before server type-checking picks up type changes. The server resolves types through build output, not source.
+- The Colyseus ZoneState schema in state.ts tracks server-internal state. Removing fields from it affects serialization -- kept stability (always 1.0) for admin dashboard compat.
+- Test helper functions like seedZone() in test files are DB seeders, not the removed lifecycle method.

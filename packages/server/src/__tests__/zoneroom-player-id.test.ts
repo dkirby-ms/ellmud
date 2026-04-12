@@ -44,7 +44,7 @@ async function connectWithPlayerId(
  * Create a zone room with short collapse timer for faster tests.
  */
 async function createZoneRoom(options: Record<string, unknown> = {}) {
-  return colyseus.createRoom('zone', { collapseTimer: 120, ...options });
+  return colyseus.createRoom('zone', { ...options });
 }
 
 // ─── 1. Basic Identity ───────────────────────────────────────────────────────

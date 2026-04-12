@@ -119,7 +119,7 @@ interface ZoneRoomOptions {
 /**
  * ZoneRoom — A procedurally generated zone instance.
  *
- * Lifecycle: Seeding → Open → Active → Destabilising → Collapse
+ * Lifecycle: Always 'open'. Zones are persistent MUD-style.
  *
  * ARCHITECTURAL CONSTRAINT:
  * - NO Schema state is ever synced to clients.
@@ -127,8 +127,7 @@ interface ZoneRoomOptions {
  * - The client is a dumb terminal receiving narrated prose only.
  */
 export class ZoneRoom extends Room<ZoneRoomOptions> {
-  private lifecycle: SharedZoneState = 'seeding';
-  private collapseTimerSeconds = 1200; // 20 minutes default
+  private lifecycle: SharedZoneState = 'open';
   private openDelayMs = 1000;
   private roomGraph!: RoomGraph;
   private entryRoomIds: string[] = []; // Multiple entry points for player distribution
@@ -249,14 +248,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Set tier-based max players
     this.maxClients = getMaxPlayersForTier(this.zoneTier, getConfig());
 
-    if (typeof options['collapseTimer'] === 'number') {
-      this.collapseTimerSeconds = options['collapseTimer'];
-    }
     if (typeof options['openDelayMs'] === 'number') {
       this.openDelayMs = Math.max(0, options['openDelayMs']);
     }
-
-    this.state.collapseTimer = this.collapseTimerSeconds;
 
     // Derive zoneSlug from room name if not explicitly provided
     const roomNameStr = this.roomName;
@@ -441,14 +435,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.startRepopTimer();
     }
 
-    // Begin lifecycle: zones stay 'open', zones follow seeding→active→collapse flow
-    if (this.isZone) {
-      this.transitionTo('open');
-      this.log('Zone initialized: persistent open state (no collapse)');
-    } else {
-      this.transitionTo('seeding');
-      this.seedZone();
-    }
+    // Begin lifecycle: zones are persistent MUD-style, always 'open'
+    this.transitionTo('open');
+    this.log('Zone initialized: persistent open state');
   }
 
   async onAuth(_client: Client, options: Record<string, unknown>): Promise<unknown> {
@@ -652,7 +641,6 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     this.sendZoneState(client, {
       state: this.lifecycle,
-      collapseTimer: this.state.collapseTimer,
     });
 
     // Send initial player state (HP, stamina, status effects, posture)
@@ -831,59 +819,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private repopZone(): void {
     if (!this.zoneData) return;
 
-    // Re-place loot in rooms that have been looted
-    for (const zoneRoom of this.zoneData.rooms) {
-      const room = this.roomGraph.rooms.get(zoneRoom.slug);
-      if (!room) continue;
-
-      // Resolve defined items from zone room loot containers
-      const definedItems = this.resolveZoneRoomItems(zoneRoom);
-      const currentItemIds = new Set(room.items.map(i => i.id));
-      for (const item of definedItems) {
-        if (!currentItemIds.has(item.id)) {
-          room.items.push(item);
-        }
-      }
-    }
-
-    // Respawn killed creatures
+    // Only creatures respawn on repop. Items placed at zone init persist permanently.
     this.creatureManager.respawnZoneCreatures(this.zoneData);
-
-    // Narrate repop to players in affected rooms
-    // this.broadcastRepopNarration(); // removing for now since it can be spammy and the effect is visible through item respawns and creature respawns
-  }
-
-  /** Convert zone room loot containers into resolved Item objects. */
-  private resolveZoneRoomItems(zoneRoom: ZoneData['rooms'][number]): Item[] {
-    const items: Item[] = [];
-    for (const container of zoneRoom.lootContainers) {
-      for (const itemId of container.items) {
-        const def = getItemDefinition(itemId);
-        if (def) {
-          items.push({
-            id: def.id,
-            name: def.name,
-            weight: def.weight,
-            description: def.description,
-          });
-        }
-      }
-    }
-    return items;
-  }
-
-  /** Send a subtle repop narration to all players currently in the zone. */
-  private broadcastRepopNarration(): void {
-    for (const [pid, _ps] of this.players) {
-      const client = this.findClient(pid);
-      if (client) {
-        this.sendNarrate(client, {
-          text: 'You notice something has changed in the room…',
-          type: 'ambient',
-          timestamp: Date.now(),
-        });
-      }
-    }
   }
 
   // ─── Tick System ─────────────────────────────────────────────────────────
@@ -897,19 +834,6 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Sandbox arena rooms in dev zones still need combat/creature ticking
     const hasSandboxCombat = isNonCombatZone && this.sandboxRoomIds.size > 0;
-
-    // Collapse timer countdown (skip for persistent hub/social/dev zones)
-    if (!isNonCombatZone && (this.lifecycle === 'active' || this.lifecycle === 'destabilising')) {
-      this.state.collapseTimer = Math.max(0, this.state.collapseTimer - 1);
-      this.state.stability = this.state.collapseTimer / this.collapseTimerSeconds;
-
-      // Lifecycle transitions based on stability
-      if (this.state.stability <= 0) {
-        this.transitionTo('collapse');
-      } else if (this.state.stability <= 0.25 && this.lifecycle === 'active') {
-        this.transitionTo('destabilising');
-      }
-    }
 
     // Creature AI tick — evaluate behavior trees, queue combat actions
     if (!isNonCombatZone || hasSandboxCombat) {
@@ -954,31 +878,6 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
   // ─── Zone Lifecycle ─────────────────────────────────────────────────────
 
-  private seedZone(): void {
-    // Placeholder: room graph generation, creature spawning, loot placement
-    this.log('Seeding zone: generating room graph...');
-
-    const scheduleActiveTransition = () => {
-      this.clock.setTimeout(() => {
-        if (this.lifecycle === 'open') {
-          this.transitionTo('active');
-        }
-      }, 5000); // Shortened for dev; production = 300_000 (5 min)
-    };
-
-    if (this.openDelayMs <= 0) {
-      this.transitionTo('open');
-      scheduleActiveTransition();
-      return;
-    }
-
-    // Transition to open after seeding is complete
-    this.clock.setTimeout(() => {
-      this.transitionTo('open');
-      scheduleActiveTransition();
-    }, this.openDelayMs); // Shortened for dev; production = seeding duration
-  }
-
   private transitionTo(newState: SharedZoneState): void {
     const previousState = this.lifecycle;
     this.lifecycle = newState;
@@ -990,35 +889,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Notify all clients of state change
     this.broadcast(MessageTypes.ZONE_STATE, {
       state: newState,
-      collapseTimer: this.state.collapseTimer,
     } satisfies ZoneStateMessage);
-
-    if (newState === 'collapse') {
-      this.handleCollapse();
-    }
-  }
-
-  private handleCollapse(): void {
-    // Clear all traces on zone collapse
-    this.traceSystem.clear();
-
-    // Clear corpses on zone collapse
-    this.corpseSystem.clear();
-
-    // Clear downing state on zone collapse
-    this.downingSystem.clear();
-
-    // Death penalty narration for all remaining players
-    this.broadcast(MessageTypes.NARRATE, {
-      text: 'The dungeon shatters. Reality folds in on itself. Everything goes dark. A creeping weakness takes hold — the death penalty bears down upon you.',
-      type: 'system',
-      timestamp: Date.now(),
-    } satisfies NarrateMessage);
-
-    // Disconnect all clients after a brief delay
-    this.clock.setTimeout(() => {
-      this.disconnect();
-    }, 2000);
   }
 
   private updateMetadata(): void {

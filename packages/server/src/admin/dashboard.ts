@@ -59,11 +59,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     th { text-align: left; color: #888; padding: 6px 8px; border-bottom: 1px solid #333; }
     td { padding: 6px 8px; border-bottom: 1px solid #1a1a1a; }
     .lifecycle { padding: 2px 6px; border-radius: 3px; font-size: 0.8em; font-weight: bold; }
-    .lifecycle.seeding { background: #333; color: #888; }
     .lifecycle.open { background: #1a3a2a; color: #4ecdc4; }
-    .lifecycle.active { background: #1a2a3a; color: #5dade2; }
-    .lifecycle.destabilising { background: #3a2a1a; color: #ff6b35; }
-    .lifecycle.collapse { background: #3a1a1a; color: #ff4444; }
     button {
       background: #333; color: #c0c0c0; border: 1px solid #555;
       padding: 4px 10px; border-radius: 3px; cursor: pointer;
@@ -269,7 +265,6 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
           if (data.name === 'zone') {
             html += '<div class="stat"><span class="label">Lifecycle</span><span class="value"><span class="lifecycle ' + data.lifecycle + '">' + data.lifecycle + '</span></span></div>';
             html += '<div class="stat"><span class="label">Stability</span><span class="value">' + (data.stability * 100).toFixed(1) + '%</span></div>';
-            html += '<div class="stat"><span class="label">Collapse Timer</span><span class="value">' + data.collapseTimer + 's</span></div>';
             html += '<div class="progress-bar"><div class="progress-fill ' +
               (data.stability > 0.5 ? 'good' : data.stability > 0.25 ? 'warn' : 'danger') +
               '" style="width:' + (data.stability * 100) + '%"></div></div>';

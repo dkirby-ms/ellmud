@@ -64,7 +64,7 @@ function roomInput(
     description: `A room called ${slug}.`,
     type: 'corridor',
     properties: [],
-    lootContainers: [],
+    startingItems: [],
     hazards: [],
     npcs: [],
     features: [],
@@ -428,7 +428,7 @@ describe('Zone Adapter Integration (repo → adapter round-trip)', () => {
       roomInput(zone.id, 'vault', {
         type: 'entry',
         properties: ['heavy_door'],
-        lootContainers: [{ id: 'chest-1', type: 'chest', items: ['gold-ring', 'silver-key'] }],
+        startingItems: [{ id: 'chest-1', type: 'chest', items: ['gold-ring', 'silver-key'] }],
         hazards: [{ type: 'poison_gas', severity: 0.8 }],
       }),
     );
@@ -469,52 +469,12 @@ describe('Zone Adapter Integration (repo → adapter round-trip)', () => {
 describe('Repop Logic (specification-based)', () => {
   /**
    * These tests validate repop LOGIC in isolation.
-   * We simulate what a repop cycle should do by comparing
-   * "original zone definition" vs "current room state" and computing a diff.
-   *
-   * The actual repop implementation is being built by Drizzt — these tests
-   * define the expected behavior that implementation must satisfy.
+   * Per #438: items placed at zone init persist permanently — they do NOT
+   * respawn on repop. Only creatures respawn.
    */
 
-  // Repop helper: given the original zone item/NPC state and the current
-  // room graph state, compute what should be restored.
-  function computeRepopDiff(
-    originalRooms: SharedZoneRoomDefinition[],
-    currentGraph: RoomGraph,
-  ): {
-    missingItems: Map<string, string[]>; // roomSlug → item IDs to restore
-    missingNpcs: Map<string, Array<{ creatureId: string; count: number }>>;
-  } {
-    const missingItems = new Map<string, string[]>();
-    const missingNpcs = new Map<string, Array<{ creatureId: string; count: number }>>();
-
-    for (const origRoom of originalRooms) {
-      const currentRoom = currentGraph.rooms.get(origRoom.slug);
-      if (!currentRoom) continue;
-
-      // Items: compare lootContainers
-      const currentItemIds = new Set(currentRoom.items.map((i) => i.id));
-      const missing = origRoom.lootContainers
-        .filter((lc) => !currentItemIds.has(lc.id))
-        .map((lc) => lc.id);
-      if (missing.length > 0) {
-        missingItems.set(origRoom.slug, missing);
-      }
-
-      // NPCs: compare creature counts (simplified — full impl tracks instance IDs)
-      // For this spec test, we track by creatureId presence
-      if (origRoom.npcs.length > 0) {
-        // In the current graph, NPCs would be tracked separately;
-        // for this spec test we assume all NPCs are missing after a "kill"
-        // scenario (the test sets up the "looted" state explicitly).
-      }
-    }
-
-    return { missingItems, missingNpcs };
-  }
-
-  it('repop restores missing items after looting', () => {
-    // Original zone definition has items
+  it('repop does NOT restore items — items persist permanently', () => {
+    // Original zone definition has starting items
     const originalRooms: SharedZoneRoomDefinition[] = [
       {
         id: 'room-vault',
@@ -524,13 +484,13 @@ describe('Repop Logic (specification-based)', () => {
         description: 'A treasure vault.',
         type: 'corridor',
         properties: [],
-        lootContainers: [
+        startingItems: [
           { id: 'chest-1', type: 'chest', items: ['gold-ring'] },
           { id: 'chest-2', type: 'crate', items: ['silver-key'] },
         ],
         hazards: [],
         npcs: [],
-    features: [],
+        features: [],
       } as SharedZoneRoomDefinition,
     ];
 
@@ -556,12 +516,14 @@ describe('Repop Logic (specification-based)', () => {
       tier: 1,
     };
 
-    const diff = computeRepopDiff(originalRooms, currentGraph);
-
-    expect(diff.missingItems.get('vault')).toEqual(['chest-1']);
+    // Items are permanent — looted items stay gone until server restart.
+    // Verify the room graph only has the remaining item, no respawn logic restores chest-1.
+    const room = currentGraph.rooms.get('vault')!;
+    expect(room.items).toHaveLength(1);
+    expect(room.items[0].id).toBe('chest-2');
   });
 
-  it('repop does not duplicate existing items', () => {
+  it('starting items are placed once at zone init and not duplicated', () => {
     const originalRooms: SharedZoneRoomDefinition[] = [
       {
         id: 'room-hall',
@@ -571,63 +533,33 @@ describe('Repop Logic (specification-based)', () => {
         description: 'A grand hall.',
         type: 'corridor',
         properties: [],
-        lootContainers: [{ id: 'altar-1', type: 'altar', items: ['rune-stone'] }],
+        startingItems: [{ id: 'altar-1', type: 'altar', items: ['rune-stone'] }],
         hazards: [],
         npcs: [],
-    features: [],
+        features: [],
       } as SharedZoneRoomDefinition,
     ];
 
-    // Current state: altar-1 is still present — nothing was looted
-    const currentGraph: RoomGraph = {
-      rooms: new Map([
-        [
-          'hall',
-          {
-            id: 'hall',
-            name: 'Hall',
-            description: 'A grand hall.',
-            type: 'corridor',
-            exits: new Map(),
-            items: [{ id: 'altar-1', type: 'altar', items: ['rune-stone'] }],
-            hazards: [],
-          },
-        ],
-      ]),
-      entryRoomIds: ['hall'],
-      bossRoomId: '',
-      seed: 42,
-      tier: 1,
-    };
-
-    const diff = computeRepopDiff(originalRooms, currentGraph);
-
-    // No missing items — repop should not touch existing ones
-    expect(diff.missingItems.has('hall')).toBe(false);
+    // Starting items are placed once — verify the definition shape is correct
+    expect(originalRooms[0].startingItems).toHaveLength(1);
+    expect(originalRooms[0].startingItems[0].id).toBe('altar-1');
   });
 
-  it('repop restores all items when room is fully looted', () => {
-    const originalRooms: SharedZoneRoomDefinition[] = [
-      {
-        id: 'room-trove',
-        zoneId: 'zone-1',
-        slug: 'trove',
-        name: 'Trove',
-        description: 'Hidden trove.',
-        type: 'dead_end',
-        properties: [],
-        lootContainers: [
-          { id: 'chest-a', type: 'chest', items: ['gem'] },
-          { id: 'chest-b', type: 'chest', items: ['potion'] },
-          { id: 'corpse-1', type: 'corpse', items: ['bone-key'] },
-        ],
-        hazards: [],
-        npcs: [],
-    features: [],
-      } as SharedZoneRoomDefinition,
-    ];
+  it('repop interval comes from zone definition (creatures only)', () => {
+    // The repop timer controls creature respawn only, not items
+    const zoneDef = zoneInput({ repopIntervalSeconds: 120 });
+    expect(zoneDef.repopIntervalSeconds).toBe(120);
 
-    // Current state: everything looted
+    const longRepop = zoneInput({ repopIntervalSeconds: 600 });
+    expect(longRepop.repopIntervalSeconds).toBe(600);
+
+    // Hub zones may use 0 to disable repop
+    const hubZone = zoneInput({ category: 'hub', repopIntervalSeconds: 0 });
+    expect(hubZone.repopIntervalSeconds).toBe(0);
+  });
+
+  it('items persist even when room is fully looted — no respawn', () => {
+    // Once items are looted, the room stays empty until server restart
     const currentGraph: RoomGraph = {
       rooms: new Map([
         [
@@ -649,55 +581,8 @@ describe('Repop Logic (specification-based)', () => {
       tier: 1,
     };
 
-    const diff = computeRepopDiff(originalRooms, currentGraph);
-
-    expect(diff.missingItems.get('trove')).toEqual(['chest-a', 'chest-b', 'corpse-1']);
-  });
-
-  it('repop interval comes from zone definition', () => {
-    // This is a specification test: the repop timer should read
-    // repopIntervalSeconds from the zone definition
-    const zoneDef = zoneInput({ repopIntervalSeconds: 120 });
-    expect(zoneDef.repopIntervalSeconds).toBe(120);
-
-    const longRepop = zoneInput({ repopIntervalSeconds: 600 });
-    expect(longRepop.repopIntervalSeconds).toBe(600);
-
-    // Hub zones may use 0 to disable repop
-    const hubZone = zoneInput({ category: 'hub', repopIntervalSeconds: 0 });
-    expect(hubZone.repopIntervalSeconds).toBe(0);
-  });
-
-  it('repop handles room not present in current graph (destroyed room)', () => {
-    const originalRooms: SharedZoneRoomDefinition[] = [
-      {
-        id: 'room-bridge',
-        zoneId: 'zone-1',
-        slug: 'bridge',
-        name: 'Bridge',
-        description: 'A stone bridge.',
-        type: 'corridor',
-        properties: [],
-        lootContainers: [{ id: 'crate-1', type: 'crate', items: ['rope'] }],
-        hazards: [],
-        npcs: [],
-    features: [],
-      } as SharedZoneRoomDefinition,
-    ];
-
-    // Current state: bridge room is gone entirely
-    const currentGraph: RoomGraph = {
-      rooms: new Map(),
-      entryRoomIds: [],
-      bossRoomId: '',
-      seed: 42,
-      tier: 1,
-    };
-
-    const diff = computeRepopDiff(originalRooms, currentGraph);
-
-    // Should not crash, and should not report items for a missing room
-    expect(diff.missingItems.has('bridge')).toBe(false);
+    // After looting, items array stays empty — repop does not restore items
+    expect(currentGraph.rooms.get('trove')!.items).toHaveLength(0);
   });
 });
 

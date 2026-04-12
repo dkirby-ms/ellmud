@@ -51,7 +51,7 @@ function roomInput(
     description: `Room ${slug}`,
     type: 'corridor',
     properties: [],
-    lootContainers: [],
+    startingItems: [],
     hazards: [],
     npcs: [],
     features: [],

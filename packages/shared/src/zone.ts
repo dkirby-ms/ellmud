@@ -8,7 +8,7 @@ import type {
   RoomType,
   Direction,
   RoomProperty,
-  LootContainer,
+  StartingItem,
   HazardPlaceholder,
   RoomFeature,
 } from './room-graph.js';
@@ -47,7 +47,7 @@ export interface ZoneRoomDefinition {
   description: string;
   type: RoomType;
   properties: RoomProperty[];
-  lootContainers: LootContainer[];
+  startingItems: StartingItem[];
   hazards: HazardPlaceholder[];
   npcs: Array<{
     creatureId: string;

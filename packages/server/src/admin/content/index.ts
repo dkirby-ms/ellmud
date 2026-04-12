@@ -13,6 +13,5 @@ export type {
   SkillDefinition,
   LootTableDefinition,
   FactionDefinition,
-  RoomTemplateDefinition,
   NarrativeTemplateDefinition,
 } from './content-types.js';

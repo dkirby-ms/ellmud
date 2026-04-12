@@ -71,18 +71,6 @@ export interface FactionEventEntry {
   narratives: string[];
 }
 
-// ─── Room Template Definition (admin-designed room templates) ─────────────────
-
-export interface RoomTemplateDefinition extends ContentEntity {
-  id: string;
-  name: string;
-  description: string;
-  type: string;
-  properties: string[];
-  hazards: Array<{ type: string; severity: number }>;
-  lootContainers: Array<{ type: string; itemIds: string[] }>;
-}
-
 // ─── Narrative Template Definition ───────────────────────────────────────────
 
 export interface NarrativeTemplateDefinition extends ContentEntity {
@@ -104,7 +92,6 @@ export const CONTENT_ENTITY_TYPES = [
   'skills',
   'loot-tables',
   'factions',
-  'rooms',
   'narrative',
 ] as const;
 

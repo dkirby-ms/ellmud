@@ -16,7 +16,7 @@ import type {
   Room,
   RoomGraph,
   RoomType,
-  LootContainer,
+  StartingItem,
   HazardPlaceholder,
 } from '@ellmud/shared';
 import { ALL_DIRECTIONS, OPPOSITE_DIRECTION } from '@ellmud/shared';
@@ -422,7 +422,7 @@ function placeLoot(rooms: Room[], rng: PRNG): void {
     if (rng.next() > 0.6) continue;
 
     const entry = rng.pick(LOOT_TABLE);
-    const container: LootContainer = {
+    const container: StartingItem = {
       id: `loot_${room.id}`,
       type: entry.type,
       items: [entry.itemId],

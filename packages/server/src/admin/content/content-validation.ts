@@ -95,17 +95,6 @@ function validateFaction(data: Record<string, unknown>, isUpdate: boolean): stri
   return errors;
 }
 
-// ─── Rooms ───────────────────────────────────────────────────────────────────
-
-function validateRoom(data: Record<string, unknown>, isUpdate: boolean): string[] {
-  const errors: string[] = [];
-  if (!isUpdate) {
-    requireString(data, 'name', errors);
-    requireString(data, 'description', errors);
-  }
-  return errors;
-}
-
 // ─── Narrative ───────────────────────────────────────────────────────────────
 
 function validateNarrative(data: Record<string, unknown>, isUpdate: boolean): string[] {
@@ -126,7 +115,6 @@ const validators: Record<ContentEntityType, Validator> = {
   skills: validateSkill,
   'loot-tables': validateLootTable,
   factions: validateFaction,
-  rooms: validateRoom,
   narrative: validateNarrative,
 };
 

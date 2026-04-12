@@ -938,7 +938,6 @@ function getZoneDetail(room: import('@colyseus/core').Room): AdminZoneDetail {
     zoneId?: string;
     lifecycle?: string;
     stability?: number;
-    collapseTimer?: number;
     tick?: number;
     playerCount?: number;
   };
@@ -1014,8 +1013,7 @@ function getZoneDetail(room: import('@colyseus/core').Room): AdminZoneDetail {
     name: room.roomName,
     clients: room.clients.length,
     lifecycle: state.lifecycle ?? 'unknown',
-    stability: state.stability ?? 0,
-    collapseTimer: state.collapseTimer ?? 0,
+    stability: state.stability ?? 1.0,
     tick: state.tick ?? 0,
     playerCount: state.playerCount ?? 0,
     paused: !room.clock.running,

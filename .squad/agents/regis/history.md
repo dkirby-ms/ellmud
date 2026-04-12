@@ -1972,3 +1972,14 @@ Items spawned through admin panel integrate fully with player item interaction c
   - Empty-state message: "No items carried." when in zone, "No items in stash." in stash room
 - TypeScript build passes. Component properly leverages existing `inZone` prop for context-aware UI.
 - Decision documented in `.squad/decisions.md`: All future text additions to this component must follow the same `inZone` conditional pattern.
+
+### 2026-04-12: Issue #438 — Remove Collapse Timer from Client
+**Status:** ✅ Complete — branch `squad/438-starting-items-no-collapse`, commit 1899488
+
+**Changes:**
+- **store.ts:** Removed `collapseTimer` and `collapseTimerMax` from `AppState`, `initialState`, `SET_ZONE_STATE` action, and `SET_COLLAPSE_TIMER` action + reducer case. Simplified `SET_ZONE_STATE` reducer to just set `zoneState`.
+- **useZoneConnection.ts:** Simplified `onZoneState` handler — no longer passes `collapseTimer` to dispatch, no longer shows timer countdown in system message.
+- **store.test.ts:** Removed 5 tests for collapse timer behavior (SET_ZONE_STATE timer tests + SET_COLLAPSE_TIMER tests). Updated basic SET_ZONE_STATE test to use `'open'` state.
+- **Compass/stability tests:** Left `stability` in test fixtures — still present in shared `RoomHeaderMessage` type.
+- TypeScript build passes clean. All 415 client tests pass.
+- **Context:** Zone lifecycle (Seeding→Open→Active→Destabilising→Collapse) removed server-side; zones are now persistent MUD-style. Drizzt handling shared type changes in parallel.

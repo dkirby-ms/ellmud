@@ -87,7 +87,7 @@ describe('onAuth → onJoin identity handoff (ZoneRoom)', () => {
   it('should use the authenticated playerId (UUID), NOT the sessionId', async () => {
     const { playerId, token } = await registerPlayer('AuthHero');
 
-    const room = await colyseus.createRoom('zone', { collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', {});
     const client = await colyseus.connectTo(room, { token });
     const collector = new MessageCollector(client);
     await wait(500);
@@ -115,7 +115,7 @@ describe('onAuth → onJoin identity handoff (ZoneRoom)', () => {
     // Both tokens should resolve to the same playerId
     expect(login.playerId).toBe(reg.playerId);
 
-    const room = await colyseus.createRoom('zone', { collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', {});
     const client = await colyseus.connectTo(room, { token: login.token });
     await wait(500);
 
@@ -148,7 +148,7 @@ describe('onAuth → onJoin identity handoff (zone ZoneRoom)', () => {
 
 describe('backward compatibility — options.playerId path', () => {
   it('should accept playerId from options (test harness pattern)', async () => {
-    const room = await colyseus.createRoom('zone', { collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', {});
     const client = await colyseus.connectTo(room, { playerId: 'legacy-test-id' });
     await wait(500);
 
@@ -162,7 +162,7 @@ describe('backward compatibility — options.playerId path', () => {
   });
 
   it('should fall back to sessionId when neither auth nor playerId is provided', async () => {
-    const room = await colyseus.createRoom('zone', { collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', {});
     // No token, no playerId — anonymous join
     const client = await colyseus.connectTo(room, {});
     await wait(500);
@@ -182,7 +182,7 @@ describe('playerId resolution priority', () => {
   it('should prefer client.auth.playerId over options.playerId', async () => {
     const { playerId: authUuid, token } = await registerPlayer('PriorityHero');
 
-    const room = await colyseus.createRoom('zone', { collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', {});
     // Pass BOTH token and playerId — auth should win
     const client = await colyseus.connectTo(room, {
       token,
@@ -208,7 +208,7 @@ describe('authenticated multi-player isolation', () => {
     const p1 = await registerPlayer('MultiAuth_A');
     const p2 = await registerPlayer('MultiAuth_B');
 
-    const room = await colyseus.createRoom('zone', { collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', {});
     const c1 = await colyseus.connectTo(room, { token: p1.token });
     const c2 = await colyseus.connectTo(room, { token: p2.token });
     await wait(500);
@@ -237,14 +237,14 @@ describe('auth failure handling', () => {
   it('should reject connection when an invalid token is provided', async () => {
     // An explicitly-provided token MUST be valid. Invalid tokens should not
     // silently degrade to anonymous — the user intended to authenticate.
-    const room = await colyseus.createRoom('zone', { collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', {});
     await expect(
       colyseus.connectTo(room, { token: 'bogus-token-xyz' }),
     ).rejects.toThrow(/expired|invalid/i);
   });
 
   it('should allow anonymous join when NO token is provided (auth optional)', async () => {
-    const room = await colyseus.createRoom('zone', { collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', {});
     // No token at all — falls through to anonymous, then to sessionId
     const client = await colyseus.connectTo(room, {});
     await wait(500);
@@ -269,7 +269,7 @@ describe('full auth pipeline integration', () => {
     expect(login.playerId).toBe(reg.playerId);
 
     // Step 3: Join with login token (simulates client.joinOrCreate('zone', { token }))
-    const room = await colyseus.createRoom('zone', { collapseTimer: 120 });
+    const room = await colyseus.createRoom('zone', {});
     const client = await colyseus.connectTo(room, { token: login.token });
     const collector = new MessageCollector(client);
     await wait(500);
