@@ -4040,3 +4040,29 @@ Key lessons:
 **Impact:** Cleaned up sample import infrastructure. Aligned database initialization with Phase 1 scope. No blocking dependencies for followup work.
 
 **Tests:** All 552 server tests pass. Zero regressions.
+
+
+---
+
+## Session: CodeQL Security Alerts Fix (#419) — PR #433
+
+**Date:** 2026-04-11
+**Branch:** squad/419-codeql-alerts
+**PR:** #433
+
+### What Changed
+
+Fixed 15 open CodeQL alerts across 3 categories:
+
+1. **Sanitization** (js/incomplete-multi-character-sanitization): Extracted packages/server/src/commands/handlers/sanitize.ts shared utility with loop-based sanitization. Previous inline approach in say/emote/whisper was flagged because CodeQL could not prove single-pass safety.
+
+2. **ReDoS** (js/polynomial-redos): Fixed email regex in admin/users/user-routes.ts. Removed dot from repeating domain character class to eliminate overlap with literal dot separator.
+
+3. **Rate Limiting** (js/missing-rate-limiting): Added global rateLimit() in index.ts using express-rate-limit directly (not wrapped). CodeQL could not trace through our createLimiter wrapper to see per-route limiters.
+
+## Learnings
+
+- **CodeQL cannot trace through wrapper functions** for express-rate-limit. The createLimiter factory in middleware/rate-limit.ts produces valid limiters, but CodeQL static analysis does not follow the indirection. A global app.use(rateLimit(...)) using the direct import gives CodeQL the signal it needs.
+- **Loop-based sanitization** addresses incomplete multi-character sanitization alerts definitively. Even though /[<>]/g removes all angle brackets in one pass, CodeQL flags it unless the replacement is provably idempotent (loop until stable).
+- **Email regex ReDoS**: Any character class that includes dot followed by a literal dot creates an ambiguity causing polynomial backtracking. Fix by making dot separators explicit.
+- **Key file paths**: packages/server/src/commands/handlers/sanitize.ts (shared sanitization), packages/server/src/middleware/rate-limit.ts (rate limit factory).
