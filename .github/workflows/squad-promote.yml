@@ -70,9 +70,40 @@ jobs:
         if: ${{ inputs.dry_run == 'false' }}
         run: |
           git checkout prod
-          git merge origin/uat --no-ff -m "chore: merge uat → prod"
-          git push origin prod
-          echo "✅ Merged uat into prod and pushed — squad-release.yml will create release"
+
+          MERGE_EXIT=0
+          git merge origin/uat --no-commit --no-ff -X theirs || MERGE_EXIT=$?
+          if [ "$MERGE_EXIT" -ne 0 ]; then
+            if git diff --cached --quiet && git diff --quiet; then
+              echo "ℹ️ Nothing to merge — trees are identical"
+            else
+              # Check if all unmerged (conflicted) files are in forbidden paths
+              FORBIDDEN_RE="^(\\.ai-team/|\\.squad/|\\.ai-team-templates/|team-docs/|docs/proposals/)"
+              UNMERGED=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+              NON_FORBIDDEN=$(echo "$UNMERGED" | grep -vE "$FORBIDDEN_RE" || true)
+              if [ -z "$NON_FORBIDDEN" ] && [ -n "$UNMERGED" ]; then
+                echo "⚠️ Conflicts only in forbidden paths — resolving by removal"
+                echo "$UNMERGED" | xargs -r git rm -f --cached 2>/dev/null || true
+                echo "$UNMERGED" | xargs -r rm -f 2>/dev/null || true
+              else
+                echo "::error::Merge failed with exit code $MERGE_EXIT"
+                git merge --abort 2>/dev/null || true
+                exit 1
+              fi
+            fi
+          fi
+
+          # Strip forbidden paths from merge commit
+          bash .github/scripts/strip-forbidden-paths.sh
+
+          # Commit and push if there are staged changes
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: merge uat → prod"
+            git push origin prod
+            echo "✅ Merged uat into prod and pushed — squad-release.yml will create release"
+          else
+            echo "ℹ️ Nothing to merge — prod is already up to date"
+          fi
 
       - name: Trigger CI/CD on prod
         if: ${{ inputs.dry_run == 'false' }}

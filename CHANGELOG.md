@@ -1,3 +1,11 @@
+# [0.2.0-dev.9](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.8...v0.2.0-dev.9) (2026-04-12)
+
+
+### Bug Fixes
+
+* handle forbidden-path conflicts in uat→prod merge ([a52b2dd](https://github.com/dkirby-ms/ellmud/commit/a52b2dddf40c826d2bd89485bf08a4fb9680f775))
+* use -X theirs for uat→prod merge in squad-promote ([17d6312](https://github.com/dkirby-ms/ellmud/commit/17d6312848ae81f1015cdee3eb7f10f92ac16da5))
+
 # [0.2.0-dev.8](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.7...v0.2.0-dev.8) (2026-04-12)
 
 
