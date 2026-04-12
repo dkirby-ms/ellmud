@@ -1,3 +1,31 @@
+# [0.2.0-dev.13](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.12...v0.2.0-dev.13) (2026-04-12)
+
+
+### Bug Fixes
+
+* replace Math.random() with crypto in E2E test fixtures ([83cdfdc](https://github.com/dkirby-ms/ellmud/commit/83cdfdca65b750d4b172adc92ae2824391903869)), closes [#19](https://github.com/dkirby-ms/ellmud/issues/19) [#19](https://github.com/dkirby-ms/ellmud/issues/19)
+
+# [0.2.0-dev.12](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.11...v0.2.0-dev.12) (2026-04-12)
+
+
+### Bug Fixes
+
+* **toggle:** report actual new state when toggling settings ([#432](https://github.com/dkirby-ms/ellmud/issues/432)) ([03a237f](https://github.com/dkirby-ms/ellmud/commit/03a237f96d264a78a79eebf2f0712559249daad4))
+
+# [0.2.0-dev.11](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.10...v0.2.0-dev.11) (2026-04-12)
+
+
+### Bug Fixes
+
+* use correct inventory/stash headers based on zone context ([#431](https://github.com/dkirby-ms/ellmud/issues/431)) ([d00eb6a](https://github.com/dkirby-ms/ellmud/commit/d00eb6a1d58b5f1ec814e59557df399d461008fa))
+
+# [0.2.0-dev.10](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.9...v0.2.0-dev.10) (2026-04-12)
+
+
+### Bug Fixes
+
+* resolve CodeQL security alerts — sanitization, ReDoS, rate limiting ([#433](https://github.com/dkirby-ms/ellmud/issues/433)) ([aa9ead5](https://github.com/dkirby-ms/ellmud/commit/aa9ead57e0852e6d210e6b0531b5a78d521fe3f2)), closes [#419](https://github.com/dkirby-ms/ellmud/issues/419) [#419](https://github.com/dkirby-ms/ellmud/issues/419)
+
 # [0.2.0-dev.9](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.8...v0.2.0-dev.9) (2026-04-12)
 
 

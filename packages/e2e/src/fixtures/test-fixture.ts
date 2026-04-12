@@ -1,3 +1,4 @@
+import { randomBytes, randomUUID } from 'node:crypto';
 import { test as base } from '@playwright/test';
 import { PlayerFixture } from './player-fixture.js';
 import { ServerManager } from './server-manager.js';
@@ -35,14 +36,14 @@ export const test = base.extend<{
 
     await use(async (name: string, zone = 'the-reliquary') => {
       // Username must be 3-20 chars (server validation)
-      const rand = Math.random().toString(36).slice(2, 8);
+      const rand = randomUUID().slice(0, 8);
       const username = `t_${name.slice(0, 6)}_${rand}`.slice(0, 20);
       const password = 'testpass123';
 
       // Character names must be alpha-only, 2-24 chars, capital first + lowercase rest.
       // Append a random alpha suffix to avoid cross-test collisions with linkdead characters.
-      const suffix = Array.from({ length: 4 }, () =>
-        String.fromCharCode(97 + Math.floor(Math.random() * 26)),
+      const suffix = Array.from(randomBytes(4), (b) =>
+        String.fromCharCode(97 + (b % 26)),
       ).join('');
       const charName = `${name}${suffix}`.slice(0, 24);
 
