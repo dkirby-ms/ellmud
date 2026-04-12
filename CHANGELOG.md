@@ -1,3 +1,11 @@
+# [0.2.0-dev.5](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.4...v0.2.0-dev.5) (2026-04-12)
+
+
+### Bug Fixes
+
+* **client:** resolve dual-React version mismatch in tests ([1476b8c](https://github.com/dkirby-ms/ellmud/commit/1476b8cfea8933442fc5ef9cc98a95333a43b64a))
+* **e2e:** fresh server per test + fix admin API room name ([243d6f4](https://github.com/dkirby-ms/ellmud/commit/243d6f4c13ef6c9e47b5c1d5ddf2e9f716433f61))
+
 # [0.2.0-dev.4](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.3...v0.2.0-dev.4) (2026-04-11)
 
 

@@ -1,6 +1,6 @@
 {
   "name": "ellmud",
-  "version": "0.2.0-dev.4",
+  "version": "0.2.0-dev.5",
   "private": true,
   "description": "PvPvE Extraction RPG — Real-Time MUD",
   "workspaces": [
@@ -40,5 +40,9 @@
   "dependencies": {
     "@xyflow/react": "^12.10.2",
     "elkjs": "^0.11.1"
+  },
+  "overrides": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
   }
 }

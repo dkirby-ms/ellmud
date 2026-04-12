@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useDrag, useDrop, DndProvider } from "react-dnd";
+import { useDrag, useDrop, DndProvider, type ConnectDragSource, type ConnectDropTarget } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { Package, Weight, RotateCw, Trash2 } from "lucide-react";
 import AnsiText from "./AnsiText.js";
@@ -171,7 +171,7 @@ function InventoryItem({ item, onMove: _onMove, onRotate, onDelete }: InventoryI
 
   return (
     <div
-      ref={drag}
+      ref={drag as unknown as React.Ref<HTMLDivElement>}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
       className="absolute cursor-move group"
@@ -274,7 +274,7 @@ function GridCell({ x, y, onDrop, isOccupied }: GridCellProps) {
 
   return (
     <div
-      ref={drop}
+      ref={drop as unknown as React.Ref<HTMLDivElement>}
       className="border border-border-muted"
       style={{
         width: CELL_SIZE,

@@ -34,7 +34,7 @@ function getEffectType(effect: StatusEffect): 'buff' | 'debuff' | 'neutral' {
 
 function highlightDirections(text: string) {
   const directionRegex = /\b(north|south|east|west|above|below)\b/gi;
-  const parts: (string | JSX.Element)[] = [];
+  const parts: (string | React.JSX.Element)[] = [];
   let lastIndex = 0;
   let match;
   while ((match = directionRegex.exec(text)) !== null) {

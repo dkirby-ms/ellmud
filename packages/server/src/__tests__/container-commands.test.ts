@@ -6,7 +6,6 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  ALL_FIXTURE_ITEMS,
   buildFixtureRegistry,
   TATTERED_SATCHEL,
   EXPEDITION_PACK,
