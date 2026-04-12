@@ -7,7 +7,19 @@
  * GDD §6.5, §6.8
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { buildFixtureRegistry } from './helpers/item-fixtures.js';
+
+// Mock ContentRegistry so take command (used by loot) can resolve item definitions.
+const FIXTURE_MAP = buildFixtureRegistry();
+vi.mock('../content/index.js', () => ({
+  getContentRegistry: () => ({
+    isInitialized: () => true,
+    getItem: (id: string) => FIXTURE_MAP.get(id),
+    getAllItems: () => Array.from(FIXTURE_MAP.values()),
+  }),
+}));
+
 import { CorpseSystem, resetCorpseIdCounter } from '../systems/CorpseSystem.js';
 import { PlayerState } from '../state/PlayerState.js';
 import { handleLoot } from '../commands/handlers/loot.js';
@@ -245,101 +257,191 @@ describe('CorpseSystem', () => {
 // ─── Loot Command Tests ─────────────────────────────────────────────────────
 
 describe('loot command', () => {
-  let system: CorpseSystem;
   let room: Room;
 
   beforeEach(() => {
-    resetCorpseIdCounter();
-    system = new CorpseSystem();
     room = makeRoom();
   });
 
+  function makeCorpseItem(name: string, items: Item[]): Item {
+    return {
+      id: `corpse-${name.toLowerCase()}`,
+      name: `corpse of ${name}`,
+      weight: 10,
+      description: `The remains of ${name}.`,
+      roomDescription: `The corpse of ${name} lies here.`,
+      containerContents: items.map(item => ({
+        definitionId: item.id,
+        quantity: 1,
+        durability: null,
+      })),
+      createdAt: Date.now(),
+      ttlSeconds: 600,
+    };
+  }
+
+  function makeContext2(
+    player: PlayerState,
+    room: Room,
+    args: string[] = [],
+  ): CommandContext {
+    return {
+      player,
+      room,
+      args,
+      resolveRoom: () => undefined,
+      otherPlayersInRoom: [],
+      stability: 1.0,
+    };
+  }
+
   it('reports no corpses when room is empty', () => {
     const player = makePlayer();
-    const ctx = makeContext(player, room, system);
+    const ctx = makeContext2(player, room);
     const result = handleLoot(ctx);
     expect(result.narrations[0]!.text).toContain('no corpses');
   });
 
   it('loots all items from first corpse when no args given', () => {
-    system.addCorpse('room-1', 'p-dead', 'Victim', [
-      makeItem('sword', 'Rusty Sword', 2),
-      makeItem('shield', 'Dented Shield', 3),
-    ], 600);
+    room.items.push({
+      id: 'corpse-victim',
+      name: 'corpse of Victim',
+      weight: 10,
+      description: 'The remains of Victim.',
+      roomDescription: 'The corpse of Victim lies here.',
+      containerContents: [
+        { definitionId: 'rusty_blade', quantity: 1, durability: null },
+        { definitionId: 'tattered_leather', quantity: 1, durability: null },
+      ],
+      createdAt: Date.now(),
+      ttlSeconds: 600,
+    });
 
     const player = makePlayer();
-    const ctx = makeContext(player, room, system);
+    const ctx = makeContext2(player, room);
     const result = handleLoot(ctx);
 
-    expect(result.narrations[0]!.text).toContain('Rusty Sword');
-    expect(result.narrations[0]!.text).toContain('Dented Shield');
-    expect(result.narrations[0]!.text).toContain('Victim');
+    expect(result.narrations[0]!.text).toContain('Rusty Blade');
+    expect(result.narrations[0]!.text).toContain('Tattered Leather');
     expect(player.inventory.size).toBe(2);
   });
 
   it('loots specific item with "loot <item> from corpse"', () => {
-    system.addCorpse('room-1', 'p-dead', 'Victim', [
-      makeItem('sword', 'Rusty Sword', 2),
-      makeItem('shield', 'Dented Shield', 3),
-    ], 600);
+    room.items.push({
+      id: 'corpse-victim',
+      name: 'corpse of Victim',
+      weight: 10,
+      description: 'The remains of Victim.',
+      roomDescription: 'The corpse of Victim lies here.',
+      containerContents: [
+        { definitionId: 'rusty_blade', quantity: 1, durability: null },
+        { definitionId: 'tattered_leather', quantity: 1, durability: null },
+      ],
+      createdAt: Date.now(),
+      ttlSeconds: 600,
+    });
 
     const player = makePlayer();
-    const ctx = makeContext(player, room, system, ['sword', 'from', 'corpse']);
+    const ctx = makeContext2(player, room, ['rusty', 'from', 'corpse']);
     const result = handleLoot(ctx);
 
-    expect(result.narrations[0]!.text).toContain('Rusty Sword');
+    expect(result.narrations[0]!.text).toContain('Rusty Blade');
     expect(player.inventory.size).toBe(1);
-    // Shield still in corpse
-    const corpses = system.getCorpsesInRoom('room-1');
-    expect(corpses[0]!.items).toHaveLength(1);
-    expect(corpses[0]!.items[0]!.name).toBe('Dented Shield');
+    // Leather still in corpse container
+    const corpse = room.items.find(i => i.id.startsWith('corpse-'));
+    expect(corpse?.containerContents).toHaveLength(1);
   });
 
   it('loots from specific player corpse with "loot corpse of <name>"', () => {
-    system.addCorpse('room-1', 'p1', 'Alice', [makeItem('s1', 'Alice Sword', 2)], 600);
-    system.addCorpse('room-1', 'p2', 'Bob', [makeItem('s2', 'Bob Shield', 3)], 600);
+    room.items.push({
+      id: 'corpse-alice',
+      name: 'corpse of Alice',
+      weight: 10,
+      description: 'The remains of Alice.',
+      roomDescription: 'The corpse of Alice lies here.',
+      containerContents: [
+        { definitionId: 'rusty_blade', quantity: 1, durability: null },
+      ],
+      createdAt: Date.now(),
+      ttlSeconds: 600,
+    });
+    room.items.push({
+      id: 'corpse-bob',
+      name: 'corpse of Bob',
+      weight: 10,
+      description: 'The remains of Bob.',
+      roomDescription: 'The corpse of Bob lies here.',
+      containerContents: [
+        { definitionId: 'tattered_leather', quantity: 1, durability: null },
+      ],
+      createdAt: Date.now(),
+      ttlSeconds: 600,
+    });
 
     const player = makePlayer();
-    const ctx = makeContext(player, room, system, ['corpse', 'of', 'Bob']);
+    const ctx = makeContext2(player, room, ['corpse', 'of', 'Bob']);
     const result = handleLoot(ctx);
 
-    expect(result.narrations[0]!.text).toContain('Bob Shield');
-    expect(result.narrations[0]!.text).toContain('Bob');
+    expect(result.narrations[0]!.text).toContain('Tattered Leather');
     expect(player.inventory.size).toBe(1);
   });
 
   it('reports empty corpse', () => {
-    const corpse = system.addCorpse('room-1', 'p-dead', 'Victim', [makeItem('s', 'S', 1)], 600);
-    system.lootAll(corpse.id);
+    room.items.push(makeCorpseItem('Victim', []));
 
     const player = makePlayer();
-    const ctx = makeContext(player, room, system);
+    const ctx = makeContext2(player, room);
     const result = handleLoot(ctx);
 
-    expect(result.narrations[0]!.text).toContain('stripped bare');
+    expect(result.narrations[0]!.text).toContain('empty');
   });
 
   it('handles weight limit — too heavy items stay in corpse', () => {
-    system.addCorpse('room-1', 'p-dead', 'Victim', [
-      makeItem('heavy', 'Heavy Boulder', 100),
-    ], 600);
+    room.items.push({
+      id: 'corpse-victim',
+      name: 'corpse of Victim',
+      weight: 10,
+      description: 'The remains of Victim.',
+      roomDescription: 'The corpse of Victim lies here.',
+      containerContents: [
+        { definitionId: 'corroded_halberd', quantity: 1, durability: null }, // weight: 12, player max: 50, but already carrying weight
+      ],
+      createdAt: Date.now(),
+      ttlSeconds: 600,
+    });
 
     const player = makePlayer('p1', 'room-1');
-    const ctx = makeContext(player, room, system);
+    // Fill up the player's weight capacity so they can't carry the halberd
+    for (let i = 0; i < 8; i++) {
+      player.addItem(makeItem(`heavy${i}`, `Heavy Item ${i}`, 5));
+    }
+
+    const ctx = makeContext2(player, room);
     const result = handleLoot(ctx);
 
     expect(result.narrations[0]!.text).toContain('Too heavy');
-    expect(player.inventory.size).toBe(0);
-    // Item should be back in corpse
-    const corpses = system.getCorpsesInRoom('room-1');
-    expect(corpses[0]!.items).toHaveLength(1);
+    expect(player.inventory.size).toBe(8); // Only the items we added, not the halberd
+    // Item should remain in corpse container
+    const corpse = room.items.find(i => i.id.startsWith('corpse-'));
+    expect(corpse?.containerContents).toHaveLength(1);
   });
 
   it('handles missing item in "loot <item> from corpse"', () => {
-    system.addCorpse('room-1', 'p-dead', 'Victim', [makeItem('s', 'Sword', 1)], 600);
+    room.items.push({
+      id: 'corpse-victim',
+      name: 'corpse of Victim',
+      weight: 10,
+      description: 'The remains of Victim.',
+      roomDescription: 'The corpse of Victim lies here.',
+      containerContents: [
+        { definitionId: 'rusty_blade', quantity: 1, durability: null },
+      ],
+      createdAt: Date.now(),
+      ttlSeconds: 600,
+    });
 
     const player = makePlayer();
-    const ctx = makeContext(player, room, system, ['potion', 'from', 'corpse']);
+    const ctx = makeContext2(player, room, ['potion', 'from', 'corpse']);
     const result = handleLoot(ctx);
 
     expect(result.narrations[0]!.text).toContain("doesn't contain");
@@ -379,33 +481,55 @@ describe('loot verb parsing', () => {
 // ─── Look Command Integration ───────────────────────────────────────────────
 
 describe('look command shows corpses', () => {
-  it('displays corpse with item count in room description', () => {
-    const system = new CorpseSystem();
-    resetCorpseIdCounter();
-    system.addCorpse('room-1', 'p-dead', 'Fallen Hero', [
-      makeItem('s', 'Sword', 1),
-      makeItem('sh', 'Shield', 2),
-    ], 600);
+  it('displays corpse with roomDescription in room description', () => {
+    const room = makeRoom();
+    room.items.push({
+      id: 'corpse-hero',
+      name: 'corpse of Fallen Hero',
+      weight: 10,
+      description: 'The remains of Fallen Hero.',
+      roomDescription: 'The corpse of Fallen Hero lies here.',
+      containerContents: [
+        { definitionId: 's', quantity: 1, durability: null },
+        { definitionId: 'sh', quantity: 1, durability: null },
+      ],
+    });
 
     const player = makePlayer();
-    const room = makeRoom();
-    const ctx = makeContext(player, room, system);
+    const ctx = {
+      player,
+      room,
+      args: [],
+      resolveRoom: () => undefined,
+      otherPlayersInRoom: [],
+      stability: 1.0,
+    };
     const result = handleLook(ctx);
 
     const text = result.narrations[0]!.text;
     expect(text).toContain('corpse of Fallen Hero');
-    expect(text).toContain('2 items');
   });
 
   it('displays stripped corpse when empty', () => {
-    const system = new CorpseSystem();
-    resetCorpseIdCounter();
-    const corpse = system.addCorpse('room-1', 'p-dead', 'Fallen Hero', [makeItem('s', 'S', 1)], 600);
-    system.lootAll(corpse.id);
+    const room = makeRoom();
+    room.items.push({
+      id: 'corpse-hero',
+      name: 'corpse of Fallen Hero',
+      weight: 10,
+      description: 'The remains of Fallen Hero.',
+      roomDescription: 'The stripped corpse of Fallen Hero lies here.',
+      containerContents: [],
+    });
 
     const player = makePlayer();
-    const room = makeRoom();
-    const ctx = makeContext(player, room, system);
+    const ctx = {
+      player,
+      room,
+      args: [],
+      resolveRoom: () => undefined,
+      otherPlayersInRoom: [],
+      stability: 1.0,
+    };
     const result = handleLook(ctx);
 
     const text = result.narrations[0]!.text;

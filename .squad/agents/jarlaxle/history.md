@@ -43,6 +43,19 @@
 
 ## Learnings
 
+### Creature Corpse Container System (squad/creature-corpse-containers)
+- **Task:** Replace direct loot distribution with corpse container items when creatures die
+- **Architecture:** On creature death, spawn a corpse container item (regular Item with containerContents) in the room containing the creature's loot. Players use `open corpse` and `take X from corpse` commands to loot.
+- **Key decisions:**
+  - **Room items as containers** — Corpses are regular Items in `room.items[]` with `containerContents` field, not a separate entity system. No ItemDefinition lookup needed for room containers.
+  - **No group loot distribution** — Removed entire group sharing / round-robin loot distribution system. All loot goes into corpse container for manual looting.
+  - **LootItem.itemId field** — Added `itemId` field to LootItem interface to map loot instance IDs to item definition IDs for container storage. Corpse uses `itemId` as `definitionId` in containerContents.
+  - **Open/take command extension** — Extended both commands to check room for containers (not just inventory). `open` checks inventory first, then room. `take from` checks inventory container first, then room container.
+  - **No direct pickup of full corpses** — Corpses with contents cannot be picked up; players must loot them first. Prevents accidental weight violations.
+- **Narration:** `{creature.name} collapses, leaving behind a corpse.` (combat type)
+- **Files:** `rooms/ZoneRoom.ts` (syncCreaturesAfterCombat), `creatures/loot.ts` (itemId field), `commands/handlers/open.ts` (room container support), `commands/handlers/take.ts` (room container support), `__tests__/helpers/item-fixtures.ts` (waterlogged_bone, revenant_essence)
+- **Tests:** Updated creature-wiring.test.ts, container-commands.test.ts. New creature-corpse.test.ts with 29 tests. All 3480+ tests passing.
+
 ### Container Item Type (Issue #409 — Container System Phase 2)
 - **Task:** Implement `container` as a first-class ItemType for bags, pouches, etc.
 - **Architecture:** Container is a regular item with `type: 'container'` + `containerProperties` on ItemDefinition and `contents` on ItemInstance. All operations are pure functions (immutable).
@@ -2602,3 +2615,40 @@ Created two private methods in `packages/server/src/rooms/ShardRoom.ts`:
 - **getItemDefinitionsMap() pattern:** Shared pure functions (container weight calc, addItemToContainer) accept Map<string, ItemDefinition>. Since we no longer export a static Map, the new getItemDefinitionsMap() function builds one from ContentRegistry on demand.
 - **Migration discipline confirmed:** Every static item had a corresponding seed row in migrations. The DB is complete.
 - **Pre-existing TS error:** ContentRegistry.ts:148 has a type cast issue (Record<string, unknown> to ContainerProperties). Not introduced by this change, not touched.
+
+
+## Session: 2026-04-12 — Creature Corpse Containers Implementation
+
+**PR:** #442 (squad/creature-corpse-containers → dev)
+
+### What was done
+- Implemented creature corpse container system replacing direct loot distribution
+- Removed ~115 lines of complex group loot distribution logic from ZoneRoom.syncCreaturesAfterCombat()
+- Extended `open` and `take` commands to support room containers in addition to inventory containers
+- Added `itemId` field to LootItem interface to map loot instances to item definition IDs
+- Corpse items created with containerContents array containing all generated loot
+- Created test fixtures: waterlogged_bone, revenant_essence
+- Updated container-related tests to cover corpse scenarios
+
+### Key Changes
+- **ZoneRoom.ts**: Corpse creation logic (~35 lines) replacing group distribution (~115 lines removed)
+- **open.ts**: Extended to check room items when opening containers
+- **take.ts**: Extended to support `take X from Y` where Y is a room container
+- **loot.ts**: Updated to reference containerContents rather than direct item distribution
+- **item-fixtures.ts**: Added new test item definitions
+
+### Test Results
+- All 3480+ tests passing
+- 29 corpse-specific tests from Minsc's TDD suite all passing
+- Zero regressions
+
+### Collaboration
+- Worked with Minsc (Tester) on spec-based test coverage
+- Minsc wrote tests in parallel to guide implementation
+- Tests validated all functionality as features were implemented
+- Tests serve as regression protection for future changes
+
+### Learnings
+- Reusing container infrastructure simpler than custom loot distribution logic
+- Player agency improves with explicit take commands over auto-distribution
+- Corpse item pattern aligns with thematic game feel (visible death consequences)

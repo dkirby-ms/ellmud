@@ -136,10 +136,10 @@ describe('open command', () => {
     expect(result.narrations[0]!.text).toContain('not a container');
   });
 
-  it('should error when item not in inventory', () => {
+  it('should error when item not in inventory or room', () => {
     const result = handleCommand('open', buildCtx(player, room, ['satchel']));
 
-    expect(result.narrations[0]!.text).toContain('not carrying');
+    expect(result.narrations[0]!.text).toContain("don't see");
   });
 
   it('should error with no args', () => {
@@ -365,10 +365,10 @@ describe('take from container', () => {
     expect(result.narrations[0]!.text).toContain("doesn't contain");
   });
 
-  it('should error when container not in inventory', () => {
+  it('should error when container not in inventory or room', () => {
     const result = handleCommand('take', buildCtx(player, room, ['blade', 'from', 'satchel']));
 
-    expect(result.narrations[0]!.text).toContain('not carrying');
+    expect(result.narrations[0]!.text).toContain("don't see");
   });
 
   it('should error on non-container item', () => {

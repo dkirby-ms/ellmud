@@ -136,6 +136,30 @@ export const REVENANT_BONE: ItemDefinition = {
   soulbound: false,
 };
 
+export const WATERLOGGED_BONE: ItemDefinition = {
+  id: 'waterlogged_bone',
+  name: 'waterlogged bone',
+  type: 'material',
+  tier: 'scrap',
+  baseStats: {},
+  baseDurability: null,
+  weight: 1,
+  description: 'A spongy bone that weeps brackish water. Useful for crude crafting.',
+  soulbound: false,
+};
+
+export const REVENANT_ESSENCE: ItemDefinition = {
+  id: 'revenant_essence',
+  name: 'revenant essence',
+  type: 'material',
+  tier: 'common',
+  baseStats: {},
+  baseDurability: null,
+  weight: 0.5,
+  description: 'A viscous, faintly glowing substance extracted from a fallen revenant.',
+  soulbound: false,
+};
+
 // ─── Keys ───────────────────────────────────────────────────────────────────
 
 export const CRYPT_KEY_FRAGMENT: ItemDefinition = {
@@ -197,7 +221,7 @@ export const ALL_FIXTURE_ITEMS: ItemDefinition[] = [
   RUSTY_BLADE, IRON_SWORD, CORRODED_HALBERD, VOIDFORGED_BLADE,
   TATTERED_LEATHER, IRON_CHAINMAIL,
   WATERLOGGED_POTION, HEALING_DRAUGHT, STAMINA_TONIC,
-  REVENANT_BONE,
+  REVENANT_BONE, WATERLOGGED_BONE, REVENANT_ESSENCE,
   CRYPT_KEY_FRAGMENT,
   TATTERED_SATCHEL, EXPEDITION_PACK, APOTHECARY_POUCH,
 ];

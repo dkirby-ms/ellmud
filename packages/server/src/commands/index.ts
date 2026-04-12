@@ -30,7 +30,6 @@ import { handleLoot } from './handlers/loot.js';
 import { handlePosition } from './handlers/position.js';
 import { handleHelp } from './handlers/help.js';
 import type { DowningSystem } from '../systems/DowningSystem.js';
-import type { CorpseSystem } from '../systems/CorpseSystem.js';
 import type { StashService } from '../stash/StashService.js';
 import type { LoadoutService } from '../loadout/LoadoutService.js';
 import { handleBoard, handleEnter } from './handlers/board.js';
@@ -138,8 +137,6 @@ export interface CommandContext {
   zoneName?: string;
   /** Current zone slug identifier (e.g. "refuge"). */
   zoneSlug?: string;
-  /** Corpse system reference for loot command (GDD §6.8). */
-  corpseSystem?: CorpseSystem;
   /** Creature manager for sandbox spawn/clear operations. */
   creatureManager?: CreatureManager;
   /** Override scenario storage directory (dev/testing). */

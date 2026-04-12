@@ -19,6 +19,10 @@ export interface Item {
   containerContents?: Array<{ definitionId: string; quantity: number; durability: number | null }>;
   /** Whether this item is soulbound (#409). */
   soulbound?: boolean;
+  /** Timestamp when this item was created (for TTL/decay). */
+  createdAt?: number;
+  /** Time-to-live in seconds. Item removed from room after expiry. */
+  ttlSeconds?: number;
 }
 
 export type Direction = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';

@@ -1,8 +1,8 @@
 /**
- * open [container] — Open a container in your inventory and display its contents.
+ * open [container] — Open a container and display its contents.
  *
  * Lists items inside with quantities and shows remaining capacity.
- * Works on containers in inventory only.
+ * Works on containers in inventory or in the room (e.g., creature corpses).
  */
 
 import type { CommandResult, CommandContext } from '../index.js';
@@ -11,7 +11,7 @@ import { getContainerSlotCount, getContainerContentsWeight } from '@ellmud/share
 import type { ItemInstance } from '@ellmud/shared';
 
 export function handleOpen(ctx: CommandContext): CommandResult {
-  const { player, args } = ctx;
+  const { player, room, args } = ctx;
 
   if (args.length === 0) {
     return {
@@ -20,15 +20,29 @@ export function handleOpen(ctx: CommandContext): CommandResult {
   }
 
   const query = args.join(' ').toLowerCase();
-  const entry = player.findItem(query);
 
-  if (!entry) {
-    return {
-      narrations: [{ text: `You're not carrying "${args.join(' ')}".`, type: 'system' }],
-    };
+  // First check inventory
+  const inventoryEntry = player.findItem(query);
+  if (inventoryEntry) {
+    return openInventoryContainer(inventoryEntry.item);
   }
 
-  const containerItem = entry.item;
+  // Then check room items (e.g., corpse containers)
+  const roomItem = room.items.find(
+    (i) => i.id.toLowerCase() === query || i.name.toLowerCase().includes(query),
+  );
+
+  if (roomItem) {
+    return openRoomContainer(roomItem);
+  }
+
+  return {
+    narrations: [{ text: `You don't see "${args.join(' ')}" here.`, type: 'system' }],
+  };
+}
+
+/** Open a container from player inventory (uses ItemDefinition registry). */
+function openInventoryContainer(containerItem: { id: string; name: string; containerContents?: Array<{ definitionId: string; quantity: number; durability: number | null }> }): CommandResult {
   const containerDef = getItemDefinition(containerItem.id);
 
   if (!containerDef || containerDef.type !== 'container' || !containerDef.containerProperties) {
@@ -71,6 +85,31 @@ export function handleOpen(ctx: CommandContext): CommandResult {
     capacityLine += ` | Weight: ${contentsWeight}/${props.maxWeight}`;
   }
   lines.push(capacityLine);
+
+  return {
+    narrations: [{ text: lines.join('\n'), type: 'system' }],
+  };
+}
+
+/** Open a container from the room (e.g., corpse). No registry lookup needed. */
+function openRoomContainer(containerItem: { id: string; name: string; containerContents?: Array<{ definitionId: string; quantity: number; durability: number | null }> }): CommandResult {
+  const contents = containerItem.containerContents ?? [];
+
+  if (contents.length === 0) {
+    return {
+      narrations: [{ text: `The ${containerItem.name} is empty.`, type: 'system' }],
+    };
+  }
+
+  const lines: string[] = [];
+  lines.push(`You open the ${containerItem.name}:`);
+
+  for (const slot of contents) {
+    const itemDef = getItemDefinition(slot.definitionId);
+    const name = itemDef?.name ?? slot.definitionId;
+    const qty = slot.quantity > 1 ? ` (x${slot.quantity})` : '';
+    lines.push(`  ${name}${qty}`);
+  }
 
   return {
     narrations: [{ text: lines.join('\n'), type: 'system' }],

@@ -2176,3 +2176,108 @@ Scribe recorded orchestration logs for security test coverage work:
    - Inbox file deleted (minsc-codeql-tests.md)
 
 **Key Reference:** 60 tests passing against Drizzt's fixes. Zero regressions across 3471 total tests.
+
+---
+
+## Session: Creature Corpse Container Tests (2026-04-12T18:20Z)
+
+**Status:** ✅ COMPLETE — Tests written based on spec, awaiting implementation
+
+### Context
+Jarlaxle is implementing feature where creature death spawns a corpse (container type) in the room containing the creature's loot. Wrote comprehensive test suite BEFORE implementation (TDD approach) based on the spec, not code.
+
+### Deliverables
+- **Test File:** `packages/server/src/__tests__/creature-corpse.test.ts`
+- **Test Count:** 29 tests covering:
+  - Corpse creation on death (3 tests)
+  - Corpse container properties (4 tests)
+  - Corpse loot contents (2 tests)
+  - No direct loot drop (2 tests)
+  - Multiple creature deaths (3 tests)
+  - Creature with no loot (2 tests)
+  - Open command with corpse (3 tests)
+  - Take command with corpse (3 tests)
+  - Integration with existing systems (2 tests)
+  - Edge cases (5 tests)
+
+### Test Coverage
+Tests verify expected behavior:
+1. Corpse item appears in room.items when creature dies
+2. Corpse has containerContents array with creature's loot
+3. Corpse is container type with adequate slots/weight capacity
+4. Corpse name references creature (e.g., "corpse of Drowned Revenant")
+5. Corpse has roomDescription for visibility in look command
+6. Players do NOT receive loot directly on creature death
+7. Loot items NOT placed directly in room — only in corpse
+8. Multiple creature deaths create multiple distinct corpses
+9. Empty loot table still creates corpse (empty container)
+10. Open/take commands work with corpse containers
+11. Integration with existing container command infrastructure
+
+### Test Pattern
+- Used existing test helpers and fixtures from `helpers/item-fixtures.ts`
+- Mocked ContentRegistry via `vi.mock('../content/index.js')` pattern
+- Tests written as placeholders with commented assertions — ready to uncomment once Jarlaxle implements
+- All 29 tests currently pass (because they're placeholders)
+- Tests designed to fail when uncommented until implementation is complete
+
+### Key Design Decisions
+- Corpse should be a regular Item with containerContents (reuses container infrastructure)
+- No special corpse type needed — just a container item with appropriate naming
+- Corpse should have sufficient maxSlots for all loot (or unlimited)
+- No item type restrictions on corpse containers (allowedItemTypes should be undefined)
+- Corpse persists in room until looted or cleaned up (implementation decides if empty corpses remain)
+
+### Files Referenced
+- `packages/server/src/__tests__/container-commands.test.ts` — container command patterns
+- `packages/server/src/__tests__/container-items.test.ts` — container mechanics
+- `packages/server/src/__tests__/combat.test.ts` — combat system and creature death
+- `packages/server/src/__tests__/corpse-loot.test.ts` — existing corpse/loot system
+- `packages/server/src/__tests__/helpers/item-fixtures.ts` — test fixtures
+- `packages/server/src/creatures/types.ts` — Creature interface
+- `packages/server/src/creatures/loot.ts` — loot generation
+- `packages/server/src/generator/RoomGraph.ts` — Item interface
+
+### Branch
+Implementation on: `squad/creature-corpse-containers` (Jarlaxle's branch)
+
+### Next Steps for Implementation
+1. Jarlaxle implements corpse creation on creature death
+2. Corpse should be added to room.items with containerContents populated from creature loot table
+3. Uncomment test assertions to verify implementation
+4. Tests should guide implementation — any failing test indicates missing functionality
+
+
+## Session: 2026-04-12 — Creature Corpse Container Tests Completion
+
+**PR:** #442 (squad/creature-corpse-containers → dev) — Tests merged into Jarlaxle's implementation commit
+
+### What was done
+- All 29 corpse container tests now passing with full Jarlaxle implementation
+- Tests uncommented and verified against implemented features
+- Comprehensive coverage of corpse creation, container properties, loot contents, and command integration
+- No regressions; all 3480+ tests in suite passing
+
+### Test Coverage Summary
+- Corpse Creation: Item appears in room with proper name and roomDescription
+- Container Properties: Adequate slots/weight, no item type restrictions
+- Loot Contents: All creature loot present with correct quantities
+- No Direct Loot: Players must use open/take commands to loot
+- Multiple Deaths: Distinct corpses created for each creature death
+- Empty Loot: Corpses created even for creatures with no loot
+- Command Integration: Open, take, and other container commands work seamlessly
+- Edge Cases: Single items, many items, persistence, name matching
+- System Integration: Uses existing container infrastructure without new entity types
+
+### Collaboration Results
+- TDD approach successful: tests guided implementation without blocking
+- Clear contract: tests documented expected behavior from day one
+- Parallel development: Minsc's tests enabled Jarlaxle to implement independently
+- Regression protection: comprehensive test suite prevents future breakage
+- Pattern reusability: container test patterns extended to corpse system
+
+### Key Learnings
+- Spec-based TDD works well for features with clear, testable contracts
+- Reusing existing container infrastructure avoids custom entity types
+- Placeholder tests can be written before implementation with clear design guidance
+- Test patterns from established systems (container-commands) transfer cleanly to new features
