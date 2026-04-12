@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useDrag, useDrop, DndProvider, type ConnectDragSource, type ConnectDropTarget } from "react-dnd";
+import { useDrag, useDrop, DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { Package, Weight, RotateCw, Trash2 } from "lucide-react";
 import AnsiText from "./AnsiText.js";
