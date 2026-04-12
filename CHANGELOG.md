@@ -1,3 +1,10 @@
+# [0.2.0-dev.10](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.9...v0.2.0-dev.10) (2026-04-12)
+
+
+### Bug Fixes
+
+* resolve CodeQL security alerts — sanitization, ReDoS, rate limiting ([#433](https://github.com/dkirby-ms/ellmud/issues/433)) ([aa9ead5](https://github.com/dkirby-ms/ellmud/commit/aa9ead57e0852e6d210e6b0531b5a78d521fe3f2)), closes [#419](https://github.com/dkirby-ms/ellmud/issues/419) [#419](https://github.com/dkirby-ms/ellmud/issues/419)
+
 # [0.2.0-dev.9](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.8...v0.2.0-dev.9) (2026-04-12)
 
 
