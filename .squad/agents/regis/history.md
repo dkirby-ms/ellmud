@@ -1958,3 +1958,17 @@ Items spawned through admin panel integrate fully with player item interaction c
 - Admin detail page headings (h1) and preview cards are good surfaces for AnsiText too, so admins can preview formatted names
 - **Dual React in monorepos:** When Radix UI peers allow React 18 or 19, npm may hoist 19 to root while workspace keeps 18 locally. Vitest 3.x thread pool externalizes node_modules bypassing Vite aliases. The fix is to align versions, not fight the resolver.
 - **React 19 upgrade** was safe for this codebase — no deprecated APIs in use.
+- **CombinedStashLoadout.tsx** uses `inZone` prop to distinguish zone inventory vs stash room context. Headers, item counts, and empty-state messages must all be conditional on this prop. Fixed in PR #435.
+- **StashTab.tsx** is the dedicated stash grid UI (drag-and-drop with mock data) — its "Stash" labels are always correct and don't need zone-conditional logic.
+
+### 2026-04-12: Issue #431 — Fix hardcoded "STASH" header (PR #435)
+**Status:** ✅ Complete — branch `squad/431-inventory-header-fix`, PR #435 targeting dev
+
+**Changes:**
+- **File:** `packages/client/src/components/CombinedStashLoadout.tsx`
+- Fixed 3 hardcoded "STASH" strings to be conditional on `inZone` prop:
+  - Headers: "EQUIPMENT & INVENTORY" / "INVENTORY" when in zone; "EQUIPMENT & STASH" / "STASH" in stash room
+  - Item count source: `inventory.length` when in zone, `stash.length` in stash room
+  - Empty-state message: "No items carried." when in zone, "No items in stash." in stash room
+- TypeScript build passes. Component properly leverages existing `inZone` prop for context-aware UI.
+- Decision documented in `.squad/decisions.md`: All future text additions to this component must follow the same `inZone` conditional pattern.

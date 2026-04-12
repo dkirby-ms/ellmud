@@ -8468,3 +8468,55 @@ This is fragile: if the API schema changes and "uptime" is renamed, deployments 
 
 ---
 
+## Decision: Inventory vs Stash headers are driven by `inZone` prop
+
+**Author:** Regis (Frontend)  
+**Date:** 2025-07-14  
+**PR:** #435  
+**Issue:** #431
+
+### Context
+
+`CombinedStashLoadout.tsx` serves dual duty — it's the equipment+items panel in both stash rooms and zones. The `inZone` prop already existed but headers were hardcoded to "STASH".
+
+### Decision
+
+All user-facing text in `CombinedStashLoadout` that refers to "stash" vs "inventory" is now conditional on `inZone`:
+- Headers: "EQUIPMENT & INVENTORY" / "INVENTORY" when in zone
+- Empty state: "No items carried." when in zone
+- Item count: uses `inventory.length` when in zone
+
+`StashTab.tsx` (the grid-based stash UI) is unaffected — it's always stash context.
+
+### Impact
+
+Frontend only. No server or shared package changes. Anyone adding new text to this component should follow the same `inZone` conditional pattern.
+
+---
+
+## Decision: Prod branch reset and force-push promote
+
+**Author:** Khelben (CI/CD Dev)  
+**Date:** 2026-07-15  
+**Status:** Implemented
+
+### Context
+
+The `squad-promote.yml` workflow used `git merge` to promote uat→prod. Over time, the branches diverged significantly (forbidden-path conflicts, old commits on prod not on uat), causing recurring merge failures. Since there is no real prod deployment system, fighting these conflicts added no value.
+
+### Decision
+
+1. **Reset prod from uat:** Force-pushed `origin/uat` to `origin/prod`, giving prod a clean starting point identical to uat.
+2. **Switched promote strategy:** Changed `squad-promote.yml` from merge-based to force-push reset. Each promotion now makes prod match uat exactly (after stripping forbidden paths via `strip-forbidden-paths.sh`).
+3. **Removed Node.js/npm steps** from the promote workflow — no longer needed without version-bump-during-merge.
+
+### Trade-offs
+
+- **Pro:** Eliminates merge conflicts entirely. Simpler workflow. Faster execution.
+- **Con:** Loses merge-commit history on prod. Force-push overwrites prod history.
+- **Acceptable because:** No real prod system exists yet. When one is added, we can revisit and switch to a merge-based approach for traceability.
+
+### Reversibility
+
+If a real prod deployment pipeline is introduced, revert to merge-based promotion by restoring the old merge logic in `squad-promote.yml`. The `strip-forbidden-paths.sh` script remains the single source of truth either way.
+
