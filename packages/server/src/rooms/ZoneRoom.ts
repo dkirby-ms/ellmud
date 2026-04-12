@@ -629,7 +629,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     this.sendTraceNarrations(client, startRoom);
 
     // Send exploration data so client map can render the starting room
-    this.sendExplorationData(client, playerId, startRoom);
+    await this.sendExplorationData(client, playerId, startRoom);
 
     // Send initial room occupants
     this.sendRoomOccupants(client, playerId, startRoom);
@@ -2783,17 +2783,40 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   }
 
   /** Send bulk exploration data to a client (on join). */
-  private sendExplorationData(client: Client, playerId: string, currentRoomId: string): void {
+  private async sendExplorationData(client: Client, playerId: string, currentRoomId: string): Promise<void> {
     const roomData = this.buildExploredRoomData(currentRoomId);
     if (!roomData) return;
 
+    // Load all previously visited rooms from this zone to provide complete map data
+    const allRooms: ExploredRoomData[] = [roomData];
+    
+    if (this.zoneSlug) {
+      try {
+        const exploredRooms = await this.explorationRepo.getExploredRoomsInZone(playerId, this.zoneSlug);
+        
+        // Build room data for each visited room that still exists in the current graph
+        for (const explored of exploredRooms) {
+          if (explored.roomId !== currentRoomId && this.roomGraph.rooms.has(explored.roomId)) {
+            const historicalRoomData = this.buildExploredRoomData(explored.roomId);
+            if (historicalRoomData) {
+              allRooms.push(historicalRoomData);
+            }
+          }
+        }
+        
+        this.log(`Loaded ${allRooms.length} explored room(s) for ${this.playerTag(playerId)}`);
+      } catch (err) {
+        this.log(`Failed to load exploration history for ${this.playerTag(playerId)}: ${err}`);
+      }
+    }
+
     const message: ExplorationDataMessage = {
       type: MessageTypes.EXPLORATION_DATA,
-      rooms: [roomData],
+      rooms: allRooms,
       currentRoomId,
     };
     client.send(MessageTypes.EXPLORATION_DATA, message);
-    this.log(`Exploration data sent to ${this.playerTag(playerId)} (${currentRoomId})`);
+    this.log(`Exploration data sent to ${this.playerTag(playerId)} (${allRooms.length} room(s))`);
 
     // Persist visit
     this.recordExplorationVisit(playerId, currentRoomId, roomData);
