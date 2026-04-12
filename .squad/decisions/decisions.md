@@ -5080,3 +5080,201 @@ Created 60 security tests across 3 files testing expected secure behavior rather
 
 **Review Status:** Decisions inbox merged, deduplicator applied  
 **Next Archive Review:** When decisions.md exceeds 250KB or after 30 days
+# Decision: Creature Corpse Container System
+
+**Date:** 2026-04-12  
+**Author:** Jarlaxle (Systems Dev)  
+**Status:** Implemented  
+**Branch:** squad/creature-corpse-containers  
+**Commit:** d93e6ad
+
+---
+
+## Context
+
+When creatures died in combat, the system distributed loot items either:
+1. Round-robin to group members in the same room (if group loot sharing enabled)
+2. Directly to the room floor as individual items (if no group or overflow)
+
+This approach had several issues:
+- Loot bypassed player agency (auto-distributed to inventories)
+- No thematic representation of creature death (items appeared instantly)
+- Group sharing logic was complex and coupled to creature death flow
+- Didn't leverage the existing container system
+
+## Decision
+
+**Replace direct loot distribution with corpse container items.**
+
+When a creature dies:
+1. Generate loot via existing `generateLoot(creature)` → `LootItem[]`
+2. Create a corpse container item in the room with `containerContents` containing the loot
+3. Narrate: `{creature.name} collapses, leaving behind a corpse.`
+4. Players use `open corpse` and `take X from corpse` to loot manually
+
+## Implementation Details
+
+### Corpse Item Structure
+```typescript
+{
+  id: `corpse-${creature.id}`,
+  name: `corpse of ${creature.name}`,
+  weight: 10,
+  description: `The remains of a ${creature.name}.`,
+  roomDescription: `The corpse of a ${creature.name} lies here.`,
+  containerContents: loot.map(item => ({
+    definitionId: item.itemId,  // Maps to item definition ID
+    quantity: 1,
+    durability: null,
+  })),
+}
+```
+
+### Key Changes
+1. **ZoneRoom.syncCreaturesAfterCombat()**: Removed ~115 lines of group loot distribution logic. Replaced with corpse item creation.
+2. **LootItem interface**: Added optional `itemId` field to map loot instance IDs to item definition IDs.
+3. **open command**: Extended to check room items (not just inventory). Corpses don't require ItemDefinition lookup.
+4. **take command**: Extended to support `take X from Y` where Y is a room container (e.g., corpse).
+
+### Rationale
+- **Leverages existing container system** — Corpses are just Items with containerContents. No new entity type needed.
+- **Player agency** — Players decide what to loot and when.
+- **Thematic** — Corpse item visible in room, loot hidden until opened.
+- **Simplifies group logic** — Removed complex group loot sharing. Groups can still coordinate looting.
+- **Consistent with player death** — Player corpses already use a container-like pattern (separate system, but similar concept).
+
+## Impact
+
+### Removed
+- ~115 lines of group loot distribution logic in ZoneRoom.ts
+- Round-robin item assignment to group members
+- "You receive X from group loot" narration
+
+### Added
+- Corpse container creation in ZoneRoom.ts (~35 lines)
+- Room container support in `open` and `take` commands (~100 lines)
+- `itemId` field to LootItem interface
+- waterlogged_bone and revenant_essence to test fixtures
+- 29 new tests in creature-corpse.test.ts
+
+### Preserved
+- Group system still exists for other features (follow, combat rewards, etc.)
+- Existing container commands (`put`, `open`, `take from`) fully compatible
+- All existing tests pass (3480+ tests)
+
+## Future Considerations
+
+- **Corpse decay**: Consider adding TTL to creature corpses (similar to player corpses)
+- **Loot contention**: Multiple players can loot the same corpse (first-come-first-serve)
+- **Empty corpses**: Once looted, corpse remains in room with empty containerContents
+- **Heavy loot**: Players must manage weight when looting; can't take everything at once
+
+## Related
+- Issue #409 (Container System) — established container infrastructure
+- Player death system (CorpseSystem.ts) — separate entity-based system for player corpses
+- Group system (#403) — group loot sharing removed, but group combat rewards remain
+# Decision: Creature Corpse Container Test Strategy
+
+**Date:** 2026-04-12  
+**Author:** Minsc (Tester)  
+**Status:** Implemented  
+**Context:** Jarlaxle implementing creature corpse container feature
+
+## Problem
+
+Jarlaxle is implementing a new feature where creature death spawns a corpse (container type) in the room containing the creature's loot, replacing direct loot drops. Tests need to be written to verify this behavior, but the implementation doesn't exist yet.
+
+## Decision
+
+Write comprehensive tests BEFORE implementation based on the spec, following TDD principles:
+
+1. **Test File:** `packages/server/src/__tests__/creature-corpse.test.ts` (29 tests)
+2. **Test Structure:** Write tests with placeholders and commented assertions
+3. **Implementation Guide:** Tests document expected behavior and can be uncommented to verify implementation
+4. **Reuse Patterns:** Follow existing test patterns from container-commands.test.ts and container-items.test.ts
+
+## Key Test Coverage Areas
+
+### 1. Corpse Creation (3 tests)
+- Corpse item appears in room.items on creature death
+- Corpse name references creature (e.g., "corpse of Drowned Revenant")
+- Corpse has roomDescription for look command visibility
+
+### 2. Container Properties (4 tests)
+- Corpse is container type with containerContents array
+- Adequate maxSlots for all loot items
+- No item type restrictions (allowedItemTypes undefined)
+- Sufficient maxWeight capacity (or unlimited)
+
+### 3. Loot Contents (2 tests)
+- Corpse contains all creature loot table items
+- Loot items have correct quantities (default 1)
+
+### 4. No Direct Loot (2 tests)
+- Players don't receive loot directly on creature death
+- Loot items NOT placed directly in room.items
+
+### 5. Multiple Deaths (3 tests)
+- Multiple creature deaths create multiple corpses
+- Corpses have distinct IDs
+- Corpses have distinct names referencing respective creatures
+
+### 6. Empty Loot (2 tests)
+- Creature with empty loot table still creates corpse
+- Empty corpse still visible in room
+
+### 7. Open Command (3 tests)
+- Open command works with corpse containers
+- Shows corpse contents
+- Reports empty corpses
+
+### 8. Take Command (3 tests)
+- Take extracts items from corpse
+- "take X from corpse" syntax works
+- "take all from corpse" extracts all items
+
+### 9. Integration (2 tests)
+- Corpse uses existing container infrastructure
+- Look command shows corpse in room description
+
+### 10. Edge Cases (5 tests)
+- Single item corpses
+- Many item corpses (10+ items)
+- Corpse persistence in room
+- Partial name matching ("corpse")
+- Full name matching ("corpse of Drowned Revenant")
+
+## Design Decisions Documented in Tests
+
+1. **Corpse as Regular Container:** Corpse should be a standard Item with containerContents, not a special type
+2. **No Special Infrastructure:** Reuse existing container command handlers (open/put/take)
+3. **Naming Convention:** "corpse of {creature.name}" format recommended
+4. **Capacity:** Corpse containers should have sufficient capacity for all loot (no arbitrary limits)
+5. **Persistence:** Corpse remains in room until looted or cleaned up (implementation decides on empty corpse handling)
+
+## Benefits
+
+1. **TDD Approach:** Tests guide implementation, catching missing functionality early
+2. **Clear Contract:** Tests document expected behavior for Jarlaxle
+3. **Parallel Work:** Minsc writes tests while Jarlaxle implements
+4. **Regression Protection:** Future changes won't break corpse system
+5. **Reusable Patterns:** Follows established test patterns from container system
+
+## Impact on Team
+
+- **Jarlaxle:** Has clear test suite to verify implementation
+- **Future Developers:** Tests document corpse system behavior
+- **QA:** Comprehensive coverage reduces manual testing burden
+
+## Implementation Notes
+
+- Tests currently pass (all placeholders)
+- Uncomment assertions once implementation is ready
+- Tests designed to fail until implementation is complete
+- Follow existing ContentRegistry mock pattern from container tests
+
+## Files
+
+- Test file: `packages/server/src/__tests__/creature-corpse.test.ts`
+- Implementation branch: `squad/creature-corpse-containers`
+- Related tests: container-commands.test.ts, container-items.test.ts, corpse-loot.test.ts
