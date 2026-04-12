@@ -70,7 +70,7 @@ jobs:
         if: ${{ inputs.dry_run == 'false' }}
         run: |
           git checkout prod
-          git merge origin/uat --no-ff -m "chore: merge uat → prod"
+          git merge origin/uat --no-ff -X theirs -m "chore: merge uat → prod"
           git push origin prod
           echo "✅ Merged uat into prod and pushed — squad-release.yml will create release"
 
