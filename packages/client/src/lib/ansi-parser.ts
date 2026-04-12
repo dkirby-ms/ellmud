@@ -135,6 +135,9 @@ function parseTaggedText(input: string): StyledSegment[] {
         // Unknown close tag — pass through as literal text
         segments.push({ text: match[0], classes: stack.map((n) => `ansi-${n}`) });
       }
+    } else if (tagName === "reset") {
+      // [reset] — universal reset (same as [/])
+      stack.length = 0;
     } else if (VALID_TAG.has(tagName)) {
       stack.push(tagName);
     } else {

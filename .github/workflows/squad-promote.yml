@@ -1,4 +1,8 @@
-name: Squad Promote
+name: Squad Promote (uat → prod)
+
+# Promotes uat → prod and triggers a release.
+# For dev → uat promotion, use scheduled-uat-promote.yml (runs automatically
+# on schedule, or trigger manually via workflow_dispatch).
 
 on:
   workflow_dispatch:
@@ -15,101 +19,12 @@ permissions:
   actions: write
 
 concurrency:
-  group: uat-promote
+  group: prod-promote
   cancel-in-progress: false
 
 jobs:
-  dev-to-uat:
-    name: Promote dev → uat
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Fetch all branches
-        run: git fetch --all
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Show current state (dry run info)
-        run: |
-          echo "=== dev HEAD ===" && git log origin/dev -1 --oneline
-          echo "=== uat HEAD ===" && git log origin/uat -1 --oneline
-          echo "=== Files that would be stripped ==="
-          git diff origin/uat..origin/dev --name-only | grep -E "^(\.(ai-team|squad|ai-team-templates)|team-docs/|docs/proposals/)" || echo "(none)"
-
-      - name: Merge dev → uat (strip forbidden paths)
-        if: ${{ inputs.dry_run == 'false' }}
-        run: |
-          git checkout uat
-
-          # Merge dev into uat; allow "already up to date" but fail on real errors
-          MERGE_EXIT=0
-          git merge origin/dev --no-commit --no-ff -X theirs || MERGE_EXIT=$?
-          if [ "$MERGE_EXIT" -ne 0 ]; then
-            # Exit code 128 = nothing to merge / already up to date with --no-commit
-            if git diff --cached --quiet && git diff --quiet; then
-              echo "ℹ️ Nothing to merge — trees are identical"
-            else
-              # Check if all unmerged (conflicted) files are in forbidden paths
-              FORBIDDEN_RE="^(\\.ai-team/|\\.squad/|\\.ai-team-templates/|team-docs/|docs/proposals/)"
-              UNMERGED=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
-              NON_FORBIDDEN=$(echo "$UNMERGED" | grep -vE "$FORBIDDEN_RE" || true)
-              if [ -z "$NON_FORBIDDEN" ] && [ -n "$UNMERGED" ]; then
-                echo "⚠️ Conflicts only in forbidden paths — resolving by removal"
-                echo "$UNMERGED" | xargs -r git rm -f --cached 2>/dev/null || true
-                echo "$UNMERGED" | xargs -r rm -f 2>/dev/null || true
-              else
-                echo "::error::Merge failed with exit code $MERGE_EXIT"
-                git merge --abort 2>/dev/null || true
-                exit 1
-              fi
-            fi
-          fi
-
-          # Strip forbidden paths from merge commit
-          bash .github/scripts/strip-forbidden-paths.sh
-
-          # Commit the merge if there are staged changes
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: merge dev → uat"
-            git push origin uat
-            echo "✅ Merged dev into uat and pushed"
-          else
-            echo "ℹ️ Nothing to merge — uat is already up to date"
-          fi
-
-      - name: Trigger CI/CD on uat
-        if: ${{ inputs.dry_run == 'false' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Give GitHub a moment to process the push
-          sleep 5
-          gh workflow run ci-cd.yml --ref uat
-          echo "✅ Triggered CI/CD pipeline on uat"
-
-      - name: Dry run complete
-        if: ${{ inputs.dry_run == 'true' }}
-        run: echo "🔍 Dry run complete — no changes pushed."
-
   uat-to-prod:
     name: Promote uat → prod (release)
-    needs: dev-to-uat
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
