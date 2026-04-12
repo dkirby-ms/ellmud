@@ -1,3 +1,10 @@
+# [0.2.0-dev.7](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.6...v0.2.0-dev.7) (2026-04-12)
+
+
+### Bug Fixes
+
+* allow deploy on workflow_dispatch events ([e6064e7](https://github.com/dkirby-ms/ellmud/commit/e6064e780c3b3807550e31f7dc33865f2e643498))
+
 # [0.2.0-dev.6](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.5...v0.2.0-dev.6) (2026-04-12)
 
 
