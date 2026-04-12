@@ -1,3 +1,10 @@
+# [0.2.0-dev.12](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.11...v0.2.0-dev.12) (2026-04-12)
+
+
+### Bug Fixes
+
+* **toggle:** report actual new state when toggling settings ([#432](https://github.com/dkirby-ms/ellmud/issues/432)) ([03a237f](https://github.com/dkirby-ms/ellmud/commit/03a237f96d264a78a79eebf2f0712559249daad4))
+
 # [0.2.0-dev.11](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.10...v0.2.0-dev.11) (2026-04-12)
 
 
