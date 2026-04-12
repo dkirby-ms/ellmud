@@ -1,3 +1,10 @@
+# [0.2.0-dev.8](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.7...v0.2.0-dev.8) (2026-04-12)
+
+
+### Bug Fixes
+
+* handle [reset] ANSI tag and simplify squad-promote workflow ([7fa7802](https://github.com/dkirby-ms/ellmud/commit/7fa780271353d07773a110a6f83a1b78cbbd1e60))
+
 # [0.2.0-dev.7](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.6...v0.2.0-dev.7) (2026-04-12)
 
 
