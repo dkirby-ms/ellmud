@@ -25,7 +25,6 @@ import {
   APOTHECARY_POUCH,
   HEALING_DRAUGHT,
   RUSTY_BLADE,
-  ALL_FIXTURE_ITEMS,
   buildFixtureRegistry,
 } from './helpers/item-fixtures.js';
 
