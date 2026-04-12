@@ -69,7 +69,7 @@
 * **ci:** standardize action refs and replace merge error swallowing ([921359c](https://github.com/dkirby-ms/ellmud/commit/921359cbea65769ba21d90db3c92c17496f43ef0))
 * limit GitHub Releases to production branch only ([2089600](https://github.com/dkirby-ms/ellmud/commit/20896006a174bf0e81df37e1318302b48b02b091))
 
-# 1.0.0-dev.1 (2026-04-11)
+# 0.1.0-dev.1 (2026-04-11)
 
 
 ### Bug Fixes
