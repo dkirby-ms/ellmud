@@ -43,6 +43,19 @@
 
 ## Learnings
 
+### Creature Corpse Container System (squad/creature-corpse-containers)
+- **Task:** Replace direct loot distribution with corpse container items when creatures die
+- **Architecture:** On creature death, spawn a corpse container item (regular Item with containerContents) in the room containing the creature's loot. Players use `open corpse` and `take X from corpse` commands to loot.
+- **Key decisions:**
+  - **Room items as containers** — Corpses are regular Items in `room.items[]` with `containerContents` field, not a separate entity system. No ItemDefinition lookup needed for room containers.
+  - **No group loot distribution** — Removed entire group sharing / round-robin loot distribution system. All loot goes into corpse container for manual looting.
+  - **LootItem.itemId field** — Added `itemId` field to LootItem interface to map loot instance IDs to item definition IDs for container storage. Corpse uses `itemId` as `definitionId` in containerContents.
+  - **Open/take command extension** — Extended both commands to check room for containers (not just inventory). `open` checks inventory first, then room. `take from` checks inventory container first, then room container.
+  - **No direct pickup of full corpses** — Corpses with contents cannot be picked up; players must loot them first. Prevents accidental weight violations.
+- **Narration:** `{creature.name} collapses, leaving behind a corpse.` (combat type)
+- **Files:** `rooms/ZoneRoom.ts` (syncCreaturesAfterCombat), `creatures/loot.ts` (itemId field), `commands/handlers/open.ts` (room container support), `commands/handlers/take.ts` (room container support), `__tests__/helpers/item-fixtures.ts` (waterlogged_bone, revenant_essence)
+- **Tests:** Updated creature-wiring.test.ts, container-commands.test.ts. New creature-corpse.test.ts with 29 tests. All 3480+ tests passing.
+
 ### Container Item Type (Issue #409 — Container System Phase 2)
 - **Task:** Implement `container` as a first-class ItemType for bags, pouches, etc.
 - **Architecture:** Container is a regular item with `type: 'container'` + `containerProperties` on ItemDefinition and `contents` on ItemInstance. All operations are pure functions (immutable).
