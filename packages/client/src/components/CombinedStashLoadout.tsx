@@ -146,7 +146,7 @@ export default function CombinedStashLoadout({ room, inZone = false }: CombinedS
       {/* Header */}
       <div className="flex items-center justify-between mb-3" style={{ borderBottom: '1px solid #2A2B35', paddingBottom: '0.5rem' }}>
         <span className="mud-exits" style={{ fontSize: '1rem' }}>
-          ═══ EQUIPMENT &amp; STASH ═══
+          ═══ EQUIPMENT &amp; {inZone ? 'INVENTORY' : 'STASH'} ═══
         </span>
         {pendingEquipAction && (
           <span className="ansi-yellow ansi-italic" style={{ fontSize: '0.8rem' }}>
@@ -256,17 +256,17 @@ export default function CombinedStashLoadout({ room, inZone = false }: CombinedS
         <div className="flex-1 flex flex-col min-h-0">
           <div className="mb-2">
             <span className="ansi-bright-yellow ansi-bold" style={{ fontSize: '0.85rem' }}>
-              STASH
+              {inZone ? 'INVENTORY' : 'STASH'}
             </span>
             <span className="ansi-dim" style={{ fontSize: '0.75rem', marginLeft: '0.75rem' }}>
-              {stashItems.length} item{stashItems.length !== 1 ? 's' : ''}
+              {inZone ? inventory.length : stashItems.length} item{(inZone ? inventory.length : stashItems.length) !== 1 ? 's' : ''}
             </span>
           </div>
 
           <div className="flex-1 overflow-y-auto narrative-scroll">
             {stashItems.length === 0 ? (
               <div className="mud-system" style={{ padding: '1rem 0', fontSize: '0.8rem', fontStyle: 'italic' }}>
-                Your stash is empty.
+                {inZone ? 'No items carried.' : 'Your stash is empty.'}
               </div>
             ) : (
               <div className="space-y-px">
