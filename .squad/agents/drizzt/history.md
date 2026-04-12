@@ -4088,3 +4088,10 @@ Scribe recorded orchestration logs for CodeQL security fixes work:
    - Inbox files deleted (drizzt-codeql-fixes.md, minsc-codeql-tests.md)
 
 **Key Reference:** All 15 CodeQL alerts addressed in PR #433. 3471 tests passing.
+
+### Toggle Command Async Pattern (#432, PR #436)
+
+- **Pattern:** Commands requiring async DB access follow the `who` command pattern — verb is intercepted in `ZoneRoom.handleCommandMessage` before the sync `handleCommand` dispatch, delegated to an async method that calls `deliverResult` directly.
+- **Key files:** `packages/server/src/commands/handlers/toggle.ts`, `packages/server/src/rooms/ZoneRoom.ts` (handleToggleCommand method near handleWhoCommand)
+- **CommandHandler type is sync** (`(ctx) => CommandResult`). Async commands must be special-cased in ZoneRoom rather than changing the type (too many test call sites depend on sync return).
+- **TOGGLE_MAP** in toggle.ts has `enabledMsg`/`disabledMsg` fields — always use them for response text.
