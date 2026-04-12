@@ -29,7 +29,7 @@ async function getColyseusRoomId(zoneSlug: string): Promise<string> {
   }
   const body = (await res.json()) as { rooms: RoomSummary[] };
   const room = body.rooms.find(
-    (r) => r.name === `zone_${zoneSlug}` || r.name === zoneSlug,
+    (r) => r.name === `zone:${zoneSlug}` || r.name === `zone_${zoneSlug}` || r.name === zoneSlug,
   );
   if (!room) {
     throw new Error(

@@ -16,8 +16,8 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: 1,
 
-  // Generous timeout — WebSocket connections need time to establish
-  timeout: 30_000,
+  // Per-test server restart adds ~10-15s startup overhead
+  timeout: 60_000,
   expect: { timeout: 10_000 },
 
   reporter: [['list'], ['html', { open: 'never' }]],
@@ -36,13 +36,6 @@ export default defineConfig({
   ],
 
   webServer: [
-    {
-      command: 'ALLOW_LOCAL_AUTH=true ADMIN_TOKEN=ellmud-admin-dev npm run dev:server',
-      port: 2567,
-      reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
-      cwd: '../../',
-    },
     {
       command: 'VITE_ALLOW_LOCAL_AUTH=true npm run dev:client',
       port: 3000,

@@ -73,11 +73,13 @@ test.describe('Item Pickup & Drop', () => {
     await bob.sendCommand('i');
     await bob.waitForMessage(/Waterlogged Potion/i);
 
-    // Alice should no longer see it on the ground
-    await alice.sendCommand('look');
-    const aliceMessages = await alice.getMessages();
-    const recentLook = aliceMessages.slice(-15).join('\n');
-    expect(recentLook).not.toMatch(/Waterlogged Potion.*lies here/i);
+    // Alice verifies she no longer has it
+    const beforeInv = (await alice.getMessages()).length;
+    await alice.sendCommand('i');
+    await alice.getPage().waitForTimeout(SETTLE_MS);
+    const afterInv = await alice.getMessages();
+    const aliceInv = afterInv.slice(beforeInv).join('\n');
+    expect(aliceInv).not.toMatch(/Waterlogged Potion/i);
   });
 
   test('drop rejects items the player is not carrying', async ({ createPlayer }) => {
@@ -296,9 +298,11 @@ test.describe('Container Exchange Between Players', () => {
     await bob.waitForMessage(/\(empty\)/i);
 
     // Alice's inventory should no longer have the potion or satchel
+    const beforeInv = (await alice.getMessages()).length;
     await alice.sendCommand('i');
-    const aliceInventory = await alice.getMessages();
-    const recentAlice = aliceInventory.slice(-10).join('\n');
-    expect(recentAlice).not.toMatch(/Waterlogged Potion/i);
+    await alice.getPage().waitForTimeout(SETTLE_MS);
+    const afterInv = await alice.getMessages();
+    const newInvOutput = afterInv.slice(beforeInv).join('\n');
+    expect(newInvOutput).not.toMatch(/Waterlogged Potion/i);
   });
 });

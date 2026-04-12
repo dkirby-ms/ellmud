@@ -1,8 +1,13 @@
 import { test as base } from '@playwright/test';
 import { PlayerFixture } from './player-fixture.js';
+import { ServerManager } from './server-manager.js';
 
 /**
- * Extended Playwright test fixture that provides a `createPlayer()` factory.
+ * Extended Playwright test fixture that provides a `createPlayer()` factory
+ * and a fresh game server for each test.
+ *
+ * The `gameServer` fixture starts a clean server process before each test
+ * and tears it down after, ensuring no shared game state between tests.
  *
  * Each call to `createPlayer(name)` spins up a fully-connected player:
  *   1. Registers a unique account (local auth)
@@ -13,9 +18,19 @@ import { PlayerFixture } from './player-fixture.js';
  * All players are cleaned up automatically after the test.
  */
 export const test = base.extend<{
+  gameServer: ServerManager;
   createPlayer: (name: string, zone?: string) => Promise<PlayerFixture>;
 }>({
-  createPlayer: async ({ browser }, use) => {
+  // Start a fresh game server for each test
+  gameServer: async ({}, use) => {
+    const server = new ServerManager();
+    await server.start();
+    await use(server);
+    await server.stop();
+  },
+
+  // createPlayer depends on gameServer to ensure server is running
+  createPlayer: async ({ browser, gameServer: _gameServer }, use) => {
     const players: PlayerFixture[] = [];
 
     await use(async (name: string, zone = 'the-reliquary') => {
