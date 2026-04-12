@@ -474,26 +474,6 @@ describe('Repop Logic (specification-based)', () => {
    */
 
   it('repop does NOT restore items — items persist permanently', () => {
-    // Original zone definition has starting items
-    const originalRooms: SharedZoneRoomDefinition[] = [
-      {
-        id: 'room-vault',
-        zoneId: 'zone-1',
-        slug: 'vault',
-        name: 'Vault',
-        description: 'A treasure vault.',
-        type: 'corridor',
-        properties: [],
-        startingItems: [
-          { id: 'chest-1', type: 'chest', items: ['gold-ring'] },
-          { id: 'chest-2', type: 'crate', items: ['silver-key'] },
-        ],
-        hazards: [],
-        npcs: [],
-        features: [],
-      } as SharedZoneRoomDefinition,
-    ];
-
     // Current state: chest-1 was looted (removed), chest-2 remains
     const currentGraph: RoomGraph = {
       rooms: new Map([

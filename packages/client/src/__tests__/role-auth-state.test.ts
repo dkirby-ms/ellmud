@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { appReducer, initialState, type AppAction, type AppState } from '../store.js';
+import { appReducer, initialState, type AppAction } from '../store.js';
 
 // ─── Role in App State Tests ─────────────────────────────────────────────────
 

@@ -22,6 +22,7 @@ function makeCtx(args: string[], otherPlayers: string[] = []): CommandContext {
   const player = new PlayerState('test-session', 'room-1');
   return {
     player,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     room: { id: 'room-1', name: 'Test Room', description: 'A test room.', exits: {} } as any,
     args,
     resolveRoom: () => undefined,
@@ -64,6 +65,7 @@ describe('Security: say sanitization', () => {
     const result = handleSay(makeCtx([nasty]));
     const text = narrationText(result);
     expect(text).toContain('helloworld');
+    // eslint-disable-next-line no-control-regex
     expect(text).not.toMatch(/[\x00-\x08\x0B\x0C\x0E-\x1F]/);
   });
 
@@ -147,6 +149,7 @@ describe('Security: emote sanitization', () => {
     const result = handleEmote(makeCtx([nasty]));
     const text = narrationText(result);
     expect(text).toContain('waveshappily');
+    // eslint-disable-next-line no-control-regex
     expect(text).not.toMatch(/[\x00-\x1F\x7F-\x9F]/);
   });
 
