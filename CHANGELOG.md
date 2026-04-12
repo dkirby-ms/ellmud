@@ -1,3 +1,10 @@
+# [0.2.0-dev.17](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.16...v0.2.0-dev.17) (2026-04-12)
+
+
+### Bug Fixes
+
+* minimap rendering with progressive exploration ([#443](https://github.com/dkirby-ms/ellmud/issues/443)) ([cd787d1](https://github.com/dkirby-ms/ellmud/commit/cd787d164c25d906a0280358160cbd07ead6690f))
+
 # [0.2.0-dev.16](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.15...v0.2.0-dev.16) (2026-04-12)
 
 
