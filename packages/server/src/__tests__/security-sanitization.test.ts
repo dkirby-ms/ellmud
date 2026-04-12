@@ -19,7 +19,7 @@ import { PlayerState } from '../state/PlayerState.js';
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeCtx(args: string[], otherPlayers: string[] = []): CommandContext {
-  const player = new PlayerState();
+  const player = new PlayerState('test-session', 'room-1');
   return {
     player,
     room: { id: 'room-1', name: 'Test Room', description: 'A test room.', exits: {} } as any,

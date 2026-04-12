@@ -12,6 +12,7 @@ import express from 'express';
 import http from 'http';
 import { ZoneRoom } from './rooms/index.js';
 import { staticLimiter } from './middleware/rate-limit.js';
+import rateLimit from 'express-rate-limit';
 import {
   AuthService,
   InMemoryTokenStore,
@@ -159,6 +160,18 @@ const { presence, isRedis: isPresenceRedis } = await createPresence(config);
 
 const app = express();
 app.use(express.json());
+
+// Global rate limiter — baseline protection for all endpoints (500 req / 15 min per IP).
+// Per-route limiters (authLimiter, apiLimiter, adminWriteLimiter) enforce tighter tiers.
+if (process.env.ALLOW_LOCAL_AUTH !== 'true') {
+  app.use(rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 500,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests. Please try again later.' },
+  }));
+}
 
 // Trust the Azure Container Apps load balancer for correct protocol detection
 app.set('trust proxy', 1);
@@ -313,7 +326,7 @@ app.use('/colyseus', monitor());
 
 // Serve client static files (client build output lives in packages/client/dist)
 const publicPath = path.resolve(__dirnameInit, '../../client/dist');
-app.use(express.static(publicPath));
+app.use(staticLimiter, express.static(publicPath));
 
 // Catch-all: serve index.html for client-side routing (GET only — does not
 // interfere with Colyseus POST /matchmake/* routes).
