@@ -81,7 +81,7 @@ jobs:
   # ─── Docker Build & Push to ACR ───────────────────────────────────────────────
   # Runs on push to uat/prod only. Uses GitHub environments for per-env secrets.
   docker-build-push:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: build-and-test
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name }}
