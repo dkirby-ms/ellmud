@@ -42,7 +42,7 @@ function makeRoom(
     description: `A room called ${slug}.`,
     type: 'corridor',
     properties: [],
-    lootContainers: [],
+    startingItems: [],
     hazards: [],
     npcs: [],
     features: [],
@@ -254,7 +254,7 @@ describe('convertZoneToRoomGraph', () => {
         makeRoom('vault', {
           type: 'entry',
           properties: ['heavy_door'],
-          lootContainers: [
+          startingItems: [
             { id: 'chest-1', type: 'chest', items: ['gold-ring'] },
           ],
           hazards: [{ type: 'gas_trap', severity: 0.6 }],

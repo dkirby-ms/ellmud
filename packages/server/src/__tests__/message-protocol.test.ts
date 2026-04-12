@@ -58,10 +58,8 @@ describe('Message Protocol — Server → Client', () => {
 
     expect(collector.zoneState.length).toBeGreaterThan(0);
 
-    const validStates = ['seeding', 'open', 'active', 'destabilising', 'collapse'];
     for (const msg of collector.zoneState) {
-      expect(validStates).toContain(msg.state);
-      expect(msg.collapseTimer).toBeTypeOf('number');
+      expect(msg.state).toBe('open');
     }
 
     await client.leave();

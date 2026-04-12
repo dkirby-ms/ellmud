@@ -63,7 +63,7 @@ async function seedZone(
     description: 'A warm, safe room.',
     type: 'entry',
     properties: [],
-    lootContainers: [],
+    startingItems: [],
     hazards: [],
     npcs: [],
     features: [],
@@ -76,7 +76,7 @@ async function seedZone(
     description: 'A dim hallway stretching north.',
     type: 'corridor',
     properties: [],
-    lootContainers: [],
+    startingItems: [],
     hazards: [],
     npcs: [],
     features: [],
@@ -248,7 +248,6 @@ describe('D3 — Exploration records correct zone slug', () => {
   it('zone rooms record null zoneSlug', async () => {
     const room = await colyseus.createRoom('zone', {
       useTestGraph: true,
-      collapseTimer: 120,
     });
     const { client } = await connectWithPlayer(room, 'explore-zone-slug-player');
 

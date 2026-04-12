@@ -9,9 +9,7 @@ import {
   bootTestServer,
   connectTestClient,
   wait,
-  waitUntil,
   makeCommand,
-  quickCollapseOptions,
 } from './helpers/index.js';
 import { MessageCollector } from './helpers/message-collector.js';
 import { resetConfig } from '../config.js';
@@ -32,31 +30,25 @@ afterAll(async () => {
 });
 
 describe('Edge Cases — ZoneRoom', () => {
-  it('should handle command during zone collapse without crashing', async () => {
+  it('zone stays open and handles commands continuously', async () => {
     const { client, collector } = await connectTestClient(
       colyseus,
       'zone',
-      quickCollapseOptions(8),
     );
 
-    const reachedCollapse = await waitUntil(
-      () => collector.zoneState.some((s) => s.state === 'collapse'),
-      25_000,
-    );
+    await wait(2000);
 
-    if (reachedCollapse) {
-      try {
-        client.send(MessageTypes.COMMAND, makeCommand('look'));
-        await wait(500);
-      } catch {
-        // Connection may be closed — that's expected
-      }
-    }
+    // Zone should be open (no collapse)
+    expect(collector.zoneState.every((s) => s.state === 'open')).toBe(true);
+
+    // Commands work normally
+    client.send(MessageTypes.COMMAND, makeCommand('look'));
+    await wait(500);
 
     expect(true).toBe(true);
 
-    try { await client.leave(); } catch { /* may already be disconnected */ }
-  }, 30_000);
+    await client.leave();
+  });
 
   it('should handle player disconnect mid-tick gracefully', async () => {
     const room = await colyseus.createRoom('zone', {});
@@ -98,14 +90,14 @@ describe('Edge Cases — ZoneRoom', () => {
     await client.leave();
   });
 
-  it('should handle joining during seeding phase', async () => {
+  it('should start in open state immediately', async () => {
     const { client, collector } = await connectTestClient(colyseus, 'zone', {}, 100);
 
     expect(collector.narrate.length).toBeGreaterThan(0);
     expect(collector.zoneState.length).toBeGreaterThan(0);
 
     const firstState = collector.zoneState[0]!;
-    expect(firstState.state).toBe('seeding');
+    expect(firstState.state).toBe('open');
 
     await client.leave();
   });

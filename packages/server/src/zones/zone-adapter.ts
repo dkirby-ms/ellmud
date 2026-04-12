@@ -49,7 +49,7 @@ export function convertZoneToRoomGraph(zoneData: ZoneData): RoomGraph {
       description: zr.description,
       type: zr.type,
       exits: new Map<Direction, string>(),
-      items: [...zr.lootContainers],
+      items: [...zr.startingItems],
       hazards: [...zr.hazards],
       ...(zr.properties.length > 0 ? { properties: [...zr.properties] } : {}),
       ...(zr.features.length > 0 ? { features: [...zr.features] } : {}),

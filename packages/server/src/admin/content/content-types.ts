@@ -80,7 +80,7 @@ export interface RoomTemplateDefinition extends ContentEntity {
   type: string;
   properties: string[];
   hazards: Array<{ type: string; severity: number }>;
-  lootContainers: Array<{ type: string; itemIds: string[] }>;
+  startingItems: Array<{ type: string; itemIds: string[] }>;
 }
 
 // ─── Narrative Template Definition ───────────────────────────────────────────

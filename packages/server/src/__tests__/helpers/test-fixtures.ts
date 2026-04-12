@@ -78,8 +78,9 @@ export const ALL_NARRATION_TYPES: NarrationType[] = [
 ];
 
 /**
- * Shard options for quick-collapse tests (very short timer).
+ * @deprecated Collapse lifecycle removed in #438. Zones are always 'open'.
+ * Kept for backward compatibility — returns empty options.
  */
-export function quickCollapseOptions(collapseTimer = 10): Record<string, unknown> {
-  return { collapseTimer };
+export function quickCollapseOptions(_collapseTimer = 10): Record<string, unknown> {
+  return {};
 }

@@ -188,10 +188,9 @@ describe('Room Switching — Edge Cases (Integration)', () => {
 
   // 🔮 ANTICIPATORY — Phase 2: enter zone during non-open lifecycle
   it.todo(
-    'enter <zone-id> when zone lifecycle is not open → rejection message (Phase 2)',
-    // When Phase 2 implements zone lifecycle awareness in Refuge, entering a
-    // zone that is 'destabilising' or 'collapse' should be rejected.
-    // Expected: system narration "That rift is collapsing" and NO ROOM_SWITCH.
+    'enter <zone-id> lifecycle check (deprecated — zones are always open now)',
+    // Collapse lifecycle removed in #438. Zones are persistent MUD-style.
+    // This todo is no longer applicable.
   );
 
   // 🔮 ANTICIPATORY — Phase 2: expedition board when no zones exist

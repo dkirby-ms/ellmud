@@ -35,7 +35,6 @@ export interface AdminZoneDetail {
   clients: number;
   lifecycle: string;
   stability: number;
-  collapseTimer: number;
   tick: number;
   playerCount: number;
   paused: boolean;

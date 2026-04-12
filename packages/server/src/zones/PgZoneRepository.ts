@@ -5,7 +5,7 @@
  * as PgItemDefinitionsStore: query helper,
  * row-to-entity mapping, proper camelCase ↔ snake_case conversion.
  *
- * JSONB fields (loot_containers, hazards, npcs, condition) are serialized
+ * JSONB fields (starting_items, hazards, npcs, condition) are serialized
  * with JSON.stringify on write and parsed on read (pg driver auto-parses JSONB).
  */
 
@@ -49,7 +49,7 @@ interface ZoneRoomRow {
   description: string;
   type: string;
   properties: string[];
-  loot_containers: unknown[];
+  starting_items: unknown[];
   hazards: unknown[];
   npcs: unknown[];
   features: unknown[];
@@ -105,7 +105,7 @@ function roomRowToEntity(row: ZoneRoomRow): ZoneRoomDefinition {
     description: row.description,
     type: row.type as ZoneRoomDefinition['type'],
     properties: row.properties as ZoneRoomDefinition['properties'],
-    lootContainers: row.loot_containers as ZoneRoomDefinition['lootContainers'],
+    startingItems: row.starting_items as ZoneRoomDefinition['startingItems'],
     hazards: row.hazards as ZoneRoomDefinition['hazards'],
     npcs: row.npcs as ZoneRoomDefinition['npcs'],
     features: (row.features ?? []) as ZoneRoomDefinition['features'],
@@ -263,7 +263,7 @@ export class PgZoneRepository implements ZoneRepository {
     const result = await query<ZoneRoomRow>(
       `INSERT INTO zone_rooms (
         zone_id, slug, name, description, type, properties,
-        loot_containers, hazards, npcs, features
+        starting_items, hazards, npcs, features
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
       RETURNING *`,
       [
@@ -273,7 +273,7 @@ export class PgZoneRepository implements ZoneRepository {
         room.description,
         room.type,
         room.properties ?? JSON.stringify([]),
-        JSON.stringify(room.lootContainers ?? []),
+        JSON.stringify(room.startingItems ?? []),
         JSON.stringify(room.hazards ?? []),
         JSON.stringify(room.npcs ?? []),
         JSON.stringify(room.features ?? []),
@@ -300,7 +300,7 @@ export class PgZoneRepository implements ZoneRepository {
     const result = await query<ZoneRoomRow>(
       `UPDATE zone_rooms SET
         slug = $1, name = $2, description = $3, type = $4, properties = $5,
-        loot_containers = $6, hazards = $7, npcs = $8, features = $9, updated_at = now()
+        starting_items = $6, hazards = $7, npcs = $8, features = $9, updated_at = now()
       WHERE id = $10
       RETURNING *`,
       [
@@ -309,7 +309,7 @@ export class PgZoneRepository implements ZoneRepository {
         merged.description,
         merged.type,
         merged.properties,
-        JSON.stringify(merged.lootContainers),
+        JSON.stringify(merged.startingItems),
         JSON.stringify(merged.hazards),
         JSON.stringify(merged.npcs),
         JSON.stringify(merged.features ?? []),

@@ -19,7 +19,7 @@ interface RoomRow {
   type: string;
   properties: string[];
   hazards: Array<{ type: string; severity: number }>;
-  loot_containers: Array<{ type: string; itemIds: string[] }>;
+  starting_items: Array<{ type: string; itemIds: string[] }>;
   created_at: Date;
   updated_at: Date;
 }
@@ -34,7 +34,7 @@ function rowToEntity(row: RoomRow): ContentEntity {
     type: row.type,
     properties: row.properties,
     hazards: row.hazards,
-    lootContainers: row.loot_containers,
+    startingItems: row.starting_items,
   };
 }
 
@@ -43,7 +43,7 @@ export class PgRoomDefinitionsStore implements IContentStore<ContentEntity> {
 
   async getAll(): Promise<ContentEntity[]> {
     const result = await query<RoomRow>(
-      `SELECT id, slug, name, description, type, properties, hazards, loot_containers, created_at, updated_at
+      `SELECT id, slug, name, description, type, properties, hazards, starting_items, created_at, updated_at
        FROM room_definitions
        ORDER BY name`,
     );
@@ -52,7 +52,7 @@ export class PgRoomDefinitionsStore implements IContentStore<ContentEntity> {
 
   async getById(id: string): Promise<ContentEntity | undefined> {
     const result = await query<RoomRow>(
-      `SELECT id, slug, name, description, type, properties, hazards, loot_containers, created_at, updated_at
+      `SELECT id, slug, name, description, type, properties, hazards, starting_items, created_at, updated_at
        FROM room_definitions
        WHERE id = $1`,
       [id],
@@ -62,16 +62,16 @@ export class PgRoomDefinitionsStore implements IContentStore<ContentEntity> {
   }
 
   async create(entity: ContentEntity): Promise<ContentEntity> {
-    const { name, description, type, properties, hazards, lootContainers } =
+    const { name, description, type, properties, hazards, startingItems } =
       entity as Record<string, unknown>;
 
     const slug = entity.slug ?? entity.id ?? '';
 
     try {
       const result = await query<RoomRow>(
-        `INSERT INTO room_definitions (slug, name, description, type, properties, hazards, loot_containers)
+        `INSERT INTO room_definitions (slug, name, description, type, properties, hazards, starting_items)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id, slug, name, description, type, properties, hazards, loot_containers, created_at, updated_at`,
+         RETURNING id, slug, name, description, type, properties, hazards, starting_items, created_at, updated_at`,
         [
           slug as string,
           name as string,
@@ -79,7 +79,7 @@ export class PgRoomDefinitionsStore implements IContentStore<ContentEntity> {
           (type as string) ?? '',
           JSON.stringify((properties as string[]) ?? []),
           JSON.stringify((hazards as Array<{ type: string; severity: number }>) ?? []),
-          JSON.stringify((lootContainers as Array<{ type: string; itemIds: string[] }>) ?? []),
+          JSON.stringify((startingItems as Array<{ type: string; itemIds: string[] }>) ?? []),
         ],
       );
       return rowToEntity(result.rows[0]);
@@ -105,9 +105,9 @@ export class PgRoomDefinitionsStore implements IContentStore<ContentEntity> {
     const result = await query<RoomRow>(
       `UPDATE room_definitions
        SET slug = $1, name = $2, description = $3, type = $4, properties = $5,
-           hazards = $6, loot_containers = $7, updated_at = now()
+           hazards = $6, starting_items = $7, updated_at = now()
        WHERE id = $8
-       RETURNING id, slug, name, description, type, properties, hazards, loot_containers, created_at, updated_at`,
+       RETURNING id, slug, name, description, type, properties, hazards, starting_items, created_at, updated_at`,
       [
         merged.slug as string,
         merged.name as string,
@@ -115,7 +115,7 @@ export class PgRoomDefinitionsStore implements IContentStore<ContentEntity> {
         (merged.type as string) ?? '',
         JSON.stringify((merged.properties as string[]) ?? []),
         JSON.stringify((merged.hazards as Array<{ type: string; severity: number }>) ?? []),
-        JSON.stringify((merged.lootContainers as Array<{ type: string; itemIds: string[] }>) ?? []),
+        JSON.stringify((merged.startingItems as Array<{ type: string; itemIds: string[] }>) ?? []),
         id,
       ],
     );

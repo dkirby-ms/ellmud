@@ -309,7 +309,7 @@ export function createZoneRouter(): Router {
       const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = data;
       const roomData = {
         properties: [],
-        lootContainers: [],
+        startingItems: [],
         hazards: [],
         npcs: [],
         features: [],
