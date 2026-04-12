@@ -1,3 +1,10 @@
+# [0.2.0-dev.15](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.14...v0.2.0-dev.15) (2026-04-12)
+
+
+### Bug Fixes
+
+* resolve all ESLint errors (0 errors remaining) ([a6fd0e1](https://github.com/dkirby-ms/ellmud/commit/a6fd0e1f28536a5f15c853f2a2399f1bc0b45268))
+
 # [0.2.0-dev.14](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.13...v0.2.0-dev.14) (2026-04-12)
 
 
