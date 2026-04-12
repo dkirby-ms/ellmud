@@ -4,6 +4,9 @@
  * Validates context-aware command listing, detailed help for specific commands,
  * dev-mode gating for dev commands, feature room command visibility,
  * and parser integration with the `?` alias.
+ *
+ * The help handler returns structured helpData (HelpCommandEntry[]) instead
+ * of narrations for the client-side modal. Tests validate the helpData payload.
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
@@ -11,6 +14,7 @@ import { handleCommand, type CommandContext, type CommandResult } from '../comma
 import { PlayerState } from '../state/PlayerState.js';
 import { resetConfig } from '../config.js';
 import type { Room, Direction, RoomType } from '../generator/RoomGraph.js';
+import type { HelpCommandEntry } from '@ellmud/shared';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -57,6 +61,16 @@ function narrationText(result: CommandResult): string {
   return result.narrations.map((n) => n.text).join('\n');
 }
 
+/** Extract helpData command names as a lowercase set for easy assertions. */
+function helpCommandNames(result: CommandResult): string[] {
+  return (result.helpData?.commands ?? []).map((c: HelpCommandEntry) => c.name);
+}
+
+/** Extract helpData category names. */
+function helpCategories(result: CommandResult): string[] {
+  return [...new Set((result.helpData?.commands ?? []).map((c: HelpCommandEntry) => c.category))];
+}
+
 function enableDevMode(): void {
   process.env.DEV_MODE_ENABLED = 'true';
   resetConfig();
@@ -80,58 +94,49 @@ describe('help command', () => {
   // ═══════════════════════════════════════════════════════════════════════════
 
   describe('help with no arguments', () => {
-    it('returns system narration with command list', () => {
+    it('returns helpData with command entries', () => {
       disableDevMode();
       const result = handleCommand('help', buildCtx());
-      const text = narrationText(result);
 
-      expect(result.narrations.length).toBeGreaterThan(0);
-      expect(result.narrations[0]?.type).toBe('system');
-      expect(text.length).toBeGreaterThan(50); // Should be substantial text
+      expect(result.helpData).toBeDefined();
+      expect(result.helpData!.commands.length).toBeGreaterThan(10);
     });
 
     it('groups commands by category', () => {
       disableDevMode();
       const result = handleCommand('help', buildCtx());
-      const text = narrationText(result).toLowerCase();
+      const categories = helpCategories(result).map(c => c.toLowerCase());
 
-      // Should have category headers
-      expect(text).toMatch(/navigation|movement/);
-      expect(text).toMatch(/items|inventory/);
-      expect(text).toMatch(/communication|social/);
-      expect(text).toMatch(/combat/);
+      expect(categories).toEqual(expect.arrayContaining([
+        expect.stringMatching(/navigation/i),
+        expect.stringMatching(/items/i),
+        expect.stringMatching(/combat/i),
+      ]));
     });
 
     it('includes core commands (go, look, attack, say, etc.)', () => {
       disableDevMode();
       const result = handleCommand('help', buildCtx());
-      const text = narrationText(result).toLowerCase();
+      const names = helpCommandNames(result);
 
-      // Navigation
-      expect(text).toContain('go');
-      expect(text).toContain('look');
-
-      // Items
-      expect(text).toContain('take');
-      expect(text).toContain('drop');
-      expect(text).toContain('inventory');
-
-      // Communication
-      expect(text).toContain('say');
-      expect(text).toContain('whisper');
-      expect(text).toContain('emote');
-
-      // Combat
-      expect(text).toContain('attack');
-      expect(text).toContain('target');
+      expect(names).toContain('go');
+      expect(names).toContain('look');
+      expect(names).toContain('take');
+      expect(names).toContain('drop');
+      expect(names).toContain('inventory');
+      expect(names).toContain('say');
+      expect(names).toContain('whisper');
+      expect(names).toContain('emote');
+      expect(names).toContain('attack');
+      expect(names).toContain('target');
     });
 
-    it('shows "help <command>" hint at the bottom', () => {
+    it('includes help command itself in helpData', () => {
       disableDevMode();
       const result = handleCommand('help', buildCtx());
-      const text = narrationText(result).toLowerCase();
+      const names = helpCommandNames(result);
 
-      expect(text).toMatch(/help\s+<command>|help\s+\[command\]/);
+      expect(names).toContain('help');
     });
   });
 
@@ -144,20 +149,18 @@ describe('help command', () => {
       disableDevMode();
       const normalRoom = makeRoom('normal', 'Normal Room', 'A regular room.');
       const result = handleCommand('help', buildCtx([], { room: normalRoom }));
-      const text = narrationText(result).toLowerCase();
+      const names = helpCommandNames(result);
 
-      // Feature commands should NOT appear
-      expect(text).not.toContain('board');
-      expect(text).not.toContain('zoneboard');
-      expect(text).not.toContain('enter');
-      expect(text).not.toContain('stash');
-      expect(text).not.toContain('store');
-      expect(text).not.toContain('loadout');
-      expect(text).not.toContain('rent');
-      expect(text).not.toContain('sandbox');
+      expect(names).not.toContain('board');
+      expect(names).not.toContain('enter');
+      expect(names).not.toContain('stash');
+      expect(names).not.toContain('store');
+      expect(names).not.toContain('loadout');
+      expect(names).not.toContain('rent');
+      expect(names).not.toContain('sandbox');
     });
 
-    it('shows board/zoneboard/enter commands in feature_expedition_board room', () => {
+    it('shows board/enter commands in feature_expedition_board room', () => {
       disableDevMode();
       const boardRoom = makeRoom(
         'board-room',
@@ -166,59 +169,57 @@ describe('help command', () => {
         'feature_expedition_board',
       );
       const result = handleCommand('help', buildCtx([], { room: boardRoom }));
-      const text = narrationText(result).toLowerCase();
+      const names = helpCommandNames(result);
 
-      expect(text).toContain('board');
-      expect(text).toContain('enter');
-      // May also contain zoneboard as legacy alias
+      expect(names).toContain('board');
+      expect(names).toContain('enter');
     });
 
     it('shows stash/store/loadout commands in feature_stash room', () => {
       disableDevMode();
       const stashRoom = makeRoom('stash-room', 'Stash', 'Personal storage.', 'feature_stash');
       const result = handleCommand('help', buildCtx([], { room: stashRoom }));
-      const text = narrationText(result).toLowerCase();
+      const names = helpCommandNames(result);
 
-      expect(text).toContain('stash');
-      expect(text).toContain('store');
-      expect(text).toContain('loadout');
+      expect(names).toContain('stash');
+      expect(names).toContain('store');
+      expect(names).toContain('loadout');
     });
 
     it('shows rent command in feature_inn room', () => {
       disableDevMode();
       const innRoom = makeRoom('inn', 'The Inn', 'A cozy inn.', 'feature_inn');
       const result = handleCommand('help', buildCtx([], { room: innRoom }));
-      const text = narrationText(result).toLowerCase();
+      const names = helpCommandNames(result);
 
-      expect(text).toContain('rent');
+      expect(names).toContain('rent');
     });
 
     it('shows sandbox command in feature_sandbox_arena room when devMode enabled', () => {
       enableDevMode();
       const sandboxRoom = makeRoom('arena', 'Sandbox Arena', 'Training arena.', 'feature_sandbox_arena');
       const result = handleCommand('help', buildCtx([], { room: sandboxRoom }));
-      const text = narrationText(result).toLowerCase();
+      const names = helpCommandNames(result);
 
-      expect(text).toContain('sandbox');
+      expect(names).toContain('sandbox');
     });
 
     it('does NOT show sandbox command in feature_sandbox room when devMode disabled', () => {
       disableDevMode();
       const sandboxRoom = makeRoom('arena', 'Sandbox Arena', 'Training arena.', 'feature_sandbox_arena');
       const result = handleCommand('help', buildCtx([], { room: sandboxRoom }));
-      const text = narrationText(result).toLowerCase();
+      const names = helpCommandNames(result);
 
-      expect(text).not.toContain('sandbox');
+      expect(names).not.toContain('sandbox');
     });
 
     it('does NOT show sandbox in normal room even with devMode enabled', () => {
       enableDevMode();
       const normalRoom = makeRoom('normal', 'Normal Room', 'A regular room.');
       const result = handleCommand('help', buildCtx([], { room: normalRoom }));
-      const text = narrationText(result).toLowerCase();
+      const names = helpCommandNames(result);
 
-      // Sandbox requires both devMode AND correct room type
-      expect(text).not.toContain('sandbox');
+      expect(names).not.toContain('sandbox');
     });
   });
 
@@ -230,19 +231,19 @@ describe('help command', () => {
     it('does NOT show goto/teleport when devMode is disabled', () => {
       disableDevMode();
       const result = handleCommand('help', buildCtx());
-      const text = narrationText(result).toLowerCase();
+      const names = helpCommandNames(result);
 
-      expect(text).not.toContain('goto');
-      expect(text).not.toContain('teleport');
+      expect(names).not.toContain('goto');
+      expect(names).not.toContain('teleport');
     });
 
     it('shows goto/teleport when devMode is enabled', () => {
       enableDevMode();
       const result = handleCommand('help', buildCtx());
-      const text = narrationText(result).toLowerCase();
+      const names = helpCommandNames(result);
 
-      expect(text).toContain('goto');
-      expect(text).toContain('teleport');
+      expect(names).toContain('goto');
+      expect(names).toContain('teleport');
     });
   });
 
@@ -254,42 +255,38 @@ describe('help command', () => {
     it('shows detailed help for "go" command', () => {
       disableDevMode();
       const result = handleCommand('help', buildCtx(['go']));
-      const text = narrationText(result).toLowerCase();
 
-      expect(result.narrations[0]?.type).toBe('system');
-      expect(text).toContain('go');
-      // Should mention usage or directions
-      expect(text.length).toBeGreaterThan(30);
+      expect(result.helpData).toBeDefined();
+      expect(result.helpData!.focusCommand).toBe('go');
+      const goEntry = result.helpData!.commands.find(c => c.name === 'go');
+      expect(goEntry).toBeDefined();
+      expect(goEntry!.usage.length).toBeGreaterThan(0);
     });
 
     it('shows detailed help for "attack" command', () => {
       disableDevMode();
       const result = handleCommand('help', buildCtx(['attack']));
-      const text = narrationText(result).toLowerCase();
 
-      expect(result.narrations[0]?.type).toBe('system');
-      expect(text).toContain('attack');
-      expect(text.length).toBeGreaterThan(30);
+      expect(result.helpData).toBeDefined();
+      expect(result.helpData!.focusCommand).toBe('attack');
+      const entry = result.helpData!.commands.find(c => c.name === 'attack');
+      expect(entry).toBeDefined();
     });
 
     it('shows detailed help for "look" command', () => {
       disableDevMode();
       const result = handleCommand('help', buildCtx(['look']));
-      const text = narrationText(result).toLowerCase();
 
-      expect(result.narrations[0]?.type).toBe('system');
-      expect(text).toContain('look');
-      expect(text.length).toBeGreaterThan(30);
+      expect(result.helpData).toBeDefined();
+      expect(result.helpData!.focusCommand).toBe('look');
     });
 
     it('shows detailed help for "say" command', () => {
       disableDevMode();
       const result = handleCommand('help', buildCtx(['say']));
-      const text = narrationText(result).toLowerCase();
 
-      expect(result.narrations[0]?.type).toBe('system');
-      expect(text).toContain('say');
-      expect(text.length).toBeGreaterThan(30);
+      expect(result.helpData).toBeDefined();
+      expect(result.helpData!.focusCommand).toBe('say');
     });
 
     it('returns helpful error for unknown command', () => {
@@ -304,20 +301,17 @@ describe('help command', () => {
     it('handles aliases correctly (e.g., help i → inventory)', () => {
       disableDevMode();
       const result = handleCommand('help', buildCtx(['i']));
-      const text = narrationText(result).toLowerCase();
 
-      // Should show help for inventory command
-      expect(text).toContain('inventory');
+      expect(result.helpData).toBeDefined();
+      expect(result.helpData!.focusCommand).toBe('inventory');
     });
 
     it('ignores extra arguments after first (help go north → help go)', () => {
       disableDevMode();
       const result = handleCommand('help', buildCtx(['go', 'north', 'extra']));
-      const text = narrationText(result).toLowerCase();
 
-      // Should show help for "go" command, not error about extra args
-      expect(text).toContain('go');
-      expect(text).not.toContain('unknown');
+      expect(result.helpData).toBeDefined();
+      expect(result.helpData!.focusCommand).toBe('go');
     });
   });
 
@@ -329,31 +323,26 @@ describe('help command', () => {
     it('help help → shows help for the help command itself', () => {
       disableDevMode();
       const result = handleCommand('help', buildCtx(['help']));
-      const text = narrationText(result).toLowerCase();
 
-      expect(result.narrations[0]?.type).toBe('system');
-      expect(text).toContain('help');
-      // Should describe the help command
-      expect(text.length).toBeGreaterThan(20);
+      expect(result.helpData).toBeDefined();
+      expect(result.helpData!.focusCommand).toBe('help');
     });
 
     it('shows help for feature commands when in appropriate room', () => {
       disableDevMode();
       const stashRoom = makeRoom('stash-room', 'Stash', 'Personal storage.', 'feature_stash');
       const result = handleCommand('help', buildCtx(['stash'], { room: stashRoom }));
-      const text = narrationText(result).toLowerCase();
 
-      expect(text).toContain('stash');
-      expect(text.length).toBeGreaterThan(20);
+      expect(result.helpData).toBeDefined();
+      expect(result.helpData!.focusCommand).toBe('stash');
     });
 
     it('shows help for dev commands when devMode enabled', () => {
       enableDevMode();
       const result = handleCommand('help', buildCtx(['goto']));
-      const text = narrationText(result).toLowerCase();
 
-      expect(text).toContain('goto');
-      expect(text.length).toBeGreaterThan(20);
+      expect(result.helpData).toBeDefined();
+      expect(result.helpData!.focusCommand).toBe('goto');
     });
 
     it('returns error for dev command help when devMode disabled', () => {
@@ -373,14 +362,11 @@ describe('help command', () => {
   describe('parser integration', () => {
     it('? alias maps to help command', () => {
       disableDevMode();
-      // This test assumes the parser converts "?" to "help"
-      // We'll test by calling help directly, but note that parser.ts should handle the alias
       const result = handleCommand('help', buildCtx());
-      const text = narrationText(result);
 
-      // Should return the same help output
-      expect(result.narrations.length).toBeGreaterThan(0);
-      expect(text).toContain('go'); // Core command should be listed
+      expect(result.helpData).toBeDefined();
+      const names = helpCommandNames(result);
+      expect(names).toContain('go');
     });
 
     it('help is in the command registry', () => {

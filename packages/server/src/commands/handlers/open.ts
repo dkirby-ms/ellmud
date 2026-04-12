@@ -6,7 +6,7 @@
  */
 
 import type { CommandResult, CommandContext } from '../index.js';
-import { getItemDefinition, ITEM_REGISTRY } from '../../items/registry.js';
+import { getItemDefinition, getItemDefinitionsMap } from '../../items/registry.js';
 import { getContainerSlotCount, getContainerContentsWeight } from '@ellmud/shared';
 import type { ItemInstance } from '@ellmud/shared';
 
@@ -64,7 +64,7 @@ export function handleOpen(ctx: CommandContext): CommandResult {
   };
 
   const usedSlots = getContainerSlotCount(containerInstance);
-  const contentsWeight = getContainerContentsWeight(containerInstance, ITEM_REGISTRY);
+  const contentsWeight = getContainerContentsWeight(containerInstance, getItemDefinitionsMap());
 
   let capacityLine = `Slots: ${usedSlots}/${props.maxSlots}`;
   if (props.maxWeight != null) {

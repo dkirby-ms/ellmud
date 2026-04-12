@@ -374,6 +374,9 @@ export const MessageTypes = {
   REQUEST_PLAYER_LIST: 'request_player_list',
   // Server → Client: who list response
   PLAYER_LIST: 'player_list',
+
+  // Server → Client: structured help data (rendered in modal)
+  HELP_DATA: 'help_data',
 } as const;
 
 export type MessageTypeKey = typeof MessageTypes[keyof typeof MessageTypes];
@@ -1013,6 +1016,25 @@ export interface PlayerListEntry {
 /** Server → Client: who list response. */
 export interface PlayerListMessage {
   players: PlayerListEntry[];
+}
+
+// ─── Help Data (modal rendering) ─────────────────────────────────────────────
+
+/** A single command's help entry, sent as structured data for modal rendering. */
+export interface HelpCommandEntry {
+  name: string;
+  description: string;
+  usage: string;
+  aliases?: string[];
+  category: string;
+}
+
+/** Server → Client: structured help data for the help modal. */
+export interface HelpDataMessage {
+  /** All available commands grouped by category. */
+  commands: HelpCommandEntry[];
+  /** If present, the player asked for help on a specific command. */
+  focusCommand?: string;
 }
 
 // ─── Character Flags (Issue #365) ────────────────────────────────────────────

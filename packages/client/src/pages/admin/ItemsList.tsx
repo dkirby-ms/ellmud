@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { Plus, Search, Filter, AlertCircle } from "lucide-react";
 import { listItems, AdminAPIError } from "../../lib/admin-api";
+import AnsiText from "../../components/AnsiText.js";
 
 type Status = "draft" | "review" | "published" | "deprecated";
 type ItemType = "weapon" | "armour" | "consumable" | "material" | "tool" | "key" | "blueprint";
@@ -215,7 +216,7 @@ export default function ItemsList() {
                     className="text-[#E8E0D0] hover:text-[#C9A84C] transition-colors"
                    
                   >
-                    {item.name}
+                    <AnsiText text={item.name} />
                   </Link>
                 </td>
                 <td className="p-4">

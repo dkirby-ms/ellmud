@@ -6,7 +6,7 @@
  */
 
 import type { CommandResult, CommandContext } from '../index.js';
-import { getItemDefinition, ITEM_REGISTRY } from '../../items/registry.js';
+import { getItemDefinition, getItemDefinitionsMap } from '../../items/registry.js';
 import { addItemToContainer } from '@ellmud/shared';
 import type { ItemInstance } from '@ellmud/shared';
 
@@ -88,7 +88,7 @@ export function handlePut(ctx: CommandContext): CommandResult {
     containerDef,
     { definitionId: itemEntry.item.id, quantity: 1, durability: null },
     itemDef,
-    ITEM_REGISTRY,
+    getItemDefinitionsMap(),
   );
 
   if (!result.success) {

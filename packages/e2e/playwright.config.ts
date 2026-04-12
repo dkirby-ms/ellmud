@@ -37,7 +37,7 @@ export default defineConfig({
 
   webServer: [
     {
-      command: 'ALLOW_LOCAL_AUTH=true npm run dev:server',
+      command: 'ALLOW_LOCAL_AUTH=true ADMIN_TOKEN=ellmud-admin-dev npm run dev:server',
       port: 2567,
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,

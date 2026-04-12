@@ -9,7 +9,7 @@
 
 import type { GearTier, ZoneTier, ItemDefinition, ItemInstance } from '@ellmud/shared';
 import { RARITY_TIERS, createItemInstance } from '@ellmud/shared';
-import { ITEM_REGISTRY } from './registry.js';
+import { getItemDefinitionsMap } from './registry.js';
 
 // ─── Drop Table ─────────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ export function getEligibleItems(zoneTier: ZoneTier): ItemDefinition[] {
     r => r.tier === ZONE_TIER_MAX_RARITY[zoneTier],
   );
   const eligible: ItemDefinition[] = [];
-  for (const item of ITEM_REGISTRY.values()) {
+  for (const item of getItemDefinitionsMap().values()) {
     const tierIndex = RARITY_TIERS.findIndex(r => r.tier === item.tier);
     if (tierIndex <= maxTierIndex) {
       eligible.push(item);

@@ -9,9 +9,21 @@
  *   - Graph adapter item resolution via registry
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { ZoneTier, Room as SharedRoom } from '@ellmud/shared';
 import { serializeRoomGraph, deserializeRoomGraph } from '@ellmud/shared';
+import { buildFixtureRegistry } from './helpers/item-fixtures.js';
+
+// Mock ContentRegistry so adaptRoomGraph can resolve item IDs without a DB.
+const FIXTURE_MAP = buildFixtureRegistry();
+vi.mock('../content/index.js', () => ({
+  getContentRegistry: () => ({
+    isInitialized: () => true,
+    getItem: (id: string) => FIXTURE_MAP.get(id),
+    getAllItems: () => Array.from(FIXTURE_MAP.values()),
+  }),
+}));
+
 import { generateZoneGraph, ROOM_NAMES } from '../generator/generator.js';
 import { adaptRoomGraph } from '../generator/graph-adapter.js';
 

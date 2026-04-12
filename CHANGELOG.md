@@ -1,3 +1,52 @@
+# [0.2.0-dev.4](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.3...v0.2.0-dev.4) (2026-04-11)
+
+
+### Bug Fixes
+
+* **e2e:** use admin spawn API for container tests ([e9304e2](https://github.com/dkirby-ms/ellmud/commit/e9304e2859588b5665bd8d1327f287391d7cf277))
+
+# [0.2.0-dev.3](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.2...v0.2.0-dev.3) (2026-04-11)
+
+
+### Bug Fixes
+
+* complete test fixes for static registry removal ([8fc0ba2](https://github.com/dkirby-ms/ellmud/commit/8fc0ba263f6745bb81f8d4a002b0394d80eaaa79))
+* resolve test failures from registry removal + help modal refactor ([3c96b57](https://github.com/dkirby-ms/ellmud/commit/3c96b578921582498f96d5fa77aaaeff8af77c7b))
+
+
+### Features
+
+* help modal overlay with structured data from server ([6eb21b0](https://github.com/dkirby-ms/ellmud/commit/6eb21b0ecd4d5a3f064bd00f59acab0fc362599a))
+
+# [0.2.0-dev.2](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.1...v0.2.0-dev.2) (2026-04-11)
+
+
+### Features
+
+* add 6 new container items across all tiers ([1e3367c](https://github.com/dkirby-ms/ellmud/commit/1e3367c6f6555fda4a64275d860b73b042839e85))
+
+# [0.2.0-dev.1](https://github.com/dkirby-ms/ellmud/compare/v0.1.1-dev.2...v0.2.0-dev.1) (2026-04-11)
+
+
+### Features
+
+* add ANSI tag support for item and creature displays ([936b0bc](https://github.com/dkirby-ms/ellmud/commit/936b0bc108ff48c4d56b561afd9dc1b31602491b)), closes [#418](https://github.com/dkirby-ms/ellmud/issues/418)
+
+## [0.1.1-dev.2](https://github.com/dkirby-ms/ellmud/compare/v0.1.1-dev.1...v0.1.1-dev.2) (2026-04-11)
+
+
+### Bug Fixes
+
+* filter npm-internal vulnerabilities from CI audit step ([7783b30](https://github.com/dkirby-ms/ellmud/commit/7783b30548eebfc59908de74783f6a526eb9ba52))
+
+## [0.1.1-dev.1](https://github.com/dkirby-ms/ellmud/compare/v0.1.0...v0.1.1-dev.1) (2026-04-11)
+
+
+### Bug Fixes
+
+* **ci:** standardize action refs and replace merge error swallowing ([921359c](https://github.com/dkirby-ms/ellmud/commit/921359cbea65769ba21d90db3c92c17496f43ef0))
+* limit GitHub Releases to production branch only ([2089600](https://github.com/dkirby-ms/ellmud/commit/20896006a174bf0e81df37e1318302b48b02b091))
+
 # 1.0.0-dev.1 (2026-04-11)
 
 

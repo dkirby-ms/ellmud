@@ -3,7 +3,7 @@
  * durability mechanics, rarity tiers, loot drops.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import {
   validateLoadout,
   calculateLoadoutWeight,
@@ -25,11 +25,8 @@ import {
   type ConsumableStats,
 } from '@ellmud/shared';
 import {
-  ITEM_REGISTRY,
-  getItemDefinition,
-  getAllItemDefinitions,
-  getItemsByType,
-  getItemsByTier,
+  ALL_FIXTURE_ITEMS,
+  buildFixtureRegistry,
   RUSTY_BLADE,
   IRON_SWORD,
   CORRODED_HALBERD,
@@ -41,6 +38,23 @@ import {
   REVENANT_BONE,
   CRYPT_KEY_FRAGMENT,
   VOIDFORGED_BLADE,
+} from './helpers/item-fixtures.js';
+
+// Mock ContentRegistry so registry functions (and loot-drops) work without a DB.
+const FIXTURE_MAP = buildFixtureRegistry();
+vi.mock('../content/index.js', () => ({
+  getContentRegistry: () => ({
+    isInitialized: () => true,
+    getItem: (id: string) => FIXTURE_MAP.get(id),
+    getAllItems: () => Array.from(FIXTURE_MAP.values()),
+  }),
+}));
+
+import {
+  getItemDefinition,
+  getAllItemDefinitions,
+  getItemsByType,
+  getItemsByTier,
 } from '../items/registry.js';
 import {
   getEligibleItems,
@@ -119,9 +133,10 @@ describe('Rarity Tiers', () => {
 // ITEM REGISTRY
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe('Item Registry', () => {
-  it('should contain all predefined items', () => {
-    expect(ITEM_REGISTRY.size).toBeGreaterThanOrEqual(18);
+describe('Item Registry (via ContentRegistry mock)', () => {
+  it('should contain all fixture items', () => {
+    const all = getAllItemDefinitions();
+    expect(all.length).toBe(ALL_FIXTURE_ITEMS.length);
   });
 
   it('getItemDefinition returns correct item', () => {
@@ -138,7 +153,7 @@ describe('Item Registry', () => {
 
   it('getAllItemDefinitions returns all items', () => {
     const all = getAllItemDefinitions();
-    expect(all.length).toBe(ITEM_REGISTRY.size);
+    expect(all.length).toBe(ALL_FIXTURE_ITEMS.length);
   });
 
   it('getItemsByType filters correctly', () => {

@@ -6,7 +6,7 @@
  * weight calculations with nested items, and serialization.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   createItemInstance,
   addItemToContainer,
@@ -25,8 +25,21 @@ import {
   APOTHECARY_POUCH,
   HEALING_DRAUGHT,
   RUSTY_BLADE,
-  getItemsByType,
-} from '../items/index.js';
+  ALL_FIXTURE_ITEMS,
+  buildFixtureRegistry,
+} from './helpers/item-fixtures.js';
+
+// Mock ContentRegistry so getItemsByType works without a DB.
+const FIXTURE_MAP = buildFixtureRegistry();
+vi.mock('../content/index.js', () => ({
+  getContentRegistry: () => ({
+    isInitialized: () => true,
+    getItem: (id: string) => FIXTURE_MAP.get(id),
+    getAllItems: () => Array.from(FIXTURE_MAP.values()),
+  }),
+}));
+
+import { getItemsByType } from '../items/index.js';
 import { inventoryToEntries } from '../inventory/index.js';
 
 // ─── Test Fixtures ──────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Send, X, Plus, AlertCircle } from "lucide-react";
 import { getCreature, createCreature, updateCreature, listItems, AdminAPIError, simulateCreatureReroll, type CreatureRerollResult } from "../../lib/admin-api";
 import AnsiPreview from "../../components/admin/AnsiPreview.js";
+import AnsiText from "../../components/AnsiText.js";
 
 type Status = "draft" | "review" | "published" | "deprecated";
 
@@ -278,7 +279,7 @@ export default function CreatureDetail() {
             className="text-[#C9A84C] text-xl"
            
           >
-            {isNew ? "New Creature" : formData.name}
+            {isNew ? "New Creature" : <AnsiText text={formData.name} />}
           </h1>
           {!isNew && formData.status && getStatusBadge(formData.status)}
         </div>
