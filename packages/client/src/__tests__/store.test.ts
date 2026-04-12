@@ -106,26 +106,8 @@ describe('appReducer', () => {
   });
 
   it('SET_ZONE_STATE updates zoneState', () => {
-    const state = appReducer(initialState, { type: 'SET_ZONE_STATE', state: 'active' });
-    expect(state.zoneState).toBe('active');
-  });
-
-  it('SET_ZONE_STATE sets collapseTimer and collapseTimerMax', () => {
-    const state = appReducer(initialState, { type: 'SET_ZONE_STATE', state: 'active', collapseTimer: 120 });
-    expect(state.collapseTimer).toBe(120);
-    expect(state.collapseTimerMax).toBe(120);
-  });
-
-  it('SET_ZONE_STATE preserves higher collapseTimerMax', () => {
-    const s1 = appReducer(initialState, { type: 'SET_ZONE_STATE', state: 'active', collapseTimer: 120 });
-    const s2 = appReducer(s1, { type: 'SET_ZONE_STATE', state: 'active', collapseTimer: 90 });
-    expect(s2.collapseTimer).toBe(90);
-    expect(s2.collapseTimerMax).toBe(120);
-  });
-
-  it('SET_ZONE_STATE without collapseTimer sets timer to null', () => {
-    const state = appReducer(initialState, { type: 'SET_ZONE_STATE', state: 'active' });
-    expect(state.collapseTimer).toBeNull();
+    const state = appReducer(initialState, { type: 'SET_ZONE_STATE', state: 'open' });
+    expect(state.zoneState).toBe('open');
   });
 
   it('ADD_SOUND_CUE appends sound cue', () => {
@@ -197,17 +179,6 @@ describe('appReducer', () => {
 
   it('initial posture is standing', () => {
     expect(initialState.posture).toBe('standing');
-  });
-
-  it('SET_COLLAPSE_TIMER updates timer', () => {
-    const state = appReducer(initialState, { type: 'SET_COLLAPSE_TIMER', timer: 45 });
-    expect(state.collapseTimer).toBe(45);
-  });
-
-  it('SET_COLLAPSE_TIMER can set to null', () => {
-    let state = appReducer(initialState, { type: 'SET_COLLAPSE_TIMER', timer: 45 });
-    state = appReducer(state, { type: 'SET_COLLAPSE_TIMER', timer: null });
-    expect(state.collapseTimer).toBeNull();
   });
 
   it('SET_INVENTORY updates inventory', () => {

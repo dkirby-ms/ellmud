@@ -76,8 +76,6 @@ export interface AppState {
   zoneState: ZoneState | null;
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
   error: string | null;
-  collapseTimer: number | null;
-  collapseTimerMax: number | null;
   soundCues: SoundCue[];
   inCombat: boolean;
   combatTick: number;
@@ -113,8 +111,6 @@ export const initialState: AppState = {
   zoneState: null,
   connectionStatus: 'disconnected',
   error: null,
-  collapseTimer: null,
-  collapseTimerMax: null,
   soundCues: [],
   inCombat: false,
   combatTick: 0,
@@ -144,7 +140,7 @@ export type AppAction =
   | { type: 'SET_ROOM'; room: Room | null }
   | { type: 'ADD_MESSAGE'; message: TerminalMessage }
   | { type: 'SET_ROOM_HEADER'; header: RoomHeaderMessage }
-  | { type: 'SET_ZONE_STATE'; state: ZoneState; collapseTimer?: number }
+  | { type: 'SET_ZONE_STATE'; state: ZoneState }
   | { type: 'SET_CONNECTION_STATUS'; status: AppState['connectionStatus'] }
   | { type: 'SET_ERROR'; error: string }
   | { type: 'CLEAR_ERROR' }
@@ -153,7 +149,6 @@ export type AppAction =
   | { type: 'SET_COMBAT_TICK'; tick: number }
   | { type: 'SET_ENEMY_STATUS'; status: EnemyStatus | null }
   | { type: 'SET_PENDING_COMBAT_ACTION'; action: CombatAction | null }
-  | { type: 'SET_COLLAPSE_TIMER'; timer: number | null }
   | { type: 'SET_INVENTORY'; items: InventoryItem[] }
   | { type: 'CLEAR_MESSAGES' }
   | { type: 'SET_LOADOUT'; slots: EquipmentSlots }
@@ -183,11 +178,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
     case 'SET_ROOM_HEADER':
       return { ...state, roomHeader: action.header };
-    case 'SET_ZONE_STATE': {
-      const timer = action.collapseTimer ?? null;
-      const maxTimer = timer != null && (state.collapseTimerMax == null || timer > state.collapseTimerMax) ? timer : state.collapseTimerMax;
-      return { ...state, zoneState: action.state, collapseTimer: timer, collapseTimerMax: maxTimer };
-    }
+    case 'SET_ZONE_STATE':
+      return { ...state, zoneState: action.state };
     case 'SET_CONNECTION_STATUS':
       return { ...state, connectionStatus: action.status };
     case 'SET_ERROR':
@@ -206,8 +198,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, enemyStatus: action.status };
     case 'SET_PENDING_COMBAT_ACTION':
       return { ...state, pendingCombatAction: action.action };
-    case 'SET_COLLAPSE_TIMER':
-      return { ...state, collapseTimer: action.timer };
     case 'SET_INVENTORY':
       return { ...state, inventory: action.items };
     case 'CLEAR_MESSAGES':
