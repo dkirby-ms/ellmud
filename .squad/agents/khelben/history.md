@@ -154,3 +154,5 @@
 **Learnings:**
 - **Action ref convention is tags, not SHAs:** Team decided against SHA pinning for simplicity. All action refs use major version tags (e.g., `@v4`).
 - **Merge error pattern:** Capture exit code with `|| MERGE_EXIT=$?`, then check `git diff --cached --quiet && git diff --quiet` to distinguish "trees identical" from real failures. Always `git merge --abort` in error path.
+- **Prod promote uses force-push, not merge:** `squad-promote.yml` was switched from merge-based to force-push reset. Since there's no real prod system, prod is simply made to match uat (after stripping forbidden paths). This eliminates merge conflicts entirely. If a real prod system is added later, consider reverting to merge-based approach for traceability.
+- **Prod branch reset (2026):** Force-pushed uat→prod to resolve accumulated divergence. Prod SHA now matches uat exactly.

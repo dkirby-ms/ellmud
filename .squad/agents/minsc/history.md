@@ -2131,3 +2131,48 @@ Fixed 6 more test files after the registry removal + Regis's help modal refactor
 - **help handler contract changed**: `handleHelp` returns `{ narrations: [], helpData: {...} }` — tests that checked `narrationText()` always got empty string. Error cases (unknown command, devMode-gated) still return narrations.
 - **admin-crud.test.ts** also fails from ContentRegistry removal (different code path via `admin/content/init.ts` → `getAllItemDefinitions`) — NOT in my scope but flagged
 - **ZoneRoom integration tests** (`commands.test.ts`, `player-death.test.ts`) need the mock even though they don't directly call registry functions — ZoneRoom's lifecycle loads content at boot
+
+## Learnings — CodeQL Security Tests (Issue #419)
+
+### What Was Done
+Created 3 new security test files (60 tests total, all passing):
+
+1. **security-sanitization.test.ts** (28 tests) — Tests sanitization in say.ts, emote.ts, whisper.ts: angle bracket stripping, C0/C1 control char removal, XSS payload neutralization, ANSI bracket [] preservation, unicode passthrough, edge cases.
+
+2. **security-redos.test.ts** (27 tests) — Tests isValidEmail regex from user-routes.ts: valid/invalid classification, 7 timing-based ReDoS resistance tests with <100ms threshold.
+
+3. **security-rate-limiting.test.ts** (5 tests) — Tests createLimiter middleware: 429 after limit, per-IP isolation, ALLOW_LOCAL_AUTH bypass using vi.resetModules().
+
+### Key Findings
+- Sanitization duplicated in say.ts, emote.ts, whisper.ts — identical sanitizeInput() in each
+- Email regex accepts user@example..com (double dots) — not a security issue
+- rate-limit.ts reads ALLOW_LOCAL_AUTH at module load — tests need vi.resetModules()
+- Chat handlers need minimal CommandContext mock for unit tests
+
+### File Paths
+- packages/server/src/__tests__/security-sanitization.test.ts
+- packages/server/src/__tests__/security-redos.test.ts
+- packages/server/src/__tests__/security-rate-limiting.test.ts
+
+
+---
+
+## Session: Security Tests for CodeQL Fixes — Orchestration Log Filed (2026-04-12T14:00Z)
+
+**Status:** ✅ COMPLETE
+
+Scribe recorded orchestration logs for security test coverage work:
+
+### Deliverables Filed
+1. **Orchestration Log:** `.squad/orchestration-log/2026-04-12T14-00-minsc-codeql.md`
+   - Summarizes all 60 security tests (sanitization 28, ReDoS 27, rate limiting 5)
+   - Documents test strategy and key findings
+   - Lists team impact for future PR reviews
+   
+2. **Session Log:** `.squad/log/2026-04-12T14-00-codeql-fixes.md`
+   - Brief summary of parallel Drizzt + Minsc work
+   
+3. **Decisions Merged:** CodeQL security test decision added to `.squad/decisions/decisions.md`
+   - Inbox file deleted (minsc-codeql-tests.md)
+
+**Key Reference:** 60 tests passing against Drizzt's fixes. Zero regressions across 3471 total tests.
