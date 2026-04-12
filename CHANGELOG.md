@@ -1,3 +1,10 @@
+# [0.2.0-dev.13](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.12...v0.2.0-dev.13) (2026-04-12)
+
+
+### Bug Fixes
+
+* replace Math.random() with crypto in E2E test fixtures ([83cdfdc](https://github.com/dkirby-ms/ellmud/commit/83cdfdca65b750d4b172adc92ae2824391903869)), closes [#19](https://github.com/dkirby-ms/ellmud/issues/19) [#19](https://github.com/dkirby-ms/ellmud/issues/19)
+
 # [0.2.0-dev.12](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.11...v0.2.0-dev.12) (2026-04-12)
 
 
