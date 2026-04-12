@@ -1944,8 +1944,17 @@ Items spawned through admin panel integrate fully with player item interaction c
 - Verified 8 components already correctly using AnsiText: RoomOccupants, CombatHUD, StatusPanel, InventoryOverlay, ItemTooltip, CombinedStashLoadout, EquipmentSilhouette, ChatPanel
 - All 420 client tests pass
 
+### 2025-07-25: Fix 232 Client Test Failures (Dual React Mismatch)
+- **Status:** Complete (Commit 1476b8c on dev)
+- **Root cause:** npm hoisted React 19 to root while client kept React 18 locally. testing-library resolved React 19 for rendering but component code used local React 18.
+- **Fix:** Upgraded react, react-dom, types from 18 to 19 in packages/client/package.json. Single React 19.2.5 now used everywhere.
+- **Files:** packages/client/package.json, package-lock.json
+- **Validation:** 28 test files pass (420 tests), server tests unaffected (2915 tests).
+
 ## Learnings
 
 - LoadoutTab, StashTab currently use hardcoded mock data — will need revisiting when real API integration lands
 - Admin `<option>` elements (e.g., loot table dropdowns in CreatureDetail) cannot render React components — ANSI tags in those contexts would need a plain-text strip function
 - Admin detail page headings (h1) and preview cards are good surfaces for AnsiText too, so admins can preview formatted names
+- **Dual React in monorepos:** When Radix UI peers allow React 18 or 19, npm may hoist 19 to root while workspace keeps 18 locally. Vitest 3.x thread pool externalizes node_modules bypassing Vite aliases. The fix is to align versions, not fight the resolver.
+- **React 19 upgrade** was safe for this codebase — no deprecated APIs in use.

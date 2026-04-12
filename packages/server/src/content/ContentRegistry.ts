@@ -145,7 +145,7 @@ export class ContentRegistry {
       
       // Map container_properties if present
       if (row.container_properties) {
-        item.containerProperties = row.container_properties as ItemDefinition['containerProperties'];
+        item.containerProperties = row.container_properties as unknown as ItemDefinition['containerProperties'];
       }
       
       next.set(row.id, item);
