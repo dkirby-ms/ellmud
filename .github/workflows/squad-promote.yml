@@ -65,9 +65,19 @@ jobs:
             if git diff --cached --quiet && git diff --quiet; then
               echo "ℹ️ Nothing to merge — trees are identical"
             else
-              echo "::error::Merge failed with exit code $MERGE_EXIT"
-              git merge --abort 2>/dev/null || true
-              exit 1
+              # Check if all unmerged (conflicted) files are in forbidden paths
+              FORBIDDEN_RE="^(\\.ai-team/|\\.squad/|\\.ai-team-templates/|team-docs/|docs/proposals/)"
+              UNMERGED=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+              NON_FORBIDDEN=$(echo "$UNMERGED" | grep -vE "$FORBIDDEN_RE" || true)
+              if [ -z "$NON_FORBIDDEN" ] && [ -n "$UNMERGED" ]; then
+                echo "⚠️ Conflicts only in forbidden paths — resolving by removal"
+                echo "$UNMERGED" | xargs -r git rm -f --cached 2>/dev/null || true
+                echo "$UNMERGED" | xargs -r rm -f 2>/dev/null || true
+              else
+                echo "::error::Merge failed with exit code $MERGE_EXIT"
+                git merge --abort 2>/dev/null || true
+                exit 1
+              fi
             fi
           fi
 
