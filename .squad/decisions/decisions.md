@@ -1,3 +1,43 @@
+## 2026-04-12T15:31:26Z: Async Command Pattern for Toggle (#432)
+
+**By:** Drizzt (Engine Dev)  
+**Issue:** #432 — Toggle follow response not descriptive enough  
+**PR:** #436  
+**Scope:** Command handler patterns  
+
+### Decision
+
+When a command needs to await database I/O to produce its response (e.g., reading current state before sending feedback), follow the established `who` command async pattern instead of modifying the synchronous `CommandHandler` type signature:
+
+1. Intercept the verb in `ZoneRoom.handleCommandMessage` before sync dispatch
+2. Delegate to a dedicated async handler method on `ZoneRoom`
+3. The async handler builds context, awaits command logic, then calls `deliverResult`
+
+Do not modify the `CommandHandler` type signature (breaks 200+ call sites).
+
+### Rationale
+
+The `toggle` command needed to report actual ON/OFF state using `enabledMsg`/`disabledMsg` from the object registry. A synchronous handler cannot read the database before responding. The `who` command already established this pattern; reusing it maintains consistency and avoids type-breaking changes.
+
+### Impact
+
+- **Jarlaxle/Minsc:** Use this pattern for future commands requiring async DB/network access instead of fire-and-forget
+- **Regis:** Client UI may want to parse and display the descriptive ON/OFF state in the server response
+- **Code Quality:** Toggle now reports actual state; no-args invocation lists current toggleable items
+
+### Related Learning
+
+Pattern established in #432 (toggle fix) as a reusable solution. The interceptor approach in `ZoneRoom.handleCommandMessage` enables async delegation without breaking existing sync call sites.
+
+### Deliverables
+
+- Toggle command now async, reports descriptive ON/OFF state
+- All 2975 tests passing
+- Pattern documented for team reference
+- PR #436 ready for review
+
+---
+
 ## 2026-04-04T17:24:38Z: Migration Discipline — Seed Files Pair with Numbered Migrations
 
 **By:** Elminster (Reviewer), enforced by Drizzt (Engine Dev)  
