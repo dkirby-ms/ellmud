@@ -1,3 +1,10 @@
+# [0.2.0-dev.16](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.15...v0.2.0-dev.16) (2026-04-12)
+
+
+### Features
+
+* unified corpse container system ([#442](https://github.com/dkirby-ms/ellmud/issues/442)) ([c6169ac](https://github.com/dkirby-ms/ellmud/commit/c6169ac35e5dfba15c18af2fd7b97241d59585e0))
+
 # [0.2.0-dev.15](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.14...v0.2.0-dev.15) (2026-04-12)
 
 
