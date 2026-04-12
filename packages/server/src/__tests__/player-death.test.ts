@@ -269,19 +269,15 @@ describe('Player Death Flow (ZoneRoom Integration)', () => {
     // Player inventory must be empty after death (non-soulbound items moved to corpse)
     expect(player!.inventory.size).toBe(0);
 
-    // Room floor should NOT have the items (they go into corpse now, not floor)
+    // Room floor should now have a corpse container item
     const floorItems = currentRoom!.items.slice(initialItemCount);
-    expect(floorItems).toHaveLength(0);
-
-    // Corpse must contain the dropped items
-    const corpses = roomInstance.corpseSystem.getCorpsesInRoom(currentRoomId);
-    expect(corpses.length).toBeGreaterThanOrEqual(1);
-
-    const corpse = corpses[0]!;
-    expect(corpse.items).toHaveLength(3); // 1 sword + 2 potions
-    const corpseItemNames = corpse.items.map(i => i.name);
-    expect(corpseItemNames).toContain('Test Sword');
-    expect(corpseItemNames.filter(n => n === 'Test Potion')).toHaveLength(2);
+    expect(floorItems).toHaveLength(1);
+    
+    // Find the corpse container item
+    const corpseItem = floorItems.find(item => item.id.startsWith('corpse-'));
+    expect(corpseItem).toBeDefined();
+    expect(corpseItem!.containerContents).toBeDefined();
+    expect(corpseItem!.containerContents).toHaveLength(3); // 1 sword + 2 potions
 
     await client.leave();
   }, 25_000);

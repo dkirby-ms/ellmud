@@ -60,7 +60,6 @@ import { SoundSystem } from '../sound/index.js';
 import { TraceSystem } from '../systems/index.js';
 import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
 import { DowningSystem, type DowningEvent } from '../systems/DowningSystem.js';
-import { CorpseSystem } from '../systems/CorpseSystem.js';
 import { GroupManager } from '../systems/GroupManager.js';
 import { type DeathPenaltyStore, getDeathPenaltyStore } from '../systems/index.js';
 import { type MetricsService, getMetricsService } from '../metrics/index.js';
@@ -142,7 +141,6 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private awarenessSystem!: AwarenessSystem;
   private downingSystem!: DowningSystem;
   private groupManager!: GroupManager;
-  private corpseSystem!: CorpseSystem;
   private narrationService!: NarrationService;
   private deathPenaltyStore!: DeathPenaltyStore;
   private metricsService!: MetricsService;
@@ -336,9 +334,6 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Initialize trace system (GDD §11.2)
     this.traceSystem = new TraceSystem();
-
-    // Initialize corpse system (GDD §6.8 — lootable corpses on death)
-    this.corpseSystem = new CorpseSystem();
 
     // Initialize awareness/stealth detection system (GDD §8.1)
     this.awarenessSystem = new AwarenessSystem();
@@ -872,8 +867,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Decay traces
     this.traceSystem.tick(TICK_INTERVAL_MS);
 
-    // Decay corpses (GDD §6.8 — configurable TTL)
-    this.corpseSystem.tick(TICK_INTERVAL_MS);
+    // Decay corpses and other time-limited items
+    this.tickCorpseDecay();
   }
 
   // ─── Zone Lifecycle ─────────────────────────────────────────────────────
@@ -1258,7 +1253,6 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             hp: c.hp, maxHp: c.maxHp, attack: c.attack, defence: c.defence,
             armour: c.armour, agility: c.agility, dodgeSkillRank: c.dodgeSkillRank,
           })),
-      corpseSystem: this.corpseSystem,
       creatureManager: this.creatureManager,
       resolveZoneExists: (slug: string) => this.knownZoneSlugs.has(slug),
       resolvePlayerByName: (name: string) => {
@@ -2111,6 +2105,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
                 quantity: 1,
                 durability: null,
               })),
+              createdAt: Date.now(),
+              ttlSeconds: 300, // 5 minutes for creature corpses
             };
 
             room.items.push(corpseItem);
@@ -2278,6 +2274,32 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   }
 
   /**
+   * Decay corpses and other time-limited items.
+   * Sweeps all rooms and removes items that have exceeded their TTL.
+   */
+  private tickCorpseDecay(): void {
+    const now = Date.now();
+    for (const [, room] of this.roomGraph.rooms) {
+      if (!room.items || room.items.length === 0) continue;
+
+      // Filter out items that have expired
+      const before = room.items.length;
+      room.items = room.items.filter(item => {
+        if (item.createdAt !== undefined && item.ttlSeconds !== undefined) {
+          const age = (now - item.createdAt) / 1000; // Convert to seconds
+          return age < item.ttlSeconds;
+        }
+        return true; // Keep items without TTL
+      });
+
+      // Log if any items decayed
+      if (room.items.length < before) {
+        this.log(`Decayed ${before - room.items.length} item(s) in room ${room.id}`);
+      }
+    }
+  }
+
+  /**
    * Check if active combat in a room should finish off downed (unstabilized) players.
    * Any strike in a room with a bleeding-out player triggers a killing blow.
    */
@@ -2385,11 +2407,25 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       });
     }
 
-    // Create lootable corpse entity with non-soulbound items (GDD §6.8)
+    // Create lootable corpse container item with non-soulbound items (GDD §6.8)
     const charName = this.characterNames.get(playerId) ?? playerName;
     if (room && corpseItems.length > 0) {
-      const config = getConfig();
-      this.corpseSystem.addCorpse(roomId, playerId, charName, corpseItems, config.corpseTTLSeconds);
+      const playerCorpseItem: import('../generator/RoomGraph.js').Item = {
+        id: `corpse-${playerId}`,
+        name: `corpse of ${charName}`,
+        weight: 10, // Corpse base weight
+        description: `The remains of ${charName}.`,
+        roomDescription: `The corpse of ${charName} lies here.`,
+        containerContents: corpseItems.map(item => ({
+          definitionId: item.id,
+          quantity: 1,
+          durability: null,
+        })),
+        createdAt: Date.now(),
+        ttlSeconds: 600, // 10 minutes for player corpses (longer than creatures)
+      };
+
+      room.items.push(playerCorpseItem);
     }
 
     // Trace: player death creates corpse trace (visual marker)

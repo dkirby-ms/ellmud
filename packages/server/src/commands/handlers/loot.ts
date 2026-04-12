@@ -1,21 +1,25 @@
 /**
  * loot [corpse | corpse of <name> | <item> from corpse] — Loot items from a corpse.
  *
- * Anyone can loot any corpse. GDD §6.8.
+ * Corpses are container items in the room. Anyone can loot any corpse. GDD §6.8.
+ * "loot" or "loot corpse" loots all items from a corpse.
+ * "loot <item> from corpse" delegates to the take command.
  */
 
 import type { CommandResult, CommandContext } from '../index.js';
+import { handleTake } from './take.js';
+import { getItemDefinition } from '../../items/registry.js';
+import { removeItemFromContainer } from '@ellmud/shared';
+import type { ItemInstance } from '@ellmud/shared';
 
 export function handleLoot(ctx: CommandContext): CommandResult {
-  const { player, args } = ctx;
+  const { args, room, player } = ctx;
 
-  if (!ctx.corpseSystem) {
-    return {
-      narrations: [{ text: 'There is nothing to loot here.', type: 'system' }],
-    };
-  }
+  // Find corpses in the room (items with id starting with 'corpse-' and containerContents)
+  const corpses = room.items.filter(item => 
+    item.id.startsWith('corpse-') && item.containerContents !== undefined
+  );
 
-  const corpses = ctx.corpseSystem.getCorpsesInRoom(player.currentRoomId);
   if (corpses.length === 0) {
     return {
       narrations: [{ text: 'There are no corpses here to loot.', type: 'system' }],
@@ -26,85 +30,103 @@ export function handleLoot(ctx: CommandContext): CommandResult {
 
   // Parse "loot <item> from corpse [of <name>]"
   const fromMatch = query.match(/^(.+?)\s+from\s+(corpse.*)$/);
-
+  
   if (fromMatch) {
     const itemQuery = fromMatch[1]!;
     const corpseQuery = fromMatch[2]!;
-    const corpse = ctx.corpseSystem.findCorpse(player.currentRoomId, corpseQuery);
-    if (!corpse) {
+    
+    // Delegate to 'take <item> from <corpse>' 
+    return handleTake({
+      ...ctx,
+      args: [itemQuery, 'from', corpseQuery],
+    });
+  }
+
+  // "loot", "loot corpse", or "loot corpse of <name>" → loot all from corpse
+  // Find the corpse based on query
+  let targetCorpse = corpses[0]; // Default to first corpse
+  
+  if (query && query !== 'corpse') {
+    // Try to match corpse by name (e.g., "corpse of zombie" or just name like "zombie")
+    const normalizedQuery = query.replace(/^corpse\s+(of\s+)?/, '');
+    const found = corpses.find(c => {
+      const corpseName = c.name.toLowerCase();
+      return corpseName.includes(normalizedQuery) || 
+             corpseName === `corpse of ${normalizedQuery}`;
+    });
+    
+    if (found) {
+      targetCorpse = found;
+    } else {
       return {
         narrations: [{ text: `You don't see that corpse here.`, type: 'system' }],
       };
     }
-
-    const result = ctx.corpseSystem.lootItem(corpse.id, itemQuery);
-    if (!result) {
-      return {
-        narrations: [{ text: `The corpse doesn't contain anything like that.`, type: 'system' }],
-      };
-    }
-
-    if (!player.canCarry(result.item)) {
-      // Put it back
-      result.corpse.items.push(result.item);
-      return {
-        narrations: [{
-          text: `The ${result.item.name} is too heavy. (${player.currentWeight}/${player.maxCarryWeight} weight)`,
-          type: 'system',
-        }],
-      };
-    }
-
-    player.addItem(result.item);
+  } else if (corpses.length > 1 && !query) {
+    // Multiple corpses, need to specify which one
+    const corpseNames = corpses.map(c => c.name).join(', ');
     return {
-      narrations: [{
-        text: `You take the ${result.item.name} from the corpse of ${corpse.ownerName}.`,
-        type: 'room',
+      narrations: [{ 
+        text: `Multiple corpses here: ${corpseNames}. Specify which one to loot.`, 
+        type: 'system' 
       }],
     };
   }
 
-  // "loot", "loot corpse", or "loot corpse of <name>" → loot all from corpse
-  const corpse = ctx.corpseSystem.findCorpse(player.currentRoomId, query || 'corpse');
-  if (!corpse) {
+  // Loot all items from the corpse
+  const contents = targetCorpse.containerContents ?? [];
+  if (contents.length === 0) {
     return {
-      narrations: [{ text: `You don't see that corpse here.`, type: 'system' }],
-    };
-  }
-
-  if (corpse.items.length === 0) {
-    return {
-      narrations: [{ text: `The corpse of ${corpse.ownerName} has already been stripped bare.`, type: 'system' }],
-    };
-  }
-
-  const result = ctx.corpseSystem.lootAll(corpse.id);
-  if (!result || result.items.length === 0) {
-    return {
-      narrations: [{ text: `The corpse of ${corpse.ownerName} has already been stripped bare.`, type: 'system' }],
+      narrations: [{ text: `The ${targetCorpse.name} is empty.`, type: 'system' }],
     };
   }
 
   const taken: string[] = [];
   const tooHeavy: string[] = [];
 
-  for (const item of result.items) {
-    if (player.canCarry(item)) {
-      player.addItem(item);
-      taken.push(item.name);
+  // Create a mutable copy of containerContents
+  const containerInstance: ItemInstance = {
+    instanceId: targetCorpse.id,
+    definitionId: targetCorpse.id,
+    durability: null,
+    maxDurability: null,
+    contents: [...contents],
+  };
+
+  // Try to loot each item
+  for (const slot of contents) {
+    const itemDef = getItemDefinition(slot.definitionId);
+    if (!itemDef) continue;
+
+    const pseudoItem = { 
+      id: itemDef.id, 
+      name: itemDef.name, 
+      weight: itemDef.weight, 
+      description: itemDef.description 
+    };
+
+    if (player.canCarry(pseudoItem)) {
+      player.addItem(pseudoItem);
+      taken.push(itemDef.name);
+      // Remove from container
+      removeItemFromContainer(containerInstance, slot.definitionId, 1);
     } else {
-      // Put back items that are too heavy
-      corpse.items.push(item);
-      tooHeavy.push(item.name);
+      tooHeavy.push(itemDef.name);
     }
   }
 
+  // Update the room item's containerContents
+  targetCorpse.containerContents = containerInstance.contents;
+
   const lines: string[] = [];
   if (taken.length > 0) {
-    lines.push(`You loot from the corpse of ${corpse.ownerName}: ${taken.join(', ')}.`);
+    lines.push(`You loot from the ${targetCorpse.name}: ${taken.join(', ')}.`);
   }
   if (tooHeavy.length > 0) {
     lines.push(`Too heavy to carry: ${tooHeavy.join(', ')}. (${player.currentWeight}/${player.maxCarryWeight})`);
+  }
+  if (taken.length === 0 && tooHeavy.length === 0) {
+    lines.push(`The ${targetCorpse.name} is empty.`);
   }
 
   return {

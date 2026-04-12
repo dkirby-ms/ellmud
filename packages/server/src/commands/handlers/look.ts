@@ -106,19 +106,6 @@ function showFullRoom(ctx: CommandContext): CommandResult {
     lines.push(`${count} other ${count === 1 ? 'wanderer lingers' : 'wanderers linger'} here.`);
   }
 
-  // Corpses in the room (GDD §6.8)
-  if (ctx.corpseSystem) {
-    const corpses = ctx.corpseSystem.getCorpsesInRoom(ctx.room.id);
-    for (const corpse of corpses) {
-      const itemCount = corpse.items.length;
-      if (itemCount > 0) {
-        lines.push(`The corpse of ${corpse.ownerName} lies here, carrying ${itemCount} item${itemCount !== 1 ? 's' : ''}.`);
-      } else {
-        lines.push(`The stripped corpse of ${corpse.ownerName} lies here.`);
-      }
-    }
-  }
-
   return {
     narrations: [{ text: lines.join('\n'), type: 'room' }],
     roomHeader: {
