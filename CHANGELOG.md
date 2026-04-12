@@ -1,3 +1,10 @@
+# [0.2.0-dev.6](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.5...v0.2.0-dev.6) (2026-04-12)
+
+
+### Bug Fixes
+
+* exclude E2E tests from CI test step ([9b3a741](https://github.com/dkirby-ms/ellmud/commit/9b3a741b16f465ac3536dc34d89e87663fa03e47))
+
 # [0.2.0-dev.5](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.4...v0.2.0-dev.5) (2026-04-12)
 
 
