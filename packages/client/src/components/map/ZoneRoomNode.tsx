@@ -40,6 +40,12 @@ export interface RoomNodeData {
   npcs?: Array<{ creatureId: string; spawnCount: number; displayName?: string }>;
   lootContainers?: Array<{ id: string; type: string; itemCount: number }>;
   hazards?: Array<{ type: string }>;
+  // Callbacks for vertical exit clicks (#445)
+  onUpExitClick?: () => void;
+  onDownExitClick?: () => void;
+  // Exit IDs for tooltip display (#445)
+  upExitIds?: string[];
+  downExitIds?: string[];
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -347,15 +353,58 @@ export function ZoneRoomNode(props: { data: RoomNodeData; selected?: boolean }) 
                   flexDirection: 'column',
                   gap: '1px',
                   fontSize: '8px',
+                  pointerEvents: 'auto',
                 }}
               >
                 {data.hasUpExits && (
-                  <span style={{ color: '#A78BFA' }} title="Has up exit">
+                  <span 
+                    style={{ 
+                      color: '#A78BFA',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'inline-block',
+                      transition: 'transform 0.1s ease, color 0.1s ease',
+                    }}
+                    title={data.upExitIds?.length ? `Up exit (${data.upExitIds.length})` : "Has up exit"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      data.onUpExitClick?.();
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.transform = 'scale(1.3)';
+                      (e.currentTarget as HTMLElement).style.color = '#C4B5FD';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
+                      (e.currentTarget as HTMLElement).style.color = '#A78BFA';
+                    }}
+                  >
                     ▲
                   </span>
                 )}
                 {data.hasDownExits && (
-                  <span style={{ color: '#A78BFA' }} title="Has down exit">
+                  <span 
+                    style={{ 
+                      color: '#A78BFA',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'inline-block',
+                      transition: 'transform 0.1s ease, color 0.1s ease',
+                    }}
+                    title={data.downExitIds?.length ? `Down exit (${data.downExitIds.length})` : "Has down exit"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      data.onDownExitClick?.();
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.transform = 'scale(1.3)';
+                      (e.currentTarget as HTMLElement).style.color = '#C4B5FD';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
+                      (e.currentTarget as HTMLElement).style.color = '#A78BFA';
+                    }}
+                  >
                     ▼
                   </span>
                 )}
