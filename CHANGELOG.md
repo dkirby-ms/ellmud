@@ -1,3 +1,10 @@
+# [0.2.0-dev.4](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.3...v0.2.0-dev.4) (2026-04-11)
+
+
+### Bug Fixes
+
+* **e2e:** use admin spawn API for container tests ([e9304e2](https://github.com/dkirby-ms/ellmud/commit/e9304e2859588b5665bd8d1327f287391d7cf277))
+
 # [0.2.0-dev.3](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.2...v0.2.0-dev.3) (2026-04-11)
 
 
