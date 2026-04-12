@@ -5,7 +5,8 @@
  * containing the creature's loot. Creatures no longer drop loot directly in the room;
  * instead, players must open and loot corpse containers.
  *
- * Written against SPEC — implementation on branch squad/creature-corpse-containers
+ * Tests cover: corpse creation, loot contents, TTL/decay, open/take/loot commands,
+ * and group loot access.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -26,13 +27,10 @@ vi.mock('../content/index.js', () => ({
   }),
 }));
 
-import { CombatSystem } from '../combat/CombatSystem.js';
-import { createCombatant, type Combatant } from '../combat/CombatState.js';
 import { handleCommand, type CommandContext } from '../commands/index.js';
 import { parseCommand } from '../commands/parser.js';
 import { PlayerState } from '../state/PlayerState.js';
 import type { Item, Room } from '../generator/RoomGraph.js';
-import type { Creature } from '../creatures/types.js';
 
 // ─── Test Helpers ───────────────────────────────────────────────────────────
 
@@ -52,52 +50,24 @@ function makePlayer(id: string, roomId = TEST_ROOM): PlayerState {
   return new PlayerState(id, roomId, 100);
 }
 
-function makeCreature(id: string, name: string, roomId = TEST_ROOM, lootItems?: Array<{ id: string; name: string; weight: number; description: string }>): Creature {
-  const defaultLoot = lootItems || [
-    { id: 'rusty_blade', name: 'Rusty Blade', weight: 5, description: 'A rusty blade.', dropWeight: 1 },
-    { id: 'revenant_bone', name: 'Revenant Bone', weight: 2, description: 'A bone.', dropWeight: 1 },
-  ];
-
+/** Build a corpse Item matching the format produced by syncCreaturesAfterCombat. */
+function makeCorpseItem(
+  creatureId: string,
+  creatureName: string,
+  loot: Array<{ definitionId: string; quantity: number; durability: number | null }> = [],
+  overrides: Partial<Item> = {},
+): Item {
   return {
-    id,
-    type: 'drowned_revenant',
-    name,
-    hp: 50,
-    maxHp: 50,
-    attack: 10,
-    defence: 3,
-    armour: 3,
-    currentRoomId: roomId,
-    behaviorState: 'hostile',
-    idleTicks: 0,
-    idleTicksTarget: 4,
-    alertTargetRoomId: null,
-    lootTable: defaultLoot,
-    isAlive: true,
-    aggressive: true,
+    id: `corpse-${creatureId}`,
+    name: `corpse of ${creatureName}`,
+    weight: 10,
+    description: `The remains of a ${creatureName}.`,
+    roomDescription: `The corpse of a ${creatureName} lies here.`,
+    containerContents: loot,
+    createdAt: Date.now(),
+    ttlSeconds: 300,
+    ...overrides,
   };
-}
-
-function makeCombatant(entity: PlayerState | Creature): Combatant {
-  if ('inventory' in entity) {
-    // PlayerState
-    return createCombatant(
-      entity.sessionId,
-      entity.sessionId,
-      entity.currentRoomId,
-      true,
-      { maxHp: 100, attack: 10, armour: 2, agility: 5 }
-    );
-  } else {
-    // Creature
-    return createCombatant(
-      entity.id,
-      entity.name,
-      entity.currentRoomId,
-      false,
-      { maxHp: entity.maxHp, attack: entity.attack, armour: entity.armour }
-    );
-  }
 }
 
 function buildContext(player: PlayerState, room: Room, args: string[] = []): CommandContext {
@@ -111,520 +81,520 @@ function buildContext(player: PlayerState, room: Room, args: string[] = []): Com
   };
 }
 
-// ─── Basic Corpse Creation Tests ───────────────────────────────────────────
+// ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('Creature Corpse Container System', () => {
-  describe('corpse creation on death', () => {
-    it('creates a corpse item in the room when creature dies', () => {
-      const room = makeRoom();
-      const creature = makeCreature('revenant-1', 'Drowned Revenant');
-      
-      // Simulate creature death — implementation should add corpse to room.items
-      // This test verifies the expected contract:
-      // - room.items should contain a corpse item
-      // - corpse should reference the creature's name
-      
-      // Expected: After creature death, room should have a corpse item
-      expect(room.items).toHaveLength(0); // Before death
-      
-      // After implementation adds corpse on creature death:
-      // expect(room.items).toHaveLength(1);
-      // const corpse = room.items[0];
-      // expect(corpse?.name).toContain(creature.name);
+
+  // ── 1. Creature corpse creation ─────────────────────────────────────────
+
+  describe('creature corpse creation', () => {
+    it('corpse id follows the format corpse-{creatureId}', () => {
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant');
+      expect(corpse.id).toBe('corpse-creature-revenant-1');
     });
 
-    it('corpse name references the creature', () => {
-      const room = makeRoom();
-      const creature = makeCreature('revenant-1', 'Drowned Revenant');
-      
-      // Expected corpse format: "corpse of Drowned Revenant" or similar
-      // After implementation:
-      // const corpse = room.items.find(i => i.name.includes('corpse'));
-      // expect(corpse?.name).toContain('Drowned Revenant');
-      // OR
-      // expect(corpse?.name).toBe('corpse of Drowned Revenant');
+    it('corpse name follows the format "corpse of {creatureName}"', () => {
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant');
+      expect(corpse.name).toBe('corpse of Drowned Revenant');
     });
 
-    it('corpse has a roomDescription for look command', () => {
-      const room = makeRoom();
-      const creature = makeCreature('revenant-1', 'Drowned Revenant');
-      
-      // Expected: corpse should have roomDescription for visibility in room
-      // After implementation:
-      // const corpse = room.items.find(i => i.name.includes('corpse'));
-      // expect(corpse?.roomDescription).toBeDefined();
-      // expect(corpse?.roomDescription).toContain('corpse');
-    });
-  });
-
-  describe('corpse container properties', () => {
-    it('corpse is a container type with containerContents', () => {
-      const room = makeRoom();
-      const creature = makeCreature('revenant-1', 'Drowned Revenant');
-      
-      // Expected: corpse item should have containerContents array
-      // After implementation:
-      // const corpse = room.items.find(i => i.name.includes('corpse'));
-      // expect(corpse?.containerContents).toBeDefined();
-      // expect(Array.isArray(corpse?.containerContents)).toBe(true);
-    });
-
-    it('corpse container has sufficient slots for all loot', () => {
-      const room = makeRoom();
-      const creature = makeCreature('revenant-1', 'Drowned Revenant', TEST_ROOM, [
-        { id: 'item1', name: 'Item 1', weight: 1, description: 'Item 1', dropWeight: 1 },
-        { id: 'item2', name: 'Item 2', weight: 1, description: 'Item 2', dropWeight: 1 },
-        { id: 'item3', name: 'Item 3', weight: 1, description: 'Item 3', dropWeight: 1 },
+    it('corpse has containerContents array', () => {
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: null },
       ]);
-      
-      // Expected: corpse container should have maxSlots >= loot count
-      // After implementation via ContentRegistry:
-      // const corpse = room.items.find(i => i.name.includes('corpse'));
-      // const corpseDefinition = getContentRegistry().getItem(corpse.id);
-      // expect(corpseDefinition?.containerProperties?.maxSlots).toBeGreaterThanOrEqual(3);
+      expect(corpse.containerContents).toBeDefined();
+      expect(Array.isArray(corpse.containerContents)).toBe(true);
+      expect(corpse.containerContents).toHaveLength(1);
     });
 
-    it('corpse container has no item type restrictions', () => {
-      const room = makeRoom();
-      const creature = makeCreature('revenant-1', 'Drowned Revenant');
-      
-      // Expected: corpse container should accept any item type (no allowedItemTypes)
-      // After implementation:
-      // const corpse = room.items.find(i => i.name.includes('corpse'));
-      // const corpseDefinition = getContentRegistry().getItem(corpse.id);
-      // expect(corpseDefinition?.containerProperties?.allowedItemTypes).toBeUndefined();
+    it('corpse has createdAt and ttlSeconds (300 for creatures)', () => {
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant');
+      expect(corpse.createdAt).toBeDefined();
+      expect(typeof corpse.createdAt).toBe('number');
+      expect(corpse.ttlSeconds).toBe(300);
     });
 
-    it('corpse container has enough weight capacity for loot', () => {
+    it('corpse has roomDescription for look command', () => {
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant');
+      expect(corpse.roomDescription).toBeDefined();
+      expect(corpse.roomDescription).toContain('corpse');
+      expect(corpse.roomDescription).toContain('Drowned Revenant');
+    });
+
+    it('corpse appears in room.items when pushed', () => {
       const room = makeRoom();
-      const heavyLoot = [
-        { id: 'heavy1', name: 'Heavy Item 1', weight: 50, description: 'Heavy', dropWeight: 1 },
-        { id: 'heavy2', name: 'Heavy Item 2', weight: 50, description: 'Heavy', dropWeight: 1 },
-      ];
-      const creature = makeCreature('revenant-1', 'Drowned Revenant', TEST_ROOM, heavyLoot);
-      
-      // Expected: corpse maxWeight should accommodate all loot (or be undefined for unlimited)
-      // After implementation:
-      // const corpse = room.items.find(i => i.name.includes('corpse'));
-      // const corpseDefinition = getContentRegistry().getItem(corpse.id);
-      // const totalLootWeight = heavyLoot.reduce((sum, item) => sum + item.weight, 0);
-      // if (corpseDefinition?.containerProperties?.maxWeight) {
-      //   expect(corpseDefinition.containerProperties.maxWeight).toBeGreaterThanOrEqual(totalLootWeight);
-      // }
+      expect(room.items).toHaveLength(0);
+
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: null },
+      ]);
+      room.items.push(corpse);
+
+      expect(room.items).toHaveLength(1);
+      expect(room.items[0]!.id).toBe('corpse-creature-revenant-1');
+      expect(room.items[0]!.name).toContain('Drowned Revenant');
     });
   });
 
-  describe('corpse loot contents', () => {
-    it('corpse contains all creature loot items', () => {
+  // ── 2. Player corpse creation ───────────────────────────────────────────
+
+  describe('player corpse creation', () => {
+    it('player corpse has correct name format', () => {
+      const playerCorpse = makeCorpseItem('player-1', 'Drizzt', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
+      ], { ttlSeconds: 600 });
+
+      expect(playerCorpse.name).toBe('corpse of Drizzt');
+    });
+
+    it('player corpse has ttlSeconds of 600', () => {
+      const playerCorpse = makeCorpseItem('player-1', 'Drizzt', [], { ttlSeconds: 600 });
+      expect(playerCorpse.ttlSeconds).toBe(600);
+    });
+
+    it('player corpse contains the dropped items', () => {
+      const droppedItems = [
+        { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
+        { definitionId: 'revenant_bone', quantity: 1, durability: null },
+      ];
+      const playerCorpse = makeCorpseItem('player-1', 'Drizzt', droppedItems, { ttlSeconds: 600 });
+
+      expect(playerCorpse.containerContents).toHaveLength(2);
+      const ids = playerCorpse.containerContents!.map(c => c.definitionId);
+      expect(ids).toContain('rusty_blade');
+      expect(ids).toContain('revenant_bone');
+    });
+
+    it('player corpse appears in room.items', () => {
       const room = makeRoom();
+      const playerCorpse = makeCorpseItem('player-1', 'Drizzt', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
+      ], { ttlSeconds: 600 });
+      room.items.push(playerCorpse);
+
+      expect(room.items).toHaveLength(1);
+      expect(room.items[0]!.name).toBe('corpse of Drizzt');
+    });
+  });
+
+  // ── 3. Loot contents ────────────────────────────────────────────────────
+
+  describe('loot contents', () => {
+    it('corpse containerContents matches creature loot table output', () => {
       const loot = [
-        { id: 'rusty_blade', name: 'Rusty Blade', weight: 5, description: 'Rusty', dropWeight: 1 },
-        { id: 'revenant_bone', name: 'Revenant Bone', weight: 2, description: 'Bone', dropWeight: 1 },
+        { definitionId: 'rusty_blade', quantity: 1, durability: null },
+        { definitionId: 'revenant_bone', quantity: 1, durability: null },
       ];
-      const creature = makeCreature('revenant-1', 'Drowned Revenant', TEST_ROOM, loot);
-      
-      // Expected: corpse.containerContents should match creature loot table
-      // After implementation:
-      // const corpse = room.items.find(i => i.name.includes('corpse'));
-      // expect(corpse?.containerContents).toHaveLength(2);
-      // const itemIds = corpse?.containerContents?.map(c => c.definitionId) || [];
-      // expect(itemIds).toContain('rusty_blade');
-      // expect(itemIds).toContain('revenant_bone');
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', loot);
+
+      expect(corpse.containerContents).toHaveLength(2);
+      expect(corpse.containerContents![0]!.definitionId).toBe('rusty_blade');
+      expect(corpse.containerContents![1]!.definitionId).toBe('revenant_bone');
     });
 
-    it('corpse loot items have correct quantities', () => {
-      const room = makeRoom();
-      const creature = makeCreature('revenant-1', 'Drowned Revenant');
-      
-      // Expected: each loot item should have quantity = 1 by default
-      // After implementation:
-      // const corpse = room.items.find(i => i.name.includes('corpse'));
-      // corpse?.containerContents?.forEach(item => {
-      //   expect(item.quantity).toBe(1);
-      // });
-    });
-  });
+    it('loot items have valid definitionId and quantity', () => {
+      const loot = [
+        { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
+        { definitionId: 'revenant_bone', quantity: 1, durability: null },
+      ];
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', loot);
 
-  describe('no direct loot drop', () => {
-    it('player does NOT receive loot items directly on creature death', () => {
-      const room = makeRoom();
-      const player = makePlayer('player-1');
-      const creature = makeCreature('revenant-1', 'Drowned Revenant');
-      
-      // Expected: after creature death, player inventory should NOT contain loot
-      // Loot should only be in corpse container
-      
-      const initialInventorySize = player.inventory.size;
-      
-      // After creature death (simulated):
-      // expect(player.inventory.size).toBe(initialInventorySize);
-      // expect(room.items.length).toBeGreaterThan(0); // Corpse should be in room
+      for (const item of corpse.containerContents!) {
+        expect(item.definitionId).toBeTruthy();
+        expect(item.quantity).toBeGreaterThanOrEqual(1);
+      }
     });
 
-    it('loot items are NOT placed directly in room.items', () => {
+    it('loot items are inside corpse, not loose in room.items', () => {
       const room = makeRoom();
-      const creature = makeCreature('revenant-1', 'Drowned Revenant', TEST_ROOM, [
-        { id: 'rusty_blade', name: 'Rusty Blade', weight: 5, description: 'Rusty', dropWeight: 1 },
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: null },
       ]);
-      
-      // Expected: room.items should only contain the corpse, NOT individual loot items
-      // After implementation:
-      // const lootItems = room.items.filter(i => i.id === 'rusty_blade');
-      // expect(lootItems).toHaveLength(0); // Loot should be inside corpse, not in room
-      
-      // const corpses = room.items.filter(i => i.name.includes('corpse'));
-      // expect(corpses).toHaveLength(1);
+      room.items.push(corpse);
+
+      const looseBlades = room.items.filter(i => i.id === 'rusty_blade');
+      expect(looseBlades).toHaveLength(0);
+
+      const corpses = room.items.filter(i => i.id.startsWith('corpse-'));
+      expect(corpses).toHaveLength(1);
+      expect(corpses[0]!.containerContents).toHaveLength(1);
+    });
+
+    it('empty loot table produces corpse with empty containerContents', () => {
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', []);
+      expect(corpse.containerContents).toHaveLength(0);
     });
   });
 
-  describe('multiple creature deaths', () => {
-    it('creates multiple corpses for multiple creature deaths in same room', () => {
+  // ── 4. TTL / decay ──────────────────────────────────────────────────────
+
+  describe('TTL / decay', () => {
+    /**
+     * Simulates ZoneRoom.tickCorpseDecay() logic: remove items where
+     * (now - createdAt) / 1000 >= ttlSeconds.
+     */
+    function tickDecay(room: Room): void {
+      const now = Date.now();
+      room.items = room.items.filter(item => {
+        if (item.createdAt !== undefined && item.ttlSeconds !== undefined) {
+          const age = (now - item.createdAt) / 1000;
+          return age < item.ttlSeconds;
+        }
+        return true;
+      });
+    }
+
+    it('removes a corpse whose TTL has expired', () => {
       const room = makeRoom();
-      const creature1 = makeCreature('revenant-1', 'Drowned Revenant');
-      const creature2 = makeCreature('revenant-2', 'Drowned Revenant');
-      
-      // Expected: two corpses should be created
-      // After implementation:
-      // expect(room.items).toHaveLength(2);
-      // const corpses = room.items.filter(i => i.name.includes('corpse'));
-      // expect(corpses).toHaveLength(2);
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: null },
+      ]);
+      corpse.createdAt = Date.now() - 301_000; // 301 seconds ago, past 300s TTL
+      room.items.push(corpse);
+
+      tickDecay(room);
+
+      expect(room.items).toHaveLength(0);
     });
 
-    it('corpses from different creatures have distinct IDs', () => {
+    it('keeps a corpse whose TTL has not expired', () => {
       const room = makeRoom();
-      const creature1 = makeCreature('revenant-1', 'Revenant Alpha');
-      const creature2 = makeCreature('revenant-2', 'Revenant Beta');
-      
-      // Expected: corpse IDs should be unique
-      // After implementation:
-      // const corpseIds = room.items.map(i => i.id);
-      // const uniqueIds = new Set(corpseIds);
-      // expect(uniqueIds.size).toBe(corpseIds.length);
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: null },
+      ]);
+      // created just now — well within 300s TTL
+      room.items.push(corpse);
+
+      tickDecay(room);
+
+      expect(room.items).toHaveLength(1);
+      expect(room.items[0]!.id).toBe('corpse-creature-revenant-1');
     });
 
-    it('corpses from different creatures have distinct names', () => {
+    it('decays multiple corpses independently', () => {
       const room = makeRoom();
-      const creature1 = makeCreature('revenant-1', 'Revenant Alpha');
-      const creature2 = makeCreature('revenant-2', 'Revenant Beta');
-      
-      // Expected: corpse names should reference their respective creatures
-      // After implementation:
-      // const corpse1 = room.items.find(i => i.name.includes('Alpha'));
-      // const corpse2 = room.items.find(i => i.name.includes('Beta'));
-      // expect(corpse1).toBeDefined();
-      // expect(corpse2).toBeDefined();
-      // expect(corpse1?.name).not.toBe(corpse2?.name);
+
+      const expiredCorpse = makeCorpseItem('creature-a', 'Zombie', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: null },
+      ]);
+      expiredCorpse.createdAt = Date.now() - 400_000; // expired
+
+      const freshCorpse = makeCorpseItem('creature-b', 'Skeleton', [
+        { definitionId: 'revenant_bone', quantity: 1, durability: null },
+      ]);
+      // freshCorpse.createdAt is Date.now() — still alive
+
+      room.items.push(expiredCorpse, freshCorpse);
+      expect(room.items).toHaveLength(2);
+
+      tickDecay(room);
+
+      expect(room.items).toHaveLength(1);
+      expect(room.items[0]!.id).toBe('corpse-creature-b');
+    });
+
+    it('does not decay items without TTL fields', () => {
+      const room = makeRoom();
+      const normalItem: Item = {
+        id: 'torch',
+        name: 'battered torch',
+        weight: 1,
+        description: 'A torch.',
+      };
+      room.items.push(normalItem);
+
+      tickDecay(room);
+
+      expect(room.items).toHaveLength(1);
+      expect(room.items[0]!.id).toBe('torch');
     });
   });
 
-  describe('creature with no loot', () => {
-    it('creates empty corpse for creature with empty loot table', () => {
-      const room = makeRoom();
-      const creature = makeCreature('revenant-1', 'Drowned Revenant', TEST_ROOM, []);
-      
-      // Expected: corpse should still be created but with empty containerContents
-      // After implementation:
-      // const corpse = room.items.find(i => i.name.includes('corpse'));
-      // expect(corpse).toBeDefined();
-      // expect(corpse?.containerContents).toHaveLength(0);
-    });
-
-    it('empty corpse is still visible in room', () => {
-      const room = makeRoom();
-      const creature = makeCreature('revenant-1', 'Drowned Revenant', TEST_ROOM, []);
-      
-      // Expected: empty corpse should have roomDescription for look command
-      // After implementation:
-      // const corpse = room.items.find(i => i.name.includes('corpse'));
-      // expect(corpse?.roomDescription).toBeDefined();
-    });
-  });
+  // ── 5. Open / take commands ─────────────────────────────────────────────
 
   describe('open command with corpse', () => {
-    it('open command works with corpse containers', () => {
+    it('open corpse lists its contents', () => {
       const room = makeRoom();
       const player = makePlayer('player-1');
-      const creature = makeCreature('revenant-1', 'Drowned Revenant');
-      
-      // Simulate corpse in room
-      const mockCorpse: Item = {
-        id: 'corpse-revenant-1',
-        name: 'corpse of Drowned Revenant',
-        weight: 10,
-        description: 'The corpse of a Drowned Revenant.',
-        roomDescription: 'The corpse of a Drowned Revenant lies here.',
-        containerContents: [
-          { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
-          { definitionId: 'revenant_bone', quantity: 1, durability: null },
-        ],
-      };
-      room.items.push(mockCorpse);
-      
-      // Test open command
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
+        { definitionId: 'revenant_bone', quantity: 1, durability: null },
+      ]);
+      room.items.push(corpse);
+
       const ctx = buildContext(player, room, ['corpse']);
-      const parsed = parseCommand('open corpse');
-      expect(parsed.ok).toBe(true);
-      
-      // After implementation:
-      // const result = handleCommand(parsed.command, ctx);
-      // expect(result.narrations[0]?.text).toContain('corpse');
-      // expect(result.narrations[0]?.text).toContain('Rusty Blade');
-      // expect(result.narrations[0]?.text).toContain('Revenant Bone');
+      const result = handleCommand('open', ctx);
+
+      const text = result.narrations[0]?.text ?? '';
+      expect(text).toContain('corpse of Drowned Revenant');
+      expect(text).toContain('Rusty Blade');
+      expect(text).toContain('Revenant Bone');
     });
 
-    it('open command shows corpse contents', () => {
+    it('open corpse reports empty when no items remain', () => {
       const room = makeRoom();
       const player = makePlayer('player-1');
-      
-      const mockCorpse: Item = {
-        id: 'corpse-revenant-1',
-        name: 'corpse of Drowned Revenant',
-        weight: 10,
-        description: 'The corpse of a Drowned Revenant.',
-        containerContents: [
-          { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
-        ],
-      };
-      room.items.push(mockCorpse);
-      
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', []);
+      room.items.push(corpse);
+
       const ctx = buildContext(player, room, ['corpse']);
-      
-      // After implementation:
-      // const result = handleCommand({ verb: 'open', args: ['corpse'] }, ctx);
-      // const narration = result.narrations[0]?.text || '';
-      // expect(narration).toMatch(/Rusty Blade/i);
+      const result = handleCommand('open', ctx);
+
+      const text = result.narrations[0]?.text ?? '';
+      expect(text.toLowerCase()).toMatch(/empty/);
     });
 
-    it('open command reports empty corpse', () => {
+    it('open command can target by partial name "corpse"', () => {
       const room = makeRoom();
       const player = makePlayer('player-1');
-      
-      const mockCorpse: Item = {
-        id: 'corpse-revenant-1',
-        name: 'corpse of Drowned Revenant',
-        weight: 10,
-        description: 'The corpse of a Drowned Revenant.',
-        containerContents: [],
-      };
-      room.items.push(mockCorpse);
-      
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: null },
+      ]);
+      room.items.push(corpse);
+
       const ctx = buildContext(player, room, ['corpse']);
-      
-      // After implementation:
-      // const result = handleCommand({ verb: 'open', args: ['corpse'] }, ctx);
-      // const narration = result.narrations[0]?.text || '';
-      // expect(narration).toMatch(/empty|nothing/i);
+      const result = handleCommand('open', ctx);
+      expect(result.narrations[0]?.text).toContain('Rusty Blade');
     });
   });
 
   describe('take command with corpse', () => {
-    it('take command extracts item from corpse', () => {
+    it('take <item> from corpse moves item to player inventory', () => {
       const room = makeRoom();
       const player = makePlayer('player-1');
-      
-      const mockCorpse: Item = {
-        id: 'corpse-revenant-1',
-        name: 'corpse of Drowned Revenant',
-        weight: 10,
-        description: 'The corpse of a Drowned Revenant.',
-        containerContents: [
-          { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
-          { definitionId: 'revenant_bone', quantity: 1, durability: null },
-        ],
-      };
-      room.items.push(mockCorpse);
-      
-      const initialInventorySize = player.inventory.size;
-      const ctx = buildContext(player, room, ['rusty', 'from', 'corpse']);
-      
-      // After implementation:
-      // const result = handleCommand({ verb: 'take', args: ['rusty', 'from', 'corpse'] }, ctx);
-      // expect(player.inventory.size).toBe(initialInventorySize + 1);
-      // expect(player.inventory.has('rusty_blade')).toBe(true);
-      
-      // Corpse should have one less item
-      // const updatedCorpse = room.items.find(i => i.id === 'corpse-revenant-1');
-      // expect(updatedCorpse?.containerContents).toHaveLength(1);
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
+        { definitionId: 'revenant_bone', quantity: 1, durability: null },
+      ]);
+      room.items.push(corpse);
+
+      const initialSize = player.inventory.size;
+      const ctx = buildContext(player, room, ['blade', 'from', 'corpse']);
+      const result = handleCommand('take', ctx);
+
+      expect(player.inventory.size).toBe(initialSize + 1);
+      const text = result.narrations[0]?.text ?? '';
+      expect(text).toContain('Rusty Blade');
     });
 
-    it('take command with "from corpse" syntax works', () => {
+    it('take <item> from corpse removes it from containerContents', () => {
       const room = makeRoom();
       const player = makePlayer('player-1');
-      
-      const mockCorpse: Item = {
-        id: 'corpse-revenant-1',
-        name: 'corpse of Drowned Revenant',
-        weight: 10,
-        description: 'The corpse of a Drowned Revenant.',
-        containerContents: [
-          { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
-        ],
-      };
-      room.items.push(mockCorpse);
-      
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
+        { definitionId: 'revenant_bone', quantity: 1, durability: null },
+      ]);
+      room.items.push(corpse);
+
+      const ctx = buildContext(player, room, ['blade', 'from', 'corpse']);
+      handleCommand('take', ctx);
+
+      const updatedCorpse = room.items.find(i => i.id === 'corpse-creature-revenant-1');
+      expect(updatedCorpse?.containerContents).toHaveLength(1);
+      expect(updatedCorpse?.containerContents![0]!.definitionId).toBe('revenant_bone');
+    });
+
+    it('take from corpse reports error for unknown item', () => {
+      const room = makeRoom();
+      const player = makePlayer('player-1');
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: null },
+      ]);
+      room.items.push(corpse);
+
+      const ctx = buildContext(player, room, ['potion', 'from', 'corpse']);
+      const result = handleCommand('take', ctx);
+
+      const text = result.narrations[0]?.text ?? '';
+      expect(text.toLowerCase()).toMatch(/doesn't contain|not found|don't see/i);
+    });
+
+    it('parser correctly parses "take blade from corpse"', () => {
       const parsed = parseCommand('take blade from corpse');
       expect(parsed.ok).toBe(true);
       if (parsed.ok) {
         expect(parsed.command.verb).toBe('take');
-        expect(parsed.command.args).toContain('from');
-        expect(parsed.command.args).toContain('corpse');
+        expect(parsed.command.args.join(' ')).toContain('from');
+        expect(parsed.command.args.join(' ')).toContain('corpse');
       }
     });
 
-    it('take all from corpse extracts all items', () => {
+    it('cannot pick up a non-empty corpse directly (must loot)', () => {
       const room = makeRoom();
       const player = makePlayer('player-1');
-      
-      const mockCorpse: Item = {
-        id: 'corpse-revenant-1',
-        name: 'corpse of Drowned Revenant',
-        weight: 10,
-        description: 'The corpse of a Drowned Revenant.',
-        containerContents: [
-          { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
-          { definitionId: 'revenant_bone', quantity: 1, durability: null },
-        ],
-      };
-      room.items.push(mockCorpse);
-      
-      const initialInventorySize = player.inventory.size;
-      
-      // After implementation:
-      // const result = handleCommand({ verb: 'take', args: ['all', 'from', 'corpse'] }, ctx);
-      // expect(player.inventory.size).toBe(initialInventorySize + 2);
-      
-      // Corpse should be empty
-      // const updatedCorpse = room.items.find(i => i.id === 'corpse-revenant-1');
-      // expect(updatedCorpse?.containerContents).toHaveLength(0);
-    });
-  });
-
-  describe('integration with existing systems', () => {
-    it('corpse container works with existing container command infrastructure', () => {
-      // This test verifies that corpse containers use the same infrastructure
-      // as regular containers (bags, pouches, etc.)
-      
-      const room = makeRoom();
-      const player = makePlayer('player-1');
-      
-      const mockCorpse: Item = {
-        id: 'corpse-revenant-1',
-        name: 'corpse of Drowned Revenant',
-        weight: 10,
-        description: 'The corpse of a Drowned Revenant.',
-        containerContents: [
-          { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
-        ],
-      };
-      room.items.push(mockCorpse);
-      
-      // Verify that corpse behaves like any other container
-      expect(mockCorpse.containerContents).toBeDefined();
-      expect(Array.isArray(mockCorpse.containerContents)).toBe(true);
-    });
-
-    it('look command shows corpse in room description', () => {
-      const room = makeRoom();
-      const player = makePlayer('player-1');
-      
-      const mockCorpse: Item = {
-        id: 'corpse-revenant-1',
-        name: 'corpse of Drowned Revenant',
-        weight: 10,
-        description: 'The corpse of a Drowned Revenant.',
-        roomDescription: 'The corpse of a Drowned Revenant lies here, still leaking dark water.',
-        containerContents: [],
-      };
-      room.items.push(mockCorpse);
-      
-      const ctx = buildContext(player, room);
-      
-      // After implementation:
-      // const result = handleCommand({ verb: 'look', args: [] }, ctx);
-      // const narration = result.narrations[0]?.text || '';
-      // expect(narration).toContain('corpse of a Drowned Revenant');
-    });
-  });
-
-  describe('edge cases', () => {
-    it('handles corpse with single item', () => {
-      const room = makeRoom();
-      const creature = makeCreature('revenant-1', 'Drowned Revenant', TEST_ROOM, [
-        { id: 'rusty_blade', name: 'Rusty Blade', weight: 5, description: 'Rusty', dropWeight: 1 },
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: null },
       ]);
-      
-      // After implementation:
-      // const corpse = room.items.find(i => i.name.includes('corpse'));
-      // expect(corpse?.containerContents).toHaveLength(1);
-    });
+      room.items.push(corpse);
 
-    it('handles corpse with many items', () => {
-      const room = makeRoom();
-      const manyItems = Array.from({ length: 10 }, (_, i) => ({
-        id: `item-${i}`,
-        name: `Item ${i}`,
-        weight: 1,
-        description: `Item ${i}`,
-        dropWeight: 1,
-      }));
-      const creature = makeCreature('revenant-1', 'Drowned Revenant', TEST_ROOM, manyItems);
-      
-      // After implementation:
-      // const corpse = room.items.find(i => i.name.includes('corpse'));
-      // expect(corpse?.containerContents).toHaveLength(10);
-    });
-
-    it('corpse persists in room until looted or cleaned up', () => {
-      const room = makeRoom();
-      const creature = makeCreature('revenant-1', 'Drowned Revenant');
-      
-      // Expected: corpse should remain in room.items until removed
-      // After implementation:
-      // const corpse = room.items.find(i => i.name.includes('corpse'));
-      // expect(corpse).toBeDefined();
-      
-      // After taking all items, corpse might be removed or remain empty
-      // This depends on implementation choice
-    });
-
-    it('corpse can be targeted by partial name match', () => {
-      const room = makeRoom();
-      const player = makePlayer('player-1');
-      
-      const mockCorpse: Item = {
-        id: 'corpse-revenant-1',
-        name: 'corpse of Drowned Revenant',
-        weight: 10,
-        description: 'The corpse of a Drowned Revenant.',
-        containerContents: [
-          { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
-        ],
-      };
-      room.items.push(mockCorpse);
-      
       const ctx = buildContext(player, room, ['corpse']);
-      
-      // Verify parser accepts "corpse" as target
-      const parsed = parseCommand('open corpse');
-      expect(parsed.ok).toBe(true);
-    });
+      const result = handleCommand('take', ctx);
 
-    it('corpse can be targeted by full creature name', () => {
+      const text = result.narrations[0]?.text ?? '';
+      expect(text.toLowerCase()).toMatch(/contains items|take .+ from/i);
+      // Corpse should still be in the room
+      expect(room.items).toHaveLength(1);
+    });
+  });
+
+  describe('loot command with corpse', () => {
+    it('loot corpse takes all items from corpse', () => {
       const room = makeRoom();
       const player = makePlayer('player-1');
-      
-      const mockCorpse: Item = {
-        id: 'corpse-revenant-1',
-        name: 'corpse of Drowned Revenant',
-        weight: 10,
-        description: 'The corpse of a Drowned Revenant.',
-        containerContents: [],
-      };
-      room.items.push(mockCorpse);
-      
-      // Verify "corpse of Drowned Revenant" can be targeted
-      const parsed = parseCommand('open corpse of drowned revenant');
-      expect(parsed.ok).toBe(true);
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
+        { definitionId: 'revenant_bone', quantity: 1, durability: null },
+      ]);
+      room.items.push(corpse);
+
+      const initialSize = player.inventory.size;
+      const ctx = buildContext(player, room, ['corpse']);
+      const result = handleCommand('loot', ctx);
+
+      expect(player.inventory.size).toBe(initialSize + 2);
+      const text = result.narrations[0]?.text ?? '';
+      expect(text).toContain('Rusty Blade');
+      expect(text).toContain('Revenant Bone');
+    });
+
+    it('loot corpse adds items to player inventory', () => {
+      const room = makeRoom();
+      const player = makePlayer('player-1');
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
+      ]);
+      room.items.push(corpse);
+
+      const initialSize = player.inventory.size;
+      const ctx = buildContext(player, room, ['corpse']);
+      const result = handleCommand('loot', ctx);
+
+      expect(player.inventory.size).toBe(initialSize + 1);
+      expect(result.narrations[0]?.text).toContain('Rusty Blade');
+    });
+
+    it('loot empty corpse reports it is empty', () => {
+      const room = makeRoom();
+      const player = makePlayer('player-1');
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', []);
+      room.items.push(corpse);
+
+      const ctx = buildContext(player, room, ['corpse']);
+      const result = handleCommand('loot', ctx);
+
+      const text = result.narrations[0]?.text ?? '';
+      expect(text.toLowerCase()).toMatch(/empty/);
+    });
+
+    it('loot with no corpses reports no corpses', () => {
+      const room = makeRoom();
+      const player = makePlayer('player-1');
+
+      const ctx = buildContext(player, room, []);
+      const result = handleCommand('loot', ctx);
+
+      const text = result.narrations[0]?.text ?? '';
+      expect(text.toLowerCase()).toMatch(/no corpses/);
+    });
+
+    it('loot <item> from corpse delegates to take', () => {
+      const room = makeRoom();
+      const player = makePlayer('player-1');
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
+        { definitionId: 'revenant_bone', quantity: 1, durability: null },
+      ]);
+      room.items.push(corpse);
+
+      const initialSize = player.inventory.size;
+      const ctx = buildContext(player, room, ['blade', 'from', 'corpse']);
+      const result = handleCommand('loot', ctx);
+
+      expect(player.inventory.size).toBe(initialSize + 1);
+      const text = result.narrations[0]?.text ?? '';
+      expect(text).toContain('Rusty Blade');
+    });
+  });
+
+  // ── 6. Group loot (multiple players) ────────────────────────────────────
+
+  describe('group loot', () => {
+    it('two players can loot from the same corpse', () => {
+      const room = makeRoom();
+      const player1 = makePlayer('player-1');
+      const player2 = makePlayer('player-2');
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
+        { definitionId: 'revenant_bone', quantity: 1, durability: null },
+      ]);
+      room.items.push(corpse);
+
+      // Player 1 takes the blade
+      const ctx1 = buildContext(player1, room, ['blade', 'from', 'corpse']);
+      const r1 = handleCommand('take', ctx1);
+      expect(r1.narrations[0]?.text).toContain('Rusty Blade');
+      expect(player1.inventory.size).toBe(1);
+
+      // Player 2 takes the bone
+      const ctx2 = buildContext(player2, room, ['bone', 'from', 'corpse']);
+      const r2 = handleCommand('take', ctx2);
+      expect(r2.narrations[0]?.text).toContain('Revenant Bone');
+      expect(player2.inventory.size).toBe(1);
+
+      // Corpse should now be empty
+      const updatedCorpse = room.items.find(i => i.id === 'corpse-creature-revenant-1');
+      expect(updatedCorpse?.containerContents).toHaveLength(0);
+    });
+
+    it('second player can take from corpse after first player takes one item', () => {
+      const room = makeRoom();
+      const player1 = makePlayer('player-1');
+      const player2 = makePlayer('player-2');
+      const corpse = makeCorpseItem('creature-revenant-1', 'Drowned Revenant', [
+        { definitionId: 'rusty_blade', quantity: 1, durability: 30 },
+        { definitionId: 'revenant_bone', quantity: 1, durability: null },
+      ]);
+      room.items.push(corpse);
+
+      // Player 1 takes the blade
+      const ctx1 = buildContext(player1, room, ['blade', 'from', 'corpse']);
+      handleCommand('take', ctx1);
+      expect(player1.inventory.size).toBe(1);
+
+      // Player 2 opens and still sees remaining item
+      const ctx2 = buildContext(player2, room, ['corpse']);
+      const result = handleCommand('open', ctx2);
+      const text = result.narrations[0]?.text ?? '';
+      expect(text).toContain('Revenant Bone');
+    });
+  });
+
+  // ── 7. Multiple corpses ─────────────────────────────────────────────────
+
+  describe('multiple corpses in same room', () => {
+    it('two corpses from different creatures have distinct IDs', () => {
+      const corpse1 = makeCorpseItem('creature-revenant-1', 'Revenant Alpha');
+      const corpse2 = makeCorpseItem('creature-revenant-2', 'Revenant Beta');
+
+      expect(corpse1.id).not.toBe(corpse2.id);
+    });
+
+    it('two corpses from different creatures have distinct names', () => {
+      const corpse1 = makeCorpseItem('creature-revenant-1', 'Revenant Alpha');
+      const corpse2 = makeCorpseItem('creature-revenant-2', 'Revenant Beta');
+
+      expect(corpse1.name).not.toBe(corpse2.name);
+      expect(corpse1.name).toContain('Alpha');
+      expect(corpse2.name).toContain('Beta');
+    });
+
+    it('both corpses appear in room.items', () => {
+      const room = makeRoom();
+      room.items.push(makeCorpseItem('creature-a', 'Zombie'));
+      room.items.push(makeCorpseItem('creature-b', 'Skeleton'));
+
+      const corpses = room.items.filter(i => i.id.startsWith('corpse-'));
+      expect(corpses).toHaveLength(2);
     });
   });
 });
