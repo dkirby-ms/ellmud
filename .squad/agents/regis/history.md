@@ -1983,3 +1983,17 @@ Items spawned through admin panel integrate fully with player item interaction c
 - **Compass/stability tests:** Left `stability` in test fixtures — still present in shared `RoomHeaderMessage` type.
 - TypeScript build passes clean. All 415 client tests pass.
 - **Context:** Zone lifecycle (Seeding→Open→Active→Destabilising→Collapse) removed server-side; zones are now persistent MUD-style. Drizzt handling shared type changes in parallel.
+
+## Learnings from #438 Implementation
+
+- **ZoneStateMessage protocol:** Shared types in `packages/shared` define the message schema. Server publishes; client subscribes. Removing `collapseTimer` field required parallel updates: server stops sending it, client stops expecting it.
+- **Client store simplicity:** Removal of timer-related state + actions streamlined Redux reducer logic. The pattern: if a field is no longer published by server, remove all client state tracking + UI display.
+- **Backward compatibility:** Kept `stability` field in `RoomHeaderMessage` even though it's always 1.0 now. Useful for future (dynamic stability calculations) and doesn't hurt current UX.
+- **Message handler robustness:** Client should gracefully handle missing fields in messages from server. `onZoneState` handler no longer assumes `collapseTimer` exists.
+- **Test coverage:** Removal tests were valuable — they caught that the SET_COLLAPSE_TIMER action was orphaned in the reducer.
+
+## Post-Implementation Documentation — Issue #438 (2026-04-12T17:31Z)
+
+**Scribe:** Documented orchestration for squad. Merged decisions, updated team records.
+
+Outcomes: 5 files changed, 415 client tests all passing. Client state + hooks simplified. PR #439 merged.

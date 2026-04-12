@@ -4118,3 +4118,19 @@ Scribe recorded orchestration logs for CodeQL security fixes work:
 - Shared package must be rebuilt before server type-checking picks up type changes. The server resolves types through build output, not source.
 - The Colyseus ZoneState schema in state.ts tracks server-internal state. Removing fields from it affects serialization -- kept stability (always 1.0) for admin dashboard compat.
 - Test helper functions like seedZone() in test files are DB seeders, not the removed lifecycle method.
+
+---
+
+## Post-Implementation Documentation — Issue #438 (2026-04-12T17:30Z)
+
+**Scribe:** Documented orchestration for squad. Merged inbox decisions into `.squad/decisions/decisions.md`:
+- Starting Items Rename & Collapse Lifecycle Removal (comprehensive spec + implementation notes)
+- Remove room_definitions Table and PgRoomDefinitionsStore
+- Zone Lifecycle Context (user directive for team memory)
+
+Inbox files deleted post-merge. Agent history and decisions updated.
+
+Key learnings documented:
+- Starting items rename mechanics across 33 files
+- Zone state simplification pattern (removing legacy lifecycle states)
+- Test restructuring when behavior changes (items no longer respawn)

@@ -8520,3 +8520,112 @@ The `squad-promote.yml` workflow used `git merge` to promote uat→prod. Over ti
 
 If a real prod deployment pipeline is introduced, revert to merge-based promotion by restoring the old merge logic in `squad-promote.yml`. The `strip-forbidden-paths.sh` script remains the single source of truth either way.
 
+---
+
+## Decision: Starting Items Rename & Collapse Lifecycle Removal (#438)
+
+**Authors:** Drizzt (Implementation), Elminster (Architecture)  
+**Date:** 2026-04-12  
+**Issue:** #438  
+**PR:** #439  
+**Status:** Implemented ✅
+
+### Executive Summary
+
+Players complained that looted items respawn on zone pop. This was wrong. We've fixed it by:
+
+1. Renaming `loot_containers` → `starting_items` to clarify intent
+2. Removing the collapse lifecycle (zones are now always 'open')
+3. Fixing repop: items stay looted; only creatures respawn
+
+### Changes
+
+#### Database
+- Column renamed: `zone_rooms.loot_containers` → `zone_rooms.starting_items`
+- No data loss; straightforward migration
+
+#### Shared Types
+- `LootContainer` → `StartingItem` interface
+- Backward-compat alias maintained
+- `ZoneRoomDefinition.lootContainers` → `ZoneRoomDefinition.startingItems`
+
+#### Server
+- `PgZoneRepository` maps `starting_items` column
+- `ZoneRoom.repopZone()` simplified: respawn creatures only, not items
+- `resolveZoneRoomItems()` deleted (was the item respawn resolver)
+
+#### Zone State
+- Collapse lifecycle removed entirely (legacy from removed "shards" system)
+- `ZoneState` simplified to always `'open'` 
+- `collapseTimer` removed from `ZoneStateMessage`
+- `stability` field kept at 1.0 for client backward-compat
+- Methods removed: `seedZone()`, `handleCollapse()`, `broadcastRepopNarration()`
+
+#### Client (Regis)
+- `collapseTimer` removed from zone store
+- Zone state always rendered as 'open'
+- Room header no longer shows collapse countdown
+
+#### Tests
+- 33 server/shared files changed
+- 3,043 total tests passing
+- Repop tests rewritten (no item respawn verification)
+- 415 client tests passing
+
+### Rationale
+
+- **Player mental model:** Looted items should stay looted
+- **System design:** Zones are MUD-style (live until server exit), not shard-based
+- **Repop purpose:** Reset creatures + hazards, not inventory
+- **Simplicity:** Fewer states = fewer edge cases
+
+---
+
+## Decision: Remove room_definitions Table and PgRoomDefinitionsStore
+
+**Author:** Copilot (Implementation)  
+**Date:** 2026-04-12  
+**PR:** #439  
+**Status:** Implemented ✅
+
+### Context
+
+The `room_definitions` table was created for admin content management but was never used by the game runtime. Rooms are defined in `zone_rooms`, which is the single source of truth. The `PgRoomDefinitionsStore` CRUD admin store was dead code.
+
+### Decision
+
+Drop `room_definitions` table and remove `PgRoomDefinitionsStore` entirely.
+
+### Changes
+
+- **DB Migration:** Drop `room_definitions` table
+- **Admin API:** Remove `/admin/api/room-definitions/*` endpoints
+- **Admin Store:** Delete `PgRoomDefinitionsStore` class
+- **Type System:** Remove `RoomDefinition` interface (replaced by `ZoneRoomDefinition`)
+- **UI:** No room-definitions admin panel
+
+### Rationale
+
+- **Single source of truth:** `zone_rooms` is canonical for room definitions
+- **Dead code removal:** Eliminates maintenance burden
+- **Admin simplicity:** Fewer tables = cleaner UI
+
+---
+
+## Directive: Zone Lifecycle Context (from user #438 notes)
+
+**Author:** dkirby-ms  
+**Date:** 2026-04-12T16:41:00Z  
+**Context:** User feedback on #438 work
+
+### Key Insight
+
+The zone collapse lifecycle (Seeding → Open → Active → Destabilising → Collapse) is legacy from a removed "shards" system. Modern design treats zones as MUD-style: initialized on server start, persist until server exit.
+
+### For Team Memory
+
+- Zones are **not** shard-based ephemeral instances
+- Repop resets creatures + hazards, not items
+- Collapse cycle is not needed as originally designed
+- This context informs all future zone work
+
