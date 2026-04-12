@@ -1,3 +1,10 @@
+# [0.2.0-dev.11](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.10...v0.2.0-dev.11) (2026-04-12)
+
+
+### Bug Fixes
+
+* use correct inventory/stash headers based on zone context ([#431](https://github.com/dkirby-ms/ellmud/issues/431)) ([d00eb6a](https://github.com/dkirby-ms/ellmud/commit/d00eb6a1d58b5f1ec814e59557df399d461008fa))
+
 # [0.2.0-dev.10](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.9...v0.2.0-dev.10) (2026-04-12)
 
 
