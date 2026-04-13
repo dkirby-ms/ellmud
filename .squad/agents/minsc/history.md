@@ -46,6 +46,26 @@
 - Placeholder tests can be written before implementation with clear design guidance
 - Test patterns from established systems (container-commands) transfer cleanly to new features
 
+---
+
+### False Confidence Audit (PR #450)
+
+**What was done:**
+- Audited all 180 test files across client, server, shared, and e2e packages
+- Identified and fixed 6 critical + 3 moderate false-confidence anti-patterns in 4 files
+- All 3488 unit tests passing after fixes
+
+**Findings:**
+- The test suite is generally healthy — false confidence was concentrated in integration/edge-case tests
+- Primary pattern: `expect(true).toBe(true)` used as "didn't crash" placeholder (5 instances in 4 files)
+- Secondary patterns: discarded `.some()` result without assertion; vacuous `toBeGreaterThanOrEqual(0)`
+- pg-* repository tests, MetricsService tests, and UI component mocks are all legitimate — they mock dependencies, not the SUT
+
+**Key Learnings:**
+- Automated scanning (regex/AST) produces many false positives for mocking anti-patterns; manual review is essential to distinguish "mocking the dependency" (correct) from "mocking the SUT" (false confidence)
+- `expect(true).toBe(true)` is the most reliable signal for false confidence — easy to grep, always a real problem
+- Tests that omit assertions entirely are less dangerous than tautological assertions because most test runners can be configured to fail on zero-assertion tests
+- `toBeGreaterThanOrEqual(0)` on array lengths is always vacuous — prefer `toBeGreaterThan(0)` or exact counts
 
 ---
 

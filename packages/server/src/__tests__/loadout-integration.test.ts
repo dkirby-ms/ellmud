@@ -23,6 +23,7 @@ import {
   bootTestServer,
   connectTestClient,
   wait,
+  makeCommand,
   MessageCollector,
 } from './helpers/index.js';
 
@@ -107,17 +108,10 @@ describe('Zone ZoneRoom — EQUIP_ITEM handler', () => {
 
     await wait(500);
 
-    // Should receive system narration with error
-    const errorMsgs = collector.narrateByType('system');
-    errorMsgs.some(
-      (m) => m.text.toLowerCase().includes('invalid') ||
-             m.text.toLowerCase().includes('error') ||
-             m.text.toLowerCase().includes('cannot'),
-    );
-
-    // At minimum, the server should not crash
-    // If error handling is implemented, we get an error message
-    expect(true).toBe(true); // Server survived the bad input
+    // Server should respond (system narration or at least not crash).
+    // Verify we got at least one message back after sending the invalid slot.
+    const allMsgsAfter = collector.all.length;
+    expect(allMsgsAfter).toBeGreaterThan(0);
 
     await client.leave();
   });
@@ -279,9 +273,10 @@ describe('Integration Edge Cases', () => {
     // Don't wait — leave immediately
     await client.leave();
 
-    // Server should not throw; reconnecting should show consistent state
-    // This is a server-stability test
-    expect(true).toBe(true);
+    // Server should not throw; verify a new client can still connect
+    const { client: client2 } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
+    await wait(300);
+    await client2.leave();
   });
 
   it('rapid equip/unequip messages do not crash the server', async () => {
@@ -300,12 +295,17 @@ describe('Integration Edge Cases', () => {
 
     await wait(1000);
 
-    // Server survived without throwing
+    // Server survived — verify it's still responsive after rapid messages
+    const { client: verifyClient, collector: verifyCollector } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
+    await wait(300);
+    expect(verifyCollector.all.length).toBeGreaterThan(0);
+    await verifyClient.leave();
+
     await client.leave();
   });
 
   it('equip message with missing fields is handled gracefully', async () => {
-    const { client } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
+    const { client, collector } = await connectTestClient(colyseus, 'zone', { zoneSlug: 'the-refuge' });
 
     // Send malformed messages
     client.send(MessageTypes.EQUIP_ITEM, {});
@@ -314,7 +314,12 @@ describe('Integration Edge Cases', () => {
 
     await wait(500);
 
-    // Server should not crash from malformed messages
+    // Server should not crash from malformed messages — verify still responsive
+    const preCount = collector.all.length;
+    client.send(MessageTypes.COMMAND, makeCommand('look'));
+    await wait(500);
+    expect(collector.all.length).toBeGreaterThan(preCount);
+
     await client.leave();
   });
 });
