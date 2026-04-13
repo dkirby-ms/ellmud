@@ -4169,3 +4169,64 @@ The zone collapse lifecycle (Seeding → Open → Active → Destabilising → C
 - Collapse cycle is not needed as originally designed
 - This context informs all future zone work
 
+---
+
+## Directive: Publish Workflow Simplification (2026-04-12T23:27:34Z)
+
+**Author:** dkirby-ms (via Copilot)  
+**Date:** 2026-04-12  
+**Status:** Implemented ✅
+
+### Directive
+
+Content workflow does not need a "review" status. Simplify to `draft → published → deprecated`. Change UI button label from "Submit Review" to "Publish".
+
+### Rationale
+
+- User request: reduce status lifecycle complexity
+- Captured for team memory
+
+---
+
+## Decision: Approve Publish Refactor + #445 Exit Icons
+
+**Date:** 2026-04-13  
+**Author:** Elminster (Lead/Architect)  
+**Scope:** Client admin pages, Zone Designer  
+**Status:** Approved and Merged ✅
+
+### Verdict: APPROVE
+
+#### 1. Publish Refactor (squad/publish-refactor branch)
+
+**Consistency:** ✅ All 9 admin detail pages reviewed. The `review` status has been uniformly removed:
+- **CreatureDetail, ItemsDetail, RoomsDetail, SkillsDetail, FactionsDetail, ZonesDetail** — All show "Publish" button with `<Send>` icon. No remaining "Submit Review" or "In Review" references.
+- **CreaturesList, ItemsList** — Status type narrowed to `draft | published | deprecated` (was `draft | review | published | deprecated`). Status badge maps and filter dropdowns updated consistently.
+- **AuditLog** — "Review" action filter option removed from dropdown. Only `create | update | delete | deploy | publish` remain.
+- **NarrativeDetail, ModifiersDetail** — Only have "Save" button (no status workflow). Not in scope. Correct.
+
+**Completeness:** ✅ `grep -rn "review" packages/client/src/` returns zero hits for status/submit contexts. Server-side also has no `'review'` status references. Clean sweep.
+
+**No regressions:** ✅ The change is purely UI-label and type-narrowing. No behavioral logic changes.
+
+#### 2. #445 Zone Designer Exit Icons (squad/445-zone-designer-exit-icons branch)
+
+**Correctness:** ✅
+- `ZoneRoomNode`: Up/down exit `<span>` elements now have `onClick` handlers with `e.stopPropagation()` (prevents node selection conflict), hover effects via inline style manipulation, and tooltip text showing exit count.
+- `ZoneExitEdge`: New `highlighted` data property adds cyan glow styling (`#22D3EE`) with proper glow filter, consistent with existing selection/hover patterns.
+- `ZoneDesigner`: `highlightedExitIds` state (Set<string>) correctly wired — populated on room click (`handleRoomClick` collects all connected exits), cleared on ESC/canvas click/exit click/up-down click. Included in `useMemo` dependency array for edges.
+
+**React/TypeScript:** ✅ No issues. Callbacks wrapped in `useCallback`. Event handlers use proper `e.stopPropagation()`. Type definitions extended cleanly (`ExitEdgeData.highlighted`, `RoomNodeData.onUpExitClick/onDownExitClick/upExitIds/downExitIds`).
+
+**Edge cases handled:**
+- Single up/down exit → selects that exit directly
+- Multiple up/down exits → selects first, highlights all
+- Deselection paths (ESC, canvas click) all clear highlighting
+
+### Merged to Dev
+
+- PR #447 (creature detail static panels) squash-merged
+- PR #448 (exit icons #445 + publish refactor) squash-merged
+
+No issues found. Both PRs shipped.
+
