@@ -233,4 +233,12 @@ export class PgCharacterRepository implements CharacterRepository {
       [characterId],
     );
   }
+
+  async resetStarterKitFlag(characterId: string): Promise<void> {
+    await query(
+      `UPDATE characters SET starter_kit_granted = false
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [characterId],
+    );
+  }
 }

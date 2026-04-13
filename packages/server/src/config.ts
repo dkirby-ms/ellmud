@@ -60,6 +60,12 @@ export interface ServerConfig {
 
   /** Explicit toggle for LLM narration. When false, template-only mode is used even if LLM credentials are configured. */
   enableLLMNarration: boolean;
+
+  /** Permadeath mode configuration — server-wide permanent death enforcement. */
+  permadeath: {
+    /** Enable permadeath mode (server-wide). When true, all characters are reset on death. */
+    enabled: boolean;
+  };
 }
 
 /**
@@ -162,6 +168,9 @@ export function loadConfig(): ServerConfig {
       model: process.env.OPENAI_LLM_MODEL ?? 'gpt-4o',
     } : undefined,
     enableLLMNarration: envBool('ENABLE_LLM_NARRATION', true),
+    permadeath: {
+      enabled: envBool('PERMADEATH_ENABLED', false),
+    },
   };
 }
 

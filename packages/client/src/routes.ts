@@ -5,6 +5,7 @@ import CharacterSelect from "./pages/CharacterSelect";
 import ZoneExploration from "./pages/ZoneExploration";
 import Leaderboard from "./pages/Leaderboard";
 import Settings from "./pages/Settings";
+import HallOfFame from "./pages/HallOfFame";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ErrorFallback } from "./components/ErrorFallback";
 import AdminLayout from "./pages/admin/AdminLayout";
@@ -65,6 +66,10 @@ export const routes: RouteObject[] = [
       {
         path: "/leaderboard",
         Component: Leaderboard,
+      },
+      {
+        path: "/hall-of-fame",
+        Component: HallOfFame,
       },
       {
         path: "/settings",

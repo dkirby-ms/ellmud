@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Settings,
   Users,
+  Skull,
 } from "lucide-react";
 import CombinedStashLoadout from "../components/CombinedStashLoadout";
 import ChatPanel from "../components/ChatPanel";
@@ -13,6 +14,7 @@ import { ReconnectionOverlay } from "../components/ReconnectionOverlay";
 import { FullMapOverlay } from "../components/map/FullMapOverlay.js";
 import AnsiText from "../components/AnsiText.js";
 import { StatusPanel } from "../components/StatusPanel.js";
+import PermadeathOverlay from "../components/PermadeathOverlay.js";
 import "../components/map/map.css";
 import MudPrompt from "../components/MudPrompt.js";
 import SettingsModal from "../components/SettingsModal.js";
@@ -298,6 +300,13 @@ export default function ZoneExploration() {
             {state.username ?? state.email ?? "Unknown"}
           </span>
           <button
+            onClick={() => navigate("/hall-of-fame")}
+            className="text-text-secondary hover:text-accent-gold transition-colors"
+            title="Hall of Fame"
+          >
+            <Skull className="w-4 h-4" />
+          </button>
+          <button
             onClick={() => setShowSettings(true)}
             className="text-text-secondary hover:text-accent-gold transition-colors"
             title="Settings"
@@ -568,7 +577,7 @@ export default function ZoneExploration() {
         onClose={closeMap}
       />
 
-      {/* Death Overlay */}
+      {/* Death Overlay (normal death) */}
       {overlay.status === 'death' && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
           <div className="text-center">
@@ -584,6 +593,14 @@ export default function ZoneExploration() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Permadeath Overlay */}
+      {overlay.status === 'permadeath' && overlay.permadeathData && (
+        <PermadeathOverlay
+          data={overlay.permadeathData}
+          onDismiss={dismissOverlay}
+        />
       )}
 
       {/* Chat Panel */}

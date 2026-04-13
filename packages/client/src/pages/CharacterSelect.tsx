@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { Settings, LogOut, Dices } from "lucide-react";
+import { Settings, LogOut, Dices, Skull } from "lucide-react";
 import { useAppContext } from "../store";
 import {
   fetchCharacters,
@@ -161,6 +161,13 @@ export default function CharacterSelect() {
           <span className="text-text-secondary text-sm font-sans">
             {state.username ?? state.email ?? "Unknown"}
           </span>
+          <button
+            onClick={() => navigate("/hall-of-fame")}
+            className="text-text-secondary hover:text-accent-gold transition-colors"
+            title="Hall of Fame"
+          >
+            <Skull className="w-4 h-4" />
+          </button>
           <button
             onClick={() => navigate("/settings")}
             className="text-text-secondary hover:text-accent-gold transition-colors"

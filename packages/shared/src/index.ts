@@ -725,9 +725,19 @@ export {
 /** Server → Client: Player overlay state for death, downing, and stabilization UI. */
 export interface OverlayMessage {
   playerId: string;
-  state: 'death' | 'downed' | 'stabilized' | 'bleed_out';
+  state: 'death' | 'downed' | 'stabilized' | 'bleed_out' | 'permadeath';
   narration: string;
   timestamp: number;
+  /** Optional stats for permadeath screen (only populated when state is 'permadeath'). */
+  permadeathStats?: {
+    characterName: string;
+    level: number;
+    totalKills: number;
+    totalDeaths: number;
+    survivedSeconds: number;
+    causeOfDeath: string;
+    zoneOfDeath: string;
+  };
 }
 
 // ─── Downing & Death Penalty Types (GDD §6.5) ──────────────────────────────

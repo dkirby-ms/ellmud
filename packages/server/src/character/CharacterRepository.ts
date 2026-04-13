@@ -53,4 +53,7 @@ export interface CharacterRepository {
 
   /** Mark the starter kit as granted for this character. */
   markStarterKitGranted(characterId: string): Promise<void>;
+
+  /** Reset the starter kit flag (permadeath use case). */
+  resetStarterKitFlag(characterId: string): Promise<void>;
 }
