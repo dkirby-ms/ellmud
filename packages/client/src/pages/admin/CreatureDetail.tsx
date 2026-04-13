@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Send, X, Plus, AlertCircle } from "lucide-react";
 import { getCreature, createCreature, updateCreature, listItems, AdminAPIError, simulateCreatureReroll, type CreatureRerollResult, fetchAuditLog, type AuditEvent } from "../../lib/admin-api";
-import AnsiPreview from "../../components/admin/AnsiPreview.js";
 import AnsiText from "../../components/AnsiText.js";
+import AnsiTextarea from "../../components/admin/AnsiTextarea.js";
 
 type Status = "draft" | "published" | "deprecated";
 
@@ -403,14 +403,11 @@ export default function CreatureDetail() {
                   >
                     Description
                   </label>
-                  <textarea
+                  <AnsiTextarea
                     value={formData.description}
-                    onChange={(e) => updateField("description", e.target.value)}
+                    onChange={(v) => updateField("description", v)}
                     rows={4}
-                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                   
                   />
-                  <AnsiPreview value={formData.description} />
                 </div>
                 <div>
                   <label
@@ -419,15 +416,12 @@ export default function CreatureDetail() {
                   >
                     Room Description
                   </label>
-                  <textarea
+                  <AnsiTextarea
                     value={formData.roomDescription}
-                    onChange={(e) => updateField("roomDescription", e.target.value)}
+                    onChange={(v) => updateField("roomDescription", v)}
                     rows={2}
                     placeholder="A slum rat sniffs along the ground."
-                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                   
                   />
-                  <AnsiPreview value={formData.roomDescription} />
                   <p
                     className="text-[#4A4B55] text-xs mt-1"
                     style={{ fontFamily: "var(--font-sans)" }}
@@ -675,51 +669,6 @@ export default function CreatureDetail() {
 
           {/* Right Column - Preview & Context */}
           <div className="space-y-6">
-            {/* Preview */}
-            <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
-              <h3
-                className="text-[#C9A84C] text-sm mb-4"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
-                Live Preview
-              </h3>
-              <div
-                className="bg-[#1C1D27] rounded p-4 text-sm space-y-3"
-                style={{ fontFamily: "var(--font-mono)" }}
-              >
-                {formData.name && (
-                  <div className="text-[#C9A84C] font-semibold">
-                    <AnsiText text={formData.name} />
-                  </div>
-                )}
-                {formData.description && (
-                  <div className="text-[#8A8B95] text-xs border-b border-[#2A2B35] pb-2">
-                    <AnsiText text={formData.description} />
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="text-[#E8E0D0]">HP: {formData.maxHp}</div>
-                  <div className="text-[#E8E0D0]">ATK: {formData.attack}</div>
-                  <div className="text-[#E8E0D0]">DEF: {formData.defence}</div>
-                  <div className="text-[#E8E0D0]">ARM: {formData.armour}</div>
-                </div>
-                <div className="border-t border-[#2A2B35] pt-2 space-y-1">
-                  <div className="text-[#8A8B95] text-xs">
-                    Behavior: {formData.behavior} {formData.aggressive ? '(aggressive)' : '(passive)'}
-                  </div>
-                  <div className="text-[#8A8B95] text-xs">
-                    Flee at: {(formData.fleeThreshold * 100).toFixed(0)}% HP
-                  </div>
-                  <div className="text-[#8A8B95] text-xs">
-                    Spawn: {formData.minCount}-{formData.maxCount} creatures
-                  </div>
-                  <div className="text-[#8A8B95] text-xs">
-                    Tier: {formData.tierMin}-{formData.tierMax}
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Stat Re-roll Simulator */}
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h3

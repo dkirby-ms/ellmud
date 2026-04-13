@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Plus, X, Eye } from "lucide-react";
 import { useAdminEntity } from "../../hooks/useAdminEntity.js";
-import AnsiPreview from "../../components/admin/AnsiPreview.js";
+import AnsiTextarea from "../../components/admin/AnsiTextarea.js";
 
 interface NarrativeData {
   id: string;
@@ -363,15 +363,13 @@ export default function NarrativeDetail() {
                             <option value="hopeful">Hopeful</option>
                           </select>
                         </div>
-                        <textarea
+                        <AnsiTextarea
                           value={line.text}
-                          onChange={(e) => updateDialogueLine(index, "text", e.target.value)}
+                          onChange={(v) => updateDialogueLine(index, "text", v)}
                           rows={2}
                           placeholder="Dialogue text..."
-                          className="w-full bg-[#0A0B0F] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none text-sm"
-                         
+                          className="w-full bg-[#0A0B0F] border border-[#2A2B35] rounded-none px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none text-sm"
                         />
-                        <AnsiPreview value={line.text} />
                       </div>
                       <button
                         onClick={() => removeDialogueLine(index)}
@@ -392,14 +390,12 @@ export default function NarrativeDetail() {
                 </div>
               ) : (
                 <>
-                <textarea
+                <AnsiTextarea
                   value={formData.template}
-                  onChange={(e) => updateField("template", e.target.value)}
+                  onChange={(v) => updateField("template", v)}
                   rows={12}
-                  className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-4 py-3 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
                   style={{ lineHeight: "1.7" }}
                 />
-                <AnsiPreview value={formData.template} />
                 </>
               )}
             </div>
