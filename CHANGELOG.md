@@ -1,3 +1,10 @@
+# [0.2.0-dev.22](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.21...v0.2.0-dev.22) (2026-04-13)
+
+
+### Features
+
+* add noTake flag to Item interface for non-carryable items ([1677ac8](https://github.com/dkirby-ms/ellmud/commit/1677ac8af0aa61bf5d12dca976be9156b5467384))
+
 # [0.2.0-dev.21](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.20...v0.2.0-dev.21) (2026-04-13)
 
 
