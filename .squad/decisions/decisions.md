@@ -5278,3 +5278,56 @@ Write comprehensive tests BEFORE implementation based on the spec, following TDD
 - Test file: `packages/server/src/__tests__/creature-corpse.test.ts`
 - Implementation branch: `squad/creature-corpse-containers`
 - Related tests: container-commands.test.ts, container-items.test.ts, corpse-loot.test.ts
+# Decision: Remove Draft/Publish Two-Button Pattern from Admin Content Editors
+
+**Date:** 2026-04-15  
+**Decided by:** Regis (Frontend Dev)  
+**Context:** Simplifying admin content workflow
+
+## Decision
+
+Removed the "Save Draft" and "Publish" two-button pattern from all admin content detail pages. Replaced with a single "Save" button that always saves content with `status: 'published'`.
+
+## Rationale
+
+1. **Cognitive simplicity:** Content creators expect "Save" to mean "save and make live." The draft/publish distinction added confusion without providing value.
+
+2. **Consistency:** Some detail pages (Skills, Rooms, Factions) had non-functional Publish buttons while others (Creature, Items, Zones) had functional two-button workflows. This inconsistency was confusing.
+
+3. **Backend alignment:** The backend `ContentRegistry.ts` filters `WHERE status = 'published'` — only published content appears in-game. Draft content was invisible anyway, so the workflow was: save as draft → test (nothing appears) → publish → test again.
+
+## Implementation
+
+**Files changed:** 6 admin detail pages
+- CreatureDetail.tsx
+- ItemsDetail.tsx  
+- SkillsDetail.tsx
+- RoomsDetail.tsx
+- FactionsDetail.tsx
+- ZonesDetail.tsx
+
+**UI changes:**
+- Single "Save" button with gold styling (`bg-[#C9A84C]`) and Save icon
+- Always sets `status: 'published'` in payload
+- Removed `Send` icon imports (no longer needed)
+
+**Data model:**
+- Kept `status` field for backward compatibility
+- Still support `draft | published | deprecated` values
+- UI just always uses `'published'` on save
+
+## Impact
+
+- **Content creators:** Simplified workflow — one button, content is immediately live
+- **Backward compatibility:** Existing draft content in DB still works (status badges still render)
+- **Future flexibility:** Can add draft workflow back later if needed (data model supports it)
+
+## Testing
+
+- TypeScript compilation: ✅ passes
+- Client tests: ✅ 465 tests pass
+- No breaking changes
+
+## Related
+
+This continues the previous simplification where we removed the "review" status (2026-04-13, PR #448). The content workflow is now: create → save (published) → optionally deprecate.

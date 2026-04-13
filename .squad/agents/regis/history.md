@@ -123,3 +123,36 @@ Cross-team note: Minsc created 50 tests with `document.execCommand` mocked for j
 ## Detailed History
 
 Full session logs and dated entries have been moved to `history-archive.md` to keep this file compact.
+
+### 2026-04-15: Admin Content Editors — Remove Draft/Publish Pattern
+**Status:** ✅ Complete
+
+**Problem:** Admin content editors had a confusing two-button pattern ("Save Draft" + "Publish"). This required content creators to understand draft vs published states, but in practice all content should be published immediately.
+
+**Changes:**
+- Removed "Save Draft" button from 6 admin detail pages: CreatureDetail, ItemsDetail, SkillsDetail, RoomsDetail, FactionsDetail, ZonesDetail
+- Single "Save" button now always saves content as status: published
+- Button uses gold styling and Save icon
+- Simplified handleSave functions
+- Removed Send icon imports
+- Kept status badge display for backward compatibility
+
+**Files Modified:**
+1. CreatureDetail.tsx — Updated handleSave, removed Save Draft button
+2. ItemsDetail.tsx — Merged handleSave and handlePublish
+3. SkillsDetail.tsx — Updated handleSave to always publish
+4. RoomsDetail.tsx — Updated handleSave to always publish
+5. FactionsDetail.tsx — Updated handleSave to always publish
+6. ZonesDetail.tsx — Merged handleSave and handleSubmit
+
+**Validation:**
+- TypeScript compilation passes clean
+- All 465 client tests pass
+- Backend ContentRegistry filters WHERE status = published
+
+## Learnings — Draft/Publish Simplification
+
+- Single-button pattern is clearer: The draft/publish two-button workflow added cognitive load without value.
+- Status field retained: Kept status field in data model for backward compatibility and future flexibility.
+- Consistent save behavior: Some pages had functional Publish buttons, others had non-functional placeholders. Standardizing to single Save button removed this inconsistency.
+- Button styling matters: Using gold button style for primary Save action provides clear visual hierarchy.
