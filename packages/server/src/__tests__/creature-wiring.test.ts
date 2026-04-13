@@ -284,6 +284,7 @@ describe('Creature Loot Drops', () => {
         quantity: 1,
         durability: null,
       })),
+      noTake: true,
     };
     room.items.push(corpseItem);
 
@@ -320,6 +321,7 @@ describe('Creature Loot Drops', () => {
         quantity: 1,
         durability: null,
       })),
+      noTake: true,
     };
     room.items.push(corpseItem);
 

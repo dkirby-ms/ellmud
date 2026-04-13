@@ -63,6 +63,7 @@ function makeCorpseItem(
     containerContents: loot,
     createdAt: Date.now(),
     ttlSeconds: 300,
+    noTake: true,
     ...overrides,
   };
 }
@@ -428,7 +429,7 @@ describe('Creature Corpse Container System', () => {
       const result = handleCommand('take', ctx);
 
       const text = result.narrations[0]?.text ?? '';
-      expect(text.toLowerCase()).toMatch(/contains items|take .+ from/i);
+      expect(text.toLowerCase()).toMatch(/can't pick up/i);
       // Corpse should still be in the room
       expect(room.items).toHaveLength(1);
     });

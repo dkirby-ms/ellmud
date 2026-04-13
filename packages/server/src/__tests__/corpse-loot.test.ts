@@ -51,7 +51,7 @@ function makePlayer(sessionId = 'player-1', roomId = 'room-1'): PlayerState {
 function _makeContext(
   player: PlayerState,
   room: Room,
-  corpseSystem: CorpseSystem,
+  _corpseSystem: CorpseSystem,
   args: string[] = [],
 ): CommandContext {
   return {
@@ -61,7 +61,6 @@ function _makeContext(
     resolveRoom: () => undefined,
     otherPlayersInRoom: [],
     stability: 1.0,
-    corpseSystem,
   };
 }
 

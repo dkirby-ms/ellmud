@@ -2107,6 +2107,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
               })),
               createdAt: Date.now(),
               ttlSeconds: 300, // 5 minutes for creature corpses
+              noTake: true,
             };
 
             room.items.push(corpseItem);
@@ -2423,6 +2424,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         })),
         createdAt: Date.now(),
         ttlSeconds: 600, // 10 minutes for player corpses (longer than creatures)
+        noTake: true,
       };
 
       room.items.push(playerCorpseItem);

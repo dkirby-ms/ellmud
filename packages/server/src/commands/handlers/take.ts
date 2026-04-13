@@ -39,10 +39,10 @@ export function handleTake(ctx: CommandContext): CommandResult {
 
   const item = room.items[itemIndex]!;
 
-  // Don't allow picking up containers with contents (like corpses) - must loot them
-  if (item.containerContents && item.containerContents.length > 0) {
+  // Don't allow picking up noTake items (corpses, furniture, etc.)
+  if (item.noTake) {
     return {
-      narrations: [{ text: `The ${item.name} contains items. Use "take <item> from ${item.name}" to loot it.`, type: 'system' }],
+      narrations: [{ text: `You can't pick up the ${item.name}.`, type: 'system' }],
     };
   }
 

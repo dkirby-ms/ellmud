@@ -23,6 +23,8 @@ export interface Item {
   createdAt?: number;
   /** Time-to-live in seconds. Item removed from room after expiry. */
   ttlSeconds?: number;
+  /** If true, item cannot be picked up (corpses, furniture, etc.). */
+  noTake?: boolean;
 }
 
 export type Direction = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
