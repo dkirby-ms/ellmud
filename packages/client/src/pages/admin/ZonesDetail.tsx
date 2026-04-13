@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from "react";
 import { Link, useParams, useNavigate } from "react-router";
-import { ArrowLeft, Save, Send, Plus, X, Trash2, Edit2, ChevronDown, ChevronRight, ArrowRight, ArrowRightLeft } from "lucide-react";
+import { ArrowLeft, Save, Plus, X, Trash2, Edit2, ChevronDown, ChevronRight, ArrowRight, ArrowRightLeft } from "lucide-react";
 import {
   getZone, createZone, updateZone,
   createRoom, updateRoom, deleteRoom,
@@ -146,25 +146,19 @@ export default function ZonesDetail() {
       setSaving(true);
       setError(null);
 
+      const dataToSave = { ...formData, status: 'published' };
+
       if (isNew) {
-        const created = await createZone(formData);
+        const created = await createZone(dataToSave);
         navigate(`/admin/zones/${created.slug}`);
       } else if (zoneId) {
-        await updateZone(zoneId, formData);
+        await updateZone(zoneId, dataToSave);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save zone");
     } finally {
       setSaving(false);
     }
-  }
-
-  async function handleSubmit() {
-    if (!formData.name || !formData.slug) {
-      setError("Name and slug are required");
-      return;
-    }
-    await handleSave();
   }
 
   // ─── Room CRUD handlers ───────────────────────────────────────────────────
@@ -376,20 +370,11 @@ export default function ZonesDetail() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2 disabled:opacity-50"
-            style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
-          >
-            <Save className="w-4 h-4" />
-            {saving ? "Saving..." : "Save Draft"}
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={saving}
             className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2 disabled:opacity-50"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
-            <Send className="w-4 h-4" />
-            {saving ? "Publishing..." : "Publish"}
+            <Save className="w-4 h-4" />
+            {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router";
-import { ArrowLeft, Save, Send, X, Plus, AlertCircle } from "lucide-react";
+import { ArrowLeft, Save, X, Plus, AlertCircle } from "lucide-react";
 import { getCreature, createCreature, updateCreature, listItems, AdminAPIError, simulateCreatureReroll, type CreatureRerollResult, fetchAuditLog, type AuditEvent } from "../../lib/admin-api";
 import AnsiText from "../../components/AnsiText.js";
 import AnsiTextarea from "../../components/admin/AnsiTextarea.js";
@@ -197,7 +197,7 @@ export default function CreatureDetail() {
     return errors.length === 0;
   };
 
-  const handleSave = async (publish: boolean) => {
+  const handleSave = async () => {
     if (!validateForm()) return;
     try {
       setSaving(true);
@@ -211,7 +211,7 @@ export default function CreatureDetail() {
           dropWeight: entry.weight,
           weight: entry.weight,
         })),
-        status: publish ? ('published' as Status) : formData.status,
+        status: 'published' as Status,
       };
       if (isNew) {
         await createCreature(payload);
@@ -223,7 +223,7 @@ export default function CreatureDetail() {
       if (err instanceof AdminAPIError) {
         setError(err.message);
       } else {
-        setError(publish ? 'Failed to publish' : 'Failed to save creature');
+        setError('Failed to save creature');
       }
       console.error('Failed to save creature:', err);
     } finally {
@@ -323,22 +323,13 @@ export default function CreatureDetail() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => handleSave(false)}
-            disabled={saving}
-            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
-          >
-            <Save className="w-4 h-4" />
-            {saving ? 'Saving...' : 'Save Draft'}
-          </button>
-          <button
-            onClick={() => handleSave(true)}
+            onClick={handleSave}
             disabled={saving}
             className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
-            <Send className="w-4 h-4" />
-            {saving ? 'Publishing...' : 'Publish'}
+            <Save className="w-4 h-4" />
+            {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>

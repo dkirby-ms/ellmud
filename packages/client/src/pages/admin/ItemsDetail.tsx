@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router";
-import { ArrowLeft, Save, Send, AlertCircle } from "lucide-react";
+import { ArrowLeft, Save, AlertCircle } from "lucide-react";
 import { getItem, createItem, updateItem, AdminAPIError } from "../../lib/admin-api";
 import AnsiTextarea from "../../components/admin/AnsiTextarea.js";
 import AnsiText from "../../components/AnsiText.js";
@@ -95,29 +95,6 @@ export default function ItemsDetail() {
     try {
       setSaving(true);
       setError(null);
-      if (isNew) {
-        await createItem(formData);
-        navigate('/admin/items');
-      } else {
-        await updateItem(id!, formData);
-      }
-    } catch (err) {
-      if (err instanceof AdminAPIError) {
-        setError(err.message);
-      } else {
-        setError('Failed to save item');
-      }
-      console.error('Failed to save item:', err);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handlePublish = async () => {
-    if (!validateForm()) return;
-    try {
-      setSaving(true);
-      setError(null);
       const dataWithStatus = { ...formData, status: 'published' };
       if (isNew) {
         await createItem(dataWithStatus);
@@ -129,9 +106,9 @@ export default function ItemsDetail() {
       if (err instanceof AdminAPIError) {
         setError(err.message);
       } else {
-        setError('Failed to publish');
+        setError('Failed to save item');
       }
-      console.error('Failed to publish:', err);
+      console.error('Failed to save item:', err);
     } finally {
       setSaving(false);
     }
@@ -199,20 +176,11 @@ export default function ItemsDetail() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
-          >
-            <Save className="w-4 h-4" />
-            {saving ? 'Saving...' : 'Save Draft'}
-          </button>
-          <button
-            onClick={handlePublish}
-            disabled={saving}
             className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
-            <Send className="w-4 h-4" />
-            {saving ? 'Publishing...' : 'Publish'}
+            <Save className="w-4 h-4" />
+            {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>
