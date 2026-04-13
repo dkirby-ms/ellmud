@@ -217,7 +217,7 @@ describe('Tick Resolution', () => {
     expect(fleeEvents[0]!.narration).toContain('no escape');
   });
 
-  it('should end combat after cooldown when one combatant is defeated', () => {
+  it('should end combat immediately when one combatant is defeated', () => {
     // Give p2 very low HP
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2', TEST_ROOM, { maxHp: 5 });
@@ -226,20 +226,10 @@ describe('Tick Resolution', () => {
     system.registerCombatant(p2);
     system.initiateCombat('p1', 'p2');
 
-    // Tick 1: p1 strikes (auto-queued), p2 dies
+    // Tick 1: p1 strikes (auto-queued), p2 dies — combat ends immediately
     const result1 = system.resolveTick();
     expect(p2.hp).toBe(0);
-    // Combat should NOT end yet (cooldown started)
-    expect(result1.events.filter((e) => e.type === 'combat_end')).toHaveLength(0);
-    expect(system.isInCombat('p1')).toBe(true);
-
-    // Tick 2-3: Cooldown ticks
-    system.resolveTick();
-    system.resolveTick();
-
-    // Tick 4: Cooldown expires, combat ends
-    const result4 = system.resolveTick();
-    const endEvents = result4.events.filter((e) => e.type === 'combat_end');
+    const endEvents = result1.events.filter((e) => e.type === 'combat_end');
     expect(endEvents).toHaveLength(1);
     expect(endEvents[0]!.narration).toContain('ended');
 
@@ -543,28 +533,18 @@ describe('Flee Mechanics', () => {
     expect(result.fleeResults).toHaveLength(1);
   });
 
-  it('should end combat after cooldown when last opponent flees', () => {
+  it('should end combat immediately when last opponent flees', () => {
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2');
     system.registerCombatant(p1);
     system.registerCombatant(p2);
     system.initiateCombat('p1', 'p2');
 
-    // Tick 1: p2 flees
+    // Tick 1: p2 flees — combat ends immediately
     system.submitAction('p2', 'flee');
     const result1 = system.resolveTick();
     expect(result1.fleeResults).toHaveLength(1);
-    // Combat should NOT end immediately (cooldown started)
-    expect(result1.endedEncounterIds).toHaveLength(0);
-    expect(system.isInCombat('p1')).toBe(true);
-
-    // Tick 2-3: Cooldown ticks
-    system.resolveTick();
-    system.resolveTick();
-
-    // Tick 4: Cooldown expires, combat ends
-    const result4 = system.resolveTick();
-    expect(result4.endedEncounterIds).toHaveLength(1);
+    expect(result1.endedEncounterIds).toHaveLength(1);
     expect(system.isInCombat('p1')).toBe(false);
   });
 });
@@ -616,14 +596,10 @@ describe('Stale Combatant Cleanup', () => {
     system.registerCombatant(creature);
     system.initiateCombat('player-1', 'creature-1');
 
-    // Player strikes and kills creature in one hit
+    // Player strikes and kills creature in one hit — combat ends immediately
     const result = system.resolveTick();
     expect(result.events.some(e => e.type === 'defeated' && e.actorId === 'creature-1')).toBe(true);
-
-    // Drain post-combat cooldown
-    while (system.hasActiveEncounters()) {
-      system.resolveTick();
-    }
+    expect(system.hasActiveEncounters()).toBe(false);
 
     // After encounter cleanup, the player's stale combatant should be gone
     expect(system.getCombatant('player-1')).toBeUndefined();
@@ -638,11 +614,9 @@ describe('Stale Combatant Cleanup', () => {
     system.registerCombatant(creature1);
     system.initiateCombat('player-1', 'creature-1');
 
-    // Kill creature, drain cooldown
+    // Kill creature — combat ends immediately
     system.resolveTick();
-    while (system.hasActiveEncounters()) {
-      system.resolveTick();
-    }
+    expect(system.hasActiveEncounters()).toBe(false);
 
     // Player "moves" to a new room — re-register with new roomId
     const ROOM_B = 'room-b';

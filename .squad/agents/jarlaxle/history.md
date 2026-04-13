@@ -45,6 +45,11 @@
 - Reusing container infrastructure simpler than custom loot distribution logic
 - Player agency improves with explicit take commands over auto-distribution
 - Corpse item pattern aligns with thematic game feel (visible death consequences)
+- CombatSystem.combatants map persists beyond encounter lifetime — cleanupEncounter must delete entries to prevent stale roomIds
+- Both attack handler (attack.ts:55) and creature AI (ZoneRoom:1894) re-register combatants on demand, so cleanup is safe
+- Flee already updates combatant.roomId in CombatSystem (line 1007); other movement paths need defensive sync via updateCombatantRoom
+- Player movement points to sync: handleCommandMessage goto, moveFollowers, admin teleport
+- Post-combat cooldown (POST_COMBAT_COOLDOWN_TICKS=3) removed — looting now uses corpse containers, so no need to keep combat alive after all enemies die. Combat ends immediately when one side is eliminated.
 
 
 ### 2026-04-13: Creature Reroll Stats Shape Fix

@@ -21,7 +21,6 @@ import {
   type TelegraphBroadcast,
   COMBAT_TIMEOUT_TICKS,
   EMPTY_TICK_RESULT,
-  POST_COMBAT_COOLDOWN_TICKS,
   BASE_FLEE_CHANCE,
   FLEE_EVASION_BONUS_PER_RANK,
   FLEE_LEVEL_PENALTY,
@@ -154,7 +153,7 @@ export class CombatSystem {
         combatantIds: new Set([attackerId, targetId]),
         tickCount: 0,
         ticksSinceLastStrike: 0,
-        postCombatCooldown: 0,
+
       };
       this.encounters.set(encId, encounter);
       this.combatantEncounter.set(attackerId, encId);
@@ -964,13 +963,10 @@ export class CombatSystem {
     }
 
     // 5. Dodge events (for combatants not striking, fleeing, or repositioning)
-    // Suppress during post-combat cooldown — no opponents remain, narration is noise.
-    if (encounter.postCombatCooldown === 0) {
-      for (const c of combatants) {
-        const qa = actions.get(c.id)!;
-        if (qa.action === 'dodge' && !qa.newPosition) {
-          events.push(resolveDodge(c));
-        }
+    for (const c of combatants) {
+      const qa = actions.get(c.id)!;
+      if (qa.action === 'dodge' && !qa.newPosition) {
+        events.push(resolveDodge(c));
       }
     }
 
@@ -1013,8 +1009,7 @@ export class CombatSystem {
         this.combatantEncounter.delete(c.id);
         this.queuedActions.delete(c.id);
         c.roomId = toRoomId;
-        // Reset cooldown if fleeing player was keeping combat alive
-        encounter.postCombatCooldown = 0;
+
       } else {
         // Flee failed — lose action for this tick (GDD §6.2)
         events.push(resolveFlee(c, false));
@@ -1063,34 +1058,9 @@ export class CombatSystem {
       events.push(resolveCombatEnd('last_standing'));
       ended = true;
     } else if (aliveInEncounter.length <= 1) {
-      // Check if any player survived (post-combat cooldown is for looting)
-      const hasPlayer = aliveInEncounter.some(id => this.combatants.get(id)?.isPlayer);
-
-      if (!hasPlayer) {
-        // Only creatures remain (player fled) — immediate end
-        events.push(resolveCombatEnd('last_standing'));
-        ended = true;
-      } else if (encounter.postCombatCooldown === 0) {
-        // First tick after last enemy defeated — start cooldown (don't end combat yet)
-        encounter.postCombatCooldown = POST_COMBAT_COOLDOWN_TICKS;
-        this.debug(`Post-combat cooldown started: ${POST_COMBAT_COOLDOWN_TICKS} ticks`);
-      } else {
-        // Cooldown in progress — decrement
-        encounter.postCombatCooldown--;
-        this.debug(`Post-combat cooldown: ${encounter.postCombatCooldown} ticks remaining`);
-
-        // Combat ends when cooldown reaches 0
-        if (encounter.postCombatCooldown === 0) {
-          events.push(resolveCombatEnd('last_standing'));
-          ended = true;
-        }
-      }
-    } else {
-      // Multiple combatants still alive — reset cooldown if it was running
-      if (encounter.postCombatCooldown > 0) {
-        this.debug(`Post-combat cooldown interrupted — new threats detected`);
-        encounter.postCombatCooldown = 0;
-      }
+      // Only one (or zero) combatants remain — combat ends immediately
+      events.push(resolveCombatEnd('last_standing'));
+      ended = true;
     }
 
     if (!ended && encounter.ticksSinceLastStrike >= COMBAT_TIMEOUT_TICKS) {
