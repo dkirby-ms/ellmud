@@ -1,3 +1,29 @@
+# [0.2.0-dev.25](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.24...v0.2.0-dev.25) (2026-04-13)
+
+
+### Bug Fixes
+
+* **admin:** guard null behavior in creature editor select ([606d0f9](https://github.com/dkirby-ms/ellmud/commit/606d0f9aa453376acf4a84c6a0c2d380616c1f61))
+
+# [0.2.0-dev.24](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.23...v0.2.0-dev.24) (2026-04-13)
+
+
+### Bug Fixes
+
+* **client:** exclude all __tests__ dirs from tsc type-checking ([c588eab](https://github.com/dkirby-ms/ellmud/commit/c588eab6608771b26041770ee070c19783f21747))
+
+# [0.2.0-dev.23](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.22...v0.2.0-dev.23) (2026-04-13)
+
+
+### Bug Fixes
+
+* align creature reroll endpoint with flat entity shape from store ([be5d8aa](https://github.com/dkirby-ms/ellmud/commit/be5d8aa421bc13c0c01cca7f177b1b8633aebf79))
+
+
+### Features
+
+* **admin:** add undo/redo support for AnsiToolbar color toggles ([7c5c583](https://github.com/dkirby-ms/ellmud/commit/7c5c583ddc1176ba5315b9c7da2efd456fa9c7fa))
+
 # [0.2.0-dev.22](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.21...v0.2.0-dev.22) (2026-04-13)
 
 

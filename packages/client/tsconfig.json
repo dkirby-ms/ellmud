@@ -17,7 +17,7 @@
     "composite": true
   },
   "include": ["src/**/*"],
-  "exclude": ["vite.config.ts", "vitest.config.ts", "src/components/_old/**/*", "src/__tests__/**/*"],
+  "exclude": ["vite.config.ts", "vitest.config.ts", "src/components/_old/**/*", "src/**/__tests__/**/*"],
   "references": [
     { "path": "../shared" }
   ]

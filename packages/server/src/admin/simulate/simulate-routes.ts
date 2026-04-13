@@ -37,12 +37,10 @@ interface CreatureDefinition {
   id: string;
   type: string;
   name: string;
-  stats: {
-    maxHp: number;
-    attack: number;
-    defence: number;
-    armour: number;
-  };
+  maxHp: number;
+  attack: number;
+  defence: number;
+  armour: number;
 }
 
 interface DroppedItem {
@@ -158,13 +156,18 @@ export function createSimulateRouter(deps: SimulateRouterDeps): Router {
         return;
       }
 
-      if (!creature.stats) {
+      // Construct baseline stats from flat entity properties
+      const baseline = {
+        maxHp: creature.maxHp,
+        attack: creature.attack,
+        defence: creature.defence,
+        armour: creature.armour,
+      };
+
+      if (baseline.maxHp == null && baseline.attack == null) {
         res.status(400).json({ error: 'Creature has no stats defined' });
         return;
       }
-
-      // Baseline stats
-      const baseline = creature.stats;
 
       // Generate N stat variations
       const rolls: CreatureRoll[] = [];
@@ -226,11 +229,18 @@ function simulateDrop(lootTable: LootTableDefinition): DropResult {
   return { items, totalWeight };
 }
 
+interface BaselineStats {
+  maxHp: number;
+  attack: number;
+  defence: number;
+  armour: number;
+}
+
 /**
  * Roll creature stats with variance.
  * Applies ±10% variance to each stat for simulation purposes.
  */
-function rollCreatureStats(baseline: CreatureDefinition['stats']): CreatureRoll {
+function rollCreatureStats(baseline: BaselineStats): CreatureRoll {
   const variance = 0.1; // ±10%
 
   const hpVariance = (Math.random() * 2 - 1) * variance;

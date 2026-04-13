@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router";
-import { ArrowLeft, Save, Send, Plus, X } from "lucide-react";
+import { ArrowLeft, Save, Plus, X } from "lucide-react";
 import { useAdminEntity } from "../../hooks/useAdminEntity.js";
 import AnsiTextarea from "../../components/admin/AnsiTextarea.js";
 
@@ -80,7 +80,8 @@ export default function FactionsDetail() {
 
   const handleSave = async () => {
     try {
-      await save({ ...formData, milestones, events });
+      const dataToSave = { ...formData, milestones, events, status: 'published' };
+      await save(dataToSave);
       if (isNew) {
         navigate("/admin/factions");
       }
@@ -143,18 +144,11 @@ export default function FactionsDetail() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-4 py-2 border border-[#8A8B95] hover:bg-[#1C1D27] text-[#8A8B95] hover:text-[#E8E0D0] rounded transition-colors flex items-center gap-2 disabled:opacity-50"
+            className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2 disabled:opacity-50"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
             <Save className="w-4 h-4" />
-            {saving ? "Saving..." : "Save Draft"}
-          </button>
-          <button
-            className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2"
-            style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
-          >
-            <Send className="w-4 h-4" />
-            Publish
+            {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
