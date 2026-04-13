@@ -1,3 +1,10 @@
+# [0.2.0-dev.26](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.25...v0.2.0-dev.26) (2026-04-13)
+
+
+### Bug Fixes
+
+* clean up stale combatant entries to prevent cross-room combat failures ([7fa5498](https://github.com/dkirby-ms/ellmud/commit/7fa54980049d29ca195ffbc3d8916638124a49ba))
+
 # [0.2.0-dev.25](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.24...v0.2.0-dev.25) (2026-04-13)
 
 
