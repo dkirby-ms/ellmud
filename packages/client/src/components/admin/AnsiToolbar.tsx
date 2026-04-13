@@ -25,26 +25,30 @@ function insertTag(
   tag: string,
   onInsert: (v: string) => void,
 ) {
+  textarea.focus();
+
   const { selectionStart, selectionEnd, value } = textarea;
   const selected = value.slice(selectionStart, selectionEnd);
-  const open = `[${tag}]`;
-  const close = `[/${tag}]`;
-  const insertion = selected ? `${open}${selected}${close}` : `${open}${close}`;
+  const wrapped = `[${tag}]${selected}[/${tag}]`;
 
-  const before = value.slice(0, selectionStart);
-  const after = value.slice(selectionEnd);
-  const newValue = before + insertion + after;
+  // Select the range we're replacing, then insert via execCommand
+  // so Ctrl+Z undoes the tag insertion as a single step.
+  textarea.setSelectionRange(selectionStart, selectionEnd);
+  document.execCommand("insertText", false, wrapped);
 
-  onInsert(newValue);
-
-  // Restore cursor position after React re-render
-  const cursorPos = selected
-    ? selectionStart + insertion.length
-    : selectionStart + open.length;
-
+  // execCommand fires the input event → React state updates via onChange.
+  // Position cursor after the insertion (or inside tags if no selection).
   requestAnimationFrame(() => {
     textarea.focus();
-    textarea.setSelectionRange(cursorPos, cursorPos);
+    if (selected) {
+      // Position cursor at the end of the wrapped text
+      const cursorPos = selectionStart + wrapped.length;
+      textarea.setSelectionRange(cursorPos, cursorPos);
+    } else {
+      // Position cursor between the opening and closing tags
+      const cursorPos = selectionStart + tag.length + 2; // after [tag]
+      textarea.setSelectionRange(cursorPos, cursorPos);
+    }
   });
 }
 
