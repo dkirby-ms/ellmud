@@ -4415,3 +4415,58 @@ If `document.execCommand` is ever removed from browsers, we would need to:
 2. Or migrate to contenteditable divs with custom ANSI rendering (major refactor)
 
 For now, `execCommand` is the correct choice.
+
+---
+
+# Decision: Clean Up Combatant Entries on Encounter End
+
+**Date:** 2025-07-18
+**Author:** Jarlaxle
+**Scope:** Combat System
+
+## Context
+
+`CombatSystem.cleanupEncounter()` cleared encounter mappings and queued actions but left combatant entries in `this.combatants`. This caused stale `roomId` values to persist after combat, blocking future combat initiation when players moved rooms.
+
+## Decision
+
+1. **`cleanupEncounter()` now removes combatant entries** from `this.combatants` for all surviving encounter participants. Both the attack handler and creature AI already re-register combatants on demand, so this is safe.
+
+2. **Added `updateCombatantRoom(id, newRoomId)`** as a defensive sync method. Called from all player movement paths in ZoneRoom (goto, follow, admin teleport). Flee was already handled.
+
+## Impact
+
+- Any code that calls `getCombatant()` after combat ends will get `undefined` — this is correct behavior (attack handler and creature AI handle this).
+- Sandbox arena code calls `removeCombatant()` which already deletes from `this.combatants`, so no change needed there.
+
+---
+
+# Decision: Remove Post-Combat Cooldown
+
+**Author:** Jarlaxle (Systems Dev)
+**Date:** 2025-07-22
+**Status:** Implemented
+
+## Context
+
+Combat had a 3-tick (`POST_COMBAT_COOLDOWN_TICKS = 3`) delay after all enemies died before firing the `combat_end` event. This was originally designed to give players time to loot during combat mode.
+
+## Decision
+
+Remove the post-combat cooldown entirely. Combat now ends immediately when only one side remains alive (i.e., `aliveInEncounter.length <= 1`).
+
+## Rationale
+
+- **Looting moved to corpse containers.** Players loot via `open corpse` / `take X from corpse` — no need to keep combat alive for loot distribution.
+- **Player-reported sluggishness.** The 3-second delay after killing all enemies felt unresponsive.
+- **Simplifies combat-end logic.** Removed ~30 lines of cooldown branching, the `postCombatCooldown` field on encounters, and the `POST_COMBAT_COOLDOWN_TICKS` constant.
+
+## Changes
+
+- `CombatSystem.ts`: Collapsed cooldown branches into immediate `ended = true`
+- `CombatState.ts`: Removed `POST_COMBAT_COOLDOWN_TICKS` constant and `postCombatCooldown` field from `CombatEncounter`
+- Tests: Updated 6 tests across `combat.test.ts` and `flee-skill-check.test.ts` to expect immediate combat end
+
+## Risks
+
+- If a future feature needs a post-combat window (e.g., post-fight dialogue), it would need to be re-added. But that should be a separate system, not tied to combat tick resolution.
