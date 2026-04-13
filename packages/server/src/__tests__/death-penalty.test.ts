@@ -88,7 +88,7 @@ describe('DeathPenalty', () => {
   // ─── Stat Application ────────────────────────────────────────────────────
 
   describe('applyDeathPenalty', () => {
-    const baseStats = { maxHp: 100, attack: 10, defence: 5, armour: 2 };
+    const baseStats = { maxHp: 100, attack: 10, armour: 2 };
 
     it('should return unmodified stats for 0 deaths', () => {
       const modified = applyDeathPenalty(baseStats, 0);
@@ -99,17 +99,15 @@ describe('DeathPenalty', () => {
       const modified = applyDeathPenalty(baseStats, 1);
       expect(modified.maxHp).toBeLessThan(baseStats.maxHp);
       expect(modified.attack).toBeLessThan(baseStats.attack);
-      expect(modified.defence).toBeLessThan(baseStats.defence);
       // Armour is 2 → floor(2 * 0.905) = floor(1.81) = 1
       expect(modified.armour).toBeLessThanOrEqual(baseStats.armour);
     });
 
     it('should never reduce stats below 1', () => {
-      const tinyStats = { maxHp: 1, attack: 1, defence: 1, armour: 1 };
+      const tinyStats = { maxHp: 1, attack: 1, armour: 1 };
       const modified = applyDeathPenalty(tinyStats, 100);
       expect(modified.maxHp).toBeGreaterThanOrEqual(1);
       expect(modified.attack).toBeGreaterThanOrEqual(1);
-      expect(modified.defence).toBeGreaterThanOrEqual(1);
       expect(modified.armour).toBeGreaterThanOrEqual(1);
     });
 
@@ -124,7 +122,6 @@ describe('DeathPenalty', () => {
       const modified = applyDeathPenalty(baseStats, 1);
       expect(Number.isInteger(modified.maxHp)).toBe(true);
       expect(Number.isInteger(modified.attack)).toBe(true);
-      expect(Number.isInteger(modified.defence)).toBe(true);
       expect(Number.isInteger(modified.armour)).toBe(true);
     });
   });

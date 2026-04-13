@@ -21,9 +21,8 @@ describe('Ability System (GDD §6.3)', () => {
     // Always fail dodge for deterministic tests
     combatSystem = new CombatSystem(() => [], () => 1);
 
-    player = createCombatant('p1', 'Alice', 'room1', true, DEFAULT_PLAYER_STATS);
+    player = createCombatant('p1', 'Alice', 'room1', true, { attack: 10 });
     creature = createCombatant('c1', 'Goblin', 'room1', false, {
-      ...DEFAULT_PLAYER_STATS,
       maxHp: 50,
       attack: 8,
     });

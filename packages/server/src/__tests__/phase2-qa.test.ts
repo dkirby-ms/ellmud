@@ -126,12 +126,12 @@ function buildExitResolver(rooms: Map<string, SoundRoom>) {
 // Player factory
 function makePlayer(id: string, roomId: string, stats?: Partial<CombatStats>): Combatant {
   const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-  return createCombatant(id, id, roomId, true, merged);
+  return createCombatant(id, id, roomId, true, { attack: merged.unarmed, maxHp: merged.maxHp, armour: merged.armour, shieldBlock: merged.shieldBlock, dodge: merged.dodge });
 }
 
 function makeCreature(id: string, roomId: string, stats?: Partial<CombatStats>): Combatant {
   const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-  return createCombatant(id, id, roomId, false, merged);
+  return createCombatant(id, id, roomId, false, { attack: merged.unarmed, maxHp: merged.maxHp, armour: merged.armour, shieldBlock: merged.shieldBlock, dodge: merged.dodge });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -174,8 +174,8 @@ describe('Phase 2 QA — Multi-Player Zone (4 players)', () => {
   });
 
   it('resolves combat between 2 of 4 players while others observe', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, attack: 15, defence: 5, armour: 2 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 5, armour: 2 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, unarmed: 15, dodge: 5, armour: 2 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 5, armour: 2 });
     const p3 = makePlayer('p3', ROOMS.ENTRY);
     const p4 = makePlayer('p4', ROOMS.ENTRY);
 
@@ -235,8 +235,8 @@ describe('Phase 2 QA — Multi-Player Zone (4 players)', () => {
   });
 
   it('simultaneous combat events generate both sound and traces', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 20, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 20, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -313,8 +313,8 @@ describe('Phase 2 QA — PvP Conflict', () => {
   });
 
   it('player 1 striking player 2 deals damage', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 15, defence: 5, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 5, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 15, dodge: 5, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 5, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -331,8 +331,8 @@ describe('Phase 2 QA — PvP Conflict', () => {
   });
 
   it('mutual strikes deal damage to both players', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, attack: 15, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 12, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, unarmed: 15, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 12, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -348,8 +348,8 @@ describe('Phase 2 QA — PvP Conflict', () => {
 
   it('repeated strikes eventually defeat a player', () => {
     // Low HP target, high attack attacker
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, attack: 50, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 30, attack: 5, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, unarmed: 50, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 30, unarmed: 5, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -372,8 +372,8 @@ describe('Phase 2 QA — PvP Conflict', () => {
   });
 
   it('player defeat generates corpse trace', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 200, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 10, attack: 5, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 200, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 10, unarmed: 5, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -399,8 +399,8 @@ describe('Phase 2 QA — PvP Conflict', () => {
   });
 
   it('heavy damage produces blood trail traces', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 30, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 5, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 30, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 5, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -473,8 +473,8 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
   });
 
   it('disconnected player auto-attacks in combat', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 15, defence: 5, armour: 2 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 5, armour: 2 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 15, dodge: 5, armour: 2 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 5, armour: 2 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -494,8 +494,8 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
 
   it('disconnected player takes full damage (no dodge stance reduction)', () => {
     // Disconnected players auto-attack; passive dodge may or may not trigger
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 15, defence: 5, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 5, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 15, dodge: 5, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 5, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -512,8 +512,8 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
   });
 
   it('reconnected player can resume combat actions', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 15, defence: 5, armour: 2 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 5, armour: 2 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 15, dodge: 5, armour: 2 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 5, armour: 2 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -532,8 +532,8 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
   });
 
   it('combat state (HP, encounter) preserved across disconnect cycles', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, attack: 20, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 20, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, unarmed: 20, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 20, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -864,9 +864,9 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
       const rooms = buildSoundTestRooms();
       const combat = new CombatSystem(buildExitResolver(rooms));
 
-      const player = makePlayer('hero', ROOMS.ENTRY, { attack: 15, defence: 5, armour: 2 });
+      const player = makePlayer('hero', ROOMS.ENTRY, { unarmed: 15, dodge: 5, armour: 2 });
       const creature = makeCreature('creature-rat', ROOMS.ENTRY, {
-        maxHp: 30, attack: 8, defence: 3, armour: 1,
+        maxHp: 30, unarmed: 8, dodge: 3, armour: 1,
       });
 
       combat.registerCombatant(player);
@@ -907,7 +907,7 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
     });
 
     it('combat timeout ends encounter after COMBAT_TIMEOUT_TICKS of no strikes', () => {
-      const rooms = buildSoundTestRooms();
+      const _rooms = buildSoundTestRooms();
       // Use no-exit resolver so flee always fails but no strikes are generated
       const combat = new CombatSystem(() => []);
 
@@ -1010,8 +1010,8 @@ describe('Phase 2 QA — Cross-System Integration', () => {
 
   it('full combat tick produces sound + traces + awareness events in sequence', () => {
     // Setup: 2 players fighting, 1 observing in adjacent room
-    const attacker = makePlayer('attacker', ROOMS.ENTRY, { attack: 20, defence: 0, armour: 0 });
-    const defender = makePlayer('defender', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 0, armour: 0 });
+    const attacker = makePlayer('attacker', ROOMS.ENTRY, { unarmed: 20, dodge: 0, armour: 0 });
+    const defender = makePlayer('defender', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 0, armour: 0 });
     [attacker, defender].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('attacker', 'defender');
@@ -1190,8 +1190,8 @@ describe('Phase 2 QA — Edge Cases', () => {
   });
 
   it('combat + disconnect + trace creation all in same tick', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 20, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 15, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 20, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 15, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -1223,8 +1223,8 @@ describe('Phase 2 QA — Edge Cases', () => {
   });
 
   it('zero-HP combatant does not participate in next tick', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 200, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 5, attack: 5, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 200, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 5, unarmed: 5, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -1282,10 +1282,10 @@ describe('Phase 2 QA — Edge Cases', () => {
   });
 
   it('multiple simultaneous combats in different rooms are independent', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 15, defence: 5, armour: 2 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 5, armour: 2 });
-    const p3 = makePlayer('p3', ROOMS.CORRIDOR, { attack: 12, defence: 5, armour: 2 });
-    const p4 = makePlayer('p4', ROOMS.CORRIDOR, { maxHp: 100, attack: 8, defence: 5, armour: 2 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 15, dodge: 5, armour: 2 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 5, armour: 2 });
+    const p3 = makePlayer('p3', ROOMS.CORRIDOR, { unarmed: 12, dodge: 5, armour: 2 });
+    const p4 = makePlayer('p4', ROOMS.CORRIDOR, { maxHp: 100, unarmed: 8, dodge: 5, armour: 2 });
     [p1, p2, p3, p4].forEach(p => combat.registerCombatant(p));
 
     const enc1 = combat.initiateCombat('p1', 'p2');

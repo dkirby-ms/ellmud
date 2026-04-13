@@ -28,12 +28,12 @@ function noExitResolver(_roomId: string): string[] {
 
 function makePlayer(id: string, roomId = TEST_ROOM, stats?: Partial<CombatStats>): Combatant {
   const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-  return createCombatant(id, id, roomId, true, merged);
+  return createCombatant(id, id, roomId, true, { attack: merged.unarmed, maxHp: merged.maxHp, armour: merged.armour, shieldBlock: merged.shieldBlock, dodge: merged.dodge });
 }
 
 function makeCreature(id: string, roomId = TEST_ROOM, stats?: Partial<CombatStats>): Combatant {
   const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-  return createCombatant(id, id, roomId, false, merged);
+  return createCombatant(id, id, roomId, false, { attack: merged.unarmed, maxHp: merged.maxHp, armour: merged.armour, shieldBlock: merged.shieldBlock, dodge: merged.dodge });
 }
 
 // ─── Damage Calculation Tests ─────────────────────────────────────────────
@@ -110,9 +110,9 @@ describe('Tick Resolution', () => {
     expect(p1.hp).toBeLessThan(p1.maxHp);
     expect(p2.hp).toBeLessThan(p2.maxHp);
 
-    // Both took 8 damage (10 * 1.0 - 2 = 8)
-    expect(p1.hp).toBe(100 - 8);
-    expect(p2.hp).toBe(100 - 8);
+    // Both took 3 damage (5 * 1.0 - 2 = 3)
+    expect(p1.hp).toBe(100 - 3);
+    expect(p2.hp).toBe(100 - 3);
 
     // Should have strike events for both
     const strikes = result.events.filter((e) => e.type === 'strike');
@@ -131,9 +131,9 @@ describe('Tick Resolution', () => {
 
     system.resolveTick();
 
-    // Both take full damage: 10 * 1.0 - 2 = 8
-    expect(p2.hp).toBe(100 - 8);
-    expect(p1.hp).toBe(100 - 8);
+    // Both take full damage: 5 * 1.0 - 2 = 3
+    expect(p2.hp).toBe(100 - 3);
+    expect(p1.hp).toBe(100 - 3);
   });
 
   it('should default to auto-attack when no action submitted (GDD §6.1)', () => {
@@ -211,7 +211,7 @@ describe('Tick Resolution', () => {
 
   it('should end combat immediately when one combatant is defeated', () => {
     // Give p2 very low HP
-    const p1 = makePlayer('p1');
+    const p1 = makePlayer('p1', TEST_ROOM, { unarmed: 10 });
     const p2 = makePlayer('p2', TEST_ROOM, { maxHp: 5 });
     p2.hp = 5;
     system.registerCombatant(p1);
@@ -262,7 +262,7 @@ describe('Tick Resolution', () => {
 
   it('should handle combat with creatures', () => {
     const player = makePlayer('p1');
-    const creature = makeCreature('goblin', TEST_ROOM, { maxHp: 30, attack: 5, armour: 1 });
+    const creature = makeCreature('goblin', TEST_ROOM, { maxHp: 30, unarmed: 5, armour: 1 });
     system.registerCombatant(player);
     system.registerCombatant(creature);
     system.initiateCombat('p1', 'goblin');
@@ -273,8 +273,8 @@ describe('Tick Resolution', () => {
     // Player took: 5 * 1.0 - 2 = 3 damage
     expect(player.hp).toBe(100 - 3);
 
-    // Creature took: 10 * 1.0 - 1 = 9 damage
-    expect(creature.hp).toBe(30 - 9);
+    // Creature took: 5 * 1.0 - 1 = 4 damage
+    expect(creature.hp).toBe(30 - 4);
   });
 
   it('should handle multi-combatant fight (3-way)', () => {
@@ -295,11 +295,11 @@ describe('Tick Resolution', () => {
 
     system.resolveTick();
 
-    // p2 was struck by p1: 10 * 1.0 - 2 = 8 (both striking)
-    expect(p2.hp).toBe(100 - 8);
+    // p2 was struck by p1: 5 * 1.0 - 2 = 3 (both striking)
+    expect(p2.hp).toBe(100 - 3);
 
-    // p1 was struck by both p3 and p2: 2 * (10 * 1.0 - 2) = 16
-    expect(p1.hp).toBe(100 - 16);
+    // p1 was struck by both p3 and p2: 2 * (5 * 1.0 - 2) = 6
+    expect(p1.hp).toBe(100 - 6);
 
     // p3 was not struck by anyone (p1 targeted p2, p2 targeted p1)
     expect(p3.hp).toBe(100);
@@ -388,30 +388,30 @@ describe('HP Tracking', () => {
     system.registerCombatant(p2);
     system.initiateCombat('p1', 'p2');
 
-    // Tick 1: both auto-attack (GDD §6.1). Both take 8 damage (10*1.0-2=8)
+    // Tick 1: both auto-attack (GDD §6.1). Both take 3 damage (5*1.0-2=3)
     system.resolveTick();
-    expect(p1.hp).toBe(92);
-    expect(p2.hp).toBe(92);
+    expect(p1.hp).toBe(97);
+    expect(p2.hp).toBe(97);
 
     // Tick 2: both auto-attack again
     system.resolveTick();
 
-    // Both take another 8 damage
-    expect(p1.hp).toBe(84);
-    expect(p2.hp).toBe(84);
+    // Both take another 3 damage
+    expect(p1.hp).toBe(94);
+    expect(p2.hp).toBe(94);
 
     // Tick 3: p1 strikes, p2 strikes back
     system.submitAction('p1', 'strike', 'p2');
     system.submitAction('p2', 'strike', 'p1');
     system.resolveTick();
 
-    // Both take 8 more (strike vs strike: 10*1.0-2=8)
-    expect(p2.hp).toBe(76);
-    expect(p1.hp).toBe(76);
+    // Both take 3 more (strike vs strike: 5*1.0-2=3)
+    expect(p2.hp).toBe(91);
+    expect(p1.hp).toBe(91);
   });
 
   it('should clamp HP at 0 on defeat', () => {
-    const p1 = makePlayer('p1', TEST_ROOM, { attack: 50 });
+    const p1 = makePlayer('p1', TEST_ROOM, { unarmed: 50 });
     const p2 = makePlayer('p2', TEST_ROOM, { maxHp: 10 });
     p2.hp = 10;
     system.registerCombatant(p1);
@@ -519,8 +519,8 @@ describe('Flee Mechanics', () => {
 
     const result = fleeNoDodge.resolveTick();
 
-    // p2 took full damage: 10 * 1.0 - 2 = 8 (flee offers no protection, dodge failed)
-    expect(p2.hp).toBe(100 - 8);
+    // p2 took full damage: 5 * 1.0 - 2 = 3 (flee offers no protection, dodge failed)
+    expect(p2.hp).toBe(100 - 3);
     // But p2 still fled successfully
     expect(result.fleeResults).toHaveLength(1);
   });
@@ -548,9 +548,9 @@ describe('Resolution Order (Simultaneous)', () => {
     const system = new CombatSystem(testExitResolver);
 
     // Both combatants have low HP — if order mattered, one would die before attacking
-    const p1 = makePlayer('p1', TEST_ROOM, { maxHp: 10, attack: 15 });
+    const p1 = makePlayer('p1', TEST_ROOM, { maxHp: 10, unarmed: 15 });
     p1.hp = 10;
-    const p2 = makePlayer('p2', TEST_ROOM, { maxHp: 10, attack: 15 });
+    const p2 = makePlayer('p2', TEST_ROOM, { maxHp: 10, unarmed: 15 });
     p2.hp = 10;
 
     system.registerCombatant(p1);
@@ -582,7 +582,7 @@ describe('Stale Combatant Cleanup', () => {
 
   it('should remove surviving player combatant when encounter ends', () => {
     const player = makePlayer('player-1');
-    const creature = makeCreature('creature-1', TEST_ROOM, { maxHp: 1, attack: 0 });
+    const creature = makeCreature('creature-1', TEST_ROOM, { maxHp: 1, unarmed: 0 });
 
     system.registerCombatant(player);
     system.registerCombatant(creature);
@@ -600,7 +600,7 @@ describe('Stale Combatant Cleanup', () => {
 
   it('should allow combat in new room after previous encounter cleanup', () => {
     const player = makePlayer('player-1');
-    const creature1 = makeCreature('creature-1', TEST_ROOM, { maxHp: 1, attack: 0 });
+    const creature1 = makeCreature('creature-1', TEST_ROOM, { maxHp: 1, unarmed: 0 });
 
     system.registerCombatant(player);
     system.registerCombatant(creature1);
@@ -613,7 +613,7 @@ describe('Stale Combatant Cleanup', () => {
     // Player "moves" to a new room — re-register with new roomId
     const ROOM_B = 'room-b';
     const playerInRoomB = makePlayer('player-1', ROOM_B);
-    const creature2 = makeCreature('creature-2', ROOM_B, { maxHp: 10, attack: 1 });
+    const creature2 = makeCreature('creature-2', ROOM_B, { maxHp: 10, unarmed: 1 });
 
     system.registerCombatant(playerInRoomB);
     system.registerCombatant(creature2);

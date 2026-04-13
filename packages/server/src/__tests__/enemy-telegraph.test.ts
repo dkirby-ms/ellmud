@@ -18,12 +18,12 @@ function testExitResolver(_roomId: string): string[] {
 
 function makePlayer(id: string, roomId = TEST_ROOM, stats?: Partial<CombatStats>): Combatant {
   const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-  return createCombatant(id, id, roomId, true, merged);
+  return createCombatant(id, id, roomId, true, { attack: merged.unarmed, maxHp: merged.maxHp, armour: merged.armour, shieldBlock: merged.shieldBlock, dodge: merged.dodge });
 }
 
 function makeCreature(id: string, roomId = TEST_ROOM, stats?: Partial<CombatStats>): Combatant {
   const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-  return createCombatant(id, id, roomId, false, merged);
+  return createCombatant(id, id, roomId, false, { attack: merged.unarmed, maxHp: merged.maxHp, armour: merged.armour, shieldBlock: merged.shieldBlock, dodge: merged.dodge });
 }
 
 // ─── Telegraph System Tests ───────────────────────────────────────────────
@@ -44,7 +44,7 @@ describe('Enemy Telegraph System (GDD §6.5)', () => {
   beforeEach(() => {
     combat = new CombatSystem(testExitResolver);
     player = makePlayer('player-1', TEST_ROOM);
-    creature = makeCreature('creature-1', TEST_ROOM, { attack: 10 });
+    creature = makeCreature('creature-1', TEST_ROOM, { unarmed: 10 });
     combat.registerCombatant(player);
     combat.registerCombatant(creature);
     combat.initiateCombat(creature.id, player.id);
@@ -209,7 +209,7 @@ describe('Enemy Telegraph System (GDD §6.5)', () => {
 
   describe('multiple creatures telegraphing', () => {
     it('tracks separate wind-up states for multiple creatures', () => {
-      const creature2 = makeCreature('creature-2', TEST_ROOM, { attack: 8 });
+      const creature2 = makeCreature('creature-2', TEST_ROOM, { unarmed: 8 });
       combat.registerCombatant(creature2);
       combat.initiateCombat(creature2.id, player.id);
 

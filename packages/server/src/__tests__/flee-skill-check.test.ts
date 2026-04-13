@@ -7,10 +7,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CombatSystem, type ExitResolver } from '../combat/CombatSystem.js';
-import {
-  createCombatant,
-  DEFAULT_PLAYER_STATS,
-} from '../combat/CombatState.js';
+import { createCombatant } from '../combat/CombatState.js';
 
 describe('Flee Skill Check (GDD §6.2)', () => {
   let system: CombatSystem;
@@ -24,8 +21,8 @@ describe('Flee Skill Check (GDD §6.2)', () => {
     const roll = () => 0.4; // Will pass with base 50% flee chance
     system = new CombatSystem(exits, roll);
 
-    const player = createCombatant('p1', 'Runner', 'room-1', true, DEFAULT_PLAYER_STATS, 0, 0, 1);
-    const creature = createCombatant('c1', 'Goblin', 'room-1', false, DEFAULT_PLAYER_STATS, 0, 0, 1);
+    const player = createCombatant('p1', 'Runner', 'room-1', true);
+    const creature = createCombatant('c1', 'Goblin', 'room-1', false);
 
     system.registerCombatant(player);
     system.registerCombatant(creature);
@@ -44,8 +41,8 @@ describe('Flee Skill Check (GDD §6.2)', () => {
     const roll = () => 0.6; // Will fail with base 50% flee chance
     system = new CombatSystem(exits, roll);
 
-    const player = createCombatant('p1', 'Unlucky', 'room-1', true, DEFAULT_PLAYER_STATS, 0, 0, 1);
-    const creature = createCombatant('c1', 'Goblin', 'room-1', false, DEFAULT_PLAYER_STATS, 0, 0, 1);
+    const player = createCombatant('p1', 'Unlucky', 'room-1', true, { dodge: 0 });
+    const creature = createCombatant('c1', 'Goblin', 'room-1', false);
 
     system.registerCombatant(player);
     system.registerCombatant(creature);
@@ -64,8 +61,8 @@ describe('Flee Skill Check (GDD §6.2)', () => {
     const roll = () => 0.65; // Will pass with 75% but fail with 50%
     system = new CombatSystem(exits, roll);
 
-    const player = createCombatant('p1', 'Evasive', 'room-1', true, DEFAULT_PLAYER_STATS, 0, 5, 1);
-    const creature = createCombatant('c1', 'Goblin', 'room-1', false, DEFAULT_PLAYER_STATS, 0, 0, 1);
+    const player = createCombatant('p1', 'Evasive', 'room-1', true, { dodge: 5 });
+    const creature = createCombatant('c1', 'Goblin', 'room-1', false);
 
     system.registerCombatant(player);
     system.registerCombatant(creature);
@@ -79,13 +76,13 @@ describe('Flee Skill Check (GDD §6.2)', () => {
   });
 
   it('higher creature level decreases flee chance', () => {
-    // Creature level 5, player level 1: level diff = 4
+    // Creature level 5, player level 1, dodge 0: level diff = 4
     // Flee chance = 50% - 4*5% = 30%
     const roll = () => 0.4; // Will fail with 30% but pass with 50%
     system = new CombatSystem(exits, roll);
 
-    const player = createCombatant('p1', 'Newbie', 'room-1', true, DEFAULT_PLAYER_STATS, 0, 0, 1);
-    const creature = createCombatant('c1', 'Dragon', 'room-1', false, DEFAULT_PLAYER_STATS, 0, 0, 5);
+    const player = createCombatant('p1', 'Newbie', 'room-1', true, { dodge: 0 });
+    const creature = createCombatant('c1', 'Dragon', 'room-1', false, { level: 5 });
 
     system.registerCombatant(player);
     system.registerCombatant(creature);
@@ -104,8 +101,8 @@ describe('Flee Skill Check (GDD §6.2)', () => {
     const roll = () => 0.4; // Will pass with 50%
     system = new CombatSystem(exits, roll);
 
-    const player = createCombatant('p1', 'Balanced', 'room-1', true, DEFAULT_PLAYER_STATS, 0, 3, 2);
-    const creature = createCombatant('c1', 'Orc', 'room-1', false, DEFAULT_PLAYER_STATS, 0, 0, 5);
+    const player = createCombatant('p1', 'Balanced', 'room-1', true, { dodge: 3, level: 2 });
+    const creature = createCombatant('c1', 'Orc', 'room-1', false, { level: 5 });
 
     system.registerCombatant(player);
     system.registerCombatant(creature);
@@ -123,8 +120,8 @@ describe('Flee Skill Check (GDD §6.2)', () => {
     const roll = () => 0.0; // Even perfect roll cannot succeed
     system = new CombatSystem(exits, roll);
 
-    const player = createCombatant('p1', 'Doomed', 'room-1', true, DEFAULT_PLAYER_STATS, 0, 0, 1);
-    const creature = createCombatant('c1', 'Ancient Dragon', 'room-1', false, DEFAULT_PLAYER_STATS, 0, 0, 20);
+    const player = createCombatant('p1', 'Doomed', 'room-1', true);
+    const creature = createCombatant('c1', 'Ancient Dragon', 'room-1', false, { level: 20 });
 
     system.registerCombatant(player);
     system.registerCombatant(creature);
@@ -141,8 +138,8 @@ describe('Flee Skill Check (GDD §6.2)', () => {
     const roll = () => 0.99; // Even worst roll succeeds
     system = new CombatSystem(exits, roll);
 
-    const player = createCombatant('p1', 'Master', 'room-1', true, DEFAULT_PLAYER_STATS, 0, 20, 1);
-    const creature = createCombatant('c1', 'Goblin', 'room-1', false, DEFAULT_PLAYER_STATS, 0, 0, 1);
+    const player = createCombatant('p1', 'Master', 'room-1', true, { dodge: 20 });
+    const creature = createCombatant('c1', 'Goblin', 'room-1', false);
 
     system.registerCombatant(player);
     system.registerCombatant(creature);
@@ -160,10 +157,10 @@ describe('Flee Skill Check (GDD §6.2)', () => {
     const roll = () => 0.15; // Will pass with 20%
     system = new CombatSystem(exits, roll);
 
-    const player = createCombatant('p1', 'Fighter', 'room-1', true, DEFAULT_PLAYER_STATS, 0, 0, 1);
-    const creature1 = createCombatant('c1', 'Rat', 'room-1', false, DEFAULT_PLAYER_STATS, 0, 0, 1);
-    const creature2 = createCombatant('c2', 'Wolf', 'room-1', false, DEFAULT_PLAYER_STATS, 0, 0, 3);
-    const creature3 = createCombatant('c3', 'Troll', 'room-1', false, DEFAULT_PLAYER_STATS, 0, 0, 7);
+    const player = createCombatant('p1', 'Fighter', 'room-1', true);
+    const creature1 = createCombatant('c1', 'Rat', 'room-1', false);
+    const creature2 = createCombatant('c2', 'Wolf', 'room-1', false, { level: 3 });
+    const creature3 = createCombatant('c3', 'Troll', 'room-1', false, { level: 7 });
 
     system.registerCombatant(player);
     system.registerCombatant(creature1);
@@ -185,8 +182,8 @@ describe('Flee Skill Check (GDD §6.2)', () => {
     const noExits: ExitResolver = () => [];
     system = new CombatSystem(noExits, roll);
 
-    const player = createCombatant('p1', 'Trapped', 'room-1', true, DEFAULT_PLAYER_STATS, 0, 20, 1);
-    const creature = createCombatant('c1', 'Goblin', 'room-1', false, DEFAULT_PLAYER_STATS, 0, 0, 1);
+    const player = createCombatant('p1', 'Trapped', 'room-1', true, { dodge: 20 });
+    const creature = createCombatant('c1', 'Goblin', 'room-1', false);
 
     system.registerCombatant(player);
     system.registerCombatant(creature);
@@ -209,8 +206,8 @@ describe('Immediate Combat End (no post-combat cooldown)', () => {
   });
 
   it('combat ends immediately when last enemy dies', () => {
-    const player = createCombatant('p1', 'Warrior', 'room-1', true, DEFAULT_PLAYER_STATS);
-    const creature = createCombatant('c1', 'Goblin', 'room-1', false, DEFAULT_PLAYER_STATS);
+    const player = createCombatant('p1', 'Warrior', 'room-1', true);
+    const creature = createCombatant('c1', 'Goblin', 'room-1', false);
     creature.hp = 1; // One hit from death
 
     system.registerCombatant(player);
@@ -226,9 +223,9 @@ describe('Immediate Combat End (no post-combat cooldown)', () => {
   });
 
   it('new aggro before combat ends keeps encounter alive', () => {
-    const player = createCombatant('p1', 'Warrior', 'room-1', true, DEFAULT_PLAYER_STATS);
-    const creature1 = createCombatant('c1', 'Goblin', 'room-1', false, DEFAULT_PLAYER_STATS);
-    const creature2 = createCombatant('c2', 'Orc', 'room-1', false, DEFAULT_PLAYER_STATS);
+    const player = createCombatant('p1', 'Warrior', 'room-1', true);
+    const creature1 = createCombatant('c1', 'Goblin', 'room-1', false);
+    const creature2 = createCombatant('c2', 'Orc', 'room-1', false);
     creature1.hp = 1;
 
     system.registerCombatant(player);

@@ -56,9 +56,13 @@ function makeCreature(overrides: Partial<Creature> = {}): Creature {
     name: 'Drowned Revenant',
     hp: 50,
     maxHp: 50,
-    attack: 10,
-    defence: 3,
+    unarmed: 10,
+    oneHanded: 0,
+    twoHanded: 0,
+    ranged: 0,
     armour: 3,
+    dodge: 3,
+    shieldBlock: 0,
     currentRoomId: 'corridor-1',
     behaviorState: 'idle',
     idleTicks: 0,
@@ -383,9 +387,7 @@ describe('Creature Combat Integration', () => {
     const player = createCombatant('player-1', 'Player', creature.currentRoomId, true, {
       maxHp: 100,
       attack: 10,
-      defence: 5,
       armour: 2,
-      agility: 5,
     });
     combat.registerCombatant(player);
 
@@ -422,15 +424,13 @@ describe('Creature Combat Integration', () => {
     const player = createCombatant('player-1', 'Player', creature.currentRoomId, true, {
       maxHp: 100,
       attack: 15,
-      defence: 5,
       armour: 2,
-      agility: 5,
     });
     combat.registerCombatant(player);
     combat.initiateCombat(player.id, combatant.id);
 
     // Player strikes, creature dodges
-    combat.submitAction(combatant.id, 'dodge');
+    combat.submitAction(combatant.id, 'strike');
     combat.resolveTick();
 
     // Sync HP back
@@ -506,7 +506,7 @@ describe('Creature Spawning', () => {
       expect(creature.name).toBe('Drowned Revenant');
       expect(creature.maxHp).toBe(50);
       expect(creature.hp).toBe(50);
-      expect(creature.attack).toBe(10);
+      expect(creature.unarmed).toBe(10);
       expect(creature.armour).toBe(3);
       expect(creature.type).toBe('drowned_revenant');
     }
@@ -694,7 +694,7 @@ describe('Drowned Revenant Template', () => {
     expect(DROWNED_REVENANT.name).toBe('Drowned Revenant');
     expect(DROWNED_REVENANT.type).toBe('drowned_revenant');
     expect(DROWNED_REVENANT.stats.maxHp).toBe(50);
-    expect(DROWNED_REVENANT.stats.attack).toBe(10);
+    expect(DROWNED_REVENANT.stats.unarmed).toBe(10);
     expect(DROWNED_REVENANT.stats.armour).toBe(3);
   });
 
