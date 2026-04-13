@@ -1,3 +1,10 @@
+# [0.2.0-dev.21](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.20...v0.2.0-dev.21) (2026-04-13)
+
+
+### Bug Fixes
+
+* remove false confidence from test suite ([#450](https://github.com/dkirby-ms/ellmud/issues/450)) ([2d5e47c](https://github.com/dkirby-ms/ellmud/commit/2d5e47c8bcf18b8875ac735a81e7819a97eed7e3))
+
 # [0.2.0-dev.20](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.19...v0.2.0-dev.20) (2026-04-13)
 
 
