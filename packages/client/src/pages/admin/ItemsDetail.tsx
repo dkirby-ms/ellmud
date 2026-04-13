@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Send, AlertCircle } from "lucide-react";
 import { getItem, createItem, updateItem, AdminAPIError } from "../../lib/admin-api";
-import AnsiPreview from "../../components/admin/AnsiPreview.js";
+import AnsiTextarea from "../../components/admin/AnsiTextarea.js";
 import AnsiText from "../../components/AnsiText.js";
 
 type ItemType = "weapon" | "armour" | "consumable" | "material" | "tool" | "key" | "blueprint";
@@ -113,12 +113,12 @@ export default function ItemsDetail() {
     }
   };
 
-  const handleSubmitReview = async () => {
+  const handlePublish = async () => {
     if (!validateForm()) return;
     try {
       setSaving(true);
       setError(null);
-      const dataWithStatus = { ...formData, status: 'review' };
+      const dataWithStatus = { ...formData, status: 'published' };
       if (isNew) {
         await createItem(dataWithStatus);
         navigate('/admin/items');
@@ -129,9 +129,9 @@ export default function ItemsDetail() {
       if (err instanceof AdminAPIError) {
         setError(err.message);
       } else {
-        setError('Failed to submit for review');
+        setError('Failed to publish');
       }
-      console.error('Failed to submit for review:', err);
+      console.error('Failed to publish:', err);
     } finally {
       setSaving(false);
     }
@@ -206,13 +206,13 @@ export default function ItemsDetail() {
             {saving ? 'Saving...' : 'Save Draft'}
           </button>
           <button
-            onClick={handleSubmitReview}
+            onClick={handlePublish}
             disabled={saving}
             className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
             <Send className="w-4 h-4" />
-            {saving ? 'Submitting...' : 'Submit Review'}
+            {saving ? 'Publishing...' : 'Publish'}
           </button>
         </div>
       </div>
@@ -277,14 +277,11 @@ export default function ItemsDetail() {
                   >
                     Description
                   </label>
-                  <textarea
+                  <AnsiTextarea
                     value={formData.description}
-                    onChange={(e) => updateField("description", e.target.value)}
+                    onChange={(v) => updateField("description", v)}
                     rows={3}
-                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                   
                   />
-                  <AnsiPreview value={formData.description} />
                 </div>
               </div>
             </div>

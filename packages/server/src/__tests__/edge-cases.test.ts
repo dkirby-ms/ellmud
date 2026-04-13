@@ -41,11 +41,12 @@ describe('Edge Cases — ZoneRoom', () => {
     // Zone should be open (no collapse)
     expect(collector.zoneState.every((s) => s.state === 'open')).toBe(true);
 
-    // Commands work normally
+    // Commands work normally — look should produce a narration
+    const preCount = collector.narrate.length;
     client.send(MessageTypes.COMMAND, makeCommand('look'));
     await wait(500);
 
-    expect(true).toBe(true);
+    expect(collector.narrate.length).toBeGreaterThan(preCount);
 
     await client.leave();
   });

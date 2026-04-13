@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Send, X, Plus, AlertCircle } from "lucide-react";
-import { getCreature, createCreature, updateCreature, listItems, AdminAPIError, simulateCreatureReroll, type CreatureRerollResult } from "../../lib/admin-api";
-import AnsiPreview from "../../components/admin/AnsiPreview.js";
+import { getCreature, createCreature, updateCreature, listItems, AdminAPIError, simulateCreatureReroll, type CreatureRerollResult, fetchAuditLog, type AuditEvent } from "../../lib/admin-api";
 import AnsiText from "../../components/AnsiText.js";
+import AnsiTextarea from "../../components/admin/AnsiTextarea.js";
 
-type Status = "draft" | "review" | "published" | "deprecated";
+type Status = "draft" | "published" | "deprecated";
 
 interface LootEntry {
   itemId: string;
@@ -39,7 +39,6 @@ interface CreatureFormData {
 const getStatusBadge = (status: Status) => {
   const badges = {
     draft: { emoji: "📝", label: "Draft", color: "#4A4B55" },
-    review: { emoji: "⏳", label: "In Review", color: "#B8860B" },
     published: { emoji: "✅", label: "Published", color: "#2D6B4F" },
     deprecated: { emoji: "⛔", label: "Deprecated", color: "#8B2500" },
   };
@@ -96,6 +95,8 @@ export default function CreatureDetail() {
   const [rerollError, setRerollError] = useState<string | null>(null);
   const [allItems, setAllItems] = useState<Array<{ id?: string; slug?: string; name: string }>>([]);
   const [itemLookup, setItemLookup] = useState<Map<string, string>>(new Map());
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [loadingAudit, setLoadingAudit] = useState(false);
 
   useEffect(() => {
     const fetchItems = async () => {
@@ -153,6 +154,27 @@ export default function CreatureDetail() {
     fetchCreature();
   }, [id, isNew, itemLookup]);
 
+  useEffect(() => {
+    if (isNew) return;
+    const fetchHistory = async () => {
+      try {
+        setLoadingAudit(true);
+        const result = await fetchAuditLog({
+          entity: 'creatures',
+          limit: 50,
+        });
+        // Filter events for this specific creature
+        const creatureEvents = result.events.filter(e => e.entity_id === id);
+        setAuditEvents(creatureEvents);
+      } catch (err) {
+        console.error('Failed to fetch audit log:', err);
+      } finally {
+        setLoadingAudit(false);
+      }
+    };
+    fetchHistory();
+  }, [id, isNew]);
+
   const updateField = (field: string, value: string | number | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -175,7 +197,7 @@ export default function CreatureDetail() {
     return errors.length === 0;
   };
 
-  const handleSave = async (submitForReview: boolean) => {
+  const handleSave = async (publish: boolean) => {
     if (!validateForm()) return;
     try {
       setSaving(true);
@@ -189,7 +211,7 @@ export default function CreatureDetail() {
           dropWeight: entry.weight,
           weight: entry.weight,
         })),
-        status: submitForReview ? ('review' as Status) : formData.status,
+        status: publish ? ('published' as Status) : formData.status,
       };
       if (isNew) {
         await createCreature(payload);
@@ -201,7 +223,7 @@ export default function CreatureDetail() {
       if (err instanceof AdminAPIError) {
         setError(err.message);
       } else {
-        setError(submitForReview ? 'Failed to submit for review' : 'Failed to save creature');
+        setError(publish ? 'Failed to publish' : 'Failed to save creature');
       }
       console.error('Failed to save creature:', err);
     } finally {
@@ -254,6 +276,22 @@ export default function CreatureDetail() {
   // Calculate loot probabilities
   const totalWeight = lootTable.reduce((sum, entry) => sum + entry.weight, 0);
 
+  // Format relative time
+  const formatTimeAgo = (timestamp: string): string => {
+    const now = new Date();
+    const past = new Date(timestamp);
+    const diffMs = now.getTime() - past.getTime();
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffDays > 0) return `${diffDays}d ago`;
+    if (diffHours > 0) return `${diffHours}h ago`;
+    if (diffMins > 0) return `${diffMins}m ago`;
+    return 'just now';
+  };
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -300,7 +338,7 @@ export default function CreatureDetail() {
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
             <Send className="w-4 h-4" />
-            {saving ? 'Submitting...' : 'Submit Review'}
+            {saving ? 'Publishing...' : 'Publish'}
           </button>
         </div>
       </div>
@@ -365,14 +403,11 @@ export default function CreatureDetail() {
                   >
                     Description
                   </label>
-                  <textarea
+                  <AnsiTextarea
                     value={formData.description}
-                    onChange={(e) => updateField("description", e.target.value)}
+                    onChange={(v) => updateField("description", v)}
                     rows={4}
-                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                   
                   />
-                  <AnsiPreview value={formData.description} />
                 </div>
                 <div>
                   <label
@@ -381,15 +416,12 @@ export default function CreatureDetail() {
                   >
                     Room Description
                   </label>
-                  <textarea
+                  <AnsiTextarea
                     value={formData.roomDescription}
-                    onChange={(e) => updateField("roomDescription", e.target.value)}
+                    onChange={(v) => updateField("roomDescription", v)}
                     rows={2}
                     placeholder="A slum rat sniffs along the ground."
-                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                   
                   />
-                  <AnsiPreview value={formData.roomDescription} />
                   <p
                     className="text-[#4A4B55] text-xs mt-1"
                     style={{ fontFamily: "var(--font-sans)" }}
@@ -637,34 +669,6 @@ export default function CreatureDetail() {
 
           {/* Right Column - Preview & Context */}
           <div className="space-y-6">
-            {/* Preview */}
-            <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
-              <h3
-                className="text-[#C9A84C] text-sm mb-4"
-                style={{ fontFamily: "var(--font-sans)" }}
-              >
-                Preview
-              </h3>
-              <div
-                className="bg-[#1C1D27] rounded p-4 text-sm space-y-2"
-                style={{ fontFamily: "var(--font-mono)" }}
-              >
-                <div className="text-[#E8E0D0]">
-                  HP: {formData.maxHp} | ATK: {formData.attack}
-                </div>
-                <div className="text-[#E8E0D0]">
-                  DEF: {formData.defence} | ARM: {formData.armour}
-                </div>
-                <div className="border-t border-[#2A2B35] my-2"></div>
-                <div className="text-[#8A8B95]">
-                  Flee at: {formData.fleeThreshold * 100}% HP
-                </div>
-                <div className="text-[#8A8B95]">
-                  Tier: {formData.tierMin}-{formData.tierMax}
-                </div>
-              </div>
-            </div>
-
             {/* Stat Re-roll Simulator */}
             <div className="bg-[#12131A] border border-[#2A2B35] rounded-lg p-6">
               <h3
@@ -695,39 +699,42 @@ export default function CreatureDetail() {
                     <div className="grid grid-cols-2 gap-2 text-xs" style={{ fontFamily: "var(--font-mono)" }}>
                       {Object.entries(rerollResult.baseline).map(([stat, value]) => (
                         <div key={stat} className="flex justify-between">
-                          <span className="text-[#8A8B95] capitalize">{stat}:</span>
+                          <span className="text-[#8A8B95] capitalize">{stat.replace('max', '')}:</span>
                           <span className="text-[#E8E0D0]">{value}</span>
                         </div>
                       ))}
                     </div>
                   </div>
-                  {rerollResult.rolls.map((roll, idx) => (
-                    <div key={idx} className="p-3 bg-[#1C1D27] rounded">
-                      <div className="text-[#C9A84C] text-xs font-semibold mb-2" style={{ fontFamily: "var(--font-sans)" }}>
-                        Roll #{idx + 1}:
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs" style={{ fontFamily: "var(--font-mono)" }}>
-                        {Object.entries(roll.stats).map(([stat, value]) => {
-                          const baseline = rerollResult.baseline[stat] || 0;
-                          const diff = value - baseline;
-                          const color = diff > 0 ? "#3A7D7B" : diff < 0 ? "#8B2500" : "#8A8B95";
-                          return (
-                            <div key={stat} className="flex justify-between">
-                              <span className="text-[#8A8B95] capitalize">{stat}:</span>
-                              <span style={{ color }}>
-                                {value} {diff !== 0 && `(${diff > 0 ? '+' : ''}${diff})`}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {roll.modifiers && roll.modifiers.length > 0 && (
-                        <div className="mt-2 text-xs text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
-                          Modifiers: {roll.modifiers.join(", ")}
+                  {rerollResult.rolls.map((roll, idx) => {
+                    const rollData = roll as unknown as { stats: Record<string, number>; variance: Record<string, number> };
+                    return (
+                      <div key={idx} className="p-3 bg-[#1C1D27] rounded">
+                        <div className="text-[#C9A84C] text-xs font-semibold mb-2" style={{ fontFamily: "var(--font-sans)" }}>
+                          Roll #{idx + 1}:
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        <div className="grid grid-cols-2 gap-2 text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+                          {Object.entries(rollData.stats).map(([stat, value]) => {
+                            const baseline = (rerollResult.baseline as Record<string, number>)[stat] || 0;
+                            const diff = value - baseline;
+                            const color = diff > 0 ? "#3A7D7B" : diff < 0 ? "#8B2500" : "#8A8B95";
+                            return (
+                              <div key={stat} className="flex justify-between">
+                                <span className="text-[#8A8B95] capitalize">{stat.replace('max', '')}:</span>
+                                <span style={{ color }}>
+                                  {value} {diff !== 0 && `(${diff > 0 ? '+' : ''}${diff})`}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {rollData.variance && (
+                          <div className="mt-2 text-xs text-[#8A8B95]" style={{ fontFamily: "var(--font-sans)" }}>
+                            Variance: {Object.entries(rollData.variance).map(([k, v]) => `${k.replace('Variance', '')}: ${v > 0 ? '+' : ''}${v}%`).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               {!rerollResult && !rerollError && !rerolling && (
@@ -746,36 +753,38 @@ export default function CreatureDetail() {
                 >
                   Version History
                 </h3>
-                <div className="space-y-2 text-sm">
-                  <div className="p-2 bg-[#1C1D27] rounded">
-                    <p
-                      className="text-[#E8E0D0]"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      v3 (current) - Published
-                    </p>
-                    <p
-                      className="text-[#8A8B95] text-xs"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      Jane, 2h ago
-                    </p>
+                {loadingAudit ? (
+                  <div className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
+                    Loading history...
                   </div>
-                  <div className="p-2 hover:bg-[#1C1D27] rounded cursor-pointer">
-                    <p
-                      className="text-[#8A8B95]"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      v2
-                    </p>
-                    <p
-                      className="text-[#4A4B55] text-xs"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
-                      Jane, 1d ago
-                    </p>
+                ) : auditEvents.length > 0 ? (
+                  <div className="space-y-2 text-sm max-h-64 overflow-y-auto">
+                    {auditEvents.map((event, idx) => {
+                      const isRecent = idx === 0;
+                      const timeAgo = formatTimeAgo(event.created_at);
+                      return (
+                        <div key={event.id} className={`p-2 rounded ${isRecent ? 'bg-[#1C1D27]' : 'hover:bg-[#1C1D27]'}`}>
+                          <p
+                            className={isRecent ? "text-[#E8E0D0]" : "text-[#8A8B95]"}
+                            style={{ fontFamily: "var(--font-sans)" }}
+                          >
+                            {event.action} {isRecent && '(current)'}
+                          </p>
+                          <p
+                            className="text-[#4A4B55] text-xs"
+                            style={{ fontFamily: "var(--font-sans)" }}
+                          >
+                            {event.actor}, {timeAgo}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
+                ) : (
+                  <div className="text-[#8A8B95] text-xs" style={{ fontFamily: "var(--font-sans)" }}>
+                    No history available
+                  </div>
+                )}
               </div>
             )}
 

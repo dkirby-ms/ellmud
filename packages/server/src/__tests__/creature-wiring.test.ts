@@ -234,7 +234,7 @@ describe('Creature AI Tick', () => {
 // ─── Creature Loot Drops ──────────────────────────────────────────────────────
 
 describe('Creature Loot Drops', () => {
-  it('defeated creature drops loot items', () => {
+  it('defeated creature drops loot in corpse container', () => {
     const { localGraph, creatureManager, combatSystem, spawned } = createTestZone();
     const creature = spawned[0]!;
     const roomId = creature.currentRoomId;
@@ -272,38 +272,66 @@ describe('Creature Loot Drops', () => {
       creatureManager.syncFromCombat(combatant);
     }
 
-    // Place loot in room
-    for (const item of loot) {
-      room.items.push(item);
-    }
+    // Create corpse container with loot
+    const corpseItem = {
+      id: `corpse-${creature.id}`,
+      name: `corpse of ${creature.name}`,
+      weight: 10,
+      description: `The remains of a ${creature.name}.`,
+      roomDescription: `The corpse of a ${creature.name} lies here.`,
+      containerContents: loot.map(item => ({
+        definitionId: item.itemId ?? item.id,
+        quantity: 1,
+        durability: null,
+      })),
+      noTake: true,
+    };
+    room.items.push(corpseItem);
 
-    expect(room.items.length).toBeGreaterThan(initialItemCount);
+    // Verify corpse was created
+    expect(room.items.length).toBe(initialItemCount + 1);
+    const corpse = room.items.find(i => i.id.startsWith('corpse-'));
+    expect(corpse).toBeDefined();
+    expect(corpse!.containerContents).toBeDefined();
+    expect(corpse!.containerContents!.length).toBe(loot.length);
     expect(creature.isAlive).toBe(false);
 
-    // Verify loot contains expected items
+    // Verify corpse contains expected items
     const lootNames = loot.map(i => i.name);
     expect(lootNames).toContain('waterlogged bone');
     expect(lootNames).toContain('revenant essence');
   });
 
-  it('loot items are pickable via take command', () => {
+  it('loot items are takeable from corpse container', () => {
     const { localGraph, creatureManager, combatSystem, spawned } = createTestZone();
     const creature = spawned[0]!;
     const roomId = creature.currentRoomId;
     const room = localGraph.rooms.get(roomId)!;
 
-    // Generate and place loot
+    // Generate and place loot in corpse container
     const loot = creatureManager.removeCreature(creature.id);
-    for (const item of loot) {
-      room.items.push(item);
-    }
+    const corpseItem = {
+      id: `corpse-${creature.id}`,
+      name: `corpse of ${creature.name}`,
+      weight: 10,
+      description: `The remains of a ${creature.name}.`,
+      roomDescription: `The corpse of a ${creature.name} lies here.`,
+      containerContents: loot.map(item => ({
+        definitionId: item.itemId ?? item.id,
+        quantity: 1,
+        durability: null,
+      })),
+      noTake: true,
+    };
+    room.items.push(corpseItem);
 
-    // Player tries to take loot
+    // Player tries to take loot from corpse
     const player = new PlayerState('player-1', roomId, 20);
-    const ctx = buildCtx(player, localGraph, creatureManager, combatSystem, ['waterlogged', 'bone']);
+    const ctx = buildCtx(player, localGraph, creatureManager, combatSystem, ['waterlogged', 'bone', 'from', 'corpse']);
     const result = handleCommand('take', ctx);
 
-    expect(result.narrations[0]!.text).toContain('pick up');
+    expect(result.narrations[0]!.text).toContain('take');
+    expect(result.narrations[0]!.text).toContain('waterlogged bone');
     expect(player.inventory.size).toBe(1);
   });
 });

@@ -14,6 +14,8 @@ export interface LootItem {
   name: string;
   weight: number;
   description: string;
+  /** Item definition ID from the loot table (used for container storage). */
+  itemId?: string;
 }
 
 /**
@@ -27,5 +29,6 @@ export function generateLoot(creature: Creature): LootItem[] {
     name: entry.name,
     weight: entry.weight,
     description: entry.description,
+    itemId: entry.itemId,
   }));
 }

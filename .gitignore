@@ -58,3 +58,4 @@ packages/server/data/sandbox-scenarios/*.json
 
 # Sandbox test scenario files
 packages/server/data/.test-sandbox-scenarios/
+test-results/

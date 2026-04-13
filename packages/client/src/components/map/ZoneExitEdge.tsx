@@ -14,6 +14,8 @@ export interface ExitEdgeData {
   targetZoneSlug?: string;
   /** True when a search/filter is active and this edge should be dimmed */
   dimmed?: boolean;
+  /** True when this exit is part of a highlighted set (e.g., connected to selected room) (#445) */
+  highlighted?: boolean;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -77,6 +79,14 @@ export function ZoneExitEdge(props: EdgeProps) {
     strokeColor = SELECTED_COLOR;
     strokeWidth = 3;
     markerEnd = edgeData.isBidirectional ? undefined : 'url(#arrowhead-oneway-selected)';
+  } else if (edgeData.highlighted) {
+    // Highlighted (connected to selected room) — bright cyan glow (#445)
+    strokeColor = '#22D3EE';
+    strokeWidth = 2.5;
+    markerEnd = edgeData.isBidirectional ? undefined :
+      edgeData.isOrphan ? 'url(#arrowhead-orphan)' :
+      edgeData.isPortal ? 'url(#arrowhead-portal)' :
+      'url(#arrowhead-oneway)';
   } else if (hovered) {
     // Hover brightening — lighten current color
     if (edgeData.isOrphan) {
@@ -130,9 +140,11 @@ export function ZoneExitEdge(props: EdgeProps) {
   }
 
   const hasModifiers = edgeData.locked || edgeData.hidden;
-  const showLabel = selected || hovered;
+  const showLabel = selected || hovered || edgeData.highlighted;
   const dirEmoji = DIRECTION_EMOJI[edgeData.direction] ?? '';
-  const glowFilter = selected ? 'drop-shadow(0 0 4px rgba(201,168,76,0.6))' : undefined;
+  const glowFilter = selected ? 'drop-shadow(0 0 4px rgba(201,168,76,0.6))' 
+    : edgeData.highlighted ? 'drop-shadow(0 0 4px rgba(34,211,238,0.5))'
+    : undefined;
   const dimOpacity = edgeData.dimmed ? 0.15 : 1;
 
   return (

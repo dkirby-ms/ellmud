@@ -60,7 +60,6 @@ import { SoundSystem } from '../sound/index.js';
 import { TraceSystem } from '../systems/index.js';
 import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
 import { DowningSystem, type DowningEvent } from '../systems/DowningSystem.js';
-import { CorpseSystem } from '../systems/CorpseSystem.js';
 import { GroupManager } from '../systems/GroupManager.js';
 import { type DeathPenaltyStore, getDeathPenaltyStore } from '../systems/index.js';
 import { type MetricsService, getMetricsService } from '../metrics/index.js';
@@ -142,7 +141,6 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private awarenessSystem!: AwarenessSystem;
   private downingSystem!: DowningSystem;
   private groupManager!: GroupManager;
-  private corpseSystem!: CorpseSystem;
   private narrationService!: NarrationService;
   private deathPenaltyStore!: DeathPenaltyStore;
   private metricsService!: MetricsService;
@@ -336,9 +334,6 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Initialize trace system (GDD §11.2)
     this.traceSystem = new TraceSystem();
-
-    // Initialize corpse system (GDD §6.8 — lootable corpses on death)
-    this.corpseSystem = new CorpseSystem();
 
     // Initialize awareness/stealth detection system (GDD §8.1)
     this.awarenessSystem = new AwarenessSystem();
@@ -634,7 +629,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     this.sendTraceNarrations(client, startRoom);
 
     // Send exploration data so client map can render the starting room
-    this.sendExplorationData(client, playerId, startRoom);
+    await this.sendExplorationData(client, playerId, startRoom);
 
     // Send initial room occupants
     this.sendRoomOccupants(client, playerId, startRoom);
@@ -872,8 +867,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Decay traces
     this.traceSystem.tick(TICK_INTERVAL_MS);
 
-    // Decay corpses (GDD §6.8 — configurable TTL)
-    this.corpseSystem.tick(TICK_INTERVAL_MS);
+    // Decay corpses and other time-limited items
+    this.tickCorpseDecay();
   }
 
   // ─── Zone Lifecycle ─────────────────────────────────────────────────────
@@ -1258,7 +1253,6 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             hp: c.hp, maxHp: c.maxHp, attack: c.attack, defence: c.defence,
             armour: c.armour, agility: c.agility, dodgeSkillRank: c.dodgeSkillRank,
           })),
-      corpseSystem: this.corpseSystem,
       creatureManager: this.creatureManager,
       resolveZoneExists: (slug: string) => this.knownZoneSlugs.has(slug),
       resolvePlayerByName: (name: string) => {
@@ -2099,114 +2093,35 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         if (!isSandboxCreature && roomId && loot.length > 0) {
           const room = this.roomGraph.rooms.get(roomId);
           if (room) {
-            // Phase 6: Group loot sharing (#403)
-            const killerId = event.killerIds?.[0];
-            let distributed = false;
+            // Create a corpse container item containing the loot
+            const corpseItem: import('../generator/RoomGraph.js').Item = {
+              id: `corpse-${event.actorId}`,
+              name: `corpse of ${event.actorName}`,
+              weight: 10, // Corpse base weight
+              description: `The remains of a ${event.actorName}.`,
+              roomDescription: `The corpse of a ${event.actorName} lies here.`,
+              containerContents: loot.map(item => ({
+                definitionId: item.itemId ?? item.id,
+                quantity: 1,
+                durability: null,
+              })),
+              createdAt: Date.now(),
+              ttlSeconds: 300, // 5 minutes for creature corpses
+              noTake: true,
+            };
 
-            if (killerId && !killerId.startsWith('creature-')) {
-              const killerGroup = this.groupManager.getGroup(killerId);
-              if (killerGroup && killerGroup.lootSharing) {
-                // Gather group members in the same room
-                const membersInRoom = Array.from(killerGroup.members.keys()).filter(memberId => {
-                  const ps = this.players.get(memberId);
-                  return ps && ps.currentRoomId === roomId;
-                });
+            room.items.push(corpseItem);
 
-                if (membersInRoom.length > 0) {
-                  // Distribute items round-robin
-                  let memberIndex = 0;
-                  const droppedItems: import('../generator/RoomGraph.js').Item[] = [];
-
-                  for (const item of loot) {
-                    let itemGiven = false;
-
-                    // Try each member starting from current index
-                    for (let attempt = 0; attempt < membersInRoom.length; attempt++) {
-                      const memberId = membersInRoom[memberIndex]!;
-                      const memberPlayer = this.players.get(memberId);
-
-                      if (memberPlayer && memberPlayer.canCarry(item)) {
-                        memberPlayer.addItem(item);
-                        itemGiven = true;
-
-                        // Narrate to recipient
-                        const recipientClient = this.findClient(memberId);
-                        if (recipientClient) {
-                          this.sendNarrate(recipientClient, {
-                            text: `You receive a ${item.name} from the group loot.`,
-                            type: 'room',
-                            timestamp: Date.now(),
-                          });
-                        }
-
-                        // Narrate to other group members in room
-                        const recipientName = this.characterNames.get(memberId) ?? 'Someone';
-                        for (const otherId of membersInRoom) {
-                          if (otherId !== memberId) {
-                            const otherClient = this.findClient(otherId);
-                            if (otherClient) {
-                              this.sendNarrate(otherClient, {
-                                text: `${recipientName} receives a ${item.name}.`,
-                                type: 'room',
-                                timestamp: Date.now(),
-                              });
-                            }
-                          }
-                        }
-
-                        // Move to next member for next item
-                        memberIndex = (memberIndex + 1) % membersInRoom.length;
-                        break;
-                      }
-
-                      // Try next member
-                      memberIndex = (memberIndex + 1) % membersInRoom.length;
-                    }
-
-                    // If no one could carry it, drop to floor
-                    if (!itemGiven) {
-                      droppedItems.push(item);
-                    }
-                  }
-
-                  // Drop remaining items to floor
-                  for (const item of droppedItems) {
-                    room.items.push(item);
-                  }
-
-                  if (droppedItems.length > 0) {
-                    for (const sid of membersInRoom) {
-                      const client = this.findClient(sid);
-                      if (client) {
-                        this.sendNarrate(client, {
-                          text: droppedItems.map(i => `A ${i.name} drops to the ground.`).join('\n'),
-                          type: 'room',
-                          timestamp: Date.now(),
-                        });
-                      }
-                    }
-                  }
-
-                  distributed = true;
-                }
-              }
-            }
-
-            // Fallback: no group sharing, drop all items to floor
-            if (!distributed) {
-              for (const item of loot) {
-                room.items.push(item);
-              }
-              for (const [sid, ps] of this.players) {
-                if (ps.currentRoomId === roomId) {
-                  const client = this.findClient(sid);
-                  if (client) {
-                    this.sendNarrate(client, {
-                      text: loot.map(i => `A ${i.name} drops to the ground.`).join('\n'),
-                      type: 'room',
-                      timestamp: Date.now(),
-                    });
-                  }
+            // Narrate corpse creation to players in room
+            for (const [sid, ps] of this.players) {
+              if (ps.currentRoomId === roomId) {
+                const client = this.findClient(sid);
+                if (client) {
+                  this.sendNarrate(client, {
+                    text: `${event.actorName} collapses, leaving behind a corpse.`,
+                    type: 'combat',
+                    timestamp: Date.now(),
+                  });
                 }
               }
             }
@@ -2360,6 +2275,32 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   }
 
   /**
+   * Decay corpses and other time-limited items.
+   * Sweeps all rooms and removes items that have exceeded their TTL.
+   */
+  private tickCorpseDecay(): void {
+    const now = Date.now();
+    for (const [, room] of this.roomGraph.rooms) {
+      if (!room.items || room.items.length === 0) continue;
+
+      // Filter out items that have expired
+      const before = room.items.length;
+      room.items = room.items.filter(item => {
+        if (item.createdAt !== undefined && item.ttlSeconds !== undefined) {
+          const age = (now - item.createdAt) / 1000; // Convert to seconds
+          return age < item.ttlSeconds;
+        }
+        return true; // Keep items without TTL
+      });
+
+      // Log if any items decayed
+      if (room.items.length < before) {
+        this.log(`Decayed ${before - room.items.length} item(s) in room ${room.id}`);
+      }
+    }
+  }
+
+  /**
    * Check if active combat in a room should finish off downed (unstabilized) players.
    * Any strike in a room with a bleeding-out player triggers a killing blow.
    */
@@ -2467,11 +2408,26 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       });
     }
 
-    // Create lootable corpse entity with non-soulbound items (GDD §6.8)
+    // Create lootable corpse container item with non-soulbound items (GDD §6.8)
     const charName = this.characterNames.get(playerId) ?? playerName;
     if (room && corpseItems.length > 0) {
-      const config = getConfig();
-      this.corpseSystem.addCorpse(roomId, playerId, charName, corpseItems, config.corpseTTLSeconds);
+      const playerCorpseItem: import('../generator/RoomGraph.js').Item = {
+        id: `corpse-${playerId}`,
+        name: `corpse of ${charName}`,
+        weight: 10, // Corpse base weight
+        description: `The remains of ${charName}.`,
+        roomDescription: `The corpse of ${charName} lies here.`,
+        containerContents: corpseItems.map(item => ({
+          definitionId: item.id,
+          quantity: 1,
+          durability: null,
+        })),
+        createdAt: Date.now(),
+        ttlSeconds: 600, // 10 minutes for player corpses (longer than creatures)
+        noTake: true,
+      };
+
+      room.items.push(playerCorpseItem);
     }
 
     // Trace: player death creates corpse trace (visual marker)
@@ -2829,17 +2785,40 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   }
 
   /** Send bulk exploration data to a client (on join). */
-  private sendExplorationData(client: Client, playerId: string, currentRoomId: string): void {
+  private async sendExplorationData(client: Client, playerId: string, currentRoomId: string): Promise<void> {
     const roomData = this.buildExploredRoomData(currentRoomId);
     if (!roomData) return;
 
+    // Load all previously visited rooms from this zone to provide complete map data
+    const allRooms: ExploredRoomData[] = [roomData];
+    
+    if (this.zoneSlug) {
+      try {
+        const exploredRooms = await this.explorationRepo.getExploredRoomsInZone(playerId, this.zoneSlug);
+        
+        // Build room data for each visited room that still exists in the current graph
+        for (const explored of exploredRooms) {
+          if (explored.roomId !== currentRoomId && this.roomGraph.rooms.has(explored.roomId)) {
+            const historicalRoomData = this.buildExploredRoomData(explored.roomId);
+            if (historicalRoomData) {
+              allRooms.push(historicalRoomData);
+            }
+          }
+        }
+        
+        this.log(`Loaded ${allRooms.length} explored room(s) for ${this.playerTag(playerId)}`);
+      } catch (err) {
+        this.log(`Failed to load exploration history for ${this.playerTag(playerId)}: ${err}`);
+      }
+    }
+
     const message: ExplorationDataMessage = {
       type: MessageTypes.EXPLORATION_DATA,
-      rooms: [roomData],
+      rooms: allRooms,
       currentRoomId,
     };
     client.send(MessageTypes.EXPLORATION_DATA, message);
-    this.log(`Exploration data sent to ${this.playerTag(playerId)} (${currentRoomId})`);
+    this.log(`Exploration data sent to ${this.playerTag(playerId)} (${allRooms.length} room(s))`);
 
     // Persist visit
     this.recordExplorationVisit(playerId, currentRoomId, roomData);

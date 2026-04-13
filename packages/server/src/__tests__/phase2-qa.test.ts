@@ -1372,11 +1372,10 @@ describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
     p2.client.send(MessageTypes.COMMAND, makeCommand('go', 'north'));
     await wait(1500);
 
-    // p1 should see awareness notification about p2 entering corridor
-    // (depends on awareness system being wired in ZoneRoom)
-    // At minimum, p1 should receive SOME notification about activity
-    // The exact message type depends on awareness tier calculation
-    expect(p1.collector.narrate.length).toBeGreaterThanOrEqual(0);
+    // p1 should see some notification about p2 entering corridor
+    // (awareness narration, room_header update, or similar)
+    const p1TotalMsgs = p1.collector.narrate.length + p1.collector.roomHeader.length;
+    expect(p1TotalMsgs).toBeGreaterThan(0);
   });
 
   it('player attack command gets a response (no creature in test graph)', async () => {
@@ -1393,10 +1392,9 @@ describe('Phase 2 QA — Colyseus Integration (multi-player)', () => {
     await wait(1500);
 
     // Since test graph has no spawned creatures, we expect a response
-    // Could be "no target" narration or the command might silently no-op
-    // Either way, the command handler should be wired and not crash
-    // (This test verifies the attack command path doesn't error)
-    expect(true).toBe(true);
+    // (e.g. "no target" narration). The command handler must be wired.
+    const allMsgs = p1.collector.narrate.length + p1.collector.all.length;
+    expect(allMsgs).toBeGreaterThan(0);
   });
 
   it('two players in same room both receive initial state', async () => {

@@ -142,6 +142,8 @@ function roomsToFlowNodes(
   mode: DesignerMode,
   creatures: Array<{ type: string; name: string }>,
   onPortalClick?: (targetZoneSlug: string) => void,
+  onUpExitClick?: (roomSlug: string, exitIds: string[]) => void,
+  onDownExitClick?: (roomSlug: string, exitIds: string[]) => void,
 ): FlowNode[] {
   const nodes: FlowNode[] = [];
 
@@ -149,9 +151,14 @@ function roomsToFlowNodes(
     const pos = positions.get(room.slug);
     if (!pos || pos.z !== currentFloor) continue;
 
-    // Count up/down/portal exits
-    const hasUpExits = exits.some((e) => e.fromRoomSlug === room.slug && e.direction === 'up');
-    const hasDownExits = exits.some((e) => e.fromRoomSlug === room.slug && e.direction === 'down');
+    // Count up/down/portal exits and collect exit IDs (#445)
+    const upExits = exits.filter((e) => e.fromRoomSlug === room.slug && e.direction === 'up');
+    const downExits = exits.filter((e) => e.fromRoomSlug === room.slug && e.direction === 'down');
+    const hasUpExits = upExits.length > 0;
+    const hasDownExits = downExits.length > 0;
+    const upExitIds = upExits.map(e => e.id);
+    const downExitIds = downExits.map(e => e.id);
+    
     const portalExits = exits
       .filter((e) => e.fromRoomSlug === room.slug && e.targetZoneSlug)
       .map((e) => ({
@@ -173,6 +180,10 @@ function roomsToFlowNodes(
         isConnectSource: mode === 'connect' && selectedRoom === room.slug,
         hasUpExits,
         hasDownExits,
+        upExitIds,
+        downExitIds,
+        onUpExitClick: upExitIds.length > 0 ? () => onUpExitClick?.(room.slug, upExitIds) : undefined,
+        onDownExitClick: downExitIds.length > 0 ? () => onDownExitClick?.(room.slug, downExitIds) : undefined,
         portalCount: portalExits.length,
         portalExits,
         onPortalClick,
@@ -411,6 +422,9 @@ export default function ZoneDesigner({
   const [directionFilter, setDirectionFilter] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // Connected exits highlighting (#445)
+  const [highlightedExitIds, setHighlightedExitIds] = useState<Set<string>>(new Set());
+
   // Resizable panel
   const [panelWidth, setPanelWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
@@ -478,6 +492,7 @@ export default function ZoneDesigner({
           setSelectedRoom(null);
           setSelectedExit(null);
           setConnectTarget(null);
+          setHighlightedExitIds(new Set());
         }
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "f") {
@@ -729,6 +744,37 @@ export default function ZoneDesigner({
     navigate(`/admin/zones/${targetZoneSlug}`);
   }, [navigate]);
 
+  // Handler for vertical exit icon clicks (#445)
+  const handleUpExitClick = useCallback((roomSlug: string, exitIds: string[]) => {
+    if (exitIds.length === 1) {
+      setSelectedExit(exitIds[0]);
+      setSelectedRoom(null);
+      setConnectTarget(null);
+      setHighlightedExitIds(new Set());
+    } else if (exitIds.length > 1) {
+      // Multiple up exits - select first one and highlight all
+      setSelectedExit(exitIds[0]);
+      setSelectedRoom(null);
+      setConnectTarget(null);
+      setHighlightedExitIds(new Set(exitIds));
+    }
+  }, []);
+
+  const handleDownExitClick = useCallback((roomSlug: string, exitIds: string[]) => {
+    if (exitIds.length === 1) {
+      setSelectedExit(exitIds[0]);
+      setSelectedRoom(null);
+      setConnectTarget(null);
+      setHighlightedExitIds(new Set());
+    } else if (exitIds.length > 1) {
+      // Multiple down exits - select first one and highlight all
+      setSelectedExit(exitIds[0]);
+      setSelectedRoom(null);
+      setConnectTarget(null);
+      setHighlightedExitIds(new Set(exitIds));
+    }
+  }, []);
+
   // ─── ReactFlow nodes & edges ────────────────────────────────────────────────
   const flowNodes = useMemo(() => {
     const nodes = roomsToFlowNodes(
@@ -743,6 +789,8 @@ export default function ZoneDesigner({
       mode,
       creatures,
       handlePortalClick,
+      handleUpExitClick,
+      handleDownExitClick,
     );
     // Apply search match/dim styling
     if (searchMatchSlugs !== null) {
@@ -775,7 +823,7 @@ export default function ZoneDesigner({
       });
     }
     return nodes;
-  }, [rooms, positions, currentFloor, selectedRoom, disconnectedSlugs, orphanExitIds, exits, showLabels, mode, searchMatchSlugs, creatures, handlePortalClick, interZoneExits]);
+  }, [rooms, positions, currentFloor, selectedRoom, disconnectedSlugs, orphanExitIds, exits, showLabels, mode, searchMatchSlugs, creatures, handlePortalClick, handleUpExitClick, handleDownExitClick, interZoneExits]);
 
   const flowEdges = useMemo(() => {
     let edges = exitsToFlowEdges(
@@ -804,8 +852,15 @@ export default function ZoneDesigner({
         (edge.data as Record<string, unknown>).dimmed = !(srcMatch || tgtMatch);
       }
     }
+    // Apply highlighting to connected exits (#445)
+    if (highlightedExitIds.size > 0) {
+      for (const edge of edges) {
+        const isHighlighted = highlightedExitIds.has(edge.id);
+        (edge.data as Record<string, unknown>).highlighted = isHighlighted;
+      }
+    }
     return edges;
-  }, [exitPairs, interZoneExits, positions, currentFloor, orphanExitIds, directionFilter, searchMatchSlugs]);
+  }, [exitPairs, interZoneExits, positions, currentFloor, orphanExitIds, directionFilter, searchMatchSlugs, highlightedExitIds]);
 
   // ─── Click handlers ─────────────────────────────────────
   function handleRoomClick(slug: string) {
@@ -826,6 +881,16 @@ export default function ZoneDesigner({
     setSelectedRoom(slug);
     setSelectedExit(null);
     setConnectTarget(null);
+    
+    // Highlight all exits connected to this room (#445)
+    const connectedExitIds = new Set<string>();
+    for (const exit of exits) {
+      if (exit.fromRoomSlug === slug || exit.toRoomSlug === slug) {
+        connectedExitIds.add(exit.id);
+      }
+    }
+    setHighlightedExitIds(connectedExitIds);
+    
     onRoomSelect?.(slug);
   }
 
@@ -833,6 +898,7 @@ export default function ZoneDesigner({
     setSelectedExit(exitId);
     setSelectedRoom(null);
     setConnectTarget(null);
+    setHighlightedExitIds(new Set());
     onExitSelect?.(exitId);
   }
 
@@ -843,6 +909,7 @@ export default function ZoneDesigner({
       setSelectedRoom(null);
       setSelectedExit(null);
       setConnectTarget(null);
+      setHighlightedExitIds(new Set());
     }
   }
 

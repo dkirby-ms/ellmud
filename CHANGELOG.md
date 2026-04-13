@@ -1,3 +1,53 @@
+# [0.2.0-dev.22](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.21...v0.2.0-dev.22) (2026-04-13)
+
+
+### Features
+
+* add noTake flag to Item interface for non-carryable items ([1677ac8](https://github.com/dkirby-ms/ellmud/commit/1677ac8af0aa61bf5d12dca976be9156b5467384))
+
+# [0.2.0-dev.21](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.20...v0.2.0-dev.21) (2026-04-13)
+
+
+### Bug Fixes
+
+* remove false confidence from test suite ([#450](https://github.com/dkirby-ms/ellmud/issues/450)) ([2d5e47c](https://github.com/dkirby-ms/ellmud/commit/2d5e47c8bcf18b8875ac735a81e7819a97eed7e3))
+
+# [0.2.0-dev.20](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.19...v0.2.0-dev.20) (2026-04-13)
+
+
+### Bug Fixes
+
+* remove unused imports in corpse test files ([3acc43a](https://github.com/dkirby-ms/ellmud/commit/3acc43a230f202c45eecfc75c200ce218fa7bdca))
+
+# [0.2.0-dev.19](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.18...v0.2.0-dev.19) (2026-04-13)
+
+
+### Features
+
+* ANSI formatting toolbar for admin content editors ([#449](https://github.com/dkirby-ms/ellmud/issues/449)) ([c59fc81](https://github.com/dkirby-ms/ellmud/commit/c59fc810c8e743c1d31de06738776def83a1938e)), closes [#448](https://github.com/dkirby-ms/ellmud/issues/448) [#447](https://github.com/dkirby-ms/ellmud/issues/447) [#448](https://github.com/dkirby-ms/ellmud/issues/448) [#445](https://github.com/dkirby-ms/ellmud/issues/445)
+
+# [0.2.0-dev.18](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.17...v0.2.0-dev.18) (2026-04-13)
+
+
+### Bug Fixes
+
+* creature detail static panels — preview, re-roll, version history ([#446](https://github.com/dkirby-ms/ellmud/issues/446)) ([9a2994b](https://github.com/dkirby-ms/ellmud/commit/9a2994b276255bc931368716db0789da00527200))
+* zone designer exit icons + publish refactor ([#445](https://github.com/dkirby-ms/ellmud/issues/445)) ([c6914bd](https://github.com/dkirby-ms/ellmud/commit/c6914bdb4721373e0468347519db05b7466f780b))
+
+# [0.2.0-dev.17](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.16...v0.2.0-dev.17) (2026-04-12)
+
+
+### Bug Fixes
+
+* minimap rendering with progressive exploration ([#443](https://github.com/dkirby-ms/ellmud/issues/443)) ([cd787d1](https://github.com/dkirby-ms/ellmud/commit/cd787d164c25d906a0280358160cbd07ead6690f))
+
+# [0.2.0-dev.16](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.15...v0.2.0-dev.16) (2026-04-12)
+
+
+### Features
+
+* unified corpse container system ([#442](https://github.com/dkirby-ms/ellmud/issues/442)) ([c6169ac](https://github.com/dkirby-ms/ellmud/commit/c6169ac35e5dfba15c18af2fd7b97241d59585e0))
+
 # [0.2.0-dev.15](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.14...v0.2.0-dev.15) (2026-04-12)
 
 
