@@ -1,3 +1,11 @@
+# [0.2.0-dev.18](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.17...v0.2.0-dev.18) (2026-04-13)
+
+
+### Bug Fixes
+
+* creature detail static panels — preview, re-roll, version history ([#446](https://github.com/dkirby-ms/ellmud/issues/446)) ([9a2994b](https://github.com/dkirby-ms/ellmud/commit/9a2994b276255bc931368716db0789da00527200))
+* zone designer exit icons + publish refactor ([#445](https://github.com/dkirby-ms/ellmud/issues/445)) ([c6914bd](https://github.com/dkirby-ms/ellmud/commit/c6914bdb4721373e0468347519db05b7466f780b))
+
 # [0.2.0-dev.17](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.16...v0.2.0-dev.17) (2026-04-12)
 
 
