@@ -1,3 +1,10 @@
+# [0.2.0-dev.24](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.23...v0.2.0-dev.24) (2026-04-13)
+
+
+### Bug Fixes
+
+* **client:** exclude all __tests__ dirs from tsc type-checking ([c588eab](https://github.com/dkirby-ms/ellmud/commit/c588eab6608771b26041770ee070c19783f21747))
+
 # [0.2.0-dev.23](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.22...v0.2.0-dev.23) (2026-04-13)
 
 
