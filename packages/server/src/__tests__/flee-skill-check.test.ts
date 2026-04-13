@@ -10,7 +10,6 @@ import { CombatSystem, type ExitResolver } from '../combat/CombatSystem.js';
 import {
   createCombatant,
   DEFAULT_PLAYER_STATS,
-  POST_COMBAT_COOLDOWN_TICKS,
 } from '../combat/CombatState.js';
 
 describe('Flee Skill Check (GDD §6.2)', () => {
@@ -201,7 +200,7 @@ describe('Flee Skill Check (GDD §6.2)', () => {
   });
 });
 
-describe('Post-Combat Cooldown (GDD §6.2)', () => {
+describe('Immediate Combat End (no post-combat cooldown)', () => {
   let system: CombatSystem;
   const exits: ExitResolver = (roomId) => (roomId === 'room-1' ? ['room-2'] : []);
 
@@ -209,7 +208,7 @@ describe('Post-Combat Cooldown (GDD §6.2)', () => {
     system = new CombatSystem(exits);
   });
 
-  it('combat does not end immediately when last enemy dies', () => {
+  it('combat ends immediately when last enemy dies', () => {
     const player = createCombatant('p1', 'Warrior', 'room-1', true, DEFAULT_PLAYER_STATS);
     const creature = createCombatant('c1', 'Goblin', 'room-1', false, DEFAULT_PLAYER_STATS);
     creature.hp = 1; // One hit from death
@@ -218,43 +217,15 @@ describe('Post-Combat Cooldown (GDD §6.2)', () => {
     system.registerCombatant(creature);
     system.initiateCombat('p1', 'c1');
 
-    // Tick 1: Player strikes, creature dies
+    // Tick 1: Player strikes, creature dies — combat ends immediately
     const result1 = system.resolveTick();
     expect(result1.events.some(e => e.type === 'defeated' && e.actorId === 'c1')).toBe(true);
-    expect(result1.events.some(e => e.type === 'combat_end')).toBe(false);
-    expect(result1.endedEncounterIds).toHaveLength(0);
-  });
-
-  it('combat ends after 3-tick cooldown when no new threats', () => {
-    const player = createCombatant('p1', 'Warrior', 'room-1', true, DEFAULT_PLAYER_STATS);
-    const creature = createCombatant('c1', 'Goblin', 'room-1', false, DEFAULT_PLAYER_STATS);
-    creature.hp = 1;
-
-    system.registerCombatant(player);
-    system.registerCombatant(creature);
-    system.initiateCombat('p1', 'c1');
-
-    // Tick 1: Creature dies, cooldown starts at 3
-    system.resolveTick();
-    expect(system.hasActiveEncounters()).toBe(true);
-
-    // Tick 2: Cooldown at 2
-    const result2 = system.resolveTick();
-    expect(result2.events.some(e => e.type === 'combat_end')).toBe(false);
-    expect(system.hasActiveEncounters()).toBe(true);
-
-    // Tick 3: Cooldown at 1
-    const result3 = system.resolveTick();
-    expect(result3.events.some(e => e.type === 'combat_end')).toBe(false);
-    expect(system.hasActiveEncounters()).toBe(true);
-
-    // Tick 4: Cooldown expires (was at 1, now 0), combat ends
-    const result4 = system.resolveTick();
-    expect(result4.events.some(e => e.type === 'combat_end')).toBe(true);
+    expect(result1.events.some(e => e.type === 'combat_end')).toBe(true);
+    expect(result1.endedEncounterIds).toHaveLength(1);
     expect(system.hasActiveEncounters()).toBe(false);
   });
 
-  it('new aggro during cooldown continues combat seamlessly', () => {
+  it('new aggro before combat ends keeps encounter alive', () => {
     const player = createCombatant('p1', 'Warrior', 'room-1', true, DEFAULT_PLAYER_STATS);
     const creature1 = createCombatant('c1', 'Goblin', 'room-1', false, DEFAULT_PLAYER_STATS);
     const creature2 = createCombatant('c2', 'Orc', 'room-1', false, DEFAULT_PLAYER_STATS);
@@ -264,19 +235,12 @@ describe('Post-Combat Cooldown (GDD §6.2)', () => {
     system.registerCombatant(creature1);
     system.registerCombatant(creature2);
 
-    // Start combat with creature1
+    // Start combat with both creatures
     system.initiateCombat('p1', 'c1');
-
-    // Tick 1: Creature1 dies, cooldown starts
-    system.resolveTick();
-    expect(system.hasActiveEncounters()).toBe(true);
-
-    // Tick 2: During cooldown, creature2 aggros
     system.initiateCombat('c2', 'p1');
-    const result2 = system.resolveTick();
 
-    // Cooldown should be reset, combat continues
-    expect(result2.events.some(e => e.type === 'combat_end')).toBe(false);
+    // Tick 1: Creature1 dies but creature2 is still alive — combat continues
+    system.resolveTick();
     expect(system.hasActiveEncounters()).toBe(true);
 
     // Many ticks later, no combat_end since we have active combat
@@ -284,40 +248,5 @@ describe('Post-Combat Cooldown (GDD §6.2)', () => {
       const r = system.resolveTick();
       expect(r.events.some(e => e.type === 'combat_end')).toBe(false);
     }
-  });
-
-  it('fleeing player during cooldown ends encounter immediately', () => {
-    const roll = () => 0.0; // Always succeed flee
-    system = new CombatSystem(exits, roll);
-
-    const player = createCombatant('p1', 'Runner', 'room-1', true, DEFAULT_PLAYER_STATS, 0, 20, 1);
-    const creature = createCombatant('c1', 'Goblin', 'room-1', false, DEFAULT_PLAYER_STATS, 0, 0, 1);
-    creature.hp = 1;
-
-    system.registerCombatant(player);
-    system.registerCombatant(creature);
-    system.initiateCombat('p1', 'c1');
-
-    // Tick 1: Creature dies, cooldown starts
-    system.resolveTick();
-    expect(system.hasActiveEncounters()).toBe(true);
-
-    // Tick 2: Player flees during cooldown
-    // Since creature is already dead and player is alone, can't actually flee from empty encounter
-    // This test demonstrates that flee from a dead encounter is handled gracefully
-    const inCombat = system.isInCombat('p1');
-    expect(inCombat).toBe(true); // Still in encounter during cooldown
-
-    // Continue cooldown
-    system.resolveTick();
-    system.resolveTick();
-    system.resolveTick();
-
-    // Combat should end after cooldown
-    expect(system.hasActiveEncounters()).toBe(false);
-  });
-
-  it('cooldown value matches POST_COMBAT_COOLDOWN_TICKS constant (3)', () => {
-    expect(POST_COMBAT_COOLDOWN_TICKS).toBe(3);
   });
 });

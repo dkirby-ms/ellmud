@@ -126,8 +126,6 @@ export interface CombatEncounter {
   combatantIds: Set<string>;
   tickCount: number;
   ticksSinceLastStrike: number;
-  /** Post-combat cooldown in ticks — counts down after last enemy defeated (GDD §6.2). */
-  postCombatCooldown: number;
   /** Threat tables per creature — map of creature ID to ThreatTable (GDD §6.10). */
   threatTables?: Map<string, import('./ThreatTable.js').ThreatTable>;
 }
@@ -184,9 +182,6 @@ export const EMPTY_TICK_RESULT: TickResult = {
 
 /** Timeout in ticks (seconds) before combat ends with no strikes. */
 export const COMBAT_TIMEOUT_TICKS = 10;
-
-/** Post-combat cooldown in ticks before combat mode ends after last enemy defeated (GDD §6.2). */
-export const POST_COMBAT_COOLDOWN_TICKS = 3;
 
 /** Base flee success chance (0.0-1.0) before skill/level modifiers (GDD §6.2). */
 export const BASE_FLEE_CHANCE = 0.5;
