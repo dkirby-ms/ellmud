@@ -9,12 +9,9 @@
  * and group loot access.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   buildFixtureRegistry,
-  RUSTY_BLADE,
-  HEALING_DRAUGHT,
-  REVENANT_BONE,
 } from './helpers/item-fixtures.js';
 
 // Mock ContentRegistry for item lookups

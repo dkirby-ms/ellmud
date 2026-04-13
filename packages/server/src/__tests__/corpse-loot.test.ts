@@ -48,7 +48,7 @@ function makePlayer(sessionId = 'player-1', roomId = 'room-1'): PlayerState {
   return new PlayerState(sessionId, roomId, 50);
 }
 
-function makeContext(
+function _makeContext(
   player: PlayerState,
   room: Room,
   corpseSystem: CorpseSystem,
