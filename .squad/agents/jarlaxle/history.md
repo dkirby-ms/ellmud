@@ -218,3 +218,54 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 
 ---
 
+
+### 2026-04-13: Permadeath Starter Kit Flag Reset
+**Status:** ✅ Complete
+
+**Task:** Fix permadeath-reset characters not receiving starter items on zone join. The starter kit system checks a `starter_kit_granted` flag — when true, starter items are NOT granted. During permadeath reset, inventory and equipment were cleared but the flag wasn't reset, leaving characters without gear and unable to receive starter items.
+
+**Implementation:**
+
+1. **CharacterRepository Interface** (CharacterRepository.ts):
+   - Added `resetStarterKitFlag(characterId: string): Promise<void>` method
+
+2. **PgCharacterRepository** (PgCharacterRepository.ts):
+   - Implemented `resetStarterKitFlag()` to set `starter_kit_granted = false` in DB
+
+3. **InMemoryCharacterRepository** (InMemoryCharacterRepository.ts):
+   - Implemented `resetStarterKitFlag()` to remove characterId from starterKitGranted Set
+
+4. **ZoneRoom.executePermadeath()** (ZoneRoom.ts):
+   - Added call to `this.characterRepo.resetStarterKitFlag(playerId)` after clearing loadout
+   - Positioned between equipment clear and in-memory inventory clear for logical flow
+   - Now resets: inventory (DB + memory), equipment (loadout + memory), and starter kit flag
+
+**Flow:**
+- Player dies during permadeath mode → executePermadeath() triggered
+- Inventory cleared from DB and memory
+- Equipment (loadout) cleared from DB and memory  
+- **Starter kit flag reset to false** ← NEW
+- Character preserved (not deleted), stash preserved
+- Character respawns with empty inventory
+- On next zone join, starter kit system sees flag=false → grants starter items
+
+**Compilation:** ✅ `npx tsc --noEmit -p packages/server/tsconfig.json` passes
+
+**Impact:** Permadeath-reset characters now receive starter gear (Rusty Blade, Tattered Leather, Waterlogged Potion) on their next zone join, matching fresh character behavior.
+
+---
+
+### 2026-04-13T19:39:59Z: Spawn Manifest — Starter Kit Reset Deployment
+**Status:** ✅ Complete — Build verified
+
+📌 **Team Update:** Deployed starter kit flag reset as part of permadeath feature completion (see Coordinator lint fixes + Regis UI links).
+
+**Outcome:** Completed reset starter kit flag logic for permadeath-reset characters. Part of three-agent spawn manifest:
+- Coordinator: Lint fixes + hall_of_fame migration 
+- Jarlaxle: Starter kit flag reset ← THIS  
+- Regis: Hall of Fame UI links
+
+**Deliverable:** `resetStarterKitFlag()` integrated into `executePermadeath()` workflow so reset characters receive starter gear on next zone join.
+
+---
+

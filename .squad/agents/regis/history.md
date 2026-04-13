@@ -6,6 +6,53 @@
 
 ## Recent Work
 
+### 2026-04-15: Hall of Fame Navigation Links
+**Status:** ✅ Complete — Build verified
+
+**Problem:** The Hall of Fame page (`/hall-of-fame`) existed but was not accessible from the UI. Users had no way to navigate to it from Character Select or during gameplay.
+
+**Changes:**
+1. **CharacterSelect.tsx** — Added Hall of Fame link to top bar:
+   - Added Skull icon import from lucide-react
+   - Added button with skull icon between username and Settings button
+   - Navigates to `/hall-of-fame` on click
+   - Styled consistently with other top bar buttons (text-secondary with gold hover)
+   - Added tooltip: "Hall of Fame"
+
+2. **ZoneExploration.tsx** — Added Hall of Fame link to game client top nav:
+   - Added Skull icon import from lucide-react
+   - Placed between username and Settings button in top navigation bar
+   - Same styling and tooltip as Character Select
+   - Accessible during gameplay, not obtrusive
+   - Positioned as secondary nav item (not primary action)
+
+**Testing:** TypeScript build passes clean. Client bundle builds successfully (no errors).
+
+**Design Decisions:**
+- Skull icon chosen to match Hall of Fame page aesthetic (memorial/permadeath theme)
+- Placed in top bar as secondary nav item (not prominent, but accessible)
+- Consistent placement in both screens (between user info and settings)
+- Hover states use gold accent for consistency with MUD theme
+- Small icon size (w-4 h-4) keeps it subtle and non-intrusive
+
+**UX Flow:** Users can now access Hall of Fame from:
+1. Character Select screen (before entering world) — view past lives/memorials
+2. Game client during gameplay (quick access to check rankings/past characters)
+
+### 2026-04-13T19:39:59Z: Spawn Manifest — Hall of Fame UI Links Deployment
+**Status:** ✅ Complete — Build verified
+
+📌 **Team Update:** Deployed Hall of Fame navigation links as part of permadeath feature completion (see Coordinator lint fixes + Jarlaxle starter kit reset).
+
+**Outcome:** Completed Hall of Fame UI links for CharacterSelect and ZoneExploration. Part of three-agent spawn manifest:
+- Coordinator: Lint fixes + hall_of_fame migration  
+- Jarlaxle: Starter kit flag reset
+- Regis: Hall of Fame UI links ← THIS
+
+**Deliverable:** Skull icon links added to top navigation in both Character Select and Zone Exploration screens. Users can now access `/hall-of-fame` from anywhere.
+
+---
+
 ### 2026-04-15: Permadeath UI — Death Screen + Hall of Fame Page
 **Status:** ✅ Complete — Build verified
 
