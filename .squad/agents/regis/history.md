@@ -42,6 +42,27 @@
 - **Visual affordance:** Hover effects (scale + color change) are critical for indicating clickability of small icon elements.
 - **Connected topology visualization:** Highlighting all connected exits (both incoming and outgoing) when a room is selected helps users understand room connectivity patterns in complex zones.
 
+### 2026-04-15: ANSI Toolbar Undo/Redo Support
+**Status:** ✅ Complete — AnsiToolbar.tsx updated
+
+**Problem:** When users clicked color toggle buttons in the ANSI toolbar (used by AnsiTextarea), the direct string manipulation bypassed the browser's native undo stack. Ctrl+Z/Ctrl+Y did not work for tag insertions.
+
+**Solution:** Updated `insertTag()` function in AnsiToolbar.tsx to use `document.execCommand("insertText")` pattern (same as AnsiDescriptionEditor already uses). This hooks into browser's native undo/redo.
+
+**Changes:**
+- **AnsiToolbar.tsx:** Replaced direct string manipulation with `document.execCommand("insertText", false, wrapped)` approach
+- `execCommand` fires input event → textarea's onChange handler captures it → parent state updates
+- Removed manual `onInsert(newValue)` call (now redundant)
+- Cursor positioning logic updated to match AnsiDescriptionEditor pattern
+- TypeScript build passes; all 415 client tests pass
+
+## Learnings — ANSI Toolbar Undo/Redo
+
+- **Browser undo stack integration:** `document.execCommand("insertText")` is technically deprecated but is the ONLY way to hook into native undo/redo (Ctrl+Z/Ctrl+Y) for plain textareas. This is the established pattern in this codebase.
+- **Event flow:** `execCommand` modifies the textarea and fires an `input` event, which React's onChange handler catches naturally. No manual state updates needed.
+- **Cursor positioning:** Use `requestAnimationFrame()` to ensure cursor positioning happens after React re-render. Position cursor inside empty tags or at end of wrapped selection.
+- **Component consistency:** AnsiDescriptionEditor and AnsiToolbar now use identical tag insertion patterns, ensuring consistent undo behavior across all ANSI editors.
+
 ### 2026-04-13: ANSI Toolbar + AnsiTextarea Component Build
 **Status:** ✅ Merged to dev — PR #449, branch `squad/admin-ansi-toolbar`
 
@@ -83,6 +104,19 @@
 
 Outcomes: 5 files changed, 415 client tests all passing. Client state + hooks simplified. PR #439 merged.
 
+
+### 2026-04-13: ANSI Toolbar Undo/Redo Integration
+**Status:** ✅ Complete
+
+📌 Team update (2026-04-13T1145Z): ANSI Editor Undo/Redo Pattern — Use `document.execCommand("insertText")` for tag insertions to integrate with browser undo stack. Decided by Regis.
+
+**Problem:** AnsiToolbar buttons bypassed browser's native undo stack; Ctrl+Z/Ctrl+Y didn't work for ANSI tag insertions.
+
+**Solution:** Switch to `document.execCommand("insertText")` (already used in AnsiDescriptionEditor) to hook into browser undo stack.
+
+**Impact:** All ANSI editors now support native undo/redo. Zero breaking changes.
+
+Cross-team note: Minsc created 50 tests with `document.execCommand` mocked for jsdom environment.
 
 ---
 

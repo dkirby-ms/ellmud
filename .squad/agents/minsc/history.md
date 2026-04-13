@@ -69,6 +69,87 @@
 
 ---
 
+## Learnings
+
+### AnsiToolbar Component Tests (execCommand undo/redo support)
+
+**What was tested:**
+- Created comprehensive test suite for AnsiToolbar component's tag insertion behavior
+- 50 tests covering all aspects: button rendering, tag insertion, selection wrapping, cursor positioning, edge cases
+- Test file: `packages/client/src/components/admin/__tests__/AnsiToolbar.test.tsx`
+
+**Pattern Discovery:**
+- `document.execCommand` is not available in jsdom/happy-dom test environments
+- Needed to mock `execCommand` to simulate its behavior: manually update textarea value + fire input event
+- The new `execCommand` approach bypasses the `onInsert` callback - value changes now happen via native input events
+- This matches the pattern already used in AnsiDescriptionEditor.tsx
+
+**Coverage Notes:**
+- ✅ All 18 color/bright-color buttons render correctly
+- ✅ All 4 modifier buttons (bold, dim, italic, underline) render correctly
+- ✅ Tag insertion at cursor position (empty selection) works for all tag types
+- ✅ Tag wrapping around selected text works correctly
+- ✅ Cursor positioning after insertion: between tags (empty) or after wrapped text (with selection)
+- ✅ Multiple sequential insertions work as expected
+- ✅ Edge cases: null ref, multiline text, rapid clicks, selection across newlines
+- ✅ Button accessibility: type="button" to prevent form submission, title attributes for ARIA
+
+**Mock Implementation Pattern:**
+```typescript
+// Mock document.execCommand for jsdom
+document.execCommand = vi.fn((command, _showUI, value) => {
+  if (command === 'insertText') {
+    const el = document.activeElement;
+    const { selectionStart, selectionEnd, value: current } = el;
+    el.value = current.slice(0, selectionStart) + value + current.slice(selectionEnd);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  }
+  return false;
+});
+```
+
+**Test Wrapper Pattern:**
+- Test wrapper provides textarea ref + input event handler (not onInsert callback)
+- Input event handler captures value changes from execCommand
+- This simulates how AnsiToolbar is actually used in the admin UI
+
+**Key Learnings:**
+- Browser-native features like undo/redo (Ctrl+Z) cannot be meaningfully tested in unit tests
+- Focus tests on the actual behavior (tag insertion, cursor positioning) not the undo stack
+- When testing components that use deprecated browser APIs (execCommand), mock the API to simulate behavior
+- execCommand approach means value updates happen via input events, not callbacks
+- Always check if component implementation has changed before writing tests (AnsiToolbar was already using execCommand)
+
+**Test Quality:**
+- All 50 tests passing
+- No false confidence patterns
+- Clear, descriptive test names
+- Comprehensive edge case coverage
+- Tests document expected behavior for future maintainers
+
+### 2026-04-13: AnsiToolbar Test Coverage & Test Quality Proposal
+**Status:** ✅ Complete
+
+📌 Team update (2026-04-13T1145Z): Testing Components with document.execCommand — Mock execCommand in test setup to simulate browser behavior in jsdom. Decided by Minsc.
+
+📌 Team update (2026-04-13T1145Z): Test Quality Guard Rails — Proposal to ban tautological assertions and establish lint-level quality gates. Decided by Minsc.
+
+**Work Done:**
+- Wrote 50 comprehensive tests for AnsiToolbar (buttons, tag insertion, selection wrapping, cursor positioning, edge cases)
+- Mocked `document.execCommand("insertText")` to simulate browser behavior in jsdom/happy-dom test environments
+- All 50 tests passing; no false-confidence patterns
+
+**Test Pattern:**
+The mock accurately simulates tag insertion: modify selection, fire input event, let parent React component handle state update.
+
+**Quality Initiative:**
+Proposed ESLint rule to flag `expect(true).toBe(true)` and similar tautological assertions that create false confidence.
+
+Cross-team note: Regis implemented the undo/redo pattern these tests verify.
+
+---
+
 ## Detailed History
 
 Full session logs and dated entries have been moved to `history-archive.md` to keep this file compact.

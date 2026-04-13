@@ -4256,3 +4256,162 @@ The old `AnsiPreview` component had a "Color Reference" palette that copied `[co
 - **Any new admin page** with ANSI-editable fields should use `<AnsiTextarea>`, not raw textarea + AnsiPreview.
 - `AnsiPreview` is still available for read-only preview contexts where no editing happens.
 - The duplicate Live Preview panel in CreatureDetail was removed since each field now has its own inline preview.
+# Decision: Fix creature reroll stats shape mismatch
+
+**Author:** Jarlaxle (Systems Dev)
+**Date:** 2025-07-14
+**File:** `packages/server/src/admin/simulate/simulate-routes.ts`
+
+## Problem
+
+The `CreatureDefinition` interface in simulate-routes expected a **nested** `stats` object (`creature.stats.maxHp`), but `PgCreatureDefinitionsStore.rowToEntity()` returns a **flat** entity (`creature.maxHp`). This caused `creature.stats` to always be `undefined`, triggering the "Creature has no stats defined" 400 error on every reroll request.
+
+## Fix
+
+- Changed the `CreatureDefinition` interface to use flat properties (`maxHp`, `attack`, `defence`, `armour`) matching the actual entity shape from the store.
+- Construct a `baseline` stats object from those flat properties before passing to `rollCreatureStats()`.
+- Updated the guard check to validate the flat properties instead of `creature.stats`.
+- Introduced a `BaselineStats` interface for the `rollCreatureStats` function parameter.
+
+## Why this approach
+
+The store's flat shape is used consistently elsewhere in the admin system. Changing the store to nest stats would ripple across the admin UI and other routes. Adapting at the simulate boundary is the minimal, safe fix.
+# Decision: Testing Components with document.execCommand
+
+**Agent:** Minsc  
+**Date:** 2025-01-XX  
+**Context:** AnsiToolbar component tests for undo/redo support  
+
+## Problem
+
+The AnsiToolbar component (and AnsiDescriptionEditor) use `document.execCommand("insertText")` to insert ANSI tags so that insertions appear on the browser's native undo stack (Ctrl+Z support). However, `document.execCommand` is not implemented in jsdom/happy-dom test environments, causing tests to fail with "document.execCommand is not a function".
+
+## Decision
+
+**Mock `document.execCommand` in test setup to simulate its behavior:**
+
+```typescript
+beforeEach(() => {
+  document.execCommand = vi.fn((command, _showUI, value) => {
+    if (command === 'insertText') {
+      const el = document.activeElement as HTMLTextAreaElement;
+      const { selectionStart, selectionEnd, value: current } = el;
+      el.value = current.slice(0, selectionStart) + value + current.slice(selectionEnd);
+      // Fire input event to trigger React onChange
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    }
+    return false;
+  });
+});
+```
+
+## Rationale
+
+1. **Practical Testing**: While browser-native undo/redo cannot be tested in jsdom, the tag insertion behavior itself can and should be tested
+2. **Behavior Simulation**: The mock accurately simulates what execCommand does: replace selection with new text + fire input event
+3. **Focus on Observable Behavior**: Tests verify tag insertion, cursor positioning, and selection wrapping - not undo stack internals
+4. **Reusable Pattern**: This mock can be used for any component that uses execCommand (AnsiDescriptionEditor, future WYSIWYG editors)
+
+## Implementation Notes
+
+- Mock is defined in test setup (beforeEach) so it applies to all tests in the suite
+- The mock supports only "insertText" command (the one we use)
+- Input event is dispatched with `bubbles: true` to match browser behavior
+- Test wrapper uses `onInput` handler instead of relying on `onInsert` callback (which is bypassed by execCommand)
+
+## Test Coverage
+
+Created 50 tests for AnsiToolbar covering:
+- Button rendering (all 18 colors + 4 modifiers)
+- Tag insertion at cursor (empty selection)
+- Tag wrapping around selection
+- Cursor positioning after insertion
+- Multiple sequential insertions
+- Edge cases (null ref, multiline, rapid clicks)
+- Accessibility (button types, ARIA labels)
+
+All tests passing with no false confidence patterns.
+
+## Future Considerations
+
+- If we add more execCommand usage (e.g., "bold", "italic" for rich text editing), extend the mock to support those commands
+- E2E tests should verify actual undo/redo behavior in a real browser
+- Consider documenting this pattern in a test utilities file for reuse across components
+# Decision: Establish Test Quality Guard Rails
+
+**Author:** Minsc (Test Infrastructure)
+**Date:** 2025-07-15
+**Status:** Proposed
+
+## Context
+
+During a comprehensive audit of all 180 test files, I found 6 critical false-confidence patterns where tests pass but verify nothing meaningful. The primary culprit was `expect(true).toBe(true)` used as a "didn't crash" placeholder.
+
+## Proposal
+
+1. **Ban tautological assertions** — Add an ESLint rule or Vitest plugin to flag `expect(true).toBe(true)`, `expect(false).toBe(false)`, and `toBeGreaterThanOrEqual(0)` on lengths.
+2. **Require assertions** — Consider enabling Vitest's `expect.hasAssertions()` or `expect.assertions(n)` for integration tests to catch assertion-free test bodies.
+3. **Prefer `it.todo()` over placeholder passes** — When a test can't be implemented yet, use `it.todo()` rather than a body that always passes.
+
+## Impact
+
+Low risk. These are lint-level guardrails that prevent future false-confidence from creeping in. No production code changes.
+# Decision: ANSI Editor Undo/Redo Pattern
+
+**Date:** 2026-04-15  
+**Author:** Regis (Frontend Dev)  
+**Status:** Implemented
+
+## Context
+
+ANSI content editors in the admin UI allow users to insert color/formatting tags via toolbar buttons. There are two ANSI editor components:
+1. **AnsiDescriptionEditor** — standalone editor with inline toolbar
+2. **AnsiToolbar + AnsiTextarea** — composite component used across admin detail pages
+
+## Problem
+
+When users clicked color toggle buttons in AnsiToolbar, the insertions bypassed the browser's native undo stack. Ctrl+Z/Ctrl+Y did not work for tag insertions, creating a frustrating UX.
+
+## Decision
+
+**Use `document.execCommand("insertText")` for all ANSI tag insertions.**
+
+This is the only way to integrate with the browser's native undo/redo stack for plain textareas. While technically deprecated, it remains the standard pattern for rich text editing in textareas and is widely supported.
+
+## Implementation
+
+Updated `AnsiToolbar.tsx` to match the pattern already used in `AnsiDescriptionEditor.tsx`:
+
+```typescript
+// Old approach (bypassed undo stack):
+const newValue = before + insertion + after;
+onInsert(newValue);
+
+// New approach (hooks into undo stack):
+textarea.setSelectionRange(selectionStart, selectionEnd);
+document.execCommand("insertText", false, wrapped);
+// execCommand fires input event → textarea onChange → parent state updates
+```
+
+## Rationale
+
+1. **User expectations:** Ctrl+Z/Ctrl+Y are fundamental editing shortcuts. Users expect them to work.
+2. **Pattern consistency:** AnsiDescriptionEditor already used this pattern successfully.
+3. **No alternatives:** contenteditable div is too complex for our use case; `document.execCommand` is the pragmatic choice.
+4. **Broad support:** Despite deprecation warnings, all major browsers still support it and have no plans to remove it.
+
+## Impact
+
+- ✅ All ANSI editors now support native undo/redo
+- ✅ Zero breaking changes (event flow unchanged from user's perspective)
+- ✅ Simplified code (removed manual string concatenation)
+- ✅ TypeScript build passes; 415 client tests pass
+
+## Future Considerations
+
+If `document.execCommand` is ever removed from browsers, we would need to:
+1. Implement a custom undo stack (significantly more complex)
+2. Or migrate to contenteditable divs with custom ANSI rendering (major refactor)
+
+For now, `execCommand` is the correct choice.

@@ -47,6 +47,23 @@
 - Corpse item pattern aligns with thematic game feel (visible death consequences)
 
 
+### 2026-04-13: Creature Reroll Stats Shape Fix
+**Status:** ✅ Complete
+
+📌 Team update (2026-04-13T1145Z): Fix creature reroll stats shape mismatch — CreatureDefinition interface now uses flat properties (maxHp, attack, defence, armour) matching store entity shape. Decided by Jarlaxle.
+
+**Problem:** Simulate-routes.ts CreatureDefinition interface expected nested stats object (`creature.stats.maxHp`), but PgCreatureDefinitionsStore.rowToEntity() returns flat entity (`creature.maxHp`). Result: creature.stats was always undefined, triggering "no stats defined" 400 error on reroll.
+
+**Solution:** 
+- Changed CreatureDefinition to use flat properties
+- Construct baseline stats object from those properties before passing to rollCreatureStats()
+- Updated guard check to validate flat properties
+
+**Why This Approach:**
+The store's flat shape is used consistently elsewhere in the admin system. Changing the store to nest stats would ripple across admin UI and other routes. Adapting at the simulate boundary is minimal and safe.
+
+**Impact:** Reroll endpoint now works without errors.
+
 ---
 
 ## Detailed History
