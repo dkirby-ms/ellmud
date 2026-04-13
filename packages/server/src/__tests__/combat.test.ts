@@ -597,3 +597,76 @@ describe('Resolution Order (Simultaneous)', () => {
     expect(p2.hp).toBe(0);
   });
 });
+
+// ─── Stale Combatant Cleanup Tests ────────────────────────────────────────
+
+describe('Stale Combatant Cleanup', () => {
+  let system: CombatSystem;
+
+  beforeEach(() => {
+    system = new CombatSystem(testExitResolver);
+    system.setRollFn(() => 1); // All flee rolls fail by default
+  });
+
+  it('should remove surviving player combatant when encounter ends', () => {
+    const player = makePlayer('player-1');
+    const creature = makeCreature('creature-1', TEST_ROOM, { maxHp: 1, attack: 0 });
+
+    system.registerCombatant(player);
+    system.registerCombatant(creature);
+    system.initiateCombat('player-1', 'creature-1');
+
+    // Player strikes and kills creature in one hit
+    const result = system.resolveTick();
+    expect(result.events.some(e => e.type === 'defeated' && e.actorId === 'creature-1')).toBe(true);
+
+    // Drain post-combat cooldown
+    while (system.hasActiveEncounters()) {
+      system.resolveTick();
+    }
+
+    // After encounter cleanup, the player's stale combatant should be gone
+    expect(system.getCombatant('player-1')).toBeUndefined();
+    expect(system.isInCombat('player-1')).toBe(false);
+  });
+
+  it('should allow combat in new room after previous encounter cleanup', () => {
+    const player = makePlayer('player-1');
+    const creature1 = makeCreature('creature-1', TEST_ROOM, { maxHp: 1, attack: 0 });
+
+    system.registerCombatant(player);
+    system.registerCombatant(creature1);
+    system.initiateCombat('player-1', 'creature-1');
+
+    // Kill creature, drain cooldown
+    system.resolveTick();
+    while (system.hasActiveEncounters()) {
+      system.resolveTick();
+    }
+
+    // Player "moves" to a new room — re-register with new roomId
+    const ROOM_B = 'room-b';
+    const playerInRoomB = makePlayer('player-1', ROOM_B);
+    const creature2 = makeCreature('creature-2', ROOM_B, { maxHp: 10, attack: 1 });
+
+    system.registerCombatant(playerInRoomB);
+    system.registerCombatant(creature2);
+
+    // This should succeed — both combatants in room-b
+    const encId = system.initiateCombat('creature-2', 'player-1');
+    expect(encId).not.toBeNull();
+  });
+
+  it('updateCombatantRoom keeps roomId in sync', () => {
+    const player = makePlayer('player-1');
+    system.registerCombatant(player);
+
+    system.updateCombatantRoom('player-1', 'room-new');
+    expect(system.getCombatant('player-1')?.roomId).toBe('room-new');
+  });
+
+  it('updateCombatantRoom is no-op for unknown combatant', () => {
+    // Should not throw
+    system.updateCombatantRoom('nonexistent', 'room-new');
+  });
+});

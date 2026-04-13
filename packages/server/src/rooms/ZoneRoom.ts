@@ -1030,6 +1030,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     const movedRoom = player.currentRoomId !== previousRoomId;
     let pendingFollowerArrivals: string[] | undefined;
     if (movedRoom) {
+      // Keep combat system in sync if a stale combatant entry exists
+      this.combatSystem.updateCombatantRoom(playerId, player.currentRoomId);
+
       const direction = args[0]?.toLowerCase();
       this.traceSystem.addTrace(previousRoomId, 'footprint', {
         actorId: playerId,
@@ -1492,6 +1495,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       const followerPreviousRoom = followerState.currentRoomId;
       followerState.currentRoomId = toRoomId;
       followerState.posture = 'standing';
+      // Keep combat system in sync if a stale combatant entry exists
+      this.combatSystem.updateCombatantRoom(followerId, toRoomId);
 
       const followerClient = this.findClient(followerId);
       const followerName = this.characterNames.get(followerId) ?? 'Someone';
@@ -3323,6 +3328,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Move the player
     player.currentRoomId = targetRoomId;
+    // Keep combat system in sync if a stale combatant entry exists
+    this.combatSystem.updateCombatantRoom(sessionId, targetRoomId);
 
     // Broadcast departure/arrival to other players
     this.broadcastPlayerMovement(sessionId, previousRoomId, targetRoomId);

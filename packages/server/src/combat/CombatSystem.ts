@@ -106,6 +106,14 @@ export class CombatSystem {
     return this.combatants.get(id);
   }
 
+  /** Update a combatant's tracked room (e.g. after player movement). */
+  updateCombatantRoom(id: string, newRoomId: string): void {
+    const combatant = this.combatants.get(id);
+    if (combatant) {
+      combatant.roomId = newRoomId;
+    }
+  }
+
   // ─── Combat Initiation ────────────────────────────────────────────────────
 
   /**
@@ -1141,6 +1149,9 @@ export class CombatSystem {
     for (const cid of encounter.combatantIds) {
       this.combatantEncounter.delete(cid);
       this.queuedActions.delete(cid);
+      // Remove combatant entries so stale roomIds don't block future combat.
+      // Both attack handler and creature AI re-register combatants on initiation.
+      this.combatants.delete(cid);
     }
     this.encounters.delete(encId);
     this.debug(`Encounter ${encId} ended and cleaned up`);
