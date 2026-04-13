@@ -1,3 +1,10 @@
+# [0.2.0-dev.27](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.26...v0.2.0-dev.27) (2026-04-13)
+
+
+### Bug Fixes
+
+* **admin:** remove Rooms from admin left-nav menu ([10c8651](https://github.com/dkirby-ms/ellmud/commit/10c8651f8c814eb085e38d1072f6f497d10680da))
+
 # [0.2.0-dev.26](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.25...v0.2.0-dev.26) (2026-04-13)
 
 
