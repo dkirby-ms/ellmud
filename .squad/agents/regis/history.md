@@ -22,7 +22,7 @@
 - Decision documented in `.squad/decisions.md`: All future text additions to this component must follow the same `inZone` conditional pattern.
 
 ### 2026-04-13: Issue #445 — Zone Designer Exit Icon Clickability
-**Status:** ✅ Complete — branch `squad/445-zone-designer-exit-icons`, commit 80119f0, PR #448
+**Status:** ✅ Complete and Merged — branch `squad/445-zone-designer-exit-icons`, commit 80119f0, PR #448 squash-merged to dev
 
 **Problem:** Up/down exit icons in zone designer were not clickable for editing. No visual feedback for connected exits when a room was selected.
 
@@ -33,12 +33,21 @@
 - Connected exits now glow cyan when their room is selected
 - Exit labels show for highlighted exits (like selected/hovered)
 
+**Code Review:** Approved by Elminster (2026-04-13T00:05Z). All React/TypeScript patterns correct. Edge cases handled.
+
 ## Learnings from #445 Implementation
 
 - **ReactFlow pointer events:** Child elements inside ReactFlow nodes inherit `pointerEvents: 'none'` by default. Must explicitly set `pointerEvents: 'auto'` on interactive elements.
 - **Event propagation:** Use `e.stopPropagation()` in onClick handlers to prevent the click from bubbling to the parent node and triggering node selection.
 - **Visual affordance:** Hover effects (scale + color change) are critical for indicating clickability of small icon elements.
 - **Connected topology visualization:** Highlighting all connected exits (both incoming and outgoing) when a room is selected helps users understand room connectivity patterns in complex zones.
+
+### 2026-04-13: Publish Workflow Refactor — Status Simplification
+**Status:** ✅ Merged to dev — PR #448, branch `squad/publish-refactor`
+
+**Changes:** Implemented user directive to simplify content workflow: removed `review` status, changed "Submit Review" button label to "Publish" across 9 admin detail pages (CreatureDetail, ItemsDetail, RoomsDetail, SkillsDetail, FactionsDetail, ZonesDetail). Updated CreaturesList and ItemsList status type unions to `draft | published | deprecated`. Updated AuditLog filter dropdown to remove "Review" action option.
+
+**Code Review:** Approved by Elminster (2026-04-13T00:05Z). Consistency verified across all pages. Zero regressions. Type-narrowing and UI-label change only, no behavioral changes.
 
 ### 2026-04-12: Issue #438 — Remove Collapse Timer from Client
 **Status:** ✅ Complete — branch `squad/438-starting-items-no-collapse`, commit 1899488

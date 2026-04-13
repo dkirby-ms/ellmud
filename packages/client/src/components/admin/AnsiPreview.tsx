@@ -1,12 +1,8 @@
 /**
- * AnsiPreview — Admin-facing ANSI markup preview panel.
+ * AnsiPreview — Read-only ANSI markup preview panel.
  *
- * Accepts either a controlled `value` prop (for embedding next to an existing
- * textarea) or renders its own textarea when used standalone.
- *
- * Features:
- *   - Live preview of ANSI-markup text on a dark terminal background
- *   - Quick-reference palette with copy-to-clipboard buttons
+ * Used for standalone preview contexts (e.g. creature Live Preview).
+ * For editable textareas, use AnsiTextarea instead.
  */
 
 import { useState } from "react";
@@ -17,30 +13,10 @@ interface AnsiPreviewProps {
   value?: string;
 }
 
-const PALETTE_COLORS = [
-  "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
-  "bright-black", "bright-red", "bright-green", "bright-yellow",
-  "bright-blue", "bright-magenta", "bright-cyan", "bright-white",
-] as const;
-
-const PALETTE_MODIFIERS = ["bold", "dim", "italic", "underline"] as const;
-
-function copyTag(name: string) {
-  navigator.clipboard.writeText(`[${name}]text[/${name}]`);
-}
-
 export default function AnsiPreview({ value }: AnsiPreviewProps) {
   const [localValue, setLocalValue] = useState("");
   const text = value ?? localValue;
   const isControlled = value !== undefined;
-
-  const [copiedTag, setCopiedTag] = useState<string | null>(null);
-
-  const handleCopy = (name: string) => {
-    copyTag(name);
-    setCopiedTag(name);
-    setTimeout(() => setCopiedTag(null), 1200);
-  };
 
   return (
     <div className="mt-3 border border-[#2A2B35] rounded-lg overflow-hidden">
@@ -77,42 +53,6 @@ export default function AnsiPreview({ value }: AnsiPreviewProps) {
           <span className="text-[#4A4B55] italic">Preview will appear here…</span>
         )}
       </div>
-
-      {/* Quick-reference palette */}
-      <details className="border-t border-[#2A2B35]">
-        <summary
-          className="px-3 py-1.5 text-xs text-[#8A8B95] cursor-pointer select-none hover:text-[#E8E0D0] transition-colors"
-          style={{ fontFamily: "var(--font-sans)", background: "#0D0E14" }}
-        >
-          Color Reference
-        </summary>
-        <div className="px-3 py-2 flex flex-wrap gap-1" style={{ background: "#0D0E14" }}>
-          {PALETTE_COLORS.map((name) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => handleCopy(name)}
-              className={`ansi-${name} text-xs px-1.5 py-0.5 rounded border border-[#2A2B35] hover:border-[#C9A84C] transition-colors cursor-pointer`}
-              style={{ background: "#12131A" }}
-              title={`[${name}]text[/${name}]`}
-            >
-              {copiedTag === name ? "✓" : name}
-            </button>
-          ))}
-          {PALETTE_MODIFIERS.map((name) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => handleCopy(name)}
-              className={`ansi-${name} text-xs px-1.5 py-0.5 rounded border border-[#2A2B35] hover:border-[#C9A84C] transition-colors cursor-pointer text-[#E8E0D0]`}
-              style={{ background: "#12131A" }}
-              title={`[${name}]text[/${name}]`}
-            >
-              {copiedTag === name ? "✓" : name}
-            </button>
-          ))}
-        </div>
-      </details>
     </div>
   );
 }

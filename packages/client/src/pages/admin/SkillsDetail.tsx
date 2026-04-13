@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from "react-router";
 import { ArrowLeft, Save, Send } from "lucide-react";
 import { useAdminEntity } from "../../hooks/useAdminEntity.js";
-import AnsiPreview from "../../components/admin/AnsiPreview.js";
+import AnsiTextarea from "../../components/admin/AnsiTextarea.js";
 
 interface SkillData {
   id: string;
@@ -239,14 +239,11 @@ export default function SkillsDetail() {
                   >
                     Description
                   </label>
-                  <textarea
+                  <AnsiTextarea
                     value={formData.description}
-                    onChange={(e) => updateField("description", e.target.value)}
+                    onChange={(v) => updateField("description", v)}
                     rows={3}
-                    className="w-full bg-[#1C1D27] border border-[#2A2B35] rounded px-3 py-2 text-[#E8E0D0] focus:border-[#C9A84C] focus:outline-none resize-none"
-                   
                   />
-                  <AnsiPreview value={formData.description} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
