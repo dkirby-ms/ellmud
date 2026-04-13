@@ -1,3 +1,10 @@
+# [0.2.0-dev.19](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.18...v0.2.0-dev.19) (2026-04-13)
+
+
+### Features
+
+* ANSI formatting toolbar for admin content editors ([#449](https://github.com/dkirby-ms/ellmud/issues/449)) ([c59fc81](https://github.com/dkirby-ms/ellmud/commit/c59fc810c8e743c1d31de06738776def83a1938e)), closes [#448](https://github.com/dkirby-ms/ellmud/issues/448) [#447](https://github.com/dkirby-ms/ellmud/issues/447) [#448](https://github.com/dkirby-ms/ellmud/issues/448) [#445](https://github.com/dkirby-ms/ellmud/issues/445)
+
 # [0.2.0-dev.18](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.17...v0.2.0-dev.18) (2026-04-13)
 
 
