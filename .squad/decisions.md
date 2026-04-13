@@ -4230,3 +4230,29 @@ Content workflow does not need a "review" status. Simplify to `draft → publish
 
 No issues found. Both PRs shipped.
 
+
+---
+
+# Decision: ANSI Toolbar replaces Color Reference
+
+**Author:** Regis (Frontend Dev)
+**Date:** 2026-04-13
+**PR:** #449
+**Branch:** `squad/admin-ansi-toolbar`
+
+## Context
+
+The old `AnsiPreview` component had a "Color Reference" palette that copied `[color]text[/color]` to clipboard — but never inserted it into the textarea. This was confusing for content editors.
+
+## Decision
+
+- Created `AnsiToolbar` component that directly inserts ANSI tags at cursor/wraps selected text.
+- Created `AnsiTextarea` composite component (toolbar + textarea + preview) as the canonical pattern for any form field that supports ANSI markup.
+- Stripped the Color Reference from `AnsiPreview` — it's now read-only only.
+- All admin detail pages updated to use `AnsiTextarea` instead of raw `<textarea> + <AnsiPreview>`.
+
+## Impact
+
+- **Any new admin page** with ANSI-editable fields should use `<AnsiTextarea>`, not raw textarea + AnsiPreview.
+- `AnsiPreview` is still available for read-only preview contexts where no editing happens.
+- The duplicate Live Preview panel in CreatureDetail was removed since each field now has its own inline preview.

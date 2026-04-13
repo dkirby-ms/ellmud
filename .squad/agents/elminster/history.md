@@ -51,6 +51,38 @@
 
 ## Learnings
 
+### 2026-07-23: Code Review — PR #449 ANSI Formatting Toolbar (APPROVED)
+
+**Task:** Review PR #449 (`squad/admin-ansi-toolbar` → `dev`) — ANSI formatting toolbar for admin content editors.
+
+**Verdict: APPROVE — Clean extraction, consistent migration, zero type errors.**
+
+**New components:** `AnsiToolbar` wraps selected text in ANSI tags via textarea ref; `AnsiTextarea` composes toolbar + textarea + collapsible preview. Both are well-structured with clear props interfaces. Toolbar cursor restoration uses `requestAnimationFrame` correctly.
+
+**Migration:** All 7 admin detail pages (Creatures, Factions, Items, Modifiers, Narrative, Rooms, Skills) consistently replaced `textarea` + `AnsiPreview` with single `AnsiTextarea`. onChange signatures updated from `(e) => e.target.value` to `(v) => v`. No missed imports, no leftover Color Reference code. CreatureDetail's duplicate Live Preview panel correctly removed.
+
+**AnsiPreview:** Slimmed to read-only. Palette/clipboard code removed. Currently has zero imports — effectively dead code but harmless to keep for future read-only contexts.
+
+**Observations:** NarrativeDetail dialogue lines pass custom `className` with `rounded-none`, matching AnsiTextarea's default — consistent. Template textarea passes custom `style` for `lineHeight`. Both work correctly with the passthrough props.
+
+**Type check:** `tsc --noEmit` passes clean on the branch.
+
+---
+
+### 2026-04-13: Code Review — PR #449 AnsiToolbar + AnsiTextarea (APPROVED)
+
+**Task:** Review PR #449 (`squad/admin-ansi-toolbar` → `dev`) — ANSI toolbar component build + admin page consolidation.
+
+**Verdict: APPROVE — Clean extraction, consistent migration, no regressions.**
+
+**New components:** `AnsiToolbar` component inserts/wraps ANSI tags at textarea cursor via ref. `AnsiTextarea` composite (toolbar + textarea + preview) as canonical pattern for ANSI-editable fields. Both well-structured, clear props, proper React patterns.
+
+**Migration:** All 7 admin detail pages consistently migrated to use `AnsiTextarea`. Old `<textarea> + <AnsiPreview>` pairs removed. CreatureDetail duplicate Live Preview panel correctly removed. `AnsiPreview` slimmed to read-only (Color Reference code removed). Zero missed imports, no orphaned code.
+
+**Type check:** `tsc --noEmit` clean. Backward-compatible with read-only AnsiPreview contexts (not currently used, but available for future).
+
+**Decision logged to:** `.squad/decisions.md` (merged from inbox 2026-04-13T00:28:21Z)
+
 ### 2026-04-13: Code Review — Publish Refactor + #445 Exit Icons (APPROVED)
 
 **Task:** Review branch `squad/445-zone-designer-exit-icons` and `squad/publish-refactor` containing two pieces of work: (1) publish refactor removing "review" status from all admin pages, (2) #445 clickable up/down exit icons with connected exit highlighting.

@@ -42,6 +42,15 @@
 - **Visual affordance:** Hover effects (scale + color change) are critical for indicating clickability of small icon elements.
 - **Connected topology visualization:** Highlighting all connected exits (both incoming and outgoing) when a room is selected helps users understand room connectivity patterns in complex zones.
 
+### 2026-04-13: ANSI Toolbar + AnsiTextarea Component Build
+**Status:** ✅ Merged to dev — PR #449, branch `squad/admin-ansi-toolbar`
+
+**Problem:** Content editors found the old Color Reference palette confusing — it copied ANSI tags to clipboard but never inserted them into the textarea. UI was fragmented across admin pages with raw `<textarea> + <AnsiPreview>` pairs.
+
+**Changes:** Extracted `AnsiToolbar` component that directly inserts/wraps ANSI tags at cursor. Created `AnsiTextarea` composite component (toolbar + textarea + preview) as canonical pattern. Migrated all 7 admin detail pages (Creature, Items, Rooms, Skills, Factions, Zones) to use AnsiTextarea. Removed non-functional Color Reference from AnsiPreview — now read-only only. Removed duplicate Live Preview panel from CreatureDetail.
+
+**Code Review:** Approved by Elminster (2026-04-13T00:28:21Z). Clean component extraction, no breaking changes, backward-compatible with read-only AnsiPreview.
+
 ### 2026-04-13: Publish Workflow Refactor — Status Simplification
 **Status:** ✅ Merged to dev — PR #448, branch `squad/publish-refactor`
 
