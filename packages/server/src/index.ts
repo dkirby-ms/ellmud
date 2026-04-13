@@ -43,6 +43,7 @@ import { initCharacterProvider } from './character/index.js';
 import { createCharacterRouter } from './api/characters.js';
 import { createSpawnZoneRouter } from './api/spawn-zone.js';
 import { createSettingsRouter } from './api/settings.js';
+import { createHallOfFameRouter } from './api/hall-of-fame.js';
 import { initUserSettingsProvider } from './db/UserSettingsRepository.js';
 import { initCharacterFlagsProvider } from './db/CharacterFlagsRepository.js';
 import { initZoneProvider, getZoneRepository } from './zones/index.js';
@@ -217,6 +218,10 @@ if (entraConfig.clientId && entraConfig.clientSecret && entraConfig.tenantId) {
 // ─── Character API ───────────────────────────────────────────────────────────
 app.use(createCharacterRouter(authService, USE_PG));
 console.log('[Ellmud] Character API: enabled');
+
+// ─── Hall of Fame API ────────────────────────────────────────────────────────
+app.use(createHallOfFameRouter());
+console.log('[Ellmud] Hall of Fame API: enabled');
 
 // ─── Spawn Zone API ─────────────────────────────────────────────────────────
 app.use(createSpawnZoneRouter(authService));

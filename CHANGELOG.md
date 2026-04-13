@@ -1,3 +1,10 @@
+# [0.2.0-dev.28](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.27...v0.2.0-dev.28) (2026-04-13)
+
+
+### Features
+
+* add permadeath system with character reset and Hall of Fame ([68c34c8](https://github.com/dkirby-ms/ellmud/commit/68c34c8ed1045983c9aedc70ac5c457d0206315d))
+
 # [0.2.0-dev.27](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.26...v0.2.0-dev.27) (2026-04-13)
 
 

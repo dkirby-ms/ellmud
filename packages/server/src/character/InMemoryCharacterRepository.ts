@@ -112,6 +112,10 @@ export class InMemoryCharacterRepository implements CharacterRepository {
     this.starterKitGranted.add(characterId);
   }
 
+  async resetStarterKitFlag(characterId: string): Promise<void> {
+    this.starterKitGranted.delete(characterId);
+  }
+
   private toSummary(row: CharacterRow): CharacterSummary {
     const factionNames: Record<string, string> = {
       kindari: 'The Kindari',

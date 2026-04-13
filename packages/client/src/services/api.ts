@@ -148,3 +148,50 @@ export async function fetchSpawnZone(token: string): Promise<SpawnZoneResponse> 
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+// ─── Hall of Fame API ─────────────────────────────────────────────────────────
+
+export interface HallOfFameEntry {
+  characterId: string;
+  characterName: string;
+  level: number;
+  totalKills: number;
+  totalDeaths: number;
+  survivedSeconds: number;
+  causeOfDeath: string;
+  zoneOfDeath: string;
+  diedAt: string; // ISO timestamp
+}
+
+export interface HallOfFameStats {
+  totalPermadeaths: number;
+  averageSurvivalSeconds: number;
+  deadliestZone: string;
+  deadliestCreature: string;
+}
+
+export interface HallOfFameResponse {
+  entries: HallOfFameEntry[];
+  total: number;
+  page: number;
+  perPage: number;
+  hasMore: boolean;
+}
+
+export async function fetchHallOfFame(
+  token: string, 
+  page: number = 1, 
+  perPage: number = 50
+): Promise<HallOfFameResponse> {
+  return request<HallOfFameResponse>(`/api/hall-of-fame?page=${page}&perPage=${perPage}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function fetchHallOfFameStats(token: string): Promise<HallOfFameStats> {
+  return request<HallOfFameStats>('/api/hall-of-fame/stats', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}

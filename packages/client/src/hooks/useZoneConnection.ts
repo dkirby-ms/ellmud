@@ -37,10 +37,21 @@ function nextMsgId(): string {
   return `msg-${++msgCounter}`;
 }
 
+export interface PermadeathData {
+  characterName: string;
+  level: number;
+  totalKills: number;
+  totalDeaths: number;
+  survivedSeconds: number;
+  causeOfDeath: string;
+  zoneOfDeath: string;
+}
+
 export interface OverlayState {
-  status: 'death' | null;
+  status: 'death' | 'permadeath' | null;
   progress: number;
   narration: string | null;
+  permadeathData: PermadeathData | null;
 }
 
 export interface UseZoneConnectionResult {
@@ -66,7 +77,7 @@ export interface UseZoneConnectionResult {
   clearHelpData: () => void;
 }
 
-const INITIAL_OVERLAY: OverlayState = { status: null, progress: 0, narration: null };
+const INITIAL_OVERLAY: OverlayState = { status: null, progress: 0, narration: null, permadeathData: null };
 
 export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionResult {
   const { state, dispatch } = useAppContext();
@@ -245,13 +256,13 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
           || msg.target === 'zone:the-bloom-observatory'
           || msg.target === 'zone:the-carrion-court';
         if (switchingToHub) {
-          if (overlayRef.current.status !== 'death') {
+          if (overlayRef.current.status !== 'death' && overlayRef.current.status !== 'permadeath') {
             dispatch({ type: 'CLEAR_MESSAGES' });
           }
           dispatch({ type: 'SET_ZONE_STATE', state: null as unknown as import('@ellmud/shared').ZoneState });
           dispatch({ type: 'SET_COMBAT_STATE', inCombat: false });
-          // Don't overwrite death state — the death overlay must stay visible
-          if (overlayRef.current.status !== 'death') {
+          // Don't overwrite death or permadeath state — overlays must stay visible
+          if (overlayRef.current.status !== 'death' && overlayRef.current.status !== 'permadeath') {
             updateOverlay(INITIAL_OVERLAY);
           }
         }
@@ -399,7 +410,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       if (disposed) return;
       switch (msg.state) {
         case 'death':
-          updateOverlay({ status: 'death', progress: 0, narration: msg.narration });
+          updateOverlay({ status: 'death', progress: 0, narration: msg.narration, permadeathData: null });
           addMessage(msg.narration, 'system');
           // Auto-dismiss death screen after 3s — server sends ROOM_SWITCH in the meantime
           if (deathTimerRef.current) clearTimeout(deathTimerRef.current);
@@ -408,6 +419,18 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
               updateOverlay(INITIAL_OVERLAY);
             }
           }, 3000);
+          break;
+        case 'permadeath':
+          // Permadeath — does NOT auto-dismiss. Player must manually dismiss to respawn.
+          if (msg.permadeathStats) {
+            updateOverlay({
+              status: 'permadeath',
+              progress: 0,
+              narration: msg.narration,
+              permadeathData: msg.permadeathStats,
+            });
+          }
+          addMessage(msg.narration, 'system');
           break;
         case 'downed':
         case 'stabilized':

@@ -108,6 +108,7 @@ import { createNarrationService } from '../narrative/factory.js';
 import type { NarrationService } from '../narrative/NarrationService.js';
 import { gatherPlayerList, formatWhoListText, type ZonePlayerData } from '../who/index.js';
 import { getCharacterFlagsRepository } from '../db/CharacterFlagsRepository.js';
+import { query } from '../db/index.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -2443,10 +2444,19 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     // Apply death penalty (increment death count, record time)
     const deathDbId = this.dbPlayerId(playerId);
-    void this.deathPenaltyStore.incrementDeathCount(deathDbId).then((newCount: number) => {
-      void this.deathPenaltyStore.setLastDeathTime(deathDbId, Date.now());
-      this.log(`Death penalty: ${this.playerTag(playerId)} death count now ${newCount}`);
-    });
+    const newCount = await this.deathPenaltyStore.incrementDeathCount(deathDbId);
+    await this.deathPenaltyStore.setLastDeathTime(deathDbId, Date.now());
+    this.log(`Death penalty: ${this.playerTag(playerId)} death count now ${newCount}`);
+
+    // Check permadeath condition AFTER normal death flow
+    const config = getConfig();
+    const isPermadeath = config.permadeath.enabled;
+
+    if (isPermadeath) {
+      // Execute permadeath - this will reset the character and respawn them
+      await this.executePermadeath(playerId, playerName, roomId, killerIds, isPvPKill);
+      return; // Skip normal respawn flow (permadeath handles it)
+    }
 
     // Record death metric (non-blocking)
     this.metricsService.recordDeath(deathDbId, {
@@ -2570,6 +2580,184 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
 
     // Clean up from downing system
+    this.downingSystem.removePlayer(playerId);
+    this.combatSystem.removeCombatant(playerId);
+  }
+
+  /**
+   * Execute permadeath — reset character to fresh state, record to hall of fame, show permadeath overlay, then respawn.
+   * Called when permadeath is enabled and a player dies.
+   */
+  private async executePermadeath(
+    playerId: string,
+    playerName: string,
+    roomId: string,
+    killerIds: string[] | undefined,
+    isPvPKill: boolean,
+  ): Promise<void> {
+    const charName = this.characterNames.get(playerId) ?? playerName;
+    const dbId = this.dbPlayerId(playerId);
+    
+    this.log(`⚠ PERMADEATH: ${this.playerTag(playerId)} character is being reset`);
+
+    // Calculate survival time (from join to death)
+    const joinTime = this.playerJoinTimes.get(playerId) ?? Date.now();
+    const survivedSeconds = Math.floor((Date.now() - joinTime) / 1000);
+
+    // Determine cause of death
+    let causeOfDeath = 'unknown';
+    if (killerIds && killerIds.length > 0) {
+      const firstKiller = killerIds[0]!;
+      if (firstKiller.startsWith('creature-')) {
+        const creature = this.creatureManager.getCreature(firstKiller);
+        causeOfDeath = creature?.name ?? 'a creature';
+      } else {
+        const killerState = this.players.get(firstKiller);
+        causeOfDeath = killerState ? this.characterNames.get(firstKiller) ?? 'a player' : 'a player';
+      }
+    }
+
+    // Determine zone of death
+    const zoneOfDeath = this.zoneData?.zone.name ?? this.zoneSlug ?? 'unknown zone';
+
+    // Query total kills and deaths from metrics
+    let totalKills = 0;
+    let totalDeaths = 0;
+    try {
+      const killsResult = await query<{ count: string }>(
+        `SELECT COUNT(*) as count FROM game_metrics WHERE player_id = $1 AND event_type = 'kill'`,
+        [dbId],
+      );
+      totalKills = parseInt(killsResult.rows[0]?.count ?? '0', 10);
+
+      const deathsResult = await query<{ count: string }>(
+        `SELECT COUNT(*) as count FROM game_metrics WHERE player_id = $1 AND event_type = 'death'`,
+        [dbId],
+      );
+      totalDeaths = parseInt(deathsResult.rows[0]?.count ?? '0', 10);
+    } catch (err) {
+      this.log(`Failed to query metrics for permadeath stats: ${err}`);
+    }
+
+    // Get character level (default to 1 if not available)
+    const level = 1; // TODO: Once level system exists, read from player state
+
+    // Record to hall_of_fame (past life record)
+    try {
+      await query(
+        `INSERT INTO hall_of_fame (character_id, player_id, character_name, level, total_kills, total_deaths, survived_seconds, cause_of_death, zone_of_death)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [playerId, dbId, charName, level, totalKills, totalDeaths, survivedSeconds, causeOfDeath, zoneOfDeath],
+      );
+      this.log(`Hall of Fame: Recorded past life of ${charName} (survived ${survivedSeconds}s, ${totalKills} kills)`);
+    } catch (err) {
+      this.log(`⚠ Failed to record hall of fame entry: ${err}`);
+    }
+
+    // RESET CHARACTER TO FRESH STATE (instead of soft-delete)
+    try {
+      // Clear inventory (DB persistence)
+      await this.inventoryRepo.clearInventory(playerId);
+      this.log(`Cleared DB inventory for ${charName}`);
+
+      // Clear equipped items (loadout)
+      if (this.loadoutService) {
+        await this.loadoutService.clearLoadout(dbId);
+        this.log(`Cleared loadout for ${charName}`);
+      }
+
+      // Reset starter kit flag so character receives starter items on next zone join
+      await this.characterRepo.resetStarterKitFlag(playerId);
+      this.log(`Reset starter kit flag for ${charName}`);
+
+      // Clear in-memory inventory
+      const player = this.players.get(playerId);
+      if (player) {
+        player.inventory.clear();
+        player.equipment = undefined;
+        this.log(`Cleared in-memory inventory and equipment for ${charName}`);
+      }
+
+      // Note: Death count is NOT reset - it's preserved as a lifetime stat
+      // Note: Stash is NOT cleared - it's preserved across permadeath
+
+      this.log(`Character ${charName} reset to fresh state (permadeath)`);
+    } catch (err) {
+      this.log(`⚠ Failed to reset character state: ${err}`);
+    }
+
+    // Send permadeath message to client
+    const client = this.findClient(playerId);
+    if (client) {
+      const narration = isPvPKill
+        ? `A rival adventurer strikes the final blow. Your character is reset, but your stash remains…`
+        : `The darkness claims you utterly. Your character is reset, but your stash survives…`;
+
+      this.sendOverlayState(client, {
+        playerId,
+        state: 'permadeath',
+        narration,
+        timestamp: Date.now(),
+        permadeathStats: {
+          characterName: charName,
+          level,
+          totalKills,
+          totalDeaths,
+          survivedSeconds,
+          causeOfDeath,
+          zoneOfDeath,
+        },
+      });
+
+      // After showing permadeath overlay, respawn player with reset character (3 seconds delay)
+      this.clock.setTimeout(async () => {
+        if (!this.players.has(playerId)) {
+          this.log(`Player ${this.playerTag(playerId)} already left during permadeath delay — skipping respawn`);
+          return;
+        }
+
+        // Resolve respawn location (same as normal death)
+        let respawnTarget: string;
+        let respawnRoomSlug: string | undefined;
+
+        let lastInn: { zoneSlug: string; roomSlug: string } | null = null;
+        try {
+          lastInn = await this.characterRepo.getLastInn(playerId);
+        } catch (err) {
+          this.log(`Failed to load last inn for ${this.playerTag(playerId)}: ${err}`);
+        }
+
+        if (lastInn) {
+          respawnTarget = `zone:${lastInn.zoneSlug}`;
+          respawnRoomSlug = lastInn.roomSlug;
+        } else {
+          const factionSlug = this.playerFactionSlugs.get(playerId);
+          respawnTarget = resolvePlayerHubTarget(factionSlug);
+        }
+
+        // Persist cleared profile (equipment=undefined) before removing from state
+        await this.savePlayerProfile(playerId, this.players.get(playerId)!);
+
+        const roomSwitch: RoomSwitchMessage = {
+          target: respawnTarget,
+          reason: 'permadeath',
+        };
+        if (respawnRoomSlug) {
+          roomSwitch.options = { targetRoomSlug: respawnRoomSlug };
+        }
+        client.send(MessageTypes.ROOM_SWITCH, roomSwitch);
+
+        // Clean up player from zone state
+        this.players.delete(playerId);
+        this.ownerPlayerIds.delete(playerId);
+        this.state.playerCount = Math.max(0, this.state.playerCount - 1);
+        this.updateMetadata();
+        
+        this.log(`Player ${this.playerTag(playerId)} reset and respawned at ${respawnTarget} after permadeath`);
+      }, 3000);
+    }
+
+    // Clean up from downing and combat systems
     this.downingSystem.removePlayer(playerId);
     this.combatSystem.removeCombatant(playerId);
   }

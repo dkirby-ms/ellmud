@@ -39,7 +39,7 @@ export default function Login() {
 
   const flavorTexts = [
     "The hum of distant machinery echoes and the metallic scent of machine oil linger in the darkness.",
-    "Deep below, something stirs in the darkness.",
+    "Forgotten gears lie half-buried in the dust, remnants of a bygone era.",
     "A cold draft whispers through the tunnels, carrying with it the faint sound of gears turning.",
     "Shadows lengthen. Time grows short.",
   ];
