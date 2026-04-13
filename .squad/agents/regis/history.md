@@ -21,6 +21,25 @@
 - TypeScript build passes. Component properly leverages existing `inZone` prop for context-aware UI.
 - Decision documented in `.squad/decisions.md`: All future text additions to this component must follow the same `inZone` conditional pattern.
 
+### 2026-04-13: Issue #445 — Zone Designer Exit Icon Clickability
+**Status:** ✅ Complete — branch `squad/445-zone-designer-exit-icons`, commit 80119f0, PR #448
+
+**Problem:** Up/down exit icons in zone designer were not clickable for editing. No visual feedback for connected exits when a room was selected.
+
+**Changes:**
+- **ZoneRoomNode.tsx:** Added `pointerEvents: 'auto'` to up/down exit indicator container, made icons interactive with hover effects (1.3x scale + color change), added onClick handlers
+- **ZoneExitEdge.tsx:** Added `highlighted` property to edge data for connected exit visualization
+- **ZoneDesigner.tsx:** When room selected, highlight all connected exits in cyan; added handlers for up/down icon clicks to select exits; clear highlighting on canvas click/ESC
+- Connected exits now glow cyan when their room is selected
+- Exit labels show for highlighted exits (like selected/hovered)
+
+## Learnings from #445 Implementation
+
+- **ReactFlow pointer events:** Child elements inside ReactFlow nodes inherit `pointerEvents: 'none'` by default. Must explicitly set `pointerEvents: 'auto'` on interactive elements.
+- **Event propagation:** Use `e.stopPropagation()` in onClick handlers to prevent the click from bubbling to the parent node and triggering node selection.
+- **Visual affordance:** Hover effects (scale + color change) are critical for indicating clickability of small icon elements.
+- **Connected topology visualization:** Highlighting all connected exits (both incoming and outgoing) when a room is selected helps users understand room connectivity patterns in complex zones.
+
 ### 2026-04-12: Issue #438 — Remove Collapse Timer from Client
 **Status:** ✅ Complete — branch `squad/438-starting-items-no-collapse`, commit 1899488
 

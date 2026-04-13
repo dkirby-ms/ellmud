@@ -164,7 +164,7 @@ export default function SkillsDetail() {
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
             <Send className="w-4 h-4" />
-            Submit Review
+            Publish
           </button>
         </div>
       </div>

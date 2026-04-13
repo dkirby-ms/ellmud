@@ -4,7 +4,7 @@ import { Plus, Search, Filter, AlertCircle } from "lucide-react";
 import { listItems, AdminAPIError } from "../../lib/admin-api";
 import AnsiText from "../../components/AnsiText.js";
 
-type Status = "draft" | "review" | "published" | "deprecated";
+type Status = "draft" | "published" | "deprecated";
 type ItemType = "weapon" | "armour" | "consumable" | "material" | "tool" | "key" | "blueprint";
 type GearTier = "scrap" | "common" | "sturdy" | "refined" | "masterwork" | "anomalous";
 
@@ -32,7 +32,6 @@ const tierColors = {
 const getStatusBadge = (status: Status) => {
   const badges = {
     draft: { emoji: "📝", label: "Draft", color: "#4A4B55" },
-    review: { emoji: "⏳", label: "In Review", color: "#B8860B" },
     published: { emoji: "✅", label: "Published", color: "#2D6B4F" },
     deprecated: { emoji: "⛔", label: "Deprecated", color: "#8B2500" },
   };
@@ -118,7 +117,6 @@ export default function ItemsList() {
         >
           <option value="all">All Status</option>
           <option value="draft">Draft</option>
-          <option value="review">In Review</option>
           <option value="published">Published</option>
           <option value="deprecated">Deprecated</option>
         </select>

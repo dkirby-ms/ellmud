@@ -113,12 +113,12 @@ export default function ItemsDetail() {
     }
   };
 
-  const handleSubmitReview = async () => {
+  const handlePublish = async () => {
     if (!validateForm()) return;
     try {
       setSaving(true);
       setError(null);
-      const dataWithStatus = { ...formData, status: 'review' };
+      const dataWithStatus = { ...formData, status: 'published' };
       if (isNew) {
         await createItem(dataWithStatus);
         navigate('/admin/items');
@@ -129,9 +129,9 @@ export default function ItemsDetail() {
       if (err instanceof AdminAPIError) {
         setError(err.message);
       } else {
-        setError('Failed to submit for review');
+        setError('Failed to publish');
       }
-      console.error('Failed to submit for review:', err);
+      console.error('Failed to publish:', err);
     } finally {
       setSaving(false);
     }
@@ -206,13 +206,13 @@ export default function ItemsDetail() {
             {saving ? 'Saving...' : 'Save Draft'}
           </button>
           <button
-            onClick={handleSubmitReview}
+            onClick={handlePublish}
             disabled={saving}
             className="px-4 py-2 bg-[#C9A84C] hover:bg-[#B89840] text-[#0A0B0F] rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
             <Send className="w-4 h-4" />
-            {saving ? 'Submitting...' : 'Submit Review'}
+            {saving ? 'Publishing...' : 'Publish'}
           </button>
         </div>
       </div>

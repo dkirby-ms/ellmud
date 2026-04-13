@@ -389,7 +389,7 @@ export default function ZonesDetail() {
             style={{ fontFamily: "var(--font-sans)", fontSize: "0.875rem" }}
           >
             <Send className="w-4 h-4" />
-            {saving ? "Submitting..." : "Submit Review"}
+            {saving ? "Publishing..." : "Publish"}
           </button>
         </div>
       </div>

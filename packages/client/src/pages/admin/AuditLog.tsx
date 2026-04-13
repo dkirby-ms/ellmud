@@ -120,7 +120,7 @@ export default function AuditLog() {
           <option value="update">Update</option>
           <option value="delete">Delete</option>
           <option value="deploy">Deploy</option>
-          <option value="review">Review</option>
+          <option value="publish">Publish</option>
         </select>
       </div>
 
