@@ -1,3 +1,10 @@
+# [0.2.0-dev.25](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.24...v0.2.0-dev.25) (2026-04-13)
+
+
+### Bug Fixes
+
+* **admin:** guard null behavior in creature editor select ([606d0f9](https://github.com/dkirby-ms/ellmud/commit/606d0f9aa453376acf4a84c6a0c2d380616c1f61))
+
 # [0.2.0-dev.24](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.23...v0.2.0-dev.24) (2026-04-13)
 
 
