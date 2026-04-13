@@ -4,7 +4,80 @@
 
 ---
 
-## Core Context
+## Recent Work
+
+### 2026-04-15: Permadeath UI — Death Screen + Hall of Fame Page
+**Status:** ✅ Complete — Build verified
+
+**Problem:** Permadeath mode needed client-side UI for permanent character deletion events and a memorial page for fallen heroes.
+
+**Changes:**
+1. **PermadeathOverlay.tsx** — Dramatic full-screen overlay for permanently deleted characters:
+   - Displays character name, level, survival time, total kills/deaths, cause and zone of death
+   - Large skull icon with "PERMANENT DEATH" title in danger red
+   - Stats panel with legacy information
+   - Memorial message: "Your story has ended. {CharacterName} will be remembered in the Hall of Fame."
+   - Two action buttons: "Hall of Fame" (view memorial page) and "Return to Character Select"
+   - Does NOT auto-dismiss (unlike normal death screen) — player must manually navigate
+
+2. **HallOfFame.tsx** — Memorial page at `/hall-of-fame` route:
+   - Dark, somber aesthetic with skull icon
+   - Stats banner displaying server-wide permadeath statistics (total deaths, avg survival, deadliest zone/creature)
+   - Table layout ranking all fallen characters by survival time (descending)
+   - Columns: Rank, Character, Level, Survival Time, Kills, Cause of Death, Zone, Date
+   - Top 3 heroes highlighted in gold
+   - Pagination support (50 entries per page)
+   - Empty state: "No fallen heroes yet. Will you be the first?"
+   - API calls: `GET /api/hall-of-fame?page={}&perPage={}` and `GET /api/hall-of-fame/stats`
+
+3. **api.ts** — Added Hall of Fame API functions:
+   - `fetchHallOfFame(token, page, perPage)` — returns paginated hall of fame entries
+   - `fetchHallOfFameStats(token)` — returns server-wide permadeath statistics
+   - Type definitions for `HallOfFameEntry`, `HallOfFameStats`, `HallOfFameResponse`
+
+4. **useZoneConnection.ts** — Updated overlay state and handler:
+   - Extended `OverlayState` interface to include `'permadeath'` status and `permadeathData`
+   - Added `PermadeathData` interface exported for component use
+   - Updated overlay handler to process `'permadeath'` messages from server
+   - Permadeath messages populate `overlay.permadeathData` from `msg.permadeathStats`
+   - Room switch handler updated to protect permadeath overlays (like death overlays)
+
+5. **ZoneExploration.tsx** — Wired permadeath overlay into game view:
+   - Imported and rendered `PermadeathOverlay` component
+   - Conditional rendering based on `overlay.status === 'permadeath'`
+   - Separated normal death overlay from permadeath overlay
+
+6. **routes.ts** — Added `/hall-of-fame` route to main navigation
+
+7. **shared/index.ts** — Extended `OverlayMessage` interface:
+   - Added `'permadeath'` to state union type
+   - Added optional `permadeathStats` field with character legacy data
+
+**Testing:** TypeScript build passes clean. Client bundle builds successfully (no errors).
+
+**Design Decisions:**
+- Permadeath overlay is modal and blocking — no auto-dismiss like normal death
+- Hall of Fame is accessible from lobby/main menu (not just after permadeath)
+- Top 3 heroes get gold highlighting — adds prestige to high survival times
+- Survival time formatted as "Xd Yh Zm" for readability
+- MUD aesthetic maintained: dark theme, monospace stats, serif character names, gold accents
+
+**Backend Notes:** API endpoints `/api/hall-of-fame` and `/api/hall-of-fame/stats` are not yet implemented server-side. Components will gracefully handle 404 errors until backend adds these endpoints.
+
+## Learnings
+
+### Permadeath UI Implementation (2026-04-15)
+
+- **Overlay state management:** Extended the existing overlay pattern (`'death'` → `'death' | 'permadeath'`) to support permanent character deletion events. The permadeath overlay does NOT auto-dismiss (unlike normal death), requiring explicit user navigation.
+- **Shared type coordination:** The `OverlayMessage` interface in `@ellmud/shared` already included permadeath support with `permadeathStats` field, demonstrating good server-client coordination.
+- **Graceful degradation:** API functions for Hall of Fame return proper TypeScript types but call non-existent endpoints. Components handle 404 errors gracefully with loading/error states.
+- **Component separation:** Separated normal death overlay (simple, auto-dismissing) from permadeath overlay (dramatic, persistent, full component) for clearer UX distinction between temporary and permanent death.
+- **Memorial aesthetics:** Hall of Fame uses dark theme, skull iconography, gold accents for top 3, and serif fonts for character names to create somber, prestigious tone befitting permanent character loss.
+- **Time formatting:** Survival time displayed as "Xd Yh Zm" (e.g., "2d 14h 32m") for human readability across table rows and stat displays.
+
+---
+
+## Archived Work
 
 **Role:** Client Architect
 
@@ -156,3 +229,86 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 - Status field retained: Kept status field in data model for backward compatibility and future flexibility.
 - Consistent save behavior: Some pages had functional Publish buttons, others had non-functional placeholders. Standardizing to single Save button removed this inconsistency.
 - Button styling matters: Using gold button style for primary Save action provides clear visual hierarchy.
+
+### 2026-04-15: Permadeath UI Redesign — Reset Model (Not Deletion)
+**Status:** Complete — TypeScript build verified
+
+**Problem:** Initial permadeath UI implied permanent character deletion with funeral tone. Design changed: characters are RESET (level, inventory, equipment, skills wiped), not deleted. Stash is preserved. Death count persists. Past lives are recorded.
+
+**Changes:**
+1. **PermadeathOverlay.tsx:**
+   - Title: PERMANENT DEATH changed to DEATH & REBIRTH (dramatic but not final)
+   - Message updated to: Death claims your progress, but not your spirit. Character rises again, stripped of all but stash items
+   - Button: Return to Character Select changed to Rise Again
+   - Behavior: Dismissing overlay returns to gameplay (respawned character), NOT character select
+   - handleReturnToLobby renamed to handleRiseAgain - just dismisses overlay, server handles respawn
+   - Hall of Fame link preserved (past lives still recorded)
+   - Stats display preserved (shows pre-reset achievements)
+   - Overall tone shift: funeral to rebirth with consequences
+
+2. **HallOfFame.tsx:**
+   - Loading text: fallen heroes changed to chronicles of past lives
+   - Empty state: No fallen heroes yet changed to No past lives recorded yet. Will you be the first to fall and rise again?
+   - Page aesthetic: memorial/graveyard changed to chronicles of past lives
+   - Ranking, stats banner, pagination unchanged (all still valid)
+
+3. **useZoneConnection.ts:**
+   - Updated permadeath handler comment: Player must manually navigate away changed to Player must manually dismiss to respawn
+   - Dismissal clears overlay state; normal gameplay resumes (server sends respawn location)
+
+4. **ZoneExploration.tsx:**
+   - Verified permadeath overlay dismissal flow: onDismiss clears overlay state, no navigation
+   - Player sees game world after dismissing (respawned character)
+
+**Testing:** TypeScript build passes clean.
+
+**Design Decisions:**
+- Permadeath is now a reset cycle mechanic, not permanent deletion
+- Hall of Fame records past lives (previous character states before reset)
+- Stash preservation incentivizes banking valuable items before risky ventures
+- Death count persists across resets (cumulative legacy)
+- Tone shifted from somber memorial to dramatic rebirth narrative
+- Rise Again button conveys continuation, not ending
+
+**Backend Integration:** Server handles actual character reset and respawn location. Client shows overlay, player dismisses, gameplay resumes with reset character.
+
+---
+
+### 2026-04-13: Permadeath UI Implementation (ROUND 1 — DEPRECATED)
+
+**Task:** Build client-side UI for permadeath character death events.
+
+**Outcome:** ⚠️ ITERATION — Components built with "permanent death" framing; messaging pivot required.
+
+**Deliverable (Then Deprecated):**
+- PermadeathOverlay component with dramatic death screen
+- HallOfFame page (/hall-of-fame) with leaderboard
+- UI tone: "Permanent Death", loss, finality
+- Ranking: survival time + death count
+
+**Process Note:** User directive pivoted design from character deletion to character reset. Round 1 UI messaging misaligned with reset semantics (not permanent loss). Round 2 messaging correction applied.
+
+---
+
+### 2026-04-13: Permadeath UI — Death & Rebirth Messaging (ROUND 2 — DELIVERED)
+
+**Task:** Reframe permadeath UI for reset-based model (correction).
+
+**Outcome:** ✅ DELIVERED — UI messaging reframed from loss to renewal.
+
+**Deliverable:**
+- **Messaging update:** "Permanent Death" → "Death & Rebirth"
+- **Button text:** "Fallen Heroes" → "Rise Again"
+- **Leaderboard:** "The Fallen" → "Past Lives"
+- **Narrative:** Character resets and continues (not lost forever)
+- **Mechanics:** Stash carries over, gear/level wiped, respawn in-game
+
+**Key Changes:**
+- Tone: Loss → Renewal
+- Framing: Memorial → Survival metrics
+- Intent: Honors extraction-loop incentive (stash preserved)
+
+**Impact:** UI now reinforces reset model semantics; supports hardcore mode identity (difficult but continuable).
+
+---
+

@@ -51,6 +51,50 @@
 
 ## Learnings
 
+### 2025-01-23: Permadeath System Design — Three Options Proposed
+
+**Task:** Analyze current death/combat/corpse systems and design permadeath feature for Ellmud.
+
+**Context:** User requested permadeath as a new feature. Performed comprehensive analysis of:
+- GDD §6.5-6.8 (death, downing, corpse systems)
+- Current death flow: downing → bleed-out → corpse drop → respawn with death penalty
+- Data model: `player_identities` → `players` → `characters` (character soft-deletion supported)
+- Death tracking: `player_death_penalty` table (death_count, last_death_at)
+- Soulbound items: preserved on death, never dropped in corpse
+- Zone lifecycle: persistent (always up, respawn on schedule) vs. instanced (collapse timer, corpse lost on collapse)
+- Extraction loop: walk out alive to keep gear, die to lose it
+
+**Key Files Analyzed:**
+- GDD.md (extraction, death, permadeath mentions)
+- packages/server/src/combat/CombatSystem.ts (defeat detection)
+- packages/server/src/rooms/ZoneRoom.ts:handlePlayerDeath() (death flow orchestration)
+- packages/server/src/systems/CorpseSystem.ts (lootable corpse creation/TTL)
+- packages/server/src/systems/DeathPenalty.ts (death count tracking, debuff stacking)
+- packages/server/src/state/PlayerState.ts (in-memory player state, inventory, equipment)
+- packages/server/src/db/migrations/001_schema.sql (players, characters, player_death_penalty tables)
+
+**Design Proposal:** Three options presented in `.squad/decisions/inbox/elminster-permadeath-design.md`:
+1. **Run-Based Permadeath (Roguelike):** Lose all inventory/equipment on death, keep stash. Already implemented — no code change.
+2. **Character Permadeath with Account Persistence (RECOMMENDED):** Opt-in per character, character deleted after N deaths (configurable threshold). Account/reputation persists. Minimal schema change (`permadeath_enabled`, `permadeath_threshold` columns on `characters`). Medium implementation cost (server + client UI).
+3. **Instanced-Zone Permadeath (Gauntlet):** Permadeath only in hardcore zones. High implementation cost, bifurcates zone design.
+
+**Recommendation:** Option 2 — strikes balance between meaningful stakes and respecting player time. Opt-in design doesn't disrupt casual players. Opens design space for high-risk/high-reward modes (titles, leaderboards, cosmetics).
+
+**Blocked on:** Dale's decision on threshold values (1/3/5 deaths?) and opt-in timing (creation only, or mid-game ritual?).
+
+**Architecture Notes:**
+- Permadeath must respect extraction loop (death = corpse drop for others to loot)
+- Death penalty system already tracks `death_count` per character (foundation in place)
+- Character soft-deletion (`deleted_at`, `is_active=false`) already supported
+- Soulbound items should remain soulbound in permadeath (preserve quest rewards across character deaths)
+- Instance collapse death should count toward permadeath threshold (no free passes)
+
+**Process Notes:**
+- Analyzed 9 key files across GDD, combat, death, corpse, player state, DB schema
+- Cross-referenced directives (inventory/stash separation, container-based corpses)
+- Identified security edge cases (disconnect death, instance collapse, griefing)
+- Proposed 3-phase rollout: beta → tuning → public announcement
+
 ### 2026-07-23: Code Review — PR #449 ANSI Formatting Toolbar (APPROVED)
 
 **Task:** Review PR #449 (`squad/admin-ansi-toolbar` → `dev`) — ANSI formatting toolbar for admin content editors.
@@ -96,6 +140,21 @@
 **Decision logged to:** `.squad/decisions.md` (inbox entries merged 2026-04-13T00:05Z)
 
 **Merged:** Both commits squash-merged to dev via PR #447 (#446) and PR #448 (#445 + publish refactor).
+
+### 2026-04-13: Permadeath System Design Analysis (DELIVERED)
+
+**Task:** Architect permadeath system with three design options and recommendation.
+
+**Outcome:** ✅ DELIVERED — Comprehensive design proposal; user direction received for system-wide reset model (design pivoted from recommendation).
+
+**Deliverable:** Permadeath Design Proposal analyzed three approaches:
+- **Option 1:** Run-based permadeath (stash-safe extraction, no character deletion)
+- **Option 2:** Character permadeath with account persistence (opt-in per character, threshold-based) ⭐ RECOMMENDED
+- **Option 3:** Softer permadeath with inventory reset only
+
+**User Pivot:** User request changed design from per-character opt-in to server-wide reset model: simple boolean toggle, no threshold, every death resets character (not deletes), stash preserved, death count persists.
+
+**Impact:** Triggered implementation iterations across Drizzt (DB schema), Jarlaxle (death handler x2), Regis (UI messaging x2), Minsc (tests x2). Design document archived to decisions.md.
 
 ---
 

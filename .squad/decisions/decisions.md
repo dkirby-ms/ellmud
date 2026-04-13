@@ -1,3 +1,95 @@
+## 2026-04-13T19:10:00Z: Permadeath System — Server-Wide Reset Model
+
+**By:** Elminster (Design), Drizzt (DB), Jarlaxle (Systems), Regis (UI), Minsc (Tests)  
+**Date:** 2026-04-13  
+**Status:** Implemented — all agents delivered; design pivot executed  
+**Scope:** Game feature — permadeath mode, character reset mechanics, leaderboard
+
+### Executive Summary
+
+Permadeath implementation pivoted during session from Elminster's recommended Option 2 (character-level opt-in with threshold) to user-directed **server-wide reset model**: all characters reset on every death when enabled, no threshold logic, simple boolean toggle. Stash preserved, death count persists as lifetime metric. Feature fully implemented across backend (DB, config, API), systems (death handler), and frontend (UI messaging, Hall of Fame page).
+
+### Design Context
+
+Elminster's analysis proposed three permadeath options:
+- **Option 1:** Run-based permadeath (stash-safe, no character deletion)
+- **Option 2:** Character permadeath with account persistence (opt-in per character, threshold-based) ⭐ Recommended
+- **Option 3:** Softer permadeath with inventory reset only
+
+**User pivot:** Rejected all options; requested **server-wide reset model** (every death resets character if enabled).
+
+### Final Decision
+
+**Server Configuration:**
+- Single boolean env var: `PERMADEATH_ENABLED=true/false`
+- No per-character opt-in; no threshold logic
+- When enabled, EVERY death triggers character reset
+
+**Reset Mechanics (When Permadeath Triggers):**
+1. Inventory cleared (DB + in-memory)
+2. Equipment cleared
+3. Level reset to 1
+4. Skills reset to defaults
+5. **Stash PRESERVED** (extraction incentive maintained)
+6. **Death count PERSISTED** (lifetime stat, not reset)
+7. Character respawns in-game immediately
+
+**Database:**
+- Migration 017: `hall_of_fame` table preserves reset records for leaderboard
+- Existing `characters.deleted_at` or reset flag (implementation choice)
+- Existing `player_death_penalty.death_count` used for persistence
+
+**API Endpoints:**
+- `GET /api/hall-of-fame` — Paginated leaderboard (survival time ranking)
+
+### Rationale
+
+1. **Simple toggle vs threshold:** Boolean config is operationally simpler; no cumulative death counting edge cases
+2. **Reset vs deletion:** Preserves stash (extraction loop incentive) while maintaining meaningful stakes (current gear lost)
+3. **Server-wide vs per-character:** Simplifies design; no per-character configuration overhead; enables "hardcore mode" servers
+4. **Death count persistence:** Tracks player effort/survivability across resets; leaderboard metric
+
+### Impact & Deliverables
+
+**Backend (Drizzt):**
+- ✅ Migration 017: `hall_of_fame` table with indexes
+- ✅ Config structure: `permadeath.enabled` boolean
+- ✅ Hall of Fame REST API endpoint
+
+**Systems (Jarlaxle — 2 rounds):**
+- ✅ Round 1: Soft-delete handler with threshold (deprecated)
+- ✅ Round 2: Reset handler, simple toggle, cleared inventory/equipment, preserved stash
+- ✅ Death count increment preserved across resets
+
+**Frontend (Regis — 2 rounds):**
+- ✅ Round 1: PermadeathOverlay component, dramatic "Permanent Death" tone (deprecated)
+- ✅ Round 2: "Death & Rebirth" messaging, "Rise Again" button, "Past Lives" leaderboard framing
+
+**Testing (Minsc — 2 rounds):**
+- ✅ Round 1: 27 tests for threshold+soft-delete model (deprecated)
+- ✅ Round 2: 26 tests for reset model; all 3565 tests passing
+- ✅ Coverage: toggle config, every-death reset, inventory/equipment clear, stash preserve, death count persist
+
+### Artifacts
+
+- 8 Orchestration log entries (Elminster, Drizzt, Jarlaxle x2, Regis x2, Minsc x2)
+- Session log: `.squad/log/2026-04-13T19-10Z-permadeath-session.md`
+- Decision inbox files (10 consolidated here, removed post-merge)
+
+### Related Learning
+
+**Design Evolution:**
+- Initial proposal (Elminster) recommended per-character opt-in with threshold for nuance
+- User direction simplified to server-wide reset model for operational clarity
+- Two implementation iterations (Jarlaxle, Regis) required to align with final model
+
+**Team Pattern:**
+- When design pivots mid-session, agent deliverables may be deprecated (Jarlaxle R1, Regis R1)
+- Orchestration logs document both iterations for process transparency
+- Test suite redesigns confirm correctness before final merge
+
+---
+
 ## 2026-04-12T15:31:26Z: Async Command Pattern for Toggle (#432)
 
 **By:** Drizzt (Engine Dev)  

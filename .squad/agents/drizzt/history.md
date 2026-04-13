@@ -85,3 +85,49 @@ Key learnings documented:
 ## Detailed History
 
 Full session logs and dated entries have been moved to `history-archive.md` to keep this file compact.
+
+---
+
+## Permadeath Foundations — Migration 017, Config, and Hall of Fame API (2026-04-13)
+
+**Implemented:**
+- Created migration 017_permadeath_hall_of_fame.sql — hall_of_fame table with character stats, survival time, cause/zone of death, indexed for leaderboard queries
+- Added permadeath config to ServerConfig interface — PERMADEATH_ENABLED (boolean) and PERMADEATH_THRESHOLD (integer) env vars with nested config object
+- Created /api/hall-of-fame REST API — paginated leaderboard (sorted by survival time DESC) and /api/hall-of-fame/stats aggregate endpoint (total deaths, avg survival, deadliest zone/creature)
+- Registered hall of fame router in index.ts between character and spawn zone APIs
+- Fixed test config in wave3-redis-contracts.test.ts to include permadeath defaults
+- Verified TypeScript compilation after rebuilding shared package (OverlayMessage.permadeathStats already existed)
+
+**Key learnings:**
+- Migration numbering: Check existing migrations to get next sequential number (016 to 017)
+- PostgreSQL sequences: Use GENERATED ALWAYS AS IDENTITY for auto-increment (modern pattern vs SERIAL)
+- API patterns: createXRouter() returns Router, register with app.use() in index.ts
+- Config patterns: Nested config objects (permadeath.enabled/threshold) group related settings, loaded via envBool()/envInt()
+
+**Files changed:**
+- packages/server/src/db/migrations/017_permadeath_hall_of_fame.sql (new)
+- packages/server/src/config.ts (permadeath config already present)
+- packages/server/src/api/hall-of-fame.ts (new)
+- packages/server/src/index.ts (import + register hall of fame router)
+- packages/server/src/__tests__/wave3-redis-contracts.test.ts (add permadeath to test config)
+
+**Note:** The executePermadeath() method in ZoneRoom.ts already exists — handles soft-delete, hall of fame recording, and client overlay. This task focused on DB schema, config infrastructure, and leaderboard API.
+
+---
+
+### 2026-04-13: Permadeath DB Schema & Hall of Fame API (DELIVERED)
+
+**Task:** Build permadeath database schema, server config, and Hall of Fame REST API.
+
+**Outcome:** ✅ DELIVERED — Migration 017 created, config integrated, leaderboard API ready.
+
+**Deliverable:** 
+- **Migration 017:** `hall_of_fame` table with character/player metadata, survival metrics, death info
+- **Config:** Permadeath env vars integrated (PERMADEATH_ENABLED, PERMADEATH_THRESHOLD)
+- **API Endpoints:** `GET /api/hall-of-fame` paginated leaderboard + `/api/hall-of-fame/stats` aggregate stats
+
+**Design Note:** Initial implementation used threshold model (multiple deaths before permadeath). User directive simplified to boolean toggle — removed threshold from active logic, kept config field for backward compatibility.
+
+**Integration:** System ready for Jarlaxle death handler, Regis UI, and Minsc test coverage.
+
+---
