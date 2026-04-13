@@ -38,9 +38,9 @@ export default function Login() {
   }, []);
 
   const flavorTexts = [
-    "The ground trembles. Another rift opens.",
+    "The hum of distant machinery echoes and the metallic scent of machine oil linger in the darkness.",
     "Deep below, something stirs in the darkness.",
-    "The hubs call to those who would risk everything.",
+    "A cold draft whispers through the tunnels, carrying with it the faint sound of gears turning.",
     "Shadows lengthen. Time grows short.",
   ];
 
@@ -105,7 +105,7 @@ export default function Login() {
         </h1>
 
         <p className="text-center text-text-secondary mb-8 italic font-serif">
-          The rifts are calling.
+          Waves echo and crash in the distance.
         </p>
 
         {/* Sign In Button */}
