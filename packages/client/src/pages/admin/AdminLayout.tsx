@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import {
   LayoutDashboard, Sword, Package, Zap, Trophy, TrendingUp, Building2,
-  Home, FileText, Scale, ClipboardList, Hammer, Upload, ScrollText, Users,
+  FileText, Scale, ClipboardList, Hammer, Upload, ScrollText, Users,
   Bell, Search, ArrowLeft, Radio, AlertTriangle, AlertCircle, FileEdit, Loader2, X, Map,
 } from "lucide-react";
 import {
@@ -48,7 +48,6 @@ const navSections = [
       { path: "/admin/loot-tables", icon: Trophy, label: "Loot Tables" },
       { path: "/admin/skills", icon: TrendingUp, label: "Skills" },
       { path: "/admin/factions", icon: Building2, label: "Factions" },
-      { path: "/admin/rooms", icon: Home, label: "Rooms" },
       { path: "/admin/zones", icon: Map, label: "Zones" },
       { path: "/admin/narrative", icon: FileText, label: "Narrative" },
       { path: "/admin/balance", icon: Scale, label: "Balance" },
