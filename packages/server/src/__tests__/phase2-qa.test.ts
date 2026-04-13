@@ -188,18 +188,18 @@ describe('Phase 2 QA — Multi-Player Zone (4 players)', () => {
     expect(combat.isInCombat('p3')).toBe(false);
     expect(combat.isInCombat('p4')).toBe(false);
 
-    // p1 strikes, p2 dodges
+    // p1 strikes, p2 strikes back
     combat.submitAction('p1', 'strike', 'p2');
-    combat.submitAction('p2', 'dodge');
+    combat.submitAction('p2', 'strike', 'p1');
 
     const result = combat.resolveTick();
     expect(result.events.length).toBeGreaterThan(0);
 
-    // p1 should have struck, p2 dodged (takes no damage)
-    const strikeEvent = result.events.find(e => e.type === 'strike' && e.actorId === 'p1');
-    const dodgeEvent = result.events.find(e => e.type === 'dodge' && e.actorId === 'p2');
-    expect(strikeEvent).toBeDefined();
-    expect(dodgeEvent).toBeDefined();
+    // Both should have strike events
+    const p1Strike = result.events.find(e => e.type === 'strike' && e.actorId === 'p1');
+    const p2Strike = result.events.find(e => e.type === 'strike' && e.actorId === 'p2');
+    expect(p1Strike).toBeDefined();
+    expect(p2Strike).toBeDefined();
   });
 
   it('combat in ENTRY propagates sound to CORRIDOR and ARMORY', () => {
@@ -357,7 +357,7 @@ describe('Phase 2 QA — PvP Conflict', () => {
     let defeated = false;
     for (let tick = 0; tick < 20; tick++) {
       combat.submitAction('p1', 'strike', 'p2');
-      combat.submitAction('p2', 'dodge');
+      combat.submitAction('p2', 'strike');
 
       const result = combat.resolveTick();
       if (result.events.some(e => e.type === 'defeated' && e.actorId === 'p2')) {
@@ -378,7 +378,7 @@ describe('Phase 2 QA — PvP Conflict', () => {
 
     combat.initiateCombat('p1', 'p2');
     combat.submitAction('p1', 'strike', 'p2');
-    combat.submitAction('p2', 'dodge');
+    combat.submitAction('p2', 'strike');
 
     const result = combat.resolveTick();
 
@@ -461,7 +461,7 @@ describe('Phase 2 QA — Scaling (2–4 replicas)', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 4. RECONNECTION TEST — disconnect mid-combat, dodge applied, state restored
+// 4. RECONNECTION TEST — disconnect mid-combat, auto-attack applied, state restored
 // ═══════════════════════════════════════════════════════════════════════════
 describe('Phase 2 QA — Reconnection (mid-combat)', () => {
   let combat: CombatSystem;
@@ -472,7 +472,7 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
     combat = new CombatSystem(buildExitResolver(rooms));
   });
 
-  it('disconnected player auto-dodges in combat', () => {
+  it('disconnected player auto-attacks in combat', () => {
     const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 15, defence: 5, armour: 2 });
     const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 5, armour: 2 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
@@ -482,18 +482,18 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
     // p2 disconnects
     combat.markDisconnected('p2');
 
-    // p1 strikes, p2 has no submitted action → auto-dodge (disconnected)
+    // p1 strikes, p2 has no submitted action → auto-attacks (disconnected)
     combat.submitAction('p1', 'strike', 'p2');
 
     const result = combat.resolveTick();
 
-    // p2 should have auto-dodged
-    const dodgeEvent = result.events.find(e => e.type === 'dodge' && e.actorId === 'p2');
-    expect(dodgeEvent).toBeDefined();
+    // p2 should have auto-attacked (disconnected players now auto-attack, not dodge)
+    const p2Strike = result.events.find(e => e.type === 'strike' && e.actorId === 'p2');
+    expect(p2Strike).toBeDefined();
   });
 
-  it('disconnected player takes reduced damage from dodge (not zero)', () => {
-    // Dodge halves incoming damage (multiplier 0.5), then armour subtracted, minimum 1
+  it('disconnected player takes full damage (no dodge stance reduction)', () => {
+    // Disconnected players auto-attack; passive dodge may or may not trigger
     const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 15, defence: 5, armour: 0 });
     const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 5, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
@@ -503,13 +503,12 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
 
     const hpBefore = p2.hp;
 
-    // p1 strikes, p2 auto-dodges → 15 * 0.5 - 0 armour = 7 damage (halved, min 1)
+    // p1 strikes, p2 auto-attacks (not dodge) — default PRNG never dodges
     combat.submitAction('p1', 'strike', 'p2');
     combat.resolveTick();
 
-    // Dodge reduces but doesn't eliminate damage
-    expect(p2.hp).toBeLessThan(hpBefore);
-    expect(p2.hp).toBeGreaterThan(hpBefore - p1.attack); // less than full damage
+    // No dodge stance reduction — takes full damage: 15 * 1.0 - 0 = 15
+    expect(p2.hp).toBe(hpBefore - p1.attack);
   });
 
   it('reconnected player can resume combat actions', () => {
@@ -525,7 +524,7 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
 
     // p2 can now submit actions again
     combat.submitAction('p2', 'strike', 'p1');
-    combat.submitAction('p1', 'dodge');
+    combat.submitAction('p1', 'strike');
 
     const result = combat.resolveTick();
     const strikeByP2 = result.events.find(e => e.type === 'strike' && e.actorId === 'p2');
@@ -552,11 +551,11 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
     // p2 disconnects
     combat.markDisconnected('p2');
 
-    // Tick 2: p1 strikes, p2 auto-dodges (takes halved damage, min 1)
+    // Tick 2: p1 strikes, p2 auto-attacks (takes full damage)
     combat.submitAction('p1', 'strike', 'p2');
     combat.resolveTick();
 
-    // p2 took reduced damage from dodge (not zero)
+    // p2 took full damage (no dodge stance reduction)
     expect(p2.hp).toBeLessThan(p2HpAfterTick1);
 
     // Reconnect: encounter still active
@@ -875,7 +874,7 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
       combat.initiateCombat('hero', 'creature-rat');
 
       combat.submitAction('hero', 'strike', 'creature-rat');
-      // Creature has no submitted action → auto-dodge
+      // Creature has no submitted action → auto-attacks
 
       const result = combat.resolveTick();
       expect(result.events.length).toBeGreaterThan(0);
@@ -909,7 +908,8 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
 
     it('combat timeout ends encounter after COMBAT_TIMEOUT_TICKS of no strikes', () => {
       const rooms = buildSoundTestRooms();
-      const combat = new CombatSystem(buildExitResolver(rooms));
+      // Use no-exit resolver so flee always fails but no strikes are generated
+      const combat = new CombatSystem(() => []);
 
       const p1 = makePlayer('p1', ROOMS.ENTRY);
       const p2 = makeCreature('c1', ROOMS.ENTRY);
@@ -918,11 +918,14 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
 
       combat.initiateCombat('p1', 'c1');
 
-      // Both dodge for COMBAT_TIMEOUT_TICKS
+      // Consume first tick (auto-strike resets counter)
+      combat.resolveTick();
+
+      // Submit flee every tick — flee is not 'strike' so hasStrike stays false
       let ended = false;
       for (let i = 0; i < COMBAT_TIMEOUT_TICKS + 1; i++) {
-        combat.submitAction('p1', 'dodge');
-        combat.submitAction('c1', 'dodge');
+        combat.submitAction('p1', 'flee');
+        combat.submitAction('c1', 'flee');
         const result = combat.resolveTick();
         if (result.endedEncounterIds.length > 0) {
           ended = true;
@@ -1196,7 +1199,7 @@ describe('Phase 2 QA — Edge Cases', () => {
     // p2 disconnects mid-tick
     combat.markDisconnected('p2');
 
-    // p1 strikes, p2 auto-dodges
+    // p1 strikes, p2 auto-attacks
     combat.submitAction('p1', 'strike', 'p2');
 
     const result = combat.resolveTick();
@@ -1294,7 +1297,7 @@ describe('Phase 2 QA — Edge Cases', () => {
 
     // Submit actions for both encounters
     combat.submitAction('p1', 'strike', 'p2');
-    combat.submitAction('p2', 'dodge');
+    combat.submitAction('p2', 'strike');
     combat.submitAction('p3', 'strike', 'p4');
     combat.submitAction('p4', 'strike', 'p3');
 

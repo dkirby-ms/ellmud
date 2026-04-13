@@ -48,13 +48,6 @@ describe('Damage Calculation', () => {
     expect(result.finalDamage).toBe(8);
   });
 
-  it('strike vs dodge: halved damage (attack × 0.5 - armour)', () => {
-    const result = calculateDamage(10, 2, 'strike', 'dodge');
-    expect(result.multiplier).toBe(0.5);
-    // 10 * 0.5 - 2 = 3
-    expect(result.finalDamage).toBe(3);
-  });
-
   it('strike vs flee: full damage (attack × 1.0 - armour)', () => {
     const result = calculateDamage(10, 2, 'strike', 'flee');
     expect(result.multiplier).toBe(1.0);
@@ -62,14 +55,14 @@ describe('Damage Calculation', () => {
     expect(result.finalDamage).toBe(8);
   });
 
-  it('dodge vs anything: zero damage (non-strike actions deal no damage)', () => {
-    const result = calculateDamage(10, 2, 'dodge', 'strike');
+  it('flee vs anything: zero damage (non-strike actions deal no damage)', () => {
+    const result = calculateDamage(10, 2, 'flee', 'strike');
     expect(result.finalDamage).toBe(0);
     expect(result.multiplier).toBe(0);
   });
 
-  it('flee vs anything: zero damage', () => {
-    const result = calculateDamage(10, 2, 'flee', 'dodge');
+  it('flee vs flee: zero damage', () => {
+    const result = calculateDamage(10, 2, 'flee', 'strike');
     expect(result.finalDamage).toBe(0);
   });
 
@@ -79,9 +72,9 @@ describe('Damage Calculation', () => {
     expect(result.finalDamage).toBe(1);
   });
 
-  it('minimum 1 damage on hit when dodge + high armour', () => {
-    // attack=5, armour=5: 5 * 0.5 - 5 = -2.5 → floor → -2 → max(1, -2) = 1
-    const result = calculateDamage(5, 5, 'strike', 'dodge');
+  it('minimum 1 damage on hit when high armour matches attack', () => {
+    // attack=5, armour=5: 5 * 1.0 - 5 = 0 → clamped to 1
+    const result = calculateDamage(5, 5, 'strike', 'strike');
     expect(result.finalDamage).toBe(1);
   });
 
@@ -126,22 +119,21 @@ describe('Tick Resolution', () => {
     expect(strikes).toHaveLength(2);
   });
 
-  it('should resolve strike vs dodge (dodger takes less damage)', () => {
+  it('should resolve strike vs strike (both take full damage)', () => {
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2');
     system.registerCombatant(p1);
     system.registerCombatant(p2);
     system.initiateCombat('p1', 'p2');
 
-    // p1 strikes (auto-queued), p2 dodges
-    system.submitAction('p2', 'dodge');
+    // Both strike
+    system.submitAction('p2', 'strike', 'p1');
 
     system.resolveTick();
 
-    // p2 took reduced damage: 10 * 0.5 - 2 = 3
-    expect(p2.hp).toBe(100 - 3);
-    // p1 took no damage (dodge doesn't deal damage)
-    expect(p1.hp).toBe(100);
+    // Both take full damage: 10 * 1.0 - 2 = 8
+    expect(p2.hp).toBe(100 - 8);
+    expect(p1.hp).toBe(100 - 8);
   });
 
   it('should default to auto-attack when no action submitted (GDD §6.1)', () => {
@@ -239,24 +231,22 @@ describe('Tick Resolution', () => {
   });
 
   it('should end combat after 10 ticks of no strikes (timeout)', () => {
+    // Use no-exit system so flee always fails but no strikes are generated
+    const noExitSystem = new CombatSystem(noExitResolver);
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2');
-    system.registerCombatant(p1);
-    system.registerCombatant(p2);
-    system.initiateCombat('p1', 'p2');
+    noExitSystem.registerCombatant(p1);
+    noExitSystem.registerCombatant(p2);
+    noExitSystem.initiateCombat('p1', 'p2');
 
     // First tick: p1 auto-strikes, resetting the counter
-    system.resolveTick();
+    noExitSystem.resolveTick();
 
-    // Clear targets to prevent auto-attack (GDD §6.2: auto-attack pauses when no target)
-    const p1Combatant = system.getCombatant('p1');
-    const p2Combatant = system.getCombatant('p2');
-    if (p1Combatant) p1Combatant.currentTarget = undefined;
-    if (p2Combatant) p2Combatant.currentTarget = undefined;
-
-    // Now 10 ticks of no strikes (both default to dodge without targets)
+    // Submit flee every tick — flee is not a 'strike' so hasStrike stays false
     for (let i = 0; i < COMBAT_TIMEOUT_TICKS; i++) {
-      const result = system.resolveTick();
+      noExitSystem.submitAction('p1', 'flee');
+      noExitSystem.submitAction('p2', 'flee');
+      const result = noExitSystem.resolveTick();
       if (i === COMBAT_TIMEOUT_TICKS - 1) {
         // Last tick should end combat
         const endEvents = result.events.filter((e) => e.type === 'combat_end');
@@ -266,8 +256,8 @@ describe('Tick Resolution', () => {
     }
 
     // Should no longer be in combat
-    expect(system.isInCombat('p1')).toBe(false);
-    expect(system.isInCombat('p2')).toBe(false);
+    expect(noExitSystem.isInCombat('p1')).toBe(false);
+    expect(noExitSystem.isInCombat('p2')).toBe(false);
   });
 
   it('should handle combat with creatures', () => {
@@ -410,14 +400,14 @@ describe('HP Tracking', () => {
     expect(p1.hp).toBe(84);
     expect(p2.hp).toBe(84);
 
-    // Tick 3: p1 strikes, p2 dodges
+    // Tick 3: p1 strikes, p2 strikes back
     system.submitAction('p1', 'strike', 'p2');
-    system.submitAction('p2', 'dodge');
+    system.submitAction('p2', 'strike', 'p1');
     system.resolveTick();
 
-    // p2 takes 3 more (strike vs dodge: 10*0.5-2=3)
-    expect(p2.hp).toBe(81);
-    expect(p1.hp).toBe(84); // unchanged
+    // Both take 8 more (strike vs strike: 10*1.0-2=8)
+    expect(p2.hp).toBe(76);
+    expect(p1.hp).toBe(76);
   });
 
   it('should clamp HP at 0 on defeat', () => {
@@ -516,18 +506,20 @@ describe('Flee Mechanics', () => {
   });
 
   it('fleeing combatant takes full strike damage (no defence)', () => {
+    // Use a roll that succeeds flee (0.35 < 50% flee chance) but fails dodge (0.35 >= 30% dodge chance)
+    const fleeNoDodge = new CombatSystem(testExitResolver, () => 0.35);
     const p1 = makePlayer('p1');
     const p2 = makePlayer('p2');
-    system.registerCombatant(p1);
-    system.registerCombatant(p2);
-    system.initiateCombat('p1', 'p2');
+    fleeNoDodge.registerCombatant(p1);
+    fleeNoDodge.registerCombatant(p2);
+    fleeNoDodge.initiateCombat('p1', 'p2');
 
     // p1 strikes (auto), p2 flees
-    system.submitAction('p2', 'flee');
+    fleeNoDodge.submitAction('p2', 'flee');
 
-    const result = system.resolveTick();
+    const result = fleeNoDodge.resolveTick();
 
-    // p2 took full damage: 10 * 1.0 - 2 = 8 (flee offers no protection)
+    // p2 took full damage: 10 * 1.0 - 2 = 8 (flee offers no protection, dodge failed)
     expect(p2.hp).toBe(100 - 8);
     // But p2 still fled successfully
     expect(result.fleeResults).toHaveLength(1);

@@ -244,15 +244,16 @@ describe('Ability System (GDD §6.3)', () => {
       expect(strikeEvent!.targetId).toBe('c1');
     });
 
-    it('should fallback to dodge if no valid target', () => {
+    it('should fallback to strike if no valid target', () => {
       player.stamina = 5;
       player.currentTarget = undefined;
 
       combatSystem.submitAction('p1', 'heavy_strike');
       const result = combatSystem.resolveTick();
 
-      const dodgeEvent = result.events.find((e) => e.actorId === 'p1' && e.type === 'dodge');
-      expect(dodgeEvent).toBeDefined();
+      const p1Action = result.events.find((e) => e.actorId === 'p1');
+      expect(p1Action).toBeDefined();
+      expect(p1Action!.type).toBe('strike');
     });
   });
 });
