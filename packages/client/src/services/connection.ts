@@ -60,19 +60,6 @@ function getClient(): Client {
   return client;
 }
 
-/** Race a promise against a timeout. */
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-    promise.then(
-      (v) => { clearTimeout(timer); resolve(v); },
-      (e) => { clearTimeout(timer); reject(e); },
-    );
-  });
-}
-
-const CONNECTION_TIMEOUT_MS = 8000;
-
 /**
  * Connect to a Colyseus room with auth token.
  * Subscribes to message-only handlers — NO Schema state sync.
@@ -86,11 +73,7 @@ export async function connect(
   const colyseus = getClient();
   const joinOptions: Record<string, unknown> = { token };
   if (characterId) joinOptions.characterId = characterId;
-  const room = await withTimeout(
-    colyseus.joinOrCreate(roomName, joinOptions),
-    CONNECTION_TIMEOUT_MS,
-    'Room connection',
-  );
+  const room = await colyseus.joinOrCreate(roomName, joinOptions);
 
   // Message-only subscriptions (dumb terminal protocol)
   room.onMessage(MessageTypes.NARRATE, handlers.onNarrate);
@@ -156,16 +139,8 @@ export async function switchRoom(
     delete (joinOptions as { roomId?: string }).roomId;
   }
   const newRoom = roomId
-    ? await withTimeout(
-        colyseus.joinById(roomId, { token, ...joinOptions }),
-        CONNECTION_TIMEOUT_MS,
-        'Room switch (joinById)',
-      )
-    : await withTimeout(
-        colyseus.joinOrCreate(targetRoomName, { token, ...joinOptions }),
-        CONNECTION_TIMEOUT_MS,
-        'Room switch (joinOrCreate)',
-      );
+    ? await colyseus.joinById(roomId, { token, ...joinOptions })
+    : await colyseus.joinOrCreate(targetRoomName, { token, ...joinOptions });
 
   // Re-register all message handlers on the new room
   newRoom.onMessage(MessageTypes.NARRATE, handlers.onNarrate);
