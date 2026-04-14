@@ -1,3 +1,10 @@
+# [0.2.0-dev.37](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.36...v0.2.0-dev.37) (2026-04-14)
+
+
+### Bug Fixes
+
+* make player-death integration test deterministic ([d5b93ad](https://github.com/dkirby-ms/ellmud/commit/d5b93ad7258cc135c0e0c7cbc06b4109fa22fede))
+
 # [0.2.0-dev.36](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.35...v0.2.0-dev.36) (2026-04-14)
 
 
