@@ -56,6 +56,7 @@ import {
   narrateBatchedEvent,
   DEFAULT_BATCHING_RULES,
 } from '../combat/index.js';
+import { calculateEquipmentBonuses, calculatePlayerEffectiveStats, type EffectiveStats } from '../combat/stats.js';
 import { SoundSystem } from '../sound/index.js';
 import { TraceSystem } from '../systems/index.js';
 import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
@@ -162,6 +163,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private playerJoinTimes = new Map<string, number>();
   /** Maps playerId → character name for log formatting. */
   private characterNames = new Map<string, string>();
+  /** Cached effective combat stats for each player (base + equipment), loaded on join. */
+  private playerStatsCache = new Map<string, EffectiveStats>();
   /** Maps playerId → faction slug for death routing (cached on join). */
   private playerFactionSlugs = new Map<string, string>();
   /** Maps playerId → character flags (anon, rp) cached on join (Issue #370). */
@@ -519,6 +522,20 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.log(`Failed to load character for ${this.playerTag(playerId)}: ${err}`);
     }
 
+    // Load combat stats for the player (base stats from DB + equipment bonuses).
+    try {
+      const baseStats = await this.characterRepo.getBaseStats(playerId);
+      // Build equipment bonus from currently equipped items (if any).
+      const equippedSlots: { slot: string; stats: import('../combat/CombatState.js').ItemStats | null }[] = [];
+      // Equipment will be populated after inventory load; for now, cache base stats.
+      // We refresh below after inventory/loadout restoration.
+      const equipment = calculateEquipmentBonuses(equippedSlots);
+      const effective = calculatePlayerEffectiveStats(baseStats, equipment);
+      this.playerStatsCache.set(playerId, effective);
+    } catch (err) {
+      this.log(`Failed to load combat stats for ${this.playerTag(playerId)}: ${err}`);
+    }
+
     // Load character flags (anon, rp) into cache for room visibility (Issue #370)
     try {
       const flagsRepo = getCharacterFlagsRepository();
@@ -737,6 +754,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.players.delete(playerId);
       this.combatSystem.removeCombatant(playerId);
       this.characterNames.delete(playerId);
+      this.playerStatsCache.delete(playerId);
       this.playerFactionSlugs.delete(playerId);
       this.playerFlagsCache.delete(playerId);
       this.ownerPlayerIds.delete(playerId);
@@ -1282,6 +1300,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         return { player: ps, characterName: charName };
       },
       groupManager: this.groupManager,
+      playerEffectiveStats: this.playerStatsCache.get(player.sessionId),
     };
   }
 
@@ -1907,8 +1926,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           const player = this.players.get(action.targetCombatantId);
           if (player) {
             const displayName = this.characterNames.get(player.sessionId) ?? player.sessionId;
+            const eff = this.playerStatsCache.get(player.sessionId);
+            const playerOpts = eff
+              ? { attack: eff.attack, maxHp: eff.maxHp, armour: eff.armour, dodge: eff.dodge, shieldBlock: eff.shieldBlock }
+              : undefined;
             this.combatSystem.registerCombatant(
-              createCombatant(player.sessionId, displayName, player.currentRoomId, true),
+              createCombatant(player.sessionId, displayName, player.currentRoomId, true, playerOpts),
             );
           }
         }
@@ -1948,8 +1971,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           const player = this.players.get(targetId);
           if (player) {
             const displayName = this.characterNames.get(player.sessionId) ?? player.sessionId;
+            const eff = this.playerStatsCache.get(player.sessionId);
+            const playerOpts = eff
+              ? { attack: eff.attack, maxHp: eff.maxHp, armour: eff.armour, dodge: eff.dodge, shieldBlock: eff.shieldBlock }
+              : undefined;
             this.combatSystem.registerCombatant(
-              createCombatant(player.sessionId, displayName, player.currentRoomId, true),
+              createCombatant(player.sessionId, displayName, player.currentRoomId, true, playerOpts),
             );
           }
         }

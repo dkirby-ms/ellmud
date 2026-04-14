@@ -459,3 +459,23 @@ APPROVE for merge. The three-layer model is correctly designed but only partiall
 4. Redesign death penalty for new stat model (I2 + I3)
 
 ---
+
+### 2025-07-24: Combat Stat Pipeline Diagnostic
+
+**Task:** Trace why runtime logs show no dodge rolls, no shield blocks, static damage, and player always raw=5.
+
+**Findings:**
+- 🔴 Player combatant registration (attack.ts:57, ZoneRoom.ts:1911, ZoneRoom.ts:1952) passes NO stats to createCombatant() — falls back to DEFAULT_PLAYER_STATS
+- 🔴 calculateEquipmentBonuses(), calculatePlayerEffectiveStats(), getBaseStats(), saveBaseStats() are dead code in production — only called in tests
+- 🟢 Creature combatant registration correctly passes real stats from templates/DB
+- 🟡 Dodge/block resolution mechanics ARE wired in CombatSystem.ts:852-864 and damage.ts — they fire correctly but operate on default values for players
+
+**Root cause:** Phase 1 stat overhaul shipped the type layer, DB layer, and calculation layer, but the wiring from DB → combat registration was never completed. This was already identified in the Phase 1 PR review as follow-up ticket "Wire player effective stats into combat registration (C1 + C2)".
+
+**Decision logged:** .squad/decisions/inbox/elminster-combat-stat-pipeline-diagnostic.md
+
+## Learnings
+
+- The combat stat pipeline has three distinct layers: DB persistence (CharacterRepository), stat calculation (stats.ts), and runtime registration (createCombatant). All three must be connected for stats to function.
+- Player combatant registration happens at three independent call sites — attack.ts (player initiates), ZoneRoom.ts:1911 (creature targets unregistered player), ZoneRoom.ts:1952 (creature joins combat targeting player). All three must be updated together.
+- The CommandContext does not currently carry characterId or equipment data, which blocks wiring effective stats into combat registration.

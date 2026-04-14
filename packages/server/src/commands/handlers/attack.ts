@@ -53,8 +53,12 @@ export function handleAttack(ctx: CommandContext): CommandResult {
   // Register combatants if not already registered
   const playerDisplayName = characterName ?? player.sessionId;
   if (!combatSystem.getCombatant(player.sessionId)) {
+    const eff = ctx.playerEffectiveStats;
+    const playerOpts = eff
+      ? { attack: eff.attack, maxHp: eff.maxHp, armour: eff.armour, dodge: eff.dodge, shieldBlock: eff.shieldBlock }
+      : undefined;
     combatSystem.registerCombatant(
-      createCombatant(player.sessionId, playerDisplayName, player.currentRoomId, true),
+      createCombatant(player.sessionId, playerDisplayName, player.currentRoomId, true, playerOpts),
     );
   }
   if (!combatSystem.getCombatant(targetId)) {

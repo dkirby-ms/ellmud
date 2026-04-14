@@ -385,4 +385,17 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 - Coordinated with Minsc: 63 test failures resolved, all passing
 - Coordinated with Elminster review: Architecture approved, integration gaps C1-C2 identified
 
+### 2025-07-18: Combat Stat Wiring Gap Diagnostic
+**Status:** ✅ Diagnostic complete — implementation pending
+
+**Findings:**
+- 3 player `createCombatant()` call sites (attack.ts:57, ZoneRoom.ts:1911, ZoneRoom.ts:1952) pass NO stats — every player gets DEFAULT_PLAYER_STATS (unarmed=5, armour=2)
+- `calculateEquipmentBonuses()` and `calculatePlayerEffectiveStats()` from combat/stats.ts are dead code — called only in tests, never in production
+- `CharacterRepository.getBaseStats()` loads 8-stat model from DB but is never called by ZoneRoom or CommandContext
+- Creature side is fully wired: ContentRegistry→CreatureManager→toCombatant→CombatSystem all pass 8 stats correctly
+- Damage pipeline (calculateDamage + dodge/block rolls) works correctly when given real stats
+- Fix requires: inject CharacterRepository into player combatant registration path, call calculatePlayerEffectiveStats before createCombatant
+
+**Decision:** Written to `.squad/decisions/inbox/jarlaxle-combat-stat-wiring-gaps.md`
+
 ---

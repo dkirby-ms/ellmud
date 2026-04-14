@@ -136,6 +136,8 @@ export interface CommandContext {
   zoneName?: string;
   /** Current zone slug identifier (e.g. "refuge"). */
   zoneSlug?: string;
+  /** Pre-computed effective combat stats for the current player (base + equipment). */
+  playerEffectiveStats?: import('../combat/stats.js').EffectiveStats;
   /** Creature manager for sandbox spawn/clear operations. */
   creatureManager?: CreatureManager;
   /** Override scenario storage directory (dev/testing). */
