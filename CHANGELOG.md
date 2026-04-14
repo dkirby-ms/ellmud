@@ -1,3 +1,10 @@
+# [0.2.0-dev.33](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.32...v0.2.0-dev.33) (2026-04-14)
+
+
+### Bug Fixes
+
+* dodge rolls, respawn location, and post-death combat cleanup (fixes [#460](https://github.com/dkirby-ms/ellmud/issues/460), fixes [#461](https://github.com/dkirby-ms/ellmud/issues/461), fixes [#462](https://github.com/dkirby-ms/ellmud/issues/462)) ([4d1899b](https://github.com/dkirby-ms/ellmud/commit/4d1899be2b33e24dfeeb9d38f99548b0eb1a7264))
+
 # [0.2.0-dev.32](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.31...v0.2.0-dev.32) (2026-04-14)
 
 
