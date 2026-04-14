@@ -1,6 +1,6 @@
 {
   "name": "ellmud",
-  "version": "0.2.0-dev.33",
+  "version": "0.2.0-dev.34",
   "private": true,
   "description": "PvPvE Extraction RPG — Real-Time MUD",
   "workspaces": [

@@ -1,3 +1,10 @@
+# [0.2.0-dev.34](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.33...v0.2.0-dev.34) (2026-04-14)
+
+
+### Bug Fixes
+
+* add timeout to API calls and Vite proxy to prevent browser hang on server restart ([a6c804b](https://github.com/dkirby-ms/ellmud/commit/a6c804bc71bf5eaa125290d14b1609162759960f))
+
 # [0.2.0-dev.33](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.32...v0.2.0-dev.33) (2026-04-14)
 
 
