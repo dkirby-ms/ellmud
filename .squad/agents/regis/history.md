@@ -441,3 +441,14 @@ dispatch({ type: 'SET_COMBAT_STATS', stats: { maxHp, unarmed, oneHanded, twoHand
 - Coordinated with Elminster review: Integration gap C3 (frontend placeholder) tracked
 
 ---
+
+
+## Learnings — Effective Stats (#455)
+
+- Server rebuildPlayerStatsCache() is the single point where effective stats are computed — send to client from there
+- findClient(playerId) on ZoneRoom maps DB player ID to Colyseus Client for sending messages
+- Shared package must be rebuilt (tsc --build) before server/client can see new exports
+- MessageCollector in test helpers needs manual update for each new message type
+- Connection service wires handlers in both connect() and switchRoom() — must update both
+- EffectiveStats (attack, armour, shieldBlock, dodge, maxHp) are distinct from base CombatStats (8 weapon skills)
+- Pattern: show effective stats as primary, base as (base: N) suffix when they differ
