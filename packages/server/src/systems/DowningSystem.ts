@@ -2,7 +2,7 @@
  * Downing System — manages the downed state, bleed-out timers, and stabilization.
  *
  * When a player reaches 0 HP they enter the "downed" state instead of dying immediately.
- * A 10-tick bleed-out timer starts. Squadmates can stabilize using `stabilize [player]`
+ * A 60-tick (~1 minute) bleed-out timer starts. Squadmates can stabilize using `stabilize [player]`
  * (costs 2 ticks + a bandage). If the timer expires or a killing blow lands, the player dies.
  *
  * Pure game logic — no Colyseus dependency. ZoneRoom wires this into the tick loop.
@@ -10,14 +10,17 @@
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/** Ticks before a downed player bleeds out and dies. */
-export const BLEED_OUT_TICKS = 10;
+/** Ticks before a downed player bleeds out and dies (~1 minute at 1s ticks). */
+export const BLEED_OUT_TICKS = 60;
 
 /** Ticks required to channel the stabilize action. */
 export const STABILIZE_CHANNEL_TICKS = 2;
 
 /** Item ID required to perform stabilization. */
 export const BANDAGE_ITEM_ID = 'bandage';
+
+/** Grace ticks after downing before a killing blow can land. */
+export const GRACE_TICKS = 3;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -30,6 +33,10 @@ export interface DownedPlayer {
   state: DownedState;
   /** Ticks remaining before bleed-out death. Only counts down while state === 'downed'. */
   bleedOutTicksRemaining: number;
+  /** Current HP (starts at 0, drains to -BLEED_OUT_TICKS during bleed-out). */
+  currentHp: number;
+  /** Grace ticks remaining — killing blows are blocked while > 0. */
+  graceTicksRemaining: number;
   /** IDs of combatants who dealt the lethal damage (for PvP kill attribution). */
   killerIds?: string[];
 }
@@ -72,6 +79,8 @@ export class DowningSystem {
       roomId,
       state: 'downed',
       bleedOutTicksRemaining: BLEED_OUT_TICKS,
+      currentHp: 0,
+      graceTicksRemaining: GRACE_TICKS,
       killerIds,
     });
     return {
@@ -157,10 +166,13 @@ export class DowningSystem {
     };
   }
 
-  /** Apply a killing blow to a downed player. Removes them from downed state. */
+  /** Apply a killing blow to a downed player. Returns null during grace period. */
   killingBlow(playerId: string): DowningEvent | null {
     const target = this.downedPlayers.get(playerId);
     if (!target) return null;
+
+    // Grace period: downed players are protected for the first N ticks
+    if (target.graceTicksRemaining > 0) return null;
 
     this.downedPlayers.delete(playerId);
     // Also clean up any in-progress stabilize targeting this player
@@ -209,7 +221,15 @@ export class DowningSystem {
     // 2. Decrement bleed-out timers for actively-bleeding players
     for (const [playerId, downed] of this.downedPlayers) {
       if (downed.state !== 'downed') continue; // Stabilized players don't bleed
+
+      // Decrement grace period first
+      if (downed.graceTicksRemaining > 0) {
+        downed.graceTicksRemaining--;
+      }
+
       downed.bleedOutTicksRemaining--;
+      downed.currentHp--; // HP drains: 0 → -1 → -2 → … → -BLEED_OUT_TICKS
+
       if (downed.bleedOutTicksRemaining <= 0) {
         events.push({
           type: 'player_bleed_out',

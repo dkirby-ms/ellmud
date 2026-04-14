@@ -204,8 +204,9 @@ export function narrateBatchedEvent(batched: BatchedEvent): string {
   }
   
   if (event.type === 'dodge') {
-    // Multiple dodges: "X dodges 3 attacks"
-    return `${icon}${event.actorName} dodges ${batched.batchSize} attacks`;
+    // Multiple dodges: "X dodges 3 attacks from Y"
+    const from = event.targetName ? ` from ${event.targetName}` : '';
+    return `${icon}${event.actorName} dodges ${batched.batchSize} attacks${from}`;
   }
   
   // Fallback: use original narration with count

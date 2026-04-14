@@ -220,7 +220,8 @@ describe('CombatSystem Dodge Integration', () => {
     expect(strikeEvent).toBeDefined();
     expect(strikeEvent!.dodged).toBe(true);
     expect(strikeEvent!.damage).toBe(0);
-    expect(strikeEvent!.narration).toContain('dodges!');
+    expect(strikeEvent!.narration).toContain('dodges');
+    expect(strikeEvent!.narration).toContain('attack!');
   });
 
   it('should not dodge when PRNG roll is above dodge chance', () => {

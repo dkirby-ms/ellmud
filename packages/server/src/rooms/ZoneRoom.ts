@@ -1513,6 +1513,13 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             this.sendExplorationUpdate(client, flee.combatantId, flee.toRoomId);
           }
         }
+      } else {
+        // Creature fled — move it to the target room and broadcast departure/arrival
+        const creature = this.creatureManager.getCreature(flee.combatantId);
+        if (creature) {
+          this.broadcastCreatureMovement(creature, flee.fromRoomId, flee.toRoomId);
+          creature.currentRoomId = flee.toRoomId;
+        }
       }
     }
   }
@@ -2809,15 +2816,28 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   }
 
   /**
-   * Handle successful stabilization — notify both players.
+   * Handle successful stabilization — revive the player at 1 HP and re-enter combat.
+   * The player is fully active again: removed from downed state, HP set to 1,
+   * re-registered as a combatant if hostiles are still present in the room.
    */
   private handlePlayerStabilized(event: DowningEvent): void {
-    const targetClient = this.findClient(event.playerId);
+    const playerId = event.playerId;
+    const downed = this.downingSystem.getDownedPlayer(playerId);
+    const roomId = downed?.roomId ?? event.roomId;
+
+    // Remove from downed tracking — player is alive and active
+    this.downingSystem.removePlayer(playerId);
+
+    // Set player HP to 1 in the combat system (revived)
+    const player = this.players.get(playerId);
+
+    // Notify the revived player
+    const targetClient = this.findClient(playerId);
     if (targetClient) {
       this.sendOverlayState(targetClient, {
-        playerId: event.playerId,
+        playerId,
         state: 'stabilized',
-        narration: 'You feel firm hands stemming the bleeding. The darkness recedes, but you remain unconscious…',
+        narration: 'Firm hands stem the bleeding. You gasp back to consciousness with a sliver of life left.',
         timestamp: Date.now(),
       });
     }
@@ -2827,7 +2847,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       const stabilizerClient = this.findClient(event.stabilizerId);
       if (stabilizerClient) {
         this.sendNarrate(stabilizerClient, {
-          text: `You stabilize ${event.playerName}. They are unconscious but no longer bleeding out.`,
+          text: `You stabilize ${event.playerName}. They stir and rise unsteadily, barely clinging to life.`,
           type: 'combat',
           timestamp: Date.now(),
         });
@@ -2835,18 +2855,41 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
 
     // Notify others in the room
-    const downed = this.downingSystem.getDownedPlayer(event.playerId);
-    if (downed) {
-      for (const [sid, ps] of this.players) {
-        if (sid === event.playerId || sid === event.stabilizerId) continue;
-        if (ps.currentRoomId !== downed.roomId) continue;
-        const otherClient = this.findClient(sid);
-        if (otherClient) {
-          this.sendNarrate(otherClient, {
-            text: `A figure stabilizes ${event.playerName}, stemming the flow of blood.`,
-            type: 'combat',
-            timestamp: Date.now(),
-          });
+    for (const [sid, ps] of this.players) {
+      if (sid === playerId || sid === event.stabilizerId) continue;
+      if (ps.currentRoomId !== roomId) continue;
+      const otherClient = this.findClient(sid);
+      if (otherClient) {
+        this.sendNarrate(otherClient, {
+          text: `${event.playerName} is stabilized and rises unsteadily to their feet.`,
+          type: 'combat',
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    // Re-register the player as a combatant at 1 HP if hostiles are present
+    if (player) {
+      const displayName = this.characterNames.get(playerId) ?? playerId;
+      const eff = this.playerStatsCache.get(playerId);
+      const playerOpts = eff
+        ? { attack: eff.attack, maxHp: eff.maxHp, armour: eff.armour, dodge: eff.dodge, shieldBlock: eff.shieldBlock }
+        : undefined;
+      const combatant = createCombatant(playerId, displayName, roomId, true, playerOpts);
+      combatant.hp = 1;
+
+      // Check if any hostile creatures are still in combat in this room
+      const activeRoomIds = this.combatSystem.getActiveEncounterRoomIds();
+      const hostileInRoom = activeRoomIds.includes(roomId);
+
+      if (hostileInRoom) {
+        this.combatSystem.registerCombatant(combatant);
+        // Find a hostile creature in this room to auto-engage
+        for (const creature of this.creatureManager.getLivingCreatures()) {
+          if (creature.roomId === roomId && this.combatSystem.isInCombat(creature.id)) {
+            this.combatSystem.initiateCombat(creature.id, playerId);
+            break;
+          }
         }
       }
     }

@@ -1,3 +1,32 @@
+# [0.2.0-dev.39](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.38...v0.2.0-dev.39) (2026-04-14)
+
+
+### Bug Fixes
+
+* **combat:** make flee instant — skip defeated, move creatures ([73418a8](https://github.com/dkirby-ms/ellmud/commit/73418a8c63dd7d0b99e3e6adbe4b9589fabc57c3))
+
+# [0.2.0-dev.38](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.37...v0.2.0-dev.38) (2026-04-14)
+
+
+### Features
+
+* **downing:** extend bleed-out to 60 ticks (~1 minute) ([b1f4574](https://github.com/dkirby-ms/ellmud/commit/b1f4574bb5f20e6b66ae3986df51a46590383896))
+* rework downed state with grace period, HP drain, and stabilize-revive ([feb8326](https://github.com/dkirby-ms/ellmud/commit/feb83264bb05461abb1a69ef0d3c8e51d36dc43c))
+
+# [0.2.0-dev.37](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.36...v0.2.0-dev.37) (2026-04-14)
+
+
+### Bug Fixes
+
+* make player-death integration test deterministic ([d5b93ad](https://github.com/dkirby-ms/ellmud/commit/d5b93ad7258cc135c0e0c7cbc06b4109fa22fede))
+
+# [0.2.0-dev.36](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.35...v0.2.0-dev.36) (2026-04-14)
+
+
+### Bug Fixes
+
+* improve dodge and block narration to include attacker name ([694a844](https://github.com/dkirby-ms/ellmud/commit/694a844e639052b808cf21fae935b72d0233b1e7))
+
 # [0.2.0-dev.35](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.34...v0.2.0-dev.35) (2026-04-14)
 
 

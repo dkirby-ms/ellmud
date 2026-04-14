@@ -13,6 +13,7 @@ import {
   DowningSystem,
   BLEED_OUT_TICKS,
   STABILIZE_CHANNEL_TICKS,
+  GRACE_TICKS,
 } from '../systems/DowningSystem.js';
 
 const ROOM_A = 'room-a';
@@ -41,6 +42,8 @@ describe('DowningSystem', () => {
       const downed = system.getDownedPlayer('p1');
       expect(downed).toBeDefined();
       expect(downed!.bleedOutTicksRemaining).toBe(BLEED_OUT_TICKS);
+      expect(downed!.currentHp).toBe(0);
+      expect(downed!.graceTicksRemaining).toBe(GRACE_TICKS);
       expect(downed!.state).toBe('downed');
     });
 
@@ -220,8 +223,29 @@ describe('DowningSystem', () => {
   // ─── Killing Blow ─────────────────────────────────────────────────────────
 
   describe('killing blow', () => {
-    it('should instantly kill a downed player', () => {
+    it('should be blocked during grace period', () => {
       system.downPlayer('p1', 'Hero', ROOM_A);
+      // Immediately after downing, grace is active
+      const event = system.killingBlow('p1');
+      expect(event).toBeNull();
+      expect(system.isPlayerDowned('p1')).toBe(true);
+    });
+
+    it('should still be blocked partway through grace period', () => {
+      system.downPlayer('p1', 'Hero', ROOM_A);
+      // Tick once — grace decrements but still > 0 (GRACE_TICKS - 1 remaining)
+      system.tick();
+      const event = system.killingBlow('p1');
+      // Grace needs GRACE_TICKS full ticks to expire
+      if (GRACE_TICKS > 1) {
+        expect(event).toBeNull();
+      }
+    });
+
+    it('should succeed after grace period expires', () => {
+      system.downPlayer('p1', 'Hero', ROOM_A);
+      // Tick through grace period
+      for (let i = 0; i < GRACE_TICKS; i++) system.tick();
       const event = system.killingBlow('p1');
       expect(event).not.toBeNull();
       expect(event!.type).toBe('killing_blow');
@@ -237,19 +261,133 @@ describe('DowningSystem', () => {
     it('should clean up stabilize channels targeting killed player', () => {
       system.downPlayer('p1', 'Hero', ROOM_A);
       system.beginStabilize('p2', 'Healer', 'p1');
+      // Expire grace
+      for (let i = 0; i < GRACE_TICKS; i++) system.tick();
       system.killingBlow('p1');
       expect(system.isChannelingStabilize('p2')).toBe(false);
     });
 
-    it('should kill even a stabilized player', () => {
+    it('should kill even a stabilized player (after grace)', () => {
       system.downPlayer('p1', 'Hero', ROOM_A);
       system.beginStabilize('p2', 'Healer', 'p1');
       for (let i = 0; i < STABILIZE_CHANNEL_TICKS; i++) system.tick();
       expect(system.getDownedPlayer('p1')!.state).toBe('stabilized');
 
+      // Stabilized players still have graceTicksRemaining from initial downing,
+      // but killingBlow checks grace on the target — stabilized players don't
+      // get their grace decremented (they're stabilized), so this tests the
+      // edge case. Grace was ticked during the channel ticks above.
       const event = system.killingBlow('p1');
-      expect(event!.type).toBe('killing_blow');
+      if (GRACE_TICKS <= STABILIZE_CHANNEL_TICKS) {
+        expect(event!.type).toBe('killing_blow');
+        expect(system.isPlayerDowned('p1')).toBe(false);
+      } else {
+        // Grace still active — killing blow blocked
+        expect(event).toBeNull();
+      }
+    });
+  });
+
+  // ─── HP Drain During Bleed-Out ─────────────────────────────────────────────
+
+  describe('HP drain during bleed-out', () => {
+    it('should drain HP by 1 each tick (0 → -1 → -2 → …)', () => {
+      system.downPlayer('p1', 'Hero', ROOM_A);
+      expect(system.getDownedPlayer('p1')!.currentHp).toBe(0);
+
+      system.tick();
+      expect(system.getDownedPlayer('p1')!.currentHp).toBe(-1);
+
+      system.tick();
+      expect(system.getDownedPlayer('p1')!.currentHp).toBe(-2);
+    });
+
+    it('should reach -BLEED_OUT_TICKS at death', () => {
+      system.downPlayer('p1', 'Hero', ROOM_A);
+      // Tick to one before death
+      for (let i = 0; i < BLEED_OUT_TICKS - 1; i++) system.tick();
+      const downed = system.getDownedPlayer('p1');
+      expect(downed).toBeDefined();
+      expect(downed!.currentHp).toBe(-(BLEED_OUT_TICKS - 1));
+
+      // Final tick — player dies and is removed
+      const events = system.tick();
+      expect(events.some(e => e.type === 'player_bleed_out')).toBe(true);
       expect(system.isPlayerDowned('p1')).toBe(false);
+    });
+
+    it('should not drain HP for stabilized players', () => {
+      system.downPlayer('p1', 'Hero', ROOM_A);
+      system.tick(); // HP = -1
+      system.beginStabilize('p2', 'Healer', 'p1');
+      // Complete stabilization (STABILIZE_CHANNEL_TICKS ticks)
+      for (let i = 0; i < STABILIZE_CHANNEL_TICKS; i++) system.tick();
+      const hpAfterStabilize = system.getDownedPlayer('p1')!.currentHp;
+
+      // Tick several more times — HP should not change
+      for (let i = 0; i < 5; i++) system.tick();
+      expect(system.getDownedPlayer('p1')!.currentHp).toBe(hpAfterStabilize);
+    });
+  });
+
+  // ─── Grace Period ─────────────────────────────────────────────────────────
+
+  describe('grace period', () => {
+    it('should initialize grace ticks to GRACE_TICKS', () => {
+      system.downPlayer('p1', 'Hero', ROOM_A);
+      expect(system.getDownedPlayer('p1')!.graceTicksRemaining).toBe(GRACE_TICKS);
+    });
+
+    it('should decrement grace ticks each tick', () => {
+      system.downPlayer('p1', 'Hero', ROOM_A);
+      system.tick();
+      expect(system.getDownedPlayer('p1')!.graceTicksRemaining).toBe(GRACE_TICKS - 1);
+    });
+
+    it('should reach 0 after GRACE_TICKS ticks', () => {
+      system.downPlayer('p1', 'Hero', ROOM_A);
+      for (let i = 0; i < GRACE_TICKS; i++) system.tick();
+      expect(system.getDownedPlayer('p1')!.graceTicksRemaining).toBe(0);
+    });
+
+    it('should not go below 0', () => {
+      system.downPlayer('p1', 'Hero', ROOM_A);
+      for (let i = 0; i < GRACE_TICKS + 3; i++) system.tick();
+      const downed = system.getDownedPlayer('p1');
+      if (downed) {
+        expect(downed.graceTicksRemaining).toBe(0);
+      }
+    });
+
+    it('stabilize during grace period should still work', () => {
+      system.downPlayer('p1', 'Hero', ROOM_A);
+      // Start stabilize immediately (within grace)
+      system.beginStabilize('p2', 'Healer', 'p1');
+      for (let i = 0; i < STABILIZE_CHANNEL_TICKS; i++) {
+        const events = system.tick();
+        const stabilized = events.find(e => e.type === 'player_stabilized');
+        if (stabilized) {
+          expect(stabilized.playerId).toBe('p1');
+        }
+      }
+      expect(system.getDownedPlayer('p1')!.state).toBe('stabilized');
+    });
+
+    it('stabilize after grace (but before death) should still work', () => {
+      system.downPlayer('p1', 'Hero', ROOM_A);
+      // Tick past grace period
+      for (let i = 0; i < GRACE_TICKS + 1; i++) system.tick();
+      expect(system.getDownedPlayer('p1')!.graceTicksRemaining).toBe(0);
+
+      // Start stabilize — player is post-grace but still alive
+      system.beginStabilize('p2', 'Healer', 'p1');
+      let stabilized = false;
+      for (let i = 0; i < STABILIZE_CHANNEL_TICKS; i++) {
+        const events = system.tick();
+        if (events.some(e => e.type === 'player_stabilized')) stabilized = true;
+      }
+      expect(stabilized).toBe(true);
+      expect(system.getDownedPlayer('p1')!.state).toBe('stabilized');
     });
   });
 

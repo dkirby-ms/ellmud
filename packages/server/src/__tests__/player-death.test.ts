@@ -145,6 +145,7 @@ describe('Player Death Flow (ZoneRoom Integration)', () => {
     // Access room internals for test manipulation
     const roomInstance = room as unknown as {
       combatSystem: { getCombatant: (id: string) => { hp: number } | undefined };
+      downingSystem: { getDownedPlayer: (id: string) => { bleedOutTicksRemaining: number } | undefined };
       players: Map<string, unknown>;
     };
 
@@ -155,11 +156,18 @@ describe('Player Death Flow (ZoneRoom Integration)', () => {
       combatant.hp = 1;
     }
 
-    // Wait for combat ticks to resolve defeat + downing bleed-out timer
-    await wait(15_000);
+    // Poll until the player is downed (up to 5 seconds)
+    for (let i = 0; i < 10; i++) {
+      await wait(500);
+      const downedRecord = roomInstance.downingSystem?.getDownedPlayer(sessionId);
+      if (downedRecord) {
+        downedRecord.bleedOutTicksRemaining = 2;
+        break;
+      }
+    }
 
-    // Check for death overlay message (downed → bleed-out → death)
-    const deathMessages = overlayMessages.filter(m => m.state === 'death');
+    // Wait for bleed-out death
+    await wait(8000);
     if (combatant) {
       // If combat was initiated, we should have a death message
       expect(deathMessages.length).toBeGreaterThanOrEqual(1);
@@ -193,6 +201,7 @@ describe('Player Death Flow (ZoneRoom Integration)', () => {
 
     const roomInstance = room as unknown as {
       combatSystem: { getCombatant: (id: string) => { hp: number } | undefined };
+      downingSystem: { getDownedPlayer: (id: string) => { bleedOutTicksRemaining: number } | undefined };
     };
 
     const sessionId = client.sessionId;
@@ -201,8 +210,18 @@ describe('Player Death Flow (ZoneRoom Integration)', () => {
       combatant.hp = 1;
     }
 
-    // Wait for death + downing bleed-out + 3s delay for ROOM_SWITCH
-    await wait(16_000);
+    // Poll until the player is downed (up to 5 seconds)
+    for (let i = 0; i < 10; i++) {
+      await wait(500);
+      const downedRecord = roomInstance.downingSystem?.getDownedPlayer(sessionId);
+      if (downedRecord) {
+        downedRecord.bleedOutTicksRemaining = 2;
+        break;
+      }
+    }
+
+    // Wait for bleed-out death + 3s delay for ROOM_SWITCH
+    await wait(8000);
 
     if (combatant) {
       const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
@@ -226,6 +245,7 @@ describe('Player Death Flow (ZoneRoom Integration)', () => {
       combatSystem: CombatSystem;
       roomGraph: { rooms: Map<string, Room> };
       corpseSystem: CorpseSystem;
+      downingSystem: { getDownedPlayer: (id: string) => { bleedOutTicksRemaining: number } | undefined };
     };
 
     const sessionId = client.sessionId;
@@ -263,8 +283,18 @@ describe('Player Death Flow (ZoneRoom Integration)', () => {
     // Initiate combat — creature attacks player
     roomInstance.combatSystem.initiateCombat('creature-test-brute', sessionId);
 
-    // Wait for combat tick to resolve defeat + downing bleed-out + death
-    await wait(15_000);
+    // Poll until the player is downed (up to 5 seconds)
+    for (let i = 0; i < 10; i++) {
+      await wait(500);
+      const downedRecord = roomInstance.downingSystem?.getDownedPlayer(sessionId);
+      if (downedRecord) {
+        downedRecord.bleedOutTicksRemaining = 2;
+        break;
+      }
+    }
+
+    // Wait for bleed-out death + processing
+    await wait(8000);
 
     // Player inventory must be empty after death (non-soulbound items moved to corpse)
     expect(player!.inventory.size).toBe(0);
@@ -296,7 +326,7 @@ describe('Player Death E2E: down → stabilize', () => {
     await colyseus.shutdown();
   });
 
-  it('player reaches 0 HP, squadmate stabilizes', async () => {
+  it('player reaches 0 HP, squadmate stabilizes, player revived at 1 HP', async () => {
     const room = await colyseus.createRoom('zone', { useTestGraph: true, openDelayMs: 0 });
     const victim = await colyseus.connectTo(room);
     const healer = await colyseus.connectTo(room);
@@ -315,7 +345,7 @@ describe('Player Death E2E: down → stabilize', () => {
       players: Map<string, PlayerState>;
       combatSystem: CombatSystem;
       roomGraph: { rooms: Map<string, Room> };
-      downingSystem: { isPlayerDowned: (id: string) => boolean };
+      downingSystem: { isPlayerDowned: (id: string) => boolean; getDownedPlayer: (id: string) => { currentHp: number } | undefined };
     };
 
     const victimId = victim.sessionId;
@@ -337,6 +367,8 @@ describe('Player Death E2E: down → stabilize', () => {
     );
     victimCombatant.hp = 1;
     roomInstance.combatSystem.registerCombatant(victimCombatant);
+    // Force deterministic rolls so dodge never fires in this integration test
+    roomInstance.combatSystem.setRollFn(() => 1);
     roomInstance.combatSystem.initiateCombat('creature-e2e-brute', victimId);
 
     // Wait for combat tick to down the victim
@@ -363,6 +395,9 @@ describe('Player Death E2E: down → stabilize', () => {
     // Verify victim received stabilized state
     const stabilizedMessages = victimOverlay.filter(m => m.state === 'stabilized');
     expect(stabilizedMessages.length).toBeGreaterThanOrEqual(1);
+
+    // After stabilization, victim should be REMOVED from downed tracking (revived)
+    expect(roomInstance.downingSystem.isPlayerDowned(victimId)).toBe(false);
 
     await victim.leave();
   }, 30_000);
