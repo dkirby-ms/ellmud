@@ -452,3 +452,27 @@ dispatch({ type: 'SET_COMBAT_STATS', stats: { maxHp, unarmed, oneHanded, twoHand
 - Connection service wires handlers in both connect() and switchRoom() — must update both
 - EffectiveStats (attack, armour, shieldBlock, dodge, maxHp) are distinct from base CombatStats (8 weapon skills)
 - Pattern: show effective stats as primary, base as (base: N) suffix when they differ
+
+### 2025-07-24: Compact ANSI Color Swatch Grid (#458)
+**Status:** Complete — All 51 tests pass, TypeScript clean, lint clean
+
+**Problem:** The ANSI color selector in admin editor screens displayed full color names as text buttons, taking excessive horizontal space (16 buttons with names like "bright-magenta").
+
+**Changes:**
+1. **AnsiToolbar.tsx** — Replaced text-label color buttons with a compact 2x8 grid of colored squares:
+   - Added COLOR_HEX map (16 entries) matching tailwind.css .ansi-* classes
+   - Color swatches are 20x20px with background-color set to actual ANSI hex value
+   - Hover shows gold border highlight + subtle scale; title tooltip shows [name]...[/name]
+   - aria-label on each swatch for screen reader accessibility
+   - Grid wrapped in role="group" with aria-label="ANSI colors"
+   - Modifier buttons (bold/dim/italic/underline) unchanged as text labels
+2. **AnsiToolbar.test.tsx** — Updated all 51 tests:
+   - Color button lookups changed from getByText to getByRole with aria-label
+   - Added getColorButton() helper for consistency
+   - Added test for grid group rendering (verifies 16 swatches in group)
+
+## Learnings
+- ANSI color hex values live in packages/client/src/styles/tailwind.css lines 133-150
+- AnsiToolbar is used via AnsiTextarea, which combines toolbar + textarea + preview
+- Color swatches should use aria-label (not visible text) + title for tooltip
+- The insertTag function uses document.execCommand("insertText") for undo support
