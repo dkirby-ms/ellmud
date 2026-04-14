@@ -296,7 +296,7 @@ describe('Player Death E2E: down → stabilize', () => {
     await colyseus.shutdown();
   });
 
-  it('player reaches 0 HP, squadmate stabilizes', async () => {
+  it('player reaches 0 HP, squadmate stabilizes, player revived at 1 HP', async () => {
     const room = await colyseus.createRoom('zone', { useTestGraph: true, openDelayMs: 0 });
     const victim = await colyseus.connectTo(room);
     const healer = await colyseus.connectTo(room);
@@ -315,7 +315,7 @@ describe('Player Death E2E: down → stabilize', () => {
       players: Map<string, PlayerState>;
       combatSystem: CombatSystem;
       roomGraph: { rooms: Map<string, Room> };
-      downingSystem: { isPlayerDowned: (id: string) => boolean };
+      downingSystem: { isPlayerDowned: (id: string) => boolean; getDownedPlayer: (id: string) => { currentHp: number } | undefined };
     };
 
     const victimId = victim.sessionId;
@@ -365,6 +365,9 @@ describe('Player Death E2E: down → stabilize', () => {
     // Verify victim received stabilized state
     const stabilizedMessages = victimOverlay.filter(m => m.state === 'stabilized');
     expect(stabilizedMessages.length).toBeGreaterThanOrEqual(1);
+
+    // After stabilization, victim should be REMOVED from downed tracking (revived)
+    expect(roomInstance.downingSystem.isPlayerDowned(victimId)).toBe(false);
 
     await victim.leave();
   }, 30_000);
