@@ -1,3 +1,10 @@
+# [0.2.0-dev.36](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.35...v0.2.0-dev.36) (2026-04-14)
+
+
+### Bug Fixes
+
+* improve dodge and block narration to include attacker name ([694a844](https://github.com/dkirby-ms/ellmud/commit/694a844e639052b808cf21fae935b72d0233b1e7))
+
 # [0.2.0-dev.35](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.34...v0.2.0-dev.35) (2026-04-14)
 
 
