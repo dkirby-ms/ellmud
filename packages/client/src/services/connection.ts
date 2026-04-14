@@ -24,6 +24,7 @@ import {
   type ToggleFlagMessage,
   type InventoryUpdateMessage,
   type HelpDataMessage,
+  type EffectiveStatsMessage,
 } from '@ellmud/shared';
 
 const WS_ENDPOINT = import.meta.env.VITE_WS_URL ??
@@ -45,6 +46,7 @@ export interface MessageHandlers {
   onRoomOccupants?: (msg: RoomOccupantsMessage) => void;
   onFlagState?: (msg: FlagStateMessage) => void;
   onHelpData?: (msg: HelpDataMessage) => void;
+  onEffectiveStats?: (msg: EffectiveStatsMessage) => void;
   onError: (code: number, message: string) => void;
   onLeave: (code: number) => void;
 }
@@ -57,6 +59,19 @@ function getClient(): Client {
   }
   return client;
 }
+
+/** Race a promise against a timeout. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
+const CONNECTION_TIMEOUT_MS = 8000;
 
 /**
  * Connect to a Colyseus room with auth token.
@@ -71,7 +86,11 @@ export async function connect(
   const colyseus = getClient();
   const joinOptions: Record<string, unknown> = { token };
   if (characterId) joinOptions.characterId = characterId;
-  const room = await colyseus.joinOrCreate(roomName, joinOptions);
+  const room = await withTimeout(
+    colyseus.joinOrCreate(roomName, joinOptions),
+    CONNECTION_TIMEOUT_MS,
+    'Room connection',
+  );
 
   // Message-only subscriptions (dumb terminal protocol)
   room.onMessage(MessageTypes.NARRATE, handlers.onNarrate);
@@ -102,6 +121,9 @@ export async function connect(
   }
   if (handlers.onHelpData) {
     room.onMessage(MessageTypes.HELP_DATA, handlers.onHelpData);
+  }
+  if (handlers.onEffectiveStats) {
+    room.onMessage(MessageTypes.EFFECTIVE_STATS, handlers.onEffectiveStats);
   }
 
   room.onError((code, message) => handlers.onError(code, message ?? 'Unknown error'));
@@ -134,8 +156,16 @@ export async function switchRoom(
     delete (joinOptions as { roomId?: string }).roomId;
   }
   const newRoom = roomId
-    ? await colyseus.joinById(roomId, { token, ...joinOptions })
-    : await colyseus.joinOrCreate(targetRoomName, { token, ...joinOptions });
+    ? await withTimeout(
+        colyseus.joinById(roomId, { token, ...joinOptions }),
+        CONNECTION_TIMEOUT_MS,
+        'Room switch (joinById)',
+      )
+    : await withTimeout(
+        colyseus.joinOrCreate(targetRoomName, { token, ...joinOptions }),
+        CONNECTION_TIMEOUT_MS,
+        'Room switch (joinOrCreate)',
+      );
 
   // Re-register all message handlers on the new room
   newRoom.onMessage(MessageTypes.NARRATE, handlers.onNarrate);
@@ -166,6 +196,9 @@ export async function switchRoom(
   }
   if (handlers.onHelpData) {
     newRoom.onMessage(MessageTypes.HELP_DATA, handlers.onHelpData);
+  }
+  if (handlers.onEffectiveStats) {
+    newRoom.onMessage(MessageTypes.EFFECTIVE_STATS, handlers.onEffectiveStats);
   }
 
   newRoom.onError((code, message) => handlers.onError(code, message ?? 'Unknown error'));

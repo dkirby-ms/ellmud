@@ -3,7 +3,8 @@
  */
 
 import type { CharacterSummary } from '@ellmud/shared';
-import type { CharacterRepository, CharacterRow } from './CharacterRepository.js';
+import type { CharacterRepository, CharacterRow, PlayerCombatStats } from './CharacterRepository.js';
+import { DEFAULT_PLAYER_COMBAT_STATS } from './CharacterRepository.js';
 import { query, getClient } from '../db/index.js';
 
 interface DbCharacterRow {
@@ -16,6 +17,14 @@ interface DbCharacterRow {
   created_at: Date;
   last_played_at: Date | null;
   deleted_at: Date | null;
+  max_hp: number;
+  unarmed: number;
+  one_handed: number;
+  two_handed: number;
+  ranged: number;
+  shield_block: number;
+  dodge: number;
+  armour: number;
 }
 
 interface FactionNameRow {
@@ -43,13 +52,28 @@ function mapRow(row: DbCharacterRow): CharacterRow {
     createdAt: row.created_at,
     lastPlayedAt: row.last_played_at,
     deletedAt: row.deleted_at,
+    combatStats: {
+      maxHp: row.max_hp ?? DEFAULT_PLAYER_COMBAT_STATS.maxHp,
+      unarmed: row.unarmed ?? DEFAULT_PLAYER_COMBAT_STATS.unarmed,
+      oneHanded: row.one_handed ?? DEFAULT_PLAYER_COMBAT_STATS.oneHanded,
+      twoHanded: row.two_handed ?? DEFAULT_PLAYER_COMBAT_STATS.twoHanded,
+      ranged: row.ranged ?? DEFAULT_PLAYER_COMBAT_STATS.ranged,
+      shieldBlock: row.shield_block ?? DEFAULT_PLAYER_COMBAT_STATS.shieldBlock,
+      dodge: row.dodge ?? DEFAULT_PLAYER_COMBAT_STATS.dodge,
+      armour: row.armour ?? DEFAULT_PLAYER_COMBAT_STATS.armour,
+    },
   };
 }
+
+/** Shared column list for character SELECT queries. */
+const CHARACTER_COLUMNS = `id, player_id, name, starting_zone_slug, faction_slug, is_active,
+       created_at, last_played_at, deleted_at,
+       max_hp, unarmed, one_handed, two_handed, ranged, shield_block, dodge, armour`;
 
 export class PgCharacterRepository implements CharacterRepository {
   async list(playerId: string): Promise<CharacterSummary[]> {
     const result = await query<DbCharacterRow>(
-      `SELECT id, player_id, name, starting_zone_slug, faction_slug, is_active, created_at, last_played_at, deleted_at
+      `SELECT ${CHARACTER_COLUMNS}
        FROM characters
        WHERE player_id = $1 AND deleted_at IS NULL
        ORDER BY created_at ASC`,
@@ -110,7 +134,7 @@ export class PgCharacterRepository implements CharacterRepository {
     const result = await query<DbCharacterRow>(
       `INSERT INTO characters (player_id, name, starting_zone_slug)
        VALUES ($1, $2, $3)
-       RETURNING id, player_id, name, starting_zone_slug, faction_slug, is_active, created_at, last_played_at, deleted_at`,
+       RETURNING ${CHARACTER_COLUMNS}`,
       [playerId, name, startingZoneSlug],
     );
     return mapRow(result.rows[0]);
@@ -118,7 +142,7 @@ export class PgCharacterRepository implements CharacterRepository {
 
   async getById(id: string): Promise<CharacterRow | null> {
     const result = await query<DbCharacterRow>(
-      `SELECT id, player_id, name, starting_zone_slug, faction_slug, is_active, created_at, last_played_at, deleted_at
+      `SELECT ${CHARACTER_COLUMNS}
        FROM characters
        WHERE id = $1 AND deleted_at IS NULL`,
       [id],
@@ -172,7 +196,7 @@ export class PgCharacterRepository implements CharacterRepository {
 
   async getActive(playerId: string): Promise<CharacterRow | null> {
     const result = await query<DbCharacterRow>(
-      `SELECT id, player_id, name, starting_zone_slug, faction_slug, is_active, created_at, last_played_at, deleted_at
+      `SELECT ${CHARACTER_COLUMNS}
        FROM characters
        WHERE player_id = $1 AND is_active = true AND deleted_at IS NULL`,
       [playerId],
@@ -239,6 +263,41 @@ export class PgCharacterRepository implements CharacterRepository {
       `UPDATE characters SET starter_kit_granted = false
        WHERE id = $1 AND deleted_at IS NULL`,
       [characterId],
+    );
+  }
+
+  async getBaseStats(characterId: string): Promise<PlayerCombatStats> {
+    const result = await query<{
+      max_hp: number; unarmed: number; one_handed: number; two_handed: number;
+      ranged: number; shield_block: number; dodge: number; armour: number;
+    }>(
+      `SELECT max_hp, unarmed, one_handed, two_handed, ranged, shield_block, dodge, armour
+       FROM characters
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [characterId],
+    );
+    const row = result.rows[0];
+    if (!row) return { ...DEFAULT_PLAYER_COMBAT_STATS };
+    return {
+      maxHp: row.max_hp,
+      unarmed: row.unarmed,
+      oneHanded: row.one_handed,
+      twoHanded: row.two_handed,
+      ranged: row.ranged,
+      shieldBlock: row.shield_block,
+      dodge: row.dodge,
+      armour: row.armour,
+    };
+  }
+
+  async saveBaseStats(characterId: string, stats: PlayerCombatStats): Promise<void> {
+    await query(
+      `UPDATE characters
+       SET max_hp = $1, unarmed = $2, one_handed = $3, two_handed = $4,
+           ranged = $5, shield_block = $6, dodge = $7, armour = $8
+       WHERE id = $9 AND deleted_at IS NULL`,
+      [stats.maxHp, stats.unarmed, stats.oneHanded, stats.twoHanded,
+       stats.ranged, stats.shieldBlock, stats.dodge, stats.armour, characterId],
     );
   }
 }

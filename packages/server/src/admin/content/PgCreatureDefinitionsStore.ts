@@ -22,10 +22,13 @@ interface CreatureRow {
   behavior: string | null;
   aggressive: boolean;
   max_hp: number;
-  attack: number;
-  defence: number;
+  unarmed: number;
+  one_handed: number;
+  two_handed: number;
+  ranged: number;
+  shield_block: number;
+  dodge_skill_rank: number;
   armour: number;
-  agility: number;
   min_count: number;
   max_count: number;
   preferred_rooms: string[];
@@ -51,10 +54,13 @@ function rowToEntity(row: CreatureRow): ContentEntity {
     behavior: row.behavior ?? null,
     aggressive: row.aggressive,
     maxHp: row.max_hp,
-    attack: row.attack,
-    defence: row.defence,
+    unarmed: row.unarmed,
+    oneHanded: row.one_handed,
+    twoHanded: row.two_handed,
+    ranged: row.ranged,
+    shieldBlock: row.shield_block,
+    dodge: row.dodge_skill_rank,
     armour: row.armour,
-    agility: row.agility,
     minCount: row.min_count,
     maxCount: row.max_count,
     preferredRooms: row.preferred_rooms,
@@ -74,7 +80,8 @@ export class PgCreatureDefinitionsStore implements IContentStore<ContentEntity> 
 
   async getAll(): Promise<ContentEntity[]> {
     const result = await query<CreatureRow>(
-      `SELECT id, type, name, description, room_description, behavior, aggressive, max_hp, attack, defence, armour, agility,
+      `SELECT id, type, name, description, room_description, behavior, aggressive,
+              max_hp, unarmed, one_handed, two_handed, ranged, shield_block, dodge_skill_rank, armour,
               min_count, max_count, preferred_rooms, forbidden_rooms,
               idle_ticks_min, idle_ticks_max, flee_threshold,
               tier_min, tier_max, status, loot_table, created_at
@@ -86,7 +93,8 @@ export class PgCreatureDefinitionsStore implements IContentStore<ContentEntity> 
 
   async getById(id: string): Promise<ContentEntity | undefined> {
     const result = await query<CreatureRow>(
-      `SELECT id, type, name, description, room_description, behavior, aggressive, max_hp, attack, defence, armour, agility,
+      `SELECT id, type, name, description, room_description, behavior, aggressive,
+              max_hp, unarmed, one_handed, two_handed, ranged, shield_block, dodge_skill_rank, armour,
               min_count, max_count, preferred_rooms, forbidden_rooms,
               idle_ticks_min, idle_ticks_max, flee_threshold,
               tier_min, tier_max, status, loot_table, created_at
@@ -104,12 +112,14 @@ export class PgCreatureDefinitionsStore implements IContentStore<ContentEntity> 
     try {
       const result = await query<CreatureRow>(
         `INSERT INTO creature_definitions
-           (type, name, description, room_description, behavior, aggressive, max_hp, attack, defence, armour, agility,
+           (type, name, description, room_description, behavior, aggressive,
+            max_hp, unarmed, one_handed, two_handed, ranged, shield_block, dodge_skill_rank, armour,
             min_count, max_count, preferred_rooms, forbidden_rooms,
             idle_ticks_min, idle_ticks_max, flee_threshold,
             tier_min, tier_max, status, loot_table)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
-         RETURNING id, type, name, description, room_description, behavior, aggressive, max_hp, attack, defence, armour, agility,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+         RETURNING id, type, name, description, room_description, behavior, aggressive,
+                   max_hp, unarmed, one_handed, two_handed, ranged, shield_block, dodge_skill_rank, armour,
                    min_count, max_count, preferred_rooms, forbidden_rooms,
                    idle_ticks_min, idle_ticks_max, flee_threshold,
                    tier_min, tier_max, status, loot_table, created_at`,
@@ -121,10 +131,13 @@ export class PgCreatureDefinitionsStore implements IContentStore<ContentEntity> 
           (e.behavior as string) ?? null,
           (e.aggressive as boolean) ?? true,
           (e.maxHp as number) ?? 100,
-          (e.attack as number) ?? 10,
-          (e.defence as number) ?? 5,
+          (e.unarmed as number) ?? 5,
+          (e.oneHanded as number) ?? 5,
+          (e.twoHanded as number) ?? 5,
+          (e.ranged as number) ?? 5,
+          (e.shieldBlock as number) ?? 0,
+          (e.dodge as number) ?? 0,
           (e.armour as number) ?? 0,
-          (e.agility as number) ?? 0,
           (e.minCount as number) ?? 1,
           (e.maxCount as number) ?? 3,
           (e.preferredRooms as string[]) ?? [],
@@ -161,12 +174,14 @@ export class PgCreatureDefinitionsStore implements IContentStore<ContentEntity> 
     const result = await query<CreatureRow>(
       `UPDATE creature_definitions
        SET type = $1, name = $2, description = $3, room_description = $4, behavior = $5, aggressive = $6,
-           max_hp = $7, attack = $8, defence = $9, armour = $10, agility = $11,
-           min_count = $12, max_count = $13, preferred_rooms = $14, forbidden_rooms = $15,
-           idle_ticks_min = $16, idle_ticks_max = $17, flee_threshold = $18,
-           tier_min = $19, tier_max = $20, status = $21, loot_table = $22
-       WHERE id = $23
-       RETURNING id, type, name, description, room_description, behavior, aggressive, max_hp, attack, defence, armour, agility,
+           max_hp = $7, unarmed = $8, one_handed = $9, two_handed = $10, ranged = $11,
+           shield_block = $12, dodge_skill_rank = $13, armour = $14,
+           min_count = $15, max_count = $16, preferred_rooms = $17, forbidden_rooms = $18,
+           idle_ticks_min = $19, idle_ticks_max = $20, flee_threshold = $21,
+           tier_min = $22, tier_max = $23, status = $24, loot_table = $25
+       WHERE id = $26
+       RETURNING id, type, name, description, room_description, behavior, aggressive,
+                 max_hp, unarmed, one_handed, two_handed, ranged, shield_block, dodge_skill_rank, armour,
                  min_count, max_count, preferred_rooms, forbidden_rooms,
                  idle_ticks_min, idle_ticks_max, flee_threshold,
                  tier_min, tier_max, status, loot_table, created_at`,
@@ -178,10 +193,13 @@ export class PgCreatureDefinitionsStore implements IContentStore<ContentEntity> 
         (m.behavior as string) ?? null,
         (m.aggressive as boolean) ?? true,
         (m.maxHp as number) ?? 100,
-        (m.attack as number) ?? 10,
-        (m.defence as number) ?? 5,
+        (m.unarmed as number) ?? 5,
+        (m.oneHanded as number) ?? 5,
+        (m.twoHanded as number) ?? 5,
+        (m.ranged as number) ?? 5,
+        (m.shieldBlock as number) ?? 0,
+        (m.dodge as number) ?? 0,
         (m.armour as number) ?? 0,
-        (m.agility as number) ?? 0,
         (m.minCount as number) ?? 1,
         (m.maxCount as number) ?? 3,
         (m.preferredRooms as string[]) ?? [],

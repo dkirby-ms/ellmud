@@ -232,7 +232,6 @@ export default function ZoneExploration() {
   const combatActions: { label: string; action: CombatAction }[] = [
     { label: "Strike", action: "strike" },
     { label: "Heavy Strike", action: "heavy_strike" },
-    { label: "Dodge", action: "dodge" },
     { label: "Block", action: "block" },
     { label: "Use Item", action: "use_item" },
     { label: "Skill", action: "skill" },

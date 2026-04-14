@@ -1,10 +1,12 @@
 /**
  * Dodge Chance Tests — GDD §6.4
  *
- * Verifies that dodging grants a % chance to fully avoid an attack,
- * based on AGI stat + dodge skill rank, with proper PRNG integration.
+ * Verifies that dodge grants a passive % chance to fully avoid any attack,
+ * based on dodge skill rank, with proper PRNG integration.
+ * Dodge is now PASSIVE — every incoming attack gets a dodge roll automatically.
+ * Dodge is BINARY — full avoidance (0 damage) or full hit (no 0.5× reduction).
  *
- * Formula: min(75%, 20% + 2% × AGI + 3% × dodgeSkillRank)
+ * Formula: min(75%, 20% + 3% × dodgeSkillRank)
  */
 
 import { describe, it, expect } from 'vitest';
@@ -12,8 +14,7 @@ import {
   calculateDamage,
   getDodgeChance,
   DODGE_BASE_CHANCE,
-  DODGE_CHANCE_PER_AGI,
-  DODGE_CHANCE_PER_SKILL_RANK,
+  DODGE_CHANCE_PER_RANK,
   MAX_DODGE_CHANCE,
 } from '../combat/damage.js';
 import { CombatSystem } from '../combat/CombatSystem.js';
@@ -26,52 +27,47 @@ import {
 // ─── getDodgeChance unit tests ──────────────────────────────────────────────
 
 describe('getDodgeChance', () => {
-  it('should return base 20% + 2% per AGI with no skill', () => {
-    // AGI 0, skill 0 → 20%
-    expect(getDodgeChance(0, 0)).toBeCloseTo(0.20);
-    // AGI 5, skill 0 → 20% + 10% = 30%
-    expect(getDodgeChance(5, 0)).toBeCloseTo(0.30);
-    // AGI 10, skill 0 → 20% + 20% = 40%
-    expect(getDodgeChance(10, 0)).toBeCloseTo(0.40);
+  it('should return base 20% + 3% per dodge skill rank', () => {
+    // skill 0 → 20%
+    expect(getDodgeChance(0)).toBeCloseTo(0.20);
+    // skill 5 → 20% + 15% = 35%
+    expect(getDodgeChance(5)).toBeCloseTo(0.35);
+    // skill 10 → 20% + 30% = 50%
+    expect(getDodgeChance(10)).toBeCloseTo(0.50);
   });
 
   it('should add 3% per dodge skill rank', () => {
-    // AGI 0, skill 5 → 20% + 15% = 35%
-    expect(getDodgeChance(0, 5)).toBeCloseTo(0.35);
-    // AGI 5, skill 5 → 20% + 10% + 15% = 45%
-    expect(getDodgeChance(5, 5)).toBeCloseTo(0.45);
+    // skill 5 → 20% + 15% = 35%
+    expect(getDodgeChance(5)).toBeCloseTo(0.35);
+    // skill 10 → 20% + 30% = 50%
+    expect(getDodgeChance(10)).toBeCloseTo(0.50);
   });
 
   it('should cap at MAX_DODGE_CHANCE (75%)', () => {
-    // AGI 20, skill 10 → 20% + 40% + 30% = 90% → capped at 75%
-    expect(getDodgeChance(20, 10)).toBeCloseTo(MAX_DODGE_CHANCE);
-    // AGI 100, skill 100 → way over cap
-    expect(getDodgeChance(100, 100)).toBeCloseTo(MAX_DODGE_CHANCE);
+    // skill 19 → 20% + 57% = 77% → capped at 75%
+    expect(getDodgeChance(19)).toBeCloseTo(MAX_DODGE_CHANCE);
+    // skill 100 → way over cap
+    expect(getDodgeChance(100)).toBeCloseTo(MAX_DODGE_CHANCE);
   });
 
-  it('should return base chance (20%) for AGI 0 and skill 0', () => {
-    expect(getDodgeChance(0, 0)).toBeCloseTo(DODGE_BASE_CHANCE);
-  });
-
-  it('should default dodgeSkillRank to 0 when omitted', () => {
-    expect(getDodgeChance(5)).toBeCloseTo(0.30);
+  it('should return base chance (20%) for dodge skill 0', () => {
+    expect(getDodgeChance(0)).toBeCloseTo(DODGE_BASE_CHANCE);
   });
 
   it('should produce correct values for typical player builds', () => {
-    // Default player: AGI 5, no dodge skill → 30%
-    expect(getDodgeChance(5, 0)).toBeCloseTo(0.30);
-    // Agile rogue: AGI 10, dodge skill 5 → 20% + 20% + 15% = 55%
-    expect(getDodgeChance(10, 5)).toBeCloseTo(0.55);
-    // Max dodge build: AGI 15, dodge skill 8 → 20% + 30% + 24% = 74%
-    expect(getDodgeChance(15, 8)).toBeCloseTo(0.74);
-    // Just over cap: AGI 15, dodge skill 9 → 20% + 30% + 27% = 77% → 75%
-    expect(getDodgeChance(15, 9)).toBeCloseTo(MAX_DODGE_CHANCE);
+    // Default player: dodge skill 5 → 35%
+    expect(getDodgeChance(5)).toBeCloseTo(0.35);
+    // Agile rogue: dodge skill 10 → 50%
+    expect(getDodgeChance(10)).toBeCloseTo(0.50);
+    // High dodge build: dodge skill 15 → 20% + 45% = 65%
+    expect(getDodgeChance(15)).toBeCloseTo(0.65);
+    // Just over cap: dodge skill 19 → 20% + 57% = 77% → 75%
+    expect(getDodgeChance(19)).toBeCloseTo(MAX_DODGE_CHANCE);
   });
 
   it('should export correct constants', () => {
     expect(DODGE_BASE_CHANCE).toBe(0.20);
-    expect(DODGE_CHANCE_PER_AGI).toBe(0.02);
-    expect(DODGE_CHANCE_PER_SKILL_RANK).toBe(0.03);
+    expect(DODGE_CHANCE_PER_RANK).toBe(0.03);
     expect(MAX_DODGE_CHANCE).toBe(0.75);
   });
 });
@@ -81,112 +77,102 @@ describe('getDodgeChance', () => {
 describe('Dodge Damage Reduction (calculateDamage)', () => {
   const attack = 10;
   const armour = 2;
-  const agi = 5;         // 30% dodge chance with no skill
-  const skillRank = 0;
+  const dodgeSkill = 5;  // 35% dodge chance
 
   it('should fully avoid damage when dodge roll succeeds', () => {
-    // Roll 0.10 < 0.30 dodge chance → dodged
-    const result = calculateDamage(attack, armour, 'strike', 'dodge', {
-      defenderAgility: agi,
-      defenderDodgeSkillRank: skillRank,
+    // Roll 0.10 < 0.35 dodge chance → dodged
+    const result = calculateDamage(attack, armour, 'strike', 'strike', {
+      defenderDodge: dodgeSkill,
       dodgeRoll: 0.10,
     });
     expect(result.finalDamage).toBe(0);
     expect(result.dodged).toBe(true);
   });
 
-  it('should apply normal halved damage when dodge roll fails', () => {
-    // Roll 0.50 >= 0.30 dodge chance → not dodged
-    const result = calculateDamage(attack, armour, 'strike', 'dodge', {
-      defenderAgility: agi,
-      defenderDodgeSkillRank: skillRank,
+  it('should deal full damage when dodge roll fails', () => {
+    // Roll 0.50 >= 0.35 dodge chance → not dodged
+    const result = calculateDamage(attack, armour, 'strike', 'strike', {
+      defenderDodge: dodgeSkill,
       dodgeRoll: 0.50,
     });
-    // 10 * 0.5 - 2 = 3
-    expect(result.finalDamage).toBe(3);
+    // 10 * 1.0 - 2 = 8 (full damage, no 0.5× reduction)
+    expect(result.finalDamage).toBe(8);
     expect(result.dodged).toBeUndefined();
   });
 
   it('should not dodge at the boundary (roll exactly at chance threshold)', () => {
-    // AGI 5, skill 0 → ~30% chance; roll 0.31 > 0.30 → not dodged
-    const result = calculateDamage(attack, armour, 'strike', 'dodge', {
-      defenderAgility: agi,
-      defenderDodgeSkillRank: skillRank,
-      dodgeRoll: 0.31,
+    // dodge skill 5 → ~35% chance; roll 0.36 > 0.35 → not dodged
+    const result = calculateDamage(attack, armour, 'strike', 'strike', {
+      defenderDodge: dodgeSkill,
+      dodgeRoll: 0.36,
     });
-    expect(result.finalDamage).toBe(3);
+    expect(result.finalDamage).toBe(8);
     expect(result.dodged).toBeUndefined();
   });
 
   it('should respect MAX_DODGE_CHANCE cap', () => {
-    // AGI 20, skill 10 → capped at 75%
+    // dodge 19 → capped at 75%
     // Roll 0.74 < 0.75 → dodged
-    const result = calculateDamage(attack, armour, 'strike', 'dodge', {
-      defenderAgility: 20,
-      defenderDodgeSkillRank: 10,
+    const result = calculateDamage(attack, armour, 'strike', 'strike', {
+      defenderDodge: 19,
       dodgeRoll: 0.74,
     });
     expect(result.finalDamage).toBe(0);
     expect(result.dodged).toBe(true);
 
     // Roll 0.76 >= 0.75 → not dodged
-    const result2 = calculateDamage(attack, armour, 'strike', 'dodge', {
-      defenderAgility: 20,
-      defenderDodgeSkillRank: 10,
+    const result2 = calculateDamage(attack, armour, 'strike', 'strike', {
+      defenderDodge: 19,
       dodgeRoll: 0.76,
     });
-    expect(result2.finalDamage).toBe(3);
+    expect(result2.finalDamage).toBe(8);
     expect(result2.dodged).toBeUndefined();
   });
 
   it('should scale with dodge skill rank', () => {
-    // AGI 5, skill 5 → 20% + 10% + 15% = 45%
-    // Roll 0.40 < 0.45 → dodged
-    const result = calculateDamage(attack, armour, 'strike', 'dodge', {
-      defenderAgility: 5,
-      defenderDodgeSkillRank: 5,
+    // dodge skill 10 → 20% + 30% = 50%
+    // Roll 0.40 < 0.50 → dodged
+    const result = calculateDamage(attack, armour, 'strike', 'strike', {
+      defenderDodge: 10,
       dodgeRoll: 0.40,
     });
     expect(result.finalDamage).toBe(0);
     expect(result.dodged).toBe(true);
   });
 
-  it('should not apply dodge chance when defender is not dodging', () => {
+  it('passive dodge applies even when defender is striking', () => {
     const result = calculateDamage(attack, armour, 'strike', 'strike', {
-      defenderAgility: agi,
-      defenderDodgeSkillRank: skillRank,
+      defenderDodge: dodgeSkill,
       dodgeRoll: 0.01,
     });
-    // 10 * 1.0 - 2 = 8 (full damage, no dodge even with low roll)
+    // Passive dodge: roll 0.01 < 0.35 → dodged regardless of defender action
+    expect(result.finalDamage).toBe(0);
+    expect(result.dodged).toBe(true);
+  });
+
+  it('should not dodge when no options are provided (backward compat)', () => {
+    const result = calculateDamage(attack, armour, 'strike', 'strike');
+    // 10 * 1.0 - 2 = 8 (full damage, no dodge roll)
     expect(result.finalDamage).toBe(8);
     expect(result.dodged).toBeUndefined();
   });
 
-  it('should not dodge when no options are provided (backward compat)', () => {
-    const result = calculateDamage(attack, armour, 'strike', 'dodge');
-    // 10 * 0.5 - 2 = 3 (halved damage, no full dodge)
-    expect(result.finalDamage).toBe(3);
-    expect(result.dodged).toBeUndefined();
-  });
-
-  it('should still have base 20% dodge chance with AGI 0 and skill 0', () => {
-    // AGI 0, skill 0 → 20% base chance
+  it('should still have base 20% dodge chance with dodge skill 0', () => {
+    // dodge skill 0 → 20% base chance
     // Roll 0.10 < 0.20 → dodged
-    const result = calculateDamage(attack, armour, 'strike', 'dodge', {
-      defenderAgility: 0,
-      defenderDodgeSkillRank: 0,
+    const result = calculateDamage(attack, armour, 'strike', 'strike', {
+      defenderDodge: 0,
       dodgeRoll: 0.10,
     });
     expect(result.finalDamage).toBe(0);
     expect(result.dodged).toBe(true);
 
     // Roll 0.25 >= 0.20 → not dodged
-    const result2 = calculateDamage(attack, armour, 'strike', 'dodge', {
-      defenderAgility: 0,
-      defenderDodgeSkillRank: 0,
+    const result2 = calculateDamage(attack, armour, 'strike', 'strike', {
+      defenderDodge: 0,
       dodgeRoll: 0.25,
     });
-    expect(result2.finalDamage).toBe(3);
+    expect(result2.finalDamage).toBe(8);
     expect(result2.dodged).toBeUndefined();
   });
 });
@@ -205,11 +191,17 @@ describe('CombatSystem Dodge Integration', () => {
 
   function makePlayer(id: string, roomId = TEST_ROOM, stats?: Partial<CombatStats>, dodgeSkillRank = 0): ReturnType<typeof createCombatant> {
     const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-    return createCombatant(id, id, roomId, true, merged, dodgeSkillRank);
+    return createCombatant(id, id, roomId, true, {
+      attack: merged.unarmed,
+      maxHp: merged.maxHp,
+      armour: merged.armour,
+      shieldBlock: merged.shieldBlock,
+      dodge: dodgeSkillRank > 0 ? dodgeSkillRank : merged.dodge,
+    });
   }
 
   it('should fully dodge when PRNG roll is below dodge chance', () => {
-    // Roll always 0.0 → always dodge (AGI 5, skill 0 = 30%)
+    // Roll always 0.0 → always dodge (dodge skill 5 = 35%)
     const system = new CombatSystem(testExitResolver, () => 0.0);
 
     const attacker = makePlayer('p1');
@@ -218,7 +210,7 @@ describe('CombatSystem Dodge Integration', () => {
     system.registerCombatant(defender);
     system.initiateCombat('p1', 'p2');
 
-    system.submitAction('p2', 'dodge');
+    system.submitAction('p2', 'strike');
 
     const result = system.resolveTick();
 
@@ -241,14 +233,15 @@ describe('CombatSystem Dodge Integration', () => {
     system.registerCombatant(defender);
     system.initiateCombat('p1', 'p2');
 
-    system.submitAction('p2', 'dodge');
+    system.submitAction('p2', 'strike');
     system.resolveTick();
 
-    // Defender takes halved damage (10 * 0.5 - 2 = 3)
+    // Defender takes full damage (5 * 1.0 - 2 = 3)
     expect(defender.hp).toBe(defender.maxHp - 3);
   });
 
-  it('should not apply dodge roll when both combatants strike', () => {
+  it('passive dodge triggers even when both combatants strike', () => {
+    // Roll always 0.0 → always dodge (passive). Both strikers dodge each other.
     const system = new CombatSystem(testExitResolver, () => 0.0);
 
     const p1 = makePlayer('p1');
@@ -260,9 +253,9 @@ describe('CombatSystem Dodge Integration', () => {
     system.submitAction('p2', 'strike', 'p1');
     system.resolveTick();
 
-    // Both take full damage (10 * 1.0 - 2 = 8)
-    expect(p1.hp).toBe(p1.maxHp - 8);
-    expect(p2.hp).toBe(p2.maxHp - 8);
+    // Both passively dodge — roll 0.0 < 35% dodge chance
+    expect(p1.hp).toBe(p1.maxHp);
+    expect(p2.hp).toBe(p2.maxHp);
   });
 
   it('backward compat: default CombatSystem (no PRNG) never dodges', () => {
@@ -274,50 +267,52 @@ describe('CombatSystem Dodge Integration', () => {
     system.registerCombatant(defender);
     system.initiateCombat('p1', 'p2');
 
-    system.submitAction('p2', 'dodge');
+    system.submitAction('p2', 'strike');
     system.resolveTick();
 
     expect(defender.hp).toBe(defender.maxHp - 3);
   });
 
-  it('high-AGI combatant dodges more reliably', () => {
-    // AGI 10, skill 0 → 20% + 20% = 40%. Roll at 0.35 → dodge succeeds.
-    const system = new CombatSystem(testExitResolver, () => 0.35);
+  it('high-dodge-skill combatant dodges more reliably', () => {
+    // dodge 10 → 20% + 30% = 50%. Roll at 0.45 → dodge succeeds.
+    const system = new CombatSystem(testExitResolver, () => 0.45);
 
     const attacker = makePlayer('p1');
-    const defender = makePlayer('p2', TEST_ROOM, { agility: 10 });
+    const defender = makePlayer('p2', TEST_ROOM, { dodge: 10 });
     system.registerCombatant(attacker);
     system.registerCombatant(defender);
     system.initiateCombat('p1', 'p2');
 
-    system.submitAction('p2', 'dodge');
+    system.submitAction('p2', 'strike');
     system.resolveTick();
 
-    // 40% chance, roll 0.35 < 0.40 → dodge succeeds
+    // 50% chance, roll 0.45 < 0.50 → dodge succeeds
     expect(defender.hp).toBe(defender.maxHp);
   });
 
   it('dodge skill rank increases dodge chance', () => {
-    // AGI 5, skill 5 → 20% + 10% + 15% = 45%. Roll at 0.40 → dodge succeeds.
-    const system = new CombatSystem(testExitResolver, () => 0.40);
+    // dodge skill 10 → 20% + 30% = 50%. Roll at 0.45 → dodge succeeds.
+    const system = new CombatSystem(testExitResolver, () => 0.45);
 
     const attacker = makePlayer('p1');
-    const defender = makePlayer('p2', TEST_ROOM, undefined, 5);
+    const defender = makePlayer('p2', TEST_ROOM, undefined, 10);
     system.registerCombatant(attacker);
     system.registerCombatant(defender);
     system.initiateCombat('p1', 'p2');
 
-    system.submitAction('p2', 'dodge');
+    system.submitAction('p2', 'strike');
     system.resolveTick();
 
-    // 45% chance, roll 0.40 < 0.45 → dodge succeeds
+    // 50% chance, roll 0.45 < 0.50 → dodge succeeds
     expect(defender.hp).toBe(defender.maxHp);
   });
 
   it('dodge can succeed on multiple attacks in the same tick', () => {
-    // Three attackers strike the same dodging defender. Each gets independent roll.
+    // Three attackers strike the same defender. Each attack gets an independent dodge roll
+    // plus a block roll (shield block). Defender also strikes a1 (auto-attack).
     let rollCount = 0;
-    const rolls = [0.10, 0.10, 0.10]; // all below 30% → all dodged
+    // Each attack needs 2 rolls: dodge + block. 4 attacks = 8 rolls.
+    const rolls = [0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10]; // all below 35% → all dodged
     const system = new CombatSystem(testExitResolver, () => rolls[rollCount++]);
 
     const a1 = makePlayer('a1');
@@ -331,13 +326,14 @@ describe('CombatSystem Dodge Integration', () => {
     system.initiateCombat('a1', 'defender');
     system.initiateCombat('a2', 'defender');
     system.initiateCombat('a3', 'defender');
-    system.submitAction('defender', 'dodge');
+    system.submitAction('defender', 'strike');
 
     system.resolveTick();
 
     // All attacks dodged — defender takes no damage
     expect(defender.hp).toBe(defender.maxHp);
-    expect(rollCount).toBe(3);
+    // 4 attacks × 2 rolls each (dodge + block) = 8 rolls
+    expect(rollCount).toBe(8);
   });
 
   it('dodge can partially succeed against multiple attackers', () => {
@@ -354,11 +350,11 @@ describe('CombatSystem Dodge Integration', () => {
     system.registerCombatant(defender);
     system.initiateCombat('a1', 'defender');
     system.initiateCombat('a2', 'defender');
-    system.submitAction('defender', 'dodge');
+    system.submitAction('defender', 'strike');
 
     system.resolveTick();
 
-    // One attack dodged (0 damage), one hit (10 * 0.5 - 2 = 3)
+    // One attack dodged (0 damage), one hit (5 * 1.0 - 2 = 3)
     expect(defender.hp).toBe(defender.maxHp - 3);
   });
 });

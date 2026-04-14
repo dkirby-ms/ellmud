@@ -28,6 +28,7 @@ import type {
   ZoneTransferMessage,
   InventoryUpdateMessage,
   HelpDataMessage,
+  EffectiveStatsMessage,
 } from '@ellmud/shared';
 import type { Room } from '@colyseus/sdk';
 import type { MessageHandlers } from '../services/connection.js';
@@ -316,6 +317,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
               id: item.id,
               name: item.name,
               tier: item.tier as import('@ellmud/shared').GearTier,
+              weight: item.weight,
             })),
           });
         }
@@ -335,6 +337,11 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
             })),
             posture: msg.posture,
           });
+        }
+      },
+      onEffectiveStats: (msg: EffectiveStatsMessage) => {
+        if (!disposed) {
+          dispatch({ type: 'SET_EFFECTIVE_STATS', stats: msg });
         }
       },
       onZoneTransfer: (msg: ZoneTransferMessage) => {

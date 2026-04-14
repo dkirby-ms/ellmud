@@ -1,6 +1,6 @@
 {
   "name": "ellmud",
-  "version": "0.2.0-dev.28",
+  "version": "0.2.0-dev.35",
   "private": true,
   "description": "PvPvE Extraction RPG — Real-Time MUD",
   "workspaces": [
@@ -16,7 +16,8 @@
     "test:e2e": "npm run test -w @ellmud/e2e",
     "lint": "npm run lint --workspaces --if-present",
     "version:bump": "npm version --no-git-tag-version",
-    "version:sync": "node scripts/sync-versions.mjs"
+    "version:sync": "node scripts/sync-versions.mjs",
+    "prepare": "husky"
   },
   "keywords": [],
   "author": "",
@@ -35,6 +36,8 @@
     "@semantic-release/release-notes-generator": "^14.1.0",
     "concurrently": "^9.2.1",
     "eslint": "^10.0.3",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "semantic-release": "^25.0.3",
     "typescript-eslint": "^8.57.1"
   },
@@ -45,5 +48,10 @@
   "overrides": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix"
+    ]
   }
 }

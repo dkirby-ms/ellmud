@@ -1,3 +1,64 @@
+# [0.2.0-dev.35](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.34...v0.2.0-dev.35) (2026-04-14)
+
+
+### Bug Fixes
+
+* build errors in combat tests + connection timeout for browser hang ([9fef3f5](https://github.com/dkirby-ms/ellmud/commit/9fef3f503ad99d210afccf5c9f2b1751e1276ad5))
+
+# [0.2.0-dev.34](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.33...v0.2.0-dev.34) (2026-04-14)
+
+
+### Bug Fixes
+
+* add timeout to API calls and Vite proxy to prevent browser hang on server restart ([a6c804b](https://github.com/dkirby-ms/ellmud/commit/a6c804bc71bf5eaa125290d14b1609162759960f))
+
+# [0.2.0-dev.33](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.32...v0.2.0-dev.33) (2026-04-14)
+
+
+### Bug Fixes
+
+* dodge rolls, respawn location, and post-death combat cleanup (fixes [#460](https://github.com/dkirby-ms/ellmud/issues/460), fixes [#461](https://github.com/dkirby-ms/ellmud/issues/461), fixes [#462](https://github.com/dkirby-ms/ellmud/issues/462)) ([4d1899b](https://github.com/dkirby-ms/ellmud/commit/4d1899be2b33e24dfeeb9d38f99548b0eb1a7264))
+
+# [0.2.0-dev.32](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.31...v0.2.0-dev.32) (2026-04-14)
+
+
+### Features
+
+* replace color name buttons with compact swatch grid in ANSI toolbar (fixes [#458](https://github.com/dkirby-ms/ellmud/issues/458)) ([f97312f](https://github.com/dkirby-ms/ellmud/commit/f97312f9d0bdd9fa1642b7e108f8c0abb0c72b82))
+
+# [0.2.0-dev.31](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.30...v0.2.0-dev.31) (2026-04-14)
+
+
+### Bug Fixes
+
+* add Laeral, Bruenor, Danilo to Issue Routing table in routing.md ([64d1352](https://github.com/dkirby-ms/ellmud/commit/64d13521b8307eda75dd5c65e7c48fadbc732800))
+
+# [0.2.0-dev.30](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.29...v0.2.0-dev.30) (2026-04-14)
+
+
+### Bug Fixes
+
+* move Discord UAT announcement to fire after successful deploy (fixes [#451](https://github.com/dkirby-ms/ellmud/issues/451)) ([e39b67f](https://github.com/dkirby-ms/ellmud/commit/e39b67f48cc0413f31efe8c1d0b67a16849d85d0))
+* replace hardcoded triage routing with routing.md-driven keyword scoring ([1b2cbe9](https://github.com/dkirby-ms/ellmud/commit/1b2cbe9391ae49b7e07107f063b711bee9446b08))
+
+# [0.2.0-dev.29](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.28...v0.2.0-dev.29) (2026-04-14)
+
+
+### Bug Fixes
+
+* inventory panel shows carried items when in zone ([1099162](https://github.com/dkirby-ms/ellmud/commit/1099162539ec6f2b32b6dc43376edaf5277f6bb7))
+* migrate admin creature CRUD to Phase 1 stats, wire calculateCreatureEffectiveStats ([#452](https://github.com/dkirby-ms/ellmud/issues/452), [#456](https://github.com/dkirby-ms/ellmud/issues/456)) ([2a97cf1](https://github.com/dkirby-ms/ellmud/commit/2a97cf174f332fe945a1433714007e59ea0341ff))
+* update 15 test files for new combat stat model ([159f1bb](https://github.com/dkirby-ms/ellmud/commit/159f1bb52bb406391d1e00d337b5b2fffee9d50c))
+* update message type count for EFFECTIVE_STATS addition ([3401c1e](https://github.com/dkirby-ms/ellmud/commit/3401c1e11e44017078010c393d3b632740d23bf7))
+* update test expectations for passive dodge refactor ([41531c5](https://github.com/dkirby-ms/ellmud/commit/41531c584a59fbf937d987f5832c04c8844b4584))
+* wire player combat stats from CharacterRepository into combatant creation ([c2c134d](https://github.com/dkirby-ms/ellmud/commit/c2c134dcedd98e4788fdb8bf10fc9dae89c6f320))
+
+
+### Features
+
+* add ItemStats to Item interface for equipment bonuses ([#453](https://github.com/dkirby-ms/ellmud/issues/453)) ([3436dc3](https://github.com/dkirby-ms/ellmud/commit/3436dc3b33f1d5cb929f4c66b7ec40910ab2095c))
+* send effective stats to client and display in StatusPanel ([#455](https://github.com/dkirby-ms/ellmud/issues/455)) ([d3fbb2d](https://github.com/dkirby-ms/ellmud/commit/d3fbb2dc5dd8d6b2fc0d1cae9dc2e21c3f9e42ec))
+
 # [0.2.0-dev.28](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.27...v0.2.0-dev.28) (2026-04-13)
 
 

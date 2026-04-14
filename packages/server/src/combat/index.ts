@@ -11,6 +11,9 @@ export {
   type FleeResult,
   type TickResult,
   type QueuedAction,
+  type WeaponType,
+  type EquipmentBonuses,
+  type ItemStats,
   DEFAULT_PLAYER_STATS,
   COMBAT_TIMEOUT_TICKS,
   EMPTY_TICK_RESULT,
@@ -19,10 +22,13 @@ export {
 export {
   calculateDamage,
   getDodgeChance,
+  getShieldBlockChance,
   DODGE_BASE_CHANCE,
-  DODGE_CHANCE_PER_AGI,
-  DODGE_CHANCE_PER_SKILL_RANK,
+  DODGE_CHANCE_PER_RANK,
   MAX_DODGE_CHANCE,
+  BLOCK_BASE_CHANCE,
+  BLOCK_CHANCE_PER_RANK,
+  MAX_BLOCK_CHANCE,
   type DamageResult,
   type DamageOptions,
   type DamageBreakdown,
@@ -50,3 +56,9 @@ export type { ClassifiedCombatEvent, SignalClass } from './signal-classification
 export { batchCombatEvents, narrateBatchedEvent, DEFAULT_BATCHING_RULES } from './micro-batching.js';
 export type { BatchedEvent, BatchingRules } from './micro-batching.js';
 export { seededPrng } from './prng.js';
+export {
+  calculateEquipmentBonuses,
+  calculatePlayerEffectiveStats,
+  calculateCreatureEffectiveStats,
+  type EffectiveStats,
+} from './stats.js';

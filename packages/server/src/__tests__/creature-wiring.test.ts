@@ -137,7 +137,7 @@ describe('Creature Spawning in Zone', () => {
       expect(creature.name).toBe('Drowned Revenant');
       expect(creature.type).toBe('drowned_revenant');
       expect(creature.maxHp).toBe(50);
-      expect(creature.attack).toBe(10);
+      expect(creature.unarmed).toBe(10);
       expect(creature.isAlive).toBe(true);
       expect(creature.behaviorState).toBe('idle');
     }
@@ -247,7 +247,7 @@ describe('Creature Loot Drops', () => {
     combatSystem.registerCombatant(creatureManager.toCombatant(creature));
     combatSystem.registerCombatant(
       createCombatant('player-1', 'player-1', roomId, true, {
-        maxHp: 100, attack: 200, defence: 5, armour: 2, agility: 5,
+        maxHp: 100, attack: 200, armour: 2,
       }),
     );
     combatSystem.initiateCombat('player-1', creature.id);

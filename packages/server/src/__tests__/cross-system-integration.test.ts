@@ -25,12 +25,12 @@ function testExitResolver(roomId: string): string[] {
 
 function makePlayer(id: string, roomId = TEST_ROOM, stats?: Partial<CombatStats>): Combatant {
   const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-  return createCombatant(id, id, roomId, true, merged);
+  return createCombatant(id, id, roomId, true, { attack: merged.unarmed, maxHp: merged.maxHp, armour: merged.armour, shieldBlock: merged.shieldBlock, dodge: merged.dodge });
 }
 
 function makeCreature(id: string, roomId = TEST_ROOM, stats?: Partial<CombatStats>): Combatant {
   const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-  return createCombatant(id, id, roomId, false, merged);
+  return createCombatant(id, id, roomId, false, { attack: merged.unarmed, maxHp: merged.maxHp, armour: merged.armour, shieldBlock: merged.shieldBlock, dodge: merged.dodge });
 }
 
 function buildContext(
@@ -100,7 +100,7 @@ describe('Combat System Edge Cases', () => {
 
   it('defeated combatant is removed from encounter', () => {
     // Create a very weak defender
-    const p1 = makePlayer('p1', TEST_ROOM, { attack: 200 });
+    const p1 = makePlayer('p1', TEST_ROOM, { unarmed: 200 });
     const p2 = makePlayer('p2', TEST_ROOM, { maxHp: 1, armour: 0 });
     p2.hp = 1;
     combat.registerCombatant(p1);
@@ -166,14 +166,14 @@ describe('Combat System Edge Cases', () => {
 
   it('combat with a creature that has exactly 0 HP remaining is already defeated', () => {
     const player = makePlayer('p1');
-    // Creature HP exactly matches one auto-attack hit: attack=10 - armour=0 = 10
-    const creature = makeCreature('c1', TEST_ROOM, { maxHp: 10, armour: 0 });
+    // Creature HP exactly matches one auto-attack hit: attack=5 - armour=0 = 5
+    const creature = makeCreature('c1', TEST_ROOM, { maxHp: 5, armour: 0 });
     combat.registerCombatant(player);
     combat.registerCombatant(creature);
     combat.initiateCombat('p1', 'c1');
 
-    // First tick: both auto-attack (GDD §6.2). Player deals 10 - 0 = 10 damage.
-    // Creature: 10 - 10 = 0 HP → defeated
+    // First tick: both auto-attack (GDD §6.2). Player deals 5 - 0 = 5 damage.
+    // Creature: 5 - 5 = 0 HP → defeated
     const result = combat.resolveTick();
     expect(creature.hp).toBe(0);
 

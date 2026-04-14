@@ -3,6 +3,8 @@
  *
  * Wraps selected text with ANSI tags or inserts empty tag pair at cursor.
  * Designed to sit above a textarea, connected via ref.
+ *
+ * Colors render as a compact swatch grid; modifiers remain text buttons.
  */
 
 import React from "react";
@@ -11,6 +13,26 @@ interface AnsiToolbarProps {
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   onInsert: (newValue: string) => void;
 }
+
+/** ANSI color name → hex value (matches tailwind.css .ansi-* classes). */
+const COLOR_HEX: Record<string, string> = {
+  black:          "#555753",
+  red:            "#CC0000",
+  green:          "#4E9A06",
+  yellow:         "#C4A000",
+  blue:           "#3465A4",
+  magenta:        "#75507B",
+  cyan:           "#06989A",
+  white:          "#D3D7CF",
+  "bright-black":   "#555753",
+  "bright-red":     "#EF2929",
+  "bright-green":   "#8AE234",
+  "bright-yellow":  "#FCE94F",
+  "bright-blue":    "#729FCF",
+  "bright-magenta": "#AD7FA8",
+  "bright-cyan":    "#34E2E2",
+  "bright-white":   "#EEEEEC",
+};
 
 const COLORS = [
   "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
@@ -23,7 +45,7 @@ const MODIFIERS = ["bold", "dim", "italic", "underline"] as const;
 function insertTag(
   textarea: HTMLTextAreaElement,
   tag: string,
-  onInsert: (v: string) => void,
+  _onInsert: (v: string) => void,
 ) {
   textarea.focus();
 
@@ -41,11 +63,9 @@ function insertTag(
   requestAnimationFrame(() => {
     textarea.focus();
     if (selected) {
-      // Position cursor at the end of the wrapped text
       const cursorPos = selectionStart + wrapped.length;
       textarea.setSelectionRange(cursorPos, cursorPos);
     } else {
-      // Position cursor between the opening and closing tags
       const cursorPos = selectionStart + tag.length + 2; // after [tag]
       textarea.setSelectionRange(cursorPos, cursorPos);
     }
@@ -58,7 +78,7 @@ export default function AnsiToolbar({ textareaRef, onInsert }: AnsiToolbarProps)
     insertTag(textareaRef.current, tag, onInsert);
   };
 
-  const btnBase =
+  const modBtnBase =
     "text-[10px] leading-tight px-1.5 py-0.5 rounded border border-[#2A2B35] hover:border-[#C9A84C] transition-colors cursor-pointer";
 
   return (
@@ -66,18 +86,20 @@ export default function AnsiToolbar({ textareaRef, onInsert }: AnsiToolbarProps)
       className="px-2 py-1.5 flex flex-wrap items-center gap-1 border border-[#2A2B35] border-b-0 rounded-t"
       style={{ background: "#0D0E14" }}
     >
-      {COLORS.map((name) => (
-        <button
-          key={name}
-          type="button"
-          onClick={() => handleClick(name)}
-          className={`ansi-${name} ${btnBase}`}
-          style={{ background: "#12131A" }}
-          title={`[${name}]…[/${name}]`}
-        >
-          {name}
-        </button>
-      ))}
+      {/* Color swatch grid — two rows of 8 */}
+      <div className="grid grid-cols-8 gap-0.5" role="group" aria-label="ANSI colors">
+        {COLORS.map((name) => (
+          <button
+            key={name}
+            type="button"
+            onClick={() => handleClick(name)}
+            aria-label={name}
+            title={`[${name}]…[/${name}]`}
+            className="w-5 h-5 rounded-sm border border-[#2A2B35] hover:border-[#C9A84C] hover:scale-110 transition-all cursor-pointer"
+            style={{ background: COLOR_HEX[name] }}
+          />
+        ))}
+      </div>
 
       <span className="w-px h-4 bg-[#2A2B35] mx-0.5" />
 
@@ -86,7 +108,7 @@ export default function AnsiToolbar({ textareaRef, onInsert }: AnsiToolbarProps)
           key={name}
           type="button"
           onClick={() => handleClick(name)}
-          className={`ansi-${name} text-[#E8E0D0] ${btnBase}`}
+          className={`ansi-${name} text-[#E8E0D0] ${modBtnBase}`}
           style={{ background: "#12131A" }}
           title={`[${name}]…[/${name}]`}
         >

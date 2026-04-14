@@ -126,12 +126,12 @@ function buildExitResolver(rooms: Map<string, SoundRoom>) {
 // Player factory
 function makePlayer(id: string, roomId: string, stats?: Partial<CombatStats>): Combatant {
   const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-  return createCombatant(id, id, roomId, true, merged);
+  return createCombatant(id, id, roomId, true, { attack: merged.unarmed, maxHp: merged.maxHp, armour: merged.armour, shieldBlock: merged.shieldBlock, dodge: merged.dodge });
 }
 
 function makeCreature(id: string, roomId: string, stats?: Partial<CombatStats>): Combatant {
   const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-  return createCombatant(id, id, roomId, false, merged);
+  return createCombatant(id, id, roomId, false, { attack: merged.unarmed, maxHp: merged.maxHp, armour: merged.armour, shieldBlock: merged.shieldBlock, dodge: merged.dodge });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -174,8 +174,8 @@ describe('Phase 2 QA — Multi-Player Zone (4 players)', () => {
   });
 
   it('resolves combat between 2 of 4 players while others observe', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, attack: 15, defence: 5, armour: 2 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 5, armour: 2 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, unarmed: 15, dodge: 5, armour: 2 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 5, armour: 2 });
     const p3 = makePlayer('p3', ROOMS.ENTRY);
     const p4 = makePlayer('p4', ROOMS.ENTRY);
 
@@ -188,18 +188,18 @@ describe('Phase 2 QA — Multi-Player Zone (4 players)', () => {
     expect(combat.isInCombat('p3')).toBe(false);
     expect(combat.isInCombat('p4')).toBe(false);
 
-    // p1 strikes, p2 dodges
+    // p1 strikes, p2 strikes back
     combat.submitAction('p1', 'strike', 'p2');
-    combat.submitAction('p2', 'dodge');
+    combat.submitAction('p2', 'strike', 'p1');
 
     const result = combat.resolveTick();
     expect(result.events.length).toBeGreaterThan(0);
 
-    // p1 should have struck, p2 dodged (takes no damage)
-    const strikeEvent = result.events.find(e => e.type === 'strike' && e.actorId === 'p1');
-    const dodgeEvent = result.events.find(e => e.type === 'dodge' && e.actorId === 'p2');
-    expect(strikeEvent).toBeDefined();
-    expect(dodgeEvent).toBeDefined();
+    // Both should have strike events
+    const p1Strike = result.events.find(e => e.type === 'strike' && e.actorId === 'p1');
+    const p2Strike = result.events.find(e => e.type === 'strike' && e.actorId === 'p2');
+    expect(p1Strike).toBeDefined();
+    expect(p2Strike).toBeDefined();
   });
 
   it('combat in ENTRY propagates sound to CORRIDOR and ARMORY', () => {
@@ -235,8 +235,8 @@ describe('Phase 2 QA — Multi-Player Zone (4 players)', () => {
   });
 
   it('simultaneous combat events generate both sound and traces', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 20, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 20, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -313,8 +313,8 @@ describe('Phase 2 QA — PvP Conflict', () => {
   });
 
   it('player 1 striking player 2 deals damage', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 15, defence: 5, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 5, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 15, dodge: 5, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 5, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -331,8 +331,8 @@ describe('Phase 2 QA — PvP Conflict', () => {
   });
 
   it('mutual strikes deal damage to both players', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, attack: 15, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 12, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, unarmed: 15, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 12, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -348,8 +348,8 @@ describe('Phase 2 QA — PvP Conflict', () => {
 
   it('repeated strikes eventually defeat a player', () => {
     // Low HP target, high attack attacker
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, attack: 50, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 30, attack: 5, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, unarmed: 50, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 30, unarmed: 5, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -357,7 +357,7 @@ describe('Phase 2 QA — PvP Conflict', () => {
     let defeated = false;
     for (let tick = 0; tick < 20; tick++) {
       combat.submitAction('p1', 'strike', 'p2');
-      combat.submitAction('p2', 'dodge');
+      combat.submitAction('p2', 'strike');
 
       const result = combat.resolveTick();
       if (result.events.some(e => e.type === 'defeated' && e.actorId === 'p2')) {
@@ -372,13 +372,13 @@ describe('Phase 2 QA — PvP Conflict', () => {
   });
 
   it('player defeat generates corpse trace', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 200, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 10, attack: 5, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 200, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 10, unarmed: 5, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
     combat.submitAction('p1', 'strike', 'p2');
-    combat.submitAction('p2', 'dodge');
+    combat.submitAction('p2', 'strike');
 
     const result = combat.resolveTick();
 
@@ -399,8 +399,8 @@ describe('Phase 2 QA — PvP Conflict', () => {
   });
 
   it('heavy damage produces blood trail traces', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 30, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 5, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 30, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 5, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -461,7 +461,7 @@ describe('Phase 2 QA — Scaling (2–4 replicas)', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 4. RECONNECTION TEST — disconnect mid-combat, dodge applied, state restored
+// 4. RECONNECTION TEST — disconnect mid-combat, auto-attack applied, state restored
 // ═══════════════════════════════════════════════════════════════════════════
 describe('Phase 2 QA — Reconnection (mid-combat)', () => {
   let combat: CombatSystem;
@@ -472,9 +472,9 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
     combat = new CombatSystem(buildExitResolver(rooms));
   });
 
-  it('disconnected player auto-dodges in combat', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 15, defence: 5, armour: 2 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 5, armour: 2 });
+  it('disconnected player auto-attacks in combat', () => {
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 15, dodge: 5, armour: 2 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 5, armour: 2 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -482,20 +482,20 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
     // p2 disconnects
     combat.markDisconnected('p2');
 
-    // p1 strikes, p2 has no submitted action → auto-dodge (disconnected)
+    // p1 strikes, p2 has no submitted action → auto-attacks (disconnected)
     combat.submitAction('p1', 'strike', 'p2');
 
     const result = combat.resolveTick();
 
-    // p2 should have auto-dodged
-    const dodgeEvent = result.events.find(e => e.type === 'dodge' && e.actorId === 'p2');
-    expect(dodgeEvent).toBeDefined();
+    // p2 should have auto-attacked (disconnected players now auto-attack, not dodge)
+    const p2Strike = result.events.find(e => e.type === 'strike' && e.actorId === 'p2');
+    expect(p2Strike).toBeDefined();
   });
 
-  it('disconnected player takes reduced damage from dodge (not zero)', () => {
-    // Dodge halves incoming damage (multiplier 0.5), then armour subtracted, minimum 1
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 15, defence: 5, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 5, armour: 0 });
+  it('disconnected player takes full damage (no dodge stance reduction)', () => {
+    // Disconnected players auto-attack; passive dodge may or may not trigger
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 15, dodge: 5, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 5, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -503,18 +503,17 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
 
     const hpBefore = p2.hp;
 
-    // p1 strikes, p2 auto-dodges → 15 * 0.5 - 0 armour = 7 damage (halved, min 1)
+    // p1 strikes, p2 auto-attacks (not dodge) — default PRNG never dodges
     combat.submitAction('p1', 'strike', 'p2');
     combat.resolveTick();
 
-    // Dodge reduces but doesn't eliminate damage
-    expect(p2.hp).toBeLessThan(hpBefore);
-    expect(p2.hp).toBeGreaterThan(hpBefore - p1.attack); // less than full damage
+    // No dodge stance reduction — takes full damage: 15 * 1.0 - 0 = 15
+    expect(p2.hp).toBe(hpBefore - p1.attack);
   });
 
   it('reconnected player can resume combat actions', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 15, defence: 5, armour: 2 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 5, armour: 2 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 15, dodge: 5, armour: 2 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 5, armour: 2 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -525,7 +524,7 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
 
     // p2 can now submit actions again
     combat.submitAction('p2', 'strike', 'p1');
-    combat.submitAction('p1', 'dodge');
+    combat.submitAction('p1', 'strike');
 
     const result = combat.resolveTick();
     const strikeByP2 = result.events.find(e => e.type === 'strike' && e.actorId === 'p2');
@@ -533,8 +532,8 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
   });
 
   it('combat state (HP, encounter) preserved across disconnect cycles', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, attack: 20, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 20, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { maxHp: 100, unarmed: 20, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 20, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -552,11 +551,11 @@ describe('Phase 2 QA — Reconnection (mid-combat)', () => {
     // p2 disconnects
     combat.markDisconnected('p2');
 
-    // Tick 2: p1 strikes, p2 auto-dodges (takes halved damage, min 1)
+    // Tick 2: p1 strikes, p2 auto-attacks (takes full damage)
     combat.submitAction('p1', 'strike', 'p2');
     combat.resolveTick();
 
-    // p2 took reduced damage from dodge (not zero)
+    // p2 took full damage (no dodge stance reduction)
     expect(p2.hp).toBeLessThan(p2HpAfterTick1);
 
     // Reconnect: encounter still active
@@ -865,9 +864,9 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
       const rooms = buildSoundTestRooms();
       const combat = new CombatSystem(buildExitResolver(rooms));
 
-      const player = makePlayer('hero', ROOMS.ENTRY, { attack: 15, defence: 5, armour: 2 });
+      const player = makePlayer('hero', ROOMS.ENTRY, { unarmed: 15, dodge: 5, armour: 2 });
       const creature = makeCreature('creature-rat', ROOMS.ENTRY, {
-        maxHp: 30, attack: 8, defence: 3, armour: 1,
+        maxHp: 30, unarmed: 8, dodge: 3, armour: 1,
       });
 
       combat.registerCombatant(player);
@@ -875,7 +874,7 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
       combat.initiateCombat('hero', 'creature-rat');
 
       combat.submitAction('hero', 'strike', 'creature-rat');
-      // Creature has no submitted action → auto-dodge
+      // Creature has no submitted action → auto-attacks
 
       const result = combat.resolveTick();
       expect(result.events.length).toBeGreaterThan(0);
@@ -908,8 +907,9 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
     });
 
     it('combat timeout ends encounter after COMBAT_TIMEOUT_TICKS of no strikes', () => {
-      const rooms = buildSoundTestRooms();
-      const combat = new CombatSystem(buildExitResolver(rooms));
+      const _rooms = buildSoundTestRooms();
+      // Use no-exit resolver so flee always fails but no strikes are generated
+      const combat = new CombatSystem(() => []);
 
       const p1 = makePlayer('p1', ROOMS.ENTRY);
       const p2 = makeCreature('c1', ROOMS.ENTRY);
@@ -918,11 +918,14 @@ describe('Phase 2 QA — Regression (Phase 1)', () => {
 
       combat.initiateCombat('p1', 'c1');
 
-      // Both dodge for COMBAT_TIMEOUT_TICKS
+      // Consume first tick (auto-strike resets counter)
+      combat.resolveTick();
+
+      // Submit flee every tick — flee is not 'strike' so hasStrike stays false
       let ended = false;
       for (let i = 0; i < COMBAT_TIMEOUT_TICKS + 1; i++) {
-        combat.submitAction('p1', 'dodge');
-        combat.submitAction('c1', 'dodge');
+        combat.submitAction('p1', 'flee');
+        combat.submitAction('c1', 'flee');
         const result = combat.resolveTick();
         if (result.endedEncounterIds.length > 0) {
           ended = true;
@@ -1007,8 +1010,8 @@ describe('Phase 2 QA — Cross-System Integration', () => {
 
   it('full combat tick produces sound + traces + awareness events in sequence', () => {
     // Setup: 2 players fighting, 1 observing in adjacent room
-    const attacker = makePlayer('attacker', ROOMS.ENTRY, { attack: 20, defence: 0, armour: 0 });
-    const defender = makePlayer('defender', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 0, armour: 0 });
+    const attacker = makePlayer('attacker', ROOMS.ENTRY, { unarmed: 20, dodge: 0, armour: 0 });
+    const defender = makePlayer('defender', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 0, armour: 0 });
     [attacker, defender].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('attacker', 'defender');
@@ -1187,8 +1190,8 @@ describe('Phase 2 QA — Edge Cases', () => {
   });
 
   it('combat + disconnect + trace creation all in same tick', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 20, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 15, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 20, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 15, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -1196,7 +1199,7 @@ describe('Phase 2 QA — Edge Cases', () => {
     // p2 disconnects mid-tick
     combat.markDisconnected('p2');
 
-    // p1 strikes, p2 auto-dodges
+    // p1 strikes, p2 auto-attacks
     combat.submitAction('p1', 'strike', 'p2');
 
     const result = combat.resolveTick();
@@ -1220,8 +1223,8 @@ describe('Phase 2 QA — Edge Cases', () => {
   });
 
   it('zero-HP combatant does not participate in next tick', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 200, defence: 0, armour: 0 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 5, attack: 5, defence: 0, armour: 0 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 200, dodge: 0, armour: 0 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 5, unarmed: 5, dodge: 0, armour: 0 });
     [p1, p2].forEach(p => combat.registerCombatant(p));
 
     combat.initiateCombat('p1', 'p2');
@@ -1279,10 +1282,10 @@ describe('Phase 2 QA — Edge Cases', () => {
   });
 
   it('multiple simultaneous combats in different rooms are independent', () => {
-    const p1 = makePlayer('p1', ROOMS.ENTRY, { attack: 15, defence: 5, armour: 2 });
-    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, attack: 10, defence: 5, armour: 2 });
-    const p3 = makePlayer('p3', ROOMS.CORRIDOR, { attack: 12, defence: 5, armour: 2 });
-    const p4 = makePlayer('p4', ROOMS.CORRIDOR, { maxHp: 100, attack: 8, defence: 5, armour: 2 });
+    const p1 = makePlayer('p1', ROOMS.ENTRY, { unarmed: 15, dodge: 5, armour: 2 });
+    const p2 = makePlayer('p2', ROOMS.ENTRY, { maxHp: 100, unarmed: 10, dodge: 5, armour: 2 });
+    const p3 = makePlayer('p3', ROOMS.CORRIDOR, { unarmed: 12, dodge: 5, armour: 2 });
+    const p4 = makePlayer('p4', ROOMS.CORRIDOR, { maxHp: 100, unarmed: 8, dodge: 5, armour: 2 });
     [p1, p2, p3, p4].forEach(p => combat.registerCombatant(p));
 
     const enc1 = combat.initiateCombat('p1', 'p2');
@@ -1294,7 +1297,7 @@ describe('Phase 2 QA — Edge Cases', () => {
 
     // Submit actions for both encounters
     combat.submitAction('p1', 'strike', 'p2');
-    combat.submitAction('p2', 'dodge');
+    combat.submitAction('p2', 'strike');
     combat.submitAction('p3', 'strike', 'p4');
     combat.submitAction('p4', 'strike', 'p3');
 

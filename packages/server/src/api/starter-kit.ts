@@ -12,6 +12,7 @@
 import { query } from '../db/index.js';
 import type { CharacterRepository } from '../character/CharacterRepository.js';
 import type { PlayerState } from '../state/PlayerState.js';
+import { extractCombatItemStats } from '../combat/stats.js';
 
 interface ItemDefRow {
   id: string;
@@ -20,6 +21,7 @@ interface ItemDefRow {
   weight: number;
   description: string;
   base_durability: number | null;
+  base_stats: Record<string, unknown> | null;
 }
 
 const STARTER_ITEM_NAMES = ['Rusty Blade', 'Tattered Leather', 'Waterlogged Potion'];
@@ -42,7 +44,7 @@ export async function grantStarterKit(
   if (alreadyGranted) return 0;
 
   const result = await query<ItemDefRow>(
-    `SELECT id, name, type, weight, description, base_durability FROM item_definitions
+    `SELECT id, name, type, weight, description, base_durability, base_stats FROM item_definitions
      WHERE name = ANY($1)`,
     [STARTER_ITEM_NAMES],
   );
@@ -51,11 +53,19 @@ export async function grantStarterKit(
 
   let granted = 0;
   for (const item of result.rows) {
+    const equipSlot: 'weapon' | 'armour' | undefined =
+      item.type === 'weapon' ? 'weapon' : item.type === 'armour' ? 'armour' : undefined;
+    const stats = (item.type === 'weapon' || item.type === 'armour')
+      ? extractCombatItemStats(item.type, item.base_stats ?? {})
+      : undefined;
+
     const added = player.addItem({
       id: item.id,
       name: item.name,
       weight: item.weight,
       description: item.description,
+      ...(equipSlot && { equipSlot }),
+      ...(stats && { stats }),
     });
     if (added) granted++;
   }

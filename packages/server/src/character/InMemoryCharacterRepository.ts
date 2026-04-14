@@ -3,7 +3,8 @@
  */
 
 import type { CharacterSummary } from '@ellmud/shared';
-import type { CharacterRepository, CharacterRow } from './CharacterRepository.js';
+import type { CharacterRepository, CharacterRow, PlayerCombatStats } from './CharacterRepository.js';
+import { DEFAULT_PLAYER_COMBAT_STATS } from './CharacterRepository.js';
 import crypto from 'crypto';
 
 export class InMemoryCharacterRepository implements CharacterRepository {
@@ -11,6 +12,7 @@ export class InMemoryCharacterRepository implements CharacterRepository {
   private lastInns = new Map<string, { zoneSlug: string; roomSlug: string }>();
   private postures = new Map<string, string>();
   private starterKitGranted = new Set<string>();
+  private combatStatsMap = new Map<string, PlayerCombatStats>();
 
   async list(playerId: string): Promise<CharacterSummary[]> {
     const chars: CharacterSummary[] = [];
@@ -44,6 +46,7 @@ export class InMemoryCharacterRepository implements CharacterRepository {
       createdAt: new Date(),
       lastPlayedAt: null,
       deletedAt: null,
+      combatStats: { ...DEFAULT_PLAYER_COMBAT_STATS },
     };
     this.characters.set(row.id, row);
     return structuredClone(row);
@@ -114,6 +117,14 @@ export class InMemoryCharacterRepository implements CharacterRepository {
 
   async resetStarterKitFlag(characterId: string): Promise<void> {
     this.starterKitGranted.delete(characterId);
+  }
+
+  async getBaseStats(characterId: string): Promise<PlayerCombatStats> {
+    return this.combatStatsMap.get(characterId) ?? { ...DEFAULT_PLAYER_COMBAT_STATS };
+  }
+
+  async saveBaseStats(characterId: string, stats: PlayerCombatStats): Promise<void> {
+    this.combatStatsMap.set(characterId, { ...stats });
   }
 
   private toSummary(row: CharacterRow): CharacterSummary {

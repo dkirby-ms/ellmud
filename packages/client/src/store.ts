@@ -43,12 +43,34 @@ export interface InventoryItem {
   id: string;
   name: string;
   tier: GearTier;
+  weight: number;
 }
 
 export interface StatusEffect {
   id: string;
   name: string;
   duration: number;
+}
+
+/** Effective combat stats with equipment bonuses (#455) */
+export interface EffectiveStats {
+  maxHp: number;
+  attack: number;
+  armour: number;
+  shieldBlock: number;
+  dodge: number;
+}
+
+/** Player base combat stats (synced from server PlayerState) */
+export interface CombatStats {
+  maxHp: number;
+  unarmed: number;
+  oneHanded: number;
+  twoHanded: number;
+  ranged: number;
+  shieldBlock: number;
+  dodge: number;
+  armour: number;
 }
 
 export function getHpTier(hp: number, maxHp: number): HpTier {
@@ -95,6 +117,8 @@ export interface AppState {
     creatures: Array<{ id: string; name: string; type: string; aggressive: boolean }>;
     players: Array<{ id: string; name: string; disconnected?: boolean }>;
   };
+  combatStats: CombatStats;
+  effectiveStats: EffectiveStats | null;
 }
 
 export const initialState: AppState = {
@@ -127,6 +151,19 @@ export const initialState: AppState = {
   stashItems: [],
   pendingEquipAction: false,
   roomOccupants: { creatures: [], players: [] },
+  // TODO: Server needs to send combat stats via room state or player_state message.
+  // These are placeholder defaults until server-side sync is wired up.
+  combatStats: {
+    maxHp: 100,
+    unarmed: 5,
+    oneHanded: 5,
+    twoHanded: 5,
+    ranged: 5,
+    shieldBlock: 5,
+    dodge: 5,
+    armour: 0,
+  },
+  effectiveStats: null,
 };
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
@@ -156,7 +193,9 @@ export type AppAction =
   | { type: 'SET_PENDING_EQUIP'; pending: boolean }
   | { type: 'SET_ACTIVE_CHARACTER'; character: CharacterSummary | null }
   | { type: 'SET_PLAYER_STATE'; hp: number; maxHp: number; stamina: number; maxStamina: number; statusEffects: StatusEffect[]; posture: Posture }
-  | { type: 'SET_ROOM_OCCUPANTS'; occupants: AppState['roomOccupants'] };
+  | { type: 'SET_ROOM_OCCUPANTS'; occupants: AppState['roomOccupants'] }
+  | { type: 'SET_COMBAT_STATS'; stats: CombatStats }
+  | { type: 'SET_EFFECTIVE_STATS'; stats: EffectiveStats };
 
 const MAX_MESSAGES = 500;
 
@@ -222,6 +261,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     case 'SET_ROOM_OCCUPANTS':
       return { ...state, roomOccupants: action.occupants };
+    case 'SET_COMBAT_STATS':
+      return { ...state, combatStats: action.stats };
+    case 'SET_EFFECTIVE_STATS':
+      return { ...state, effectiveStats: action.stats };
     default:
       return state;
   }

@@ -7,7 +7,7 @@
  * Design constraints:
  * - Deterministic: same inputs → same outputs (no randomness in Phase 1)
  * - Simultaneous: all damage calculated from start-of-tick HP, applied at once
- * - No-input defaults to Dodge (GDD §6.3)
+ * - Auto-attack: idle combatants auto-strike; dodge is passive on every incoming attack
  */
 
 import type { CombatAction, PositionZone, CreaturePositionType } from '@ellmud/shared';
@@ -22,13 +22,12 @@ import {
   COMBAT_TIMEOUT_TICKS,
   EMPTY_TICK_RESULT,
   BASE_FLEE_CHANCE,
-  FLEE_EVASION_BONUS_PER_RANK,
+  FLEE_DODGE_BONUS_PER_RANK,
   FLEE_LEVEL_PENALTY,
   REPOSITION_COOLDOWN_TICKS,
 } from './CombatState.js';
 import { calculateDamage, type DamageBreakdown } from './damage.js';
 import {
-  resolveDodge,
   resolveFlee,
   resolveDefeated,
   resolveCombatEnd,
@@ -38,7 +37,7 @@ import { ThreatTable } from './ThreatTable.js';
 
 /**
  * Calculate flee success probability for a combatant.
- * Base 50% + Evasion skill scaling - creature level penalty (GDD §6.2).
+ * Base 50% + dodge skill scaling - creature level penalty (GDD §6.2).
  *
  * @param fleeing - The combatant attempting to flee
  * @param hostiles - All hostile combatants in the encounter
@@ -47,8 +46,8 @@ import { ThreatTable } from './ThreatTable.js';
 function calculateFleeChance(fleeing: Combatant, hostiles: Combatant[]): number {
   let chance = BASE_FLEE_CHANCE;
 
-  // Evasion skill bonus
-  chance += fleeing.evasionSkillRank * FLEE_EVASION_BONUS_PER_RANK;
+  // Dodge skill bonus (replaces evasion)
+  chance += fleeing.dodge * FLEE_DODGE_BONUS_PER_RANK;
 
   // Level penalty from highest-level hostile creature
   const maxHostileLevel = Math.max(...hostiles.map(h => h.level), 0);
@@ -387,7 +386,7 @@ export class CombatSystem {
     }
 
     // Queue the position change as this tick's action
-    this.queuedActions.set(combatantId, { action: 'dodge', newPosition });
+    this.queuedActions.set(combatantId, { action: 'strike', newPosition });
     return { success: true };
   }
 
@@ -524,7 +523,7 @@ export class CombatSystem {
       const target = this.combatants.get(highestThreatOverall);
       if (target && creature.positionCooldown === 0) {
         const newPosition = target.position;
-        this.queuedActions.set(creature.id, { action: 'dodge', newPosition });
+        this.queuedActions.set(creature.id, { action: 'strike', newPosition });
         creature.currentTarget = highestThreatOverall;
         this.debug(`${creature.name} repositions to ${newPosition} (aggressive, chasing ${target.name})`);
         return undefined; // Repositioning costs the action
@@ -649,15 +648,26 @@ export class CombatSystem {
       // Combatants winding up don't queue actions — they're committed to the telegraph
       // UNLESS their wind-up just expired this tick (they're in windUpExpired list)
       if (c.windUp && !windUpExpired.includes(c)) {
-        // Queue a dodge placeholder so resolution logic doesn't crash
-        this.queuedActions.set(c.id, { action: 'dodge' });
+        // Queue a strike placeholder so resolution logic doesn't crash
+        this.queuedActions.set(c.id, { action: 'strike' });
         continue;
       }
 
-      // Disconnected players always default to dodge (GDD §6.3)
-      if (c.disconnected) {
-        this.queuedActions.set(c.id, { action: 'dodge' });
-        this.debug(`Default dodge for ${c.name} (disconnected)`);
+      // Disconnected players auto-attack (dodge is passive, not an action)
+      if (c.disconnected && !this.queuedActions.has(c.id)) {
+        let target = c.currentTarget ? this.combatants.get(c.currentTarget) : undefined;
+        const targetValid = target && target.hp > 0 && encounter.combatantIds.has(c.currentTarget!);
+        if (!targetValid) {
+          const newTargetId = this.cycleTarget(c.id);
+          if (newTargetId) target = this.combatants.get(newTargetId);
+        }
+        if (target && target.hp > 0 && encounter.combatantIds.has(target.id)) {
+          this.queuedActions.set(c.id, { action: 'strike', targetId: target.id });
+          this.debug(`Auto-attack for ${c.name} → ${target.name} (disconnected)`);
+        } else {
+          this.queuedActions.set(c.id, { action: 'strike' });
+          this.debug(`Default idle for ${c.name} (disconnected, no target)`);
+        }
         continue;
       }
 
@@ -680,10 +690,9 @@ export class CombatSystem {
           const reason = c.disconnected ? '(disconnected)' : '(no input)';
           this.debug(`Auto-attack for ${c.name} → ${target.name} ${reason}`);
         } else {
-          // No valid hostiles remain — dodge is correct
-          this.queuedActions.set(c.id, { action: 'dodge' });
-          const reason = c.disconnected ? '(disconnected)' : '(no target)';
-          this.debug(`Default dodge for ${c.name} ${reason}`);
+          // No valid hostiles remain — idle (no meaningful action)
+          this.queuedActions.set(c.id, { action: 'strike' });
+          this.debug(`Default idle for ${c.name} (no target)`);
         }
       }
     }
@@ -707,12 +716,12 @@ export class CombatSystem {
 
       const abilityAction = qa.action;
       // Only process ability actions (not base combat actions)
-      if (abilityAction === 'strike' || abilityAction === 'dodge' || abilityAction === 'flee') continue;
+      if (abilityAction === 'strike' || abilityAction === 'flee') continue;
 
       const ability = getAbilityDefinition(abilityAction);
       if (!ability) {
-        // Unknown ability — fall back to dodge
-        this.queuedActions.set(c.id, { action: 'dodge' });
+        // Unknown ability — fall back to strike
+        this.queuedActions.set(c.id, { action: 'strike' });
         continue;
       }
 
@@ -722,17 +731,17 @@ export class CombatSystem {
       const offCooldown = cooldown === 0;
 
       if (!hasStaminaForAbility || !offCooldown) {
-        // Can't use ability — fall back to auto-attack or dodge
+        // Can't use ability — fall back to auto-attack
         if (c.currentTarget) {
           const target = this.combatants.get(c.currentTarget);
           if (target && target.hp > 0 && this.combatantEncounter.has(c.id)) {
             this.queuedActions.set(c.id, { action: 'strike', targetId: c.currentTarget });
             this.debug(`Ability ${abilityAction} failed validation — fallback to auto-attack for ${c.name}`);
           } else {
-            this.queuedActions.set(c.id, { action: 'dodge' });
+            this.queuedActions.set(c.id, { action: 'strike' });
           }
         } else {
-          this.queuedActions.set(c.id, { action: 'dodge' });
+          this.queuedActions.set(c.id, { action: 'strike' });
         }
         continue;
       }
@@ -772,7 +781,7 @@ export class CombatSystem {
             narration: `${c.name} observes ${target.name}: ${target.hp}/${target.maxHp} HP, Attack: ${target.attack}, Armour: ${target.armour}`,
           });
         }
-        this.queuedActions.set(c.id, { action: 'dodge' });
+        this.queuedActions.set(c.id, { action: 'strike' });
         this.debug(`${c.name} uses ${ability.name} on ${target?.name ?? 'unknown'}`);
       }
     }
@@ -839,14 +848,18 @@ export class CombatSystem {
         continue;
       }
 
-      const defenderAction = actions.get(targetId)?.action ?? 'dodge';
-      const dodgeRoll = defenderAction === 'dodge' ? this.roll() : undefined;
+      const defenderAction = actions.get(targetId)?.action ?? 'strike';
+      // Passive dodge: always roll for dodge on every incoming attack
+      const dodgeRoll = this.roll();
+      // Shield block: roll for block if target has shieldBlock > 0
+      const blockRoll = target.shieldBlock > 0 ? this.roll() : 1;
       
       // Block should mitigate telegraphed abilities (GDD §6.5)
       const dmg = calculateDamage(attackDamage, target.armour, 'strike', defenderAction, {
-        defenderAgility: target.agility,
-        defenderDodgeSkillRank: target.dodgeSkillRank,
+        defenderDodge: target.dodge,
+        defenderShieldBlock: target.shieldBlock,
         dodgeRoll,
+        blockRoll,
         damageMultiplier: abilityDamageMultiplier,
       });
 
@@ -890,10 +903,11 @@ export class CombatSystem {
         maxHp: target.maxHp,
         narration: '', // placeholder
         dodged: dmg.dodged,
+        blocked: dmg.blocked,
         breakdown,
       });
 
-      this.debug(`Damage roll: ${c.name} → ${target.name}: raw=${dmg.rawDamage} ×${dmg.multiplier} -${dmg.armourReduction} = ${dmg.finalDamage}${dmg.dodged ? ' (DODGED)' : ''}`);
+      this.debug(`Damage roll: ${c.name} → ${target.name}: raw=${dmg.rawDamage} ×${dmg.multiplier} -${dmg.armourReduction} = ${dmg.finalDamage}${dmg.dodged ? ' (DODGED)' : ''}${dmg.blocked ? ' (BLOCKED)' : ''}`);
     }
 
     // 4. Apply all damage at once
@@ -908,7 +922,7 @@ export class CombatSystem {
     }
     
     for (const evt of strikeEvents) {
-      if (!evt.dodged && evt.damage && evt.damage > 0) {
+      if (!evt.dodged && !evt.blocked && evt.damage && evt.damage > 0) {
         const attacker = this.combatants.get(evt.actorId);
         const target = this.combatants.get(evt.targetId!);
         
@@ -931,6 +945,8 @@ export class CombatSystem {
       evt.newHp = target.hp;
       if (evt.dodged) {
         evt.narration = `${evt.targetName} dodges!`;
+      } else if (evt.blocked) {
+        evt.narration = `${evt.targetName} blocks with their shield!`;
       } else {
         const defeated = target.hp <= 0;
         evt.narration = defeated
@@ -962,13 +978,7 @@ export class CombatSystem {
       }
     }
 
-    // 5. Dodge events (for combatants not striking, fleeing, or repositioning)
-    for (const c of combatants) {
-      const qa = actions.get(c.id)!;
-      if (qa.action === 'dodge' && !qa.newPosition) {
-        events.push(resolveDodge(c));
-      }
-    }
+    // 5. (Passive dodge narration is emitted inline with strike events above)
 
     // 6. Handle flee — skill check based on Evasion vs creature level (GDD §6.2)
     for (const c of combatants) {
@@ -1053,14 +1063,41 @@ export class CombatSystem {
     );
 
     let ended = false;
-    if (aliveInEncounter.length === 0) {
-      // No combatants remain (all fled or all defeated) — immediate end
+    if (aliveInEncounter.length <= 1) {
       events.push(resolveCombatEnd('last_standing'));
       ended = true;
-    } else if (aliveInEncounter.length <= 1) {
-      // Only one (or zero) combatants remain — combat ends immediately
-      events.push(resolveCombatEnd('last_standing'));
-      ended = true;
+    } else {
+      // Check if hostile pairs remain — if all survivors are on the same
+      // "side" (all players or all creatures), combat should end.
+      const hasPlayer = aliveInEncounter.some(
+        (id) => this.combatants.get(id)?.isPlayer === true,
+      );
+      const hasCreature = aliveInEncounter.some(
+        (id) => this.combatants.get(id)?.isPlayer === false,
+      );
+      // In PvP, all survivors are players but may be hostile to each other.
+      // Only end if a single side remains in PvE (players vs creatures).
+      // PvP encounters keep going as long as multiple players remain.
+      if (!hasPlayer || !hasCreature) {
+        // PvE: only one side left → end combat
+        // For PvP, hasCreature is false but multiple players may still fight.
+        // Detect PvP: if all alive are players and more than one, check if
+        // any pair has active hostility (currentTarget pointing at each other).
+        if (hasPlayer && !hasCreature && aliveInEncounter.length > 1) {
+          // PvP scenario: check for active hostile pairs among players
+          const hasHostilePair = aliveInEncounter.some((id) => {
+            const c = this.combatants.get(id);
+            return c?.currentTarget && aliveInEncounter.includes(c.currentTarget);
+          });
+          if (!hasHostilePair) {
+            events.push(resolveCombatEnd('last_standing'));
+            ended = true;
+          }
+        } else {
+          events.push(resolveCombatEnd('last_standing'));
+          ended = true;
+        }
+      }
     }
 
     if (!ended && encounter.ticksSinceLastStrike >= COMBAT_TIMEOUT_TICKS) {
@@ -1144,7 +1181,7 @@ export class CombatSystem {
     this.combatants.delete(id);
   }
 
-  /** Mark a combatant as disconnected — will auto-dodge until reconnection. */
+  /** Mark a combatant as disconnected — will auto-attack until reconnection. */
   markDisconnected(id: string): void {
     const combatant = this.combatants.get(id);
     if (combatant) {

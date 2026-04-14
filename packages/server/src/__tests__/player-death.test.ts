@@ -45,12 +45,12 @@ function testExitResolver(roomId: string): string[] {
 
 function makePlayer(id: string, roomId = TEST_ROOM, stats?: Partial<CombatStats>) {
   const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-  return createCombatant(id, id, roomId, true, merged);
+  return createCombatant(id, id, roomId, true, { attack: merged.unarmed, maxHp: merged.maxHp, armour: merged.armour, shieldBlock: merged.shieldBlock, dodge: merged.dodge });
 }
 
 function makeCreature(id: string, roomId = TEST_ROOM, stats?: Partial<CombatStats>) {
   const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-  return createCombatant(id, id, roomId, false, merged);
+  return createCombatant(id, id, roomId, false, { attack: merged.unarmed, maxHp: merged.maxHp, armour: merged.armour, shieldBlock: merged.shieldBlock, dodge: merged.dodge });
 }
 
 describe('Player Defeat Detection (CombatSystem)', () => {
@@ -63,7 +63,7 @@ describe('Player Defeat Detection (CombatSystem)', () => {
   it('should generate a defeated event for a player when HP reaches 0', () => {
     const player = makePlayer('player-1', TEST_ROOM, { maxHp: 5 });
     player.hp = 5;
-    const creature = makeCreature('creature-1', TEST_ROOM, { attack: 20 });
+    const creature = makeCreature('creature-1', TEST_ROOM, { unarmed: 20 });
     system.registerCombatant(player);
     system.registerCombatant(creature);
     system.initiateCombat('creature-1', 'player-1');
@@ -81,7 +81,7 @@ describe('Player Defeat Detection (CombatSystem)', () => {
   it('player defeated event has isPlayer-compatible actorId (session ID, not creature-*)', () => {
     const player = makePlayer('session-abc-123', TEST_ROOM, { maxHp: 1 });
     player.hp = 1;
-    const creature = makeCreature('creature-brute', TEST_ROOM, { attack: 50 });
+    const creature = makeCreature('creature-brute', TEST_ROOM, { unarmed: 50 });
     system.registerCombatant(player);
     system.registerCombatant(creature);
     system.initiateCombat('creature-brute', 'session-abc-123');
@@ -97,7 +97,7 @@ describe('Player Defeat Detection (CombatSystem)', () => {
   it('defeated player is removed from encounter after tick', () => {
     const player = makePlayer('p1', TEST_ROOM, { maxHp: 3 });
     player.hp = 3;
-    const creature = makeCreature('creature-1', TEST_ROOM, { attack: 20 });
+    const creature = makeCreature('creature-1', TEST_ROOM, { unarmed: 20 });
     system.registerCombatant(player);
     system.registerCombatant(creature);
     system.initiateCombat('creature-1', 'p1');

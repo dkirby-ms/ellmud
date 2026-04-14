@@ -337,6 +337,25 @@ jobs:
 
           echo "✓ Rollback complete"
 
+  # ─── Discord notification after successful UAT deploy ─────────────────────────
+  notify-discord-uat:
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_name == 'uat'
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Announce UAT deploy to Discord
+        continue-on-error: true
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_TESTING_ALERTS }}
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+          RUN_URL="${REPO_URL}/actions/runs/${{ github.run_id }}"
+          curl -s -o /dev/null -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\":\"✅ **UAT Deploy Successful**\nCommit \`${SHORT_SHA}\` deployed to UAT test server.\n[View deployment](${RUN_URL}) · [View uat branch](${REPO_URL}/tree/uat)\"}" \
+            "$DISCORD_WEBHOOK_URL"
+
   # ─── Create issue on CI failure ───────────────────────────────────────────────
   create-failure-issue:
     if: failure() && github.event_name == 'push'

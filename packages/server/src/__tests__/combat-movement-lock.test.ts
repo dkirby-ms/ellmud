@@ -70,10 +70,10 @@ describe('Combat Movement Lock', () => {
     expect(result.narrations[0]!.type).toBe('combat');
   });
 
-  it('should allow "dodge" while in combat', () => {
+  it('should explain "dodge" is now passive when used in combat', () => {
     const result = handleCommand('dodge', buildCtx());
-    expect(result.narrations[0]!.text).toContain('dodge');
-    expect(result.narrations[0]!.type).toBe('combat');
+    expect(result.narrations[0]!.text).toContain('passive');
+    expect(result.narrations[0]!.type).toBe('system');
   });
 
   it('should allow "look" while in combat', () => {

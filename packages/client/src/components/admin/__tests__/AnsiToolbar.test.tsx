@@ -13,9 +13,12 @@
  * NOTE: document.execCommand undo/redo behavior (Ctrl+Z) cannot be meaningfully
  * tested in jsdom. These tests focus on the tag insertion behavior itself.
  *
+ * Color buttons render as compact swatches (no visible text) — look them up via
+ * aria-label / getByRole.  Modifier buttons still show text labels.
+ *
  * Testing checklist:
- * - [x] All color buttons render (black, red, green, yellow, blue, magenta, cyan, white)
- * - [x] All bright color buttons render
+ * - [x] All color swatch buttons render (black … white)
+ * - [x] All bright color swatch buttons render
  * - [x] All modifier buttons render (bold, dim, italic, underline)
  * - [x] Clicking button inserts [tag][/tag] at cursor (empty selection)
  * - [x] Clicking button wraps selected text with [tag]selected[/tag]
@@ -137,25 +140,33 @@ function setSelection(
   textarea.setSelectionRange(start, end);
 }
 
+/**
+ * Get a color swatch button by its ANSI name.
+ * Color swatches no longer have visible text — they use aria-label.
+ */
+function getColorButton(name: string) {
+  return screen.getByRole('button', { name });
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('AnsiToolbar', () => {
   // ── 1. Rendering all buttons ─────────────────────────────────────────────
 
   describe('button rendering', () => {
-    it('renders all standard color buttons', () => {
+    it('renders all standard color swatch buttons', () => {
       render(<TestWrapper />);
       
       COLORS.forEach((color) => {
-        expect(screen.getByText(color)).toBeInTheDocument();
+        expect(getColorButton(color)).toBeInTheDocument();
       });
     });
 
-    it('renders all bright color buttons', () => {
+    it('renders all bright color swatch buttons', () => {
       render(<TestWrapper />);
       
       BRIGHT_COLORS.forEach((color) => {
-        expect(screen.getByText(color)).toBeInTheDocument();
+        expect(getColorButton(color)).toBeInTheDocument();
       });
     });
 
@@ -176,11 +187,20 @@ describe('AnsiToolbar', () => {
     it('all buttons have correct title attributes', () => {
       render(<TestWrapper />);
       
-      const redButton = screen.getByText('red');
+      const redButton = getColorButton('red');
       expect(redButton).toHaveAttribute('title', '[red]…[/red]');
 
       const boldButton = screen.getByText('bold');
       expect(boldButton).toHaveAttribute('title', '[bold]…[/bold]');
+    });
+
+    it('color swatches are rendered inside a grid group', () => {
+      render(<TestWrapper />);
+      const group = screen.getByRole('group', { name: 'ANSI colors' });
+      expect(group).toBeInTheDocument();
+      // All 16 color buttons should be inside the group
+      const buttons = group.querySelectorAll('button');
+      expect(buttons).toHaveLength(16);
     });
   });
 
@@ -194,7 +214,7 @@ describe('AnsiToolbar', () => {
       const textarea = screen.getByTestId('test-textarea') as HTMLTextAreaElement;
       setSelection(textarea, 0);
 
-      await user.click(screen.getByText('red'));
+      await user.click(getColorButton('red'));
 
       expect(textarea.value).toBe('[red][/red]');
     });
@@ -218,7 +238,7 @@ describe('AnsiToolbar', () => {
       const textarea = screen.getByTestId('test-textarea') as HTMLTextAreaElement;
       setSelection(textarea, 6); // After "Hello "
 
-      await user.click(screen.getByText('blue'));
+      await user.click(getColorButton('blue'));
 
       expect(textarea.value).toBe('Hello [blue][/blue]World');
     });
@@ -230,7 +250,7 @@ describe('AnsiToolbar', () => {
       const textarea = screen.getByTestId('test-textarea') as HTMLTextAreaElement;
       setSelection(textarea, 0);
 
-      await user.click(screen.getByText('green'));
+      await user.click(getColorButton('green'));
 
       expect(textarea.value).toBe('[green][/green]Text here');
     });
@@ -242,7 +262,7 @@ describe('AnsiToolbar', () => {
       const textarea = screen.getByTestId('test-textarea') as HTMLTextAreaElement;
       setSelection(textarea, 9); // After all text
 
-      await user.click(screen.getByText('yellow'));
+      await user.click(getColorButton('yellow'));
 
       expect(textarea.value).toBe('Text here[yellow][/yellow]');
     });
@@ -258,7 +278,7 @@ describe('AnsiToolbar', () => {
       const textarea = screen.getByTestId('test-textarea') as HTMLTextAreaElement;
       setSelection(textarea, 0, 5); // Select "Hello"
 
-      await user.click(screen.getByText('red'));
+      await user.click(getColorButton('red'));
 
       expect(textarea.value).toBe('[red]Hello[/red] World');
     });
@@ -282,7 +302,7 @@ describe('AnsiToolbar', () => {
       const textarea = screen.getByTestId('test-textarea') as HTMLTextAreaElement;
       setSelection(textarea, 10, 15); // Select "brown"
 
-      await user.click(screen.getByText('cyan'));
+      await user.click(getColorButton('cyan'));
 
       expect(textarea.value).toBe('The quick [cyan]brown[/cyan] fox');
     });
@@ -322,7 +342,7 @@ describe('AnsiToolbar', () => {
       const textarea = screen.getByTestId('test-textarea') as HTMLTextAreaElement;
       setSelection(textarea, 0);
 
-      await user.click(screen.getByText(color));
+      await user.click(getColorButton(color));
 
       expect(textarea.value).toBe(`[${color}][/${color}]`);
     });
@@ -334,7 +354,7 @@ describe('AnsiToolbar', () => {
       const textarea = screen.getByTestId('test-textarea') as HTMLTextAreaElement;
       setSelection(textarea, 0);
 
-      await user.click(screen.getByText(color));
+      await user.click(getColorButton(color));
 
       expect(textarea.value).toBe(`[${color}][/${color}]`);
     });
@@ -362,7 +382,7 @@ describe('AnsiToolbar', () => {
       const textarea = screen.getByTestId('test-textarea') as HTMLTextAreaElement;
       setSelection(textarea, 0);
 
-      await user.click(screen.getByText('red'));
+      await user.click(getColorButton('red'));
 
       // Cursor should be at position 5: [red]|[/red]
       expect(textarea.selectionStart).toBe(5);
@@ -390,7 +410,7 @@ describe('AnsiToolbar', () => {
       const textarea = screen.getByTestId('test-textarea') as HTMLTextAreaElement;
       setSelection(textarea, 0);
 
-      await user.click(screen.getByText('green'));
+      await user.click(getColorButton('green'));
 
       expect(document.activeElement).toBe(textarea);
     });
@@ -407,7 +427,7 @@ describe('AnsiToolbar', () => {
       
       // First insertion
       setSelection(textarea, 0);
-      await user.click(screen.getByText('red'));
+      await user.click(getColorButton('red'));
       expect(textarea.value).toBe('[red][/red]');
 
       // Second insertion at end
@@ -424,7 +444,7 @@ describe('AnsiToolbar', () => {
       
       // First wrap
       setSelection(textarea, 0, 4);
-      await user.click(screen.getByText('red'));
+      await user.click(getColorButton('red'));
       expect(textarea.value).toBe('[red]Text[/red]');
 
       // Second wrap (wrap the whole thing)
@@ -441,7 +461,7 @@ describe('AnsiToolbar', () => {
       
       // Insert in the middle of "Text"
       setSelection(textarea, 7); // After "Te"
-      await user.click(screen.getByText('blue'));
+      await user.click(getColorButton('blue'));
       expect(textarea.value).toBe('[red]Te[blue][/blue]xt[/red]');
     });
   });
@@ -456,7 +476,7 @@ describe('AnsiToolbar', () => {
       
       render(<AnsiToolbar textareaRef={textareaRef} onInsert={onInsert} />);
       
-      await user.click(screen.getByText('red'));
+      await user.click(getColorButton('red'));
       
       // Should not throw, onInsert should not be called
       expect(onInsert).not.toHaveBeenCalled();
@@ -470,7 +490,7 @@ describe('AnsiToolbar', () => {
       setSelection(textarea, 0);
 
       // Click multiple buttons quickly
-      await user.click(screen.getByText('red'));
+      await user.click(getColorButton('red'));
       await user.click(screen.getByText('bold'));
       await user.click(screen.getByText('italic'));
 
@@ -488,7 +508,7 @@ describe('AnsiToolbar', () => {
       const textarea = screen.getByTestId('test-textarea') as HTMLTextAreaElement;
       setSelection(textarea, 0);
 
-      await user.click(screen.getByText('red'));
+      await user.click(getColorButton('red'));
 
       expect(onValueChange).toHaveBeenCalledWith('[red][/red]');
     });
@@ -501,7 +521,7 @@ describe('AnsiToolbar', () => {
       const textarea = screen.getByTestId('test-textarea') as HTMLTextAreaElement;
       setSelection(textarea, 6, 12); // Select "Middle"
 
-      await user.click(screen.getByText('cyan'));
+      await user.click(getColorButton('cyan'));
 
       expect(textarea.value).toBe('Start [cyan]Middle[/cyan] End');
     });
@@ -514,7 +534,7 @@ describe('AnsiToolbar', () => {
       const textarea = screen.getByTestId('test-textarea') as HTMLTextAreaElement;
       setSelection(textarea, 7, 13); // Select "Line 2"
 
-      await user.click(screen.getByText('green'));
+      await user.click(getColorButton('green'));
 
       expect(textarea.value).toBe('Line 1\n[green]Line 2[/green]\nLine 3');
     });
@@ -527,7 +547,7 @@ describe('AnsiToolbar', () => {
       const textarea = screen.getByTestId('test-textarea') as HTMLTextAreaElement;
       setSelection(textarea, 4, 11); // Select " 1\nLine"
 
-      await user.click(screen.getByText('yellow'));
+      await user.click(getColorButton('yellow'));
 
       expect(textarea.value).toBe('Line[yellow] 1\nLine[/yellow] 2');
     });
@@ -545,11 +565,12 @@ describe('AnsiToolbar', () => {
       });
     });
 
-    it('color buttons have appropriate ARIA labels via title', () => {
+    it('color swatches have accessible aria-label and title', () => {
       render(<TestWrapper />);
       
-      const redButton = screen.getByText('red');
+      const redButton = getColorButton('red');
       expect(redButton).toHaveAttribute('title', '[red]…[/red]');
+      expect(redButton).toHaveAttribute('aria-label', 'red');
     });
 
     it('modifier buttons have appropriate ARIA labels via title', () => {

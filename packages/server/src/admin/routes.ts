@@ -68,10 +68,13 @@ function contentEntityToCreatureTemplate(entity: ContentEntity): CreatureTemplat
     name: (e.name as string) ?? 'Unknown Creature',
     stats: {
       maxHp: (e.maxHp as number) ?? 100,
-      attack: (e.attack as number) ?? 10,
-      defence: (e.defence as number) ?? 5,
+      unarmed: (e.unarmed as number) ?? 5,
+      oneHanded: (e.oneHanded as number) ?? 5,
+      twoHanded: (e.twoHanded as number) ?? 5,
+      ranged: (e.ranged as number) ?? 5,
+      shieldBlock: (e.shieldBlock as number) ?? 0,
+      dodge: (e.dodge as number) ?? 0,
       armour: (e.armour as number) ?? 0,
-      agility: (e.agility as number) ?? 0,
     },
     lootTable: Array.isArray(e.lootTable) ? (e.lootTable as CreatureTemplate['lootTable']) : [],
     spawnRules: {

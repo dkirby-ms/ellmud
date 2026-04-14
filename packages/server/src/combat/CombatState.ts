@@ -3,28 +3,64 @@
  *
  * Combatant is a unified interface for players and creatures.
  * CombatEncounter groups combatants in a room-scoped fight.
+ *
+ * Phase 1 stat model: 8 stats shared between players and creatures.
+ * Weapon-type skills replace single attack; shieldBlock replaces defence.
+ * Agility removed — dodge stat handles all avoidance.
  */
 
 import type { CombatAction, PositionZone } from '@ellmud/shared';
 
+// ─── Weapon Types ───────────────────────────────────────────────────────────
+
+/** Weapon categories that map to weapon skill stats. */
+export type WeaponType = 'unarmed' | 'one_handed' | 'two_handed' | 'ranged';
+
 // ─── Combat Stats ───────────────────────────────────────────────────────────
 
+/**
+ * Unified combat stats for both players and creatures (8 stats).
+ * Weapon-type skills determine hit effectiveness with each weapon category.
+ */
 export interface CombatStats {
   maxHp: number;
-  attack: number;
-  defence: number;
+  unarmed: number;
+  oneHanded: number;
+  twoHanded: number;
+  ranged: number;
+  shieldBlock: number;
+  dodge: number;
   armour: number;
-  /** Agility stat — scales dodge chance (GDD §6.4). */
-  agility: number;
 }
 
 export const DEFAULT_PLAYER_STATS: CombatStats = {
   maxHp: 100,
-  attack: 10,
-  defence: 5,
+  unarmed: 5,
+  oneHanded: 5,
+  twoHanded: 5,
+  ranged: 5,
+  shieldBlock: 5,
+  dodge: 5,
   armour: 2,
-  agility: 5,
 };
+
+// ─── Equipment Stat Extraction ──────────────────────────────────────────────
+
+/** Bonuses contributed by equipped gear. */
+export interface EquipmentBonuses {
+  weaponSkill: WeaponType;
+  weaponDamage: number;
+  armour: number;
+  shieldBlock: number;
+}
+
+/** Standardised shape for item_definitions.base_stats JSONB column. */
+export interface ItemStats {
+  weaponType?: WeaponType;
+  weaponDamage?: number;
+  armour?: number;
+  shieldBlock?: number;
+}
 
 // ─── Combatant ──────────────────────────────────────────────────────────────
 
@@ -33,15 +69,14 @@ export interface Combatant {
   name: string;
   hp: number;
   maxHp: number;
+  /** Runtime effective attack value (weapon skill + weapon damage for players, weapon skill for creatures). */
   attack: number;
-  defence: number;
+  /** Flat damage reduction from armour (base + equipment). */
   armour: number;
-  /** Agility stat — scales dodge chance (GDD §6.4). */
-  agility: number;
-  /** Dodge skill rank — scales dodge chance (GDD §6.4). */
-  dodgeSkillRank: number;
-  /** Evasion skill rank — scales flee success chance (GDD §6.2). */
-  evasionSkillRank: number;
+  /** Shield block skill — determines block chance (binary: block nullifies attack). */
+  shieldBlock: number;
+  /** Dodge skill — determines dodge chance (passive avoidance). */
+  dodge: number;
   /** Creature level — affects flee difficulty for players (GDD §6.2). */
   level: number;
   roomId: string;
@@ -79,23 +114,26 @@ export function createCombatant(
   name: string,
   roomId: string,
   isPlayer: boolean,
-  stats: CombatStats = DEFAULT_PLAYER_STATS,
-  dodgeSkillRank = 0,
-  evasionSkillRank = 0,
-  level = 1,
+  opts?: {
+    attack?: number;
+    maxHp?: number;
+    armour?: number;
+    shieldBlock?: number;
+    dodge?: number;
+    level?: number;
+  },
 ): Combatant {
+  const maxHp = opts?.maxHp ?? DEFAULT_PLAYER_STATS.maxHp;
   return {
     id,
     name,
-    hp: stats.maxHp,
-    maxHp: stats.maxHp,
-    attack: stats.attack,
-    defence: stats.defence,
-    armour: stats.armour,
-    agility: stats.agility,
-    dodgeSkillRank,
-    evasionSkillRank,
-    level,
+    hp: maxHp,
+    maxHp,
+    attack: opts?.attack ?? DEFAULT_PLAYER_STATS.unarmed,
+    armour: opts?.armour ?? DEFAULT_PLAYER_STATS.armour,
+    shieldBlock: opts?.shieldBlock ?? (isPlayer ? DEFAULT_PLAYER_STATS.shieldBlock : 0),
+    dodge: opts?.dodge ?? DEFAULT_PLAYER_STATS.dodge,
+    level: opts?.level ?? 1,
     roomId,
     isPlayer,
     stamina: isPlayer ? 100 : undefined,
@@ -143,8 +181,10 @@ export interface CombatEvent {
   maxHp?: number;
   narration: string;
   killerIds?: string[];
-  /** True when the target successfully dodged the attack (GDD §6.4). */
+  /** True when the target successfully dodged the attack. */
   dodged?: boolean;
+  /** True when the target's shield blocked the attack (binary nullification). */
+  blocked?: boolean;
   /** Detailed damage pipeline breakdown — populated on strike events for observability. */
   breakdown?: import('./damage.js').DamageBreakdown;
 }
@@ -186,8 +226,8 @@ export const COMBAT_TIMEOUT_TICKS = 10;
 /** Base flee success chance (0.0-1.0) before skill/level modifiers (GDD §6.2). */
 export const BASE_FLEE_CHANCE = 0.5;
 
-/** Flee success bonus per Evasion skill rank (GDD §6.2). */
-export const FLEE_EVASION_BONUS_PER_RANK = 0.05;
+/** Flee success bonus per dodge skill rank. */
+export const FLEE_DODGE_BONUS_PER_RANK = 0.05;
 
 /** Flee success penalty per creature level above player (GDD §6.2). */
 export const FLEE_LEVEL_PENALTY = 0.05;
