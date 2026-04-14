@@ -984,6 +984,8 @@ export class CombatSystem {
     for (const c of combatants) {
       const qa = actions.get(c.id)!;
       if (qa.action !== 'flee') continue;
+      // Skip flee for defeated combatants — they can't flee if dead
+      if (c.hp <= 0) continue;
 
       const exits = this.resolveExits(c.roomId);
       let toRoomId = qa.fleeRoomId;

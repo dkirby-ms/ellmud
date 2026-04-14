@@ -1513,6 +1513,13 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             this.sendExplorationUpdate(client, flee.combatantId, flee.toRoomId);
           }
         }
+      } else {
+        // Creature fled — move it to the target room and broadcast departure/arrival
+        const creature = this.creatureManager.getCreature(flee.combatantId);
+        if (creature) {
+          this.broadcastCreatureMovement(creature, flee.fromRoomId, flee.toRoomId);
+          creature.currentRoomId = flee.toRoomId;
+        }
       }
     }
   }
