@@ -337,6 +337,8 @@ describe('Player Death E2E: down → stabilize', () => {
     );
     victimCombatant.hp = 1;
     roomInstance.combatSystem.registerCombatant(victimCombatant);
+    // Force deterministic rolls so dodge never fires in this integration test
+    roomInstance.combatSystem.setRollFn(() => 1);
     roomInstance.combatSystem.initiateCombat('creature-e2e-brute', victimId);
 
     // Wait for combat tick to down the victim
