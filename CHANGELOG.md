@@ -1,3 +1,44 @@
+# [0.2.0-dev.44](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.43...v0.2.0-dev.44) (2026-04-14)
+
+
+### Bug Fixes
+
+* only send bleed-out HP messages when HP actually changes ([26bc471](https://github.com/dkirby-ms/ellmud/commit/26bc471366d975c961223cceec3271d01777e0c8))
+
+# [0.2.0-dev.43](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.42...v0.2.0-dev.43) (2026-04-14)
+
+
+### Bug Fixes
+
+* bleed-out dies at -10 HP and slow down combat pacing ([b884eeb](https://github.com/dkirby-ms/ellmud/commit/b884eebd4a40c65b058b4919285d6946c9b4f80b))
+* send bleed-out HP drain to downed players with scroll log prompt ([269153a](https://github.com/dkirby-ms/ellmud/commit/269153ab61f0f3f2ac5cf20a37f1e7d19feade9d))
+
+
+### Reverts
+
+* remove browser timeout/proxy changes that caused Firefox blank screen ([1a2782d](https://github.com/dkirby-ms/ellmud/commit/1a2782df85ed116c9d70f562fee0fba92f889879))
+
+# [0.2.0-dev.42](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.41...v0.2.0-dev.42) (2026-04-14)
+
+
+### Bug Fixes
+
+* **combat:** send 0 HP state when player enters downed state ([81989ad](https://github.com/dkirby-ms/ellmud/commit/81989ade92b15478f7d5a239e933aac8cbf0a9ef))
+
+# [0.2.0-dev.41](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.40...v0.2.0-dev.41) (2026-04-14)
+
+
+### Bug Fixes
+
+* **combat:** prevent post-death combat bleed with pendingDeathTeleport guard ([357f68f](https://github.com/dkirby-ms/ellmud/commit/357f68ff73ff45607e311c707c4db353e3abd9f0))
+
+# [0.2.0-dev.40](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.39...v0.2.0-dev.40) (2026-04-14)
+
+
+### Bug Fixes
+
+* resolve 6 combat bugs from live playtesting ([e05231d](https://github.com/dkirby-ms/ellmud/commit/e05231d97c5c2e5810c7907f1f0df6c1a6c6fa22))
+
 # [0.2.0-dev.39](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.38...v0.2.0-dev.39) (2026-04-14)
 
 

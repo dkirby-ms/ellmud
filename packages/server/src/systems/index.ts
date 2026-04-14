@@ -10,6 +10,7 @@ export { AmbientSystem, ATMOSPHERE_INTERVAL, type AmbientSystemConfig } from './
 export {
   DowningSystem,
   BLEED_OUT_TICKS,
+  BLEED_HP_LOSS,
   STABILIZE_CHANNEL_TICKS,
   BANDAGE_ITEM_ID,
   type DownedPlayer,

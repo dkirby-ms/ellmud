@@ -144,6 +144,10 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private traceSystem!: TraceSystem;
   private awarenessSystem!: AwarenessSystem;
   private downingSystem!: DowningSystem;
+  /** Tracks last sent bleed-out HP per downed player to avoid spamming every tick. */
+  private lastBleedHpSent = new Map<string, number>();
+  /** Players who have died and are awaiting teleport — excluded from combat event delivery. */
+  private pendingDeathTeleport = new Set<string>();
   private groupManager!: GroupManager;
   private narrationService!: NarrationService;
   private deathPenaltyStore!: DeathPenaltyStore;
@@ -772,6 +776,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.playerStartingZones.delete(playerId);
       this.playerFlagsCache.delete(playerId);
       this.ownerPlayerIds.delete(playerId);
+      this.pendingDeathTeleport.delete(playerId);
       this.updateMetadata();
     }
     // Clean up follow relationships on disconnect (#403)
@@ -1448,13 +1453,15 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Apply temporal micro-batching (single tick = 50-150ms temporal window)
     const batchedEvents = batchCombatEvents(classifiedEvents, DEFAULT_BATCHING_RULES);
 
-    // Send batched combat narrations to all clients
+    // Send batched combat narrations scoped by room (Bug 1/6 fix).
+    // Only players in the same room as the encounter see the events.
+    // Downed players are excluded to prevent post-death combat bleed.
     for (const batched of batchedEvents) {
       const narrationText = narrateBatchedEvent(batched);
-      
-      this.broadcast(MessageTypes.NARRATE, {
+      const eventRoomId = batched.event.roomId;
+      const msg = {
         text: narrationText,
-        type: 'combat',
+        type: 'combat' as const,
         timestamp: Date.now(),
         combatEvent: {
           eventType: batched.event.type,
@@ -1463,7 +1470,23 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           signalClass: batched.event.signalClass,
           icon: batched.event.icon,
         },
-      } satisfies NarrateMessage);
+      } satisfies NarrateMessage;
+
+      if (eventRoomId) {
+        // Room-scoped delivery: only send to players in the combat room
+        for (const [sid, ps] of this.players) {
+          if (ps.currentRoomId !== eventRoomId) continue;
+          if (this.downingSystem.isPlayerDowned(sid)) continue;
+          if (this.pendingDeathTeleport.has(sid)) continue;
+          const client = this.findClient(sid);
+          if (client) {
+            this.sendNarrate(client, msg);
+          }
+        }
+      } else {
+        // Fallback: no room info, broadcast to all (shouldn't happen with new code)
+        this.broadcast(MessageTypes.NARRATE, msg);
+      }
     }
 
     // Track players who took damage (from original events, not batched)
@@ -1473,8 +1496,10 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
     }
 
-    // Send player state updates to all players whose HP changed
+    // Send player state updates to all players whose HP changed (skip downed/dead players)
     for (const playerId of playersNeedingUpdate) {
+      if (this.downingSystem.isPlayerDowned(playerId)) continue;
+      if (this.pendingDeathTeleport.has(playerId)) continue;
       const client = this.findClient(playerId);
       if (client) {
         this.sendPlayerState(client, playerId);
@@ -1913,8 +1938,10 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private buildCreatureWorldState(): CreatureWorldState {
     const playersInRoom = new Map<string, string[]>();
     for (const [sid, ps] of this.players) {
-      // Peaceful players are invisible to creature AI
+      // Peaceful, downed, and dead players are invisible to creature AI
       if (ps.peaceful) continue;
+      if (this.downingSystem.isPlayerDowned(sid)) continue;
+      if (this.pendingDeathTeleport.has(sid)) continue;
       const list = playersInRoom.get(ps.currentRoomId);
       if (list) {
         list.push(sid);
@@ -2296,9 +2323,19 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.downingSystem.downPlayer(playerId, event.actorName, roomId, event.killerIds);
       this.log(`Player ${this.playerTag(playerId)} downed in ${roomId}`);
 
-      // Notify the downed player
+      // Send 0 HP state to client BEFORE removing combatant (so UI shows 0 HP)
+      const combatant = this.combatSystem.getCombatant(playerId);
       const client = this.findClient(playerId);
       if (client) {
+        client.send(MessageTypes.PLAYER_STATE, {
+          hp: 0,
+          maxHp: combatant?.maxHp ?? 100,
+          stamina: 0,
+          maxStamina: 0,
+          statusEffects: [],
+          posture: player?.posture ?? 'standing',
+        } satisfies PlayerStateMessage);
+
         this.sendOverlayState(client, {
           playerId,
           state: 'downed',
@@ -2327,6 +2364,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
   /**
    * Tick the downing system and handle resulting events (bleed-outs, stabilizations).
+   * Also sends HP drain updates to downed players so the client sees the bleed-out countdown.
    */
   private tickDowningSystem(): void {
     const events = this.downingSystem.tick();
@@ -2334,12 +2372,46 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     for (const event of events) {
       switch (event.type) {
         case 'player_bleed_out':
+          this.lastBleedHpSent.delete(event.playerId);
           this.handlePlayerDeath(event.playerId, event.playerName, event.roomId, event.killerIds);
           break;
         case 'player_stabilized':
+          this.lastBleedHpSent.delete(event.playerId);
           this.handlePlayerStabilized(event);
           break;
       }
+    }
+
+    // Send HP drain updates only when HP actually changes (not every tick)
+    for (const downed of this.downingSystem.getAllDownedPlayers()) {
+      if (downed.state !== 'downed') continue;
+
+      const lastSent = this.lastBleedHpSent.get(downed.playerId);
+      if (lastSent === downed.currentHp) continue;
+
+      this.lastBleedHpSent.set(downed.playerId, downed.currentHp);
+
+      const client = this.findClient(downed.playerId);
+      if (!client) continue;
+
+      const maxHp = this.playerStatsCache.get(downed.playerId)?.maxHp ?? 100;
+      const player = this.players.get(downed.playerId);
+
+      client.send(MessageTypes.PLAYER_STATE, {
+        hp: downed.currentHp,
+        maxHp,
+        stamina: 0,
+        maxStamina: 0,
+        statusEffects: [],
+        posture: player?.posture ?? 'standing',
+      } satisfies PlayerStateMessage);
+
+      // Echo the status prompt into the scroll log so the player sees the countdown
+      this.sendNarrate(client, {
+        text: `[HP: ${downed.currentHp}/${maxHp} | Bleeding out...]`,
+        type: 'system',
+        timestamp: Date.now(),
+      });
     }
   }
 
@@ -2416,6 +2488,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private async handlePlayerDeath(playerId: string, playerName: string, roomId: string, killerIds?: string[]): Promise<void> {
     const player = this.players.get(playerId);
     if (!player) return;
+
+    // Mark player as dead immediately — prevents combat event delivery during 3s teleport delay
+    this.pendingDeathTeleport.add(playerId);
 
     // Break follow relationships on death (#413)
     this.cleanupFollowRelationships(playerId);

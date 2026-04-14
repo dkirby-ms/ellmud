@@ -165,7 +165,7 @@ describe('calculatePlayerEffectiveStats', () => {
     expect(result.attack).toBe(5); // unarmed skill only
     expect(result.armour).toBe(2);
     expect(result.dodge).toBe(5);
-    expect(result.shieldBlock).toBe(5);
+    expect(result.shieldBlock).toBe(0); // No shield equipped → no block chance
     expect(result.maxHp).toBe(100);
   });
 

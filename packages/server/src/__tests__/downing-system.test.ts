@@ -12,6 +12,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   DowningSystem,
   BLEED_OUT_TICKS,
+  BLEED_HP_LOSS,
   STABILIZE_CHANNEL_TICKS,
   GRACE_TICKS,
 } from '../systems/DowningSystem.js';
@@ -291,24 +292,27 @@ describe('DowningSystem', () => {
   // ─── HP Drain During Bleed-Out ─────────────────────────────────────────────
 
   describe('HP drain during bleed-out', () => {
-    it('should drain HP by 1 each tick (0 → -1 → -2 → …)', () => {
+    it('should drain HP gradually over the bleed-out period (0 → −BLEED_HP_LOSS)', () => {
       system.downPlayer('p1', 'Hero', ROOM_A);
       expect(system.getDownedPlayer('p1')!.currentHp).toBe(0);
 
-      system.tick();
+      // After 6 ticks (BLEED_OUT_TICKS / BLEED_HP_LOSS), HP should be -1
+      const ticksPerHp = BLEED_OUT_TICKS / BLEED_HP_LOSS;
+      for (let i = 0; i < ticksPerHp; i++) system.tick();
       expect(system.getDownedPlayer('p1')!.currentHp).toBe(-1);
 
-      system.tick();
+      // After another interval, HP should be -2
+      for (let i = 0; i < ticksPerHp; i++) system.tick();
       expect(system.getDownedPlayer('p1')!.currentHp).toBe(-2);
     });
 
-    it('should reach -BLEED_OUT_TICKS at death', () => {
+    it('should reach -BLEED_HP_LOSS at death', () => {
       system.downPlayer('p1', 'Hero', ROOM_A);
       // Tick to one before death
       for (let i = 0; i < BLEED_OUT_TICKS - 1; i++) system.tick();
       const downed = system.getDownedPlayer('p1');
       expect(downed).toBeDefined();
-      expect(downed!.currentHp).toBe(-(BLEED_OUT_TICKS - 1));
+      expect(downed!.currentHp).toBe(-Math.floor((BLEED_OUT_TICKS - 1) * BLEED_HP_LOSS / BLEED_OUT_TICKS));
 
       // Final tick — player dies and is removed
       const events = system.tick();
@@ -318,7 +322,7 @@ describe('DowningSystem', () => {
 
     it('should not drain HP for stabilized players', () => {
       system.downPlayer('p1', 'Hero', ROOM_A);
-      system.tick(); // HP = -1
+      system.tick(); // HP starts draining
       system.beginStabilize('p2', 'Healer', 'p1');
       // Complete stabilization (STABILIZE_CHANNEL_TICKS ticks)
       for (let i = 0; i < STABILIZE_CHANNEL_TICKS; i++) system.tick();

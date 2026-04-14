@@ -78,7 +78,7 @@ describe('createCombatant — stat passthrough', () => {
     expect(c.attack).toBe(CUSTOM_STATS.unarmed); // unarmed skill, no weapon damage
     expect(c.armour).toBe(CUSTOM_STATS.armour);
     expect(c.dodge).toBe(CUSTOM_STATS.dodge);
-    expect(c.shieldBlock).toBe(CUSTOM_STATS.shieldBlock);
+    expect(c.shieldBlock).toBe(0); // No shield equipped → no block capability
     expect(c.maxHp).toBe(CUSTOM_STATS.maxHp);
   });
 
@@ -210,7 +210,7 @@ describe('buildPlayerCombatOpts — stat pipeline', () => {
     expect(effective.attack).toBe(8);  // unarmed (highest when no weapon)
     expect(effective.armour).toBe(5);
     expect(effective.dodge).toBe(10);
-    expect(effective.shieldBlock).toBe(7);
+    expect(effective.shieldBlock).toBe(0); // No shield equipped → no block
     expect(effective.maxHp).toBe(150);
   });
 

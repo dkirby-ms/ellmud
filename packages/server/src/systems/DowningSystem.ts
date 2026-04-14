@@ -13,6 +13,9 @@
 /** Ticks before a downed player bleeds out and dies (~1 minute at 1s ticks). */
 export const BLEED_OUT_TICKS = 60;
 
+/** Total HP lost during bleed-out (0 → −BLEED_HP_LOSS over BLEED_OUT_TICKS). */
+export const BLEED_HP_LOSS = 10;
+
 /** Ticks required to channel the stabilize action. */
 export const STABILIZE_CHANNEL_TICKS = 2;
 
@@ -33,7 +36,7 @@ export interface DownedPlayer {
   state: DownedState;
   /** Ticks remaining before bleed-out death. Only counts down while state === 'downed'. */
   bleedOutTicksRemaining: number;
-  /** Current HP (starts at 0, drains to -BLEED_OUT_TICKS during bleed-out). */
+  /** Current HP (starts at 0, drains to -BLEED_HP_LOSS during bleed-out). */
   currentHp: number;
   /** Grace ticks remaining — killing blows are blocked while > 0. */
   graceTicksRemaining: number;
@@ -228,7 +231,9 @@ export class DowningSystem {
       }
 
       downed.bleedOutTicksRemaining--;
-      downed.currentHp--; // HP drains: 0 → -1 → -2 → … → -BLEED_OUT_TICKS
+      // HP drains slowly: 0 → −1 → … → −BLEED_HP_LOSS over BLEED_OUT_TICKS
+      const ticksElapsed = BLEED_OUT_TICKS - downed.bleedOutTicksRemaining;
+      downed.currentHp = -Math.floor(ticksElapsed * BLEED_HP_LOSS / BLEED_OUT_TICKS);
 
       if (downed.bleedOutTicksRemaining <= 0) {
         events.push({
