@@ -1,3 +1,10 @@
+# [0.2.0-dev.42](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.41...v0.2.0-dev.42) (2026-04-14)
+
+
+### Bug Fixes
+
+* **combat:** send 0 HP state when player enters downed state ([81989ad](https://github.com/dkirby-ms/ellmud/commit/81989ade92b15478f7d5a239e933aac8cbf0a9ef))
+
 # [0.2.0-dev.41](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.40...v0.2.0-dev.41) (2026-04-14)
 
 
