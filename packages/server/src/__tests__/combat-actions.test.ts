@@ -153,12 +153,20 @@ describe('resolveFlee', () => {
     expect(event.narration).toContain('flees from combat');
   });
 
-  it('produces a failed flee event', () => {
+  it('produces a failed flee event (no exits)', () => {
     const combatant = makePlayer('p1', 'Trapped');
-    const event = resolveFlee(combatant, false);
+    const event = resolveFlee(combatant, false, undefined, 'no_exits');
 
     expect(event.type).toBe('flee');
     expect(event.narration).toContain('no escape');
+  });
+
+  it('produces a failed flee event (failed roll)', () => {
+    const combatant = makePlayer('p1', 'Unlucky');
+    const event = resolveFlee(combatant, false, undefined, 'failed_roll');
+
+    expect(event.type).toBe('flee');
+    expect(event.narration).toContain("can't break free");
   });
 
   it('does not include target or damage fields', () => {

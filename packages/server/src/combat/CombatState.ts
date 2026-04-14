@@ -187,6 +187,8 @@ export interface CombatEvent {
   blocked?: boolean;
   /** Detailed damage pipeline breakdown — populated on strike events for observability. */
   breakdown?: import('./damage.js').DamageBreakdown;
+  /** Room where this event occurred — used for room-scoped delivery. */
+  roomId?: string;
 }
 
 export interface FleeResult {

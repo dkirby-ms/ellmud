@@ -560,13 +560,15 @@ describe('Resolution Order (Simultaneous)', () => {
 
     const result = system.resolveTick();
 
-    // Both should have attacked (simultaneous), both defeated
-    const strikes = result.events.filter((e) => e.type === 'strike');
-    expect(strikes).toHaveLength(2);
-
-    // Both should be at 0 HP
+    // Both die simultaneously from damage calculated at start-of-tick HP.
+    // Strike narration is suppressed for defeated combatants (Bug fix),
+    // but the damage was still applied.
     expect(p1.hp).toBe(0);
     expect(p2.hp).toBe(0);
+
+    // Both should be defeated
+    const defeats = result.events.filter((e) => e.type === 'defeated');
+    expect(defeats).toHaveLength(2);
   });
 });
 

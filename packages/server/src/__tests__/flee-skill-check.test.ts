@@ -53,7 +53,7 @@ describe('Flee Skill Check (GDD §6.2)', () => {
 
     expect(result.fleeResults).toHaveLength(0);
     expect(player.roomId).toBe('room-1'); // Still in same room
-    expect(result.events.some(e => e.type === 'flee' && e.actorId === 'p1' && e.narration.includes('no escape'))).toBe(true);
+    expect(result.events.some(e => e.type === 'flee' && e.actorId === 'p1' && e.narration.includes("can't break free"))).toBe(true);
   });
 
   it('evasion skill increases flee chance', () => {

@@ -47,10 +47,20 @@ export function resolveDodge(combatant: Combatant, attackerName?: string): Comba
 }
 
 /** Build a flee narration event. */
-export function resolveFlee(combatant: Combatant, success: boolean, _toRoomId?: string): CombatEvent {
-  const narration = success
-    ? `${combatant.name} flees from combat!`
-    : `${combatant.name} tries to flee but there is no escape!`;
+export function resolveFlee(
+  combatant: Combatant,
+  success: boolean,
+  _toRoomId?: string,
+  failReason?: 'no_exits' | 'failed_roll',
+): CombatEvent {
+  let narration: string;
+  if (success) {
+    narration = `${combatant.name} flees from combat!`;
+  } else if (failReason === 'no_exits') {
+    narration = `${combatant.name} tries to flee but there is no escape!`;
+  } else {
+    narration = `${combatant.name} tries to flee but can't break free!`;
+  }
 
   return {
     type: 'flee',

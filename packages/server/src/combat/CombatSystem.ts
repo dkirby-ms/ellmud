@@ -768,6 +768,7 @@ export class CombatSystem {
           actorId: c.id,
           actorName: c.name,
           narration: `${c.name} is blocking.`,
+          roomId: encounter.roomId,
         });
       } else if (ability.type === 'utility') {
         // Utility ability (observe) → reveal target stats
@@ -779,6 +780,7 @@ export class CombatSystem {
             actorId: c.id,
             actorName: c.name,
             narration: `${c.name} observes ${target.name}: ${target.hp}/${target.maxHp} HP, Attack: ${target.attack}, Armour: ${target.armour}`,
+            roomId: encounter.roomId,
           });
         }
         this.queuedActions.set(c.id, { action: 'strike' });
@@ -939,22 +941,43 @@ export class CombatSystem {
       }
     }
 
-    // Fill in newHp on strike events and generate narration
-    for (const evt of strikeEvents) {
+    // Bug 3 fix: Filter out strikes from combatants who were defeated this tick.
+    // Defeated combatants (hp <= 0 after damage) generate no offensive events.
+    const filteredStrikeEvents = strikeEvents.filter(evt => {
+      const attacker = this.combatants.get(evt.actorId);
+      return attacker && attacker.hp > 0;
+    });
+
+    // Bug 2 fix: Fill in newHp as running tally (not post-tick snapshot) so
+    // each hit within a tick shows cumulative damage rather than identical HP.
+    const runningHp = new Map<string, number>();
+    for (const evt of filteredStrikeEvents) {
       const target = this.combatants.get(evt.targetId!)!;
-      evt.newHp = target.hp;
+      if (!runningHp.has(evt.targetId!)) {
+        // Start from pre-damage HP: post-tick HP + total accumulated damage
+        const totalDmg = damageAccumulator.get(evt.targetId!) ?? 0;
+        runningHp.set(evt.targetId!, target.hp + totalDmg);
+      }
+
+      const currentRunning = runningHp.get(evt.targetId!)!;
+      const hitDamage = (evt.dodged || evt.blocked) ? 0 : (evt.damage ?? 0);
+      const newRunning = Math.max(0, currentRunning - hitDamage);
+      runningHp.set(evt.targetId!, newRunning);
+
+      evt.newHp = newRunning;
+      evt.roomId = encounter.roomId;
       if (evt.dodged) {
         evt.narration = `${evt.targetName} dodges ${evt.actorName}'s attack!`;
       } else if (evt.blocked) {
         evt.narration = `${evt.targetName} blocks ${evt.actorName}'s attack with their shield!`;
       } else {
-        const defeated = target.hp <= 0;
+        const defeated = newRunning <= 0;
         evt.narration = defeated
           ? `${evt.actorName} strikes ${evt.targetName} for ${evt.damage} damage — ${evt.targetName} is defeated!`
-          : `${evt.actorName} strikes ${evt.targetName} for ${evt.damage} damage. [${evt.targetName}: ${target.hp}/${target.maxHp} HP]`;
+          : `${evt.actorName} strikes ${evt.targetName} for ${evt.damage} damage. [${evt.targetName}: ${newRunning}/${target.maxHp} HP]`;
       }
     }
-    events.push(...strikeEvents);
+    events.push(...filteredStrikeEvents);
 
     // 4a. Process position changes and decrement cooldowns (GDD §6.11)
     for (const c of combatants) {
@@ -970,6 +993,7 @@ export class CombatSystem {
           actorId: c.id,
           actorName: c.name,
           narration,
+          roomId: encounter.roomId,
         });
         this.debug(`${c.name} repositioned to ${qa.newPosition}`);
       } else if (c.positionCooldown > 0) {
@@ -996,7 +1020,7 @@ export class CombatSystem {
 
       if (!toRoomId) {
         // No exits available — flee fails
-        events.push(resolveFlee(c, false));
+        events.push({ ...resolveFlee(c, false, undefined, 'no_exits'), roomId: encounter.roomId });
         continue;
       }
 
@@ -1009,7 +1033,7 @@ export class CombatSystem {
       const fleeSuccess = fleeRoll < fleeChance;
 
       if (fleeSuccess) {
-        events.push(resolveFlee(c, true, toRoomId));
+        events.push({ ...resolveFlee(c, true, toRoomId), roomId: encounter.roomId });
         fleeResults.push({
           combatantId: c.id,
           combatantName: c.name,
@@ -1024,7 +1048,7 @@ export class CombatSystem {
 
       } else {
         // Flee failed — lose action for this tick (GDD §6.2)
-        events.push(resolveFlee(c, false));
+        events.push({ ...resolveFlee(c, false, undefined, 'failed_roll'), roomId: encounter.roomId });
       }
     }
 
@@ -1032,6 +1056,7 @@ export class CombatSystem {
     for (const c of combatants) {
       if (c.hp <= 0) {
         const defeatedEvent = resolveDefeated(c);
+        defeatedEvent.roomId = encounter.roomId;
         const contributors = damageContributors.get(c.id);
         if (contributors) {
           defeatedEvent.killerIds = [...contributors];
@@ -1066,7 +1091,7 @@ export class CombatSystem {
 
     let ended = false;
     if (aliveInEncounter.length <= 1) {
-      events.push(resolveCombatEnd('last_standing'));
+      events.push({ ...resolveCombatEnd('last_standing'), roomId: encounter.roomId });
       ended = true;
     } else {
       // Check if hostile pairs remain — if all survivors are on the same
@@ -1092,18 +1117,18 @@ export class CombatSystem {
             return c?.currentTarget && aliveInEncounter.includes(c.currentTarget);
           });
           if (!hasHostilePair) {
-            events.push(resolveCombatEnd('last_standing'));
+            events.push({ ...resolveCombatEnd('last_standing'), roomId: encounter.roomId });
             ended = true;
           }
         } else {
-          events.push(resolveCombatEnd('last_standing'));
+          events.push({ ...resolveCombatEnd('last_standing'), roomId: encounter.roomId });
           ended = true;
         }
       }
     }
 
     if (!ended && encounter.ticksSinceLastStrike >= COMBAT_TIMEOUT_TICKS) {
-      events.push(resolveCombatEnd('timeout'));
+      events.push({ ...resolveCombatEnd('timeout'), roomId: encounter.roomId });
       ended = true;
     }
 
@@ -1173,7 +1198,7 @@ export class CombatSystem {
       const enc = this.encounters.get(encId);
       if (enc) {
         enc.combatantIds.delete(id);
-        if (enc.combatantIds.size <= 1) {
+        if (this.shouldEndEncounter(enc)) {
           this.cleanupEncounter(encId);
         }
       }
@@ -1181,6 +1206,32 @@ export class CombatSystem {
     }
     this.queuedActions.delete(id);
     this.combatants.delete(id);
+  }
+
+  /**
+   * Check if an encounter should end: <= 1 combatant, or no hostile pairs remain.
+   */
+  private shouldEndEncounter(enc: CombatEncounter): boolean {
+    if (enc.combatantIds.size <= 1) return true;
+
+    const alive = [...enc.combatantIds].filter(
+      (cid) => (this.combatants.get(cid)?.hp ?? 0) > 0,
+    );
+    if (alive.length <= 1) return true;
+
+    const hasPlayer = alive.some((cid) => this.combatants.get(cid)?.isPlayer === true);
+    const hasCreature = alive.some((cid) => this.combatants.get(cid)?.isPlayer === false);
+    if (!hasPlayer || !hasCreature) {
+      // PvP check: multiple players with active hostile pairs should continue
+      if (hasPlayer && !hasCreature && alive.length > 1) {
+        return !alive.some((cid) => {
+          const c = this.combatants.get(cid);
+          return c?.currentTarget && alive.includes(c.currentTarget);
+        });
+      }
+      return true;
+    }
+    return false;
   }
 
   /** Mark a combatant as disconnected — will auto-attack until reconnection. */

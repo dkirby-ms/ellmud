@@ -80,7 +80,7 @@ export function calculatePlayerEffectiveStats(
     maxHp: base.maxHp,
     attack: weaponSkillValue + equipment.weaponDamage,
     armour: base.armour + equipment.armour,
-    shieldBlock: base.shieldBlock + equipment.shieldBlock,
+    shieldBlock: equipment.shieldBlock > 0 ? base.shieldBlock + equipment.shieldBlock : 0,
     dodge: base.dodge,
   };
 }

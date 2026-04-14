@@ -1448,13 +1448,15 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Apply temporal micro-batching (single tick = 50-150ms temporal window)
     const batchedEvents = batchCombatEvents(classifiedEvents, DEFAULT_BATCHING_RULES);
 
-    // Send batched combat narrations to all clients
+    // Send batched combat narrations scoped by room (Bug 1/6 fix).
+    // Only players in the same room as the encounter see the events.
+    // Downed players are excluded to prevent post-death combat bleed.
     for (const batched of batchedEvents) {
       const narrationText = narrateBatchedEvent(batched);
-      
-      this.broadcast(MessageTypes.NARRATE, {
+      const eventRoomId = batched.event.roomId;
+      const msg = {
         text: narrationText,
-        type: 'combat',
+        type: 'combat' as const,
         timestamp: Date.now(),
         combatEvent: {
           eventType: batched.event.type,
@@ -1463,7 +1465,22 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           signalClass: batched.event.signalClass,
           icon: batched.event.icon,
         },
-      } satisfies NarrateMessage);
+      } satisfies NarrateMessage;
+
+      if (eventRoomId) {
+        // Room-scoped delivery: only send to players in the combat room
+        for (const [sid, ps] of this.players) {
+          if (ps.currentRoomId !== eventRoomId) continue;
+          if (this.downingSystem.isPlayerDowned(sid)) continue;
+          const client = this.findClient(sid);
+          if (client) {
+            this.sendNarrate(client, msg);
+          }
+        }
+      } else {
+        // Fallback: no room info, broadcast to all (shouldn't happen with new code)
+        this.broadcast(MessageTypes.NARRATE, msg);
+      }
     }
 
     // Track players who took damage (from original events, not batched)
@@ -1473,8 +1490,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
     }
 
-    // Send player state updates to all players whose HP changed
+    // Send player state updates to all players whose HP changed (skip downed players)
     for (const playerId of playersNeedingUpdate) {
+      if (this.downingSystem.isPlayerDowned(playerId)) continue;
       const client = this.findClient(playerId);
       if (client) {
         this.sendPlayerState(client, playerId);
