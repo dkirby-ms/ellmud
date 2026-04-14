@@ -96,6 +96,8 @@ export interface Combatant {
   position: PositionZone;
   /** Reposition cooldown — ticks remaining before can reposition again (GDD §6.11). */
   positionCooldown: number;
+  /** Auto-attack cooldown — ticks remaining before next auto-strike. */
+  strikeCooldown: number;
 }
 
 // ─── Wind-Up State (GDD §6.5) ───────────────────────────────────────────────
@@ -141,6 +143,7 @@ export function createCombatant(
     abilityCooldowns: isPlayer ? new Map() : undefined,
     position: 'front',
     positionCooldown: 0,
+    strikeCooldown: 0,
   };
 }
 
@@ -236,6 +239,9 @@ export const FLEE_LEVEL_PENALTY = 0.05;
 
 /** Repositioning cooldown in ticks (GDD §6.11). */
 export const REPOSITION_COOLDOWN_TICKS = 3;
+
+/** Ticks between auto-attacks — slows basic strike pacing for a deliberate feel. */
+export const AUTO_ATTACK_COOLDOWN_TICKS = 1;
 
 /** Flanking damage bonus when attacking from flank (GDD §6.11). */
 export const FLANKING_DAMAGE_BONUS = 0.15;

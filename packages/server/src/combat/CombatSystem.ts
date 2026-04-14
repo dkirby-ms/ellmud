@@ -25,6 +25,7 @@ import {
   FLEE_DODGE_BONUS_PER_RANK,
   FLEE_LEVEL_PENALTY,
   REPOSITION_COOLDOWN_TICKS,
+  AUTO_ATTACK_COOLDOWN_TICKS,
 } from './CombatState.js';
 import { calculateDamage, type DamageBreakdown } from './damage.js';
 import {
@@ -608,7 +609,12 @@ export class CombatSystem {
 
     // Note: Don't end combat immediately if only 1 combatant - check cooldown logic at end
 
-    // 0. Process wind-up countdowns (GDD §6.5)
+    // 0a. Decrement auto-attack cooldowns
+    for (const c of combatants) {
+      if (c.strikeCooldown > 0) c.strikeCooldown--;
+    }
+
+    // 0b. Process wind-up countdowns (GDD §6.5)
     const windUpExpired: Combatant[] = [];
     for (const c of combatants) {
       if (c.windUp) {
@@ -655,6 +661,11 @@ export class CombatSystem {
 
       // Disconnected players auto-attack (dodge is passive, not an action)
       if (c.disconnected && !this.queuedActions.has(c.id)) {
+        if (c.strikeCooldown > 0) {
+          this.queuedActions.set(c.id, { action: 'strike' });
+          this.debug(`Auto-attack on cooldown for ${c.name} (disconnected)`);
+          continue;
+        }
         let target = c.currentTarget ? this.combatants.get(c.currentTarget) : undefined;
         const targetValid = target && target.hp > 0 && encounter.combatantIds.has(c.currentTarget!);
         if (!targetValid) {
@@ -672,6 +683,12 @@ export class CombatSystem {
       }
 
       if (!this.queuedActions.has(c.id)) {
+        // On auto-attack cooldown — idle this tick
+        if (c.strikeCooldown > 0) {
+          this.queuedActions.set(c.id, { action: 'strike' });
+          this.debug(`Auto-attack on cooldown for ${c.name}`);
+          continue;
+        }
         // Auto-attack if we have a valid target
         let target = c.currentTarget ? this.combatants.get(c.currentTarget) : undefined;
         const targetValid = target && target.hp > 0 && encounter.combatantIds.has(c.currentTarget!);
@@ -910,6 +927,9 @@ export class CombatSystem {
       });
 
       this.debug(`Damage roll: ${c.name} → ${target.name}: raw=${dmg.rawDamage} ×${dmg.multiplier} -${dmg.armourReduction} = ${dmg.finalDamage}${dmg.dodged ? ' (DODGED)' : ''}${dmg.blocked ? ' (BLOCKED)' : ''}`);
+
+      // Set auto-attack cooldown after striking
+      c.strikeCooldown = AUTO_ATTACK_COOLDOWN_TICKS;
     }
 
     // 4. Apply all damage at once
