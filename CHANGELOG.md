@@ -1,3 +1,10 @@
+# [0.2.0-dev.40](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.39...v0.2.0-dev.40) (2026-04-14)
+
+
+### Bug Fixes
+
+* resolve 6 combat bugs from live playtesting ([e05231d](https://github.com/dkirby-ms/ellmud/commit/e05231d97c5c2e5810c7907f1f0df6c1a6c6fa22))
+
 # [0.2.0-dev.39](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.38...v0.2.0-dev.39) (2026-04-14)
 
 
