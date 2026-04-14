@@ -1,3 +1,10 @@
+# [0.2.0-dev.41](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.40...v0.2.0-dev.41) (2026-04-14)
+
+
+### Bug Fixes
+
+* **combat:** prevent post-death combat bleed with pendingDeathTeleport guard ([357f68f](https://github.com/dkirby-ms/ellmud/commit/357f68ff73ff45607e311c707c4db353e3abd9f0))
+
 # [0.2.0-dev.40](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.39...v0.2.0-dev.40) (2026-04-14)
 
 
