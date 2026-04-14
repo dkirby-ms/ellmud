@@ -1,3 +1,10 @@
+# [0.2.0-dev.44](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.43...v0.2.0-dev.44) (2026-04-14)
+
+
+### Bug Fixes
+
+* only send bleed-out HP messages when HP actually changes ([26bc471](https://github.com/dkirby-ms/ellmud/commit/26bc471366d975c961223cceec3271d01777e0c8))
+
 # [0.2.0-dev.43](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.42...v0.2.0-dev.43) (2026-04-14)
 
 
