@@ -142,42 +142,82 @@ jobs:
               }
             }
 
-            // If not routed to @copilot, use keyword-based routing
+            // If not routed to @copilot, use routing.md-driven keyword scoring
             if (!assignedMember) {
-              for (const member of members) {
-                const role = member.role.toLowerCase();
-                if ((role.includes('frontend') || role.includes('ui')) &&
-                    (issueText.includes('ui') || issueText.includes('frontend') ||
-                     issueText.includes('css') || issueText.includes('component') ||
-                     issueText.includes('button') || issueText.includes('page') ||
-                     issueText.includes('layout') || issueText.includes('design'))) {
-                  assignedMember = member;
-                  triageReason = 'Issue relates to frontend/UI work';
-                  break;
+              // Parse the Routing Table from routing.md
+              // Format: | Work Type | Route To | Examples |
+              const routingRules = [];
+              if (routingContent) {
+                const routingLines = routingContent.split('\n');
+                let inRoutingTable = false;
+                for (const line of routingLines) {
+                  if (line.match(/^\|\s*Work Type\s*\|/i)) {
+                    inRoutingTable = true;
+                    continue;
+                  }
+                  if (inRoutingTable && line.match(/^\|[-\s|]+\|$/)) {
+                    continue; // skip separator row
+                  }
+                  if (inRoutingTable && line.startsWith('|')) {
+                    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+                    if (cells.length >= 3) {
+                      const workType = cells[0].toLowerCase();
+                      const routeTo = cells[1].trim();
+                      const examples = cells[2].toLowerCase();
+                      // Extract keywords from Work Type and Examples columns
+                      const keywords = [
+                        ...workType.split(/[,/]/).map(s => s.trim()),
+                        ...examples.split(/[,/]/).map(s => s.trim())
+                      ].filter(k => k.length > 2); // skip tiny fragments
+                      routingRules.push({ routeTo, keywords });
+                    }
+                  } else if (inRoutingTable && !line.startsWith('|')) {
+                    break; // end of table
+                  }
                 }
-                if ((role.includes('backend') || role.includes('api') || role.includes('server')) &&
-                    (issueText.includes('api') || issueText.includes('backend') ||
-                     issueText.includes('database') || issueText.includes('endpoint') ||
-                     issueText.includes('server') || issueText.includes('auth'))) {
-                  assignedMember = member;
-                  triageReason = 'Issue relates to backend/API work';
-                  break;
+              }
+
+              // Score each member by keyword matches in issue text
+              const scores = new Map();
+              for (const rule of routingRules) {
+                const member = members.find(m =>
+                  m.name.toLowerCase() === rule.routeTo.toLowerCase()
+                );
+                if (!member) continue;
+
+                let score = scores.get(member.name) || 0;
+                for (const keyword of rule.keywords) {
+                  if (issueText.includes(keyword)) {
+                    // Longer keywords are more specific, score higher
+                    score += keyword.length;
+                  }
                 }
-                if ((role.includes('test') || role.includes('qa') || role.includes('quality')) &&
-                    (issueText.includes('test') || issueText.includes('bug') ||
-                     issueText.includes('fix') || issueText.includes('regression') ||
-                     issueText.includes('coverage'))) {
-                  assignedMember = member;
-                  triageReason = 'Issue relates to testing/quality work';
-                  break;
+                if (score > 0) {
+                  scores.set(member.name, score);
                 }
-                if ((role.includes('devops') || role.includes('infra') || role.includes('ops')) &&
-                    (issueText.includes('deploy') || issueText.includes('ci') ||
-                     issueText.includes('pipeline') || issueText.includes('docker') ||
-                     issueText.includes('infrastructure'))) {
-                  assignedMember = member;
-                  triageReason = 'Issue relates to DevOps/infrastructure work';
-                  break;
+              }
+
+              // Pick highest-scoring member
+              if (scores.size > 0) {
+                let bestName = null;
+                let bestScore = 0;
+                for (const [name, score] of scores) {
+                  if (score > bestScore) {
+                    bestScore = score;
+                    bestName = name;
+                  }
+                }
+                if (bestName) {
+                  assignedMember = members.find(m => m.name === bestName);
+                  const matchedKeywords = [];
+                  for (const rule of routingRules) {
+                    if (rule.routeTo.toLowerCase() === bestName.toLowerCase()) {
+                      for (const kw of rule.keywords) {
+                        if (issueText.includes(kw)) matchedKeywords.push(kw);
+                      }
+                    }
+                  }
+                  triageReason = `Routing match: keywords [${matchedKeywords.slice(0, 5).join(', ')}] → ${bestName} (${assignedMember.role})`;
                 }
               }
             }
