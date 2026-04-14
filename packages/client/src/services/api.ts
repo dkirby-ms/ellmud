@@ -20,24 +20,33 @@ export function onAuthError(handler: () => void): void {
   _on401 = handler;
 }
 
-async function request<T>(path: string, options: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
+async function request<T>(path: string, options: RequestInit & { timeout?: number }): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeout ?? 10000);
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+    clearTimeout(timeout);
 
-  if (!res.ok) {
-    if (res.status === 401) {
-      _on401?.();
+    if (!res.ok) {
+      if (res.status === 401) {
+        _on401?.();
+      }
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new ApiError(res.status, body.error ?? body.message ?? 'Request failed');
     }
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, body.error ?? body.message ?? 'Request failed');
-  }
 
-  return res.json() as Promise<T>;
+    return res.json() as Promise<T>;
+  } catch (err) {
+    clearTimeout(timeout);
+    throw err;
+  }
 }
 
 export class ApiError extends Error {
@@ -78,12 +87,16 @@ export async function logout(token: string): Promise<void> {
  */
 export async function validateToken(token: string): Promise<boolean> {
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(`${BASE_URL}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     return res.status !== 401;
   } catch {
-    // Server unreachable — keep token, let normal flow handle it
+    // Server unreachable or timed out — keep token, let normal flow handle it
     return true;
   }
 }
