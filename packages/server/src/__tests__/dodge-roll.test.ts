@@ -41,8 +41,8 @@ describe('Dodge Roll Integration (Bug #460)', () => {
     combat.initiateCombat(creature.id, player.id);
 
     // Creature attacks player; player should dodge
-    combat.submitAction(creature.id, { action: 'strike', targetId: player.id });
-    combat.submitAction(player.id, { action: 'strike', targetId: creature.id });
+    combat.submitAction(creature.id, 'strike', player.id);
+    combat.submitAction(player.id, 'strike', creature.id);
 
     const result = combat.resolveTick();
 
@@ -73,8 +73,8 @@ describe('Dodge Roll Integration (Bug #460)', () => {
     combat.registerCombatant(creature);
     combat.initiateCombat(creature.id, player.id);
 
-    combat.submitAction(creature.id, { action: 'strike', targetId: player.id });
-    combat.submitAction(player.id, { action: 'strike', targetId: creature.id });
+    combat.submitAction(creature.id, 'strike', player.id);
+    combat.submitAction(player.id, 'strike', creature.id);
 
     const result = combat.resolveTick();
 
@@ -103,8 +103,8 @@ describe('Dodge Roll Integration (Bug #460)', () => {
     combat.registerCombatant(creature);
     combat.initiateCombat(creature.id, player.id);
 
-    combat.submitAction(creature.id, { action: 'strike', targetId: player.id });
-    combat.submitAction(player.id, { action: 'strike', targetId: creature.id });
+    combat.submitAction(creature.id, 'strike', player.id);
+    combat.submitAction(player.id, 'strike', creature.id);
 
     const result = combat.resolveTick();
 
@@ -136,8 +136,8 @@ describe('Dodge Roll Integration (Bug #460)', () => {
       combat.registerCombatant(creature);
       combat.initiateCombat(creature.id, player.id);
 
-      combat.submitAction(creature.id, { action: 'strike', targetId: player.id });
-      combat.submitAction(player.id, { action: 'strike', targetId: creature.id });
+      combat.submitAction(creature.id, 'strike', player.id);
+      combat.submitAction(player.id, 'strike', creature.id);
 
       const result = combat.resolveTick();
 

@@ -44,9 +44,9 @@ describe('Post-Death Combat Cleanup (Bug #462)', () => {
     combat.initiateCombat(creature2.id, player.id);
 
     // All attack each other
-    combat.submitAction(creature1.id, { action: 'strike', targetId: player.id });
-    combat.submitAction(creature2.id, { action: 'strike', targetId: player.id });
-    combat.submitAction(player.id, { action: 'strike', targetId: creature1.id });
+    combat.submitAction(creature1.id, 'strike', player.id);
+    combat.submitAction(creature2.id, 'strike', player.id);
+    combat.submitAction(player.id, 'strike', creature1.id);
 
     const result = combat.resolveTick();
 
@@ -76,9 +76,9 @@ describe('Post-Death Combat Cleanup (Bug #462)', () => {
     combat.initiateCombat(player1.id, creature.id);
     combat.initiateCombat(player2.id, creature.id);
 
-    combat.submitAction(creature.id, { action: 'strike', targetId: player1.id });
-    combat.submitAction(player1.id, { action: 'strike', targetId: creature.id });
-    combat.submitAction(player2.id, { action: 'strike', targetId: creature.id });
+    combat.submitAction(creature.id, 'strike', player1.id);
+    combat.submitAction(player1.id, 'strike', creature.id);
+    combat.submitAction(player2.id, 'strike', creature.id);
 
     const result = combat.resolveTick();
 
@@ -103,8 +103,8 @@ describe('Post-Death Combat Cleanup (Bug #462)', () => {
     combat.registerCombatant(creature);
     combat.initiateCombat(player.id, creature.id);
 
-    combat.submitAction(player.id, { action: 'strike', targetId: creature.id });
-    combat.submitAction(creature.id, { action: 'strike', targetId: player.id });
+    combat.submitAction(player.id, 'strike', creature.id);
+    combat.submitAction(creature.id, 'strike', player.id);
 
     const result = combat.resolveTick();
 
@@ -131,9 +131,9 @@ describe('Post-Death Combat Cleanup (Bug #462)', () => {
     combat.initiateCombat(creature2.id, player.id);
 
     // First tick: player dies
-    combat.submitAction(creature1.id, { action: 'strike', targetId: player.id });
-    combat.submitAction(creature2.id, { action: 'strike', targetId: player.id });
-    combat.submitAction(player.id, { action: 'strike', targetId: creature1.id });
+    combat.submitAction(creature1.id, 'strike', player.id);
+    combat.submitAction(creature2.id, 'strike', player.id);
+    combat.submitAction(player.id, 'strike', creature1.id);
 
     const tick1 = combat.resolveTick();
     expect(tick1.events.some(e => e.type === 'defeated' && e.actorId === player.id)).toBe(true);
