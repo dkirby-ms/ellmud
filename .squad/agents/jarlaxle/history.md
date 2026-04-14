@@ -399,3 +399,24 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 **Decision:** Written to `.squad/decisions/inbox/jarlaxle-combat-stat-wiring-gaps.md`
 
 ---
+
+### 2026-06-24: Admin Creature CRUD Migration + calculateCreatureEffectiveStats Wiring (#452, #456)
+
+**Problem:** PgCreatureDefinitionsStore still used old columns (attack, defence, agility) from pre-Phase 1 schema. `calculateCreatureEffectiveStats()` existed but wasn't used in production paths — inline `Math.max()` was duplicated in `CreatureManager.toCombatant()` and `ZoneRoom.buildCommandContext()`.
+
+**Changes:**
+- PgCreatureDefinitionsStore: All SELECT/INSERT/UPDATE queries now use Phase 1 columns (unarmed, one_handed, two_handed, ranged, shield_block, dodge_skill_rank)
+- CreatureRow interface + rowToEntity mapper updated for new column layout
+- INSERT uses 25 params (was 22), UPDATE uses 26 params (was 23)
+- admin-crud.test.ts: Creature fixtures updated to Phase 1 stat model
+- content-stores.test.ts: CREATURE_ROW mock, param counts, and field assertions updated
+- CreatureManager.toCombatant: Now delegates to calculateCreatureEffectiveStats() instead of inline Math.max()
+- ZoneRoom.buildCommandContext: Both creaturesInRoom and resolveCreaturesInRoom use calculateCreatureEffectiveStats()
+
+### Learnings
+- DB columns use snake_case (one_handed, shield_block, dodge_skill_rank), entity fields use camelCase (oneHanded, shieldBlock, dodge)
+- ContentRegistry.ts is the canonical pattern for loading creature stats from DB — always match its column list
+- When changing column counts in parameterized queries, content-stores.test.ts has exact param-count assertions that must be updated
+- calculateCreatureEffectiveStats() is now the single source of truth for creature stat resolution — no more inline Math.max()
+
+---

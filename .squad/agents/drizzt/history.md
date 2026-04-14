@@ -67,6 +67,9 @@
 - **Creature definitions** keep legacy columns (attack, defence, agility) for backward compat but new weapon skills (unarmed, one_handed, two_handed, ranged, shield_block, dodge_skill_rank) are the Phase 1 future.
 - **CharacterRow.combatStats** is populated in every SELECT via shared `CHARACTER_COLUMNS` constant — keeps queries DRY.
 - **Migration 018** = character combat stats, **Migration 019** = creature combat stats with varied weapon/dodge values per creature archetype.
+- **ItemStats dual format (#453):** DB `base_stats` JSONB has legacy format (`{damage, speed}` for weapons, `{armour, weight}` for armour) and canonical combat format (`{weaponType, weaponDamage, armour, shieldBlock}`). `extractCombatItemStats()` in `stats.ts` bridges both. Always use it when converting DB item data to combat stats.
+- **Item.stats field (#453):** The `Item` interface (RoomGraph.ts) now carries optional `stats?: ItemStats` (combat ItemStats). Equipment items should populate this when created from DB definitions.
+- **Stats cache rebuild pattern (#453):** `rebuildPlayerStatsCache()` in ZoneRoom.ts must be called after any loadout mutation (equip/unequip/swap) and after join-time loadout restoration. It reads loadout → ContentRegistry → extractCombatItemStats → calculateEquipmentBonuses → effective stats.
 
 ---
 
