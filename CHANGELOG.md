@@ -1,3 +1,10 @@
+# [0.2.0-dev.31](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.30...v0.2.0-dev.31) (2026-04-14)
+
+
+### Bug Fixes
+
+* add Laeral, Bruenor, Danilo to Issue Routing table in routing.md ([64d1352](https://github.com/dkirby-ms/ellmud/commit/64d13521b8307eda75dd5c65e7c48fadbc732800))
+
 # [0.2.0-dev.30](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.29...v0.2.0-dev.30) (2026-04-14)
 
 
