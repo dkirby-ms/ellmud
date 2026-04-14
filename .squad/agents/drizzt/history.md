@@ -203,3 +203,30 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 - DowningSystem grace period: GRACE_TICKS=3 blocks killingBlow() for first 3 ticks after downing. HP drains 0→-10 over BLEED_OUT_TICKS. Stabilize = revive at 1 HP + remove from downed + re-engage combat.
 - handlePlayerStabilized() in ZoneRoom now fully revives: removePlayer() from downing, re-registers combatant at 1 HP, auto-engages hostile creatures via initiateCombat().
 - CombatSystem has no getAllCombatants(); use getActiveEncounterRoomIds() + creatureManager.getLivingCreatures() to find hostiles in a room.
+
+---
+
+### 2026-07-22: Six Combat Bug Fixes from Live Playtesting
+
+**Task:** Fix all combat bugs identified from live playtesting session.
+
+**Outcome:** All 6 bugs fixed, 16 new tests, 3695+ existing tests pass.
+
+**Bug 1 (Post-death combat bleed):** Room-scoped event delivery in deliverCombatResults — events only go to players in the combat room, downed players skipped, removeCombatant ends encounters when no hostile pairs remain.
+
+**Bug 2 (HP display stacking):** Running HP tally within a tick instead of post-tick snapshot.
+
+**Bug 3 (Post-defeat actions):** Strike events from combatants who die in the same tick filtered out after damage application.
+
+**Bug 4 (Shield block without shield):** calculatePlayerEffectiveStats returns shieldBlock=0 when equipment.shieldBlock is 0.
+
+**Bug 5 (Flee narration):** resolveFlee now accepts failReason: no_exits vs failed_roll.
+
+**Bug 6 (Combat_end timing):** All CombatEvents carry roomId for room-scoped delivery.
+
+## Learnings
+
+- deliverCombatResults was using this.broadcast() (zone-wide). Changed to per-room delivery using this.sendNarrate() to individual clients filtered by room.
+- removeCombatant now uses shouldEndEncounter() checking hostile pairs, not just size <= 1.
+- ShieldBlock formula: equipment.shieldBlock > 0 ? base + equipment : 0. Skill activates only with a shield.
+- Running HP tally: Start from target.hp + totalDamage (pre-damage), subtract each hit sequentially.
