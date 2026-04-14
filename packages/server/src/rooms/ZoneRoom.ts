@@ -2362,6 +2362,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
   /**
    * Tick the downing system and handle resulting events (bleed-outs, stabilizations).
+   * Also sends HP drain updates to downed players so the client sees the bleed-out countdown.
    */
   private tickDowningSystem(): void {
     const events = this.downingSystem.tick();
@@ -2375,6 +2376,32 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           this.handlePlayerStabilized(event);
           break;
       }
+    }
+
+    // Send HP drain updates to all still-downed players so the client sees the bleed-out countdown
+    for (const downed of this.downingSystem.getAllDownedPlayers()) {
+      if (downed.state !== 'downed') continue;
+      const client = this.findClient(downed.playerId);
+      if (!client) continue;
+
+      const maxHp = this.playerStatsCache.get(downed.playerId)?.maxHp ?? 100;
+      const player = this.players.get(downed.playerId);
+
+      client.send(MessageTypes.PLAYER_STATE, {
+        hp: downed.currentHp,
+        maxHp,
+        stamina: 0,
+        maxStamina: 0,
+        statusEffects: [],
+        posture: player?.posture ?? 'standing',
+      } satisfies PlayerStateMessage);
+
+      // Echo the status prompt into the scroll log so the player sees the countdown
+      this.sendNarrate(client, {
+        text: `[HP: ${downed.currentHp}/${maxHp} | Bleeding out...]`,
+        type: 'system',
+        timestamp: Date.now(),
+      });
     }
   }
 
