@@ -30,6 +30,9 @@ How to decide who handles what.
 | `squad:volo` | LLM, narrative, prompt issues | Volo |
 | `squad:regis` | React UI, admin pages, client-side issues | Regis |
 | `squad:minsc` | Test, quality, regression issues | Minsc |
+| `squad:laeral` | Zone/creature/item design, theming, lore issues | Laeral |
+| `squad:bruenor` | Content creation, zone/room/NPC data issues | Bruenor |
+| `squad:danilo` | Docs, Discord, changelogs, community issues | Danilo |
 | `squad:khelben` | CI/CD, GitHub Actions, Docker, deployment issues | Khelben |
 
 ### How Issue Assignment Works
