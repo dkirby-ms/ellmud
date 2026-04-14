@@ -2,7 +2,7 @@
  * Downing System — manages the downed state, bleed-out timers, and stabilization.
  *
  * When a player reaches 0 HP they enter the "downed" state instead of dying immediately.
- * A 10-tick bleed-out timer starts. Squadmates can stabilize using `stabilize [player]`
+ * A 60-tick (~1 minute) bleed-out timer starts. Squadmates can stabilize using `stabilize [player]`
  * (costs 2 ticks + a bandage). If the timer expires or a killing blow lands, the player dies.
  *
  * Pure game logic — no Colyseus dependency. ZoneRoom wires this into the tick loop.
@@ -10,8 +10,8 @@
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/** Ticks before a downed player bleeds out and dies (HP drains from 0 to -10). */
-export const BLEED_OUT_TICKS = 10;
+/** Ticks before a downed player bleeds out and dies (~1 minute at 1s ticks). */
+export const BLEED_OUT_TICKS = 60;
 
 /** Ticks required to channel the stabilize action. */
 export const STABILIZE_CHANNEL_TICKS = 2;

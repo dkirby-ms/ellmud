@@ -49,6 +49,24 @@ describe('resolvePlayerHubName', () => {
 
 // ─── Integration: Faction-Based Death Routing ────────────────────────────────
 
+/** Helper: after combat init, wait for downed state then fast-forward bleed-out */
+async function fastForwardDeath(
+  roomInstance: { downingSystem: { getDownedPlayer: (id: string) => { bleedOutTicksRemaining: number } | undefined } },
+  sessionId: string,
+): Promise<void> {
+  // Poll until the player is downed (up to 5 seconds)
+  for (let i = 0; i < 10; i++) {
+    await wait(500);
+    const downed = roomInstance.downingSystem?.getDownedPlayer(sessionId);
+    if (downed) {
+      downed.bleedOutTicksRemaining = 2;
+      break;
+    }
+  }
+  // Wait for bleed-out death + ROOM_SWITCH delay
+  await wait(8000);
+}
+
 describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
   let colyseus: ColyseusTestServer;
 
@@ -81,6 +99,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
       players: Map<string, PlayerState>;
       combatSystem: CombatSystem;
       playerFactionSlugs: Map<string, string>;
+      downingSystem: { getDownedPlayer: (id: string) => { bleedOutTicksRemaining: number } | undefined };
     };
 
     const sessionId = client.sessionId;
@@ -104,8 +123,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     roomInstance.combatSystem.registerCombatant(playerCombatant);
     roomInstance.combatSystem.initiateCombat('creature-death-test', sessionId);
 
-    // Wait for defeat → downed → bleed-out → death → 3s delay for ROOM_SWITCH
-    await wait(16_000);
+    await fastForwardDeath(roomInstance, sessionId);
 
     // Verify ROOM_SWITCH targets the kindari stronghold
     const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
@@ -135,6 +153,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
       players: Map<string, PlayerState>;
       combatSystem: CombatSystem;
       playerFactionSlugs: Map<string, string>;
+      downingSystem: { getDownedPlayer: (id: string) => { bleedOutTicksRemaining: number } | undefined };
     };
 
     const sessionId = client.sessionId;
@@ -157,7 +176,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     roomInstance.combatSystem.registerCombatant(playerCombatant);
     roomInstance.combatSystem.initiateCombat('creature-veil-test', sessionId);
 
-    await wait(16_000);
+    await fastForwardDeath(roomInstance, sessionId);
 
     const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
     expect(deathSwitches.length).toBeGreaterThanOrEqual(1);
@@ -186,6 +205,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
       players: Map<string, PlayerState>;
       combatSystem: CombatSystem;
       playerFactionSlugs: Map<string, string>;
+      downingSystem: { getDownedPlayer: (id: string) => { bleedOutTicksRemaining: number } | undefined };
     };
 
     const sessionId = client.sessionId;
@@ -208,7 +228,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     roomInstance.combatSystem.registerCombatant(playerCombatant);
     roomInstance.combatSystem.initiateCombat('creature-nofaction-test', sessionId);
 
-    await wait(16_000);
+    await fastForwardDeath(roomInstance, sessionId);
 
     // Verify fallback to Refuge
     const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
@@ -243,6 +263,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
       players: Map<string, PlayerState>;
       combatSystem: CombatSystem;
       playerFactionSlugs: Map<string, string>;
+      downingSystem: { getDownedPlayer: (id: string) => { bleedOutTicksRemaining: number } | undefined };
       characterRepo: CharacterRepository;
     };
 
@@ -269,7 +290,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     roomInstance.combatSystem.registerCombatant(playerCombatant);
     roomInstance.combatSystem.initiateCombat('creature-inn-test', sessionId);
 
-    await wait(16_000);
+    await fastForwardDeath(roomInstance, sessionId);
 
     // Verify ROOM_SWITCH targets the inn zone, NOT the faction stronghold
     const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
@@ -300,6 +321,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
       players: Map<string, PlayerState>;
       combatSystem: CombatSystem;
       playerFactionSlugs: Map<string, string>;
+      downingSystem: { getDownedPlayer: (id: string) => { bleedOutTicksRemaining: number } | undefined };
     };
 
     const sessionId = client.sessionId;
@@ -322,7 +344,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     roomInstance.combatSystem.registerCombatant(playerCombatant);
     roomInstance.combatSystem.initiateCombat('creature-fallback-test', sessionId);
 
-    await wait(16_000);
+    await fastForwardDeath(roomInstance, sessionId);
 
     const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
     expect(deathSwitches.length).toBeGreaterThanOrEqual(1);
@@ -365,8 +387,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     roomInstance.combatSystem.registerCombatant(playerCombatant);
     roomInstance.combatSystem.initiateCombat('creature-penalty-test', sessionId);
 
-    // Wait for defeat → downed → bleed-out → death (but before ROOM_SWITCH cleans up)
-    await wait(13_000);
+    await fastForwardDeath(roomInstance, sessionId);
 
     // After death, before room switch cleanup: death penalty should be set
     if (roomInstance.players.has(sessionId)) {
@@ -396,6 +417,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
       players: Map<string, PlayerState>;
       combatSystem: CombatSystem;
       playerFactionSlugs: Map<string, string>;
+      downingSystem: { getDownedPlayer: (id: string) => { bleedOutTicksRemaining: number } | undefined };
     };
 
     const sessionId = client.sessionId;
@@ -418,7 +440,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     roomInstance.combatSystem.registerCombatant(playerCombatant);
     roomInstance.combatSystem.initiateCombat('creature-scarlet-test', sessionId);
 
-    await wait(16_000);
+    await fastForwardDeath(roomInstance, sessionId);
 
     const deathSwitches = roomSwitchMessages.filter(m => m.reason === 'player_death');
     expect(deathSwitches.length).toBeGreaterThanOrEqual(1);

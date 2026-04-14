@@ -200,3 +200,6 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 - Dodge events are emitted as type strike with dodged true and damage 0, not type dodge
 - Encounters are created via initiateCombat(attackerId, targetId), not startEncounter
 - death-spawn-routing.test.ts is flaky under parallel execution (Colyseus timing)
+- DowningSystem grace period: GRACE_TICKS=3 blocks killingBlow() for first 3 ticks after downing. HP drains 0→-10 over BLEED_OUT_TICKS. Stabilize = revive at 1 HP + remove from downed + re-engage combat.
+- handlePlayerStabilized() in ZoneRoom now fully revives: removePlayer() from downing, re-registers combatant at 1 HP, auto-engages hostile creatures via initiateCombat().
+- CombatSystem has no getAllCombatants(); use getActiveEncounterRoomIds() + creatureManager.getLivingCreatures() to find hostiles in a room.
