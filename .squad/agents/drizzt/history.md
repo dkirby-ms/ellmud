@@ -166,3 +166,37 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 - Coordinated with Elminster review: Integration gap C1 depends on this getBaseStats() method
 
 ---
+
+### 2026-07-22: Three Combat Bug Fixes — TDD (#460, #461, #462)
+
+**Task:** Fix dodge never firing, death respawn hardcoded to Refuge, and post-death combat continuing.
+
+**Outcome:** All 3 bugs fixed with TDD approach, 14 new tests, 3667+ existing tests pass.
+
+**Bug #460 (Dodge never fires):**
+- Root cause: CombatSystem constructor defaults roll to () => 1, ZoneRoom never passed a real RNG
+- Fix: Pass () => Math.random() in ZoneRoom.ts production construction
+- Default () => 1 preserved for all existing deterministic tests
+
+**Bug #461 (Death respawn hardcoded to Refuge):**
+- Created zones/respawn.ts with resolveRespawnTarget() — chain: lastInn, faction hub, startingZoneSlug, The Refuge
+- Applied to both normal death AND permadeath paths in ZoneRoom.ts
+- Added playerStartingZones cache map, populated on join from CharacterRow.startingZoneSlug
+
+**Bug #462 (Post-death combat continues):**
+- After removing dead combatants, added hostile-pair detection for encounter end check
+- If all survivors are on the same side (all creatures or all players without active targets), end combat
+- PvP preserved via currentTarget cross-reference check
+
+**Key Files:**
+- packages/server/src/zones/respawn.ts (new)
+- packages/server/src/combat/CombatSystem.ts (encounter end logic)
+- packages/server/src/rooms/ZoneRoom.ts (RNG wiring, respawn integration)
+
+## Learnings
+
+- CombatSystem.resolveTick() is the public API; resolveEncounterTick() is private per-encounter
+- TickResult.endedEncounterIds (not .ended) indicates which encounters finished
+- Dodge events are emitted as type strike with dodged true and damage 0, not type dodge
+- Encounters are created via initiateCombat(attackerId, targetId), not startEncounter
+- death-spawn-routing.test.ts is flaky under parallel execution (Colyseus timing)
