@@ -8,19 +8,6 @@ Ellmud is a text-primary, real-time multiplayer extraction RPG built on WebSocke
 
 ---
 
-## 🎯 What Makes Ellmud Unique
-
-- **Permadeath with Meaning** — When you die, your character is gone forever. But your story is recorded in the Hall of Fame, and your stash is preserved for your next run.
-- **Real-Time Tick-Based Combat** — Strike, dodge, and flee in a synchronized tick loop. Combat is fast, tense, and unforgiving.
-- **Passive Dodge Mechanic** — Your posture affects your dodge chance. Stand tall or crouch low to survive longer.
-- **Extraction-Based Progression** — Success isn't measured by kills—it's by what you bring home. Die with loot? It's gone. Loot dies with you.
-- **Prose Narration** — Every action is narrated in rich prose. Combat, exploration, and interaction feel cinematic, not mechanical.
-- **Procedural Shards** — The Warrens are split into multiple shards (shard instances). Each shard is a unique PvE instance; other players may be present.
-- **Persistent Stash** — Your stash survives death. Load out your gear, dive in, and if you make it out alive, keep what you found.
-- **Live Admin Tools** — Content creators can tweak creatures, items, and encounters in real-time without restarting the server.
-
----
-
 ## 🚀 Quick Start
 
 ### Prerequisites

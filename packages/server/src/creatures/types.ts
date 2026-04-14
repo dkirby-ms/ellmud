@@ -88,13 +88,16 @@ export interface Creature {
   name: string;
   hp: number;
   maxHp: number;
-  attack: number;
-  defence: number;
+  /** Weapon skill stats — creatures use the same 4 weapon skills as players. */
+  unarmed: number;
+  oneHanded: number;
+  twoHanded: number;
+  ranged: number;
   armour: number;
-  /** Agility stat — scales dodge chance (GDD §6.4). Defaults to 0 for creatures. */
-  agility?: number;
-  /** Dodge skill rank — scales dodge chance (GDD §6.4). Defaults to 0 for creatures. */
-  dodgeSkillRank?: number;
+  /** Dodge skill — passive avoidance chance. */
+  dodge: number;
+  /** Shield block skill — binary block chance. Defaults to 0 for most creatures. */
+  shieldBlock: number;
   currentRoomId: string;
   behaviorState: BehaviorState;
   /** Ticks spent in current idle patrol position. */

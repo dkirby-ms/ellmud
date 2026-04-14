@@ -418,15 +418,15 @@ describe('Gap #20: Tick timer renders as progress bar', () => {
 // design-prompt §6: 8 combat actions including "Skill"
 
 describe('Gap #21: Skill button in combat quickbar', () => {
-  it('combat quickbar has 8 action buttons (not 7)', () => {
+  it('combat quickbar has 7 action buttons (dodge is passive)', () => {
     // UX Review Batch 2 — anticipatory test (gap #21)
     renderZoneExploration({
       inCombat: true,
       combatTick: 1,
     });
 
-    // All 8 expected actions: Strike, Heavy Strike, Dodge, Block, Use Item, Skill, Flee, Observe
-    const expectedActions = ['Strike', 'Heavy Strike', 'Dodge', 'Block', 'Use Item', 'Skill', 'Flee', 'Observe'];
+    // All 7 expected actions: Strike, Heavy Strike, Block, Use Item, Skill, Flee, Observe (Dodge is passive)
+    const expectedActions = ['Strike', 'Heavy Strike', 'Block', 'Use Item', 'Skill', 'Flee', 'Observe'];
     for (const label of expectedActions) {
       expect(screen.getByRole('button', { name: new RegExp(`^\\d*\\s*${label}$`, 'i') })).toBeInTheDocument();
     }

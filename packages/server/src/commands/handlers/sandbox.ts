@@ -45,17 +45,15 @@ const STAT_ALIASES: Record<string, keyof Combatant> = {
   maxhp: 'maxHp',
   atk: 'attack',
   attack: 'attack',
-  def: 'defence',
-  defence: 'defence',
-  defense: 'defence',
-  agi: 'agility',
-  agility: 'agility',
+  dodge: 'dodge',
+  dge: 'dodge',
+  shieldblock: 'shieldBlock',
+  block: 'shieldBlock',
   armour: 'armour',
   armor: 'armour',
-  block: 'defence',
 };
 
-const SETTABLE_STATS = ['hp', 'maxhp', 'atk', 'def', 'agi', 'armour', 'block'];
+const SETTABLE_STATS = ['hp', 'maxhp', 'atk', 'dodge', 'shieldblock', 'armour', 'block'];
 
 // ─── Combat Log Ring Buffer ─────────────────────────────────────────────────
 
@@ -475,7 +473,7 @@ function handleInfo(ctx: CommandContext): CommandResult {
     const lines: string[] = ['── Creature Templates ──'];
     for (const t of templates) {
       lines.push(
-        `  ${t.name} (${t.type}) — HP: ${t.stats.maxHp}, ATK: ${t.stats.attack}, DEF: ${t.stats.defence}, ARM: ${t.stats.armour}, AGI: ${t.stats.agility}`,
+        `  ${t.name} (${t.type}) — HP: ${t.stats.maxHp}, UNA: ${t.stats.unarmed}, 1H: ${t.stats.oneHanded}, 2H: ${t.stats.twoHanded}, RNG: ${t.stats.ranged}, ARM: ${t.stats.armour}, DGE: ${t.stats.dodge}, BLK: ${t.stats.shieldBlock}`,
       );
     }
     if (templates.length === 0) {
@@ -498,10 +496,13 @@ function handleInfo(ctx: CommandContext): CommandResult {
     `── ${template.name} ──`,
     `  Type: ${template.type}`,
     `  HP: ${template.stats.maxHp}`,
-    `  Attack: ${template.stats.attack}`,
-    `  Defence: ${template.stats.defence}`,
+    `  Unarmed: ${template.stats.unarmed}`,
+    `  One-Handed: ${template.stats.oneHanded}`,
+    `  Two-Handed: ${template.stats.twoHanded}`,
+    `  Ranged: ${template.stats.ranged}`,
     `  Armour: ${template.stats.armour}`,
-    `  Agility: ${template.stats.agility}`,
+    `  Dodge: ${template.stats.dodge}`,
+    `  Shield Block: ${template.stats.shieldBlock}`,
     `  Aggressive: ${template.aggressive ? 'yes' : 'no'}`,
     `  Flee threshold: ${Math.round(template.fleeThreshold * 100)}%`,
   ];

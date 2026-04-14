@@ -47,7 +47,6 @@ export interface DeathPenaltyDebuff {
 export interface CombatStatModifiers {
   maxHp: number;
   attack: number;
-  defence: number;
   armour: number;
 }
 
@@ -107,7 +106,6 @@ export function applyDeathPenalty(
   return {
     maxHp: Math.max(1, Math.floor(stats.maxHp * multiplier)),
     attack: Math.max(1, Math.floor(stats.attack * multiplier)),
-    defence: Math.max(1, Math.floor(stats.defence * multiplier)),
     armour: Math.max(1, Math.floor(stats.armour * multiplier)),
   };
 }

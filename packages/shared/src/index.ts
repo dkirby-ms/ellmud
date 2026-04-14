@@ -113,7 +113,6 @@ export type ZoneState = 'open';
 export type CombatAction =
   | 'strike'
   | 'heavy_strike'
-  | 'dodge'
   | 'block'
   | 'use_item'
   | 'skill'

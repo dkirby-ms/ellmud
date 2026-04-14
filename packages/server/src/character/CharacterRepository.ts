@@ -4,6 +4,29 @@
 
 import type { CharacterSummary } from '@ellmud/shared';
 
+/** Player combat stats persisted in the characters table (Phase 1). */
+export interface PlayerCombatStats {
+  maxHp: number;
+  unarmed: number;
+  oneHanded: number;
+  twoHanded: number;
+  ranged: number;
+  shieldBlock: number;
+  dodge: number;
+  armour: number;
+}
+
+export const DEFAULT_PLAYER_COMBAT_STATS: PlayerCombatStats = {
+  maxHp: 100,
+  unarmed: 5,
+  oneHanded: 5,
+  twoHanded: 5,
+  ranged: 5,
+  shieldBlock: 5,
+  dodge: 5,
+  armour: 2,
+};
+
 /** Raw character row from the database. */
 export interface CharacterRow {
   id: string;
@@ -15,6 +38,7 @@ export interface CharacterRow {
   createdAt: Date;
   lastPlayedAt: Date | null;
   deletedAt: Date | null;
+  combatStats: PlayerCombatStats;
 }
 
 export interface CharacterRepository {
@@ -56,4 +80,10 @@ export interface CharacterRepository {
 
   /** Reset the starter kit flag (permadeath use case). */
   resetStarterKitFlag(characterId: string): Promise<void>;
+
+  /** Get the persisted combat stats for a character (Phase 1). */
+  getBaseStats(characterId: string): Promise<PlayerCombatStats>;
+
+  /** Persist updated combat stats for a character (Phase 1). */
+  saveBaseStats(characterId: string, stats: PlayerCombatStats): Promise<void>;
 }

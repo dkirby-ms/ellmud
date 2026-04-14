@@ -18,10 +18,13 @@ export const HOLLOW_STALKER: CreatureTemplate = {
   name: 'Hollow Stalker',
   stats: {
     maxHp: 60,
-    attack: 13,
-    defence: 5,
+    unarmed: 13,
+    oneHanded: 0,
+    twoHanded: 0,
+    ranged: 0,
+    shieldBlock: 0,
+    dodge: 6,
     armour: 4,
-    agility: 6,
   },
   lootTable: [
     {

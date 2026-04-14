@@ -107,15 +107,9 @@ describe('Auto-Attack Baseline (GDD §6.1, §6.2)', () => {
       e => e.type === 'strike' && e.actorId === player.id && e.targetId === creature2.id
     );
     expect(strikeEvent).toBeTruthy();
-
-    // Should NOT be dodging — there's still a valid target
-    const dodgeEvent = result.events.find(
-      e => e.type === 'dodge' && e.actorId === player.id
-    );
-    expect(dodgeEvent).toBeFalsy();
   });
 
-  it('defaults to dodge when ALL hostiles are dead (no retarget possible)', () => {
+  it('defaults to idle when ALL hostiles are dead (no retarget possible)', () => {
     const player = makePlayer('player-1');
     const creature1 = makeCreature('creature-1');
     system.registerCombatant(player);
@@ -132,7 +126,7 @@ describe('Auto-Attack Baseline (GDD §6.1, §6.2)', () => {
       creature1Combatant.hp = 0;
     }
 
-    // Second tick — no hostiles remain, should dodge
+    // Second tick — no hostiles remain, should idle (no strike target)
     const result = system.resolveTick();
 
     const strikeEvent = result.events.find(
@@ -172,32 +166,6 @@ describe('Auto-Attack Baseline (GDD §6.1, §6.2)', () => {
       e => e.type === 'strike' && e.actorId === creature.id
     );
     expect(creatureStrike).toBeTruthy();
-  });
-
-  it('explicit dodge action overrides auto-attack', () => {
-    const player = makePlayer('player-1');
-    const creature = makeCreature('creature-1');
-    system.registerCombatant(player);
-    system.registerCombatant(creature);
-
-    system.initiateCombat(player.id, creature.id);
-
-    // Submit explicit dodge
-    system.submitAction(player.id, 'dodge');
-
-    const result = system.resolveTick();
-
-    // Should have a dodge event from player (explicit, not auto-attack)
-    const dodgeEvent = result.events.find(
-      e => e.type === 'dodge' && e.actorId === player.id
-    );
-    expect(dodgeEvent).toBeTruthy();
-
-    // Should NOT have a strike event from player
-    const strikeEvent = result.events.find(
-      e => e.type === 'strike' && e.actorId === player.id
-    );
-    expect(strikeEvent).toBeFalsy();
   });
 });
 

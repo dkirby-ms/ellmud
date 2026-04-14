@@ -131,6 +131,9 @@
 
 ---
 
+
+## Core Context
+
 ## Archived Work
 
 **Role:** Client Architect

@@ -18,10 +18,13 @@ export const THE_COLLAPSED_ONE: CreatureTemplate = {
   name: 'The Collapsed One',
   stats: {
     maxHp: 150,
-    attack: 18,
-    defence: 8,
+    unarmed: 18,
+    oneHanded: 0,
+    twoHanded: 0,
+    ranged: 0,
+    shieldBlock: 0,
+    dodge: 1,
     armour: 10,
-    agility: 1,
   },
   lootTable: [
     {

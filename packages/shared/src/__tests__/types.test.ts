@@ -137,9 +137,9 @@ describe('Type Enumerations', () => {
 
   it('CombatAction should allow all combat actions', () => {
     const actions: CombatAction[] = [
-      'strike', 'heavy_strike', 'dodge', 'block', 'use_item', 'skill', 'flee', 'observe',
+      'strike', 'heavy_strike', 'block', 'use_item', 'skill', 'flee', 'observe',
     ];
-    expect(actions).toHaveLength(8);
+    expect(actions).toHaveLength(7);
   });
 
   it('GearTier should allow all gear tiers', () => {

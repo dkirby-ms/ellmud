@@ -18,10 +18,13 @@ export const RUBBLE_SCAVENGER: CreatureTemplate = {
   name: 'Rubble Scavenger',
   stats: {
     maxHp: 35,
-    attack: 8,
-    defence: 3,
+    unarmed: 8,
+    oneHanded: 0,
+    twoHanded: 0,
+    ranged: 0,
+    shieldBlock: 0,
+    dodge: 4,
     armour: 2,
-    agility: 4,
   },
   lootTable: [
     {

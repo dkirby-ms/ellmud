@@ -15,7 +15,7 @@ import { MinimapWidget, type MinimapWidgetProps } from "./map/MinimapWidget.js";
 import { EquipmentSilhouette } from "./EquipmentSilhouette.js";
 import { RoomOccupants } from "./RoomOccupants.js";
 import { CombatHUD } from "./CombatHUD.js";
-import { useAppContext, type StatusEffect, type EnemyStatus } from "../store.js";
+import { useAppContext, type StatusEffect, type EnemyStatus, type CombatStats } from "../store.js";
 import { useVersion } from "../hooks/useVersion.js";
 
 // ─── Status Effect Classifier ────────────────────────────────────────────────
@@ -229,6 +229,7 @@ export function StatusPanel({
             soundCues={state.soundCues}
             onSendCommand={onSendCommand}
             onOpenInventory={onOpenInventory}
+            combatStats={state.combatStats}
           />
         )}
       </div>
@@ -387,9 +388,10 @@ interface CharacterTabProps {
   soundCues: Array<{ id: string; text: string; timestamp: number }>;
   onSendCommand: (cmd: string) => void;
   onOpenInventory: () => void;
+  combatStats: CombatStats;
 }
 
-function CharacterTab({ soundCues, onSendCommand, onOpenInventory }: CharacterTabProps) {
+function CharacterTab({ soundCues, onSendCommand, onOpenInventory, combatStats }: CharacterTabProps) {
   return (
     <>
       {/* Sound Cues */}
@@ -409,6 +411,40 @@ function CharacterTab({ soundCues, onSendCommand, onOpenInventory }: CharacterTa
           ) : (
             <p className="text-text-disabled text-xs font-sans">Silence.</p>
           )}
+        </div>
+      </div>
+
+      {/* Combat Skills */}
+      <div className="p-4 border-t border-border-muted" data-testid="combat-stats">
+        <h3 className="text-text-secondary text-xs mb-3 font-sans">COMBAT SKILLS</h3>
+
+        {/* Weapon Skills */}
+        <div className="mb-3">
+          <h4 className="text-text-secondary text-xs mb-1.5 font-sans">⚔ Weapon Skills</h4>
+          <div className="space-y-1 pl-2">
+            <StatRow label="Unarmed" value={combatStats.unarmed} />
+            <StatRow label="One-Handed" value={combatStats.oneHanded} />
+            <StatRow label="Two-Handed" value={combatStats.twoHanded} />
+            <StatRow label="Ranged" value={combatStats.ranged} />
+          </div>
+        </div>
+
+        {/* Defence */}
+        <div className="mb-3">
+          <h4 className="text-text-secondary text-xs mb-1.5 font-sans">🛡 Defence</h4>
+          <div className="space-y-1 pl-2">
+            <StatRow label="Dodge" value={combatStats.dodge} />
+            <StatRow label="Shield Block" value={combatStats.shieldBlock} />
+            <StatRow label="Armour" value={combatStats.armour} />
+          </div>
+        </div>
+
+        {/* Health */}
+        <div>
+          <h4 className="text-text-secondary text-xs mb-1.5 font-sans">❤ Health</h4>
+          <div className="space-y-1 pl-2">
+            <StatRow label="Max HP" value={combatStats.maxHp} />
+          </div>
         </div>
       </div>
 
@@ -436,13 +472,16 @@ function CharacterTab({ soundCues, onSendCommand, onOpenInventory }: CharacterTa
           </button>
         </div>
       </div>
-
-      {/* Future: Skills, Reputation */}
-      <div className="p-4 border-t border-border-muted">
-        <p className="text-text-disabled text-xs font-sans italic">
-          Skills &amp; reputation coming soon.
-        </p>
-      </div>
     </>
+  );
+}
+
+/** Single stat row: label left-aligned, value right-aligned in monospace */
+function StatRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-text-primary text-xs font-sans">{label}</span>
+      <span className="text-text-primary text-xs font-mono">{value}</span>
+    </div>
   );
 }

@@ -166,7 +166,7 @@ const COMMAND_HELP: Record<string, CommandHelp> = {
     category: 'Combat',
   },
   dodge: {
-    description: 'Attempt to evade incoming attacks.',
+    description: 'Dodge is a passive ability — you automatically attempt to dodge incoming attacks based on your Agility and dodge skill.',
     usage: 'dodge',
     category: 'Combat',
   },

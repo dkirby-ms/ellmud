@@ -82,10 +82,9 @@ export interface CreatureRef {
   hp?: number;
   maxHp?: number;
   attack?: number;
-  defence?: number;
   armour?: number;
-  agility?: number;
-  dodgeSkillRank?: number;
+  dodge?: number;
+  shieldBlock?: number;
 }
 
 /** Lightweight player info for room display (Issue #370). */

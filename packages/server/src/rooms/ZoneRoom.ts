@@ -1221,11 +1221,14 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
 
     const creaturesInRoom = this.creatureManager.getCreaturesInRoom(player.currentRoomId)
-      .map(c => ({
-        id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription,
-        hp: c.hp, maxHp: c.maxHp, attack: c.attack, defence: c.defence,
-        armour: c.armour, agility: c.agility, dodgeSkillRank: c.dodgeSkillRank,
-      }));
+      .map(c => {
+        const bestSkill = Math.max(c.unarmed, c.oneHanded, c.twoHanded, c.ranged);
+        return {
+          id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription,
+          hp: c.hp, maxHp: c.maxHp, attack: bestSkill,
+          armour: c.armour, dodge: c.dodge, shieldBlock: c.shieldBlock,
+        };
+      });
 
     return {
       player,
@@ -1252,11 +1255,14 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       creaturesInRoom,
       resolveCreaturesInRoom: (roomId: string) =>
         this.creatureManager.getCreaturesInRoom(roomId)
-          .map(c => ({
-            id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription,
-            hp: c.hp, maxHp: c.maxHp, attack: c.attack, defence: c.defence,
-            armour: c.armour, agility: c.agility, dodgeSkillRank: c.dodgeSkillRank,
-          })),
+          .map(c => {
+            const bestSkill = Math.max(c.unarmed, c.oneHanded, c.twoHanded, c.ranged);
+            return {
+              id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription,
+              hp: c.hp, maxHp: c.maxHp, attack: bestSkill,
+              armour: c.armour, dodge: c.dodge, shieldBlock: c.shieldBlock,
+            };
+          }),
       creatureManager: this.creatureManager,
       resolveZoneExists: (slug: string) => this.knownZoneSlugs.has(slug),
       resolvePlayerByName: (name: string) => {
@@ -1958,8 +1964,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         break;
       }
       case 'combat_dodge': {
+        // Dodge is now passive — creatures auto-attack instead
         if (this.combatSystem.isInCombat(creature.id)) {
-          this.combatSystem.submitAction(creature.id, 'dodge');
+          this.combatSystem.submitAction(creature.id, 'strike');
         }
         break;
       }

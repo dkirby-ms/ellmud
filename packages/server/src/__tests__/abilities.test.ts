@@ -8,7 +8,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   CombatSystem,
   createCombatant,
-  DEFAULT_PLAYER_STATS,
   type Combatant,
 } from '../combat/index.js';
 

@@ -116,9 +116,13 @@ export class CreatureManager {
       name: template.name,
       hp: template.stats.maxHp,
       maxHp: template.stats.maxHp,
-      attack: template.stats.attack,
-      defence: template.stats.defence,
+      unarmed: template.stats.unarmed,
+      oneHanded: template.stats.oneHanded,
+      twoHanded: template.stats.twoHanded,
+      ranged: template.stats.ranged,
       armour: template.stats.armour,
+      dodge: template.stats.dodge,
+      shieldBlock: template.stats.shieldBlock,
       currentRoomId: roomId,
       behaviorState: 'idle',
       idleTicks: 0,
@@ -151,9 +155,13 @@ export class CreatureManager {
       name: template.name,
       hp: template.stats.maxHp,
       maxHp: template.stats.maxHp,
-      attack: template.stats.attack,
-      defence: template.stats.defence,
+      unarmed: template.stats.unarmed,
+      oneHanded: template.stats.oneHanded,
+      twoHanded: template.stats.twoHanded,
+      ranged: template.stats.ranged,
       armour: template.stats.armour,
+      dodge: template.stats.dodge,
+      shieldBlock: template.stats.shieldBlock,
       currentRoomId: roomId,
       behaviorState: 'idle',
       idleTicks: 0,
@@ -277,9 +285,13 @@ export class CreatureManager {
       name: template.name,
       hp: template.stats.maxHp,
       maxHp: template.stats.maxHp,
-      attack: template.stats.attack,
-      defence: template.stats.defence,
+      unarmed: template.stats.unarmed,
+      oneHanded: template.stats.oneHanded,
+      twoHanded: template.stats.twoHanded,
+      ranged: template.stats.ranged,
       armour: template.stats.armour,
+      dodge: template.stats.dodge,
+      shieldBlock: template.stats.shieldBlock,
       currentRoomId: roomId,
       behaviorState: 'idle',
       idleTicks: 0,
@@ -374,7 +386,7 @@ export class CreatureManager {
    * Creatures use the same combat resolution as players.
    */
   toCombatant(creature: Creature): Combatant {
-    // Use createCombatant to get default position fields
+    const bestSkill = Math.max(creature.unarmed, creature.oneHanded, creature.twoHanded, creature.ranged);
     const combatant = createCombatant(
       creature.id,
       creature.name,
@@ -382,14 +394,11 @@ export class CreatureManager {
       false, // isPlayer
       {
         maxHp: creature.maxHp,
-        attack: creature.attack,
-        defence: creature.defence,
+        attack: bestSkill,
         armour: creature.armour,
-        agility: creature.agility ?? 0,
+        dodge: creature.dodge,
+        shieldBlock: creature.shieldBlock,
       },
-      creature.dodgeSkillRank ?? 0,
-      0, // evasionSkillRank
-      1, // level
     );
     
     // Override with current HP
