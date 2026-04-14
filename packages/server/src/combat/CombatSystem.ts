@@ -944,9 +944,9 @@ export class CombatSystem {
       const target = this.combatants.get(evt.targetId!)!;
       evt.newHp = target.hp;
       if (evt.dodged) {
-        evt.narration = `${evt.targetName} dodges!`;
+        evt.narration = `${evt.targetName} dodges ${evt.actorName}'s attack!`;
       } else if (evt.blocked) {
-        evt.narration = `${evt.targetName} blocks with their shield!`;
+        evt.narration = `${evt.targetName} blocks ${evt.actorName}'s attack with their shield!`;
       } else {
         const defeated = target.hp <= 0;
         evt.narration = defeated
