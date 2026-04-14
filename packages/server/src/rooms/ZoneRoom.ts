@@ -2321,9 +2321,19 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.downingSystem.downPlayer(playerId, event.actorName, roomId, event.killerIds);
       this.log(`Player ${this.playerTag(playerId)} downed in ${roomId}`);
 
-      // Notify the downed player
+      // Send 0 HP state to client BEFORE removing combatant (so UI shows 0 HP)
+      const combatant = this.combatSystem.getCombatant(playerId);
       const client = this.findClient(playerId);
       if (client) {
+        client.send(MessageTypes.PLAYER_STATE, {
+          hp: 0,
+          maxHp: combatant?.maxHp ?? 100,
+          stamina: 0,
+          maxStamina: 0,
+          statusEffects: [],
+          posture: player?.posture ?? 'standing',
+        } satisfies PlayerStateMessage);
+
         this.sendOverlayState(client, {
           playerId,
           state: 'downed',
