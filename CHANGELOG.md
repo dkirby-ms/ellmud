@@ -1,3 +1,10 @@
+# [0.2.0-dev.35](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.34...v0.2.0-dev.35) (2026-04-14)
+
+
+### Bug Fixes
+
+* build errors in combat tests + connection timeout for browser hang ([9fef3f5](https://github.com/dkirby-ms/ellmud/commit/9fef3f503ad99d210afccf5c9f2b1751e1276ad5))
+
 # [0.2.0-dev.34](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.33...v0.2.0-dev.34) (2026-04-14)
 
 
