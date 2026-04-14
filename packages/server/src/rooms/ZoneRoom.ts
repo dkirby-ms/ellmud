@@ -144,6 +144,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private traceSystem!: TraceSystem;
   private awarenessSystem!: AwarenessSystem;
   private downingSystem!: DowningSystem;
+  /** Tracks last sent bleed-out HP per downed player to avoid spamming every tick. */
+  private lastBleedHpSent = new Map<string, number>();
   /** Players who have died and are awaiting teleport — excluded from combat event delivery. */
   private pendingDeathTeleport = new Set<string>();
   private groupManager!: GroupManager;
@@ -2370,17 +2372,25 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     for (const event of events) {
       switch (event.type) {
         case 'player_bleed_out':
+          this.lastBleedHpSent.delete(event.playerId);
           this.handlePlayerDeath(event.playerId, event.playerName, event.roomId, event.killerIds);
           break;
         case 'player_stabilized':
+          this.lastBleedHpSent.delete(event.playerId);
           this.handlePlayerStabilized(event);
           break;
       }
     }
 
-    // Send HP drain updates to all still-downed players so the client sees the bleed-out countdown
+    // Send HP drain updates only when HP actually changes (not every tick)
     for (const downed of this.downingSystem.getAllDownedPlayers()) {
       if (downed.state !== 'downed') continue;
+
+      const lastSent = this.lastBleedHpSent.get(downed.playerId);
+      if (lastSent === downed.currentHp) continue;
+
+      this.lastBleedHpSent.set(downed.playerId, downed.currentHp);
+
       const client = this.findClient(downed.playerId);
       if (!client) continue;
 
