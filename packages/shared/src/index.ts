@@ -240,6 +240,15 @@ export interface PlayerStateMessage {
   posture: Posture;
 }
 
+/** Server → Client: Effective combat stats after equipment bonuses (#455). */
+export interface EffectiveStatsMessage {
+  maxHp: number;
+  attack: number;
+  armour: number;
+  shieldBlock: number;
+  dodge: number;
+}
+
 /** Server → Client: Enemy telegraph broadcast (GDD §6.5). */
 export interface TelegraphMessage {
   creatureId: string;
@@ -362,6 +371,7 @@ export const MessageTypes = {
   EXPLORATION_UPDATE: 'exploration_update',
   ROOM_OCCUPANTS: 'room_occupants',
   FLAG_STATE: 'flag_state',
+  EFFECTIVE_STATS: 'effective_stats',
 
   // Client → Server: who list
   REQUEST_PLAYER_LIST: 'request_player_list',

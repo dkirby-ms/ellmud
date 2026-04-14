@@ -52,6 +52,15 @@ export interface StatusEffect {
   duration: number;
 }
 
+/** Effective combat stats with equipment bonuses (#455) */
+export interface EffectiveStats {
+  maxHp: number;
+  attack: number;
+  armour: number;
+  shieldBlock: number;
+  dodge: number;
+}
+
 /** Player base combat stats (synced from server PlayerState) */
 export interface CombatStats {
   maxHp: number;
@@ -109,6 +118,7 @@ export interface AppState {
     players: Array<{ id: string; name: string; disconnected?: boolean }>;
   };
   combatStats: CombatStats;
+  effectiveStats: EffectiveStats | null;
 }
 
 export const initialState: AppState = {
@@ -153,6 +163,7 @@ export const initialState: AppState = {
     dodge: 5,
     armour: 0,
   },
+  effectiveStats: null,
 };
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
@@ -183,7 +194,8 @@ export type AppAction =
   | { type: 'SET_ACTIVE_CHARACTER'; character: CharacterSummary | null }
   | { type: 'SET_PLAYER_STATE'; hp: number; maxHp: number; stamina: number; maxStamina: number; statusEffects: StatusEffect[]; posture: Posture }
   | { type: 'SET_ROOM_OCCUPANTS'; occupants: AppState['roomOccupants'] }
-  | { type: 'SET_COMBAT_STATS'; stats: CombatStats };
+  | { type: 'SET_COMBAT_STATS'; stats: CombatStats }
+  | { type: 'SET_EFFECTIVE_STATS'; stats: EffectiveStats };
 
 const MAX_MESSAGES = 500;
 
@@ -251,6 +263,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, roomOccupants: action.occupants };
     case 'SET_COMBAT_STATS':
       return { ...state, combatStats: action.stats };
+    case 'SET_EFFECTIVE_STATS':
+      return { ...state, effectiveStats: action.stats };
     default:
       return state;
   }

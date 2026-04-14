@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { appReducer, initialState, type AppAction, type TerminalMessage, type SoundCue, type EnemyStatus, type InventoryItem } from '../store.js';
+import { appReducer, initialState, type AppAction, type TerminalMessage, type SoundCue, type EnemyStatus, type InventoryItem, type EffectiveStats } from '../store.js';
 
 function makeMsg(id: string, text = 'test'): TerminalMessage {
   return { id, text, type: 'room', timestamp: Date.now() };
@@ -222,5 +222,22 @@ describe('appReducer', () => {
   it('returns current state for unknown action', () => {
     const state = appReducer(initialState, { type: 'UNKNOWN' } as unknown as AppAction);
     expect(state).toBe(initialState);
+  });
+
+  it('SET_EFFECTIVE_STATS updates effectiveStats', () => {
+    const stats: EffectiveStats = { maxHp: 150, attack: 12, armour: 8, shieldBlock: 7, dodge: 10 };
+    const state = appReducer(initialState, { type: 'SET_EFFECTIVE_STATS', stats });
+    expect(state.effectiveStats).toEqual(stats);
+  });
+
+  it('effectiveStats defaults to null', () => {
+    expect(initialState.effectiveStats).toBeNull();
+  });
+
+  it('LOGOUT clears effectiveStats', () => {
+    const stats: EffectiveStats = { maxHp: 150, attack: 12, armour: 8, shieldBlock: 7, dodge: 10 };
+    let state = appReducer(initialState, { type: 'SET_EFFECTIVE_STATS', stats });
+    state = appReducer(state, { type: 'LOGOUT' });
+    expect(state.effectiveStats).toBeNull();
   });
 });

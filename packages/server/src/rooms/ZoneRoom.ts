@@ -18,6 +18,7 @@ import {
   type InventoryUpdateMessage,
   type DisplayItem,
   type PlayerStateMessage,
+  type EffectiveStatsMessage,
   type TelegraphMessage,
   type ZoneTransferMessage,
   type ExploredRoomData,
@@ -3471,9 +3472,27 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       const equipment = calculateEquipmentBonuses(equippedSlots);
       const effective = calculatePlayerEffectiveStats(baseStats, equipment);
       this.playerStatsCache.set(playerId, effective);
+      this.sendEffectiveStats(playerId);
     } catch (err) {
       this.log(`Failed to rebuild stats cache for ${this.playerTag(playerId)}: ${err}`);
     }
+  }
+
+  /** Send effective stats (with equipment bonuses) to the client (#455). */
+  private sendEffectiveStats(playerId: string): void {
+    const cached = this.playerStatsCache.get(playerId);
+    if (!cached) return;
+
+    const client = this.findClient(playerId);
+    if (!client) return;
+
+    client.send(MessageTypes.EFFECTIVE_STATS, {
+      maxHp: cached.maxHp,
+      attack: cached.attack,
+      armour: cached.armour,
+      shieldBlock: cached.shieldBlock,
+      dodge: cached.dodge,
+    } satisfies EffectiveStatsMessage);
   }
 
   /** Send current inventory contents to client (on join and after inventory mutations). */
