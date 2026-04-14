@@ -419,4 +419,8 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 - When changing column counts in parameterized queries, content-stores.test.ts has exact param-count assertions that must be updated
 - calculateCreatureEffectiveStats() is now the single source of truth for creature stat resolution — no more inline Math.max()
 
+- **Bleed-out HP drain fix**: Changed from 1-HP-per-tick (reaching -60) to formula-based drain via BLEED_HP_LOSS=10. HP = -floor(elapsed * 10 / 60), dying at -10 HP while keeping the 60-tick (~1 min) timer. Formula avoids accumulation drift.
+- **Combat pacing**: Added AUTO_ATTACK_COOLDOWN_TICKS=1 and strikeCooldown field on Combatant. After any strike resolves, that combatant idles for 1 tick before auto-attacking again — effectively halving auto-attack DPS. Player-submitted abilities are unaffected (they bypass the auto-attack path). Cooldown decrements at start of resolveEncounterTick.
+- The auto-attack idle path queues `{ action: 'strike' }` with no targetId — effectively a no-op since resolveEncounterTick skips strikes with no valid target.
+
 ---

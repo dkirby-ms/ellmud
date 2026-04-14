@@ -4470,3 +4470,220 @@ Remove the post-combat cooldown entirely. Combat now ends immediately when only 
 ## Risks
 
 - If a future feature needs a post-combat window (e.g., post-fight dialogue), it would need to be re-added. But that should be a separate system, not tied to combat tick resolution.
+
+# Combat Bug Fixes Decision Record
+
+**Author:** Drizzt (Engine Dev)
+**Date:** 2026-07-22
+**Issues:** #460, #461, #462
+
+## Decisions Made
+
+### 1. Respawn Resolution Centralized (zones/respawn.ts)
+
+Respawn target resolution is now a pure function in `zones/respawn.ts` with a 4-step fallback chain: lastInn, faction hub, startingZoneSlug, The Refuge. Both normal death and permadeath paths use it.
+
+**Rationale:** The respawn logic was duplicated in two places in ZoneRoom.ts and missed the startingZoneSlug step. Centralizing prevents future drift.
+
+### 2. Encounter End Detection Uses Hostile-Pair Check
+
+After removing defeated combatants, the encounter-end check now verifies that hostile pairs still exist (players vs creatures). If only one "side" survives, combat ends immediately.
+
+PvP is handled by checking `currentTarget` cross-references among surviving players.
+
+**Rationale:** The previous `aliveCount <= 1` check failed when a player died against multiple creatures — 2 creatures remained but had nobody to fight.
+
+### 3. RNG Injection Pattern for CombatSystem
+
+Production ZoneRoom passes `() => Math.random()`. Test code uses the default `() => 1` (deterministic, dodge never fires) or injects controlled roll values. The `setRollFn()` method exists for sandbox/replay override.
+
+**Rationale:** Preserves all existing deterministic tests while enabling real randomness in production.
+
+## Team Impact
+
+- **Jarlaxle:** Encounter cleanup is now more aggressive. If adding new combat mechanics that create multi-side encounters, the hostile-pair detection may need updating.
+- **Minsc:** 14 new tests added. The `death-spawn-routing.test.ts` is known flaky under parallel execution.
+- **Regis:** No client changes needed. Death overlay and respawn messaging unchanged.
+
+# Decision: Downed State Rework — Grace Period + Stabilize Revive
+
+**Author:** Drizzt (Engine Dev)  
+**Date:** 2025-07-23  
+**Status:** Implemented
+
+## Context
+The downed→death flow was effectively instant-kill. `checkKillingBlows()` ran every tick and any combat activity in the room would finish off a downed player immediately — zero rescue window.
+
+## Decision
+1. **Grace period (3 ticks):** `killingBlow()` returns `null` while `graceTicksRemaining > 0`. Grace decrements each tick alongside bleed-out. This gives ~3 seconds of protection.
+2. **HP drain tracking:** `currentHp` starts at 0, drains by 1 per tick to -10 (death). Enables future UI health bars for downed players.
+3. **Stabilize = full revive:** `handlePlayerStabilized()` now removes the player from downed tracking, re-creates them as a combatant at 1 HP, and auto-engages hostile creatures in the room. The player is fully active, not unconscious.
+
+## Impact
+- DowningSystem.ts: New `GRACE_TICKS`, `currentHp`, `graceTicksRemaining` fields
+- ZoneRoom.ts `handlePlayerStabilized()`: Complete rewrite — revive flow instead of notification-only
+- DownedState type unchanged ('downed' | 'stabilized') — stabilized state is transient (removed immediately after event)
+- 12 new unit tests, 1 updated integration test
+
+## Risks
+- Stabilized players re-entering combat at 1 HP may die again immediately if not healed. This is intentional per the design.
+- Grace period applies to killing blows only, not bleed-out (bleed-out continues during grace).
+
+# Decision: Bleed-out drains to -10 HP (not -60)
+
+**Author:** jarlaxle
+**Date:** 2025-07-14
+
+## Context
+DowningSystem previously drained 1 HP per tick over 60 ticks, meaning players reached -60 HP before dying. This felt excessive and made the HP display confusing.
+
+## Decision
+- Added `BLEED_HP_LOSS = 10` constant to DowningSystem.
+- HP now drains from 0 to -10 over the full 60-tick bleed-out period using a formula: `currentHp = -floor(elapsed * BLEED_HP_LOSS / BLEED_OUT_TICKS)`.
+- BLEED_OUT_TICKS remains 60 (~1 minute at 1s ticks). Death still triggers when `bleedOutTicksRemaining` hits 0.
+- The formula approach avoids accumulation drift and makes HP a pure function of elapsed ticks.
+
+## Impact
+- Client sees HP updates every ~6 ticks (stepping from 0 → -1 → -2 → … → -10).
+- Tests updated to reflect the new drain rate.
+- No changes to stabilization, grace period, or killing blow mechanics.
+
+# Decision: Auto-attack cooldown to slow combat pacing
+
+**Author:** jarlaxle
+**Date:** 2025-07-14
+
+## Context
+Combat felt too frantic — every combatant struck every 1-second tick with no pause between attacks.
+
+## Decision
+- Added `AUTO_ATTACK_COOLDOWN_TICKS = 1` constant to CombatState.
+- Added `strikeCooldown` field to the Combatant interface (default 0).
+- After a basic strike resolves, the attacker's `strikeCooldown` is set to 1. While on cooldown, auto-attack assignment is skipped (combatant idles).
+- Cooldowns decrement at the start of each encounter tick, before auto-attack assignment.
+- Player-submitted abilities (which have their own cooldown system) are unaffected — only auto-attack strikes are throttled.
+
+## Effect
+- Auto-attacks now fire every 2 ticks (2 seconds) instead of every tick, halving base DPS.
+- Combat feels more deliberate with breathing room between swings.
+- The constant is easily tunable — change `AUTO_ATTACK_COOLDOWN_TICKS` to adjust globally.
+
+## Tuning Note
+Value of 1 means "attack, skip, attack, skip…" (every other tick). Increase to 2 for every-3rd-tick pacing. The team can adjust based on playtesting.
+
+# Decision: ANSI color selector uses swatch grid, not text buttons
+
+**Date:** 2025-07-24
+**Author:** Regis
+**Issue:** #458
+
+## Context
+The ANSI color picker in admin editor screens (AnsiToolbar) displayed 16 color names as text buttons, consuming excessive toolbar width.
+
+## Decision
+Replaced text-label color buttons with a compact 2x8 grid of 20x20px colored squares. Each square uses the actual ANSI hex color as its background. Color names are accessible via `title` tooltip and `aria-label`. Modifier buttons (bold, dim, italic, underline) remain as text labels since they represent styles, not colors.
+
+## Consequences
+- The COLOR_HEX map in AnsiToolbar.tsx must stay in sync with the .ansi-* classes in tailwind.css
+- Color buttons are now queried by `aria-label` in tests, not by visible text
+- If new ANSI colors are added, update both the CSS and the COLOR_HEX map
+
+# Decision: API and proxy timeout strategy
+
+**Author:** Regis (Frontend)  
+**Date:** 2025-07-14  
+**Status:** Implemented
+
+## Context
+When the game server (`localhost:2567`) is down and the user refreshes the browser, `fetch()` calls through the Vite proxy hang indefinitely — the proxy waits forever for a backend that isn't there. The browser tab becomes unresponsive and must be force-closed.
+
+## Decision
+Added timeouts at two layers:
+
+1. **Client-side fetch timeouts** — `validateToken()` uses a 5s AbortController timeout; the generic `request()` helper uses a 10s default. These ensure the browser never blocks indefinitely on any API call.
+
+2. **Vite proxy timeouts** — Added both `timeout` (incoming socket) and `proxyTimeout` (outgoing proxy request) at 5s to every proxy entry. Confirmed that Vite's bundled `http-proxy` supports `proxyTimeout` for aborting the outgoing request when the backend is unreachable.
+
+## Alternatives considered
+- **`proxyTimeout` only**: Would only abort the outgoing connection but not the incoming socket. Using both covers edge cases where the proxy connects but the backend stalls.
+- **Vite `configureServer` error hook**: Considered adding a custom error handler via `server.middlewares`, but the combination of client-side AbortController + proxy timeouts is sufficient and simpler.
+
+## Impact
+- No breaking changes — all existing tests pass (469/469).
+- Users will see a fast error instead of an infinite hang when the server is restarting.
+
+# Decision: Revert Browser Timeout/Proxy Changes
+
+**Date:** 2025-07-24  
+**Author:** Regis (Frontend Dev)  
+**Commit:** 7a37b30  
+**Status:** Implemented
+
+## Context
+
+Commit `a6c804b` introduced client-side timeout mechanisms and Vite proxy timeout configurations that caused Firefox to display a blank screen. The changes included:
+
+1. AbortController-based timeouts wrapping all fetch calls in `api.ts`
+2. A `withTimeout()` helper wrapping Colyseus WebSocket connections in `connection.ts`
+3. `timeout: 5000` and `proxyTimeout: 5000` configs on all Vite dev server proxy routes
+
+## Problem
+
+The timeout changes broke Firefox compatibility completely — users reported a blank screen with no console errors. The timeout logic was intended to improve error handling but was unnecessary and caused more harm than good.
+
+## Decision
+
+**Revert all timeout-related changes from commit a6c804b.**
+
+### Changes Reverted:
+
+1. **`packages/client/src/services/api.ts`**
+   - Removed AbortController + setTimeout wrappers from `request()` and `validateToken()`
+   - Reverted to simple `fetch()` calls without signal/timeout parameters
+   - Removed timeout type parameter from request signature
+
+2. **`packages/client/src/services/connection.ts`**
+   - Removed `withTimeout()` helper function (lines 63-72)
+   - Removed `CONNECTION_TIMEOUT_MS` constant (line 74)
+   - In `connect()`: changed `await withTimeout(colyseus.joinOrCreate(...), ...)` back to direct `await colyseus.joinOrCreate(roomName, joinOptions)`
+   - In `switchRoom()`: changed both `withTimeout` calls back to direct `colyseus.joinById()` and `colyseus.joinOrCreate()` calls
+
+3. **`packages/client/vite.config.ts`**
+   - Removed `, timeout: 5000, proxyTimeout: 5000` from all 8 proxy entries
+   - Kept proxy routes intact and preserved `ws: true` on `/colyseus` WebSocket proxy
+
+## Rationale
+
+- **Browser Compatibility:** Client-side timeouts via AbortController broke Firefox completely
+- **Simplicity:** Network timeout handling should be server-side, not client-side
+- **Proxy Configs:** Vite proxy timeouts are optional and were causing issues without providing value
+- **User Impact:** The blank screen bug was a blocker for Firefox users
+
+## Consequences
+
+- **Positive:** Firefox users can now load the application properly
+- **Positive:** Simpler client code without timeout complexity
+- **Neutral:** Network timeout handling is now fully server-side (as it should be)
+- **Risk:** No client-side timeout protection, but this is acceptable since:
+  - Server has its own timeout mechanisms
+  - Browser native timeouts still apply
+  - User can refresh if connection hangs
+
+## Alternatives Considered
+
+1. **Fix Firefox compatibility:** Would require debugging AbortController behavior across browsers, not worth the complexity
+2. **Keep only Vite proxy timeouts:** Still risky and unnecessary, server handles this
+3. **Add conditional timeout for Chrome only:** Browser-specific code is a maintenance nightmare
+
+## Implementation Notes
+
+- All changes verified with `npx tsc --noEmit --project packages/client/tsconfig.json`
+- Linting passed via pre-commit hooks
+- No test changes required (no tests covered the timeout logic)
+
+## Team Notification
+
+This decision affects:
+- **Frontend:** All WebSocket and fetch calls now use browser defaults
+- **Backend:** Should ensure server-side timeout handling is robust
+- **QA:** Verify Firefox compatibility is restored

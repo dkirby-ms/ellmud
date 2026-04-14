@@ -7763,3 +7763,21 @@ Key learnings documented:
 - Starting items rename mechanics across 33 files
 - Zone state simplification pattern (removing legacy lifecycle states)
 - Test restructuring when behavior changes (items no longer respawn)
+## Learnings
+
+- When using sed to remove options from JS object literals, watch for trailing commas after deletion -- they cause syntax errors. Use perl multiline regex for safer cleanup.
+- Shared package must be rebuilt before server type-checking picks up type changes. The server resolves types through build output, not source.
+- The Colyseus ZoneState schema in state.ts tracks server-internal state. Removing fields from it affects serialization -- kept stability (always 1.0) for admin dashboard compat.
+- Test helper functions like seedZone() in test files are DB seeders, not the removed lifecycle method.
+- **Combat stat model (Phase 1):** 8 stats shared between players and creatures: maxHp, unarmed, oneHanded, twoHanded, ranged, shieldBlock, dodge, armour. No agility (removed by user directive 2026-04-13). ShieldBlock is binary (block chance, not flat reduction).
+- **PlayerCombatStats type** lives in `CharacterRepository.ts`, separate from `CombatStats` in `CombatState.ts`. Jarlaxle owns CombatState.ts; Drizzt owns the DB persistence layer.
+- **Creature definitions** keep legacy columns (attack, defence, agility) for backward compat but new weapon skills (unarmed, one_handed, two_handed, ranged, shield_block, dodge_skill_rank) are the Phase 1 future.
+- **CharacterRow.combatStats** is populated in every SELECT via shared `CHARACTER_COLUMNS` constant — keeps queries DRY.
+- **Migration 018** = character combat stats, **Migration 019** = creature combat stats with varied weapon/dodge values per creature archetype.
+- **ItemStats dual format (#453):** DB `base_stats` JSONB has legacy format (`{damage, speed}` for weapons, `{armour, weight}` for armour) and canonical combat format (`{weaponType, weaponDamage, armour, shieldBlock}`). `extractCombatItemStats()` in `stats.ts` bridges both. Always use it when converting DB item data to combat stats.
+- **Item.stats field (#453):** The `Item` interface (RoomGraph.ts) now carries optional `stats?: ItemStats` (combat ItemStats). Equipment items should populate this when created from DB definitions.
+- **Stats cache rebuild pattern (#453):** `rebuildPlayerStatsCache()` in ZoneRoom.ts must be called after any loadout mutation (equip/unequip/swap) and after join-time loadout restoration. It reads loadout → ContentRegistry → extractCombatItemStats → calculateEquipmentBonuses → effective stats.
+
+---
+
+
