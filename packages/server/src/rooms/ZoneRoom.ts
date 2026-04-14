@@ -144,6 +144,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private traceSystem!: TraceSystem;
   private awarenessSystem!: AwarenessSystem;
   private downingSystem!: DowningSystem;
+  /** Players who have died and are awaiting teleport — excluded from combat event delivery. */
+  private pendingDeathTeleport = new Set<string>();
   private groupManager!: GroupManager;
   private narrationService!: NarrationService;
   private deathPenaltyStore!: DeathPenaltyStore;
@@ -772,6 +774,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.playerStartingZones.delete(playerId);
       this.playerFlagsCache.delete(playerId);
       this.ownerPlayerIds.delete(playerId);
+      this.pendingDeathTeleport.delete(playerId);
       this.updateMetadata();
     }
     // Clean up follow relationships on disconnect (#403)
@@ -1472,6 +1475,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         for (const [sid, ps] of this.players) {
           if (ps.currentRoomId !== eventRoomId) continue;
           if (this.downingSystem.isPlayerDowned(sid)) continue;
+          if (this.pendingDeathTeleport.has(sid)) continue;
           const client = this.findClient(sid);
           if (client) {
             this.sendNarrate(client, msg);
@@ -1490,9 +1494,10 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
     }
 
-    // Send player state updates to all players whose HP changed (skip downed players)
+    // Send player state updates to all players whose HP changed (skip downed/dead players)
     for (const playerId of playersNeedingUpdate) {
       if (this.downingSystem.isPlayerDowned(playerId)) continue;
+      if (this.pendingDeathTeleport.has(playerId)) continue;
       const client = this.findClient(playerId);
       if (client) {
         this.sendPlayerState(client, playerId);
@@ -1931,8 +1936,10 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private buildCreatureWorldState(): CreatureWorldState {
     const playersInRoom = new Map<string, string[]>();
     for (const [sid, ps] of this.players) {
-      // Peaceful players are invisible to creature AI
+      // Peaceful, downed, and dead players are invisible to creature AI
       if (ps.peaceful) continue;
+      if (this.downingSystem.isPlayerDowned(sid)) continue;
+      if (this.pendingDeathTeleport.has(sid)) continue;
       const list = playersInRoom.get(ps.currentRoomId);
       if (list) {
         list.push(sid);
@@ -2434,6 +2441,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private async handlePlayerDeath(playerId: string, playerName: string, roomId: string, killerIds?: string[]): Promise<void> {
     const player = this.players.get(playerId);
     if (!player) return;
+
+    // Mark player as dead immediately — prevents combat event delivery during 3s teleport delay
+    this.pendingDeathTeleport.add(playerId);
 
     // Break follow relationships on death (#413)
     this.cleanupFollowRelationships(playerId);
