@@ -1063,14 +1063,41 @@ export class CombatSystem {
     );
 
     let ended = false;
-    if (aliveInEncounter.length === 0) {
-      // No combatants remain (all fled or all defeated) — immediate end
+    if (aliveInEncounter.length <= 1) {
       events.push(resolveCombatEnd('last_standing'));
       ended = true;
-    } else if (aliveInEncounter.length <= 1) {
-      // Only one (or zero) combatants remain — combat ends immediately
-      events.push(resolveCombatEnd('last_standing'));
-      ended = true;
+    } else {
+      // Check if hostile pairs remain — if all survivors are on the same
+      // "side" (all players or all creatures), combat should end.
+      const hasPlayer = aliveInEncounter.some(
+        (id) => this.combatants.get(id)?.isPlayer === true,
+      );
+      const hasCreature = aliveInEncounter.some(
+        (id) => this.combatants.get(id)?.isPlayer === false,
+      );
+      // In PvP, all survivors are players but may be hostile to each other.
+      // Only end if a single side remains in PvE (players vs creatures).
+      // PvP encounters keep going as long as multiple players remain.
+      if (!hasPlayer || !hasCreature) {
+        // PvE: only one side left → end combat
+        // For PvP, hasCreature is false but multiple players may still fight.
+        // Detect PvP: if all alive are players and more than one, check if
+        // any pair has active hostility (currentTarget pointing at each other).
+        if (hasPlayer && !hasCreature && aliveInEncounter.length > 1) {
+          // PvP scenario: check for active hostile pairs among players
+          const hasHostilePair = aliveInEncounter.some((id) => {
+            const c = this.combatants.get(id);
+            return c?.currentTarget && aliveInEncounter.includes(c.currentTarget);
+          });
+          if (!hasHostilePair) {
+            events.push(resolveCombatEnd('last_standing'));
+            ended = true;
+          }
+        } else {
+          events.push(resolveCombatEnd('last_standing'));
+          ended = true;
+        }
+      }
     }
 
     if (!ended && encounter.ticksSinceLastStrike >= COMBAT_TIMEOUT_TICKS) {

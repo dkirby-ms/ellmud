@@ -97,7 +97,7 @@ import { LoadoutService, getLoadoutRepository } from '../loadout/index.js';
 import type { LoadoutRepository } from '../loadout/index.js';
 import { getZoneRepository } from '../zones/index.js';
 import type { ZoneData } from '../zones/index.js';
-import { resolvePlayerHubTarget, resolvePlayerHubName } from '../zones/stronghold.js';
+import { resolveRespawnTarget } from '../zones/respawn.js';
 import { convertZoneToRoomGraph } from '../zones/zone-adapter.js';
 import { getItemDefinition } from '../items/registry.js';
 import { getContentRegistry } from '../content/index.js';
@@ -169,6 +169,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private playerStatsCache = new Map<string, EffectiveStats>();
   /** Maps playerId → faction slug for death routing (cached on join). */
   private playerFactionSlugs = new Map<string, string>();
+  /** Maps playerId → starting zone slug for death respawn fallback (cached on join). */
+  private playerStartingZones = new Map<string, string>();
   /** Maps playerId → character flags (anon, rp) cached on join (Issue #370). */
   private playerFlagsCache = new Map<string, import('@ellmud/shared').CharacterFlags>();
 
@@ -325,11 +327,14 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
     }
 
-    // Initialize combat system with room exit resolver
-    this.combatSystem = new CombatSystem((roomId: string) => {
-      const room = this.roomGraph.rooms.get(roomId);
-      return room ? Array.from(room.exits.values()) : [];
-    });
+    // Initialize combat system with room exit resolver and real RNG
+    this.combatSystem = new CombatSystem(
+      (roomId: string) => {
+        const room = this.roomGraph.rooms.get(roomId);
+        return room ? Array.from(room.exits.values()) : [];
+      },
+      () => Math.random(),
+    );
 
     // Initialize sound propagation system (GDD §12)
     this.soundSystem = new SoundSystem((roomId: string) => {
@@ -519,6 +524,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         ?? await this.characterRepo.getActive(playerId);
       if (character?.name) {
         this.characterNames.set(playerId, character.name);
+      }
+      if (character?.startingZoneSlug) {
+        this.playerStartingZones.set(playerId, character.startingZoneSlug);
       }
     } catch (err) {
       this.log(`Failed to load character for ${this.playerTag(playerId)}: ${err}`);
@@ -761,6 +769,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.characterNames.delete(playerId);
       this.playerStatsCache.delete(playerId);
       this.playerFactionSlugs.delete(playerId);
+      this.playerStartingZones.delete(playerId);
       this.playerFlagsCache.delete(playerId);
       this.ownerPlayerIds.delete(playerId);
       this.updateMetadata();
@@ -2565,11 +2574,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Send death state to the defeated player
     const client = this.findClient(playerId);
     if (client) {
-      // Resolve respawn location: last rented inn → faction hub → default hub
-      let respawnTarget: string;
-      let respawnName: string;
-      let respawnRoomSlug: string | undefined;
-
+      // Resolve respawn location: lastInn → faction hub → startingZoneSlug → Refuge
       let lastInn: { zoneSlug: string; roomSlug: string } | null = null;
       try {
         lastInn = await this.characterRepo.getLastInn(playerId);
@@ -2577,15 +2582,14 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         this.log(`Failed to load last inn for ${this.playerTag(playerId)}: ${err}`);
       }
 
-      if (lastInn) {
-        respawnTarget = `zone:${lastInn.zoneSlug}`;
-        respawnName = 'your rented room';
-        respawnRoomSlug = lastInn.roomSlug;
-      } else {
-        const factionSlug = this.playerFactionSlugs.get(playerId);
-        respawnTarget = resolvePlayerHubTarget(factionSlug);
-        respawnName = resolvePlayerHubName(factionSlug);
-      }
+      const respawn = resolveRespawnTarget({
+        lastInn,
+        factionSlug: this.playerFactionSlugs.get(playerId),
+        startingZoneSlug: this.playerStartingZones.get(playerId),
+      });
+      const respawnTarget = respawn.target;
+      const respawnName = respawn.displayName;
+      const respawnRoomSlug = respawn.roomSlug;
 
       this.sendOverlayState(client, {
         playerId,
@@ -2764,9 +2768,6 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         }
 
         // Resolve respawn location (same as normal death)
-        let respawnTarget: string;
-        let respawnRoomSlug: string | undefined;
-
         let lastInn: { zoneSlug: string; roomSlug: string } | null = null;
         try {
           lastInn = await this.characterRepo.getLastInn(playerId);
@@ -2774,23 +2775,21 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           this.log(`Failed to load last inn for ${this.playerTag(playerId)}: ${err}`);
         }
 
-        if (lastInn) {
-          respawnTarget = `zone:${lastInn.zoneSlug}`;
-          respawnRoomSlug = lastInn.roomSlug;
-        } else {
-          const factionSlug = this.playerFactionSlugs.get(playerId);
-          respawnTarget = resolvePlayerHubTarget(factionSlug);
-        }
+        const respawn = resolveRespawnTarget({
+          lastInn,
+          factionSlug: this.playerFactionSlugs.get(playerId),
+          startingZoneSlug: this.playerStartingZones.get(playerId),
+        });
 
         // Persist cleared profile (equipment=undefined) before removing from state
         await this.savePlayerProfile(playerId, this.players.get(playerId)!);
 
         const roomSwitch: RoomSwitchMessage = {
-          target: respawnTarget,
+          target: respawn.target,
           reason: 'permadeath',
         };
-        if (respawnRoomSlug) {
-          roomSwitch.options = { targetRoomSlug: respawnRoomSlug };
+        if (respawn.roomSlug) {
+          roomSwitch.options = { targetRoomSlug: respawn.roomSlug };
         }
         client.send(MessageTypes.ROOM_SWITCH, roomSwitch);
 
@@ -2800,7 +2799,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         this.state.playerCount = Math.max(0, this.state.playerCount - 1);
         this.updateMetadata();
         
-        this.log(`Player ${this.playerTag(playerId)} reset and respawned at ${respawnTarget} after permadeath`);
+        this.log(`Player ${this.playerTag(playerId)} reset and respawned at ${respawn.target} after permadeath`);
       }, 3000);
     }
 
