@@ -2,12 +2,13 @@
  * Damage model — GDD §6.4.
  *
  * Formula:
- *   modified_dmg  = raw_dmg × stance_multiplier - armour - block
- *   final_damage  = max(1, modified_dmg) × dodge_reduction × flanking_bonus
+ *   modified_dmg  = raw_dmg × stance_multiplier - armour
+ *   final_damage  = max(1, modified_dmg) × flanking_bonus
  *
- * Dodge grants a % chance to fully avoid an attack
- * based on AGI stat + dodge skill rank.
- * When a PRNG roll is provided, dodge can reduce final_damage to 0.
+ * Resolution order per attack:
+ *   1. Dodge roll — full avoidance (0 damage) based on dodge skill
+ *   2. Shield block roll — binary block (0 damage) based on shieldBlock skill
+ *   3. Damage calculation with armour reduction
  *
  * Flanking bonus applies when attacker is at Flank position
  * and target is focused on a Front position combatant (GDD §6.11).
@@ -20,8 +21,10 @@ export interface DamageResult {
   multiplier: number;
   armourReduction: number;
   finalDamage: number;
-  /** True when a dodge roll fully avoided the attack (GDD §6.4). */
+  /** True when a dodge roll fully avoided the attack. */
   dodged?: boolean;
+  /** True when a shield block nullified the attack. */
+  blocked?: boolean;
   /** Detailed damage pipeline breakdown — populated for observability (sandbox/logging). */
   breakdown?: DamageBreakdown;
 }
@@ -50,20 +53,26 @@ export interface DamageBreakdown {
   finalDamage: number;
   /** Whether the attack was fully dodged. */
   dodged: boolean;
+  /** Whether the attack was blocked by a shield. */
+  blocked: boolean;
   /** Calculated dodge probability before the roll (0 if dodge not applicable). */
   dodgeChance: number;
+  /** Calculated shield block probability before the roll. */
+  blockChance: number;
   /** Reserved for future crit system. */
   criticalHit?: boolean;
 }
 
-/** Options for dodge chance calculation. */
+/** Options for damage calculation. */
 export interface DamageOptions {
-  /** Defender's agility stat (GDD §6.4). */
-  defenderAgility?: number;
-  /** Defender's dodge skill rank (GDD §6.4). */
-  defenderDodgeSkillRank?: number;
+  /** Defender's dodge skill stat. */
+  defenderDodge?: number;
+  /** Defender's shield block skill stat. */
+  defenderShieldBlock?: number;
   /** A PRNG roll in [0, 1) to determine dodge success. */
   dodgeRoll?: number;
+  /** A PRNG roll in [0, 1) to determine shield block success. */
+  blockRoll?: number;
   /** Damage multiplier for abilities (e.g., 1.5 for Heavy Strike) (GDD §6.3). */
   damageMultiplier?: number;
   /** Flat damage reduction for block ability (GDD §6.3). */
@@ -74,21 +83,37 @@ export interface DamageOptions {
 
 /** Base dodge chance (20%). */
 export const DODGE_BASE_CHANCE = 0.20;
-/** Dodge chance bonus per point of agility (2%). */
-export const DODGE_CHANCE_PER_AGI = 0.02;
 /** Dodge chance bonus per dodge skill rank (3%). */
-export const DODGE_CHANCE_PER_SKILL_RANK = 0.03;
+export const DODGE_CHANCE_PER_RANK = 0.03;
 /** Maximum dodge chance (75%) to prevent invincibility. */
 export const MAX_DODGE_CHANCE = 0.75;
 
+/** Base shield block chance (5%). */
+export const BLOCK_BASE_CHANCE = 0.05;
+/** Block chance bonus per shieldBlock skill rank (3%). */
+export const BLOCK_CHANCE_PER_RANK = 0.03;
+/** Maximum block chance (60%). */
+export const MAX_BLOCK_CHANCE = 0.60;
+
 /**
- * Calculate dodge chance from AGI stat and dodge skill rank.
- * Formula: min(MAX_DODGE_CHANCE, 20% + 2% × AGI + 3% × dodgeSkillRank)
+ * Calculate dodge chance from dodge skill stat.
+ * Formula: min(MAX_DODGE_CHANCE, 20% + 3% × dodge)
  */
-export function getDodgeChance(agility: number, dodgeSkillRank = 0): number {
+export function getDodgeChance(dodge: number): number {
   return Math.min(
     MAX_DODGE_CHANCE,
-    DODGE_BASE_CHANCE + DODGE_CHANCE_PER_AGI * agility + DODGE_CHANCE_PER_SKILL_RANK * dodgeSkillRank,
+    DODGE_BASE_CHANCE + DODGE_CHANCE_PER_RANK * dodge,
+  );
+}
+
+/**
+ * Calculate shield block chance from shieldBlock skill stat.
+ * Formula: min(MAX_BLOCK_CHANCE, 5% + 3% × shieldBlock)
+ */
+export function getShieldBlockChance(shieldBlock: number): number {
+  return Math.min(
+    MAX_BLOCK_CHANCE,
+    BLOCK_BASE_CHANCE + BLOCK_CHANCE_PER_RANK * shieldBlock,
   );
 }
 
@@ -103,7 +128,6 @@ function getStanceMultiplier(attackerAction: CombatAction, defenderAction: Comba
     case 'strike': 
     case 'heavy_strike':
       return 1.0;   // both aggressive — full damage
-    case 'dodge':  return 0.5;   // dodging halves incoming damage
     case 'block':  return 1.0;   // block uses flat reduction, not multiplier
     case 'flee':   return 1.0;   // fleeing provides no defence
     default:       return 1.0;
@@ -113,11 +137,13 @@ function getStanceMultiplier(attackerAction: CombatAction, defenderAction: Comba
 /**
  * Calculate damage from one combatant to another for a single tick.
  *
- * @param attackerAttack  - Attacker's base attack stat
+ * Resolution order: dodge → shield block → damage (armour reduction).
+ *
+ * @param attackerAttack  - Attacker's effective attack stat
  * @param defenderArmour  - Defender's armour value
  * @param attackerAction  - What the attacker chose this tick
  * @param defenderAction  - What the defender chose this tick
- * @param options         - Optional dodge roll, defence stat, damage multiplier, block reduction
+ * @param options         - Optional dodge/block rolls, damage multiplier, etc.
  */
 export function calculateDamage(
   attackerAttack: number,
@@ -139,7 +165,9 @@ export function calculateDamage(
       flankingBonus: 1.0,
       finalDamage: 0,
       dodged: false,
+      blocked: false,
       dodgeChance: 0,
+      blockChance: 0,
     };
     return { rawDamage: 0, multiplier: 0, armourReduction: 0, finalDamage: 0, breakdown: zeroBreakdown };
   }
@@ -159,13 +187,15 @@ export function calculateDamage(
   const flankingBonus = options?.flankingBonus ?? 1.0;
   const damageWithFlanking = Math.floor(baseDamage * flankingBonus);
 
-  // GDD §6.4: Dodge grants a % chance to fully avoid an attack
+  // Step 1: Passive dodge roll
+  let dodgeChance = 0;
+  if (options?.defenderDodge !== undefined) {
+    dodgeChance = getDodgeChance(options.defenderDodge);
+  }
   if (
-    defenderAction === 'dodge' &&
-    options?.defenderAgility !== undefined &&
+    options?.defenderDodge !== undefined &&
     options?.dodgeRoll !== undefined
   ) {
-    const dodgeChance = getDodgeChance(options.defenderAgility, options.defenderDodgeSkillRank);
     if (options.dodgeRoll < dodgeChance) {
       const dodgedBreakdown: DamageBreakdown = {
         rawDamage: attackerAttack,
@@ -177,7 +207,9 @@ export function calculateDamage(
         flankingBonus,
         finalDamage: 0,
         dodged: true,
+        blocked: false,
         dodgeChance,
+        blockChance: 0,
       };
       return {
         rawDamage,
@@ -190,15 +222,43 @@ export function calculateDamage(
     }
   }
 
-  // Compute dodge chance even when dodge doesn't trigger (for observability)
-  let dodgeChance = 0;
+  // Step 2: Shield block roll (binary — nullifies attack on success)
+  let blockChance = 0;
+  if (options?.defenderShieldBlock !== undefined && options.defenderShieldBlock > 0) {
+    blockChance = getShieldBlockChance(options.defenderShieldBlock);
+  }
   if (
-    defenderAction === 'dodge' &&
-    options?.defenderAgility !== undefined
+    options?.defenderShieldBlock !== undefined &&
+    options.defenderShieldBlock > 0 &&
+    options?.blockRoll !== undefined
   ) {
-    dodgeChance = getDodgeChance(options.defenderAgility, options.defenderDodgeSkillRank);
+    if (options.blockRoll < blockChance) {
+      const blockedBreakdown: DamageBreakdown = {
+        rawDamage: attackerAttack,
+        abilityMultiplier,
+        stanceMultiplier: multiplier,
+        afterStance: afterMultiplier,
+        armourReduction: defenderArmour,
+        blockReduction,
+        flankingBonus,
+        finalDamage: 0,
+        dodged: false,
+        blocked: true,
+        dodgeChance,
+        blockChance,
+      };
+      return {
+        rawDamage,
+        multiplier,
+        armourReduction: defenderArmour,
+        finalDamage: 0,
+        blocked: true,
+        breakdown: blockedBreakdown,
+      };
+    }
   }
 
+  // Step 3: Normal damage with armour reduction
   const breakdown: DamageBreakdown = {
     rawDamage: attackerAttack,
     abilityMultiplier,
@@ -209,7 +269,9 @@ export function calculateDamage(
     flankingBonus,
     finalDamage: damageWithFlanking,
     dodged: false,
+    blocked: false,
     dodgeChance,
+    blockChance,
   };
 
   return {

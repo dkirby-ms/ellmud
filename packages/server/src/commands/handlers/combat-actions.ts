@@ -30,20 +30,10 @@ export function handleStrike(ctx: CommandContext): CommandResult {
   };
 }
 
-/** dodge — Queue a dodge action. */
-export function handleDodge(ctx: CommandContext): CommandResult {
-  const { player, combatSystem } = ctx;
-
-  if (!combatSystem || !combatSystem.isInCombat(player.sessionId)) {
-    return {
-      narrations: [{ text: 'You are not in combat.', type: 'system' }],
-    };
-  }
-
-  combatSystem.submitAction(player.sessionId, 'dodge');
-
+/** dodge — Dodge is now a passive mechanic and cannot be selected. */
+export function handleDodge(_ctx: CommandContext): CommandResult {
   return {
-    narrations: [{ text: 'You brace to dodge.', type: 'combat' }],
+    narrations: [{ text: 'Dodge is a passive ability — you automatically attempt to dodge incoming attacks.', type: 'system' }],
   };
 }
 

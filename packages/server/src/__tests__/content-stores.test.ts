@@ -427,12 +427,17 @@ describe('PgCreatureDefinitionsStore', () => {
     type: 'drowned_revenant',
     name: 'Drowned Revenant',
     description: 'A waterlogged corpse risen from the depths',
+    room_description: null,
     behavior: 'aggressive',
+    aggressive: true,
     max_hp: 120,
-    attack: 15,
-    defence: 8,
+    unarmed: 10,
+    one_handed: 8,
+    two_handed: 3,
+    ranged: 1,
+    shield_block: 0,
+    dodge_skill_rank: 3,
     armour: 3,
-    agility: 5,
     min_count: 1,
     max_count: 3,
     preferred_rooms: ['flooded_chamber', 'submerged_hall'],
@@ -472,10 +477,13 @@ describe('PgCreatureDefinitionsStore', () => {
       expect(e.description).toBe('A waterlogged corpse risen from the depths');
       expect(e.behavior).toBe('aggressive');
       expect(e.maxHp).toBe(120);
-      expect(e.attack).toBe(15);
-      expect(e.defence).toBe(8);
+      expect(e.unarmed).toBe(10);
+      expect(e.oneHanded).toBe(8);
+      expect(e.twoHanded).toBe(3);
+      expect(e.ranged).toBe(1);
+      expect(e.shieldBlock).toBe(0);
+      expect(e.dodge).toBe(3);
       expect(e.armour).toBe(3);
-      expect(e.agility).toBe(5);
       expect(e.minCount).toBe(1);
       expect(e.maxCount).toBe(3);
       expect(e.preferredRooms).toEqual(['flooded_chamber', 'submerged_hall']);
@@ -570,7 +578,7 @@ describe('PgCreatureDefinitionsStore', () => {
       expect(entity.name).toBe('Drowned Revenant');
     });
 
-    it('inserts into creature_definitions with 22 params', async () => {
+    it('inserts into creature_definitions with 25 params', async () => {
       queryMock.mockResolvedValueOnce(mockQueryResult([CREATURE_ROW]));
       await store.create({ id: 'x', type: 'test', name: 'Test' });
 
@@ -579,7 +587,7 @@ describe('PgCreatureDefinitionsStore', () => {
         expect.any(Array),
       );
       const callArgs = queryMock.mock.calls[0][1] as unknown[];
-      expect(callArgs).toHaveLength(22);
+      expect(callArgs).toHaveLength(25);
     });
 
     it('serializes loot_table as JSON', async () => {
@@ -594,8 +602,8 @@ describe('PgCreatureDefinitionsStore', () => {
       });
 
       const callArgs = queryMock.mock.calls[0][1] as unknown[];
-      // loot_table is the 22nd param ($22)
-      expect(callArgs[21]).toBe(JSON.stringify(loot));
+      // loot_table is the 25th param ($25)
+      expect(callArgs[24]).toBe(JSON.stringify(loot));
     });
 
     it('throws ContentStoreError DUPLICATE_ID on unique violation', async () => {
@@ -625,10 +633,10 @@ describe('PgCreatureDefinitionsStore', () => {
       await store.create({ id: 'x', type: 'test', name: 'Bare Creature' });
 
       const callArgs = queryMock.mock.calls[0][1] as unknown[];
-      // max_hp=$7 defaults to 100, attack=$8 defaults to 10
+      // max_hp=$7 defaults to 100, unarmed=$8 defaults to 5
       expect(callArgs[6]).toBe(100); // maxHp
-      expect(callArgs[7]).toBe(10);  // attack
-      expect(callArgs[8]).toBe(5);   // defence
+      expect(callArgs[7]).toBe(5);   // unarmed
+      expect(callArgs[8]).toBe(5);   // oneHanded
     });
   });
 
@@ -657,7 +665,7 @@ describe('PgCreatureDefinitionsStore', () => {
       expect(updated.type).toBe('drowned_revenant'); // unchanged
     });
 
-    it('passes 23 params to the UPDATE query (22 cols + WHERE id)', async () => {
+    it('passes 26 params to the UPDATE query (25 cols + WHERE id)', async () => {
       queryMock.mockResolvedValueOnce(mockQueryResult([CREATURE_ROW]));
       queryMock.mockResolvedValueOnce(mockQueryResult([CREATURE_ROW]));
 
@@ -665,8 +673,8 @@ describe('PgCreatureDefinitionsStore', () => {
 
       // Second call is the UPDATE
       const callArgs = queryMock.mock.calls[1][1] as unknown[];
-      expect(callArgs).toHaveLength(23);
-      expect(callArgs[22]).toBe('c-001'); // WHERE id = $23
+      expect(callArgs).toHaveLength(26);
+      expect(callArgs[25]).toBe('c-001'); // WHERE id = $26
     });
   });
 

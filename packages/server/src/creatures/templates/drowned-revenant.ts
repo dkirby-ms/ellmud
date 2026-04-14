@@ -18,10 +18,13 @@ export const DROWNED_REVENANT: CreatureTemplate = {
   name: 'Drowned Revenant',
   stats: {
     maxHp: 50,
-    attack: 10,
-    defence: 3,
+    unarmed: 10,
+    oneHanded: 0,
+    twoHanded: 0,
+    ranged: 0,
+    shieldBlock: 0,
+    dodge: 3,
     armour: 3,
-    agility: 3,
   },
   lootTable: [
     {

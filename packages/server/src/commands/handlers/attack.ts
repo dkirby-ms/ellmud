@@ -53,8 +53,12 @@ export function handleAttack(ctx: CommandContext): CommandResult {
   // Register combatants if not already registered
   const playerDisplayName = characterName ?? player.sessionId;
   if (!combatSystem.getCombatant(player.sessionId)) {
+    const eff = ctx.playerEffectiveStats;
+    const playerOpts = eff
+      ? { attack: eff.attack, maxHp: eff.maxHp, armour: eff.armour, dodge: eff.dodge, shieldBlock: eff.shieldBlock }
+      : undefined;
     combatSystem.registerCombatant(
-      createCombatant(player.sessionId, playerDisplayName, player.currentRoomId, true),
+      createCombatant(player.sessionId, playerDisplayName, player.currentRoomId, true, playerOpts),
     );
   }
   if (!combatSystem.getCombatant(targetId)) {
@@ -62,10 +66,16 @@ export function handleAttack(ctx: CommandContext): CommandResult {
     const creature = creaturesInRoom?.find(c => c.id === targetId);
     const targetDisplayName = creature?.name ?? targetId;
     const stats = creature?.maxHp != null
-      ? { maxHp: creature.maxHp, attack: creature.attack ?? 1, defence: creature.defence ?? 0, armour: creature.armour ?? 0, agility: creature.agility ?? 0 }
+      ? {
+          maxHp: creature.maxHp,
+          attack: creature.attack ?? 1,
+          armour: creature.armour ?? 0,
+          dodge: creature.dodge ?? 0,
+          shieldBlock: creature.shieldBlock ?? 0,
+        }
       : undefined;
     combatSystem.registerCombatant(
-      createCombatant(targetId, targetDisplayName, player.currentRoomId, !isCreatureId(targetId), stats, creature?.dodgeSkillRank),
+      createCombatant(targetId, targetDisplayName, player.currentRoomId, !isCreatureId(targetId), stats),
     );
   }
 

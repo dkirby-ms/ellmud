@@ -65,7 +65,6 @@ export class InMemoryPlayerRepository implements PlayerRepository {
     const player = this.players.get(id);
     if (!player) return null;
     // Strip passwordHash from the returned Player
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash: _passwordHash, ...playerData } = player;
     return playerData;
   }
@@ -106,7 +105,6 @@ export class InMemoryPlayerRepository implements PlayerRepository {
     this.providerIndex.set(`${provider}:${providerId}`, id);
 
     // Strip passwordHash from the returned Player
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash: _passwordHash, ...playerData } = player;
     return playerData;
   }

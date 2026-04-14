@@ -1,5 +1,5 @@
 /**
- * Combat action resolution — per-action logic for Strike, Dodge, Flee.
+ * Combat action resolution — per-action logic for Strike, Flee, and passive Dodge.
  *
  * Each resolver produces narration hints. The CombatSystem orchestrates
  * the tick by calling these after damage has been calculated.
@@ -33,13 +33,16 @@ export function resolveStrike(
   };
 }
 
-/** Build a dodge narration event. */
-export function resolveDodge(combatant: Combatant): CombatEvent {
+/** Build a passive dodge narration event (triggered when dodge roll succeeds). */
+export function resolveDodge(combatant: Combatant, attackerName?: string): CombatEvent {
+  const narration = attackerName
+    ? `${combatant.name} dodges ${attackerName}'s attack!`
+    : `${combatant.name} dodges the attack!`;
   return {
     type: 'dodge',
     actorId: combatant.id,
     actorName: combatant.name,
-    narration: `${combatant.name} takes a defensive stance.`,
+    narration,
   };
 }
 

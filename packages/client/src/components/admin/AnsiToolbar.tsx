@@ -23,7 +23,7 @@ const MODIFIERS = ["bold", "dim", "italic", "underline"] as const;
 function insertTag(
   textarea: HTMLTextAreaElement,
   tag: string,
-  onInsert: (v: string) => void,
+  _onInsert: (v: string) => void,
 ) {
   textarea.focus();
 

@@ -264,9 +264,29 @@ export default function CombinedStashLoadout({ room, inZone = false }: CombinedS
           </div>
 
           <div className="flex-1 overflow-y-auto narrative-scroll">
-            {stashItems.length === 0 ? (
+            {(inZone ? inventory.length : stashItems.length) === 0 ? (
               <div className="mud-system" style={{ padding: '1rem 0', fontSize: '0.8rem', fontStyle: 'italic' }}>
                 {inZone ? 'No items carried.' : 'Your stash is empty.'}
+              </div>
+            ) : inZone ? (
+              <div className="space-y-px">
+                {inventory.map(item => (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-2"
+                    style={{
+                      padding: '0.3rem 0.5rem',
+                      fontSize: '0.8rem',
+                    }}
+                  >
+                    <span className={tierClass(item.tier)} style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <AnsiText text={item.name} />
+                    </span>
+                    <span className="ansi-dim" style={{ fontSize: '0.7rem', flexShrink: 0 }}>
+                      {item.weight}wt
+                    </span>
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="space-y-px">

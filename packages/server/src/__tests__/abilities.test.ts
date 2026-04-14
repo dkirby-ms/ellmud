@@ -8,7 +8,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   CombatSystem,
   createCombatant,
-  DEFAULT_PLAYER_STATS,
   type Combatant,
 } from '../combat/index.js';
 
@@ -21,9 +20,8 @@ describe('Ability System (GDD §6.3)', () => {
     // Always fail dodge for deterministic tests
     combatSystem = new CombatSystem(() => [], () => 1);
 
-    player = createCombatant('p1', 'Alice', 'room1', true, DEFAULT_PLAYER_STATS);
+    player = createCombatant('p1', 'Alice', 'room1', true, { attack: 10 });
     creature = createCombatant('c1', 'Goblin', 'room1', false, {
-      ...DEFAULT_PLAYER_STATS,
       maxHp: 50,
       attack: 8,
     });
@@ -244,15 +242,16 @@ describe('Ability System (GDD §6.3)', () => {
       expect(strikeEvent!.targetId).toBe('c1');
     });
 
-    it('should fallback to dodge if no valid target', () => {
+    it('should fallback to strike if no valid target', () => {
       player.stamina = 5;
       player.currentTarget = undefined;
 
       combatSystem.submitAction('p1', 'heavy_strike');
       const result = combatSystem.resolveTick();
 
-      const dodgeEvent = result.events.find((e) => e.actorId === 'p1' && e.type === 'dodge');
-      expect(dodgeEvent).toBeDefined();
+      const p1Action = result.events.find((e) => e.actorId === 'p1');
+      expect(p1Action).toBeDefined();
+      expect(p1Action!.type).toBe('strike');
     });
   });
 });

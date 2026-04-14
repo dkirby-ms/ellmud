@@ -21,6 +21,12 @@ interface CreatureRow {
   defence: number;
   armour: number;
   agility: number;
+  unarmed: number;
+  one_handed: number;
+  two_handed: number;
+  ranged: number;
+  shield_block: number;
+  dodge_skill_rank: number;
   min_count: number;
   max_count: number;
   preferred_rooms: string[];
@@ -156,6 +162,7 @@ export class ContentRegistry {
   private async loadCreatures(): Promise<void> {
     const result = await this.pool!.query<CreatureRow>(
       `SELECT id, slug, type, name, max_hp, attack, defence, armour, agility,
+              unarmed, one_handed, two_handed, ranged, shield_block, dodge_skill_rank,
               min_count, max_count, preferred_rooms, forbidden_rooms,
               idle_ticks_min, idle_ticks_max, flee_threshold, loot_table, status,
               aggressive, room_description
@@ -184,10 +191,13 @@ export class ContentRegistry {
         name: row.name,
         stats: {
           maxHp: row.max_hp,
-          attack: row.attack,
-          defence: row.defence,
+          unarmed: row.unarmed ?? 5,
+          oneHanded: row.one_handed ?? 5,
+          twoHanded: row.two_handed ?? 5,
+          ranged: row.ranged ?? 5,
+          shieldBlock: row.shield_block ?? 0,
+          dodge: row.dodge_skill_rank ?? 0,
           armour: row.armour,
-          agility: row.agility,
         },
         lootTable,
         spawnRules: {

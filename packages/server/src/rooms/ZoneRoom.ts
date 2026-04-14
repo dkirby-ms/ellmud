@@ -18,6 +18,7 @@ import {
   type InventoryUpdateMessage,
   type DisplayItem,
   type PlayerStateMessage,
+  type EffectiveStatsMessage,
   type TelegraphMessage,
   type ZoneTransferMessage,
   type ExploredRoomData,
@@ -56,6 +57,7 @@ import {
   narrateBatchedEvent,
   DEFAULT_BATCHING_RULES,
 } from '../combat/index.js';
+import { calculateEquipmentBonuses, calculatePlayerEffectiveStats, calculateCreatureEffectiveStats, extractCombatItemStats, type EffectiveStats } from '../combat/stats.js';
 import { SoundSystem } from '../sound/index.js';
 import { TraceSystem } from '../systems/index.js';
 import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
@@ -98,6 +100,7 @@ import type { ZoneData } from '../zones/index.js';
 import { resolvePlayerHubTarget, resolvePlayerHubName } from '../zones/stronghold.js';
 import { convertZoneToRoomGraph } from '../zones/zone-adapter.js';
 import { getItemDefinition } from '../items/registry.js';
+import { getContentRegistry } from '../content/index.js';
 import type { Item } from '../generator/RoomGraph.js';
 import type { ExplorationRepository } from '../exploration/index.js';
 import { getExplorationRepository } from '../exploration/index.js';
@@ -162,6 +165,8 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private playerJoinTimes = new Map<string, number>();
   /** Maps playerId → character name for log formatting. */
   private characterNames = new Map<string, string>();
+  /** Cached effective combat stats for each player (base + equipment), loaded on join. */
+  private playerStatsCache = new Map<string, EffectiveStats>();
   /** Maps playerId → faction slug for death routing (cached on join). */
   private playerFactionSlugs = new Map<string, string>();
   /** Maps playerId → character flags (anon, rp) cached on join (Issue #370). */
@@ -519,6 +524,20 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.log(`Failed to load character for ${this.playerTag(playerId)}: ${err}`);
     }
 
+    // Load combat stats for the player (base stats from DB + equipment bonuses).
+    try {
+      const baseStats = await this.characterRepo.getBaseStats(playerId);
+      // Build equipment bonus from currently equipped items (if any).
+      const equippedSlots: { slot: string; stats: import('../combat/CombatState.js').ItemStats | null }[] = [];
+      // Equipment will be populated after inventory load; for now, cache base stats.
+      // We refresh below after inventory/loadout restoration.
+      const equipment = calculateEquipmentBonuses(equippedSlots);
+      const effective = calculatePlayerEffectiveStats(baseStats, equipment);
+      this.playerStatsCache.set(playerId, effective);
+    } catch (err) {
+      this.log(`Failed to load combat stats for ${this.playerTag(playerId)}: ${err}`);
+    }
+
     // Load character flags (anon, rp) into cache for room visibility (Issue #370)
     try {
       const flagsRepo = getCharacterFlagsRepository();
@@ -657,6 +676,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.log(`Failed to send equipment state for ${this.playerTag(playerId)}: ${err}`);
     }
 
+    // Rebuild stats cache with actual equipped items now that loadout is restored (#453)
+    await this.rebuildPlayerStatsCache(playerId);
+
     // Send current inventory to client on join
     this.sendInventoryUpdate(client, playerId);
   }
@@ -737,6 +759,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.players.delete(playerId);
       this.combatSystem.removeCombatant(playerId);
       this.characterNames.delete(playerId);
+      this.playerStatsCache.delete(playerId);
       this.playerFactionSlugs.delete(playerId);
       this.playerFlagsCache.delete(playerId);
       this.ownerPlayerIds.delete(playerId);
@@ -1221,11 +1244,18 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
 
     const creaturesInRoom = this.creatureManager.getCreaturesInRoom(player.currentRoomId)
-      .map(c => ({
-        id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription,
-        hp: c.hp, maxHp: c.maxHp, attack: c.attack, defence: c.defence,
-        armour: c.armour, agility: c.agility, dodgeSkillRank: c.dodgeSkillRank,
-      }));
+      .map(c => {
+        const effective = calculateCreatureEffectiveStats({
+          maxHp: c.maxHp, unarmed: c.unarmed, oneHanded: c.oneHanded,
+          twoHanded: c.twoHanded, ranged: c.ranged, shieldBlock: c.shieldBlock,
+          dodge: c.dodge, armour: c.armour,
+        });
+        return {
+          id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription,
+          hp: c.hp, maxHp: c.maxHp, attack: effective.attack,
+          armour: effective.armour, dodge: effective.dodge, shieldBlock: effective.shieldBlock,
+        };
+      });
 
     return {
       player,
@@ -1252,11 +1282,18 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       creaturesInRoom,
       resolveCreaturesInRoom: (roomId: string) =>
         this.creatureManager.getCreaturesInRoom(roomId)
-          .map(c => ({
-            id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription,
-            hp: c.hp, maxHp: c.maxHp, attack: c.attack, defence: c.defence,
-            armour: c.armour, agility: c.agility, dodgeSkillRank: c.dodgeSkillRank,
-          })),
+          .map(c => {
+            const effective = calculateCreatureEffectiveStats({
+              maxHp: c.maxHp, unarmed: c.unarmed, oneHanded: c.oneHanded,
+              twoHanded: c.twoHanded, ranged: c.ranged, shieldBlock: c.shieldBlock,
+              dodge: c.dodge, armour: c.armour,
+            });
+            return {
+              id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription,
+              hp: c.hp, maxHp: c.maxHp, attack: effective.attack,
+              armour: effective.armour, dodge: effective.dodge, shieldBlock: effective.shieldBlock,
+            };
+          }),
       creatureManager: this.creatureManager,
       resolveZoneExists: (slug: string) => this.knownZoneSlugs.has(slug),
       resolvePlayerByName: (name: string) => {
@@ -1276,6 +1313,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         return { player: ps, characterName: charName };
       },
       groupManager: this.groupManager,
+      playerEffectiveStats: this.playerStatsCache.get(player.sessionId),
     };
   }
 
@@ -1901,8 +1939,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           const player = this.players.get(action.targetCombatantId);
           if (player) {
             const displayName = this.characterNames.get(player.sessionId) ?? player.sessionId;
+            const eff = this.playerStatsCache.get(player.sessionId);
+            const playerOpts = eff
+              ? { attack: eff.attack, maxHp: eff.maxHp, armour: eff.armour, dodge: eff.dodge, shieldBlock: eff.shieldBlock }
+              : undefined;
             this.combatSystem.registerCombatant(
-              createCombatant(player.sessionId, displayName, player.currentRoomId, true),
+              createCombatant(player.sessionId, displayName, player.currentRoomId, true, playerOpts),
             );
           }
         }
@@ -1942,8 +1984,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
           const player = this.players.get(targetId);
           if (player) {
             const displayName = this.characterNames.get(player.sessionId) ?? player.sessionId;
+            const eff = this.playerStatsCache.get(player.sessionId);
+            const playerOpts = eff
+              ? { attack: eff.attack, maxHp: eff.maxHp, armour: eff.armour, dodge: eff.dodge, shieldBlock: eff.shieldBlock }
+              : undefined;
             this.combatSystem.registerCombatant(
-              createCombatant(player.sessionId, displayName, player.currentRoomId, true),
+              createCombatant(player.sessionId, displayName, player.currentRoomId, true, playerOpts),
             );
           }
         }
@@ -1958,8 +2004,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         break;
       }
       case 'combat_dodge': {
+        // Dodge is now passive — creatures auto-attack instead
         if (this.combatSystem.isInCombat(creature.id)) {
-          this.combatSystem.submitAction(creature.id, 'dodge');
+          this.combatSystem.submitAction(creature.id, 'strike');
         }
         break;
       }
@@ -3235,6 +3282,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             }
 
             await this.sendLoadoutAndStashUpdate(client, playerId);
+            await this.rebuildPlayerStatsCache(this.dbPlayerId(playerId));
             this.sendInventoryUpdate(client, playerId);
             client.send(MessageTypes.NARRATE, {
               text: `Equipped from inventory to ${message.targetSlot}.`,
@@ -3261,6 +3309,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
 
       await this.sendLoadoutAndStashUpdate(client, playerId);
+      await this.rebuildPlayerStatsCache(this.dbPlayerId(playerId));
       client.send(MessageTypes.NARRATE, {
         text: `Item equipped to ${message.targetSlot}.`,
         type: 'system',
@@ -3301,6 +3350,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
 
       await this.sendLoadoutAndStashUpdate(client, playerId);
+      await this.rebuildPlayerStatsCache(this.dbPlayerId(playerId));
       client.send(MessageTypes.NARRATE, {
         text: `Item unequipped from ${message.slot}.`,
         type: 'system',
@@ -3341,6 +3391,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
 
       await this.sendLoadoutAndStashUpdate(client, playerId);
+      await this.rebuildPlayerStatsCache(this.dbPlayerId(playerId));
       client.send(MessageTypes.NARRATE, {
         text: `Item swapped into ${message.targetSlot}.`,
         type: 'system',
@@ -3390,6 +3441,58 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         items: stashItems,
       } satisfies StashUpdateMessage);
     }
+  }
+
+  /**
+   * Rebuild the player stats cache from current base stats + equipped items.
+   * Called after loadout restoration on join and after any equip/unequip/swap.
+   */
+  private async rebuildPlayerStatsCache(playerId: string): Promise<void> {
+    try {
+      const baseStats = await this.characterRepo.getBaseStats(playerId);
+      const equippedSlots: { slot: string; stats: import('../combat/CombatState.js').ItemStats | null }[] = [];
+
+      if (this.loadoutService) {
+        const loadout = await this.loadoutService.getLoadout(playerId);
+        const registry = getContentRegistry();
+
+        for (const slot of EQUIPMENT_SLOT_ORDER) {
+          const equipped = loadout[slot];
+          if (!equipped) continue;
+
+          let itemStats: import('../combat/CombatState.js').ItemStats | null = null;
+          const def = registry?.isInitialized() ? registry.getItem(equipped.itemId) : undefined;
+          if (def) {
+            itemStats = extractCombatItemStats(def.type, def.baseStats as Record<string, unknown>);
+          }
+          equippedSlots.push({ slot, stats: itemStats });
+        }
+      }
+
+      const equipment = calculateEquipmentBonuses(equippedSlots);
+      const effective = calculatePlayerEffectiveStats(baseStats, equipment);
+      this.playerStatsCache.set(playerId, effective);
+      this.sendEffectiveStats(playerId);
+    } catch (err) {
+      this.log(`Failed to rebuild stats cache for ${this.playerTag(playerId)}: ${err}`);
+    }
+  }
+
+  /** Send effective stats (with equipment bonuses) to the client (#455). */
+  private sendEffectiveStats(playerId: string): void {
+    const cached = this.playerStatsCache.get(playerId);
+    if (!cached) return;
+
+    const client = this.findClient(playerId);
+    if (!client) return;
+
+    client.send(MessageTypes.EFFECTIVE_STATS, {
+      maxHp: cached.maxHp,
+      attack: cached.attack,
+      armour: cached.armour,
+      shieldBlock: cached.shieldBlock,
+      dodge: cached.dodge,
+    } satisfies EffectiveStatsMessage);
   }
 
   /** Send current inventory contents to client (on join and after inventory mutations). */

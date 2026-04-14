@@ -14,8 +14,9 @@ import type { PRNG } from '../generator/prng.js';
 import type { Creature, CreatureTemplate, CreatureAction } from './types.js';
 import { updateCreature, type CreatureWorldState } from './behavior.js';
 import { generateLoot, type LootItem } from './loot.js';
-import type { Combatant } from '../combat/CombatState.js';
+import type { Combatant, CombatStats } from '../combat/CombatState.js';
 import { createCombatant } from '../combat/CombatState.js';
+import { calculateCreatureEffectiveStats } from '../combat/stats.js';
 import { DROWNED_REVENANT } from './templates/drowned-revenant.js';
 import { getContentRegistry } from '../content/index.js';
 import type { CreaturePositionType } from '@ellmud/shared';
@@ -116,9 +117,13 @@ export class CreatureManager {
       name: template.name,
       hp: template.stats.maxHp,
       maxHp: template.stats.maxHp,
-      attack: template.stats.attack,
-      defence: template.stats.defence,
+      unarmed: template.stats.unarmed,
+      oneHanded: template.stats.oneHanded,
+      twoHanded: template.stats.twoHanded,
+      ranged: template.stats.ranged,
       armour: template.stats.armour,
+      dodge: template.stats.dodge,
+      shieldBlock: template.stats.shieldBlock,
       currentRoomId: roomId,
       behaviorState: 'idle',
       idleTicks: 0,
@@ -151,9 +156,13 @@ export class CreatureManager {
       name: template.name,
       hp: template.stats.maxHp,
       maxHp: template.stats.maxHp,
-      attack: template.stats.attack,
-      defence: template.stats.defence,
+      unarmed: template.stats.unarmed,
+      oneHanded: template.stats.oneHanded,
+      twoHanded: template.stats.twoHanded,
+      ranged: template.stats.ranged,
       armour: template.stats.armour,
+      dodge: template.stats.dodge,
+      shieldBlock: template.stats.shieldBlock,
       currentRoomId: roomId,
       behaviorState: 'idle',
       idleTicks: 0,
@@ -277,9 +286,13 @@ export class CreatureManager {
       name: template.name,
       hp: template.stats.maxHp,
       maxHp: template.stats.maxHp,
-      attack: template.stats.attack,
-      defence: template.stats.defence,
+      unarmed: template.stats.unarmed,
+      oneHanded: template.stats.oneHanded,
+      twoHanded: template.stats.twoHanded,
+      ranged: template.stats.ranged,
       armour: template.stats.armour,
+      dodge: template.stats.dodge,
+      shieldBlock: template.stats.shieldBlock,
       currentRoomId: roomId,
       behaviorState: 'idle',
       idleTicks: 0,
@@ -374,22 +387,29 @@ export class CreatureManager {
    * Creatures use the same combat resolution as players.
    */
   toCombatant(creature: Creature): Combatant {
-    // Use createCombatant to get default position fields
+    const baseStats: CombatStats = {
+      maxHp: creature.maxHp,
+      unarmed: creature.unarmed,
+      oneHanded: creature.oneHanded,
+      twoHanded: creature.twoHanded,
+      ranged: creature.ranged,
+      shieldBlock: creature.shieldBlock,
+      dodge: creature.dodge,
+      armour: creature.armour,
+    };
+    const effective = calculateCreatureEffectiveStats(baseStats);
     const combatant = createCombatant(
       creature.id,
       creature.name,
       creature.currentRoomId,
       false, // isPlayer
       {
-        maxHp: creature.maxHp,
-        attack: creature.attack,
-        defence: creature.defence,
-        armour: creature.armour,
-        agility: creature.agility ?? 0,
+        maxHp: effective.maxHp,
+        attack: effective.attack,
+        armour: effective.armour,
+        dodge: effective.dodge,
+        shieldBlock: effective.shieldBlock,
       },
-      creature.dodgeSkillRank ?? 0,
-      0, // evasionSkillRank
-      1, // level
     );
     
     // Override with current HP

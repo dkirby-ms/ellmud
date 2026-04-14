@@ -18,12 +18,12 @@ function testExitResolver(_roomId: string): string[] {
 
 function makePlayer(id: string, roomId = TEST_ROOM, stats?: Partial<CombatStats>): Combatant {
   const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-  return createCombatant(id, id, roomId, true, merged);
+  return createCombatant(id, id, roomId, true, { attack: merged.unarmed, maxHp: merged.maxHp, armour: merged.armour, shieldBlock: merged.shieldBlock, dodge: merged.dodge });
 }
 
 function makeCreature(id: string, roomId = TEST_ROOM, stats?: Partial<CombatStats>): Combatant {
   const merged = { ...DEFAULT_PLAYER_STATS, ...stats };
-  return createCombatant(id, id, roomId, false, merged);
+  return createCombatant(id, id, roomId, false, { attack: merged.unarmed, maxHp: merged.maxHp, armour: merged.armour, shieldBlock: merged.shieldBlock, dodge: merged.dodge });
 }
 
 // ─── Telegraph System Tests ───────────────────────────────────────────────
@@ -44,7 +44,7 @@ describe('Enemy Telegraph System (GDD §6.5)', () => {
   beforeEach(() => {
     combat = new CombatSystem(testExitResolver);
     player = makePlayer('player-1', TEST_ROOM);
-    creature = makeCreature('creature-1', TEST_ROOM, { attack: 10 });
+    creature = makeCreature('creature-1', TEST_ROOM, { unarmed: 10 });
     combat.registerCombatant(player);
     combat.registerCombatant(creature);
     combat.initiateCombat(creature.id, player.id);
@@ -100,24 +100,23 @@ describe('Enemy Telegraph System (GDD §6.5)', () => {
     it('decrements remainingTicks each tick until expiry', () => {
       combat.queueTelegraph(creature.id, player.id, testAbility);
 
-      // Tick 1: countdown 3 → 2
+      // Tick 1: countdown 3 → 2, creature auto-strikes via placeholder (10-2=8)
       let result = combat.resolveTick();
       expect(result.telegraphs).toHaveLength(1);
       expect(result.telegraphs?.[0].remainingTicks).toBe(2);
 
-      // Tick 2: countdown 2 → 1
+      // Tick 2: countdown 2 → 1, creature auto-strikes again (8)
       result = combat.resolveTick();
       expect(result.telegraphs).toHaveLength(1);
       expect(result.telegraphs?.[0].remainingTicks).toBe(1);
 
-      // Tick 3: countdown 1 → 0, ability fires
+      // Tick 3: countdown 1 → 0, ability fires (18-2=16)
       result = combat.resolveTick();
       expect(result.telegraphs).toHaveLength(0); // No more telegraphs
 
-      // Check that damage was applied (18 damage from ability - 2 armour = 16)
+      // Total player damage: 8 (tick 1) + 8 (tick 2) + 16 (ability) = 32
       const playerAfter = combat.getCombatant(player.id);
-      const expectedHp = 100 - 16; // Initial HP 100 minus ability damage
-      expect(playerAfter?.hp).toBe(expectedHp);
+      expect(playerAfter?.hp).toBe(100 - 32);
     });
 
     it('broadcasts telegraph on each countdown tick', () => {
@@ -151,12 +150,14 @@ describe('Enemy Telegraph System (GDD §6.5)', () => {
       combat.queueTelegraph(creature.id, player.id, testAbility);
 
       // Advance to ability execution (3 ticks)
+      // Ticks 1-2: creature auto-strikes (10-2=8 each), Tick 3: ability fires (18-2=16)
       combat.resolveTick();
       combat.resolveTick();
       combat.resolveTick();
 
       const playerAfter = combat.getCombatant(player.id);
-      const expectedDamage = testAbility.damage - player.armour; // 18 - 2 = 16
+      // Total damage: 8 + 8 + 16 = 32
+      const expectedDamage = 8 + 8 + (testAbility.damage - player.armour);
       expect(playerAfter?.hp).toBe(playerInitialHp - expectedDamage);
     });
 
@@ -167,26 +168,28 @@ describe('Enemy Telegraph System (GDD §6.5)', () => {
       // Player blocks on tick 3
       combat.resolveTick();
       combat.resolveTick();
-      combat.submitAction(player.id, 'dodge'); // dodge mitigates
+      combat.submitAction(player.id, 'block'); // block uses flat reduction
       combat.resolveTick();
 
       const playerAfter = combat.getCombatant(player.id);
-      // Dodge halves damage: (18 * 0.5) - 2 = 9 - 2 = 7
-      const expectedDamage = Math.floor(testAbility.damage * 0.5) - player.armour;
-      expect(playerAfter?.hp).toBe(playerInitialHp - expectedDamage);
+      // Ticks 1-2: creature auto-strikes (8 each). Tick 3: ability with block: 18 - 2 - 5 = 11
+      const blockReduction = 5;
+      const abilityDamage = testAbility.damage - player.armour - blockReduction;
+      const totalDamage = 8 + 8 + abilityDamage; // 8 + 8 + 11 = 27
+      expect(playerAfter?.hp).toBe(playerInitialHp - totalDamage);
     });
   });
 
   describe('creature behavior integration', () => {
-    it('creature does not queue actions while winding up', () => {
+    it('creature auto-strikes via placeholder while winding up', () => {
       combat.queueTelegraph(creature.id, player.id, testAbility);
 
-      // Resolve tick — creature should not auto-attack while winding up
+      // Resolve tick — creature has a strike placeholder during wind-up
       const result = combat.resolveTick();
 
-      // Only telegraph, no strike events
+      // Creature still deals base attack damage via placeholder strike
       const strikeEvents = result.events.filter(e => e.type === 'strike' && e.actorId === creature.id);
-      expect(strikeEvents).toHaveLength(0);
+      expect(strikeEvents).toHaveLength(1);
     });
 
     it('creature returns to normal attacks after telegraph completes', () => {
@@ -206,7 +209,7 @@ describe('Enemy Telegraph System (GDD §6.5)', () => {
 
   describe('multiple creatures telegraphing', () => {
     it('tracks separate wind-up states for multiple creatures', () => {
-      const creature2 = makeCreature('creature-2', TEST_ROOM, { attack: 8 });
+      const creature2 = makeCreature('creature-2', TEST_ROOM, { unarmed: 8 });
       combat.registerCombatant(creature2);
       combat.initiateCombat(creature2.id, player.id);
 

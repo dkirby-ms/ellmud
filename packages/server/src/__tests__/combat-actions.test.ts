@@ -90,19 +90,51 @@ describe('resolveStrike', () => {
 // ─── resolveDodge ───────────────────────────────────────────────────────────
 
 describe('resolveDodge', () => {
-  it('produces a dodge event with defensive stance narration', () => {
+  it('produces a dodge event with passive dodge narration', () => {
     const combatant = makePlayer('p1', 'Rogue');
     const event = resolveDodge(combatant);
 
     expect(event.type).toBe('dodge');
     expect(event.actorId).toBe('p1');
     expect(event.actorName).toBe('Rogue');
-    expect(event.narration).toContain('defensive stance');
+    expect(event.narration).toContain('dodges the attack');
   });
 
   it('does not include target or damage fields', () => {
     const combatant = makePlayer('p1', 'Rogue');
     const event = resolveDodge(combatant);
+
+    expect(event.targetId).toBeUndefined();
+    expect(event.damage).toBeUndefined();
+  });
+});
+
+// ─── resolveDodge (passive dodge narration) ─────────────────────────────────
+
+describe('resolveDodge (passive)', () => {
+  it('produces a dodge event with attacker name in narration', () => {
+    const combatant = makePlayer('p1', 'Rogue');
+    const event = resolveDodge(combatant, 'Revenant');
+
+    expect(event.type).toBe('dodge');
+    expect(event.actorId).toBe('p1');
+    expect(event.actorName).toBe('Rogue');
+    expect(event.narration).toContain('Rogue');
+    expect(event.narration).toContain('dodges');
+    expect(event.narration).toContain('Revenant');
+  });
+
+  it('produces a dodge event without attacker name', () => {
+    const combatant = makePlayer('p1', 'Rogue');
+    const event = resolveDodge(combatant);
+
+    expect(event.type).toBe('dodge');
+    expect(event.narration).toContain('dodges the attack');
+  });
+
+  it('does not include target or damage fields', () => {
+    const combatant = makePlayer('p1', 'Rogue');
+    const event = resolveDodge(combatant, 'Goblin');
 
     expect(event.targetId).toBeUndefined();
     expect(event.damage).toBeUndefined();
@@ -204,15 +236,16 @@ describe('Damage Calculation Edge Cases', () => {
     expect(result.finalDamage).toBe(1);
   });
 
-  it('dodge vs dodge produces zero damage', () => {
-    const result = calculateDamage(100, 0, 'dodge', 'dodge');
-    expect(result.finalDamage).toBe(0);
+  it('strike vs strike deals full damage (no dodge reduction)', () => {
+    // With passive dodge, strike vs strike has 1.0x multiplier: 100 * 1.0 - 0 = 100
+    const result = calculateDamage(100, 0, 'strike', 'strike');
+    expect(result.finalDamage).toBe(100);
   });
 
-  it('strike vs dodge with exact armour match yields minimum 1', () => {
-    // attack=4, armour=2: 4 * 0.5 - 2 = 0 → clamped to 1
-    const result = calculateDamage(4, 2, 'strike', 'dodge');
-    expect(result.finalDamage).toBe(1);
+  it('strike vs strike with armour yields at least minimum 1', () => {
+    // attack=4, armour=2: 4 * 1.0 - 2 = 2
+    const result = calculateDamage(4, 2, 'strike', 'strike');
+    expect(result.finalDamage).toBe(2);
   });
 
   it('equal attack and armour still deals 1 damage on strike vs strike', () => {

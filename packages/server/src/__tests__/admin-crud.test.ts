@@ -36,8 +36,8 @@ const ENTITY_FIXTURES: Record<string, { create: Record<string, unknown>; update:
     update: { name: 'Sharpened Blade', description: 'A newly honed sword' },
   },
   creatures: {
-    create: { name: 'Drowned Revenant', type: 'drowned_revenant', hp: 50, maxHp: 50, attack: 8, defence: 4, armour: 2 },
-    update: { name: 'Greater Drowned Revenant', hp: 80, maxHp: 80 },
+    create: { name: 'Drowned Revenant', type: 'drowned_revenant', maxHp: 50, unarmed: 5, oneHanded: 8, twoHanded: 3, ranged: 1, shieldBlock: 0, dodge: 0, armour: 2 },
+    update: { name: 'Greater Drowned Revenant', maxHp: 80, oneHanded: 12 },
   },
   modifiers: {
     create: { name: 'Darkness', type: 'darkness', description: 'Vision is severely limited', effect: { visibility: -0.5 } },

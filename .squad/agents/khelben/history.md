@@ -25,6 +25,8 @@
 - **CI/CD trigger pattern:** After promotion workflows push to uat/prod, they now explicitly trigger `ci-cd.yml` via `gh workflow run ci-cd.yml --ref <branch>` using `GH_TOKEN`. A 5-second sleep gives GitHub time to process the push before triggering.
 - **workflow_dispatch needs actions:write:** `gh workflow run` uses the workflow_dispatch API, which requires `actions: write` permission on GITHUB_TOKEN. `contents: write` alone is not enough — the API returns HTTP 403 without it. Both promote workflows now carry both permissions.
 
+- **Pre-commit hooks:** Husky + lint-staged installed. Pre-commit hook runs `eslint --fix` on staged `.ts`/`.tsx` files. Config lives in root `package.json` under `lint-staged` key. Hook file: `.husky/pre-commit`. `prepare` script in package.json ensures hooks install on `npm install`.
+
 ### Workflow Audit (2025-01)
 
 - **14 workflows total:** 4 core CI/CD (ci-cd, release, scheduled-uat-promote, squad-promote) + 10 Squad (ci, docs, heartbeat, insider-release, issue-assign, label-enforce, preview, triage, release, label-sync).

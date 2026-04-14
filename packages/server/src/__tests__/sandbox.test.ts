@@ -803,7 +803,7 @@ describe('Combat Sandbox', () => {
       expect(updated?.hp).toBe(200);
     });
 
-    it('sets first creature DEF by index via "sandbox set 1 def 0"', () => {
+    it('sets first creature armour by index via "sandbox set 1 armour 0"', () => {
       // Spawn a creature first
       const spawnCtx = buildCtx(sandboxArena, ['spawn', 'drowned_revenant'], {
         combatSystem, creatureManager,
@@ -821,16 +821,16 @@ describe('Combat Sandbox', () => {
       );
       combatSystem.registerCombatant(creatureCombatant);
 
-      const ctx = buildCtx(sandboxArena, ['set', '1', 'def', '0'], {
+      const ctx = buildCtx(sandboxArena, ['set', '1', 'armour', '0'], {
         combatSystem, creatureManager,
       });
       const result = handleCommand('sandbox', ctx);
       const text = narrationText(result).toLowerCase();
 
       expect(text).toContain('set');
-      // Creature's defence should be overridden to 0
+      // Creature's armour should be overridden to 0
       const updated = combatSystem.getCombatant(creature.id);
-      expect(updated?.defence).toBe(0);
+      expect(updated?.armour).toBe(0);
     });
 
     it('sets creature stat by name match via "sandbox set revenant atk 99"', () => {
@@ -931,8 +931,8 @@ describe('Combat Sandbox', () => {
       // Should display the template's stats
       expect(text.toLowerCase()).toContain('drowned revenant');
       expect(text).toContain(String(DROWNED_REVENANT.stats.maxHp));    // 50
-      expect(text).toContain(String(DROWNED_REVENANT.stats.attack));    // 10
-      expect(text).toContain(String(DROWNED_REVENANT.stats.defence));   // 3
+      expect(text).toContain(String(DROWNED_REVENANT.stats.unarmed));    // 10
+      expect(text).toContain(String(DROWNED_REVENANT.stats.armour));    // 3
       expect(text).toContain(String(DROWNED_REVENANT.stats.armour));    // 3
     });
 
@@ -979,7 +979,7 @@ describe('Combat Sandbox', () => {
       combatSystem.registerCombatant(playerCombatant);
 
       const originalAtk = playerCombatant.attack;
-      const originalDef = playerCombatant.defence;
+      const originalDef = playerCombatant.armour;
 
       // Apply overrides
       const setCtx1 = buildCtx(sandboxArena, ['set', 'player', 'atk', '999'], {
@@ -987,13 +987,13 @@ describe('Combat Sandbox', () => {
       });
       handleCommand('sandbox', setCtx1);
 
-      const setCtx2 = buildCtx(sandboxArena, ['set', 'player', 'def', '0'], {
+      const setCtx2 = buildCtx(sandboxArena, ['set', 'player', 'armour', '0'], {
         player, combatSystem, creatureManager,
       });
       handleCommand('sandbox', setCtx2);
 
       expect(combatSystem.getCombatant(player.sessionId)?.attack).toBe(999);
-      expect(combatSystem.getCombatant(player.sessionId)?.defence).toBe(0);
+      expect(combatSystem.getCombatant(player.sessionId)?.armour).toBe(0);
 
       // Clear overrides
       const clearCtx = buildCtx(sandboxArena, ['clear'], {
@@ -1004,7 +1004,7 @@ describe('Combat Sandbox', () => {
 
       expect(text).toMatch(/clear|restore|reset/);
       expect(combatSystem.getCombatant(player.sessionId)?.attack).toBe(originalAtk);
-      expect(combatSystem.getCombatant(player.sessionId)?.defence).toBe(originalDef);
+      expect(combatSystem.getCombatant(player.sessionId)?.armour).toBe(originalDef);
     });
 
     it('reports appropriately when no active overrides exist', () => {
@@ -1036,7 +1036,6 @@ describe('Combat Sandbox', () => {
       // Capture pre-override snapshot
       const snapshot = {
         attack: playerCombatant.attack,
-        defence: playerCombatant.defence,
         armour: playerCombatant.armour,
         maxHp: playerCombatant.maxHp,
       };
@@ -1056,9 +1055,8 @@ describe('Combat Sandbox', () => {
 
       const restored = combatSystem.getCombatant(player.sessionId)!;
       expect(restored.attack).toBe(snapshot.attack);
-      expect(restored.defence).toBe(snapshot.defence);
-      // armour should be unchanged — it was never overridden
       expect(restored.armour).toBe(snapshot.armour);
+      expect(restored.maxHp).toBe(snapshot.maxHp);
     });
   });
 
@@ -1232,8 +1230,7 @@ describe('Combat Sandbox', () => {
 
       const playerCombatant = createCombatant(
         'player-1', 'player-1', ARENA_ROOM_ID, true,
-        { ...DEFAULT_PLAYER_STATS, agility: 10 },
-        5, // dodgeSkillRank
+        { dodge: 5 },
       );
       const creatureCombatant = createCombatant(
         'creature-sandbox-0', 'Drowned Revenant', ARENA_ROOM_ID, false,
@@ -1244,8 +1241,8 @@ describe('Combat Sandbox', () => {
       dodgeCombatSystem.registerCombatant(creatureCombatant);
       dodgeCombatSystem.initiateCombat('creature-sandbox-0', 'player-1');
 
-      // Queue the player to dodge (default auto-attacks current target)
-      dodgeCombatSystem.submitAction('player-1', 'dodge');
+      // Queue the player to strike (passive dodge is automatic)
+      dodgeCombatSystem.submitAction('player-1', 'strike');
 
       const tickResult = dodgeCombatSystem.resolveTick();
 
@@ -1563,13 +1560,10 @@ describe('Combat Sandbox', () => {
       }));
 
       const creatures = creatureManager.getCreaturesInRoom(ARENA_ROOM_ID);
-      const creatureCombatant = createCombatant(
-        creatures[0]!.id, creatures[0]!.name, ARENA_ROOM_ID, false,
-        DROWNED_REVENANT.stats,
-      );
+      const creatureCombatant = creatureManager.toCombatant(creatures[0]!);
       combatSystem.registerCombatant(creatureCombatant);
 
-      handleCommand('sandbox', buildCtx(sandboxArena, ['set', creatures[0]!.id, 'atk', '77'], {
+      handleCommand('sandbox', buildCtx(sandboxArena, ['set', creatures[0]!.id, 'armour', '77'], {
         player, combatSystem, creatureManager,
       }));
 
@@ -1593,7 +1587,7 @@ describe('Combat Sandbox', () => {
       const loadedCreatures = creatureManager.getCreaturesInRoom(ARENA_ROOM_ID);
       expect(loadedCreatures).toHaveLength(1);
       const loadedCombatant = combatSystem.getCombatant(loadedCreatures[0]!.id);
-      expect(loadedCombatant?.attack).toBe(77);
+      expect(loadedCombatant?.armour).toBe(77);
     });
 
     it('load clears previous arena state before loading', () => {

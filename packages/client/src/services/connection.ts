@@ -24,6 +24,7 @@ import {
   type ToggleFlagMessage,
   type InventoryUpdateMessage,
   type HelpDataMessage,
+  type EffectiveStatsMessage,
 } from '@ellmud/shared';
 
 const WS_ENDPOINT = import.meta.env.VITE_WS_URL ??
@@ -45,6 +46,7 @@ export interface MessageHandlers {
   onRoomOccupants?: (msg: RoomOccupantsMessage) => void;
   onFlagState?: (msg: FlagStateMessage) => void;
   onHelpData?: (msg: HelpDataMessage) => void;
+  onEffectiveStats?: (msg: EffectiveStatsMessage) => void;
   onError: (code: number, message: string) => void;
   onLeave: (code: number) => void;
 }
@@ -102,6 +104,9 @@ export async function connect(
   }
   if (handlers.onHelpData) {
     room.onMessage(MessageTypes.HELP_DATA, handlers.onHelpData);
+  }
+  if (handlers.onEffectiveStats) {
+    room.onMessage(MessageTypes.EFFECTIVE_STATS, handlers.onEffectiveStats);
   }
 
   room.onError((code, message) => handlers.onError(code, message ?? 'Unknown error'));
@@ -166,6 +171,9 @@ export async function switchRoom(
   }
   if (handlers.onHelpData) {
     newRoom.onMessage(MessageTypes.HELP_DATA, handlers.onHelpData);
+  }
+  if (handlers.onEffectiveStats) {
+    newRoom.onMessage(MessageTypes.EFFECTIVE_STATS, handlers.onEffectiveStats);
   }
 
   newRoom.onError((code, message) => handlers.onError(code, message ?? 'Unknown error'));

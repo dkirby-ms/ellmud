@@ -17,10 +17,13 @@ export const GUTTERSPAWN: CreatureTemplate = {
   name: 'Gutterspawn',
   stats: {
     maxHp: 15,
-    attack: 5,
-    defence: 1,
+    unarmed: 5,
+    oneHanded: 0,
+    twoHanded: 0,
+    ranged: 0,
+    shieldBlock: 0,
+    dodge: 7,
     armour: 0,
-    agility: 7,
   },
   lootTable: [
     {

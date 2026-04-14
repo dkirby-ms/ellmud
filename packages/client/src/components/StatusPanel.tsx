@@ -15,7 +15,7 @@ import { MinimapWidget, type MinimapWidgetProps } from "./map/MinimapWidget.js";
 import { EquipmentSilhouette } from "./EquipmentSilhouette.js";
 import { RoomOccupants } from "./RoomOccupants.js";
 import { CombatHUD } from "./CombatHUD.js";
-import { useAppContext, type StatusEffect, type EnemyStatus } from "../store.js";
+import { useAppContext, type StatusEffect, type EnemyStatus, type CombatStats, type EffectiveStats } from "../store.js";
 import { useVersion } from "../hooks/useVersion.js";
 
 // ─── Status Effect Classifier ────────────────────────────────────────────────
@@ -229,6 +229,8 @@ export function StatusPanel({
             soundCues={state.soundCues}
             onSendCommand={onSendCommand}
             onOpenInventory={onOpenInventory}
+            combatStats={state.combatStats}
+            effectiveStats={state.effectiveStats}
           />
         )}
       </div>
@@ -387,9 +389,11 @@ interface CharacterTabProps {
   soundCues: Array<{ id: string; text: string; timestamp: number }>;
   onSendCommand: (cmd: string) => void;
   onOpenInventory: () => void;
+  combatStats: CombatStats;
+  effectiveStats: EffectiveStats | null;
 }
 
-function CharacterTab({ soundCues, onSendCommand, onOpenInventory }: CharacterTabProps) {
+function CharacterTab({ soundCues, onSendCommand, onOpenInventory, combatStats, effectiveStats }: CharacterTabProps) {
   return (
     <>
       {/* Sound Cues */}
@@ -410,6 +414,58 @@ function CharacterTab({ soundCues, onSendCommand, onOpenInventory }: CharacterTa
             <p className="text-text-disabled text-xs font-sans">Silence.</p>
           )}
         </div>
+      </div>
+
+      {/* Combat Skills */}
+      <div className="p-4 border-t border-border-muted" data-testid="combat-stats">
+        <h3 className="text-text-secondary text-xs mb-3 font-sans">COMBAT SKILLS</h3>
+
+        {/* Effective Stats (with equipment bonuses) */}
+        {effectiveStats && (
+          <div className="mb-3" data-testid="effective-stats">
+            <h4 className="text-text-secondary text-xs mb-1.5 font-sans">⚔ Effective Stats</h4>
+            <div className="space-y-1 pl-2">
+              <EffectiveStatRow label="Attack" effective={effectiveStats.attack} />
+              <EffectiveStatRow label="Armour" effective={effectiveStats.armour} base={combatStats.armour} />
+              <EffectiveStatRow label="Shield Block" effective={effectiveStats.shieldBlock} base={combatStats.shieldBlock} />
+              <EffectiveStatRow label="Dodge" effective={effectiveStats.dodge} base={combatStats.dodge} />
+              <EffectiveStatRow label="Max HP" effective={effectiveStats.maxHp} base={combatStats.maxHp} />
+            </div>
+          </div>
+        )}
+
+        {/* Weapon Skills */}
+        <div className="mb-3">
+          <h4 className="text-text-secondary text-xs mb-1.5 font-sans">⚔ Weapon Skills</h4>
+          <div className="space-y-1 pl-2">
+            <StatRow label="Unarmed" value={combatStats.unarmed} />
+            <StatRow label="One-Handed" value={combatStats.oneHanded} />
+            <StatRow label="Two-Handed" value={combatStats.twoHanded} />
+            <StatRow label="Ranged" value={combatStats.ranged} />
+          </div>
+        </div>
+
+        {/* Defence */}
+        {!effectiveStats && (
+          <div className="mb-3">
+            <h4 className="text-text-secondary text-xs mb-1.5 font-sans">🛡 Defence</h4>
+            <div className="space-y-1 pl-2">
+              <StatRow label="Dodge" value={combatStats.dodge} />
+              <StatRow label="Shield Block" value={combatStats.shieldBlock} />
+              <StatRow label="Armour" value={combatStats.armour} />
+            </div>
+          </div>
+        )}
+
+        {/* Health */}
+        {!effectiveStats && (
+          <div>
+            <h4 className="text-text-secondary text-xs mb-1.5 font-sans">❤ Health</h4>
+            <div className="space-y-1 pl-2">
+              <StatRow label="Max HP" value={combatStats.maxHp} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Quick Actions */}
@@ -436,13 +492,32 @@ function CharacterTab({ soundCues, onSendCommand, onOpenInventory }: CharacterTa
           </button>
         </div>
       </div>
-
-      {/* Future: Skills, Reputation */}
-      <div className="p-4 border-t border-border-muted">
-        <p className="text-text-disabled text-xs font-sans italic">
-          Skills &amp; reputation coming soon.
-        </p>
-      </div>
     </>
+  );
+}
+
+/** Single stat row: label left-aligned, value right-aligned in monospace */
+function StatRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-text-primary text-xs font-sans">{label}</span>
+      <span className="text-text-primary text-xs font-mono">{value}</span>
+    </div>
+  );
+}
+
+/** Effective stat row: shows effective value with optional base context */
+function EffectiveStatRow({ label, effective, base }: { label: string; effective: number; base?: number }) {
+  const showBase = base !== undefined && base !== effective;
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-text-primary text-xs font-sans">{label}</span>
+      <span className="text-text-primary text-xs font-mono">
+        {effective}
+        {showBase && (
+          <span className="text-text-disabled ml-1">(base: {base})</span>
+        )}
+      </span>
+    </div>
   );
 }
