@@ -1,3 +1,11 @@
+# [0.2.0-dev.38](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.37...v0.2.0-dev.38) (2026-04-14)
+
+
+### Features
+
+* **downing:** extend bleed-out to 60 ticks (~1 minute) ([b1f4574](https://github.com/dkirby-ms/ellmud/commit/b1f4574bb5f20e6b66ae3986df51a46590383896))
+* rework downed state with grace period, HP drain, and stabilize-revive ([feb8326](https://github.com/dkirby-ms/ellmud/commit/feb83264bb05461abb1a69ef0d3c8e51d36dc43c))
+
 # [0.2.0-dev.37](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.36...v0.2.0-dev.37) (2026-04-14)
 
 
