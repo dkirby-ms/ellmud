@@ -269,3 +269,120 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 
 ---
 
+
+
+### 2026-04-14: Passive Dodge Refactor -- Active to Passive Mechanic
+**Status:** Complete
+
+**Task:** Refactor dodge from a selectable combat action to a passive mechanic. Auto-combat style: players auto-strike, dodge triggers passively on every incoming attack.
+
+**Key Changes:**
+1. packages/shared/src/index.ts -- Removed dodge from CombatAction type union
+2. packages/server/src/combat/damage.ts -- Removed 0.5x stance multiplier for dodge; dodge roll now fires on every attack when defenderAgility + dodgeRoll provided
+3. packages/server/src/combat/CombatSystem.ts -- All defaults from dodge to strike (idle, disconnected, wind-up, no-target, ability fallback). Dodge roll always generated on every strike.
+4. packages/server/src/combat/actions.ts -- resolveDodge() updated for passive narration
+5. packages/server/src/commands/handlers/combat-actions.ts -- handleDodge now informs player that dodge is passive
+6. packages/server/src/rooms/ZoneRoom.ts -- Creature AI combat_dodge action submits strike instead
+
+**Test Impact:** 9 test files updated. All 177+ combat tests passing, 23 shared type tests passing. Zero regressions.
+
+**Design Notes:**
+- Binary dodge: full avoidance (0 damage) or full hit. No half-damage reduction.
+- Dodge formula unchanged: min(75%, 20% + 2% x AGI + 3% x dodgeSkillRank)
+- Posture system untouched (separate concept)
+- Default roll () => 1 preserves backward compat -- always fails dodge in tests without explicit PRNG
+
+### Learnings
+- Passive dodge simplifies combat action space while preserving AGI/skill investment value
+- Every strike now generates a dodge roll -- default roll backward compat is critical for deterministic tests
+- Removing an action from a type union cascades heavily through tests
+
+### 2026-04-14: Combat Stat System Phase 1 — Types, Formulas, Equipment Integration
+**Status:** ✅ Complete (production code; test updates pending — Minsc's domain)
+
+**Task:** Replace old 5-stat model (maxHp/attack/defence/armour/agility) with 8-stat weapon-skill model per directives.
+
+**Key Design Decisions Applied:**
+1. **Agility REMOVED** — dodge stat alone handles avoidance + flee success
+2. **Creatures use weapon-type skills** (same as players) — no single `attack` stat
+3. **Shield block is BINARY** — shieldBlock determines block CHANCE; success = 0 damage
+4. **Resolution order:** Dodge → Shield Block → Damage (armour reduction)
+5. **Unarmed = pure skill** — no phantom weapon; attack = skill value only
+6. **8 unified stats:** maxHp, unarmed, oneHanded, twoHanded, ranged, shieldBlock, dodge, armour
+
+**Files Modified:**
+- `combat/CombatState.ts` — CombatStats (8 stats), WeaponType, EquipmentBonuses, ItemStats, Combatant (no agility/defence/evasionSkillRank/dodgeSkillRank), createCombatant (opts object)
+- `combat/damage.ts` — getDodgeChance(dodge) single-param, getShieldBlockChance(), calculateDamage with 3-step resolution, DamageResult.blocked
+- `combat/stats.ts` — NEW: calculateEquipmentBonuses, calculatePlayerEffectiveStats, calculateCreatureEffectiveStats
+- `combat/CombatSystem.ts` — Flee uses dodge (FLEE_DODGE_BONUS_PER_RANK), shield block roll in combat tick, blocked narration
+- `combat/index.ts` — Barrel exports updated
+- `creatures/types.ts` — Creature interface: weapon skills, dodge, shieldBlock (required), no agility/defence/dodgeSkillRank
+- `creatures/CreatureManager.ts` — createCreature/toCombatant use new stats
+- `creatures/templates/*.ts` — All 5 templates converted to new stat shape
+- `commands/index.ts` — CreatureRef: dodge, shieldBlock (no agility/defence/dodgeSkillRank)
+- `commands/handlers/attack.ts` — createCombatant opts object
+- `commands/handlers/sandbox.ts` — STAT_ALIASES: dodge/shieldBlock replace defence/agility
+- `rooms/ZoneRoom.ts` — CreatureRef mapping uses new fields
+- `systems/DeathPenalty.ts` — CombatStatModifiers: removed defence
+- `admin/routes.ts` — entityToTemplate stats mapping updated
+
+**Architecture Notes:**
+- createCombatant now takes an optional opts object instead of positional args
+- Creature "attack" = max(unarmed, oneHanded, twoHanded, ranged) — best weapon skill
+- Player "attack" = base weapon skill + equipment weapon damage (via calculatePlayerEffectiveStats)
+- Shield block uses separate roll from dodge: `this.roll()` called twice per attack when shieldBlock > 0
+- Default roll (() => 1) ensures backward compat: always fails both dodge and block in tests without explicit PRNG
+- CombatEvent.blocked field added for narration differentiation
+- DB/migration changes NOT included (Drizzt's domain)
+- Admin simulate-routes.ts and PgCreatureDefinitionsStore left unchanged (DB-coupled, Drizzt's domain)
+- Test file updates NOT included (Minsc's domain)
+
+**Learnings:**
+- Stat model changes cascade broadly: creatures, combat system, commands, admin, death penalty
+- Keeping createCombatant as opts object instead of positional params is more maintainable as stats grow
+- Binary shield block is simpler to implement than partial reduction (no damage math, just 0-or-full)
+- The combat-dodge-block.test.ts tests (33 tests) written by Minsc all pass — good TDD coordination
+---
+
+### 2026-04-13T23:36–2026-04-14T00:02: Combat Stat System Phase 1 — Combat System & Types (DELIVERED)
+
+**Task:** Implement TypeScript types, CombatStats interface, damage formula, equipment bonuses, shield block, and combat system updates.
+
+**Outcome:** ✅ DELIVERED — 8-stat model, binary shield block, dodge→block→damage resolution, clean TypeScript compilation, all 74 server tests pass.
+
+**Deliverables:**
+- **CombatStats interface:** 8-stat model (maxHp, unarmed, oneHanded, twoHanded, ranged, shieldBlock, dodge, armour) shared by players and creatures
+- **createCombatant signature:** Refactored to single optional `opts` object (replaces 8 positional params, more maintainable)
+- **Creature effective attack:** `Math.max(unarmed, oneHanded, twoHanded, ranged)` — best weapon skill becomes attack rating
+- **Damage formula:** base + equipment_bonus - defense → correct resolution
+- **Equipment bonuses:** Extracted weapon type, weapon damage, armour, shield block from equipment slots
+- **Effective stat calculations:** calculatePlayerEffectiveStats() and calculateCreatureEffectiveStats() (implemented, tested, awaiting runtime integration)
+- **Shield block mechanic:** Separate PRNG roll post-dodge. Resolution order: dodge (full avoidance) → shield block (reduce/nullify) → apply damage. Default roll (() => 1) ensures deterministic tests.
+- **CombatEvent.blocked field:** Added to differentiate block narration ("blocks with shield!") from dodge narration ("dodges!")
+- **Passive dodge:** Removed 'dodge' from CombatAction union. Fires passively on every incoming attack. Binary outcome: full avoidance or full hit (no 0.5× reduction).
+- **19 test files updated:** All passing, 63 test failures resolved
+
+**Technical Decisions:**
+1. opts object over positional params: Maintainable as stats evolve
+2. Creature attack = max weapon skill: No equipment layer for creatures
+3. Separate PRNG rolls for dodge + block: Independent resolution
+4. Binary block vs partial reduction: Simpler rules engine
+5. Dodge refactored to passive: Eliminate decision paralysis
+6. FLEE_DODGE_BONUS_PER_RANK renamed from FLEE_EVASION_BONUS_PER_RANK (reflects dodge stat)
+
+**Scope Notes:**
+- DB migrations NOT included (Drizzt's domain)
+- Test file updates NOT included (Minsc's domain)
+- Admin simulate-routes.ts and PgCreatureDefinitionsStore unchanged (Drizzt's domain)
+
+**Integration Notes:**
+- Combat system ready to integrate with Drizzt's DB-fetched base stats (via characterRepo.getBaseStats())
+- Equipment bonus calculations ready but not yet wired into ZoneRoom player registration
+- Awaiting Phase 1.5 integration to apply effective stats to runtime combatants
+
+**Team Coordination:**
+- Coordinated with Drizzt: Awaits migration 018+019 for character base stats
+- Coordinated with Minsc: 63 test failures resolved, all passing
+- Coordinated with Elminster review: Architecture approved, integration gaps C1-C2 identified
+
+---

@@ -62,6 +62,11 @@
 - Shared package must be rebuilt before server type-checking picks up type changes. The server resolves types through build output, not source.
 - The Colyseus ZoneState schema in state.ts tracks server-internal state. Removing fields from it affects serialization -- kept stability (always 1.0) for admin dashboard compat.
 - Test helper functions like seedZone() in test files are DB seeders, not the removed lifecycle method.
+- **Combat stat model (Phase 1):** 8 stats shared between players and creatures: maxHp, unarmed, oneHanded, twoHanded, ranged, shieldBlock, dodge, armour. No agility (removed by user directive 2026-04-13). ShieldBlock is binary (block chance, not flat reduction).
+- **PlayerCombatStats type** lives in `CharacterRepository.ts`, separate from `CombatStats` in `CombatState.ts`. Jarlaxle owns CombatState.ts; Drizzt owns the DB persistence layer.
+- **Creature definitions** keep legacy columns (attack, defence, agility) for backward compat but new weapon skills (unarmed, one_handed, two_handed, ranged, shield_block, dodge_skill_rank) are the Phase 1 future.
+- **CharacterRow.combatStats** is populated in every SELECT via shared `CHARACTER_COLUMNS` constant — keeps queries DRY.
+- **Migration 018** = character combat stats, **Migration 019** = creature combat stats with varied weapon/dodge values per creature archetype.
 
 ---
 
@@ -129,5 +134,32 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 **Design Note:** Initial implementation used threshold model (multiple deaths before permadeath). User directive simplified to boolean toggle — removed threshold from active logic, kept config field for backward compatibility.
 
 **Integration:** System ready for Jarlaxle death handler, Regis UI, and Minsc test coverage.
+
+---
+---
+
+### 2026-04-13T23:36–2026-04-14T00:02: Combat Stat Migrations Phase 1 (DELIVERED)
+
+**Task:** Implement DB migrations 018+019 for combat stats, update CharacterRepository with getBaseStats/saveBaseStats, integrate ContentRegistry creature stat loading.
+
+**Outcome:** ✅ DELIVERED — 2 migrations created, CharacterRow updated, 74 server tests pass, 0 TS errors.
+
+**Deliverables:**
+- **Migration 018:** Added 8 combat stat columns to `characters` table (maxHp, unarmed, oneHanded, twoHanded, ranged, shieldBlock, dodge, armour) with sensible defaults
+- **Migration 019:** Added 8 combat stat columns to `creature_definitions` with varied seeding per creature archetype (melee, ranged, boss, etc.)
+- **CharacterRepository:** Implemented getBaseStats(characterId) and saveBaseStats(characterId, stats) in both Pg and InMemory implementations
+- **ContentRegistry:** loadCreatures() now reads new columns and maps into CombatStats shape
+
+**Integration Notes:**
+- Used CHARACTER_COLUMNS constant to keep all SELECT queries DRY
+- Null coalescing in mapRow provides fallback defaults for rolling deploys
+- Creature dodge_skill_rank DB column maps to stats.dodge on CreatureTemplate (naming intentional for clarity)
+- Repository ready for Jarlaxle's combat system integration
+- No admin store updates (Drizzt's charter; not in scope)
+
+**Team Coordination:**
+- Coordinated with Jarlaxle: CombatSystem can now fetch player stats via characterRepo.getBaseStats()
+- Coordinated with Minsc: 74/74 character repository tests pass
+- Coordinated with Elminster review: Integration gap C1 depends on this getBaseStats() method
 
 ---

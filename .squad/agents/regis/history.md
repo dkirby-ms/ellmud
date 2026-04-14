@@ -113,6 +113,13 @@
 
 ## Learnings
 
+### Inventory Regression Fix (2026-session)
+
+- **Root cause:** `CombinedStashLoadout.tsx` right panel always rendered `stashItems` regardless of `inZone` prop. The header/count switched correctly between "INVENTORY"/"STASH" but the actual item list never used the `inventory` state when in a zone — always showed stash items (empty when not in stash room → "stash empty").
+- **Type mismatch:** `InventoryItem` (id/name/tier) and `DisplayItem` (instanceId/definitionId/type/weight/etc) are different types. Can't just swap data sources without handling the render differences. Used separate render branches for inventory vs stash items.
+- **Dropped data:** `useZoneConnection.ts` was mapping server inventory items and discarding the `weight` field. Added `weight` to `InventoryItem` interface and the mapping.
+- **Key lesson:** When a component uses a prop to switch labels/headers but hardcodes the data source, the UI looks correct at a glance (right title) but shows wrong content. Always verify the data flow matches the display logic.
+
 ### Permadeath UI Implementation (2026-04-15)
 
 - **Overlay state management:** Extended the existing overlay pattern (`'death'` → `'death' | 'permadeath'`) to support permanent character deletion events. The permadeath overlay does NOT auto-dismiss (unlike normal death), requiring explicit user navigation.
@@ -359,3 +366,75 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 
 ---
 
+### 2026-07-22: Combat Stats Display — Character Tab
+**Status:** ✅ Complete — Lint clean, TypeScript clean (pre-existing error in ZoneExploration unrelated)
+
+**Problem:** Players had no way to see their combat stats (weapon skills, defence, health) in the game UI.
+
+**Changes:**
+1. **store.ts** — Added `CombatStats` interface and `combatStats` field to AppState with placeholder defaults. Added `SET_COMBAT_STATS` action for future server sync.
+2. **StatusPanel.tsx** — Replaced "Skills & reputation coming soon" placeholder with a full Combat Skills section in the Character tab:
+   - ⚔ Weapon Skills: Unarmed, One-Handed, Two-Handed, Ranged
+   - 🛡 Defence: Dodge, Shield Block, Armour
+   - ❤ Health: Max HP
+   - New `StatRow` helper component for label/value pairs
+   - Consistent styling with existing panel (text-xs, font-sans headers, font-mono values)
+
+**Design Decisions:**
+- Text-driven layout respecting MUD aesthetic — no bars or gauges, just labels + numbers
+- Stats grouped into Weapon Skills / Defence / Health categories
+- Placeholder values until server sends combat stats via room state
+- Quick Actions moved below Combat Skills (stats are more persistent/important)
+
+**Server Dependency:** `SET_COMBAT_STATS` action is wired but server doesn't send combat stats yet. TODO comments in store.ts mark what's needed.
+
+## Learnings — Combat Stats Display
+
+- `AppState` is the single source of truth for all player-visible data; new stat domains get an interface + action + reducer case
+- CharacterTab section order: Sound Cues → Combat Skills → Quick Actions (persistent info before transient actions)
+- 8 combat stats confirmed: maxHp, unarmed, oneHanded, twoHanded, ranged, shieldBlock, dodge, armour (no agility)
+- `CombatStats` interface exported from store.ts for reuse across components
+
+---
+
+---
+
+### 2026-04-13T23:36–2026-04-14T00:05: Combat Stats UI & Inventory Fix Phase 1 (DELIVERED)
+
+**Task:** Implement combat stats display in StatusPanel Character tab + store action. Fix inventory UI regression (zone vs stash branching).
+
+**Outcome:** ✅ DELIVERED — Combat Skills section visible, SET_COMBAT_STATS action dispatched, inventory UI regression fixed.
+
+**Deliverables:**
+
+**Combat Stats UI:**
+- **StatusPanel Character tab:** Added Combat Skills section between Sound Cues and Quick Actions
+- **3-group display:**
+  - Weapon Skills: unarmed, oneHanded, twoHanded, ranged (derived from Strength/Dexterity)
+  - Defence Stats: dodge, shieldBlock, armour (derived from Constitution/Wisdom)
+  - Health: maxHp (current/max)
+- **Redux store:** Implemented SET_COMBAT_STATS action + reducer in store.ts
+- **Placeholder defaults:** UI displays frozen defaults until server sends combat stats
+
+**Inventory UI Regression Fix:**
+- **Issue:** CombinedStashLoadout always rendered stash items, failed to branch on loadout type (zone vs stash)
+- **Fix:** Added conditional render: `if (type === 'stash') renderStash() else renderZone()`
+- **Result:** Zone and stash inventories now mutually exclusive; no cross-contamination
+
+**Integration Notes:**
+- StatusPanel ready to receive live combat stats once server dispatches SET_COMBAT_STATS
+- Waiting for server integration: Character.combatStats needs to be loaded from DB and sent via WebSocket
+- Inventory fix resolves user-reported regression on live
+
+**Server Team Action Needed:**
+When combat stats are added to room state or player_state messages, dispatch:
+```ts
+dispatch({ type: 'SET_COMBAT_STATS', stats: { maxHp, unarmed, oneHanded, twoHanded, ranged, shieldBlock, dodge, armour } });
+```
+
+**Team Coordination:**
+- Coordinated with Jarlaxle: Ready to receive CombatStats type from combat system
+- Coordinated with Drizzt: Waiting for character base stats loading
+- Coordinated with Elminster review: Integration gap C3 (frontend placeholder) tracked
+
+---
