@@ -1,3 +1,16 @@
+# [0.2.0-dev.43](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.42...v0.2.0-dev.43) (2026-04-14)
+
+
+### Bug Fixes
+
+* bleed-out dies at -10 HP and slow down combat pacing ([b884eeb](https://github.com/dkirby-ms/ellmud/commit/b884eebd4a40c65b058b4919285d6946c9b4f80b))
+* send bleed-out HP drain to downed players with scroll log prompt ([269153a](https://github.com/dkirby-ms/ellmud/commit/269153ab61f0f3f2ac5cf20a37f1e7d19feade9d))
+
+
+### Reverts
+
+* remove browser timeout/proxy changes that caused Firefox blank screen ([1a2782d](https://github.com/dkirby-ms/ellmud/commit/1a2782df85ed116c9d70f562fee0fba92f889879))
+
 # [0.2.0-dev.42](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.41...v0.2.0-dev.42) (2026-04-14)
 
 
