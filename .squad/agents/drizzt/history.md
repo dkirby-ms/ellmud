@@ -230,3 +230,6 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 - removeCombatant now uses shouldEndEncounter() checking hostile pairs, not just size <= 1.
 - ShieldBlock formula: equipment.shieldBlock > 0 ? base + equipment : 0. Skill activates only with a shield.
 - Running HP tally: Start from target.hp + totalDamage (pre-damage), subtract each hit sequentially.
+- sendPlayerState() requires an active combatant — downed players are removed from CombatSystem on defeat, so downing HP updates must be sent directly in tickDowningSystem() using DowningSystem's currentHp.
+- playerStatsCache persists after combatant removal — use it to get maxHp for downed players.
+- MudPrompt (client) re-renders reactively on PLAYER_STATE, but the scroll log needs explicit narrate messages for status echoes.
