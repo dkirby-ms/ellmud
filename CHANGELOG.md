@@ -1,3 +1,10 @@
+# [0.2.0-dev.32](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.31...v0.2.0-dev.32) (2026-04-14)
+
+
+### Features
+
+* replace color name buttons with compact swatch grid in ANSI toolbar (fixes [#458](https://github.com/dkirby-ms/ellmud/issues/458)) ([f97312f](https://github.com/dkirby-ms/ellmud/commit/f97312f9d0bdd9fa1642b7e108f8c0abb0c72b82))
+
 # [0.2.0-dev.31](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.30...v0.2.0-dev.31) (2026-04-14)
 
 
