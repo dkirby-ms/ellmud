@@ -56,7 +56,7 @@ import {
   narrateBatchedEvent,
   DEFAULT_BATCHING_RULES,
 } from '../combat/index.js';
-import { calculateEquipmentBonuses, calculatePlayerEffectiveStats, type EffectiveStats } from '../combat/stats.js';
+import { calculateEquipmentBonuses, calculatePlayerEffectiveStats, calculateCreatureEffectiveStats, extractCombatItemStats, type EffectiveStats } from '../combat/stats.js';
 import { SoundSystem } from '../sound/index.js';
 import { TraceSystem } from '../systems/index.js';
 import { AwarenessSystem, type AwarenessPlayer } from '../systems/index.js';
@@ -99,6 +99,7 @@ import type { ZoneData } from '../zones/index.js';
 import { resolvePlayerHubTarget, resolvePlayerHubName } from '../zones/stronghold.js';
 import { convertZoneToRoomGraph } from '../zones/zone-adapter.js';
 import { getItemDefinition } from '../items/registry.js';
+import { getContentRegistry } from '../content/index.js';
 import type { Item } from '../generator/RoomGraph.js';
 import type { ExplorationRepository } from '../exploration/index.js';
 import { getExplorationRepository } from '../exploration/index.js';
@@ -674,6 +675,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.log(`Failed to send equipment state for ${this.playerTag(playerId)}: ${err}`);
     }
 
+    // Rebuild stats cache with actual equipped items now that loadout is restored (#453)
+    await this.rebuildPlayerStatsCache(playerId);
+
     // Send current inventory to client on join
     this.sendInventoryUpdate(client, playerId);
   }
@@ -1240,11 +1244,15 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
 
     const creaturesInRoom = this.creatureManager.getCreaturesInRoom(player.currentRoomId)
       .map(c => {
-        const bestSkill = Math.max(c.unarmed, c.oneHanded, c.twoHanded, c.ranged);
+        const effective = calculateCreatureEffectiveStats({
+          maxHp: c.maxHp, unarmed: c.unarmed, oneHanded: c.oneHanded,
+          twoHanded: c.twoHanded, ranged: c.ranged, shieldBlock: c.shieldBlock,
+          dodge: c.dodge, armour: c.armour,
+        });
         return {
           id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription,
-          hp: c.hp, maxHp: c.maxHp, attack: bestSkill,
-          armour: c.armour, dodge: c.dodge, shieldBlock: c.shieldBlock,
+          hp: c.hp, maxHp: c.maxHp, attack: effective.attack,
+          armour: effective.armour, dodge: effective.dodge, shieldBlock: effective.shieldBlock,
         };
       });
 
@@ -1274,11 +1282,15 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       resolveCreaturesInRoom: (roomId: string) =>
         this.creatureManager.getCreaturesInRoom(roomId)
           .map(c => {
-            const bestSkill = Math.max(c.unarmed, c.oneHanded, c.twoHanded, c.ranged);
+            const effective = calculateCreatureEffectiveStats({
+              maxHp: c.maxHp, unarmed: c.unarmed, oneHanded: c.oneHanded,
+              twoHanded: c.twoHanded, ranged: c.ranged, shieldBlock: c.shieldBlock,
+              dodge: c.dodge, armour: c.armour,
+            });
             return {
               id: c.id, name: c.name, type: c.type, roomDescription: c.roomDescription,
-              hp: c.hp, maxHp: c.maxHp, attack: bestSkill,
-              armour: c.armour, dodge: c.dodge, shieldBlock: c.shieldBlock,
+              hp: c.hp, maxHp: c.maxHp, attack: effective.attack,
+              armour: effective.armour, dodge: effective.dodge, shieldBlock: effective.shieldBlock,
             };
           }),
       creatureManager: this.creatureManager,
@@ -3269,6 +3281,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
             }
 
             await this.sendLoadoutAndStashUpdate(client, playerId);
+            await this.rebuildPlayerStatsCache(this.dbPlayerId(playerId));
             this.sendInventoryUpdate(client, playerId);
             client.send(MessageTypes.NARRATE, {
               text: `Equipped from inventory to ${message.targetSlot}.`,
@@ -3295,6 +3308,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
 
       await this.sendLoadoutAndStashUpdate(client, playerId);
+      await this.rebuildPlayerStatsCache(this.dbPlayerId(playerId));
       client.send(MessageTypes.NARRATE, {
         text: `Item equipped to ${message.targetSlot}.`,
         type: 'system',
@@ -3335,6 +3349,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
 
       await this.sendLoadoutAndStashUpdate(client, playerId);
+      await this.rebuildPlayerStatsCache(this.dbPlayerId(playerId));
       client.send(MessageTypes.NARRATE, {
         text: `Item unequipped from ${message.slot}.`,
         type: 'system',
@@ -3375,6 +3390,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       }
 
       await this.sendLoadoutAndStashUpdate(client, playerId);
+      await this.rebuildPlayerStatsCache(this.dbPlayerId(playerId));
       client.send(MessageTypes.NARRATE, {
         text: `Item swapped into ${message.targetSlot}.`,
         type: 'system',
@@ -3423,6 +3439,40 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       client.send(MessageTypes.STASH_UPDATE, {
         items: stashItems,
       } satisfies StashUpdateMessage);
+    }
+  }
+
+  /**
+   * Rebuild the player stats cache from current base stats + equipped items.
+   * Called after loadout restoration on join and after any equip/unequip/swap.
+   */
+  private async rebuildPlayerStatsCache(playerId: string): Promise<void> {
+    try {
+      const baseStats = await this.characterRepo.getBaseStats(playerId);
+      const equippedSlots: { slot: string; stats: import('../combat/CombatState.js').ItemStats | null }[] = [];
+
+      if (this.loadoutService) {
+        const loadout = await this.loadoutService.getLoadout(playerId);
+        const registry = getContentRegistry();
+
+        for (const slot of EQUIPMENT_SLOT_ORDER) {
+          const equipped = loadout[slot];
+          if (!equipped) continue;
+
+          let itemStats: import('../combat/CombatState.js').ItemStats | null = null;
+          const def = registry?.isInitialized() ? registry.getItem(equipped.itemId) : undefined;
+          if (def) {
+            itemStats = extractCombatItemStats(def.type, def.baseStats as Record<string, unknown>);
+          }
+          equippedSlots.push({ slot, stats: itemStats });
+        }
+      }
+
+      const equipment = calculateEquipmentBonuses(equippedSlots);
+      const effective = calculatePlayerEffectiveStats(baseStats, equipment);
+      this.playerStatsCache.set(playerId, effective);
+    } catch (err) {
+      this.log(`Failed to rebuild stats cache for ${this.playerTag(playerId)}: ${err}`);
     }
   }
 
