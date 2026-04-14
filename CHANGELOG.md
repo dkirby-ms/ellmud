@@ -1,3 +1,10 @@
+# [0.2.0-dev.39](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.38...v0.2.0-dev.39) (2026-04-14)
+
+
+### Bug Fixes
+
+* **combat:** make flee instant — skip defeated, move creatures ([73418a8](https://github.com/dkirby-ms/ellmud/commit/73418a8c63dd7d0b99e3e6adbe4b9589fabc57c3))
+
 # [0.2.0-dev.38](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.37...v0.2.0-dev.38) (2026-04-14)
 
 
