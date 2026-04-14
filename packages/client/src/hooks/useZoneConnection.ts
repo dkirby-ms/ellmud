@@ -316,6 +316,7 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
               id: item.id,
               name: item.name,
               tier: item.tier as import('@ellmud/shared').GearTier,
+              weight: item.weight,
             })),
           });
         }

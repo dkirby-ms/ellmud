@@ -182,7 +182,7 @@ describe('appReducer', () => {
   });
 
   it('SET_INVENTORY updates inventory', () => {
-    const items: InventoryItem[] = [{ id: 'i1', name: 'Sword', tier: 'common' }];
+    const items: InventoryItem[] = [{ id: 'i1', name: 'Sword', tier: 'common', weight: 3 }];
     const state = appReducer(initialState, { type: 'SET_INVENTORY', items });
     expect(state.inventory).toEqual(items);
   });
