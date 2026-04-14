@@ -1,3 +1,21 @@
+# [0.2.0-dev.29](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.28...v0.2.0-dev.29) (2026-04-14)
+
+
+### Bug Fixes
+
+* inventory panel shows carried items when in zone ([1099162](https://github.com/dkirby-ms/ellmud/commit/1099162539ec6f2b32b6dc43376edaf5277f6bb7))
+* migrate admin creature CRUD to Phase 1 stats, wire calculateCreatureEffectiveStats ([#452](https://github.com/dkirby-ms/ellmud/issues/452), [#456](https://github.com/dkirby-ms/ellmud/issues/456)) ([2a97cf1](https://github.com/dkirby-ms/ellmud/commit/2a97cf174f332fe945a1433714007e59ea0341ff))
+* update 15 test files for new combat stat model ([159f1bb](https://github.com/dkirby-ms/ellmud/commit/159f1bb52bb406391d1e00d337b5b2fffee9d50c))
+* update message type count for EFFECTIVE_STATS addition ([3401c1e](https://github.com/dkirby-ms/ellmud/commit/3401c1e11e44017078010c393d3b632740d23bf7))
+* update test expectations for passive dodge refactor ([41531c5](https://github.com/dkirby-ms/ellmud/commit/41531c584a59fbf937d987f5832c04c8844b4584))
+* wire player combat stats from CharacterRepository into combatant creation ([c2c134d](https://github.com/dkirby-ms/ellmud/commit/c2c134dcedd98e4788fdb8bf10fc9dae89c6f320))
+
+
+### Features
+
+* add ItemStats to Item interface for equipment bonuses ([#453](https://github.com/dkirby-ms/ellmud/issues/453)) ([3436dc3](https://github.com/dkirby-ms/ellmud/commit/3436dc3b33f1d5cb929f4c66b7ec40910ab2095c))
+* send effective stats to client and display in StatusPanel ([#455](https://github.com/dkirby-ms/ellmud/issues/455)) ([d3fbb2d](https://github.com/dkirby-ms/ellmud/commit/d3fbb2dc5dd8d6b2fc0d1cae9dc2e21c3f9e42ec))
+
 # [0.2.0-dev.28](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.27...v0.2.0-dev.28) (2026-04-13)
 
 
