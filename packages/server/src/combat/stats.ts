@@ -99,3 +99,28 @@ export function calculateCreatureEffectiveStats(base: CombatStats): EffectiveSta
     dodge: base.dodge,
   };
 }
+
+/**
+ * Extract combat-relevant ItemStats from an item_definitions.base_stats JSONB blob.
+ *
+ * Handles both the legacy seed format ({damage, speed, armour, weight}) and the
+ * canonical combat ItemStats format ({weaponType, weaponDamage, armour, shieldBlock}).
+ */
+export function extractCombatItemStats(
+  itemType: string,
+  baseStats: Record<string, unknown>,
+): ItemStats {
+  const stats: ItemStats = {};
+
+  if (itemType === 'weapon') {
+    stats.weaponType = (baseStats.weaponType as WeaponType | undefined) ?? 'one_handed';
+    stats.weaponDamage =
+      (typeof baseStats.weaponDamage === 'number' ? baseStats.weaponDamage : undefined) ??
+      (typeof baseStats.damage === 'number' ? baseStats.damage : 0);
+  }
+
+  if (typeof baseStats.armour === 'number') stats.armour = baseStats.armour;
+  if (typeof baseStats.shieldBlock === 'number') stats.shieldBlock = baseStats.shieldBlock;
+
+  return stats;
+}

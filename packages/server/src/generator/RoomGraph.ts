@@ -15,6 +15,8 @@ export interface Item {
   roomDescription?: string;
   /** Equipment slot this item can be equipped to (#390). */
   equipSlot?: 'weapon' | 'armour';
+  /** Combat stats from item_definitions.base_stats JSONB (#453). */
+  stats?: import('../combat/CombatState.js').ItemStats;
   /** Present on container items — serialized contents for persistence (#409). */
   containerContents?: Array<{ definitionId: string; quantity: number; durability: number | null }>;
   /** Whether this item is soulbound (#409). */
@@ -100,8 +102,8 @@ export function createTestRoomGraph(): RoomGraph {
       ['west', 'entry'],
     ]),
     items: [
-      { id: 'halberd', name: 'corroded halberd', weight: 5, description: 'A pitted halberd. Still sharp enough to wound.', equipSlot: 'weapon' },
-      { id: 'shield', name: 'dented shield', weight: 3, description: 'A battered shield bearing an unknown crest.', equipSlot: 'armour' },
+      { id: 'halberd', name: 'corroded halberd', weight: 5, description: 'A pitted halberd. Still sharp enough to wound.', equipSlot: 'weapon', stats: { weaponType: 'two_handed', weaponDamage: 10 } },
+      { id: 'shield', name: 'dented shield', weight: 3, description: 'A battered shield bearing an unknown crest.', equipSlot: 'armour', stats: { armour: 2, shieldBlock: 5 } },
     ],
   });
 

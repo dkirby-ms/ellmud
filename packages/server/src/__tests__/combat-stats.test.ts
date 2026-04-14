@@ -276,3 +276,93 @@ describe('calculatePlayerEffectiveStats', () => {
     expect(result.dodge).toBe(DEFAULT_BASE_STATS.dodge);
   });
 });
+
+// ─── extractCombatItemStats (#453) ──────────────────────────────────────────
+
+import { extractCombatItemStats } from '../combat/stats.js';
+
+describe('extractCombatItemStats', () => {
+  it('weapon with canonical format → extracts weaponType and weaponDamage', () => {
+    const stats = extractCombatItemStats('weapon', { weaponType: 'two_handed', weaponDamage: 20 });
+    expect(stats.weaponType).toBe('two_handed');
+    expect(stats.weaponDamage).toBe(20);
+  });
+
+  it('weapon with legacy format (damage field) → maps damage to weaponDamage', () => {
+    const stats = extractCombatItemStats('weapon', { damage: 8, speed: 1 });
+    expect(stats.weaponType).toBe('one_handed');
+    expect(stats.weaponDamage).toBe(8);
+  });
+
+  it('armour item → extracts armour value', () => {
+    const stats = extractCombatItemStats('armour', { armour: 3, weight: 8 });
+    expect(stats.armour).toBe(3);
+    expect(stats.weaponType).toBeUndefined();
+    expect(stats.weaponDamage).toBeUndefined();
+  });
+
+  it('armour with shieldBlock → extracts both', () => {
+    const stats = extractCombatItemStats('armour', { armour: 2, shieldBlock: 5 });
+    expect(stats.armour).toBe(2);
+    expect(stats.shieldBlock).toBe(5);
+  });
+
+  it('consumable → returns empty stats', () => {
+    const stats = extractCombatItemStats('consumable', { heal: 20 });
+    expect(stats.weaponType).toBeUndefined();
+    expect(stats.weaponDamage).toBeUndefined();
+    expect(stats.armour).toBeUndefined();
+    expect(stats.shieldBlock).toBeUndefined();
+  });
+
+  it('empty base_stats → defaults for weapon', () => {
+    const stats = extractCombatItemStats('weapon', {});
+    expect(stats.weaponType).toBe('one_handed');
+    expect(stats.weaponDamage).toBe(0);
+  });
+});
+
+// ─── Item → Equipment Pipeline (#453) ──────────────────────────────────────
+
+describe('Item with stats → calculateEquipmentBonuses pipeline', () => {
+  it('Item with weapon stats feeds correctly through equipment bonuses', () => {
+    const itemStats: ItemStats = { weaponType: 'one_handed', weaponDamage: 12 };
+    const bonuses = calculateEquipmentBonuses([
+      slot('main_hand', itemStats),
+    ]);
+    expect(bonuses.weaponSkill).toBe('one_handed');
+    expect(bonuses.weaponDamage).toBe(12);
+  });
+
+  it('Item with armour stats feeds correctly through equipment bonuses', () => {
+    const itemStats: ItemStats = { armour: 5 };
+    const bonuses = calculateEquipmentBonuses([
+      slot('chest', itemStats),
+    ]);
+    expect(bonuses.armour).toBe(5);
+  });
+
+  it('full pipeline: extractCombatItemStats → calculateEquipmentBonuses → effective stats', () => {
+    const weaponStats = extractCombatItemStats('weapon', { damage: 10, speed: 1 });
+    const armourStats = extractCombatItemStats('armour', { armour: 4, weight: 6 });
+
+    const bonuses = calculateEquipmentBonuses([
+      slot('main_hand', weaponStats),
+      slot('chest', armourStats),
+    ]);
+
+    const effective = calculatePlayerEffectiveStats(DEFAULT_BASE_STATS, bonuses);
+    expect(effective.attack).toBe(15); // oneHanded(5) + weaponDamage(10)
+    expect(effective.armour).toBe(6);  // base(2) + gear(4)
+  });
+
+  it('equipment bonuses include shield stats when item has shieldBlock', () => {
+    const shieldStats = extractCombatItemStats('armour', { armour: 2, shieldBlock: 8 });
+    const bonuses = calculateEquipmentBonuses([
+      slot('off_hand', shieldStats),
+    ]);
+    const effective = calculatePlayerEffectiveStats(DEFAULT_BASE_STATS, bonuses);
+    expect(effective.shieldBlock).toBe(13); // base(5) + gear(8)
+    expect(effective.armour).toBe(4);       // base(2) + gear(2)
+  });
+});
