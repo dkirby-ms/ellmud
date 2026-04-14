@@ -1,3 +1,11 @@
+# [0.2.0-dev.30](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.29...v0.2.0-dev.30) (2026-04-14)
+
+
+### Bug Fixes
+
+* move Discord UAT announcement to fire after successful deploy (fixes [#451](https://github.com/dkirby-ms/ellmud/issues/451)) ([e39b67f](https://github.com/dkirby-ms/ellmud/commit/e39b67f48cc0413f31efe8c1d0b67a16849d85d0))
+* replace hardcoded triage routing with routing.md-driven keyword scoring ([1b2cbe9](https://github.com/dkirby-ms/ellmud/commit/1b2cbe9391ae49b7e07107f063b711bee9446b08))
+
 # [0.2.0-dev.29](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.28...v0.2.0-dev.29) (2026-04-14)
 
 
