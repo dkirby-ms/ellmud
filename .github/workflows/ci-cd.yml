@@ -358,7 +358,7 @@ jobs:
 
   # ─── Create issue on CI failure ───────────────────────────────────────────────
   create-failure-issue:
-    if: ${{ always() && github.event_name == 'push' && (needs.build-and-test.result == 'failure' || needs.docker-build-push.result == 'failure' || needs.deploy.result == 'failure') }}
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (needs.build-and-test.result == 'failure' || needs.docker-build-push.result == 'failure' || needs.deploy.result == 'failure') }}
     needs: [build-and-test, docker-build-push, deploy]
     runs-on: ubuntu-latest
     permissions:

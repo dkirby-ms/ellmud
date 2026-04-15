@@ -25,7 +25,7 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json ./packages/shared/package.json
 COPY packages/server/package.json ./packages/server/package.json
-RUN npm ci --omit=dev --workspace @ellmud/shared --workspace @ellmud/server \
+RUN npm ci --omit=dev --ignore-scripts --workspace @ellmud/shared --workspace @ellmud/server \
     && npm cache clean --force
 
 # Copy compiled output
