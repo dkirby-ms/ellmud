@@ -3,6 +3,17 @@ name: Squad Release
 on:
   push:
     branches: [prod, dev]
+    paths-ignore:
+      - docs/**
+      - .squad/**
+      - .github/**
+      - .copilot/**
+      - infra/**
+      - "*.md"
+      - "**/*.md"
+      - LICENSE
+      - .gitattributes
+      - .gitignore
 
 permissions:
   contents: write
