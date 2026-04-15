@@ -170,6 +170,7 @@ describe('Player Death Flow (ZoneRoom Integration)', () => {
     await wait(8000);
     if (combatant) {
       // If combat was initiated, we should have a death message
+      const deathMessages = overlayMessages.filter(m => m.state === 'death');
       expect(deathMessages.length).toBeGreaterThanOrEqual(1);
       expect(deathMessages[0]!.state).toBe('death');
       expect(deathMessages[0]!.narration).toBeTruthy();
