@@ -13,6 +13,7 @@ export class InMemoryCharacterRepository implements CharacterRepository {
   private postures = new Map<string, string>();
   private starterKitGranted = new Set<string>();
   private combatStatsMap = new Map<string, PlayerCombatStats>();
+  private statPointsMap = new Map<string, number>();
 
   async list(playerId: string): Promise<CharacterSummary[]> {
     const chars: CharacterSummary[] = [];
@@ -125,6 +126,14 @@ export class InMemoryCharacterRepository implements CharacterRepository {
 
   async saveBaseStats(characterId: string, stats: PlayerCombatStats): Promise<void> {
     this.combatStatsMap.set(characterId, { ...stats });
+  }
+
+  async getStatPointsAvailable(characterId: string): Promise<number> {
+    return this.statPointsMap.get(characterId) ?? 0;
+  }
+
+  async saveStatPointsAvailable(characterId: string, points: number): Promise<void> {
+    this.statPointsMap.set(characterId, points);
   }
 
   private toSummary(row: CharacterRow): CharacterSummary {

@@ -86,4 +86,10 @@ export interface CharacterRepository {
 
   /** Persist updated combat stats for a character (Phase 1). */
   saveBaseStats(characterId: string, stats: PlayerCombatStats): Promise<void>;
+
+  /** Get the number of banked stat points available for training (#457). */
+  getStatPointsAvailable(characterId: string): Promise<number>;
+
+  /** Set the number of banked stat points (#457). */
+  saveStatPointsAvailable(characterId: string, points: number): Promise<void>;
 }

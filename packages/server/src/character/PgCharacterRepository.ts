@@ -300,4 +300,19 @@ export class PgCharacterRepository implements CharacterRepository {
        stats.ranged, stats.shieldBlock, stats.dodge, stats.armour, characterId],
     );
   }
+
+  async getStatPointsAvailable(characterId: string): Promise<number> {
+    const result = await query<{ stat_points_available: number }>(
+      `SELECT stat_points_available FROM characters WHERE id = $1 AND deleted_at IS NULL`,
+      [characterId],
+    );
+    return result.rows[0]?.stat_points_available ?? 0;
+  }
+
+  async saveStatPointsAvailable(characterId: string, points: number): Promise<void> {
+    await query(
+      `UPDATE characters SET stat_points_available = $1 WHERE id = $2 AND deleted_at IS NULL`,
+      [points, characterId],
+    );
+  }
 }
