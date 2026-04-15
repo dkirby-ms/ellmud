@@ -364,6 +364,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     const roomInstance = room as unknown as {
       players: Map<string, PlayerState>;
       combatSystem: CombatSystem;
+      downingSystem: { getDownedPlayer: (id: string) => { bleedOutTicksRemaining: number } | undefined };
     };
 
     const sessionId = client.sessionId;
