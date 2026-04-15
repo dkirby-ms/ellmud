@@ -160,3 +160,119 @@
 - **Prod branch reset (2026):** Force-pushed uat→prod to resolve accumulated divergence. Prod SHA now matches uat exactly.
 - **Discord notifications in promote workflows:** `scheduled-uat-promote.yml` now posts to Discord (`DISCORD_TESTING_ALERTS` secret) when commits are promoted. Uses plain `curl` with `continue-on-error: true` so notifications never block the pipeline. Pattern reusable for `squad-promote.yml` if needed.
 - **Discord UAT announce moved to ci-cd.yml (issue #451):** Notification removed from `scheduled-uat-promote.yml` and added as `notify-discord-uat` job in `ci-cd.yml` with `needs: deploy` + `github.ref_name == 'uat'`. Ensures Discord is only notified after a successful deploy, not just a code promotion. Same `DISCORD_TESTING_ALERTS` secret, same `continue-on-error: true` pattern.
+
+---
+
+## Branching Strategy Review (2026-04-15)
+
+**Status:** ✅ Analysis Complete
+
+**Current Model:** dev → uat → prod (default branch is dev, but prod has tag v0.2.1 and dev is at v0.2.0-dev.46)
+
+**Scope:** Deep review of the three-tier branching strategy, workflow automation, pain points, and recommendations.
+
+### 1. Branch Model & Code Flow
+
+**Current State:**
+- **dev:** Primary development branch. All PRs target here. Receives features, bug fixes, and routine commits. No deploy from this branch (CI only: build/test/lint).
+- **uat:** Staging/QA branch. Code promoted from dev via `scheduled-uat-promote.yml` (4x daily: 01:00, 13:00, 17:00, 21:00 UTC) or manually via `squad-promote.yml`. Triggers full CI/CD pipeline including Docker build → ACR push → Azure Container App deployment.
+- **prod:** Production branch. Code promoted from uat via manual `squad-promote.yml` (workflow_dispatch). Also triggers full CI/CD. Uses force-push to reset prod to uat (after stripping forbidden paths). Current SHA is v0.2.1; dev is at v0.2.0-dev.46.
+
+**Workflow Automation:**
+- `scheduled-uat-promote.yml`: Merges dev → uat on schedule (no-ff merge, strips forbidden paths, bumps patch version). Explicitly triggers `ci-cd.yml` on uat after push.
+- `squad-promote.yml`: Manual uat → prod promotion with optional dry-run. Uses force-push (not merge) to reset prod to uat. Explicitly triggers `ci-cd.yml` on prod after push.
+- `ci-cd.yml`: Runs on push to uat/prod OR on workflow_dispatch. Builds, tests, lints; if passed, builds Docker, pushes to ACR, deploys to Container App with health check + rollback on failure.
+
+**Version Bumping:**
+- Patch version bumped on dev → uat (both scheduled and manual squad-promote).
+- Minor version bumped on uat → prod.
+- Major version is manual-only (via explicit commit).
+
+### 2. Pain Points & Observed Issues
+
+**Critical:**
+- **TS errors promoted to uat:** Commit 8aaea81 (Apr 15) fixed TS errors in death tests that were merged into uat by `scheduled-uat-promote.yml` before CI caught them. The scheduled promotion runs on a timer (not gated by CI success), so broken code on dev gets automatically promoted. While 8aaea81 was later fixed on dev, the broken code was already on uat for ~12 hours (from scheduled promote at 01:00 UTC on Apr 14 until 8aaea81 was committed Apr 15).
+  - **Root cause:** `scheduled-uat-promote.yml` doesn't validate that dev CI passes before promoting. It just checks `git rev-list --count origin/uat..origin/dev` and merges.
+  - **Impact:** Broken code reaches uat/staging, wasting QA time and potentially breaking downstream prod promotions.
+
+**High:**
+- **No branch protection rules visible:** Cannot confirm if `required-status-checks` or `require-branches-be-up-to-date` are enforced on uat/prod. Recommend checking GitHub Settings > Branches > Branch protection rules to see if any exist.
+- **Prod divergence risk (mitigated but fragile):** Prod force-push model prevents merge conflicts but eliminates commit history traceability. If a real production system (with persistent state) is added, this model breaks—you'd need to merge/cherry-pick instead.
+- **No pre-promotion validation step:** UAT promotion doesn't check if the commit to be promoted passed CI on dev. uat → prod promotion validates no forbidden files, but doesn't validate that uat itself is deployable (though that's implicit since uat CI must have passed to reach uat).
+
+**Medium:**
+- **Concurrency groups not fully aligned:** `scheduled-uat-promote.yml` uses `concurrency: { group: uat-promote, cancel-in-progress: false }`. `squad-promote.yml` for uat → prod uses `concurrency: { group: prod-promote, cancel-in-progress: false }`. These are separate groups, so they don't serialize with each other. If someone manually promotes uat → prod at the same moment scheduled-uat-promote is running, you could have overlapping CI/CD jobs on uat. Low risk (scheduled runs 4x/day, manual is ad-hoc), but possible.
+- **Forbidden path maintenance burden:** Forbidden paths list exists in two places: inline in `scheduled-uat-promote.yml` (lines 85–86) AND in `.github/scripts/strip-forbidden-paths.sh`. While `strip-forbidden-paths.sh` is the source of truth for merges, the inline regex in `scheduled-uat-promote.yml` (the conflict check) can drift. Currently in sync, but future changes risk desynchronization.
+
+**Low:**
+- **UAT promote logs are quiet on success:** The log message "ℹ️ dev is not ahead of uat — nothing to promote" is fine, but it's easy to miss when scheduled-promote runs and silently does nothing (happens 3-4x daily).
+- **Manual squad-promote has dry-run, but it's not tested in CI:** The dry-run mode is useful for validation, but there's no automated test that verifies the dry-run logic (e.g., that it correctly shows what *would* be promoted without actually pushing).
+
+### 3. Recommendations
+
+**Immediate (High Priority):**
+
+1. **Add CI gating to scheduled promotion:**
+   - Before `scheduled-uat-promote.yml` merges dev → uat, fetch the latest CI/CD run on dev's HEAD commit.
+   - Check if `status: success` (or allow specific statuses like "failure-but-recoverable").
+   - If CI failed, skip promotion and notify (Discord, email, or issue comment).
+   - **Implementation:** Add job that uses GitHub API (via `gh run list`) to check dev's latest run status before attempting merge.
+
+2. **Enforce branch protection rules (GitHub UI):**
+   - **dev:** No protection needed (active development); allow direct pushes.
+   - **uat:** Require status checks (`ci-cd.yml` build-and-test must pass on PRs). Allow direct pushes (for scheduled-promote) but enforce `require-branches-be-up-to-date` to avoid stale code.
+   - **prod:** Require status checks (`ci-cd.yml` must pass on PRs). Enforce `require-branches-be-up-to-date`. Dismiss stale reviews on push.
+   - **Note:** These rules apply to PRs; the promotion workflows (using `GITHUB_TOKEN`) bypass them, so explicit CI checks in the workflows are still needed.
+
+3. **Consolidate forbidden-path detection:**
+   - Extract the conflict-check regex from `scheduled-uat-promote.yml` (line 85) into a helper function or separate script.
+   - Both workflows should source the forbidden paths from `.github/scripts/strip-forbidden-paths.sh` or a `.github/scripts/forbidden-paths.txt` file.
+   - **Benefit:** Single source of truth; reduce maintenance risk.
+
+**Short-term (Medium Priority):**
+
+4. **Align concurrency groups to serialize promote workflows:**
+   - Change `squad-promote.yml`'s concurrency group from `prod-promote` to include both dev→uat and uat→prod in one group.
+   - **Option A (Simple):** Use single `concurrency: { group: code-promotion, cancel-in-progress: false }` in both promote workflows.
+   - **Option B (Strict):** Use `concurrency: { group: promote-${{ github.ref_name }}, cancel-in-progress: false }` to allow parallel promotes on different branches.
+   - Option A is safer; it ensures dev→uat and uat→prod never overlap (uat→prod must wait for dev→uat to finish).
+
+5. **Improve promotion observability:**
+   - Add summary line to `scheduled-uat-promote.yml`: "Skipped (dev not ahead)" vs "Promoted N commits" vs "Merge conflict (forbidden paths only — auto-resolved)".
+   - Post to Discord for both success AND skipped (not failure, just info).
+   - **Benefit:** Team sees when scheduled jobs run and what they did.
+
+**Long-term (Strategic):**
+
+6. **Consider release-branch model if real prod emerges:**
+   - If real production users are added, the current force-push model becomes dangerous (loses production fix history).
+   - Consider moving to a release-branch model: dev → uat → release/vX.Y → prod (with cherry-picks for hotfixes).
+   - Keep merge-based promotion for traceability; reserve force-push for dev→uat only (which is test-only).
+
+7. **Document the branching model:**
+   - Add `.github/BRANCHING.md` with ASCII diagram:
+     ```
+     dev (active development, no deploy)
+       ↓ [scheduled 4x/day OR manual]
+     uat (staging/QA, auto-deploy)
+       ↓ [manual only, gated]
+     prod (production)
+     ```
+   - Include: When to PR to each branch, how to manually promote, what automatic workflows do, where to find logs.
+
+### 4. Current State Summary
+
+**What's Working Well:**
+- Automated dev → uat promotion 4x/day keeps staging relatively fresh.
+- Manual uat → prod gate ensures control over production releases.
+- Forbidden path stripping prevents team tooling from reaching production.
+- CI/CD pipeline on uat/prod is robust (health checks, rollback).
+- Version bumping is automatic and prevents version conflicts.
+
+**What Needs Improvement:**
+- **No CI gating on automated dev → uat promotion** — broken code reaches uat undetected. **FIX PRIORITY: 1**
+- **Branch protection rules need verification** — couldn't confirm from repo settings. Check GitHub UI.
+- **Forbidden-path maintenance risk** — paths defined in two places, risk of drift.
+- **Concurrency serialization** — dev→uat and uat→prod can overlap; low risk but cleanable.
+
+---

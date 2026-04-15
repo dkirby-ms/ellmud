@@ -945,3 +945,1203 @@ This document is the canonical reference for squad implementation.
 
 ---
 
+
+## 2026-04-15: CI/CD Branching Strategy & Promotion Gating
+
+**By:** Khelben (CI/CD Dev)  
+**Date:** 2026-04-15  
+**Context:** Post-incident review of commit 8aaea81 (TS errors promoted to uat)  
+**Status:** Analysis complete; recommendations issued  
+**Scope:** CI/CD pipeline — promotion workflows, gating, concurrency
+
+### Executive Summary
+
+Current dev → uat → prod model is sound, but **automated scheduled promotion lacks CI gating**. Broken code on dev gets merged to uat without validation. Root cause: `scheduled-uat-promote.yml` checks commit count, not CI status. Broken code sits on uat until caught by uat's CI, delaying detection and fixes.
+
+### Critical Issues
+
+**1. No CI Gating on Scheduled Promotion**
+- Scheduled promotion runs 4x daily (01:00, 13:00, 17:00, 21:00 UTC)
+- If dev has 10 commits ahead (including broken ones), all 10 auto-merge to uat
+- CI validation happens *after* merge → 12-hour detection lag (TS errors, 2026-04-14)
+- **Fix:** Check dev's latest CI status before merging; skip if failed
+
+**2. Forbidden-Path Duplication**
+- `.github/scripts/strip-forbidden-paths.sh` defines authoritative list
+- Also defined inline in `scheduled-uat-promote.yml` line 85 (conflict regex)
+- One list updated → other forgotten → conflicts missed → forbidden files leak
+- **Fix:** Single source of truth; both workflows reference same script
+
+**3. Concurrency Group Misalignment**
+- `scheduled-uat-promote.yml` group = `uat-promote` (dev→uat)
+- `squad-promote.yml` group = `prod-promote` (uat→prod)
+- Separate groups allow dev→uat and uat→prod to overlap (race condition)
+- **Fix:** Unified group name (`code-promotion`) serializes all promotions
+
+### Immediate Actions (Priority 1)
+
+**1. Add CI Gating to scheduled-uat-promote.yml**
+- New `check-dev-ci` job validates dev's latest CI run
+- Outputs `passed=true/false`
+- `promote-dev-to-uat` job depends on this; skips if CI failed
+
+**2. Consolidate Forbidden-Paths Reference**
+- Extract forbidden-path regex to script or shared variable
+- Both workflows source the same definition
+- Prevents sync drift
+
+**3. Unify Concurrency Groups**
+- Both workflows use `concurrency.group: code-promotion`
+- Ensures uat→prod waits for dev→uat completion
+
+### Medium/Long-term Recommendations
+
+- **Branch Protection Rules:** Confirm uat requires CI status check; prod requires up-to-date
+- **Release Branch Model:** If real prod system added, switch from force-push to merge-based with hotfix cherry-pick
+- **Promotion Observability:** Add Discord notifications for all promotion outcomes (success, skip, failure)
+# Progression System Architecture — Issue #457
+
+**Author:** Elminster (Lead/Architect)  
+**Date:** 2025-01-28  
+**Issue:** #457 — Stat training and progression system  
+**Status:** PROPOSAL (awaiting Dale's approval)
+
+---
+
+## Executive Summary
+
+This proposal redesigns EllMUD's progression system from the current static-stat model to a **use-based, skill-driven progression** system with scaled HP growth, 0-100 combat stats, and stamina as a separate resource pool.
+
+**Key Changes:**
+- **HP scaling:** 20-30 base → 1000+ endgame via combat experience
+- **Combat stats:** 0-100 scale for all weapon skills and defensive stats
+- **Stamina:** New ~100 pool separate from HP, modified by status/gear
+- **Use-based progression:** Using a weapon type increases that skill (fast early, slow later)
+- **Three-layer model preserved:** Template → Base → Effective (Base now grows over time)
+
+**Migration Strategy:** 4-phase rollout with backward compatibility at each step.
+
+---
+
+## 1. STAT MODEL REDESIGN
+
+### 1.1 Current System (Phase 1 Baseline)
+
+**CombatStats Interface (8 stats):**
+```typescript
+interface CombatStats {
+  maxHp: number;        // Currently: 100 (static)
+  unarmed: number;      // Currently: 5 (static)
+  oneHanded: number;    // Currently: 5 (static)
+  twoHanded: number;    // Currently: 5 (static)
+  ranged: number;       // Currently: 5 (static)
+  shieldBlock: number;  // Currently: 5 (static)
+  dodge: number;        // Currently: 5 (static)
+  armour: number;       // Currently: 2 (static)
+}
+```
+
+**Problems:**
+- All players have identical stats (no progression)
+- Starting HP=100 is too high for early game (should be 20-30)
+- No differentiation between starter and endgame characters
+- Equipment bonuses exist but add to already-high base values
+
+### 1.2 New System — 0-100 Scaled Stats
+
+**Revised CombatStats Interface:**
+```typescript
+interface CombatStats {
+  maxHp: number;        // 20-30 base → 1000+ endgame (separate formula)
+  unarmed: number;      // 0-100 scale (5 = starter value)
+  oneHanded: number;    // 0-100 scale (5 = starter value)
+  twoHanded: number;    // 0-100 scale (5 = starter value)
+  ranged: number;       // 0-100 scale (5 = starter value)
+  shieldBlock: number;  // 0-100 scale (5 = starter value)
+  dodge: number;        // 0-100 scale (5 = starter value)
+  armour: number;       // 0-100 scale (2 = starter value)
+}
+```
+
+**0-100 Scale Semantics:**
+- **0-20:** Untrained (fumbles, poor accuracy, minimal defence)
+- **21-40:** Novice (functional basics, common in new players)
+- **41-60:** Competent (reliable performance, mid-game plateau)
+- **61-80:** Expert (high effectiveness, late-game target)
+- **81-100:** Master (peak performance, endgame specialists)
+
+**Starter Values (same as current):**
+- Weapon skills: 5 (untrained baseline — use-based growth from here)
+- Defensive stats: dodge=5, shieldBlock=5, armour=2
+- maxHp: **25** (down from 100)
+
+### 1.3 Stamina — New Resource Pool
+
+**New Stat:**
+```typescript
+interface Combatant {
+  // ... existing fields
+  stamina: number;      // Current stamina (players only)
+  maxStamina: number;   // Maximum stamina (players only)
+}
+```
+
+**Properties:**
+- **Base value:** 100 for all players (never scales with progression)
+- **Regeneration:** +10 stamina per tick (1 second) out of combat; +5 per tick in combat
+- **Status modifiers:** Exhausted=-50 max, Energized=+25 max, Bleeding=-5/tick
+- **Equipment modifiers:** Light armour=+10 max, Heavy armour=-15 max
+- **Ability costs:** Heavy Strike=15, Block=10/tick, Dodge=20
+
+**Stamina replaces mana/energy concepts — it's a tactical resource, not a magic bar.**
+
+### 1.4 HP Growth Formula
+
+**Current Problem:** HP=100 for all characters (starter and endgame same).
+
+**New Formula (Logarithmic Growth Curve):**
+
+```
+maxHp = base_hp + (combat_xp_multiplier × log(1 + total_combat_xp))
+```
+
+Where:
+- `base_hp = 25` (starting HP for new characters)
+- `combat_xp_multiplier = 150` (tuning constant)
+- `total_combat_xp` = cumulative XP earned from combat encounters (all sources)
+- `log()` = natural logarithm
+
+**Example Milestones:**
+| Total Combat XP | Max HP | Description |
+|---|---|---|
+| 0 | 25 | Brand new character |
+| 100 | 116 | ~10 encounters survived |
+| 500 | 219 | ~50 encounters, early mid-game |
+| 2000 | 389 | ~200 encounters, solid mid-game |
+| 10000 | 687 | ~1000 encounters, late-game |
+| 50000 | 1031 | Endgame veteran |
+
+**Why Logarithmic?**
+- Fast early gains (25→116 in first 10 encounters = good feedback)
+- Slows naturally at mid/late game (prevents runaway scaling)
+- No hard cap needed (100k XP = ~1200 HP, diminishing returns keep it reasonable)
+- Matches genre conventions (classic MUDs, D&D, roguelikes all use logarithmic HP curves)
+
+**XP Sources (all award combat_xp):**
+- Creature kill credit: 10-100 XP (scaled by creature level)
+- Survival time in combat: 5 XP per 30 ticks (~30 seconds)
+- Boss kills: 500-2000 XP (one-time bonuses)
+- PvP kills: 50-200 XP (scaled by victim's HP/level)
+
+### 1.5 Damage Formula Impacts
+
+**Current damage formula (from damage.ts):**
+```
+final_damage = max(1, (attack × stance_multiplier) - armour) × flanking_bonus
+```
+
+**No changes needed to core formula**, but:
+- **Attack values will trend higher** as weapon skills grow 5→80+
+- **Armour reduction becomes more meaningful** (armour 2→50 blocks flat damage)
+- **Equipment damage bonuses remain additive** (`attack = weaponSkill + weaponDamage`)
+
+**Example Combat Math (using new scales):**
+- Starter player: `unarmed=5 + fists=0 = attack 5` vs. `armour 2` → `5-2 = 3 damage/hit`
+- Mid-game player: `oneHanded=40 + iron_sword=10 = attack 50` vs. `armour 15` → `50-15 = 35 damage/hit`
+- Endgame player: `twoHanded=75 + steel_greatsword=30 = attack 105` vs. `armour 50` → `105-50 = 55 damage/hit`
+
+**Dodge/Block Chance Formulas (already exist in damage.ts):**
+```typescript
+dodgeChance = min(0.75, 0.20 + 0.03 × dodge)   // 20% base + 3% per rank
+blockChance = min(0.60, 0.05 + 0.03 × shieldBlock) // 5% base + 3% per rank
+```
+
+These formulas **already scale correctly** for 0-100 values:
+- dodge=5 → 35% dodge chance (starter)
+- dodge=50 → 75% dodge chance (capped, endgame)
+- shieldBlock=5 → 20% block chance (starter)
+- shieldBlock=18 → 60% block chance (capped, mid-game)
+
+---
+
+## 2. USE-BASED PROGRESSION SYSTEM
+
+### 2.1 Core Mechanic — Skill-by-Doing
+
+**Design Principle:** Using a weapon type increases that weapon's skill rank. Defensive stats grow through successful use.
+
+**Trigger Events:**
+| Stat | Trigger | XP Award |
+|---|---|---|
+| unarmed | Land unarmed strike | 1-3 XP |
+| oneHanded | Land one-handed weapon strike | 1-3 XP |
+| twoHanded | Land two-handed weapon strike | 1-3 XP |
+| ranged | Land ranged weapon strike | 1-3 XP |
+| shieldBlock | Successfully block attack with shield | 2-5 XP |
+| dodge | Successfully dodge attack | 2-5 XP |
+| armour | Take reduced damage from armour | 1 XP per 5 damage blocked |
+
+**XP variance:** 
+- Successful hits against higher-level creatures award more XP (×1.5 multiplier per level difference)
+- Critical success (future): Double XP award
+- Misses/failures award 0 XP (no participation trophies)
+
+### 2.2 Skill Rank Growth Curve
+
+**Formula (Exponential XP Requirements):**
+
+```typescript
+function xpToNextRank(currentRank: number): number {
+  if (currentRank >= 100) return Infinity; // Cap at 100
+  return Math.floor(50 * Math.pow(1.15, currentRank));
+}
+```
+
+**Example Milestones:**
+| Rank | Total XP Required | Hits to Rank (avg) | Description |
+|---|---|---|---|
+| 5 → 10 | 356 XP | ~150 hits | Fast early gains (starter → novice) |
+| 10 → 20 | 1,742 XP | ~700 hits | Early mid-game (novice → competent) |
+| 20 → 40 | 18,314 XP | ~7,000 hits | Mid-game plateau (competent → expert) |
+| 40 → 60 | 193,201 XP | ~77,000 hits | Late-game grind (expert → master) |
+| 60 → 80 | 2,038,392 XP | ~815,000 hits | Endgame mastery |
+| 80 → 100 | 21,508,780 XP | ~8.6M hits | Lifetime achievement (months/years) |
+
+**Why Exponential?**
+- **Ranks 0-20:** Fast progression (days) — new players see results quickly
+- **Ranks 20-40:** Moderate pace (weeks) — mid-game plateau feels earned
+- **Ranks 40-60:** Slow grind (months) — late-game specialization is meaningful
+- **Ranks 60-100:** Prestige territory (months/years) — true mastery is rare
+
+**Anti-Grind Safeguards:**
+- **Skill XP per encounter capped** at 50 XP/skill (prevents AFK farming)
+- **Diminishing returns on same-level mobs** (kill same creature 10+ times = halved XP)
+- **Variety bonus** (+25% XP for using multiple weapon types in same session)
+
+### 2.3 Skill Specialization vs. Generalization
+
+**Players choose their path:**
+- **Specialist:** Focus one weapon type (e.g., oneHanded=80, rest=5) → High attack in one style, weak if disarmed
+- **Generalist:** Spread across multiple types (e.g., oneHanded=40, twoHanded=40, ranged=30) → Flexible, but lower peak damage
+- **Defensive tank:** Invest in shieldBlock + armour → Low damage, high survivability
+- **Dodge specialist:** Max dodge + light armour → High avoidance, fragile if hit
+
+**No class restrictions — equipment access and stat growth are the only constraints.**
+
+### 2.4 Database Schema — Skill XP Tracking
+
+**New Table: `character_skill_progress`**
+
+```sql
+CREATE TABLE character_skill_progress (
+  character_id UUID NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  skill_type   TEXT NOT NULL, -- 'unarmed', 'oneHanded', 'twoHanded', 'ranged', 'shieldBlock', 'dodge', 'armour'
+  current_xp   INTEGER NOT NULL DEFAULT 0,
+  total_xp     INTEGER NOT NULL DEFAULT 0, -- Lifetime XP (never decreases, even after rank-ups)
+  last_gain_at TIMESTAMPTZ,
+  PRIMARY KEY (character_id, skill_type)
+);
+
+CREATE INDEX idx_character_skill_progress_char ON character_skill_progress(character_id);
+```
+
+**Why separate table?**
+- Keeps `characters` table clean (stat columns stay as base ranks)
+- Allows XP history queries (when did they last train X?)
+- Supports future skill decay mechanics (unused skills atrophy over time)
+
+**XP → Rank Conversion (runtime):**
+```typescript
+function calculateRankFromXP(totalXP: number): number {
+  let rank = 0;
+  let xpRequired = 0;
+  while (xpRequired <= totalXP && rank < 100) {
+    xpRequired += xpToNextRank(rank);
+    rank++;
+  }
+  return rank;
+}
+```
+
+This runs on:
+- Character login (load base stats from DB)
+- Equipment change (recalculate effective stats)
+- Skill XP gain (check for rank-up, update characters table if needed)
+
+### 2.5 Combat XP (for HP Growth)
+
+**New Column: `characters.combat_xp`**
+
+```sql
+ALTER TABLE characters
+  ADD COLUMN IF NOT EXISTS combat_xp INTEGER NOT NULL DEFAULT 0;
+```
+
+**Combat XP is separate from skill XP:**
+- Skill XP: Per-skill progression (oneHanded, dodge, etc.)
+- Combat XP: Universal HP growth currency
+
+**Award Rules:**
+- Creature kill credit: 10-100 XP (scaled by creature level)
+- Survival bonus: 5 XP per 30 combat ticks (~30 seconds in active combat)
+- Boss kill bonus: 500-2000 XP (one-time per boss per character)
+- PvP kill: 50-200 XP (scaled by victim's max HP / 10)
+
+**No XP loss on death** (death penalty is corpse loot + temporary stat debuff, not XP loss).
+
+---
+
+## 3. DATABASE SCHEMA CHANGES
+
+### 3.1 Migration 020 — Progression Foundations
+
+**File:** `020_progression_system.sql`
+
+```sql
+-- ============================================================================
+-- Migration 020: Progression System — Use-Based Skill Growth & HP Scaling
+-- ============================================================================
+
+-- ─── Step 1: Add combat_xp to characters ────────────────────────────────────
+
+ALTER TABLE characters
+  ADD COLUMN IF NOT EXISTS combat_xp INTEGER NOT NULL DEFAULT 0;
+
+COMMENT ON COLUMN characters.combat_xp IS 
+  'Cumulative combat experience points — drives HP growth via logarithmic formula.';
+
+-- ─── Step 2: Adjust starter HP from 100 → 25 ────────────────────────────────
+
+-- Update default for new characters
+ALTER TABLE characters
+  ALTER COLUMN max_hp SET DEFAULT 25;
+
+-- Migrate existing characters: Set combat_xp based on current HP
+-- Formula: If HP=100, grant retroactive XP equivalent to mid-game character
+-- This preserves existing power level while enabling future growth
+UPDATE characters
+  SET combat_xp = CASE
+    WHEN max_hp = 100 THEN 2000  -- Retroactive "mid-game" XP (~389 calculated HP)
+    ELSE 0                        -- Fresh characters start at 0
+  END,
+  max_hp = CASE
+    WHEN max_hp = 100 THEN 389   -- Recalculate from combat_xp=2000
+    ELSE 25                       -- Fresh characters start at base
+  END
+  WHERE deleted_at IS NULL;
+
+-- ─── Step 3: Create skill progress tracking table ───────────────────────────
+
+CREATE TABLE character_skill_progress (
+  character_id UUID NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  skill_type   TEXT NOT NULL, -- 'unarmed', 'oneHanded', 'twoHanded', 'ranged', 'shieldBlock', 'dodge', 'armour'
+  current_xp   INTEGER NOT NULL DEFAULT 0,  -- XP toward next rank
+  total_xp     INTEGER NOT NULL DEFAULT 0,  -- Lifetime XP (never decreases)
+  last_gain_at TIMESTAMPTZ,
+  PRIMARY KEY (character_id, skill_type),
+  CONSTRAINT chk_skill_type CHECK (
+    skill_type IN ('unarmed', 'oneHanded', 'twoHanded', 'ranged', 'shieldBlock', 'dodge', 'armour')
+  )
+);
+
+CREATE INDEX idx_character_skill_progress_char ON character_skill_progress(character_id);
+
+COMMENT ON TABLE character_skill_progress IS
+  'Tracks per-skill XP progression for use-based skill growth system (Issue #457).';
+
+-- ─── Step 4: Initialize skill XP for existing characters ────────────────────
+
+-- Retroactive XP grant: Existing characters with stat rank 5 get starter XP (0)
+-- Characters with higher ranks (e.g., from testing) get proportional XP
+INSERT INTO character_skill_progress (character_id, skill_type, total_xp, current_xp)
+SELECT 
+  c.id AS character_id,
+  skill_type,
+  -- Retroactive XP calculation (approximate)
+  CASE 
+    WHEN rank = 5 THEN 0  -- Starter value = 0 XP
+    WHEN rank > 5 THEN FLOOR(50 * (POWER(1.15, rank) - 1) / 0.15)  -- Geometric series sum
+    ELSE 0
+  END AS total_xp,
+  0 AS current_xp  -- All XP applied to ranks; current_xp always starts fresh
+FROM characters c
+CROSS JOIN (
+  SELECT 'unarmed' AS skill_type, c.unarmed AS rank FROM characters c WHERE c.deleted_at IS NULL
+  UNION ALL
+  SELECT 'oneHanded', c.one_handed FROM characters c WHERE c.deleted_at IS NULL
+  UNION ALL
+  SELECT 'twoHanded', c.two_handed FROM characters c WHERE c.deleted_at IS NULL
+  UNION ALL
+  SELECT 'ranged', c.ranged FROM characters c WHERE c.deleted_at IS NULL
+  UNION ALL
+  SELECT 'shieldBlock', c.shield_block FROM characters c WHERE c.deleted_at IS NULL
+  UNION ALL
+  SELECT 'dodge', c.dodge FROM characters c WHERE c.deleted_at IS NULL
+  UNION ALL
+  SELECT 'armour', c.armour FROM characters c WHERE c.deleted_at IS NULL
+) AS skill_data
+ON c.id = skill_data.character_id  -- This is invalid SQL; fixed below
+WHERE c.deleted_at IS NULL;
+
+-- CORRECTED INSERT (removing invalid self-join):
+INSERT INTO character_skill_progress (character_id, skill_type, total_xp, current_xp)
+SELECT c.id, 'unarmed', 0, 0 FROM characters c WHERE c.deleted_at IS NULL
+UNION ALL
+SELECT c.id, 'oneHanded', 0, 0 FROM characters c WHERE c.deleted_at IS NULL
+UNION ALL
+SELECT c.id, 'twoHanded', 0, 0 FROM characters c WHERE c.deleted_at IS NULL
+UNION ALL
+SELECT c.id, 'ranged', 0, 0 FROM characters c WHERE c.deleted_at IS NULL
+UNION ALL
+SELECT c.id, 'shieldBlock', 0, 0 FROM characters c WHERE c.deleted_at IS NULL
+UNION ALL
+SELECT c.id, 'dodge', 0, 0 FROM characters c WHERE c.deleted_at IS NULL
+UNION ALL
+SELECT c.id, 'armour', 0, 0 FROM characters c WHERE c.deleted_at IS NULL;
+
+-- ─── Step 5: Add stamina columns to characters ──────────────────────────────
+
+-- Stamina is NOT stored in characters table (it's runtime-only in PlayerState)
+-- Max stamina modifiers from equipment/status are calculated dynamically
+-- No migration needed here; stamina lives in Combatant interface only
+
+-- ─── Verification Queries ────────────────────────────────────────────────────
+
+-- Verify all active characters have skill progress rows (should be 7 per character)
+-- Expected: COUNT(*) = 7 × (active character count)
+-- SELECT COUNT(*) FROM character_skill_progress;
+
+-- Verify HP migration preserved power levels
+-- SELECT id, max_hp, combat_xp FROM characters WHERE deleted_at IS NULL;
+```
+
+### 3.2 Data Model Summary
+
+**After Migration 020:**
+
+**`characters` table changes:**
+- `max_hp` default: 100 → 25
+- `combat_xp` column added (drives HP growth)
+- Existing stat columns (unarmed, one_handed, etc.) unchanged — still store base ranks
+
+**New table: `character_skill_progress`**
+- Tracks XP per skill type
+- `total_xp` used to calculate current rank
+- `current_xp` tracks partial progress toward next rank (UI display)
+
+**Runtime-only (not persisted):**
+- `stamina` / `maxStamina` (in Combatant interface, recalculated each combat registration)
+
+---
+
+## 4. INTEGRATION POINTS
+
+### 4.1 Combat Registration (attack.ts, ZoneRoom.ts)
+
+**Current Problem (from history.md):**
+> Player combat always uses DEFAULT_PLAYER_STATS — base stats from DB and equipment bonuses never loaded at registration (attack.ts:57, ZoneRoom.ts:1911, 1952)
+
+**Fix Required:**
+
+**In `ZoneRoom.ts` (lines 1985-1991, 2030-2036):**
+
+Replace:
+```typescript
+const eff = this.playerStatsCache.get(player.sessionId);
+const playerOpts = eff
+  ? { attack: eff.attack, maxHp: eff.maxHp, armour: eff.armour, dodge: eff.dodge, shieldBlock: eff.shieldBlock }
+  : undefined;
+```
+
+With:
+```typescript
+const eff = this.playerStatsCache.get(player.sessionId);
+const playerOpts = eff
+  ? { 
+      attack: eff.attack, 
+      maxHp: eff.maxHp, 
+      armour: eff.armour, 
+      dodge: eff.dodge, 
+      shieldBlock: eff.shieldBlock,
+      stamina: eff.maxStamina,       // NEW: Wire stamina
+      maxStamina: eff.maxStamina     // NEW: Wire stamina
+    }
+  : undefined;
+```
+
+**Add `calculateMaxStamina()` helper:**
+```typescript
+// In stats.ts or new progression.ts file
+export function calculateMaxStamina(
+  baseStamina: number = 100,
+  equipment: EquipmentBonuses,
+  statusEffects: string[] = []
+): number {
+  let max = baseStamina;
+  
+  // Equipment modifiers (from armour weight)
+  if (equipment.armour >= 20) max -= 15;  // Heavy armour penalty
+  else if (equipment.armour <= 5) max += 10; // Light armour bonus
+  
+  // Status effect modifiers
+  if (statusEffects.includes('exhausted')) max -= 50;
+  if (statusEffects.includes('energized')) max += 25;
+  
+  return Math.max(10, max); // Floor at 10 to prevent 0-stamina edge cases
+}
+```
+
+**Wire into `calculatePlayerEffectiveStats()`:**
+```typescript
+export interface EffectiveStats {
+  maxHp: number;
+  attack: number;
+  armour: number;
+  shieldBlock: number;
+  dodge: number;
+  maxStamina: number;  // NEW
+}
+
+export function calculatePlayerEffectiveStats(
+  base: CombatStats,
+  equipment: EquipmentBonuses,
+  statusEffects: string[] = []
+): EffectiveStats {
+  const skillKey = WEAPON_SKILL_KEY[equipment.weaponSkill];
+  const weaponSkillValue = base[skillKey] as number;
+
+  return {
+    maxHp: base.maxHp,
+    attack: weaponSkillValue + equipment.weaponDamage,
+    armour: base.armour + equipment.armour,
+    shieldBlock: equipment.shieldBlock > 0 ? base.shieldBlock + equipment.shieldBlock : 0,
+    dodge: base.dodge,
+    maxStamina: calculateMaxStamina(100, equipment, statusEffects),  // NEW
+  };
+}
+```
+
+### 4.2 HP Growth on Combat XP Gain
+
+**New System: `ProgressionSystem.ts`**
+
+```typescript
+/**
+ * ProgressionSystem — Handles skill XP gains, rank-ups, and HP growth.
+ * 
+ * Responsibilities:
+ * - Award skill XP on combat events (hits landed, blocks, dodges)
+ * - Award combat XP on kills/survival
+ * - Calculate rank-ups and persist to DB
+ * - Recalculate HP from combat_xp on rank changes
+ */
+
+import type { CharacterRepository } from '../character/CharacterRepository.js';
+
+export const HP_BASE = 25;
+export const HP_MULTIPLIER = 150;
+
+/** Calculate max HP from combat XP using logarithmic formula. */
+export function calculateMaxHPFromCombatXP(combatXP: number): number {
+  return Math.floor(HP_BASE + HP_MULTIPLIER * Math.log(1 + combatXP));
+}
+
+/** Calculate XP required to reach next rank for a given skill. */
+export function xpToNextRank(currentRank: number): number {
+  if (currentRank >= 100) return Infinity;
+  return Math.floor(50 * Math.pow(1.15, currentRank));
+}
+
+/** Calculate current rank from total XP. */
+export function calculateRankFromXP(totalXP: number): number {
+  let rank = 0;
+  let xpAccumulator = 0;
+  while (rank < 100) {
+    const xpNeeded = xpToNextRank(rank);
+    if (xpAccumulator + xpNeeded > totalXP) break;
+    xpAccumulator += xpNeeded;
+    rank++;
+  }
+  return rank;
+}
+
+export interface SkillXPGain {
+  characterId: string;
+  skillType: 'unarmed' | 'oneHanded' | 'twoHanded' | 'ranged' | 'shieldBlock' | 'dodge' | 'armour';
+  xp: number;
+}
+
+export interface CombatXPGain {
+  characterId: string;
+  xp: number;
+  reason: string; // 'kill', 'survival', 'boss', 'pvp'
+}
+
+export class ProgressionSystem {
+  constructor(private characterRepo: CharacterRepository) {}
+
+  /** Award skill XP and check for rank-ups. Returns true if rank increased. */
+  async awardSkillXP(gain: SkillXPGain): Promise<boolean> {
+    // Load current skill progress
+    const progress = await this.characterRepo.getSkillProgress(gain.characterId, gain.skillType);
+    const newTotalXP = progress.total_xp + gain.xp;
+    const oldRank = calculateRankFromXP(progress.total_xp);
+    const newRank = calculateRankFromXP(newTotalXP);
+
+    // Persist XP gain
+    await this.characterRepo.addSkillXP(gain.characterId, gain.skillType, gain.xp);
+
+    // If rank-up occurred, update base stat in characters table
+    if (newRank > oldRank) {
+      await this.characterRepo.updateStatRank(gain.characterId, gain.skillType, newRank);
+      return true;
+    }
+    return false;
+  }
+
+  /** Award combat XP and recalculate HP. Returns new max HP. */
+  async awardCombatXP(gain: CombatXPGain): Promise<number> {
+    const char = await this.characterRepo.getById(gain.characterId);
+    if (!char) throw new Error('Character not found');
+
+    const newCombatXP = char.combatStats.combat_xp + gain.xp;
+    const newMaxHP = calculateMaxHPFromCombatXP(newCombatXP);
+
+    // Persist combat XP and recalculated HP
+    await this.characterRepo.updateCombatXP(gain.characterId, newCombatXP);
+    await this.characterRepo.updateMaxHP(gain.characterId, newMaxHP);
+
+    return newMaxHP;
+  }
+}
+```
+
+**Hook into CombatSystem tick resolution:**
+
+```typescript
+// In CombatSystem.ts, after damage is dealt:
+if (result.events.some(e => e.type === 'defeated')) {
+  const defeatedEvent = result.events.find(e => e.type === 'defeated');
+  const killerIds = defeatedEvent.killerIds ?? [];
+  
+  // Award combat XP to all killers
+  for (const killerId of killerIds) {
+    const combatant = this.combatants.get(killerId);
+    if (combatant?.isPlayer) {
+      await this.progressionSystem.awardCombatXP({
+        characterId: killerId,
+        xp: 50, // Base kill XP (scaled by creature level in future)
+        reason: 'kill'
+      });
+    }
+  }
+}
+
+// Award skill XP for each landed hit
+for (const event of result.events) {
+  if (event.type === 'strike' && !event.dodged && !event.blocked) {
+    const attacker = this.combatants.get(event.actorId);
+    if (attacker?.isPlayer) {
+      // Determine weapon type from attacker's equipment (requires equipment context)
+      const weaponType = getEquippedWeaponType(event.actorId); // Needs implementation
+      await this.progressionSystem.awardSkillXP({
+        characterId: event.actorId,
+        skillType: weaponType,
+        xp: 2 // Base hit XP
+      });
+    }
+  }
+  
+  // Award dodge XP on successful dodge
+  if (event.dodged) {
+    const defender = this.combatants.get(event.targetId);
+    if (defender?.isPlayer) {
+      await this.progressionSystem.awardSkillXP({
+        characterId: event.targetId,
+        skillType: 'dodge',
+        xp: 3
+      });
+    }
+  }
+  
+  // Award shieldBlock XP on successful block
+  if (event.blocked) {
+    const defender = this.combatants.get(event.targetId);
+    if (defender?.isPlayer) {
+      await this.progressionSystem.awardSkillXP({
+        characterId: event.targetId,
+        skillType: 'shieldBlock',
+        xp: 4
+      });
+    }
+  }
+}
+```
+
+### 4.3 CharacterRepository Extensions
+
+**New Methods:**
+
+```typescript
+export interface CharacterRepository {
+  // ... existing methods
+  
+  /** Get skill progress for a specific skill type. */
+  getSkillProgress(characterId: string, skillType: string): Promise<{
+    total_xp: number;
+    current_xp: number;
+    last_gain_at: Date | null;
+  }>;
+  
+  /** Add XP to a skill. */
+  addSkillXP(characterId: string, skillType: string, xp: number): Promise<void>;
+  
+  /** Update a stat rank (called on rank-up). */
+  updateStatRank(characterId: string, skillType: string, newRank: number): Promise<void>;
+  
+  /** Update combat XP. */
+  updateCombatXP(characterId: string, newCombatXP: number): Promise<void>;
+  
+  /** Update max HP (recalculated from combat XP). */
+  updateMaxHP(characterId: string, newMaxHP: number): Promise<void>;
+}
+```
+
+**PgCharacterRepository Implementation:**
+
+```typescript
+async getSkillProgress(characterId: string, skillType: string) {
+  const result = await this.db.query(
+    `SELECT total_xp, current_xp, last_gain_at 
+     FROM character_skill_progress 
+     WHERE character_id = $1 AND skill_type = $2`,
+    [characterId, skillType]
+  );
+  return result.rows[0] ?? { total_xp: 0, current_xp: 0, last_gain_at: null };
+}
+
+async addSkillXP(characterId: string, skillType: string, xp: number) {
+  await this.db.query(
+    `INSERT INTO character_skill_progress (character_id, skill_type, total_xp, current_xp, last_gain_at)
+     VALUES ($1, $2, $3, $3, NOW())
+     ON CONFLICT (character_id, skill_type)
+     DO UPDATE SET 
+       total_xp = character_skill_progress.total_xp + $3,
+       current_xp = character_skill_progress.current_xp + $3,
+       last_gain_at = NOW()`,
+    [characterId, skillType, xp]
+  );
+}
+
+async updateStatRank(characterId: string, skillType: string, newRank: number) {
+  const columnMap = {
+    unarmed: 'unarmed',
+    oneHanded: 'one_handed',
+    twoHanded: 'two_handed',
+    ranged: 'ranged',
+    shieldBlock: 'shield_block',
+    dodge: 'dodge',
+    armour: 'armour'
+  };
+  const column = columnMap[skillType];
+  await this.db.query(
+    `UPDATE characters SET ${column} = $1 WHERE id = $2`,
+    [newRank, characterId]
+  );
+  
+  // Reset current_xp to 0 after rank-up
+  await this.db.query(
+    `UPDATE character_skill_progress 
+     SET current_xp = 0 
+     WHERE character_id = $1 AND skill_type = $2`,
+    [characterId, skillType]
+  );
+}
+
+async updateCombatXP(characterId: string, newCombatXP: number) {
+  await this.db.query(
+    `UPDATE characters SET combat_xp = $1 WHERE id = $2`,
+    [newCombatXP, characterId]
+  );
+}
+
+async updateMaxHP(characterId: string, newMaxHP: number) {
+  await this.db.query(
+    `UPDATE characters SET max_hp = $1 WHERE id = $2`,
+    [newMaxHP, characterId]
+  );
+}
+```
+
+### 4.4 Frontend Stat Display
+
+**Current State (from shared/index.ts):**
+- Frontend has `SET_COMBAT_STATS` reducer but server never dispatches it (integration gap from Phase 1 review)
+
+**Required Changes:**
+
+**Server: Dispatch combat stats on character load**
+
+```typescript
+// In ZoneRoom.ts, after player joins and character loads:
+const baseStats = await this.characterRepo.getBaseStats(client.sessionId);
+const equipment = this.loadoutManager.getEquippedItems(client.sessionId);
+const equipmentBonuses = calculateEquipmentBonuses(equipment);
+const effectiveStats = calculatePlayerEffectiveStats(baseStats, equipmentBonuses);
+
+// Cache for combat registration
+this.playerStatsCache.set(client.sessionId, effectiveStats);
+
+// Dispatch to client
+client.send('combat_stats', {
+  maxHp: effectiveStats.maxHp,
+  currentHp: client.state.hp, // From PlayerState
+  attack: effectiveStats.attack,
+  armour: effectiveStats.armour,
+  dodge: effectiveStats.dodge,
+  shieldBlock: effectiveStats.shieldBlock,
+  stamina: effectiveStats.maxStamina,
+  maxStamina: effectiveStats.maxStamina,
+  // Additional UI metadata
+  baseStats: baseStats, // Show raw base stats in character sheet
+  equipmentBonuses: equipmentBonuses, // Show equipment contribution
+});
+```
+
+**Client: Handle combat_stats message**
+
+```typescript
+// In client state reducer:
+case 'combat_stats':
+  return {
+    ...state,
+    combatStats: {
+      maxHp: message.maxHp,
+      currentHp: message.currentHp,
+      attack: message.attack,
+      armour: message.armour,
+      dodge: message.dodge,
+      shieldBlock: message.shieldBlock,
+      stamina: message.stamina,
+      maxStamina: message.maxStamina,
+    },
+    characterSheet: {
+      baseStats: message.baseStats,
+      equipmentBonuses: message.equipmentBonuses,
+    }
+  };
+```
+
+**UI Components to Update:**
+
+1. **Character Sheet** — Show base stats + equipment bonuses + effective totals
+2. **Combat HUD** — Display HP bar (scales 0-1000+), stamina bar (0-100)
+3. **Progression Notifications** — "Your One-Handed skill increased to 21!" (on rank-up)
+4. **XP Progress Bars** — Show current_xp / xp_to_next_rank per skill (optional)
+
+### 4.5 Death Penalty Interaction
+
+**Current System (from DowningSystem.ts):**
+- Bleedout timer: 60 ticks
+- Grace period: 3 ticks before killing blow
+- Death penalty exists but is not applied (orphaned code from Phase 1 review)
+
+**Death Penalty Design (Issue #457 scope):**
+
+**On Death:**
+1. Drop corpse with all equipped gear (existing)
+2. Respawn at faction stronghold (existing)
+3. Apply temporary stat debuff: **-20% to all combat stats for 300 ticks (5 minutes)**
+4. **NO XP loss** (death penalty is gear risk + stat debuff, not progression loss)
+
+**New Interface:**
+
+```typescript
+export interface DeathPenalty {
+  appliedAt: number; // Tick when penalty was applied
+  expiresAt: number; // Tick when penalty expires (appliedAt + 300)
+  statMultiplier: number; // 0.8 (-20% debuff)
+}
+```
+
+**Apply on death (in DowningSystem or ZoneRoom death handler):**
+
+```typescript
+// After corpse drop, before respawn teleport:
+playerState.deathPenalty = {
+  appliedAt: currentTick,
+  expiresAt: currentTick + 300,
+  statMultiplier: 0.8
+};
+
+// Recalculate effective stats with penalty
+const baseStats = await this.characterRepo.getBaseStats(playerId);
+const equipment = this.loadoutManager.getEquippedItems(playerId);
+const effectiveStats = calculatePlayerEffectiveStats(baseStats, equipment);
+
+// Apply death penalty multiplier
+if (playerState.deathPenalty && currentTick < playerState.deathPenalty.expiresAt) {
+  effectiveStats.attack *= playerState.deathPenalty.statMultiplier;
+  effectiveStats.armour *= playerState.deathPenalty.statMultiplier;
+  effectiveStats.dodge *= playerState.deathPenalty.statMultiplier;
+  effectiveStats.shieldBlock *= playerState.deathPenalty.statMultiplier;
+}
+
+this.playerStatsCache.set(playerId, effectiveStats);
+```
+
+**Tick expiration check (in ZoneRoom tick):**
+
+```typescript
+for (const [sid, ps] of this.players) {
+  if (ps.deathPenalty && currentTick >= ps.deathPenalty.expiresAt) {
+    delete ps.deathPenalty;
+    // Recalculate stats without penalty
+    this.recalculatePlayerStats(sid);
+    // Notify player
+    this.sendNarrate(this.clients.get(sid), {
+      text: 'The shadow of death fades. You feel your strength return.',
+      type: 'system',
+      timestamp: Date.now()
+    });
+  }
+}
+```
+
+---
+
+## 5. PHASED IMPLEMENTATION PLAN
+
+### Phase 0: Foundation (1-2 days)
+
+**Goal:** Database migrations + CharacterRepository extensions
+
+**Tasks:**
+- [ ] Write `020_progression_system.sql` migration
+- [ ] Test migration on dev DB (verify HP recalculation, skill_progress population)
+- [ ] Extend CharacterRepository interface with progression methods
+- [ ] Implement PgCharacterRepository progression methods
+- [ ] Update InMemoryCharacterRepository (test doubles)
+- [ ] Unit tests for progression math (HP formula, XP curves, rank calculation)
+
+**Acceptance Criteria:**
+- Migration runs cleanly on fresh DB and existing DB
+- `getSkillProgress()`, `addSkillXP()`, `updateStatRank()` work correctly
+- XP→Rank calculation matches design spec (test rank 5→10, 20→40, 60→80)
+
+### Phase 1: HP Growth (2-3 days)
+
+**Goal:** Combat XP awards + logarithmic HP scaling
+
+**Tasks:**
+- [ ] Create `ProgressionSystem.ts` with `awardCombatXP()`
+- [ ] Hook into CombatSystem defeat events (award kill XP)
+- [ ] Hook into CombatSystem tick (award survival XP every 30 ticks)
+- [ ] Implement `calculateMaxHPFromCombatXP()` in combat registration
+- [ ] Update frontend to display scaled HP bars (max 1000+ range)
+- [ ] Add death penalty stat debuff (300-tick expiration)
+
+**Acceptance Criteria:**
+- Players gain combat XP on kills and survival
+- Max HP increases logarithmically (25 → 116 after ~100 XP)
+- HP bar UI scales correctly (no overflow at 1000+ HP)
+- Death penalty applies -20% to stats for 5 minutes
+
+### Phase 2: Use-Based Skill Progression (3-4 days)
+
+**Goal:** Skill XP gains on weapon use, dodge, block
+
+**Tasks:**
+- [ ] Hook `awardSkillXP()` into CombatSystem strike events (detect weapon type)
+- [ ] Award dodge XP on successful dodge
+- [ ] Award shieldBlock XP on successful block
+- [ ] Award armour XP on damage reduction (1 XP per 5 blocked)
+- [ ] Implement rank-up detection and `updateStatRank()` calls
+- [ ] Wire rank-ups into effective stat recalculation (force cache invalidation)
+- [ ] Add progression notifications to narration feed ("Skill increased!")
+
+**Acceptance Criteria:**
+- Using a weapon awards XP to that weapon type's skill
+- Dodging/blocking awards XP to defensive stats
+- Rank-ups persist to DB and update effective stats
+- Players see progression feedback in narration
+
+### Phase 3: Stamina System (2-3 days)
+
+**Goal:** Stamina pool, regeneration, equipment/status modifiers
+
+**Tasks:**
+- [ ] Add `stamina` / `maxStamina` to Combatant interface (players only)
+- [ ] Implement `calculateMaxStamina()` with equipment/status modifiers
+- [ ] Wire stamina into combat registration (initialize from effective stats)
+- [ ] Add stamina costs to abilities (Heavy Strike, Block)
+- [ ] Implement stamina regeneration (+10/tick OOC, +5/tick in combat)
+- [ ] Add stamina bar to combat HUD (client UI)
+- [ ] Block ability use when stamina < cost (validation in CombatSystem)
+
+**Acceptance Criteria:**
+- Stamina regenerates correctly in/out of combat
+- Abilities consume stamina and are blocked when insufficient
+- Heavy armour reduces max stamina, light armour increases it
+- Status effects (exhausted, energized) modify stamina
+
+### Phase 4: Frontend Integration & Polish (2-3 days)
+
+**Goal:** Character sheet, progression UI, XP notifications
+
+**Tasks:**
+- [ ] Dispatch `combat_stats` message on character load
+- [ ] Build Character Sheet UI (base stats + equipment bonuses + effective)
+- [ ] Add skill XP progress bars (optional, per-skill)
+- [ ] Style progression notifications (rank-up badges, XP gains)
+- [ ] Add `/stats` command to show detailed progression info
+- [ ] Update GDD documentation with progression mechanics
+- [ ] Write player-facing guide ("How Progression Works")
+
+**Acceptance Criteria:**
+- Character sheet displays all stats correctly
+- Players see real-time XP gains and rank-ups
+- `/stats` command shows detailed progression data
+- Documentation is updated
+
+**Total Estimated Time:** 10-15 days (2-3 weeks)
+
+---
+
+## 6. RISKS & TRADE-OFFS
+
+### 6.1 Balance Risks
+
+**Risk:** Exponential XP curve makes ranks 60+ unattainable
+
+**Mitigation:**
+- Tune `xpToNextRank()` multiplier (currently 1.15, can lower to 1.12 for faster high-end progression)
+- Add endgame XP sources (boss kills, rare encounters, daily bonuses)
+- Monitor player data (if <1% reach rank 50 in 6 months, curve is too steep)
+
+**Risk:** HP scaling makes early game too fragile (25 HP = 2-hit deaths)
+
+**Mitigation:**
+- Starter zones have low-damage creatures (5-8 damage/hit)
+- Free healing at faction stronghold
+- Bleedout system gives 60-second safety net
+- If 25 HP proves too low, adjust `HP_BASE` to 35-40 (migration can bump existing characters)
+
+**Risk:** Stamina costs make abilities unusable in long fights
+
+**Mitigation:**
+- In-combat regen (+5/tick) is intentionally generous (100 stamina = 20 ticks of regen)
+- Abilities cost 10-20 stamina (1-2 ticks to recover)
+- Players can disengage and regen stamina before re-engaging (tactical choice)
+
+### 6.2 Technical Risks
+
+**Risk:** Skill XP queries on every hit cause DB load
+
+**Mitigation:**
+- Batch XP writes (accumulate in memory, flush every 10 ticks)
+- Use `ON CONFLICT DO UPDATE` for upsert efficiency
+- Add DB index on `(character_id, skill_type)` (already in schema)
+
+**Risk:** HP recalculation on every combat XP gain is expensive
+
+**Mitigation:**
+- HP recalculation is `O(1)` (logarithm + multiplication)
+- Only persist HP to DB when it changes (compare old vs. new before UPDATE)
+- Cache effective HP in PlayerState (don't query DB mid-combat)
+
+**Risk:** Migration 020 breaks existing characters
+
+**Mitigation:**
+- Retroactive XP grants preserve power levels (HP=100 → combat_xp=2000)
+- Test migration on staging DB with real player data
+- Rollback plan: Migration 021 reverts changes (restore HP=100, drop skill_progress table)
+
+### 6.3 Design Trade-Offs
+
+**Trade-Off:** Use-based progression vs. quest/achievement-based progression
+
+**Decision:** Use-based is more organic and fits MUD genre (skill-by-doing is classic)
+
+**Downside:** Players might grind low-level mobs for XP (anti-social behavior)
+
+**Safeguard:** Diminishing returns on same-creature kills (halve XP after 10 kills)
+
+---
+
+**Trade-Off:** Logarithmic HP curve vs. linear HP curve
+
+**Decision:** Logarithmic prevents runaway scaling and matches genre conventions
+
+**Downside:** Endgame HP growth feels slow (2000 XP → 3000 XP only adds ~100 HP)
+
+**Justification:** At 1000+ HP, another 100 HP is meaningful (10% increase). Linear scaling would hit 5000+ HP (impossible to balance PvP).
+
+---
+
+**Trade-Off:** Stamina as resource pool vs. cooldowns-only
+
+**Decision:** Stamina adds tactical depth (resource management during fights)
+
+**Downside:** Another bar to track (complexity tax)
+
+**Justification:** Stamina unifies ability costs, blocking, dodging (cleaner than per-ability cooldowns + per-ability costs). Genre-standard (ESO, WoW, D&D all use stamina/energy).
+
+---
+
+## 7. OPEN QUESTIONS FOR DALE
+
+1. **HP Scaling Tuning:** Start at 25 HP or 35 HP? (25 = fragile starter, 35 = safer but slower growth feedback)
+
+2. **Skill XP Variance:** Should higher-level creatures award more skill XP (e.g., 1-3 XP baseline, +50% per level difference)? Or flat 2 XP per hit?
+
+3. **PvP Progression:** Should PvP kills award skill XP (currently yes for combat XP, TBD for skill XP)? Risk: PvP farming loops.
+
+4. **Stamina Regen Rates:** +10 OOC, +5 in-combat feel right? Or too fast/slow?
+
+5. **Death Penalty Duration:** 300 ticks (5 minutes) or shorter (180 ticks = 3 minutes)? Feedback loop depends on zone run length.
+
+6. **Skill Decay:** Should unused skills atrophy over time (e.g., -1 rank per 30 days inactive)? Or permanent once earned?
+
+7. **Specialization Incentives:** Should high-rank skills (80+) grant passive bonuses (e.g., oneHanded=90 → +5% crit chance)? Or pure attack scaling?
+
+---
+
+## 8. CONCLUSION
+
+This progression system transforms EllMUD from a static-stat prototype into a dynamic, growth-driven RPG while preserving the three-layer architecture and use-based philosophy.
+
+**What Changes:**
+- HP scales 25 → 1000+ via combat XP (logarithmic curve)
+- Weapon skills and defensive stats scale 5 → 100 via use-based XP (exponential curve)
+- Stamina adds tactical resource management (100 base, modified by gear/status)
+- Death penalty applies temporary stat debuff (no XP loss)
+
+**What Stays the Same:**
+- CombatStats interface (8 stats, no structural changes)
+- Damage formula (dodge→block→armour→damage pipeline unchanged)
+- Equipment bonuses (still additive to base stats)
+- Three-layer model (Template→Base→Effective, Base now grows over time)
+
+**Implementation Priority:**
+1. Phase 0: DB migrations + CharacterRepository (foundation)
+2. Phase 1: HP growth (immediate player feedback)
+3. Phase 2: Skill XP (core progression loop)
+4. Phase 3: Stamina (tactical depth)
+5. Phase 4: Frontend polish (UX completion)
+
+**Estimated Timeline:** 2-3 weeks for full implementation + testing.
+
+**Next Steps:**
+1. Dale reviews proposal and answers open questions
+2. Merge Phase 0 (migrations) after review approval
+3. Iterative rollout of Phases 1-4 with playtesting between each
+
+---
+
+**Proposal Status:** AWAITING APPROVAL
+
+**Related Issues:** #457  
+**Related PRs:** (none yet)  
+**Dependencies:** Phase 1 combat stat system (migrations 018/019) must be merged first  
+**Blockers:** None
