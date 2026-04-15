@@ -23,6 +23,9 @@
 - **Concurrency:** Scheduled workflow uses `concurrency: { group: scheduled-uat-promote, cancel-in-progress: false }` to prevent overlapping merge runs. Squad-promote uses per-ref groups — consider updating to serialize with scheduled workflow.
 - **GITHUB_TOKEN limitation:** Pushes made with `GITHUB_TOKEN` (by `github-actions[bot]`) do NOT trigger other workflows by design (to prevent infinite loops). Solution: use `workflow_dispatch` trigger + explicit `gh workflow run` calls after pushing.
 - **CI/CD trigger pattern:** After promotion workflows push to uat/prod, they now explicitly trigger `ci-cd.yml` via `gh workflow run ci-cd.yml --ref <branch>` using `GH_TOKEN`. A 5-second sleep gives GitHub time to process the push before triggering.
+- **Deploy job outputs:** The `deploy` job now exposes `fqdn` via `outputs.fqdn` from the healthcheck step. Any downstream job can reference `needs.deploy.outputs.fqdn` to get the container app's FQDN without needing Azure credentials.
+- **Discord webhook embeds:** UAT notification uses Discord embed format (not plain `content`) with Python heredoc for safe JSON construction. Changelog is extracted via awk between first two `# [` headers in CHANGELOG.md. Always pass untrusted content to Python via env vars, never shell interpolation.
+- **CHANGELOG.md format:** Follows Keep a Changelog / semantic-release format. Version headers are `# [x.y.z-dev.N](url) (date)`. Sections are `### Bug Fixes`, `### Features`, etc.
 - **workflow_dispatch needs actions:write:** `gh workflow run` uses the workflow_dispatch API, which requires `actions: write` permission on GITHUB_TOKEN. `contents: write` alone is not enough — the API returns HTTP 403 without it. Both promote workflows now carry both permissions.
 
 - **Pre-commit hooks:** Husky + lint-staged installed. Pre-commit hook runs `eslint --fix` on staged `.ts`/`.tsx` files. Config lives in root `package.json` under `lint-staged` key. Hook file: `.husky/pre-commit`. `prepare` script in package.json ensures hooks install on `npm install`.
@@ -276,3 +279,35 @@
 - **Concurrency serialization** — dev→uat and uat→prod can overlap; low risk but cleanable.
 
 ---
+
+## CI/CD Bug Fixes - Run #278 (2026-04-20)
+
+**Status:** ✅ Complete
+
+**Context:** CI/CD run #278 on `uat` branch failed with two distinct bugs. Both fixed in this session.
+
+**Bugs Fixed:**
+
+1. **Docker build failure - husky not found:**
+   - **Problem:** Runtime stage's `npm ci --omit=dev` triggered the `prepare` script which tried to run `husky` (a devDependency not installed with `--omit=dev`). Build failed with `sh: husky: not found, npm error code 127`.
+   - **Root cause:** The `prepare` script in package.json runs on ANY `npm ci`, even when devDependencies are omitted.
+   - **Fix:** Added `--ignore-scripts` flag to the runtime stage's `npm ci` command in `Dockerfile` (line 28).
+   - **Rationale:** Build stage (Step 7) runs full `npm ci` and needs `prepare` to install husky hooks for development. Runtime stage only needs production dependencies and has no need for git hooks, so skipping scripts is safe.
+
+2. **Issue auto-creation skipped on workflow_dispatch:**
+   - **Problem:** The `create-failure-issue` job in `.github/workflows/ci-cd.yml` had condition `github.event_name == 'push'`, which excluded `workflow_dispatch` triggers. Manual workflow runs that failed didn't create tracking issues.
+   - **Fix:** Updated the `if` condition (line 361) to `(github.event_name == 'push' || github.event_name == 'workflow_dispatch')`.
+   - **Rationale:** Issues are valuable for both automated and manual failures. The job already has proper failure detection via `needs.*.result == 'failure'`, so adding `workflow_dispatch` is safe and consistent with other jobs like `docker-build-push` and `deploy`.
+
+**Learnings:**
+
+- **npm scripts + --omit=dev behavior:** The `prepare` script ALWAYS runs during `npm ci`, even with `--omit=dev`. Use `--ignore-scripts` to prevent this when devDependencies aren't available. This is a common Docker multi-stage pattern: build stage runs scripts, runtime stage skips them.
+- **workflow_dispatch event handling:** When adding `workflow_dispatch` triggers to workflows, audit all `if` conditions that filter on `github.event_name`. Jobs that should apply to manual runs (deploys, notifications, issue creation) need to include both `'push'` and `'workflow_dispatch'`.
+- **Docker layer optimization preserved:** Adding `--ignore-scripts` doesn't affect caching (it's in the same RUN command), and has no performance impact (slightly faster if anything, since no scripts execute).
+
+**Files Changed:**
+- `Dockerfile`: Added `--ignore-scripts` to runtime stage npm ci (line 28)
+- `.github/workflows/ci-cd.yml`: Updated `create-failure-issue` condition to include `workflow_dispatch` (line 361)
+
+**Verification:** YAML lint passed. Changes are minimal and surgical — only the failing command and the incorrect condition were modified.
+
