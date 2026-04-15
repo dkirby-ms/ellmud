@@ -12,15 +12,27 @@ on:
     paths-ignore:
       - docs/**
       - .squad/**
+      - .github/**
+      - .copilot/**
+      - infra/**
       - "*.md"
       - "**/*.md"
+      - LICENSE
+      - .gitattributes
+      - .gitignore
   push:
     branches: [uat, prod]
     paths-ignore:
       - docs/**
       - .squad/**
+      - .github/**
+      - .copilot/**
+      - infra/**
       - "*.md"
       - "**/*.md"
+      - LICENSE
+      - .gitattributes
+      - .gitignore
 
 permissions:
   contents: read
