@@ -132,7 +132,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -354,18 +353,70 @@ jobs:
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_name == 'uat'
     needs: deploy
     runs-on: ubuntu-latest
+    environment: ${{ github.ref_name }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract changelog
+        id: changelog
+        run: |
+          # Extract latest version's changes (between first and second version headers)
+          CHANGELOG=$(awk '/^# \[/{if(found) exit; found=1; next} found' CHANGELOG.md)
+          # Store as multiline output
+          {
+            echo "content<<CHANGELOG_EOF"
+            echo "$CHANGELOG"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Announce UAT deploy to Discord
         continue-on-error: true
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_TESTING_ALERTS }}
+          CLIENT_URL: ${{ secrets.CLIENT_URL }}
+          CHANGELOG_CONTENT: ${{ steps.changelog.outputs.content }}
         run: |
-          SHORT_SHA="${GITHUB_SHA::7}"
-          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
-          RUN_URL="${REPO_URL}/actions/runs/${{ github.run_id }}"
+          # Build and send Discord embed payload entirely in Python
+          # to safely handle special characters in changelog content
+          PAYLOAD=$(python3 << 'PYEOF'
+          import json, os
+
+          client_url = os.environ.get("CLIENT_URL", "")
+          changelog = os.environ.get("CHANGELOG_CONTENT", "").strip()
+
+          # Clean up changelog: remove leading/trailing blank lines
+          lines = changelog.split("\n")
+          while lines and not lines[0].strip():
+              lines.pop(0)
+          while lines and not lines[-1].strip():
+              lines.pop()
+          clean_changelog = "\n".join(lines)
+
+          description = (
+              "🧪 **New build on the test server!**\n\n"
+              "Here's what changed:\n\n"
+              f"{clean_changelog}\n\n"
+              f"🔗 **[Jump into the test server]({client_url})**"
+          )
+
+          payload = {
+              "embeds": [{
+                  "title": "🚀 New UAT Build Deployed",
+                  "description": description,
+                  "color": 5763719,
+                  "footer": {
+                      "text": "ellmud test server"
+                  }
+              }]
+          }
+          print(json.dumps(payload))
+          PYEOF
+          )
+
           curl -s -o /dev/null -w "%{http_code}" \
             -H "Content-Type: application/json" \
-            -d "{\"content\":\"✅ **UAT Deploy Successful**\nCommit \`${SHORT_SHA}\` deployed to UAT test server.\n[View deployment](${RUN_URL}) · [View uat branch](${REPO_URL}/tree/uat)\"}" \
+            -d "$PAYLOAD" \
             "$DISCORD_WEBHOOK_URL"
 
   # ─── Create issue on CI failure ───────────────────────────────────────────────
