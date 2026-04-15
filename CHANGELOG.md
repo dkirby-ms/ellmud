@@ -1,3 +1,10 @@
+# [0.2.0-dev.46](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.45...v0.2.0-dev.46) (2026-04-15)
+
+
+### Bug Fixes
+
+* use currentRoomId instead of roomId on Creature type ([4a37cde](https://github.com/dkirby-ms/ellmud/commit/4a37cdeabf50c941e1c8e702e2ef9611bcfbd591))
+
 # [0.2.0-dev.45](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.44...v0.2.0-dev.45) (2026-04-15)
 
 
