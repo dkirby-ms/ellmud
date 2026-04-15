@@ -1,3 +1,10 @@
+# [0.2.0-dev.45](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.44...v0.2.0-dev.45) (2026-04-15)
+
+
+### Bug Fixes
+
+* TS errors in death tests + CI failure-issue job condition ([8aaea81](https://github.com/dkirby-ms/ellmud/commit/8aaea81e2492db8408e65fea2f324a968f319248))
+
 # [0.2.0-dev.44](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.43...v0.2.0-dev.44) (2026-04-14)
 
 
