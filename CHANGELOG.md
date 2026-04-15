@@ -1,3 +1,10 @@
+# [0.2.0-dev.47](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.46...v0.2.0-dev.47) (2026-04-15)
+
+
+### Bug Fixes
+
+* Docker husky failure + issue-creation on workflow_dispatch ([824cd3c](https://github.com/dkirby-ms/ellmud/commit/824cd3cadee463fea83f7ac7850f257998414ffd))
+
 # [0.2.0-dev.46](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.45...v0.2.0-dev.46) (2026-04-15)
 
 
