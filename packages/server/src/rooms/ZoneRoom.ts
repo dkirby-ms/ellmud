@@ -2961,7 +2961,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         this.combatSystem.registerCombatant(combatant);
         // Find a hostile creature in this room to auto-engage
         for (const creature of this.creatureManager.getLivingCreatures()) {
-          if (creature.roomId === roomId && this.combatSystem.isInCombat(creature.id)) {
+          if (creature.currentRoomId === roomId && this.combatSystem.isInCombat(creature.id)) {
             this.combatSystem.initiateCombat(creature.id, playerId);
             break;
           }
