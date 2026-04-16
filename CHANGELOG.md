@@ -1,3 +1,10 @@
+# [0.2.0-dev.49](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.48...v0.2.0-dev.49) (2026-04-16)
+
+
+### Bug Fixes
+
+* reorder semantic-release plugins so version:sync runs after npm bumps root ([83cde67](https://github.com/dkirby-ms/ellmud/commit/83cde678de8c90cbcc86b5a63d72dc5c2b735886))
+
 # [0.2.0-dev.48](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.47...v0.2.0-dev.48) (2026-04-16)
 
 
