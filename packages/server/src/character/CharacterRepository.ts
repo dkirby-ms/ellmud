@@ -86,4 +86,25 @@ export interface CharacterRepository {
 
   /** Persist updated combat stats for a character (Phase 1). */
   saveBaseStats(characterId: string, stats: PlayerCombatStats): Promise<void>;
+
+  /** Get the number of banked stat points available for training (#457). */
+  getStatPointsAvailable(characterId: string): Promise<number>;
+
+  /** Set the number of banked stat points (#457). */
+  saveStatPointsAvailable(characterId: string, points: number): Promise<void>;
+
+  /**
+   * Atomically train a stat: increment the stat column and decrement stat_points_available.
+   * Returns the new values, or null if the guard failed (#464 W1).
+   */
+  trainStat(
+    characterId: string,
+    statKey: keyof PlayerCombatStats,
+    increment: number,
+  ): Promise<{ newStatValue: number; newPointsAvailable: number } | null>;
+
+  /**
+   * Atomically add stat points (e.g. from level-ups) (#464 W2).
+   */
+  addStatPoints(characterId: string, points: number): Promise<void>;
 }

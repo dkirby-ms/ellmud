@@ -1,3 +1,32 @@
+# [0.2.0-dev.51](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.50...v0.2.0-dev.51) (2026-04-16)
+
+
+### Bug Fixes
+
+* harden death-spawn-routing tests against silent passes ([3afe7c9](https://github.com/dkirby-ms/ellmud/commit/3afe7c9253865be7e66906c3e5f390e32fe9dfff))
+
+# [0.2.0-dev.50](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.49...v0.2.0-dev.50) (2026-04-16)
+
+
+### Bug Fixes
+
+* resolve CI flake in death-penalty test (async timing) ([131f6a5](https://github.com/dkirby-ms/ellmud/commit/131f6a5316cc21e94c96c0f5034bfbece0ed7c42))
+
+# [0.2.0-dev.49](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.48...v0.2.0-dev.49) (2026-04-16)
+
+
+### Bug Fixes
+
+* reorder semantic-release plugins so version:sync runs after npm bumps root ([83cde67](https://github.com/dkirby-ms/ellmud/commit/83cde678de8c90cbcc86b5a63d72dc5c2b735886))
+
+# [0.2.0-dev.48](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.47...v0.2.0-dev.48) (2026-04-16)
+
+
+### Features
+
+* **ci:** improve UAT Discord notification with embed, changelog, and test site link ([f3bb156](https://github.com/dkirby-ms/ellmud/commit/f3bb15618269eb71aa6f32d5e5828c8b622f5aa1))
+* stat training & progression system ([#457](https://github.com/dkirby-ms/ellmud/issues/457)) ([#464](https://github.com/dkirby-ms/ellmud/issues/464)) ([07a8ee7](https://github.com/dkirby-ms/ellmud/commit/07a8ee7eb010ee83d3c433fbad9639ef9ae7f4d6))
+
 # [0.2.0-dev.47](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.46...v0.2.0-dev.47) (2026-04-15)
 
 

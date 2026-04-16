@@ -49,6 +49,13 @@ import { adaptRoomGraph } from '../generator/graph-adapter.js';
 import { handleLook } from '../commands/handlers/look.js';
 import { handleToggleAsync } from '../commands/handlers/toggle.js';
 import {
+  validateTrain,
+  buildTrainSuccessResult,
+  buildTrainOverviewResult,
+  buildTrainErrorResult,
+  DEFAULT_SOFT_CAPS,
+} from '../commands/handlers/train.js';
+import {
   CombatSystem,
   type TickResult,
   createCombatant,
@@ -112,6 +119,15 @@ import type { NarrationService } from '../narrative/NarrationService.js';
 import { gatherPlayerList, formatWhoListText, type ZonePlayerData } from '../who/index.js';
 import { getCharacterFlagsRepository } from '../db/CharacterFlagsRepository.js';
 import { query } from '../db/index.js';
+import type { WeaponType } from '../combat/CombatState.js';
+import {
+  type CombatSkillSlug,
+  type PlayerSkillsRepository,
+  PgPlayerSkillsRepository,
+  calculateXpGain,
+  skillForWeaponType,
+  getSkillCategory,
+} from '../progression/index.js';
 
 const TICK_INTERVAL_MS = 1000;
 
@@ -171,12 +187,20 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private characterNames = new Map<string, string>();
   /** Cached effective combat stats for each player (base + equipment), loaded on join. */
   private playerStatsCache = new Map<string, EffectiveStats>();
+  /** Cached base combat stats for each player (loaded on join, sent with EFFECTIVE_STATS #457). */
+  private playerBaseStatsCache = new Map<string, import('../character/CharacterRepository.js').PlayerCombatStats>();
+  /** Cached banked stat points for each player (#457). */
+  private playerStatPointsCache = new Map<string, number>();
   /** Maps playerId → faction slug for death routing (cached on join). */
   private playerFactionSlugs = new Map<string, string>();
   /** Maps playerId → starting zone slug for death respawn fallback (cached on join). */
   private playerStartingZones = new Map<string, string>();
   /** Maps playerId → character flags (anon, rp) cached on join (Issue #370). */
   private playerFlagsCache = new Map<string, import('@ellmud/shared').CharacterFlags>();
+  /** Maps playerId → currently equipped weapon type for XP attribution (#457). */
+  private playerWeaponTypes = new Map<string, WeaponType>();
+  /** Skill progression repository for XP persistence (#457). */
+  private skillsRepo: PlayerSkillsRepository = new PgPlayerSkillsRepository();
 
   // ─── Zone-specific fields ──────────────────────────────────────────────────
   private zoneSlug?: string;
@@ -546,6 +570,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       const equipment = calculateEquipmentBonuses(equippedSlots);
       const effective = calculatePlayerEffectiveStats(baseStats, equipment);
       this.playerStatsCache.set(playerId, effective);
+      this.playerWeaponTypes.set(playerId, equipment.weaponSkill);
     } catch (err) {
       this.log(`Failed to load combat stats for ${this.playerTag(playerId)}: ${err}`);
     }
@@ -772,6 +797,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.combatSystem.removeCombatant(playerId);
       this.characterNames.delete(playerId);
       this.playerStatsCache.delete(playerId);
+      this.playerBaseStatsCache.delete(playerId);
+      this.playerStatPointsCache.delete(playerId);
+      this.playerWeaponTypes.delete(playerId);
       this.playerFactionSlugs.delete(playerId);
       this.playerStartingZones.delete(playerId);
       this.playerFlagsCache.delete(playerId);
@@ -890,6 +918,9 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.deliverCombatResults(tickResult);
       this.recordCombatMetrics(tickResult);
 
+      // Award use-based skill XP from combat actions (#457)
+      this.processCombatXp(tickResult);
+
       // Propagate combat sounds to nearby rooms (GDD §12)
       this.propagateCombatSounds(tickResult);
 
@@ -1002,6 +1033,12 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     // Async command: `toggle` — requires DB read/write to report new state (#432)
     if (verb === 'toggle') {
       void this.handleToggleCommand(client, player, args);
+      return;
+    }
+
+    // Async command: `train` — requires DB read/write for stat points (#457)
+    if (verb === 'train') {
+      void this.handleTrainCommand(client, player, args);
       return;
     }
 
@@ -1855,6 +1892,109 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     }
   }
 
+  // ─── Skill XP Processing (#457) ───────────────────────────────────────────
+
+  /**
+   * Process combat events for skill XP gains.
+   * Called after each combat tick — awards use-based XP to players.
+   *
+   * XP rules:
+   *   - Strike → weapon skill XP (based on equipped weapon type)
+   *   - Successful dodge (target) → dodge skill XP
+   *   - Successful block (target) → shield_block skill XP
+   *   - Take damage and survive (target) → armour skill XP
+   */
+  private processCombatXp(tickResult: TickResult): void {
+    // Collect XP events from this tick
+    const xpAwards = new Map<string, Set<CombatSkillSlug>>();
+
+    for (const event of tickResult.events) {
+      if (event.type !== 'strike') continue;
+
+      // Attacker: weapon skill XP for landing a strike (hit or miss, you swung)
+      const attackerId = event.actorId;
+      if (this.players.has(attackerId)) {
+        const weaponType = this.playerWeaponTypes.get(attackerId) ?? 'unarmed';
+        const skill = skillForWeaponType(weaponType);
+        if (!xpAwards.has(attackerId)) xpAwards.set(attackerId, new Set());
+        xpAwards.get(attackerId)!.add(skill);
+      }
+
+      // Defender XP events (only for players)
+      const targetId = event.targetId;
+      if (!targetId || !this.players.has(targetId)) continue;
+      const targetCombatant = this.combatSystem.getCombatant(targetId);
+      if (!targetCombatant || targetCombatant.hp <= 0) continue; // must survive
+
+      if (!xpAwards.has(targetId)) xpAwards.set(targetId, new Set());
+
+      if (event.dodged) {
+        xpAwards.get(targetId)!.add('dodge');
+      } else if (event.blocked) {
+        xpAwards.get(targetId)!.add('shield_block');
+      } else if (event.damage && event.damage > 0) {
+        // Took damage and survived → armour XP
+        xpAwards.get(targetId)!.add('armour');
+      }
+    }
+
+    // Apply XP awards asynchronously (fire-and-forget, errors logged)
+    for (const [playerId, skills] of xpAwards) {
+      // playerId here = characterId (combatant ID is the character UUID)
+      const ownerPlayerId = this.ownerPlayerIds.get(playerId);
+      if (!ownerPlayerId) continue;
+
+      for (const skill of skills) {
+        this.awardSkillXp(playerId, playerId, ownerPlayerId, skill).catch((err) => {
+          this.log(`XP award error for ${this.playerTag(playerId)} skill=${skill}: ${err}`);
+        });
+      }
+    }
+  }
+
+  /**
+   * Award XP in a single skill to a player, persisting atomically and notifying on level-up.
+   */
+  private async awardSkillXp(
+    playerId: string,
+    characterId: string,
+    ownerPlayerId: string,
+    skill: CombatSkillSlug,
+  ): Promise<void> {
+    // Calculate XP delta for this action (pure function, no DB read needed)
+    const existing = await this.skillsRepo.getSkill(characterId, skill);
+    const currentLevel = existing?.level ?? 1;
+    const xpDelta = calculateXpGain(currentLevel, this.zoneTier);
+
+    // Atomic upsert: xp = xp + delta with level-up resolved in SQL
+    const result = await this.skillsRepo.awardXp(
+      characterId,
+      ownerPlayerId,
+      skill,
+      getSkillCategory(skill),
+      xpDelta,
+    );
+
+    // Bank stat points from level-ups
+    const levelsGained = result.level - Math.max(result.previousLevel, 1);
+    if (levelsGained > 0) {
+      await this.characterRepo.addStatPoints(characterId, levelsGained);
+
+      // Notify the player
+      const client = this.findClient(playerId);
+      if (client) {
+        const skillLabel = skill.replace(/_/g, ' ');
+        client.send(MessageTypes.NARRATE, {
+          text: `Your ${skillLabel} skill has reached level ${result.level}! You gained ${levelsGained} stat point${levelsGained > 1 ? 's' : ''}.`,
+          type: 'system',
+          timestamp: Date.now(),
+        } satisfies NarrateMessage);
+      }
+    }
+  }
+
+  // ─── End Skill XP Processing ──────────────────────────────────────────────
+
   /** Send active trace descriptions to a client as narration. */
   private sendTraceNarrations(client: Client, roomId: string): void {
     const descriptions = this.traceSystem.getTracesForPlayer(roomId, {
@@ -2580,7 +2720,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       actorName: charName,
     });
 
-    // Apply death penalty (increment death count, record time)
+    // Apply death penalty debuff to player state synchronously (before any awaits)
+    // so it's visible immediately to tick-driven observers and tests.
+    player.deathPenalty = {
+      appliedAt: Date.now(),
+      durationMs: DEATH_PENALTY_DEFAULTS.durationMs,
+      attackPenalty: DEATH_PENALTY_DEFAULTS.attackPenalty,
+      defencePenalty: DEATH_PENALTY_DEFAULTS.defencePenalty,
+    };
+
+    // Persist death count and timestamp (async, non-blocking for state)
     const deathDbId = this.dbPlayerId(playerId);
     const newCount = await this.deathPenaltyStore.incrementDeathCount(deathDbId);
     await this.deathPenaltyStore.setLastDeathTime(deathDbId, Date.now());
@@ -2603,14 +2752,6 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       isPvP: isPvPKill,
       itemsLost: corpseItems.length,
     });
-
-    // Apply death penalty debuff to player state (on any death)
-    player.deathPenalty = {
-      appliedAt: Date.now(),
-      durationMs: DEATH_PENALTY_DEFAULTS.durationMs,
-      attackPenalty: DEATH_PENALTY_DEFAULTS.attackPenalty,
-      defencePenalty: DEATH_PENALTY_DEFAULTS.defencePenalty,
-    };
 
     // Log PvPKillEvent for each player killer on PvP death
     if (isPvPKill) {
@@ -3567,6 +3708,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private async rebuildPlayerStatsCache(playerId: string): Promise<void> {
     try {
       const baseStats = await this.characterRepo.getBaseStats(playerId);
+      const statPointsAvailable = await this.characterRepo.getStatPointsAvailable(playerId);
       const equippedSlots: { slot: string; stats: import('../combat/CombatState.js').ItemStats | null }[] = [];
 
       if (this.loadoutService) {
@@ -3589,13 +3731,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       const equipment = calculateEquipmentBonuses(equippedSlots);
       const effective = calculatePlayerEffectiveStats(baseStats, equipment);
       this.playerStatsCache.set(playerId, effective);
+      this.playerBaseStatsCache.set(playerId, baseStats);
+      this.playerStatPointsCache.set(playerId, statPointsAvailable);
+      this.playerWeaponTypes.set(playerId, equipment.weaponSkill);
       this.sendEffectiveStats(playerId);
     } catch (err) {
       this.log(`Failed to rebuild stats cache for ${this.playerTag(playerId)}: ${err}`);
     }
   }
 
-  /** Send effective stats (with equipment bonuses) to the client (#455). */
+  /** Send effective stats (with equipment bonuses, base stats, and stat points) to the client (#455, #457). */
   private sendEffectiveStats(playerId: string): void {
     const cached = this.playerStatsCache.get(playerId);
     if (!cached) return;
@@ -3603,12 +3748,28 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     const client = this.findClient(playerId);
     if (!client) return;
 
+    const baseStats = this.playerBaseStatsCache.get(playerId);
+    const statPointsAvailable = this.playerStatPointsCache.get(playerId) ?? 0;
+
     client.send(MessageTypes.EFFECTIVE_STATS, {
       maxHp: cached.maxHp,
       attack: cached.attack,
       armour: cached.armour,
       shieldBlock: cached.shieldBlock,
       dodge: cached.dodge,
+      ...(baseStats ? {
+        baseStats: {
+          maxHp: baseStats.maxHp,
+          unarmed: baseStats.unarmed,
+          oneHanded: baseStats.oneHanded,
+          twoHanded: baseStats.twoHanded,
+          ranged: baseStats.ranged,
+          shieldBlock: baseStats.shieldBlock,
+          dodge: baseStats.dodge,
+          armour: baseStats.armour,
+        },
+      } : {}),
+      statPointsAvailable,
     } satisfies EffectiveStatsMessage);
   }
 
@@ -3940,6 +4101,80 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       this.log(`Failed to handle toggle command: ${err}`);
       this.sendNarrate(client, {
         text: 'Toggle failed. Please try again.',
+        type: 'system',
+        timestamp: Date.now(),
+      });
+    }
+  }
+
+  /** Handle `train` command — async DB read/write for stat point allocation (#457). */
+  private async handleTrainCommand(client: Client, player: PlayerState, args: string[]): Promise<void> {
+    const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
+
+    // Combat guard (#464 W5)
+    if (this.combatSystem.isInCombat(player.sessionId)) {
+      this.sendNarrate(client, {
+        text: "You can't train while in combat!",
+        type: 'system',
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    // Room type gate: only works in training rooms
+    const room = this.roomGraph.rooms.get(player.currentRoomId);
+    if (!room || room.type !== 'feature_training') {
+      this.sendNarrate(client, {
+        text: "You can't do that here.",
+        type: 'system',
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    try {
+      const baseStats = await this.characterRepo.getBaseStats(playerId);
+      const statPointsAvailable = await this.characterRepo.getStatPointsAvailable(playerId);
+
+      // No args: show overview
+      if (args.length === 0) {
+        const result = buildTrainOverviewResult(baseStats, statPointsAvailable);
+        this.deliverResult(client, result);
+        return;
+      }
+
+      // Validate training attempt
+      const statInput = args.join('-');
+      const validation = validateTrain(statInput, baseStats, statPointsAvailable);
+      if (!validation.valid || !validation.statKey) {
+        const result = buildTrainErrorResult(validation.error!);
+        this.deliverResult(client, result);
+        return;
+      }
+
+      // Clamp increment so we don't overshoot the soft cap (#464 W4)
+      const statKey = validation.statKey;
+      const oldValue = baseStats[statKey];
+      const rawIncrement = statKey === 'maxHp' ? 5 : 1;
+      const increment = Math.min(rawIncrement, DEFAULT_SOFT_CAPS[statKey] - oldValue);
+
+      // Atomic DB update: increment stat + decrement point in one query (#464 W1)
+      const trainResult = await this.characterRepo.trainStat(playerId, statKey, increment);
+      if (!trainResult) {
+        const result = buildTrainErrorResult('Training failed — no stat points available.');
+        this.deliverResult(client, result);
+        return;
+      }
+
+      // Rebuild cache so combat uses the new stats immediately
+      await this.rebuildPlayerStatsCache(playerId);
+
+      const result = buildTrainSuccessResult(statKey, oldValue, trainResult.newStatValue, trainResult.newPointsAvailable);
+      this.deliverResult(client, result);
+    } catch (err) {
+      this.log(`Failed to handle train command for ${this.playerTag(playerId)}: ${err}`);
+      this.sendNarrate(client, {
+        text: 'Training failed. Please try again.',
         type: 'system',
         timestamp: Date.now(),
       });

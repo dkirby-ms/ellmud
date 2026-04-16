@@ -240,4 +240,24 @@ describe('appReducer', () => {
     state = appReducer(state, { type: 'LOGOUT' });
     expect(state.effectiveStats).toBeNull();
   });
+
+  it('SET_BASE_STATS updates baseStats and statPointsAvailable', () => {
+    const baseStats = { maxHp: 100, unarmed: 5, oneHanded: 5, twoHanded: 5, ranged: 5, shieldBlock: 5, dodge: 5, armour: 0 };
+    const state = appReducer(initialState, { type: 'SET_BASE_STATS', baseStats, statPointsAvailable: 3 });
+    expect(state.baseStats).toEqual(baseStats);
+    expect(state.statPointsAvailable).toBe(3);
+  });
+
+  it('baseStats defaults to null and statPointsAvailable defaults to 0', () => {
+    expect(initialState.baseStats).toBeNull();
+    expect(initialState.statPointsAvailable).toBe(0);
+  });
+
+  it('LOGOUT clears baseStats and statPointsAvailable', () => {
+    const baseStats = { maxHp: 100, unarmed: 5, oneHanded: 5, twoHanded: 5, ranged: 5, shieldBlock: 5, dodge: 5, armour: 0 };
+    let state = appReducer(initialState, { type: 'SET_BASE_STATS', baseStats, statPointsAvailable: 3 });
+    state = appReducer(state, { type: 'LOGOUT' });
+    expect(state.baseStats).toBeNull();
+    expect(state.statPointsAvailable).toBe(0);
+  });
 });
