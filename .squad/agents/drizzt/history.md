@@ -216,3 +216,5 @@ Full session logs and dated entries have been moved to `history-archive.md` to k
 - sendPlayerState() requires an active combatant — downed players are removed from CombatSystem on defeat, so downing HP updates must be sent directly in tickDowningSystem() using DowningSystem's currentHp.
 - playerStatsCache persists after combatant removal — use it to get maxHp for downed players.
 - MudPrompt (client) re-renders reactively on PLAYER_STATE, but the scroll log needs explicit narrate messages for status echoes.
+- handlePlayerDeath() is async but called fire-and-forget from tick handlers. Any synchronous state mutations (like deathPenalty) must happen BEFORE the first await to be visible to same-tick observers.
+- death-spawn-routing.test.ts needs polling patterns (not single checks) for async state because Colyseus integration tests share resources under parallel vitest execution.
