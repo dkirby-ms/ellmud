@@ -1,3 +1,10 @@
+# [0.2.0-dev.52](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.51...v0.2.0-dev.52) (2026-04-16)
+
+
+### Bug Fixes
+
+* remove duplicate down arrow from minimap inter-floor edges ([#463](https://github.com/dkirby-ms/ellmud/issues/463)) ([#466](https://github.com/dkirby-ms/ellmud/issues/466)) ([810bc61](https://github.com/dkirby-ms/ellmud/commit/810bc617e40307694387aa3fc28546faf982b9ae))
+
 # [0.2.0-dev.51](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.50...v0.2.0-dev.51) (2026-04-16)
 
 
