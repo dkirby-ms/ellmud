@@ -136,6 +136,27 @@ export class InMemoryCharacterRepository implements CharacterRepository {
     this.statPointsMap.set(characterId, points);
   }
 
+  async trainStat(
+    characterId: string,
+    statKey: keyof PlayerCombatStats,
+    increment: number,
+  ): Promise<{ newStatValue: number; newPointsAvailable: number } | null> {
+    const points = this.statPointsMap.get(characterId) ?? 0;
+    if (points <= 0) return null;
+    const stats = this.combatStatsMap.get(characterId) ?? { ...DEFAULT_PLAYER_COMBAT_STATS };
+    const newValue = stats[statKey] + increment;
+    stats[statKey] = newValue;
+    this.combatStatsMap.set(characterId, stats);
+    const newPoints = points - 1;
+    this.statPointsMap.set(characterId, newPoints);
+    return { newStatValue: newValue, newPointsAvailable: newPoints };
+  }
+
+  async addStatPoints(characterId: string, points: number): Promise<void> {
+    const current = this.statPointsMap.get(characterId) ?? 0;
+    this.statPointsMap.set(characterId, current + points);
+  }
+
   private toSummary(row: CharacterRow): CharacterSummary {
     const factionNames: Record<string, string> = {
       kindari: 'The Kindari',

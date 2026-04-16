@@ -2,7 +2,6 @@
  * PlayerSkillsRepository — Interface for player skill persistence.
  *
  * Reads and writes the player_skills table (per-character skill levels and XP).
- * Also manages stat_points_available on the characters table.
  */
 
 import type { CombatSkillSlug } from './SkillProgression.js';
@@ -33,12 +32,15 @@ export interface PlayerSkillsRepository {
   upsertSkill(characterId: string, playerId: string, record: PlayerSkillRecord): Promise<void>;
 
   /**
-   * Get the number of banked stat points for a character.
+   * Atomically award XP to a skill using relative increment (xp = xp + delta).
+   * Handles single level-up in the write to prevent lost updates from concurrent ticks.
+   * Returns the new state and previous level for level-up detection.
    */
-  getStatPoints(characterId: string): Promise<number>;
-
-  /**
-   * Add stat points to a character's bank (from level-ups).
-   */
-  addStatPoints(characterId: string, points: number): Promise<void>;
+  awardXp(
+    characterId: string,
+    playerId: string,
+    skill: CombatSkillSlug,
+    category: string,
+    xpDelta: number,
+  ): Promise<{ level: number; xp: number; previousLevel: number }>;
 }

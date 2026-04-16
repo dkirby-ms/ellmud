@@ -13,6 +13,7 @@ import type { CommandContext, CommandResult } from '../commands/index.js';
 import { PlayerState } from '../state/PlayerState.js';
 import type { Room, RoomType } from '../generator/RoomGraph.js';
 import type { CombatStats } from '../combat/CombatState.js';
+import { DEFAULT_SOFT_CAPS } from '../commands/handlers/train.js';
 
 // ─── Constants matching design decisions ────────────────────────────────────
 
@@ -36,18 +37,6 @@ const DEFAULT_BASE_STATS: CombatStats = {
   shieldBlock: 5,
   dodge: 5,
   armour: 2,
-};
-
-// Soft caps per stat (tied to zone tier unlocks — design decision #2)
-const STAT_SOFT_CAPS: Record<keyof CombatStats, number> = {
-  maxHp: 200,
-  unarmed: 20,
-  oneHanded: 20,
-  twoHanded: 20,
-  ranged: 20,
-  shieldBlock: 20,
-  dodge: 20,
-  armour: 15,
 };
 
 // ─── Test room fixtures ─────────────────────────────────────────────────────
@@ -215,7 +204,7 @@ describe('Train Command (GDD §7.1 — Issue #457)', () => {
       saveBaseStats,
       rebuildPlayerStatsCache: (_id: string) => { rebuildCalled = true; },
       isInCombat: () => false,
-      statSoftCaps: STAT_SOFT_CAPS,
+      statSoftCaps: DEFAULT_SOFT_CAPS,
     };
   }
 
@@ -341,14 +330,14 @@ describe('Train Command (GDD §7.1 — Issue #457)', () => {
 
     it('should fail if stat is at soft cap', () => {
       setAvailableStatPoints('player-1', 5);
-      const cappedStats = { ...DEFAULT_BASE_STATS, dodge: STAT_SOFT_CAPS.dodge };
+      const cappedStats = { ...DEFAULT_BASE_STATS, dodge: DEFAULT_SOFT_CAPS.dodge };
       saveBaseStats('player-1', cappedStats);
 
       const ctx = buildCtx(makeRoom(), ['dodge']);
       const result = handleTrain(ctx);
 
       expect(result.narrations[0]!.text).toContain('soft cap');
-      expect(getBaseStats('player-1').dodge).toBe(STAT_SOFT_CAPS.dodge);
+      expect(getBaseStats('player-1').dodge).toBe(DEFAULT_SOFT_CAPS.dodge);
       // Points should not be consumed
       expect(getAvailableStatPoints('player-1')).toBe(5);
     });
@@ -421,24 +410,24 @@ describe('Train Command (GDD §7.1 — Issue #457)', () => {
 
     it('should handle training stat at exactly soft cap', () => {
       setAvailableStatPoints('player-1', 3);
-      saveBaseStats('player-1', { ...DEFAULT_BASE_STATS, shieldBlock: STAT_SOFT_CAPS.shieldBlock });
+      saveBaseStats('player-1', { ...DEFAULT_BASE_STATS, shieldBlock: DEFAULT_SOFT_CAPS.shieldBlock });
 
       const ctx = buildCtx(makeRoom(), ['shieldBlock']);
       const result = handleTrain(ctx);
 
       expect(result.narrations[0]!.text).toContain('soft cap');
-      expect(getBaseStats('player-1').shieldBlock).toBe(STAT_SOFT_CAPS.shieldBlock);
+      expect(getBaseStats('player-1').shieldBlock).toBe(DEFAULT_SOFT_CAPS.shieldBlock);
     });
 
     it('should handle training stat at one below soft cap', () => {
       setAvailableStatPoints('player-1', 3);
-      saveBaseStats('player-1', { ...DEFAULT_BASE_STATS, shieldBlock: STAT_SOFT_CAPS.shieldBlock - 1 });
+      saveBaseStats('player-1', { ...DEFAULT_BASE_STATS, shieldBlock: DEFAULT_SOFT_CAPS.shieldBlock - 1 });
 
       const ctx = buildCtx(makeRoom(), ['shieldBlock']);
       handleTrain(ctx);
 
       // Should succeed — stat is still below cap
-      expect(getBaseStats('player-1').shieldBlock).toBe(STAT_SOFT_CAPS.shieldBlock);
+      expect(getBaseStats('player-1').shieldBlock).toBe(DEFAULT_SOFT_CAPS.shieldBlock);
       expect(getAvailableStatPoints('player-1')).toBe(2);
     });
 
