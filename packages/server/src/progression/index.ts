@@ -23,3 +23,10 @@ export {
 export type { PlayerSkillRecord, PlayerSkillsRepository } from './PlayerSkillsRepository.js';
 export { PgPlayerSkillsRepository } from './PgPlayerSkillsRepository.js';
 export { getSkillCategory } from './PgPlayerSkillsRepository.js';
+export { InMemoryPlayerSkillsRepository } from './InMemoryPlayerSkillsRepository.js';
+export {
+  initSkillsProvider,
+  getSkillsRepository,
+  isSkillsPg,
+  resetSkillsProvider,
+} from './skills-provider.js';

@@ -53,6 +53,7 @@ import {
   buildTrainSuccessResult,
   buildTrainOverviewResult,
   buildTrainErrorResult,
+  DEFAULT_SOFT_CAPS,
 } from '../commands/handlers/train.js';
 import {
   CombatSystem,
@@ -123,7 +124,7 @@ import {
   type CombatSkillSlug,
   type PlayerSkillsRepository,
   PgPlayerSkillsRepository,
-  applyXpGain,
+  calculateXpGain,
   skillForWeaponType,
   getSkillCategory,
 } from '../progression/index.js';
@@ -1952,7 +1953,7 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   }
 
   /**
-   * Award XP in a single skill to a player, persisting to DB and notifying on level-up.
+   * Award XP in a single skill to a player, persisting atomically and notifying on level-up.
    */
   private async awardSkillXp(
     playerId: string,
@@ -1960,31 +1961,31 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
     ownerPlayerId: string,
     skill: CombatSkillSlug,
   ): Promise<void> {
-    // Load current skill state (default: level 1, xp 0)
+    // Calculate XP delta for this action (pure function, no DB read needed)
     const existing = await this.skillsRepo.getSkill(characterId, skill);
     const currentLevel = existing?.level ?? 1;
-    const currentXp = existing?.xp ?? 0;
+    const xpDelta = calculateXpGain(currentLevel, this.zoneTier);
 
-    const result = applyXpGain(skill, currentXp, currentLevel, this.zoneTier);
-
-    // Persist updated skill
-    await this.skillsRepo.upsertSkill(characterId, ownerPlayerId, {
-      skillName: skill,
-      category: getSkillCategory(skill),
-      level: result.newLevel,
-      xp: result.newXp,
-    });
+    // Atomic upsert: xp = xp + delta with level-up resolved in SQL
+    const result = await this.skillsRepo.awardXp(
+      characterId,
+      ownerPlayerId,
+      skill,
+      getSkillCategory(skill),
+      xpDelta,
+    );
 
     // Bank stat points from level-ups
-    if (result.statPointsAwarded > 0) {
-      await this.skillsRepo.addStatPoints(characterId, result.statPointsAwarded);
+    const levelsGained = result.level - Math.max(result.previousLevel, 1);
+    if (levelsGained > 0) {
+      await this.characterRepo.addStatPoints(characterId, levelsGained);
 
       // Notify the player
       const client = this.findClient(playerId);
       if (client) {
         const skillLabel = skill.replace(/_/g, ' ');
         client.send(MessageTypes.NARRATE, {
-          text: `Your ${skillLabel} skill has reached level ${result.newLevel}! You gained ${result.statPointsAwarded} stat point${result.statPointsAwarded > 1 ? 's' : ''}.`,
+          text: `Your ${skillLabel} skill has reached level ${result.level}! You gained ${levelsGained} stat point${levelsGained > 1 ? 's' : ''}.`,
           type: 'system',
           timestamp: Date.now(),
         } satisfies NarrateMessage);
@@ -4109,6 +4110,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
   private async handleTrainCommand(client: Client, player: PlayerState, args: string[]): Promise<void> {
     const playerId = this.playerIds.get(client.sessionId) ?? client.sessionId;
 
+    // Combat guard (#464 W5)
+    if (this.combatSystem.isInCombat(player.sessionId)) {
+      this.sendNarrate(client, {
+        text: "You can't train while in combat!",
+        type: 'system',
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
     // Room type gate: only works in training rooms
     const room = this.roomGraph.rooms.get(player.currentRoomId);
     if (!room || room.type !== 'feature_training') {
@@ -4140,20 +4151,24 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
         return;
       }
 
-      // Apply the training
+      // Clamp increment so we don't overshoot the soft cap (#464 W4)
       const statKey = validation.statKey;
       const oldValue = baseStats[statKey];
-      const increment = statKey === 'maxHp' ? 5 : 1;
-      const newStats = { ...baseStats, [statKey]: oldValue + increment };
-      const newPoints = statPointsAvailable - 1;
+      const rawIncrement = statKey === 'maxHp' ? 5 : 1;
+      const increment = Math.min(rawIncrement, DEFAULT_SOFT_CAPS[statKey] - oldValue);
 
-      await this.characterRepo.saveBaseStats(playerId, newStats);
-      await this.characterRepo.saveStatPointsAvailable(playerId, newPoints);
+      // Atomic DB update: increment stat + decrement point in one query (#464 W1)
+      const trainResult = await this.characterRepo.trainStat(playerId, statKey, increment);
+      if (!trainResult) {
+        const result = buildTrainErrorResult('Training failed — no stat points available.');
+        this.deliverResult(client, result);
+        return;
+      }
 
       // Rebuild cache so combat uses the new stats immediately
       await this.rebuildPlayerStatsCache(playerId);
 
-      const result = buildTrainSuccessResult(statKey, oldValue, oldValue + increment, newPoints);
+      const result = buildTrainSuccessResult(statKey, oldValue, trainResult.newStatValue, trainResult.newPointsAvailable);
       this.deliverResult(client, result);
     } catch (err) {
       this.log(`Failed to handle train command for ${this.playerTag(playerId)}: ${err}`);
