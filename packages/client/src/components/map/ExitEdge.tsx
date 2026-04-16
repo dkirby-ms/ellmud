@@ -37,18 +37,7 @@ export function ExitEdge({ fromPosition, toPosition, interFloor }: ExitEdgeProps
         strokeLinecap="round"
         strokeDasharray={interFloor ? INTER_FLOOR_DASH : undefined}
       />
-      {interFloor && (
-        <text
-          x={(x1 + x2) / 2}
-          y={(y1 + y2) / 2 - 5}
-          textAnchor="middle"
-          fill={INTER_FLOOR_STROKE}
-          fontSize={8}
-          fontFamily="var(--font-mono)"
-        >
-          {toPosition.z > fromPosition.z ? '↑' : '↓'}
-        </text>
-      )}
+      {/* Inter-floor direction indicators removed — RoomNode badges are canonical */}
     </g>
   );
 }

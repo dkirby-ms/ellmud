@@ -92,7 +92,7 @@ export function RoomNode({ roomId, position, roomData, isCurrent, compact, onCli
       {roomData.exits.down && (
         <text
           x={cx + r + 2}
-          y={cy + (roomData.exits.up ? 0 : -r + 2)}
+          y={cy + (roomData.exits.up ? r + 2 : r - 2)}
           textAnchor="start"
           fill="#a78bfa"
           fontSize={compact ? 7 : 9}
