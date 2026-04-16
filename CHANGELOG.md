@@ -1,3 +1,10 @@
+# [0.2.0-dev.50](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.49...v0.2.0-dev.50) (2026-04-16)
+
+
+### Bug Fixes
+
+* resolve CI flake in death-penalty test (async timing) ([131f6a5](https://github.com/dkirby-ms/ellmud/commit/131f6a5316cc21e94c96c0f5034bfbece0ed7c42))
+
 # [0.2.0-dev.49](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.48...v0.2.0-dev.49) (2026-04-16)
 
 

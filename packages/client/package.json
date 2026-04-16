@@ -1,6 +1,6 @@
 {
   "name": "@ellmud/client",
-  "version": "0.2.0-dev.49",
+  "version": "0.2.0-dev.50",
   "private": true,
   "scripts": {
     "dev": "vite",
