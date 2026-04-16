@@ -218,6 +218,7 @@ export function MapRenderer({
                     roomData={roomData}
                     isCurrent={false}
                     compact={compact}
+                    hideVerticalBadges
                   />
                 </g>
               );
