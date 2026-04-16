@@ -1,3 +1,11 @@
+# [0.2.0-dev.48](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.47...v0.2.0-dev.48) (2026-04-16)
+
+
+### Features
+
+* **ci:** improve UAT Discord notification with embed, changelog, and test site link ([f3bb156](https://github.com/dkirby-ms/ellmud/commit/f3bb15618269eb71aa6f32d5e5828c8b622f5aa1))
+* stat training & progression system ([#457](https://github.com/dkirby-ms/ellmud/issues/457)) ([#464](https://github.com/dkirby-ms/ellmud/issues/464)) ([07a8ee7](https://github.com/dkirby-ms/ellmud/commit/07a8ee7eb010ee83d3c433fbad9639ef9ae7f4d6))
+
 # [0.2.0-dev.47](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.46...v0.2.0-dev.47) (2026-04-15)
 
 
