@@ -342,6 +342,13 @@ export function useZoneConnection(roomName: string = 'zone'): UseZoneConnectionR
       onEffectiveStats: (msg: EffectiveStatsMessage) => {
         if (!disposed) {
           dispatch({ type: 'SET_EFFECTIVE_STATS', stats: msg });
+          if (msg.baseStats) {
+            dispatch({
+              type: 'SET_BASE_STATS',
+              baseStats: msg.baseStats,
+              statPointsAvailable: msg.statPointsAvailable ?? 0,
+            });
+          }
         }
       },
       onZoneTransfer: (msg: ZoneTransferMessage) => {

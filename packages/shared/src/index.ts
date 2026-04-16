@@ -240,13 +240,29 @@ export interface PlayerStateMessage {
   posture: Posture;
 }
 
-/** Server → Client: Effective combat stats after equipment bonuses (#455). */
+/** Base combat stats before equipment bonuses (#457). */
+export interface BaseStatsMessage {
+  maxHp: number;
+  unarmed: number;
+  oneHanded: number;
+  twoHanded: number;
+  ranged: number;
+  shieldBlock: number;
+  dodge: number;
+  armour: number;
+}
+
+/** Server → Client: Effective combat stats after equipment bonuses (#455, extended #457). */
 export interface EffectiveStatsMessage {
   maxHp: number;
   attack: number;
   armour: number;
   shieldBlock: number;
   dodge: number;
+  /** Base stats before equipment bonuses (#457). */
+  baseStats?: BaseStatsMessage;
+  /** Banked stat points available for training (#457). */
+  statPointsAvailable?: number;
 }
 
 /** Server → Client: Enemy telegraph broadcast (GDD §6.5). */

@@ -8,6 +8,7 @@ import type { Room } from '@colyseus/sdk';
 import type {
   NarrationType, RoomHeaderMessage, ZoneState, CombatAction, GearTier,
   EquipmentSlots, DisplayItem, CharacterSummary, UserRole, Posture,
+  BaseStatsMessage,
 } from '@ellmud/shared';
 import { createEmptyEquipmentSlots } from '@ellmud/shared';
 
@@ -119,6 +120,8 @@ export interface AppState {
   };
   combatStats: CombatStats;
   effectiveStats: EffectiveStats | null;
+  baseStats: BaseStatsMessage | null;
+  statPointsAvailable: number;
 }
 
 export const initialState: AppState = {
@@ -164,6 +167,8 @@ export const initialState: AppState = {
     armour: 0,
   },
   effectiveStats: null,
+  baseStats: null,
+  statPointsAvailable: 0,
 };
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
@@ -195,7 +200,8 @@ export type AppAction =
   | { type: 'SET_PLAYER_STATE'; hp: number; maxHp: number; stamina: number; maxStamina: number; statusEffects: StatusEffect[]; posture: Posture }
   | { type: 'SET_ROOM_OCCUPANTS'; occupants: AppState['roomOccupants'] }
   | { type: 'SET_COMBAT_STATS'; stats: CombatStats }
-  | { type: 'SET_EFFECTIVE_STATS'; stats: EffectiveStats };
+  | { type: 'SET_EFFECTIVE_STATS'; stats: EffectiveStats }
+  | { type: 'SET_BASE_STATS'; baseStats: BaseStatsMessage; statPointsAvailable: number };
 
 const MAX_MESSAGES = 500;
 
@@ -265,6 +271,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, combatStats: action.stats };
     case 'SET_EFFECTIVE_STATS':
       return { ...state, effectiveStats: action.stats };
+    case 'SET_BASE_STATS':
+      return { ...state, baseStats: action.baseStats, statPointsAvailable: action.statPointsAvailable };
     default:
       return state;
   }

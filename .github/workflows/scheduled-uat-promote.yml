@@ -69,6 +69,7 @@ jobs:
           git diff origin/uat..origin/dev --name-only | grep -E "^(\.(ai-team|squad|ai-team-templates)|team-docs/|docs/proposals/)" || echo "(none)"
 
       - name: Merge dev → uat (strip forbidden paths)
+        id: merge
         if: steps.check.outputs.commits_ahead != '0'
         run: |
           git checkout uat
@@ -105,12 +106,14 @@ jobs:
             git commit -m "chore: merge dev → uat [scheduled]"
             git push origin uat
             echo "✅ Merged dev into uat and pushed"
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "ℹ️ Nothing to merge — uat is already up to date after stripping"
+            echo "ℹ️ Nothing to deploy — all changes were in stripped paths"
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Trigger CI/CD on uat
-        if: steps.check.outputs.commits_ahead != '0'
+        if: steps.merge.outputs.pushed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
