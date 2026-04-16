@@ -220,3 +220,6 @@ dispatch({ type: 'SET_COMBAT_STATS', stats: { maxHp, unarmed, oneHanded, twoHand
 - Vite proxy timeout configs are optional and can cause blank screen issues in certain browsers
 - Connection timeout logic should be handled server-side, not client-side
 - When reverting commits, verify TypeScript + linting before committing
+- Every repository in the project follows a provider singleton pattern (init*Provider, get*Repository) for DI — new repos must match this pattern, not hard-code Pg implementations
+- InMemory test doubles use Map-based storage keyed by composite strings (e.g. `${characterId}:${skillName}`)
+- ZoneRoom defaults repos to InMemory and upgrades via provider in onCreate — tests skip the provider init to stay in-memory
