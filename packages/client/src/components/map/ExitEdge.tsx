@@ -22,6 +22,9 @@ export function ExitEdge({ fromPosition, toPosition, interFloor }: ExitEdgeProps
   const x2 = toPosition.x * CELL_SIZE;
   const y2 = toPosition.y * CELL_SIZE;
 
+  // Skip zero-length edges (inter-floor exits sharing the same x,y)
+  if (x1 === x2 && y1 === y2) return null;
+
   const stroke = interFloor ? INTER_FLOOR_STROKE : EDGE_STROKE;
   const strokeWidth = interFloor ? INTER_FLOOR_STROKE_WIDTH : EDGE_STROKE_WIDTH;
 

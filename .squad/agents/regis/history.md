@@ -223,3 +223,37 @@ dispatch({ type: 'SET_COMBAT_STATS', stats: { maxHp, unarmed, oneHanded, twoHand
 - Every repository in the project follows a provider singleton pattern (init*Provider, get*Repository) for DI — new repos must match this pattern, not hard-code Pg implementations
 - InMemory test doubles use Map-based storage keyed by composite strings (e.g. `${characterId}:${skillName}`)
 - ZoneRoom defaults repos to InMemory and upgrades via provider in onCreate — tests skip the provider init to stay in-memory
+
+### 2025-07-25: Fix Duplicate Minimap Down Arrows (#463)
+**Status:** ✅ Complete — PR #466 opened
+
+**Problem:** Minimap showed duplicate down arrows: one from ExitEdge (inter-floor text indicator at edge midpoint) and one from RoomNode (badge next to room circle). Additionally, the RoomNode down arrow was positioned at the top of the room when no up exit was present.
+
+**Changes:**
+1. **ExitEdge.tsx** — Removed the `{interFloor && <text>}` block that rendered ↑/↓ at edge midpoints. RoomNode badges are the canonical vertical exit indicators.
+2. **RoomNode.tsx** — Fixed down badge y-position from `cy - r + 2` (top of room) to `cy + r - 2` (below room). When both up and down exits present, down shifts to `cy + r + 2` to avoid overlap.
+3. **ExitEdge.test.tsx** — 5 new tests: line rendering, stroke styles, and verification that no text indicators render for inter-floor edges.
+4. **RoomNode.test.tsx** — 5 new tests: badge presence for up/down exits, down badge y-positioning, and absence of badges when no vertical exits.
+
+## Learnings
+- Minimap ExitEdge and RoomNode are separate SVG components in `packages/client/src/components/map/`
+- RoomNode badges (↑/↓) are the canonical indicators for vertical exits; ExitEdge should only render the line
+- `ExploredRoomData.exits` is `Record<string, string>` — truthy check on key works for presence detection
+
+### 2025-07-25: Fix Phantom Minimap Arrows (follow-up to #466)
+**Status:** ✅ Complete
+
+**Problem:** After PR #466 removed duplicate arrows from ExitEdge, phantom ↑/↓ arrows still appeared on the minimap. Root cause: inter-floor ghost rooms (Layer 2 in MapRenderer) rendered as full `<RoomNode>` instances with roomData, so they also displayed ↑/↓ badges — producing duplicate arrows from adjacent floors.
+
+**Changes:**
+1. **RoomNode.tsx** — Added `hideVerticalBadges` prop. When true, suppresses ↑/↓ badge rendering.
+2. **MapRenderer.tsx** — Pass `hideVerticalBadges` to Layer 2 inter-floor ghost RoomNodes.
+3. **ExitEdge.tsx** — Skip rendering zero-length edges (inter-floor exits where rooms share x,y coords produce invisible dot artifacts).
+4. **RoomNode.test.tsx** — Added test for `hideVerticalBadges` prop.
+5. **ExitEdge.test.tsx** — Added test for zero-length edge skipping; updated inter-floor stroke test to use non-zero-length edge.
+
+## Learnings
+- Inter-floor ghost rooms (Layer 2) in MapRenderer are dimmed `<RoomNode>` instances — they inherit all badge rendering unless explicitly suppressed
+- `computeLayout.ts` uses separate occupied sets per z-level, so up/down-connected rooms share (x,y) → edges between them are zero-length
+- Three rendering layers can produce vertical exit indicators: ExitEdge text (removed in #466), RoomNode badges (canonical), and ghost RoomNode badges (now suppressed)
+

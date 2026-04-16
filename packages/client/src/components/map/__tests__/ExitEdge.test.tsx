@@ -7,6 +7,8 @@ const from = { x: 1, y: 1, z: 0 };
 const toSameFloor = { x: 2, y: 1, z: 0 };
 const toAbove = { x: 1, y: 1, z: 1 };
 const toBelow = { x: 1, y: 1, z: -1 };
+// Inter-floor edge where rooms don't share x,y (non-zero-length)
+const toAboveOffset = { x: 2, y: 1, z: 1 };
 
 function renderEdge(props: Parameters<typeof ExitEdge>[0]) {
   return render(
@@ -45,13 +47,24 @@ describe('ExitEdge', () => {
   it('uses inter-floor stroke and dash for inter-floor edges', () => {
     const { container } = renderEdge({
       fromPosition: from,
-      toPosition: toAbove,
+      toPosition: toAboveOffset,
       direction: 'up',
       interFloor: true,
     });
     const line = container.querySelector('line');
     expect(line?.getAttribute('stroke')).toBe(INTER_FLOOR_STROKE);
     expect(line?.getAttribute('stroke-dasharray')).toBe(INTER_FLOOR_DASH);
+  });
+
+  it('skips rendering zero-length inter-floor edges (same x,y)', () => {
+    const { container } = renderEdge({
+      fromPosition: from,
+      toPosition: toAbove,
+      direction: 'up',
+      interFloor: true,
+    });
+    const line = container.querySelector('line');
+    expect(line).toBeNull();
   });
 
   it('does NOT render a text direction indicator for inter-floor edges', () => {

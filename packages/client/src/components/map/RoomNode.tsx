@@ -15,9 +15,11 @@ export interface RoomNodeProps {
   isCurrent: boolean;
   compact: boolean;
   onClick?: () => void;
+  /** When true, suppresses ↑/↓ badges (used for inter-floor ghost rooms). */
+  hideVerticalBadges?: boolean;
 }
 
-export function RoomNode({ roomId, position, roomData, isCurrent, compact, onClick }: RoomNodeProps) {
+export function RoomNode({ roomId, position, roomData, isCurrent, compact, onClick, hideVerticalBadges }: RoomNodeProps) {
   const cx = position.x * CELL_SIZE;
   const cy = position.y * CELL_SIZE;
   const r = compact ? NODE_SIZE_COMPACT / 2 : NODE_SIZE / 2;
@@ -76,7 +78,7 @@ export function RoomNode({ roomId, position, roomData, isCurrent, compact, onCli
       )}
 
       {/* Up/down exit badges — show when room has vertical exits */}
-      {roomData.exits.up && (
+      {!hideVerticalBadges && roomData.exits.up && (
         <text
           x={cx + r + 2}
           y={cy - r + 2}
@@ -89,7 +91,7 @@ export function RoomNode({ roomId, position, roomData, isCurrent, compact, onCli
           ↑
         </text>
       )}
-      {roomData.exits.down && (
+      {!hideVerticalBadges && roomData.exits.down && (
         <text
           x={cx + r + 2}
           y={cy + (roomData.exits.up ? r + 2 : r - 2)}

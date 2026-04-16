@@ -73,4 +73,14 @@ describe('RoomNode — vertical exit badges', () => {
     const arrows = texts.filter((t) => t.textContent === '↑' || t.textContent === '↓');
     expect(arrows.length).toBe(0);
   });
+
+  it('hides ↑ and ↓ badges when hideVerticalBadges is true', () => {
+    const { container } = renderNode({
+      roomData: makeRoom({ up: 'room-above', down: 'room-below' }),
+      hideVerticalBadges: true,
+    });
+    const texts = Array.from(container.querySelectorAll('text'));
+    const arrows = texts.filter((t) => t.textContent === '↑' || t.textContent === '↓');
+    expect(arrows.length).toBe(0);
+  });
 });
