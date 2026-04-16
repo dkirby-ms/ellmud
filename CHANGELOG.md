@@ -1,3 +1,10 @@
+# [0.2.0-dev.51](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.50...v0.2.0-dev.51) (2026-04-16)
+
+
+### Bug Fixes
+
+* harden death-spawn-routing tests against silent passes ([3afe7c9](https://github.com/dkirby-ms/ellmud/commit/3afe7c9253865be7e66906c3e5f390e32fe9dfff))
+
 # [0.2.0-dev.50](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.49...v0.2.0-dev.50) (2026-04-16)
 
 
