@@ -10,7 +10,6 @@ import type { CombatSkillSlug } from './SkillProgression.js';
 
 export class InMemoryPlayerSkillsRepository implements PlayerSkillsRepository {
   private skills = new Map<string, PlayerSkillRecord>();
-  private statPoints = new Map<string, number>();
 
   private key(characterId: string, skillName: CombatSkillSlug): string {
     return `${characterId}:${skillName}`;
@@ -54,13 +53,5 @@ export class InMemoryPlayerSkillsRepository implements PlayerSkillsRepository {
 
     this.skills.set(key, { skillName: skill, category, level, xp });
     return { level, xp, previousLevel };
-  }
-
-  async getStatPoints(characterId: string): Promise<number> {
-    return this.statPoints.get(characterId) ?? 0;
-  }
-
-  async addStatPoints(characterId: string, points: number): Promise<void> {
-    this.statPoints.set(characterId, (this.statPoints.get(characterId) ?? 0) + points);
   }
 }
