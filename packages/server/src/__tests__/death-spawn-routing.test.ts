@@ -55,14 +55,17 @@ async function fastForwardDeath(
   sessionId: string,
 ): Promise<void> {
   // Poll until the player is downed (up to 5 seconds)
+  let foundDowned = false;
   for (let i = 0; i < 10; i++) {
     await wait(500);
     const downed = roomInstance.downingSystem?.getDownedPlayer(sessionId);
     if (downed) {
       downed.bleedOutTicksRemaining = 2;
+      foundDowned = true;
       break;
     }
   }
+  expect(foundDowned).toBe(true); // Fail fast if player never entered downed state
   // Wait for bleed-out death + ROOM_SWITCH delay
   await wait(8000);
 }
@@ -388,23 +391,33 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
     roomInstance.combatSystem.registerCombatant(playerCombatant);
     roomInstance.combatSystem.initiateCombat('creature-penalty-test', sessionId);
 
-    await fastForwardDeath(roomInstance, sessionId);
+    // Inline downed-state polling so we can capture deathPenalty BEFORE room switch cleanup
+    let foundDowned = false;
+    for (let i = 0; i < 10; i++) {
+      await wait(500);
+      const downed = roomInstance.downingSystem?.getDownedPlayer(sessionId);
+      if (downed) {
+        downed.bleedOutTicksRemaining = 2;
+        foundDowned = true;
+        break;
+      }
+    }
+    expect(foundDowned).toBe(true);
 
-    // Poll for deathPenalty — handlePlayerDeath is async and may still be in-flight on slow CI
+    // Poll for deathPenalty immediately — must catch it before room switch removes the player
     let postDeathPlayer: typeof player | undefined;
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 40; i++) {
       postDeathPlayer = roomInstance.players.get(sessionId);
       if (postDeathPlayer?.deathPenalty) break;
       await wait(250);
     }
 
-    // After death, before room switch cleanup: death penalty should be set
-    if (postDeathPlayer) {
-      expect(postDeathPlayer.deathPenalty).not.toBeNull();
-      expect(postDeathPlayer.deathPenalty!.durationMs).toBe(DEATH_PENALTY_DEFAULTS.durationMs);
-      expect(postDeathPlayer.deathPenalty!.attackPenalty).toBe(DEATH_PENALTY_DEFAULTS.attackPenalty);
-      expect(postDeathPlayer.deathPenalty!.defencePenalty).toBe(DEATH_PENALTY_DEFAULTS.defencePenalty);
-    }
+    // Death penalty must be set before room switch cleanup removes the player
+    expect(postDeathPlayer).toBeDefined();
+    expect(postDeathPlayer!.deathPenalty).not.toBeNull();
+    expect(postDeathPlayer!.deathPenalty!.durationMs).toBe(DEATH_PENALTY_DEFAULTS.durationMs);
+    expect(postDeathPlayer!.deathPenalty!.attackPenalty).toBe(DEATH_PENALTY_DEFAULTS.attackPenalty);
+    expect(postDeathPlayer!.deathPenalty!.defencePenalty).toBe(DEATH_PENALTY_DEFAULTS.defencePenalty);
 
     await wait(5000);
     await client.leave();
