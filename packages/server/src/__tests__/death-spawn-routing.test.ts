@@ -390,9 +390,16 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
 
     await fastForwardDeath(roomInstance, sessionId);
 
+    // Poll for deathPenalty — handlePlayerDeath is async and may still be in-flight on slow CI
+    let postDeathPlayer: typeof player | undefined;
+    for (let i = 0; i < 20; i++) {
+      postDeathPlayer = roomInstance.players.get(sessionId);
+      if (postDeathPlayer?.deathPenalty) break;
+      await wait(250);
+    }
+
     // After death, before room switch cleanup: death penalty should be set
-    if (roomInstance.players.has(sessionId)) {
-      const postDeathPlayer = roomInstance.players.get(sessionId)!;
+    if (postDeathPlayer) {
       expect(postDeathPlayer.deathPenalty).not.toBeNull();
       expect(postDeathPlayer.deathPenalty!.durationMs).toBe(DEATH_PENALTY_DEFAULTS.durationMs);
       expect(postDeathPlayer.deathPenalty!.attackPenalty).toBe(DEATH_PENALTY_DEFAULTS.attackPenalty);
@@ -401,7 +408,7 @@ describe('Faction-Based Death Routing (ZoneRoom Integration)', () => {
 
     await wait(5000);
     await client.leave();
-  }, 25_000);
+  }, 30_000);
 
   it('scarlet faction routes to zone:the-carrion-court on death', async () => {
     const room = await colyseus.createRoom('zone', { useTestGraph: true, openDelayMs: 0 });

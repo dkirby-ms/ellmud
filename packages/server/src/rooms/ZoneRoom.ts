@@ -2720,7 +2720,16 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       actorName: charName,
     });
 
-    // Apply death penalty (increment death count, record time)
+    // Apply death penalty debuff to player state synchronously (before any awaits)
+    // so it's visible immediately to tick-driven observers and tests.
+    player.deathPenalty = {
+      appliedAt: Date.now(),
+      durationMs: DEATH_PENALTY_DEFAULTS.durationMs,
+      attackPenalty: DEATH_PENALTY_DEFAULTS.attackPenalty,
+      defencePenalty: DEATH_PENALTY_DEFAULTS.defencePenalty,
+    };
+
+    // Persist death count and timestamp (async, non-blocking for state)
     const deathDbId = this.dbPlayerId(playerId);
     const newCount = await this.deathPenaltyStore.incrementDeathCount(deathDbId);
     await this.deathPenaltyStore.setLastDeathTime(deathDbId, Date.now());
@@ -2743,14 +2752,6 @@ export class ZoneRoom extends Room<ZoneRoomOptions> {
       isPvP: isPvPKill,
       itemsLost: corpseItems.length,
     });
-
-    // Apply death penalty debuff to player state (on any death)
-    player.deathPenalty = {
-      appliedAt: Date.now(),
-      durationMs: DEATH_PENALTY_DEFAULTS.durationMs,
-      attackPenalty: DEATH_PENALTY_DEFAULTS.attackPenalty,
-      defencePenalty: DEATH_PENALTY_DEFAULTS.defencePenalty,
-    };
 
     // Log PvPKillEvent for each player killer on PvP death
     if (isPvPKill) {
