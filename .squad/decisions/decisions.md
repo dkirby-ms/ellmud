@@ -2145,3 +2145,132 @@ This progression system transforms EllMUD from a static-stat prototype into a dy
 **Related PRs:** (none yet)  
 **Dependencies:** Phase 1 combat stat system (migrations 018/019) must be merged first  
 **Blockers:** None
+
+---
+
+## 2026-04-16T00:00:00Z: RoomNode badges are canonical vertical exit indicators
+
+**By:** Regis (Frontend Dev)  
+**Date:** 2026-07-25  
+**Issue:** #463  
+**Status:** Implemented  
+**Commit:** 0c13307
+
+### Context
+
+The minimap had two independent sources of ↑/↓ arrows for vertical exits:
+1. **RoomNode badges** — small text next to the room circle
+2. **ExitEdge text** — text label at the midpoint of inter-floor edge lines
+
+Both rendered simultaneously, causing duplicate arrows on the minimap, plus ghost rooms (rooms not on the current floor) showed spurious vertical badges.
+
+### Decision
+
+**RoomNode badges are the single source of truth for vertical exit indicators.** ExitEdge renders only the dashed line for inter-floor connections — no text labels.
+
+### Rationale
+
+- RoomNode badges are anchored to the room they belong to, making them spatially unambiguous
+- ExitEdge midpoint text overlaps with room nodes on single-floor maps or when rooms are close together
+- One canonical indicator eliminates visual noise and prevents future drift between two labeling systems
+- Ghost rooms on Layer 2 now suppress badges via `hideVerticalBadges` prop
+
+### Implementation
+
+- Added `hideVerticalBadges` prop to RoomNode
+- MapRenderer passes this flag for Layer 2 ghost rooms
+- Filtered zero-length inter-floor edges in ExitEdge
+- 484 client tests pass; no regressions
+
+---
+
+## 2026-04-15T00:00:00Z: Death-Spawn-Routing Test Hardening
+
+**By:** Minsc (Tester)  
+**Date:** 2026-04-15  
+**Status:** Implemented  
+**Commit:** f48c993
+
+### Context
+
+Elminster reviewed Drizzt's CI fix (commit 131f6a5 for death penalty race condition) and REJECTED with two required test changes to `death-spawn-routing.test.ts`. Since Drizzt was locked out, Minsc (QA) made the revisions.
+
+### Changes Made
+
+#### 1. `fastForwardDeath` now asserts downed state was reached
+The polling loop tracked whether the player entered downed state, but never asserted it. If the player never got downed, all 6 integration tests would silently pass without a death occurring. Added `expect(foundDowned).toBe(true)` after the loop.
+
+#### 2. Death penalty test: conditional guard → hard assertion
+The `if (postDeathPlayer)` guard meant all deathPenalty assertions were silently skipped when the player was cleaned up before polling found them. Replaced with `expect(postDeathPlayer).toBeDefined()`.
+
+#### 3. Death penalty test: race condition fix
+The hardening immediately revealed a real bug: `fastForwardDeath` waits 8s (including ROOM_SWITCH delay), so the player was already cleaned up by room switch before the deathPenalty poll started. The old conditional guard had been hiding this. Fixed by inlining the downed-state polling and capturing deathPenalty immediately after bleed-out, before room switch cleanup.
+
+### Validation
+
+- 23/23 tests pass in `death-spawn-routing.test.ts`
+- 3269/3269 server tests pass (0 regressions)
+
+### Convention Established
+
+**No conditional guards around test assertions.** Use `expect(x).toBeDefined()` instead of `if (x) { expect(x)... }`. The latter creates vacuously-passing tests that hide real failures.
+
+---
+
+## 2026-07-22T00:00:00Z: Synchronous state mutations before awaits in fire-and-forget async handlers
+
+**By:** Drizzt (Engine Dev)  
+**Date:** 2026-07-22  
+**Status:** Implemented  
+**Commit:** 131f6a5
+
+### Context
+
+CI flake in death-penalty test caused by `handlePlayerDeath()` setting `player.deathPenalty` after two `await` calls, but being called fire-and-forget from tick handlers.
+
+### Decision
+
+When an async method is called fire-and-forget (no `await` at call site), any synchronous state mutations that callers might observe must happen BEFORE the first `await`. This applies to `handlePlayerDeath()` and any similar pattern in tick handlers.
+
+### Rationale
+
+The tick system and tests observe state synchronously. If a fire-and-forget async function defers state writes behind awaits, the state appears stale until the microtask queue drains — which is non-deterministic under load.
+
+### Applied To
+
+`player.deathPenalty` assignment moved before `incrementDeathCount`/`setLastDeathTime` awaits in `ZoneRoom.handlePlayerDeath()`.
+
+### Team Impact
+
+Any future fire-and-forget async handlers in tick code should follow this pattern.
+
+---
+
+## 2026-01-01T00:00:00Z: Expand CI/CD paths-ignore
+
+**By:** Khelben (CI/CD Dev)  
+**Date:** 2025-01-01  
+**Status:** Implemented  
+**Scope:** CI/CD configuration
+
+### Context
+
+The CI/CD workflow was only ignoring `docs/`, `.squad/`, and `*.md` files. Changes to workflow files, infrastructure, Copilot config, and repo metadata were still triggering full CI runs unnecessarily.
+
+### Decision
+
+Added these paths to `paths-ignore` in both `pull_request` and `push` triggers:
+
+- `.github/**` — workflow/agent config changes
+- `.copilot/**` — Copilot session state
+- `infra/**` — infrastructure-as-code (Bicep/Terraform)
+- `LICENSE`
+- `.gitattributes`
+- `.gitignore`
+
+`workflow_dispatch` left untouched (manual trigger, no paths concept).
+
+### Rationale
+
+These paths contain no application code. Skipping CI for them saves runner minutes and reduces noise. If a workflow change itself needs validation, `workflow_dispatch` can be used manually.
+

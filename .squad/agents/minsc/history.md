@@ -177,6 +177,12 @@
 
 ## Learnings
 
+### 2026-04-15: Death-Spawn-Routing Test Hardening
+- `fastForwardDeath` helper now asserts downed state was reached (no more silent pass if player never enters downed state)
+- Death penalty test: replaced `if (postDeathPlayer)` guard with `expect(postDeathPlayer).toBeDefined()` — old guard let the test pass vacuously when the player was cleaned up before polling
+- Death penalty test needed inlined polling: `fastForwardDeath`'s 8s ROOM_SWITCH wait caused the player to be cleaned up before deathPenalty could be observed. Fix: poll for deathPenalty immediately after bleed-out, before room switch completes.
+- **Key lesson:** Conditional guards around assertions (`if (x) { expect(x)... }`) are a test smell — they make tests pass vacuously when the precondition fails. Always use `expect(x).toBeDefined()` instead.
+
 ### 2026-04-14: Combat Stat System — API Patterns
 - `calculateEquipmentBonuses()` takes an array of `{ slot: string; stats: ItemStats | null }[]`, not a Record
 - Weapon slot is `main_hand`, shield slot is `off_hand` (not `weapon`/`offhand`)

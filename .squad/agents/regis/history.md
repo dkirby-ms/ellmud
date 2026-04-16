@@ -257,3 +257,37 @@ dispatch({ type: 'SET_COMBAT_STATS', stats: { maxHp, unarmed, oneHanded, twoHand
 - `computeLayout.ts` uses separate occupied sets per z-level, so up/down-connected rooms share (x,y) → edges between them are zero-length
 - Three rendering layers can produce vertical exit indicators: ExitEdge text (removed in #466), RoomNode badges (canonical), and ghost RoomNode badges (now suppressed)
 
+
+### 2026-04-16: Phantom Arrows Minimap Fix
+
+**Status:** Complete — 484 client tests pass ✓
+
+**Problem:** Minimap had duplicate vertical exit indicators (↑/↓ arrows) rendering from two independent sources:
+1. RoomNode badges (text next to room circle)
+2. ExitEdge text labels (at edge midpoints)
+
+Additionally, ghost rooms (rooms not on current floor) showed spurious badges, and zero-length inter-floor edges showed phantom arrows.
+
+**Root Cause:** 
+- No canonical source of truth for vertical indicators
+- Layer 2 ghost rooms rendered with full props (including vertical exits)
+- Zero-length edges still triggered arrow rendering
+
+**Solution:**
+1. Added `hideVerticalBadges` prop to RoomNode component
+2. MapRenderer passes `hideVerticalBadges={true}` for Layer 2 ghost rooms
+3. ExitEdge filters out zero-length inter-floor edges before rendering
+4. RoomNode badges established as canonical vertical exit indicator
+
+**Changes:**
+- `RoomNode.tsx` — Added `hideVerticalBadges` prop
+- `MapRenderer.tsx` — Conditional badge suppression for ghost rooms
+- `ExitEdge.tsx` — Zero-length edge filtering
+- `RoomNode.test.tsx` — New tests for badge suppression
+
+**Test Results:** 484/484 pass, 0 regressions
+
+**Commit:** 0c13307 (dev branch)
+
+**Design Decision:** See .squad/decisions/decisions.md — RoomNode badges are now the canonical vertical exit indicator (ExitEdge handles only dashed lines).
+

@@ -51,6 +51,22 @@
 
 ## Learnings
 
+### 2025-07-24: Re-Review Death-Spawn-Routing Tests (Minsc revision f48c993) — APPROVED
+
+**Task:** Verify Minsc addressed both required changes from rejection of Drizzt's commit 131f6a5.
+
+**Verdict: APPROVE — Both issues cleanly resolved, no new problems.**
+
+**Required Change 1 — `fastForwardDeath` must assert downed state:**
+- ✅ `fastForwardDeath` now tracks `foundDowned` boolean and asserts `expect(foundDowned).toBe(true)` after the polling loop (line 68). Every caller benefits.
+
+**Required Change 2 — Silent skip bug in death penalty test:**
+- ✅ The `if (postDeathPlayer)` conditional guard is gone. Replaced with `expect(postDeathPlayer).toBeDefined()` (line 416) followed by unconditional assertions on penalty fields.
+- ✅ Minsc also inlined the downed-state polling in this test (rather than calling `fastForwardDeath`) so the test can capture `deathPenalty` before room switch cleanup removes the player. This is a correct structural choice — the death penalty test has unique timing requirements.
+- ✅ Polling window increased from 20→40 iterations (10s total) to handle slow CI — reasonable.
+
+**No new issues found. No stale assumptions detected.**
+
 ### 2025-07-23: Phase 1 Combat Stat System Review — APPROVE WITH NOTES
 
 **Task:** Full architecture review of 44-file Phase 1 combat stat overhaul (8-stat weapon-skill model replacing old 5-stat model).
@@ -479,3 +495,5 @@ APPROVE for merge. The three-layer model is correctly designed but only partiall
 - The combat stat pipeline has three distinct layers: DB persistence (CharacterRepository), stat calculation (stats.ts), and runtime registration (createCombatant). All three must be connected for stats to function.
 - Player combatant registration happens at three independent call sites — attack.ts (player initiates), ZoneRoom.ts:1911 (creature targets unregistered player), ZoneRoom.ts:1952 (creature joins combat targeting player). All three must be updated together.
 - The CommandContext does not currently carry characterId or equipment data, which blocks wiring effective stats into combat registration.
+- Death penalty tests with conditional guards (`if (player)`) can pass vacuously when the player is cleaned up before assertions run. Always assert player existence unconditionally after polling.
+- `DEATH_PENALTY_DEFAULTS.attackPenalty/defencePenalty` are stale references to old stat model (flagged in Phase 1 review, still unresolved).
