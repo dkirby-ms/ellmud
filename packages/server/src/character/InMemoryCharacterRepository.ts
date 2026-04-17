@@ -13,7 +13,6 @@ export class InMemoryCharacterRepository implements CharacterRepository {
   private postures = new Map<string, string>();
   private starterKitGranted = new Set<string>();
   private combatStatsMap = new Map<string, PlayerCombatStats>();
-  private statPointsMap = new Map<string, number>();
 
   async list(playerId: string): Promise<CharacterSummary[]> {
     const chars: CharacterSummary[] = [];
@@ -126,35 +125,6 @@ export class InMemoryCharacterRepository implements CharacterRepository {
 
   async saveBaseStats(characterId: string, stats: PlayerCombatStats): Promise<void> {
     this.combatStatsMap.set(characterId, { ...stats });
-  }
-
-  async getStatPointsAvailable(characterId: string): Promise<number> {
-    return this.statPointsMap.get(characterId) ?? 0;
-  }
-
-  async saveStatPointsAvailable(characterId: string, points: number): Promise<void> {
-    this.statPointsMap.set(characterId, points);
-  }
-
-  async trainStat(
-    characterId: string,
-    statKey: keyof PlayerCombatStats,
-    increment: number,
-  ): Promise<{ newStatValue: number; newPointsAvailable: number } | null> {
-    const points = this.statPointsMap.get(characterId) ?? 0;
-    if (points <= 0) return null;
-    const stats = this.combatStatsMap.get(characterId) ?? { ...DEFAULT_PLAYER_COMBAT_STATS };
-    const newValue = stats[statKey] + increment;
-    stats[statKey] = newValue;
-    this.combatStatsMap.set(characterId, stats);
-    const newPoints = points - 1;
-    this.statPointsMap.set(characterId, newPoints);
-    return { newStatValue: newValue, newPointsAvailable: newPoints };
-  }
-
-  async addStatPoints(characterId: string, points: number): Promise<void> {
-    const current = this.statPointsMap.get(characterId) ?? 0;
-    this.statPointsMap.set(characterId, current + points);
   }
 
   private toSummary(row: CharacterRow): CharacterSummary {

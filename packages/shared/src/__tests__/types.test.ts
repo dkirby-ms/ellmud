@@ -51,7 +51,7 @@ describe('MessageTypes', () => {
 
   it('should have exactly 33 message types', () => {
     const keys = Object.keys(MessageTypes);
-    expect(keys).toHaveLength(34);
+    expect(keys).toHaveLength(33);
   });
 
   it('should have unique values for all message types', () => {

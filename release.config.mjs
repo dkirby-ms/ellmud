@@ -6,15 +6,15 @@ const plugins = [
   '@semantic-release/release-notes-generator',
   '@semantic-release/changelog',
   [
-    '@semantic-release/npm',
-    {
-      npmPublish: false,
-    },
-  ],
-  [
     '@semantic-release/exec',
     {
       prepareCmd: 'npm run version:sync',
+    },
+  ],
+  [
+    '@semantic-release/npm',
+    {
+      npmPublish: false,
     },
   ],
   [

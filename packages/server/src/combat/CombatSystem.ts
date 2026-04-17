@@ -362,23 +362,6 @@ export class CombatSystem {
     return roomIds;
   }
 
-  /** Get all active encounters — used for COMBAT_STATE broadcasts (#467). */
-  getActiveEncounters(): CombatEncounter[] {
-    return Array.from(this.encounters.values());
-  }
-
-  /** Get combatant data for all members of an encounter (#467). */
-  getEncounterCombatants(encounterId: string): Combatant[] {
-    const encounter = this.encounters.get(encounterId);
-    if (!encounter) return [];
-    const result: Combatant[] = [];
-    for (const cid of encounter.combatantIds) {
-      const c = this.combatants.get(cid);
-      if (c) result.push(c);
-    }
-    return result;
-  }
-
   // ─── Position System (GDD §6.11) ──────────────────────────────────────────
 
   /**
@@ -585,19 +568,13 @@ export class CombatSystem {
     const allFlees: FleeResult[] = [];
     const endedEncounterIds: string[] = [];
     const allTelegraphs: TelegraphBroadcast[] = [];
-    const newEncounterRoomIds: string[] = [];
 
     for (const [encId, encounter] of this.encounters) {
-      // Track encounters entering their first tick
-      const isFirstTick = encounter.tickCount === 0;
       const result = this.resolveEncounterTick(encounter);
       allEvents.push(...result.events);
       allFlees.push(...result.fleeResults);
       if (result.telegraphs) {
         allTelegraphs.push(...result.telegraphs);
-      }
-      if (isFirstTick) {
-        newEncounterRoomIds.push(encounter.roomId);
       }
       if (result.ended) {
         endedEncounterIds.push(encId);
@@ -609,7 +586,7 @@ export class CombatSystem {
       this.cleanupEncounter(encId);
     }
 
-    return { events: allEvents, fleeResults: allFlees, endedEncounterIds, telegraphs: allTelegraphs, newEncounterRoomIds };
+    return { events: allEvents, fleeResults: allFlees, endedEncounterIds, telegraphs: allTelegraphs };
   }
 
   private resolveEncounterTick(encounter: CombatEncounter): {
@@ -1178,11 +1155,6 @@ export class CombatSystem {
     // 10. Clear queued actions for next tick
     for (const c of combatants) {
       this.queuedActions.delete(c.id);
-    }
-
-    // Stamp round number on all events for display grouping
-    for (const e of events) {
-      e.roundNumber = encounter.tickCount;
     }
 
     return { events, fleeResults, ended, telegraphs };

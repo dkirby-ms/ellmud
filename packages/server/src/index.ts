@@ -40,7 +40,6 @@ import { initLoadoutProvider } from './loadout/index.js';
 import { initDeathPenaltyProvider } from './systems/index.js';
 import { initMetricsProvider } from './metrics/index.js';
 import { initCharacterProvider } from './character/index.js';
-import { initSkillsProvider } from './progression/index.js';
 import { createCharacterRouter } from './api/characters.js';
 import { createSpawnZoneRouter } from './api/spawn-zone.js';
 import { createSettingsRouter } from './api/settings.js';
@@ -127,10 +126,6 @@ console.log(`[Ellmud] Gameplay metrics: ${USE_PG ? 'PostgreSQL' : 'no-op'}`);
 // ─── Character Persistence ──────────────────────────────────────────────────
 initCharacterProvider(USE_PG);
 console.log(`[Ellmud] Character persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
-
-// ─── Skills Persistence (#457) ──────────────────────────────────────────────
-initSkillsProvider(USE_PG);
-console.log(`[Ellmud] Skills persistence: ${USE_PG ? 'PostgreSQL' : 'in-memory'}`);
 
 // ─── Zone Persistence ───────────────────────────────────────────────────────
 initZoneProvider(USE_PG);
