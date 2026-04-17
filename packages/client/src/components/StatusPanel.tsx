@@ -216,6 +216,8 @@ export function StatusPanel({
             inCombat={state.inCombat}
             enemyStatus={enemyStatus}
             roomOccupants={state.roomOccupants}
+            combatCombatants={state.combatCombatants}
+            combatHostileIds={state.combatHostileIds}
           />
         )}
         {activeTab === "gear" && (
@@ -279,6 +281,8 @@ interface EnvironmentTabProps {
     creatures: Array<{ id: string; name: string; type: string; aggressive: boolean }>;
     players: Array<{ id: string; name: string; disconnected?: boolean }>;
   };
+  combatCombatants: import('@ellmud/shared').CombatantSnapshot[];
+  combatHostileIds: string[];
 }
 
 function EnvironmentTab({
@@ -289,6 +293,8 @@ function EnvironmentTab({
   inCombat,
   enemyStatus,
   roomOccupants,
+  combatCombatants,
+  combatHostileIds,
 }: EnvironmentTabProps) {
   return (
     <>
@@ -311,14 +317,13 @@ function EnvironmentTab({
           <CombatHUD
             enemyStatus={enemyStatus}
             availableTargets={
-              roomOccupants.creatures
-                .filter((c) => c.aggressive)
-                .map((c) => ({
-                  id: c.id,
-                  name: c.name,
-                  hp: 100,
-                  maxHp: 100,
-                }))
+              combatCombatants.length > 0
+                ? combatCombatants
+                    .filter(c => combatHostileIds.includes(c.id))
+                    .map(c => ({ id: c.id, name: c.name, hp: c.hp, maxHp: c.maxHp }))
+                : roomOccupants.creatures
+                    .filter((c) => c.aggressive)
+                    .map((c) => ({ id: c.id, name: c.name, hp: 100, maxHp: 100 }))
             }
           />
         </div>

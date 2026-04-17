@@ -362,6 +362,23 @@ export class CombatSystem {
     return roomIds;
   }
 
+  /** Get all active encounters — used for COMBAT_STATE broadcasts (#467). */
+  getActiveEncounters(): CombatEncounter[] {
+    return Array.from(this.encounters.values());
+  }
+
+  /** Get combatant data for all members of an encounter (#467). */
+  getEncounterCombatants(encounterId: string): Combatant[] {
+    const encounter = this.encounters.get(encounterId);
+    if (!encounter) return [];
+    const result: Combatant[] = [];
+    for (const cid of encounter.combatantIds) {
+      const c = this.combatants.get(cid);
+      if (c) result.push(c);
+    }
+    return result;
+  }
+
   // ─── Position System (GDD §6.11) ──────────────────────────────────────────
 
   /**
