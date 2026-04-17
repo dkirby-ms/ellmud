@@ -1,3 +1,10 @@
+# [0.2.0-dev.54](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.53...v0.2.0-dev.54) (2026-04-17)
+
+
+### Features
+
+* add combat intro message and round separators ([4b1c31a](https://github.com/dkirby-ms/ellmud/commit/4b1c31a974362a2ef6c0dac3e5ec90aeacb33e55))
+
 # [0.2.0-dev.53](https://github.com/dkirby-ms/ellmud/compare/v0.2.0-dev.52...v0.2.0-dev.53) (2026-04-16)
 
 
